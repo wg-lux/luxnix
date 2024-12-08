@@ -13,17 +13,22 @@ in {
   };
 
   config = mkIf cfg.enable {
-    hardware = {
-      graphics = {
-        enable = true;
-        extraPackages = with pkgs; [
-          mesa
-        ];
-      };
+    hardware.graphics = {
+      enable = true;
+      extraPackages = with pkgs; [
+        mesa
+      ];
     };
 
+    luxnix.nvidia-prime = {
+      enable = true;
+      nvidiaBusId = "PCI:01:00:0";
+      onboardBusId = "PCI:00:02:0";
+      onboardGpuType = "intel";
+      nvidiaDriver = "beta";
+    };
+    
 
-    environment.systemPackages = with pkgs; [
-    ];
+  
   };
 }

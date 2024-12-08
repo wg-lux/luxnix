@@ -10,9 +10,13 @@ in {
     enable = mkEnableOption "Enable common configuration";
   };
 
+
   config = mkIf cfg.enable {
     hardware = {
       networking.enable = true;
+       
+      # EXPERIMENTAL
+      graphics.enable = true;
     };
 
     services = {

@@ -2,7 +2,7 @@
   pkgs,
   lib,
   ...
-}: {
+}@inputs: {
   imports = [
     ./hardware-configuration.nix
     ./disks.nix
@@ -51,11 +51,11 @@
     luxnix.ollama.enable = false;
     luxnix.nfs.enable = false; #CHANGEME
   };
+
   programs.coolercontrol.enable = true;
-  hardware.amdgpu.opencl.enable = true;
 
   roles = {
-    gpu.enable = false;
+    gpu.enable = true;
     desktop = {
       enable = true;
       # addons = {
