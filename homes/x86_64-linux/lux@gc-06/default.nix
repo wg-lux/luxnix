@@ -22,7 +22,7 @@
 
   luxnix.user = {
     enable = true;
-    name = "dev01";
+    name = "lux";
   };
 
   home.stateVersion = "23.11";
