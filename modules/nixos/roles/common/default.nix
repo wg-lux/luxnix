@@ -12,6 +12,10 @@ in {
 
 
   config = mkIf cfg.enable {
+    environment.systemPackages = with pkgs; [
+      devenv
+    ];
+
     hardware = {
       networking.enable = true;
        
