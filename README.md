@@ -18,4 +18,4 @@ gpu-client-06 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMenwtVZxjgAWj6xKZqB40QTl9s
 
 
 # GC 07
-nixos-anywhere --flake '.#gc-07' nixos@192.168.1.42
+nixos-anywhere --flake '.#gc-03' nixos@192.168.0.48
