@@ -21,7 +21,7 @@ in {
 
   config = {
     users.mutableUsers = false;
-#    users.defaultUserShell = pkgs.zsh;
+    # users.defaultUserShell = pkgs.zsh;
     users.users.${cfg.name} =
       {
         isNormalUser = true;

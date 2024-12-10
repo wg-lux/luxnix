@@ -1,5 +1,6 @@
 {
   lib,
+  pkgs,
   config,
   ...
 }:
@@ -10,8 +11,12 @@ in {
     enable = mkEnableOption "Enable common configuration";
   };
 
+  
 
   config = mkIf cfg.enable {
+      environment.systemPackages = with pkgs; [
+      devenv
+    ];
     hardware = {
       networking.enable = true;
        

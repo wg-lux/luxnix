@@ -11,6 +11,8 @@
     # syncthing.enable = false;
   };
 
+  
+
   roles = {
     desktop.enable = true;
     social.enable = true;
@@ -20,14 +22,8 @@
 
   luxnix.user = {
     enable = true;
-    name = "dev01";
+    name = "setup";
   };
-
-  
-  home.packages = [
-    
-  ];
 
   home.stateVersion = "23.11";
 }
-

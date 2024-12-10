@@ -37,6 +37,9 @@
 
   roles = {
     gpu.enable = true;
+
+    devUser.enable = true;
+
     desktop = {
       enable = true;
       # addons = {
