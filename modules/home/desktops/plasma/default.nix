@@ -258,7 +258,7 @@ in {
         lockOnResume = true;
         autoLock = true;
         timeout = 10;
-        lockOnStartup = true;
+        lockOnStartup = false;
         passwordRequired = true;
         passwordRequiredDelay = 10; # The time it takes in seconds for the password to be required after the screen is locked.
 

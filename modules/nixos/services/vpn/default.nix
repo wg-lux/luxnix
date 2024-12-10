@@ -10,37 +10,31 @@ with lib; let
 in {
   options.services.vpn = {
     enable = mkEnableOption "Enable vpn";
+
+    main-domain = mkOption {
+      type = types.str;
+      default = "vpn.luxnix.org";
+      description = "The main domain for the vpn";
+    };
+
+    backup-nameservers = mkOption {
+      type = types.listOf types.str;
+      default = ["8.8.8.8" "1.1.1.1"];
+      description = "The nameservers for the vpn";
+    };
+
+    stage-1-vpn = mkOption {
+      type = types.bool;
+      default = false;
+      description = "Enabbles VPN Service at stage 1 of boot";
+    };
+
   };
 
   config = mkIf cfg.enable {
-    networking.wireguard.enable = true;
-    services.mullvad-vpn = {
-      enable = true;
-      package = pkgs.mullvad-vpn;
-    };
-    services.tailscale.enable = true;
+    networking.domain = cfg.main-domain;
+    networking.nameservers = [ "8.8.8.8" "1.1.1.1" ];
 
-    sops.secrets.mullvad_account_id = {
-      sopsFile = ../../secrets.yaml;
-    };
-
-    systemd.services."mullvad-daemon" = {
-      serviceConfig.LoadCredential = ["account:${config.sops.secrets.mullvad_account_id.path}"];
-
-      postStart = ''
-           while ! ${pkgs.mullvad}/bin/mullvad status >/dev/null; do sleep 1; done
-           # ${pkgs.mullvad}/bin/mullvad auto-connect set on
-           ${pkgs.mullvad}/bin/mullvad tunnel set ipv6 on
-           ${pkgs.mullvad}/bin/mullvad dns set default --block-ads --block-trackers --block-malware
-           ${pkgs.mullvad}/bin/mullvad lan set allow
-           ${pkgs.mullvad}/bin/mullvad split-tunnel add $(${pkgs.procps}/bin/pgrep tailscaled)
-        #
-        # account="$(<"$CREDENTIALS_DIRECTORY/account")"
-        # current_account="$(${pkgs.mullvad}/bin/mullvad account get | grep "account:" | sed 's/.* //')"
-        # if [[ "$current_account" != "$account" ]]; then
-        # 	${pkgs.mullvad}/bin/mullvad account login "$account"
-        # fi
-      '';
-    };
+  
   };
 }

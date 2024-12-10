@@ -21,7 +21,6 @@ in {
 
     roles = {
       common.enable = true;
-
       desktop.addons = {
         plasma.enable = true;
       };
@@ -32,30 +31,13 @@ in {
       bluetooth.enable = true;
       # zsa.enable = true;
     };
-
-    services = {
-      luxnix.avahi.enable = false;
-      vpn.enable = false;
-      virtualisation.podman.enable = false;
-    };
     
     environment.systemPackages = with pkgs; [
-    	vscode
+      vscode-fhs
       gparted exfatprogs ntfs3g
+      easyrsa
     ];
 
-    system = {
-      boot.plymouth = true;
-    };
 
-    cli.programs = {
-      nh.enable = true;
-      nix-ld.enable = true;
-    };
-
-    user = {
-      name = "admin";
-      initialPassword = "1";
-    };
   };
 }

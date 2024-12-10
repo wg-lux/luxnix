@@ -6,9 +6,9 @@
 }:
 with lib;
 with lib.luxnix; let
-  cfg = config.user;
+  cfg = config.user.admin;
 in {
-  options.user = with types; {
+  options.user.admin = with types; {
     name = mkOpt str "lux_t" "The name of the user's account";
     initialPassword =
       mkOpt str "1"
@@ -20,10 +20,9 @@ in {
   };
 
   config = {
-    users.mutableUsers = false;
-#    users.defaultUserShell = pkgs.zsh;
     users.users.${cfg.name} =
       {
+        shell = pkgs.zsh;
         isNormalUser = true;
         inherit (cfg) name initialPassword;
         home = "/home/${cfg.name}";

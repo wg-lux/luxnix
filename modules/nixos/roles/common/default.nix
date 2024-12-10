@@ -24,18 +24,29 @@ in {
       graphics.enable = true;
     };
 
-    services = {
-      ssh.enable = true;
+
+    cli.programs = {
+      nh.enable = true;
+      nix-ld.enable = true;
     };
+
+
+    
 
     security = {
       sops.enable = true;
     };
 
+    programs = {
+      zsh.enable = true;
+    };
+
     system = {
       nix.enable = true;
       boot.enable = true;
+      boot.secureBoot = false;
       locale.enable = true;
+      boot.plymouth = true;
     };
   };
 }

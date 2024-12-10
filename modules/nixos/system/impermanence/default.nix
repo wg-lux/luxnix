@@ -77,6 +77,7 @@ in {
         "/var/cache/"
         "/var/db/sudo/"
         "/var/lib/"
+        "/etc/luxnix/"
       ];
       files = [
         "/etc/machine-id"

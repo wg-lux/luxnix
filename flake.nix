@@ -45,6 +45,9 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    nix-ld.url = "github:Mic92/nix-ld";
+    nix-ld.inputs.nixpkgs.follows = "nixpkgs";
+
     nixos-anywhere = {
       url = "github:numtide/nixos-anywhere";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -121,6 +124,9 @@
         };
       };
     };
+
+
+    
   in
     lib.mkFlake {
       channels-config = {
@@ -133,6 +139,7 @@
       ];
 
       systems.modules.nixos = with inputs; [
+        nix-ld.nixosModules.nix-ld
         # stylix.nixosModules.stylix
         home-manager.nixosModules.home-manager
         disko.nixosModules.disko

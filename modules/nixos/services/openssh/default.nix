@@ -25,24 +25,7 @@ in {
       };
     };
     users.users = {
-      ${config.user.name}.openssh.authorizedKeys.keys = [
-        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHwYnbv/tPCcTIPgFbOISXDOiGZGpyUtu6NmtJ+Pg9Dh agl-gpu-client-dev-intern@endo-reg.net"
-        # "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKuM4bCeJq0XQ1vd/iNK650Bu3wPVKQTSB0k2gsMKhdE hello@haseebmajid.dev"
-        # "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINP5gqbEEj+pykK58djSI1vtMtFiaYcygqhHd3mzPbSt hello@haseebmajid.dev"
-        # "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGOEtfQ0znAH8QyB4Z5FzRPa9iKkBhuriEpqyfoEkiv+ haseeb.majid@imaginecurve.com"
-        # "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM+EemSmTtzuzWNmdTWrcxE7LUXaUJVoJfl0Za5vE4N0 nixos@vps"
-      ];
+      ${config.user.admin.name}.openssh.authorizedKeys.keys = cfg.authorizedKeys;
     };
   };
 }
-#     users.users = { #TODO: some kind of central provisioning for easy rotations
-#       ${config.user.name}.openssh.authorizedKeys.keys = cfg.authorizedKeys [
-#         "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHwYnbv/tPCcTIPgFbOISXDOiGZGpyUtu6NmtJ+Pg9Dh agl-gpu-client-dev-intern@endo-reg.net"
-#         # "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKuM4bCeJq0XQ1vd/iNK650Bu3wPVKQTSB0k2gsMKhdE hello@haseebmajid.dev"
-#         # "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINP5gqbEEj+pykK58djSI1vtMtFiaYcygqhHd3mzPbSt hello@haseebmajid.dev"
-#         # "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGOEtfQ0znAH8QyB4Z5FzRPa9iKkBhuriEpqyfoEkiv+ haseeb.majid@imaginecurve.com"
-#         # "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM+EemSmTtzuzWNmdTWrcxE7LUXaUJVoJfl0Za5vE4N0 nixos@vps"
-#      ];
-#     };
-#   };
-# }

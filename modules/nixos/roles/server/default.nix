@@ -18,6 +18,7 @@ in {
     };
 
     services = {
+      ssh.enable = true;
       luxnix = {
         avahi.enable = true;
       };
@@ -108,9 +109,10 @@ in {
       "net.ipv4.tcp_congestion_control" = "bbr";
     };
 
-    user = {
-      name = "nixos";
-      initialPassword = "1";
-    };
+    # migrating to machine level configuration
+    # user = {
+    #   name = "nixos";
+    #   initialPassword = "1";
+    # };
   };
 }

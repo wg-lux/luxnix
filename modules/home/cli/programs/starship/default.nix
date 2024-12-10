@@ -1,5 +1,6 @@
 {
   config,
+  pkgs,
   lib,
   ...
 }:
@@ -13,6 +14,7 @@ in {
   };
 
   config = mkIf cfg.enable {
+
     programs.starship = {
       enable = true;
       enableZshIntegration = true;

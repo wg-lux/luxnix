@@ -1,4 +1,21 @@
 
+
+# Identities
+
+# Computer (auto generated on machine creation)
+- /etc/machine-id
+- ssh_host_ed25519_key
+- ssh_host_rsa_key
+
+## User
+- ~/.ssh/id_ed25519 -> user@host
+        - ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519
+        - You can add the key to git!
+
+
+# SSH
+- SSH is currently imported within the roles `gpu-client-dev` and `server`
+
 Acknowledgements:
 - https://github.com/hmajid2301/nixicle 
 - https://haseebmajid.dev/posts/2024-05-02-part-5b-installing-our-nix-configuration-as-part-of-your-workflow/
@@ -15,6 +32,7 @@ gpu-client-06 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMenwtVZxjgAWj6xKZqB40QTl9s
         };
     };
 
+# Certificate Authority
 
 
 # GC 07

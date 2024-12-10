@@ -21,8 +21,6 @@
     alsa.enable = true;
     alsa.support32Bit = true;
     pulse.enable = true;
-    # If you want to use JACK applications, uncomment this
-    # jack.enable = true;
   };
 
 
@@ -32,23 +30,49 @@
     luxnix.ollama.enable = false;
     luxnix.nfs.enable = false; #CHANGEME
   };
+  
+  luxnix.nvidia-prime = {
+    enable = true; # enables common and desktop (with addon plasma) roles
+    nvidiaBusId = "PCI:1:0:0";
+    onboardBusId = "PCI:0:2:0";
+    onboardGpuType = "intel";
+    nvidiaDriver = "beta";
+  };
 
   programs.coolercontrol.enable = true;
 
   roles = {
-    gpu.enable = true;
-    desktop = {
+    desktop.enable = true;
+    #gpu-client-dev.enable = true; # Enables common, desktop(with plasma) and laptop-gpu roles
+    # ada.enable = true;
+  };
+
+  user = {
+    admin = {
+      name = "admin";
+      initialPassword = "1";
+    };
+    dev-01 = { # enabled by default
+      name = "dev-01";
+      initialPassword = "1";
+    };
+    user = { # enabled by default
       enable = true;
-      # addons = {
-      # };
+      name = "user";
+      initialPassword = "1";
     };
   };
 
+  user.settings.mutable = false;
+
+
   boot = {
     kernelParams = [
+      # "resume_offset=533760"
     ];
-
     blacklistedKernelModules = [
+      # "ath12k_pci"
+      # "ath12k"
     ];
 
     supportedFilesystems = lib.mkForce ["btrfs"];
