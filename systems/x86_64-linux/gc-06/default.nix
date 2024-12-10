@@ -42,8 +42,8 @@
   programs.coolercontrol.enable = true;
 
   roles = {
-    desktop.enable = true;
-    #gpu-client-dev.enable = true; # Enables common, desktop(with plasma) and laptop-gpu roles
+    # desktop.enable = true;
+    gpu-client-dev.enable = true; # Enables common, desktop(with plasma) and laptop-gpu roles
     # ada.enable = true;
   };
 

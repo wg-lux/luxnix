@@ -20,7 +20,7 @@ in {
     
     cli.programs.nix-ld = {
       enable = true;
-      libraries = [
+      libraries = with pkgs; [
           stdenv.cc.cc
           zlib
           fuse3
@@ -42,6 +42,8 @@ in {
           gperf
           unzip
           cudatoolkit
+          mesa
+          glibc
           linuxPackages.nvidia_x11
           xorg.libXi
           xorg.libXmu
