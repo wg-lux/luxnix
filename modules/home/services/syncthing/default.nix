@@ -7,7 +7,7 @@ with lib; let
   cfg = config.services.luxnix.syncthing;
 in {
   options.services.luxnix.syncthing = {
-    enable = mkEnableOption "Enable syncthing service";
+    enable = mkBoolOpt false "Enable syncthing service";
 
     # tray = {
     #   enable = mkEnableOption "Enable syncthing tray";

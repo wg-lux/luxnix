@@ -22,14 +22,28 @@ in {
 
       #
       # Some high-level settings:
-      #
+
+        # Run to get options
+        # plasma-apply-colorscheme     plasma-apply-lookandfeel   
+        # plasma-apply-cursortheme     plasma-apply-wallpaperimage
+        # plasma-apply-desktoptheme  
+
       workspace = {
         clickItemTo = "select";
-        lookAndFeel = "org.kde.breezedark.desktop";
-        cursor.theme = "Bibata-Modern-Ice";
-        iconTheme = "Papirus-Dark";
+        colorScheme = "BreezeDark";
+        lookAndFeel = "org.kde.breezetwilight.desktop";
+        # cursor.size = 24;
+        # cursor.theme = "Bibata-Modern-Ice";
+        # iconTheme = "Papirus-Dark";
         #TODO customize
-        wallpaper = "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Patak/contents/images/1080x1920.png";
+        # wallpaper = "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Patak/contents/images/1080x1920.png";
+        wallpaperBackground = {
+          blur = true;
+        };
+        wallpaperFillMode = "preserveAspectFit";
+        wallpaperPictureOfTheDay = {
+          provider = "bing";
+        };
       };
 
 

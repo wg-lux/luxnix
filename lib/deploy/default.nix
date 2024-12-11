@@ -26,7 +26,7 @@ in rec {
       lib.foldl
       (result: name: let
         host = hosts.${name};
-        user = host.config.user.name or null;
+        user = host.config.user.admin.name or null;
         inherit (host.pkgs) system;
       in
         result

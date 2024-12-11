@@ -63,7 +63,7 @@ in {
 
         nd = "nix develop";
         nfu = "nix flake update";
-        hms = "home-manager switch --flake ~/luxnix#${config.luxnix.user.name}@${host}";
+        hms = "home-manager switch --flake ~/luxnix#${config.luxnix.user.admin.name}@${host}";
         nrs = "sudo nixos-rebuild switch --flake ~/luxnix#${host}";
 
         # other

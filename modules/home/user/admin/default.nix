@@ -5,9 +5,9 @@
 }:
 with lib;
 with lib.luxnix; let
-  cfg = config.luxnix.user;
+  cfg = config.luxnix.user.admin;
 in {
-  options.luxnix.user = {
+  options.luxnix.user.admin = {
     enable = mkOpt types.bool false "Whether to configure the user account.";
     home = mkOpt (types.nullOr types.str) "/home/${cfg.name}" "The user's home directory.";
     name = mkOpt (types.nullOr types.str) config.snowfallorg.user.name "The user account.";

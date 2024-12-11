@@ -110,6 +110,7 @@
   };
 
   # https://snowfall.org/guides/lib/quickstart/
+  # https://snowfall.org/reference/lib/
   outputs = inputs: let 
     lib = inputs.snowfall-lib.mkLib {
       inherit inputs;

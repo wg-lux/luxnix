@@ -20,8 +20,8 @@ in {
     sops = {
       age = {
         generateKey = true;
-        keyFile = "/home/${config.luxnix.user.name}/.config/sops/age/keys.txt";
-        sshKeyPaths = ["/home/${config.luxnix.user.name}/.ssh/id_ed25519"];
+        keyFile = "/home/${config.luxnix.user.admin.name}/.config/sops/age/keys.txt";
+        sshKeyPaths = ["/home/${config.luxnix.user.admin.name}/.ssh/id_ed25519"];
       };
 
       defaultSymlinkPath = "/run/user/1000/secrets";
