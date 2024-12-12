@@ -221,6 +221,11 @@ in {
 
     };
 
+    systemd.tmpfiles.rules = [
+      "d /etc/openvpn 0750 admin users -"
+    ];
+
+
     roles.base-server.enable=true;
 
     # Networking

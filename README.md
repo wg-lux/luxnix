@@ -15,6 +15,11 @@
     - we will be prompted to enter hdd encryption pwd  
 - delete the old system id from .ssh/known_hosts
 - reboot system and check if you can ssh connect
+- git clone https://github.com/wg-lux/luxnix in /home/admin
+  - cd luxnix
+  - direnv allow
+  - nhh
+  - nho
 - switch to luxnix-administration repo
 - (#TODO make list of steps for initial secret setup)
 

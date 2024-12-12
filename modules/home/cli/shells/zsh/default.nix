@@ -14,9 +14,9 @@ in {
   };
 
   config = mkIf cfg.enable {
-     programs.bash.bashrcExtra = ''
-	exec zsh
-     '';
+    #  programs.bash.bashrcExtra = ''
+	  #     # exec zsh
+    #  '';
      programs.zsh = {
       enable = true;
       autosuggestion.enable = true;
