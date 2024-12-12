@@ -15,7 +15,10 @@ in {
   config = mkIf cfg.enable {
     roles = {
       common.enable = true;
-      development.enable = true;
+    };
+
+    desktops = {
+      plasma.enable = true;
     };
 
     services = {

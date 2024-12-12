@@ -170,27 +170,6 @@ in {
             }
             "org.kde.plasma.appmenu"
             "org.kde.plasma.panelspacer"
-            # {
-            #   plasmusicToolbar = {
-            #     panelIcon = {
-            #       albumCover = {
-            #         useAsIcon = false;
-            #         radius = 8;
-            #       };
-            #       icon = "view-media-track";
-            #     };
-            #     playbackSource = "auto";
-            #     musicControls.showPlaybackControls = true;
-            #     songText = {
-            #       displayInSeparateLines = true;
-            #       maximumWidth = 640;
-            #       scrolling = {
-            #         behavior = "alwaysScroll";
-            #         speed = 3;
-            #       };
-            #     };
-            #   };
-            # }
           ];
         }
       ];
@@ -246,7 +225,7 @@ in {
 
       kwin = {
         edgeBarrier = 0;        # Disables the edge-barriers introduced in plasma 6.1
-        cornerBarrier = false;  # When enabled, prevents the cursor from crossing at screen-corners.
+        cornerBarrier = true;  # When enabled, prevents the cursor from crossing at screen-corners.
 
         scripts.polonium.enable = true;
         borderlessMaximizedWindows = true;
@@ -266,7 +245,10 @@ in {
       kscreenlocker = {
         appearance = {
           alwaysShowClock = true;
-          wallpaper = "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Kay/contents/images/1080x1920.png";
+          wallpaperPictureOfTheDay = {
+            provider = "bing";
+          };
+          # wallpaper = "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Kay/contents/images/1080x1920.png";
 
         };
         lockOnResume = true;

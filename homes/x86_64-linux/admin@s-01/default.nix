@@ -14,7 +14,7 @@
   roles = {
     development.enable = true;
     social.enable = true;
-    gpu.enable = true;
+    gpu.enable = false;
     video.enable = true;
   };
 

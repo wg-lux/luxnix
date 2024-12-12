@@ -12,7 +12,7 @@
   };
 
   roles = {
-    desktop.enable = true;
+    development.enable = true;
     social.enable = true;
     gpu.enable = true;
     video.enable = true;

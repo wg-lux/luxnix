@@ -3,14 +3,17 @@
   config,
   ...
 }:
-with lib; let
+with lib; 
+with lib.luxnix; let
   cfg = config.roles.development;
 in {
   options.roles.development = {
-    enable = mkEnableOption "Enable development configuration";
+    enable = mkBoolOpt false "Enable development configuration";
   };
 
   config = mkIf cfg.enable {
+    roles.desktop.enable = true;
+
     cli = {
 
       programs = {

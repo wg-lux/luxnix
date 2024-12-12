@@ -1,12 +1,40 @@
+# Setup Checklist
+- Boot to nixos
+- set password
+- ssh connect to target machine using pwd authentication and perform from source machine from here on
+- check hardware-config:
+  - sudo nixos-generate-config
+  - cat /etc/nixos/hardware-config
+  - transfer kernel module setup (look at existing hardware configs to get an idea)
+- copy authorized_keys to .ssh/authorized_keys
+  - *Hint: display your ed25519 public key like this:*
+  - cat ~/.ssh/id_ed25519.pub
+- run install command from repo root
+  - `nixos-anywhere --flake '.#HOSTNAME nixos@IP'`
+  - if included in setup: 
+    - we will be prompted to enter hdd encryption pwd  
+- delete the old system id from .ssh/known_hosts
+- reboot system and check if you can ssh connect
+- switch to luxnix-administration repo
+- (#TODO make list of steps for initial secret setup)
+
 # To-Do
 - [ ] Migrate Tempfile Rules
+- [ ] Migrate user passwords
+- [ ] Create coloreg-client role
+  - [ ] two bootmodes, one with (maintenance), one w/o (production) ssh access
+  - [ ] implement impermanence setup to make sure no temporary files remain between boots
+- [ ] deploy usb-encrypter
+  - [ ] create test using virtual usb stick
+- [ ] deploy create-boot-usb script
+
+
 
 # VPN Configuration
 - defined in modules/nixos/vpn
 - 
 
 # Identities
-
 ## Computer (auto generated on machine creation)
 - /etc/machine-id
 - /etc/ssh/ssh_host_ed25519_key
