@@ -31,24 +31,11 @@
     luxnix.nfs.enable = false; #CHANGEME
   };
   
-  luxnix.nvidia-prime = {
-    enable = true; # enables common and desktop (with addon plasma) roles
-    nvidiaBusId = "PCI:1:0:0";
-    onboardBusId = "PCI:0:2:0";
-    onboardGpuType = "intel";
-    nvidiaDriver = "beta";
-  };
+  luxnix.nvidia-prime.enable = false;
 
   programs.coolercontrol.enable = true;
 
-  roles = {
-    # desktop.enable = true;
-    gpu-client-dev.enable = true;   # Enables common, desktop(with plasma) and laptop-gpu roles
-                                    # Also enables aglnet.client.enable = true;
-    # ada.enable = true;
-
-    # Testing
-  };
+  roles.aglnet-host.enable =true; # enables base-server (and base-server calls common and desktop)
 
   user = {
     admin = {

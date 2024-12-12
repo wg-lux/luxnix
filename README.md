@@ -1,17 +1,35 @@
+# To-Do
+- [ ] Migrate Tempfile Rules
 
+# VPN Configuration
+- defined in modules/nixos/vpn
+- 
 
 # Identities
 
-# Computer (auto generated on machine creation)
+## Computer (auto generated on machine creation)
 - /etc/machine-id
-- ssh_host_ed25519_key
-- ssh_host_rsa_key
+- /etc/ssh/ssh_host_ed25519_key
+- /etc/ssh/ssh_host_rsa_key
+
+--> collect and store in luxnix-administration/data/computer-identities/{host}
 
 ## User
-- ~/.ssh/id_ed25519 -> user@host
-        - ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519
-        - You can add the key to git!
+Manually deploy your personal ed_25519 key to
+- ~/.ssh/id_ed25519
+  - if you want, you can also generate a new one: ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519
+- You can add the key to git!
 
+## OpenVPN 
+! Manually deployed during system setup !
+
+Clients require:
+- private key (gc-01.key -> cert.key)
+- certificate (gc-01.crt -> cert.crt)
+- server certificate: ca.cert
+- pre-shared key: ta.key
+
+/etc/identity/openvpn/
 
 # SSH
 - SSH is currently imported within the roles `gpu-client-dev` and `server`

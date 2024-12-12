@@ -6,15 +6,10 @@
 }:
 with lib;
 with lib.luxnix; let
-  cfg = config.roles.gpu-client-dev;
+  cfg = config.roles.base-server;
 in {
-  options.roles.gpu-client-dev = {
-    enable = mkBoolOpt false ''
-      Enable desktop configuration for gpu development clients.
-      Enables roles:
-      - desktop
-      - aglnet.client
-    '';
+  options.roles.base-server = {
+    enable = mkEnableOption "Enable base desktop server configuration";
   };
 
   config = mkIf cfg.enable {
@@ -45,11 +40,9 @@ in {
           util-linux
           m4
           gperf
-          unzip
-          cudatoolkit
-          mesa
+          glib
           glibc
-          linuxPackages.nvidia_x11
+          unzip
           xorg.libXi
           xorg.libXmu
           freeglut
@@ -61,14 +54,6 @@ in {
           stdenv.cc
           binutils
           pkgs.autoAddDriverRunpath
-          cudaPackages.cuda_nvcc
-          cudaPackages.nccl
-          cudaPackages.cudnn
-          cudaPackages.libnpp
-          cudaPackages.cutensor
-          cudaPackages.libcufft
-          cudaPackages.libcurand
-          cudaPackages.libcublas
       ];
     };
     
@@ -78,12 +63,11 @@ in {
 
     roles = {
       desktop.enable = true;
-      aglnet.client.enable = true; 
     };
 
     services = {
       luxnix.avahi.enable = false;
-      # vpn.enable = false; #TODO OPENVPN IMPLEMENTATION #managed via roles
+      vpn.enable = false; #TODO OPENVPN IMPLEMENTATION
       virtualisation.podman.enable = false;
     };
     
