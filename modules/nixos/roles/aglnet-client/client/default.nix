@@ -48,10 +48,10 @@ with lib; let
   defaultNoBind = true;
 
 
-  defaultCaPath = "/etc/identity/openvpn/ca.pem";
-  defaultTlsAuthPath = "/etc/identity/openvpn/tls.pem";
-  defaultServerCertPath = "/etc/identity/openvpn/crt.crt";
-  defaultServerKeyPath = "/etc/identity/openvpn/key.key";
+  defaultCaPath = "/etc/openvpn/ca.pem";
+  defaultTlsAuthPath = "/etc/openvpn/tls.pem";
+  defaultServerCertPath = "/etc/openvpn/crt.crt";
+  defaultServerKeyPath = "/etc/openvpn/key.key";
   # defaultDhPath = "/etc/identity/openvpn/dh.pem";
 
   # defaultClientConfigDir = "/etc/openvpn/ccd";
