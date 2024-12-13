@@ -222,7 +222,7 @@ in {
     };
 
     systemd.tmpfiles.rules = [
-      "d /etc/openvpn 0750 admin openvpn -"
+      "d /etc/openvpn 0750 admin users -"
     ];
 
 

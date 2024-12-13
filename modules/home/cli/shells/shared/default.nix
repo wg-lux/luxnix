@@ -24,7 +24,7 @@ in {
         cd = "z";
         cdi = "zi";
         cp = "xcp";
-        ping = "gping";
+        # ping = "gping";
         l = "eza --group --header --group-directories-first --long --git --all --binary --all --icons always";
         tree = "eza --tree";
         # sudo = "sudo -E -s";

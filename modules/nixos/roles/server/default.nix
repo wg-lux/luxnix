@@ -109,10 +109,5 @@ in {
       "net.ipv4.tcp_congestion_control" = "bbr";
     };
 
-    # migrating to machine level configuration
-    # user = {
-    #   name = "nixos";
-    #   initialPassword = "1";
-    # };
   };
 }

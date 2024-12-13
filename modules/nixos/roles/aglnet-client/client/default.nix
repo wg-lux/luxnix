@@ -37,6 +37,8 @@ with lib; let
   defaultProtocolLc = "tcp";
   defaultDomain = "vpn.endo-reg.net";
 
+  defaultUpdateResolvConf = false;
+
   defaultDev = "tun";
 
   defaultSubnet = "172.16.255.0";
@@ -122,7 +124,7 @@ in {
 
     updateResolvConf = mkOption {
       type = types.bool;
-      default = true;
+      default = defaultUpdateResolvConf;
       description = "Update resolv.conf with VPN nameservers";
     };
 
@@ -217,9 +219,37 @@ in {
       # etc = etc-files; # deploy via luxnix-administration module
 
     };
+#
+    systemd.tmpfiles.rules = [
+      "d /etc/openvpn 0750 admin users -"
+    ];
+
+        # client = ''
+        # client
+        # proto ${base.proto}
+        # dev ${base.dev}
+        # remote ${base.domain} ${toString base.port}
+
+        # resolv-retry ${base.resolv-retry}
+        # nobind
+        # persist-key
+        # persist-tun
+
+        # ca ${base.paths.shared.ca}
+        # tls-auth ${base.paths.shared.ta} 1
+        # cert ${base.paths.client.cert}
+        # key ${base.paths.client.key}
+        # cipher ${base.cipher}
+
+        # route-nopull
+        # route ${base.subnet} ${base.intern-subnet} 
+
+        # remote-cert-tls server
+        # verb ${base.verb}
 
     services.openvpn = let 
       config = ''
+        client
         proto ${cfg.protocolLc}
         dev ${cfg.dev}
         remote ${cfg.mainDomain} ${toString cfg.port}

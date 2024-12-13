@@ -74,10 +74,13 @@ in {
         "/srv"
         "/.cache/nix/"
         "/etc/NetworkManager/system-connections"
+        "/etc/openvpn/"
         "/var/cache/"
         "/var/db/sudo/"
         "/var/lib/"
-        "/etc/luxnix/"
+        "/home/admin/"
+        "/etc/ssh/"
+
       ];
       files = [
         "/etc/machine-id"

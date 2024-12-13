@@ -17,6 +17,10 @@ in {
       devenv
     ];
 
+    systemd.tmpfiles.rules = [
+      "d /etc/user-passwords 0700 admin users -"
+    ];
+
     hardware = {
       networking.enable = true;
        
