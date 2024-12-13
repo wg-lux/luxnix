@@ -52,6 +52,7 @@ in {
           cudaPackages_11.cudatoolkit
           mesa
           glibc
+          glib
           linuxPackages.nvidia_x11
           xorg.libXi
           xorg.libXmu
@@ -61,7 +62,6 @@ in {
           xorg.libXv
           xorg.libXrandr
           ncurses5
-          stdenv.cc
           binutils
           pkgs.autoAddDriverRunpath
           cudaPackages_11.cuda_nvcc

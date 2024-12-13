@@ -183,25 +183,25 @@ from luxnix_administration.utils import generate_client_certificate_folder
 generate_client_certificate_folder(cert_type= $CERT_TYPE, hostname= $HOSTNAME)
 
 # client
-generate_client_certificate_folder(cert_type= "client", hostname= "gc-02")
+generate_client_certificate_folder(cert_type= "client", hostname= "s-02")
 
 ```
 
 ## Deploy Secrets / IDs using luxnix administration
 
 For "admin" on "gc-02":
-- `./deploy-user-folders-remote.sh "admin@192.168.1.47" "admin@gc-02"`
+- `./deploy-user-folders-remote.sh "admin@192.168.179.2" "admin@s-02"`
 
 - Deploy password for user:
 a. locally: 
 `python ./luxnix_administration/utils/deploy_user_passwords_local.py "gc-02"`
 
 b. remotely:
-`python ./deploy_user_passwords_remote.py "gc-02" "192.168.1.47" "dev-01"`
+`python ./luxnix_administration/utils/deploy_user_passwords_remote.py "s-02" "192.168.179.2" "dev-01"`
 
 - Deploy OpenVPN Config / Certs
 - run: `./deploy-openvpn-certificates.sh NAME TYPE` for local deployment
 (e.g., `./deploy-openvpn-certificates.sh gc-02 client`)
 - remote: `./deploy-openvpn-certificates-remote.sh <user@ip> <hostname> <cert_type>`
-(e.g.`./deploy-openvpn-certificates-remote.sh admin@192.168.1.47 gc-02 client`) 
+(e.g.`./deploy-openvpn-certificates-remote.sh admin@192.168.179.2 s-02 client`) 
 

@@ -16,19 +16,19 @@ in {
 
     systemd.services.traefik = {
       environment = {
-        CF_API_EMAIL = "hello@haseebmajid.dev";
+        # CF_API_EMAIL = "hello@haseebmajid.dev";
       };
       serviceConfig = {
-        EnvironmentFile = [config.sops.secrets.cloudflare_api_key.path];
+        # EnvironmentFile = [config.sops.secrets.cloudflare_api_key.path];
       };
     };
 
-    sops.secrets.cloudflare_api_key = {
-      sopsFile = ../secrets.yaml;
-    };
+    # sops.secrets.cloudflare_api_key = {
+    #   sopsFile = ../secrets.yaml;
+    # };
 
     services = {
-      tailscale.permitCertUid = "traefik";
+      # tailscale.permitCertUid = "traefik";
 
       traefik = {
         enable = true;
@@ -69,18 +69,18 @@ in {
           api = {
             dashboard = true;
           };
-          certificatesResolvers = {
-            tailscale.tailscale = {};
-            letsencrypt = {
-              acme = {
-                email = "hello@haseebmajid.dev";
-                storage = "/var/lib/traefik/cert.json";
-                dnsChallenge = {
-                  provider = "cloudflare";
-                };
-              };
-            };
-          };
+          # certificatesResolvers = {
+          #   tailscale.tailscale = {};
+          #   letsencrypt = {
+          #     acme = {
+          #       email = "hello@haseebmajid.dev";
+          #       storage = "/var/lib/traefik/cert.json";
+          #       dnsChallenge = {
+          #         provider = "cloudflare";
+          #       };
+          #     };
+          #   };
+          # };
           entryPoints.redis = {
             address = "0.0.0.0:6381";
           };
@@ -98,12 +98,8 @@ in {
               certResolver = "letsencrypt";
               domains = [
                 {
-                  main = "homelab.haseebmajid.dev";
-                  sans = ["*.homelab.haseebmajid.dev"];
-                }
-                {
-                  main = "haseebmajid.dev";
-                  sans = ["*.haseebmajid.dev"];
+                  main = "endo-reg.net";
+                  sans = ["*.endo-reg.net"];
                 }
               ];
             };
