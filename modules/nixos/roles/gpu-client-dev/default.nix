@@ -49,7 +49,7 @@ in {
           m4
           gperf
           unzip
-          cudatoolkit
+          cudaPackages_11.cudatoolkit
           mesa
           glibc
           linuxPackages.nvidia_x11
@@ -64,14 +64,14 @@ in {
           stdenv.cc
           binutils
           pkgs.autoAddDriverRunpath
-          cudaPackages.cuda_nvcc
-          cudaPackages.nccl
-          cudaPackages.cudnn
-          cudaPackages.libnpp
-          cudaPackages.cutensor
-          cudaPackages.libcufft
-          cudaPackages.libcurand
-          cudaPackages.libcublas
+          cudaPackages_11.cuda_nvcc
+          cudaPackages_11.nccl
+          cudaPackages_11.cudnn
+          cudaPackages_11.libnpp
+          cudaPackages_11.cutensor
+          cudaPackages_11.libcufft
+          cudaPackages_11.libcurand
+          cudaPackages_11.libcublas
       ];
     };
     

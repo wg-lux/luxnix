@@ -160,3 +160,48 @@ Create home configuration for your user, e.g.: `homes/x86_64-linux/admin@gc-02/d
 - Make sure all newly created files are committed!
 - Run: `nixos-anywhere --flake '.#gc-02' nixos@192.168.1.47`
 - Enter & Verify Harddisk encryption key
+
+
+## Initial System Configuration
+Currently, automatic ssh authorized_keys deployment is broken #FIXME
+
+- Log in as admin user
+- git clone https://github.com/wg-lux/luxnix
+- cd luxnix
+- nh os switch
+- nh home switch
+- sudo chown -R admin:root "/etc/user-passwords" (necessary for remote deploy w/o sudo priv.)
+- reboot
+
+SSH Connection should now work
+
+## Prepare OpenVPN ID Files
+```python
+from luxnix_administration.utils import generate_client_certificate_folder
+
+# host
+generate_client_certificate_folder(cert_type= $CERT_TYPE, hostname= $HOSTNAME)
+
+# client
+generate_client_certificate_folder(cert_type= "client", hostname= "gc-02")
+
+```
+
+## Deploy Secrets / IDs using luxnix administration
+
+For "admin" on "gc-02":
+- `./deploy-user-folders-remote.sh "admin@192.168.1.47" "admin@gc-02"`
+
+- Deploy password for user:
+a. locally: 
+`python ./luxnix_administration/utils/deploy_user_passwords_local.py "gc-02"`
+
+b. remotely:
+`python ./deploy_user_passwords_remote.py "gc-02" "192.168.1.47" "dev-01"`
+
+- Deploy OpenVPN Config / Certs
+- run: `./deploy-openvpn-certificates.sh NAME TYPE` for local deployment
+(e.g., `./deploy-openvpn-certificates.sh gc-02 client`)
+- remote: `./deploy-openvpn-certificates-remote.sh <user@ip> <hostname> <cert_type>`
+(e.g.`./deploy-openvpn-certificates-remote.sh admin@192.168.1.47 gc-02 client`) 
+
