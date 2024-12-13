@@ -19,12 +19,6 @@ in {
 
   config = mkIf cfg.enable {
 
-    # Create anonymizer dirs
-    systemd.tmpfiles.rules = [
-      "d /etc/lx-anonymizer/data 0700 admin users -" # TODO Change group from user to service or sth. when implemented
-      "d /etc/lx-anonymizer/temp 0700 admin users -" 
-    ];
-
     services = {
       ssh.enable = true;
       ssh.authorizedKeys = [
@@ -87,7 +81,8 @@ in {
 
     roles = {
       desktop.enable = true;
-      aglnet.client.enable = true; 
+      aglnet.client.enable = true;
+      endoreg-client.enable = true;
     };
 
     services = {

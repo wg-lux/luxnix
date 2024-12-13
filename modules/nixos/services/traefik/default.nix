@@ -14,6 +14,10 @@ in {
   config = mkIf cfg.enable {
     networking.firewall.allowedTCPPorts = [80 443];
 
+    systemd.tmpfiles.rules = [
+      "d /etc/endoreg-cert 0700 admin users -" 
+    ];
+
     systemd.services.traefik = {
       environment = {
         # CF_API_EMAIL = "hello@haseebmajid.dev";
