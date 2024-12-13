@@ -9,14 +9,14 @@ with lib;
 with lib.luxnix; let
   cfg = config.clone-dirs;
   repos = { #FIXME: remove hardcoded references
-    "https://github.com/wg-lux/luxnix" = "/home/admin/luxnix";
-    "https://github.com/wg-lux/endoreg-db-api" = "/home/admin/dev/endoreg-db-api";
-    "https://github.com/wg-lux/endoreg-db" = "/home/admin/dev/endoreg-db";
-    "https://github.com/wg-lux/nix-config" = "/home/admin/repotest/nix-config";
+    "https://github.com/wg-lux/luxnix" = "~/luxnix";
+    "https://github.com/wg-lux/endoreg-db-api" = "~/dev/endoreg-db-api";
+    "https://github.com/wg-lux/endoreg-db" = "~/admin/dev/endoreg-db";
+    "https://github.com/wg-lux/nix-config" = "~/repotest/nix-config";
   };
 in {
   options.clone-dirs = with types; {
-    enable = mkBoolOpt true "enable default git repo cloning";
+    enable = mkBoolOpt false "enable default git repo cloning";
   };
 
   config = mkIf cfg.enable {

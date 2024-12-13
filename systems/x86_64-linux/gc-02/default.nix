@@ -42,12 +42,10 @@
   programs.coolercontrol.enable = true;
 
   roles = {
-    # desktop.enable = true;
-    gpu-client-dev.enable = true;   # Enables common, desktop(with plasma) and laptop-gpu roles
+    gpu-client-dev.enable = true;   # Enables common, desktop(with plasma) 
+                                    # and laptop-gpu roles
+                                    # also enables openssh and adds lux@gc-06 key
                                     # Also enables aglnet.client.enable = true;
-    # ada.enable = true;
-
-    # Testing
   };
 
   user = {
