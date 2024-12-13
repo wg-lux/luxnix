@@ -33,10 +33,9 @@ in {
     #############################################
 
     #
-
     # This activation script ensures the hashed password file is present.
     # If not, it creates a default one with the given hash.
-    system.activationScripts.createDefaultHashedPassword = {
+    system.activationScripts.createDefaultHashedPasswordUser = {
       text = ''
         set -e
         if [ ! -f ${passwordFile} ]; then
@@ -46,13 +45,19 @@ in {
           # This is a SHA-512 crypt hash that you trust and know beforehand.
           echo "\$6\$yC9hyVoZEYLlzjbZ\$pILBYLOZBlplgoYL9L.dyIKPGPrcW2ifd1I3ffRAYIwsv8B.pA76Eo6OUq71gJJKl8kGyBsmlbKwnGcKQEpoa." > ${passwordFile}
           chmod 600 ${passwordFile}
-          chown admin:root ${passwordFile}
+
         fi
       '';
+
+          #       if id "admin" &>/dev/null; then
+          # chown admin:root ${passwordFile}
+          # else
+          # chown root:root ${passwordFile}
+          # fi
       # Usually no dependencies needed, but we ensure it runs early.
       # This ensures the file is ready before the user accounts are set up.
       # For example:
-      # deps = [ "something-else" ];
+      # deps = [ "systemd-tmpfiles-setup" ];
     };
 
     users.users.${cfg.name} =

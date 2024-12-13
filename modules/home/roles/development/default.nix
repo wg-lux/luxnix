@@ -14,6 +14,8 @@ in {
   config = mkIf cfg.enable {
     roles.desktop.enable = true;
 
+    clone-dirs.enable = true;
+
     cli = {
 
       programs = {
