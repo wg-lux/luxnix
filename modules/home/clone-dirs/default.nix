@@ -13,6 +13,7 @@ with lib.luxnix; let
     "https://github.com/wg-lux/endoreg-db-api" = "~/dev/endoreg-db-api";
     "https://github.com/wg-lux/endoreg-db" = "~/admin/dev/endoreg-db";
     "https://github.com/wg-lux/nix-config" = "~/repotest/nix-config";
+    "https://github.com/wg-lux/agl_anonymizer_pipeline" = "~/dev/agl_anonymizer_pipeline";
   };
 in {
   options.clone-dirs = with types; {

@@ -35,8 +35,6 @@ in {
     };
 
 
-    
-
     security = {
       sops.enable = true;
     };

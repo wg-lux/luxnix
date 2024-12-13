@@ -23,7 +23,7 @@ ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM7vvbgQtzi4GNeugHSuMyEke4MY0bSfoU7cBOnRYU8M
 
 or 
 ```shell
-./deploy-authorized-key.sh nixos@192.168.1.47 "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM7vvbgQtzi4GNeugHSuMyEke4MY0bSfoU7cBOnRYU8M"
+./deploy-authorized-key.sh nixos@192.168.179.2 "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM7vvbgQtzi4GNeugHSuMyEke4MY0bSfoU7cBOnRYU8M"
 ```
 
 - verify ssh connection: `ssh nixos@192.168.179.142`
@@ -163,10 +163,10 @@ Create home configuration for your user, e.g.: `homes/x86_64-linux/admin@gc-02/d
 
 
 ## Initial System Configuration
-Currently, automatic ssh authorized_keys deployment is broken #FIXME
 
 - Log in as admin user
 - git clone https://github.com/wg-lux/luxnix
+- rm ~/.zshrc
 - cd luxnix
 - nh os switch
 - nh home switch

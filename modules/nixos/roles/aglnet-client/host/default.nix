@@ -228,7 +228,7 @@ in {
     ];
 
 
-    roles.base-server.enable=true;
+    
 
     # Networking
     networking = {

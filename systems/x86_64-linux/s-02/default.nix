@@ -35,9 +35,9 @@
 
   programs.coolercontrol.enable = true;
 
-  roles.aglnet.host.enable =true; # enables base-server (and base-server calls common and desktop)
+  roles.aglnet.client.enable =true; 
   roles.base-server.enable=true;
-  
+
   services.ssh = {
     enable = true;
     authorizedKeys = [ # just adds authorized keys for admin user, does not enable ssh!

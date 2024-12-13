@@ -16,7 +16,7 @@ in {
     system = {
       nix.enable = true;
     };
-
+    programs.zsh.enable = true;
     cli = {
       terminals.foot.enable = true;
       terminals.kitty.enable = true;
