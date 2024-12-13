@@ -22,26 +22,26 @@ in {
 
   config = mkIf cfg.enable {
 
-    home.activation.cloneRepos = lib.mkAfter ''
-      ${pkgs.git}/bin/git --version > /dev/null || exit 1
+    # home.activation.cloneRepos = lib.mkAfter ''
+    #   ${pkgs.git}/bin/git --version > /dev/null || exit 1
 
-      repos='${builtins.toJSON repos}'
+    #   repos='${builtins.toJSON repos}'
 
-      echo "$repos" | ${pkgs.jq}/bin/jq -c 'to_entries[]' | while read -r entry; do
-        url=$(echo "$entry" | ${pkgs.jq}/bin/jq -r '.key' <<< "$entry")
-        path=$(echo "$entry" | ${pkgs.jq}/bin/jq -r '.value' <<< "$entry")
+    #   echo "$repos" | ${pkgs.jq}/bin/jq -c 'to_entries[]' | while read -r entry; do
+    #     url=$(echo "$entry" | ${pkgs.jq}/bin/jq -r '.key' <<< "$entry")
+    #     path=$(echo "$entry" | ${pkgs.jq}/bin/jq -r '.value' <<< "$entry")
 
-        if [ ! -d "$(dirname "$path")" ]; then
-          mkdir -p "$(dirname "$path")"
-        fi
+    #     if [ ! -d "$(dirname "$path")" ]; then
+    #       mkdir -p "$(dirname "$path")"
+    #     fi
 
-        if [ ! -d "$path" ]; then
-          ${pkgs.git}/bin/git clone -- "$url" "$path"
-        else
-          echo "$path already exists, skipping clone."
-        fi
-      done
-    '';
+    #     if [ ! -d "$path" ]; then
+    #       ${pkgs.git}/bin/git clone -- "$url" "$path"
+    #     else
+    #       echo "$path already exists, skipping clone."
+    #     fi
+    #   done
+    # '';
 
   };
 }
