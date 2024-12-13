@@ -241,10 +241,10 @@ in {
     };
 
     # Create "/etc/openvpn/update-resolve-conf" file using (source is updateResolvConfFile) environment.etc
-    environment.etc."openvpn/update-resolve-conf" = {
-      source = updateResolvConfFile;
-      mode = "0755";
-    };
+    # environment.etc."openvpn/update-resolve-conf" = {
+    #   source = updateResolvConfFile;
+    #   mode = "0755";
+    # };
 
     services.openvpn = let 
       config = ''
