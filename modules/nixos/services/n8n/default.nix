@@ -3,11 +3,12 @@
   lib,
   ...
 }:
-with lib; let
+with lib; 
+with lib.luxnix; let
   cfg = config.services.luxnix.n8n;
 in {
   options.services.luxnix.n8n = {
-    enable = mkEnableOption "Enable n8n";
+    enable = mkBoolOpt false "Enable n8n";
   };
 
   config = mkIf cfg.enable {
