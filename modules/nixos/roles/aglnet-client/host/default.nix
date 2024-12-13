@@ -41,9 +41,8 @@ with lib; let
 
   defaultClientToClient = true;
 
-  defaultUpdateResolvConf = true;
+  defaultUpdateResolvConf = false;
 
-  updateResolvConfFile = ./update-resolv-conf;
 
 in {
   options.roles.aglnet.host = {
@@ -99,7 +98,7 @@ in {
 
     updateResolvConf = mkOption {
       type = types.bool;
-      default = true;
+      default = defaultUpdateResolvConf;
       description = "Update resolv.conf with VPN nameservers";
     };
 
