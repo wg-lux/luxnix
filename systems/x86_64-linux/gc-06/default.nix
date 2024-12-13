@@ -23,12 +23,14 @@
     pulse.enable = true;
   };
 
-
   services = {
     virtualisation.kvm.enable = false;
     hardware.openrgb.enable = false;
-    luxnix.ollama.enable = false;
-    luxnix.nfs.enable = false; #CHANGEME
+    luxnix = {
+      traefik.enable = true;
+      ollama.enable = false;
+      nfs.enable = false; #CHANGEME
+    };
   };
   
   luxnix.nvidia-prime = {
