@@ -6,7 +6,7 @@
 #CHANGEME 
 with lib;
 with lib.luxnix; let
-  cfg = config.luxnix.authentik;
+  cfg = config.services.luxnix.authentik;
 in {
   options.services.luxnix.authentik = with types; {
     enable = mkBoolOpt false "Enable authentik host";
