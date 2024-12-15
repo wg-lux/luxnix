@@ -13,7 +13,7 @@ in {
   };
 
   config = mkIf cfg.enable {
-    networking.firewall.allowedTCPPorts = [80 443];
+    # allow firewall
 
     systemd.tmpfiles.rules = [
       "d /etc/traefik 0700 admin users -" 
@@ -32,12 +32,13 @@ in {
     #   sopsFile = ../secrets.yaml;
     # };
 
+
+    # systemd.services.traefik.restartIfChanged = true;
+    # systemd.services.traefik.wantedBy = [ "multi-user.target" ];
+
+
     services = {
       # tailscale.permitCertUid = "traefik";
-      networking.firewall.allowedTCPPorts = [ 80 443 ];
-      systemd.services.traefik.restartIfChanged = true;
-      systemd.services.traefik.wantedBy = [ "multi-user.target" ];
-
 
       traefik = {
         enable = true;
@@ -116,7 +117,7 @@ in {
           };
         };
 
-        dynamicConfigOptions
+        # dynamicConfigOptions
       };
     };
   };
