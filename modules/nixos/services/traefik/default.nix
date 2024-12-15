@@ -34,6 +34,10 @@ in {
 
     services = {
       # tailscale.permitCertUid = "traefik";
+      networking.firewall.allowedTCPPorts = [ 80 443 ];
+      systemd.services.traefik.restartIfChanged = true;
+      systemd.services.traefik.wantedBy = [ "multi-user.target" ];
+
 
       traefik = {
         enable = true;
@@ -52,7 +56,7 @@ in {
             prometheus = {};
           };
 
-          tracing = {};
+          # tracing = {};
 
           accessLog = {
             addInternals = true;
@@ -74,6 +78,7 @@ in {
           api = {
             dashboard = true;
           };
+
           # certificatesResolvers = {
           #   tailscale.tailscale = {};
           #   letsencrypt = {
@@ -110,6 +115,8 @@ in {
             };
           };
         };
+
+        dynamicConfigOptions
       };
     };
   };
