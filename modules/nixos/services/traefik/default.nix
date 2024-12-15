@@ -4,11 +4,12 @@
   ...
 }:
 #CHANGEME Set up traefik
-with lib; let
+with lib; 
+with luxnix.lib; let
   cfg = config.services.luxnix.traefik;
 in {
   options.services.luxnix.traefik = {
-    enable = mkEnableOption "Enable traefik";
+    enable = mkBoolOpt false "Enable traefik";
   };
 
   config = mkIf cfg.enable {
