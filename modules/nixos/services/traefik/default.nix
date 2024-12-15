@@ -5,7 +5,7 @@
 }:
 #CHANGEME Set up traefik
 with lib; 
-with luxnix.lib; let
+with lib.luxnix; let
   cfg = config.services.luxnix.traefik;
 in {
   options.services.luxnix.traefik = {
