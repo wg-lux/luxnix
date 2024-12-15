@@ -15,13 +15,6 @@
   systemd.services.systemd-networkd-wait-online.enable = lib.mkForce false;
 
   security.rtkit.enable = true;
-  services.pipewire.systemWide = true;
-  services.pipewire = {
-    enable = true;
-    alsa.enable = true;
-    alsa.support32Bit = true;
-    pulse.enable = true;
-  };
 
   services = {
     virtualisation.kvm.enable = false;
