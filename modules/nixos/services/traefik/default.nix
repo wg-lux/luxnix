@@ -15,7 +15,7 @@ in {
     networking.firewall.allowedTCPPorts = [80 443];
 
     systemd.tmpfiles.rules = [
-      "d /etc/endoreg-cert 0700 admin users -" 
+      "d /etc/traefik 0700 admin users -" 
     ];
 
     systemd.services.traefik = {

@@ -1,27 +1,5 @@
 # Setup Checklist
-- Boot to nixos
-- set password
-- ssh connect to target machine using pwd authentication and perform from source machine from here on
-- check hardware-config:
-  - sudo nixos-generate-config
-  - cat /etc/nixos/hardware-config
-  - transfer kernel module setup (look at existing hardware configs to get an idea)
-- copy authorized_keys to .ssh/authorized_keys
-  - *Hint: display your ed25519 public key like this:*
-  - cat ~/.ssh/id_ed25519.pub
-- run install command from repo root
-  - `nixos-anywhere --flake '.#HOSTNAME nixos@IP'`
-  - if included in setup: 
-    - we will be prompted to enter hdd encryption pwd  
-- delete the old system id from .ssh/known_hosts
-- reboot system and check if you can ssh connect
-- git clone https://github.com/wg-lux/luxnix in /home/admin
-  - cd luxnix
-  - direnv allow
-  - nhh
-  - nho
-- switch to luxnix-administration repo
-- (#TODO make list of steps for initial secret setup)
+-> See: deployment-guid.md
 
 # To-Do
 - [ ] Migrate Tempfile Rules
@@ -34,10 +12,11 @@
 - [ ] deploy create-boot-usb script
 
 
+# Traefik as Reverse Proxy
+- 
 
 # VPN Configuration
 - defined in modules/nixos/vpn
-- 
 
 # Identities
 ## Computer (auto generated on machine creation)
@@ -48,30 +27,30 @@
 --> collect and store in luxnix-administration/data/computer-identities/{host}
 
 ## User
-Manually deploy your personal ed_25519 key to
+-> See: deployment-guid.md
+
+For standalone setup manually deploy your personal ed_25519 key to
 - ~/.ssh/id_ed25519
   - if you want, you can also generate a new one: ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519
-- You can add the key to git!
+- You can add the key to yout git account git!
 
 ## OpenVPN 
-! Manually deployed during system setup !
+-> See: deployment-guid.md
 
-Clients require:
+Clients require (`/etc/identity/openvpn/`):
 - private key (gc-01.key -> cert.key)
 - certificate (gc-01.crt -> cert.crt)
 - server certificate: ca.cert
 - pre-shared key: ta.key
 
-/etc/identity/openvpn/
 
-# SSH
-- SSH is currently imported within the roles `gpu-client-dev` and `server`
 
-Acknowledgements:
+# Acknowledgements
+
 - https://github.com/hmajid2301/nixicle 
 - https://haseebmajid.dev/posts/2024-05-02-part-5b-installing-our-nix-configuration-as-part-of-your-workflow/
 
-
+# Scratchpad / Prototyping
 nixos-anywhere --flake '.#server-03' nixos@192.168.179.3
 
 ---
