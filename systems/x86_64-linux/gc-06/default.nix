@@ -2,7 +2,12 @@
   pkgs,
   lib,
   ...
-}@inputs: {
+}@inputs: 
+  let
+    sensitiveHdd = import ./sensitive-hdd.nix {};
+
+  in
+{
   imports = [
     ./hardware-configuration.nix
     ./disks.nix
@@ -38,11 +43,17 @@
 
   roles = {
     # desktop.enable = true;
-    gpu-client-dev.enable = true;   # Enables common, desktop(with plasma) and laptop-gpu roles
-                                    # Also enables aglnet.client.enable = true;
+    gpu-client-dev.enable = true;   # Enables common, desktop(with plasma) and laptop-gpu roles                                # Also enables aglnet.client.enable = true;
     # ada.enable = true;
 
     # Testing
+  };
+
+  endoreg = {
+    sensitive-storage = {
+      enable = true; 
+      partitionConfigurations = (import ./sensitive-storage.nix {} );
+    };
   };
 
   user = {

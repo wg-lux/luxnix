@@ -13,7 +13,7 @@ in {
   };
 
   config = mkIf cfg.enable {
-
+    user.endoreg-service-user.enable = true;
 
     # Boot Modes:
     # TODO normal, maintenance
@@ -22,11 +22,18 @@ in {
     # activate impermanence setup to make sure no sensitive data is left on the system
 
     # Services
-    ## Anonymizer
+
+    # Endoreg USB Encrypter
+    
+
+    ## Filesystem Setup
     # Create anonymizer dirs #TODO move to service lx-anonymizer
     systemd.tmpfiles.rules = [
+      # Anonymizer
       "d /etc/lx-anonymizer/data 0700 admin users -" # TODO Change group from user to service or sth. when implemented
       "d /etc/lx-anonymizer/temp 0700 admin users -" 
+      # USB Encrypter
+      "d /mnt/endoreg-sensitive-data 0770 admin endoreg-service -"
     ];
   };
 }

@@ -6,14 +6,17 @@
 }:
 with lib;
 with lib.luxnix; let
-  cfg = config.group.maintenance;
+  cfg = config.group.endoreg-service;
 in {
-  options.group.maintenance = with types; {
-    name = mkOpt str "maintenance" "The name of the group";
+  options.group.endoreg-service = with types; {
+    name = mkOpt str "endoreg-service" "The name of the group";
+    # initialPassword =
+    #   mkOpt str "1"
+    #   "The initial password to use";
     members = mkOpt (listOf str) [
       "admin"
     ] "Groups for the user to be assigned.";
-    gid = mkOpt int 102 "The group id";
+    gid = mkOpt int 101 "The group id";
   };
 
   config = {
