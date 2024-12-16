@@ -15,14 +15,14 @@ let
     
     partition-luks-uuid = partitionConfiguration.luks-uuid;
     mountpoint = conf.mountPoint;
-    filemode-secret = conf.filemode-secret;
-    filemode-mountpoint = conf.filemode-mountpoint;
+    filemode-secret = conf.filemodeSecret;
+    filemode-mountpoint = conf.filemodeMountpoint;
 
-    mount-script-name = conf.mount-script-name;
-    umount-script-name = conf.umount-script-name;
+    mount-script-name = conf.mountScriptName;
+    umount-script-name = conf.umountScriptName;
 
-    mount-service-name = conf.mount-service-name;
-    umount-service-name = conf.umount-service-name;
+    mount-service-name = conf.mountServiceName;
+    umount-service-name = conf.umountServiceName;
 
     # Requires sops.sercrets. .... to be defined, happens after "in"
     key-file = conf.keyFile;

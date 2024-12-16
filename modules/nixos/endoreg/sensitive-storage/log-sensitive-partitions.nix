@@ -5,23 +5,24 @@ let
 
   # Partition-specific configuration
   conf = partitionConfiguration;
-  luksUuid = partition-config.luks-uuid;
-  uuid = partition-config.uuid;
+  label = partitionConfiguration.label;
+  luksUuid = partitionConfiguration.luks-uuid;
+  uuid = partitionConfiguration.uuid;
 
   # Mountpoint and service configuration
   mountpoint = conf.mountPoint;
-  scriptName = conf.log-script-name;
-  serviceName = conf.log-service-name;
-  timerName = conf.log-service-name;
-  timerOnCalendar = conf.log-timer-on-calendar;
+  scriptName = conf.logScriptName;
+  serviceName = conf.logServiceName;
+  timerName = conf.logServiceName;
+  timerOnCalendar = conf.logTimerOnCalendar;
 
   # Keyfile path for encryption
-  keyFile = conf.keyfile-target;
+  keyFile = conf.keyFile;
 
   # Logging configuration
   user = conf.user;
   group = conf.group;
-  logDir = conf.log-dir;
+  logDir = conf.logDir;
 
   # Create a state-checking script
   scriptPath = pkgs.writeShellScriptBin "${scriptName}" ''

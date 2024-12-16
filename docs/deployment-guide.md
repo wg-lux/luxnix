@@ -215,3 +215,20 @@ b. remotely:
 - run `sudo python runner.py`
 - backup keyfiles if required
 - make sure you copy sensitive-storage.nix (was sensitive-hdd.nix) to your system folder
+- deploy generated keyfiles (1 -> dropoff, 2 -> processing, 3 -> processed) to ~/admin/.config/endoreg-sensitive-storage
+
+*Verify Functionality*
+
+```shell
+sudo mount-dropoff
+sudo umount-dropoff
+sudo log-dropoff
+
+sudo mount-processing
+sudo umount-processing
+sudo log-processing
+
+sudo mount-processed
+sudo umount-processed
+sudo log-processed
+```
