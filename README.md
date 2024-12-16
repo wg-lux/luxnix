@@ -1,6 +1,18 @@
 # Setup Checklist
 -> See: deployment-guide.md
 
+# Luxnix
+
+Luxnix is a NixOS based system that provides a securely encrypted setup for study laptops as well as GPU processing units.
+
+This infrastructure was built in the context of the coloreg study. Here the first use cases will be the automatic processing of 
+
+- medical reports,
+- medical images,
+- medical videos.
+
+
+
 # To-Do
 - [ ] Migrate Tempfile Rules
 - [ ] Migrate user passwords
