@@ -16,8 +16,6 @@ with lib.luxnix; let
 in {
   options.cli.programs.git = with types; {
     enable = mkBoolOpt false "Whether or not to enable git.";
-    userName = mkOpt str "Thomas" "The name to use with git.";
-    email = mkOpt (nullOr str) "tlux14@googlemail.com" "The email to use with git.";
     urlRewrites = mkOpt (attrsOf str) {} "url we need to rewrite i.e. ssh to http";
     allowedSigners = mkOpt str "" "The public key used for signing commits";
   };
@@ -33,12 +31,10 @@ in {
       extraConfig =
         {
           credential = {
-            helper = "store --file ~git-credentials";
+            helper = "store --file ~/.git-credentials";
           };
           credential.modalPrompt = true;
-          credential.https = {
-            helper = "store --file ~git-credentials";
-          };
+
           # gpg.format = "ssh";
           # gpg.ssh.allowedSignersFile = "~/.ssh/allowed_signers";
           # commit.gpgsign = true;
