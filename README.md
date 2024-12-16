@@ -1,5 +1,5 @@
 # Setup Checklist
--> See: deployment-guid.md
+-> See: deployment-guide.md
 
 # To-Do
 - [ ] Migrate Tempfile Rules
