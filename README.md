@@ -1,69 +1,135 @@
-# Setup Checklist
+# Setup
 -> See: deployment-guide.md
 
-# To-Do
-- [ ] Migrate Tempfile Rules
-- [ ] Migrate user passwords
-- [ ] Create coloreg-client role
-  - [ ] two bootmodes, one with (maintenance), one w/o (production) ssh access
-  - [ ] implement impermanence setup to make sure no temporary files remain between boots
-- [ ] deploy usb-encrypter
-  - [ ] create test using virtual usb stick
-- [ ] deploy create-boot-usb script
+References for the NixOS Setup used:
 
-
-# Traefik as Reverse Proxy
-- 
-
-# VPN Configuration
-- defined in modules/nixos/vpn
-
-# Identities
-## Computer (auto generated on machine creation)
-- /etc/machine-id
-- /etc/ssh/ssh_host_ed25519_key
-- /etc/ssh/ssh_host_rsa_key
-
---> collect and store in luxnix-administration/data/computer-identities/{host}
-
-## User
--> See: deployment-guid.md
-
-For standalone setup manually deploy your personal ed_25519 key to
-- ~/.ssh/id_ed25519
-  - if you want, you can also generate a new one: ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519
-- You can add the key to yout git account git!
-
-## OpenVPN 
--> See: deployment-guid.md
-
-Clients require (`/etc/identity/openvpn/`):
-- private key (gc-01.key -> cert.key)
-- certificate (gc-01.crt -> cert.crt)
-- server certificate: ca.cert
-- pre-shared key: ta.key
+- Nixicle https://github.com/hmajid2301/nixicle
+- Snowflakes OS Quickstart https://snowfall.org/guides/lib/quickstart/
 
 
 
-# Acknowledgements
+# LuxNix - Professional NixOS Configuration Framework
 
-- https://github.com/hmajid2301/nixicle 
-- https://haseebmajid.dev/posts/2024-05-02-part-5b-installing-our-nix-configuration-as-part-of-your-workflow/
+A comprehensive NixOS configuration framework designed for research and development environments, emphasizing security, reproducibility, and automated deployment. Built using Snowfall Lib, this repository manages multiple systems and user environments with a focus on GPU computing, secure networking, and development tooling. It provides provides a securely encrypted setup for study laptops as well as GPU processing units. 
 
-# Scratchpad / Prototyping
-nixos-anywhere --flake '.#server-03' nixos@192.168.179.3
+This infrastructure was built in the context of the coloreg study at the Universitätsklinik Würzburg. Here the first use case will be the processing of medical study data, such as. 
 
+- Reports,
+- images,
+- videos.
+
+## 🚀 Key Features
+
+### System Architecture
+- **Modular Design**: Built on Snowfall Lib for clean separation of concerns and maintainable code
+- **Multi-System Support**: Manages configurations for development workstations (gc-*) and servers (s-*)
+- **Role-Based Configuration**: Predefined roles for common use cases:
+  - GPU Development Environment
+  - Base Server Configuration
+  - Monitoring Systems
+  - Desktop Environment (KDE Plasma)
+
+### Security & Hardware
+- **Disk Encryption**: LUKS2 encryption with FIDO2 support
+- **Impermanence**: Stateless system design with persistent data management
+- **Hardware Optimization**:
+  - NVIDIA Prime support for hybrid graphics
+  - Custom hardware configurations for different machine types
+  - Advanced audio and bluetooth management
+
+### Development Environment
+- **GPU Computing**: Configured for research and development workloads
+- **Development Tools**:
+  - Container support (Podman)
+  - Language-specific toolchains
+  - CLI utilities (modern-unix tools)
+- **Terminal Environment**:
+  - Multiple terminal emulator options (Alacritty, Foot, Kitty, WezTerm)
+  - ZSH configuration with modern tools
+
+### Infrastructure Services
+- **Authentication**: Authentik for centralized identity management
+- **Storage**: MinIO for S3-compatible object storage
+- **AI/ML**: Ollama for AI model deployment
+- **Monitoring**: Comprehensive monitoring setup with Netdata
+- **Network**: Advanced VPN configuration and Traefik for service routing
+
+## 🛠 Getting Started
+
+### Prerequisites
+- NixOS installation media
+- Basic understanding of Nix flakes
+- Hardware compatible with NixOS
+
+### Quick Start
+1. Boot from NixOS installation media
+2. Follow the deployment guide in `deployment-guide.md`
+3. Choose appropriate system configuration from `systems/x86_64-linux/`
+
+### Deployment
+```bash
+# Clone the repository
+git clone https://github.com/your-username/luxnix.git
+
+# Deploy to a new system
+nixos-anywhere --flake '.#hostname' nixos@ip-address
+
+# Update existing system
+nh os switch
+hho #shortcut
+```
+
+## 📁 Repository Structure
+
+```
+luxnix/
+├── flake.nix           # Main flake configuration
+├── modules/            # Modular system configurations
+│   ├── home/          # Home-manager configurations
+│   └── nixos/         # System-level configurations
+├── systems/           # Per-machine configurations
+└── homes/            # User-specific configurations
+```
+
+## 🔒 Security Features
+
+- LUKS2 encryption with FIDO2 device support
+- Secure boot configuration (optional)
+- VPN integration for secure networking
+- Role-based access control
+- Secrets management with SOPS
+
+## 🖥️ Supported Systems
+
+- Development Workstations (gc-*)
+  - Hybrid GPU configurations
+  - Development toolchains
+  - Desktop environments
+
+- Servers (s-*)
+  - Infrastructure services
+  - Monitoring systems
+  - Network services
+
+## 📚 Documentation
+
+Detailed documentation is available in the `docs/` directory:
+- Deployment Guide
+- Network Architecture
+- Service Configuration
+- Hardware Setup
+
+## 🛟 Support
+
+For issues and questions:
+- Create an issue in the repository
+- Check the documentation in `docs/`
+- Review the deployment guide for common problems
+
+## 📜 License
+
+MIT - see LICENSE
 ---
-identities = {
-        ed25519 = { # ed25519 keys
-backup = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC/gVfFAeG/9CwqiPOxu5JoY/vx705a77wvGgh687a5d";
-gpu-client-dev = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHwYnbv/tPCcTIPgFbOISXDOiGZGpyUtu6NmtJ+Pg9Dh agl-gpu-client-dev";
-gpu-client-06 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMenwtVZxjgAWj6xKZqB40QTl9smUcaoDnTRmJ/icp29 lux@gc06";
-        };
-    };
 
-# Certificate Authority
+Built with ❄️ using NixOS
 
-
-# GC 07
-nixos-anywhere --flake '.#gc-03' nixos@192.168.0.48
