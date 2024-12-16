@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../dev/agl_anonymizer_pipeline"
+		},
+		{
+			"path": "../dev/lx-anonymizer"
+		}
+	],
+	"settings": {}
+}
