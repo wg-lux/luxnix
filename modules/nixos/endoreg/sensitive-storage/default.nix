@@ -65,7 +65,7 @@ in {
           user = "admin";
           group = "endoreg-service";
         };
-      }
+      };
     };
 
     user = mkOption {
