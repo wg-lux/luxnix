@@ -1,6 +1,12 @@
-# Deployment Protocol: s-02
+# Deployment following the example of a Server 2 (s-02)
 
+Establishing luxnix on your machine requires using the official nix installer first.
 
+For this step, follow the guide at https://nixos.wiki/wiki/NixOS_Installation_Guide.
+
+Once Luxnix is established on the central study laptop, it can be deployed to other machines. These should be accessible during setup, later connections via a secure ssh connection will be available.
+
+For this, the user roles are defined in the homes directory.
 
 ## Pre-Requisites
 - NixOS Boot Stick
