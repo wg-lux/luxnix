@@ -18,6 +18,8 @@ in {
     keyFileOffset      = offset-b;
     keyFileSize        = keyfile-size;
     preLVM             = true;
-    # fallbackToPassword = true;
+    keyFileTimeout = 10;
   };
+
+  
 }

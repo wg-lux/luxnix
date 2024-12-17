@@ -105,7 +105,7 @@ let
         keyFileOffset      = offset-b;
         keyFileSize        = keyfile-size;
         preLVM             = true;
-        fallbackToPassword = true;
+        keyFileTimeout = 10; # if no prompt is displayed, try pressing "Esc"
       };
     }
     EOF
