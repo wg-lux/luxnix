@@ -49,7 +49,7 @@ in {
           m4
           gperf
           unzip
-          cudaPackages_11.cudatoolkit
+          cudaPackages.cudatoolkit
           mesa
           glibc
           glib
@@ -64,14 +64,14 @@ in {
           ncurses5
           binutils
           pkgs.autoAddDriverRunpath
-          cudaPackages_11.cuda_nvcc
-          cudaPackages_11.nccl
-          cudaPackages_11.cudnn
-          cudaPackages_11.libnpp
-          cudaPackages_11.cutensor
-          cudaPackages_11.libcufft
-          cudaPackages_11.libcurand
-          cudaPackages_11.libcublas
+          cudaPackages.cuda_nvcc
+          cudaPackages.nccl
+          cudaPackages.cudnn
+          cudaPackages.libnpp
+          cudaPackages.cutensor
+          cudaPackages.libcufft
+          cudaPackages.libcurand
+          cudaPackages.libcublas
       ];
     };
     
