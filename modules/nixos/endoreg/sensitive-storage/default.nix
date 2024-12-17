@@ -50,7 +50,7 @@ in {
   let
     # create helper function wich accepts "label" and returns a configuration dict
     createPartitionConfig = { label, group }:
-      {
+      if cfg.enable then {
         label = label;
         user = cfg.user;
         group = group;
@@ -65,7 +65,8 @@ in {
         logServiceName = "log-${label}";
         logTimerOnCalendar = "*:0/30"; # Every 30 minutes
         logDir = sensitiveLogsDirectory;
-      } // cfg.partitionConfigurations."${label}";
+      } // cfg.partitionConfigurations."${label}"
+      else {};
 
       dropoffConfig = createPartitionConfig { label = "dropoff"; group = "sensitive-storage-dropoff"; };
       processingConfig = createPartitionConfig { label = "processing"; group = "sensitive-storage-processing"; };
