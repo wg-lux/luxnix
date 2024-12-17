@@ -8,7 +8,24 @@
 
 let
     # add script
-    conf = partitionConfiguration;
+    conf = if config.endoreg.sensitive-storage.enable 
+        then partitionConfiguration
+        else  # dummy dictionary
+            {
+                label = "dummy";
+                luks-uuid = "dummy";
+                mountPoint = "dummy";
+                filemodeSecret = "dummy";
+                filemodeMountpoint = "dummy";
+                mountScriptName = "dummy";
+                umountScriptName = "dummy";
+                mountServiceName = "dummy";
+                umountServiceName = "dummy";
+                keyFile = "dummy";
+                user = "dummy";
+                group = "dummy";
+            };
+
     # endoreg-sensitive-hdd = network-config.hardware.${hostname}.endoreg-sensitive;
 
     label = partitionConfiguration.label;

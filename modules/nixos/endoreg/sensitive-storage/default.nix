@@ -8,14 +8,10 @@ with lib;
 with lib.luxnix; let
   cfg = config.endoreg.sensitive-storage;
 
-  sensitiveDataDirectory = if cfg.enable 
-    then "${cfg.sensitiveDirectory}/data"
-    else "";
-
-  sensitiveLogsDirectory = if cfg.enable 
-    then "${cfg.sensitiveDirectory}/logs"
-    else "";
-
+  sensitiveDataDirectory = "${cfg.sensitiveDirectory}/data";
+  sensitiveLogsDirectory = "${cfg.sensitiveDirectory}/logs";
+  # get mountpoint directory helper function (expects sensitiveDataDirectory)
+  # and returns "${sensitiveDataDirectory}/${label}"
 
 in {
   options.endoreg.sensitive-storage = {
@@ -54,7 +50,7 @@ in {
   let
     # create helper function wich accepts "label" and returns a configuration dict
     createPartitionConfig = { label, group }:
-      if cfg.enable then {
+      {
         label = label;
         user = cfg.user;
         group = group;
@@ -69,8 +65,7 @@ in {
         logServiceName = "log-${label}";
         logTimerOnCalendar = "*:0/30"; # Every 30 minutes
         logDir = sensitiveLogsDirectory;
-      } // cfg.partitionConfigurations."${label}"
-      else {};
+      } // cfg.partitionConfigurations."${label}";
 
       dropoffConfig = createPartitionConfig { label = "dropoff"; group = "sensitive-storage-dropoff"; };
       processingConfig = createPartitionConfig { label = "processing"; group = "sensitive-storage-processing"; };
