@@ -10,9 +10,6 @@ with lib.luxnix; let
 in {
   options.group.endoreg-service = with types; {
     name = mkOpt str "endoreg-service" "The name of the group";
-    # initialPassword =
-    #   mkOpt str "1"
-    #   "The initial password to use";
     members = mkOpt (listOf str) [
       "admin"
     ] "Groups for the user to be assigned.";

@@ -13,9 +13,6 @@ in {
   options.user.user = with types; {
     enable = mkBoolOpt true "Enable basic center User";
     name = mkOpt str "endoreg-center" "The name of the user's account";
-    initialPassword =
-      mkOpt str "1"
-      "The initial password to use";
     passwordFile =
       mkOpt str passwordFile
       "The hashed password file to use";
@@ -48,23 +45,13 @@ in {
 
         fi
       '';
-
-          #       if id "admin" &>/dev/null; then
-          # chown admin:root ${passwordFile}
-          # else
-          # chown root:root ${passwordFile}
-          # fi
-      # Usually no dependencies needed, but we ensure it runs early.
-      # This ensures the file is ready before the user accounts are set up.
-      # For example:
-      # deps = [ "systemd-tmpfiles-setup" ];
     };
 
     users.users.${cfg.name} =
       {
         shell = pkgs.zsh;
         isNormalUser = true;
-        password = cfg.initialPassword;
+        initialPassword = "1";
         home = "/home/${cfg.name}";
         group = "root";
         hashedPasswordFile = passwordFile;

@@ -42,16 +42,13 @@
   user = {
     admin = {
       name = "admin";
-      initialPassword = "1";
     };
     dev-01 = { # enabled by default
       name = "dev-01";
-      initialPassword = "1";
     };
     user = { # enabled by default
       enable = true;
       name = "user";
-      initialPassword = "1";
     };
   };
 

@@ -12,9 +12,6 @@ with lib.luxnix; let
 in {
   options.user.dev-01 = with types; {
     name = mkOpt str "dev-01" "The name of the user's account";
-    initialPassword =
-      mkOpt str "1"
-      "The initial password to use";
     passwordFile =
       mkOpt str passwordFile
       "The hashed password file to use";
@@ -48,16 +45,6 @@ in {
 
         fi
       '';
-
-          #       if id "admin" &>/dev/null; then
-          # chown admin:root ${passwordFile}
-          # else
-          # chown root:root ${passwordFile}
-          # fi
-      # Usually no dependencies needed, but we ensure it runs early.
-      # This ensures the file is ready before the user accounts are set up.
-      # For example:
-      # deps = [ "systemd-tmpfiles-setup" ];
     };
 
 
@@ -66,6 +53,7 @@ in {
       {
         shell = pkgs.zsh;
         isNormalUser = true;
+        initialPassword = "1";
         home = "/home/${cfg.name}";
         group = "users";
         hashedPasswordFile = passwordFile;
