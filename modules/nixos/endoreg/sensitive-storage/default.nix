@@ -22,6 +22,20 @@ in {
       description = ''
         Sensitive HDD configuration
       '';
+      default =  {
+          label = "dummy";
+          luks-uuid = "dummy";
+          mountPoint = "dummy";
+          filemodeSecret = "dummy";
+          filemodeMountpoint = "dummy";
+          mountScriptName = "dummy";
+          umountScriptName = "dummy";
+          mountServiceName = "dummy";
+          umountServiceName = "dummy";
+          keyFile = "dummy";
+          user = "dummy";
+          group = "dummy";
+      };
     };
 
     user = mkOption {
