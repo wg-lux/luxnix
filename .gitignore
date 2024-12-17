@@ -3,6 +3,8 @@
 .env
 ~git-credentials
 
+*keyfile.bin
+
 # pre-commit
 .pre-commit-config.yaml
 

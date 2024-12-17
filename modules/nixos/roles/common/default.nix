@@ -41,6 +41,7 @@ in {
 
     programs = {
       zsh.enable = true;
+      command-not-found.enable = true;
     };
 
     system = {
@@ -49,7 +50,6 @@ in {
       boot.secureBoot = false;
       locale.enable = true;
       boot.plymouth = true;
-      command-not-found.enable = true;
     };
   };
 }

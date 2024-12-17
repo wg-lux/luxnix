@@ -94,6 +94,7 @@ in {
     environment.systemPackages = with pkgs; [
     	vscode
       obsidian
+      e2fsprogs
     ];
 
 

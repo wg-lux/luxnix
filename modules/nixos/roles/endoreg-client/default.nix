@@ -15,6 +15,10 @@ in {
   config = mkIf cfg.enable {
     user.endoreg-service-user.enable = true;
 
+
+    luxnix.boot-decryption-stick = {
+      enable = true;
+    };
     # Boot Modes:
     # TODO normal, maintenance
     # normal: no ssh access, can mount sensitive data
