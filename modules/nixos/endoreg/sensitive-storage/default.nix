@@ -8,10 +8,14 @@ with lib;
 with lib.luxnix; let
   cfg = config.endoreg.sensitive-storage;
 
-  sensitiveDataDirectory = "${cfg.sensitiveDirectory}/data";
-  sensitiveLogsDirectory = "${cfg.sensitiveDirectory}/logs";
-  # get mountpoint directory helper function (expects sensitiveDataDirectory)
-  # and returns "${sensitiveDataDirectory}/${label}"
+  sensitiveDataDirectory = if cfg.enable 
+    then "${cfg.sensitiveDirectory}/data"
+    else "";
+
+  sensitiveLogsDirectory = if cfg.enable 
+    then "${cfg.sensitiveDirectory}/logs"
+    else "";
+
 
 in {
   options.endoreg.sensitive-storage = {
