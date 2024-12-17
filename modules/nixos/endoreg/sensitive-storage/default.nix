@@ -25,6 +25,7 @@ in {
       default = {
         dropoff = {
           label = "dropoff";
+          uuid = "dummy";
           luks-uuid = "dummy";
           mountPoint = "dummy/c";
           filemodeSecret = "0700";
@@ -39,6 +40,7 @@ in {
         };
         processing = {
           label = "processing";
+          uuid = "dummy";
           luks-uuid = "dummy";
           mountPoint = "dummy/c";
           filemodeSecret = "0700";
@@ -53,6 +55,7 @@ in {
         };
         processed =  {
           label = "processed";
+          uuid = "dummy";
           luks-uuid = "dummy";
           mountPoint = "dummy/c";
           filemodeSecret = "0700";
