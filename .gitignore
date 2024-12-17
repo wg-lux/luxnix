@@ -1,6 +1,7 @@
 # direnv
 .direnv
 .env
+~git-credentials
 
 # pre-commit
 .pre-commit-config.yaml

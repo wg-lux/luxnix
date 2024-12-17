@@ -49,6 +49,7 @@ in {
       boot.secureBoot = false;
       locale.enable = true;
       boot.plymouth = true;
+      command-not-found.enable = true;
     };
   };
 }
