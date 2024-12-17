@@ -22,20 +22,50 @@ in {
       description = ''
         Sensitive HDD configuration
       '';
-      default =  {
-          label = "dummy";
+      default = {
+        dropoff = {
+          label = "dropoff";
           luks-uuid = "dummy";
-          mountPoint = "dummy";
-          filemodeSecret = "dummy";
-          filemodeMountpoint = "dummy";
-          mountScriptName = "dummy";
-          umountScriptName = "dummy";
-          mountServiceName = "dummy";
-          umountServiceName = "dummy";
+          mountPoint = "dummy/c";
+          filemodeSecret = "0700";
+          filemodeMountpoint = "0750";
+          mountScriptName = "mount-dropoff";
+          umountScriptName = "umount-dropoff";
+          mountServiceName = "mount-dropoff";
+          umountServiceName = "umount-dropoff";
           keyFile = "dummy";
-          user = "dummy";
-          group = "dummy";
-      };
+          user = "admin";
+          group = "endoreg-service";
+        };
+        processing = {
+          label = "processing";
+          luks-uuid = "dummy";
+          mountPoint = "dummy/c";
+          filemodeSecret = "0700";
+          filemodeMountpoint = "0750";
+          mountScriptName = "mount-processing";
+          umountScriptName = "umont-processing";
+          mountServiceName = "mount-processing";
+          umountServiceName = "umont-processing";
+          keyFile = "dummy2";
+          user = "admin";
+          group = "endoreg-service";
+        };
+        processed =  {
+          label = "processed";
+          luks-uuid = "dummy";
+          mountPoint = "dummy/c";
+          filemodeSecret = "0700";
+          filemodeMountpoint = "0750";
+          mountScriptName = "mount-processed";
+          umountScriptName = "umont-processed";
+          mountServiceName = "mount-processed";
+          umountServiceName = "umont-processed";
+          keyFile = "dummy3";
+          user = "admin";
+          group = "endoreg-service";
+        };
+      }
     };
 
     user = mkOption {
