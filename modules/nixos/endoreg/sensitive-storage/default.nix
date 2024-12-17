@@ -15,7 +15,7 @@ with lib.luxnix; let
 
 in {
   options.endoreg.sensitive-storage = {
-    enable = mkEnableOption "Enable endoreg sensitive storage configuration";
+    enable = mkBoolOpt false "Enable endoreg sensitive storage configuration";
   
     partitionConfigurations = mkOption {
       type = types.attrsOf (types.attrsOf types.str);

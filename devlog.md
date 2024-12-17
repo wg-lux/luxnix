@@ -1,3 +1,22 @@
+# 2024-12-17
+- luxnix-administration
+    - update user passwords on
+
+```shell
+cd ~/luxnix-administration
+# set hostname and ip as environment variables
+export HOSTNAME="s-01"
+export IP="192.168.179.1"
+export SCRIPTPATH="./luxnix_administration/utils/deploy_user_passwords_remote.py"
+
+python $SCRIPTPATH $HOSTNAME $IP
+
+ssh admin@$IP
+nho
+
+```
+
+# Before 2024-12-17
 To-Do
 
     Migrate Tempfile Rules
