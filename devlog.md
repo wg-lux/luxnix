@@ -1,3 +1,14 @@
+# 2024-12-18
+## Deploy Boot Keyfiles on s-01, s-02, s-03
+- add boot stick to base-server role
+
+### s-01
+ssh 192.168.179.1
+cd luxnix
+git pull
+nho
+
+
 # 2024-12-17
 ## setup gs-02
 
@@ -96,6 +107,44 @@ exit
 
 nixos-anywhere --flake '.#gs-02' $IP
 
+
+```
+
+### Deploy Secrets
+- switch to luxnix administration
+```shell
+# (on target machine)
+sudo rm /etc/user-passwords/admin_hashed
+sudo rm /etc/user-passwords/dev-01_hashed
+sudo rm /etc/user-passwords/user_hashed
+
+##################
+
+# On source machine
+python ./luxnix_administration/utils/deploy_user_passwords_remote.py "gs-02" "192.168.0.219"
+
+
+cd ~/luxnix-administration/data/openvpn-ca/
+
+easyrsa build-client-full gs-02
+
+./deploy-openvpn-certificates-remote.sh admin@192.168.0.219 "gs-02" "client" nopass
+
+# Generate new certificates
+python
+from luxnix_administration.utils import generate_client_certificate_folder
+
+# host
+generate_client_certificate_folder(
+    cert_type = "client",
+    hostname = "gs-02"
+)
+
+exit() #exit python
+
+./deploy-openvpn-certificates-remote.sh admin@192.168.0.219 gs-02 client
+
+reboot
 
 ```
 

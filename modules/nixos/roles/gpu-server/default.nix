@@ -22,6 +22,7 @@ in {
     roles = {
       desktop.enable = true;
       aglnet.client.enable = true;
+      base-server.enable = true;
     };
 
     services = {
@@ -84,9 +85,7 @@ in {
       # "aarch64-linux"
     ];
 
-    luxnix.boot-decryption-stick = {
-      enable = true;
-    };
+    
 
 
 

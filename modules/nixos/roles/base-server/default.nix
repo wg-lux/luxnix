@@ -65,6 +65,10 @@ in {
       desktop.enable = true;
     };
 
+    luxnix.boot-decryption-stick = {
+      enable = true;
+    };
+
     services = {
       luxnix.avahi.enable = false;
       vpn.enable = false; #TODO OPENVPN IMPLEMENTATION
