@@ -9,7 +9,9 @@ let
   # Offset in bytes for the keyfile partition
   offsetB = cfg.offsetM * 1024 * 1024;
 
-  scriptPath = pkgs.writeShellScriptBin "${cfg.scriptName}" ''
+
+  #"${cfg.scriptName}" ''
+  scriptPath = pkgs.writeShellScriptBin "gs-01-bootstick" '' 
     #!/usr/bin/env bash
     set -euo pipefail
 
