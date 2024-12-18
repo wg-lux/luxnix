@@ -86,6 +86,7 @@ let
         cryptsetup luksAddKey "$LUKS_DEVICE" "$KEYFILE_NAME"
 
 
+        echo "Adding keyfile to cryptroot2..."
         # /dev/disk/by-partlabel/luks2
         LUKS_DEVICE="/dev/disk/by-partlabel/luks2"
         cryptsetup luksAddKey "$LUKS_DEVICE" "$KEYFILE_NAME"
@@ -130,6 +131,13 @@ let
         keyFileTimeout = 10;
       };
       boot.initrd.luks.devices."cryptroot2" = {
+        keyFile        = usb-device;
+        keyFileOffset  = offset-b;
+        keyFileSize    = keyfile-size;
+        preLVM         = true;
+        keyFileTimeout = 10;
+      };
+      boot.initrd.luks.devices."cryptroot3" = {
         keyFile        = usb-device;
         keyFileOffset  = offset-b;
         keyFileSize    = keyfile-size;

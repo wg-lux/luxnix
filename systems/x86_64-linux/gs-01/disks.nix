@@ -74,10 +74,10 @@
           partitions = {
             luks = {
               size = "100%";
-              label = "luks3";
+              label = "luks2";
               content = {
                 type = "luks";
-                name = "cryptroot3";
+                name = "cryptroot2";
                 extraOpenArgs = [
                   "--allow-discards"
                   "--perf-no_read_workqueue"
