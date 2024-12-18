@@ -16,6 +16,25 @@ git pull
 nho
 
 sudo boot-decryption-stick-setup
+git add .
+git stash
+
+--- 
+on source machine
+
+- nano systems/x86_64-linux/$TARGET_HOSTNAME/boot-decryption-config.nix 
+- nano systems/x86_64-linux/$TARGET_HOSTNAME/default.nix
+    - add ./boot-decryption-config.nix to extraImports
+
+- git add .
+- git commit -m "added $TARGET decryption stick config"
+
+---
+on target machine
+
+- git pull
+- nho
+
 
 ### s-01
 ssh 192.168.179.1
