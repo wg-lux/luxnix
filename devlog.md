@@ -48,9 +48,6 @@ easyrsa build-client-full $TARGET_HOSTNAME
 
 ```
 
-```shell
-
-```
 
 ## Setup s-04
 ```shell

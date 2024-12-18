@@ -9,7 +9,9 @@ let
   # Offset in bytes for the keyfile partition
   offsetB = cfg.offsetM * 1024 * 1024;
 
-  scriptPath = pkgs.writeShellScriptBin "${cfg.scriptName}" ''
+
+  #"${cfg.scriptName}" ''
+  scriptPath = pkgs.writeShellScriptBin "gs-02-bootstick" '' 
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -69,15 +71,28 @@ let
     read -p "Do you want to proceed with adding the keyfile to cryptroot? (y/n): " ADD_KEYFILE
 
     if [[ "$ADD_KEYFILE" == "y" ]]; then
-        echo "Adding keyfile to cryptroot..."
+        echo "Adding keyfile to cryptroot0..."
 
-        # The device for your luks partition is created by disko with label "luks".
-        # Typically, after disko configuration, your LUKS partition should be accessible at:
-        # /dev/disk/by-partlabel/luks
-        # Verify by checking lsblk or blkid if needed.
-        LUKS_DEVICE="/dev/disk/by-partlabel/luks"
+        # For the primary disk setup, the luks partition is labeled as "luks0"
+        # Disko defines "cryptroot0" as the name of the LUKS container.
+        # This is accessible at:
+        # /dev/disk/by-partlabel/luks0
+        LUKS_DEVICE="/dev/disk/by-partlabel/luks0"
+        cryptsetup luksAddKey "$LUKS_DEVICE" "$KEYFILE_NAME"
 
-        # Add the keyfile to the luks device
+        echo "Adding keyfile to cryptroot1..."
+        # /dev/disk/by-partlabel/luks1
+        LUKS_DEVICE="/dev/disk/by-partlabel/luks1"
+        cryptsetup luksAddKey "$LUKS_DEVICE" "$KEYFILE_NAME"
+
+
+        # /dev/disk/by-partlabel/luks2
+        LUKS_DEVICE="/dev/disk/by-partlabel/luks2"
+        cryptsetup luksAddKey "$LUKS_DEVICE" "$KEYFILE_NAME"
+        
+        echo "Adding keyfile to cryptroot3..."
+        # /dev/disk/by-partlabel/luks3
+        LUKS_DEVICE="/dev/disk/by-partlabel/luks3"
         cryptsetup luksAddKey "$LUKS_DEVICE" "$KEYFILE_NAME"
     fi
 
@@ -98,14 +113,28 @@ let
       # Ensure necessary kernel modules for USB and LUKS
       boot.initrd.availableKernelModules = [ "dm-crypt" "sd_mod" "usb_storage" ];
 
-      # 'cryptroot' is defined by disko as the name of the LUKS container.
       # Use the usb-device as keyFile, with offset and size defined above.
-      boot.initrd.luks.devices."cryptroot" = {
-        keyFile            = usb-device;
-        keyFileOffset      = offset-b;
-        keyFileSize        = keyfile-size;
-        preLVM             = true;
-        keyFileTimeout = 10; # if no prompt is displayed, try pressing "Esc"
+      # Adjust the LUKS device naming to match the updated configuration.
+      boot.initrd.luks.devices."cryptroot0" = {
+        keyFile        = usb-device;
+        keyFileOffset  = offset-b;
+        keyFileSize    = keyfile-size;
+        preLVM         = true;
+        keyFileTimeout = 10;
+      };
+      boot.initrd.luks.devices."cryptroot1" = {
+        keyFile        = usb-device;
+        keyFileOffset  = offset-b;
+        keyFileSize    = keyfile-size;
+        preLVM         = true;
+        keyFileTimeout = 10;
+      };
+      boot.initrd.luks.devices."cryptroot2" = {
+        keyFile        = usb-device;
+        keyFileOffset  = offset-b;
+        keyFileSize    = keyfile-size;
+        preLVM         = true;
+        keyFileTimeout = 10;
       };
     }
     EOF
@@ -127,7 +156,7 @@ let
   '';
 
 in {
-  options.luxnix.boot-decryption-stick-gs-02 = {
+  options.luxnix.boot-decryption-stick-gs-01 = {
     enable = mkBoolOpt false "Enable boot stick with keyfile configuration";
 
     offsetM = mkOption {
@@ -150,7 +179,7 @@ in {
 
     scriptName = mkOption {
       type = types.str;
-      default = "boot-decryption-stick-setup-gs-02";
+      default = "boot-decryption-stick-setup-02";
       description = "Name of the script that will be created.";
     };
 
