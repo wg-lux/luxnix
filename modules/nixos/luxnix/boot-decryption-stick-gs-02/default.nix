@@ -3,7 +3,7 @@ with lib;
 with lib.luxnix;
 
 let
-  cfg = config.luxnix.boot-decryption-stick;
+  cfg = config.luxnix.boot-decryption-stick-gs-01;
   hostname = config.networking.hostName;
 
   # Offset in bytes for the keyfile partition
@@ -127,7 +127,7 @@ let
   '';
 
 in {
-  options.luxnix.boot-decryption-stick = {
+  options.luxnix.boot-decryption-stick-gs-01 = {
     enable = mkBoolOpt false "Enable boot stick with keyfile configuration";
 
     offsetM = mkOption {
@@ -150,7 +150,7 @@ in {
 
     scriptName = mkOption {
       type = types.str;
-      default = "boot-decryption-stick-setup";
+      default = "boot-decryption-stick-setup-gs-02";
       description = "Name of the script that will be created.";
     };
 
