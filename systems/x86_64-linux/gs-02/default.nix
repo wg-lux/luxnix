@@ -37,11 +37,11 @@
   
   
   luxnix.nvidia-default.enable = true;
+  luxnix.boot-decryption-stick-gs-01.enable = true;
 
   programs.coolercontrol.enable = true;
 
   roles = {
-    
     gpu-server.enable=true;
   };
 
