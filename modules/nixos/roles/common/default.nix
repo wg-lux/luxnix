@@ -15,6 +15,10 @@ in {
   config = mkIf cfg.enable {
     environment.systemPackages = with pkgs; [
       devenv
+      parted
+      cryptsetup
+      lsof
+      e2fsprogs
     ];
 
     systemd.tmpfiles.rules = [

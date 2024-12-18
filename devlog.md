@@ -8,6 +8,14 @@ cd luxnix
 git pull
 nho
 
+```shell
+❯ sudo boot-decryption-stick-setup
+Available USB devices:
+sda             7,5G disk  
+nvme0n1       476,9G disk  
+Please enter the device path (e.g., /dev/sdb) of the USB drive: /dev/sda 
+```
+
 
 # 2024-12-17
 ## setup gs-02
