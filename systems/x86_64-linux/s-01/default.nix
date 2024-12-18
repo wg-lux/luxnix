@@ -2,11 +2,16 @@
   pkgs,
   lib,
   ...
-}@inputs: {
+}@inputs: 
+let
+    extraImports = [
+      ./boot-decryption-config.nix
+    ];
+in {
   imports = [
     ./hardware-configuration.nix
     ./disks.nix
-  ];
+  ] ++ extraImports;
 
   # environment.pathsToLink = [
   #   "/share/fish"
