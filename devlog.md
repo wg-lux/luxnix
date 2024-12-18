@@ -1,6 +1,18 @@
 # 2024-12-18
 ## Deploy Boot Keyfiles on s-01, s-02, s-03
 - add boot stick to base-server role
+### Setup s-04
+```shell
+
+export SSH_IP="192.168.1.48"
+export TARGET_HOSTNAME="s-04"
+export PUB_KEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM7vvbgQtzi4GNeugHSuMyEke4MY0bSfoU7cBOnRYU8M"
+
+cd ~/luxnix-administration
+./deploy-authorized-key.sh nixos@$SSH_IP $PUB_KEY
+
+```
+
 ### setup gs-02
 
 ```shell
