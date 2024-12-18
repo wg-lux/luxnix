@@ -156,7 +156,7 @@ let
   '';
 
 in {
-  options.luxnix.boot-decryption-stick-gs-01 = {
+  options.luxnix.boot-decryption-stick-gs-02 = {
     enable = mkBoolOpt false "Enable boot stick with keyfile configuration";
 
     offsetM = mkOption {
