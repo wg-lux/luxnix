@@ -7,7 +7,7 @@
     sensitiveHdd = import ./sensitive-hdd.nix {};
 
     extraImports = [
-      ./boot-decryption-config.nix
+      # ./boot-decryption-config.nix
     ];
 
   in
@@ -34,8 +34,7 @@
       nfs.enable = false; #CHANGEME
     };
   };
-  
-  
+
   luxnix.nvidia-default.enable = true;
 
   programs.coolercontrol.enable = true;
@@ -53,7 +52,7 @@
   };
 
   # add admin@gc-02 public key
-  roles.ssh-access.dev-01.enable = true; # defaults to give gc-02 ssh access
+  # roles.ssh-access.dev-01.enable = true; # defaults to give gc-02 ssh access
 
   user = {
     admin = {

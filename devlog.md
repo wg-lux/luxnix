@@ -1,7 +1,33 @@
 # 2024-12-18
 ## Deploy Boot Keyfiles on s-01, s-02, s-03
 - add boot stick to base-server role
-### Setup s-04
+## ToDo 
+Continue s-04 setup
+- [ ] Deploy setup files to s04
+- [ ] setup boot stick
+
+## setup gs-01
+```shell
+
+cd ~/luxnix-administration
+
+export SSH_IP="192.168.0.228"
+export TARGET_HOSTNAME="gs-01"
+export PUB_KEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM7vvbgQtzi4GNeugHSuMyEke4MY0bSfoU7cBOnRYU8M"
+
+./deploy-authorized-key.sh nixos@$SSH_IP $PUB_KEY
+
+cd ~/luxnix
+
+export SSH_IP="192.168.0.228"
+export TARGET_HOSTNAME="gs-01"
+export PUB_KEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM7vvbgQtzi4GNeugHSuMyEke4MY0bSfoU7cBOnRYU8M"
+
+nixos-anywhere --flake '.#gs-01' nixos@$SSH_IP
+
+```
+
+## Setup s-04
 ```shell
 
 export SSH_IP="192.168.1.48"
@@ -10,6 +36,17 @@ export PUB_KEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM7vvbgQtzi4GNeugHSuMyEke4MY
 
 cd ~/luxnix-administration
 ./deploy-authorized-key.sh nixos@$SSH_IP $PUB_KEY
+
+# create admin@s-04
+# create system folder s04
+# modify disk (sda) and hardware config (kernel modules, intel cpu)
+
+cd ~/luxnix
+git add .
+git commit -m "add $TARGET_HOSTNAME"
+git push
+
+nixos-anywhere --flake '.#s-04' nixos@$SSH_IP
 
 ```
 

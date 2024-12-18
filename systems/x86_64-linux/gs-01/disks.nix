@@ -2,8 +2,8 @@
   disko.devices = {
     disk = {
       # Primary disk with EFI and main btrfs definition
-      nvme0n1 = {
-        device = "/dev/nvme0n1";
+      sda = {
+        device = "/dev/sda";
         type = "disk";
         content = {
           type = "gpt";
@@ -43,8 +43,8 @@
       };
 
       # Additional disks, each with a LUKS partition only (no filesystem)
-      nvme1n1 = {
-        device = "/dev/nvme1n1";
+      sdc = {
+        device = "/dev/sdc";
         type = "disk";
         content = {
           type = "gpt";
@@ -66,30 +66,67 @@
         };
       };
 
-      nvme2n1 = {
-        device = "/dev/nvme2n1";
+      sdd = {
+        device = "/dev/sdd";
         type = "disk";
         content = {
           type = "gpt";
           partitions = {
             luks = {
               size = "100%";
-              label = "luks2";
+              label = "luks3";
               content = {
                 type = "luks";
-                name = "cryptroot2";
+                name = "cryptroot3";
                 extraOpenArgs = [
                   "--allow-discards"
                   "--perf-no_read_workqueue"
                   "--perf-no_write_workqueue"
                 ];
+                settings = {crypttabExtraOpts = ["fido2-device=auto" "token-timeout=10"];};
+                
+                content = {
+                  type = "btrfs";
+
+                  extraArgs = [
+                     "-L" "nixos" "-f"
+
+                      "/dev/mapper/cryptroot0"
+                      "/dev/mapper/cryptroot1"
+                    ];
+
+                  subvolumes = {
+                    "/root" = {
+                      mountpoint = "/";
+                      mountOptions = ["subvol=root" "compress=zstd" "noatime"];
+                    };
+                    "/home" = {
+                      mountpoint = "/home";
+                      mountOptions = ["subvol=home" "compress=zstd" "noatime"];
+                    };
+                    "/nix" = {
+                      mountpoint = "/nix";
+                      mountOptions = ["subvol=nix" "compress=zstd" "noatime"];
+                    };
+                    "/persist" = {
+                      mountpoint = "/persist";
+                      mountOptions = ["subvol=persist" "compress=zstd" "noatime"];
+                    };
+                    "/log" = {
+                      mountpoint = "/var/log";
+                      mountOptions = ["subvol=log" "compress=zstd" "noatime"];
+                    };
+                    "/swap" = {
+                      mountpoint = "/swap";
+                      swap.swapfile.size = "16G";
+                    };
+                  };
+                };
               };
             };
           };
         };
       };
-
-      
     };
   };
 

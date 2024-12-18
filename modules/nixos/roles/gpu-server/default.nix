@@ -24,7 +24,6 @@ in {
       aglnet.client.enable = true;
       base-server.enable = true;
     };
-
     
     cli.programs.nix-ld = {
       enable = true;
