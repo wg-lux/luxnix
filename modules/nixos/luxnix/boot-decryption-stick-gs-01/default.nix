@@ -68,7 +68,7 @@ let
     dd if="$KEYFILE_NAME" of="$USB_DEVICE" bs="$BS" count="$COUNT" seek=$(($OFFSET_B/$BS))
 
     # Confirm adding the keyfile to cryptroot
-    read -p "Do you want to proceed with adding the keyfile to cryptroot0? (y/n): " ADD_KEYFILE
+    read -p "Do you want to proceed with adding the keyfile to cryptroot? (y/n): " ADD_KEYFILE
 
     if [[ "$ADD_KEYFILE" == "y" ]]; then
         echo "Adding keyfile to cryptroot0..."
@@ -85,9 +85,9 @@ let
         LUKS_DEVICE="/dev/disk/by-partlabel/luks1"
         cryptsetup luksAddKey "$LUKS_DEVICE" "$KEYFILE_NAME"
         
-        echo "Adding keyfile to cryptroot2..."
-        # /dev/disk/by-partlabel/luks2
-        LUKS_DEVICE="/dev/disk/by-partlabel/luks2"
+        echo "Adding keyfile to cryptroot3..."
+        # /dev/disk/by-partlabel/luks3
+        LUKS_DEVICE="/dev/disk/by-partlabel/luks3"
         cryptsetup luksAddKey "$LUKS_DEVICE" "$KEYFILE_NAME"
     fi
 
