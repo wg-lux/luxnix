@@ -15,6 +15,12 @@ in {
   config = mkIf cfg.enable {
     user.endoreg-service-user.enable = true;
 
+    services.ssh = {
+      enable = true;
+        authorizedKeys = [ # just adds authorized keys for admin user, does not enable ssh!
+        "${config.luxnix.generic-settings.rootIdED25519}" 
+        ];
+      };
 
     luxnix.boot-decryption-stick = {
       enable = true;

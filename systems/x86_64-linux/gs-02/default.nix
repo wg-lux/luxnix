@@ -57,6 +57,9 @@
     };
   };
 
+  # add admin@gc-02 public key
+  ssh-access.dev-01.enable = true; # defaults to give gc-02 ssh access
+
   user = {
     admin = {
       name = "admin";

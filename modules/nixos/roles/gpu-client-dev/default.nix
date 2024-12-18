@@ -19,12 +19,13 @@ in {
 
   config = mkIf cfg.enable {
 
-    services = {
-      ssh.enable = true;
-      ssh.authorizedKeys = [
-        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM7vvbgQtzi4GNeugHSuMyEke4MY0bSfoU7cBOnRYU8M" #lux@gc-06
-      ];
-    };
+    services.ssh = {
+      enable = true;
+        authorizedKeys = [ # just adds authorized keys for admin user, does not enable ssh!
+        "${config.luxnix.generic-settings.rootIdED25519}" 
+        ];
+      };
+
     
     cli.programs.nix-ld = {
       enable = true;

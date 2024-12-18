@@ -25,12 +25,6 @@ in {
       base-server.enable = true;
     };
 
-    services = {
-      ssh.enable = true;
-      ssh.authorizedKeys = [
-        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM7vvbgQtzi4GNeugHSuMyEke4MY0bSfoU7cBOnRYU8M" #lux@gc-06
-      ];
-    };
     
     cli.programs.nix-ld = {
       enable = true;

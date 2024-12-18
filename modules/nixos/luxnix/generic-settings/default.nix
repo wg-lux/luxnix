@@ -36,6 +36,14 @@ in {
         Path to the luxnix administration directory.
       '';
     };
+
+    rootIdED25519 = mkOption {
+      type = types.str;
+      default = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM7vvbgQtzi4GNeugHSuMyEke4MY0bSfoU7cBOnRYU8M";
+      description = ''
+        The root
+      '';
+    };
   };
 
 

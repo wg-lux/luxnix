@@ -37,12 +37,7 @@ in {
   roles.aglnet.host.enable =true; # enables base-server (and base-server calls common and desktop)
   roles.base-server.enable=true;
   
-  services.ssh = {
-    enable = true;
-    authorizedKeys = [ # just adds authorized keys for admin user, does not enable ssh!
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM7vvbgQtzi4GNeugHSuMyEke4MY0bSfoU7cBOnRYU8M"
-    ];
-  };
+  
 
   user = {
     admin = {

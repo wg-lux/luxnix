@@ -1,6 +1,36 @@
 # 2024-12-18
 ## Deploy Boot Keyfiles on s-01, s-02, s-03
 - add boot stick to base-server role
+### setup gs-02
+
+```shell
+export SSH_IP="172.16.255.22"
+export TARGET_HOSTNAME="gs-02"
+
+ssh $SSH_IP
+
+sudo rm -rf /etc/user-passwords
+sudo mkdir /etc/user-passwords  
+sudo chown -R admin /etc/user-passwords
+
+cd luxnix
+git pull 
+nho
+```
+
+```shell
+cd ~/luxnix-administration
+export SSH_IP="172.16.255.22"
+export TARGET_HOSTNAME="gs-02"
+
+./deploy-user-folders-remote.sh "admin@$SSH_IP" "admin@$TARGET_HOSTNAME"
+
+python luxnix_administration/utils/deploy_user_passwords_remote.py $TARGET_HOSTNAME $SSH_IP 
+
+sudo boot-decryption-stick-setup
+
+```
+
 ### s-03
 ```shell
 export SSH_IP="192.168.1.24"
