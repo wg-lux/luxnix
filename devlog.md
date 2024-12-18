@@ -1,11 +1,44 @@
 # 2024-12-18
 ## Deploy Boot Keyfiles on s-01, s-02, s-03
 - add boot stick to base-server role
+### s-03
+```shell
+export SSH_IP="192.168.1.24"
+export TARGET_HOSTNAME="s-03"
+
+ssh $SSH_IP
+git pull 
+nho
+
+sudo boot-decryption-stick-setup
+
+
+```
+
+*Detour: Deploy User-folders and passwords*
+Target
+```shell
+sudo rm -rf /etc/user-passwords
+sudo mkdir /etc/user-passwords  
+sudo chown -R admin /etc/user-passwords 
+```
+
+Source
+```shell
+cd ~/luxnix-administration
+export SSH_IP="192.168.1.24"
+export TARGET_HOSTNAME="s-03"
+
+./deploy-user-folders-remote.sh "admin@$SSH_IP" "admin@$TARGET_HOSTNAME"
+
+python luxnix_administration/utils/deploy_user_passwords_remote.py $TARGET_HOSTNAME $SSH_IP 
+
+
+./deploy-openvpn-certificates-remote.sh "admin@$SSH_IP" "$TARGET_HOSTNAME" "client"
+
+```
 
 ### s-02
-*Detour: Update user pwds:*
-
-
 export SSH_IP="192.168.179.2"
 export TARGET_HOSTNAME="s-02"
 
