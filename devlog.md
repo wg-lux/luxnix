@@ -16,6 +16,15 @@ nvme0n1       476,9G disk
 Please enter the device path (e.g., /dev/sdb) of the USB drive: /dev/sda 
 ```
 
+- create `boot-decryption-config.nix` file in target systems folder in nix config:
+    - `nano systems/x86_64-linux/s-01/boot-decryption-config.nix`
+- add to extra imports in `nano systems/x86_64-linux/s-01/default.nix`
+
+- git add .
+- pull and rebuild on target system
+
+
+- [ ] add echo cat generated-nix-config-file to script
 
 # 2024-12-17
 ## setup gs-02
