@@ -119,6 +119,10 @@ let
     umount "$MOUNT_POINT"
     rmdir "$MOUNT_POINT"
 
+    # print generated file content to console
+    echo "Generated NixOS configuration file content:"
+    cat $NIX_CONFIGURATION_OUTPUT
+
     echo "Script completed successfully!"
   '';
 
