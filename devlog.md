@@ -27,6 +27,31 @@ nixos-anywhere --flake '.#gs-01' nixos@$SSH_IP
 
 ```
 
+```shell
+
+export SSH_IP="192.168.0.228"
+export TARGET_HOSTNAME="gs-01"
+
+./deploy-user-folders-remote.sh "admin@$SSH_IP" "admin@$TARGET_HOSTNAME"
+
+python luxnix_administration/utils/deploy_user_passwords_remote.py $TARGET_HOSTNAME $SSH_IP 
+
+sudo boot-decryption-stick-setup
+
+cd ~/luxnix-administration/data/openvpn-ca/
+export SSH_IP="192.168.0.228"
+export TARGET_HOSTNAME="gs-01"
+
+easyrsa build-client-full $TARGET_HOSTNAME
+
+./deploy-openvpn-certificates-remote.sh admin@$SSH_IP $TARGET_HOSTNAME "client" nopass
+
+```
+
+```shell
+
+```
+
 ## Setup s-04
 ```shell
 
