@@ -2,6 +2,21 @@
 ## Deploy Boot Keyfiles on s-01, s-02, s-03
 - add boot stick to base-server role
 
+### s-02
+*Detour: Update user pwds:*
+
+
+export SSH_IP="192.168.179.2"
+export TARGET_HOSTNAME="s-02"
+
+ssh $SSH_IP
+
+cd luxnix
+git pull 
+nho
+
+sudo boot-decryption-stick-setup
+
 ### s-01
 ssh 192.168.179.1
 cd luxnix
@@ -24,7 +39,7 @@ Please enter the device path (e.g., /dev/sdb) of the USB drive: /dev/sda
 - pull and rebuild on target system
 
 
-- [ ] add echo cat generated-nix-config-file to script
+- [x] add echo cat generated-nix-config-file to script
 
 # 2024-12-17
 ## setup gs-02
