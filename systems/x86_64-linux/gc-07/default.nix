@@ -7,7 +7,7 @@
     sensitiveHdd = import ./sensitive-hdd.nix {};
 
     extraImports = [
-      # ./boot-decryption-config.nix
+      ./boot-decryption-config.nix
     ];
 
   in
