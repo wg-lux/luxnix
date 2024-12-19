@@ -87,7 +87,7 @@ let
         
         echo "Adding keyfile to cryptroot2..."
         # /dev/disk/by-partlabel/luks2
-        LUKS_DEVICE="/dev/disk/by-partlabel/luks3"
+        LUKS_DEVICE="/dev/disk/by-partlabel/luks2"
         cryptsetup luksAddKey "$LUKS_DEVICE" "$KEYFILE_NAME"
     fi
 

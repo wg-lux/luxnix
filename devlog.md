@@ -30,7 +30,7 @@ ssh $SSH_IP
 nh os switch
 nh home switch
 cd luxnix
-sudo boot-decryption-stick-setup
+sudo gs-01-bootstick
 
 
 ```
