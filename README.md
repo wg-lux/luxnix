@@ -1,11 +1,10 @@
 # Setup
--> See: deployment-guide.md
+-> See: docs/deployment-guide.md
 
 References for the NixOS Setup used:
 
 - Nixicle https://github.com/hmajid2301/nixicle
 - Snowflakes OS Quickstart https://snowfall.org/guides/lib/quickstart/
-
 
 
 # LuxNix - Professional NixOS Configuration Framework
@@ -63,7 +62,7 @@ This infrastructure was built in the context of the coloreg study at the Univers
 
 ### Quick Start
 1. Boot from NixOS installation media
-2. Follow the deployment guide in `deployment-guide.md`
+2. Follow the deployment guide in `docs/deployment-guide.md`
 3. Choose appropriate system configuration from `systems/x86_64-linux/`
 
 ### Deployment

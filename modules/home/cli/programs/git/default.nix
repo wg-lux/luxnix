@@ -32,13 +32,6 @@ in {
 
       extraConfig =
         {
-          credential = {
-            helper = "store --file ~git-credentials";
-          };
-          credential.modalPrompt = true;
-          credential.https = {
-            helper = "store --file ~git-credentials";
-          };
           # gpg.format = "ssh";
           # gpg.ssh.allowedSignersFile = "~/.ssh/allowed_signers";
           # commit.gpgsign = true;
@@ -47,7 +40,7 @@ in {
           # core = {
           #   editor = "nvim";
           #   pager = "delta";
-          # };{}
+          # };
 
           # color = {
           #   ui = true;
