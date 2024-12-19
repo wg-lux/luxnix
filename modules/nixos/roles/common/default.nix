@@ -19,6 +19,7 @@ in {
       cryptsetup
       lsof
       e2fsprogs
+      nix-prefetch-scripts
     ];
 
     systemd.tmpfiles.rules = [

@@ -85,8 +85,8 @@ let
         LUKS_DEVICE="/dev/disk/by-partlabel/luks1"
         cryptsetup luksAddKey "$LUKS_DEVICE" "$KEYFILE_NAME"
         
-        echo "Adding keyfile to cryptroot3..."
-        # /dev/disk/by-partlabel/luks3
+        echo "Adding keyfile to cryptroot2..."
+        # /dev/disk/by-partlabel/luks2
         LUKS_DEVICE="/dev/disk/by-partlabel/luks3"
         cryptsetup luksAddKey "$LUKS_DEVICE" "$KEYFILE_NAME"
     fi

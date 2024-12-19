@@ -44,7 +44,7 @@
 
       # Additional disks, each with a LUKS partition only (no filesystem)
       sdb = {
-        device = "/dev/sdb";
+        device = "/dev/sdc";
         type = "disk";
         content = {
           type = "gpt";
@@ -67,7 +67,7 @@
       };
 
       sdc = {
-        device = "/dev/sdc";
+        device = "/dev/sdd";
         type = "disk";
         content = {
           type = "gpt";

@@ -1,4 +1,58 @@
 # 2024-12-19
+## setup gs-08
+
+## gs-01 setup - new attempt
+previously we failed due to inconsistent disk mounting (sda, sdb, ....)
+
+*Luxnix-Administration Repo*
+```shell
+
+cd ~/luxnix-administration
+
+export SSH_IP="192.168.0.230"
+export TARGET_HOSTNAME="gs-01"
+export PUB_KEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM7vvbgQtzi4GNeugHSuMyEke4MY0bSfoU7cBOnRYU8M"
+
+./deploy-authorized-key.sh nixos@$SSH_IP $PUB_KEY
+
+
+# continue in luxnix shell and install os
+# continue here after finished installation
+
+./deploy-user-folders-remote.sh "admin@$SSH_IP" "admin@$TARGET_HOSTNAME"
+
+python luxnix_administration/utils/deploy_user_passwords_remote.py $TARGET_HOSTNAME $SSH_IP 
+
+./deploy-openvpn-certificates-remote.sh admin@$SSH_IP $TARGET_HOSTNAME "client" nopass
+
+ssh $SSH_IP
+
+nh os switch
+nh home switch
+cd luxnix
+sudo boot-decryption-stick-setup
+
+
+```
+
+```shell
+cd ~/luxnix
+export SSH_IP="192.168.0.230"
+export TARGET_HOSTNAME="gs-01"
+
+nixos-anywhere --flake '.#gs-01' nixos@$SSH_IP
+
+
+ssh $SSH_IP
+sudo rm -rf /etc/user-passwords
+sudo mkdir /etc/user-passwords  
+sudo chown -R admin /etc/user-passwords
+git clone https://github.com/wg-lux/luxnix
+cd luxnix
+direnv allow
+exit
+```
+
 ## s-04 setup
 ```shell
 
@@ -58,6 +112,8 @@ git push
 
 ssh $SSH_IP
 cd luxnix
+git add .
+git stash
 git pull
 nho
 sudo reboot

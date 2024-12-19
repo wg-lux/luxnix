@@ -1,7 +1,7 @@
 let
-  usb-uuid = "b758e703-4d29-404c-ac9d-5964923eb657";
+  usb-uuid = "50bfb364-e2a1-435d-ab8a-c5ba5e4b8f30";
   usb-mountpoint = "/mnt/usb_key";
-  usb-device = "/dev/disk/by-uuid/b758e703-4d29-404c-ac9d-5964923eb657";
+  usb-device = "/dev/disk/by-uuid/50bfb364-e2a1-435d-ab8a-c5ba5e4b8f30";
 
   bs = 1;
   offset-m = 50;
@@ -18,8 +18,6 @@ in {
     keyFileOffset      = offset-b;
     keyFileSize        = keyfile-size;
     preLVM             = true;
-    keyFileTimeout = 10;
+    keyFileTimeout = 10; # if no prompt is displayed, try pressing "Esc"
   };
-
-  
 }
