@@ -28,8 +28,7 @@
   services = {
     virtualisation.kvm.enable = false;
     hardware.openrgb.enable = false;
-    luxnix = {
-      traefik.enable = true;
+    luxnix = {      
       ollama.enable = false;
       nfs.enable = false; #CHANGEME
     };

@@ -29,7 +29,6 @@
     virtualisation.kvm.enable = false;
     hardware.openrgb.enable = false;
     luxnix = {
-      traefik.enable = true;
       ollama.enable = false;
       nfs.enable = false; #CHANGEME
     };
@@ -42,6 +41,9 @@
     onboardGpuType = "intel";
     nvidiaDriver = "beta";
   };
+
+  #TODO Remove after prototyping
+  luxnix.traefik-host.enable = true;
 
   programs.coolercontrol.enable = true;
 
