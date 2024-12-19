@@ -5,7 +5,7 @@
 }@inputs: 
 let
     extraImports = [
-      # ./boot-decryption-config.nix
+      ./boot-decryption-config.nix
     ];
 in {
   imports = [

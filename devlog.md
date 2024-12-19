@@ -1,10 +1,80 @@
+# 2024-12-19
+## s-04 setup
+```shell
+
+cd ~/luxnix-administration
+
+export SSH_IP="192.168.1.48"
+export TARGET_HOSTNAME="s-04"
+export PUB_KEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM7vvbgQtzi4GNeugHSuMyEke4MY0bSfoU7cBOnRYU8M"
+
+./deploy-authorized-key.sh nixos@$SSH_IP $PUB_KEY
+
+cd ~/luxnix
+
+export SSH_IP="192.168.1.48"
+export TARGET_HOSTNAME="s-04"
+export PUB_KEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM7vvbgQtzi4GNeugHSuMyEke4MY0bSfoU7cBOnRYU8M"
+
+nixos-anywhere --flake '.#s-04' nixos@$SSH_IP
+```
+
+```shell
+
+export SSH_IP="192.168.1.48"
+export TARGET_HOSTNAME="s-04"
+
+ssh $SSH_IP
+sudo rm -rf /etc/user-passwords
+sudo mkdir /etc/user-passwords  
+sudo chown -R admin /etc/user-passwords
+git clone https://github.com/wg-lux/luxnix
+cd luxnix
+direnv allow
+exit
+
+cd ~/luxnix-administration
+export SSH_IP="192.168.1.48"
+export TARGET_HOSTNAME="s-04"
+./deploy-user-folders-remote.sh "admin@$SSH_IP" "admin@$TARGET_HOSTNAME"
+
+python luxnix_administration/utils/deploy_user_passwords_remote.py $TARGET_HOSTNAME $SSH_IP 
+
+./deploy-openvpn-certificates-remote.sh admin@$SSH_IP $TARGET_HOSTNAME "client" nopass
+
+ssh $SSH_IP
+nh os switch
+nh home switch
+cd luxnix
+sudo boot-decryption-stick-setup
+
+exit
+
+# create systems/x86_64-linux/${TARGET_HOSTNAME}/boot-decryption-config.nix
+# import created file in systems/x86_64-linux/${TARGET_HOSTNAME}/default.nix
+git add .
+git commit -m "add $TARGET_HOSTNAME decryption stick config"
+git push
+
+ssh $SSH_IP
+cd luxnix
+git pull
+nho
+sudo reboot
+
+# cd ~/luxnix-administration/data/openvpn-ca/
+# export SSH_IP="192.168.1.48"
+# export TARGET_HOSTNAME="s-04"
+
+# easyrsa build-client-full $TARGET_HOSTNAME
+
+
+
+```
+
 # 2024-12-18
 ## Deploy Boot Keyfiles on s-01, s-02, s-03
 - add boot stick to base-server role
-## ToDo 
-Continue s-04 setup
-- [ ] Deploy setup files to s04
-- [ ] setup boot stick
 
 ## setup gs-01
 ```shell
