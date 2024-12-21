@@ -11,6 +11,10 @@
     # syncthing.enable = false;
   };
 
+  luxnix.django-demo-app = {
+    enable = true;
+  };
+
   roles = {
     development.enable = true;
     social.enable = true;

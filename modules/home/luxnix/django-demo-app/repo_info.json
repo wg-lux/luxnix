@@ -1,0 +1,12 @@
+{
+    "url": "https://github.com/wg-lux/lx-django-template",
+    "rev": "325ab1e0ad92115d6a6b08f4d1420f0b531799a5",
+    "date": "2024-12-21T12:24:34+01:00",
+    "path": "/nix/store/2m8fd181qxsca41wpk2imwmm5mrlh0v4-lx-django-template",
+    "sha256": "0ciplm9w3swyhlpq6zlivs0rhb3999k8pcm6gjdgk2m8c0alb6f6",
+    "hash": "sha256-xplFFWCoivmafKayi2ZKaSyYgd6RfoMvhZ7rwVOlNzI=",
+    "fetchLFS": false,
+    "fetchSubmodules": false,
+    "deepClone": false,
+    "leaveDotGit": false
+}

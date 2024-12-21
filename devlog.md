@@ -1,3 +1,23 @@
+# 2024-12-21
+## traefik implementation
+### Quick introduction
+*Entrypoints*
+- mostly :80 and :443 (http and https)
+
+*Routers*
+
+*Middlewares*
+
+*Services*
+
+# 2024-12-20
+## Django Test App deployment
+- add modules/home/luxnix/django-demo-app
+  - home option: luxnix.django-demo-app
+  - added to homes/x86_64-linux/admin@gc-06
+
+
+
 # 2024-12-19
 ## setup gc-09
 *Luxnix-Administration Repo*

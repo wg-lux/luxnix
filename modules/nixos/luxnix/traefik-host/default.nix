@@ -44,14 +44,14 @@ in {
         };
 
         certificatesResolvers.letsencrypt.acme = {
-          email = "postmaster@YOUR.DOMAIN";
+          email = "postmaster@endo-reg.net";
           storage = "${config.services.traefik.dataDir}/acme.json";
           httpChallenge.entryPoint = "web";
         };
 
         api.dashboard = true;
         # Access the Traefik dashboard on <Traefik IP>:8080 of your server
-        # api.insecure = true;
+        api.insecure = true;
       };
 
       dynamicConfigOptions = {

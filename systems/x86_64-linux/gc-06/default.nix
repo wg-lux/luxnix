@@ -44,6 +44,10 @@
 
   #TODO Remove after prototyping
   luxnix.traefik-host.enable = true;
+  networking.firewall = {
+    allowedTCPPorts = [ 8300 80 443 ];
+    allowedUDPPorts = [ 53 ];
+  };
 
   programs.coolercontrol.enable = true;
 

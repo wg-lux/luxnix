@@ -1,16 +1,65 @@
-{ config, pkgs, ... }:
-{}
+{ config, lib, pkgs, ... }:
+
+with lib; 
+with lib.luxnix; let 
+  repoInfo = builtins.fromJSON (builtins.readFile ./repo_info.json);
+
+  lxDjangoRepo = pkgs.fetchFromGitHub {
+    owner = "wg-lux";
+    repo = "lx-django-template";
+    rev = repoInfo.rev;
+    sha256 = repoInfo.sha256;
+  };
+
+  cfg = config.luxnix.django-demo-app;
+
+in {
+  options.luxnix.django-demo-app = with types; {
+    enable = mkBoolOpt false "Enable Django Demo App";
+  };
+
+  config = mkIf cfg.enable {
+    programs.tmux.enable = true;
+
+    # to check on created session:
+    # tmux new-session -A -s django-demo-app
+
+    # On activation, copy the repository to a writable directory
+    home.activation.runDjangoDemoApp = lib.mkAfter ''
+      targetDir="$HOME/lx-django-template"
+      # create target dir if not exists
+      mkdir -p "$targetDir"
+
+      echo "Copying lx-django-template to $targetDir"
+      # rm -rf "$targetDir"
+      # mkdir -p "$targetDir"
+      cp -rT ${lxDjangoRepo} "$targetDir"
+      chmod -R u+rw,g+rw,o+r "$targetDir"
+
+      cd "$targetDir"
+      # ${pkgs.direnv}/bin/direnv allow
+      echo "lx-django-template copied to $targetDir and direnv allowed"
+
+      echo "Running devenv up"
+      ############# REMOVE AFTER PROTOTYPING #############
+      cd "$HOME/dev/lx-django-template"
+      ####################################################
+
+      # Run devenv up in a new detached tmux session
+      ${pkgs.tmux}/bin/tmux new-session -d -s django-demo-app "${pkgs.devenv}/bin/devenv up"
+    '';
+
+    # add zsh aliases to open the tmux session
+    programs.zsh.shellAliases = {
+      tm-django-demo-app = "tmux new-session -A -s django-demo-app";
+    };
+  };
+}
+
+
 # let
 #   # Fetch the lx-django-template repository at a known commit
-#   lxDjangoRepo = pkgs.fetchFromGitHub {
-#     # get latest: nix-prefetch-git https://github.com/wg-lux/lx-django-template
-#     owner = "wg-lux";
-#     repo = "lx-django-template";
-#     # Replace with a stable revision of the repo
-#     rev = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-#     # Replace with the correct sha256 from nix-prefetch-git
-#     sha256 = "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=";
-#   };
+
 # in {
 #   home.username = "yourUser";
 
