@@ -1,10 +1,11 @@
 [project]
-name = "luxnix-administration"
-version = "0.5.3"
-description = "EndoReg Db Django App"
+name = "lx-admin"
+version = "0.1.0"
+description = "Utilities for Luxnix Administration"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "cryptography>=44.0.0",
     "django-bootstrap5>=24.3",
     "django>=5.1.3",
     "djangorestframework>=3.15.2",
@@ -25,4 +26,4 @@ dependencies = [
 ]
 
 [tool.setuptools]
-packages = ["luxnix_administration"]
+packages = ["lx_admin"]

@@ -1,0 +1,27 @@
+users:
+  - name: "agl-admin"
+    roles:
+      - admin@gc-01
+      - admin@gc-02
+      - admin@gc-05
+      - admin@gc-06
+      - admin@gc-07
+      - admin@gc-08
+      - admin@gc-09
+      - admin@s-01
+      - admin@s-02
+      - admin@s-03
+      - admin@s-04
+      - admin@gs-01
+      - admin@gs-02
+      - admin@ss-01
+
+  - name: "agl-dev-01"
+    roles:
+      - admin@gc-02
+
+
+  - name: "agl-dev-02"
+    roles:
+      - admin@gc-04
+

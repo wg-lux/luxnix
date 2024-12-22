@@ -48,7 +48,7 @@ def main():
         print(f"  Multiprocessor Count: {properties.multi_processor_count}")
 
 
-    write_message()
+    # write_message()
 
 
 if __name__ == "__main__":
