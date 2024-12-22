@@ -9,6 +9,7 @@ with lib; let
 in {
   options.roles.common = {
     enable = mkEnableOption "Enable common configuration";
+
   };
 
 
@@ -25,6 +26,8 @@ in {
     systemd.tmpfiles.rules = [
       "d /etc/user-passwords 0700 admin users -"
     ];
+
+    roles.postgres.default.enable = true;
 
     hardware = {
       networking.enable = true;

@@ -16,6 +16,8 @@ in {
   };
 
   config = mkIf cfg.enable {
+    networking.firewall.allowedTCPPorts = [ 8300 80 443 ];
+
     services.traefik = {
       enable = true;
 

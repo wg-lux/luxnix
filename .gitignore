@@ -2,7 +2,7 @@
 .direnv
 .env
 ~git-credentials
-
+utils/secrets/
 *keyfile.bin
 
 # pre-commit

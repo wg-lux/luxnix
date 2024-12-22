@@ -42,7 +42,7 @@
     nvidiaDriver = "beta";
   };
 
-  #TODO Remove after prototyping
+  #TODO Remove after prototyping ############################################
   luxnix.traefik-host.enable = true;
   networking.firewall = {
     allowedTCPPorts = [ 8300 80 443 ];
@@ -54,6 +54,7 @@
   roles = {
     # desktop.enable = true;
     gpu-client-dev.enable = true;   # Enables common, desktop(with plasma) and laptop-gpu roles                                # Also enables aglnet.client.enable = true;
+    postgres.main.enable = true;
     # ada.enable = true;
 
     # Testing
