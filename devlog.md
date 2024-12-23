@@ -1,9 +1,50 @@
 # 2024-12-23
+## Postgresql next attempt
+- [ ] activate on gc-06
+- [ ] swap identmap and auth with 
+  - `include_dir "/etc/lx-postgres/auth`
+  - `include_dir "/etc/lx-postgres/ident`
+- [ ] make sure dir exists with tmpfile and belongs to user postgres
+- [ ] deploy files manually:
+
+pg_hba_main.conf (default)
+```conf
+# TYPE  DATABASE        USER            ADDRESS                 METHOD
+
+# "local" is for Unix domain socket connections only
+local   all             all                                     trust
+# IPv4 local connections:
+host    all             all             127.0.0.1/32            trust
+# IPv6 local connections:
+host    all             all             ::1/128                 trust
+# Allow replication connections from localhost, by a user with the
+# replication privilege.
+local   replication     all                                     trust
+host    replication     all             127.0.0.1/32            trust
+host    replication     all             ::1/128                 trust
+```
+
+ident:
+```
+```
+
+Later
+- [ ] setup sops
+- [ ] deploy files using sops
+
 ## Postgresql
 - roles.postgresql.default.enable activate local base postgresql config
   - includes port definition
 - roles.postgresql.main.enable activates the default config for the networks main postgresql config
   - also allows port access
+
+Alter User PWD in via psql cli:
+postgres=# ALTER USER postgres WITH PASSWORD 'test';
+
+Connect via remote (make sure pg_hba.conf allows this and fw rules are in place)
+psql -h <host> -U <username> -d <database>
+psql -h 172.16.255.12 -U postgres -d postgres
+
 
 # 2024-12-21
 ## traefik implementation
