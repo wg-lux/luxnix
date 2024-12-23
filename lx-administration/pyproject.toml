@@ -14,5 +14,9 @@ dependencies = [
 [tool.setuptools]
 packages = ["lx_administration"]
 
+[tool.ruff]
+select = ["E", "F", "W"]
+ignore = []
+
 [tool.uv.sources]
 lx_administration = { workspace = true }

@@ -1,6 +1,6 @@
 import os
 import unittest
-from unittest.mock import patch, call
+from unittest.mock import patch
 from lx_administration.ssh.generate_key import create_openssh_keys
 
 class TestCreateOpenSSHKeys(unittest.TestCase):

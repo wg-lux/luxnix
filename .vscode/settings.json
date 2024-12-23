@@ -1,0 +1,30 @@
+{
+    "favorites.resources": [
+        {
+            "filePath": "lx-administration/pyproject.toml",
+            "group": "Default"
+        },
+        {
+            "filePath": "lx-administration/devenv.nix",
+            "group": "lx-administration"
+        },
+        {
+            "filePath": "lx-administration/pyproject.toml",
+            "group": "lx-administration"
+        }
+    ],
+    "favorites.groups": [
+        "Default",
+        "lx-administration"
+    ],
+    "favorites.currentGroup": "lx-administration",
+    "python.testing.unittestArgs": [
+        "-v",
+        "-s",
+        "./lx-administration",
+        "-p",
+        "test_*.py"
+    ],
+    "python.testing.pytestEnabled": false,
+    "python.testing.unittestEnabled": true
+}

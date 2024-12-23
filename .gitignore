@@ -4,6 +4,7 @@
 ~git-credentials
 utils/secrets/
 *keyfile.bin
+luxnix.code-workspace
 
 # pre-commit
 .pre-commit-config.yaml
