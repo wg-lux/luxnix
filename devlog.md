@@ -1,3 +1,10 @@
+# 2024-12-23
+## Postgresql
+- roles.postgresql.default.enable activate local base postgresql config
+  - includes port definition
+- roles.postgresql.main.enable activates the default config for the networks main postgresql config
+  - also allows port access
+
 # 2024-12-21
 ## traefik implementation
 ### Quick introduction
