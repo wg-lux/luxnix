@@ -28,7 +28,6 @@ in {
     ];
 
     roles.postgres.default.enable = true;
-    roles.postgres.default.enable = true;
 
     hardware = {
       networking.enable = true;

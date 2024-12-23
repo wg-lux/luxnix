@@ -54,6 +54,7 @@ in {
   config = mkIf cfg.enable {
     services.luxnix.postgresql.enable = true;
 
+    roles.postgres.default.enable = true;
     # Allow port:
     networking.firewall.allowedTCPPorts = [ postgresqlPort ];
 
