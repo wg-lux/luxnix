@@ -7,6 +7,8 @@
 with lib; let
   cfg = config.roles.postgres.main;
 
+  postgresqlPort = config.roles.postgres.default.postgresqlPort;
+
   mkDefaultUser = user: {
     name = user;
     ensureDBOwnership = true;
@@ -51,6 +53,9 @@ in {
 
   config = mkIf cfg.enable {
     services.luxnix.postgresql.enable = true;
+
+    # Allow port:
+    networking.firewall.allowedTCPPorts = [ postgresqlPort ];
 
     services = {
       postgresql = {

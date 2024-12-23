@@ -35,6 +35,9 @@ in {
 
   roles.aglnet.client.enable =true; 
   roles.base-server.enable=true;
+  roles.postgres-main = {
+    enable = true;
+  };
 
   user = {
     admin = {
