@@ -1,3 +1,4 @@
+.vscode
 result
 result/
 *result
@@ -8,6 +9,7 @@ untracked_notes.md
 tests/sensitive/
 erc_data/
 data/
+.devenv.flake.nix
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -15,10 +17,6 @@ __pycache__/
 *$py.class
 _build
 .direnv
-
-###### Do not Remove ######
-# Protects temporary files from being comitted
-endoreg_client_manager/data/*
 
 # C extensions
 *.so

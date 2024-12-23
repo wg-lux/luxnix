@@ -6,6 +6,7 @@ let
     tesseract
     glib
     openssh
+    openssl
   ];
 
 in 
@@ -22,6 +23,7 @@ in
     stdenv.cc.cc
     tesseract
     sops
+    openssl
   ];
 
   env = {

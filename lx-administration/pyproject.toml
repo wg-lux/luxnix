@@ -1,0 +1,23 @@
+[project]
+name = "lx-admin"
+version = "0.1.0"
+description = "Utilities for Luxnix Administration"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "cryptography>=44.0.0",
+    "myst-parser[linkify]>=4.0.0",
+    "pyopenssl>=24.3.0",
+    "sphinx>=8.1.3",
+]
+
+[tool.setuptools]
+packages = ["lx_admin"]
+
+[tool.uv.sources]
+lx-admin = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "lx-admin",
+]
