@@ -27,6 +27,7 @@ in {
       "d /etc/user-passwords 0700 admin users -"
     ];
 
+    roles.postgresql.default.enable = true;
     roles.postgres.default.enable = true;
 
     hardware = {
