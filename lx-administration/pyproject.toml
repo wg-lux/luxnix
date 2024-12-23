@@ -1,5 +1,5 @@
 [project]
-name = "lx-admin"
+name = "lx-administration"
 version = "0.1.0"
 description = "Utilities for Luxnix Administration"
 readme = "README.md"
@@ -12,12 +12,7 @@ dependencies = [
 ]
 
 [tool.setuptools]
-packages = ["lx_admin"]
+packages = ["lx_administration"]
 
 [tool.uv.sources]
-lx-admin = { workspace = true }
-
-[dependency-groups]
-dev = [
-    "lx-admin",
-]
+lx_administration = { workspace = true }

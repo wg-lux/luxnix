@@ -43,8 +43,7 @@ in
 
   scripts = {
     hello.exec = "${pkgs.uv}/bin/uv run python hello.py";
-    bump-lx-demo-app.exec = 
-      "${pkgs.uv}/bin/uv run python lx_admin/bumpversion/lx_django_template.py";
+    utest.exec = "${pkgs.uv}/bin/uv run python -m unittest";
   };
 
   tasks = {
