@@ -49,6 +49,14 @@
     allowedUDPPorts = [ 53 ];
   };
 
+  services.luxnix.keycloak = {
+    enable = true;
+    vpnIP = "172.16.255.106";
+    # port = 8080;
+
+    hostname = "keycloak.endo-reg.net";
+  };
+
   programs.coolercontrol.enable = true;
 
   roles = {

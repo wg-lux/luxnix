@@ -5,12 +5,9 @@ KeyFileManager class for handling users, roles, and keys in a YAML file.
 import os
 from datetime import datetime
 from pathlib import Path
-import subprocess
+from .helpers import generate_key_pair
 
 import yaml
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa, ed25519
 
 # Import your own local modules
 from .ssh_key_utils import (
@@ -20,68 +17,7 @@ from .ssh_key_utils import (
 from .sops_age_utils import deploy_sops_age_keys
 
 
-def generate_sops_age_key():
-    """
-    Generates a sops-age key pair using the `age` CLI tool.
 
-    Returns:
-        tuple: (private_key, public_key)
-    """
-    result = subprocess.run(["age-keygen"], capture_output=True, text=True, check=True)
-    private_key = result.stdout.strip()
-    public_key = next(
-        line for line in private_key.splitlines() if line.startswith("# public key: ")
-    ).replace("# public key: ", "")
-    return private_key, public_key
-
-
-def generate_key_pair(key_type="rsa"):
-    """
-    Generates a private and public key pair for rsa, ed25519, or sops_age.
-
-    Args:
-        key_type (str): Type of key to generate ("rsa", "ed25519", "sops_age").
-
-    Returns:
-        tuple: (private_key_pem_or_text, public_key_pem_or_text)
-    """
-    if key_type == "rsa":
-        private_key = rsa.generate_private_key(
-            public_exponent=65537,
-            key_size=2048,
-            backend=default_backend()
-        )
-        private_key_pem = private_key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.TraditionalOpenSSL,
-            encryption_algorithm=serialization.NoEncryption()
-        ).decode('utf-8')
-        public_key = private_key.public_key()
-        public_key_pem = public_key.public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo
-        ).decode('utf-8')
-        return private_key_pem, public_key_pem
-
-    elif key_type == "ed25519":
-        private_key = ed25519.Ed25519PrivateKey.generate()
-        private_key_pem = private_key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=serialization.NoEncryption()
-        ).decode('utf-8')
-        public_key = private_key.public_key()
-        public_key_pem = public_key.public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo
-        ).decode('utf-8')
-        return private_key_pem, public_key_pem
-
-    elif key_type == "sops_age":
-        return generate_sops_age_key()
-
-    else:
-        raise ValueError(f"Unsupported key type: {key_type}")
 
 class KeyFileManager:
     """
@@ -109,9 +45,23 @@ class KeyFileManager:
         }
       ]
     }
+
+    Examples:
+    >>> from lx_admin.managers import KeyFileManager
+    >>> kfm = KeyFileManager()
+    >>> kfm.add_user("backup")
+    >>> kfm.add_user_role("backup", "root@root")
+    >>> kfm.auto_add_key("backup", "root@root", "rsa")
+    >>> kfm.auto_add_key("backup", "root@root", "ed25519")
+    >>> kfm.auto_add_key("backup", "root@root", "sops_age")
+    >>> kfm.generate_user_id_files("backup", "root@root", "data/generated-user-folders") 
+    >>> Generated .ssh and .config/sops files for user 'backup' and role 'root@root'.
+
     """
 
-    def __init__(self, file_path: str):
+
+
+    def __init__(self, file_path: str = "data/luxnix-identities.yaml"):
         """
         Initialize the manager with the path to the YAML file.
 
@@ -322,7 +272,7 @@ class KeyFileManager:
         Args:
             user_name (str): The name of the user.
             role (str): The role (e.g., 'admin@hostname').
-            key_type (str): The type of key to generate ('rsa' or 'ed25519').
+            key_type (str): The type of key to generate ('rsa' or 'ed25519' or 'sops_age').
 
         Raises:
             ValueError: If the role does not have any keys for the user.

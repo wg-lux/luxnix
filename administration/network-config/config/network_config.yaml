@@ -1,0 +1,144 @@
+# config/network_config.yaml
+networkName: "lxNet"
+
+################ Basic Servers ################
+systems:
+  - hostname: "s-01"
+    openvpnIp: "172.16.255.1"
+    roles: ["openvpn", "traefik"]
+    services:
+      - name: "traefik"
+        description: "Reverse proxy for *.endo-reg.net"
+        enabled: true
+      - name: "openvpn"
+        description: "Primary VPN host"
+        enabled: true
+
+  - hostname: "s-02"
+    openvpnIp: "172.16.255.12"
+    roles: ["postgres-main"]
+    services:
+      - name: "postgres"
+        description: "Main production DB"
+        enabled: true
+
+  - hostname: "s-03"
+    openvpnIp: "172.16.255.13"
+    roles: ["postgres-backup", "keycloak"]
+    services:
+      - name: "postgres"
+        description: "Backup DB"
+        enabled: true
+      - name: "keycloak"
+        description: "Keycloak SSO server"
+        enabled: true
+
+  - hostname: "s-04"
+    openvpnIp: "172.16.255.14"
+    roles: ["postgres-test"]
+    services:
+      - name: "postgres"
+        description: "Testing DB"
+        enabled: true
+
+################ GPU Servers ################
+
+  - hostname: "gs-01"
+    openvpnIp: "172.16.255.21"
+    roles: ["gpu-server"]
+    services: []
+
+  - hostname: "gs-02"
+    openvpnIp: "172.16.255.22"
+    roles: ["gpu-server"]
+    services: []
+
+################# GPU Clients ###############
+
+  - hostname: "gc-01"
+    openvpnIp: "172.16.255.101"
+    roles: ["gpu-client"]
+    services: []
+
+  - hostname: "gc-02"
+    openvpnIp: "172.16.255.102"
+    roles: ["gpu-client"]
+    services: []
+
+  - hostname: "gc-03"
+    openvpnIp: "172.16.255.103"
+    roles: ["gpu-client"]
+    services: []
+
+  - hostname: "gc-04"
+    openvpnIp: "172.16.255.104"
+    roles: ["gpu-client"]
+    services: []
+
+  - hostname: "gc-05"
+    openvpnIp: "172.16.255.105"
+    roles: ["gpu-client"]
+    services: []
+
+  - hostname: "gc-06"
+    openvpnIp: "172.16.255.106"
+    roles: ["gpu-client"]
+    services: []
+
+  - hostname: "gc-07"
+    openvpnIp: "172.16.255.107"
+    roles: ["gpu-client"]
+    services: []
+
+  - hostname: "gc-08"
+    openvpnIp: "172.16.255.108"
+    roles: ["gpu-client"]
+    services: []
+
+  - hostname: "gc-09"
+    openvpnIp: "172.16.255.109"
+    roles: ["gpu-client"]
+    services: []
+
+users:
+  - username: "admin"
+    defaultUser: true
+    permissions:
+      read: true
+      write: true
+      execute: true
+
+  - username: "dev-01"
+    defaultUser: true
+    permissions:
+      read: true
+      write: true
+      execute: true
+
+  - username: "user"
+    defaultUser: true
+    permissions:
+      read: true
+      write: false
+      execute: false
+
+  - username: "lux_t"
+    defaultUser: false
+    permissions:
+      read: true
+      write: true
+      execute: false
+
+  - username: "d01"
+    defaultUser: false
+    permissions:
+      read: true
+      write: true
+      execute: true
+      
+  - username: "d02"
+    defaultUser: false
+    permissions:
+      read: true
+      write: true
+      execute: true

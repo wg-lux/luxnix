@@ -103,8 +103,8 @@
       inputs.home-manager.follows = "home-manager";
     };
 
-    endoreg-usb-encrypter.url = "github:wg-lux/endoreg-usb-encrypter";
-	  endoreg-usb-encrypter.inputs.nixpkgs.follows = "nixpkgs";
+    # endoreg-usb-encrypter.url = "github:wg-lux/endoreg-usb-encrypter";
+	  # endoreg-usb-encrypter.inputs.nixpkgs.follows = "nixpkgs";
 
 
   };

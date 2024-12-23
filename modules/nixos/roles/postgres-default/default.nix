@@ -61,7 +61,7 @@ in {
           wal_level = lib.mkDefault "replica";
           max_wal_senders = lib.mkDefault 5;
           wal_keep_size = lib.mkDefault "512MB";
-          # password_encryption = "scram-sha-256";
+          password_encryption = "scram-sha-256";
           # hot_standby = true;
           # log_connections = true;
           # log_statement = "all";
@@ -96,21 +96,9 @@ in {
         # host  replication               ${cfg.replUser}              ${conf.ip-backup}/32        scram-sha-256
         # host  ${conf.users.aglnet-base.name} ${conf.users.aglnet-base.name} 172.16.255.142/32 scram-sha-256
         
-        authentication = lib.mkOverride 10 ''
-            #type database                  DBuser                      address                     auth-method         optional_ident_map
-            local sameuser                  all                                                     peer                map=superuser_map
-        '';
+        authentication = lib.mkOverride 10 config.luxnix.generic-settings.postgres.activeAuthentication;
 
-        identMap = lib.mkOverride 10 ''
-          # ArbitraryMapName systemUser DBUser
-          superuser_map      root      postgres
-          superuser_map      root      ${cfg.replUser}
-          superuser_map      ${config.user.admin.name}     postgres
-          superuser_map      postgres  postgres
-
-          # Let other names login as themselves
-          superuser_map      /^(.*)$   \1
-        '';
+        identMap = lib.mkOverride 10 config.luxnix.generic-settings.postgres.activeIdentMap;
       };
     };
 

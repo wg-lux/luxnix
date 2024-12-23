@@ -1,0 +1,5 @@
+# templates/openvpn_ccd_template.j2
+ifconfig-push 172.16.255.12 255.255.255.0
+
+# Additional settings or routes can go here, e.g.:
+# push "route 172.16.254.0 255.255.255.0"

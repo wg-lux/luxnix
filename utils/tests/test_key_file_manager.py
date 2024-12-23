@@ -114,7 +114,7 @@ class TestKeyFileManager(unittest.TestCase):
         that populates new keys for each user and role.
         """
         try:
-            from user_keygen import process_users
+            from lx_admin.user_keygen import process_users
         except ImportError:
             self.skipTest("user_keygen not found or process_users not implemented")
 
