@@ -26,7 +26,7 @@ in {
     hardware.openrgb.enable = false;
     luxnix.ollama.enable = false;
     luxnix.nfs.enable = false; #CHANGEME
-    luxnix.traefik.enable = false;
+    # luxnix.traefik.enable = false;
   };
   
   luxnix.nvidia-prime.enable = false;
