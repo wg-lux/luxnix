@@ -11,26 +11,27 @@ This infrastructure was built in the context of the coloreg study at the Univers
 ## 🔎 Overview 
 
 
-### [Table of Contents - automatically updated](TABLE_OF_CONTENTS.md)
+### [Table Of Contents - automatically generated](TABLE_OF_CONTENTS.md)
 ### [Prerequisites](docs/hardware-setup.md#hardware-setup)
 - NixOS installation media
 - UEFI-capable system
 - Storage device (NVMe or SATA)
 - USB drive for boot decryption (optional)
 - FIDO2 security key (optional)
-### [Example of deploying Luxnix: Deployment Guide](docs/deployment-guide.md#Deployment)
-### [LUKS Secrets management](docs/security.md#luks-encryption-management)
-### [Boot decryption and USB stick set up](docs/security.md#boot-decryption-usb-stick-setup)
-### [Service management](docs/service-architecture.md#overview)
-### [Access management](docs/access-management.md#access-control)
-### [Useful tools for development](docs/development.md#development)
+### [Example Of Deploying LuxNix: Deployment Guide](docs/deployment-guide.md#Deployment)
+### [LUKS Secrets Management](docs/security.md#luks-encryption-management)
+### [Boot Decryption & USB Stick Setup](docs/security.md#boot-decryption-usb-stick-setup)
+### [Service Management](docs/service-architecture.md#overview)
+### [Access Management](docs/access-management.md#access-control)
+### [Tools For Development](docs/development.md#development)
 
 ## 🛠️ Initial Setup
 1. Verify UEFI boot mode
 2. Prepare storage devices
 3. Set up LUKS encryption
 4. Follow hardware setup guide
-References for the NixOS Setup used:
+
+### References for the NixOS Setup used:
 
 - Nixicle https://github.com/hmajid2301/nixicle
 - Snowflakes OS Quickstart https://snowfall.org/guides/lib/quickstart/
