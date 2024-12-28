@@ -1,4 +1,4 @@
-#  ✨ LuxNix - Professional NixOS Configuration Framework ✨
+#  🟦 LuxNix - Professional NixOS Configuration Framework
 
 A comprehensive NixOS configuration framework designed for research and development environments, emphasizing security, reproducibility, and automated deployment. Built using Snowfall Lib, this repository manages multiple systems and user environments with a focus on GPU computing, secure networking, and development tooling. It provides provides a securely encrypted setup for study laptops as well as GPU processing units. 
 
@@ -24,7 +24,7 @@ This infrastructure was built in the context of the coloreg study at the Univers
 ### [Access management](docs/access-management.md#access-control)
 ### [Useful tools for development](docs/development.md#development)
 
-## Initial Setup
+## 🛠️ Initial Setup
 1. Verify UEFI boot mode
 2. Prepare storage devices
 3. Set up LUKS encryption
