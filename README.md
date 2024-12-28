@@ -1,13 +1,4 @@
-# Setup
--> See: docs/deployment-guide.md
-
-References for the NixOS Setup used:
-
-- Nixicle https://github.com/hmajid2301/nixicle
-- Snowflakes OS Quickstart https://snowfall.org/guides/lib/quickstart/
-
-
-# LuxNix - Professional NixOS Configuration Framework
+#  LuxNix - Professional NixOS Configuration Framework ✨
 
 A comprehensive NixOS configuration framework designed for research and development environments, emphasizing security, reproducibility, and automated deployment. Built using Snowfall Lib, this repository manages multiple systems and user environments with a focus on GPU computing, secure networking, and development tooling. It provides provides a securely encrypted setup for study laptops as well as GPU processing units. 
 
@@ -16,6 +7,32 @@ This infrastructure was built in the context of the coloreg study at the Univers
 - Reports,
 - images,
 - videos.
+
+## Overview 🔎
+
+### [Prerequisites](docs/hardware-setup.md#hardware-setup)
+- NixOS installation media
+- UEFI-capable system
+- Storage device (NVMe or SATA)
+- USB drive for boot decryption (optional)
+- FIDO2 security key (optional)
+
+### [Example of deploying Luxnix: Deployment Guide](docs/deployment-guide.md#Deployment)
+### [LUKS Secrets management](docs/security.md#luks-encryption-management)
+### [Boot decryption and USB stick set up](docs/security.md#boot-decryption-usb-stick-setup)
+### [Service management](docs/service-architecture.md#overview)
+### [Access management](docs/access-management.md#access-control)
+### [Useful tools for development](docs/development.md#development)
+
+## Initial Setup
+1. Verify UEFI boot mode
+2. Prepare storage devices
+3. Set up LUKS encryption
+4. Follow hardware setup guide
+References for the NixOS Setup used:
+
+- Nixicle https://github.com/hmajid2301/nixicle
+- Snowflakes OS Quickstart https://snowfall.org/guides/lib/quickstart/
 
 ## 🚀 Key Features
 

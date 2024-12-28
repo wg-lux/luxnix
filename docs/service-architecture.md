@@ -3,6 +3,42 @@
 ## Overview
 This document details the service architecture of the LuxNix system, covering virtualization, container management, storage, development tools, and infrastructure services.
 
+## Useful commands
+
+For a comprehensive service status run:
+```
+bash
+systemctl status
+```
+
+
+To see just the active services (without devices):
+```
+bash
+systemctl list-units --type=service --state=active
+```
+
+
+For LuxNix-specific services:
+
+```
+bash
+systemctl list-units '*luxnix*' --all
+```
+For system services (add your own):
+```
+bash
+systemctl status \
+  sops.service \
+  traefik.service \
+  podman.service \
+  postgresql.service \
+  redis.service \
+  minio.service
+```
+
+
+
 ## Core Services
 
 ### Reverse Proxy (Traefik)

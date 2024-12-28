@@ -149,6 +149,7 @@
         sops-nix.nixosModules.sops
         nix-topology.nixosModules.default
         # authentik-nix.nixosModules.default
+        ./modules/nixos/luxnix/toc-generator
       ];
 
       # systems.hosts.framework.modules = with inputs; [
