@@ -1,0 +1,30 @@
+{
+  "folders": [
+	{
+		"name": "luxnix-refactor",
+		"path": "../../luxnix-refactor"
+	},
+	{
+		"name": "luxnix",
+		"path": ".."
+	}
+],
+  "settings": {
+    "favorites.resources": [
+      {
+        "filePath": "lx-administration/pyproject.toml",
+        "group": "Default"
+      },
+      {
+        "filePath": "lx-administration/devenv.nix",
+        "group": "lx-administration"
+      },
+      {
+        "filePath": "lx-administration/pyproject.toml",
+        "group": "lx-administration"
+      }
+    ],
+    "favorites.groups": ["Default", "lx-administration"],
+    "favorites.currentGroup": "lx-administration"
+  }
+}

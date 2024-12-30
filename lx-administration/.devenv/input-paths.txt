@@ -1,0 +1,3 @@
+/home/admin/dev/luxnix/lx-administration/devenv.lock
+/home/admin/dev/luxnix/lx-administration/devenv.nix
+/home/admin/dev/luxnix/lx-administration/devenv.yaml
