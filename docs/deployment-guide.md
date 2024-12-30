@@ -1,4 +1,6 @@
-# Deployment following the example of a Server 2 (s-02)
+# Deployment
+
+This example will deploy server 2 (s-02)
 
 Establishing luxnix on your machine requires using the official nix installer first.
 
