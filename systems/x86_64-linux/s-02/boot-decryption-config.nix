@@ -1,7 +1,7 @@
 let
-  usb-uuid = "a532af56-8430-44b5-bb9f-4d313b91ff2e";
+  usb-uuid = "baa66128-7f1e-4084-bf60-a2459162dd1f";
   usb-mountpoint = "/mnt/usb_key";
-  usb-device = "/dev/disk/by-uuid/a532af56-8430-44b5-bb9f-4d313b91ff2e";
+  usb-device = "/dev/disk/by-uuid/baa66128-7f1e-4084-bf60-a2459162dd1f";
 
   bs = 1;
   offset-m = 50;

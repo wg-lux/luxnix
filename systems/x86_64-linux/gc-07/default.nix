@@ -1,98 +1,34 @@
-{
+{ config,
   pkgs,
   lib,
+  modulesPath,
   ...
 }@inputs: 
   let
-    sensitiveHdd = import ./sensitive-hdd.nix {};
-
-    extraImports = [
-      ./boot-decryption-config.nix
-    ];
+    extraImports = [ ];
 
   in
 {
-  imports = [
-    ./hardware-configuration.nix
-    ./disks.nix
-  ]++extraImports;
 
-  # environment.pathsToLink = [
-  #   "/share/fish"
-  # ];
-  systemd.services.NetworkManager-wait-online.enable = lib.mkForce false;
-  systemd.services.systemd-networkd-wait-online.enable = lib.mkForce false;
+    imports = [
+      (modulesPath + "/installer/scan/not-detected.nix")
+      ./boot-decryption-config.nix
+      ./disks.nix
+      (import ./roles.nix {inherit config pkgs; })
+      (import ./endoreg.nix { inherit config pkgs; })
+      (import ./services.nix { inherit config pkgs lib; })
+      (import ./luxnix.nix { inherit config pkgs; })
 
-  security.rtkit.enable = true;
-
-  services = {
-    virtualisation.kvm.enable = false;
-    hardware.openrgb.enable = false;
-    luxnix = {
-      ollama.enable = false;
-      nfs.enable = false; #CHANGEME
-    };
-  };
-  
-  luxnix.nvidia-prime = {
-    enable = true; # enables common and desktop (with addon plasma) roles
-    nvidiaBusId = "PCI:1:0:0";
-    onboardBusId = "PCI:0:2:0";
-    onboardGpuType = "intel";
-    nvidiaDriver = "beta";
-  };
-
-  programs.coolercontrol.enable = true;
-
-  roles = {
-    # desktop.enable = true;
-    gpu-client-dev.enable = true;   # Enables common, desktop(with plasma) and laptop-gpu roles                                # Also enables aglnet.client.enable = true;
-    # ada.enable = true;
-
-    # Testing
-  };
-
-  endoreg = {
-    sensitive-storage = {
-      enable = false; 
-      # partitionConfigurations = (import ./sensitive-storage.nix {} );
-    };
-  };
+    ]++extraImports;
 
   user = {
     admin = {
       name = "admin";
     };
-    dev-01 = { # enabled by default
-      name = "dev-01";
-    };
-    user = { # enabled by default
-      enable = true;
-      name = "user";
-    };
+    ansible.enable = true;
+    settings.mutable = false;
   };
 
-  user.settings.mutable = false;
-
-
-  boot = {
-    kernelParams = [
-      # "resume_offset=533760"
-    ];
-    blacklistedKernelModules = [
-      # "ath12k_pci"
-      # "ath12k"
-    ];
-
-    supportedFilesystems = lib.mkForce ["btrfs"];
-    kernelPackages = pkgs.linuxPackages_latest;
-    resumeDevice = "/dev/disk/by-label/nixos";
-
-    initrd = {
-      supportedFilesystems = ["nfs"];
-      kernelModules = ["nfs"];
-    };
-  };
 
   system.stateVersion = "23.11";
 }

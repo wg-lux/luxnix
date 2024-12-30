@@ -39,6 +39,7 @@ in {
           eval "$(direnv hook zsh)"
       '';
 
+      #TODO read shell aliases from .json file; 
       shellAliases = {
         ls = "eza";
         ll = "eza -l";

@@ -9,6 +9,11 @@ with lib.luxnix; let
 in {
   options.cli.programs.nh = with types; {
     enable = mkBoolOpt false "Whether or not to enable nh (nix commandline helper).";
+    luxnixDirectory = mkOption {
+      type = types.str;
+      default = config.luxnix.generic-settings.configurationPath;
+      description = "The directory where nh expects the luxnix repository";
+    };
   };
 
   config = mkIf cfg.enable {
@@ -16,7 +21,7 @@ in {
       enable = true;
       clean.enable = true;
       clean.extraArgs = "--keep-since 4d --keep 3";
-      flake = "/home/${config.user.admin.name}/luxnix";
+      flake = cfg.luxnixDirectory;
     };
   };
 }

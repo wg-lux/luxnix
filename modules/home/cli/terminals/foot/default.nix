@@ -18,7 +18,7 @@ in {
       settings = {
         main = {
           # term = "foot";
-          shell = "fish";
+          shell = "zsh";
           pad = "15x15";
           selection-target = "clipboard";
         };

@@ -14,8 +14,6 @@ in {
   config = mkIf cfg.enable {
     roles.desktop.enable = true;
 
-    clone-dirs.enable = true;
-
     cli = {
 
       programs = {
@@ -34,6 +32,7 @@ in {
         yazi.enable = true;
         zoxide.enable = true;
       };
+      terminals.tmux.enable = true;
     };
   };
 }

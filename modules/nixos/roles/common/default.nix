@@ -23,11 +23,17 @@ in {
       nix-prefetch-scripts
     ];
 
+    systemd.services.NetworkManager-wait-online.enable = lib.mkForce false;
+    systemd.services.systemd-networkd-wait-online.enable = lib.mkForce false;
+
+    security.rtkit.enable = lib.mkDefault true;
+    programs.coolercontrol.enable = true;
+
     systemd.tmpfiles.rules = [
       "d /etc/user-passwords 0700 admin users -"
     ];
 
-    roles.postgres.default.enable = true;
+    roles.postgres.default.enable = false; #TODO ACTIVATE
 
     hardware = {
       networking.enable = true;
@@ -36,9 +42,11 @@ in {
       graphics.enable = true;
     };
 
-
+    nixpkgs.hostPlatform = lib.mkDefault config.luxnix.generic-settings.hostPlatform;
+    
     cli.programs = {
       nh.enable = true;
+      nh.luxnixDirectory = lib.mkDefault config.luxnix.generic-settings.configurationPath;
       nix-ld.enable = true;
     };
 

@@ -1,0 +1,55 @@
+- name: Ensure luxnix-test-target contains an up-to-date Git repo
+  hosts: gpu_server
+  become: true
+  become_user: "{{ ansible_become_user }}"
+  vars:
+    ansible_python_interpreter: "/run/current-system/sw/bin/python"
+  tasks:
+    - name: Clone or update the wg-lux/luxnix-refactor repository
+      ansible.builtin.git:
+        repo: "{{ luxnix_repo }}"
+        dest: "{{ luxnix_dest }}"
+        version: "{{ luxnix_branch }}"
+        update: true
+        force: true
+      register: git_update
+      # notify:
+      #   - Allow direnv
+      #   - Build devenv
+
+    - name: Ensure the user passwords directory exists
+      ansible.builtin.file: # filepath = "{{ local_users_passwords_dir  }}"
+        path: "{{ local_users_passwords_dir }}"
+        state: directory
+        owner: "admin"
+        mode: "0700"
+
+    - name: Deploy user passwords
+      ansible.builtin.copy:
+        src: "{{ admin_password_file_source }}"
+        dest: "{{ admin_password_file }}"
+        mode: "0600"
+        owner: "admin"
+      register: user_password
+      # when: git_update.changed
+
+    - name: Read admin password
+      ansible.builtin.slurp:
+        src: "{{ admin_password_file }}"
+      register: user_password
+      # no_log: true
+
+    - name: Allow direnv
+      ansible.builtin.command:
+        cmd: "direnv allow {{ luxnix_dest }}/.envrc"
+        creates: "{{ luxnix_dest }}/.envrc_allowed"
+
+    - name: Build devenv
+      ansible.builtin.shell:
+        cmd: 'zsh -c ''cd "{{ luxnix_dest }}" && devenv build'''
+        creates: "{{ luxnix_dest }}/.devenv_built"
+
+    - name: Print python interpreter
+      ansible.builtin.shell:
+        cmd: 'zsh -c ''cd "{{ luxnix_dest }}" && echo "hello world"'''
+        creates: "{{ luxnix_dest }}/._devenv_built"

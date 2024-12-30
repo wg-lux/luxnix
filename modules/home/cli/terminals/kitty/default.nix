@@ -20,7 +20,7 @@ in {
       '';
 
       settings = {
-        shell = "fish";
+        shell = "zsh";
         window_padding_width = 10;
         scrollback_lines = 10000;
         show_hyperlink_targets = "no";
