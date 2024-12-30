@@ -1,13 +1,25 @@
+# 2024-12-30
+
+## Merge luxnix-refactor
+
+### Migration-01 - Cleanup
+
+- Retain `modules/nixos/luxnix/shell-shortcuts`
+- Retain `modules/nixos/luxnix/toc`
+
 # 2024-12-23
+
 ## Postgresql next attempt
+
 - [ ] activate on gc-06
-- [ ] swap identmap and auth with 
+- [ ] swap identmap and auth with
   - `include_dir "/etc/lx-postgres/auth`
   - `include_dir "/etc/lx-postgres/ident`
 - [ ] make sure dir exists with tmpfile and belongs to user postgres
 - [ ] deploy files manually:
 
 pg_hba_main.conf (default)
+
 ```conf
 # TYPE  DATABASE        USER            ADDRESS                 METHOD
 
@@ -25,14 +37,18 @@ host    replication     all             ::1/128                 trust
 ```
 
 ident:
+
 ```
+
 ```
 
 Later
+
 - [ ] setup sops
 - [ ] deploy files using sops
 
 ## Postgresql
+
 - roles.postgresql.default.enable activate local base postgresql config
   - includes port definition
 - roles.postgresql.main.enable activates the default config for the networks main postgresql config
@@ -45,30 +61,36 @@ Connect via remote (make sure pg_hba.conf allows this and fw rules are in place)
 psql -h <host> -U <username> -d <database>
 psql -h 172.16.255.12 -U postgres -d postgres
 
-
 # 2024-12-21
+
 ## traefik implementation
+
 ### Quick introduction
-*Entrypoints*
+
+_Entrypoints_
+
 - mostly :80 and :443 (http and https)
 
-*Routers*
+_Routers_
 
-*Middlewares*
+_Middlewares_
 
-*Services*
+_Services_
 
 # 2024-12-20
+
 ## Django Test App deployment
+
 - add modules/home/luxnix/django-demo-app
   - home option: luxnix.django-demo-app
   - added to homes/x86_64-linux/admin@gc-06
 
-
-
 # 2024-12-19
+
 ## setup gc-09
-*Luxnix-Administration Repo*
+
+_Luxnix-Administration Repo_
+
 ```shell
 
 cd ~/luxnix-administration
@@ -83,7 +105,7 @@ export PUB_KEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM7vvbgQtzi4GNeugHSuMyEke4MY
 
 ssh $SSH_IP
 sudo rm -rf /etc/user-passwords
-sudo mkdir /etc/user-passwords  
+sudo mkdir /etc/user-passwords
 sudo chown -R admin /etc/user-passwords
 git clone https://github.com/wg-lux/luxnix
 cd luxnix
@@ -92,7 +114,7 @@ exit
 
 ./deploy-user-folders-remote.sh "admin@$SSH_IP" "admin@$TARGET_HOSTNAME"
 
-python luxnix_administration/utils/deploy_user_passwords_remote.py $TARGET_HOSTNAME $SSH_IP 
+python luxnix_administration/utils/deploy_user_passwords_remote.py $TARGET_HOSTNAME $SSH_IP
 
 ./deploy-openvpn-certificates-remote.sh admin@$SSH_IP $TARGET_HOSTNAME "client" nopass
 
@@ -103,7 +125,6 @@ cd luxnix
 sudo boot-decryption-stick-setup
 
 ```
-
 
 ```shell
 cd ~/luxnix
@@ -117,9 +138,10 @@ nixos-anywhere --flake '.#gc-09' nixos@$SSH_IP
 
 ```
 
-
 ## setup gc-07
-*Luxnix-Administration Repo*
+
+_Luxnix-Administration Repo_
+
 ```shell
 
 cd ~/luxnix-administration
@@ -133,7 +155,7 @@ export PUB_KEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM7vvbgQtzi4GNeugHSuMyEke4MY
 ## continue after installation
 ./deploy-user-folders-remote.sh "admin@$SSH_IP" "admin@$TARGET_HOSTNAME"
 
-python luxnix_administration/utils/deploy_user_passwords_remote.py $TARGET_HOSTNAME $SSH_IP 
+python luxnix_administration/utils/deploy_user_passwords_remote.py $TARGET_HOSTNAME $SSH_IP
 
 ./deploy-openvpn-certificates-remote.sh admin@$SSH_IP $TARGET_HOSTNAME "client" nopass
 
@@ -144,7 +166,6 @@ cd luxnix
 sudo boot-decryption-stick-setup
 
 ```
-
 
 ```shell
 cd ~/luxnix
@@ -157,7 +178,7 @@ nixos-anywhere --flake '.#gc-07' nixos@$SSH_IP
 
 ssh $SSH_IP
 sudo rm -rf /etc/user-passwords
-sudo mkdir /etc/user-passwords  
+sudo mkdir /etc/user-passwords
 sudo chown -R admin /etc/user-passwords
 git clone https://github.com/wg-lux/luxnix
 cd luxnix
@@ -166,7 +187,9 @@ exit
 ```
 
 ## setup gc-08
-*Luxnix-Administration Repo*
+
+_Luxnix-Administration Repo_
+
 ```shell
 
 cd ~/luxnix-administration
@@ -182,7 +205,7 @@ export PUB_KEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM7vvbgQtzi4GNeugHSuMyEke4MY
 
 ssh $SSH_IP
 sudo rm -rf /etc/user-passwords
-sudo mkdir /etc/user-passwords  
+sudo mkdir /etc/user-passwords
 sudo chown -R admin /etc/user-passwords
 git clone https://github.com/wg-lux/luxnix
 cd luxnix
@@ -192,7 +215,7 @@ exit
 
 ./deploy-user-folders-remote.sh "admin@$SSH_IP" "admin@$TARGET_HOSTNAME"
 
-python luxnix_administration/utils/deploy_user_passwords_remote.py $TARGET_HOSTNAME $SSH_IP 
+python luxnix_administration/utils/deploy_user_passwords_remote.py $TARGET_HOSTNAME $SSH_IP
 
 ./deploy-openvpn-certificates-remote.sh admin@$SSH_IP $TARGET_HOSTNAME "client" nopass
 
@@ -201,10 +224,9 @@ ssh $SSH_IP
 nh os switch
 nh home switch
 cd luxnix
-boot-decryption-stick-setup 
+boot-decryption-stick-setup
 
 ```
-
 
 ```shell
 cd ~/luxnix
@@ -217,7 +239,7 @@ nixos-anywhere --flake '.#gc-08' nixos@$SSH_IP
 
 ssh $SSH_IP
 sudo rm -rf /etc/user-passwords
-sudo mkdir /etc/user-passwords  
+sudo mkdir /etc/user-passwords
 sudo chown -R admin /etc/user-passwords
 git clone https://github.com/wg-lux/luxnix
 cd luxnix
@@ -226,9 +248,11 @@ exit
 ```
 
 ## gs-01 setup - new attempt
+
 previously we failed due to inconsistent disk mounting (sda, sdb, ....)
 
-*Luxnix-Administration Repo*
+_Luxnix-Administration Repo_
+
 ```shell
 
 cd ~/luxnix-administration
@@ -245,7 +269,7 @@ export PUB_KEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM7vvbgQtzi4GNeugHSuMyEke4MY
 
 ./deploy-user-folders-remote.sh "admin@$SSH_IP" "admin@$TARGET_HOSTNAME"
 
-python luxnix_administration/utils/deploy_user_passwords_remote.py $TARGET_HOSTNAME $SSH_IP 
+python luxnix_administration/utils/deploy_user_passwords_remote.py $TARGET_HOSTNAME $SSH_IP
 
 ./deploy-openvpn-certificates-remote.sh admin@$SSH_IP $TARGET_HOSTNAME "client" nopass
 
@@ -269,7 +293,7 @@ nixos-anywhere --flake '.#gs-01' nixos@$SSH_IP
 
 ssh $SSH_IP
 sudo rm -rf /etc/user-passwords
-sudo mkdir /etc/user-passwords  
+sudo mkdir /etc/user-passwords
 sudo chown -R admin /etc/user-passwords
 git clone https://github.com/wg-lux/luxnix
 cd luxnix
@@ -278,6 +302,7 @@ exit
 ```
 
 ## s-04 setup
+
 ```shell
 
 cd ~/luxnix-administration
@@ -304,7 +329,7 @@ export TARGET_HOSTNAME="s-04"
 
 ssh $SSH_IP
 sudo rm -rf /etc/user-passwords
-sudo mkdir /etc/user-passwords  
+sudo mkdir /etc/user-passwords
 sudo chown -R admin /etc/user-passwords
 git clone https://github.com/wg-lux/luxnix
 cd luxnix
@@ -316,7 +341,7 @@ export SSH_IP="192.168.1.48"
 export TARGET_HOSTNAME="s-04"
 ./deploy-user-folders-remote.sh "admin@$SSH_IP" "admin@$TARGET_HOSTNAME"
 
-python luxnix_administration/utils/deploy_user_passwords_remote.py $TARGET_HOSTNAME $SSH_IP 
+python luxnix_administration/utils/deploy_user_passwords_remote.py $TARGET_HOSTNAME $SSH_IP
 
 ./deploy-openvpn-certificates-remote.sh admin@$SSH_IP $TARGET_HOSTNAME "client" nopass
 
@@ -353,10 +378,13 @@ sudo reboot
 ```
 
 # 2024-12-18
+
 ## Deploy Boot Keyfiles on s-01, s-02, s-03
+
 - add boot stick to base-server role
 
 ## setup gs-01
+
 ```shell
 
 cd ~/luxnix-administration
@@ -384,7 +412,7 @@ export TARGET_HOSTNAME="gs-01"
 
 ./deploy-user-folders-remote.sh "admin@$SSH_IP" "admin@$TARGET_HOSTNAME"
 
-python luxnix_administration/utils/deploy_user_passwords_remote.py $TARGET_HOSTNAME $SSH_IP 
+python luxnix_administration/utils/deploy_user_passwords_remote.py $TARGET_HOSTNAME $SSH_IP
 
 sudo boot-decryption-stick-setup
 
@@ -398,8 +426,8 @@ easyrsa build-client-full $TARGET_HOSTNAME
 
 ```
 
-
 ## Setup s-04
+
 ```shell
 
 export SSH_IP="192.168.1.48"
@@ -431,11 +459,11 @@ export TARGET_HOSTNAME="gs-02"
 ssh $SSH_IP
 
 sudo rm -rf /etc/user-passwords
-sudo mkdir /etc/user-passwords  
+sudo mkdir /etc/user-passwords
 sudo chown -R admin /etc/user-passwords
 
 cd luxnix
-git pull 
+git pull
 nho
 ```
 
@@ -446,19 +474,20 @@ export TARGET_HOSTNAME="gs-02"
 
 ./deploy-user-folders-remote.sh "admin@$SSH_IP" "admin@$TARGET_HOSTNAME"
 
-python luxnix_administration/utils/deploy_user_passwords_remote.py $TARGET_HOSTNAME $SSH_IP 
+python luxnix_administration/utils/deploy_user_passwords_remote.py $TARGET_HOSTNAME $SSH_IP
 
 sudo boot-decryption-stick-setup
 
 ```
 
 ### s-03
+
 ```shell
 export SSH_IP="192.168.1.24"
 export TARGET_HOSTNAME="s-03"
 
 ssh $SSH_IP
-git pull 
+git pull
 nho
 
 sudo boot-decryption-stick-setup
@@ -466,15 +495,17 @@ sudo boot-decryption-stick-setup
 
 ```
 
-*Detour: Deploy User-folders and passwords*
+_Detour: Deploy User-folders and passwords_
 Target
+
 ```shell
 sudo rm -rf /etc/user-passwords
-sudo mkdir /etc/user-passwords  
-sudo chown -R admin /etc/user-passwords 
+sudo mkdir /etc/user-passwords
+sudo chown -R admin /etc/user-passwords
 ```
 
 Source
+
 ```shell
 cd ~/luxnix-administration
 export SSH_IP="192.168.1.24"
@@ -482,7 +513,7 @@ export TARGET_HOSTNAME="s-03"
 
 ./deploy-user-folders-remote.sh "admin@$SSH_IP" "admin@$TARGET_HOSTNAME"
 
-python luxnix_administration/utils/deploy_user_passwords_remote.py $TARGET_HOSTNAME $SSH_IP 
+python luxnix_administration/utils/deploy_user_passwords_remote.py $TARGET_HOSTNAME $SSH_IP
 
 
 ./deploy-openvpn-certificates-remote.sh "admin@$SSH_IP" "$TARGET_HOSTNAME" "client"
@@ -490,37 +521,41 @@ python luxnix_administration/utils/deploy_user_passwords_remote.py $TARGET_HOSTN
 ```
 
 ### s-02
+
 export SSH_IP="192.168.179.2"
 export TARGET_HOSTNAME="s-02"
 
 ssh $SSH_IP
 
 cd luxnix
-git pull 
+git pull
 nho
 
 sudo boot-decryption-stick-setup
 git add .
 git stash
 
---- 
+---
+
 on source machine
 
-- nano systems/x86_64-linux/$TARGET_HOSTNAME/boot-decryption-config.nix 
+- nano systems/x86_64-linux/$TARGET_HOSTNAME/boot-decryption-config.nix
 - nano systems/x86_64-linux/$TARGET_HOSTNAME/default.nix
-    - add ./boot-decryption-config.nix to extraImports
+
+  - add ./boot-decryption-config.nix to extraImports
 
 - git add .
 - git commit -m "added $TARGET decryption stick config"
 
 ---
+
 on target machine
 
 - git pull
 - nho
 
-
 ### s-01
+
 ssh 192.168.179.1
 cd luxnix
 git pull
@@ -529,22 +564,22 @@ nho
 ```shell
 ❯ sudo boot-decryption-stick-setup
 Available USB devices:
-sda             7,5G disk  
-nvme0n1       476,9G disk  
-Please enter the device path (e.g., /dev/sdb) of the USB drive: /dev/sda 
+sda             7,5G disk
+nvme0n1       476,9G disk
+Please enter the device path (e.g., /dev/sdb) of the USB drive: /dev/sda
 ```
 
 - create `boot-decryption-config.nix` file in target systems folder in nix config:
-    - `nano systems/x86_64-linux/s-01/boot-decryption-config.nix`
+  - `nano systems/x86_64-linux/s-01/boot-decryption-config.nix`
 - add to extra imports in `nano systems/x86_64-linux/s-01/default.nix`
 
 - git add .
 - pull and rebuild on target system
 
-
 - [x] add echo cat generated-nix-config-file to script
 
 # 2024-12-17
+
 ## setup gs-02
 
 ```shell
@@ -552,7 +587,7 @@ export TARGET_IP="192.168.0.219"
 
 ssh nixos@$TARGET_IP
 
-sudo nixos-generate-config 
+sudo nixos-generate-config
 
 cat /etc/nixos/hardware-configuration
 ```
@@ -614,22 +649,25 @@ cat /etc/nixos/hardware-configuration
 }
 
 ```
+
 -> created `systems/x86_64-linux/gs-02/hardware-configuration.nix`
 
 create disk configuration
+
 ```shell
 [nixos@nixos:~]$ lsblk
 NAME        MAJ:MIN RM  SIZE RO TYPE MOUNTPOINTS
 loop0         7:0    0  2.3G  0 loop /nix/.ro-store
-sda           8:0    1 14.6G  0 disk 
+sda           8:0    1 14.6G  0 disk
 └─sda1        8:1    1 14.6G  0 part /iso
-nvme2n1     259:0    0  3.6T  0 disk 
-nvme3n1     259:1    0  3.6T  0 disk 
-nvme1n1     259:2    0  3.6T  0 disk 
-nvme0n1     259:3    0  3.6T  0 disk 
-├─nvme0n1p1 259:4    0    1G  0 part 
-└─nvme0n1p2 259:5    0  3.6T  0 part 
+nvme2n1     259:0    0  3.6T  0 disk
+nvme3n1     259:1    0  3.6T  0 disk
+nvme1n1     259:2    0  3.6T  0 disk
+nvme0n1     259:3    0  3.6T  0 disk
+├─nvme0n1p1 259:4    0    1G  0 part
+└─nvme0n1p2 259:5    0  3.6T  0 part
 ```
+
 -> -> created `systems/x86_64-linux/gs-02/disks.nix`
 
 ```shell
@@ -646,7 +684,9 @@ nixos-anywhere --flake '.#gs-02' $IP
 ```
 
 ### Deploy Secrets
+
 - switch to luxnix administration
+
 ```shell
 # (on target machine)
 sudo rm /etc/user-passwords/admin_hashed
@@ -684,8 +724,9 @@ reboot
 ```
 
 ## Migrate S01 User Passwords
+
 - luxnix-administration
-    - update user passwords on
+  - update user passwords on
 
 ```shell
 cd ~/luxnix-administration
@@ -703,9 +744,8 @@ nho
 
 ```
 
-
-
 # Before 2024-12-17
+
 To-Do
 
     Migrate Tempfile Rules
