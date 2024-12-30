@@ -3,6 +3,23 @@
 ## Overview
 This document describes the network architecture of the LuxNix system, detailing how different components interact and how the network is structured for security and efficiency.
 
+## OpenVPN Service
+
+The OpenVPN Service is used for accessing the devices in the Network through SSH.
+
+The command for running the OpenVPN service is 
+
+```
+bash
+❯ sudo systemctl restart openvpn-aglnet.service
+```
+
+After the setup, the service should be up and running.
+
+```
+bash
+❯ sudo systemctl status openvpn-aglnet.service
+```
 ## Network Topology
 
 ### Basic Structure
