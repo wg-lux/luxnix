@@ -47,14 +47,11 @@ in
 
   tasks = {
 
-    #TODO @maxhild Document the tasks
-    # `devenv tasks run autoconf:finished` calls the autoconf:finished task
-    # Runs all tasks in "after" field before executing the task
-    # Requires valid ansible key
     "autoconf:generate-hostinfo" = {
       description = "Generate conf/hostinfo.json; Generates hostinfo @ ./docs/hostinfo\
        (summary markdown; html split by host)";
       exec = "./scripts/ansible-cmdb.sh";
+      # after = [ "autoconf:setup-symlinks"];
     };
 
     "autoconf:finished" = {
@@ -71,6 +68,9 @@ in
       direnv allow
       touch .repo_initialized
     '';
+
+    hi.exec = "${pkgs.uv}/bin/uv run python lx_administration/ansible/hostinfo.py";
+    
     
     init-server-ssh.exec = "./tmux/init-server-ssh.sh";
     kill-server-ssh.exec = "tmux kill-session -t ssh-servers";

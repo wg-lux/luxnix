@@ -1,0 +1,175 @@
+{
+    "name": "gc-06",
+    "hostvars": {},
+    "ansible_facts": {
+        "ansible_all_ipv4_addresses": [
+            "172.16.255.106",
+            "192.168.0.115"
+        ],
+        "ansible_all_ipv6_addresses": [
+            "fe80::5541:fac3:a92b:cdb1",
+            "fe80::2a5b:cdab:48f7:979c"
+        ],
+        "ansible_architecture": "x86_64",
+        "ansible_board_name": "MS-17L5",
+        "ansible_board_vendor": "Micro-Star International Co., Ltd.",
+        "ansible_board_version": "REV:1.0",
+        "ansible_date_time": {
+            "date": "2025-01-02",
+            "weeknumber": 0,
+            "iso8601_basic": "20250102T125811041592",
+            "tz": "CET",
+            "tz_dst": "CEST",
+            "tz_offset": "+0100",
+            "weekday": "Donnerstag",
+            "weekday_number": 4
+        },
+        "ansible_distribution": "NixOS",
+        "ansible_distribution_release": "vicuna",
+        "ansible_distribution_version": "24.11",
+        "ansible_interfaces": [
+            "lo",
+            "enp3s0",
+            "tun0",
+            "wlo1"
+        ],
+        "ansible_kernel": "6.12.6",
+        "ansible_mounts": [
+            {
+                "block_available": 205195412,
+                "block_size": 4096,
+                "block_total": 249915648,
+                "block_used": 44720236,
+                "device": "/dev/mapper/cryptroot",
+                "dump": 0,
+                "fstype": "btrfs",
+                "mount": "/",
+                "options": "rw,noatime,compress=zstd:3,ssd,discard=async,space_cache=v2,subvolid=260,subvol=/root,bind",
+                "size_available": 840480407552,
+                "size_total": 1023654494208,
+                "uuid": "ab8bbca5-94f1-45cd-8b17-0893e8745df3"
+            },
+            {
+                "block_available": 205195412,
+                "block_size": 4096,
+                "block_total": 249915648,
+                "block_used": 44720236,
+                "device": "/dev/mapper/cryptroot",
+                "dump": 0,
+                "fstype": "btrfs",
+                "mount": "/persist",
+                "options": "rw,noatime,compress=zstd:3,ssd,discard=async,space_cache=v2,subvolid=259,subvol=/persist,bind",
+                "size_available": 840480407552,
+                "size_total": 1023654494208,
+                "uuid": "ab8bbca5-94f1-45cd-8b17-0893e8745df3"
+            },
+            {
+                "block_available": 205195412,
+                "block_size": 4096,
+                "block_total": 249915648,
+                "block_used": 44720236,
+                "device": "/dev/mapper/cryptroot",
+                "dump": 0,
+                "fstype": "btrfs",
+                "mount": "/var/log",
+                "options": "rw,noatime,compress=zstd:3,ssd,discard=async,space_cache=v2,subvolid=257,subvol=/log,bind",
+                "size_available": 840480407552,
+                "size_total": 1023654494208,
+                "uuid": "ab8bbca5-94f1-45cd-8b17-0893e8745df3"
+            },
+            {
+                "block_available": 205195412,
+                "block_size": 4096,
+                "block_total": 249915648,
+                "block_used": 44720236,
+                "device": "/dev/mapper/cryptroot",
+                "dump": 0,
+                "fstype": "btrfs",
+                "mount": "/nix",
+                "options": "rw,noatime,compress=zstd:3,ssd,discard=async,space_cache=v2,subvolid=258,subvol=/nix,bind",
+                "size_available": 840480407552,
+                "size_total": 1023654494208,
+                "uuid": "ab8bbca5-94f1-45cd-8b17-0893e8745df3"
+            },
+            {
+                "block_available": 205195412,
+                "block_size": 4096,
+                "block_total": 249915648,
+                "block_used": 44720236,
+                "device": "/dev/mapper/cryptroot",
+                "dump": 0,
+                "fstype": "btrfs",
+                "mount": "/nix/store",
+                "options": "ro,noatime,compress=zstd:3,ssd,discard=async,space_cache=v2,subvolid=258,subvol=/nix,bind",
+                "size_available": 840480407552,
+                "size_total": 1023654494208,
+                "uuid": "ab8bbca5-94f1-45cd-8b17-0893e8745df3"
+            },
+            {
+                "block_available": 205195412,
+                "block_size": 4096,
+                "block_total": 249915648,
+                "block_used": 44720236,
+                "device": "/dev/mapper/cryptroot",
+                "dump": 0,
+                "fstype": "btrfs",
+                "mount": "/swap",
+                "options": "rw,relatime,compress=zstd:3,ssd,discard=async,space_cache=v2,subvolid=261,subvol=/swap,bind",
+                "size_available": 840480407552,
+                "size_total": 1023654494208,
+                "uuid": "ab8bbca5-94f1-45cd-8b17-0893e8745df3"
+            },
+            {
+                "block_available": 205195412,
+                "block_size": 4096,
+                "block_total": 249915648,
+                "block_used": 44720236,
+                "device": "/dev/mapper/cryptroot",
+                "dump": 0,
+                "fstype": "btrfs",
+                "mount": "/home",
+                "options": "rw,noatime,compress=zstd:3,ssd,discard=async,space_cache=v2,subvolid=256,subvol=/home,bind",
+                "size_available": 840480407552,
+                "size_total": 1023654494208,
+                "uuid": "ab8bbca5-94f1-45cd-8b17-0893e8745df3"
+            },
+            {
+                "block_available": 93588,
+                "block_size": 4096,
+                "block_total": 130812,
+                "block_used": 37224,
+                "device": "/dev/nvme0n1p1",
+                "dump": 0,
+                "fstype": "vfat",
+                "mount": "/boot",
+                "options": "rw,relatime,fmask=0022,dmask=0022,codepage=437,iocharset=iso8859-1,shortname=mixed,errors=remount-ro",
+                "size_available": 383336448,
+                "size_total": 535805952,
+                "uuid": "B7C2-4C1E"
+            }
+        ],
+        "ansible_nodename": "gc-06",
+        "ansible_processor_cores": 10,
+        "ansible_processor_count": 1,
+        "ansible_processor_nproc": 16,
+        "ansible_processor_threads_per_core": 2,
+        "ansible_processor_vcpus": 20,
+        "ansible_product_name": "Katana 17 B13VGK",
+        "ansible_python": {
+            "executable": "/home/admin/dev/luxnix/.devenv/state/venv/bin/python",
+            "version": {
+                "major": 3,
+                "minor": 11,
+                "micro": 10,
+                "releaselevel": "final",
+                "serial": 0
+            }
+        },
+        "ansible_python_version": "3.11.10",
+        "ansible_ssh_host_key_ed25519_public": "AAAAC3NzaC1lZDI1NTE5AAAAIFOzOQEI3UARYajgSqaL7Qr/1W1U6DpAy+NqmYUQ04Id",
+        "ansible_ssh_host_key_rsa_public": "AAAAB3NzaC1yc2EAAAADAQABAAACAQCwCpHcDLRvYXs/mS3wUsrU33lYLOunR/PncE0l9vUY8wMKfzBH8q24b2lBl3g+rCN3rvLOO/VbI5C8y8QHgbiW9gX1tDCZ0gHb0IKqD7AfVS8d5RYN630AlsGKkC+TcbKx126r3uQ/2C8SxLMLUPzK+RfYPY3mIpprzs7jD9QaKLsxvco3e2Cswxb0v+Ng89+z7jUA+kz+dN0savwlrGkvyUtMc7VhLDrwx/Ff1Slw3Up6vWOq4XaCSzKRlWwCPlRYe2QK5jmsx7dgR0CTAxLe2w9ySTn0/yhhX4aNgbjzAyex+LqwHV4M5oBAtpybRvxUJX5Ym5vN6wwPfLnqEVaYPWdvnbqZutkfGN1EyQ1r8k6gWQLAwnOjf1h0pS/xbyWxO8E7tgnJevtqJNbCvVEiMYb23An1KBr1fvVYisyPHDuUZC7T/noNLQ8UbsDL3wHe4qIqtupQV3Sik9qghP3ONY+bCyp53dwojh3PwJ+EK2NNW+1J4P7a4KYnhYpgPQFJ/zUxcPAevak7wvrpkJGlx22hoapKn+qYZ3Wu2pHs0+VA0XQa9GEPRfIDpQKt8iEozMGgdTV0W3xZeGPYjEaSfdt1qI6EvG9HhwpLxYHpi5cQAahF78TkU6NeXj7GoQVbsCe55MPbN6Kg5twSIzXchzHCi4MJSeLsv7BAv/eO/Q==",
+        "ansible_system": "Linux",
+        "ansible_swapfree_mb": 16383,
+        "ansible_swaptotal_mb": 16383
+    }
+}

@@ -90,4 +90,23 @@ class PasswordGenerator:
             raw_file.write(passphrase)
 
         with open(hashed_path, "w") as hashed_file:
-            hashed_file.write(hashed)
+            hashed_file.write(hashed)  #
+
+    def verify_password_hash(self, password, password_hash):
+        """
+        Verify a password against a given hash.
+
+        :param password: The password to verify.
+        :param password_hash: The hash to verify against.
+        :return: True if the password matches the hash, False otherwise.
+        """
+        salt = base64.urlsafe_b64decode(password_hash.encode())[:16]
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=salt,
+            iterations=100000,
+            backend=default_backend(),
+        )
+        key = kdf.derive(password.encode())
+        return base64.urlsafe_b64encode(salt + key).decode() == password_hash

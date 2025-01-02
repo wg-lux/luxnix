@@ -1,3 +1,3 @@
-from .generator import PasswordGenerator, ReadablePasswordGenerator
+from .generator import PasswordGenerator
 
-__all__ = ["PasswordGenerator", "ReadablePasswordGenerator"]
+__all__ = ["PasswordGenerator"]
