@@ -21,11 +21,33 @@ in {
       '';
     };
 
+    hostPlatform = mkOption {
+      type = types.str;
+      default = "x86_64-linux";
+      description = "Default Host Platform";
+    };
+
     sensitiveServiceGID = mkOption {
       type = types.int;
       default = 901;
       description = ''
         The GID of the sensitive service group.
+      '';
+    };
+
+    mutableUsers = mkOption {
+      type = types.bool;
+      default = false;
+      description = ''
+        Allow users to be mutable.
+      '';
+    };
+
+    useDHCP = mkOption {
+      type = types.bool;
+      default = true;
+      description = ''
+        Use DHCP for network configuration.
       '';
     };
 
@@ -87,9 +109,16 @@ in {
       '';
     };
 
+    _configurationPathRelative = mkOption {
+      type = types.str;
+      default = "luxnix-production";
+      description = ''
+        Relative path to the luxnix directory.
+      '';
+    };
     configurationPath = mkOption {
       type = types.path;
-      default = "/home/${config.user.admin.name}/luxnix/";
+      default = "/home/${config.user.admin.name}/${cfg._configurationPathRelative}/";
       description = ''
         Path to the luxnix directory.
       '';
@@ -97,17 +126,9 @@ in {
 
     systemConfigurationPath = mkOption {
       type = types.path;
-      default = "/home/${config.user.admin.name}/luxnix/systems/x86_64-linux/${hostname}";
+      default = "/home/${config.user.admin.name}/${cfg._configurationPathRelative}/systems/x86_64-linux/${hostname}";
       description = ''
         Path to the systems specif nixos configuration directory.
-      '';
-    };
-
-    luxnixAdministrationPath = mkOption {
-      type = types.path;
-      default = "/home/${config.user.admin.name}/luxnix-administration";
-      description = ''
-        Path to the luxnix administration directory.
       '';
     };
 
@@ -127,6 +148,10 @@ in {
         gid = cfg.sensitiveServiceGID;
       };
     };
+
+    users.mutableUsers = lib.mkDefault cfg.mutableUsers;
+
+    networking.useDHCP = lib.mkDefault cfg.useDHCP;
   };
 
 

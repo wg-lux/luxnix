@@ -82,6 +82,7 @@ in {
     environment.systemPackages = with pkgs; [
     	vscode
       obsidian
+      spotify
     ];
 
 

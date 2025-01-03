@@ -1,0 +1,32 @@
+[project]
+name = "lx-administration"
+version = "0.1.0"
+description = "Utilities for Luxnix Administration"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "cryptography>=44.0.0",
+    "myst-parser[linkify]>=4.0.0",
+    "pyopenssl>=24.3.0",
+    "sphinx>=8.1.3",
+    "black>=23.7.0",
+    "ruff>=0.8.4",
+    "ansible>=11.1.0",
+    "ansible-core>=2.18.1",
+    "pexpect>=4.9.0",
+    "python-ffmpeg>=2.0.12",
+    "faker>=33.1.0",
+    "ansible-cmdb>=1.31",
+    "djlint>=1.36.4",
+    "pydantic>=2.10.4",
+]
+
+[tool.setuptools]
+packages = ["lx_administration"]
+
+[tool.ruff]
+lint.select = ["E", "F", "W"]
+lint.ignore = []
+
+[tool.uv.sources]
+lx_administration = { workspace = true }

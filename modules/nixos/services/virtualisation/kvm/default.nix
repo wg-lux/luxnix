@@ -9,7 +9,7 @@ with lib.luxnix; let
   cfg = config.services.virtualisation.kvm;
 in {
   options.services.virtualisation.kvm = {
-    enable = lib.mkEnableOption "enable kvm virtualisation";
+    enable = mkBoolOpt false "enable kvm virtualisation";
   };
 
   config = lib.mkIf cfg.enable {

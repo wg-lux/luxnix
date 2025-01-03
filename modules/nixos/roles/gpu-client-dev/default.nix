@@ -28,7 +28,7 @@ in {
 
     
     cli.programs.nix-ld = {
-      enable = true;
+      enable = lib.mkForce true;
       libraries = with pkgs; [
           stdenv.cc.cc
           zlib
@@ -80,9 +80,11 @@ in {
       # "aarch64-linux"
     ];
 
+
+    luxnix.gpu-eval.enable = lib.mkDefault false;
+
     roles = {
       desktop.enable = true;
-      aglnet.client.enable = true;
       endoreg-client.enable = true;
     };
 
@@ -96,6 +98,7 @@ in {
     	vscode
       obsidian
       e2fsprogs
+      spotify
     ];
 
 

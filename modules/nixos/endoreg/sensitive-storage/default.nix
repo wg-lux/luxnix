@@ -6,7 +6,7 @@
 }:
 with lib;
 with lib.luxnix; let
-  cfg = config.endoreg.sensitive-storage;
+  cfg = config.endoreg.sensitiveStorage;
 
   sensitiveDataDirectory = "${cfg.sensitiveDirectory}/data";
   sensitiveLogsDirectory = "${cfg.sensitiveDirectory}/logs";
@@ -14,7 +14,7 @@ with lib.luxnix; let
   # and returns "${sensitiveDataDirectory}/${label}"
 
 in {
-  options.endoreg.sensitive-storage = {
+  options.endoreg.sensitiveStorage = {
     enable = mkBoolOpt false "Enable endoreg sensitive storage configuration";
   
     partitionConfigurations = mkOption {

@@ -5,7 +5,8 @@ with lib;
     deps = [];
     text = ''
       echo "Updating Table of Contents..."
-      ${pkgs.python3}/bin/python3 ${./generate-toc.py}
+      echo "CURRENTLY DISABLED; FIXME"
+      # ${pkgs.python3}/bin/python3 ${./generate-toc.py}
     '';
   };
 }

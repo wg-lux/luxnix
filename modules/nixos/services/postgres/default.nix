@@ -34,7 +34,7 @@ in {
         enable = true;
         # TODO: look at using default postgres
         package = pkgs.postgresql_16_jit;
-        extraPlugins = ps: with ps; [pgvecto-rs];
+        extensions = ps: with ps; [pgvecto-rs];
         settings = {
           shared_preload_libraries = ["vectors.so"];
           search_path = "\"$user\", public, vectors";

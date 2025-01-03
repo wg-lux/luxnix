@@ -17,7 +17,7 @@ in {
 
       settings = {
         shell = {
-          program = "fish";
+          program = "zsh";
         };
 
         window = {
