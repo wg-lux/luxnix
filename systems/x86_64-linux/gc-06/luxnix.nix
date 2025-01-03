@@ -11,6 +11,7 @@
       onboardGpuType = "intel";
       nvidiaDriver = "beta";
     };
+    gpu-eval.enable = true;
 
     generic-settings = {
       enable = true;

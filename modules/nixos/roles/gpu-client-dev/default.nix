@@ -81,7 +81,7 @@ in {
     ];
 
 
-    luxnix.gpu-eval.enable = false;
+    luxnix.gpu-eval.enable = lib.mkDefault false;
 
     roles = {
       desktop.enable = true;

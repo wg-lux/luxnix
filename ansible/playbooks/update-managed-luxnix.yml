@@ -15,11 +15,27 @@
       #   - Allow direnv
       #   - Build devenv
 
+    - name: Ensure the user passwords directory exists
+      ansible.builtin.file: # filepath = "{{ local_users_passwords_dir  }}"
+        path: "{{ local_users_passwords_dir }}"
+        state: directory
+        owner: "admin"
+        mode: "0700"
+
+    - name: Deploy user passwords
+      ansible.builtin.copy:
+        src: "{{ admin_password_file_source }}"
+        dest: "{{ admin_password_file }}"
+        mode: "0600"
+        owner: "admin"
+      register: user_password
+      # when: git_update.changed
+
     - name: Read admin password
       ansible.builtin.slurp:
         src: "{{ admin_password_file }}"
       register: user_password
-      no_log: true
+      # no_log: true
 
     - name: Run nho
       ansible.builtin.expect:
@@ -33,7 +49,7 @@
         ansible_sudo_pass: "{{ user_password.content | b64decode }}"
       async: 900 # 15 minutes
       poll: 5
-      when: git_update.changed
+      # when: git_update.changed
 
     - name: Run nhh
       ansible.builtin.expect:
@@ -47,4 +63,4 @@
         ansible_sudo_pass: "{{ user_password.content | b64decode }}"
       async: 900 # 15 minutes
       poll: 5
-      when: git_update.changed
+      # when: git_update.changed

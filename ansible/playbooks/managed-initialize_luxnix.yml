@@ -31,7 +31,7 @@
         mode: "0600"
         owner: "admin"
       register: user_password
-      # when: git_update.changed
+      when: git_update.changed
 
     - name: Read admin password
       ansible.builtin.slurp:
