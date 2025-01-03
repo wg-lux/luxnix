@@ -1,5 +1,5 @@
 {
-  description = "Haseeb's Nix/NixOS Config";
+  description = "AGL's Nix/NixOS Config";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-24.11";
@@ -45,8 +45,9 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    nix-ld.url = "github:Mic92/nix-ld";
+    nix-ld.url = "github:Mic92/nix-ld/911665df070e3d6c970e5a248fc4a38550bd5689"; #TODO Unpin when naked_asm is stable
     nix-ld.inputs.nixpkgs.follows = "nixpkgs";
+    # nix-ld.ref = "v2.0.3";
 
     nixos-anywhere = {
       url = "github:numtide/nixos-anywhere";

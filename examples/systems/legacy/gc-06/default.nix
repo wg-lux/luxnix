@@ -39,7 +39,7 @@
     nvidiaBusId = "PCI:1:0:0";
     onboardBusId = "PCI:0:2:0";
     onboardGpuType = "intel";
-    nvidiaDriver = "beta";
+    nvidiaDriver = "stable";
   };
 
   #TODO Remove after prototyping ############################################

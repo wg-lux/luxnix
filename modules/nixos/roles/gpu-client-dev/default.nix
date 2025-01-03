@@ -28,7 +28,7 @@ in {
 
     
     cli.programs.nix-ld = {
-      enable = true;
+      enable = lib.mkForce true;
       libraries = with pkgs; [
           stdenv.cc.cc
           zlib
@@ -81,7 +81,7 @@ in {
     ];
 
 
-    luxnix.gpu-eval.enable = true;
+    luxnix.gpu-eval.enable = false;
 
     roles = {
       desktop.enable = true;

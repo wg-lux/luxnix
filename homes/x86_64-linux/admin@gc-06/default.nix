@@ -18,7 +18,7 @@
 
   luxnix.generic-settings = {
     enable = true;
-    configurationPath = "luxnix";
+    configurationPath = "dev/luxnix";
   };
 
   roles = {

@@ -64,8 +64,8 @@ in {
 
         nd = "nix develop";
         nfu = "nix flake update";
-        hms = "home-manager switch --flake ~/luxnix#${config.luxnix.user.admin.name}@${host}";
-        nrs = "sudo nixos-rebuild switch --flake ~/luxnix#${host}";
+        # hms = "home-manager switch --flake ~/luxnix#${config.luxnix.user.admin.name}@${host}";
+        # nrs = "sudo nixos-rebuild switch --flake ~/luxnix#${host}";
 
         # other
         tldrf = "${pkgs.tldr}/bin/tldr --list | fzf --preview \"${pkgs.tldr}/bin/tldr {1} --color\" --preview-window=right,70% | xargs tldr";

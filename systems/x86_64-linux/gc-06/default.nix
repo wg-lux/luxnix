@@ -17,7 +17,7 @@
       (import ./roles.nix {inherit config pkgs; })
       (import ./endoreg.nix { inherit config pkgs; })
       (import ./services.nix { inherit config pkgs lib; })
-      (import ./luxnix.nix { inherit config pkgs; })
+      (import ./luxnix.nix { inherit config pkgs lib; })
 
     ]++extraImports;
 

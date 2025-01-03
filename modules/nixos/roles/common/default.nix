@@ -46,7 +46,6 @@ in {
     
     cli.programs = {
       nh.enable = true;
-      nh.luxnixDirectory = lib.mkDefault config.luxnix.generic-settings.configurationPath;
       nix-ld.enable = true;
     };
 

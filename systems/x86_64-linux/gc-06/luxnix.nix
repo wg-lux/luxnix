@@ -1,4 +1,4 @@
-{config, pkgs, ...}@inputs:
+{config, pkgs, lib, ...}@inputs:
 
 {
   luxnix = {
@@ -16,7 +16,7 @@
       enable = true;
       hostPlatform = "x86_64-linux"; # is default
 
-      configurationPath = "/home/admin/luxnix";
+      configurationPath = lib.mkForce "/home/admin/dev/luxnix";
       # sensitiveServiceGroupName = "sensitive-service-group"; # is default
 
       # sensitiveServiceGID = 901; # is default
