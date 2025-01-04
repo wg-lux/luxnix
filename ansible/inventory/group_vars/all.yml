@@ -3,7 +3,7 @@
 luxnix_dev_repo: "/home/admin/dev/luxnix"
 luxnix_repo: "https://github.com/wg-lux/luxnix.git"
 luxnix_dest: "/home/admin/luxnix-production"
-luxnix_branch: "migrate-01"
+luxnix_branch: "main"
 
 ansible_user: admin
 ansible_become_user: admin
