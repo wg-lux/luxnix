@@ -5,6 +5,7 @@
     (modulesPath + "/installer/scan/not-detected.nix")
     ./boot-decryption-config.nix
     ./disks.nix
+    ./luxnix.nix
   ];
 
   user = {
@@ -20,14 +21,4 @@
 
   services = {
     };
-
-  luxnix = {
-    traefik-host.enable = false;
-
-    nvidia-prime = {
-      enable = true;
-      nvidiaBusId = "PCI:1:0:0";
-    };
-
-  };
 }

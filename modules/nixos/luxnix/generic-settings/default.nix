@@ -13,6 +13,13 @@ in {
   options.luxnix.generic-settings = {
     enable = mkEnableOption "Enable generic settings";
 
+    systemStateVersion = mkOption {
+      type = types.str;
+      description = ''
+        The system state version.
+      '';
+    };
+
     sensitiveServiceGroupName = mkOption {
       type = types.str;
       default = "sensitive-service-group";
@@ -150,7 +157,7 @@ in {
     };
 
     users.mutableUsers = lib.mkDefault cfg.mutableUsers;
-
+    system.stateVersion = cfg.systemStateVersion;
     networking.useDHCP = lib.mkDefault cfg.useDHCP;
   };
 
