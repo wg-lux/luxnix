@@ -1,6 +1,5 @@
-group_roles: [
-  "base-server"
-]
+group_roles: 
+  - name: "base_server"
 
 group_services: []
 
