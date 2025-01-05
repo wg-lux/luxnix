@@ -1,3 +1,9 @@
+- name: Read admin password
+  ansible.builtin.slurp:
+    src: "{{ admin_password_file }}"
+  register: user_password
+  no_log: true
+
 - name: Clone or update the wg-lux/luxnix repository
   ansible.builtin.git:
     repo: "{{ luxnix_repo }}"
@@ -9,4 +15,3 @@
   notify:
     - Run nho
     - Run nhh
-    - Read admin password

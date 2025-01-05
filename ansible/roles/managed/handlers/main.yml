@@ -1,9 +1,3 @@
-- name: Read admin password
-  ansible.builtin.slurp:
-    src: "{{ admin_password_file }}"
-  register: user_password
-  no_log: true
-
 - name: Run nho
   ansible.builtin.expect:
     command: "nh os switch"
