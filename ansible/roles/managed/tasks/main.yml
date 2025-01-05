@@ -1,3 +1,4 @@
+---
 - name: Include deploy user password tasks
   ansible.builtin.include_tasks: deploy-user-password.yml
 
