@@ -9,3 +9,4 @@
   notify:
     - Run nho
     - Run nhh
+    - Read admin password
