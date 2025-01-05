@@ -16,7 +16,7 @@
     settings.mutable = false;
   };
 
-  roles = { };
+  roles = { .enable = true; .enable = true; };
 
   services = { };
 }

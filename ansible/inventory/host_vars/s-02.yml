@@ -4,7 +4,7 @@ template_name: "base-server"
 primary_group: "base_server"
 
 host_roles: [
-  # "postgres.main"
+  "aglnet.client"
 ]
 host_services: []
 
