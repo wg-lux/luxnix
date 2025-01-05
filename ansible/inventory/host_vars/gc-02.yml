@@ -1,4 +1,4 @@
-# inventory/host_vars/gc-09.yml
+# inventory/host_vars/gc-02.yml
 ---
 template_name: "gpu-client-dev"
 primary_group: "gpu_client"

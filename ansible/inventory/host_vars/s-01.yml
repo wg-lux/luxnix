@@ -1,3 +1,0 @@
-# inventory/host_vars/s-01.yml
----
-ansible_host: 172.16.255.1

@@ -1,5 +1,9 @@
 # inventory/group_vars/all.yml
 ---
+group_roles: []
+
+group_services: []
+
 luxnix_dev_repo: "/home/admin/dev/luxnix"
 luxnix_repo: "https://github.com/wg-lux/luxnix.git"
 luxnix_dest: "/home/admin/luxnix-production"
@@ -13,3 +17,4 @@ ansible_python_interpreter: "{{luxnix_dest}}/.devenv/state/venv/bin/python"
 local_users_passwords_dir: "{{luxnix_dest}}/secrets/user-passwords/{{inventory_hostname}}"
 admin_password_file: "{{local_users_passwords_dir}}/admin_raw"
 admin_password_file_source: "{{luxnix_dev_repo}}/secrets/user-passwords/{{inventory_hostname}}/admin_raw"
+

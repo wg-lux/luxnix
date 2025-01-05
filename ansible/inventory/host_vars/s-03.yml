@@ -1,13 +1,11 @@
-# inventory/host_vars/gc-07.yml
+# inventory/host_vars/s-02.yml
 ---
-template_name: "gpu-client-dev"
-primary_group: "gpu_client"
-nvidia_prime:
-  nvidiaBusId: "PCI:1:0:0"
-  onboardBusId: "PCI:0:2:0"
-  onboardGpuType: "intel"
+template_name: "base-server"
+primary_group: "base_server"
 
-host_roles: []
+host_roles: [
+  # "postgres.main"
+]
 host_services: []
 
 generic_settings:
@@ -15,24 +13,23 @@ generic_settings:
   systemStateVersion: "23.11" 
 
   linux:
-    cpuMicrocode: "intel"
+    cpuMicrocode: "amd"
 
     kernelPackages: "pkgs.linuxPackages_latest"
     kernelModules:
-      - "kvm-intel"
+      - "kvm-amd"
     initrd:
       supportedFilesystems:
         - "nfs"
       kernelModules:
         - "nfs"
       availableKernelModules:
-        - "vmd"
         - "xhci_pci"
         - "ahci"
+        - "usbhid"
         - "nvme"
         - "usb_storage"
         - "sd_mod"
-
     supportedFilesystems:
       - "btrfs"
     resumeDevice: "/dev/disk/by-label/nixos"

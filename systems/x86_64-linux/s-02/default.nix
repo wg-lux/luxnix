@@ -1,25 +1,12 @@
-{ config,
-  pkgs,
-  lib,
-  modulesPath,
-  ...
-}@inputs: 
-  let
-    extraImports = [ ];
+{ config, pkgs, lib, modulesPath, ... }:
 
-  in
 {
-
-    imports = [
-      (modulesPath + "/installer/scan/not-detected.nix")
-      ./boot-decryption-config.nix
-      ./disks.nix
-      (import ./roles.nix {inherit config pkgs; })
-      (import ./endoreg.nix { inherit config pkgs; })
-      (import ./services.nix { inherit config pkgs lib; })
-      (import ./luxnix.nix { inherit config pkgs; })
-
-    ]++extraImports;
+  imports = [
+    (modulesPath + "/installer/scan/not-detected.nix")
+    ./boot-decryption-config.nix
+    ./disks.nix
+    ./luxnix.nix
+  ];
 
   user = {
     admin = {
@@ -29,6 +16,7 @@
     settings.mutable = false;
   };
 
+  roles = { };
 
-  system.stateVersion = "23.11";
+  services = { };
 }
