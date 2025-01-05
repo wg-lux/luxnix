@@ -1,0 +1,45 @@
+- hosts: base_server
+  become: true
+  roles:
+    - common
+
+- hosts: all,!openvpn_host
+  become: true
+  roles:
+    - common
+    - openvpn_host
+
+- hosts: base_server
+  become: true
+
+- hosts: gpu_server
+  become: true
+
+- hosts: gpu_client
+  become: true
+  # roles:
+  #   - nvidia_prime
+
+- hosts: s-01
+  become: true
+  roles:
+    - openvpn_host
+
+- hosts: s-02
+  become: true
+  roles:
+    - keycloak_host
+    - postgres_host_main
+
+- hosts: s-03
+  become: true
+  roles:
+    - postgres_host_test
+
+- hosts: gs-01
+  become: true
+  # roles:
+  #   - gpu_server
+
+- name: Update-managed-luxnix playbook
+  ansible.builtin.import_playbook: playbooks/update-managed-luxnix.yml

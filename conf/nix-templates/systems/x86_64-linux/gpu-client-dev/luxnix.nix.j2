@@ -1,0 +1,54 @@
+{config, pkgs, ...}@inputs:
+
+{
+  luxnix = {
+    traefik-host.enable = true;
+
+    nvidia-prime = {
+      enable = true; # enables common and desktop (with addon plasma) roles
+      nvidiaBusId = "{{ nvidia_prime.nvidiaBusId }}";
+      onboardBusId = "{{ nvidia_prime.onboardBusId }}";
+      onboardGpuType = "{{ nvidia_prime.onboardGpuType }}";
+      nvidiaDriver = "{{ nvidia_prime.nvidiaDriver }}";
+    };
+
+    generic-settings = {
+      enable = true;
+      hostPlatform = "{{ generic_settings.hostPlatform }}"; 
+        
+      linux = {
+        cpuMicrocode = "{{ generic_settings.linux.cpuMicrocode }}"; 
+        kernelPackages = pkgs.{{ generic_settings.linux.kernelPackages }}; 
+        kernelModules = [ {% for module in generic_settings.linux.kernelModules %}
+          "{{ module }}"{% if not loop.last %}, {% endif %} {% endfor %}
+        ];
+        extraModulePackages = [ {% for package in generic_settings.linux.extraModulePackages %}
+          "{{ package }}"{% if not loop.last %} {% endif %} {% endfor %}
+        ];
+        initrd = {
+          supportedFilesystems = [ {% for fs in generic_settings.linux.initrd.supportedFilesystems %}
+            "{{ fs }}"{% if not loop.last %} {% endif %} {% endfor %}
+          ];
+          kernelModules = [ {% for module in generic_settings.linux.initrd.kernelModules %}
+            "{{ module }}"{% if not loop.last %} {% endif %} {% endfor %}
+          ];
+          availableKernelModules = [ {% for module in generic_settings.linux.initrd.availableKernelModules %}
+            "{{ module }}"{% if not loop.last %} {% endif %} {% endfor %}
+          ];
+        };
+
+        supportedFilesystems = [ {% for fs in generic_settings.linux.supportedFilesystems %}
+          "{{ fs }}"{% if not loop.last %}, {% endif %} {% endfor %}
+        ];
+        resumeDevice = "{{ generic_settings.linux.resumeDevice }}"; 
+        kernelParams = [ {% for param in generic_settings.linux.kernelParams %}
+          "{{ param }}"{% if not loop.last %} {% endif %} {% endfor %}
+        ];  
+        
+        blacklistedKernelModules = [ {% for module in generic_settings.linux.blacklistedKernelModules %}
+          "{{ module }}"{% if not loop.last %} {% endif %} {% endfor %}
+        ];
+      };
+    };
+  };
+}

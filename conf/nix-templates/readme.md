@@ -5,3 +5,4 @@ Goal of this implementation is to minimize manual changes in the nix configurati
 To-Do:
 
 - [ ] `systems/x84_64-linux/${hostname}`
+- [ ] `homes/x86_64-linux/${user}@hostname`

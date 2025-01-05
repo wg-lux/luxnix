@@ -20,19 +20,22 @@
         cpuMicrocode = "intel"; # default is "intel"
         # processorType = "x86_64"; # default
         kernelPackages = pkgs.linuxPackages_latest; # default
-        kernelModules = [ "kvm-intel" ];
+        kernelModules = [ "intel" ];
         extraModulePackages = []; # default
         initrd = {
           supportedFilesystems = ["nfs"]; # default
           kernelModules = [ "nfs" ]; # default
-          availableKernelModules =   [ "xhci_pci" "ahci" "nvme" "usb_storage" "sd_mod" ];
+          availableKernelModules =  [ "vmd" "xhci_pci" "ahci" "nvme" "usb_storage" "sd_mod" ];
         };
 
         supportedFilesystems = ["btrfs"]; # default
         resumeDevice = "/dev/disk/by-label/nixos"; # default
         kernelParams = []; # default
         
-        blacklistedKernelModules = []; # default 
+        blacklistedKernelModules = []; # default
+
+        
+    
       };
     };
   };

@@ -1,6 +1,5 @@
 # inventory/host_vars/gc-06.yml
 ---
-ansible_host: 172.16.255.106
 ansible_python_interpreter: "{{luxnix_dev_repo}}/.devenv/state/venv/bin/python"
 luxnix_dev_repo: "/home/admin/dev/luxnix"
 luxnix_repo: "https://github.com/wg-lux/luxnix.git"

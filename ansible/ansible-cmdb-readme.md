@@ -24,6 +24,13 @@ Options:
 
 ```
 
+; Patterns:
+; webservers:dbservers -> all hosts in the webservers or the dbserver group
+; webservers:&dbservers -> all hosts in both the webservers and the dbserver group
+; webservers:!dbservers -> all hosts in the webservers group that are not in the dbserver group
+; webservers:dbservers:&staging:!phoenix -> all machines in the groups ‘webservers’ and ‘dbservers’ are to be managed if they are in the group ‘staging’ also, but the machines are not to be managed if they are in the group ‘phoenix’
+; in host lists the : can be interchanged with ,
+
 cd ~/luxnix/ansible
 ansible -m setup --tree cmdb/ all
 ansible-cmdb cmdb/ > overview.html
