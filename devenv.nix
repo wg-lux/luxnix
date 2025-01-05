@@ -72,6 +72,7 @@ in
     hi.exec = "${pkgs.uv}/bin/uv run python lx_administration/ansible/hostinfo.py";
     bnsc.exec = "${pkgs.uv}/bin/uv run python scripts/build-nix-system-configs.py";
     
+    run-ansible.exec = "${pkgs.uv}/bin/uv run ansible-playbook ansible/site.yml";
     
     ssh-all.exec = "./tmux/all-luxnix-dir.sh";
 
