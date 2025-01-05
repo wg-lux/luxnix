@@ -15,6 +15,7 @@
     generic-settings = {
       enable = true;
       hostPlatform = "x86_64-linux"; 
+      systemStateVersion = "23.11";
         
       linux = {
         cpuMicrocode = "intel"; 
