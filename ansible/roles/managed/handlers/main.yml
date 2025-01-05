@@ -1,3 +1,25 @@
----
-- handlers: Run nh os switch and nh home switch
-  ansible.builtin.include_tasks: ./update-luxnix-production.yml
+- name: Run nho
+  ansible.builtin.expect:
+    command: "nh os switch"
+    timeout: 900 # 15 Minutes
+    responses:
+      "(?i)\\[sudo\\]\\s*passwort\\s*für\\s*admin:": "{{ ansible_sudo_pass }}"
+  become: true
+  become_user: "{{ ansible_become_user }}"
+  vars:
+    ansible_sudo_pass: "{{ user_password.content | b64decode }}"
+  async: 900 # 15 minutes
+  poll: 5
+
+- name: Run nhh
+  ansible.builtin.expect:
+    command: "nh home switch"
+    timeout: 900 # 15 Minutes
+    responses:
+      "(?i)\\[sudo\\]\\s*passwort\\s*für\\s*admin:": "{{ ansible_sudo_pass }}"
+  become: true
+  become_user: "{{ ansible_become_user }}"
+  vars:
+    ansible_sudo_pass: "{{ user_password.content | b64decode }}"
+  async: 900 # 15 minutes
+  poll: 5
