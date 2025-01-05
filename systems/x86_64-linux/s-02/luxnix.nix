@@ -6,10 +6,6 @@
 
     nvidia-prime = {
       enable = false; # enables common and desktop (with addon plasma) roles
-      nvidiaBusId = "";
-      onboardBusId = "";
-      onboardGpuType = "";
-      nvidiaDriver = "";
     };
 
     generic-settings = {
