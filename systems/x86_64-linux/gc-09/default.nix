@@ -16,9 +16,7 @@
     settings.mutable = false;
   };
 
-  roles = {
-    };
+  roles = { aglnet.client.enable = true; gpu_client_dev.enable = true; };
 
-  services = {
-    };
+  services = { };
 }

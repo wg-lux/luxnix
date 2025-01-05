@@ -16,15 +16,15 @@
     settings.mutable = false;
   };
 
-  roles = {
-    {% for role in roles -%}
-      {{ role.name }}.enable = true;
-    {% endfor -%}
+  roles = { {% for role in group_roles -%}
+      {{ role.name }}.enable = true; {% endfor -%} 
+    {% for role in host_roles -%} 
+      {{ role.name }}.enable = true; {% endfor -%}
   };
 
-  services = {
-    {% for service in services -%}
-      {{ service.name }}.enable = true;
-    {% endfor -%}
+  services = { {% for service in group_services -%}
+      {{ service.name }}.enable = true; {% endfor -%}
+    {% for service in host_services -%}
+      {{ service.name }}.enable = true; {% endfor -%}
   };
 }
