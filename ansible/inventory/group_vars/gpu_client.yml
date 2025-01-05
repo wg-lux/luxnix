@@ -4,6 +4,6 @@ nvidia_prime:
 
 group_roles:
   - name: "aglnet.client"
-  - name: "gpu_client_dev"
+  - name: "gpu-client-dev"
 
 group_services: []
