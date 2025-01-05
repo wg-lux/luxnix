@@ -5,7 +5,7 @@
     traefik-host.enable = true;
 
     nvidia-prime = {
-      enable = true; # enables common and desktop (with addon plasma) roles
+      enable = "false"; # enables common and desktop (with addon plasma) roles
       nvidiaBusId = "";
       onboardBusId = "";
       onboardGpuType = "";
