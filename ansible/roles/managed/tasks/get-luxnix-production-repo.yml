@@ -1,0 +1,11 @@
+- name: Clone or update the wg-lux/luxnix repository
+  ansible.builtin.git:
+    repo: "{{ luxnix_repo }}"
+    dest: "{{ luxnix_dest }}"
+    version: "{{ luxnix_branch }}"
+    update: true
+    force: false
+  register: git_update
+  notify:
+    - Run nho
+    - Run nhh

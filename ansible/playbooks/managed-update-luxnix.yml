@@ -3,62 +3,23 @@
   become: true
   become_user: "{{ ansible_become_user }}"
   tasks:
-    - name: Clone or update the wg-lux/luxnix-refactor repository
-      ansible.builtin.git:
-        repo: "{{ luxnix_repo }}"
-        dest: "{{ luxnix_dest }}"
-        version: "{{ luxnix_branch }}"
-        update: true
-        force: false
-      register: git_update
-      notify:
-        - Run nho
-        - Run nhh
+    # - name: Ensure the user passwords directory exists
+    #   ansible.builtin.file: # filepath = "{{ local_users_passwords_dir  }}"
+    #     path: "{{ local_users_passwords_dir }}"
+    #     state: directory
+    #     owner: "{{ ansible_become_user }}"
+    #     mode: "0700"
 
-    - name: Ensure the user passwords directory exists
-      ansible.builtin.file: # filepath = "{{ local_users_passwords_dir  }}"
-        path: "{{ local_users_passwords_dir }}"
-        state: directory
-        owner: "{{ ansible_become_user }}"
-        mode: "0700"
-
-    - name: Deploy user passwords
-      ansible.builtin.copy:
-        src: "{{ admin_password_file_source }}"
-        dest: "{{ admin_password_file }}"
-        mode: "0600"
-        owner: "{{ ansible_become_user }}"
-      register: user_password
+    # - name: Deploy user passwords
+    #   ansible.builtin.copy:
+    #     src: "{{ admin_password_file_source }}"
+    #     dest: "{{ admin_password_file }}"
+    #     mode: "0600"
+    #     owner: "{{ ansible_become_user }}"
+    #   register: user_password
 
     - name: Read admin password
       ansible.builtin.slurp:
         src: "{{ admin_password_file }}"
       register: user_password
       no_log: true
-
-  handlers:
-    - name: Run nho
-      ansible.builtin.expect:
-        command: "nh os switch"
-        timeout: 900 # 15 Minutes
-        responses:
-          "(?i)\\[sudo\\]\\s*passwort\\s*für\\s*admin:": "{{ ansible_sudo_pass }}"
-      become: true
-      become_user: "{{ ansible_become_user }}"
-      vars:
-        ansible_sudo_pass: "{{ user_password.content | b64decode }}"
-      async: 900 # 15 minutes
-      poll: 5
-
-    - name: Run nhh
-      ansible.builtin.expect:
-        command: "nh home switch"
-        timeout: 900 # 15 Minutes
-        responses:
-          "(?i)\\[sudo\\]\\s*passwort\\s*für\\s*admin:": "{{ ansible_sudo_pass }}"
-      become: true
-      become_user: "{{ ansible_become_user }}"
-      vars:
-        ansible_sudo_pass: "{{ user_password.content | b64decode }}"
-      async: 900 # 15 minutes
-      poll: 5

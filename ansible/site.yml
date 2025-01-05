@@ -1,10 +1,27 @@
-# - name: Set default roles for gpu_server group
-#   hosts: all,!openvpn_host
-#   become: true
-#   roles:
-#     - common
-#     - openvpn_host
+- name: Set role common for all hosts
+  hosts: all,!openvpn_host
+  become: true
+  roles:
+    - common
+    - openvpn_client
 
+- name: Set role openvpn_client for all hosts except openvpn_host
+  hosts: all,!openvpn_host
+  become: true
+  roles:
+    - openvpn_client
+
+- name: Set role openvpn_host for openvpn_host
+  hosts: openvpn_host
+  become: true
+  roles:
+    - openvpn_host
+
+- name: Set role managed for managed hosts
+  hosts: managed
+  become: true
+  roles:
+    - managed
 # - name: Set base_server group's roles
 #   hosts: base_server
 #   become: true
@@ -25,12 +42,6 @@
 #   # roles:
 #   #   - nvidia_prime
 
-# - name: Set aglnet_client group's roles
-#   hosts: s-01
-#   become: true
-#   roles:
-#     - openvpn_host
-
 # - name: Set s-02 host roles
 #   hosts: s-02
 #   become: true
@@ -50,5 +61,5 @@
 #   # roles:
 #   #   - gpu_server
 
-- name: Update-managed-luxnix playbook
-  ansible.builtin.import_playbook: "playbooks/managed-update-luxnix.yml"
+# - name: Update-managed-luxnix playbook
+#   ansible.builtin.import_playbook: "playbooks/managed-update-luxnix.yml"
