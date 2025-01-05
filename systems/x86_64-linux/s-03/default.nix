@@ -16,7 +16,7 @@
     settings.mutable = false;
   };
 
-  roles = { base-server.enable = true; .enable = true; };
+  roles = { base-server.enable = true; aglnet.client.enable = true; };
 
   services = { };
 }

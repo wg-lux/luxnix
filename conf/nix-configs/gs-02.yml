@@ -1,0 +1,10 @@
+roles:
+  - name: gpu_server
+    enable: "true"
+  - name: base_server_host
+    enable: "true"
+  - name: aglnet_client
+    enable: "true"
+
+primary_group: "gpu_server"
+
