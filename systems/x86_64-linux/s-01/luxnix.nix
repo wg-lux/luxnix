@@ -10,28 +10,44 @@
 
     generic-settings = {
       enable = true;
-      hostPlatform = "x86_64-linux"; # is default
-
+      hostPlatform = "x86_64-linux"; 
+      systemStateVersion = "23.11";
+        
       linux = {
-        cpuMicrocode = "amd"; # default is "intel"
-        # processorType = "x86_64"; # default
-        kernelPackages = pkgs.linuxPackages_latest; # default
-        kernelModules = [ "kvm-amd" ];
-        extraModulePackages = []; # default
+        cpuMicrocode = "amd"; 
+        kernelPackages = pkgs.pkgs.linuxPackages_latest; 
+        kernelModules = [ 
+          "kvm-amd" 
+        ];
+        extraModulePackages = [ 
+        ];
         initrd = {
-          supportedFilesystems = ["nfs"]; # default
-          kernelModules = [ "nfs" ]; # default
-          availableKernelModules =  [ "nvme" "xhci_pci" "ahci" "usbhid" "uas" "usb_storage" "sd_mod" ];
+          supportedFilesystems = [ 
+            "nfs" 
+          ];
+          kernelModules = [ 
+            "nfs" 
+          ];
+          availableKernelModules = [ 
+            "xhci_pci"  
+            "uas"  
+            "ahci"  
+            "usbhid"  
+            "nvme"  
+            "usb_storage"  
+            "sd_mod" 
+          ];
         };
 
-        supportedFilesystems = ["btrfs"]; # default
-        resumeDevice = "/dev/disk/by-label/nixos"; # default
-        kernelParams = []; # default
+        supportedFilesystems = [ 
+          "btrfs" 
+        ];
+        resumeDevice = "/dev/disk/by-label/nixos"; 
+        kernelParams = [ 
+        ];  
         
-        blacklistedKernelModules = []; # default
-
-        
-    
+        blacklistedKernelModules = [ 
+        ];
       };
     };
   };

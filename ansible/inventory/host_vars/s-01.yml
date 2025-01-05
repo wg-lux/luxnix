@@ -1,0 +1,39 @@
+# inventory/host_vars/s-02.yml
+---
+template_name: "base-server"
+primary_group: "base_server"
+
+host_roles: 
+  - name: "aglnet.host"
+
+host_services: []
+
+generic_settings:
+  hostPlatform: "x86_64-linux"
+  systemStateVersion: "23.11" 
+
+  linux:
+    cpuMicrocode: "amd"
+
+    kernelPackages: "pkgs.linuxPackages_latest"
+    kernelModules:
+      - "kvm-amd"
+    initrd:
+      supportedFilesystems:
+        - "nfs"
+      kernelModules:
+        - "nfs"
+      availableKernelModules:
+        # [ "nvme" "xhci_pci" "ahci" "usbhid" "uas" "usb_storage" "sd_mod" ];
+        - "xhci_pci"
+        - "uas"
+        - "ahci"
+        - "usbhid"
+        - "nvme"
+        - "usb_storage"
+        - "sd_mod"
+    supportedFilesystems:
+      - "btrfs"
+    resumeDevice: "/dev/disk/by-label/nixos"
+    kernelParams: []
+    kernelModulesBlacklist: []
