@@ -1,0 +1,25 @@
+- name: Update Nix
+  hosts: managed
+  become: true
+  become_user: "{{ ansible_become_user }}"
+  tasks:
+    # - name: Ensure the user passwords directory exists
+    #   ansible.builtin.file: # filepath = "{{ local_users_passwords_dir  }}"
+    #     path: "{{ local_users_passwords_dir }}"
+    #     state: directory
+    #     owner: "{{ ansible_become_user }}"
+    #     mode: "0700"
+
+    # - name: Deploy user passwords
+    #   ansible.builtin.copy:
+    #     src: "{{ admin_password_file_source }}"
+    #     dest: "{{ admin_password_file }}"
+    #     mode: "0600"
+    #     owner: "{{ ansible_become_user }}"
+    #   register: user_password
+
+    - name: Read admin password
+      ansible.builtin.slurp:
+        src: "{{ admin_password_file }}"
+      register: user_password
+      no_log: true

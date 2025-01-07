@@ -14,10 +14,14 @@ in {
 
   config = mkIf cfg.enable {
 
-    services = {
-      ssh.enable = true;
-    };
     
+    services.ssh = {
+      enable = true;
+        authorizedKeys = [ # just adds authorized keys for admin user, does not enable ssh!
+        "${config.luxnix.generic-settings.rootIdED25519}" 
+        ];
+      };
+
     cli.programs.nix-ld = {
       enable = true;
       libraries = with pkgs; [
@@ -65,6 +69,10 @@ in {
       desktop.enable = true;
     };
 
+    luxnix.boot-decryption-stick = {
+      enable = true;
+    };
+
     services = {
       luxnix.avahi.enable = false;
       vpn.enable = false; #TODO OPENVPN IMPLEMENTATION
@@ -74,6 +82,7 @@ in {
     environment.systemPackages = with pkgs; [
     	vscode
       obsidian
+      spotify
     ];
 
 

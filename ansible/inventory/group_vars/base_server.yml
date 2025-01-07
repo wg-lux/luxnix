@@ -1,0 +1,7 @@
+group_roles: 
+  - name: "base-server"
+
+group_services: []
+
+nvidia_prime:
+  enable: "false"

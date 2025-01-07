@@ -1,0 +1,9 @@
+- path: ./tests/conf
+  owner: admin
+  group: users
+  exists: true
+  directory: true
+  filemode: "0755"
+
+- path: ./ansible.cfg
+  symlink: true

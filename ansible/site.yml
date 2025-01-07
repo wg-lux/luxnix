@@ -1,0 +1,65 @@
+- name: Set role common for all hosts
+  hosts: all,!openvpn_host
+  become: true
+  roles:
+    - common
+    - openvpn_client
+
+- name: Set role openvpn_client for all hosts except openvpn_host
+  hosts: all,!openvpn_host
+  become: true
+  roles:
+    - openvpn_client
+
+- name: Set role openvpn_host for openvpn_host
+  hosts: openvpn_host
+  become: true
+  roles:
+    - openvpn_host
+
+- name: Set role managed for managed hosts
+  hosts: managed
+  become: true
+  roles:
+    - managed
+# - name: Set base_server group's roles
+#   hosts: base_server
+#   become: true
+#   roles:
+#     - common
+
+# - name: Set gpu_server group's roles
+#   hosts: base_server
+#   become: true
+
+# - name: Set gpu_client group's roles
+#   hosts: gpu_server
+#   become: true
+
+# - name: Set gpu_client_dev group's roles
+#   hosts: gpu_client
+#   become: true
+#   # roles:
+#   #   - nvidia_prime
+
+# - name: Set s-02 host roles
+#   hosts: s-02
+#   become: true
+#   roles:
+#     - keycloak_host
+#     - postgres_host_main
+
+# - name: Set s-03 host roles
+#   hosts: s-03
+#   become: true
+#   roles:
+#     - postgres_host_test
+
+# - name: Set gs-01 host roles
+#   hosts: gs-01
+#   become: true
+#   # roles:
+#   #   - gpu_server
+
+# - name: Update-managed-luxnix playbook
+#   ansible.builtin.import_playbook: "playbooks/managed-update-luxnix.yml"

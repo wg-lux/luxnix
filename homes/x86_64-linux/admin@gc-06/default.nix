@@ -1,5 +1,10 @@
 {pkgs, ...}: {
-  # cli.programs.git.allowedSigners = ; #TODO
+    cli.programs.git = {
+      enable = true;
+      userName = "maddonix";
+      email = "tlux14@googlemail.com";
+      allowedSigners = "SHA256:LNfWnvEthO0QL8DzUxtxHD4VnLxvCZWFmcDhZodk29o";
+    };
 
   desktops = {
     plasma = {
@@ -9,6 +14,11 @@
 
   services.luxnix = {
     # syncthing.enable = false;
+  };
+
+  luxnix.generic-settings = {
+    enable = true;
+    configurationPath = "dev/luxnix";
   };
 
   roles = {

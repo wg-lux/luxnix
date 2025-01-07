@@ -1,0 +1,205 @@
+# data/network/topology.yaml
+
+# base-servers: 172.16.255.11 to 172.16.255.14
+# gpu-servers: 172.16.255.21 to 172.16.255.22
+# storage-server: 172.16.255.31
+# gpu-clients: 172.16.255.101 to 172.16.255.109
+
+# data/network/topology.yaml
+
+# Define the available client types
+ClientTypes:
+  - base-server
+  - gpu-server
+  - storage-server
+  - base-client
+  - gpu-client
+  - coloreg-client
+
+# Define the available client tags
+ClientTags:
+  - coloreg
+  - client
+  - server
+  - production
+  - development
+  - test
+
+# Define permissions (placeholder, structure to be decided)
+Permissions:
+#   # #TODO (adjust as needed)
+#   # read:
+#   #   - coloreg-client
+#   # write:
+#   #   - gpu-server
+#   # admin:
+#   #   - base-server
+#   # For now, leave this section blank or as a placeholder
+#   {}
+
+
+# Define the clients and their corresponding fields
+Clients:
+  # Base servers
+  s-01:
+    hostname: "s-01"
+    name: "Server 01"
+    description: "Base server for general use"
+    client_type: "base-server"
+    client_tags:
+      - server
+      - production
+    vpn_ip: "172.16.255.1"
+
+  s-02:
+    hostname: "s-02"
+    name: "Server 02"
+    description: "Another base server"
+    client_type: "base-server"
+    client_tags:
+      - server
+      - production
+    vpn_ip: "172.16.255.12"
+
+  s-03:
+    hostname: "s-03"
+    name: "Server 03"
+    description: "Base server for development"
+    client_type: "base-server"
+    client_tags:
+      - server
+      - development
+    vpn_ip: "172.16.255.13"
+
+  s-04:
+    hostname: "s-04"
+    name: "Server 04"
+    description: "Base server for testing"
+    client_type: "base-server"
+    client_tags:
+      - server
+      - test
+    vpn_ip: "172.16.255.14"
+
+  # GPU servers
+  gs-01:
+    hostname: "gs-01"
+    name: "GPU Server 01"
+    description: "GPU-accelerated server for computation"
+    client_type: "gpu-server"
+    client_tags:
+      - server
+      - production
+    vpn_ip: "172.16.255.21"
+
+  gs-02:
+    hostname: "gs-02"
+    name: "GPU Server 02"
+    description: "Secondary GPU-accelerated server"
+    client_type: "gpu-server"
+    client_tags:
+      - server
+      - development
+    vpn_ip: "172.16.255.22"
+
+  # Storage server
+  ss-01:
+    hostname: "ss-01"
+    name: "Storage Server 01"
+    description: "Server for data storage"
+    client_type: "storage-server"
+    client_tags:
+      - server
+      - production
+    vpn_ip: "172.16.255.31"
+
+  # GPU clients
+  gc-01:
+    hostname: "gc-01"
+    name: "GPU Client 01"
+    description: "GPU-enabled client system"
+    client_type: "gpu-client"
+    client_tags:
+      - client
+      - production
+    vpn_ip: "172.16.255.101"
+
+  gc-02:
+    hostname: "gc-02"
+    name: "GPU Client 02"
+    description: "GPU-enabled client system"
+    client_type: "gpu-client"
+    client_tags:
+      - client
+      - production
+    vpn_ip: "172.16.255.102"
+
+  gc-03:
+    hostname: "gc-03"
+    name: "GPU Client 03"
+    description: "GPU-enabled client system"
+    client_type: "gpu-client"
+    client_tags:
+      - client
+      - development
+    vpn_ip: "172.16.255.103"
+
+  gc-04:
+    hostname: "gc-04"
+    name: "GPU Client 04"
+    description: "GPU-enabled client system"
+    client_type: "gpu-client"
+    client_tags:
+      - client
+      - test
+    vpn_ip: "172.16.255.104"
+
+  gc-05:
+    hostname: "gc-05"
+    name: "GPU Client 05"
+    description: "GPU-enabled client system"
+    client_type: "gpu-client"
+    client_tags:
+      - client
+      - production
+    vpn_ip: "172.16.255.105"
+
+  gc-06:
+    hostname: "gc-06"
+    name: "GPU Client 06"
+    description: "GPU-enabled client system"
+    client_type: "gpu-client"
+    client_tags:
+      - client
+      - development
+    vpn_ip: "172.16.255.106"
+
+  gc-07:
+    hostname: "gc-07"
+    name: "GPU Client 07"
+    description: "GPU-enabled client system"
+    client_type: "gpu-client"
+    client_tags:
+      - client
+      - production
+    vpn_ip: "172.16.255.107"
+
+  gc-08:
+    hostname: "gc-08"
+    name: "GPU Client 08"
+    description: "GPU-enabled client system"
+    client_type: "gpu-client"
+    client_tags:
+      - client
+      - production
+    vpn_ip: "172.16.255.108"
+
+  gc-09:
+    hostname: "gc-09"
+    name: "GPU Client 09"
+    description: "GPU-enabled client system"
+    client_type: "gpu-client"
+    client_tags:
+      - client
+      - test
+    vpn_ip: "172.16.255.109"

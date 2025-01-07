@@ -183,7 +183,6 @@ Create home configuration for your user, e.g.: `homes/x86_64-linux/admin@gc-02/d
 - sudo chown -R admin:root "/etc/user-passwords" (necessary for remote deploy w/o sudo priv.)
 - reboot
 
-SSH Connection should now work
 
 ## Prepare OpenVPN ID Files
 ```python
@@ -215,3 +214,32 @@ b. remotely:
 - remote: `./deploy-openvpn-certificates-remote.sh <user@ip> <hostname> <cert_type>`
 (e.g.`./deploy-openvpn-certificates-remote.sh admin@192.168.179.2 s-02 client`) 
 
+# Setup Boot USB Stick
+- set `options.luxnix.boot-decryption-stick` true
+  - enabled by roles `base-server`, `endoreg-client`
+
+# EndoReg Client: Sensitive Data Hdd
+- git clone https://github.com/wg-lux/endoreg-usb-encrypter
+- insert empty USB Stick (Stick will be formatted / erased)
+- make sure the option "endoreg.sensitive-storage.enabled" is true 
+
+- run `sudo python runner.py`
+- backup keyfiles if required
+- make sure you copy sensitive-storage.nix (was sensitive-hdd.nix) to your system folder
+- deploy generated keyfiles (1 -> dropoff, 2 -> processing, 3 -> processed) to ~/admin/.config/endoreg-sensitive-storage
+
+*Verify Functionality*
+
+```shell
+sudo mount-dropoff
+sudo umount-dropoff
+sudo log-dropoff
+
+sudo mount-processing
+sudo umount-processing
+sudo log-processing
+
+sudo mount-processed
+sudo umount-processed
+sudo log-processed
+```

@@ -15,8 +15,9 @@ in {
     programs.nh = {
       enable = true;
       clean.enable = true;
-      clean.extraArgs = "--keep-since 4d --keep 3";
-      flake = "/home/${config.user.admin.name}/luxnix";
+      clean.dates = "weekly";
+      clean.extraArgs = "--keep-since 4d --keep 3"; # nh clean all --help
+      flake = config.luxnix.generic-settings.configurationPath;
     };
   };
 }

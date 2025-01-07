@@ -19,15 +19,16 @@ in {
 
   config = mkIf cfg.enable {
 
-    services = {
-      ssh.enable = true;
-      ssh.authorizedKeys = [
-        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM7vvbgQtzi4GNeugHSuMyEke4MY0bSfoU7cBOnRYU8M" #lux@gc-06
-      ];
-    };
+    services.ssh = {
+      enable = true;
+        authorizedKeys = [ # just adds authorized keys for admin user, does not enable ssh!
+        "${config.luxnix.generic-settings.rootIdED25519}" 
+        ];
+      };
+
     
     cli.programs.nix-ld = {
-      enable = true;
+      enable = lib.mkForce true;
       libraries = with pkgs; [
           stdenv.cc.cc
           zlib
@@ -49,7 +50,7 @@ in {
           m4
           gperf
           unzip
-          cudaPackages_11.cudatoolkit
+          cudaPackages.cudatoolkit
           mesa
           glibc
           glib
@@ -64,14 +65,14 @@ in {
           ncurses5
           binutils
           pkgs.autoAddDriverRunpath
-          cudaPackages_11.cuda_nvcc
-          cudaPackages_11.nccl
-          cudaPackages_11.cudnn
-          cudaPackages_11.libnpp
-          cudaPackages_11.cutensor
-          cudaPackages_11.libcufft
-          cudaPackages_11.libcurand
-          cudaPackages_11.libcublas
+          cudaPackages.cuda_nvcc
+          cudaPackages.nccl
+          cudaPackages.cudnn
+          cudaPackages.libnpp
+          cudaPackages.cutensor
+          cudaPackages.libcufft
+          cudaPackages.libcurand
+          cudaPackages.libcublas
       ];
     };
     
@@ -79,9 +80,11 @@ in {
       # "aarch64-linux"
     ];
 
+
+    luxnix.gpu-eval.enable = lib.mkDefault false;
+
     roles = {
       desktop.enable = true;
-      aglnet.client.enable = true;
       endoreg-client.enable = true;
     };
 
@@ -94,6 +97,8 @@ in {
     environment.systemPackages = with pkgs; [
     	vscode
       obsidian
+      e2fsprogs
+      spotify
     ];
 
 

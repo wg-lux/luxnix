@@ -7,12 +7,13 @@
 with lib;
 with lib.luxnix; let
   cfg = config.user.admin;
+  passwordFile = "/etc/user-passwords/${cfg.name}_hashed";
 in {
   options.user.admin = with types; {
     name = mkOpt str "lux_t" "The name of the user's account";
-    initialPassword =
-      mkOpt str "1"
-      "The initial password to use";
+    passwordFile =
+      mkOpt str passwordFile
+      "The hashed password file to use";
     extraGroups = mkOpt (listOf str) [] "Groups for the user to be assigned.";
     extraOptions =
       mkOpt attrs {}
@@ -20,11 +21,25 @@ in {
   };
 
   config = {
+    system.activationScripts.createDefaultHashedPasswordDev01 = {
+      text = ''
+        set -e
+        if [ ! -f ${passwordFile} ]; then
+          echo "Creating default hashed password file for user ${cfg.name}"
+          mkdir -p /etc/user-passwords
+          # Default hashed password (as requested)
+          # This is a SHA-512 crypt hash that you trust and know beforehand.
+          echo "\$6\$yC9hyVoZEYLlzjbZ\$pILBYLOZBlplgoYL9L.dyIKPGPrcW2ifd1I3ffRAYIwsv8B.pA76Eo6OUq71gJJKl8kGyBsmlbKwnGcKQEpoa." > ${passwordFile}
+          chmod 600 ${passwordFile}
+
+        fi
+      '';
+    };
     users.users.${cfg.name} =
       {
         shell = pkgs.zsh;
         isNormalUser = true;
-        inherit (cfg) name initialPassword;
+        hashedPasswordFile = passwordFile;
         home = "/home/${cfg.name}";
         group = "users";
 
