@@ -1,38 +1,17 @@
 { pkgs, lib, config, inputs, ... }:
 let
-  buildInputs = with pkgs; [
-    python311Full
-    stdenv.cc.cc
-    tesseract
-    glib
-    openssh
-    openssl
-    black
-    nixpkgs-fmt
-  ];
-  #  packageDefs = import ./devenv/packages.nix { inherit pkgs; };
-  #  buildInputs = packageDefs.buildInputs;
+
+  packageDefs = import ./devenv/packages.nix { inherit pkgs; };
+  buildInputs = packageDefs.buildInputs;
   tasks = import ./devenv/tasks.nix;
 
 in 
 {
-  #  packages = packageDefs.packages;
+  packages = packageDefs.packages;
 
   # A dotenv file was found, while dotenv integration is currently not enabled.
   dotenv.enable = false;
   dotenv.disableHint = true;
-
-  packages = with pkgs; [
-    cudaPackages.cuda_nvcc
-    age
-    openssh
-    stdenv.cc.cc
-    tesseract
-    sops
-    openssl
-    black
-    nixpkgs-fmt #TODO WILL BE DEPRECATED SOON ->  nixfmt
-  ];
 
   env = {
     LD_LIBRARY_PATH = "${

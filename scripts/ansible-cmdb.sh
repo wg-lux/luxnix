@@ -11,4 +11,4 @@ ansible-cmdb -t html_fancy_split ansible/cmdb/
 ansible-cmdb -t json ansible/cmdb/ > conf/hostinfo.json
 mv ./ansible/cmdb/*.html ./docs/hostinfo/html
 
-cd ..
+cd .."
