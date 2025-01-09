@@ -1,0 +1,481 @@
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Ansible Overview</title>
+    <style type="text/css">
+      /* reset.css */
+      html, body, div, span, applet, object, iframe,
+      h1, h2, h3, h4, h5, h6, p, blockquote, pre,
+      a, abbr, acronym, address, big, cite, code,
+      del, dfn, em, img, ins, kbd, q, s, samp,
+      small, strike, strong, sub, sup, tt, var,
+      b, u, i, center,
+      dl, dt, dd, ol, ul, li,
+      fieldset, form, label, legend,
+      table, caption, tbody, tfoot, thead, tr, th, td,
+      article, aside, canvas, details, embed,
+      figure, figcaption, footer, header, hgroup,
+      menu, nav, output, ruby, section, summary,
+      time, mark, audio, video {
+        margin: 0; padding: 0; border: 0; font-size: 100%; font: inherit; vertical-align: baseline;
+      }
+      /* HTML5 display-role reset for older browsers */
+      article, aside, details, figcaption, figure,
+      footer, header, hgroup, menu, nav, section { display: block; }
+      body { line-height: 1; }
+      ol, ul { list-style: none; }
+      blockquote, q { quotes: none; }
+      blockquote:before, blockquote:after,
+      q:before, q:after { content: ''; content: none; }
+      table { border-collapse: collapse; border-spacing: 0; }
+
+      /* ansible-cmdb */
+      *, body { font-family: sans-serif; font-weight: lighter; }
+      a { text-decoration: none; }
+      b { font-weight: bold; }
+      p { margin-bottom: 1em; }
+
+      header { position: fixed; top: 0px; left: 0px; right: 0px; background-color: #0071b8; overflow: auto; color: #E0E0E0; padding: 15px; z-index: 1000; }
+      header h1 { font-size: x-large; float: left; line-height: 32px; font-weight: bold; }
+      header #clear_settings { float: right; line-height: 32px; font-size: small; margin-left: 12px; }
+      header #clear_settings a { color: #FFFFFF; font-weight: bold; padding: 6px; background-color: #0090F0; box-shadow: 2px 2px 0px 0px rgba(0,0,0,0.15); }
+      header #generated { float: right; line-height: 32px; font-size: small; }
+      header #top { display: none; }
+      header #top a { line-height: 32px; margin-left: 64px; color: #FFFFFF; border-bottom: 1px solid #909090; }
+      header #generated .detail { font-weight: bold; }
+
+      footer { display: block; position: fixed; bottom: 0px; right: 0px; left: 0px; background-color: #d5d5d5; overflow: auto; color: #505050; padding: 4px; font-size: x-small; text-align: right; padding-right: 8px; }
+      footer a { font-weight: bold; text-decoration: none; color: #202020; }
+
+      #col_toggles { margin: 32px; margin-top: 100px; }
+      #col_toggles h2 { display: block; font-size: 1.4em; margin-bottom: 32px; color: #606060; }
+      #col_toggle_buttons { margin-left: 32px; font-weight: normal; line-height: 40px; }
+      #col_toggles a { line-height: 40px; }
+      #col_toggles a { display: inline-block; background-color: #009688; line-height: 32px; padding: 0px 15px 0px 15px; margin-right: 6px; box-shadow: 2px 2px 0px 0px rgba(0,0,0,0.35); color: #FFFFFF; }
+      #col_toggles a.col-invisible { background-color: #B0B0B0; box-shadow: 0 0px 0px 0; }
+
+      #host_overview { margin: 32px; }
+      #host_overview h2 { display: block; font-size: 1.4em; color: #606060; }
+      #host_overview_tbl_wrapper{ margin-left: 16px; }
+      #host_overview table { width: 100%; clear: both; }
+      #host_overview tr { border-bottom: 1px solid #F0F0F0; }
+      #host_overview tr:hover { background-color: #F0F0F0; }
+      #host_overview thead th { text-align: left; color: #707070; padding: 16px 0px 8px 16px; border-bottom: 1px solid #C0C0C0; font-weight: bold; cursor: pointer; background-repeat: no-repeat; background-position: center right; background-image: url("https://cdn.datatables.net/1.10.2//images/sort_both.png"); }
+      #host_overview thead th.sorting_desc { background-image: url("https://cdn.datatables.net/1.10.2//images/sort_desc.png"); }
+      #host_overview thead th.sorting_asc { background-image: url("https://cdn.datatables.net/1.10.2//images/sort_asc.png"); }
+      #host_overview tbody td { color: #000000; padding: 8px 12px 8px 12px; }
+      #host_overview tbody a { text-decoration: none; color: #005c9d; }
+      #host_overview_tbl_filter { float: right; color: #808080; padding-bottom: 32px; }
+      #host_overview_tbl_filter label input { margin-left: 12px; }
+      #host_overview_tbl_filter #filter_link a { color: #000000; background: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAoUlEQVR4Xu2TIQ6EMBBF/+4dOUBFBYoboBHoBsuRUCgcnpDg3/Y7ICQVK3ebvPxJ30xH9QXom/PO/PoDAjSOY8pwIwFFr2EYUobjONj33bjGd3Ylr77v2bYNp7Hwhifs3HOeUdu2LMuCE1DXdedtl612cJ1R0zRM04TT1HVNjPERO/ecZxRCSBnmeWZdV+Ma39mVvABVVZUy3EhA0f//gvQB4y08WIiD/goAAAAASUVORK5CYII=) no-repeat left center; padding: 5px 0 5px 25px; }
+      #host_overview_tbl_info { margin-top: 16px; color: #C0C0C0; }
+      #host_overview .bar { clear: both; margin-bottom: 1px; }
+      #host_overview .prog_bar_full { float: left; display: block; height: 12px; border: 1px solid #000000; padding: 1px; margin-right: 4px; color: white; text-align: center; }
+      #host_overview .prog_bar_used { display: block; height: 12px; background-color: #8F4040; }
+      #host_overview tbody td.error a { color: #FF0000; }
+      #host_overview span.usage_detail { color: #606060; }
+      #host_overview .error { color: #FF0000; }
+
+      #hosts { margin-left: 32px; margin-bottom: 120px; }
+      #hosts .toggle-collapse { cursor: pointer; }
+      #hosts a.toggle-all { margin-top: 20px; display: inline-block; color: #0080FF; }
+      #hosts a { color: #005c9d; }
+      #hosts p.desc { color: #303030; margin-bottom: 32px; max-width: 800px; }
+      #hosts h3.collapsed::before { color: #505050; margin-right: 16px; content: "⊞";  font-weight: 200; font-size: large; }
+      #hosts h3.uncollapsed::before { color: #505050; margin-right: 16px; content: "⊟";  font-weight: 200; font-size: large;}
+      #hosts h4.collapsed::before { color: #505050; margin-right: 16px; content: "⊞";  font-weight: 200; font-size: large;}
+      #hosts h4.uncollapsed::before { color: #505050; margin-right: 16px; content: "⊟"; font-weight: 200; font-size: large;}
+      #hosts h5.collapsed::before { color: #505050; margin-right: 16px; content: "⊞";  font-weight: 200; font-size: large;}
+      #hosts h5.uncollapsed::before { color: #505050; margin-right: 16px; content: "⊟"; font-weight: 200; font-size: large;}
+      #hosts div.collapsable { margin-left: 16px; }
+      #hosts div.collapsed { display: none; }
+      #hosts h3.uncollapsed { line-height: 1.5em; font-size: xx-large; border-bottom: 1px solid #D0D0D0; }
+      #hosts h3.collapsed {  line-height: 1.5em; font-size: xx-large; }
+      #hosts h4 { font-size: large; font-weight: bold; color: #404040; margin-top: 32px; margin-bottom: 32px; }
+      #hosts h5 { font-weight: bold; color: #404040; margin-top: 32px; margin-bottom: 32px; }
+      #hosts th { text-align: left; color: #808080; padding-bottom: 10px; }
+      #hosts td { padding-left: 16px; color: #303030; padding-bottom: 10px; }
+      #hosts ul { list-style: square; margin-left: 48px; }
+      #hosts table.net_overview td, #hosts table.net_overview th { text-align: left; padding: 0px 0px 8px 16px; margin: 0px; }
+      #hosts table.net_overview { margin: 16px 0px 16px 0px; }
+      #hosts .error { color: #FF0000; }
+    </style>
+    <!-- DataTables assets -->
+      <script type="text/javascript" charset="utf8" src="https://code.jquery.com/jquery-1.10.2.min.js"></script>
+    <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/1.10.2//js/jquery.dataTables.js"></script>
+  </head>
+  <body>
+
+
+  <header>
+    <h1>Host overview</h1>
+    <span id="top"><a href="#">Back to top</a></span>
+    <span id="clear_settings"><a href="javascript:window.localStorage.clear('columnVisibility'); location.reload();" title="If things are acting weird, press this button">Clear settings</a></span> 
+    <span id="generated">Generated on <span class="detail">Thu Jan  9 11:57:44 2025</span> by <span class="detail">admin</span> @ <span class="detail">localhost</span></span>
+  </header>
+
+
+  <div id="col_toggles">
+    <h2>Shown columns</h2>
+    <div id="col_toggle_buttons">
+        
+        <a href="" class="col-toggle col-visible" data-column="0" data-column-id="name">Name</a>
+        
+        <a href="" class="col-toggle col-invisible" data-column="1" data-column-id="groups">Groups</a>
+        
+        <a href="" class="col-toggle col-invisible" data-column="2" data-column-id="cust">Cust</a>
+        
+        <a href="" class="col-toggle col-invisible" data-column="3" data-column-id="dtap">DTAP</a>
+        
+        <a href="" class="col-toggle col-invisible" data-column="4" data-column-id="comment">Comment</a>
+        
+        <a href="" class="col-toggle col-invisible" data-column="5" data-column-id="ext_id">Ext ID</a>
+        
+        <a href="" class="col-toggle col-visible" data-column="6" data-column-id="fqdn">FQDN</a>
+        
+        <a href="" class="col-toggle col-visible" data-column="7" data-column-id="main_ip">Main IP</a>
+        
+        <a href="" class="col-toggle col-invisible" data-column="8" data-column-id="all_ipv4">All IPv4</a>
+        
+        <a href="" class="col-toggle col-invisible" data-column="9" data-column-id="all_ipv6">All IPv6</a>
+        
+        <a href="" class="col-toggle col-visible" data-column="10" data-column-id="os">OS</a>
+        
+        <a href="" class="col-toggle col-invisible" data-column="11" data-column-id="kernel">Kernel</a>
+        
+        <a href="" class="col-toggle col-invisible" data-column="12" data-column-id="arch">Arch</a>
+        
+        <a href="" class="col-toggle col-visible" data-column="13" data-column-id="virt">Virt</a>
+        
+        <a href="" class="col-toggle col-invisible" data-column="14" data-column-id="cpu_type">CPU type</a>
+        
+        <a href="" class="col-toggle col-visible" data-column="15" data-column-id="vcpus">vCPUs</a>
+        
+        <a href="" class="col-toggle col-visible" data-column="16" data-column-id="ram">RAM [GiB]</a>
+        
+        <a href="" class="col-toggle col-invisible" data-column="17" data-column-id="mem_usage">Mem Usage</a>
+        
+        <a href="" class="col-toggle col-invisible" data-column="18" data-column-id="swap_usage">Swap Usage</a>
+        
+        <a href="" class="col-toggle col-invisible" data-column="19" data-column-id="disk_usage">Disk usage</a>
+        
+        <a href="" class="col-toggle col-invisible" data-column="20" data-column-id="physdisk_size">PhysDisk size</a>
+        
+        <a href="" class="col-toggle col-invisible" data-column="21" data-column-id="nr_of_ifaces">Nr of Ifaces</a>
+        
+        <a href="" class="col-toggle col-invisible" data-column="22" data-column-id="timestamp">Timestamp</a>
+        
+        <a href="" class="col-toggle col-invisible" data-column="23" data-column-id="prodname">Product Name</a>
+        
+        <a href="" class="col-toggle col-invisible" data-column="24" data-column-id="prodserial">Product Serial</a>
+    </div>
+  </div>
+
+
+  <div id="host_overview">
+    <h2>Host overview</h2>
+    <div id="host_overview_tbl_wrapper">
+      <table id="host_overview_tbl" class="demo display dataTable compact">
+      <thead>
+        <tr>
+            <th>Name</th>
+            <th>Groups</th>
+            <th>Cust</th>
+            <th>DTAP</th>
+            <th>Comment</th>
+            <th>Ext ID</th>
+            <th>FQDN</th>
+            <th>Main IP</th>
+            <th>All IPv4</th>
+            <th>All IPv6</th>
+            <th>OS</th>
+            <th>Kernel</th>
+            <th>Arch</th>
+            <th>Virt</th>
+            <th>CPU type</th>
+            <th>vCPUs</th>
+            <th>RAM [GiB]</th>
+            <th>Mem Usage</th>
+            <th>Swap Usage</th>
+            <th>Disk usage</th>
+            <th>PhysDisk size</th>
+            <th>Nr of Ifaces</th>
+            <th>Timestamp</th>
+            <th>Product Name</th>
+            <th>Product Serial</th>
+        </tr>
+      </thead>
+      <tbody>
+      </tbody>
+      </table>
+    </div>
+  </div>
+
+<script>
+$(document).ready( function () {
+  
+  function getQueryParams(qs) {
+    qs = qs.split('+').join(' ');
+    var params = {},
+      tokens,
+      re = /[?&]?([^=]+)=([^&]*)/g;
+    while (tokens = re.exec(qs)) {
+      params[decodeURIComponent(tokens[1])] = decodeURIComponent(tokens[2]);
+    }
+    return params;
+  }
+
+  // Get persisted column visibility from localStorage.
+  var columnVisibility = localStorage.getItem("columnVisibility");
+  if (columnVisibility == null) {
+    columnVisibility = {
+        "name": true,
+        "groups": false,
+        "cust": false,
+        "dtap": false,
+        "comment": false,
+        "ext_id": false,
+        "fqdn": true,
+        "main_ip": true,
+        "all_ipv4": false,
+        "all_ipv6": false,
+        "os": true,
+        "kernel": false,
+        "arch": false,
+        "virt": true,
+        "cpu_type": false,
+        "vcpus": true,
+        "ram": true,
+        "mem_usage": false,
+        "swap_usage": false,
+        "disk_usage": false,
+        "physdisk_size": false,
+        "nr_of_ifaces": false,
+        "timestamp": false,
+        "prodname": false,
+        "prodserial": false,
+    };
+    localStorage.setItem("columnVisibility", JSON.stringify(columnVisibility));
+  } else {
+    columnVisibility = JSON.parse(columnVisibility);
+  }
+
+  // Initialize the DataTables jQuery plugin on the host overview table
+  var table = $('#host_overview_tbl').DataTable({
+    paging: false,
+    columnDefs: [
+        {
+          "targets": [0],
+          "visible": true,
+          "sType": "string"
+        },
+        {
+          "targets": [1],
+          "visible": false,
+          "sType": "string"
+        },
+        {
+          "targets": [2],
+          "visible": false,
+          "sType": "string"
+        },
+        {
+          "targets": [3],
+          "visible": false,
+          "sType": "string"
+        },
+        {
+          "targets": [4],
+          "visible": false,
+          "sType": "string"
+        },
+        {
+          "targets": [5],
+          "visible": false,
+          "sType": "string"
+        },
+        {
+          "targets": [6],
+          "visible": true,
+          "sType": "string"
+        },
+        {
+          "targets": [7],
+          "visible": true,
+          "sType": "string"
+        },
+        {
+          "targets": [8],
+          "visible": false,
+          "sType": "string"
+        },
+        {
+          "targets": [9],
+          "visible": false,
+          "sType": "string"
+        },
+        {
+          "targets": [10],
+          "visible": true,
+          "sType": "string"
+        },
+        {
+          "targets": [11],
+          "visible": false,
+          "sType": "string"
+        },
+        {
+          "targets": [12],
+          "visible": false,
+          "sType": "string"
+        },
+        {
+          "targets": [13],
+          "visible": true,
+          "sType": "string"
+        },
+        {
+          "targets": [14],
+          "visible": false,
+          "sType": "string"
+        },
+        {
+          "targets": [15],
+          "visible": true,
+          "sType": "num"
+        },
+        {
+          "targets": [16],
+          "visible": true,
+          "sType": "num"
+        },
+        {
+          "targets": [17],
+          "visible": false,
+          "sType": "string"
+        },
+        {
+          "targets": [18],
+          "visible": false,
+          "sType": "string"
+        },
+        {
+          "targets": [19],
+          "visible": false,
+          "sType": "string"
+        },
+        {
+          "targets": [20],
+          "visible": false,
+          "sType": "string"
+        },
+        {
+          "targets": [21],
+          "visible": false,
+          "sType": "num"
+        },
+        {
+          "targets": [22],
+          "visible": false,
+          "sType": "string"
+        },
+        {
+          "targets": [23],
+          "visible": false,
+          "sType": "string"
+        },
+        {
+          "targets": [24],
+          "visible": false,
+          "sType": "string"
+        },
+    ],
+    "fnInitComplete": function() {
+      // Focus the input field
+      $("#host_overview_tbl_filter input").focus();
+
+      // Set the search box value to the query string 'search' part
+      var qp = getQueryParams(document.location.search);
+      if ("search" in qp) {
+        $("#host_overview_tbl_filter input").val(qp.search);
+        this.fnFilter(qp.search);
+      }
+    }
+  });
+
+  // Display or hide columns based on localStorage preferences.
+  for (var columnId in columnVisibility) {
+    var columnButton = $("a[data-column-id='" + columnId +"']");
+    var columnNr = columnButton.attr('data-column');
+    var column = table.column(columnNr);
+    column.visible(columnVisibility[columnId]);
+    var newClass = ['col-invisible','col-visible'][Number(column.visible())];
+    columnButton.get(0).className = 'col-toggle ' + newClass;
+  }
+
+  // Show a direct link to the search term
+  table.on( 'search.dt', function () {
+    $('#filter_link').remove();
+    if (table.search() == "") {
+    } else {
+      $('#host_overview_tbl_filter label').after('<span id="filter_link">&nbsp; <a title="Direct link to search" href="?search='+table.search()+'">&nbsp;</a></span>');
+    }
+  } );
+
+  // Show and hide columns on button clicks
+  $('a.col-toggle').on('click', function(e) {
+    e.preventDefault();
+    var columnId = $(this).attr('data-column-id')
+    var column = table.column( $(this).attr('data-column') );
+    column.visible( ! column.visible() );
+    var newClass = ['col-invisible','col-visible'][Number(column.visible())];
+    e.target.className = 'col-toggle ' + newClass;
+
+    // Storage column visibility in localStorage.
+    columnVisibility[columnId] = column.visible();
+    localStorage.setItem("columnVisibility", JSON.stringify(columnVisibility));
+  });
+
+  // Open the Detailed host information when jumping to a host.
+  $('#host_overview td a').on('click', function(e) {
+    var hostId=$(this).attr('href').substr(1);
+    var hostElem = $("h3[data-host-name='"+hostId+"']");
+    hostElem.addClass('uncollapsed');
+    hostElem.removeClass('collapsed');
+    hostElem.next().removeClass('collapsed');
+  });
+
+  
+  // Open the detailed host information when clicking on the hosts header
+  $('.toggle-collapse').on('click', function(e) {
+    $(this).toggleClass('collapsed');
+    $(this).toggleClass('uncollapsed');
+    $(this).next().toggleClass('collapsed');
+  });
+
+  // Toggle opening and closing all information for a host.
+  $('a.toggle-all').on('click', function(e) {
+    e.preventDefault();
+    if ($(this).text() == "Open all") {
+      $(this).siblings('.collapsed').each(function(item) {
+        $(this).addClass('uncollapsed');
+        $(this).removeClass('collapsed');
+        $(this).next().toggleClass('collapsed');
+      });
+      $(this).text("Close all");
+    } else {
+      $(this).text("Open all");
+      $(this).siblings('.uncollapsed').each(function(item) {
+        $(this).addClass('collapsed');
+        $(this).removeClass('uncollapsed');
+        $(this).next().toggleClass('collapsed');
+      });
+    }
+  });
+
+});
+</script>
+
+  </body>
+  </html>
+

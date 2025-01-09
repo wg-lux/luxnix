@@ -10,9 +10,13 @@ let
     black
     nixpkgs-fmt
   ];
+  #  packageDefs = import ./devenv/packages.nix { inherit pkgs; };
+  #  buildInputs = packageDefs.buildInputs;
+  tasks = import ./devenv/tasks.nix;
 
 in 
 {
+  #  packages = packageDefs.packages;
 
   # A dotenv file was found, while dotenv integration is currently not enabled.
   dotenv.enable = false;
@@ -45,21 +49,7 @@ in
     };
   };
 
-  tasks = {
-
-    "autoconf:generate-hostinfo" = {
-      description = "Generate conf/hostinfo.json; Generates hostinfo @ ./docs/hostinfo\
-       (summary markdown; html split by host)";
-      exec = "./scripts/ansible-cmdb.sh";
-      # after = [ "autoconf:setup-symlinks"];
-    };
-
-    "autoconf:finished" = {
-      description = "Start the finalize task";
-      exec = "echo 'Starting finalize task'";
-      after = [ "autoconf:generate-hostinfo"];
-    };
-  };
+  tasks = tasks;
 
   scripts = {
     hello.exec = "${pkgs.uv}/bin/uv run python hello.py";
