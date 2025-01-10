@@ -1,8 +1,8 @@
 # inventory/group_vars/all.yml
 ---
-group_roles: []
+group_roles: {}
 
-group_services: []
+group_services: {}
 
 luxnix_dev_repo: "/home/admin/dev/luxnix"
 luxnix_repo: "https://github.com/wg-lux/luxnix.git"

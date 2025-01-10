@@ -16,23 +16,59 @@
     settings.mutable = false;
   };
 
-  roles = { {% for role in group_roles -%}
-      {{ role.name }} = { enable = true; {% for key, value in role.items() if key != 'name' -%}
-        {{ key }} = {{ value | tojson }};
-      {% endfor -%} }; {% endfor -%} 
-    {% for role in host_roles -%} 
-      {{ role.name }} = { enable = true; {% for key, value in role.items() if key != 'name' -%}
-        {{ key }} = {{ value | tojson }};
-      {% endfor -%} }; {% endfor -%}
+  roles = { 
+    
+    {% for role_name, role in group_roles.items() -%}
+      {{ role_name }} = {
+        {% for key, value in role.items() -%}
+          {% if value is mapping -%}
+            {{ key }} = { 
+              {% for sub_key, sub_value in value.items() -%}
+                {{ sub_key }} = {{ sub_value | tojson }};
+              {% endfor -%} 
+            };
+          {% else -%}
+            {{ key }} = {{ value | tojson }};
+          {% endif -%}
+        {% endfor -%} 
+      };
+    {% endfor -%}
+
+    # Host Roles  
+    {% for role_name, role in host_roles.items() -%} 
+      {{ role_name }} = {
+        {% for key, value in role.items() -%}
+          {% if value is mapping -%}
+            {{ key }} = { 
+              {% for sub_key, sub_value in value.items() -%}
+                {{ sub_key }} = {{ sub_value | tojson }};
+              {% endfor -%} 
+            };
+          {% else -%}
+            {{ key }} = {{ value | tojson }};
+          {% endif -%}
+        {% endfor -%} 
+      };
+    {% endfor -%}
   };
 
-  services = { {% for service in group_services -%}
-      {{ service.name }} = { enable = true; {% for key, value in service.items() if key != 'name' -%}
-        {{ key }} = {{ value | tojson }};
-      {% endfor -%} }; {% endfor -%}
-    {% for service in host_services -%}
-      {{ service.name }} = { enable = true; {% for key, value in service.items() if key != 'name' -%}
-        {{ key }} = {{ value | tojson }};
-      {% endfor -%} }; {% endfor -%}
+  services = {
+     {% for service_name, service in group_services.items() -%}
+      {{ service_name }} = { 
+        enable = {{ service.enable | tojson }}; 
+        {% for key, value in service.items() if key != 'enable' -%}
+          {{ key }} = {{ value | tojson }};
+        {% endfor -%} 
+      }; 
+    {% endfor -%}
+
+    {% for service_name, service in host_services.items() -%}
+      {{ service_name }} = { 
+        enable = {{ service.enable | tojson }}; 
+        {% for key, value in service.items() if key != 'enable' -%}
+          {{ key }} = {{ value | tojson }};
+        {% endfor -%} 
+      }; 
+    {% endfor -%}
   };
 }

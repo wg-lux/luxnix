@@ -4,15 +4,12 @@ template_name: "base-server"
 primary_group: "base_server"
 
 host_roles:
-  base_server:
-    enable: "true"
-    aglnet_client:
-      enable: "true"
-    ssh_access.dev_01:
-      enable: "true"
-      idEd25519: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK"
+  base-server.enable: "true"
+  aglnet.client.enable: "true"
+  ssh-access.dev-01.enable: "true"
+  ssh-access.dev-01.idEd25519: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK"
 
-host_services: []
+host_services: {}
 
 generic_settings:
   hostPlatform: "x86_64-linux"

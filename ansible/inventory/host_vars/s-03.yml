@@ -3,14 +3,14 @@
 template_name: "base-server"
 primary_group: "base_server"
 
-host_roles: 
+host_roles:
   - name: "aglnet.client"
-  
-host_services: []
+
+host_services: {}
 
 generic_settings:
   hostPlatform: "x86_64-linux"
-  systemStateVersion: "23.11" 
+  systemStateVersion: "23.11"
 
   linux:
     cpuMicrocode: "amd"
