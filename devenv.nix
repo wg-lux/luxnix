@@ -54,10 +54,16 @@ in
       # after = [ "autoconf:setup-symlinks"];
     };
 
+    "autoconf:build-nix-system-configs" = {
+      description = "Build nix system configs";
+      exec = "bnsc";
+      after = [ "autoconf:generate-hostinfo"];
+    };
+
     "autoconf:finished" = {
       description = "Start the finalize task";
       exec = "echo 'Starting finalize task'";
-      after = [ "autoconf:generate-hostinfo"];
+      after = [ "autoconf:build-nix-system-configs"];
     };
   };
 
@@ -68,6 +74,8 @@ in
       direnv allow
       touch .repo_initialized
     '';
+
+    ac.exec = "devenv tasks run autoconf:finished";
 
     hi.exec = "${pkgs.uv}/bin/uv run python lx_administration/ansible/hostinfo.py";
     bnsc.exec = "${pkgs.uv}/bin/uv run python scripts/build-nix-system-configs.py";
@@ -86,6 +94,7 @@ in
 
   enterShell = ''
     . .devenv/state/venv/bin/activate
+    uv pip install -e .
     hello
   '';
 

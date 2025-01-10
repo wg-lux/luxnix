@@ -16,7 +16,7 @@
     settings.mutable = false;
   };
 
-  roles = { base-server.enable = true; aglnet.client.enable = true; };
+  roles = { base-server.enable = true; aglnet.client.enable = true; postgresql.main.enable = true; ssh-access.dev-01.enable = true; };
 
   services = { };
 }
