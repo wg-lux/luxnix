@@ -23,7 +23,7 @@
 
   hardware.graphics = {
     enable = true;
-    drivers = lib.mkForce 10 [ "ast" ]; # ASPEED Graphics Driver
+    # drivers = lib.mkForce 10 [ "ast" ]; # ASPEED Graphics Driver
   };
 
   user = {

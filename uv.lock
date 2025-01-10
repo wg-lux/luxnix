@@ -62,6 +62,22 @@ wheels = [
 ]
 
 [[package]]
+name = "arsenal-cli"
+version = "1.2.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "docutils" },
+    { name = "libtmux" },
+    { name = "pyfzf" },
+    { name = "pyperclip" },
+    { name = "pyyaml" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/77/f0/ba4d998fae6a389df4841786ca2e4436eaed3e8b5bfa78ddab2f9ccf2524/arsenal-cli-1.2.7.tar.gz", hash = "sha256:1ab0ed88ade1fe32e01336b0ab88dac2d168283f4beb939866453cfd0f9a99a6", size = 4314127 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/55/0b/39daf30c99bd706fe67f24c829ab4c1318102deca2b52638f89143b733fb/arsenal_cli-1.2.7-py2.py3-none-any.whl", hash = "sha256:980496d94d715e4e7c626e431f90931759bd5a9d50c911fbdfa02732b7e7d30c", size = 115922 },
+]
+
+[[package]]
 name = "babel"
 version = "2.16.0"
 source = { registry = "https://pypi.org/simple" }
@@ -382,6 +398,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/65/62/67257a84338fde1b89fce8b28164364bf2ad6a5a4459a6a890cf497cf721/jsonxs-0.6.tar.gz", hash = "sha256:dc41ae07961f3f19f97241e4c7f611d84d076c420dd2876aadfd936e59c8c302", size = 4071 }
 
 [[package]]
+name = "libtmux"
+version = "0.40.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/20/53/d30bf462b0a005e4541b1c217e15107970063aad99145a259d75b23d35bd/libtmux-0.40.1.tar.gz", hash = "sha256:98ffe2b4922449e89dcd0072e1852bcd5757944fd34159d70ed3e57df398796d", size = 318731 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/92/89/179a35a1f0964466bdeb8db2b3b071780693490abd10d28e151b51088747/libtmux-0.40.1-py3-none-any.whl", hash = "sha256:aa8bd4a052ed6ce2686f46fa884022d79e900321b17428e87cc5d1b91fcb6081", size = 56185 },
+]
+
+[[package]]
 name = "linkify-it-py"
 version = "2.0.3"
 source = { registry = "https://pypi.org/simple" }
@@ -401,6 +426,7 @@ dependencies = [
     { name = "ansible" },
     { name = "ansible-cmdb" },
     { name = "ansible-core" },
+    { name = "arsenal-cli" },
     { name = "black" },
     { name = "cryptography" },
     { name = "djlint" },
@@ -421,6 +447,7 @@ requires-dist = [
     { name = "ansible", specifier = ">=11.1.0" },
     { name = "ansible-cmdb", specifier = ">=1.31" },
     { name = "ansible-core", specifier = ">=2.18.1" },
+    { name = "arsenal-cli", specifier = ">=1.2.7" },
     { name = "black", specifier = ">=23.7.0" },
     { name = "cryptography", specifier = ">=44.0.0" },
     { name = "djlint", specifier = ">=1.36.4" },
@@ -697,6 +724,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pyfzf"
+version = "0.3.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d4/4c/c0c658a1e1e9f0e01932990d7947579515fe048d0a515f07458ecd992b8f/pyfzf-0.3.1.tar.gz", hash = "sha256:dd902e34cffeca9c3082f96131593dd20b4b3a9bba5b9dde1b0688e424b46bd2", size = 3652 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/99/35/6a6c7b95390ec58904646a04f54e1b56fd57d7a247588b791c6331697797/pyfzf-0.3.1-py3-none-any.whl", hash = "sha256:736f71563461b75f6f85b55345bdc638fa0dc14c32c857c59e8b1ca1cfa3cf4a", size = 4315 },
+]
+
+[[package]]
 name = "pygments"
 version = "2.18.0"
 source = { registry = "https://pypi.org/simple" }
@@ -716,6 +752,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/c1/d4/1067b82c4fc674d6f
 wheels = [
     { url = "https://files.pythonhosted.org/packages/42/22/40f9162e943f86f0fc927ebc648078be87def360d9d8db346619fb97df2b/pyOpenSSL-24.3.0-py3-none-any.whl", hash = "sha256:e474f5a473cd7f92221cc04976e48f4d11502804657a08a989fb3be5514c904a", size = 56111 },
 ]
+
+[[package]]
+name = "pyperclip"
+version = "1.9.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/30/23/2f0a3efc4d6a32f3b63cdff36cd398d9701d26cda58e3ab97ac79fb5e60d/pyperclip-1.9.0.tar.gz", hash = "sha256:b7de0142ddc81bfc5c7507eea19da920b92252b548b96186caf94a5e2527d310", size = 20961 }
 
 [[package]]
 name = "python-dateutil"

@@ -21,6 +21,7 @@ dependencies = [
     "pydantic>=2.10.4",
     "jinja2>=3.1.5",
     "pyyaml>=6.0.2",
+    "arsenal-cli>=1.2.7",
 ]
 
 [tool.setuptools]
