@@ -13,17 +13,37 @@ def find_duplicates(content, section):
     lines = section_content.split("\n")
     keys = {}
     in_multiline = False
+    multiline_key = None
+    multiline_value = []
     for line in lines:
         if "''" in line:
             in_multiline = not in_multiline
-        if not in_multiline and "=" in line:
-            raw_line = line.strip()
-            raw_key = raw_line.split("=")[0].strip()
-            norm_key = raw_key.replace("_", "-")
-            if norm_key not in keys:
-                # Rebuild line to use the normalized key
-                remainder = raw_line.split("=", 1)[1]
-                keys[norm_key] = f"{norm_key}={remainder}"
+            if in_multiline:
+                # Found start of multiline block, parse key
+                raw_line = line.strip()
+                raw_key = raw_line.split("=")[0].strip()
+                norm_key = raw_key.replace("_", "-")
+                multiline_key = norm_key
+                multiline_value = [raw_line.split("''", 1)[1]]
+            else:
+                # End of multiline block, store
+                multiline_value.append(line.split("''", 1)[0])
+                keys[multiline_key] = (
+                    f"{multiline_key} = ''\n" + "\n".join(multiline_value) + "'';"
+                )
+                multiline_key = None
+                multiline_value = []
+        elif in_multiline:
+            multiline_value.append(line)
+        else:
+            if "=" in line:
+                raw_line = line.strip()
+                raw_key = raw_line.split("=")[0].strip()
+                norm_key = raw_key.replace("_", "-")
+                if norm_key not in keys:
+                    # Rebuild line to use the normalized key
+                    remainder = raw_line.split("=", 1)[1]
+                    keys[norm_key] = f"{norm_key}={remainder}"
     return keys
 
 

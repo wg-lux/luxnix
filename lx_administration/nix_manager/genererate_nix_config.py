@@ -38,7 +38,7 @@ def generate_nix_system_configuration(
 
     print(f"Generated {default_nix_path}")
 
-    # validate_default_nix_file(default_nix_path)
+    validate_default_nix_file(default_nix_path)
 
     print(f"Validated {default_nix_path}")
 
