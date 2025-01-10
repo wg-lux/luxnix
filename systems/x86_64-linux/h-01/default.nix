@@ -35,5 +35,5 @@
   };
 
 
-  system.stateVersion = "23.11";
+  luxnix.generic-settings.systemStateVersion = "24.11";
 }
