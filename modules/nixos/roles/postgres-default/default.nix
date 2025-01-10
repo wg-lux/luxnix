@@ -21,11 +21,6 @@ in {
       default = defaultAuthKeys;
     };
 
-    replUser = mkOption {
-      type = types.str;
-      default = "repl-user";
-    };
-
     postgresqlDataDir = mkOption {
       type = types.str;
       default = "/var/lib/postgresql/${config.services.postgresql.package.psqlSchema}";
@@ -71,7 +66,6 @@ in {
         };
         ensureDatabases = [ 
             config.user.admin.name
-            cfg.replUser
         ];
 
         ensureUsers = [
