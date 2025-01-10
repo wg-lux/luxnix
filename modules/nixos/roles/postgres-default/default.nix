@@ -76,13 +76,13 @@ in {
               replication = true;
             };
           }
-          {
-            name = cfg.replUser;
-            ensureDBOwnership = true;
-            ensureClauses = {
-              replication = true;
-            };
-          }
+          # {
+          #   name = cfg.replUser;
+          #   ensureDBOwnership = true;
+          #   ensureClauses = {
+          #     replication = true;
+          #   };
+          # }
         ];
         
         # host  ${conf.keycloak-user}     ${conf.keycloak-user}       127.0.0.1/32                scram-sha-256 
