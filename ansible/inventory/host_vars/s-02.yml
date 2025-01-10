@@ -5,7 +5,7 @@ primary_group: "base_server"
 
 host_roles:
   - name: "aglnet.client"
-  - name: "postgresql.main"
+  - name: "postgres.main"
   - name: "ssh-access.dev-01"
 
 host_services: []

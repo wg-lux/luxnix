@@ -29,6 +29,8 @@
     settings.mutable = false;
   };
 
+  services.ssh.enable=true;
+
   environment.systemPackages = with pkgs; [
     nmap
     libreoffice-qt6-fresh
