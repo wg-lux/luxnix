@@ -16,15 +16,39 @@
     settings.mutable = false;
   };
 
-  roles = { {% for role in group_roles -%}
-      {{ role.name }}.enable = true; {% endfor -%} 
-    {% for role in host_roles -%} 
-      {{ role.name }}.enable = true; {% endfor -%}
+roles = { 
+    {% for role_name, role in group_roles.items() -%}
+      {{ role_name }} = {{ role }};
+    {% endfor -%}
+
+    # Host Roles  
+    {% for role_name, role_value in host_roles.items() -%} {% if role_value is string and '\n' in role_value -%}
+        {{ role_name }} = ''
+{{ role_value | trim }}d
+'';
+      {% else -%}
+        {{ role_name }} = {{ role_value }};
+      {% endif -%}
+    {% endfor -%}
   };
 
-  services = { {% for service in group_services -%}
-      {{ service.name }}.enable = true; {% endfor -%}
-    {% for service in host_services -%}
-      {{ service.name }}.enable = true; {% endfor -%}
+  services = {
+    {% for service_name, service in group_services.items() -%}
+      {{ service_name }} = { 
+        enable = {{ service.enable | tojson | replace(':', ' =') | replace(',', ';') }}; 
+        {% for key, value in service.items() if key != 'enable' -%}
+          {{ key }} = {{ value | tojson | replace(':', ' =') | replace(',', ';') }};
+        {% endfor -%} 
+      }; 
+    {% endfor -%}
+
+    {% for service_name, service in host_services.items() -%}
+      {{ service_name }} = { 
+        enable = {{ service.enable | tojson | replace(':', ' =') | replace(',', ';') }}; 
+        {% for key, value in service.items() if key != 'enable' -%}
+          {{ key }} = {{ value | tojson | replace(':', ' =') | replace(',', ';') }};
+        {% endfor -%} 
+      }; 
+    {% endfor -%}
   };
 }

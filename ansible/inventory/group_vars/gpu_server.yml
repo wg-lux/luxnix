@@ -1,8 +1,8 @@
 nvidia_prime:
   enable: "false"
 
-group_roles: 
-  - name: "base-server"
-  - name: "gpu-server" # activates desktop and aglnet.client; desktop calls common
+group_roles:
+  base-server.enable: "true"
+  gpu-server.enable: "true" # activates desktop and aglnet.client; desktop calls common
 
-group_services: []
+group_services: {}

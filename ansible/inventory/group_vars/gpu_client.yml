@@ -3,7 +3,7 @@ nvidia_prime:
   nvidiaDriver: "beta"
 
 group_roles:
-  - name: "aglnet.client"
-  - name: "gpu-client-dev"
+  aglnet.client.enable: "true"
+  gpu-client-dev.enable": "true"
 
-group_services: []
+group_services: {}

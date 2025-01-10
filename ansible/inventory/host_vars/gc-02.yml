@@ -8,11 +8,11 @@ nvidia_prime:
   onboardGpuType: "intel"
 
 host_roles: []
-host_services: []
+host_services: {}
 
 generic_settings:
   hostPlatform: "x86_64-linux"
-  systemStateVersion: "23.11" 
+  systemStateVersion: "23.11"
 
   linux:
     cpuMicrocode: "intel"

@@ -1,8 +1,1 @@
-roles:
-  - name: base_server
-    enable: "true"
-  - name: aglnet_client
-    enable: "true"
-
 primary_group: "base_server"
-

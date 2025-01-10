@@ -57,13 +57,19 @@ in {
         optimize = "nix-store --optimize";
         journalctl-clear = "sudo journalctl --flush --rotate --vacuum-time=1s";
 
-         # nix
+        # util
+        show-auth-keys = "for f in /etc/ssh/authorized_keys.d/*; do echo \$f; cat \$f; done";
+
+        # nix
         nhh = "nh home switch";
         nho = "nh os switch";
         nhu = "nh os --update";
 
         nd = "nix develop";
         nfu = "nix flake update";
+
+
+
         # hms = "home-manager switch --flake ~/luxnix#${config.luxnix.user.admin.name}@${host}";
         # nrs = "sudo nixos-rebuild switch --flake ~/luxnix#${host}";
 

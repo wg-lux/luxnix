@@ -29,6 +29,18 @@
     settings.mutable = false;
   };
 
+  services.ssh.enable=true;
 
-  system.stateVersion = "23.11";
+  environment.systemPackages = with pkgs; [
+    nmap
+    libreoffice-qt6-fresh
+    hunspell
+    hunspellDicts.de_DE
+    hunspellDicts.en_US
+    pandoc
+    blender
+  ];
+
+
+  luxnix.generic-settings.systemStateVersion = "23.11";
 }

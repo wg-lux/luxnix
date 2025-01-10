@@ -6,6 +6,7 @@ from .template_renderer import render_nix_template
 from .utils import (
     get_merged_host_config,
 )
+from .validation import validate_default_nix_file
 
 
 def generate_nix_system_configuration(
@@ -36,6 +37,10 @@ def generate_nix_system_configuration(
         f.write(default_nix)
 
     print(f"Generated {default_nix_path}")
+
+    validate_default_nix_file(default_nix_path)
+
+    print(f"Validated {default_nix_path}")
 
     # render luxnix_nix from template:
     luxnix_nix = render_nix_template(template_dir, "luxnix.nix.j2", config_data)

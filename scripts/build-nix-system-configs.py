@@ -6,6 +6,7 @@ from yaml import safe_load
 def build_nix_system_configs(conf_parent: Path, out_dir: Path) -> None:
     assert conf_parent.is_dir()
     conf_dir = conf_parent / "nix-configs"
+
     print(f"Building NixOS system configurations from {conf_dir}")
     for template in conf_dir.glob("*.yml"):
         print(f"Generating NixOS system configuration for {template}")
