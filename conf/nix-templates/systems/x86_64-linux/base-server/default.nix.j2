@@ -22,8 +22,13 @@ roles = {
     {% endfor -%}
 
     # Host Roles  
-    {% for role_name, role in host_roles.items() -%} 
-      {{ role_name }} = {{ role }};
+    {% for role_name, role_value in host_roles.items() -%} {% if role_value is string and '\n' in role_value -%}
+        {{ role_name }} = ''
+{{ role_value | trim }}d
+'';
+      {% else -%}
+        {{ role_name }} = {{ role_value }};
+      {% endif -%}
     {% endfor -%}
   };
 

@@ -12,8 +12,11 @@ def find_duplicates(content, section):
     section_content = match.group(1)
     lines = section_content.split("\n")
     keys = {}
+    in_multiline = False
     for line in lines:
-        if "=" in line:
+        if "''" in line:
+            in_multiline = not in_multiline
+        if not in_multiline and "=" in line:
             raw_line = line.strip()
             raw_key = raw_line.split("=")[0].strip()
             norm_key = raw_key.replace("_", "-")
@@ -49,6 +52,15 @@ def remove_duplicates(content, section):
         + "};"
         + content[match.end() :]
     )
+    in_multiline = False
+    new_section_lines = []
+    for line in lines:
+        if "''" in line:
+            in_multiline = not in_multiline
+        if in_multiline:
+            new_section_lines.append(line)
+        else:
+            new_section_lines.append(line)
     return new_content
 
 
