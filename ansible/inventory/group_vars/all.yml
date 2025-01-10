@@ -18,3 +18,4 @@ local_users_passwords_dir: "{{luxnix_dest}}/secrets/user-passwords/{{inventory_h
 admin_password_file: "{{local_users_passwords_dir}}/admin_raw"
 admin_password_file_source: "{{luxnix_dev_repo}}/secrets/user-passwords/{{inventory_hostname}}/admin_raw"
 
+dev_01_id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK

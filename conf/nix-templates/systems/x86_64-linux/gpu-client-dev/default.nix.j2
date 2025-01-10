@@ -17,14 +17,22 @@
   };
 
   roles = { {% for role in group_roles -%}
-      {{ role.name }}.enable = true; {% endfor -%} 
+      {{ role.name }} = { enable = true; {% for key, value in role.items() if key != 'name' -%}
+        {{ key }} = {{ value | tojson }};
+      {% endfor -%} }; {% endfor -%} 
     {% for role in host_roles -%} 
-      {{ role.name }}.enable = true; {% endfor -%}
+      {{ role.name }} = { enable = true; {% for key, value in role.items() if key != 'name' -%}
+        {{ key }} = {{ value | tojson }};
+      {% endfor -%} }; {% endfor -%}
   };
 
   services = { {% for service in group_services -%}
-      {{ service.name }}.enable = true; {% endfor -%}
+      {{ service.name }} = { enable = true; {% for key, value in service.items() if key != 'name' -%}
+        {{ key }} = {{ value | tojson }};
+      {% endfor -%} }; {% endfor -%}
     {% for service in host_services -%}
-      {{ service.name }}.enable = true; {% endfor -%}
+      {{ service.name }} = { enable = true; {% for key, value in service.items() if key != 'name' -%}
+        {{ key }} = {{ value | tojson }};
+      {% endfor -%} }; {% endfor -%}
   };
 }
