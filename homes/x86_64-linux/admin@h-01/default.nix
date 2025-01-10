@@ -19,8 +19,8 @@
   # luxnix.django-demo-app = {
   #   enable = true;
   # };
-Re-uses ssh host keys from the sshd to not break .ssh/known_hosts
-Authorized ssh keys are read from /root/.ssh/authorized_keys, /root/.ssh/authorized_keys2 and /etc/ssh/authorized_keys.d/root
+# Re-uses ssh host keys from the sshd to not break .ssh/known_hosts
+# Authorized ssh keys are read from /root/.ssh/authorized_keys, /root/.ssh/authorized_keys2 and /etc/ssh/authorized_keys.d/root
   networking.usePredictableInterfaceNames = false;
   systemd.network = {
     enable = true;

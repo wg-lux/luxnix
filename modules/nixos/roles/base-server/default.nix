@@ -17,7 +17,7 @@ in {
     
     services.ssh = {
       enable = true;
-        authorizedKeys = [ # just adds authorized keys for admin user, does not enable ssh!
+        authorizedKeys = [ 
         "${config.luxnix.generic-settings.rootIdED25519}" 
         ];
       };
