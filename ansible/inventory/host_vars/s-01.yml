@@ -1,10 +1,9 @@
 # inventory/host_vars/s-01.yml
 ---
-template_name: "base-server"
-primary_group: "base_server"
+template_name: "main"
 
 host_roles:
-  - name: "aglnet.host"
+  aglnet.host.enable: "true"
 
 host_services: {}
 
@@ -37,3 +36,30 @@ generic_settings:
     resumeDevice: "/dev/disk/by-label/nixos"
     kernelParams: []
     kernelModulesBlacklist: []
+
+host_luxnix:
+  generic_settings.hostPlatform: "x86_64-linux"
+  generic_settings.systemStateVersion: "23.11"
+
+  generic_settings.linux.cpuMicrocode: "amd"
+
+  generic_settings.linux.kernelPackages: "pkgs.linuxPackages_latest"
+  generic_settings.linux.kernelModules:
+    - "kvm-amd"
+  generic_settings.linux.initrd.supportedFilesystems:
+    - "nfs"
+  generic_settings.linux.initrd.kernelModules:
+    - "nfs"
+  generic_settings.linux.initrd.availableKernelModules:
+    - "xhci_pci"
+    - "uas"
+    - "ahci"
+    - "usbhid"
+    - "nvme"
+    - "usb_storage"
+    - "sd_mod"
+  generic_settings.linux.supportedFilesystems:
+    - "btrfs"
+  generic_settings.linux.resumeDevice: "/dev/disk/by-label/nixos"
+  generic_settings.linux.kernelParams: []
+  generic_settings.linux.kernelModulesBlacklist: []

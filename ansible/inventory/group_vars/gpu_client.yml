@@ -4,6 +4,7 @@ nvidia_prime:
 
 group_roles:
   aglnet.client.enable: "true"
-  gpu-client-dev.enable": "true"
+  gpu-client-dev.enable: "true"
 
 group_services: {}
+group_luxnix: {}

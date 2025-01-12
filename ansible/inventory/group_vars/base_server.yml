@@ -2,6 +2,7 @@ group_roles:
   base-server.enable: "true"
 
 group_services: {}
+group_luxnix: {}
 
 nvidia_prime:
   enable: "false"

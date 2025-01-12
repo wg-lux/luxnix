@@ -1,7 +1,46 @@
 # inventory/host_vars/gc-06.yml
 ---
-ansible_python_interpreter: "{{luxnix_dev_repo}}/.devenv/state/venv/bin/python"
+template_name: "main"
+ansible_python_interpreter: "{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python"
 luxnix_dev_repo: "/home/admin/dev/luxnix"
 luxnix_repo: "https://github.com/wg-lux/luxnix.git"
 luxnix_dest: "/home/admin/luxnix-production"
 luxnix_branch: "migrate-01"
+
+host_roles:
+  aglnet.client.enable: "true"
+
+host_services:
+  testy.test: "false"
+
+host_luxnix:
+  ##### Override Config Path #####
+  configurationPath: 'lib.mkForce "/home/admin/dev/luxnix"'
+
+  generic_settings.hostPlatform: "x86_64-linux"
+  generic_settings.systemStateVersion: "23.11"
+
+  generic_settings.linux.cpuMicrocode: "intel"
+  generic_settings.linux.kernelPackages: "pkgs.linuxPackages_latest"
+  generic_settings.linux.kernelModules:
+    - "kvm-intel"
+  generic_settings.linux.initrd.supportedFilesystems:
+    - "nfs"
+  generic_settings.linux.initrd.kernelModules:
+    - "dm-snapshot"
+  generic_settings.linux.initrd.availableKernelModules:
+    - "vmd"
+    - "xhci_pci"
+    - "ahci"
+    - "nvme"
+    - "usb_storage"
+    - "sd_mod"
+  generic_settings.linux.supportedFilesystems:
+    - '"btrfs"'
+  generic_settings.linux.resumeDevice: "/dev/disk/by-label/nixos"
+  generic_settings.linux.kernelParams: []
+  generic_settings.linux.kernelModulesBlacklist: []
+  nvidia_prime:
+    nvidiaBusId: "PCI:1:0:0"
+    onboardBusId: "PCI:0:2:0"
+    onboardGpuType: "intel"
