@@ -1,0 +1,48 @@
+# {{ hostname }}/default.nix
+
+{ config, pkgs, lib, modulesPath, ... }:
+
+{
+  imports = [
+    (modulesPath + "/installer/scan/not-detected.nix")
+    ./boot-decryption-config.nix
+    ./disks.nix
+    ./luxnix.nix
+  ];
+
+  user = {
+    admin = {
+      name = "admin";
+    };
+    ansible.enable = true;
+    settings.mutable = false;
+  };
+
+  roles = { 
+    {% for role_str, role_value in roles_configs.items() -%}{% if role_value is string and '\n' in role_value -%}
+{{ role_str }} = ''
+{{ role_value | trim }}
+'';
+  {% else -%}
+{{ role_str }} = {{ role_value }};
+    {% endif -%}{% endfor -%}
+};
+
+  services = {
+    {% for service_str, service_value in service_configs.items() -%} {% if service_value is string and '\n' in service_value -%}
+      {{ service_str }} = ''
+{{ service_value | trim }}
+''; 
+{% else -%}{{ service_str }} = {{ service_value }};
+    {% endif -%}{% endfor -%}
+  };
+
+  luxnix = {
+    {% for luxnix_str, luxnix_value in luxnix_configs.items() -%} {% if luxnix_value is string and '\n' in luxnix_value -%}
+      {{ luxnix_str }} = ''
+{{ luxnix_value | trim }}
+''; {% else -%}
+      {{ luxnix_str }} = {{ luxnix_value }};
+    {% endif -%}{% endfor -%}
+  };
+}
