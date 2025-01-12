@@ -38,7 +38,7 @@ def host_config_get_platform(config_data: dict) -> str:
     luxnix = host_config_get_luxnix(config_data)
     assert luxnix, "No luxnix found"
 
-    platform = luxnix.get("generic_settings.hostPlatform")
+    platform = luxnix.get("generic_settings.hostPlatform").replace('"', "")
     assert platform, "Key 'generic_settings.hostPlatform' not found in luxnix"
 
     return platform
@@ -63,6 +63,8 @@ def generate_default_nix(
     # pretty print config data
     # pp = pprint.PrettyPrinter(indent=4)
 
+    config_data = config_data.copy()
+
     if not logger:
         logger = get_logger("generate_default_nix", reset=True)
 
@@ -72,7 +74,28 @@ def generate_default_nix(
 
     # Render default.nix from template:
     host_platform = host_config_get_platform(config_data)
-    default_nix = render_nix_template(template_dir, "default.nix.j2", config_data)
+
+    # Exchange underscores with dashes in keys
+    transformed_config_data = config_data.copy()
+
+    replace_underscore_keys = ["service_configs", "role_configs", "luxnix_configs"]
+
+    for key in replace_underscore_keys:
+        transformed_config_data[key] = {}
+        if key in config_data:
+            assert isinstance(config_data[key], dict), f"{key} is not a dict"
+            nix_keys = config_data[key].keys()
+
+            for nix_key in nix_keys:
+                value = config_data[key][nix_key]
+                transformed_key = nix_key.replace("_", "-")
+                if not nix_key == transformed_key:
+                    logger.info(f"Transforming key {nix_key} to {transformed_key}")
+                transformed_config_data[key][transformed_key] = value
+
+    default_nix = render_nix_template(
+        template_dir, "default.nix.j2", transformed_config_data
+    )
     default_nix_path = out_dir / "systems" / host_platform / hostname / "default.nix"
 
     os.makedirs(default_nix_path.parent, exist_ok=True)

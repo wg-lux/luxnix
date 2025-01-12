@@ -9,7 +9,6 @@ def build_nix_system_configs(conf_parent: Path, out_dir: Path) -> None:
 
     print(f"Building NixOS system configurations from {conf_dir}")
     for template in conf_dir.glob("*.yml"):
-        print(f"Generating NixOS system configuration for {template}")
         hostname = template.stem
 
         generate_nix_system_configuration(

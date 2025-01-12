@@ -9,10 +9,10 @@ host_services: {}
 
 host_luxnix:
   generic_settings:
-  generic_settings.hostPlatform: "x86_64-linux"
-  generic_settings.systemStateVersion: "23.11"
+  generic_settings.hostPlatform: '"x86_64-linux"'
+  generic_settings.systemStateVersion: '"23.11"'
 
-  generic_settings.linux.cpuMicrocode: "amd"
+  generic_settings.linux.cpuMicrocode: '"amd"'
 
   generic_settings.linux.kernelPackages: "pkgs.linuxPackages_latest"
   generic_settings.linux.kernelModules:
@@ -30,6 +30,6 @@ host_luxnix:
     - "sd_mod"
   generic_settings.linux.supportedFilesystems:
     - "btrfs"
-  generic_settings.linux.resumeDevice: "/dev/disk/by-label/nixos"
+  generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
   generic_settings.linux.kernelParams: []
   generic_settings.linux.kernelModulesBlacklist: []

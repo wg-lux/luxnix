@@ -1,0 +1,881 @@
+gc-06:
+  group_vars:
+    all:
+      admin_password_file: '{{ local_users_passwords_dir }}/admin_raw'
+      admin_password_file_source: '{{ luxnix_dev_repo }}/secrets/user-passwords/{{
+        inventory_hostname }}/admin_raw'
+      aglnet_conf: &id008
+        backupNameservers:
+          - 8.8.8.8
+          - 1.1.1.1
+        caPath: /etc/openvpn/ca.pem
+        clientConfigDir: /etc/openvpn/ccd
+        dhPath: /etc/openvpn/dh.pem
+        domain: '{{ network_conf.domain }}'
+        serverCertPath: /etc/openvpn/crt.crt
+        serverKeyPath: /etc/openvpn/key.key
+        subnet: 172.16.255.0
+        subnetIntern: 255.255.255.0
+        subnetSuffix: '32'
+        tlsAuthPath: /etc/openvpn/tls.pem
+      ansible_become_user: admin
+      ansible_key_dir: '{{ luxnix_dest }}/secrets/ansible-vault-keys'
+      ansible_key_source_dir: '{{ luxnix_dev_repo }}/secrets/ansible-vault-keys-source'
+      ansible_python_interpreter: '{{ luxnix_dest }}/.devenv/state/venv/bin/python'
+      ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+      ansible_user: admin
+      authentication: &id009
+        agl_admin:
+          id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM7vvbgQtzi4GNeugHSuMyEke4MY0bSfoU7cBOnRYU8M
+        dev_01:
+          id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK
+        dev_02: {}
+      local_users_passwords_dir: '{{ luxnix_dest }}/secrets/user-passwords/{{ inventory_hostname
+        }}'
+      luxnix_branch: main
+      luxnix_dest: /home/admin/luxnix-production
+      luxnix_dev_repo: /home/admin/dev/luxnix
+      luxnix_repo: https://github.com/wg-lux/luxnix.git
+      luxnix_secrets: null
+      network_conf: &id010
+        domain: endo-reg.net
+    gpu_client: {}
+  groups:
+    - gpu_client
+  host_vars:
+    ansible_python_interpreter: '{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python'
+    host_luxnix:
+      configurationPath: lib.mkForce "/home/admin/dev/luxnix"
+      generic_settings.hostPlatform: '"x86_64-linux"'
+      generic_settings.linux.cpuMicrocode: '"intel"'
+      generic_settings.linux.initrd.availableKernelModules: &id001
+        - vmd
+        - xhci_pci
+        - ahci
+        - nvme
+        - usb_storage
+        - sd_mod
+      generic_settings.linux.initrd.kernelModules: &id002
+        - dm-snapshot
+      generic_settings.linux.initrd.supportedFilesystems: &id003
+        - nfs
+      generic_settings.linux.kernelModules: &id004
+        - kvm-intel
+      generic_settings.linux.kernelModulesBlacklist: &id005 []
+      generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
+      generic_settings.linux.kernelParams: &id006 []
+      generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+      generic_settings.linux.supportedFilesystems: &id007
+        - '"btrfs"'
+      generic_settings.systemStateVersion: '"23.11"'
+      nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
+      nvidia_prime.onboardBusId: '"PCI:0:2:0"'
+      nvidia_prime.onboardGpuType: '"intel"'
+    host_roles:
+      aglnet.client.enable: 'true'
+    host_services: {}
+    luxnix_branch: migrate-01
+    luxnix_dest: /home/admin/luxnix-production
+    luxnix_dev_repo: /home/admin/dev/luxnix
+    luxnix_repo: https://github.com/wg-lux/luxnix.git
+    template_name: main
+  hostname: gc-06
+  luxnix_configs:
+    configurationPath: lib.mkForce "/home/admin/dev/luxnix"
+    generic_settings.hostPlatform: '"x86_64-linux"'
+    generic_settings.linux.cpuMicrocode: '"intel"'
+    generic_settings.linux.initrd.availableKernelModules: *id001
+    generic_settings.linux.initrd.kernelModules: *id002
+    generic_settings.linux.initrd.supportedFilesystems: *id003
+    generic_settings.linux.kernelModules: *id004
+    generic_settings.linux.kernelModulesBlacklist: *id005
+    generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
+    generic_settings.linux.kernelParams: *id006
+    generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+    generic_settings.linux.supportedFilesystems: *id007
+    generic_settings.systemStateVersion: '"23.11"'
+    group_all_test_luxnix: 'true'
+    nvidia_prime.enable: 'true'
+    nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
+    nvidia_prime.nvidiaDriver: '"beta"'
+    nvidia_prime.onboardBusId: '"PCI:0:2:0"'
+    nvidia_prime.onboardGpuType: '"intel"'
+  role_configs:
+    aglnet.client.enable: 'true'
+    gpu-client-dev.enable: 'true'
+    group_all_test_group: 'true'
+  service_configs:
+    group_all_test_service: 'true'
+  vpn_ip: 172.16.255.106
+gc-07:
+  group_vars:
+    all:
+      admin_password_file: '{{ local_users_passwords_dir }}/admin_raw'
+      admin_password_file_source: '{{ luxnix_dev_repo }}/secrets/user-passwords/{{
+        inventory_hostname }}/admin_raw'
+      aglnet_conf: *id008
+      ansible_become_user: admin
+      ansible_key_dir: '{{ luxnix_dest }}/secrets/ansible-vault-keys'
+      ansible_key_source_dir: '{{ luxnix_dev_repo }}/secrets/ansible-vault-keys-source'
+      ansible_python_interpreter: '{{ luxnix_dest }}/.devenv/state/venv/bin/python'
+      ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+      ansible_user: admin
+      authentication: *id009
+      local_users_passwords_dir: '{{ luxnix_dest }}/secrets/user-passwords/{{ inventory_hostname
+        }}'
+      luxnix_branch: main
+      luxnix_dest: /home/admin/luxnix-production
+      luxnix_dev_repo: /home/admin/dev/luxnix
+      luxnix_repo: https://github.com/wg-lux/luxnix.git
+      luxnix_secrets: null
+      network_conf: *id010
+    gpu_client: {}
+    managed: {}
+  groups:
+    - gpu_client
+    - managed
+  host_vars:
+    host_luxnix:
+      generic_settings.hostPlatform: '"x86_64-linux"'
+      generic_settings.linux.cpuMicrocode: '"intel"'
+      generic_settings.linux.initrd.availableKernelModules: &id011
+        - vmd
+        - xhci_pci
+        - ahci
+        - nvme
+        - usb_storage
+        - sd_mod
+      generic_settings.linux.initrd.kernelModules: &id012
+        - nfs
+      generic_settings.linux.initrd.supportedFilesystems: &id013
+        - nfs
+      generic_settings.linux.kernelModules: &id014
+        - kvm-intel
+      generic_settings.linux.kernelModulesBlacklist: &id015 []
+      generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
+      generic_settings.linux.kernelParams: &id016 []
+      generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+      generic_settings.linux.supportedFilesystems: &id017
+        - btrfs
+      generic_settings.systemStateVersion: '"23.11"'
+      nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
+      nvidia_prime.onboardBusId: '"PCI:0:2:0"'
+      nvidia_prime.onboardGpuType: '"intel"'
+    host_roles:
+      aglnet.client.enable: 'true'
+    host_services: {}
+    template_name: main
+  hostname: gc-07
+  luxnix_configs:
+    generic_settings.hostPlatform: '"x86_64-linux"'
+    generic_settings.linux.cpuMicrocode: '"intel"'
+    generic_settings.linux.initrd.availableKernelModules: *id011
+    generic_settings.linux.initrd.kernelModules: *id012
+    generic_settings.linux.initrd.supportedFilesystems: *id013
+    generic_settings.linux.kernelModules: *id014
+    generic_settings.linux.kernelModulesBlacklist: *id015
+    generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
+    generic_settings.linux.kernelParams: *id016
+    generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+    generic_settings.linux.supportedFilesystems: *id017
+    generic_settings.systemStateVersion: '"23.11"'
+    group_all_test_luxnix: 'true'
+    nvidia_prime.enable: 'true'
+    nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
+    nvidia_prime.nvidiaDriver: '"beta"'
+    nvidia_prime.onboardBusId: '"PCI:0:2:0"'
+    nvidia_prime.onboardGpuType: '"intel"'
+  role_configs:
+    aglnet.client.enable: 'true'
+    gpu-client-dev.enable: 'true'
+    group_all_test_group: 'true'
+  service_configs:
+    group_all_test_service: 'true'
+  vpn_ip: 172.16.255.107
+gc-08:
+  group_vars:
+    all:
+      admin_password_file: '{{ local_users_passwords_dir }}/admin_raw'
+      admin_password_file_source: '{{ luxnix_dev_repo }}/secrets/user-passwords/{{
+        inventory_hostname }}/admin_raw'
+      aglnet_conf: *id008
+      ansible_become_user: admin
+      ansible_key_dir: '{{ luxnix_dest }}/secrets/ansible-vault-keys'
+      ansible_key_source_dir: '{{ luxnix_dev_repo }}/secrets/ansible-vault-keys-source'
+      ansible_python_interpreter: '{{ luxnix_dest }}/.devenv/state/venv/bin/python'
+      ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+      ansible_user: admin
+      authentication: *id009
+      local_users_passwords_dir: '{{ luxnix_dest }}/secrets/user-passwords/{{ inventory_hostname
+        }}'
+      luxnix_branch: main
+      luxnix_dest: /home/admin/luxnix-production
+      luxnix_dev_repo: /home/admin/dev/luxnix
+      luxnix_repo: https://github.com/wg-lux/luxnix.git
+      luxnix_secrets: null
+      network_conf: *id010
+    gpu_client: {}
+    managed: {}
+  groups:
+    - gpu_client
+    - managed
+  host_vars:
+    host_luxnix:
+      generic_settings.hostPlatform: '"x86_64-linux"'
+      generic_settings.linux.cpuMicrocode: '"intel"'
+      generic_settings.linux.initrd.availableKernelModules: &id018
+        - vmd
+        - xhci_pci
+        - ahci
+        - nvme
+        - usb_storage
+        - sd_mod
+      generic_settings.linux.initrd.kernelModules: &id019
+        - nfs
+      generic_settings.linux.initrd.supportedFilesystems: &id020
+        - nfs
+      generic_settings.linux.kernelModules: &id021
+        - kvm-intel
+      generic_settings.linux.kernelModulesBlacklist: &id022 []
+      generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
+      generic_settings.linux.kernelParams: &id023 []
+      generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+      generic_settings.linux.supportedFilesystems: &id024
+        - btrfs
+      generic_settings.systemStateVersion: '"23.11"'
+      nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
+      nvidia_prime.onboardBusId: '"PCI:0:2:0"'
+      nvidia_prime.onboardGpuType: '"intel"'
+    host_roles:
+      aglnet.client.enable: 'true'
+    host_services: {}
+    template_name: main
+  hostname: gc-08
+  luxnix_configs:
+    generic_settings.hostPlatform: '"x86_64-linux"'
+    generic_settings.linux.cpuMicrocode: '"intel"'
+    generic_settings.linux.initrd.availableKernelModules: *id018
+    generic_settings.linux.initrd.kernelModules: *id019
+    generic_settings.linux.initrd.supportedFilesystems: *id020
+    generic_settings.linux.kernelModules: *id021
+    generic_settings.linux.kernelModulesBlacklist: *id022
+    generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
+    generic_settings.linux.kernelParams: *id023
+    generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+    generic_settings.linux.supportedFilesystems: *id024
+    generic_settings.systemStateVersion: '"23.11"'
+    group_all_test_luxnix: 'true'
+    nvidia_prime.enable: 'true'
+    nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
+    nvidia_prime.nvidiaDriver: '"beta"'
+    nvidia_prime.onboardBusId: '"PCI:0:2:0"'
+    nvidia_prime.onboardGpuType: '"intel"'
+  role_configs:
+    aglnet.client.enable: 'true'
+    gpu-client-dev.enable: 'true'
+    group_all_test_group: 'true'
+  service_configs:
+    group_all_test_service: 'true'
+  vpn_ip: 172.16.255.108
+gc-09:
+  group_vars:
+    all:
+      admin_password_file: '{{ local_users_passwords_dir }}/admin_raw'
+      admin_password_file_source: '{{ luxnix_dev_repo }}/secrets/user-passwords/{{
+        inventory_hostname }}/admin_raw'
+      aglnet_conf: *id008
+      ansible_become_user: admin
+      ansible_key_dir: '{{ luxnix_dest }}/secrets/ansible-vault-keys'
+      ansible_key_source_dir: '{{ luxnix_dev_repo }}/secrets/ansible-vault-keys-source'
+      ansible_python_interpreter: '{{ luxnix_dest }}/.devenv/state/venv/bin/python'
+      ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+      ansible_user: admin
+      authentication: *id009
+      local_users_passwords_dir: '{{ luxnix_dest }}/secrets/user-passwords/{{ inventory_hostname
+        }}'
+      luxnix_branch: main
+      luxnix_dest: /home/admin/luxnix-production
+      luxnix_dev_repo: /home/admin/dev/luxnix
+      luxnix_repo: https://github.com/wg-lux/luxnix.git
+      luxnix_secrets: null
+      network_conf: *id010
+    gpu_client: {}
+    managed: {}
+    test_group: {}
+  groups:
+    - gpu_client
+    - managed
+    - test_group
+  host_vars:
+    host_luxnix:
+      generic_settings.hostPlatform: '"x86_64-linux"'
+      generic_settings.linux.cpuMicrocode: '"intel"'
+      generic_settings.linux.initrd.availableKernelModules: &id025
+        - xhci_pci
+        - ahci
+        - nvme
+        - usb_storage
+        - sd_mod
+      generic_settings.linux.initrd.kernelModules: &id026
+        - nfs
+      generic_settings.linux.initrd.supportedFilesystems: &id027
+        - nfs
+      generic_settings.linux.kernelModules: &id028
+        - kvm-intel
+      generic_settings.linux.kernelModulesBlacklist: &id029 []
+      generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
+      generic_settings.linux.kernelParams: &id030 []
+      generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+      generic_settings.linux.supportedFilesystems: &id031
+        - btrfs
+      generic_settings.systemStateVersion: '"23.11"'
+      nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
+      nvidia_prime.onboardBusId: '"PCI:0:2:0"'
+      nvidia_prime.onboardGpuType: '"intel"'
+    host_roles:
+      aglnet.client.enable: 'true'
+    host_services: {}
+    template_name: main
+  hostname: gc-09
+  luxnix_configs:
+    generic_settings.hostPlatform: '"x86_64-linux"'
+    generic_settings.linux.cpuMicrocode: '"intel"'
+    generic_settings.linux.initrd.availableKernelModules: *id025
+    generic_settings.linux.initrd.kernelModules: *id026
+    generic_settings.linux.initrd.supportedFilesystems: *id027
+    generic_settings.linux.kernelModules: *id028
+    generic_settings.linux.kernelModulesBlacklist: *id029
+    generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
+    generic_settings.linux.kernelParams: *id030
+    generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+    generic_settings.linux.supportedFilesystems: *id031
+    generic_settings.systemStateVersion: '"23.11"'
+    group_all_test_luxnix: 'true'
+    nvidia_prime.enable: 'true'
+    nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
+    nvidia_prime.nvidiaDriver: '"beta"'
+    nvidia_prime.onboardBusId: '"PCI:0:2:0"'
+    nvidia_prime.onboardGpuType: '"intel"'
+  role_configs:
+    aglnet.client.enable: 'true'
+    gpu-client-dev.enable: 'true'
+    group_all_test_group: 'true'
+  service_configs:
+    group_all_test_service: 'true'
+  vpn_ip: 172.16.255.109
+gs-01:
+  group_vars:
+    all:
+      admin_password_file: '{{ local_users_passwords_dir }}/admin_raw'
+      admin_password_file_source: '{{ luxnix_dev_repo }}/secrets/user-passwords/{{
+        inventory_hostname }}/admin_raw'
+      aglnet_conf: *id008
+      ansible_become_user: admin
+      ansible_key_dir: '{{ luxnix_dest }}/secrets/ansible-vault-keys'
+      ansible_key_source_dir: '{{ luxnix_dev_repo }}/secrets/ansible-vault-keys-source'
+      ansible_python_interpreter: '{{ luxnix_dest }}/.devenv/state/venv/bin/python'
+      ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+      ansible_user: admin
+      authentication: *id009
+      local_users_passwords_dir: '{{ luxnix_dest }}/secrets/user-passwords/{{ inventory_hostname
+        }}'
+      luxnix_branch: main
+      luxnix_dest: /home/admin/luxnix-production
+      luxnix_dev_repo: /home/admin/dev/luxnix
+      luxnix_repo: https://github.com/wg-lux/luxnix.git
+      luxnix_secrets: null
+      network_conf: *id010
+    gpu_server:
+      nvidia_prime: &id039
+        enable: 'false'
+    managed: {}
+  groups:
+    - gpu_server
+    - managed
+  host_vars:
+    host_luxnix:
+      generic_settings.hostPlatform: '"x86_64-linux"'
+      generic_settings.linux.cpuMicrocode: '"amd"'
+      generic_settings.linux.initrd.availableKernelModules: &id032
+        - xhci_pci
+        - ahci
+        - mpt3sas
+        - usb_storage
+        - usbhid
+        - sd_mod
+      generic_settings.linux.initrd.kernelModules: &id033
+        - nfs
+        - dm-snapshot
+      generic_settings.linux.initrd.supportedFilesystems: &id034
+        - nfs
+      generic_settings.linux.kernelModules: &id035
+        - kvm-amd
+      generic_settings.linux.kernelModulesBlacklist: &id036 []
+      generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
+      generic_settings.linux.kernelParams: &id037 []
+      generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+      generic_settings.linux.supportedFilesystems: &id038
+        - btrfs
+      generic_settings.systemStateVersion: '"23.11"'
+    host_roles:
+      aglnet.client.enable: 'true'
+    host_services: {}
+    template_name: main
+  hostname: gs-01
+  luxnix_configs:
+    generic_settings.hostPlatform: '"x86_64-linux"'
+    generic_settings.linux.cpuMicrocode: '"amd"'
+    generic_settings.linux.initrd.availableKernelModules: *id032
+    generic_settings.linux.initrd.kernelModules: *id033
+    generic_settings.linux.initrd.supportedFilesystems: *id034
+    generic_settings.linux.kernelModules: *id035
+    generic_settings.linux.kernelModulesBlacklist: *id036
+    generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
+    generic_settings.linux.kernelParams: *id037
+    generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+    generic_settings.linux.supportedFilesystems: *id038
+    generic_settings.systemStateVersion: '"23.11"'
+    group_all_test_luxnix: 'true'
+  role_configs:
+    aglnet.client.enable: 'true'
+    base-server.enable: 'true'
+    gpu-client-dev.enable: 'true'
+    gpu-server.enable: 'true'
+    group_all_test_group: 'true'
+  service_configs:
+    group_all_test_service: 'true'
+  vpn_ip: 172.16.255.21
+gs-02:
+  group_vars:
+    all:
+      admin_password_file: '{{ local_users_passwords_dir }}/admin_raw'
+      admin_password_file_source: '{{ luxnix_dev_repo }}/secrets/user-passwords/{{
+        inventory_hostname }}/admin_raw'
+      aglnet_conf: *id008
+      ansible_become_user: admin
+      ansible_key_dir: '{{ luxnix_dest }}/secrets/ansible-vault-keys'
+      ansible_key_source_dir: '{{ luxnix_dev_repo }}/secrets/ansible-vault-keys-source'
+      ansible_python_interpreter: '{{ luxnix_dest }}/.devenv/state/venv/bin/python'
+      ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+      ansible_user: admin
+      authentication: *id009
+      local_users_passwords_dir: '{{ luxnix_dest }}/secrets/user-passwords/{{ inventory_hostname
+        }}'
+      luxnix_branch: main
+      luxnix_dest: /home/admin/luxnix-production
+      luxnix_dev_repo: /home/admin/dev/luxnix
+      luxnix_repo: https://github.com/wg-lux/luxnix.git
+      luxnix_secrets: null
+      network_conf: *id010
+    gpu_server:
+      nvidia_prime: *id039
+    managed: {}
+    test_group: {}
+  groups:
+    - gpu_server
+    - managed
+    - test_group
+  host_vars:
+    host_luxnix:
+      generic_settings.hostPlatform: '"x86_64-linux"'
+      generic_settings.linux.cpuMicrocode: '"amd"'
+      generic_settings.linux.initrd.availableKernelModules: &id040
+        - xhci_pci
+        - ahci
+        - thunderbolt
+        - nvme
+        - usb_storage
+        - usbhid
+        - sd_mod
+      generic_settings.linux.initrd.kernelModules: &id041
+        - nfs
+        - dm-snapshot
+      generic_settings.linux.initrd.supportedFilesystems: &id042
+        - nfs
+      generic_settings.linux.kernelModules: &id043
+        - kvm-amd
+      generic_settings.linux.kernelModulesBlacklist: &id044 []
+      generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
+      generic_settings.linux.kernelParams: &id045 []
+      generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+      generic_settings.linux.supportedFilesystems: &id046
+        - btrfs
+      generic_settings.primary_group: gpu_server
+      generic_settings.systemStateVersion: '"23.11"'
+      generic_settings.template_name: gpu-server
+    host_roles:
+      aglnet.client.enable: 'true'
+    host_services: {}
+    template_name: main
+  hostname: gs-02
+  luxnix_configs:
+    generic_settings.hostPlatform: '"x86_64-linux"'
+    generic_settings.linux.cpuMicrocode: '"amd"'
+    generic_settings.linux.initrd.availableKernelModules: *id040
+    generic_settings.linux.initrd.kernelModules: *id041
+    generic_settings.linux.initrd.supportedFilesystems: *id042
+    generic_settings.linux.kernelModules: *id043
+    generic_settings.linux.kernelModulesBlacklist: *id044
+    generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
+    generic_settings.linux.kernelParams: *id045
+    generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+    generic_settings.linux.supportedFilesystems: *id046
+    generic_settings.primary_group: gpu_server
+    generic_settings.systemStateVersion: '"23.11"'
+    generic_settings.template_name: gpu-server
+    group_all_test_luxnix: 'true'
+  role_configs:
+    aglnet.client.enable: 'true'
+    base-server.enable: 'true'
+    gpu-client-dev.enable: 'true'
+    gpu-server.enable: 'true'
+    group_all_test_group: 'true'
+  service_configs:
+    group_all_test_service: 'true'
+  vpn_ip: 172.16.255.22
+s-01:
+  group_vars:
+    all:
+      admin_password_file: '{{ local_users_passwords_dir }}/admin_raw'
+      admin_password_file_source: '{{ luxnix_dev_repo }}/secrets/user-passwords/{{
+        inventory_hostname }}/admin_raw'
+      aglnet_conf: *id008
+      ansible_become_user: admin
+      ansible_key_dir: '{{ luxnix_dest }}/secrets/ansible-vault-keys'
+      ansible_key_source_dir: '{{ luxnix_dev_repo }}/secrets/ansible-vault-keys-source'
+      ansible_python_interpreter: '{{ luxnix_dest }}/.devenv/state/venv/bin/python'
+      ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+      ansible_user: admin
+      authentication: *id009
+      local_users_passwords_dir: '{{ luxnix_dest }}/secrets/user-passwords/{{ inventory_hostname
+        }}'
+      luxnix_branch: main
+      luxnix_dest: /home/admin/luxnix-production
+      luxnix_dev_repo: /home/admin/dev/luxnix
+      luxnix_repo: https://github.com/wg-lux/luxnix.git
+      luxnix_secrets: null
+      network_conf: *id010
+    base_server:
+      nvidia_prime: &id054
+        enable: 'false'
+    managed: {}
+    openvpn_host: {}
+  groups:
+    - openvpn_host
+    - base_server
+    - managed
+  host_vars:
+    generic_settings:
+      hostPlatform: x86_64-linux
+      linux:
+        cpuMicrocode: amd
+        initrd:
+          availableKernelModules:
+            - xhci_pci
+            - uas
+            - ahci
+            - usbhid
+            - nvme
+            - usb_storage
+            - sd_mod
+          kernelModules:
+            - nfs
+          supportedFilesystems:
+            - nfs
+        kernelModules:
+          - kvm-amd
+        kernelModulesBlacklist: []
+        kernelPackages: pkgs.linuxPackages_latest
+        kernelParams: []
+        resumeDevice: /dev/disk/by-label/nixos
+        supportedFilesystems:
+          - btrfs
+      systemStateVersion: '23.11'
+    host_luxnix:
+      generic_settings.hostPlatform: '"x86_64-linux"'
+      generic_settings.linux.cpuMicrocode: '"amd"'
+      generic_settings.linux.initrd.availableKernelModules: &id047
+        - xhci_pci
+        - uas
+        - ahci
+        - usbhid
+        - nvme
+        - usb_storage
+        - sd_mod
+      generic_settings.linux.initrd.kernelModules: &id048
+        - nfs
+      generic_settings.linux.initrd.supportedFilesystems: &id049
+        - nfs
+      generic_settings.linux.kernelModules: &id050
+        - kvm-amd
+      generic_settings.linux.kernelModulesBlacklist: &id051 []
+      generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
+      generic_settings.linux.kernelParams: &id052 []
+      generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+      generic_settings.linux.supportedFilesystems: &id053
+        - btrfs
+      generic_settings.systemStateVersion: '"23.11"'
+    host_roles:
+      aglnet.host.enable: 'true'
+    host_services: {}
+    template_name: main
+  hostname: s-01
+  luxnix_configs:
+    generic_settings.hostPlatform: '"x86_64-linux"'
+    generic_settings.linux.cpuMicrocode: '"amd"'
+    generic_settings.linux.initrd.availableKernelModules: *id047
+    generic_settings.linux.initrd.kernelModules: *id048
+    generic_settings.linux.initrd.supportedFilesystems: *id049
+    generic_settings.linux.kernelModules: *id050
+    generic_settings.linux.kernelModulesBlacklist: *id051
+    generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
+    generic_settings.linux.kernelParams: *id052
+    generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+    generic_settings.linux.supportedFilesystems: *id053
+    generic_settings.systemStateVersion: '"23.11"'
+    group_all_test_luxnix: 'true'
+  role_configs:
+    aglnet.client.enable: 'true'
+    aglnet.host.enable: 'true'
+    base-server.enable: 'true'
+    gpu-client-dev.enable: 'true'
+    group_all_test_group: 'true'
+  service_configs:
+    group_all_test_service: 'true'
+  vpn_ip: 172.16.255.1
+s-02:
+  group_vars:
+    all:
+      admin_password_file: '{{ local_users_passwords_dir }}/admin_raw'
+      admin_password_file_source: '{{ luxnix_dev_repo }}/secrets/user-passwords/{{
+        inventory_hostname }}/admin_raw'
+      aglnet_conf: *id008
+      ansible_become_user: admin
+      ansible_key_dir: '{{ luxnix_dest }}/secrets/ansible-vault-keys'
+      ansible_key_source_dir: '{{ luxnix_dev_repo }}/secrets/ansible-vault-keys-source'
+      ansible_python_interpreter: '{{ luxnix_dest }}/.devenv/state/venv/bin/python'
+      ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+      ansible_user: admin
+      authentication: *id009
+      local_users_passwords_dir: '{{ luxnix_dest }}/secrets/user-passwords/{{ inventory_hostname
+        }}'
+      luxnix_branch: main
+      luxnix_dest: /home/admin/luxnix-production
+      luxnix_dev_repo: /home/admin/dev/luxnix
+      luxnix_repo: https://github.com/wg-lux/luxnix.git
+      luxnix_secrets: null
+      network_conf: *id010
+    base_server:
+      nvidia_prime: *id054
+    managed: {}
+    under_development: {}
+  groups:
+    - under_development
+    - base_server
+    - managed
+  host_vars:
+    ansible_groups:
+      - base-server
+      - aglnet.host
+      - ssh-access.dev-01
+      - postgres.main
+    host_luxnix:
+      generic_settings.hostPlatform: '"x86_64-linux"'
+      generic_settings.linux.cpuMicrocode: '"intel"'
+      generic_settings.linux.initrd.availableKernelModules: &id055
+        - xhci_pci
+        - ahci
+        - usbhid
+        - nvme
+        - usb_storage
+        - sd_mod
+      generic_settings.linux.initrd.kernelModules: &id056
+        - nfs
+      generic_settings.linux.initrd.supportedFilesystems: &id057
+        - nfs
+      generic_settings.linux.kernelModules: &id058
+        - kvm-intel
+      generic_settings.linux.kernelModulesBlacklist: &id059 []
+      generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
+      generic_settings.linux.kernelParams: &id060 []
+      generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+      generic_settings.linux.supportedFilesystems: &id061
+        - btrfs
+      generic_settings.systemStateVersion: '"23.11"'
+    host_roles:
+      aglnet.client.enable: 'true'
+      base-server.enable: 'true'
+      postgres.main.authentication: '#type database                  DBuser                      address                     auth-method         optional_ident_map
+
+        local sameuser                  all                                                     peer                map=superuser_map
+
+        host  all                       all                172.16.255.106/32          scram-sha-256
+        map=superuser_map
+
+        host  replication               ${config.postgres.main.replUser}    172.16.255.106/32          scram-sha-256
+
+        host  ${config.postgres.main.devUser}            ${config.postgres.main.devUser}     172.16.255.106/32          scram-sha-256
+
+        '
+      postgres.main.enable: 'true'
+      postgres.main.identMap: '# ArbitraryMapName systemUser DBUser
+
+        superuser_map      root      postgres
+
+        superuser_map      root      ${config.postgres.main.replUser}
+
+        superuser_map      ${config.user.admin.name}     ${config.user.admin.name}
+
+        superuser_map      ${config.user.admin.name}     endoregClient
+
+        superuser_map      postgres  postgres
+
+
+        # Let other names login as themselves
+
+        superuser_map      /^(.*)$   \1
+
+        '
+      ssh-access.dev-01.enable: 'true'
+      ssh-access.dev-01.idEd25519: '"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK"'
+    host_services: {}
+    template_name: main
+  hostname: s-02
+  luxnix_configs:
+    generic_settings.hostPlatform: '"x86_64-linux"'
+    generic_settings.linux.cpuMicrocode: '"intel"'
+    generic_settings.linux.initrd.availableKernelModules: *id055
+    generic_settings.linux.initrd.kernelModules: *id056
+    generic_settings.linux.initrd.supportedFilesystems: *id057
+    generic_settings.linux.kernelModules: *id058
+    generic_settings.linux.kernelModulesBlacklist: *id059
+    generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
+    generic_settings.linux.kernelParams: *id060
+    generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+    generic_settings.linux.supportedFilesystems: *id061
+    generic_settings.systemStateVersion: '"23.11"'
+    group_all_test_luxnix: 'true'
+  role_configs:
+    aglnet.client.enable: 'true'
+    base-server.enable: 'true'
+    gpu-client-dev.enable: 'true'
+    group_all_test_group: 'true'
+    postgres.main.authentication: '#type database                  DBuser                      address                     auth-method         optional_ident_map
+
+      local sameuser                  all                                                     peer                map=superuser_map
+
+      host  all                       all                172.16.255.106/32          scram-sha-256
+      map=superuser_map
+
+      host  replication               ${config.postgres.main.replUser}    172.16.255.106/32          scram-sha-256
+
+      host  ${config.postgres.main.devUser}            ${config.postgres.main.devUser}     172.16.255.106/32          scram-sha-256
+
+      '
+    postgres.main.enable: 'true'
+    postgres.main.identMap: '# ArbitraryMapName systemUser DBUser
+
+      superuser_map      root      postgres
+
+      superuser_map      root      ${config.postgres.main.replUser}
+
+      superuser_map      ${config.user.admin.name}     ${config.user.admin.name}
+
+      superuser_map      ${config.user.admin.name}     endoregClient
+
+      superuser_map      postgres  postgres
+
+
+      # Let other names login as themselves
+
+      superuser_map      /^(.*)$   \1
+
+      '
+    ssh-access.dev-01.enable: 'true'
+    ssh-access.dev-01.idEd25519: '"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK"'
+  service_configs:
+    group_all_test_service: 'true'
+  vpn_ip: 172.16.255.12
+s-03:
+  group_vars:
+    all:
+      admin_password_file: '{{ local_users_passwords_dir }}/admin_raw'
+      admin_password_file_source: '{{ luxnix_dev_repo }}/secrets/user-passwords/{{
+        inventory_hostname }}/admin_raw'
+      aglnet_conf: *id008
+      ansible_become_user: admin
+      ansible_key_dir: '{{ luxnix_dest }}/secrets/ansible-vault-keys'
+      ansible_key_source_dir: '{{ luxnix_dev_repo }}/secrets/ansible-vault-keys-source'
+      ansible_python_interpreter: '{{ luxnix_dest }}/.devenv/state/venv/bin/python'
+      ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+      ansible_user: admin
+      authentication: *id009
+      local_users_passwords_dir: '{{ luxnix_dest }}/secrets/user-passwords/{{ inventory_hostname
+        }}'
+      luxnix_branch: main
+      luxnix_dest: /home/admin/luxnix-production
+      luxnix_dev_repo: /home/admin/dev/luxnix
+      luxnix_repo: https://github.com/wg-lux/luxnix.git
+      luxnix_secrets: null
+      network_conf: *id010
+    base_server:
+      nvidia_prime: *id054
+    managed: {}
+    test_group: {}
+  groups:
+    - base_server
+    - managed
+    - test_group
+  host_vars:
+    host_luxnix:
+      generic_settings: null
+      generic_settings.hostPlatform: '"x86_64-linux"'
+      generic_settings.linux.cpuMicrocode: '"amd"'
+      generic_settings.linux.initrd.availableKernelModules: &id062
+        - xhci_pci
+        - ahci
+        - usbhid
+        - nvme
+        - usb_storage
+        - sd_mod
+      generic_settings.linux.initrd.kernelModules: &id063
+        - nfs
+      generic_settings.linux.initrd.supportedFilesystems: &id064
+        - nfs
+      generic_settings.linux.kernelModules: &id065
+        - kvm-amd
+      generic_settings.linux.kernelModulesBlacklist: &id066 []
+      generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
+      generic_settings.linux.kernelParams: &id067 []
+      generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+      generic_settings.linux.supportedFilesystems: &id068
+        - btrfs
+      generic_settings.systemStateVersion: '"23.11"'
+    host_roles:
+      aglnet.client.enable: 'true'
+    host_services: {}
+    template_name: main
+  hostname: s-03
+  luxnix_configs:
+    generic_settings: null
+    generic_settings.hostPlatform: '"x86_64-linux"'
+    generic_settings.linux.cpuMicrocode: '"amd"'
+    generic_settings.linux.initrd.availableKernelModules: *id062
+    generic_settings.linux.initrd.kernelModules: *id063
+    generic_settings.linux.initrd.supportedFilesystems: *id064
+    generic_settings.linux.kernelModules: *id065
+    generic_settings.linux.kernelModulesBlacklist: *id066
+    generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
+    generic_settings.linux.kernelParams: *id067
+    generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+    generic_settings.linux.supportedFilesystems: *id068
+    generic_settings.systemStateVersion: '"23.11"'
+    group_all_test_luxnix: 'true'
+  role_configs:
+    aglnet.client.enable: 'true'
+    base-server.enable: 'true'
+    gpu-client-dev.enable: 'true'
+    group_all_test_group: 'true'
+  service_configs:
+    group_all_test_service: 'true'
+  vpn_ip: 172.16.255.13

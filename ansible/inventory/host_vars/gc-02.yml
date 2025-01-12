@@ -1,7 +1,6 @@
 # inventory/host_vars/gc-02.yml
 ---
 template_name: "main"
-primary_group: "gpu_client"
 
 host_roles:
   aglnet.client.enable: "true"
@@ -9,11 +8,11 @@ host_roles:
 host_services: {}
 
 host_luxnix:
-  generic_settings.hostPlatform: "x86_64-linux"
-  generic_settings.systemStateVersion: "23.11"
+  generic_settings.hostPlatform: '"x86_64-linux"'
+  generic_settings.systemStateVersion: '"23.11"'
 
-  generic_settings.linux.cpuMicrocode: "intel"
-  generic_settings.linux.kernelPackages: "pkgs.linuxPackages_latest"
+  generic_settings.linux.cpuMicrocode: '"intel"'
+  generic_settings.linux.kernelPackages: '"pkgs.linuxPackages_latest"'
   generic_settings.linux.kernelModules:
     - "kvm-intel"
   generic_settings.linux.initrd.supportedFilesystems:
@@ -28,11 +27,10 @@ host_luxnix:
     - "sd_mod"
   generic_settings.linux.supportedFilesystems:
     - "btrfs"
-  generic_settings.linux.resumeDevice: "/dev/disk/by-label/nixos"
+  generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
   generic_settings.linux.kernelParams: []
   generic_settings.linux.kernelModulesBlacklist: []
 
-  nvidia_prime:
-    nvidiaBusId: "PCI:1:0:0"
-    onboardBusId: "PCI:0:2:0"
-    onboardGpuType: "intel"
+  nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
+  nvidia_prime.onboardBusId: '"PCI:0:2:0"'
+  nvidia_prime.onboardGpuType: '"intel"'

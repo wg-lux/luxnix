@@ -110,8 +110,8 @@ def merge_host_group_vars(host_configs, host, group, group_vars, logger=None):
     host_configs[host]["group_vars"][group] = _group_config
 
     for key, value in _group_roles.items():
-        warn_if_overridden(key, group, host_configs[host]["roles_configs"], host)
-        host_configs[host]["roles_configs"][key] = value
+        warn_if_overridden(key, group, host_configs[host]["role_configs"], host)
+        host_configs[host]["role_configs"][key] = value
 
     for key, value in _group_luxnix.items():
         warn_if_overridden(key, group, host_configs[host]["luxnix_configs"], host)
@@ -220,7 +220,7 @@ def pipe(
     )
 
     for host, host_config in host_configs.items():
-        host_configs[host]["roles_configs"] = {}
+        host_configs[host]["role_configs"] = {}
         host_configs[host]["service_configs"] = {}
         host_configs[host]["luxnix_configs"] = {}
 

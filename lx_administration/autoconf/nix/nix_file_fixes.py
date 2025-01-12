@@ -19,7 +19,7 @@ def fix_yml_list_in_nix_file(
     log_heading(logger, f"Fixing lists in Nix file: {filepath} at {timestamp}")
 
     output = []
-    pattern = re.compile(r"(\s*[A-Za-z0-9._]+)\s*=\s*\[([^]]*)\];")
+    pattern = re.compile(r"(\s*[A-Za-z0-9._-]+)\s*=\s*\[([^]]*)\];")
     for i, line in enumerate(lines):
         original_line = line
         match = pattern.search(line)

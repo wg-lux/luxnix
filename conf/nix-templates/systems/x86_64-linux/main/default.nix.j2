@@ -7,7 +7,6 @@
     (modulesPath + "/installer/scan/not-detected.nix")
     ./boot-decryption-config.nix
     ./disks.nix
-    ./luxnix.nix
   ];
 
   user = {
@@ -19,7 +18,7 @@
   };
 
   roles = { 
-    {% for role_str, role_value in roles_configs.items() -%}{% if role_value is string and '\n' in role_value -%}
+    {% for role_str, role_value in role_configs.items() -%}{% if role_value is string and '\n' in role_value -%}
 {{ role_str }} = ''
 {{ role_value | trim }}
 '';
@@ -39,10 +38,13 @@
 
   luxnix = {
     {% for luxnix_str, luxnix_value in luxnix_configs.items() -%} {% if luxnix_value is string and '\n' in luxnix_value -%}
-      {{ luxnix_str }} = ''
+{{ luxnix_str }} = ''
 {{ luxnix_value | trim }}
-''; {% else -%}
-      {{ luxnix_str }} = {{ luxnix_value }};
-    {% endif -%}{% endfor -%}
+''; 
+  {% else -%}
+    {{ luxnix_str }} = {{ luxnix_value }};
+
+{% endif -%}{% endfor -%}
+
   };
 }

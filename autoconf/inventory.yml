@@ -1,0 +1,39 @@
+base_server:
+  - s-01
+  - s-02
+  - s-03
+gpu_client:
+  - gc-06
+  - gc-07
+  - gc-08
+  - gc-09
+gpu_server:
+  - gs-01
+  - gs-02
+main:
+  - s-01 ansible_host
+  - s-02 ansible_host
+  - s-03 ansible_host
+  - gs-01 ansible_host
+  - gs-02 ansible_host
+  - gc-06 ansible_host
+  - gc-07 ansible_host
+  - gc-08 ansible_host
+  - gc-09 ansible_host
+managed:
+  - s-01
+  - s-02
+  - s-03
+  - gs-01
+  - gs-02
+  - gc-07
+  - gc-08
+  - gc-09
+openvpn_host:
+  - s-01
+test_group:
+  - s-03
+  - gs-02
+  - gc-09
+under_development:
+  - s-02
