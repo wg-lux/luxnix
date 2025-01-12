@@ -164,6 +164,10 @@ def get_merged_host_config(
     ansible_root: Path = Path("./ansible"),
 ) -> str:
     merged_config = {}
+
+    common_vars_file = get_ansible_group_vars_file("all", ansible_root)
+    common_vars = safe_load(common_vars_file.read_text())
+
     host_vars_file = get_ansible_host_vars_file(hostname, ansible_root)
     host_vars = safe_load(host_vars_file.read_text())
 
@@ -173,6 +177,9 @@ def get_merged_host_config(
     group_vars_file = get_ansible_group_vars_file(primary_group, ansible_root)
     group_vars = safe_load(group_vars_file.read_text())
     group_vars["primary_group"] = primary_group
+
+    # add base config to merged config:
+    merged_config.update(common_vars)
 
     # add group vars to merged config:
     merged_config.update(group_vars)
