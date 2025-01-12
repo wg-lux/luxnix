@@ -18,12 +18,12 @@ with lib.luxnix; let
     blender
   ];
 
-  customPackages = [] ++ p1;
+  customPackages = [] ++ (if cfg.p1 then p1 else []);
 in {
   options.roles.custom-packages = {
-    enable = lib.mkBoolOpt false "Enable common configuration";
+    enable = mkBoolOpt false "Enable common configuration";
 
-    p1 = lib.mkBoolOpt false "Add Packages of set 'p1' to custom packages";
+    p1 = mkBoolOpt false "Add Packages of set 'p1' to custom packages";
 
   };
 

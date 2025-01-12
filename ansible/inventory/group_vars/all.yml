@@ -1,11 +1,8 @@
 # inventory/group_vars/all.yml
 ---
-group_roles:
-  group_all_test_group: "true"
-group_services:
-  group_all_test_service: "true"
-group_luxnix:
-  group_all_test_luxnix: "true"
+group_roles: {}
+group_services: {}
+group_luxnix: {}
 
 ansible_key_dir: "{{ luxnix_dest }}/secrets/ansible-vault-keys"
 ansible_key_source_dir: "{{ luxnix_dev_repo }}/secrets/ansible-vault-keys-source"

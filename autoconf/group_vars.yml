@@ -28,12 +28,9 @@ all:
     dev_01:
       id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK
     dev_02: {}
-  group_luxnix:
-    group_all_test_luxnix: 'true'
-  group_roles:
-    group_all_test_group: 'true'
-  group_services:
-    group_all_test_service: 'true'
+  group_luxnix: {}
+  group_roles: {}
+  group_services: {}
   local_users_passwords_dir: '{{ luxnix_dest }}/secrets/user-passwords/{{ inventory_hostname
     }}'
   luxnix_branch: main

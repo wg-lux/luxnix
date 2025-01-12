@@ -103,7 +103,12 @@ def generate_default_nix(
     write_nix_file(default_nix, default_nix_path, logger=logger)
 
 
-def pipe(autoconf_out: Path, nix_template_dir=Path("./conf"), logger=None):
+def pipe(
+    autoconf_out: Path,
+    nix_template_dir=Path("./conf"),
+    nix_out: Path = Path("."),
+    logger=None,
+):
     # load config data
     if not logger:
         logger = get_logger("autoconf_nix_main_pipe", reset=True)
@@ -118,6 +123,6 @@ def pipe(autoconf_out: Path, nix_template_dir=Path("./conf"), logger=None):
             hostname,
             config_data,
             nix_template_dir=nix_template_dir,
-            out_dir=autoconf_out,
+            out_dir=nix_out,
             logger=logger,
         )

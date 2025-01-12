@@ -45,7 +45,7 @@ gc-06:
   host_vars:
     ansible_python_interpreter: '{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python'
     host_luxnix:
-      configurationPath: lib.mkForce "/home/admin/dev/luxnix"
+      generic_settings.configurationPath: lib.mkForce "/home/admin/dev/luxnix"
       generic_settings.hostPlatform: '"x86_64-linux"'
       generic_settings.linux.cpuMicrocode: '"intel"'
       generic_settings.linux.initrd.availableKernelModules: &id001
@@ -73,6 +73,8 @@ gc-06:
       nvidia_prime.onboardGpuType: '"intel"'
     host_roles:
       aglnet.client.enable: 'true'
+      custom_packages.enable: 'true'
+      custom_packages.p1: 'true'
     host_services: {}
     luxnix_branch: migrate-01
     luxnix_dest: /home/admin/luxnix-production
@@ -81,7 +83,7 @@ gc-06:
     template_name: main
   hostname: gc-06
   luxnix_configs:
-    configurationPath: lib.mkForce "/home/admin/dev/luxnix"
+    generic_settings.configurationPath: lib.mkForce "/home/admin/dev/luxnix"
     generic_settings.hostPlatform: '"x86_64-linux"'
     generic_settings.linux.cpuMicrocode: '"intel"'
     generic_settings.linux.initrd.availableKernelModules: *id001
@@ -94,7 +96,6 @@ gc-06:
     generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
     generic_settings.linux.supportedFilesystems: *id007
     generic_settings.systemStateVersion: '"23.11"'
-    group_all_test_luxnix: 'true'
     nvidia_prime.enable: 'true'
     nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
     nvidia_prime.nvidiaDriver: '"beta"'
@@ -102,10 +103,10 @@ gc-06:
     nvidia_prime.onboardGpuType: '"intel"'
   role_configs:
     aglnet.client.enable: 'true'
+    custom_packages.enable: 'true'
+    custom_packages.p1: 'true'
     gpu-client-dev.enable: 'true'
-    group_all_test_group: 'true'
-  service_configs:
-    group_all_test_service: 'true'
+  service_configs: {}
   vpn_ip: 172.16.255.106
 gc-07:
   group_vars:
@@ -179,7 +180,6 @@ gc-07:
     generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
     generic_settings.linux.supportedFilesystems: *id017
     generic_settings.systemStateVersion: '"23.11"'
-    group_all_test_luxnix: 'true'
     nvidia_prime.enable: 'true'
     nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
     nvidia_prime.nvidiaDriver: '"beta"'
@@ -188,9 +188,7 @@ gc-07:
   role_configs:
     aglnet.client.enable: 'true'
     gpu-client-dev.enable: 'true'
-    group_all_test_group: 'true'
-  service_configs:
-    group_all_test_service: 'true'
+  service_configs: {}
   vpn_ip: 172.16.255.107
 gc-08:
   group_vars:
@@ -264,7 +262,6 @@ gc-08:
     generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
     generic_settings.linux.supportedFilesystems: *id024
     generic_settings.systemStateVersion: '"23.11"'
-    group_all_test_luxnix: 'true'
     nvidia_prime.enable: 'true'
     nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
     nvidia_prime.nvidiaDriver: '"beta"'
@@ -273,9 +270,7 @@ gc-08:
   role_configs:
     aglnet.client.enable: 'true'
     gpu-client-dev.enable: 'true'
-    group_all_test_group: 'true'
-  service_configs:
-    group_all_test_service: 'true'
+  service_configs: {}
   vpn_ip: 172.16.255.108
 gc-09:
   group_vars:
@@ -350,7 +345,6 @@ gc-09:
     generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
     generic_settings.linux.supportedFilesystems: *id031
     generic_settings.systemStateVersion: '"23.11"'
-    group_all_test_luxnix: 'true'
     nvidia_prime.enable: 'true'
     nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
     nvidia_prime.nvidiaDriver: '"beta"'
@@ -359,9 +353,7 @@ gc-09:
   role_configs:
     aglnet.client.enable: 'true'
     gpu-client-dev.enable: 'true'
-    group_all_test_group: 'true'
-  service_configs:
-    group_all_test_service: 'true'
+  service_configs: {}
   vpn_ip: 172.16.255.109
 gs-01:
   group_vars:
@@ -435,15 +427,12 @@ gs-01:
     generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
     generic_settings.linux.supportedFilesystems: *id038
     generic_settings.systemStateVersion: '"23.11"'
-    group_all_test_luxnix: 'true'
   role_configs:
     aglnet.client.enable: 'true'
     base-server.enable: 'true'
     gpu-client-dev.enable: 'true'
     gpu-server.enable: 'true'
-    group_all_test_group: 'true'
-  service_configs:
-    group_all_test_service: 'true'
+  service_configs: {}
   vpn_ip: 172.16.255.21
 gs-02:
   group_vars:
@@ -523,15 +512,12 @@ gs-02:
     generic_settings.primary_group: gpu_server
     generic_settings.systemStateVersion: '"23.11"'
     generic_settings.template_name: gpu-server
-    group_all_test_luxnix: 'true'
   role_configs:
     aglnet.client.enable: 'true'
     base-server.enable: 'true'
     gpu-client-dev.enable: 'true'
     gpu-server.enable: 'true'
-    group_all_test_group: 'true'
-  service_configs:
-    group_all_test_service: 'true'
+  service_configs: {}
   vpn_ip: 172.16.255.22
 s-01:
   group_vars:
@@ -633,15 +619,12 @@ s-01:
     generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
     generic_settings.linux.supportedFilesystems: *id053
     generic_settings.systemStateVersion: '"23.11"'
-    group_all_test_luxnix: 'true'
   role_configs:
     aglnet.client.enable: 'true'
     aglnet.host.enable: 'true'
     base-server.enable: 'true'
     gpu-client-dev.enable: 'true'
-    group_all_test_group: 'true'
-  service_configs:
-    group_all_test_service: 'true'
+  service_configs: {}
   vpn_ip: 172.16.255.1
 s-02:
   group_vars:
@@ -754,12 +737,10 @@ s-02:
     generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
     generic_settings.linux.supportedFilesystems: *id061
     generic_settings.systemStateVersion: '"23.11"'
-    group_all_test_luxnix: 'true'
   role_configs:
     aglnet.client.enable: 'true'
     base-server.enable: 'true'
     gpu-client-dev.enable: 'true'
-    group_all_test_group: 'true'
     postgres.main.authentication: '#type database                  DBuser                      address                     auth-method         optional_ident_map
 
       local sameuser                  all                                                     peer                map=superuser_map
@@ -793,8 +774,7 @@ s-02:
       '
     ssh-access.dev-01.enable: 'true'
     ssh-access.dev-01.idEd25519: '"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK"'
-  service_configs:
-    group_all_test_service: 'true'
+  service_configs: {}
   vpn_ip: 172.16.255.12
 s-03:
   group_vars:
@@ -870,12 +850,9 @@ s-03:
     generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
     generic_settings.linux.supportedFilesystems: *id068
     generic_settings.systemStateVersion: '"23.11"'
-    group_all_test_luxnix: 'true'
   role_configs:
     aglnet.client.enable: 'true'
     base-server.enable: 'true'
     gpu-client-dev.enable: 'true'
-    group_all_test_group: 'true'
-  service_configs:
-    group_all_test_service: 'true'
+  service_configs: {}
   vpn_ip: 172.16.255.13
