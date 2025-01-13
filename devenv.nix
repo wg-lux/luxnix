@@ -3,7 +3,7 @@ let
 
   packageDefs = import ./devenv/packages.nix { inherit pkgs lib config inputs; };
   buildInputs = packageDefs.buildInputs;
-  tasks = import ./devenv/tasks.nix {inherit pkgs lib config inputs;};
+  tasks = import ./devenv/tasks.nix;
   scripts = import ./devenv/scripts.nix {inherit pkgs lib config inputs;};
   processes = import ./devenv/processes.nix {inherit pkgs lib config inputs;};
 
