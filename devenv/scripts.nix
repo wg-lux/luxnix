@@ -1,4 +1,4 @@
-{ pkgs, lib, config, inputs, ... }:
+{ pkgs, ... }:
 {
   scripts = {
     hello.exec = "${pkgs.uv}/bin/uv run python hello.py";

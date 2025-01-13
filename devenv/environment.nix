@@ -1,4 +1,4 @@
-{ pkgs, lib, config, inputs, ... }:
+{ pkgs, ... }:
 
 let
   buildInputs = with pkgs; [

@@ -1,11 +1,11 @@
 { pkgs, lib, config, inputs, ... }:
 let
 
-  packageDefs = import ./devenv/packages.nix { inherit pkgs lib config inputs; };
+  packageDefs = import ./devenv/packages.nix { inherit pkgs; };
   buildInputs = packageDefs.buildInputs;
   tasks = import ./devenv/tasks.nix;
-  scripts = import ./devenv/scripts.nix {inherit pkgs lib config inputs;};
-  processes = import ./devenv/processes.nix {inherit pkgs lib config inputs;};
+  scripts = import ./devenv/scripts.nix {inherit pkgs;};
+  processes = import ./devenv/processes.nix {inherit pkgs;};
 
 in 
 {
