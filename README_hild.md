@@ -1,3 +1,4 @@
+
 #  🟦 LuxNix - Professional NixOS Configuration Framework
 
 A comprehensive NixOS configuration framework designed for research and development environments, emphasizing security, reproducibility, and automated deployment. Built using Snowfall Lib and Nixicle, this architecture easily manages multiple systems and user environments with a focus on enabling fast GPU computing and secure networking.
@@ -5,28 +6,24 @@ A comprehensive NixOS configuration framework designed for research and developm
 It provides a securely encrypted setup for study laptops, enabling research on protected data. 
 This enables cooperation among research centers.
 
-This infrastructure was built in the context of the ColoReg study at University Hospital of Würzburg. Here the main use case will be gathering medical study data, such as: 
-
-- Reports,
-- images,
-- or videos.
+This infrastructure was built in the context of the ColoReg study. Here the main use case will be gathering medical study data.
 
 ## 🔎 Overview 
 
 
 ### [Table Of Contents - automatically generated](TABLE_OF_CONTENTS.md)
-### [Prerequisites](docs/hardware-setup.md#hardware-setup)
+### [Prerequisites](hardware-setup.md#hardware-setup)
 - NixOS installation media
 - UEFI-capable system
 - Storage device (NVMe or SATA)
 - USB drive for boot decryption (optional)
 - FIDO2 security key (optional)
 ### [Example Of Deploying LuxNix: Deployment Guide](docs/deployment-guide.md#Deployment)
-### [LUKS Secrets Management](docs/security.md#luks-encryption-management)
-### [Boot Decryption & USB Stick Setup](docs/security.md#boot-decryption-usb-stick-setup)
-### [Service Management](docs/service-architecture.md#overview)
-### [Access Management](docs/access-management.md#access-control)
-### [Tools For Development](docs/development.md#development)
+### [LUKS Secrets Management](security.md#luks-encryption-management)
+### [Boot Decryption & USB Stick Setup](security.md#boot-decryption-usb-stick-setup)
+### [Service Management](service-architecture.md#overview)
+### [Access Management](access-management.md#access-control)
+### [Tools For Development](development.md#development)
 
 ## 🛠️ Initial Setup
 1. Verify UEFI boot mode
@@ -97,7 +94,7 @@ nixos-anywhere --flake '.#hostname' nixos@ip-address
 
 # Update existing system
 nh os switch
-hho #shortcut
+nho #shortcut
 ```
 
 ## 📁 Repository Structure
@@ -153,4 +150,3 @@ MIT - see LICENSE
 ---
 
 Built with ❄️ using NixOS
-
