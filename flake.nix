@@ -138,6 +138,7 @@
       # Add modules to all homes
       homes.modules = with inputs; [
         plasma-manager.homeManagerModules.plasma-manager
+        ../modules/home
       ];
 
       systems.modules.nixos = with inputs; [
