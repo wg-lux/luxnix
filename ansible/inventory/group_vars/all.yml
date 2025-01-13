@@ -1,21 +1,48 @@
 # inventory/group_vars/all.yml
 ---
 group_roles: {}
-
 group_services: {}
+group_luxnix: {}
+
+ansible_key_dir: "{{ luxnix_dest }}/secrets/ansible-vault-keys"
+ansible_key_source_dir: "{{ luxnix_dev_repo }}/secrets/ansible-vault-keys-source"
 
 luxnix_dev_repo: "/home/admin/dev/luxnix"
 luxnix_repo: "https://github.com/wg-lux/luxnix.git"
 luxnix_dest: "/home/admin/luxnix-production"
 luxnix_branch: "main"
+luxnix_secrets:
 
 ansible_user: admin
 ansible_become_user: admin
 ansible_ssh_private_key_file: ~/.ssh/id_ed25519
-ansible_python_interpreter: "{{luxnix_dest}}/.devenv/state/venv/bin/python"
+ansible_python_interpreter: "{{ luxnix_dest }}/.devenv/state/venv/bin/python"
 
-local_users_passwords_dir: "{{luxnix_dest}}/secrets/user-passwords/{{inventory_hostname}}"
-admin_password_file: "{{local_users_passwords_dir}}/admin_raw"
-admin_password_file_source: "{{luxnix_dev_repo}}/secrets/user-passwords/{{inventory_hostname}}/admin_raw"
+local_users_passwords_dir: "{{ luxnix_dest }}/secrets/user-passwords/{{ inventory_hostname }}"
+admin_password_file: "{{ local_users_passwords_dir }}/admin_raw"
+admin_password_file_source: "{{ luxnix_dev_repo }}/secrets/user-passwords/{{ inventory_hostname }}/admin_raw"
 
-dev_01_id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK
+authentication:
+  dev_01:
+    id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK
+  dev_02: {}
+  agl_admin:
+    id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM7vvbgQtzi4GNeugHSuMyEke4MY0bSfoU7cBOnRYU8M
+
+network_conf:
+  domain: "endo-reg.net"
+
+aglnet_conf:
+  domain: "{{ network_conf.domain }}"
+  subnet: "172.16.255.0"
+  subnetIntern: "255.255.255.0"
+  subnetSuffix: "32"
+  caPath: "/etc/openvpn/ca.pem"
+  tlsAuthPath: "/etc/openvpn/tls.pem"
+  serverCertPath: "/etc/openvpn/crt.crt"
+  serverKeyPath: "/etc/openvpn/key.key"
+  dhPath: "/etc/openvpn/dh.pem"
+  clientConfigDir: "/etc/openvpn/ccd"
+  backupNameservers:
+    - "8.8.8.8"
+    - "1.1.1.1"

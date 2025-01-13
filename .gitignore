@@ -11,6 +11,8 @@ docs/hostinfo/
 docs/luxnix-hostinfo.md
 conf/hostinfo.json
 
+*.key
+
 # pre-commit
 .pre-commit-config.yaml
 

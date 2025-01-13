@@ -6,3 +6,4 @@ group_roles:
   gpu-server.enable: "true" # activates desktop and aglnet.client; desktop calls common
 
 group_services: {}
+group_luxnix: {}

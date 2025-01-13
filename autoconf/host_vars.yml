@@ -1,0 +1,404 @@
+gc-02:
+  host_luxnix:
+    generic_settings.hostPlatform: '"x86_64-linux"'
+    generic_settings.linux.cpuMicrocode: '"intel"'
+    generic_settings.linux.initrd.availableKernelModules:
+      - xhci_pci
+      - ahci
+      - nvme
+      - usb_storage
+      - sd_mod
+    generic_settings.linux.initrd.kernelModules:
+      - nfs
+    generic_settings.linux.initrd.supportedFilesystems:
+      - nfs
+    generic_settings.linux.kernelModules:
+      - kvm-intel
+    generic_settings.linux.kernelModulesBlacklist: []
+    generic_settings.linux.kernelPackages: '"pkgs.linuxPackages_latest"'
+    generic_settings.linux.kernelParams: []
+    generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+    generic_settings.linux.supportedFilesystems:
+      - btrfs
+    generic_settings.systemStateVersion: '"23.11"'
+    nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
+    nvidia_prime.onboardBusId: '"PCI:0:2:0"'
+    nvidia_prime.onboardGpuType: '"intel"'
+  host_roles:
+    aglnet.client.enable: 'true'
+  host_services: {}
+  template_name: main
+gc-06:
+  ansible_python_interpreter: '{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python'
+  host_luxnix:
+    generic_settings.configurationPath: lib.mkForce "/home/admin/dev/luxnix"
+    generic_settings.hostPlatform: '"x86_64-linux"'
+    generic_settings.linux.cpuMicrocode: '"intel"'
+    generic_settings.linux.initrd.availableKernelModules:
+      - vmd
+      - xhci_pci
+      - ahci
+      - nvme
+      - usb_storage
+      - sd_mod
+    generic_settings.linux.initrd.kernelModules:
+      - dm-snapshot
+    generic_settings.linux.initrd.supportedFilesystems:
+      - nfs
+    generic_settings.linux.kernelModules:
+      - kvm-intel
+    generic_settings.linux.kernelModulesBlacklist: []
+    generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
+    generic_settings.linux.kernelParams: []
+    generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+    generic_settings.linux.supportedFilesystems:
+      - '"btrfs"'
+    generic_settings.systemStateVersion: '"23.11"'
+    nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
+    nvidia_prime.onboardBusId: '"PCI:0:2:0"'
+    nvidia_prime.onboardGpuType: '"intel"'
+  host_roles:
+    aglnet.client.enable: 'true'
+    aglnet.host.enable: 'false'
+    custom_packages.enable: 'true'
+    custom_packages.p1: 'true'
+    gpu_client_dev.enable: 'true'
+  host_services: {}
+  luxnix_branch: migrate-01
+  luxnix_dest: /home/admin/luxnix-production
+  luxnix_dev_repo: /home/admin/dev/luxnix
+  luxnix_repo: https://github.com/wg-lux/luxnix.git
+  template_name: main
+gc-07:
+  host_luxnix:
+    generic_settings.hostPlatform: '"x86_64-linux"'
+    generic_settings.linux.cpuMicrocode: '"intel"'
+    generic_settings.linux.initrd.availableKernelModules:
+      - vmd
+      - xhci_pci
+      - ahci
+      - nvme
+      - usb_storage
+      - sd_mod
+    generic_settings.linux.initrd.kernelModules:
+      - nfs
+    generic_settings.linux.initrd.supportedFilesystems:
+      - nfs
+    generic_settings.linux.kernelModules:
+      - kvm-intel
+    generic_settings.linux.kernelModulesBlacklist: []
+    generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
+    generic_settings.linux.kernelParams: []
+    generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+    generic_settings.linux.supportedFilesystems:
+      - btrfs
+    generic_settings.systemStateVersion: '"23.11"'
+    nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
+    nvidia_prime.onboardBusId: '"PCI:0:2:0"'
+    nvidia_prime.onboardGpuType: '"intel"'
+  host_roles:
+    aglnet.client.enable: 'true'
+  host_services: {}
+  template_name: main
+gc-08:
+  host_luxnix:
+    generic_settings.hostPlatform: '"x86_64-linux"'
+    generic_settings.linux.cpuMicrocode: '"intel"'
+    generic_settings.linux.initrd.availableKernelModules:
+      - vmd
+      - xhci_pci
+      - ahci
+      - nvme
+      - usb_storage
+      - sd_mod
+    generic_settings.linux.initrd.kernelModules:
+      - nfs
+    generic_settings.linux.initrd.supportedFilesystems:
+      - nfs
+    generic_settings.linux.kernelModules:
+      - kvm-intel
+    generic_settings.linux.kernelModulesBlacklist: []
+    generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
+    generic_settings.linux.kernelParams: []
+    generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+    generic_settings.linux.supportedFilesystems:
+      - btrfs
+    generic_settings.systemStateVersion: '"23.11"'
+    nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
+    nvidia_prime.onboardBusId: '"PCI:0:2:0"'
+    nvidia_prime.onboardGpuType: '"intel"'
+  host_roles:
+    aglnet.client.enable: 'true'
+  host_services: {}
+  template_name: main
+gc-09:
+  host_luxnix:
+    generic_settings.hostPlatform: '"x86_64-linux"'
+    generic_settings.linux.cpuMicrocode: '"intel"'
+    generic_settings.linux.initrd.availableKernelModules:
+      - xhci_pci
+      - ahci
+      - nvme
+      - usb_storage
+      - sd_mod
+    generic_settings.linux.initrd.kernelModules:
+      - nfs
+    generic_settings.linux.initrd.supportedFilesystems:
+      - nfs
+    generic_settings.linux.kernelModules:
+      - kvm-intel
+    generic_settings.linux.kernelModulesBlacklist: []
+    generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
+    generic_settings.linux.kernelParams: []
+    generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+    generic_settings.linux.supportedFilesystems:
+      - btrfs
+    generic_settings.systemStateVersion: '"23.11"'
+    nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
+    nvidia_prime.onboardBusId: '"PCI:0:2:0"'
+    nvidia_prime.onboardGpuType: '"intel"'
+  host_roles:
+    aglnet.client.enable: 'true'
+  host_services: {}
+  template_name: main
+gs-01:
+  host_luxnix:
+    generic_settings.hostPlatform: '"x86_64-linux"'
+    generic_settings.linux.cpuMicrocode: '"amd"'
+    generic_settings.linux.initrd.availableKernelModules:
+      - xhci_pci
+      - ahci
+      - mpt3sas
+      - usb_storage
+      - usbhid
+      - sd_mod
+    generic_settings.linux.initrd.kernelModules:
+      - nfs
+      - dm-snapshot
+    generic_settings.linux.initrd.supportedFilesystems:
+      - nfs
+    generic_settings.linux.kernelModules:
+      - kvm-amd
+    generic_settings.linux.kernelModulesBlacklist: []
+    generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
+    generic_settings.linux.kernelParams: []
+    generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+    generic_settings.linux.supportedFilesystems:
+      - btrfs
+    generic_settings.systemStateVersion: '"23.11"'
+  host_roles:
+    aglnet.client.enable: 'true'
+  host_services: {}
+  template_name: main
+gs-02:
+  host_luxnix:
+    generic_settings.hostPlatform: '"x86_64-linux"'
+    generic_settings.linux.cpuMicrocode: '"amd"'
+    generic_settings.linux.initrd.availableKernelModules:
+      - xhci_pci
+      - ahci
+      - thunderbolt
+      - nvme
+      - usb_storage
+      - usbhid
+      - sd_mod
+    generic_settings.linux.initrd.kernelModules:
+      - nfs
+      - dm-snapshot
+    generic_settings.linux.initrd.supportedFilesystems:
+      - nfs
+    generic_settings.linux.kernelModules:
+      - kvm-amd
+    generic_settings.linux.kernelModulesBlacklist: []
+    generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
+    generic_settings.linux.kernelParams: []
+    generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+    generic_settings.linux.supportedFilesystems:
+      - btrfs
+    generic_settings.primary_group: gpu_server
+    generic_settings.systemStateVersion: '"23.11"'
+    generic_settings.template_name: gpu-server
+  host_roles:
+    aglnet.client.enable: 'true'
+  host_services: {}
+  template_name: main
+h-01:
+  host_luxnix:
+    generic_settings.hostPlatform: '"x86_64-linux"'
+    generic_settings.linux.cpuMicrocode: '"amd"'
+    generic_settings.linux.initrd.availableKernelModules:
+      - xhci_pci
+      - uas
+      - ahci
+      - usbhid
+      - nvme
+      - usb_storage
+      - sd_mod
+    generic_settings.linux.initrd.kernelModules:
+      - nfs
+    generic_settings.linux.initrd.supportedFilesystems:
+      - nfs
+    generic_settings.linux.kernelModules:
+      - kvm-amd
+    generic_settings.linux.kernelModulesBlacklist: []
+    generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
+    generic_settings.linux.kernelParams: []
+    generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+    generic_settings.linux.supportedFilesystems:
+      - btrfs
+    generic_settings.systemStateVersion: '"23.11"'
+  host_roles:
+    aglnet.client.enable: 'true'
+  host_services: {}
+  template_name: main
+s-01:
+  generic_settings:
+    hostPlatform: x86_64-linux
+    linux:
+      cpuMicrocode: amd
+      initrd:
+        availableKernelModules:
+          - xhci_pci
+          - uas
+          - ahci
+          - usbhid
+          - nvme
+          - usb_storage
+          - sd_mod
+        kernelModules:
+          - nfs
+        supportedFilesystems:
+          - nfs
+      kernelModules:
+        - kvm-amd
+      kernelModulesBlacklist: []
+      kernelPackages: pkgs.linuxPackages_latest
+      kernelParams: []
+      resumeDevice: /dev/disk/by-label/nixos
+      supportedFilesystems:
+        - btrfs
+    systemStateVersion: '23.11'
+  host_luxnix:
+    generic_settings.hostPlatform: '"x86_64-linux"'
+    generic_settings.linux.cpuMicrocode: '"amd"'
+    generic_settings.linux.initrd.availableKernelModules:
+      - xhci_pci
+      - uas
+      - ahci
+      - usbhid
+      - nvme
+      - usb_storage
+      - sd_mod
+    generic_settings.linux.initrd.kernelModules:
+      - nfs
+    generic_settings.linux.initrd.supportedFilesystems:
+      - nfs
+    generic_settings.linux.kernelModules:
+      - kvm-amd
+    generic_settings.linux.kernelModulesBlacklist: []
+    generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
+    generic_settings.linux.kernelParams: []
+    generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+    generic_settings.linux.supportedFilesystems:
+      - btrfs
+    generic_settings.systemStateVersion: '"23.11"'
+  host_roles:
+    aglnet.host.enable: 'true'
+  host_services: {}
+  template_name: main
+s-02:
+  ansible_groups:
+    - base-server
+    - aglnet.host
+    - ssh-access.dev-01
+    - postgres.main
+  host_luxnix:
+    generic_settings.hostPlatform: '"x86_64-linux"'
+    generic_settings.linux.cpuMicrocode: '"intel"'
+    generic_settings.linux.initrd.availableKernelModules:
+      - xhci_pci
+      - ahci
+      - usbhid
+      - nvme
+      - usb_storage
+      - sd_mod
+    generic_settings.linux.initrd.kernelModules:
+      - nfs
+    generic_settings.linux.initrd.supportedFilesystems:
+      - nfs
+    generic_settings.linux.kernelModules:
+      - kvm-intel
+    generic_settings.linux.kernelModulesBlacklist: []
+    generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
+    generic_settings.linux.kernelParams: []
+    generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+    generic_settings.linux.supportedFilesystems:
+      - btrfs
+    generic_settings.systemStateVersion: '"23.11"'
+  host_roles:
+    aglnet.client.enable: 'true'
+    base-server.enable: 'true'
+    postgres.main.authentication: '#type database                  DBuser                      address                     auth-method         optional_ident_map
+
+      local sameuser                  all                                                     peer                map=superuser_map
+
+      host  all                       all                172.16.255.106/32          scram-sha-256
+      map=superuser_map
+
+      host  replication               ${config.postgres.main.replUser}    172.16.255.106/32          scram-sha-256
+
+      host  ${config.postgres.main.devUser}            ${config.postgres.main.devUser}     172.16.255.106/32          scram-sha-256
+
+      '
+    postgres.main.enable: 'true'
+    postgres.main.identMap: '# ArbitraryMapName systemUser DBUser
+
+      superuser_map      root      postgres
+
+      superuser_map      root      ${config.postgres.main.replUser}
+
+      superuser_map      ${config.user.admin.name}     ${config.user.admin.name}
+
+      superuser_map      ${config.user.admin.name}     endoregClient
+
+      superuser_map      postgres  postgres
+
+
+      # Let other names login as themselves
+
+      superuser_map      /^(.*)$   \1
+
+      '
+    ssh-access.dev-01.enable: 'true'
+    ssh-access.dev-01.idEd25519: '"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK"'
+  host_services: {}
+  template_name: main
+s-03:
+  host_luxnix:
+    generic_settings: null
+    generic_settings.hostPlatform: '"x86_64-linux"'
+    generic_settings.linux.cpuMicrocode: '"amd"'
+    generic_settings.linux.initrd.availableKernelModules:
+      - xhci_pci
+      - ahci
+      - usbhid
+      - nvme
+      - usb_storage
+      - sd_mod
+    generic_settings.linux.initrd.kernelModules:
+      - nfs
+    generic_settings.linux.initrd.supportedFilesystems:
+      - nfs
+    generic_settings.linux.kernelModules:
+      - kvm-amd
+    generic_settings.linux.kernelModulesBlacklist: []
+    generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
+    generic_settings.linux.kernelParams: []
+    generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+    generic_settings.linux.supportedFilesystems:
+      - btrfs
+    generic_settings.systemStateVersion: '"23.11"'
+  host_roles:
+    aglnet.client.enable: 'true'
+  host_services: {}
+  template_name: main

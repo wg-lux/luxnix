@@ -41,6 +41,7 @@ in
       after = [ "autoconf:generate-hostinfo"];
     };
 
+    # devent run tasks autoconf:finished
     "autoconf:finished" = {
       description = "Start the finalize task";
       exec = "echo 'Starting finalize task'";
@@ -58,7 +59,7 @@ in
 
     ac.exec = "devenv tasks run autoconf:finished";
 
-    hi.exec = "${pkgs.uv}/bin/uv run python lx_administration/ansible/hostinfo.py";
+    # hi.exec = "${pkgs.uv}/bin/uv run python lx_administration/ansible/hostinfo.py";
     bnsc.exec = "${pkgs.uv}/bin/uv run python scripts/build-nix-system-configs.py";
     
     run-ansible.exec = "${pkgs.uv}/bin/uv run ansible-playbook ansible/site.yml";

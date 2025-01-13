@@ -1,11 +1,21 @@
 # inventory/host_vars/s-02.yml
 ---
-template_name: "base-server"
-primary_group: "base_server"
+# defines the template set (see conf/nix-templates)main
+# autoconf:
+#   template_set: "base-server"
+#   overide_template: {} # key is original template name, value is new template name
+
+template_name: "main"
+
+ansible_groups:
+  - "base-server"
+  - "aglnet.host"
+  - "ssh-access.dev-01"
+  - "postgres.main"
 
 host_roles:
-  base-server.enable: "true"
   aglnet.client.enable: "true"
+  base-server.enable: "true"
   ssh-access.dev-01.enable: "true"
   ssh-access.dev-01.idEd25519: '"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK"'
   postgres.main.enable: "true"
@@ -28,30 +38,28 @@ host_roles:
 
 host_services: {}
 
-generic_settings:
-  hostPlatform: "x86_64-linux"
-  systemStateVersion: "23.11"
+host_luxnix:
+  generic_settings.hostPlatform: '"x86_64-linux"'
+  generic_settings.systemStateVersion: '"23.11"'
 
-  linux:
-    cpuMicrocode: "intel"
+  generic_settings.linux.cpuMicrocode: '"intel"'
 
-    kernelPackages: "pkgs.linuxPackages_latest"
-    kernelModules:
-      - "kvm-intel"
-    initrd:
-      supportedFilesystems:
-        - "nfs"
-      kernelModules:
-        - "nfs"
-      availableKernelModules:
-        - "xhci_pci"
-        - "ahci"
-        - "usbhid"
-        - "nvme"
-        - "usb_storage"
-        - "sd_mod"
-    supportedFilesystems:
-      - "btrfs"
-    resumeDevice: "/dev/disk/by-label/nixos"
-    kernelParams: []
-    kernelModulesBlacklist: []
+  generic_settings.linux.kernelPackages: "pkgs.linuxPackages_latest"
+  generic_settings.linux.kernelModules:
+    - "kvm-intel"
+  generic_settings.linux.initrd.supportedFilesystems:
+    - "nfs"
+  generic_settings.linux.initrd.kernelModules:
+    - "nfs"
+  generic_settings.linux.initrd.availableKernelModules:
+    - "xhci_pci"
+    - "ahci"
+    - "usbhid"
+    - "nvme"
+    - "usb_storage"
+    - "sd_mod"
+  generic_settings.linux.supportedFilesystems:
+    - "btrfs"
+  generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+  generic_settings.linux.kernelParams: []
+  generic_settings.linux.kernelModulesBlacklist: []
