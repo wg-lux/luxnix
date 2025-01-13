@@ -1,34 +1,19 @@
 { pkgs, lib, config, inputs, ... }:
 let
-  buildInputs = with pkgs; [
-    python311Full
-    stdenv.cc.cc
-    tesseract
-    glib
-    openssh
-    openssl
-    black
-    nixpkgs-fmt
-  ];
+
+  packageDefs = import ./devenv/packages.nix { inherit pkgs; };
+  buildInputs = packageDefs.buildInputs;
+  tasks = import ./devenv/tasks.nix;
+  scripts = import ./devenv/scripts.nix {inherit pkgs;};
+  processes = import ./devenv/processes.nix {inherit pkgs;};
 
 in 
 {
+  packages = packageDefs.packages;
 
   # A dotenv file was found, while dotenv integration is currently not enabled.
   dotenv.enable = false;
   dotenv.disableHint = true;
-
-  packages = with pkgs; [
-    cudaPackages.cuda_nvcc
-    age
-    openssh
-    stdenv.cc.cc
-    tesseract
-    sops
-    openssl
-    black
-    nixpkgs-fmt #TODO WILL BE DEPRECATED SOON ->  nixfmt
-  ];
 
   env = {
     LD_LIBRARY_PATH = "${
@@ -45,15 +30,11 @@ in
     };
   };
 
-  tasks = {
+  tasks = tasks;
 
-    "autoconf:generate-hostinfo" = {
-      description = "Generate conf/hostinfo.json; Generates hostinfo @ ./docs/hostinfo\
-       (summary markdown; html split by host)";
-      exec = "./scripts/ansible-cmdb.sh";
-      # after = [ "autoconf:setup-symlinks"];
-    };
+  scripts = scripts;
 
+<<<<<<< HEAD
     "autoconf:build-nix-system-configs" = {
       description = "Build nix system configs";
       exec = "bnsc";
@@ -91,6 +72,9 @@ in
 
   processes = {
   };
+=======
+  processes = processes;
+>>>>>>> review
 
   enterShell = ''
     . .devenv/state/venv/bin/activate

@@ -15,8 +15,8 @@
     run-ansible.exec = "${pkgs.uv}/bin/uv run ansible-playbook ansible/site.yml";
     
     ssh-all.exec = "./tmux/all-luxnix-dir.sh";
+
     init-server-ssh.exec = "./tmux/init-server-ssh.sh";
     kill-server-ssh.exec = "tmux kill-session -t ssh-servers";
     conn-server-ssh.exec = "tmux attach-session -t ssh-servers";
-  };
-}
+  }
