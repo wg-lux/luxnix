@@ -33,7 +33,7 @@ in {
       "d /etc/user-passwords 0700 admin users -"
     ];
 
-    roles.postgres.default.enable = false; #TODO ACTIVATE
+    roles.postgres.default.enable = lib.mkDefault true; #TODO ACTIVATE
 
     hardware = {
       networking.enable = true;

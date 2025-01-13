@@ -47,7 +47,7 @@ in {
       default = [ ];
       description = "Default Kernel Params";
     };
-    blacklistedKernelModules = mkOption {
+    kernelModulesBlacklist = mkOption {
       type = types.listOf types.str;
       default = [ ];
       description = "Default blacklisted Kernel Modules";
@@ -83,7 +83,7 @@ in {
       kernelPackages = cfg.kernelPackages;
       supportedFilesystems = lib.mkForce cfg.supportedFilesystems;
       resumeDevice = cfg.resumeDevice;
-      blacklistedKernelModules = cfg.blacklistedKernelModules;
+      blacklistedKernelModules = cfg.kernelModulesBlacklist;
       initrd = cfg.initrd;
     };
   };

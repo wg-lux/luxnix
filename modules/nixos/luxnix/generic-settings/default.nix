@@ -82,7 +82,6 @@ in {
         default = ''
           # ArbitraryMapName systemUser DBUser
           superuser_map      root      postgres
-          superuser_map      root      ${config.roles.postgres.default.replUser}
           superuser_map      ${config.user.admin.name}     postgres
           superuser_map      postgres  postgres
 

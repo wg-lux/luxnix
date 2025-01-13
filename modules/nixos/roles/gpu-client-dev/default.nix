@@ -99,6 +99,8 @@ in {
       obsidian
       e2fsprogs
       spotify
+      keepassxc
+      blender
     ];
 
 

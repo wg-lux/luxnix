@@ -1,37 +1,65 @@
 # inventory/host_vars/s-02.yml
 ---
-template_name: "base-server"
-primary_group: "base_server"
+# defines the template set (see conf/nix-templates)main
+# autoconf:
+#   template_set: "base-server"
+#   overide_template: {} # key is original template name, value is new template name
 
-host_roles: 
-  - name: "aglnet.client"
+template_name: "main"
 
-host_services: []
+ansible_groups:
+  - "base-server"
+  - "aglnet.host"
+  - "ssh-access.dev-01"
+  - "postgres.main"
 
-generic_settings:
-  hostPlatform: "x86_64-linux"
-  systemStateVersion: "23.11" 
+host_roles:
+  aglnet.client.enable: "true"
+  base-server.enable: "true"
+  ssh-access.dev-01.enable: "true"
+  ssh-access.dev-01.idEd25519: '"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK"'
+  postgres.main.enable: "true"
+  postgres.main.authentication: |
+    #type database                  DBuser                      address                     auth-method         optional_ident_map
+    local sameuser                  all                                                     peer                map=superuser_map
+    host  all                       all                172.16.255.106/32          scram-sha-256 map=superuser_map
+    host  replication               ${config.postgres.main.replUser}    172.16.255.106/32          scram-sha-256
+    host  ${config.postgres.main.devUser}            ${config.postgres.main.devUser}     172.16.255.106/32          scram-sha-256
+  postgres.main.identMap: |
+    # ArbitraryMapName systemUser DBUser
+    superuser_map      root      postgres
+    superuser_map      root      ${config.postgres.main.replUser}
+    superuser_map      ${config.user.admin.name}     ${config.user.admin.name}
+    superuser_map      ${config.user.admin.name}     endoregClient
+    superuser_map      postgres  postgres
 
-  linux:
-    cpuMicrocode: "intel"
+    # Let other names login as themselves
+    superuser_map      /^(.*)$   \1
 
-    kernelPackages: "pkgs.linuxPackages_latest"
-    kernelModules:
-      - "kvm-intel"
-    initrd:
-      supportedFilesystems:
-        - "nfs"
-      kernelModules:
-        - "nfs"
-      availableKernelModules:
-        - "xhci_pci"
-        - "ahci"
-        - "usbhid"
-        - "nvme"
-        - "usb_storage"
-        - "sd_mod"
-    supportedFilesystems:
-      - "btrfs"
-    resumeDevice: "/dev/disk/by-label/nixos"
-    kernelParams: []
-    kernelModulesBlacklist: []
+host_services: {}
+
+host_luxnix:
+  generic_settings.hostPlatform: '"x86_64-linux"'
+  generic_settings.systemStateVersion: '"23.11"'
+
+  generic_settings.linux.cpuMicrocode: '"intel"'
+
+  generic_settings.linux.kernelPackages: "pkgs.linuxPackages_latest"
+  generic_settings.linux.kernelModules:
+    - "kvm-intel"
+  generic_settings.linux.initrd.supportedFilesystems:
+    - "nfs"
+  generic_settings.linux.initrd.kernelModules:
+    - "nfs"
+  generic_settings.linux.initrd.availableKernelModules:
+    - "xhci_pci"
+    - "ahci"
+    - "usbhid"
+    - "nvme"
+    - "usb_storage"
+    - "sd_mod"
+  generic_settings.linux.supportedFilesystems:
+    - "btrfs"
+  generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+  generic_settings.linux.kernelParams: []
+  generic_settings.linux.kernelModulesBlacklist: []

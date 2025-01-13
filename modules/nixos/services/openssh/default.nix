@@ -10,7 +10,7 @@ with lib.luxnix; let
 in {
   options.services.ssh = with types; {
     enable = mkBoolOpt false "Enable ssh";
-    authorizedKeys = mkOpt (listOf str) [] "The public keys to apply.";
+    authorizedKeys = mkOpt (listOf str) [] "The public keys to grant access to connect as admin.";
   };
 
   config = mkIf cfg.enable {

@@ -1,5 +1,96 @@
 from pathlib import Path
 from yaml import safe_load
+import re
+
+
+def find_duplicates(content, section):
+    pattern = re.compile(rf"{section} = \{{(.*?)\}};", re.DOTALL)
+    match = pattern.search(content)
+    if not match:
+        return {}
+
+    section_content = match.group(1)
+    lines = section_content.split("\n")
+    keys = {}
+    in_multiline = False
+    multiline_key = None
+    multiline_value = []
+    for line in lines:
+        if "''" in line:
+            in_multiline = not in_multiline
+            if in_multiline:
+                # Found start of multiline block, parse key
+                raw_line = line.strip()
+                raw_key = raw_line.split("=")[0].strip()
+                norm_key = raw_key.replace("_", "-")
+                multiline_key = norm_key
+                multiline_value = [raw_line.split("''", 1)[1]]
+            else:
+                # End of multiline block, store
+                multiline_value.append(line.split("''", 1)[0])
+                keys[multiline_key] = (
+                    f"{multiline_key} = ''\n" + "\n".join(multiline_value) + "'';"
+                )
+                multiline_key = None
+                multiline_value = []
+        elif in_multiline:
+            multiline_value.append(line)
+        else:
+            if "=" in line:
+                raw_line = line.strip()
+                raw_key = raw_line.split("=")[0].strip()
+                norm_key = raw_key.replace("_", "-")
+                if norm_key not in keys:
+                    # Rebuild line to use the normalized key
+                    remainder = raw_line.split("=", 1)[1]
+                    keys[norm_key] = f"{norm_key}={remainder}"
+    return keys
+
+
+def remove_duplicates(content, section):
+    keys = find_duplicates(content, section)
+    pattern = re.compile(rf"{section} = \{{(.*?)\}};", re.DOTALL)
+    match = pattern.search(content)
+    if not match:
+        return content
+
+    section_content = match.group(1)
+    lines = section_content.split("\n")
+    indent = ""
+    for line in lines:
+        if line.strip():
+            indent = line[: len(line) - len(line.lstrip())]
+            break
+
+    new_section_content = "\n".join(indent + line for line in keys.values())
+    new_content = (
+        content[: match.start()]
+        + f"{section} = {{\n"
+        + new_section_content
+        + "\n"
+        + indent
+        + "};"
+        + content[match.end() :]
+    )
+    in_multiline = False
+    new_section_lines = []
+    for line in lines:
+        if "''" in line:
+            in_multiline = not in_multiline
+        if in_multiline:
+            new_section_lines.append(line)
+        else:
+            new_section_lines.append(line)
+    return new_content
+
+
+def parse_nix_file(filepath):
+    with open(filepath, "r") as file:
+        content = file.read()
+    content = remove_duplicates(content, "user")
+    content = remove_duplicates(content, "roles")
+    return content
+
 
 TEMPLATE_LOOKUP = {
     "gc-06": "gpu-client-dev",
@@ -73,6 +164,10 @@ def get_merged_host_config(
     ansible_root: Path = Path("./ansible"),
 ) -> str:
     merged_config = {}
+
+    common_vars_file = get_ansible_group_vars_file("all", ansible_root)
+    common_vars = safe_load(common_vars_file.read_text())
+
     host_vars_file = get_ansible_host_vars_file(hostname, ansible_root)
     host_vars = safe_load(host_vars_file.read_text())
 
@@ -82,6 +177,9 @@ def get_merged_host_config(
     group_vars_file = get_ansible_group_vars_file(primary_group, ansible_root)
     group_vars = safe_load(group_vars_file.read_text())
     group_vars["primary_group"] = primary_group
+
+    # add base config to merged config:
+    merged_config.update(common_vars)
 
     # add group vars to merged config:
     merged_config.update(group_vars)

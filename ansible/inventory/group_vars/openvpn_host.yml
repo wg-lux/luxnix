@@ -1,0 +1,5 @@
+---
+group_roles:
+  aglnet.host.enable: "true"
+group_services: {}
+group_luxnix: {}

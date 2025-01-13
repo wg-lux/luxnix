@@ -23,7 +23,7 @@
 
   hardware.graphics = {
     enable = true;
-    drivers = lib.mkForce 10 [ "ast" ]; # ASPEED Graphics Driver
+    # drivers = lib.mkForce 10 [ "ast" ]; # ASPEED Graphics Driver
   };
 
   user = {
@@ -35,5 +35,5 @@
   };
 
 
-  system.stateVersion = "23.11";
+  luxnix.generic-settings.systemStateVersion = "24.11";
 }

@@ -34,10 +34,12 @@ in
 
   scripts = scripts;
 
-  processes = processes;
+  processes = {
+  };
 
   enterShell = ''
     . .devenv/state/venv/bin/activate
+    uv pip install -e .
     hello
   '';
 
