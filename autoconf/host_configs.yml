@@ -73,8 +73,10 @@ gc-06:
       nvidia_prime.onboardGpuType: '"intel"'
     host_roles:
       aglnet.client.enable: 'true'
+      aglnet.host.enable: 'false'
       custom_packages.enable: 'true'
       custom_packages.p1: 'true'
+      gpu_client_dev.enable: 'true'
     host_services: {}
     luxnix_branch: migrate-01
     luxnix_dest: /home/admin/luxnix-production
@@ -103,9 +105,13 @@ gc-06:
     nvidia_prime.onboardGpuType: '"intel"'
   role_configs:
     aglnet.client.enable: 'true'
+    aglnet.host.enable: 'false'
     custom_packages.enable: 'true'
     custom_packages.p1: 'true'
     gpu-client-dev.enable: 'true'
+    gpu_client_dev.enable: 'true'
+    lx-anonymizer.enable: 'true'
+    lx-anonymizer.user: '"PeterPan"'
   service_configs: {}
   vpn_ip: 172.16.255.106
 gc-07:
@@ -188,6 +194,8 @@ gc-07:
   role_configs:
     aglnet.client.enable: 'true'
     gpu-client-dev.enable: 'true'
+    lx-anonymizer.enable: 'true'
+    lx-anonymizer.user: '"PeterPan"'
   service_configs: {}
   vpn_ip: 172.16.255.107
 gc-08:
@@ -270,6 +278,8 @@ gc-08:
   role_configs:
     aglnet.client.enable: 'true'
     gpu-client-dev.enable: 'true'
+    lx-anonymizer.enable: 'true'
+    lx-anonymizer.user: '"PeterPan"'
   service_configs: {}
   vpn_ip: 172.16.255.108
 gc-09:
@@ -353,6 +363,8 @@ gc-09:
   role_configs:
     aglnet.client.enable: 'true'
     gpu-client-dev.enable: 'true'
+    lx-anonymizer.enable: 'true'
+    lx-anonymizer.user: '"PeterPan"'
   service_configs: {}
   vpn_ip: 172.16.255.109
 gs-01:

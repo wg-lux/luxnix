@@ -60,6 +60,7 @@ in
       after = [ "autoconf:generate-hostinfo"];
     };
 
+    # devent run tasks autoconf:finished
     "autoconf:finished" = {
       description = "Start the finalize task";
       exec = "echo 'Starting finalize task'";

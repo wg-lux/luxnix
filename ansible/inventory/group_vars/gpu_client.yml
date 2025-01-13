@@ -1,6 +1,8 @@
 group_roles:
   aglnet.client.enable: "true"
   gpu-client-dev.enable: "true"
+  lx-anonymizer.enable: "true"
+  lx-anonymizer.user: '"PeterPan"'
 
 group_services: {}
 group_luxnix:

@@ -7,6 +7,7 @@
     (modulesPath + "/installer/scan/not-detected.nix")
     ./boot-decryption-config.nix
     ./disks.nix
+    ./endoreg.nix
   ];
 
   user = {
@@ -19,9 +20,12 @@
 
   roles = { 
     aglnet.client.enable = true;
+    aglnet.host.enable = false;
     custom-packages.enable = true;
     custom-packages.p1 = true;
     gpu-client-dev.enable = true;
+    lx-anonymizer.enable = true;
+    lx-anonymizer.user = "PeterPan";
     };
 
   services = {

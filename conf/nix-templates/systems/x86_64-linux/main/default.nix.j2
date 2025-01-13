@@ -7,6 +7,7 @@
     (modulesPath + "/installer/scan/not-detected.nix")
     ./boot-decryption-config.nix
     ./disks.nix
+    ./endoreg.nix
   ];
 
   user = {
