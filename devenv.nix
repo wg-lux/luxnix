@@ -4,7 +4,9 @@ let
   packageDefs = import ./devenv/packages.nix { inherit pkgs; };
   buildInputs = packageDefs.buildInputs;
   tasks = import ./devenv/tasks.nix;
-  scripts = import ./devenv/scripts.nix {inherit pkgs;};
+  scripts = import ./devenv/scripts.nix {
+    inherit pkgs lib config inputs;
+  };
   processes = import ./devenv/processes.nix {inherit pkgs;};
 
 in 
