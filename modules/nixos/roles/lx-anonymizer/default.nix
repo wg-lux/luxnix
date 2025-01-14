@@ -49,6 +49,12 @@ in {
     ];
 
     # TODO Create user with correct permissions
-
+    users.users.${cfg.user} = {
+      isNormalUser = true;
+      home = cfg.rootDir;
+      group = cfg.group;
+      createHome = false;
+      uid = config.luxnix.generic-settings.uids.lxAnonymizer;
+    };
   };
 }

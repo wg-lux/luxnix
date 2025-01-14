@@ -21,7 +21,6 @@
   roles = { 
     aglnet.client.enable = true;
     base-server.enable = true;
-    gpu-client-dev.enable = true;
     postgres.main.authentication = ''
 #type database                  DBuser                      address                     auth-method         optional_ident_map
 local sameuser                  all                                                     peer                map=superuser_map
@@ -49,7 +48,9 @@ superuser_map      /^(.*)$   \1
     };
 
   luxnix = {
-    generic-settings.hostPlatform = "x86_64-linux";
+    generic-settings.configurationPathRelative = "luxnix-production";
+
+generic-settings.hostPlatform = "x86_64-linux";
 
 generic-settings.linux.cpuMicrocode = "intel";
 

@@ -19,17 +19,16 @@
   };
 
   roles = { 
-    aglnet.client.enable = true;
     aglnet.host.enable = true;
-    base-server.enable = true;
-    gpu-client-dev.enable = true;
     };
 
   services = {
     };
 
   luxnix = {
-    generic-settings.hostPlatform = "x86_64-linux";
+    generic-settings.configurationPathRelative = "luxnix-production";
+
+generic-settings.hostPlatform = "x86_64-linux";
 
 generic-settings.linux.cpuMicrocode = "amd";
 

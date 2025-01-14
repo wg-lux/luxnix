@@ -18,7 +18,7 @@ in {
       enable = true;
       ports = [22];
 
-      settings = {
+      settings = { #TODO LIMIT TO vpn access
         PasswordAuthentication = false;
         StreamLocalBindUnlink = "yes";
         GatewayPorts = "clientspecified";

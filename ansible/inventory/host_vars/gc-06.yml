@@ -7,14 +7,7 @@ luxnix_repo: "https://github.com/wg-lux/luxnix.git"
 luxnix_dest: "/home/admin/luxnix-production"
 luxnix_branch: "migrate-01"
 
-host_roles:
-  aglnet.client.enable: "true"
-  aglnet.host.enable: "false"
-  gpu_client_dev.enable: "true"
-  # ssh_access.dev_01.enable: "true"
-  custom_packages.enable: "true"
-  custom_packages.p1: "true"
-
+host_roles: {}
 host_services: {}
 
 host_luxnix:

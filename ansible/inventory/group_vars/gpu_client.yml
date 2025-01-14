@@ -1,10 +1,5 @@
 group_roles:
-  aglnet.client.enable: "true"
-  gpu-client-dev.enable: "true"
-  lx-anonymizer.enable: "true"
-  lx-anonymizer.user: '"PeterPan"'
-
+  endoreg-client.enable: "true"
 group_services: {}
 group_luxnix:
-  nvidia_prime.enable: "true"
   nvidia_prime.nvidiaDriver: '"beta"'

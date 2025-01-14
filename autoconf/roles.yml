@@ -10,6 +10,9 @@ dev-01-access:
 keycloak_host:
   files: []
   vars: null
+lx-anonymizer:
+  files: []
+  vars: null
 managed:
   files: []
   vars: null

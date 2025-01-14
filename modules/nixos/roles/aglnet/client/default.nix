@@ -5,29 +5,6 @@
   ...
 }:
 
-
-        # client
-        # proto ${base.proto}
-        # dev ${base.dev}
-        # remote ${base.domain} ${toString base.port}
-
-        # resolv-retry ${base.resolv-retry}
-        # nobind
-        # persist-key
-        # persist-tun
-
-        # ca ${base.paths.shared.ca}
-        # tls-auth ${base.paths.shared.ta} 1
-        # cert ${base.paths.client.cert}
-        # key ${base.paths.client.key}
-        # cipher ${base.cipher}
-
-        # route-nopull
-        # route ${base.subnet} ${base.intern-subnet} 
-
-        # remote-cert-tls server
-        # verb ${base.verb}
-
 with lib; let
   cfg = config.roles.aglnet.client;
 
@@ -206,7 +183,6 @@ in {
       default = defaultPersistTun;
       description = "Persist tun for the VPN";  
     };
-
   };
 
 
@@ -215,37 +191,11 @@ in {
       systemPackages = with pkgs; [
         openvpn
       ];
-
-      # etc = etc-files; # deploy via luxnix-administration module
-
     };
 #
     systemd.tmpfiles.rules = [
       "d /etc/openvpn 0750 admin users -"
     ];
-
-        # client = ''
-        # client
-        # proto ${base.proto}
-        # dev ${base.dev}
-        # remote ${base.domain} ${toString base.port}
-
-        # resolv-retry ${base.resolv-retry}
-        # nobind
-        # persist-key
-        # persist-tun
-
-        # ca ${base.paths.shared.ca}
-        # tls-auth ${base.paths.shared.ta} 1
-        # cert ${base.paths.client.cert}
-        # key ${base.paths.client.key}
-        # cipher ${base.cipher}
-
-        # route-nopull
-        # route ${base.subnet} ${base.intern-subnet} 
-
-        # remote-cert-tls server
-        # verb ${base.verb}
 
     services.openvpn = let 
       config = ''
@@ -283,9 +233,6 @@ in {
         };
       };
     };
-
-    # Secrets
-    # sops.secrets = sops-secrets;
 
   };
 

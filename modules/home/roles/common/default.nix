@@ -20,8 +20,8 @@ in {
     cli = {
       terminals.foot.enable = true;
       terminals.kitty.enable = true;
-      cli.shells.zsh.enable = true;
-      cli.shells.shared.enable = true;
+      shells.zsh.enable = true;
+      shells.shared.enable = true;
     };
     programs = {
       guis.enable = true;

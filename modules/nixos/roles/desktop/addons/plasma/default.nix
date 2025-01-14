@@ -14,22 +14,17 @@ in {
 
   config = mkIf cfg.enable {
 ###   
-environment.systemPackages = with pkgs; [
-    kdePackages.xdg-desktop-portal-kde
-    kdePackages.svgpart
-    kdePackages.systemsettings
-  ];
+  roles.custom-packages.kdePlasma = true;
 
-services.desktopManager.plasma6.enable = true;
+  services.desktopManager.plasma6.enable = true;
   services.displayManager = {
     defaultSession = "plasmax11";
     sddm.enable = true;
-    # sddm.wayland.enable = true;
   };
 
   services.xserver = {
     enable = true;
-    xkb.layout = "de";
+    xkb.layout = "de"; # TODO use locale via generic settings
     xkb.variant = "";
     displayManager = {
       gdm= {
@@ -39,21 +34,5 @@ services.desktopManager.plasma6.enable = true;
     };
   };
 
-####
-#    services = {
-#      xserver = {
-#        enable = true;
-#        displayManager.gdm.enable = true;
-#        desktopManager.gnome = {
-#          enable = true;
-#          extraGSettingsOverridePackages = [
-#            pkgs.nautilus-open-any-terminal
-#          ];
-#        };
-#      };
-#    };#
-
-#    services.udev.packages = with pkgs; [gnome-settings-daemon];
-#    programs.dconf.enable = true;
   };
 }

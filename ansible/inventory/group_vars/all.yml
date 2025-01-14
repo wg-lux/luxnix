@@ -2,7 +2,7 @@
 ---
 group_roles: {}
 group_services: {}
-group_luxnix: {}
+group_luxnix: { generic_settings.configurationPathRelative: '"lx-production"' }
 
 ansible_key_dir: "{{ luxnix_dest }}/secrets/ansible-vault-keys"
 ansible_key_source_dir: "{{ luxnix_dev_repo }}/secrets/ansible-vault-keys-source"

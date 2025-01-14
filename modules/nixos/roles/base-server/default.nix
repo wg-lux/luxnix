@@ -69,22 +69,11 @@ in {
       desktop.enable = true;
     };
 
-    luxnix.boot-decryption-stick = {
-      enable = true;
-    };
-
     services = {
       luxnix.avahi.enable = false;
-      vpn.enable = false; #TODO OPENVPN IMPLEMENTATION
       virtualisation.podman.enable = false;
     };
-    
-    environment.systemPackages = with pkgs; [
-    	vscode
-      obsidian
-      spotify
-    ];
-
+  
 
     
   };

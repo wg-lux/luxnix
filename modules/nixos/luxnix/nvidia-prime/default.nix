@@ -66,15 +66,11 @@ in {
   config = mkIf cfg.enable {
 
     hardware.graphics = {
-          enable = true;
-          extraPackages = with pkgs; [
-            mesa
-          ];
-        };
-
-    environment.systemPackages = [
-      pkgs.autoAddDriverRunpath
-    ];
+      enable = true;
+      extraPackages = with pkgs; [
+        mesa
+      ];
+    };
 
     nixpkgs.config.cudaSupport = true;
 

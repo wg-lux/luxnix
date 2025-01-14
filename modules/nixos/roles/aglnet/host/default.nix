@@ -218,9 +218,6 @@ in {
       systemPackages = with pkgs; [
         openvpn
       ];
-
-      # etc = etc-files;
-
     };
 
     systemd.tmpfiles.rules = [
@@ -236,15 +233,7 @@ in {
         "allowed${cfg.protocol}Ports" = [ cfg.port ];
       };
       nameservers = cfg.backupNameservers;
-      # enableIPv4 = true;
-      # forwarding = true;
     };
-
-    # Create "/etc/openvpn/update-resolve-conf" file using (source is updateResolvConfFile) environment.etc
-    # environment.etc."openvpn/update-resolve-conf" = {
-    #   source = updateResolvConfFile;
-    #   mode = "0755";
-    # };
 
     services.openvpn = let 
       config = ''
@@ -285,10 +274,6 @@ in {
         };
       };
     };
-
-    # Secrets
-    # sops.secrets = sops-secrets;
-
   };
 
 }

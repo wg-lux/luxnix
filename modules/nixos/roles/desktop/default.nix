@@ -13,8 +13,6 @@ in {
   };
 
   config = mkIf cfg.enable {
-
-
     boot.binfmt.emulatedSystems = [
       # "aarch64-linux"
     ];
@@ -24,20 +22,12 @@ in {
       desktop.addons = {
         plasma.enable = true;
       };
+      custom-packages.baseDevelopment = true;
     };
 
     hardware = {
       audio.enable = true;
       bluetooth.enable = true;
-      # zsa.enable = true;
     };
-    
-    environment.systemPackages = with pkgs; [
-      vscode-fhs
-      gparted exfatprogs ntfs3g
-      easyrsa
-    ];
-
-
   };
 }

@@ -115,7 +115,7 @@ in {
       '';
     };
 
-    _configurationPathRelative = mkOption {
+    configurationPathRelative = mkOption {
       type = types.str;
       default = "luxnix-production";
       description = ''
@@ -124,7 +124,7 @@ in {
     };
     configurationPath = mkOption {
       type = types.path;
-      default = "/home/${config.user.admin.name}/${cfg._configurationPathRelative}/";
+      default = "/home/${config.user.admin.name}/${cfg.configurationPathRelative}/";
       description = ''
         Path to the luxnix directory.
       '';

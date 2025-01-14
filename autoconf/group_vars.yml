@@ -28,7 +28,8 @@ all:
     dev_01:
       id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK
     dev_02: {}
-  group_luxnix: {}
+  group_luxnix:
+    generic_settings.configurationPathRelative: '"luxnix-production"'
   group_roles: {}
   group_services: {}
   local_users_passwords_dir: '{{ luxnix_dest }}/secrets/user-passwords/{{ inventory_hostname
@@ -42,40 +43,25 @@ all:
     domain: endo-reg.net
 base_server:
   group_luxnix: {}
-  group_roles:
-    base-server.enable: 'true'
+  group_roles: {}
   group_services: {}
-  nvidia_prime:
-    enable: 'false'
 gpu_client:
   group_luxnix:
-    nvidia_prime.enable: 'true'
     nvidia_prime.nvidiaDriver: '"beta"'
   group_roles:
-    aglnet.client.enable: 'true'
-    gpu-client-dev.enable: 'true'
-    lx-anonymizer.enable: 'true'
-    lx-anonymizer.user: '"PeterPan"'
+    endoreg-client.enable: 'true'
   group_services: {}
 gpu_server:
   group_luxnix: {}
-  group_roles:
-    base-server.enable: 'true'
-    gpu-server.enable: 'true'
+  group_roles: {}
   group_services: {}
-  nvidia_prime:
-    enable: 'false'
 hetzner_server:
   group_luxnix: {}
-  group_roles:
-    aglnet.client.enable: 'true'
-    gpu-client-dev.enable: 'true'
+  group_roles: {}
   group_services: {}
 managed:
   group_luxnix: {}
-  group_roles:
-    aglnet.client.enable: 'true'
-    gpu-client-dev.enable: 'true'
+  group_roles: {}
   group_services: {}
 openvpn_host:
   group_luxnix: {}

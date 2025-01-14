@@ -12,8 +12,5 @@ in {
     enable = mkBoolOpt false "Enable ADA configuration";
   };
 
-  config = mkIf cfg.enable {
-
-
-  };
+  config = mkIf cfg.enable {  };
 }

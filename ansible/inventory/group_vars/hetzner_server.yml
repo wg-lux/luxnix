@@ -1,6 +1,3 @@
-group_roles:
-  aglnet.client.enable: "true"
-  gpu-client-dev.enable: "true"
-
+group_roles: {}
 group_services: {}
 group_luxnix: {}

@@ -49,8 +49,8 @@
         kernelParams = [ 
         ];  
         
-        blacklistedKernelModules = [ 
-        ];
+        # blacklistedKernelModules = [ 
+        # ];
       };
     };
   };

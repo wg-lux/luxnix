@@ -20,16 +20,16 @@
 
   roles = { 
     aglnet.client.enable = true;
-    gpu-client-dev.enable = true;
-    lx-anonymizer.enable = true;
-    lx-anonymizer.user = "PeterPan";
+    endoreg-client.enable = true;
     };
 
   services = {
     };
 
   luxnix = {
-    generic-settings.hostPlatform = "x86_64-linux";
+    generic-settings.configurationPathRelative = "luxnix-production";
+
+generic-settings.hostPlatform = "x86_64-linux";
 
 generic-settings.linux.cpuMicrocode = "intel";
 
@@ -45,8 +45,6 @@ generic-settings.linux.resumeDevice = "/dev/disk/by-label/nixos";
 
 generic-settings.linux.supportedFilesystems = ["btrfs"];
 generic-settings.systemStateVersion = "23.11";
-
-nvidia-prime.enable = true;
 
 nvidia-prime.nvidiaBusId = "PCI:1:0:0";
 

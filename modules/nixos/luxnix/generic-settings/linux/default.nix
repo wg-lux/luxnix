@@ -80,8 +80,8 @@ in {
       kernelModules = cfg.kernelModules;
       extraModulePackages = cfg.extraModulePackages;
       kernelParams = cfg.kernelParams;
-      kernelPackages = cfg.kernelPackages;
-      supportedFilesystems = lib.mkForce cfg.supportedFilesystems;
+      kernelPackages = lib.mkDefault cfg.kernelPackages;
+      supportedFilesystems = lib.mkDefault cfg.supportedFilesystems;
       resumeDevice = cfg.resumeDevice;
       blacklistedKernelModules = cfg.kernelModulesBlacklist;
       initrd = cfg.initrd;

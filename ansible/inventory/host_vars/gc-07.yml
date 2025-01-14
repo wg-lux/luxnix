@@ -1,9 +1,7 @@
 # inventory/host_vars/gc-07.yml
 ---
 template_name: "main"
-host_roles:
-  aglnet.client.enable: "true"
-
+host_roles: {}
 host_services: {}
 
 host_luxnix:
@@ -12,7 +10,7 @@ host_luxnix:
   generic_settings.linux.cpuMicrocode: '"intel"'
   generic_settings.linux.kernelPackages: "pkgs.linuxPackages_latest"
   generic_settings.linux.kernelModules:
-    - "kvm-intel"
+    - "intel"
   generic_settings.linux.initrd.supportedFilesystems:
     - "nfs"
   generic_settings.linux.initrd.kernelModules:
