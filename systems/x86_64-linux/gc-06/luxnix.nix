@@ -2,23 +2,52 @@
 
 {
   luxnix = {
-    traefik-host.enable = true;
+    # traefik-host.enable = true;
 
-    nvidia-prime = {
-      enable = true; # enables common and desktop (with addon plasma) roles
-      nvidiaBusId = "PCI:1:0:0";
-      onboardBusId = "PCI:0:2:0";
-      onboardGpuType = "intel";
-      nvidiaDriver = "beta";
-    };
-    gpu-eval.enable = true;
+    # nvidia-prime = {
+    #   enable = true; # enables common and desktop (with addon plasma) roles
+    #   nvidiaBusId = "PCI:1:0:0";
+    #   onboardBusId = "PCI:0:2:0";
+    #   onboardGpuType = "intel";
+    #   nvidiaDriver = "beta";
+    # };
+    # gpu-eval.enable = true;
 
-    generic-settings = {
-      enable = true;
-      hostPlatform = "x86_64-linux"; # is default
+    # generic-settings = {
+    #   enable = true;
+    #   # hostPlatform = "x86_64-linux"; # is default
 
-      configurationPath = lib.mkForce "/home/admin/dev/luxnix";
-      # sensitiveServiceGroupName = "sensitive-service-group"; # is default
+    #   # configurationPath = lib.mkForce "/home/admin/dev/luxnix";
+
+        
+    #   linux = {
+    #     # cpuMicrocode = "intel"; # default is "intel"
+    #     # processorType = "x86_64"; # default
+    #     # kernelPackages = pkgs.linuxPackages_latest; # default
+    #     # kernelModules = [ "kvm-intel" ];
+    #     # extraModulePackages = []; # default
+    #     initrd = {
+    #       # kernelModules = ["dm-snapshot" ]; # default
+    #       # availableKernelModules = [ 
+    #       #   "vmd" "xhci_pci" "ahci" "nvme" 
+    #       #   "usb_storage" "sd_mod"
+    #       # ];
+    #       # supportedFilesystems = ["nfs" "btrfs"];
+    #     };
+
+    #     # supportedFilesystems = ["btrfs" "nfs"]; # default
+    #     # resumeDevice = "/dev/disk/by-label/nixos"; # default
+    #     # kernelParams = []; # default
+        
+    #     # blacklistedKernelModules = []; # default
+
+        
+    
+    #   };
+    # };
+  };
+}  
+# sensitiveServiceGroupName = "sensitive-service-group"; # is default
 
       # sensitiveServiceGID = 901; # is default
 
@@ -42,30 +71,3 @@
       # sslCertificateKeyPath = "${systemConfigurationPath}/ssl/cert.key";
       # sslCertificatePath = "${systemConfigurationPath}/ssl/cert.pem";
 
-        
-      linux = {
-        cpuMicrocode = "intel"; # default is "intel"
-        # processorType = "x86_64"; # default
-        kernelPackages = pkgs.linuxPackages_latest; # default
-        kernelModules = [ "kvm-intel" ];
-        extraModulePackages = []; # default
-        initrd = {
-          kernelModules = ["dm-snapshot" ]; # default
-          availableKernelModules = [ 
-            "vmd" "xhci_pci" "ahci" "nvme" 
-            "usb_storage" "sd_mod"
-          ];
-        };
-
-        supportedFilesystems = ["btrfs"]; # default
-        resumeDevice = "/dev/disk/by-label/nixos"; # default
-        kernelParams = []; # default
-        
-        blacklistedKernelModules = []; # default
-
-        
-    
-      };
-    };
-  };
-}

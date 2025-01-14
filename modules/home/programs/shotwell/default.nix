@@ -13,7 +13,7 @@ in {
 
   config = mkIf cfg.enable {
     home.packages = with pkgs; [
-      shotwell # Image manager / Processor
+      # shotwell # Image manager / Processor
     ];
   };
 }

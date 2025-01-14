@@ -7,10 +7,18 @@ luxnix_repo: "https://github.com/wg-lux/luxnix.git"
 luxnix_dest: "/home/admin/luxnix-production"
 luxnix_branch: "migrate-01"
 
-host_roles: {}
+host_roles:
+  custom_packages.videoEditing: "true"
+  custom_packages.baseDevelopment: "true"
+  custom_packages.office: "true"
+  custom_packages.visuals: "true"
+  custom_packages.cuda: "true"
+
 host_services: {}
 
 host_luxnix:
+  # Custom packages
+
   ##### Override Config Path #####
   generic_settings.configurationPath: 'lib.mkForce "/home/admin/dev/luxnix"'
 
@@ -23,8 +31,10 @@ host_luxnix:
     - "kvm-intel"
   generic_settings.linux.initrd.supportedFilesystems:
     - "nfs"
+    - "btrfs"
   generic_settings.linux.initrd.kernelModules:
     - "dm-snapshot"
+    - "nfs"
   generic_settings.linux.initrd.availableKernelModules:
     - "vmd"
     - "xhci_pci"
@@ -33,10 +43,12 @@ host_luxnix:
     - "usb_storage"
     - "sd_mod"
   generic_settings.linux.supportedFilesystems:
-    - '"btrfs"'
+    - "btrfs"
+    - "nfs"
   generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
   generic_settings.linux.kernelParams: []
   generic_settings.linux.kernelModulesBlacklist: []
+  generic_settings.linux.extraModulePackages: []
   nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
   nvidia_prime.onboardBusId: '"PCI:0:2:0"'
   nvidia_prime.onboardGpuType: '"intel"'

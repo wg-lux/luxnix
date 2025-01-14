@@ -15,24 +15,24 @@ with lib.luxnix; let
   ];
 
   baseDevelopment = with pkgs; [
-    vscode-fhs
-    # vscode
+    # vscode-fhs
+    vscode
     gparted exfatprogs ntfs3g
     easyrsa
     e2fsprogs
     keepassxc
   ];
 
-  visuals = [
+  visuals = with pkgs; [
     blender
   ];
 
   office = with pkgs; [
-    # libreoffice-qt6-fresh
-    # hunspell
-    # hunspellDicts.de_DE
-    # hunspellDicts.en_US
-    # pandoc
+    libreoffice-qt6-fresh
+    hunspell
+    hunspellDicts.de_DE
+    hunspellDicts.en_US
+    pandoc
     obsidian
     spotify
   ];
@@ -106,6 +106,7 @@ in {
     kdePlasma = mkBoolOpt false "Add KDE Plasma Packages to custom packages";
     baseDevelopment = mkBoolOpt false "Add Base Development Packages to custom packages";
     cuda = mkBoolOpt false "Add CUDA packages to custom packages";
+    videoEditing = mkBoolOpt false "Add Video Editing packages to custom packages";
     visuals = mkBoolOpt false "Add Visuals packages to custom packages";
     ld = {
       enable = mkBoolOpt true "Enable nix-ld";
@@ -121,5 +122,7 @@ in {
       libraries = ldPackages;
     };
     
+    programs.obs-studio.enable = cfg.videoEditing;
+
   };
 }

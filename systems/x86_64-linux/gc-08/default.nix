@@ -7,7 +7,6 @@
     (modulesPath + "/installer/scan/not-detected.nix")
     ./boot-decryption-config.nix
     ./disks.nix
-    ./endoreg.nix
   ];
 
   user = {
@@ -27,7 +26,9 @@
     };
 
   luxnix = {
-    generic-settings.configurationPathRelative = "luxnix-production";
+    generic-settings.configurationPathRelative = "lx-production";
+
+generic-settings.enable = true;
 
 generic-settings.hostPlatform = "x86_64-linux";
 
@@ -45,6 +46,10 @@ generic-settings.linux.resumeDevice = "/dev/disk/by-label/nixos";
 
 generic-settings.linux.supportedFilesystems = ["btrfs"];
 generic-settings.systemStateVersion = "23.11";
+
+gpu-eval.enable = true;
+
+nvidia-prime.enable = true;
 
 nvidia-prime.nvidiaBusId = "PCI:1:0:0";
 

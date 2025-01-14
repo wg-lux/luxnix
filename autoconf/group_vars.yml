@@ -29,7 +29,8 @@ all:
       id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK
     dev_02: {}
   group_luxnix:
-    generic_settings.configurationPathRelative: '"luxnix-production"'
+    generic_settings.configurationPathRelative: '"lx-production"'
+    generic_settings.enable: 'true'
   group_roles: {}
   group_services: {}
   local_users_passwords_dir: '{{ luxnix_dest }}/secrets/user-passwords/{{ inventory_hostname
@@ -47,8 +48,11 @@ base_server:
   group_services: {}
 gpu_client:
   group_luxnix:
+    gpu_eval.enable: 'true'
+    nvidia_prime.enable: 'true'
     nvidia_prime.nvidiaDriver: '"beta"'
   group_roles:
+    aglnet.client.enable: 'true'
     endoreg-client.enable: 'true'
   group_services: {}
 gpu_server:
