@@ -1,8 +1,11 @@
 import os
 import subprocess
+from typing import Any
 
 
-def create_openssh_keys(output_dir, key_name="id_rsa", passphrase=None, key_type="rsa"):
+def create_openssh_keys(
+    output_dir, key_name="id_rsa", passphrase=None, key_type="rsa"
+) -> dict[str, Any]:
     """
     Create OpenSSH key pair.
 
@@ -49,3 +52,6 @@ def create_openssh_keys(output_dir, key_name="id_rsa", passphrase=None, key_type
     subprocess.run(cmd, check=True)
 
     return {"private_key": private_key_path, "public_key": public_key_path}
+
+
+x = create_openssh_keys("/tmp", key_name="my_key", key_type="rsa")

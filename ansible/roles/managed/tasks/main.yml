@@ -1,6 +1,6 @@
 ---
-- name: Update Luxnix Production Repository
-  ansible.builtin.include_tasks: "get-luxnix-production-repo.yml"
-
 - name: Include deploy user password tasks
   ansible.builtin.include_tasks: deploy-user-password.yml
+
+- name: Update Luxnix Production Repository
+  ansible.builtin.include_tasks: get-luxnix-production-repo.yml

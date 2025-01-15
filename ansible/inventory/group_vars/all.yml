@@ -11,7 +11,7 @@ ansible_key_source_dir: "{{ luxnix_dev_repo }}/secrets/ansible-vault-keys-source
 
 luxnix_dev_repo: "/home/admin/dev/luxnix"
 luxnix_repo: "https://github.com/wg-lux/luxnix.git"
-luxnix_dest: "/home/admin/luxnix-production"
+luxnix_dest: "/home/admin/lx-production"
 luxnix_branch: "main"
 luxnix_secrets:
 
