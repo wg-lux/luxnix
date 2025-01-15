@@ -1,8 +1,9 @@
 group_roles:
-  endoreg-client.enable: "true"
+  endoreg_client.enable: "true"
   aglnet.client.enable: "true"
 group_services: {}
 group_luxnix:
   nvidia_prime.nvidiaDriver: '"beta"'
   nvidia_prime.enable: "true"
   gpu_eval.enable: "true"
+  boot_decryption_stick.enable: "true"

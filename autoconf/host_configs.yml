@@ -33,7 +33,7 @@ gc-06:
       local_users_passwords_dir: '{{ luxnix_dest }}/secrets/user-passwords/{{ inventory_hostname
         }}'
       luxnix_branch: main
-      luxnix_dest: /home/admin/luxnix-production
+      luxnix_dest: /home/admin/lx-production
       luxnix_dev_repo: /home/admin/dev/luxnix
       luxnix_repo: https://github.com/wg-lux/luxnix.git
       luxnix_secrets: null
@@ -89,6 +89,7 @@ gc-06:
     template_name: main
   hostname: gc-06
   luxnix_configs:
+    boot_decryption_stick.enable: 'true'
     generic_settings.configurationPath: lib.mkForce "/home/admin/dev/luxnix"
     generic_settings.configurationPathRelative: '"lx-production"'
     generic_settings.enable: 'true'
@@ -118,7 +119,7 @@ gc-06:
     custom_packages.office: 'true'
     custom_packages.videoEditing: 'true'
     custom_packages.visuals: 'true'
-    endoreg-client.enable: 'true'
+    endoreg_client.enable: 'true'
   service_configs: {}
   vpn_ip: 172.16.255.106
 gc-07:
@@ -138,16 +139,14 @@ gc-07:
       local_users_passwords_dir: '{{ luxnix_dest }}/secrets/user-passwords/{{ inventory_hostname
         }}'
       luxnix_branch: main
-      luxnix_dest: /home/admin/luxnix-production
+      luxnix_dest: /home/admin/lx-production
       luxnix_dev_repo: /home/admin/dev/luxnix
       luxnix_repo: https://github.com/wg-lux/luxnix.git
       luxnix_secrets: null
       network_conf: *id011
     gpu_client: {}
-    managed: {}
   groups:
     - gpu_client
-    - managed
   host_vars:
     host_luxnix:
       generic_settings.hostPlatform: '"x86_64-linux"'
@@ -180,6 +179,7 @@ gc-07:
     template_name: main
   hostname: gc-07
   luxnix_configs:
+    boot_decryption_stick.enable: 'true'
     generic_settings.configurationPathRelative: '"lx-production"'
     generic_settings.enable: 'true'
     generic_settings.hostPlatform: '"x86_64-linux"'
@@ -202,7 +202,7 @@ gc-07:
     nvidia_prime.onboardGpuType: '"intel"'
   role_configs:
     aglnet.client.enable: 'true'
-    endoreg-client.enable: 'true'
+    endoreg_client.enable: 'true'
   service_configs: {}
   vpn_ip: 172.16.255.107
 gc-08:
@@ -222,7 +222,7 @@ gc-08:
       local_users_passwords_dir: '{{ luxnix_dest }}/secrets/user-passwords/{{ inventory_hostname
         }}'
       luxnix_branch: main
-      luxnix_dest: /home/admin/luxnix-production
+      luxnix_dest: /home/admin/lx-production
       luxnix_dev_repo: /home/admin/dev/luxnix
       luxnix_repo: https://github.com/wg-lux/luxnix.git
       luxnix_secrets: null
@@ -268,6 +268,7 @@ gc-08:
     template_name: main
   hostname: gc-08
   luxnix_configs:
+    boot_decryption_stick.enable: 'true'
     generic_settings.configurationPathRelative: '"lx-production"'
     generic_settings.enable: 'true'
     generic_settings.hostPlatform: '"x86_64-linux"'
@@ -290,7 +291,7 @@ gc-08:
     nvidia_prime.onboardGpuType: '"intel"'
   role_configs:
     aglnet.client.enable: 'true'
-    endoreg-client.enable: 'true'
+    endoreg_client.enable: 'true'
   service_configs: {}
   vpn_ip: 172.16.255.108
 gc-09:
@@ -310,17 +311,15 @@ gc-09:
       local_users_passwords_dir: '{{ luxnix_dest }}/secrets/user-passwords/{{ inventory_hostname
         }}'
       luxnix_branch: main
-      luxnix_dest: /home/admin/luxnix-production
+      luxnix_dest: /home/admin/lx-production
       luxnix_dev_repo: /home/admin/dev/luxnix
       luxnix_repo: https://github.com/wg-lux/luxnix.git
       luxnix_secrets: null
       network_conf: *id011
     gpu_client: {}
-    managed: {}
     test_group: {}
   groups:
     - gpu_client
-    - managed
     - test_group
   host_vars:
     host_luxnix:
@@ -354,6 +353,7 @@ gc-09:
     template_name: main
   hostname: gc-09
   luxnix_configs:
+    boot_decryption_stick.enable: 'true'
     generic_settings.configurationPathRelative: '"lx-production"'
     generic_settings.enable: 'true'
     generic_settings.hostPlatform: '"x86_64-linux"'
@@ -376,7 +376,7 @@ gc-09:
     nvidia_prime.onboardGpuType: '"intel"'
   role_configs:
     aglnet.client.enable: 'true'
-    endoreg-client.enable: 'true'
+    endoreg_client.enable: 'true'
   service_configs: {}
   vpn_ip: 172.16.255.109
 gs-01:
@@ -396,16 +396,14 @@ gs-01:
       local_users_passwords_dir: '{{ luxnix_dest }}/secrets/user-passwords/{{ inventory_hostname
         }}'
       luxnix_branch: main
-      luxnix_dest: /home/admin/luxnix-production
+      luxnix_dest: /home/admin/lx-production
       luxnix_dev_repo: /home/admin/dev/luxnix
       luxnix_repo: https://github.com/wg-lux/luxnix.git
       luxnix_secrets: null
       network_conf: *id011
     gpu_server: {}
-    managed: {}
   groups:
     - gpu_server
-    - managed
   host_vars:
     host_luxnix:
       generic_settings.hostPlatform: '"x86_64-linux"'
@@ -472,17 +470,15 @@ gs-02:
       local_users_passwords_dir: '{{ luxnix_dest }}/secrets/user-passwords/{{ inventory_hostname
         }}'
       luxnix_branch: main
-      luxnix_dest: /home/admin/luxnix-production
+      luxnix_dest: /home/admin/lx-production
       luxnix_dev_repo: /home/admin/dev/luxnix
       luxnix_repo: https://github.com/wg-lux/luxnix.git
       luxnix_secrets: null
       network_conf: *id011
     gpu_server: {}
-    managed: {}
     test_group: {}
   groups:
     - gpu_server
-    - managed
     - test_group
   host_vars:
     host_luxnix:
@@ -555,18 +551,16 @@ s-01:
       local_users_passwords_dir: '{{ luxnix_dest }}/secrets/user-passwords/{{ inventory_hostname
         }}'
       luxnix_branch: main
-      luxnix_dest: /home/admin/luxnix-production
+      luxnix_dest: /home/admin/lx-production
       luxnix_dev_repo: /home/admin/dev/luxnix
       luxnix_repo: https://github.com/wg-lux/luxnix.git
       luxnix_secrets: null
       network_conf: *id011
     base_server: {}
-    managed: {}
     openvpn_host: {}
   groups:
     - openvpn_host
     - base_server
-    - managed
   host_vars:
     generic_settings:
       hostPlatform: x86_64-linux
@@ -659,18 +653,16 @@ s-02:
       local_users_passwords_dir: '{{ luxnix_dest }}/secrets/user-passwords/{{ inventory_hostname
         }}'
       luxnix_branch: main
-      luxnix_dest: /home/admin/luxnix-production
+      luxnix_dest: /home/admin/lx-production
       luxnix_dev_repo: /home/admin/dev/luxnix
       luxnix_repo: https://github.com/wg-lux/luxnix.git
       luxnix_secrets: null
       network_conf: *id011
     base_server: {}
-    managed: {}
     under_development: {}
   groups:
     - under_development
     - base_server
-    - managed
   host_vars:
     ansible_groups:
       - base-server
@@ -809,17 +801,15 @@ s-03:
       local_users_passwords_dir: '{{ luxnix_dest }}/secrets/user-passwords/{{ inventory_hostname
         }}'
       luxnix_branch: main
-      luxnix_dest: /home/admin/luxnix-production
+      luxnix_dest: /home/admin/lx-production
       luxnix_dev_repo: /home/admin/dev/luxnix
       luxnix_repo: https://github.com/wg-lux/luxnix.git
       luxnix_secrets: null
       network_conf: *id011
     base_server: {}
-    managed: {}
     test_group: {}
   groups:
     - base_server
-    - managed
     - test_group
   host_vars:
     host_luxnix:

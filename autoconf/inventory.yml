@@ -23,15 +23,7 @@ main:
   - gc-08 ansible_host
   - gc-09 ansible_host
 managed:
-  - s-01
-  - s-02
-  - s-03
-  - gs-01
-  - gs-02
-  - gc-02
-  - gc-07
   - gc-08
-  - gc-09
 openvpn_host:
   - s-01
 test_group:

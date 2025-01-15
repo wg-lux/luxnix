@@ -36,7 +36,7 @@ all:
   local_users_passwords_dir: '{{ luxnix_dest }}/secrets/user-passwords/{{ inventory_hostname
     }}'
   luxnix_branch: main
-  luxnix_dest: /home/admin/luxnix-production
+  luxnix_dest: /home/admin/lx-production
   luxnix_dev_repo: /home/admin/dev/luxnix
   luxnix_repo: https://github.com/wg-lux/luxnix.git
   luxnix_secrets: null
@@ -48,12 +48,13 @@ base_server:
   group_services: {}
 gpu_client:
   group_luxnix:
+    boot_decryption_stick.enable: 'true'
     gpu_eval.enable: 'true'
     nvidia_prime.enable: 'true'
     nvidia_prime.nvidiaDriver: '"beta"'
   group_roles:
     aglnet.client.enable: 'true'
-    endoreg-client.enable: 'true'
+    endoreg_client.enable: 'true'
   group_services: {}
 gpu_server:
   group_luxnix: {}

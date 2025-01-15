@@ -31,7 +31,9 @@
     };
 
   luxnix = {
-    generic-settings.configurationPath = lib.mkForce "/home/admin/dev/luxnix";
+    boot-decryption-stick.enable = true;
+
+generic-settings.configurationPath = lib.mkForce "/home/admin/dev/luxnix";
 
 generic-settings.configurationPathRelative = "lx-production";
 
