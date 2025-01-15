@@ -1,16 +1,16 @@
-- name: Set role common for all hosts
-  hosts: all,!openvpn_host
-  become: true
-  roles:
-    - common
-    - openvpn_client
+# - name: Set role common for all hosts
+#   hosts: all,!openvpn_host
+#   become: true
+#   roles:
+#     - common
+#     - openvpn_client
 
-- name: Set role openvpn_host for openvpn_host
-  hosts: openvpn_host
-  become: true
-  roles:
-    - common
-    - openvpn_host
+# - name: Set role openvpn_host for openvpn_host
+#   hosts: openvpn_host
+#   become: true
+#   roles:
+#     - common
+#     - openvpn_host
 
 - name: Set role managed for managed hosts
   hosts: managed

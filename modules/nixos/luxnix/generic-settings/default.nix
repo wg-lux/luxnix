@@ -117,7 +117,7 @@ in {
 
     configurationPathRelative = mkOption {
       type = types.str;
-      default = "luxnix-production";
+      default = "lx-production";
       description = ''
         Relative path to the luxnix directory.
       '';
@@ -132,7 +132,7 @@ in {
 
     systemConfigurationPath = mkOption {
       type = types.path;
-      default = "/home/${config.user.admin.name}/${cfg._configurationPathRelative}/systems/x86_64-linux/${hostname}";
+      default = "/home/${config.user.admin.name}/${cfg.configurationPathRelative}/systems/x86_64-linux/${hostname}";
       description = ''
         Path to the systems specif nixos configuration directory.
       '';
