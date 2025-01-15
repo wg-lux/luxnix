@@ -245,8 +245,10 @@ gc-08:
         - sd_mod
       generic_settings.linux.initrd.kernelModules: &id020
         - nfs
+        - btrfs
       generic_settings.linux.initrd.supportedFilesystems: &id021
         - nfs
+        - btrfs
       generic_settings.linux.kernelModules: &id022
         - intel
       generic_settings.linux.kernelModulesBlacklist: &id023 []
@@ -254,6 +256,7 @@ gc-08:
       generic_settings.linux.kernelParams: &id024 []
       generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
       generic_settings.linux.supportedFilesystems: &id025
+        - nfs
         - btrfs
       generic_settings.systemStateVersion: '"23.11"'
       nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'

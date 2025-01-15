@@ -17,8 +17,10 @@ host_luxnix:
     - "intel"
   generic_settings.linux.initrd.supportedFilesystems:
     - "nfs"
+    - "btrfs"
   generic_settings.linux.initrd.kernelModules:
     - "nfs"
+    - "btrfs"
   generic_settings.linux.initrd.availableKernelModules:
     - "vmd"
     - "xhci_pci"
@@ -27,6 +29,7 @@ host_luxnix:
     - "usb_storage"
     - "sd_mod"
   generic_settings.linux.supportedFilesystems:
+    - "nfs"
     - "btrfs"
   generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
   generic_settings.linux.kernelParams: []

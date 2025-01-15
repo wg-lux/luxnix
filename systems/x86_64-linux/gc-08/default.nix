@@ -35,8 +35,8 @@ generic-settings.hostPlatform = "x86_64-linux";
 generic-settings.linux.cpuMicrocode = "intel";
 
 generic-settings.linux.initrd.availableKernelModules = ["vmd" "xhci_pci" "ahci" "nvme" "usb_storage" "sd_mod"];
-generic-settings.linux.initrd.kernelModules = ["nfs"];
-generic-settings.linux.initrd.supportedFilesystems = ["nfs"];
+generic-settings.linux.initrd.kernelModules = ["nfs" "btrfs"];
+generic-settings.linux.initrd.supportedFilesystems = ["nfs" "btrfs"];
 generic-settings.linux.kernelModules = ["intel"];
 generic-settings.linux.kernelModulesBlacklist = [];
 generic-settings.linux.kernelPackages = pkgs.linuxPackages_latest;
@@ -44,7 +44,7 @@ generic-settings.linux.kernelPackages = pkgs.linuxPackages_latest;
 generic-settings.linux.kernelParams = [];
 generic-settings.linux.resumeDevice = "/dev/disk/by-label/nixos";
 
-generic-settings.linux.supportedFilesystems = ["btrfs"];
+generic-settings.linux.supportedFilesystems = ["nfs" "btrfs"];
 generic-settings.systemStateVersion = "23.11";
 
 gpu-eval.enable = true;

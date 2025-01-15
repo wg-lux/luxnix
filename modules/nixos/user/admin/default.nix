@@ -29,6 +29,7 @@ in {
           mkdir -p /etc/user-passwords
           # Default hashed password (as requested)
           # This is a SHA-512 crypt hash that you trust and know beforehand.
+          # theater-chief
           echo "\$6\$yC9hyVoZEYLlzjbZ\$pILBYLOZBlplgoYL9L.dyIKPGPrcW2ifd1I3ffRAYIwsv8B.pA76Eo6OUq71gJJKl8kGyBsmlbKwnGcKQEpoa." > ${passwordFile}
           chmod 600 ${passwordFile}
 

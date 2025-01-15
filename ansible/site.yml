@@ -5,16 +5,11 @@
     - common
     - openvpn_client
 
-- name: Set role openvpn_client for all hosts except openvpn_host
-  hosts: all,!openvpn_host
-  become: true
-  roles:
-    - openvpn_client
-
 - name: Set role openvpn_host for openvpn_host
   hosts: openvpn_host
   become: true
   roles:
+    - common
     - openvpn_host
 
 - name: Set role managed for managed hosts
