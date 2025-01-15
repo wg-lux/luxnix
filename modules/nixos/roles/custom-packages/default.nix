@@ -8,6 +8,13 @@ with lib;
 with lib.luxnix; let
   cfg = config.roles.custom-packages;
 
+  dev01 = [];
+  dev02 = [];
+  dev03 = [
+    obsidian
+    balena-cli
+  ];
+
   kdePlasma = with pkgs; [
     kdePackages.xdg-desktop-portal-kde
     kdePackages.svgpart
@@ -94,7 +101,8 @@ with lib.luxnix; let
     ++ (if cfg.kdePlasma then kdePlasma else [])
     ++ (if cfg.baseDevelopment then baseDevelopment else [])
     ++ (if cfg.office then office else [])
-    ++ (if cfg.visuals then visuals else []);
+    ++ (if cfg.visuals then visuals else [])
+    ;
 
   ldPackages = lib.mkIf cfg.ld.enable (
     ldBase ++ (if cfg.cuda then ldCuda else [])
@@ -108,6 +116,9 @@ in {
     cuda = mkBoolOpt false "Add CUDA packages to custom packages";
     videoEditing = mkBoolOpt false "Add Video Editing packages to custom packages";
     visuals = mkBoolOpt false "Add Visuals packages to custom packages";
+    dev01 = mkBoolOpt false "Add dev01 packages to custom packages";
+    dev02 = mkBoolOpt false "Add dev02 packages to custom packages";
+    dev03 = mkBoolOpt false "Add dev03 packages to custom packages";
     ld = {
       enable = mkBoolOpt true "Enable nix-ld";
     };

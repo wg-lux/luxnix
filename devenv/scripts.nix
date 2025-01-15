@@ -11,7 +11,7 @@
   ac.exec = "devenv tasks run autoconf:finished";
 
   # hi.exec = "${pkgs.uv}/bin/uv run python lx_administration/ansible/hostinfo.py";
-  bnsc.exec = "${pkgs.uv}/bin/uv run python scripts/build-nix-system-configs.py";
+  bnsc.exec = "${pkgs.uv}/bin/uv run python scripts/autoconf-pipeline.py";
   
   run-ansible.exec = "${pkgs.uv}/bin/uv run ansible-playbook ansible/site.yml";
   

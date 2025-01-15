@@ -264,6 +264,10 @@ gc-08:
       nvidia_prime.onboardGpuType: '"intel"'
     host_roles:
       aglnet.client.enable: 'true'
+      custom_packages.baseDevelopment: 'true'
+      custom_packages.cuda: 'true'
+      custom_packages.dev03: 'true'
+      custom_packages.office: 'true'
     host_services: {}
     template_name: main
   hostname: gc-08
@@ -291,6 +295,10 @@ gc-08:
     nvidia_prime.onboardGpuType: '"intel"'
   role_configs:
     aglnet.client.enable: 'true'
+    custom_packages.baseDevelopment: 'true'
+    custom_packages.cuda: 'true'
+    custom_packages.dev03: 'true'
+    custom_packages.office: 'true'
     endoreg_client.enable: 'true'
   service_configs: {}
   vpn_ip: 172.16.255.108

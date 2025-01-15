@@ -52,6 +52,3 @@ def create_openssh_keys(
     subprocess.run(cmd, check=True)
 
     return {"private_key": private_key_path, "public_key": public_key_path}
-
-
-x = create_openssh_keys("/tmp", key_name="my_key", key_type="rsa")

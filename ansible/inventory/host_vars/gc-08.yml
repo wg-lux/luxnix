@@ -4,6 +4,10 @@ template_name: "main"
 
 host_roles:
   aglnet.client.enable: "true"
+  custom_packages.dev03: "true"
+  custom_packages.cuda: "true"
+  custom_packages.office: "true"
+  custom_packages.baseDevelopment: "true"
 
 host_services: {}
 
