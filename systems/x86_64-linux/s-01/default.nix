@@ -21,7 +21,7 @@
     aglnet.client.enable = lib.mkForce false;
     aglnet.host.enable = true;
     base-server.enable = true;
-    endoreg-client.enable = true;
+    endoreg-client.enable = false;
     };
 
   services = {

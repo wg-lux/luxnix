@@ -633,7 +633,7 @@ s-01:
     aglnet.client.enable: lib.mkForce false
     aglnet.host.enable: 'true'
     base_server.enable: 'true'
-    endoreg_client.enable: 'true'
+    endoreg_client.enable: 'false'
   service_configs: {}
   vpn_ip: 172.16.255.1
 s-02:
@@ -719,7 +719,7 @@ s-02:
   role_configs:
     aglnet.client.enable: 'true'
     base_server.enable: 'true'
-    endoreg_client.enable: 'true'
+    endoreg_client.enable: 'false'
   service_configs: {}
   vpn_ip: 172.16.255.12
 s-03:
@@ -802,6 +802,6 @@ s-03:
   role_configs:
     aglnet.client.enable: 'true'
     base_server.enable: 'true'
-    endoreg_client.enable: 'true'
+    endoreg_client.enable: 'false'
   service_configs: {}
   vpn_ip: 172.16.255.13

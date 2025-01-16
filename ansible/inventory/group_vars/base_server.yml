@@ -1,5 +1,5 @@
 group_roles:
-  endoreg_client.enable: "true"
+  endoreg_client.enable: "false"
   aglnet.client.enable: "true"
   base_server.enable: "true"
 group_services: {}

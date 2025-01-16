@@ -20,7 +20,7 @@
   roles = { 
     aglnet.client.enable = true;
     base-server.enable = true;
-    endoreg-client.enable = true;
+    endoreg-client.enable = false;
     };
 
   services = {

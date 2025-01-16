@@ -52,7 +52,7 @@ base_server:
   group_roles:
     aglnet.client.enable: 'true'
     base_server.enable: 'true'
-    endoreg_client.enable: 'true'
+    endoreg_client.enable: 'false'
   group_services: {}
 gpu_client:
   group_luxnix:
