@@ -45,7 +45,7 @@ generic-settings.linux.cpuMicrocode = "intel";
 
 generic-settings.linux.extraModulePackages = [];
 generic-settings.linux.initrd.availableKernelModules = ["vmd" "xhci_pci" "ahci" "nvme" "usb_storage" "sd_mod"];
-generic-settings.linux.initrd.kernelModules = ["dm-snapshot" "nfs"];
+generic-settings.linux.initrd.kernelModules = ["dm-snapshot" "nfs" "btrfs"];
 generic-settings.linux.initrd.supportedFilesystems = ["nfs" "btrfs"];
 generic-settings.linux.kernelModules = ["kvm-intel"];
 generic-settings.linux.kernelModulesBlacklist = [];

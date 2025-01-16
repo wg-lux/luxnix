@@ -45,6 +45,7 @@ gc-06:
     generic_settings.linux.initrd.kernelModules:
       - dm-snapshot
       - nfs
+      - btrfs
     generic_settings.linux.initrd.supportedFilesystems:
       - nfs
       - btrfs
@@ -262,32 +263,6 @@ h-01:
   host_services: {}
   template_name: main
 s-01:
-  generic_settings:
-    hostPlatform: x86_64-linux
-    linux:
-      cpuMicrocode: amd
-      initrd:
-        availableKernelModules:
-          - xhci_pci
-          - uas
-          - ahci
-          - usbhid
-          - nvme
-          - usb_storage
-          - sd_mod
-        kernelModules:
-          - nfs
-        supportedFilesystems:
-          - nfs
-      kernelModules:
-        - kvm-amd
-      kernelModulesBlacklist: []
-      kernelPackages: pkgs.linuxPackages_latest
-      kernelParams: []
-      resumeDevice: /dev/disk/by-label/nixos
-      supportedFilesystems:
-        - btrfs
-    systemStateVersion: '23.11'
   host_luxnix:
     generic_settings.hostPlatform: '"x86_64-linux"'
     generic_settings.linux.cpuMicrocode: '"amd"'
@@ -313,14 +288,15 @@ s-01:
       - btrfs
     generic_settings.systemStateVersion: '"23.11"'
   host_roles:
+    aglnet.client.enable: 'false'
     aglnet.host.enable: 'true'
+    boot_decryption_stick.enable: 'true'
   host_services: {}
   template_name: main
 s-02:
   ansible_groups:
     - base-server
     - aglnet.host
-    - ssh-access.dev-01
     - postgres.main
   host_luxnix:
     generic_settings.hostPlatform: '"x86_64-linux"'
@@ -334,8 +310,10 @@ s-02:
       - sd_mod
     generic_settings.linux.initrd.kernelModules:
       - nfs
+      - btrfs
     generic_settings.linux.initrd.supportedFilesystems:
       - nfs
+      - btrfs
     generic_settings.linux.kernelModules:
       - kvm-intel
     generic_settings.linux.kernelModulesBlacklist: []
@@ -343,49 +321,15 @@ s-02:
     generic_settings.linux.kernelParams: []
     generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
     generic_settings.linux.supportedFilesystems:
+      - nfs
       - btrfs
     generic_settings.systemStateVersion: '"23.11"'
-  host_roles:
-    aglnet.client.enable: 'true'
-    base-server.enable: 'true'
-    postgres.main.authentication: '#type database                  DBuser                      address                     auth-method         optional_ident_map
-
-      local sameuser                  all                                                     peer                map=superuser_map
-
-      host  all                       all                172.16.255.106/32          scram-sha-256
-      map=superuser_map
-
-      host  replication               ${config.postgres.main.replUser}    172.16.255.106/32          scram-sha-256
-
-      host  ${config.postgres.main.devUser}            ${config.postgres.main.devUser}     172.16.255.106/32          scram-sha-256
-
-      '
-    postgres.main.enable: 'true'
-    postgres.main.identMap: '# ArbitraryMapName systemUser DBUser
-
-      superuser_map      root      postgres
-
-      superuser_map      root      ${config.postgres.main.replUser}
-
-      superuser_map      ${config.user.admin.name}     ${config.user.admin.name}
-
-      superuser_map      ${config.user.admin.name}     endoregClient
-
-      superuser_map      postgres  postgres
-
-
-      # Let other names login as themselves
-
-      superuser_map      /^(.*)$   \1
-
-      '
-    ssh-access.dev-01.enable: 'true'
-    ssh-access.dev-01.idEd25519: '"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK"'
+  host_roles: {}
   host_services: {}
   template_name: main
 s-03:
   host_luxnix:
-    generic_settings: null
+    generic_settings.enable: 'true'
     generic_settings.hostPlatform: '"x86_64-linux"'
     generic_settings.linux.cpuMicrocode: '"amd"'
     generic_settings.linux.initrd.availableKernelModules:
@@ -397,8 +341,10 @@ s-03:
       - sd_mod
     generic_settings.linux.initrd.kernelModules:
       - nfs
+      - btrfs
     generic_settings.linux.initrd.supportedFilesystems:
       - nfs
+      - btrfs
     generic_settings.linux.kernelModules:
       - kvm-amd
     generic_settings.linux.kernelModulesBlacklist: []
@@ -406,9 +352,9 @@ s-03:
     generic_settings.linux.kernelParams: []
     generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
     generic_settings.linux.supportedFilesystems:
+      - nfs
       - btrfs
     generic_settings.systemStateVersion: '"23.11"'
-  host_roles:
-    aglnet.client.enable: 'true'
+  host_roles: {}
   host_services: {}
   template_name: main

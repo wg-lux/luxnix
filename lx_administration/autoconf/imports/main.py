@@ -124,8 +124,6 @@ def merge_host_group_vars(host_configs, host, group, group_vars, logger=None):
 
 def merge_host_vars(host_config, host_vars):
     # make deep copy of host_config
-    verbose = False
-
     host_config = host_config.copy()
     host_vars = host_vars.copy()
 
@@ -134,22 +132,9 @@ def merge_host_vars(host_config, host_vars):
         if key not in host_config:
             host_config[key] = {}
 
-    if verbose:
-        print("------------merge_host_vars------------")
-        pp = pprint.PrettyPrinter(indent=2)
-        print("host_config:")
-        pp.pprint(host_config)
-
-        print("\n\nhost_vars:")
-        pp.pprint(host_vars)
-
     _host_roles = host_vars.pop("host_roles", {})
     _host_services = host_vars.pop("host_services", {})
     _host_luxnix = host_vars.pop("host_luxnix", {})
-
-    # merge dicts
-    if verbose:
-        print("Merging host_vars with host_config")
 
     host_config["role_configs"] = deep_update(host_config["role_configs"], _host_roles)
     host_config["service_configs"] = deep_update(

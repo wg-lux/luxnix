@@ -35,6 +35,7 @@ host_luxnix:
   generic_settings.linux.initrd.kernelModules:
     - "dm-snapshot"
     - "nfs"
+    - "btrfs"
   generic_settings.linux.initrd.availableKernelModules:
     - "vmd"
     - "xhci_pci"

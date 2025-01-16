@@ -10,32 +10,9 @@ template_name: "main"
 ansible_groups:
   - "base-server"
   - "aglnet.host"
-  - "ssh-access.dev-01"
   - "postgres.main"
 
-host_roles:
-  aglnet.client.enable: "true"
-  base-server.enable: "true"
-  ssh-access.dev-01.enable: "true"
-  ssh-access.dev-01.idEd25519: '"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK"'
-  postgres.main.enable: "true"
-  postgres.main.authentication: |
-    #type database                  DBuser                      address                     auth-method         optional_ident_map
-    local sameuser                  all                                                     peer                map=superuser_map
-    host  all                       all                172.16.255.106/32          scram-sha-256 map=superuser_map
-    host  replication               ${config.postgres.main.replUser}    172.16.255.106/32          scram-sha-256
-    host  ${config.postgres.main.devUser}            ${config.postgres.main.devUser}     172.16.255.106/32          scram-sha-256
-  postgres.main.identMap: |
-    # ArbitraryMapName systemUser DBUser
-    superuser_map      root      postgres
-    superuser_map      root      ${config.postgres.main.replUser}
-    superuser_map      ${config.user.admin.name}     ${config.user.admin.name}
-    superuser_map      ${config.user.admin.name}     endoregClient
-    superuser_map      postgres  postgres
-
-    # Let other names login as themselves
-    superuser_map      /^(.*)$   \1
-
+host_roles: {}
 host_services: {}
 
 host_luxnix:
@@ -49,8 +26,10 @@ host_luxnix:
     - "kvm-intel"
   generic_settings.linux.initrd.supportedFilesystems:
     - "nfs"
+    - "btrfs"
   generic_settings.linux.initrd.kernelModules:
     - "nfs"
+    - "btrfs"
   generic_settings.linux.initrd.availableKernelModules:
     - "xhci_pci"
     - "ahci"
@@ -59,7 +38,27 @@ host_luxnix:
     - "usb_storage"
     - "sd_mod"
   generic_settings.linux.supportedFilesystems:
+    - "nfs"
     - "btrfs"
   generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
   generic_settings.linux.kernelParams: []
   generic_settings.linux.kernelModulesBlacklist: []
+  # ssh-access.dev-01.enable: "true"
+  # ssh-access.dev-01.idEd25519: '"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK"'
+  # postgres.main.enable: "true"
+  # postgres.main.authentication: |
+  #   #type database                  DBuser                      address                     auth-method         optional_ident_map
+  #   local sameuser                  all                                                     peer                map=superuser_map
+  #   host  all                       all                172.16.255.106/32          scram-sha-256 map=superuser_map
+  #   host  replication               ${config.postgres.main.replUser}    172.16.255.106/32          scram-sha-256
+  #   host  ${config.postgres.main.devUser}            ${config.postgres.main.devUser}     172.16.255.106/32          scram-sha-256
+  # postgres.main.identMap: |
+  #   # ArbitraryMapName systemUser DBUser
+  #   superuser_map      root      postgres
+  #   superuser_map      root      ${config.postgres.main.replUser}
+  #   superuser_map      ${config.user.admin.name}     ${config.user.admin.name}
+  #   superuser_map      ${config.user.admin.name}     endoregClient
+  #   superuser_map      postgres  postgres
+
+  #   # Let other names login as themselves
+  #   superuser_map      /^(.*)$   \1
