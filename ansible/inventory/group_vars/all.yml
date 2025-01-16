@@ -3,6 +3,7 @@
 group_roles: {}
 group_services: {}
 group_luxnix:
+  ansible.enable: "true"
   generic_settings.enable: "true"
   generic_settings.configurationPathRelative: '"lx-production"'
 
