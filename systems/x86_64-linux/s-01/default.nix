@@ -28,7 +28,9 @@
     };
 
   luxnix = {
-    boot-decryption-stick.enable = true;
+    ansible.enable = true;
+
+boot-decryption-stick.enable = true;
 
 generic-settings.configurationPathRelative = "lx-production";
 
@@ -50,6 +52,8 @@ generic-settings.linux.resumeDevice = "/dev/disk/by-label/nixos";
 
 generic-settings.linux.supportedFilesystems = ["btrfs"];
 generic-settings.systemStateVersion = "23.11";
+
+nvidia-prime.enable = false;
 
 };
 }

@@ -174,6 +174,7 @@ gc-09:
   template_name: main
 gs-01:
   host_luxnix:
+    boot_decryption_stick_gs_01.enable: 'true'
     generic_settings.hostPlatform: '"x86_64-linux"'
     generic_settings.linux.cpuMicrocode: '"amd"'
     generic_settings.linux.initrd.availableKernelModules:
@@ -197,12 +198,12 @@ gs-01:
     generic_settings.linux.supportedFilesystems:
       - btrfs
     generic_settings.systemStateVersion: '"23.11"'
-  host_roles:
-    aglnet.client.enable: 'true'
+  host_roles: {}
   host_services: {}
   template_name: main
 gs-02:
   host_luxnix:
+    boot_decryption_stick_gs_01.enable: 'true'
     generic_settings.hostPlatform: '"x86_64-linux"'
     generic_settings.linux.cpuMicrocode: '"amd"'
     generic_settings.linux.initrd.availableKernelModules:
@@ -226,11 +227,8 @@ gs-02:
     generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
     generic_settings.linux.supportedFilesystems:
       - btrfs
-    generic_settings.primary_group: gpu_server
     generic_settings.systemStateVersion: '"23.11"'
-    generic_settings.template_name: gpu-server
-  host_roles:
-    aglnet.client.enable: 'true'
+  host_roles: {}
   host_services: {}
   template_name: main
 h-01:

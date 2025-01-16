@@ -31,6 +31,7 @@ all:
     dev_03:
       id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos
   group_luxnix:
+    ansible.enable: 'true'
     generic_settings.configurationPathRelative: '"lx-production"'
     generic_settings.enable: 'true'
   group_roles: {}
@@ -47,9 +48,10 @@ all:
 base_server:
   group_luxnix:
     boot_decryption_stick.enable: 'true'
+    nvidia_prime.enable: 'false'
   group_roles:
     aglnet.client.enable: 'true'
-    base-server.enable: 'true'
+    base_server.enable: 'true'
     endoreg_client.enable: 'true'
   group_services: {}
 gpu_client:
@@ -64,7 +66,10 @@ gpu_client:
   group_services: {}
 gpu_server:
   group_luxnix: {}
-  group_roles: {}
+  group_roles:
+    aglnet.client.enable: 'true'
+    base-server.enable: 'true'
+    endoreg_client.enable: 'true'
   group_services: {}
 hetzner_server:
   group_luxnix: {}

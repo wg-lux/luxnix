@@ -92,6 +92,7 @@ gc-06:
     template_name: main
   hostname: gc-06
   luxnix_configs:
+    ansible.enable: 'true'
     boot_decryption_stick.enable: 'true'
     generic_settings.configurationPath: lib.mkForce "/home/admin/dev/luxnix"
     generic_settings.configurationPathRelative: '"lx-production"'
@@ -182,6 +183,7 @@ gc-07:
     template_name: main
   hostname: gc-07
   luxnix_configs:
+    ansible.enable: 'true'
     boot_decryption_stick.enable: 'true'
     generic_settings.configurationPathRelative: '"lx-production"'
     generic_settings.enable: 'true'
@@ -275,6 +277,7 @@ gc-08:
     template_name: main
   hostname: gc-08
   luxnix_configs:
+    ansible.enable: 'true'
     boot_decryption_stick.enable: 'true'
     generic_settings.configurationPathRelative: '"lx-production"'
     generic_settings.enable: 'true'
@@ -364,6 +367,7 @@ gc-09:
     template_name: main
   hostname: gc-09
   luxnix_configs:
+    ansible.enable: 'true'
     boot_decryption_stick.enable: 'true'
     generic_settings.configurationPathRelative: '"lx-production"'
     generic_settings.enable: 'true'
@@ -417,6 +421,7 @@ gs-01:
     - gpu_server
   host_vars:
     host_luxnix:
+      boot_decryption_stick_gs_01.enable: 'true'
       generic_settings.hostPlatform: '"x86_64-linux"'
       generic_settings.linux.cpuMicrocode: '"amd"'
       generic_settings.linux.initrd.availableKernelModules: &id033
@@ -440,12 +445,13 @@ gs-01:
       generic_settings.linux.supportedFilesystems: &id039
         - btrfs
       generic_settings.systemStateVersion: '"23.11"'
-    host_roles:
-      aglnet.client.enable: 'true'
+    host_roles: {}
     host_services: {}
     template_name: main
   hostname: gs-01
   luxnix_configs:
+    ansible.enable: 'true'
+    boot_decryption_stick_gs_01.enable: 'true'
     generic_settings.configurationPathRelative: '"lx-production"'
     generic_settings.enable: 'true'
     generic_settings.hostPlatform: '"x86_64-linux"'
@@ -462,6 +468,8 @@ gs-01:
     generic_settings.systemStateVersion: '"23.11"'
   role_configs:
     aglnet.client.enable: 'true'
+    base-server.enable: 'true'
+    endoreg_client.enable: 'true'
   service_configs: {}
   vpn_ip: 172.16.255.21
 gs-02:
@@ -493,6 +501,7 @@ gs-02:
     - test_group
   host_vars:
     host_luxnix:
+      boot_decryption_stick_gs_01.enable: 'true'
       generic_settings.hostPlatform: '"x86_64-linux"'
       generic_settings.linux.cpuMicrocode: '"amd"'
       generic_settings.linux.initrd.availableKernelModules: &id040
@@ -516,15 +525,14 @@ gs-02:
       generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
       generic_settings.linux.supportedFilesystems: &id046
         - btrfs
-      generic_settings.primary_group: gpu_server
       generic_settings.systemStateVersion: '"23.11"'
-      generic_settings.template_name: gpu-server
-    host_roles:
-      aglnet.client.enable: 'true'
+    host_roles: {}
     host_services: {}
     template_name: main
   hostname: gs-02
   luxnix_configs:
+    ansible.enable: 'true'
+    boot_decryption_stick_gs_01.enable: 'true'
     generic_settings.configurationPathRelative: '"lx-production"'
     generic_settings.enable: 'true'
     generic_settings.hostPlatform: '"x86_64-linux"'
@@ -538,11 +546,11 @@ gs-02:
     generic_settings.linux.kernelParams: *id045
     generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
     generic_settings.linux.supportedFilesystems: *id046
-    generic_settings.primary_group: gpu_server
     generic_settings.systemStateVersion: '"23.11"'
-    generic_settings.template_name: gpu-server
   role_configs:
     aglnet.client.enable: 'true'
+    base-server.enable: 'true'
+    endoreg_client.enable: 'true'
   service_configs: {}
   vpn_ip: 172.16.255.22
 s-01:
@@ -604,6 +612,7 @@ s-01:
     template_name: main
   hostname: s-01
   luxnix_configs:
+    ansible.enable: 'true'
     boot_decryption_stick.enable: 'true'
     generic_settings.configurationPathRelative: '"lx-production"'
     generic_settings.enable: 'true'
@@ -619,10 +628,11 @@ s-01:
     generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
     generic_settings.linux.supportedFilesystems: *id053
     generic_settings.systemStateVersion: '"23.11"'
+    nvidia_prime.enable: 'false'
   role_configs:
     aglnet.client.enable: 'false'
     aglnet.host.enable: 'true'
-    base-server.enable: 'true'
+    base_server.enable: 'true'
     endoreg_client.enable: 'true'
   service_configs: {}
   vpn_ip: 172.16.255.1
@@ -689,6 +699,7 @@ s-02:
     template_name: main
   hostname: s-02
   luxnix_configs:
+    ansible.enable: 'true'
     boot_decryption_stick.enable: 'true'
     generic_settings.configurationPathRelative: '"lx-production"'
     generic_settings.enable: 'true'
@@ -704,9 +715,10 @@ s-02:
     generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
     generic_settings.linux.supportedFilesystems: *id060
     generic_settings.systemStateVersion: '"23.11"'
+    nvidia_prime.enable: 'false'
   role_configs:
     aglnet.client.enable: 'true'
-    base-server.enable: 'true'
+    base_server.enable: 'true'
     endoreg_client.enable: 'true'
   service_configs: {}
   vpn_ip: 172.16.255.12
@@ -770,6 +782,7 @@ s-03:
     template_name: main
   hostname: s-03
   luxnix_configs:
+    ansible.enable: 'true'
     boot_decryption_stick.enable: 'true'
     generic_settings.configurationPathRelative: '"lx-production"'
     generic_settings.enable: 'true'
@@ -785,9 +798,10 @@ s-03:
     generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
     generic_settings.linux.supportedFilesystems: *id067
     generic_settings.systemStateVersion: '"23.11"'
+    nvidia_prime.enable: 'false'
   role_configs:
     aglnet.client.enable: 'true'
-    base-server.enable: 'true'
+    base_server.enable: 'true'
     endoreg_client.enable: 'true'
   service_configs: {}
   vpn_ip: 172.16.255.13

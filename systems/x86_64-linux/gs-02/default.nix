@@ -19,13 +19,19 @@
 
   roles = { 
     aglnet.client.enable = true;
+    base-server.enable = true;
+    endoreg-client.enable = true;
     };
 
   services = {
     };
 
   luxnix = {
-    generic-settings.configurationPathRelative = "lx-production";
+    ansible.enable = true;
+
+boot-decryption-stick-gs-01.enable = true;
+
+generic-settings.configurationPathRelative = "lx-production";
 
 generic-settings.enable = true;
 
@@ -44,11 +50,7 @@ generic-settings.linux.kernelParams = [];
 generic-settings.linux.resumeDevice = "/dev/disk/by-label/nixos";
 
 generic-settings.linux.supportedFilesystems = ["btrfs"];
-generic-settings.primary-group = gpu_server;
-
 generic-settings.systemStateVersion = "23.11";
-
-generic-settings.template-name = gpu-server;
 
 };
 }

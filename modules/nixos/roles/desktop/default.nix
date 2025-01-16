@@ -23,6 +23,8 @@ in {
         plasma.enable = true;
       };
       custom-packages.baseDevelopment = true;
+      custom-packages.kdePlasma = true;
+      custom-packages.office = true;
     };
 
     hardware = {

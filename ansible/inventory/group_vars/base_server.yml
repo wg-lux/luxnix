@@ -1,7 +1,8 @@
 group_roles:
   endoreg_client.enable: "true"
   aglnet.client.enable: "true"
-  base-server.enable: "true"
+  base_server.enable: "true"
 group_services: {}
 group_luxnix:
+  nvidia_prime.enable: "false"
   boot_decryption_stick.enable: "true"

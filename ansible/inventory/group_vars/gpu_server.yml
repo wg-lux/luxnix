@@ -1,3 +1,6 @@
-group_roles: {}
+group_roles:
+  endoreg_client.enable: "true"
+  aglnet.client.enable: "true"
+  base-server.enable: "true"
 group_services: {}
 group_luxnix: {}
