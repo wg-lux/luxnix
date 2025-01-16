@@ -600,7 +600,6 @@ s-01:
     host_roles:
       aglnet.client.enable: 'false'
       aglnet.host.enable: 'true'
-      boot_decryption_stick.enable: 'true'
     host_services: {}
     template_name: main
   hostname: s-01
@@ -624,7 +623,6 @@ s-01:
     aglnet.client.enable: 'false'
     aglnet.host.enable: 'true'
     base-server.enable: 'true'
-    boot_decryption_stick.enable: 'true'
     endoreg_client.enable: 'true'
   service_configs: {}
   vpn_ip: 172.16.255.1

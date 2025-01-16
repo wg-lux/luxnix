@@ -21,7 +21,6 @@
     aglnet.client.enable = false;
     aglnet.host.enable = true;
     base-server.enable = true;
-    boot-decryption-stick.enable = true;
     endoreg-client.enable = true;
     };
 

@@ -290,7 +290,6 @@ s-01:
   host_roles:
     aglnet.client.enable: 'false'
     aglnet.host.enable: 'true'
-    boot_decryption_stick.enable: 'true'
   host_services: {}
   template_name: main
 s-02:
