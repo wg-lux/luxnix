@@ -606,7 +606,7 @@ s-01:
         - btrfs
       generic_settings.systemStateVersion: '"23.11"'
     host_roles:
-      aglnet.client.enable: 'false'
+      aglnet.client.enable: lib.mkForce false
       aglnet.host.enable: 'true'
     host_services: {}
     template_name: main
@@ -630,7 +630,7 @@ s-01:
     generic_settings.systemStateVersion: '"23.11"'
     nvidia_prime.enable: 'false'
   role_configs:
-    aglnet.client.enable: 'false'
+    aglnet.client.enable: lib.mkForce false
     aglnet.host.enable: 'true'
     base_server.enable: 'true'
     endoreg_client.enable: 'true'

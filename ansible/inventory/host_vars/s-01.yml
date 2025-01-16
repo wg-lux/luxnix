@@ -3,7 +3,7 @@
 template_name: "main"
 
 host_roles:
-  aglnet.client.enable: "false"
+  aglnet.client.enable: "lib.mkForce false"
   aglnet.host.enable: "true"
 
 host_services: {}

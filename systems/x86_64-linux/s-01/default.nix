@@ -18,7 +18,7 @@
   };
 
   roles = { 
-    aglnet.client.enable = false;
+    aglnet.client.enable = lib.mkForce false;
     aglnet.host.enable = true;
     base-server.enable = true;
     endoreg-client.enable = true;
