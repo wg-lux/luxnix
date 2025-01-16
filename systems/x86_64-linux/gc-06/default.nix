@@ -31,9 +31,7 @@
     };
 
   luxnix = {
-    ansible.enable = true;
-
-boot-decryption-stick.enable = true;
+    boot-decryption-stick.enable = true;
 
 generic-settings.configurationPath = lib.mkForce "/home/admin/dev/luxnix";
 

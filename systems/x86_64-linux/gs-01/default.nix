@@ -27,9 +27,7 @@
     };
 
   luxnix = {
-    ansible.enable = true;
-
-boot-decryption-stick-gs-01.enable = true;
+    boot-decryption-stick-gs-01.enable = true;
 
 generic-settings.configurationPathRelative = "lx-production";
 
