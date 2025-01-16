@@ -605,6 +605,7 @@ s-01:
     template_name: main
   hostname: s-01
   luxnix_configs:
+    boot_decryption_stick.enable: 'true'
     generic_settings.configurationPathRelative: '"lx-production"'
     generic_settings.enable: 'true'
     generic_settings.hostPlatform: '"x86_64-linux"'
@@ -690,6 +691,7 @@ s-02:
     template_name: main
   hostname: s-02
   luxnix_configs:
+    boot_decryption_stick.enable: 'true'
     generic_settings.configurationPathRelative: '"lx-production"'
     generic_settings.enable: 'true'
     generic_settings.hostPlatform: '"x86_64-linux"'
@@ -707,7 +709,6 @@ s-02:
   role_configs:
     aglnet.client.enable: 'true'
     base-server.enable: 'true'
-    boot_decryption_stick.enable: 'true'
     endoreg_client.enable: 'true'
   service_configs: {}
   vpn_ip: 172.16.255.12
@@ -771,6 +772,7 @@ s-03:
     template_name: main
   hostname: s-03
   luxnix_configs:
+    boot_decryption_stick.enable: 'true'
     generic_settings.configurationPathRelative: '"lx-production"'
     generic_settings.enable: 'true'
     generic_settings.hostPlatform: '"x86_64-linux"'
@@ -788,7 +790,6 @@ s-03:
   role_configs:
     aglnet.client.enable: 'true'
     base-server.enable: 'true'
-    boot_decryption_stick.enable: 'true'
     endoreg_client.enable: 'true'
   service_configs: {}
   vpn_ip: 172.16.255.13

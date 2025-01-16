@@ -45,11 +45,11 @@ all:
   network_conf:
     domain: endo-reg.net
 base_server:
-  group_luxnix: {}
+  group_luxnix:
+    boot_decryption_stick.enable: 'true'
   group_roles:
     aglnet.client.enable: 'true'
     base-server.enable: 'true'
-    boot_decryption_stick.enable: 'true'
     endoreg_client.enable: 'true'
   group_services: {}
 gpu_client:

@@ -29,7 +29,9 @@
     };
 
   luxnix = {
-    generic-settings.configurationPathRelative = "lx-production";
+    boot-decryption-stick.enable = true;
+
+generic-settings.configurationPathRelative = "lx-production";
 
 generic-settings.enable = true;
 
