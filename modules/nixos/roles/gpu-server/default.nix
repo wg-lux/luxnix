@@ -22,6 +22,7 @@ in {
     roles = {
       aglnet.client.enable = true;
       base-server.enable = true;
+      custom-packages.cuda = true;
     };
     
     # cli.programs.nix-ld = {
