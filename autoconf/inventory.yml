@@ -4,6 +4,7 @@ base_server:
   - s-03
 gpu_client:
   - gc-02
+  - gc-05
   - gc-06
   - gc-07
   - gc-08
@@ -18,6 +19,7 @@ main:
   - gs-01 ansible_host
   - gs-02 ansible_host
   - gc-02 ansible_host
+  - gc-05 ansible_host
   - gc-06 ansible_host
   - gc-07 ansible_host
   - gc-08 ansible_host

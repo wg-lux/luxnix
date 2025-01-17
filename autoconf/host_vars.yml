@@ -28,6 +28,37 @@ gc-02:
     aglnet.client.enable: 'true'
   host_services: {}
   template_name: main
+gc-05:
+  host_luxnix:
+    generic_settings.hostPlatform: '"x86_64-linux"'
+    generic_settings.linux.cpuMicrocode: '"intel"'
+    generic_settings.linux.initrd.availableKernelModules:
+      - xhci_pci
+      - ahci
+      - nvme
+      - usbhid
+      - usb_storage
+      - sd_mod
+    generic_settings.linux.initrd.kernelModules:
+      - nfs
+    generic_settings.linux.initrd.supportedFilesystems:
+      - nfs
+    generic_settings.linux.kernelModules:
+      - kvm-intel
+    generic_settings.linux.kernelModulesBlacklist: []
+    generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
+    generic_settings.linux.kernelParams: []
+    generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+    generic_settings.linux.supportedFilesystems:
+      - btrfs
+    generic_settings.systemStateVersion: '"23.11"'
+    nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
+    nvidia_prime.onboardBusId: '"PCI:0:2:0"'
+    nvidia_prime.onboardGpuType: '"intel"'
+  host_roles:
+    aglnet.client.enable: 'true'
+  host_services: {}
+  template_name: main
 gc-06:
   ansible_python_interpreter: '{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python'
   host_luxnix:
@@ -216,9 +247,11 @@ gs-02:
       - sd_mod
     generic_settings.linux.initrd.kernelModules:
       - nfs
+      - btrfs
       - dm-snapshot
     generic_settings.linux.initrd.supportedFilesystems:
       - nfs
+      - btrfs
     generic_settings.linux.kernelModules:
       - kvm-amd
     generic_settings.linux.kernelModulesBlacklist: []
@@ -226,6 +259,7 @@ gs-02:
     generic_settings.linux.kernelParams: []
     generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
     generic_settings.linux.supportedFilesystems:
+      - nfs
       - btrfs
     generic_settings.systemStateVersion: '"23.11"'
   host_roles: {}

@@ -64,11 +64,11 @@ gpu_client:
     endoreg_client.enable: 'true'
   group_services: {}
 gpu_server:
-  group_luxnix: {}
+  group_luxnix:
+    nvidia_default.enable: 'true'
   group_roles:
     aglnet.client.enable: 'true'
     base-server.enable: 'true'
-    endoreg_client.enable: 'true'
   group_services: {}
 hetzner_server:
   group_luxnix: {}

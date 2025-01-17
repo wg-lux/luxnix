@@ -1,6 +1,6 @@
 group_roles:
-  endoreg_client.enable: "true"
   aglnet.client.enable: "true"
   base-server.enable: "true"
 group_services: {}
-group_luxnix: {}
+group_luxnix:
+  nvidia_default.enable: "true"
