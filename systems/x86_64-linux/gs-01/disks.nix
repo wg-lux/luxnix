@@ -118,7 +118,12 @@
                     };
                     "/swap" = {
                       mountpoint = "/swap";
-                      swap.swapfile.size = "16G";
+                      mountOptions = [
+                        "subvol=swap"
+                        "noatime"
+                        "nodatacow"
+                      ];
+                      swap.swapfile.size = "64G";
                     };
                   };
                 };
