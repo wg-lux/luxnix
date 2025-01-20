@@ -31,7 +31,9 @@ authentication:
   dev_02: {}
   dev_03:
     id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos
-group_luxnix: {}
+group_luxnix:
+  ansible.enable: 'true'
+  generic_settings.enable: 'true'
 group_roles: {}
 group_services: {}
 host_luxnix:

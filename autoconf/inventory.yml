@@ -170,7 +170,6 @@ all:
   - ansible_group_names:
       - all
       - gpu_server
-      - managed
     ansible_host: 172.16.255.21
     ansible_role_names: []
     facts:
@@ -228,7 +227,6 @@ all:
       - all
       - gpu_server
       - test_group
-      - managed
     ansible_host: 172.16.255.22
     ansible_role_names: []
     facts:
@@ -381,7 +379,6 @@ all:
       - all
       - gpu_client
       - test_group
-      - managed
     ansible_host: 172.16.255.106
     ansible_role_names: []
     facts:
@@ -609,7 +606,9 @@ groups:
         dev_02: {}
         dev_03:
           id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos
-      group_luxnix: {}
+      group_luxnix:
+        ansible.enable: 'true'
+        generic_settings.enable: 'true'
       group_roles: {}
       group_services: {}
       local_users_passwords_dir: '{{ luxnix_dest }}/secrets/user-passwords/{{ inventory_hostname

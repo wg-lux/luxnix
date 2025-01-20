@@ -4,7 +4,9 @@ ansible_groups:
   - "common"
 group_roles: {}
 group_services: {}
-group_luxnix: {}
+group_luxnix:
+  generic_settings.enable: "true"
+  ansible.enable: "true"
 
 ansible_key_dir: "{{ luxnix_dest }}/secrets/ansible-vault-keys"
 ansible_key_source_dir: "{{ luxnix_dev_repo }}/secrets/ansible-vault-keys-source"
