@@ -15,6 +15,17 @@ class AnsibleInventoryHost(BaseModel):
     files: List[str] = []
     facts: Optional[AnsibleFactsModel] = None
 
+    def _order_group_names(self):
+        # TODO harden
+        # make sure "all" is in ansible_group_names and is at first index, if not add it
+        if "all" not in self.ansible_group_names:
+            self.ansible_group_names.insert(0, "all")
+
+        # make sure that "openvpn_host" is last if it is in ansible_group_names
+        if "openvpn_host" in self.ansible_group_names:
+            self.ansible_group_names.remove("openvpn_host")
+            self.ansible_group_names.append("openvpn_host")
+
     def validate_ansible_host(self):
         if not self.ansible_host:
             raise ValueError("ansible_host is required")

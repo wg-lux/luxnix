@@ -14,7 +14,8 @@ def ansible_lint_and_format(file: Path):
     import subprocess
     from ruamel.yaml import YAML
 
-    yaml_parser = YAML()
+    yaml_parser = YAML(typ="rt")
+    yaml_parser.preserve_quotes = True
     with open(file, "r") as fr:
         data = yaml_parser.load(fr)
 

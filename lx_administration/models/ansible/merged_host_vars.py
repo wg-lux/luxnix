@@ -22,6 +22,8 @@ def _dictkey_replace_underscore_keys(
         if not nix_key == transformed_key:
             logger.info(f"Transforming key {nix_key} to {transformed_key}")
             transformed_config_data[transformed_key] = value
+        else:
+            transformed_config_data[nix_key] = config_data[nix_key]
 
     return transformed_config_data
 
@@ -64,14 +66,37 @@ class MergedHostVars(BaseModel):
 
         return mergerd_vars
 
+    def _is_aglnet_host(self):
+        is_aglnet_host = False
+        for role_name in self.group_roles.keys():
+            if "aglnet.host" in role_name:
+                if self.group_roles[role_name] == "true":
+                    is_aglnet_host = True
+                    break
+        return is_aglnet_host
+
     def prepare_roles(self):
         from lx_administration.autoconf.imports.utils import deep_update
 
+        is_aglnet_host = self._is_aglnet_host()
+
         role_configs = {}
 
+        print("-----")
+        print("preparing roles")
+
+        import pprint
+
+        pp = pprint.PrettyPrinter(indent=4)
         # merge group_roles and host_roles
         role_configs = deep_update(role_configs, self.group_roles)
+
+        pp.pprint("After merging group_roles")
+        pp.pprint(role_configs)
+
         role_configs = deep_update(role_configs, self.host_roles)
+        pp.pprint("After merging group_roles and host_roles")
+        pp.pprint(role_configs)
 
         role_configs = _dictkey_replace_underscore_keys(role_configs)
 

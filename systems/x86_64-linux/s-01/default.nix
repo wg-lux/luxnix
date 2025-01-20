@@ -18,6 +18,8 @@
   };
 
   roles = { 
+    aglnet.client.enable = lib.mkForce false;
+    aglnet.host.enable = true;
     base-server.enable = true;
     endoreg-client.enable = false;
     };
@@ -26,7 +28,9 @@
     };
 
   luxnix = {
-    boot-decryption-stick.enable = true;
+    ansible.enable = true;
+
+boot-decryption-stick.enable = true;
 
 generic-settings.enable = true;
 

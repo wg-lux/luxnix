@@ -170,6 +170,7 @@ all:
   - ansible_group_names:
       - all
       - gpu_server
+      - managed
     ansible_host: 172.16.255.21
     ansible_role_names: []
     facts:
@@ -227,6 +228,7 @@ all:
       - all
       - gpu_server
       - test_group
+      - managed
     ansible_host: 172.16.255.22
     ansible_role_names: []
     facts:
