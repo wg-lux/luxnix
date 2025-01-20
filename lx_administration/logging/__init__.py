@@ -9,7 +9,9 @@ def log_heading(logger, heading):
     logger.info("-" * 80)
 
 
-def get_logger(name, log_dir: Path = Path("./autoconf/logs"), reset=False):
+def get_logger(
+    name, log_dir: Path = Path("./autoconf/logs"), reset=False, log_level=logging.INFO
+):
     log_dir.mkdir(exist_ok=True)
 
     logfile = log_dir / f"{name}.log"
@@ -21,7 +23,7 @@ def get_logger(name, log_dir: Path = Path("./autoconf/logs"), reset=False):
     logger.setLevel(logging.DEBUG)
 
     file_handler = logging.FileHandler(logfile)
-    file_handler.setLevel(logging.INFO)
+    file_handler.setLevel(log_level)
     formatter = logging.Formatter(
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )

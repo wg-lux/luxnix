@@ -42,6 +42,7 @@ in
   enterShell = ''
     . .devenv/state/venv/bin/activate
     uv pip install -e .
+    python -m unittest
     hello
   '';
 

@@ -204,6 +204,8 @@ gc-09:
   host_services: {}
   template_name: main
 gs-01:
+  ansible_roles:
+    - dev-01-access
   host_luxnix:
     boot_decryption_stick_gs_01.enable: 'true'
     generic_settings.hostPlatform: '"x86_64-linux"'

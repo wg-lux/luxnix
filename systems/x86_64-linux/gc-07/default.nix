@@ -1,4 +1,4 @@
-# gc-07/default.nix
+# /default.nix
 
 { config, pkgs, lib, modulesPath, ... }:
 
@@ -18,17 +18,13 @@
   };
 
   roles = { 
-    aglnet.client.enable = true;
-    endoreg-client.enable = true;
     };
 
   services = {
     };
 
   luxnix = {
-    boot-decryption-stick.enable = true;
-
-generic-settings.configurationPathRelative = "lx-production";
+    generic-settings.configurationPathRelative = "lx-production";
 
 generic-settings.enable = true;
 
@@ -49,13 +45,7 @@ generic-settings.linux.resumeDevice = "/dev/disk/by-label/nixos";
 generic-settings.linux.supportedFilesystems = ["btrfs"];
 generic-settings.systemStateVersion = "23.11";
 
-gpu-eval.enable = true;
-
-nvidia-prime.enable = true;
-
 nvidia-prime.nvidiaBusId = "PCI:1:0:0";
-
-nvidia-prime.nvidiaDriver = "beta";
 
 nvidia-prime.onboardBusId = "PCI:0:2:0";
 

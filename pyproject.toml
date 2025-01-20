@@ -22,6 +22,7 @@ dependencies = [
     "jinja2>=3.1.5",
     "pyyaml>=6.0.2",
     "arsenal-cli>=1.2.7",
+    "ruamel-yaml>=0.18.10",
 ]
 
 [tool.setuptools]

@@ -1,4 +1,4 @@
-# s-02/default.nix
+# /default.nix
 
 { config, pkgs, lib, modulesPath, ... }:
 
@@ -18,22 +18,13 @@
   };
 
   roles = { 
-    aglnet.client.enable = true;
-    base-server.enable = true;
-    endoreg-client.enable = false;
     };
 
   services = {
     };
 
   luxnix = {
-    boot-decryption-stick.enable = true;
-
-generic-settings.configurationPathRelative = "lx-production";
-
-generic-settings.enable = true;
-
-generic-settings.hostPlatform = "x86_64-linux";
+    generic-settings.hostPlatform = "x86_64-linux";
 
 generic-settings.linux.cpuMicrocode = "intel";
 
@@ -49,8 +40,6 @@ generic-settings.linux.resumeDevice = "/dev/disk/by-label/nixos";
 
 generic-settings.linux.supportedFilesystems = ["nfs" "btrfs"];
 generic-settings.systemStateVersion = "23.11";
-
-nvidia-prime.enable = false;
 
 };
 }

@@ -13,6 +13,7 @@
 
   packages = with pkgs; [
     cudaPackages.cuda_nvcc
+    jq
     age
     openssh
     stdenv.cc.cc

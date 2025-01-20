@@ -18,6 +18,7 @@ in {
     roles = {
       desktop.enable = true;
       custom-packages.cuda = true;
+      aglnet.client.enable = true;
     };
 
     luxnix.nvidia-prime.enable = true;

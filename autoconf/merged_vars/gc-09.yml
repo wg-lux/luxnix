@@ -1,0 +1,74 @@
+admin_password_file: '{{ local_users_passwords_dir }}/admin_raw'
+admin_password_file_source: '{{ luxnix_dev_repo }}/secrets/user-passwords/{{ inventory_hostname
+  }}/admin_raw'
+aglnet_conf:
+  backupNameservers:
+    - 8.8.8.8
+    - 1.1.1.1
+  caPath: /etc/openvpn/ca.pem
+  clientConfigDir: /etc/openvpn/ccd
+  dhPath: /etc/openvpn/dh.pem
+  domain: '{{ network_conf.domain }}'
+  serverCertPath: /etc/openvpn/crt.crt
+  serverKeyPath: /etc/openvpn/key.key
+  subnet: 172.16.255.0
+  subnetIntern: 255.255.255.0
+  subnetSuffix: '32'
+  tlsAuthPath: /etc/openvpn/tls.pem
+ansible_become_user: admin
+ansible_groups:
+  - common
+ansible_key_dir: '{{ luxnix_dest }}/secrets/ansible-vault-keys'
+ansible_key_source_dir: '{{ luxnix_dev_repo }}/secrets/ansible-vault-keys-source'
+ansible_python_interpreter: '{{ luxnix_dest }}/.devenv/state/venv/bin/python'
+ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+ansible_user: admin
+authentication:
+  agl_admin:
+    id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM7vvbgQtzi4GNeugHSuMyEke4MY0bSfoU7cBOnRYU8M
+  dev_01:
+    id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK
+  dev_02: {}
+  dev_03:
+    id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos
+group_luxnix: {}
+group_roles: {}
+group_services: {}
+host_luxnix:
+  generic_settings.hostPlatform: '"x86_64-linux"'
+  generic_settings.linux.cpuMicrocode: '"intel"'
+  generic_settings.linux.initrd.availableKernelModules:
+    - xhci_pci
+    - ahci
+    - nvme
+    - usb_storage
+    - sd_mod
+  generic_settings.linux.initrd.kernelModules:
+    - nfs
+  generic_settings.linux.initrd.supportedFilesystems:
+    - nfs
+  generic_settings.linux.kernelModules:
+    - kvm-intel
+  generic_settings.linux.kernelModulesBlacklist: []
+  generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
+  generic_settings.linux.kernelParams: []
+  generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+  generic_settings.linux.supportedFilesystems:
+    - btrfs
+  generic_settings.systemStateVersion: '"23.11"'
+  nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
+  nvidia_prime.onboardBusId: '"PCI:0:2:0"'
+  nvidia_prime.onboardGpuType: '"intel"'
+host_roles:
+  aglnet.client.enable: 'true'
+host_services: {}
+local_users_passwords_dir: '{{ luxnix_dest }}/secrets/user-passwords/{{ inventory_hostname
+  }}'
+luxnix_branch: main
+luxnix_dest: /home/admin/lx-production
+luxnix_dev_repo: /home/admin/dev/luxnix
+luxnix_repo: https://github.com/wg-lux/luxnix.git
+luxnix_secrets:
+network_conf:
+  domain: endo-reg.net
+template_name: main

@@ -6,7 +6,16 @@ common:
   vars: null
 dev-01-access:
   files: []
-  vars: null
+  vars:
+    host_roles:
+      ssh_access.dev_01.enable: 'true'
+      ssh_access.dev_01.idEd25519: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK
+dev-03-access:
+  files: []
+  vars:
+    host_roles:
+      ssh_access.dev_03.enable: 'true'
+      ssh_access.dev_03.idEd25519: '"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos"'
 keycloak_host:
   files: []
   vars: null

@@ -1,0 +1,4 @@
+- autoconf/main:pipe
+  - autoconf/imports/main:pipe
+    - autoconf/imports/main:ansible_etl
+  - autoconf/nix/main:pipe

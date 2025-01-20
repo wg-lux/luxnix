@@ -5,10 +5,14 @@ mkdir -p ./ansible/cmdb
 mkdir -p ./docs/hostinfo/html
 
 ansible -m setup --tree ansible/cmdb/ all
-ansible-cmdb -t markdown ansible/cmdb/ > docs/luxnix-hostinfo.md
+# ansible-cmdb -t markdown ansible/cmdb/ > docs/luxnix-hostinfo.md
 
-ansible-cmdb -t html_fancy_split ansible/cmdb/
-ansible-cmdb -t json ansible/cmdb/ > conf/hostinfo.json
-# mv ./ansible/cmdb/*.html ./docs/hostinfo/html
+# Rename all files in the cmdb directory to have the .json extension
+for f in ./ansible/cmdb/*; do
+    mv -- "$f" "${f%}.json"
+done
 
-cd .."
+for f in ./ansible/cmdb/*.json; do
+    ansible-lint "$f"
+    jq '.' "$f" > tmp.$$.json && mv tmp.$$.json "$f"
+done

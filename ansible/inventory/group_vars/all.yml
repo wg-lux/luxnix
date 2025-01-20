@@ -1,10 +1,10 @@
 # inventory/group_vars/all.yml
 ---
+ansible_groups:
+  - "common"
 group_roles: {}
 group_services: {}
-group_luxnix:
-  generic_settings.enable: "true"
-  generic_settings.configurationPathRelative: '"lx-production"'
+group_luxnix: {}
 
 ansible_key_dir: "{{ luxnix_dest }}/secrets/ansible-vault-keys"
 ansible_key_source_dir: "{{ luxnix_dev_repo }}/secrets/ansible-vault-keys-source"
@@ -27,7 +27,7 @@ admin_password_file_source: "{{ luxnix_dev_repo }}/secrets/user-passwords/{{ inv
 authentication:
   dev_01:
     id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK
-  dev_02: {}
+  dev_02: {} # Add gc-05 pubkey here
   dev_03:
     id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos
   agl_admin:

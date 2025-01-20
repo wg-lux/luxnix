@@ -12,13 +12,11 @@ def pipe(
     conf_parent: Path = Path("./conf"),
 ):
     logger = get_logger("autoconf_main_pipe", reset=True)
-    etl_result = etl_pipe(
+    _inventory = etl_pipe(
         ansible_root, autoconf_out, subnet="172.16.255.0", logger=logger
     )
-    host_facts, inventory, host_configs, roles, group_vars, host_vars = etl_result
-
     nix_pipe(
-        autoconf_out,
+        autoconf_out=autoconf_out,
         nix_template_dir=conf_parent / "nix-templates",
         nix_out=nix_out,
         logger=logger,

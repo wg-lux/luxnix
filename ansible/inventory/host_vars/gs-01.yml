@@ -2,6 +2,10 @@
 ---
 template_name: "main"
 
+ansible_roles:
+  - "dev-01-access"
+  - "dev-03-access"
+
 host_roles: {}
 
 host_services: {}

@@ -1,1 +1,92 @@
-{}
+gc-06:
+  all_ipv4_addresses:
+    - 172.16.255.106
+    - 192.168.0.115
+    - 192.168.0.235
+  bios:
+    date: 07/23/2024
+    vendor: American Megatrends International, LLC.
+    version: E17L5IMS.117
+  current_date: "2025-01-17T12:45:53Z"
+  default_ipv4:
+    address: 192.168.0.235
+    gateway: 192.168.0.1
+    interface: enp3s0
+    netmask: 255.255.255.0
+  machine: x86_64
+gs-01:
+  all_ipv4_addresses:
+    - 172.16.255.21
+    - 192.168.0.230
+    - 169.254.3.1
+  bios:
+    date: 03/22/2023
+    vendor: American Megatrends International, LLC.
+    version: "1.4"
+  current_date: "2025-01-17T12:45:54Z"
+  default_ipv4:
+    address: 192.168.0.230
+    gateway: 192.168.0.1
+    interface: eno1np1
+    netmask: 255.255.255.0
+  machine: x86_64
+gs-02:
+  all_ipv4_addresses:
+    - 172.16.255.22
+    - 192.168.0.56
+  bios:
+    date: 11/12/2024
+    vendor: American Megatrends International, LLC.
+    version: F4g
+  current_date: "2025-01-17T12:45:53Z"
+  default_ipv4:
+    address: 192.168.0.56
+    gateway: 192.168.0.1
+    interface: enp15s0
+    netmask: 255.255.255.0
+  machine: x86_64
+s-01:
+  all_ipv4_addresses:
+    - 172.16.255.1
+    - 192.168.179.1
+  bios:
+    date: 06/21/2023
+    vendor: American Megatrends International, LLC.
+    version: "0.22"
+  current_date: "2025-01-17T12:45:52Z"
+  default_ipv4:
+    address: 192.168.179.1
+    gateway: 192.168.178.1
+    interface: eno1
+    netmask: 255.255.0.0
+  machine: x86_64
+s-02:
+  all_ipv4_addresses:
+    - 172.16.255.12
+    - 192.168.179.2
+  bios:
+    date: 07/13/2023
+    vendor: American Megatrends International, LLC.
+    version: "5.19"
+  current_date: "2025-01-17T12:45:52Z"
+  default_ipv4:
+    address: 192.168.179.2
+    gateway: 192.168.178.1
+    interface: enp2s0
+    netmask: 255.255.0.0
+  machine: x86_64
+s-03:
+  all_ipv4_addresses:
+    - 192.168.1.24
+    - 172.16.255.13
+  bios:
+    date: 06/21/2023
+    vendor: American Megatrends International, LLC.
+    version: "0.22"
+  current_date: "2025-01-17T12:45:56Z"
+  default_ipv4:
+    address: 192.168.1.24
+    gateway: 192.168.178.1
+    interface: wlp3s0
+    netmask: 255.255.0.0
+  machine: x86_64
