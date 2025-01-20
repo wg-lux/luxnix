@@ -28,9 +28,7 @@
     };
 
   luxnix = {
-    generic-settings.configurationPathRelative = "lx-production";
-
-generic-settings.enable = true;
+    generic-settings.enable = true;
 
 generic-settings.hostPlatform = "x86_64-linux";
 

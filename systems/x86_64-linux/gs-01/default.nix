@@ -24,7 +24,11 @@
     };
 
   luxnix = {
-    boot-decryption-stick-gs-01.enable = true;
+    generic-settings.enable = true;
+
+nvidia-default.enable = true;
+
+boot-decryption-stick-gs-01.enable = true;
 
 generic-settings.hostPlatform = "x86_64-linux";
 

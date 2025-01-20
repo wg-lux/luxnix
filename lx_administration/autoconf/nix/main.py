@@ -78,15 +78,10 @@ def pipe(
             export = False
 
         if export:
-            if hostname == "gc-06":
-                import pprint
-
-                pprint.pprint(merged_vars.export_host_config())
-
-                generate_default_nix(
-                    hostname,
-                    merged_vars,
-                    nix_template_dir=nix_template_dir,
-                    out_dir=nix_out,
-                    logger=logger,
-                )
+            generate_default_nix(
+                hostname,
+                merged_vars,
+                nix_template_dir=nix_template_dir,
+                out_dir=nix_out,
+                logger=logger,
+            )

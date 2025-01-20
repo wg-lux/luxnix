@@ -18,13 +18,19 @@
   };
 
   roles = { 
+    base-server.enable = true;
+    endoreg-client.enable = false;
     };
 
   services = {
     };
 
   luxnix = {
-    generic-settings.enable = true;
+    boot-decryption-stick.enable = true;
+
+generic-settings.enable = true;
+
+nvidia-prime.enable = false;
 
 generic-settings.hostPlatform = "x86_64-linux";
 

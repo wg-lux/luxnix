@@ -128,7 +128,6 @@ class AnsibleInventory(BaseModel):
 
     def export_merged_host_vars(self, hostname: str):
         from lx_administration.autoconf.imports.utils import deep_update
-        import pprint
 
         # self.update_hosts_group_vars()
         host = self.get_host_by_name(hostname)
@@ -153,25 +152,11 @@ class AnsibleInventory(BaseModel):
                     group_names = group_names + new_group_names
 
         group_vars = {}
-        if hostname == "gc-06":
-            print("----" * 10)
-            print("export_merged_host_vars")
         for group_name in group_names:
             group = self.get_group_by_name(group_name)
             group_vars = deep_update(group_vars, group.vars)
-            if hostname == "gc-06":
-                print(group_name)
-                pprint.pprint(group.vars)
-                pprint.pprint(group_vars)
 
         merged_vars = deep_update(group_vars, host.vars)
-
-        import pprint
-
-        if hostname == "gc-06":
-            pprint.pprint("----" * 10)
-            pprint.pprint("export_merged_host_vars")
-            pprint.pprint(merged_vars)
 
         return merged_vars
 
