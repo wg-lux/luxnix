@@ -26,9 +26,6 @@ def generate_default_nix(
     out_dir=Path("./tmp"),
     logger=None,
 ) -> None:
-    # pretty print config data
-    # pp = pprint.PrettyPrinter(indent=4)
-
     if not logger:
         logger = get_logger("generate_default_nix", reset=True)
 
@@ -40,10 +37,6 @@ def generate_default_nix(
     host_platform = merged_vars.get_host_platform()
 
     exported_host_config = merged_vars.export_host_config()
-
-    import pprint
-
-    pprint.pprint(exported_host_config)
 
     default_nix = render_nix_template(
         template_dir, "default.nix.j2", exported_host_config
@@ -71,26 +64,21 @@ def pipe(
         hostname = merged_vars_file.stem
         merged_vars = MergedHostVars.load_from_file(merged_vars_file)
 
-        if hostname == "s-01":
-            import pprint
+        try:
+            _host_platform = merged_vars.get_host_platform()
+            export = True
 
-            pprint.pprint(merged_vars)
+        except Exception as e:
+            logger.warning(
+                f"Failed to get host platform for {hostname}: {e}; Skipping empty host"
+            )
+            export = False
 
-            try:
-                _host_platform = merged_vars.get_host_platform()
-                export = True
-
-            except Exception as e:
-                logger.warning(
-                    f"Failed to get host platform for {hostname}: {e}; Skipping empty host"
-                )
-                export = False
-
-            if export:
-                generate_default_nix(
-                    hostname,
-                    merged_vars,
-                    nix_template_dir=nix_template_dir,
-                    out_dir=nix_out,
-                    logger=logger,
-                )
+        if export:
+            generate_default_nix(
+                hostname,
+                merged_vars,
+                nix_template_dir=nix_template_dir,
+                out_dir=nix_out,
+                logger=logger,
+            )

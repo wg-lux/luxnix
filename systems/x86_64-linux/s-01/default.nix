@@ -28,9 +28,7 @@
     };
 
   luxnix = {
-    ansible.enable = true;
-
-boot-decryption-stick.enable = true;
+    boot-decryption-stick.enable = true;
 
 generic-settings.enable = true;
 

@@ -18,6 +18,7 @@
   };
 
   roles = { 
+    aglnet.client.enable = true;
     custom-packages.baseDevelopment = true;
     custom-packages.cuda = true;
     custom-packages.dev03 = true;

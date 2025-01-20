@@ -18,6 +18,7 @@
   };
 
   roles = { 
+    aglnet.client.enable = true;
     };
 
   services = {

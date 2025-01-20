@@ -18,6 +18,7 @@
   };
 
   roles = { 
+    aglnet.client.enable = true;
     endoreg-client.enable = true;
     custom-packages.baseDevelopment = true;
     custom-packages.cuda = true;
@@ -30,7 +31,9 @@
     };
 
   luxnix = {
-    boot-decryption-stick.enable = true;
+    ansible.enable = true;
+
+boot-decryption-stick.enable = true;
 
 generic-settings.configurationPathRelative = "lx-production";
 
