@@ -5,12 +5,12 @@ from pathlib import Path
 from lx_administration.logging import get_logger
 import shutil
 import os
+from lx_administration.yaml import dump_yaml, format_yaml, ansible_lint
+
+
+from ..ansible import AnsibleInventory
 
 OWNER_TYPES = ["local", "roles", "services", "luxnix", "clients"]
-
-
-class Vault(BaseModel):
-    name: str
 
 
 def generate_ansible_key(key_path: Path, encryption_key_path: Optional[Path] = None):
@@ -172,19 +172,74 @@ def _get_by_name(obj_list: List[Union[Secret, AccessKey]], name: str, logger=Non
         return None
 
 
-class Vaults(BaseModel):
+def _resolve_home(path: str) -> str:
+    if not path.startswith("~/"):
+        return path
+
+    else:
+        return Path(path).expanduser().as_posix()
+
+
+class Vault(BaseModel):
     secrets: List[Secret] = []
     access_keys: List[AccessKey] = []
+    dir: str = "~/.lxv/"
+    key: str = "~/.lxv.key"
+    inventory: Optional[AnsibleInventory] = None
 
-    def save_to_file(self, file: str):
+    @classmethod
+    def _get_vault_paths(cls, dir: str, key: str):
+        dir = Path(dir).expanduser()
+        key = Path(key).expanduser()
+        vault = dir / "vault.yml"
+        return dir, key, vault
+
+    @classmethod
+    def load_dir(cls, dir: str = "~/.lxv/", key: str = "~/.lxv.key"):
+        import yaml
+
+        dir, key, vault_file = cls._get_vault_paths(dir, key)
+
+        if not dir.exists():
+            raise FileNotFoundError(f"Directory {dir} does not exist!")
+
+        if not vault_file.exists():
+            raise FileNotFoundError(f"File {vault_file} does not exist!")
+
+        with open(vault_file, "r") as f:
+            data = yaml.load(f, Loader=yaml.SafeLoader)
+        vault = cls.model_validate(data)
+        return vault
+
+    @classmethod
+    def load_or_create(cls, dir: str = "~/.lxv/", key: str = "~/.lxv.key"):
+        dir, key, vault_file = cls._get_vault_paths(dir, key)
+
+        if not vault_file.exists():
+            print("No vault file found. Creating new vault.")
+            vault = cls()
+            vault.save_to_file(vault_file)
+
+        else:
+            vault = cls.load_dir(dir, key)
+
+    def save_to_file(self, file: str = None):
         """dump as yml"""
-        from lx_administration.utils import dump_yaml
+        if not file:
+            file = Path(self.dir) / "vault.yml"
+        else:  # make sure the directory exists
+            file = Path(file)
+
+        file: Path = file.expanduser()
+
+        if not file.parent.exists():
+            file.parent.mkdir(parents=True)
 
         raw = self.model_dump(
             mode="python",
         )
-        with open(file, "w") as f:
-            f.write(raw)
+        file = Path(file)
+        dump_yaml(raw, file, format_yaml, ansible_lint)
 
     # Utility Methods:
     def get_access_key_by_name(self, name: str, logger=None):

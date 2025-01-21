@@ -1,5 +1,6 @@
 
-{
+{pkgs,...}: {
+
   "initialize-environment:endoreg-db" = {
     description = "Initialize endoreg-db by running tasks 'endoreg-db:init' and 'endoreg-db:migrate'";
     # Trigger endoreg-db:init and endoreg-db:migrate
@@ -16,11 +17,15 @@
       description = "Generate conf/hostinfo.json; Generates hostinfo @ ./docs/hostinfo (summary markdown; html split by host)";
       exec = "./scripts/ansible-cmdb.sh";
     };
+  "autoconf:initialize-vault" = {
+      description = "Initialize vault";
+      exec = "${pkgs.uv}/bin/uv run python scripts/bootstrap-lx-vault.py";
+  };
 
   "autoconf:build-nix-system-configs" = {
       description = "Build nix system configs";
       exec = "bnsc";
-      after = [ "autoconf:generate-hostinfo"];
+      # after = [ "autoconf:generate-hostinfo"];
     };
 
   # devenv run tasks autoconf:finished

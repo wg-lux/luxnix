@@ -30,6 +30,7 @@ def ansible_lint(file: Path):
 def dump_yaml(data, file: Path, format_func=format_yaml, lint_func=None):
     with open(file, "w") as f:
         yaml.dump(data, f, indent=2)
+
     if format_func:
         format_func(file)
 

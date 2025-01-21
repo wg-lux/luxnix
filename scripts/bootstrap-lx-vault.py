@@ -5,9 +5,7 @@ from lx_administration.models import Vault
 
 def main():
     vault = Vault()  # ...you may specify custom paths or arguments if needed...
-    _hosts = vault.bootstrap_hosts()
-
-    vault.sync()
+    vault.load_or_create()
 
 
 if __name__ == "__main__":
