@@ -35,8 +35,8 @@ in {
   };
 
   #TODO Documentation
-  #  unit-nixos-upgrade.timer
-  # sudo systemctl status unit-script-nixos-upgrade-start
+  # sudo systemctl status nixos-upgrade.timer
+  # sudo systemctl status nixos-upgrade.service
   # unit-script-nixos-upgrade-start
   # nixos-upgrade.timer
   # 
@@ -51,8 +51,8 @@ in {
       ];
       dates = cfg.dates;
       operation = cfg.operation;
-      fixedRandomDelay = false;
-      # randomizedDelaySec = "30min";
+      fixedRandomDelay = true;
+      randomizedDelaySec = "30min";
       allowReboot = true;
     };
   };

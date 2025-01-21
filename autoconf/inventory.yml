@@ -632,7 +632,7 @@ groups:
     vars:
       group_luxnix:
         boot_decryption_stick.enable: 'true'
-        maintenance.autoUpdates.dates: '"09:05"'
+        maintenance.autoUpdates.dates: '"04:00"'
         maintenance.autoUpdates.enable: 'true'
         maintenance.autoUpdates.flake: '"github:wg-lux/luxnix"'
         nvidia_prime.enable: 'false'
@@ -645,6 +645,10 @@ groups:
     name: gpu_server
     vars:
       group_luxnix:
+        maintenance.autoUpdates.dates: '"06:00"'
+        maintenance.autoUpdates.enable: 'true'
+        maintenance.autoUpdates.flake: '"github:wg-lux/luxnix"'
+        maintenance.autoUpdates.operation: '"update"'
         nvidia_default.enable: 'true'
       group_roles:
         aglnet.client.enable: 'true'
@@ -658,6 +662,10 @@ groups:
         generic_settings.configurationPathRelative: '"lx-production"'
         generic_settings.enable: 'true'
         gpu_eval.enable: 'true'
+        maintenance.autoUpdates.dates: '"09:00"'
+        maintenance.autoUpdates.enable: 'true'
+        maintenance.autoUpdates.flake: '"github:wg-lux/luxnix"'
+        maintenance.autoUpdates.operation: '"update"'
         nvidia_prime.enable: 'true'
         nvidia_prime.nvidiaDriver: '"beta"'
       group_roles:

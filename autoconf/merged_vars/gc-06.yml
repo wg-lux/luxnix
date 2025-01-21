@@ -36,6 +36,10 @@ group_luxnix:
   generic_settings.configurationPathRelative: '"lx-production"'
   generic_settings.enable: 'true'
   gpu_eval.enable: 'true'
+  maintenance.autoUpdates.dates: '"09:00"'
+  maintenance.autoUpdates.enable: 'true'
+  maintenance.autoUpdates.flake: '"github:wg-lux/luxnix"'
+  maintenance.autoUpdates.operation: '"update"'
   nvidia_prime.enable: 'true'
   nvidia_prime.nvidiaDriver: '"beta"'
 group_roles:

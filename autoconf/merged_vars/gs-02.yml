@@ -33,6 +33,10 @@ authentication:
     id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos
 group_luxnix:
   generic_settings.enable: 'true'
+  maintenance.autoUpdates.dates: '"06:00"'
+  maintenance.autoUpdates.enable: 'true'
+  maintenance.autoUpdates.flake: '"github:wg-lux/luxnix"'
+  maintenance.autoUpdates.operation: '"update"'
   nvidia_default.enable: 'true'
 group_roles:
   aglnet.client.enable: 'true'

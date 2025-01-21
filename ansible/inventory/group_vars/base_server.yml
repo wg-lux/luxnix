@@ -8,4 +8,4 @@ group_luxnix:
   boot_decryption_stick.enable: "true"
   maintenance.autoUpdates.enable: "true"
   maintenance.autoUpdates.flake: '"github:wg-lux/luxnix"'
-  maintenance.autoUpdates.dates: '"09:05"'
+  maintenance.autoUpdates.dates: '"04:00"'

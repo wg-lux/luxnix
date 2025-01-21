@@ -32,7 +32,7 @@
 
 generic-settings.enable = true;
 
-maintenance.autoUpdates.dates = "09:05";
+maintenance.autoUpdates.dates = "04:00";
 
 maintenance.autoUpdates.enable = true;
 

@@ -39,6 +39,14 @@ generic-settings.enable = true;
 
 gpu-eval.enable = true;
 
+maintenance.autoUpdates.dates = "09:00";
+
+maintenance.autoUpdates.enable = true;
+
+maintenance.autoUpdates.flake = "github:wg-lux/luxnix";
+
+maintenance.autoUpdates.operation = "update";
+
 nvidia-prime.enable = true;
 
 nvidia-prime.nvidiaDriver = "beta";

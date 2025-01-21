@@ -9,3 +9,8 @@ group_luxnix:
   gpu_eval.enable: "true"
   boot_decryption_stick.enable: "true"
   generic_settings.configurationPathRelative: '"lx-production"'
+
+  maintenance.autoUpdates.enable: "true"
+  maintenance.autoUpdates.operation: '"update"'
+  maintenance.autoUpdates.flake: '"github:wg-lux/luxnix"'
+  maintenance.autoUpdates.dates: '"09:00"'

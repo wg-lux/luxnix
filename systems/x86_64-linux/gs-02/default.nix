@@ -28,6 +28,14 @@
   luxnix = {
     generic-settings.enable = true;
 
+maintenance.autoUpdates.dates = "06:00";
+
+maintenance.autoUpdates.enable = true;
+
+maintenance.autoUpdates.flake = "github:wg-lux/luxnix";
+
+maintenance.autoUpdates.operation = "update";
+
 nvidia-default.enable = true;
 
 boot-decryption-stick-gs-01.enable = true;
