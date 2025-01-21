@@ -8,7 +8,7 @@ import warnings
 
 from lx_administration.logging import log_heading, get_logger
 from lx_administration.models import MergedHostVars
-from lx_administration.autoconf.imports.utils import ansible_lint_and_format
+from lx_administration.yaml.dump import dump_yaml, ansible_lint, format_yaml
 
 
 def ansible_etl(ansible_root: Path, autoconf_out: Path, subnet: str, logger=None):
@@ -53,17 +53,19 @@ def ansible_etl(ansible_root: Path, autoconf_out: Path, subnet: str, logger=None
 
     for host in inventory.all:
         merged_vars = inventory.export_merged_host_vars(host.hostname)
-        with open(merged_vars_out / f"{host.hostname}.yml", "w") as f:
-            yaml.dump(merged_vars, f, indent=2)
-
-        print(f"ansible_lint_and_format({merged_vars_out / f'{host.hostname}.yml'})")
-        ansible_lint_and_format(merged_vars_out / f"{host.hostname}.yml")
 
         # validate merged_vars
         try:
             MergedHostVars(**merged_vars)
         except Exception as e:
             warnings.warn(f"Invalid merged_vars for {host.hostname}: {e}")
+
+        dump_yaml(
+            merged_vars,
+            merged_vars_out / f"{host.hostname}.yml",
+            format_yaml,
+            # ansible_lint,
+        )
 
     #     host_configs[host] = merged_config
     inventory.save_to_file(autoconf_out / "inventory.yml")

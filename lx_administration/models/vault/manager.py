@@ -159,6 +159,54 @@ class Secret(BaseModel):
         pass
 
 
+def _get_by_name(obj_list: List[Union[Secret, AccessKey]], name: str, logger=None):
+    if not logger:
+        logger = get_logger("lx_vault__get_by_name")
+    objs = [obj for obj in obj_list if obj.name == name]
+    if not len(objs) <= 1:
+        logger.warning(f"Found more than one object: {len(objs)}")
+
+    if objs:
+        return objs[0]
+    else:
+        return None
+
+
 class Vaults(BaseModel):
     secrets: List[Secret] = []
     access_keys: List[AccessKey] = []
+
+    def save_to_file(self, file: str):
+        """dump as yml"""
+        from lx_administration.utils import dump_yaml
+
+        raw = self.model_dump(
+            mode="python",
+        )
+        with open(file, "w") as f:
+            f.write(raw)
+
+    # Utility Methods:
+    def get_access_key_by_name(self, name: str, logger=None):
+        if not logger:
+            logger = get_logger("Vaults-get_access_key_by_name", reset=True)
+
+        key = _get_by_name(self.access_keys, name, logger)
+        return key
+
+    def get_or_create_key(
+        self,
+        name: str,
+        owner_type: str,
+        local_vault_key: str,
+        vault_dir="~/.lxv/",
+        logger=None,
+    ):
+        if not logger:
+            logger = get_logger("Vaults-get_or_create_key", reset=True)
+
+        key = AccessKey.get_or_create(
+            name, owner_type, local_vault_key, vault_dir, logger
+        )
+        self.access_keys.append(key)
+        return key

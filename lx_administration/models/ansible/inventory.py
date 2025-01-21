@@ -4,6 +4,7 @@ from pathlib import Path
 from lx_administration.logging import log_heading, get_logger  #
 from .facts import AnsibleFactsModel
 from lx_administration.models.ansible.merged_host_vars import MergedHostVars
+from lx_administration.yaml import dump_yaml, ansible_lint, format_yaml
 
 
 class AnsibleInventoryHost(BaseModel):
@@ -138,7 +139,7 @@ class AnsibleInventory(BaseModel):
 
         return inventory
 
-    def export_merged_host_vars(self, hostname: str):
+    def export_merged_host_vars(self, hostname: str) -> Dict:
         from lx_administration.autoconf.imports.utils import deep_update
 
         # self.update_hosts_group_vars()
@@ -173,25 +174,15 @@ class AnsibleInventory(BaseModel):
         return merged_vars
 
     def save_to_file(self, inventory_file: Path = Path("./autoconf/inventory.yml")):
-        import yaml
-        from lx_administration.autoconf.imports.utils import ansible_lint_and_format
-
-        # save as yml file to (./autoconf/inventory.yml)
-        with open(inventory_file, "w") as f:
-            yaml.dump(self.model_dump(mode="python"), f, indent=2)
-
-        ansible_lint_and_format(inventory_file)
+        dump_yaml(
+            self.model_dump(mode="python"),
+            inventory_file,
+            format_func=format_yaml,
+            lint_func=ansible_lint,
+        )
 
     def hostname_update_ansible_facts(self, hostname: str, facts: AnsibleFactsModel):
         self.get_host_by_name(hostname).update_facts(facts)
-
-    # def update_hosts_group_vars(self):
-    #     from lx_administration.autoconf.imports.utils import deep_update
-
-    #     for host in self.all:
-    #         for group_name in host.ansible_group_names:
-    #             group = self.get_group_by_name(group_name)
-    #             group.vars = deep_update(group.vars, host.vars)
 
     def group_name_exists(self, group_name: str):
         return any(group_name in group.name for group in self.groups)

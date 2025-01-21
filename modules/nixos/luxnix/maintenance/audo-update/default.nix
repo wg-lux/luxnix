@@ -37,10 +37,6 @@ in {
   #TODO Documentation
   # sudo systemctl status nixos-upgrade.timer
   # sudo systemctl status nixos-upgrade.service
-  # unit-script-nixos-upgrade-start
-  # nixos-upgrade.timer
-  # 
-  #  unit-nixos-upgrade.service 
 
   config = mkIf cfg.enable {
     system.autoUpgrade = {

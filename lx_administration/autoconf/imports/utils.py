@@ -10,22 +10,6 @@ def _load_config(config_path: Path) -> dict:
         return yaml.safe_load(f)
 
 
-def ansible_lint_and_format(file: Path):
-    import subprocess
-    from ruamel.yaml import YAML
-
-    yaml_parser = YAML(typ="rt")
-    yaml_parser.preserve_quotes = True
-    with open(file, "r") as fr:
-        data = yaml_parser.load(fr)
-
-    yaml_parser.indent(mapping=2, sequence=4, offset=2)
-    with open(file, "w") as fw:
-        yaml_parser.dump(data, fw)
-
-    subprocess.run(["ansible-lint", file])
-
-
 def deep_update(dict1, dict2):
     dict1 = dict1.copy()
     dict2 = dict2.copy()
