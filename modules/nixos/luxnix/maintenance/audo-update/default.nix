@@ -16,7 +16,7 @@ in {
     
     date = mkOption {
       type = with types; string;
-      default = "08:46";
+      default = "08:49";
       description = "The time of day to perform the system upgrade";
     };
 
@@ -41,8 +41,8 @@ in {
       flags = [
         "-L"
       ];
-      fixedRandomDelay = true;
-      randomizedDelaySec = "30min";
+      fixedRandomDelay = false;
+      # randomizedDelaySec = "30min";
       allowReboot = true;
     };
   };
