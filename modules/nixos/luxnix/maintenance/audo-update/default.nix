@@ -16,7 +16,7 @@ in {
     
     date = mkOption {
       type = with types; string;
-      default = "08:40";
+      default = "08:46";
       description = "The time of day to perform the system upgrade";
     };
 
@@ -28,9 +28,19 @@ in {
 
   };
 
+  #TODO Documentation
+  # systemctl status nixos-upgrade.timer
+
+  # logs at
+  # systemctl status nixos-upgrade.service 
+
   config = mkIf cfg.enable {
     system.autoUpgrade = {
       enable = cfg.enable;
+      flake = cfg.flake;
+      flags = [
+        "-L"
+      ];
       fixedRandomDelay = true;
       randomizedDelaySec = "30min";
       allowReboot = true;

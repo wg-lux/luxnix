@@ -32,7 +32,9 @@
 
 generic-settings.enable = true;
 
-maintenance.autoUpdates = true;
+maintenance.autoUpdates.enable = true;
+
+maintenance.autoUpdates.flake = "github:wg-lux/luxnix";
 
 nvidia-prime.enable = false;
 
