@@ -25,3 +25,17 @@ from .hosts import (
     AutoConfHost,
     AutoConfHosts,
 )
+
+from .manager import Vault
+
+__all__ = [
+    "VaultGroup",
+    "VaultGroups",
+    "VaultClient",
+    "VaultClients",
+    "HostConfig",
+    "Hosts",
+    "AutoConfHost",
+    "AutoConfHosts",
+    "Vault",
+]

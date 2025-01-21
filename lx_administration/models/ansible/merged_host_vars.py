@@ -36,6 +36,7 @@ class MergedHostVars(BaseModel):
     host_roles: Optional[Dict[str, Union[List[str], str]]] = {}
     host_services: Optional[Dict[str, Union[List[str], str]]] = {}
     template_name: Optional[str] = "main"
+    system_users: Optional[List[str]] = ["admin"]
 
     @classmethod
     def load_from_file(cls, file: str, logger=None):

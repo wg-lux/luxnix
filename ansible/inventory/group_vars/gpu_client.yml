@@ -8,5 +8,4 @@ group_luxnix:
   nvidia_prime.enable: "true"
   gpu_eval.enable: "true"
   boot_decryption_stick.enable: "true"
-  ansible.enable: "true"
   generic_settings.configurationPathRelative: '"lx-production"'

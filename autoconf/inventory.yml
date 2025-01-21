@@ -170,7 +170,6 @@ all:
   - ansible_group_names:
       - all
       - gpu_server
-      - managed
     ansible_host: 172.16.255.21
     ansible_role_names: []
     facts:
@@ -228,7 +227,6 @@ all:
       - all
       - gpu_server
       - test_group
-      - managed
     ansible_host: 172.16.255.22
     ansible_role_names: []
     facts:
@@ -618,7 +616,6 @@ groups:
       luxnix_dest: /home/admin/lx-production
       luxnix_dev_repo: /home/admin/dev/luxnix
       luxnix_repo: https://github.com/wg-lux/luxnix.git
-      luxnix_secrets:
       network_conf:
         domain: endo-reg.net
   - files: []
@@ -652,7 +649,6 @@ groups:
     name: gpu_client
     vars:
       group_luxnix:
-        ansible.enable: 'true'
         boot_decryption_stick.enable: 'true'
         generic_settings.configurationPathRelative: '"lx-production"'
         generic_settings.enable: 'true'

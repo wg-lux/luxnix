@@ -14,7 +14,7 @@ luxnix_dev_repo: "/home/admin/dev/luxnix"
 luxnix_repo: "https://github.com/wg-lux/luxnix.git"
 luxnix_dest: "/home/admin/lx-production"
 luxnix_branch: "main"
-luxnix_secrets:
+# luxnix_secrets: []
 
 ansible_user: admin
 ansible_become_user: admin

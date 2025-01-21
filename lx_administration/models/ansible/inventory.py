@@ -3,6 +3,7 @@ from typing import Dict, List, Optional, Union
 from pathlib import Path
 from lx_administration.logging import log_heading, get_logger  #
 from .facts import AnsibleFactsModel
+from lx_administration.models.ansible.merged_host_vars import MergedHostVars
 
 
 class AnsibleInventoryHost(BaseModel):
@@ -294,3 +295,14 @@ class AnsibleInventory(BaseModel):
             host = self.get_host_by_name(host_name)
             assert isinstance(vars, dict)
             host.vars = deep_update(host.vars, vars)
+
+    def build_merged_vars(self, hostname: str) -> MergedHostVars:
+        merged_data = self.export_merged_host_vars(hostname)
+        return MergedHostVars(
+            group_luxnix=merged_data.get("group_luxnix", {}),
+            group_roles=merged_data.get("group_roles", {}),
+            group_services=merged_data.get("group_services", {}),
+            host_luxnix=merged_data.get("host_luxnix", {}),
+            host_roles=merged_data.get("host_roles", {}),
+            host_services=merged_data.get("host_services", {}),
+        )

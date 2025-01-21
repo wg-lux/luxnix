@@ -77,7 +77,6 @@ luxnix_branch: main
 luxnix_dest: /home/admin/lx-production
 luxnix_dev_repo: /home/admin/dev/luxnix
 luxnix_repo: https://github.com/wg-lux/luxnix.git
-luxnix_secrets:
 network_conf:
   domain: endo-reg.net
 template_name: main

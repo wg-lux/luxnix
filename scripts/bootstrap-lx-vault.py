@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from lx_administration.vault import Vault
+from lx_administration.models import Vault
 
 
 def main():

@@ -32,7 +32,6 @@ authentication:
   dev_03:
     id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos
 group_luxnix:
-  ansible.enable: 'true'
   boot_decryption_stick.enable: 'true'
   generic_settings.configurationPathRelative: '"lx-production"'
   generic_settings.enable: 'true'
@@ -88,7 +87,6 @@ luxnix_branch: migrate-01
 luxnix_dest: /home/admin/luxnix-production
 luxnix_dev_repo: /home/admin/dev/luxnix
 luxnix_repo: https://github.com/wg-lux/luxnix.git
-luxnix_secrets:
 network_conf:
   domain: endo-reg.net
 template_name: main
