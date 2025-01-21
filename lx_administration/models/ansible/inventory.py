@@ -70,15 +70,30 @@ class AnsibleInventory(BaseModel):
     all: List[AnsibleInventoryHost] = []
     file: str = "./ansible/inventory/hosts.ini"
 
+    @classmethod
+    def from_file(cls, filepath: str):
+        import yaml
+
+        filepath = Path(filepath)
+        assert filepath.exists(), f"File not found: {filepath}"
+
+        with open(filepath, "r") as f:
+            data = yaml.load(f, yaml.SafeLoader)
+
+            inventory = cls.model_validate(data)
+
+        return inventory
+
     # Create Class Method to load inventory from file
     @classmethod
-    def load_from_file(cls, file: Path, subnet: str = "172.16.255."):
+    def load_from_hosts_ini(cls, file: Path, subnet: str = "172.16.255."):
         logger = get_logger("AnsibleInventory-load_from_file", reset=True)
 
         # assert subnet is ip address with missing last octet
         assert subnet.endswith(".") and len(subnet.split(".")) == 4
         # Initialize temporary dict to read inventory
         inventory = cls(file=file.resolve().as_posix())
+        print(inventory)
         with open(file, "r") as f:
             for raw_line in f:
                 line = raw_line.strip()

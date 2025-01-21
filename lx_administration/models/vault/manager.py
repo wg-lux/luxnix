@@ -100,20 +100,12 @@ class AccessKey(BaseModel):
             updated=updated,
         )
 
-        return key
+        return key, created
 
     def read_key(self):
         file = Path(self.file)
         with open(file, "r") as f:
             return f.read()
-
-
-def get_access_key(name, vault_dir: Path, owner_type="clients"):
-    assert owner_type in OWNER_TYPES, f"Invalid owner_type: {owner_type}"
-    access_key = AccessKey.get_or_create(
-        name, owner_type, local_vault_key=vault_dir / "lxv.key", vault_dir=vault_dir
-    )
-    return access_key
 
 
 class Secret(BaseModel):
@@ -172,20 +164,15 @@ def _get_by_name(obj_list: List[Union[Secret, AccessKey]], name: str, logger=Non
         return None
 
 
-def _resolve_home(path: str) -> str:
-    if not path.startswith("~/"):
-        return path
-
-    else:
-        return Path(path).expanduser().as_posix()
-
-
 class Vault(BaseModel):
     secrets: List[Secret] = []
     access_keys: List[AccessKey] = []
     dir: str = "~/.lxv/"
     key: str = "~/.lxv.key"
+    key_owner_types: List[str] = ["local", "roles", "services", "luxnix", "clients"]
     inventory: Optional[AnsibleInventory] = None
+    default_system_users: List[str] = ["admin"]
+    subnet: str = "172.16.255."
 
     @classmethod
     def _get_vault_paths(cls, dir: str, key: str):
@@ -207,7 +194,7 @@ class Vault(BaseModel):
             raise FileNotFoundError(f"File {vault_file} does not exist!")
 
         with open(vault_file, "r") as f:
-            data = yaml.load(f, Loader=yaml.SafeLoader)
+            data = yaml.load(f, Loader=yaml.FullLoader)
         vault = cls.model_validate(data)
         return vault
 
@@ -223,23 +210,44 @@ class Vault(BaseModel):
         else:
             vault = cls.load_dir(dir, key)
 
+    def load_inventory(self, inventory_file: str):
+        """load inventory from file and set self.inventory"""
+
+        self.inventory = AnsibleInventory.from_file(inventory_file)
+        return self.inventory
+
+    def sync_inventory(self, inventory_file: str):
+        logger = get_logger("Vaults-sync_inventory", reset=True)
+        inventory_file: Path = Path(inventory_file)
+        assert inventory_file.exists(), f"File {inventory_file} does not exist!"
+        # read inventory file and set self.inventory
+        vault_dir, _vault_key, vault_file = self.get_paths()
+        logger.info(f"Loading inventory from {inventory_file}")
+        _inventory = self.load_inventory(inventory_file.resolve().as_posix())
+
+        # TODO Update stuff
+
+        self.save_to_file()
+
+    # def fetch_secret_list_from_inventory(self):
+
+    def get_paths(self):
+        return self._get_vault_paths(self.dir, self.key)
+
     def save_to_file(self, file: str = None):
         """dump as yml"""
         if not file:
-            file = Path(self.dir) / "vault.yml"
-        else:  # make sure the directory exists
-            file = Path(file)
+            vault_dir, _vault_key, vault_file = self.get_paths()
+        else:
+            vault_file = Path(file)
+            vault_dir = vault_file.parent
 
-        file: Path = file.expanduser()
+        if not vault_dir.exists():
+            vault_dir.mkdir(parents=True)
 
-        if not file.parent.exists():
-            file.parent.mkdir(parents=True)
-
-        raw = self.model_dump(
-            mode="python",
-        )
-        file = Path(file)
-        dump_yaml(raw, file, format_yaml, ansible_lint)
+        raw = self.model_dump(mode="python", round_trip=True)
+        print("save to file", vault_file)
+        dump_yaml(raw, vault_file, format_yaml, ansible_lint)
 
     # Utility Methods:
     def get_access_key_by_name(self, name: str, logger=None):
@@ -259,6 +267,8 @@ class Vault(BaseModel):
     ):
         if not logger:
             logger = get_logger("Vaults-get_or_create_key", reset=True)
+
+        assert owner_type in self.key_owner_types, f"Invalid owner_type: {owner_type}"
 
         key = AccessKey.get_or_create(
             name, owner_type, local_vault_key, vault_dir, logger
