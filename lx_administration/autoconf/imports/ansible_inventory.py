@@ -16,6 +16,6 @@ def load_inventory_hostfile(
             "load_inventory_hostfile", reset=True, log_level=logging.DEBUG
         )
 
-    inventory = AnsibleInventory.load_from_file(file, subnet=subnet)
+    inventory = AnsibleInventory.load_from_hosts_ini(file, subnet=subnet)
 
     return inventory

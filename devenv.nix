@@ -3,7 +3,9 @@ let
 #
   packageDefs = import ./devenv/packages.nix { inherit pkgs; };
   buildInputs = packageDefs.buildInputs;
-  tasks = import ./devenv/tasks.nix;
+  tasks = import ./devenv/tasks.nix {
+    inherit pkgs lib config inputs;
+  };
   scripts = import ./devenv/scripts.nix {
     inherit pkgs lib config inputs;
   };
@@ -42,6 +44,7 @@ in
   enterShell = ''
     . .devenv/state/venv/bin/activate
     uv pip install -e .
+    devenv tasks run "autoconf:initialize-vault"
     python -m unittest
     hello
   '';

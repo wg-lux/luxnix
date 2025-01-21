@@ -5,12 +5,12 @@ from pathlib import Path
 from lx_administration.logging import get_logger
 import shutil
 import os
+from lx_administration.yaml import dump_yaml, format_yaml, ansible_lint
+
+
+from ..ansible import AnsibleInventory
 
 OWNER_TYPES = ["local", "roles", "services", "luxnix", "clients"]
-
-
-class Vault(BaseModel):
-    name: str
 
 
 def generate_ansible_key(key_path: Path, encryption_key_path: Optional[Path] = None):
@@ -100,20 +100,12 @@ class AccessKey(BaseModel):
             updated=updated,
         )
 
-        return key
+        return key, created
 
     def read_key(self):
         file = Path(self.file)
         with open(file, "r") as f:
             return f.read()
-
-
-def get_access_key(name, vault_dir: Path, owner_type="clients"):
-    assert owner_type in OWNER_TYPES, f"Invalid owner_type: {owner_type}"
-    access_key = AccessKey.get_or_create(
-        name, owner_type, local_vault_key=vault_dir / "lxv.key", vault_dir=vault_dir
-    )
-    return access_key
 
 
 class Secret(BaseModel):
@@ -159,6 +151,127 @@ class Secret(BaseModel):
         pass
 
 
-class Vaults(BaseModel):
+def _get_by_name(obj_list: List[Union[Secret, AccessKey]], name: str, logger=None):
+    if not logger:
+        logger = get_logger("lx_vault__get_by_name")
+    objs = [obj for obj in obj_list if obj.name == name]
+    if not len(objs) <= 1:
+        logger.warning(f"Found more than one object: {len(objs)}")
+
+    if objs:
+        return objs[0]
+    else:
+        return None
+
+
+class Vault(BaseModel):
     secrets: List[Secret] = []
     access_keys: List[AccessKey] = []
+    dir: str = "~/.lxv/"
+    key: str = "~/.lxv.key"
+    key_owner_types: List[str] = ["local", "roles", "services", "luxnix", "clients"]
+    inventory: Optional[AnsibleInventory] = None
+    default_system_users: List[str] = ["admin"]
+    subnet: str = "172.16.255."
+
+    @classmethod
+    def _get_vault_paths(cls, dir: str, key: str):
+        dir = Path(dir).expanduser()
+        key = Path(key).expanduser()
+        vault = dir / "vault.yml"
+        return dir, key, vault
+
+    @classmethod
+    def load_dir(cls, dir: str = "~/.lxv/", key: str = "~/.lxv.key"):
+        import yaml
+
+        dir, key, vault_file = cls._get_vault_paths(dir, key)
+
+        if not dir.exists():
+            raise FileNotFoundError(f"Directory {dir} does not exist!")
+
+        if not vault_file.exists():
+            raise FileNotFoundError(f"File {vault_file} does not exist!")
+
+        with open(vault_file, "r") as f:
+            data = yaml.load(f, Loader=yaml.FullLoader)
+        vault = cls.model_validate(data)
+        return vault
+
+    @classmethod
+    def load_or_create(cls, dir: str = "~/.lxv/", key: str = "~/.lxv.key"):
+        dir, key, vault_file = cls._get_vault_paths(dir, key)
+
+        if not vault_file.exists():
+            print("No vault file found. Creating new vault.")
+            vault = cls()
+            vault.save_to_file(vault_file)
+
+        else:
+            vault = cls.load_dir(dir, key)
+
+    def load_inventory(self, inventory_file: str):
+        """load inventory from file and set self.inventory"""
+
+        self.inventory = AnsibleInventory.from_file(inventory_file)
+        return self.inventory
+
+    def sync_inventory(self, inventory_file: str):
+        logger = get_logger("Vaults-sync_inventory", reset=True)
+        inventory_file: Path = Path(inventory_file)
+        assert inventory_file.exists(), f"File {inventory_file} does not exist!"
+        # read inventory file and set self.inventory
+        vault_dir, _vault_key, vault_file = self.get_paths()
+        logger.info(f"Loading inventory from {inventory_file}")
+        _inventory = self.load_inventory(inventory_file.resolve().as_posix())
+
+        # TODO Update stuff
+
+        self.save_to_file()
+
+    # def fetch_secret_list_from_inventory(self):
+
+    def get_paths(self):
+        return self._get_vault_paths(self.dir, self.key)
+
+    def save_to_file(self, file: str = None):
+        """dump as yml"""
+        if not file:
+            vault_dir, _vault_key, vault_file = self.get_paths()
+        else:
+            vault_file = Path(file)
+            vault_dir = vault_file.parent
+
+        if not vault_dir.exists():
+            vault_dir.mkdir(parents=True)
+
+        raw = self.model_dump(mode="python", round_trip=True)
+        print("save to file", vault_file)
+        dump_yaml(raw, vault_file, format_yaml, ansible_lint)
+
+    # Utility Methods:
+    def get_access_key_by_name(self, name: str, logger=None):
+        if not logger:
+            logger = get_logger("Vaults-get_access_key_by_name", reset=True)
+
+        key = _get_by_name(self.access_keys, name, logger)
+        return key
+
+    def get_or_create_key(
+        self,
+        name: str,
+        owner_type: str,
+        local_vault_key: str,
+        vault_dir="~/.lxv/",
+        logger=None,
+    ):
+        if not logger:
+            logger = get_logger("Vaults-get_or_create_key", reset=True)
+
+        assert owner_type in self.key_owner_types, f"Invalid owner_type: {owner_type}"
+
+        key = AccessKey.get_or_create(
+            name, owner_type, local_vault_key, vault_dir, logger
+        )
+        self.access_keys.append(key)
+        return key
