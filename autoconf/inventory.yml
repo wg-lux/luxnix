@@ -170,6 +170,7 @@ all:
   - ansible_group_names:
       - all
       - gpu_server
+      - managed
     ansible_host: 172.16.255.21
     ansible_role_names: []
     facts:
@@ -227,6 +228,7 @@ all:
       - all
       - gpu_server
       - test_group
+      - managed
     ansible_host: 172.16.255.22
     ansible_role_names: []
     facts:
@@ -630,6 +632,7 @@ groups:
     vars:
       group_luxnix:
         boot_decryption_stick.enable: 'true'
+        maintenance.autoUpdates: 'true'
         nvidia_prime.enable: 'false'
       group_roles:
         aglnet.client.enable: 'true'

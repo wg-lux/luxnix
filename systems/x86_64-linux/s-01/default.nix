@@ -32,6 +32,8 @@
 
 generic-settings.enable = true;
 
+maintenance.autoUpdates = true;
+
 nvidia-prime.enable = false;
 
 generic-settings.hostPlatform = "x86_64-linux";
