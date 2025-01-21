@@ -632,6 +632,7 @@ groups:
     vars:
       group_luxnix:
         boot_decryption_stick.enable: 'true'
+        maintenance.autoUpdates.dates: '"09:05"'
         maintenance.autoUpdates.enable: 'true'
         maintenance.autoUpdates.flake: '"github:wg-lux/luxnix"'
         nvidia_prime.enable: 'false'

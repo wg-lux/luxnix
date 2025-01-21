@@ -32,6 +32,8 @@
 
 generic-settings.enable = true;
 
+maintenance.autoUpdates.dates = "09:05";
+
 maintenance.autoUpdates.enable = true;
 
 maintenance.autoUpdates.flake = "github:wg-lux/luxnix";
