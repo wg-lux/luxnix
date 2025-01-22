@@ -50,6 +50,7 @@ def ansible_etl(ansible_root: Path, autoconf_out: Path, subnet: str, logger=None
 
     merged_vars_out = autoconf_out / "merged_vars"
     merged_vars_out.mkdir(exist_ok=True)
+    inventory.validate()
 
     for host in inventory.all:
         merged_vars = inventory.export_merged_host_vars(host.hostname)

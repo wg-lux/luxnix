@@ -22,7 +22,7 @@ def _is_extra_user_name_attribute(attribute_name: str) -> bool:
 
 def _get_extra_user_names(vars: Dict[str, Union[str, Dict, List[str]]]) -> List[str]:
     extra_user_names = []
-    for key in vars:
+    for key in vars.keys():
         if _is_extra_user_name_attribute(key):
             name = vars[key]
             assert isinstance(
@@ -103,12 +103,16 @@ class AnsibleInventoryGroup(BaseModel):
 
 class AnsibleInventoryRole(BaseModel):
     name: str
-    vars: Dict[str, Union[str, Dict, List[str]]] = {}
+    vars: Optional[Dict[str, Union[str, Dict, List[str]]]] = {}
     files: List[str] = []
     extra_user_names: List[str] = []
 
     def get_extra_user_names(self) -> List[str]:
-        extra_user_names = _get_extra_user_names(self.vars)
+        if not self.vars:
+            return []
+
+        _vars = self.vars
+        extra_user_names = _get_extra_user_names(_vars)
 
         return extra_user_names
 
@@ -140,11 +144,14 @@ class AnsibleInventory(BaseModel):
     @classmethod
     def load_from_hosts_ini(cls, file: Path, subnet: str = "172.16.255."):
         logger = get_logger("AnsibleInventory-load_from_file", reset=True)
-
+        file = file.resolve()
+        ansible_inventory_dir = file.parent
+        ansible_root_dir = ansible_inventory_dir.parent
         # assert subnet is ip address with missing last octet
         assert subnet.endswith(".") and len(subnet.split(".")) == 4
         # Initialize temporary dict to read inventory
-        inventory = cls(file=file.resolve().as_posix())
+        inventory = cls(file=file.as_posix())
+        inventory.load_host_vars(ansible_inventory_dir=ansible_inventory_dir)
         with open(file, "r") as f:
             for raw_line in f:
                 line = raw_line.strip()
@@ -163,14 +170,15 @@ class AnsibleInventory(BaseModel):
                     hostname = parts[0]
                     assert hostname, "hostname is required"
                     inventory.add_host_by_name(hostname)
+
                     inventory.add_group_to_host(hostname, group_name)
 
                     if len(parts) > 1 and parts[1].startswith("ansible_host="):
                         ip = parts[1].split("=")[1]
                         inventory.set_ansible_host_ip(hostname, ip)
 
-        inventory.load_roles(file.parent)
-        inventory.load_group_vars(file.parent)
+        inventory.load_roles(ansible_root_dir)
+        inventory.load_group_vars(ansible_inventory_dir)
 
         log_heading(logger, f"Loaded Inventory from {file}")
 
@@ -212,6 +220,8 @@ class AnsibleInventory(BaseModel):
         # self.update_hosts_group_vars()
         host = self.get_host_by_name(hostname)
 
+        assert host, f"No host found with name {hostname}"
+
         group_names = host.ansible_group_names
 
         _check_again = True
@@ -240,7 +250,7 @@ class AnsibleInventory(BaseModel):
 
         return merged_vars
 
-    def save_to_file(self, inventory_file: Path = Path("./autoconf/inventory.yml")):
+    def validate(self):
         for group in self.groups:
             group.validate()
 
@@ -250,6 +260,8 @@ class AnsibleInventory(BaseModel):
         for host in self.all:
             host.validate_ansible_host()
 
+    def save_to_file(self, inventory_file: Path = Path("./autoconf/inventory.yml")):
+        self.validate()
         dump_yaml(
             self.model_dump(mode="python"),
             inventory_file,
@@ -300,13 +312,16 @@ class AnsibleInventory(BaseModel):
         assert len(host) == 1, f"Multiple hosts found with name {ansible_host}"
         return host[0]
 
-    def get_host_by_name(self, host_name: str):
+    def get_host_by_name(self, host_name: str) -> Union[AnsibleInventoryHost, bool]:
         host = [_ for _ in self.all if _.hostname == host_name]
         if host:
             assert len(host) == 1, f"Multiple hosts found with name {host_name}"
             return host[0]
+        logger = get_logger("AnsibleInventory-get_host_by_name", reset=True)
+        # ValueError(f"No host found with name {host_name}")
+        logger.warning(f"No host found with name {host_name}, adding")
 
-        raise ValueError(f"No host found with name {host_name}")
+        return False
 
     def set_ansible_host_ip(self, hostname: str, ansible_host: str):
         host = self.get_host_by_name(hostname)
@@ -318,15 +333,14 @@ class AnsibleInventory(BaseModel):
         host.ansible_group_names.append(group_name)
         host.ansible_group_names = list(set(host.ansible_group_names))
 
-    def load_roles(self, ansible_inventory_dir: Path):
+    def load_roles(self, ansible_root_dir: Path):
         from lx_administration.autoconf.imports.utils import load_roles
 
-        roles_dir = ansible_inventory_dir / "roles"
+        roles_dir = ansible_root_dir / "roles"
 
-        roles = load_roles(roles_dir)
+        _roles = load_roles(roles_dir)
         roles = [
-            AnsibleInventoryRole(name=role, **roles[role])
-            for role, value in roles.items()
+            AnsibleInventoryRole(name=role, **value) for role, value in _roles.items()
         ]
 
         self.roles = roles
@@ -355,8 +369,15 @@ class AnsibleInventory(BaseModel):
         host_vars = load_host_vars(host_vars_dir)
 
         for host_name, vars in host_vars.items():
+            print(host_name)
             host = self.get_host_by_name(host_name)
+            if not host:
+                host = AnsibleInventoryHost(hostname=host_name)
+                self.all.append(host)
             assert isinstance(vars, dict)
+            import pprint
+
+            pprint.pprint(vars)
             host.vars = deep_update(host.vars, vars)
 
     def build_merged_vars(self, hostname: str) -> MergedHostVars:

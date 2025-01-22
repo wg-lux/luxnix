@@ -44,17 +44,18 @@ def _role_load_vars(role: str, ansible_roles_dir: Path) -> dict:
 
 def load_roles(ansible_roles_dir: Path) -> Dict[str, Union[List, Dict]]:
     """Load roles from Ansible roles directory"""
-    roles = []
+    _roles = []
+    print(f"LODING ROLES FROM: {ansible_roles_dir}")
     for role in ansible_roles_dir.glob("*"):
         if role.is_dir():
-            roles.append(role.name)
+            _roles.append(role.name)
 
     roles = {
         role: {
             "files": _role_load_files(role, ansible_roles_dir),
             "vars": _role_load_vars(role, ansible_roles_dir),
         }
-        for role in roles
+        for role in _roles
     }
     return roles
 

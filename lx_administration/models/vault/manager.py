@@ -139,12 +139,6 @@ class Secret(BaseModel):
     secret_type: str = (
         "password"  # password, id_ed25519, id_rsa, ssh_cert, gpg_key, gpg_cert
     )
-
-    role_names: List[str] = []
-    client_names: List[str] = []
-    group_names: List[str] = []
-    luxnix_names: List[str] = []
-
     created: Optional[datetime] = None
     updated: Optional[datetime] = None
     validity: Optional[timedelta] = timedelta(days=180)
@@ -187,10 +181,17 @@ class Secret(BaseModel):
 class SecretTemplate(BaseModel):
     name: str
     owner_type: str
+    secret_type: str = "password"
 
     @classmethod
-    def create_secret_template(cls, name: str, owner_type: str):
-        return cls(name=name, owner_type=owner_type)
+    def create_secret_template(
+        cls, name: str, owner_type: str, secret_type: Optional[str] = "password"
+    ):
+        return cls(name=name, owner_type=owner_type, secret_type=secret_type)
+
+    def _set_secret_type(self):
+        # if
+        template_name = self.name
 
     def validate(self):
         assert self.owner_type in OWNER_TYPES, f"Invalid owner_type: {self.owner_type}"
@@ -312,6 +313,7 @@ class Vault(BaseModel):
         self, name: str, owner_type: str
     ) -> Tuple[SecretTemplate, bool]:
         template = self.get_secret_template_by_name(name)
+
         created = False
         if not template:
             template = SecretTemplate.create_secret_template(
@@ -400,12 +402,12 @@ class Vault(BaseModel):
 
         logger.info(
             f"Existing secret templates: \
-                ${[template.name for template in secret_templates]}"
+{[template.name for template in secret_templates]}"
         )
 
         logger.info(
             f"Created secret templates: \
-                ${[template.name for template in created_secret_templates]}"
+{[template.name for template in created_secret_templates]}"
         )
 
     def sync_inventory(self, inventory_file: str):
@@ -440,7 +442,6 @@ class Vault(BaseModel):
             vault_dir.mkdir(parents=True)
 
         raw = self.model_dump(mode="python", round_trip=True)
-        print("save to file", vault_file)
         dump_yaml(raw, vault_file, format_yaml, ansible_lint)
 
     # Utility Methods:
