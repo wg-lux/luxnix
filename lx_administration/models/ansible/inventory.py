@@ -7,15 +7,47 @@ from lx_administration.models.ansible.merged_host_vars import MergedHostVars
 from lx_administration.yaml import dump_yaml, ansible_lint, format_yaml
 
 
+def _is_extra_user_attribute(attribute_name: str) -> bool:
+    return attribute_name.startswith("extraUsers")
+
+
+def _is_extra_user_name_attribute(attribute_name: str) -> bool:
+    is_extra_user_attribute = _is_extra_user_attribute(attribute_name)
+    if not is_extra_user_attribute:
+        return False
+
+    else:
+        return attribute_name.endswith("name")
+
+
+def _get_extra_user_names(vars: Dict[str, Union[str, Dict, List[str]]]) -> List[str]:
+    extra_user_names = []
+    for key in vars:
+        if _is_extra_user_name_attribute(key):
+            name = vars[key]
+            assert isinstance(
+                name, str
+            ), f"Extra user name must be a string, got {name}"
+            extra_user_names.append(name)
+
+    return extra_user_names
+
+
 class AnsibleInventoryHost(BaseModel):
     ansible_host: Optional[str] = ""
     hostname: Optional[str]
     ansible_group_names: List[str] = []
     ansible_role_names: List[str] = []
+    extra_user_names: List[str] = []
     subnet: Optional[str] = "172.16.255."
     vars: Dict[str, Union[str, Dict, List[str]]] = {}
     files: List[str] = []
     facts: Optional[AnsibleFactsModel] = None
+
+    def get_extra_user_names(self) -> List[str]:
+        extra_user_names = _get_extra_user_names(self.vars)
+
+        return extra_user_names
 
     def _order_group_names(self):
         # TODO harden
@@ -35,6 +67,8 @@ class AnsibleInventoryHost(BaseModel):
         if not self.subnet:
             raise ValueError("subnet is required")
 
+        self.extra_user_names = self.get_extra_user_names()
+
         # make sure "all" is in ansible_group_names and is at first index, if not add it
         if "all" not in self.ansible_group_names:
             self.ansible_group_names.insert(0, "all")
@@ -53,15 +87,33 @@ class AnsibleInventoryGroup(BaseModel):
     name: str
     vars: Dict[str, Union[str, Dict, List[str]]] = {}
     files: List[str] = []
+    extra_user_names: List[str] = []
 
     def __str__(self):
         return super().__str__()
+
+    def get_extra_user_names(self) -> List[str]:
+        extra_user_names = _get_extra_user_names(self.vars)
+
+        return extra_user_names
+
+    def validate(self):
+        self.extra_user_names = self.get_extra_user_names()
 
 
 class AnsibleInventoryRole(BaseModel):
     name: str
     vars: Dict[str, Union[str, Dict, List[str]]] = {}
     files: List[str] = []
+    extra_user_names: List[str] = []
+
+    def get_extra_user_names(self) -> List[str]:
+        extra_user_names = _get_extra_user_names(self.vars)
+
+        return extra_user_names
+
+    def validate(self):
+        self.extra_user_names = self.get_extra_user_names()
 
 
 class AnsibleInventory(BaseModel):
@@ -133,6 +185,27 @@ class AnsibleInventory(BaseModel):
     def get_group_names(self):
         return [group.name for group in self.groups]
 
+    def get_all_extra_user_names(self):
+        extra_user_names = []
+        for host in self.all:
+            host.validate_ansible_host()
+            names = host.extra_user_names
+            extra_user_names.extend(names)
+
+        # add names from group vars
+        for group in self.groups:
+            group.validate()
+            names = group.extra_user_names
+            extra_user_names.extend(names)
+
+        # add names from role_vars
+        for role in self.roles:
+            role.validate()
+            names = role.extra_user_names
+            extra_user_names.extend(names)
+
+        return extra_user_names
+
     def export_merged_host_vars(self, hostname: str) -> Dict:
         from lx_administration.autoconf.imports.utils import deep_update
 
@@ -168,6 +241,15 @@ class AnsibleInventory(BaseModel):
         return merged_vars
 
     def save_to_file(self, inventory_file: Path = Path("./autoconf/inventory.yml")):
+        for group in self.groups:
+            group.validate()
+
+        for role in self.roles:
+            role.validate()
+
+        for host in self.all:
+            host.validate_ansible_host()
+
         dump_yaml(
             self.model_dump(mode="python"),
             inventory_file,
@@ -260,10 +342,6 @@ class AnsibleInventory(BaseModel):
         group_vars = load_group_vars(group_vars_dir)
 
         for group_name, vars in group_vars.items():
-            # print("--" * 10)
-            # print(group_name)
-            # print(vars)
-            # print("--" * 10)
             group = self.get_group_by_name(group_name)
             assert isinstance(vars, dict)
             group.vars = deep_update(group.vars, vars)

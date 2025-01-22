@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, List, Dict, Union
+from typing import Optional, List, Dict, Union, Tuple
 from datetime import datetime, timedelta
 from pathlib import Path
 from lx_administration.logging import get_logger
@@ -44,6 +44,21 @@ def generate_secret_dir_path(name: str, vault_dir: Path):
         secret_dir.mkdir(parents=True)
 
     return secret_dir
+
+
+def _is_valid(
+    validity: timedelta, created: datetime, updated: Optional[datetime], logger=None
+) -> bool:
+    if not logger:
+        logger = get_logger("lx_vault__is_valid")
+    assert created, "created is required"
+
+    if not updated:
+        updated = created
+
+    is_valid = updated - created <= validity
+
+    return is_valid
 
 
 class AccessKey(BaseModel):
@@ -107,6 +122,15 @@ class AccessKey(BaseModel):
         with open(file, "r") as f:
             return f.read()
 
+    def validate(self):
+        logger = get_logger("AccessKey-validate")
+        # check secret validity
+        _validity_status = _is_valid(self.validity, self.created, self.updated, logger)
+
+        # also war
+
+        assert self.owner_type in OWNER_TYPES, f"Invalid owner_type: {self.owner_type}"
+
 
 class Secret(BaseModel):
     name: str
@@ -150,8 +174,49 @@ class Secret(BaseModel):
     def generate_deployment_secrets():
         pass
 
+    def validate(self):
+        logger = get_logger("Secret-validate")
+        # check secret validity
+        _validity_status = _is_valid(self.validity, self.created, self.updated, logger)
 
-def _get_by_name(obj_list: List[Union[Secret, AccessKey]], name: str, logger=None):
+        directory = str2path(self.directory, expanduser=True, resolve=True)
+        if not directory.exists():
+            directory.mkdir(mode=700, parents=True, exist_ok=True)
+
+
+class SecretTemplate(BaseModel):
+    name: str
+    owner_type: str
+
+    @classmethod
+    def create_secret_template(cls, name: str, owner_type: str):
+        return cls(name=name, owner_type=owner_type)
+
+    def validate(self):
+        assert self.owner_type in OWNER_TYPES, f"Invalid owner_type: {self.owner_type}"
+
+
+def _check_unique_list(lst: List[str]) -> bool:
+    if not len(lst) == len(set(lst)):
+        return False
+
+    return True
+
+
+def _assert_unique_list(lst: List[Union[Tuple[str, str], str]]) -> bool:
+    from collections import Counter
+
+    if not _check_unique_list(lst):
+        # get duplicates
+        duplicates = [item for item, count in Counter(lst).items() if count > 1]
+        raise ValueError(f"List contains duplicates: {duplicates}")
+
+    return True
+
+
+def _get_by_name(
+    obj_list: List[Union[Secret, AccessKey, SecretTemplate]], name: str, logger=None
+):
     if not logger:
         logger = get_logger("lx_vault__get_by_name")
     objs = [obj for obj in obj_list if obj.name == name]
@@ -162,22 +227,6 @@ def _get_by_name(obj_list: List[Union[Secret, AccessKey]], name: str, logger=Non
         return objs[0]
     else:
         return None
-
-
-class SecretTemplate(BaseModel):
-    owner_type: str
-    template_dir: str
-
-    @classmethod
-    def create_template(cls, owner_type: str, template_dir: str):
-        return cls(owner_type=owner_type, template_dir=template_dir)
-
-    def get_template_dir(self, return_as_string=False):
-        p = self.template_dir
-        p = str2path(
-            p, expanduser=True, resolve=True, return_as_string=return_as_string
-        )
-        return p
 
 
 class Vault(BaseModel):
@@ -228,25 +277,136 @@ class Vault(BaseModel):
         else:
             vault = cls.load_dir(dir, key)
 
+    def _validate_secret_templates(self):
+        name_owner_type_tuples = [
+            (template.name, template.owner_type) for template in self.secret_templates
+        ]
+        _assert_unique_list(name_owner_type_tuples)
+
+        for template in self.secret_templates:
+            template.validate()
+
+    def _validate_access_keys(self):
+        for access_key in self.access_keys:
+            access_key.validate()
+
+    def _validate_secrets(self):
+        for secret in self.secrets:
+            secret.validate()
+
+    def validate(self):
+        self._validate_secret_templates()
+        self._validate_access_keys()
+        self._validate_secrets()
+
     def load_inventory(self, inventory_file: str):
         """load inventory from file and set self.inventory"""
 
         self.inventory = AnsibleInventory.from_file(inventory_file)
         return self.inventory
 
-    # def sync_secret_templates(self):
-    #     inventory = self.inventory.model_copy()
+    def get_secret_template_by_name(self, name: str):
+        return _get_by_name(self.secret_templates, name)
 
-    #     # extract roles
-    #     role_names = inventory.get_role_names()
+    def get_or_create_secret_template(
+        self, name: str, owner_type: str
+    ) -> Tuple[SecretTemplate, bool]:
+        template = self.get_secret_template_by_name(name)
+        created = False
+        if not template:
+            template = SecretTemplate.create_secret_template(
+                name=name, owner_type=owner_type
+            )
+            self.secret_templates.append(template)
+            created = True
 
-    #     # extract clients
-    #     client_names = inventory.get_hostnames()
+        return template, created
 
-    #     # extract groups
-    #     group_names = inventory.get_group_names()
+    def get_or_create_secret_templates(
+        self, names: List[str], owner_type: str
+    ) -> Tuple[List[SecretTemplate], List[SecretTemplate]]:
+        templates = []
+        created_templates = []
+        for name in names:
+            template, created = self.get_or_create_secret_template(name, owner_type)
+            templates.append(template)
+            if created:
+                created_templates.append(template)
 
-    #     local_system_user_names = self.default_system_users
+        return templates, created_templates
+
+    def _sync_role_secret_templates(
+        self,
+    ) -> Tuple[List[SecretTemplate], List[SecretTemplate]]:
+        role_names = self.inventory.get_role_names()
+        owner_type = "roles"
+        _secret_templates, _created_secret_templates = (
+            self.get_or_create_secret_templates(role_names, owner_type)
+        )
+
+        return _secret_templates, _created_secret_templates
+
+    def _sync_client_secret_templates(
+        self,
+    ) -> Tuple[List[SecretTemplate], List[SecretTemplate]]:
+        client_names = self.inventory.get_hostnames()
+        owner_type = "clients"
+        _secret_templates, _created_secret_templates = (
+            self.get_or_create_secret_templates(client_names, owner_type)
+        )
+
+        return _secret_templates, _created_secret_templates
+
+    def _sync_group_secret_templates(
+        self,
+    ) -> Tuple[List[SecretTemplate], List[SecretTemplate]]:
+        group_names = self.inventory.get_group_names()
+        owner_type = "groups"
+        _secret_templates, _created_secret_templates = (
+            self.get_or_create_secret_templates(group_names, owner_type)
+        )
+
+        return _secret_templates, _created_secret_templates
+
+    def sync_secret_templates(self):
+        logger = get_logger("Vaults-sync_secret_templates", reset=True)
+
+        secret_templates = []
+        created_secret_templates = []
+
+        # Get or create secret templates for roles
+        _secret_templates, _created_secret_templates = (
+            self._sync_role_secret_templates()
+        )
+        secret_templates.extend(_secret_templates)
+        created_secret_templates.extend(_created_secret_templates)
+
+        # Get or create secret templates for clients
+        _secret_templates, _created_secret_templates = (
+            self._sync_client_secret_templates()
+        )
+        secret_templates.extend(_secret_templates)
+        created_secret_templates.extend(_created_secret_templates)
+
+        # Get or create secret templates for groups
+        _secret_templates, _created_secret_templates = (
+            self._sync_group_secret_templates()
+        )
+        secret_templates.extend(_secret_templates)
+        created_secret_templates.extend(_created_secret_templates)
+
+        logger.info(f"Synced {len(secret_templates)} secret templates.")
+        logger.info(f"Created {len(created_secret_templates)} secret templates:")
+
+        logger.info(
+            f"Existing secret templates: \
+                ${[template.name for template in secret_templates]}"
+        )
+
+        logger.info(
+            f"Created secret templates: \
+                ${[template.name for template in created_secret_templates]}"
+        )
 
     def sync_inventory(self, inventory_file: str):
         logger = get_logger("Vaults-sync_inventory", reset=True)
@@ -256,6 +416,8 @@ class Vault(BaseModel):
         vault_dir, _vault_key, vault_file = self.get_paths()
         logger.info(f"Loading inventory from {inventory_file}")
         _inventory = self.load_inventory(inventory_file.resolve().as_posix())
+
+        self.sync_secret_templates()
 
         # TODO Update stuff
 

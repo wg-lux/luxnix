@@ -1,3 +1,3 @@
-from .paths import get_paths
+from .paths import str2path
 
-__all__ = ["get_paths"]
+__all__ = ["str2path"]

@@ -43,6 +43,7 @@ in {
         hashedPasswordFile = passwordFile;
         home = "/home/${cfg.name}";
         group = "users";
+        linger = true; # Makes sure user services start at boot not at login
 
         # TODO: set in modules
         extraGroups =
