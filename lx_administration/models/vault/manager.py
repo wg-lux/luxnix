@@ -10,7 +10,28 @@ from lx_administration.utils.paths import str2path
 
 from ..ansible import AnsibleInventory
 
+
 OWNER_TYPES = ["local", "roles", "services", "luxnix", "clients"]
+SECRET_TYPES = [
+    "password",
+    "id_ed25519",
+    "id_rsa",
+    "ssh_cert",
+    "openvpn_cert",
+    "vault_key",
+]
+
+LOCAL_USER_SECRET_TYPES = ["password", "id_ed25519", "id_rsa"]
+for _ in LOCAL_USER_SECRET_TYPES:
+    assert _ in SECRET_TYPES, f"Invalid secret_type: {_}"
+
+BASE_CLIENT_SECRET_TYPES = [
+    "id_ed25519",
+    "id_rsa",
+    "ssh_cert",
+    "openvpn_cert",
+    "vault_key",
+]
 
 
 def generate_ansible_key(key_path: Path, encryption_key_path: Optional[Path] = None):
@@ -31,11 +52,18 @@ def generate_ansible_key(key_path: Path, encryption_key_path: Optional[Path] = N
         )
 
 
-def generate_access_key_path(name: str, vault_dir: Path, owner_type: str):
+def generate_access_key_path(
+    name: str, vault_dir: Path, owner_type: str, secret_type: str
+):
     assert owner_type in OWNER_TYPES, f"Invalid owner_type: {owner_type}"
-    if not vault_dir.exists():
-        vault_dir.mkdir(parents=True)
-    return vault_dir / f"{owner_type}/{name}.key"
+    assert secret_type in SECRET_TYPES, f"Invalid secret_type: {secret_type}"
+
+    secret_path = vault_dir / f"{secret_type}/{owner_type}/{name}.key"
+
+    secret_dir = secret_path.parent
+    secret_dir.mkdir(mode=700, parents=True, exist_ok=True)
+
+    return secret_path
 
 
 def generate_secret_dir_path(name: str, vault_dir: Path):
@@ -189,10 +217,6 @@ class SecretTemplate(BaseModel):
     ):
         return cls(name=name, owner_type=owner_type, secret_type=secret_type)
 
-    def _set_secret_type(self):
-        # if
-        template_name = self.name
-
     def validate(self):
         assert self.owner_type in OWNER_TYPES, f"Invalid owner_type: {self.owner_type}"
 
@@ -235,7 +259,11 @@ class Vault(BaseModel):
     access_keys: List[AccessKey] = []
     dir: str = "~/.lxv/"
     key: str = "~/.lxv.key"
-    key_owner_types: List[str] = OWNER_TYPES.copy()
+    owner_types: List[str] = OWNER_TYPES.copy()
+    secret_types: List[str] = SECRET_TYPES.copy()
+    default_client_secret_types: List[str] = BASE_CLIENT_SECRET_TYPES.copy()
+    default_local_secret_types: List[str] = LOCAL_USER_SECRET_TYPES.copy()
+
     inventory: Optional[AnsibleInventory] = None
     default_system_users: List[str] = ["admin"]
     subnet: str = "172.16.255."
@@ -310,14 +338,14 @@ class Vault(BaseModel):
         return _get_by_name(self.secret_templates, name)
 
     def get_or_create_secret_template(
-        self, name: str, owner_type: str
+        self, name: str, owner_type: str, secret_type="password"
     ) -> Tuple[SecretTemplate, bool]:
         template = self.get_secret_template_by_name(name)
 
         created = False
         if not template:
             template = SecretTemplate.create_secret_template(
-                name=name, owner_type=owner_type
+                name=name, owner_type=owner_type, secret_type=secret_type
             )
             self.secret_templates.append(template)
             created = True
@@ -325,12 +353,14 @@ class Vault(BaseModel):
         return template, created
 
     def get_or_create_secret_templates(
-        self, names: List[str], owner_type: str
+        self, names: List[str], owner_type: str, secret_type: str = "password"
     ) -> Tuple[List[SecretTemplate], List[SecretTemplate]]:
         templates = []
         created_templates = []
         for name in names:
-            template, created = self.get_or_create_secret_template(name, owner_type)
+            template, created = self.get_or_create_secret_template(
+                name, owner_type, secret_type
+            )
             templates.append(template)
             if created:
                 created_templates.append(template)
@@ -348,16 +378,51 @@ class Vault(BaseModel):
 
         return _secret_templates, _created_secret_templates
 
-    def _sync_client_secret_templates(
-        self,
-    ) -> Tuple[List[SecretTemplate], List[SecretTemplate]]:
-        client_names = self.inventory.get_hostnames()
-        owner_type = "clients"
-        _secret_templates, _created_secret_templates = (
-            self.get_or_create_secret_templates(client_names, owner_type)
-        )
+    def _build_local_user_secret_templates(self):
+        # make sure we fail if hardcoded owner_type is invalid due to other changes
+        owner_type = "local"
+        assert owner_type in OWNER_TYPES, f"Invalid owner_type: {owner_type}"
 
-        return _secret_templates, _created_secret_templates
+        secret_templates, created_secret_templates = [], []
+        client_names = self.inventory.get_hostnames()
+        default_users = self.default_system_users.copy()
+        secret_types = LOCAL_USER_SECRET_TYPES
+
+        for secret_type in secret_types:
+            for client_name in client_names:
+                client = self.inventory.get_host_by_name(client_name)
+                extra_users = client.get_extra_user_names()
+
+                users = extra_users + default_users
+                user_secret_names = [f"{user}@{client_name}" for user in users]
+
+                _secret_templates, _created_secret_templates = (
+                    self.get_or_create_secret_templates(
+                        user_secret_names, owner_type, secret_type
+                    )
+                )
+                secret_templates.extend(_secret_templates)
+                created_secret_templates.extend(_created_secret_templates)
+
+        return secret_templates, created_secret_templates
+
+    def _build_client_secret_templates(self):
+        secret_templates, created_secret_templates = [], []
+        owner_type = "clients"
+        secret_names = self.inventory.get_hostnames()
+        secret_types = BASE_CLIENT_SECRET_TYPES
+
+        assert owner_type in OWNER_TYPES, f"Invalid owner_type: {owner_type}"
+        for secret_type in secret_types:
+            _secret_templates, _created_secret_templates = (
+                self.get_or_create_secret_templates(
+                    secret_names, owner_type, secret_type
+                )
+            )
+            secret_templates.extend(_secret_templates)
+            created_secret_templates.extend(_created_secret_templates)
+
+        return secret_templates, created_secret_templates
 
     def _sync_group_secret_templates(
         self,
@@ -383,9 +448,13 @@ class Vault(BaseModel):
         secret_templates.extend(_secret_templates)
         created_secret_templates.extend(_created_secret_templates)
 
+        _secret_templates, _created_secret_templates = (
+            self._build_local_user_secret_templates()
+        )
+
         # Get or create secret templates for clients
         _secret_templates, _created_secret_templates = (
-            self._sync_client_secret_templates()
+            self._build_client_secret_templates()
         )
         secret_templates.extend(_secret_templates)
         created_secret_templates.extend(_created_secret_templates)

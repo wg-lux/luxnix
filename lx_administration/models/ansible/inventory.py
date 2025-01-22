@@ -369,15 +369,12 @@ class AnsibleInventory(BaseModel):
         host_vars = load_host_vars(host_vars_dir)
 
         for host_name, vars in host_vars.items():
-            print(host_name)
             host = self.get_host_by_name(host_name)
             if not host:
                 host = AnsibleInventoryHost(hostname=host_name)
                 self.all.append(host)
             assert isinstance(vars, dict)
-            import pprint
 
-            pprint.pprint(vars)
             host.vars = deep_update(host.vars, vars)
 
     def build_merged_vars(self, hostname: str) -> MergedHostVars:
