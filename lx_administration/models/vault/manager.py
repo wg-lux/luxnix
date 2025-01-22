@@ -3,9 +3,9 @@ from typing import Optional, List, Dict, Union
 from datetime import datetime, timedelta
 from pathlib import Path
 from lx_administration.logging import get_logger
-import shutil
 import os
 from lx_administration.yaml import dump_yaml, format_yaml, ansible_lint
+from lx_administration.utils.paths import str2path
 
 
 from ..ansible import AnsibleInventory
@@ -164,21 +164,39 @@ def _get_by_name(obj_list: List[Union[Secret, AccessKey]], name: str, logger=Non
         return None
 
 
+class SecretTemplate(BaseModel):
+    owner_type: str
+    template_dir: str
+
+    @classmethod
+    def create_template(cls, owner_type: str, template_dir: str):
+        return cls(owner_type=owner_type, template_dir=template_dir)
+
+    def get_template_dir(self, return_as_string=False):
+        p = self.template_dir
+        p = str2path(
+            p, expanduser=True, resolve=True, return_as_string=return_as_string
+        )
+        return p
+
+
 class Vault(BaseModel):
     secrets: List[Secret] = []
     access_keys: List[AccessKey] = []
     dir: str = "~/.lxv/"
     key: str = "~/.lxv.key"
-    key_owner_types: List[str] = ["local", "roles", "services", "luxnix", "clients"]
+    key_owner_types: List[str] = OWNER_TYPES.copy()
     inventory: Optional[AnsibleInventory] = None
     default_system_users: List[str] = ["admin"]
     subnet: str = "172.16.255."
+    secret_templates: List[SecretTemplate] = []
 
     @classmethod
-    def _get_vault_paths(cls, dir: str, key: str):
-        dir = Path(dir).expanduser()
-        key = Path(key).expanduser()
+    def _get_vault_paths(cls, dir: str, key: str) -> Union[Tuple[Path, Path, Path]]:
+        key = str2path(key, expanduser=True, resolve=False, return_as_string=False)
+        dir = str2path(dir, expanduser=True, resolve=False, return_as_string=False)
         vault = dir / "vault.yml"
+
         return dir, key, vault
 
     @classmethod
@@ -215,6 +233,20 @@ class Vault(BaseModel):
 
         self.inventory = AnsibleInventory.from_file(inventory_file)
         return self.inventory
+
+    # def sync_secret_templates(self):
+    #     inventory = self.inventory.model_copy()
+
+    #     # extract roles
+    #     role_names = inventory.get_role_names()
+
+    #     # extract clients
+    #     client_names = inventory.get_hostnames()
+
+    #     # extract groups
+    #     group_names = inventory.get_group_names()
+
+    #     local_system_user_names = self.default_system_users
 
     def sync_inventory(self, inventory_file: str):
         logger = get_logger("Vaults-sync_inventory", reset=True)

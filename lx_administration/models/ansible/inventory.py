@@ -93,7 +93,6 @@ class AnsibleInventory(BaseModel):
         assert subnet.endswith(".") and len(subnet.split(".")) == 4
         # Initialize temporary dict to read inventory
         inventory = cls(file=file.resolve().as_posix())
-        print(inventory)
         with open(file, "r") as f:
             for raw_line in f:
                 line = raw_line.strip()
@@ -118,41 +117,21 @@ class AnsibleInventory(BaseModel):
                         ip = parts[1].split("=")[1]
                         inventory.set_ansible_host_ip(hostname, ip)
 
-        logger.info("--" * 10)
-        logger.info(f"gc-06: {inventory.get_host_by_name('gc-06')}")
-        logger.info(f"Groups: {inventory.groups}")
-        logger.info(f"Roles: {inventory.roles}")
-        logger.info(f"All: {inventory.all}")
-        logger.info("--" * 10)
-
         inventory.load_roles(file.parent)
-        logger.info("--" * 10)
-        logger.info("loaded roles")
-        logger.info(f"Roles: {inventory.roles}")
-        logger.info("--" * 10)
-
         inventory.load_group_vars(file.parent)
-        logger.info("--" * 10)
-        logger.info("loaded group vars")
-        logger.info(f"Groups: {inventory.groups}")
-        logger.info("--" * 10)
-
-        inventory.load_host_vars(file.parent)
-        logger.info("--" * 10)
-        logger.info("loaded host vars")
-        logger.info(f"All: {inventory.all}")
-        # logger.info("--" * 10)
-
-        # inventory.update_hosts_group_vars()
-        # logger.info("--" * 10)
-        logger.info("updated host group vars")
-        for host in inventory.all:
-            logger.info(f"----{host.hostname}----")
-            logger.info(f"{host.hostname}: {host.ansible_group_names}")
 
         log_heading(logger, f"Loaded Inventory from {file}")
 
         return inventory
+
+    def get_role_names(self):
+        return [role.name for role in self.roles]
+
+    def get_hostnames(self):
+        return [host.hostname for host in self.all]
+
+    def get_group_names(self):
+        return [group.name for group in self.groups]
 
     def export_merged_host_vars(self, hostname: str) -> Dict:
         from lx_administration.autoconf.imports.utils import deep_update
