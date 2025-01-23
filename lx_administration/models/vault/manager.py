@@ -11,7 +11,7 @@ from lx_administration.utils.paths import str2path
 from ..ansible import AnsibleInventory
 
 
-OWNER_TYPES = ["local", "roles", "services", "luxnix", "clients"]
+OWNER_TYPES = ["local", "roles", "services", "luxnix", "clients", "groups"]
 SECRET_TYPES = [
     "password",
     "id_ed25519",
@@ -58,7 +58,7 @@ def generate_access_key_path(
     assert owner_type in OWNER_TYPES, f"Invalid owner_type: {owner_type}"
     assert secret_type in SECRET_TYPES, f"Invalid secret_type: {secret_type}"
 
-    secret_path = vault_dir / f"{secret_type}/{owner_type}/{name}.key"
+    secret_path = vault_dir / "access_keys" / f"{secret_type}/{owner_type}/{name}.key"
 
     secret_dir = secret_path.parent
     secret_dir.mkdir(mode=700, parents=True, exist_ok=True)
@@ -66,10 +66,14 @@ def generate_access_key_path(
     return secret_path
 
 
-def generate_secret_dir_path(name: str, vault_dir: Path):
-    secret_dir = vault_dir / "secrets" / name
-    if not secret_dir.exists():
-        secret_dir.mkdir(parents=True)
+def generate_secret_dir_path(
+    name: str, vault_dir: Path, owner_type: str, secret_type: str
+):
+    assert owner_type in OWNER_TYPES, f"Invalid owner_type: {owner_type}"
+    assert secret_type in SECRET_TYPES, f"Invalid secret_type: {secret_type}"
+
+    secret_dir = vault_dir / "secrets" / f"{secret_type}/{owner_type}/{name}"
+    secret_dir.mkdir(mode=700, parents=True, exist_ok=True)
 
     return secret_dir
 
@@ -162,7 +166,7 @@ class AccessKey(BaseModel):
 
 class Secret(BaseModel):
     name: str
-    directory: str
+    file: str
     access_key: AccessKey
     secret_type: str = (
         "password"  # password, id_ed25519, id_rsa, ssh_cert, gpg_key, gpg_cert
@@ -210,15 +214,38 @@ class SecretTemplate(BaseModel):
     name: str
     owner_type: str
     secret_type: str = "password"
+    directory: Optional[str] = None
 
     @classmethod
     def create_secret_template(
-        cls, name: str, owner_type: str, secret_type: Optional[str] = "password"
+        cls,
+        name: str,
+        owner_type: str,
+        secret_type: Optional[str] = "password",
+        vault_dir: str = "~/.lxv/",
     ):
-        return cls(name=name, owner_type=owner_type, secret_type=secret_type)
+        template = cls(name=name, owner_type=owner_type, secret_type=secret_type)
+
+        if not template.directory:
+            template.directory = template.get_secret_dir(Path(vault_dir)).as_posix()
+
+        return template
 
     def validate(self):
         assert self.owner_type in OWNER_TYPES, f"Invalid owner_type: {self.owner_type}"
+        assert (
+            self.secret_type in SECRET_TYPES
+        ), f"Invalid secret_type: {self.secret_type}"
+
+        assert Path(
+            self.directory
+        ).exists(), f"Directory {self.directory} does not exist!"
+
+    def get_secret_dir(self, vault_dir: Path):
+        secret_dir = generate_secret_dir_path(
+            self.name, vault_dir, self.owner_type, self.secret_type
+        )
+        return secret_dir
 
 
 def _check_unique_list(lst: List[str]) -> bool:
@@ -338,14 +365,21 @@ class Vault(BaseModel):
         return _get_by_name(self.secret_templates, name)
 
     def get_or_create_secret_template(
-        self, name: str, owner_type: str, secret_type="password"
+        self,
+        name: str,
+        owner_type: str,
+        secret_type="password",
+        vault_dir: str = "~/.lxv/",
     ) -> Tuple[SecretTemplate, bool]:
         template = self.get_secret_template_by_name(name)
 
         created = False
         if not template:
             template = SecretTemplate.create_secret_template(
-                name=name, owner_type=owner_type, secret_type=secret_type
+                name=name,
+                owner_type=owner_type,
+                secret_type=secret_type,
+                vault_dir=vault_dir,
             )
             self.secret_templates.append(template)
             created = True
@@ -353,13 +387,17 @@ class Vault(BaseModel):
         return template, created
 
     def get_or_create_secret_templates(
-        self, names: List[str], owner_type: str, secret_type: str = "password"
+        self,
+        names: List[str],
+        owner_type: str,
+        secret_type: str = "password",
+        vault_dir: str = "~/.lxv/",
     ) -> Tuple[List[SecretTemplate], List[SecretTemplate]]:
         templates = []
         created_templates = []
         for name in names:
             template, created = self.get_or_create_secret_template(
-                name, owner_type, secret_type
+                name, owner_type, secret_type, vault_dir
             )
             templates.append(template)
             if created:
@@ -478,6 +516,9 @@ class Vault(BaseModel):
             f"Created secret templates: \
 {[template.name for template in created_secret_templates]}"
         )
+
+        for template in self.secret_templates:
+            template.validate()
 
     def sync_inventory(self, inventory_file: str):
         logger = get_logger("Vaults-sync_inventory", reset=True)
