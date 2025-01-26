@@ -5,6 +5,6 @@ group_services: {}
 group_luxnix:
   nvidia_default.enable: "true"
   maintenance.autoUpdates.enable: "true"
-  maintenance.autoUpdates.operation: '"update"'
+  maintenance.autoUpdates.operation: '"switch"'
   maintenance.autoUpdates.flake: '"github:wg-lux/luxnix"'
   maintenance.autoUpdates.dates: '"06:00"'

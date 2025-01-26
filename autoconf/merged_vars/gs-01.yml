@@ -39,7 +39,7 @@ group_luxnix:
   maintenance.autoUpdates.dates: '"06:00"'
   maintenance.autoUpdates.enable: 'true'
   maintenance.autoUpdates.flake: '"github:wg-lux/luxnix"'
-  maintenance.autoUpdates.operation: '"update"'
+  maintenance.autoUpdates.operation: '"switch"'
   nvidia_default.enable: 'true'
   vault.dir: '"/etc/secrets/vault"'
   vault.enable: 'true'
