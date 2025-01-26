@@ -34,7 +34,7 @@ maintenance.autoUpdates.enable = true;
 
 maintenance.autoUpdates.flake = "github:wg-lux/luxnix";
 
-maintenance.autoUpdates.operation = "update";
+maintenance.autoUpdates.operation = "switch";
 
 nvidia-default.enable = true;
 

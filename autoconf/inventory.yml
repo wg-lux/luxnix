@@ -676,7 +676,7 @@ groups:
         maintenance.autoUpdates.dates: '"06:00"'
         maintenance.autoUpdates.enable: 'true'
         maintenance.autoUpdates.flake: '"github:wg-lux/luxnix"'
-        maintenance.autoUpdates.operation: '"update"'
+        maintenance.autoUpdates.operation: '"switch"'
         nvidia_default.enable: 'true'
       group_roles:
         aglnet.client.enable: 'true'
