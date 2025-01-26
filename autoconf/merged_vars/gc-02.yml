@@ -33,6 +33,10 @@ authentication:
     id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos
 group_luxnix:
   generic_settings.enable: 'true'
+  vault.dir: '"/etc/secrets/vault"'
+  vault.enable: 'true'
+  vault.key: '"/etc/secrets/.key"'
+  vault.psk: '"/etc/secrets/.psk"'
 group_roles: {}
 group_services: {}
 host_luxnix:
@@ -69,6 +73,12 @@ luxnix_branch: main
 luxnix_dest: /home/admin/lx-production
 luxnix_dev_repo: /home/admin/dev/luxnix
 luxnix_repo: https://github.com/wg-lux/luxnix.git
+lx_vault_dir: '{{ secret_dir }}/vault'
+lx_vault_dir_src: ~/.lxv
+lx_vault_key: '{{ secret_dir }}/.key'
+lx_vault_key_src: ~/.lxv/.key
+lx_vault_psk: '{{ secret_dir }}/.psk'
 network_conf:
   domain: endo-reg.net
+secret_dir: /etc/secrets
 template_name: main

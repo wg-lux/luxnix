@@ -11,6 +11,6 @@ group_luxnix:
   generic_settings.configurationPathRelative: '"lx-production"'
 
   maintenance.autoUpdates.enable: "true"
-  maintenance.autoUpdates.operation: '"update"'
+  maintenance.autoUpdates.operation: '"switch"'
   maintenance.autoUpdates.flake: '"github:wg-lux/luxnix"'
   maintenance.autoUpdates.dates: '"09:00"'

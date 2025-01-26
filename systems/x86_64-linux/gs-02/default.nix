@@ -38,6 +38,14 @@ maintenance.autoUpdates.operation = "update";
 
 nvidia-default.enable = true;
 
+vault.dir = "/etc/secrets/vault";
+
+vault.enable = true;
+
+vault.key = "/etc/secrets/.key";
+
+vault.psk = "/etc/secrets/.psk";
+
 boot-decryption-stick-gs-01.enable = true;
 
 generic-settings.hostPlatform = "x86_64-linux";

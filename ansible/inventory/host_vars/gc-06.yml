@@ -17,6 +17,7 @@ host_roles:
 host_services: {}
 
 host_luxnix:
+  maintenance.autoUpdates.enable: "false"
   # Custom packages
 
   ##### Override Config Path #####

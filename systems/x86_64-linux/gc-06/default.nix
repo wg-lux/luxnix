@@ -41,15 +41,23 @@ gpu-eval.enable = true;
 
 maintenance.autoUpdates.dates = "09:00";
 
-maintenance.autoUpdates.enable = true;
+maintenance.autoUpdates.enable = false;
 
 maintenance.autoUpdates.flake = "github:wg-lux/luxnix";
 
-maintenance.autoUpdates.operation = "update";
+maintenance.autoUpdates.operation = "switch";
 
 nvidia-prime.enable = true;
 
 nvidia-prime.nvidiaDriver = "beta";
+
+vault.dir = "/etc/secrets/vault";
+
+vault.enable = true;
+
+vault.key = "/etc/secrets/.key";
+
+vault.psk = "/etc/secrets/.psk";
 
 generic-settings.configurationPath = lib.mkForce "/home/admin/dev/luxnix";
 

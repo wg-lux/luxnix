@@ -1,0 +1,32 @@
+---
+- name: Deploy Pre-Shared Keys to managed hosts
+  hosts: managed
+  gather_facts: true
+  become: true # Ensures tasks run with elevated privileges (root)
+  become_user: admin # Optional if 'become' defaults to root on your system
+
+  tasks:
+    - name: Ensure base secrets directory exists
+      ansible.builtin.file:
+        path: "{{ secret_dir }}"
+        state: directory
+        mode: "0755"
+        owner: root
+        group: root
+
+    - name: Ensure vault directory exists
+      ansible.builtin.file:
+        path: "{{ lx_vault_dir }}"
+        state: directory
+        mode: "0700"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+
+    - name: Copy PSK file
+      ansible.builtin.copy:
+        src: "{{ lx_vault_dir_src }}/psk/{{ inventory_hostname }}"
+        dest: "{{ lx_vault_psk }}"
+        mode: "0600"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+      no_log: true

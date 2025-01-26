@@ -39,9 +39,13 @@ group_luxnix:
   maintenance.autoUpdates.dates: '"09:00"'
   maintenance.autoUpdates.enable: 'true'
   maintenance.autoUpdates.flake: '"github:wg-lux/luxnix"'
-  maintenance.autoUpdates.operation: '"update"'
+  maintenance.autoUpdates.operation: '"switch"'
   nvidia_prime.enable: 'true'
   nvidia_prime.nvidiaDriver: '"beta"'
+  vault.dir: '"/etc/secrets/vault"'
+  vault.enable: 'true'
+  vault.key: '"/etc/secrets/.key"'
+  vault.psk: '"/etc/secrets/.psk"'
 group_roles:
   aglnet.client.enable: 'true'
   endoreg_client.enable: 'true'
@@ -75,6 +79,7 @@ host_luxnix:
     - btrfs
     - nfs
   generic_settings.systemStateVersion: '"23.11"'
+  maintenance.autoUpdates.enable: 'false'
   nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
   nvidia_prime.onboardBusId: '"PCI:0:2:0"'
   nvidia_prime.onboardGpuType: '"intel"'
@@ -91,6 +96,12 @@ luxnix_branch: migrate-01
 luxnix_dest: /home/admin/luxnix-production
 luxnix_dev_repo: /home/admin/dev/luxnix
 luxnix_repo: https://github.com/wg-lux/luxnix.git
+lx_vault_dir: '{{ secret_dir }}/vault'
+lx_vault_dir_src: ~/.lxv
+lx_vault_key: '{{ secret_dir }}/.key'
+lx_vault_key_src: ~/.lxv/.key
+lx_vault_psk: '{{ secret_dir }}/.psk'
 network_conf:
   domain: endo-reg.net
+secret_dir: /etc/secrets
 template_name: main
