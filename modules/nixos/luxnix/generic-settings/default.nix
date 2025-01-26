@@ -8,6 +8,7 @@ with lib;
 with lib.luxnix; let
   cfg = config.luxnix.generic-settings;
   hostname = config.networking.hostName;
+  username = config.user.admin.name;
 
 in {
   options.luxnix.generic-settings = {
@@ -17,6 +18,14 @@ in {
       type = types.str;
       description = ''
         The system state version.
+      '';
+    };
+
+    secretDir = mkOption {
+      type = types.path;
+      default = "/etc/secrets";
+      description = ''
+        The directory where secrets are stored.
       '';
     };
 
@@ -158,7 +167,12 @@ in {
     users.mutableUsers = lib.mkDefault cfg.mutableUsers;
     system.stateVersion = cfg.systemStateVersion;
     networking.useDHCP = lib.mkDefault cfg.useDHCP;
+    # use tmpfile rule to create secret directory belonging to admin:users
+    systemd.tmpfiles.rules = [
+      "d ${cfg.secretDir} 0755 ${username} users"
+    ];
   };
+
 
 
 }

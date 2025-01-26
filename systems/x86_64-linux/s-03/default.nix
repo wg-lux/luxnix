@@ -39,6 +39,14 @@ maintenance.autoUpdates.flake = "github:wg-lux/luxnix";
 
 nvidia-prime.enable = false;
 
+vault.dir = "/etc/secrets/vault";
+
+vault.enable = true;
+
+vault.key = "/etc/secrets/.key";
+
+vault.psk = "/etc/secrets/.psk";
+
 generic-settings.hostPlatform = "x86_64-linux";
 
 generic-settings.linux.cpuMicrocode = "amd";
