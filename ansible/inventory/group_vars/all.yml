@@ -6,9 +6,16 @@ group_roles: {}
 group_services: {}
 group_luxnix:
   generic_settings.enable: "true"
+  vault.enable: "true"
+  vault.dir: "'/etc/secrets/vault'"
+  vault.key: "'/etc/secrets/.key'"
+  vault.psk: "'/etc/secrets/.psk'"
 
 ansible_key_dir: "{{ luxnix_dest }}/secrets/ansible-vault-keys"
 ansible_key_source_dir: "{{ luxnix_dev_repo }}/secrets/ansible-vault-keys-source"
+
+lx_vault_dir: "~/.lxv"
+lx_vault_key: "~/.lxv/.key"
 
 luxnix_dev_repo: "/home/admin/dev/luxnix"
 luxnix_repo: "https://github.com/wg-lux/luxnix.git"

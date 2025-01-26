@@ -18,6 +18,7 @@ yaml.add_representer(td, timedelta_representer, Dumper=yaml.SafeDumper)
 OWNER_TYPES = ["local", "roles", "services", "luxnix", "clients", "groups"]
 SECRET_TYPES = [
     "password",
+    "system_password",
     "id_ed25519",
     "id_rsa",
     "ssh_cert",

@@ -19,11 +19,14 @@ def _is_valid(validity: td, created: dt, updated: Optional[dt], logger=None) -> 
     return is_valid
 
 
-def ensure_local_vault_key(path: str, logger=None):
+def ensure_local_vault_key(path: Union[Path, str], logger=None):
     """Ensure that a local vault key exists, or create it."""
     if not logger:
         logger = get_logger("ensure_local_vault_key")
-    local_vault_key = Path(path)
+    if not isinstance(path, Path):
+        local_vault_key = Path(path)
+    else:
+        local_vault_key = path
     if not local_vault_key.exists():
         logger.warning(
             f"Local vault key {local_vault_key} does not exist. Creating new key."
@@ -31,19 +34,14 @@ def ensure_local_vault_key(path: str, logger=None):
         generate_ansible_key(local_vault_key)
 
 
-def generate_ansible_key(key_path: Path, encryption_key_path: Optional[Path] = None):
+def generate_ansible_key(key_path: Path, mode="password"):
+    from ...password import PasswordGenerator
     # Generate a passphrase file, no longer encrypting it with ansible-vault
 
     assert not key_path.exists(), f"File {key_path} already exists!"
-    generate_passphrase_file(key_path)
-
-
-def generate_passphrase_file(key_path: Path):
-    """Generate a passphrase using PasswordGenerator and write it to key_path."""
-    from ...password import PasswordGenerator
 
     key_path = key_path.expanduser().resolve()
-    pg = PasswordGenerator(mode="passphrase", n_words=4)
+    pg = PasswordGenerator(mode=mode, n_words=4)
     results = pg.pipe()
     passphrase = results[0][1]
 

@@ -16,16 +16,6 @@
 # from .manager import Vault
 
 
-from .manager import Vault
+from .manager import Vault, PreSharedKey, AccessKey, Secret, SecretTemplate
 
-__all__ = [
-    "VaultGroup",
-    "VaultGroups",
-    "VaultClient",
-    "VaultClients",
-    "HostConfig",
-    "Hosts",
-    "AutoConfHost",
-    "AutoConfHosts",
-    "Vault",
-]
+__all__ = ["Vault", "PreSharedKey", "AccessKey", "Secret", "SecretTemplate"]

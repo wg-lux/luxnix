@@ -37,10 +37,10 @@ def main(logger=None):
     vault = vault.load_or_create()
     logger.info("Vault loaded or created successfully!")
 
-    logger.info(vault.summary())
-
     logger.info("Syncing inventory...")
     vault.sync_inventory("./autoconf/inventory.yml", logger=logger)
+
+    logger.info(vault.summary())
 
 
 if __name__ == "__main__":

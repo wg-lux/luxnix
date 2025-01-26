@@ -56,6 +56,8 @@ class SecretTemplate(BaseModel):
         ), f"Invalid secret_type: {self.secret_type}"
         if self.secret_type == "password":
             return PasswordGenerator(mode="passphrase", n_words=4)
+        if self.secret_type == "system_password":
+            return PasswordGenerator(mode="password", key_length=32)
 
     def validate(self):
         """
@@ -101,8 +103,12 @@ class SecretTemplate(BaseModel):
         Returns:
             bool: True if secrets were created or updated, False otherwise.
         """
+        from .manager import Vault
+
+        vault: Vault
         if not self.generator:
-            return False
+            raise ValueError(f"SecretTemplate.generator is not set for {self.name}")
+
         results = self.generator.pipe()
         secret_dir = Path(self.directory).expanduser().resolve()
 

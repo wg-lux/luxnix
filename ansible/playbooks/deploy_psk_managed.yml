@@ -1,0 +1,23 @@
+---
+- name: Deploy Pre-Shared Keys to managed hosts
+  hosts: managed
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Ensure vault directory exists
+      ansible.builtin.file:
+        path: "{{ group_luxnix.vault.dir }}"
+        state: directory
+        mode: "0700"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+
+    - name: Copy PSK file
+      ansible.builtin.copy:
+        src: "{{ lx_vault_dir }}/psk/{{ inventory_hostname }}"
+        dest: "{{ group_luxnix.vault.psk }}"
+        mode: "0600"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+      no_log: true

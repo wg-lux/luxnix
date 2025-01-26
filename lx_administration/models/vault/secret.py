@@ -44,7 +44,9 @@ class Secret(BaseModel):
                 "--vault-password-file",
                 access_key_path,
                 file_path,
-            ]
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
 
         return secret

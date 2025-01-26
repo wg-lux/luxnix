@@ -109,6 +109,13 @@ class Vault(BaseModel):
         with open(vault_file_p, "r") as f:
             data = yaml.safe_load(f)
 
+        if "secret_templates" in data and data["secret_templates"]:
+            secret_templates = [
+                SecretTemplate.model_validate(template)
+                for template in data["secret_templates"]
+            ]
+            data["secret_templates"] = secret_templates
+
         if "pre_shared_keys" in data and data["pre_shared_keys"]:
             pre_shared_keys = [
                 PreSharedKey.model_validate(psk) for psk in data["pre_shared_keys"]
@@ -355,15 +362,19 @@ class Vault(BaseModel):
                 - First list: All secret templates for roles (both existing and new)
                 - Second list: Only newly created secret templates
         """
+        # We Use password
+        secret_type = "system_password"
         role_names = self.inventory.get_role_names()
         owner_type = "roles"
         _secret_templates, _created_secret_templates = (
-            self.get_or_create_secret_templates(role_names, owner_type)
+            self.get_or_create_secret_templates(
+                role_names, owner_type, secret_type=secret_type
+            )
         )
 
         return _secret_templates, _created_secret_templates
 
-    def _build_local_user_secret_templates(self):
+    def _build_local_user_secret_templates(self, logger=None):
         """
         Builds secret templates for local users across all hosts in the inventory.
 
@@ -381,6 +392,8 @@ class Vault(BaseModel):
         Templates are created with owner_type="local" and follow the naming pattern:
         "{username}@{hostname}"
         """
+        if not logger:
+            logger = get_logger("Vaults-build_local_user_secret_templates", reset=True)
         # make sure we fail if hardcoded owner_type is invalid due to other changes
         owner_type = "local"
         assert owner_type in OWNER_TYPES, f"Invalid owner_type: {owner_type}"
@@ -454,16 +467,20 @@ class Vault(BaseModel):
             - First list: All secret templates for groups (existing and new)
             - Second list: Only newly created secret templates
         """
+        secret_type = "system_password"
         group_names = self.inventory.get_group_names()
         owner_type = "groups"
         _secret_templates, _created_secret_templates = (
-            self.get_or_create_secret_templates(group_names, owner_type)
+            self.get_or_create_secret_templates(
+                group_names, owner_type, secret_type=secret_type
+            )
         )
 
         return _secret_templates, _created_secret_templates
 
-    def sync_secret_templates(self):
-        logger = get_logger("Vaults-sync_secret_templates", reset=True)
+    def sync_secret_templates(self, logger=None):
+        if not logger:
+            logger = get_logger("Vaults-sync_secret_templates", reset=True)
 
         secret_templates = []
         created_secret_templates = []
@@ -475,17 +492,6 @@ class Vault(BaseModel):
         secret_templates.extend(_secret_templates)
         created_secret_templates.extend(_created_secret_templates)
 
-        _secret_templates, _created_secret_templates = (
-            self._build_local_user_secret_templates()
-        )
-
-        # Get or create secret templates for clients
-        _secret_templates, _created_secret_templates = (
-            self._build_client_secret_templates()
-        )
-        secret_templates.extend(_secret_templates)
-        created_secret_templates.extend(_created_secret_templates)
-
         # Get or create secret templates for groups
         _secret_templates, _created_secret_templates = (
             self._sync_group_secret_templates()
@@ -493,24 +499,37 @@ class Vault(BaseModel):
         secret_templates.extend(_secret_templates)
         created_secret_templates.extend(_created_secret_templates)
 
-        logger.info(f"Synced {len(secret_templates)} secret templates.")
-        logger.info(f"Created {len(created_secret_templates)} secret templates:")
-
-        logger.info(
-            f"Existing secret templates: \
-{[template.name for template in secret_templates]}"
+        # Get or create secret templates for local users
+        _secret_templates, _created_secret_templates = (
+            self._build_local_user_secret_templates()
         )
+        secret_templates.extend(_secret_templates)
+        created_secret_templates.extend(_created_secret_templates)
 
-        logger.info(
-            f"Created secret templates: \
-{[template.name for template in created_secret_templates]}"
-        )
+        # Get or create secret templates for clients
+        # _secret_templates, _created_secret_templates = (
+        #     self._build_client_secret_templates()
+        # )
+        # secret_templates.extend(_secret_templates)
+        # created_secret_templates.extend(_created_secret_templates)
+
+        #         logger.info(f"Synced {len(secret_templates)} secret templates.")
+        #         logger.info(f"Created {len(created_secret_templates)} secret templates:")
+
+        #         logger.info(
+        #             f"Existing secret templates: \
+        # {[template.name for template in secret_templates]}"
+        #         )
+
+        #         logger.info(
+        #             f"Created secret templates: \
+        # {[template.name for template in created_secret_templates]}"
+        #         )
 
         for template in self.secret_templates:
             template.validate()
-            success = template.create_or_update_secrets(vault=self)
-            if not success:
-                warnings.warn(f"{template.name} secrets could not be created / updated")
+            _success = template.create_or_update_secrets(vault=self)
+
             # template.pipe()
 
     def _sync_client_psk(self, logger=None) -> List[PreSharedKey]:
@@ -541,7 +560,9 @@ class Vault(BaseModel):
         logger.info(f"Loading inventory from {inventory_file}")
         _inventory = self.load_inventory(inventory_file.resolve().as_posix())
 
-        # First sync PSKs for all clients
+        # First sync PSKs for all clients (hostnames)
+        # TODO implement validity check and automated update
+        # TODO implement archive of old PSKs
         created_psks = self._sync_client_psk(logger=logger)
 
         logger.info(f"Created {len(created_psks)} new pre-shared keys")
@@ -549,7 +570,7 @@ class Vault(BaseModel):
             logger.info(f"Client PSK: {psk.name}")
 
         # # Then sync secret templates
-        # self.sync_secret_templates()
+        self.sync_secret_templates(logger=logger)
 
         self.save_to_file(logger=logger)
 
@@ -558,15 +579,7 @@ class Vault(BaseModel):
         if not logger:
             logger = get_logger("Vaults-get_client_psk", reset=True)
         psks = self.pre_shared_keys
-        logger.info(f"Searching for PSK for client {client_name}")
-        logger.info(f"Existing PSKs: {[psk.name for psk in psks]}")
-
         psk = _get_by_name(psks, client_name)
-
-        logger.info(f"Found PSK: {psk}")
-
-        logger.info("---------------------------------")
-
         return psk
 
     def get_paths(self):
@@ -653,7 +666,7 @@ class Vault(BaseModel):
     # Utility Methods:
     def get_access_key(
         self, name: str, owner_type, secret_type: str = None, logger=None
-    ):
+    ) -> Optional[AccessKey]:
         """
         Retrieve an access key by name with optional owner_type and secret_type filtering.
 
@@ -670,6 +683,9 @@ class Vault(BaseModel):
             logger = get_logger("Vaults-get_access_key_by_name", reset=True)
 
         key = _get_by_name(self.access_keys, name, logger)
+        if key:
+            assert isinstance(key, AccessKey), f"Invalid key type: {type(key)}"
+
         return key
 
     def get_or_create_key(
@@ -700,19 +716,15 @@ class Vault(BaseModel):
 
         if not logger:
             logger = get_logger("Vaults-get_or_create_key", reset=True)
-        key = self.get_access_key(name, owner_type, logger)
+        key = self.get_access_key(name, owner_type, secret_type, logger)
 
         if key:
             key.validate()
             return key
 
         else:
-            key, is_new = AccessKey.get_or_create(
+            key = AccessKey.create(
                 name, owner_type, secret_type, local_vault_key, vault_dir, logger
             )
-            if not is_new:
-                warnings.warn(
-                    f"Access Key {key.name} was not it vault but exists as file"
-                )
             self.access_keys.append(key)
             return key

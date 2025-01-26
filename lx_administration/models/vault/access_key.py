@@ -31,7 +31,7 @@ class AccessKey(BaseModel):
         arbitrary_types_allowed = True
 
     @classmethod
-    def get_or_create(
+    def create(
         cls,
         name: str,
         owner_type: str,
@@ -49,17 +49,18 @@ class AccessKey(BaseModel):
 
         created = dt.now()
         updated = dt.now()
-        is_new = False
 
         access_key_file = generate_access_key_path(
             name, vault_dir_path, owner_type, secret_type=secret_type
         )
-        ensure_local_vault_key(local_vault_key, logger)
-        local_vault_key_path = Path(local_vault_key).expanduser().resolve()
-        print(f"Access Key File: {access_key_file}")
-        if not access_key_file.exists():
-            is_new = True
-            generate_ansible_key(access_key_file, local_vault_key_path)
+
+        if access_key_file.exists():
+            raise FileExistsError(f"Access key file {access_key_file} already exists.")
+
+        # local_vault_key_path = Path(local_vault_key).expanduser().resolve()
+        # ensure_local_vault_key(local_vault_key_path, logger)
+
+        generate_ansible_key(access_key_file, mode="password")
 
         key = cls(
             name=name,
@@ -72,7 +73,7 @@ class AccessKey(BaseModel):
 
         key.validate()
 
-        return key, is_new
+        return key
 
     def validate(self):
         """
