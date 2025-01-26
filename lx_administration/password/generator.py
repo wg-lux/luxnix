@@ -8,22 +8,15 @@ import secrets
 from faker import Faker
 from datetime import datetime
 import shutil
+from pydantic import BaseModel
+from typing import Union, Tuple, Optional, List, Dict, LiteralString, Literal
 
 
-class PasswordGenerator:
-    """
-    A class to generate random passwords and passphrases, and create password hashes.
-    """
-
-    def __init__(self, length=12, security_level=1):
-        """
-        Initialize the PasswordGenerator with a specified length and security level.
-
-        :param length: Length of the password to be generated.
-        :param security_level: Security level (not used in current implementation).
-        """
-        self.length = length
-        self.security_level = security_level
+class PasswordGenerator(BaseModel):
+    mode: Union[Literal["password"], Literal["passphrase"]] = "passphrase"
+    length: Optional[int] = 12
+    security_level: Optional[int] = 1
+    num_words: Optional[int] = 3
 
     def generate_random_password(self):
         """
@@ -41,7 +34,7 @@ class PasswordGenerator:
             password = "".join(password)
         return password
 
-    def generate_random_passphrase(self, num_words=4):
+    def generate_random_passphrase(self):
         """
         Generate a random passphrase consisting of a specified number of words.
 
@@ -49,7 +42,7 @@ class PasswordGenerator:
         :return: A random passphrase string.
         """
         fake = Faker()
-        words = [fake.word() for _ in range(num_words)]
+        words = [fake.word() for _ in range(self.num_words)]
         return "-".join(words)
 
     def create_password_hash(self, password):
@@ -110,3 +103,16 @@ class PasswordGenerator:
         )
         key = kdf.derive(password.encode())
         return base64.urlsafe_b64encode(salt + key).decode() == password_hash
+
+    def pipe(
+        self,
+    ) -> Tuple[str, str]:
+        if self.mode == "password":
+            result = self.generate_random_password()
+
+        elif self.mode == "passphrase":
+            result = self.generate_random_passphrase()
+
+        hashed_result = self.create_password_hash(result)
+
+        return [("password", result), ("password_hash", hashed_result)]

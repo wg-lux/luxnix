@@ -15,16 +15,6 @@
 # from .hosts import VaultGroup, VaultGroups, VaultClient, VaultClients, HostConfig, Hosts
 # from .manager import Vault
 
-from .hosts import (
-    VaultGroup,
-    VaultGroups,
-    VaultClient,
-    VaultClients,
-    HostConfig,
-    Hosts,
-    AutoConfHost,
-    AutoConfHosts,
-)
 
 from .manager import Vault
 
