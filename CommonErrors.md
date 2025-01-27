@@ -2,18 +2,18 @@
 
 ## Permission denied on nho run
 
-'''
+```
 bash
 nix-os-rebuild switch --flake .
-'''
+```
 
 If this command returns a permission error,
 run:
 
-'''
+```
 bash
 sudo nix-os-rebuild switch --flake .
-'''
+```
 
 If nho returns an error with permission denied, you dont have admin privileges.
 
@@ -35,10 +35,10 @@ For group definitions, check back with the definitions inside of ansible/invento
 Quick fix:
 
 Install the missing apps using nix-shell. This is also great when testing out a package. Availability check at: https://search.nixos.org/packages
-'''
+```
 bash
 nix-shell -p firefox
-'''
+```
 
 Thorough fix:
 
@@ -74,13 +74,13 @@ Then:
 Raise issue on github
 
 ## No Home Defined
-'''
+```
 bash
 nhh 
 error: [json.exception.parse_error.101] parse error at line 1, column 1: syntax error while parsing value - invalid literal; last read: 'h'
 Error: 
    0: Failed to parse nix-eval output: 
-'''
+```
 
 If the above error, or an error telling you that no home for this machine is defined arises, add your host machine to:
 
