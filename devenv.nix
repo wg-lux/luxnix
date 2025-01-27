@@ -44,7 +44,7 @@ in
   enterShell = ''
     . .devenv/state/venv/bin/activate
     uv pip install -e .
-    devenv tasks run "autoconf:initialize-vault"
+    # devenv tasks run "autoconf:initialize-vault"
     python -m unittest
     hello
   '';

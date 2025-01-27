@@ -17,21 +17,9 @@
     settings.mutable = false;
   };
 
-  services.ssh = { # also enabled by endoreg-client role
-    enable = true;
-      authorizedKeys = [ # just adds authorized keys for admin user, does not enable ssh!
-      "${config.luxnix.generic-settings.rootIdED25519}" 
-      ];
-    };
-
   roles = { 
-
-    # endoreg-client.enable = true;
-    aglnet.client.enable = true; # also enabled by endoreg-client role
-    desktop.enable = true; # also enabled by endoreg-client role
-    custom-packages.cuda = lib.mkForce true; # also enabled by endoreg-client role
-    # also enables agl-admin ssh access
-
+    aglnet.client.enable = true;
+    endoreg-client.enable = true;
     custom-packages.baseDevelopment = true;
     };
 
@@ -41,23 +29,23 @@
   luxnix = {
     boot-decryption-stick.enable = true;
 
-generic-settings.configurationPathRelative = "luxnix";
+generic-settings.configurationPathRelative = "lx-production";
 
 generic-settings.enable = true;
 
-gpu-eval.enable = false;
+gpu-eval.enable = true;
 
 maintenance.autoUpdates.dates = "09:00";
 
-maintenance.autoUpdates.enable = false;
+maintenance.autoUpdates.enable = true;
 
 maintenance.autoUpdates.flake = "github:wg-lux/luxnix";
 
 maintenance.autoUpdates.operation = "switch";
 
-nvidia-prime.enable = lib.mkForce false; 
+nvidia-prime.enable = true;
 
-nvidia-prime.nvidiaDriver = "production";
+nvidia-prime.nvidiaDriver = "beta";
 
 vault.dir = "/etc/secrets/vault";
 

@@ -1,121 +1,6 @@
 all:
   - ansible_group_names:
       - all
-      - gpu_client
-    ansible_host: 172.16.255.102
-    ansible_role_names: []
-    extra_user_names: []
-    facts:
-    files: []
-    hostname: gc-02
-    subnet: 172.16.255.
-    vars:
-      host_luxnix:
-        generic_settings.configurationPath: lib.mkForce "/home/admin/luxnix"
-        generic_settings.hostPlatform: '"x86_64-linux"'
-        generic_settings.linux.cpuMicrocode: '"intel"'
-        generic_settings.linux.initrd.availableKernelModules:
-          - xhci_pci
-          - ahci
-          - nvme
-          - usb_storage
-          - sd_mod
-        generic_settings.linux.initrd.kernelModules:
-          - nfs
-        generic_settings.linux.initrd.supportedFilesystems:
-          - nfs
-        generic_settings.linux.kernelModules:
-          - kvm-intel
-        generic_settings.linux.kernelModulesBlacklist: []
-        generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
-        generic_settings.linux.kernelParams: []
-        generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
-        generic_settings.linux.supportedFilesystems:
-          - btrfs
-        generic_settings.systemStateVersion: '"23.11"'
-        nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
-        nvidia_prime.onboardBusId: '"PCI:0:2:0"'
-        nvidia_prime.onboardGpuType: '"intel"'
-      host_roles:
-        custom_packages.baseDevelopment: 'true'
-        custom_packages.cuda: 'true'
-        custom_packages.videoEditing: 'true'
-        custom_packages.visuals: 'true'
-      host_services: {}
-      template_name: main
-  - ansible_group_names:
-      - all
-      - test_group
-    ansible_host: 172.16.255.106
-    ansible_role_names: []
-    extra_user_names: []
-    facts:
-      all_ipv4_addresses:
-        - 172.16.255.106
-        - 192.168.0.115
-        - 192.168.0.235
-      bios:
-        date: 07/23/2024
-        vendor: American Megatrends International, LLC.
-        version: E17L5IMS.117
-      current_date: '2025-01-17T12:45:53Z'
-      default_ipv4:
-        address: 192.168.0.235
-        gateway: 192.168.0.1
-        interface: enp3s0
-        netmask: 255.255.255.0
-      machine: x86_64
-    files: []
-    hostname: gc-06
-    subnet: 172.16.255.
-    vars:
-      ansible_python_interpreter: '{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python'
-      host_luxnix:
-        generic_settings.configurationPath: lib.mkForce "/home/admin/dev/luxnix"
-        generic_settings.hostPlatform: '"x86_64-linux"'
-        generic_settings.linux.cpuMicrocode: '"intel"'
-        generic_settings.linux.extraModulePackages: []
-        generic_settings.linux.initrd.availableKernelModules:
-          - vmd
-          - xhci_pci
-          - ahci
-          - nvme
-          - usb_storage
-          - sd_mod
-        generic_settings.linux.initrd.kernelModules:
-          - dm-snapshot
-          - nfs
-          - btrfs
-        generic_settings.linux.initrd.supportedFilesystems:
-          - nfs
-          - btrfs
-        generic_settings.linux.kernelModules:
-          - kvm-intel
-        generic_settings.linux.kernelModulesBlacklist: []
-        generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
-        generic_settings.linux.kernelParams: []
-        generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
-        generic_settings.linux.supportedFilesystems:
-          - btrfs
-          - nfs
-        generic_settings.systemStateVersion: '"23.11"'
-        maintenance.autoUpdates.enable: 'false'
-        nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
-        nvidia_prime.onboardBusId: '"PCI:0:2:0"'
-        nvidia_prime.onboardGpuType: '"intel"'
-      host_roles:
-        custom_packages.baseDevelopment: 'true'
-        custom_packages.cuda: 'true'
-        custom_packages.videoEditing: 'true'
-        custom_packages.visuals: 'true'
-      host_services: {}
-      luxnix_branch: migrate-01
-      luxnix_dest: /home/admin/luxnix-production
-      luxnix_dev_repo: /home/admin/dev/luxnix
-      luxnix_repo: https://github.com/wg-lux/luxnix.git
-      template_name: main
-  - ansible_group_names:
-      - all
     ansible_host: 172.16.255.107
     ansible_role_names: []
     extra_user_names: []
@@ -566,6 +451,118 @@ all:
       host_roles:
         aglnet.client.enable: 'true'
       host_services: {}
+      template_name: main
+  - ansible_group_names:
+      - all
+      - gpu_client
+    ansible_host: 172.16.255.102
+    ansible_role_names: []
+    extra_user_names: []
+    facts:
+    files: []
+    hostname: gc-02
+    subnet: 172.16.255.
+    vars:
+      host_luxnix:
+        generic_settings.configurationPath: lib.mkForce "/home/admin/luxnix"
+        generic_settings.hostPlatform: '"x86_64-linux"'
+        generic_settings.linux.cpuMicrocode: '"intel"'
+        generic_settings.linux.initrd.availableKernelModules:
+          - xhci_pci
+          - ahci
+          - nvme
+          - usb_storage
+          - sd_mod
+        generic_settings.linux.initrd.kernelModules:
+          - nfs
+        generic_settings.linux.initrd.supportedFilesystems:
+          - nfs
+        generic_settings.linux.kernelModules:
+          - kvm-intel
+        generic_settings.linux.kernelModulesBlacklist: []
+        generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
+        generic_settings.linux.kernelParams: []
+        generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+        generic_settings.linux.supportedFilesystems:
+          - btrfs
+        generic_settings.systemStateVersion: '"23.11"'
+        nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
+        nvidia_prime.onboardBusId: '"PCI:0:2:0"'
+        nvidia_prime.onboardGpuType: '"intel"'
+      host_roles:
+        custom_packages.baseDevelopment: 'true'
+      host_services: {}
+      template_name: main
+  - ansible_group_names:
+      - all
+      - gpu_client
+      - test_group
+    ansible_host: 172.16.255.106
+    ansible_role_names: []
+    extra_user_names: []
+    facts:
+      all_ipv4_addresses:
+        - 172.16.255.106
+        - 192.168.0.115
+        - 192.168.0.235
+      bios:
+        date: 07/23/2024
+        vendor: American Megatrends International, LLC.
+        version: E17L5IMS.117
+      current_date: '2025-01-17T12:45:53Z'
+      default_ipv4:
+        address: 192.168.0.235
+        gateway: 192.168.0.1
+        interface: enp3s0
+        netmask: 255.255.255.0
+      machine: x86_64
+    files: []
+    hostname: gc-06
+    subnet: 172.16.255.
+    vars:
+      ansible_python_interpreter: '{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python'
+      host_luxnix:
+        generic_settings.configurationPath: lib.mkForce "/home/admin/dev/luxnix"
+        generic_settings.hostPlatform: '"x86_64-linux"'
+        generic_settings.linux.cpuMicrocode: '"intel"'
+        generic_settings.linux.extraModulePackages: []
+        generic_settings.linux.initrd.availableKernelModules:
+          - vmd
+          - xhci_pci
+          - ahci
+          - nvme
+          - usb_storage
+          - sd_mod
+        generic_settings.linux.initrd.kernelModules:
+          - dm-snapshot
+          - nfs
+          - btrfs
+        generic_settings.linux.initrd.supportedFilesystems:
+          - nfs
+          - btrfs
+        generic_settings.linux.kernelModules:
+          - kvm-intel
+        generic_settings.linux.kernelModulesBlacklist: []
+        generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
+        generic_settings.linux.kernelParams: []
+        generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+        generic_settings.linux.supportedFilesystems:
+          - btrfs
+          - nfs
+        generic_settings.systemStateVersion: '"23.11"'
+        maintenance.autoUpdates.enable: 'false'
+        nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
+        nvidia_prime.onboardBusId: '"PCI:0:2:0"'
+        nvidia_prime.onboardGpuType: '"intel"'
+      host_roles:
+        custom_packages.baseDevelopment: 'true'
+        custom_packages.videoEditing: 'true'
+        custom_packages.visuals: 'true'
+      host_services: {}
+      luxnix_branch: migrate-01
+      luxnix_dest: /home/admin/luxnix-production
+      luxnix_dev_repo: /home/admin/dev/luxnix
+      luxnix_repo: https://github.com/wg-lux/luxnix.git
       template_name: main
   - ansible_group_names:
       - all

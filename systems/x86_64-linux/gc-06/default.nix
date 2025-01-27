@@ -18,8 +18,9 @@
   };
 
   roles = { 
+    aglnet.client.enable = true;
+    endoreg-client.enable = true;
     custom-packages.baseDevelopment = true;
-    custom-packages.cuda = true;
     custom-packages.videoEditing = true;
     custom-packages.visuals = true;
     };
@@ -28,7 +29,25 @@
     };
 
   luxnix = {
-    generic-settings.enable = true;
+    boot-decryption-stick.enable = true;
+
+generic-settings.configurationPathRelative = "lx-production";
+
+generic-settings.enable = true;
+
+gpu-eval.enable = true;
+
+maintenance.autoUpdates.dates = "09:00";
+
+maintenance.autoUpdates.enable = false;
+
+maintenance.autoUpdates.flake = "github:wg-lux/luxnix";
+
+maintenance.autoUpdates.operation = "switch";
+
+nvidia-prime.enable = true;
+
+nvidia-prime.nvidiaDriver = "beta";
 
 vault.dir = "/etc/secrets/vault";
 
@@ -57,8 +76,6 @@ generic-settings.linux.resumeDevice = "/dev/disk/by-label/nixos";
 
 generic-settings.linux.supportedFilesystems = ["btrfs" "nfs"];
 generic-settings.systemStateVersion = "23.11";
-
-maintenance.autoUpdates.enable = false;
 
 nvidia-prime.nvidiaBusId = "PCI:1:0:0";
 
