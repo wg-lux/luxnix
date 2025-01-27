@@ -70,7 +70,7 @@ generic-settings.linux.initrd.kernelModules = ["nfs"];
 generic-settings.linux.initrd.supportedFilesystems = ["nfs"];
 generic-settings.linux.kernelModules = ["kvm-intel"];
 generic-settings.linux.kernelModulesBlacklist = [];
-generic-settings.linux.kernelPackages = "pkgs.linuxPackages_latest";
+generic-settings.linux.kernelPackages = pkgs.linuxPackages_latest;
 
 generic-settings.linux.kernelParams = [];
 generic-settings.linux.resumeDevice = "/dev/disk/by-label/nixos";
