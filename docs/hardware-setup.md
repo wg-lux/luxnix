@@ -7,6 +7,7 @@ This document outlines the hardware setup required for LuxNix, including disk en
 ## Prerequisites
 
 Before beginning setup, ensure you have:
+
 - ### A computer with UEFI boot support
 
 #### Check if your system is booted in UEFI mode

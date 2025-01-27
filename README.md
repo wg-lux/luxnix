@@ -12,6 +12,8 @@ This infrastructure was built in the context of the ColoReg study. Here the main
 
 
 ### [Table Of Contents - automatically generated](TABLE_OF_CONTENTS.md)
+### [Shortcuts For Easy LuxNix Usage](LxCheatsheet.md)
+### [Common Errors In LuxNix](CommonErrors.md)
 ### [Prerequisites](docs/hardware-setup.md#hardware-setup)
 - NixOS installation media
 - UEFI-capable system
