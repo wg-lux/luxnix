@@ -1,0 +1,7 @@
+- name: Deploy access key
+  ansible.builtin.copy:
+    src: "{{ item.file }}"
+    dest: "{{ lx_vault_dir }}/{{ item.target_name }}"
+    mode: "0600"
+    owner: "{{ ansible_user }}"
+  no_log: true

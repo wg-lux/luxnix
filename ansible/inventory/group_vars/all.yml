@@ -4,8 +4,8 @@ secret_dir: "/etc/secrets"
 lx_vault_dir: "{{ secret_dir }}/vault"
 lx_vault_key: "{{ secret_dir }}/.key"
 lx_vault_psk: "{{ secret_dir }}/.psk"
-lx_vault_dir_src: "~/.lxv"
-lx_vault_key_src: "~/.lxv/.key"
+lx_vault_dir_src: "/home/admin/.lxv"
+lx_vault_key_src: "/home/admin/.lxv.key"
 
 ansible_groups:
   - "common"
