@@ -19,13 +19,37 @@
 
   roles = { 
     aglnet.client.enable = true;
+    endoreg-client.enable = true;
+    custom-packages.baseDevelopment = true;
+    custom-packages.cuda = true;
+    custom-packages.office = true;
+    custom-packages.videoEditing = true;
+    custom-packages.visuals = true;
     };
 
   services = {
     };
 
   luxnix = {
-    generic-settings.enable = true;
+    boot-decryption-stick.enable = true;
+
+generic-settings.configurationPathRelative = "lx-production";
+
+generic-settings.enable = true;
+
+gpu-eval.enable = true;
+
+maintenance.autoUpdates.dates = "09:00";
+
+maintenance.autoUpdates.enable = true;
+
+maintenance.autoUpdates.flake = "github:wg-lux/luxnix";
+
+maintenance.autoUpdates.operation = "switch";
+
+nvidia-prime.enable = true;
+
+nvidia-prime.nvidiaDriver = "beta";
 
 vault.dir = "/etc/secrets/vault";
 
@@ -34,6 +58,8 @@ vault.enable = true;
 vault.key = "/etc/secrets/.key";
 
 vault.psk = "/etc/secrets/.psk";
+
+generic-settings.configurationPath = lib.mkForce "/home/admin/luxnix";
 
 generic-settings.hostPlatform = "x86_64-linux";
 
