@@ -26,7 +26,6 @@ all:
         generic_settings.linux.kernelModules:
           - intel
         generic_settings.linux.kernelModulesBlacklist: []
-        generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
         generic_settings.linux.kernelParams: []
         generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
         generic_settings.linux.supportedFilesystems:
@@ -67,7 +66,6 @@ all:
         generic_settings.linux.kernelModules:
           - intel
         generic_settings.linux.kernelModulesBlacklist: []
-        generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
         generic_settings.linux.kernelParams: []
         generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
         generic_settings.linux.supportedFilesystems:
@@ -111,7 +109,6 @@ all:
         generic_settings.linux.kernelModules:
           - kvm-intel
         generic_settings.linux.kernelModulesBlacklist: []
-        generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
         generic_settings.linux.kernelParams: []
         generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
         generic_settings.linux.supportedFilesystems:
@@ -173,7 +170,6 @@ all:
         generic_settings.linux.kernelModules:
           - kvm-amd
         generic_settings.linux.kernelModulesBlacklist: []
-        generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
         generic_settings.linux.kernelParams: []
         generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
         generic_settings.linux.supportedFilesystems:
@@ -231,7 +227,6 @@ all:
         generic_settings.linux.kernelModules:
           - kvm-amd
         generic_settings.linux.kernelModulesBlacklist: []
-        generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
         generic_settings.linux.kernelParams: []
         generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
         generic_settings.linux.supportedFilesystems:
@@ -286,7 +281,6 @@ all:
         generic_settings.linux.kernelModules:
           - kvm-amd
         generic_settings.linux.kernelModulesBlacklist: []
-        generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
         generic_settings.linux.kernelParams: []
         generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
         generic_settings.linux.supportedFilesystems:
@@ -345,7 +339,6 @@ all:
         generic_settings.linux.kernelModules:
           - kvm-intel
         generic_settings.linux.kernelModulesBlacklist: []
-        generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
         generic_settings.linux.kernelParams: []
         generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
         generic_settings.linux.supportedFilesystems:
@@ -402,7 +395,6 @@ all:
         generic_settings.linux.kernelModules:
           - kvm-amd
         generic_settings.linux.kernelModulesBlacklist: []
-        generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
         generic_settings.linux.kernelParams: []
         generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
         generic_settings.linux.supportedFilesystems:
@@ -439,7 +431,6 @@ all:
         generic_settings.linux.kernelModules:
           - kvm-intel
         generic_settings.linux.kernelModulesBlacklist: []
-        generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
         generic_settings.linux.kernelParams: []
         generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
         generic_settings.linux.supportedFilesystems:
@@ -465,6 +456,7 @@ all:
     vars:
       host_luxnix:
         generic_settings.configurationPath: lib.mkForce "/home/admin/luxnix"
+        generic_settings.configurationPathRelative: '"luxnix"'
         generic_settings.hostPlatform: '"x86_64-linux"'
         generic_settings.linux.cpuMicrocode: '"intel"'
         generic_settings.linux.initrd.availableKernelModules:
@@ -480,7 +472,6 @@ all:
         generic_settings.linux.kernelModules:
           - kvm-intel
         generic_settings.linux.kernelModulesBlacklist: []
-        generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
         generic_settings.linux.kernelParams: []
         generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
         generic_settings.linux.supportedFilesystems:
@@ -543,7 +534,6 @@ all:
         generic_settings.linux.kernelModules:
           - kvm-intel
         generic_settings.linux.kernelModulesBlacklist: []
-        generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
         generic_settings.linux.kernelParams: []
         generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
         generic_settings.linux.supportedFilesystems:
@@ -625,6 +615,7 @@ groups:
           id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos
       group_luxnix:
         generic_settings.enable: 'true'
+        generic_settings.linux.kernelPackages: pkgs.linuxPackages_6_12
         vault.dir: '"/etc/secrets/vault"'
         vault.enable: 'true'
         vault.key: '"/etc/secrets/.key"'

@@ -12,7 +12,7 @@ host_luxnix:
   generic_settings.systemStateVersion: '"23.11"'
 
   generic_settings.linux.cpuMicrocode: '"intel"'
-  generic_settings.linux.kernelPackages: "pkgs.linuxPackages_latest"
+
   generic_settings.linux.kernelModules:
     - "kvm-intel"
   generic_settings.linux.initrd.supportedFilesystems:

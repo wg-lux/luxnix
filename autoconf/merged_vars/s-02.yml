@@ -37,6 +37,7 @@ authentication:
 group_luxnix:
   boot_decryption_stick.enable: 'true'
   generic_settings.enable: 'true'
+  generic_settings.linux.kernelPackages: pkgs.linuxPackages_6_12
   maintenance.autoUpdates.dates: '"04:00"'
   maintenance.autoUpdates.enable: 'true'
   maintenance.autoUpdates.flake: '"github:wg-lux/luxnix"'
@@ -69,7 +70,6 @@ host_luxnix:
   generic_settings.linux.kernelModules:
     - kvm-intel
   generic_settings.linux.kernelModulesBlacklist: []
-  generic_settings.linux.kernelPackages: pkgs.linuxPackages_latest
   generic_settings.linux.kernelParams: []
   generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
   generic_settings.linux.supportedFilesystems:

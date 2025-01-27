@@ -29,9 +29,11 @@
   luxnix = {
     boot-decryption-stick.enable = true;
 
-generic-settings.configurationPathRelative = "lx-production";
+generic-settings.configurationPathRelative = "luxnix";
 
 generic-settings.enable = true;
+
+generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
 
 gpu-eval.enable = true;
 
@@ -66,8 +68,6 @@ generic-settings.linux.initrd.kernelModules = ["nfs"];
 generic-settings.linux.initrd.supportedFilesystems = ["nfs"];
 generic-settings.linux.kernelModules = ["kvm-intel"];
 generic-settings.linux.kernelModulesBlacklist = [];
-generic-settings.linux.kernelPackages = pkgs.linuxPackages_latest;
-
 generic-settings.linux.kernelParams = [];
 generic-settings.linux.resumeDevice = "/dev/disk/by-label/nixos";
 

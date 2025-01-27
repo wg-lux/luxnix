@@ -35,6 +35,8 @@ generic-settings.configurationPathRelative = "lx-production";
 
 generic-settings.enable = true;
 
+generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
+
 gpu-eval.enable = true;
 
 maintenance.autoUpdates.dates = "09:00";
@@ -69,8 +71,6 @@ generic-settings.linux.initrd.kernelModules = ["dm-snapshot" "nfs" "btrfs"];
 generic-settings.linux.initrd.supportedFilesystems = ["nfs" "btrfs"];
 generic-settings.linux.kernelModules = ["kvm-intel"];
 generic-settings.linux.kernelModulesBlacklist = [];
-generic-settings.linux.kernelPackages = pkgs.linuxPackages_latest;
-
 generic-settings.linux.kernelParams = [];
 generic-settings.linux.resumeDevice = "/dev/disk/by-label/nixos";
 
