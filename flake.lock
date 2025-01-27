@@ -1,4 +1,4 @@
-{
+homes/x86_64-linux/admin@gc-02/default.nix{
   "nodes": {
     "catppuccin": {
       "inputs": {
