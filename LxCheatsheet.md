@@ -4,29 +4,25 @@ These shortcuts (and more) are defined at:
 luxnix/modules/home/cli/shells/shared/default.nix
 
 ## Shortcut
-```
-bash
+```bash
 nho
 ```
 
 ## Fallback
 
-```
-bash
+```bash
 nh os switch
 ```
 
 ## Fallback
 
-```
-bash
+```bash
 sudo nixos-rebuild switch --flake .
 ```
 
 # Deleting old nix Generations
 
-```
-bash
+```bash
 `sudo rm /nix/var/nix/gcroots/auto/*`
 ```
 
@@ -36,39 +32,34 @@ bash
 
 ### Shortcut
 
-```
-bash
+```bash
 nhh
 ```
 
 ### Fallback
 
-```
-bash
+```bash
 nh home switch
 ```
 
 # Nix garbage collection:
 
 ## Shortcut
-```
-bash
+```bash
 cleanup
 cleanup-roots
 ```
 
 ## Fallback
 
-```
-bash
+```bash
 Nix-collect-garbage -d
 Nix-store --gc
 ```
 
 ### After garbage cleaning:
 
-```
-bash
+```bash
 Nix-store --verify --check-contents --repair
 ```
 
@@ -79,15 +70,13 @@ luxnix/modules/nixos/roles/aglnet
 
 ## Service restart
 
-```
-bash
+```bash
 sudo systemctl restart openvpn-aglnet.service
 ```
 
 ## Service status
 
-```
-bash
+```bash
 sudo systemctl restart openvpn-aglnet.service
 ```
 
@@ -101,22 +90,19 @@ Devenv tasks and scripts are generally defined at
 
 ### Initialize
 
-```
-bash
+```bash
 devenv tasks run endoreg-db:init
 ```
 
 ### Migrate
 
-```
-bash
+```bash
 devenv tasks run endoreg-db:migrate
 ```
 
 ### Full set up (init & migrate)
 
-```
-bash
+```bash
 devenv tasks run initialize-environment:endoreg-db
 ```
 
@@ -128,15 +114,13 @@ Autoconf populates the groups and hosts in /autoconf from the yml files in ansib
 
 ### Run the AutoConf pipeline:
 
-```
-bash
+```bash
 devenv tasks run autoconf:finished
 ```
 
 ### Shortcut (after direnv allow)
 
-```
-bash
+```bash
 bnsc
 ```
 
@@ -144,7 +128,6 @@ bnsc
 
 ### Generate automatic table of contents
 
-```
-bash
+```bash
 devenv tasks run docs:toc-generator
 ```

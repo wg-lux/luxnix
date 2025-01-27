@@ -10,8 +10,7 @@ nix-os-rebuild switch --flake .
 If this command returns a permission error,
 run:
 
-```
-bash
+```bash
 sudo nix-os-rebuild switch --flake .
 ```
 
@@ -35,8 +34,8 @@ For group definitions, check back with the definitions inside of ansible/invento
 Quick fix:
 
 Install the missing apps using nix-shell. This is also great when testing out a package. Availability check at: https://search.nixos.org/packages
-```
-bash
+
+```bash
 nix-shell -p firefox
 ```
 
@@ -48,6 +47,7 @@ Check if the correct roles are added to your laptop or server. This is edited at
 
 Default role setup:
 
+```Nix
   roles = { 
     aglnet.client.enable = true;
     common.enable = true;
@@ -57,30 +57,37 @@ Default role setup:
     custom-packages.videoEditing = false;
     custom-packages.visuals = false;
     };
+```
 
 ## I See The Error Message: "Directory Not Empty" on a Directory Not Tracked In The LuxNix Github Repository
 
 Try out:
+```bash
+
 cleanup
 nho
+```
 
 Then:
+```bash
+
 git fetch
 git merge
 rm -rf directory
 nho
+```
+
 
 Then:
 Raise issue on github
 
 ## No Home Defined
-```
-bash
+```bash
 nhh 
+```
 error: [json.exception.parse_error.101] parse error at line 1, column 1: syntax error while parsing value - invalid literal; last read: 'h'
 Error: 
    0: Failed to parse nix-eval output: 
-```
 
 If the above error, or an error telling you that no home for this machine is defined arises, add your host machine to:
 
