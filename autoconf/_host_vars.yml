@@ -26,6 +26,11 @@ gc-02:
     nvidia_prime.onboardGpuType: '"intel"'
   host_roles:
     aglnet.client.enable: 'true'
+    custom_packages.cuda: 'true'
+    custom_packages.office: 'true'
+    custom_packages.videoEditing: 'true'
+    custom_packages.visuals: 'true'
+    custom_packages.baseDevelopment: 'true'
   host_services: {}
   template_name: main
 gc-05:
@@ -57,6 +62,10 @@ gc-05:
     nvidia_prime.onboardGpuType: '"intel"'
   host_roles:
     aglnet.client.enable: 'true'
+    custom_packages.cuda: 'true'
+    custom_packages.office: 'true'
+    custom_packages.videoEditing: 'true'
+    custom_packages.visuals: 'true'
   host_services: {}
   template_name: main
 gc-06:
