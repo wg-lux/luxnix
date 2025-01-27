@@ -104,8 +104,9 @@ This document outlines key processes, commands, and configurations required for 
   systems/
     x86_64-linux/
       <machine>/
-        hardware-configuration.nix
-        configuration.nix
+        boot-decryption.nix
+        default.nix
+        disks.nix
   ```
 
 - **Shared Modules:**
