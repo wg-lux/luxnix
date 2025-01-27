@@ -15,7 +15,7 @@
 
   luxnix.generic-settings = {
     enable = true;
-    configurationPath = "dev/luxnix";
+    configurationPath = "lx-production";
   };
 
   roles = {
