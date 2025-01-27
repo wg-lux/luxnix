@@ -3,11 +3,7 @@
 template_name: "main"
 
 host_roles:
-  custom_packages.videoEditing: "true"
   custom_packages.baseDevelopment: "true"
-  custom_packages.office: "true"
-  custom_packages.visuals: "true"
-  custom_packages.cuda: "true"
 
 host_services: {}
 

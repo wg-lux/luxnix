@@ -79,7 +79,6 @@ host_luxnix:
 host_roles:
   custom_packages.baseDevelopment: 'true'
   custom_packages.cuda: 'true'
-  custom_packages.office: 'true'
   custom_packages.videoEditing: 'true'
   custom_packages.visuals: 'true'
 host_services: {}

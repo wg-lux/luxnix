@@ -32,23 +32,12 @@ authentication:
   dev_03:
     id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos
 group_luxnix:
-  boot_decryption_stick.enable: 'true'
-  generic_settings.configurationPathRelative: '"lx-production"'
   generic_settings.enable: 'true'
-  gpu_eval.enable: 'true'
-  maintenance.autoUpdates.dates: '"09:00"'
-  maintenance.autoUpdates.enable: 'true'
-  maintenance.autoUpdates.flake: '"github:wg-lux/luxnix"'
-  maintenance.autoUpdates.operation: '"switch"'
-  nvidia_prime.enable: 'true'
-  nvidia_prime.nvidiaDriver: '"beta"'
   vault.dir: '"/etc/secrets/vault"'
   vault.enable: 'true'
   vault.key: '"/etc/secrets/.key"'
   vault.psk: '"/etc/secrets/.psk"'
-group_roles:
-  aglnet.client.enable: 'true'
-  endoreg_client.enable: 'true'
+group_roles: {}
 group_services: {}
 host_luxnix:
   generic_settings.configurationPath: lib.mkForce "/home/admin/dev/luxnix"
@@ -86,7 +75,6 @@ host_luxnix:
 host_roles:
   custom_packages.baseDevelopment: 'true'
   custom_packages.cuda: 'true'
-  custom_packages.office: 'true'
   custom_packages.videoEditing: 'true'
   custom_packages.visuals: 'true'
 host_services: {}
