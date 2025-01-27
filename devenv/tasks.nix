@@ -37,7 +37,7 @@
 
   "docs:toc-generator" = {
     description = "Updating the documentation overview in TABLE OF CONTENTS";
-    exec =  "./lib/toc-generator/toc.sh";
+    exec =  "${pkgs.uv}/bin/uv run python lib/toc-generator/generate-toc.py";
   };
   "endoreg-db:init" = {
     description = "Initializing endoreg-db module";

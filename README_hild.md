@@ -68,7 +68,6 @@ This infrastructure was built in the context of the ColoReg study. Here the main
 ### Infrastructure Services
 - **Authentication**: Authentik for centralized identity management
 - **Storage**: MinIO for S3-compatible object storage
-- **AI/ML**: Ollama for AI model deployment
 - **Monitoring**: Comprehensive monitoring setup with Netdata
 - **Network**: Advanced VPN configuration and Traefik for service routing
 
