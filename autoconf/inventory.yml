@@ -39,14 +39,12 @@ all:
       host_roles:
         custom_packages.baseDevelopment: 'true'
         custom_packages.cuda: 'true'
-        custom_packages.office: 'true'
         custom_packages.videoEditing: 'true'
         custom_packages.visuals: 'true'
       host_services: {}
       template_name: main
   - ansible_group_names:
       - all
-      - gpu_client
       - test_group
     ansible_host: 172.16.255.106
     ansible_role_names: []
@@ -108,7 +106,6 @@ all:
       host_roles:
         custom_packages.baseDevelopment: 'true'
         custom_packages.cuda: 'true'
-        custom_packages.office: 'true'
         custom_packages.videoEditing: 'true'
         custom_packages.visuals: 'true'
       host_services: {}

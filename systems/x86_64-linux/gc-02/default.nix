@@ -22,7 +22,6 @@
     endoreg-client.enable = true;
     custom-packages.baseDevelopment = true;
     custom-packages.cuda = true;
-    custom-packages.office = true;
     custom-packages.videoEditing = true;
     custom-packages.visuals = true;
     };

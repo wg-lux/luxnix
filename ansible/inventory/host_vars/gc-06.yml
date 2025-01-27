@@ -10,7 +10,6 @@ luxnix_branch: "migrate-01"
 host_roles:
   custom_packages.videoEditing: "true"
   custom_packages.baseDevelopment: "true"
-  custom_packages.office: "true"
   custom_packages.visuals: "true"
   custom_packages.cuda: "true"
 
