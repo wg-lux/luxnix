@@ -3,11 +3,17 @@
 template_name: "main"
 
 host_roles:
-  aglnet.client.enable: "true"
+  custom_packages.videoEditing: "true"
+  custom_packages.baseDevelopment: "true"
+  custom_packages.office: "true"
+  custom_packages.visuals: "true"
+  custom_packages.cuda: "true"
 
 host_services: {}
 
 host_luxnix:
+  generic_settings.configurationPath: 'lib.mkForce "/home/admin/luxnix"'
+
   generic_settings.hostPlatform: '"x86_64-linux"'
   generic_settings.systemStateVersion: '"23.11"'
 

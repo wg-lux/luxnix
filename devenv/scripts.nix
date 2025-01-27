@@ -21,7 +21,7 @@
   kill-server-ssh.exec = "tmux kill-session -t ssh-servers";
   conn-server-ssh.exec = "tmux attach-session -t ssh-servers";
 
-  init-psk-managed.exec = "ansible-playbook ./ansible/playbooks/deploy_psk_managed.yml";
+  sync-secrets.exec = "ansible-playbook ./ansible/playbooks/deploy_secrets.yml";
 
 
 }

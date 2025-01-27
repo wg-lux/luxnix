@@ -1,6 +1,7 @@
 all:
   - ansible_group_names:
       - all
+      - gpu_client
     ansible_host: 172.16.255.102
     ansible_role_names: []
     extra_user_names: []
@@ -10,6 +11,7 @@ all:
     subnet: 172.16.255.
     vars:
       host_luxnix:
+        generic_settings.configurationPath: lib.mkForce "/home/admin/luxnix"
         generic_settings.hostPlatform: '"x86_64-linux"'
         generic_settings.linux.cpuMicrocode: '"intel"'
         generic_settings.linux.initrd.availableKernelModules:
@@ -35,7 +37,11 @@ all:
         nvidia_prime.onboardBusId: '"PCI:0:2:0"'
         nvidia_prime.onboardGpuType: '"intel"'
       host_roles:
-        aglnet.client.enable: 'true'
+        custom_packages.baseDevelopment: 'true'
+        custom_packages.cuda: 'true'
+        custom_packages.office: 'true'
+        custom_packages.videoEditing: 'true'
+        custom_packages.visuals: 'true'
       host_services: {}
       template_name: main
   - ansible_group_names:
@@ -638,9 +644,9 @@ groups:
       luxnix_dev_repo: /home/admin/dev/luxnix
       luxnix_repo: https://github.com/wg-lux/luxnix.git
       lx_vault_dir: '{{ secret_dir }}/vault'
-      lx_vault_dir_src: ~/.lxv
+      lx_vault_dir_src: /home/admin/.lxv
       lx_vault_key: '{{ secret_dir }}/.key'
-      lx_vault_key_src: ~/.lxv/.key
+      lx_vault_key_src: /home/admin/.lxv.key
       lx_vault_psk: '{{ secret_dir }}/.psk'
       network_conf:
         domain: endo-reg.net

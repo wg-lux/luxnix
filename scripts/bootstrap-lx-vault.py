@@ -19,10 +19,10 @@ def main(logger=None):
     dirpath = Path("~/.lxv").expanduser()
     keypath = Path("~/.lsv.key").expanduser()
 
-    # if dirpath.exists():
-    #     shutil.rmtree(dirpath, ignore_errors=True)
-    # if keypath.exists():
-    #     os.remove(keypath)
+    if dirpath.exists():
+        shutil.rmtree(dirpath, ignore_errors=True)
+    if keypath.exists():
+        os.remove(keypath)
     #######################
 
     vault = Vault(
@@ -39,6 +39,9 @@ def main(logger=None):
 
     logger.info("Syncing inventory...")
     vault.sync_inventory("./autoconf/inventory.yml", logger=logger)
+
+    logger.info("Exporting host keys...")
+    vault.export_all_host_keys(logger=logger)
 
     logger.info(vault.summary())
 

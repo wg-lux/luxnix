@@ -1,5 +1,5 @@
 from pydantic import BaseModel, model_validator
-from typing import Optional, List, Union, Tuple
+from typing import Optional, List, Union, Tuple, Dict
 from pathlib import Path
 from lx_administration.logging import get_logger
 from lx_administration.yaml import dump_yaml, format_yaml, ansible_lint
@@ -20,6 +20,7 @@ from .manager_utils import _get_by_name, _assert_unique_list
 from datetime import datetime as dt, timedelta as td
 
 from icecream import ic
+from ...utils.vault_deployment import get_access_keys_for_client
 
 
 class Vault(BaseModel):
@@ -663,6 +664,62 @@ class Vault(BaseModel):
         psk.encrypt_access_key(Path(access_key.file), target_path)
         return target_path
 
+    def export_host_keys(self, hostname: str, logger=None) -> Dict:
+        """
+        Export all relevant access keys for a specific host.
+
+        Args:
+            hostname (str): Name of the host to export keys for
+            logger (Logger, optional): Logger instance
+
+        Returns:
+            Dict: Dictionary containing access keys organized by type
+        """
+        if not logger:
+            logger = get_logger("Vaults-export_host_keys", reset=True)
+
+        host = self.inventory.get_host_by_name(hostname)
+        if not host:
+            logger.error(f"Host {hostname} not found in inventory")
+            return {}
+
+        # Get all access keys for this host
+        keys = get_access_keys_for_client(
+            host.model_dump(), self.access_keys, logger=logger
+        )
+
+        # access_keys = [AccessKey.model_validate(key) for key in keys]
+
+        return {"hostname": hostname, "access_keys": keys}
+
+    def export_all_host_keys(self, logger=None):
+        """
+        Export access keys for all hosts in the inventory.
+        Creates a YAML file for each host in the {vault_dir}/deploy directory.
+
+        Args:
+            logger (Logger, optional): Logger instance
+        """
+        if not logger:
+            logger = get_logger("Vaults-export_all_host_keys", reset=True)
+
+        # Create deploy directory
+        deploy_dir = Path(self.dir).expanduser().resolve() / "deploy"
+        deploy_dir.mkdir(parents=True, exist_ok=True)
+
+        hostnames = self.inventory.get_hostnames()
+        for hostname in hostnames:
+            logger.info(f"Exporting keys for host: {hostname}")
+
+            # Export keys for this host
+            keys_data = self.export_host_keys(hostname, logger)
+
+            # Save to file
+            output_file = deploy_dir / f"{hostname}.yml"
+            # dump_yaml(keys_data, output_file, format_yaml, ansible_lint)
+            dump_yaml(keys_data, output_file, format_yaml)
+            logger.info(f"Exported keys to: {output_file}")
+
     # Utility Methods:
     def get_access_key(
         self, name: str, owner_type, secret_type: str = None, logger=None
@@ -685,6 +742,16 @@ class Vault(BaseModel):
         key = _get_by_name(self.access_keys, name, logger)
         if key:
             assert isinstance(key, AccessKey), f"Invalid key type: {type(key)}"
+
+            if owner_type:
+                if key.owner_type != owner_type:
+                    logger.warning(
+                        f"Access key {name} has owner_type {key.owner_type}, not {owner_type}"
+                    )
+                    # ic(key)
+                    # ic(owner_type)
+                    raise AssertionError(f"Invalid owner_type: {key.owner_type}")
+                    # return None
 
         return key
 

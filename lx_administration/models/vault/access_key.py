@@ -26,6 +26,7 @@ class AccessKey(BaseModel):
     updated: Optional[dt] = None
     validity: Optional[td] = td(days=180)
     owner_type: Optional[str] = "roles"
+    target_name: Optional[str] = None
 
     class Config:
         arbitrary_types_allowed = True
@@ -62,8 +63,13 @@ class AccessKey(BaseModel):
 
         generate_ansible_key(access_key_file, mode="password")
 
+        target_name = f"AK__{owner_type}__{secret_type}__{name}"
+
         key = cls(
             name=name,
+            owner_type=owner_type,
+            # secret_type=secret_type,
+            target_name=target_name,
             file=access_key_file.as_posix(),
             vault_dir=vault_dir_path.as_posix(),
             local_vault_key=local_vault_key,

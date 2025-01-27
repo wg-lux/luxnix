@@ -5,6 +5,7 @@ from lx_administration.logging import log_heading, get_logger  #
 from .facts import AnsibleFactsModel
 from lx_administration.models.ansible.merged_host_vars import MergedHostVars
 from lx_administration.yaml import dump_yaml, ansible_lint, format_yaml
+from lx_administration.utils.vault_deployment import get_access_keys_for_client
 
 
 def _is_extra_user_attribute(attribute_name: str) -> bool:
@@ -387,3 +388,12 @@ class AnsibleInventory(BaseModel):
             host_roles=merged_data.get("host_roles", {}),
             host_services=merged_data.get("host_services", {}),
         )
+
+
+def gather_client_access_keys(inventory, all_access_keys):
+    results = {}
+    for client in inventory.get("all", []):
+        results[client["hostname"]] = get_access_keys_for_client(
+            client, all_access_keys
+        )
+    return results
