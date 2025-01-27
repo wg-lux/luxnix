@@ -64,15 +64,6 @@ CAUTION: Before restarting and rebuilding make sure you have a hashed password f
 
 etc/user-password/files
 
-
-Here’s a consolidated `.md` document based on the information provided for managing your LuxNix system:
-
----
-
-# LuxNix Management Documentation
-
-This document outlines key processes, commands, and configurations required for setting up and managing the LuxNix system, leveraging Ansible, Snowfall Lib, and Nixcicle frameworks.
-
 ---
 
 ## Essential Files and Directories
