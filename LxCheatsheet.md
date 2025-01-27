@@ -4,7 +4,6 @@ These shortcuts (and more) are defined at:
 luxnix/modules/home/cli/shells/shared/default.nix
 
 ## Shortcut
-
 nho
 
 ## Fallback
@@ -13,6 +12,10 @@ nh os switch
 
 ## Fallback
 sudo nixos-rebuild switch --flake .
+
+# Deleting old nix Generations
+
+`sudo rm /nix/var/nix/gcroots/auto/*`
 
 # Changes to User Environment (Home)
 
