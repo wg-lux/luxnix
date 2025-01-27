@@ -19,6 +19,7 @@
 
   roles = { 
     aglnet.client.enable = true;
+    endoreg-client.enable = true;
     custom-packages.baseDevelopment = true;
     custom-packages.cuda = true;
     custom-packages.dev03 = true;
@@ -29,9 +30,27 @@
     };
 
   luxnix = {
-    generic-settings.enable = true;
+    boot-decryption-stick.enable = true;
+
+generic-settings.configurationPathRelative = "lx-production";
+
+generic-settings.enable = true;
 
 generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
+
+gpu-eval.enable = true;
+
+maintenance.autoUpdates.dates = "09:00";
+
+maintenance.autoUpdates.enable = true;
+
+maintenance.autoUpdates.flake = "github:wg-lux/luxnix";
+
+maintenance.autoUpdates.operation = "switch";
+
+nvidia-prime.enable = true;
+
+nvidia-prime.nvidiaDriver = "beta";
 
 vault.dir = "/etc/secrets/vault";
 

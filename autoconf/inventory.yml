@@ -1,6 +1,7 @@
 all:
   - ansible_group_names:
       - all
+      - gpu_client
     ansible_host: 172.16.255.107
     ansible_role_names: []
     extra_user_names: []
@@ -39,6 +40,7 @@ all:
       template_name: main
   - ansible_group_names:
       - all
+      - gpu_client
     ansible_host: 172.16.255.108
     ansible_role_names: []
     extra_user_names: []
@@ -85,6 +87,7 @@ all:
       template_name: main
   - ansible_group_names:
       - all
+      - gpu_client
     ansible_host: 172.16.255.109
     ansible_role_names: []
     extra_user_names: []
@@ -406,6 +409,7 @@ all:
       template_name: main
   - ansible_group_names:
       - all
+      - gpu_client
     ansible_host: 172.16.255.105
     ansible_role_names: []
     extra_user_names: []
@@ -556,6 +560,18 @@ all:
       template_name: main
   - ansible_group_names:
       - all
+      - gpu_client
+    ansible_host: 172.16.255.101
+    ansible_role_names: []
+    extra_user_names: []
+    facts:
+    files: []
+    hostname: gc-01
+    subnet: 172.16.255.
+    vars: {}
+  - ansible_group_names:
+      - all
+      - gpu_client
     ansible_host: 172.16.255.103
     ansible_role_names: []
     extra_user_names: []
@@ -566,6 +582,7 @@ all:
     vars: {}
   - ansible_group_names:
       - all
+      - gpu_client
     ansible_host: 172.16.255.104
     ansible_role_names: []
     extra_user_names: []
