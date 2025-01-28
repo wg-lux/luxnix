@@ -33,6 +33,10 @@ in
       sync.enable = true;
     };
   };
+  
+  git-hooks.hooks = {
+    ansible-lint.enable = true;
+  };
 
   tasks = tasks;
 

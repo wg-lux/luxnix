@@ -11,10 +11,14 @@ Before beginning setup, ensure you have:
 - ### A computer with UEFI boot support
 
 #### Check if your system is booted in UEFI mode
+```bash
 [ -d /sys/firmware/efi ] && echo "UEFI" || echo "BIOS"
+```
 
 #### For more details
+```bash
 ls /sys/firmware/efi/efivars
+```
 
 - ### At least one storage device (NVMe or SATA)
 - ### (Optional) USB stick for boot decryption
