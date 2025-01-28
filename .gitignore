@@ -1,4 +1,7 @@
 .repo_initialized
+
+conf/ansible.cfg
+
 # direnv
 .direnv
 .devenv_built

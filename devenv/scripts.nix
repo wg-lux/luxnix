@@ -8,6 +8,9 @@
     touch .repo_initialized
   '';
 
+  # Make sure ./conf/ansible.cfg exists, if not, create it by copying .conf/TEMPLATE_ansible.cfg
+  ensure-ansible-config.exec = "cp -n ./conf/TEMPLATE_ansible.cfg ./conf/ansible.cfg";
+
   ac.exec = "devenv tasks run autoconf:finished";
 
   # hi.exec = "${pkgs.uv}/bin/uv run python lx_administration/ansible/hostinfo.py";
