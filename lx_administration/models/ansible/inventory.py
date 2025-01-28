@@ -5,7 +5,7 @@ from lx_administration.logging import log_heading, get_logger  #
 from .facts import AnsibleFactsModel
 from lx_administration.models.ansible.merged_host_vars import MergedHostVars
 from lx_administration.yaml import dump_yaml, ansible_lint, format_yaml
-from lx_administration.utils.vault_deployment import get_access_keys_for_client
+from ..config import DEFAULT_USERS
 
 
 def _is_extra_user_attribute(attribute_name: str) -> bool:
@@ -39,14 +39,20 @@ class AnsibleInventoryHost(BaseModel):
     hostname: Optional[str]
     ansible_group_names: List[str] = []
     ansible_role_names: List[str] = []
-    extra_user_names: List[str] = []
+    extra_user_names: List[str] = [
+        "dev"
+    ]  # ["dev", "maintenance", "root", "center-user"]
     subnet: Optional[str] = "172.16.255."
     vars: Dict[str, Union[str, Dict, List[str]]] = {}
     files: List[str] = []
     facts: Optional[AnsibleFactsModel] = None
 
     def get_extra_user_names(self) -> List[str]:
-        extra_user_names = _get_extra_user_names(self.vars)
+        extra_user_names = DEFAULT_USERS.copy()
+        extra_user_names.extend(self.vars.get("os_extra_user_names", []))
+
+        attribute_extra_user_names = _get_extra_user_names(self.vars)
+        extra_user_names.extend(attribute_extra_user_names)
 
         return extra_user_names
 
@@ -372,7 +378,9 @@ class AnsibleInventory(BaseModel):
         for host_name, vars in host_vars.items():
             host = self.get_host_by_name(host_name)
             if not host:
-                host = AnsibleInventoryHost(hostname=host_name)
+                host = AnsibleInventoryHost(
+                    hostname=host_name, extra_user_names=["root", "center-user"]
+                )
                 self.all.append(host)
             assert isinstance(vars, dict)
 
@@ -390,10 +398,11 @@ class AnsibleInventory(BaseModel):
         )
 
 
-def gather_client_access_keys(inventory, all_access_keys):
-    results = {}
-    for client in inventory.get("all", []):
-        results[client["hostname"]] = get_access_keys_for_client(
-            client, all_access_keys
-        )
-    return results
+# DEPRECEATED
+# def gather_client_access_keys(inventory, all_access_keys):
+#     results = {}
+#     for client in inventory.get("all", []):
+#         results[client["hostname"]] = get_access_keys_for_client(
+#             client, all_access_keys
+#         )
+#     return results

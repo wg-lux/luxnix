@@ -1,5 +1,6 @@
 import yaml
 from datetime import datetime as dt, timedelta as td
+from ..config import DEFAULT_USERS
 
 
 def datetime_representer(dumper, data):
@@ -25,6 +26,7 @@ SECRET_TYPES = [
     "openvpn_cert",
     # Removed "vault_key" as it's replaced by pre-shared key system
 ]
+
 
 LOCAL_USER_SECRET_TYPES = ["password", "id_ed25519", "id_rsa"]
 for _ in LOCAL_USER_SECRET_TYPES:

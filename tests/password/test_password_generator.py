@@ -84,6 +84,50 @@ class TestPasswordGenerator(unittest.TestCase):
             self.password_gen.verify_password_hash("wrongpassword", password_hash)
         )
 
+    def test_nixos_password_hash_compatibility(self):
+        """
+        Test that generated password hashes are compatible with NixOS user password files.
+        NixOS expects a crypt(3) compatible hash format starting with '$6$' (SHA-512).
+        Format: $6$rounds=<rounds>$<salt>$<hash>
+        """
+        password = "test-password-123"
+        password_hash = self.password_gen.create_password_hash(password)
+
+        # Verify hash starts with $6$ (SHA-512)
+        self.assertTrue(
+            password_hash.startswith("$6$"),
+            f"Hash should start with $6$ (SHA-512), got: {password_hash[:10]}...",
+        )
+
+        # Split hash parts
+        parts = password_hash.split("$")
+        self.assertEqual(
+            len(parts), 5, "Hash should have format $6$rounds=<rounds>$<salt>$<hash>"
+        )
+        self.assertEqual(parts[1], "6", "First part should be '6' for SHA-512")
+        self.assertTrue(
+            parts[2].startswith("rounds="), "Second part should specify rounds"
+        )
+
+        # Verify hash can be written to and read from a file
+        import tempfile
+        import os
+
+        with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
+            f.write(password_hash)
+            f.flush()
+
+            # Read back and verify
+            with open(f.name, "r") as f2:
+                stored_hash = f2.read().strip()
+
+            self.assertEqual(stored_hash, password_hash)
+            self.assertTrue(
+                self.password_gen.verify_password_hash(password, stored_hash)
+            )
+
+        os.unlink(f.name)
+
 
 if __name__ == "__main__":
     unittest.main()

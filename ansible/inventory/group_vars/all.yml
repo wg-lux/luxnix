@@ -16,8 +16,8 @@ group_luxnix:
   generic_settings.linux.kernelPackages: "pkgs.linuxPackages_6_12"
   vault.enable: "true"
   vault.dir: '"/etc/secrets/vault"'
-  vault.key: '"/etc/secrets/.key"'
-  vault.psk: '"/etc/secrets/.psk"'
+  vault.key: '"/etc/secrets/.key"' # Depreceated ?
+  vault.psk: '"/etc/secrets/.psk"' # Depreceated ?
 
 ansible_key_dir: "{{ luxnix_dest }}/secrets/ansible-vault-keys"
 ansible_key_source_dir: "{{ luxnix_dev_repo }}/secrets/ansible-vault-keys-source"

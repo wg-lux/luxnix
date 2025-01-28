@@ -10,6 +10,7 @@ from datetime import datetime
 import shutil
 from pydantic import BaseModel, field_validator, model_validator
 from typing import Union, Tuple, Optional, List, Literal
+from passlib.hash import sha512_crypt
 
 
 class PasswordGenerator(BaseModel):
@@ -94,23 +95,12 @@ class PasswordGenerator(BaseModel):
         secrets.SystemRandom().shuffle(words)
         return "-".join(words)
 
-    def create_password_hash(self, password):
+    def create_password_hash(self, password: str) -> str:
         """
-        Create a hash of the given password using PBKDF2HMAC.
-
-        :param password: The password to hash.
-        :return: A base64 encoded hash of the password.
+        Create a password hash using SHA-512 (compatible with NixOS).
+        Uses passlib's sha512_crypt which is compatible with crypt's SHA512 format.
         """
-        salt = os.urandom(16)
-        kdf = PBKDF2HMAC(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=salt,
-            iterations=100000,
-            backend=default_backend(),
-        )
-        key = kdf.derive(password.encode())
-        return base64.urlsafe_b64encode(salt + key).decode()
+        return sha512_crypt.hash(password)
 
     def create_user_passphrase_file(self, username, hostname, n_words=4):
         passphrase = self.generate_random_passphrase(n_words)
@@ -134,24 +124,11 @@ class PasswordGenerator(BaseModel):
         with open(hashed_path, "w") as hashed_file:
             hashed_file.write(hashed)  #
 
-    def verify_password_hash(self, password, password_hash):
+    def verify_password_hash(self, password: str, password_hash: str) -> bool:
         """
-        Verify a password against a given hash.
-
-        :param password: The password to verify.
-        :param password_hash: The hash to verify against.
-        :return: True if the password matches the hash, False otherwise.
+        Verify a password against a given hash using SHA-512.
         """
-        salt = base64.urlsafe_b64decode(password_hash.encode())[:16]
-        kdf = PBKDF2HMAC(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=salt,
-            iterations=100000,
-            backend=default_backend(),
-        )
-        key = kdf.derive(password.encode())
-        return base64.urlsafe_b64encode(salt + key).decode() == password_hash
+        return sha512_crypt.verify(password, password_hash)
 
     def pipe(self) -> List[Tuple[str, str]]:
         """Generate password/passphrase and its hash."""

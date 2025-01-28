@@ -7,6 +7,9 @@ luxnix_repo: "https://github.com/wg-lux/luxnix.git"
 luxnix_dest: "/home/admin/luxnix-production"
 luxnix_branch: "migrate-01"
 
+os_extra_user_names:
+  - "demodemo"
+
 host_roles:
   custom_packages.videoEditing: "true"
   custom_packages.baseDevelopment: "true"

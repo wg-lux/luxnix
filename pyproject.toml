@@ -24,6 +24,7 @@ dependencies = [
     "arsenal-cli>=1.2.7",
     "ruamel-yaml>=0.18.10",
     "icecream>=2.1.4",
+    "passlib>=1.7.4",
 ]
 
 [tool.setuptools]

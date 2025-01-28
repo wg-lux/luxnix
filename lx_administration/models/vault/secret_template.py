@@ -8,6 +8,7 @@ from .manager_utils import (
     generate_secret_dir_path,
 )
 from .secret import Secret
+from lx_administration.logging import get_logger
 
 
 class SecretTemplate(BaseModel):
@@ -93,7 +94,7 @@ class SecretTemplate(BaseModel):
         )
         return secret_dir
 
-    def create_or_update_secrets(self, vault: "Vault"):  # noqa: F821
+    def create_or_update_secrets(self, vault: "Vault", logger=None):  # noqa: F821
         """
         Create or update secrets within the specified vault using the stored generator.
 
@@ -105,9 +106,13 @@ class SecretTemplate(BaseModel):
         """
         from .manager import Vault
 
-        vault: Vault
+        _vault: Vault = vault
+        if not logger:
+            logger = get_logger("lx_vault__create_or_update_secrets")
         if not self.generator:
             raise ValueError(f"SecretTemplate.generator is not set for {self.name}")
+
+        hostnames = [host.hostname for host in _vault.inventory.all]
 
         results = self.generator.pipe()
         secret_dir = Path(self.directory).expanduser().resolve()
@@ -119,20 +124,32 @@ class SecretTemplate(BaseModel):
             _secret = _secrets[i]
             secret_file = secret_dir / secret_name
 
-            _exists = Secret.check_exists(secret_name, secret_file, vault)
+            _exists = Secret.check_exists(secret_name, secret_file, _vault)
 
             if not _exists:
                 # Create the encrypted secret file
                 Secret.create_secret(
                     secret=_secret,
                     file=str(secret_file),
-                    vault=vault,
+                    vault=_vault,
                 )
 
                 # Create and store the Secret object
 
+                # Some secret names the hostnames which should not be present
+                # in the secret_target variable
+                pseudo_secret_name = secret_name
+                for hostname in hostnames:
+                    rm_str = f"@{hostname}"
+                    pseudo_secret_name = pseudo_secret_name.replace(rm_str, "")
+
+                if pseudo_secret_name != secret_name:
+                    logger.info(
+                        f"Replaced occuring hostname in secret_target:\
+                             {pseudo_secret_name} != {secret_name}"
+                    )
                 secret_target = (
-                    f"SCRT_{self.owner_type}_{self.secret_type}_{secret_name}"
+                    f"SCRT_{self.owner_type}_{self.secret_type}_{pseudo_secret_name}"
                 )
 
                 secret = Secret(

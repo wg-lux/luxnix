@@ -4,7 +4,9 @@ all:
       - gpu_client
     ansible_host: 172.16.255.107
     ansible_role_names: []
-    extra_user_names: []
+    extra_user_names:
+      - admin
+      - maintenance
     facts:
     files: []
     hostname: gc-07
@@ -43,7 +45,9 @@ all:
       - gpu_client
     ansible_host: 172.16.255.108
     ansible_role_names: []
-    extra_user_names: []
+    extra_user_names:
+      - admin
+      - maintenance
     facts:
     files: []
     hostname: gc-08
@@ -90,7 +94,9 @@ all:
       - gpu_client
     ansible_host: 172.16.255.109
     ansible_role_names: []
-    extra_user_names: []
+    extra_user_names:
+      - admin
+      - maintenance
     facts:
     files: []
     hostname: gc-09
@@ -130,7 +136,9 @@ all:
       - managed
     ansible_host: 172.16.255.21
     ansible_role_names: []
-    extra_user_names: []
+    extra_user_names:
+      - admin
+      - maintenance
     facts:
       all_ipv4_addresses:
         - 172.16.255.21
@@ -188,7 +196,9 @@ all:
       - managed
     ansible_host: 172.16.255.22
     ansible_role_names: []
-    extra_user_names: []
+    extra_user_names:
+      - admin
+      - maintenance
     facts:
       all_ipv4_addresses:
         - 172.16.255.22
@@ -246,7 +256,9 @@ all:
       - managed
     ansible_host: 172.16.255.1
     ansible_role_names: []
-    extra_user_names: []
+    extra_user_names:
+      - admin
+      - maintenance
     facts:
       all_ipv4_addresses:
         - 172.16.255.1
@@ -300,7 +312,9 @@ all:
       - managed
     ansible_host: 172.16.255.12
     ansible_role_names: []
-    extra_user_names: []
+    extra_user_names:
+      - admin
+      - maintenance
     facts:
       all_ipv4_addresses:
         - 172.16.255.12
@@ -358,7 +372,9 @@ all:
       - managed
     ansible_host: 172.16.255.13
     ansible_role_names: []
-    extra_user_names: []
+    extra_user_names:
+      - admin
+      - maintenance
     facts:
       all_ipv4_addresses:
         - 192.168.1.24
@@ -412,7 +428,9 @@ all:
       - gpu_client
     ansible_host: 172.16.255.105
     ansible_role_names: []
-    extra_user_names: []
+    extra_user_names:
+      - admin
+      - maintenance
     facts:
     files: []
     hostname: gc-05
@@ -452,7 +470,9 @@ all:
       - gpu_client
     ansible_host: 172.16.255.102
     ansible_role_names: []
-    extra_user_names: []
+    extra_user_names:
+      - admin
+      - maintenance
     facts:
     files: []
     hostname: gc-02
@@ -494,7 +514,10 @@ all:
       - test_group
     ansible_host: 172.16.255.106
     ansible_role_names: []
-    extra_user_names: []
+    extra_user_names:
+      - admin
+      - maintenance
+      - demodemo
     facts:
       all_ipv4_addresses:
         - 172.16.255.106
@@ -557,13 +580,17 @@ all:
       luxnix_dest: /home/admin/luxnix-production
       luxnix_dev_repo: /home/admin/dev/luxnix
       luxnix_repo: https://github.com/wg-lux/luxnix.git
+      os_extra_user_names:
+        - demodemo
       template_name: main
   - ansible_group_names:
       - all
       - gpu_client
     ansible_host: 172.16.255.101
     ansible_role_names: []
-    extra_user_names: []
+    extra_user_names:
+      - admin
+      - maintenance
     facts:
     files: []
     hostname: gc-01
@@ -574,7 +601,9 @@ all:
       - gpu_client
     ansible_host: 172.16.255.103
     ansible_role_names: []
-    extra_user_names: []
+    extra_user_names:
+      - admin
+      - maintenance
     facts:
     files: []
     hostname: gc-03
@@ -585,7 +614,9 @@ all:
       - gpu_client
     ansible_host: 172.16.255.104
     ansible_role_names: []
-    extra_user_names: []
+    extra_user_names:
+      - admin
+      - maintenance
     facts:
     files: []
     hostname: gc-04

@@ -101,5 +101,7 @@ lx_vault_key_src: /home/admin/.lxv.key
 lx_vault_psk: '{{ secret_dir }}/.psk'
 network_conf:
   domain: endo-reg.net
+os_extra_user_names:
+  - demodemo
 secret_dir: /etc/secrets
 template_name: main

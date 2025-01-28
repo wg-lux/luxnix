@@ -625,31 +625,9 @@ class Vault(BaseModel):
         secret_templates.extend(_secret_templates)
         created_secret_templates.extend(_created_secret_templates)
 
-        # Get or create secret templates for clients
-        # _secret_templates, _created_secret_templates = (
-        #     self._build_client_secret_templates()
-        # )
-        # secret_templates.extend(_secret_templates)
-        # created_secret_templates.extend(_created_secret_templates)
-
-        #         logger.info(f"Synced {len(secret_templates)} secret templates.")
-        #         logger.info(f"Created {len(created_secret_templates)} secret templates:")
-
-        #         logger.info(
-        #             f"Existing secret templates: \
-        # {[template.name for template in secret_templates]}"
-        #         )
-
-        #         logger.info(
-        #             f"Created secret templates: \
-        # {[template.name for template in created_secret_templates]}"
-        #         )
-
         for template in self.secret_templates:
             template.validate()
-            _success = template.create_or_update_secrets(vault=self)
-
-            # template.pipe()
+            _success = template.create_or_update_secrets(vault=self, logger=logger)
 
     def _sync_client_psk(self, logger=None) -> List[PreSharedKey]:
         """Create PSKs for all clients in inventory"""
