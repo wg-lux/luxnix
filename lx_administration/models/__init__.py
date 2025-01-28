@@ -8,7 +8,7 @@ from .ansible import (
     MergedHostVars,
     # AnsibleInventoryRoles,
 )
-from .vault import Vault
+from .vault import Vault, Secret, AnsibleCfg
 
 __all__ = [
     "AnsibleFactsModel",
@@ -19,5 +19,7 @@ __all__ = [
     "AnsibleInventoryGroup",
     "MergedHostVars",
     "Vault",
+    "Secret",
+    "AnsibleCfg",
     # "AnsibleInventoryRoles",
 ]

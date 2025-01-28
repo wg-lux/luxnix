@@ -119,10 +119,6 @@ class SecretTemplate(BaseModel):
             _secret = _secrets[i]
             secret_file = secret_dir / secret_name
 
-            access_key = vault.get_or_create_key(
-                self.name, self.owner_type, self.secret_type, self.local_vault_key
-            )
-
             _exists = Secret.check_exists(secret_name, secret_file, vault)
 
             if not _exists:
@@ -130,14 +126,20 @@ class SecretTemplate(BaseModel):
                 Secret.create_secret(
                     secret=_secret,
                     file=str(secret_file),
-                    access_key=access_key,
+                    vault=vault,
                 )
 
                 # Create and store the Secret object
+
+                secret_target = (
+                    f"SCRT_{self.owner_type}_{self.secret_type}_{secret_name}"
+                )
+
                 secret = Secret(
                     name=secret_name,
+                    template_name=self.name,
                     file=str(secret_file),
-                    access_key=access_key,
+                    target_name=secret_target,
                     owner_type=self.owner_type,
                     secret_type=self.secret_type,
                     local_vault_key=self.local_vault_key,

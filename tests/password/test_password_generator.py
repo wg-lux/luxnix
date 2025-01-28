@@ -5,46 +5,58 @@ import string
 
 class TestPasswordGenerator(unittest.TestCase):
     def setUp(self):
-        """
-        Set up the test case with instances of PasswordGenerator.
-        """
-        self.generator = PasswordGenerator(mode="password", length=12)
-        self.passphrase_generator = PasswordGenerator(mode="passphrase", num_words=4)
+        """Set up test cases with specific configurations."""
+        self.password_gen = PasswordGenerator(
+            mode="password",
+            key_length=32,
+        )
+        # Configure passphrase generator to match test expectations
+        self.passphrase_gen = PasswordGenerator(
+            mode="passphrase",
+            num_words=4,
+            require_digits=False,  # Disable for consistent word count
+            require_special=False,  # Disable for consistent word count
+        )
 
     def test_generate_random_password(self):
-        """
-        Test the generate_random_password method to ensure it generates
-        a password of the correct length with required characters.
-        """
-        password = self.generator.generate_random_password()
-        self.assertEqual(len(password), 12)
-        self.assertTrue(any(c.islower() for c in password))
+        """Test password generation with all requirements."""
+        password = self.password_gen.generate_random_password()
+
+        # Test length
+        self.assertEqual(len(password), 32)
+
+        # Test character requirements
         self.assertTrue(any(c.isupper() for c in password))
+        self.assertTrue(any(c.islower() for c in password))
         self.assertTrue(any(c.isdigit() for c in password))
         self.assertTrue(any(c in string.punctuation for c in password))
+
+    def test_password_minimum_length(self):
+        """Test minimum length validation."""
+        with self.assertRaises(ValueError):
+            PasswordGenerator(mode="password", key_length=8)
 
     def test_generate_random_passphrase(self):
         """
         Test the generate_random_passphrase method.
         """
-        passphrase = self.passphrase_generator.generate_random_passphrase()
+        passphrase = self.passphrase_gen.generate_random_passphrase()
         self.assertEqual(len(passphrase.split("-")), 4)
 
     def test_pipe_password_mode(self):
-        """
-        Test the pipe method in password mode.
-        """
-        result = self.generator.pipe()
+        """Test the pipe method in password mode."""
+        result = self.password_gen.pipe()
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0][0], "password")
         self.assertEqual(result[1][0], "password_hash")
-        self.assertEqual(len(result[0][1]), 12)
+        self.assertEqual(len(result[0][1]), 32)  # Updated to match new default length
 
     def test_pipe_passphrase_mode(self):
-        """
-        Test the pipe method in passphrase mode.
-        """
-        result = self.passphrase_generator.pipe()
+        """Test the pipe method in passphrase mode."""
+        gen = PasswordGenerator(
+            mode="passphrase", num_words=4, require_digits=False, require_special=False
+        )
+        result = gen.pipe()
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0][0], "password")
         self.assertEqual(result[1][0], "password_hash")
@@ -56,7 +68,7 @@ class TestPasswordGenerator(unittest.TestCase):
         a given password.
         """
         password = "testpassword"
-        password_hash = self.generator.create_password_hash(password)
+        password_hash = self.password_gen.create_password_hash(password)
         self.assertIsInstance(password_hash, str)
         self.assertGreater(len(password_hash), 0)
 
@@ -66,10 +78,10 @@ class TestPasswordGenerator(unittest.TestCase):
         against a hash.
         """
         password = "testpassword"
-        password_hash = self.generator.create_password_hash(password)
-        self.assertTrue(self.generator.verify_password_hash(password, password_hash))
+        password_hash = self.password_gen.create_password_hash(password)
+        self.assertTrue(self.password_gen.verify_password_hash(password, password_hash))
         self.assertFalse(
-            self.generator.verify_password_hash("wrongpassword", password_hash)
+            self.password_gen.verify_password_hash("wrongpassword", password_hash)
         )
 
 

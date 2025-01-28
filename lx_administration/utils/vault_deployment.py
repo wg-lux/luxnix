@@ -2,6 +2,23 @@ from lx_administration.logging import get_logger
 from icecream import ic
 
 
+def get_secrets_for_access_keys(access_keys, all_secrets, logger=None):
+    matched_secrets = []
+    if not logger:
+        logger = get_logger("get_secrets_for_access_keys", reset=True)
+
+    # iterate over all secrets and check if the secrets access key is
+    # in the list of access keys
+    for secret in all_secrets:
+        access_key = secret.get("access_key")
+        if access_key in access_keys:
+            matched_secrets.append(secret)
+
+    logger.info(f"Matched Secrets: {matched_secrets}")
+
+    return matched_secrets
+
+
 def get_access_keys_for_client(client, all_access_keys, logger=None):
     matched_keys = []
     if not logger:
@@ -33,7 +50,7 @@ def get_access_keys_for_client(client, all_access_keys, logger=None):
             if ak_name in groups:
                 matched_keys.append(ak)
         elif owner_type == "local":
-            if ak_name.endswith(hostname):
+            if ak_name.endswith(f"@{hostname}"):
                 matched_keys.append(ak)
 
         else:

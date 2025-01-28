@@ -47,7 +47,11 @@ def ansible_lint(file: Path):
 
 
 def dump_yaml(data, file: Path, format_func=format_yaml, lint_func=None):
-    """Dump data to YAML file without trailing spaces."""
+    """Dump data to YAML file with directory creation."""
+    # Ensure parent directory exists
+    file = Path(file)  # Ensure we have a Path object
+    file.parent.mkdir(parents=True, exist_ok=True)
+
     with open(file, "w") as f:
         yaml.safe_dump(
             data,

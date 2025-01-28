@@ -16,6 +16,12 @@
 # from .manager import Vault
 
 
-from .manager import Vault, PreSharedKey, AccessKey, Secret, SecretTemplate
+from .manager import Vault, PreSharedKey, Secret, SecretTemplate, AnsibleCfg
 
-__all__ = ["Vault", "PreSharedKey", "AccessKey", "Secret", "SecretTemplate"]
+__all__ = [
+    "Vault",
+    "PreSharedKey",
+    "Secret",
+    "SecretTemplate",
+    "AnsibleCfg",
+]

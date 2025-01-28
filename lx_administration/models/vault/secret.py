@@ -6,7 +6,6 @@ import warnings
 from lx_administration.logging import get_logger
 from lx_administration.utils.paths import str2path
 from .manager_utils import _is_valid, _get_by_name
-from .access_key import AccessKey
 
 
 class Secret(BaseModel):
@@ -16,10 +15,11 @@ class Secret(BaseModel):
 
     name: str
     file: str
-    access_key: AccessKey
     owner_type: str
+    template_name: str
     secret_type: str = "password"
     local_vault_key: Optional[str] = "~/.lxv.key"
+    target_name: str
     created: Optional[dt] = None
     updated: Optional[dt] = None
     validity: Optional[td] = td(days=180)
@@ -28,23 +28,34 @@ class Secret(BaseModel):
         arbitrary_types_allowed = True
 
     @classmethod
-    def create_secret(cls, secret: str, file: str, access_key: AccessKey):
+    def create_secret(
+        cls,
+        secret: str,
+        file: str,
+        vault: "Vault",  # noqa: F821
+    ):
         import subprocess
+        from lx_administration.models import Vault
 
-        access_key_path = Path(access_key.file).expanduser().resolve().as_posix()
+        _vault: Vault = vault
+
         file_path = Path(file).expanduser().resolve()
         with open(file_path, "w") as f:
             f.write(secret)
 
-        # use ansible-vault to encrypt the file using the access_key
+        vault_id = _vault.get_local_vault_id()
+        assert vault_id, "Vault ID not found for local hostname"
+
+        encrypt_args = [
+            "ansible-vault",
+            "encrypt",
+            f"--encrypt-vault-id={vault_id}",
+            file_path.as_posix(),
+        ]
+
         subprocess.run(
-            [
-                "ansible-vault",
-                "encrypt",
-                "--vault-password-file",
-                access_key_path,
-                file_path,
-            ],
+            encrypt_args,
+            check=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
@@ -66,18 +77,59 @@ class Secret(BaseModel):
                 f"File {file} exists but secret {name} does not exist in vault or vice versa"
             )
 
-    def get_or_create_access_key(self, vault_dir: str):
-        access_key = AccessKey.get_or_create(
-            name=self.name,
-            owner_type=self.owner_type,
-            vault_dir=vault_dir,
-            local_vault_key=self.local_vault_key,
-        )
+    def create_re_encrypted_file(
+        self,
+        target_file: str,
+        pre_shared_key_file: str,
+        vault: "Vault",  # noqa: F821
+    ):
+        """Create a copy of the encrypted file with a new key."""
+        import subprocess
+        import shutil
+        import warnings
 
-        return access_key
+        source_path = Path(self.file).expanduser().resolve()
+        target_path = Path(target_file).expanduser().resolve()
+        pre_shared_key_path = Path(pre_shared_key_file).expanduser().resolve()
 
-    def generate_deployment_secrets():
-        pass
+        if not source_path.exists():
+            raise FileNotFoundError(f"Source file not found: {source_path}")
+
+        if not pre_shared_key_path.exists():
+            raise FileNotFoundError(f"PSK file not found: {pre_shared_key_path}")
+
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        if target_path.exists():
+            warnings.warn(f"Target file {target_path} exists and will be overwritten")
+
+        # Copy the source file to target location
+        shutil.copy2(source_path, target_path)
+
+        vault_id = vault.get_local_vault_id() if vault else None
+
+        try:
+            rekey_args = [
+                "ansible-vault",
+                "rekey",
+                "--new-vault-password-file",
+                pre_shared_key_path.as_posix(),
+                target_path.as_posix(),
+            ]
+            if vault_id:
+                rekey_args.insert(2, f"--new-vault-id={vault_id}")
+
+            result = subprocess.run(
+                rekey_args,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+                text=True,
+            )
+            if result.stderr:
+                warnings.warn(f"Rekey warning: {result.stderr}")
+
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"Failed to rekey file: {e.stderr}")
 
     def validate(self):
         logger = get_logger("Secret-validate")
