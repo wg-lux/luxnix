@@ -59,6 +59,7 @@ in {
 
         # util
         show-auth-keys = "for f in /etc/ssh/authorized_keys.d/*; do echo \$f; cat \$f; done";
+        cap = "cat /etc/secrets/vault/SCRT_local_password_admin_password";
 
         # nix
         nhh = "nh home switch";
