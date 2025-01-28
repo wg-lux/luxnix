@@ -9,6 +9,7 @@
     openssl
     black
     nixpkgs-fmt
+    ansible-lint
   ];
 
   packages = with pkgs; [

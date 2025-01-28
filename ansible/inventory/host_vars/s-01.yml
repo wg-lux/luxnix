@@ -14,7 +14,6 @@ host_luxnix:
 
   generic_settings.linux.cpuMicrocode: '"amd"'
 
-  generic_settings.linux.kernelPackages: "pkgs.linuxPackages_latest"
   generic_settings.linux.kernelModules:
     - "kvm-amd"
   generic_settings.linux.initrd.supportedFilesystems:

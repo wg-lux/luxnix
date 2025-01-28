@@ -13,6 +13,7 @@ group_roles: {}
 group_services: {}
 group_luxnix:
   generic_settings.enable: "true"
+  generic_settings.linux.kernelPackages: "pkgs.linuxPackages_6_12"
   vault.enable: "true"
   vault.dir: '"/etc/secrets/vault"'
   vault.key: '"/etc/secrets/.key"'

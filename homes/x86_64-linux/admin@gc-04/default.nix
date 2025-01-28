@@ -1,9 +1,6 @@
 {pkgs, ...}: {
     cli.programs.git = {
       enable = true;
-      userName = "peterkczyk";
-      email = "peter.kowalczyk21@gmail.com";
-      # allowedSigners = "SHA256:LNfWnvEthO0QL8DzUxtxHD4VnLxvCZWFmcDhZodk29o";
     };
 
   desktops = {

@@ -12,18 +12,20 @@ This infrastructure was built in the context of the ColoReg study. Here the main
 
 
 ### [Table Of Contents - automatically generated](TABLE_OF_CONTENTS.md)
-### [Prerequisites](hardware-setup.md#hardware-setup)
+### [Shortcuts For Easy LuxNix Usage](LxCheatsheet.md)
+### [Common Errors In LuxNix](CommonErrors.md)
+### [Prerequisites](docs/hardware-setup.md#hardware-setup)
 - NixOS installation media
 - UEFI-capable system
 - Storage device (NVMe or SATA)
 - USB drive for boot decryption (optional)
 - FIDO2 security key (optional)
 ### [Example Of Deploying LuxNix: Deployment Guide](docs/deployment-guide.md#Deployment)
-### [LUKS Secrets Management](security.md#luks-encryption-management)
-### [Boot Decryption & USB Stick Setup](security.md#boot-decryption-usb-stick-setup)
-### [Service Management](service-architecture.md#overview)
-### [Access Management](access-management.md#access-control)
-### [Tools For Development](development.md#development)
+### [LUKS Secrets Management](docs/security.md#luks-encryption-management)
+### [Boot Decryption & USB Stick Setup](docs/security.md#boot-decryption-usb-stick-setup)
+### [Service Management](docs/service-architecture.md#overview)
+### [Access Management](docs/access-management.md#access-control)
+### [Tools For Development](docs/development.md#development)
 
 ## 🛠️ Initial Setup
 1. Verify UEFI boot mode
@@ -35,42 +37,6 @@ This infrastructure was built in the context of the ColoReg study. Here the main
 
 - Nixicle https://github.com/hmajid2301/nixicle
 - Snowflakes OS Quickstart https://snowfall.org/guides/lib/quickstart/
-
-## 🚀 Key Features
-
-### System Architecture
-- **Modular Design**: Built on Snowfall Lib for clean separation of concerns and maintainable code
-- **Multi-System Support**: Manages configurations for development workstations (gc-*) and servers (s-*)
-- **Role-Based Configuration**: Predefined roles for common use cases:
-  - GPU Development Environment
-  - Base Server Configuration
-  - Monitoring Systems
-  - Desktop Environment (KDE Plasma)
-
-### Security & Hardware
-- **Disk Encryption**: LUKS2 encryption with FIDO2 support
-- **Impermanence**: Stateless system design with persistent data management
-- **Hardware Optimization**:
-  - NVIDIA Prime support for hybrid graphics
-  - Custom hardware configurations for different machine types
-  - Advanced audio and bluetooth management
-
-### Development Environment
-- **GPU Computing**: Configured for research and development workloads
-- **Development Tools**:
-  - Container support (Podman)
-  - Language-specific toolchains
-  - CLI utilities (modern-unix tools)
-- **Terminal Environment**:
-  - Multiple terminal emulator options (Alacritty, Foot, Kitty, WezTerm)
-  - ZSH configuration with modern tools
-
-### Infrastructure Services
-- **Authentication**: Authentik for centralized identity management
-- **Storage**: MinIO for S3-compatible object storage
-- **AI/ML**: Ollama for AI model deployment
-- **Monitoring**: Comprehensive monitoring setup with Netdata
-- **Network**: Advanced VPN configuration and Traefik for service routing
 
 ## 🛠 Getting Started
 
@@ -87,7 +53,7 @@ This infrastructure was built in the context of the ColoReg study. Here the main
 ### Deployment
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/luxnix.git
+git clone https://github.com/wg-lux/luxnix.git
 
 # Deploy to a new system
 nixos-anywhere --flake '.#hostname' nixos@ip-address
@@ -117,15 +83,15 @@ luxnix/
 - Role-based access control
 - Secrets management with SOPS
 
-## 🖥️ Supported Systems
+## 🖥️ Supported System Types
 
 - Development Workstations (gc-*)
   - Hybrid GPU configurations
-  - Development toolchains
-  - Desktop environments
+  - Development toolchain preinstalled
+  - Desktop environment with KDE and Plasma on Linux (NixOS Distro)
 
 - Servers (s-*)
-  - Infrastructure services
+  - Infrastructure to outsource computation
   - Monitoring systems
   - Network services
 
@@ -136,6 +102,7 @@ Detailed documentation is available in the `docs/` directory:
 - Network Architecture
 - Service Configuration
 - Hardware Setup
+- User Management
 
 ## 🛟 Support
 

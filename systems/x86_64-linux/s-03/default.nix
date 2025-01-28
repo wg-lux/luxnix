@@ -31,6 +31,8 @@
 
 generic-settings.enable = true;
 
+generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
+
 maintenance.autoUpdates.dates = "04:00";
 
 maintenance.autoUpdates.enable = true;
@@ -56,8 +58,6 @@ generic-settings.linux.initrd.kernelModules = ["nfs" "btrfs"];
 generic-settings.linux.initrd.supportedFilesystems = ["nfs" "btrfs"];
 generic-settings.linux.kernelModules = ["kvm-amd"];
 generic-settings.linux.kernelModulesBlacklist = [];
-generic-settings.linux.kernelPackages = pkgs.linuxPackages_latest;
-
 generic-settings.linux.kernelParams = [];
 generic-settings.linux.resumeDevice = "/dev/disk/by-label/nixos";
 

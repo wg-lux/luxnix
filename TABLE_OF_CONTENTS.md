@@ -62,6 +62,8 @@
 - [host](docs/deployment-guide.md#host)
 - [client](docs/deployment-guide.md#client)
 - [Deploy Secrets / IDs using luxnix administration](docs/deployment-guide.md#deploy-secrets-/-ids-using-luxnix-administration)
+- [Setup Boot USB Stick](docs/deployment-guide.md#setup-boot-usb-stick)
+- [EndoReg Client: Sensitive Data Hdd](docs/deployment-guide.md#endoreg-client:-sensitive-data-hdd)
 
 ## [development](docs/development.md)
 
@@ -92,6 +94,7 @@
 
 - [Network Architecture](docs/network-architecture.md#network-architecture)
 - [Overview](docs/network-architecture.md#overview)
+- [OpenVPN Service](docs/network-architecture.md#openvpn-service)
 - [Network Topology](docs/network-architecture.md#network-topology)
 - [Basic Structure](docs/network-architecture.md#basic-structure)
 - [Core Components](docs/network-architecture.md#core-components)
@@ -200,3 +203,24 @@
 - [Maintenance](docs/service-architecture.md#maintenance)
 - [Troubleshooting](docs/service-architecture.md#troubleshooting)
 - [Common Issues](docs/service-architecture.md#common-issues)
+
+## [user-management](docs/user-management.md)
+
+- [LuxNix Ansible User Management](docs/user-management.md#luxnix-ansible-user-management)
+- [Example Deployment Flow](docs/user-management.md#example-deployment-flow)
+- [1. Overview](docs/user-management.md#1.-overview)
+- [Key Concepts](docs/user-management.md#key-concepts)
+- [2. `luxnix/autoconf/group_vars.yml`](docs/user-management.md#2.-`luxnix/autoconf/group_vars.yml`)
+- [Explanation](docs/user-management.md#explanation)
+- [3. `roles.yaml`](docs/user-management.md#3.-`roles.yaml`)
+- [4. `inventory/hosts.ini`](docs/user-management.md#4.-`inventory/hosts.ini`)
+- [Base Servers](docs/user-management.md#base-servers)
+- [GPU Servers](docs/user-management.md#gpu-servers)
+- [GPU Clients](docs/user-management.md#gpu-clients)
+- [Explanation](docs/user-management.md#explanation)
+- [5. `inventory/group_vars/gpu_client.yaml` (Example Group File)](docs/user-management.md#5.-`inventory/group_vars/gpu_client.yaml`-(example-group-file))
+- [Explanation](docs/user-management.md#explanation)
+- [6. `inventory/host_vars/gc-02.yml`](docs/user-management.md#6.-`inventory/host_vars/gc-02.yml`)
+- [Explanation](docs/user-management.md#explanation)
+- [7. Putting It All Together](docs/user-management.md#7.-putting-it-all-together)
+- [8. Tips & Best Practices](docs/user-management.md#8.-tips-&-best-practices)
