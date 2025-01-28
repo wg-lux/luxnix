@@ -36,6 +36,7 @@ ansible_python_interpreter: "{{ luxnix_dest }}/.devenv/state/venv/bin/python"
 local_users_passwords_dir: "{{ luxnix_dest }}/secrets/user-passwords/{{ inventory_hostname }}"
 admin_password_file: "{{ local_users_passwords_dir }}/admin_raw"
 admin_password_file_source: "{{ luxnix_dev_repo }}/secrets/user-passwords/{{ inventory_hostname }}/admin_raw"
+# admin_password_file_source: "{{ lx_vault_dir }}/password/local/admin@{{ inventory_hostname }}/admin@{{ inventory_hostname }}_password"
 
 authentication:
   dev_01:

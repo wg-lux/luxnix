@@ -7,7 +7,7 @@
 with lib; 
 with lib.luxnix; let
   cfg = config.luxnix.vault;
-  username = config.user.admin.name;
+  adminName = config.user.admin.name;
   
 in {
   options.luxnix.vault = {
@@ -18,7 +18,19 @@ in {
       description = "The directory where Vault configuration files are stored";
     };
 
-    key = mkOption {
+    adminPasswordFile = mkOption {
+      default = "${config.luxnix.vault.dir}/SCRT_local_password_${adminName}_password";
+      type = types.str;
+      description = "The path to the admin password file";
+    };
+
+    adminPasswordHashedFile = mkOption {
+      default = "${config.luxnix.vault.adminPasswordFile}_hash";
+      type = types.str;
+      description = "The path to the admin password hashed file";
+    };
+
+    key = mkOption { # DEPRECATED ?
       default = "${config.luxnix.generic-settings.secretDir}/.key";
       type = types.str;
       description = "The path to the key file";
@@ -36,7 +48,7 @@ in {
   config = mkIf cfg.enable {
     # make sure vault dir exists with correct permissions (700)
     systemd.tmpfiles.rules = [
-      "d ${cfg.dir} 0700 ${username} users"
+      "d ${cfg.dir} 0700 ${adminName} users"
     ];
   };
 }

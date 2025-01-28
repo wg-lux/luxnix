@@ -23,10 +23,10 @@ def main(logger=None):
     dirpath = Path("~/.lxv").expanduser()
     keypath = Path("~/.lsv.key").expanduser()
 
-    if dirpath.exists():
-        shutil.rmtree(dirpath, ignore_errors=True)
-    if keypath.exists():
-        os.remove(keypath)
+    # if dirpath.exists():
+    #     shutil.rmtree(dirpath, ignore_errors=True)
+    # if keypath.exists():
+    #     os.remove(keypath)
     #######################
 
     vault = Vault(
