@@ -19,12 +19,8 @@
 
   roles = { 
     aglnet.client.enable = true;
-    common.enable = true;
-    desktop.enable = true;
     endoreg-client.enable = true;
     custom-packages.baseDevelopment = true;
-    custom-packages.videoEditing = false;
-    custom-packages.visuals = false;
     };
 
   services = {

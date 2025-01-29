@@ -2,12 +2,21 @@ import yaml
 from pathlib import Path
 from typing import Dict, List, Optional
 from pydantic import BaseModel, RootModel
+import os
 
-# Explicitly define the paths #automatic base path doesn't work
+# Get the script's directory
+BASE_DIR = Path(os.path.dirname(os.path.abspath(__file__)))
+
+# Use absolute paths based on script location
+HOST_CONFIGS_PATH = BASE_DIR / "../autoconf/host_configs_25-01-17.yml"
+MERMAID_MARKDOWN_PATH = BASE_DIR / "../autoconf/host_data_report.md"
+MERMAID_HTML_PATH = BASE_DIR / "../autoconf/host_data_report.html"
+
+"""# Explicitly define the paths #automatic base path doesn't work
 HOST_CONFIGS_PATH = Path("../autoconf/host_configs_25-01-17.yml")
 MERMAID_MARKDOWN_PATH = Path("../autoconf/host_data_report.md")
 MERMAID_HTML_PATH = Path("../autoconf/host_data_report.html")
-
+"""
 
 # Validate that the input file exists
 if not HOST_CONFIGS_PATH.exists():

@@ -51,7 +51,8 @@ in
     # devenv tasks run "autoconf:initialize-vault"
     python -m unittest
     hello
-    python mermaid_report_of_autoconf_hosts.py
+    pwd
+    python autodocs/mermaid_report_of_host_configs.py
   '';
 
   enterTest = ''
