@@ -21,6 +21,7 @@ ansible_groups:
 ansible_key_dir: '{{ luxnix_dest }}/secrets/ansible-vault-keys'
 ansible_key_source_dir: '{{ luxnix_dev_repo }}/secrets/ansible-vault-keys-source'
 ansible_python_interpreter: '{{ luxnix_dest }}/.devenv/state/venv/bin/python'
+ansible_roles: []
 ansible_ssh_private_key_file: ~/.ssh/id_ed25519
 ansible_user: admin
 authentication:
