@@ -16,8 +16,8 @@ group_luxnix:
   generic_settings.linux.kernelPackages: "pkgs.linuxPackages_6_12"
   vault.enable: "true"
   vault.dir: '"/etc/secrets/vault"'
-  vault.key: '"/etc/secrets/.key"'
-  vault.psk: '"/etc/secrets/.psk"'
+  vault.key: '"/etc/secrets/.key"' # Depreceated ?
+  vault.psk: '"/etc/secrets/.psk"' # Depreceated ?
 
 ansible_key_dir: "{{ luxnix_dest }}/secrets/ansible-vault-keys"
 ansible_key_source_dir: "{{ luxnix_dev_repo }}/secrets/ansible-vault-keys-source"
@@ -35,7 +35,8 @@ ansible_python_interpreter: "{{ luxnix_dest }}/.devenv/state/venv/bin/python"
 
 local_users_passwords_dir: "{{ luxnix_dest }}/secrets/user-passwords/{{ inventory_hostname }}"
 admin_password_file: "{{ local_users_passwords_dir }}/admin_raw"
-admin_password_file_source: "{{ luxnix_dev_repo }}/secrets/user-passwords/{{ inventory_hostname }}/admin_raw"
+# admin_password_file_source: "{{ luxnix_dev_repo }}/secrets/user-passwords/{{ inventory_hostname }}/admin_raw"
+admin_password_file_source: "{{ lx_vault_dir_src }}/secrets/password/local/admin@{{ inventory_hostname }}/admin@{{ inventory_hostname }}_password"
 
 authentication:
   dev_01:

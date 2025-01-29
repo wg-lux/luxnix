@@ -18,6 +18,7 @@ class PreSharedKey(BaseModel):
     created: Optional[dt] = None
     updated: Optional[dt] = None
     validity: Optional[td] = td(days=30)  # PSKs are shorter-lived than regular keys
+    vault_id_prefix: Optional[str] = None
 
     class Config:
         arbitrary_types_allowed = True
@@ -57,7 +58,14 @@ class PreSharedKey(BaseModel):
             except (ValueError, IndexError):
                 data["validity"] = td(days=30)
 
+        _vid_prefix = data.get("vault_id_prefix", data["name"])
+        data["vault_id_prefix"] = _vid_prefix.replace("@", "--")
+
         return data
+
+    def get_vid(self):
+        vid = f"{self.vault_id_prefix}@{self.file}"
+        return vid
 
     def model_dump(self, **kwargs):
         """Custom serialization for YAML dumping"""
@@ -138,3 +146,8 @@ class PreSharedKey(BaseModel):
         # Write decrypted data
         with open(target_path, "wb") as f_out:
             f_out.write(decrypted)
+
+
+# If needed, migrate logic from AccessKey here:
+# def some_replacement_method(...):
+#     # ...migrated logic from AccessKey...

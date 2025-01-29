@@ -1,0 +1,10 @@
+group_roles:
+  # ssh_access.dev_01.enable: "false"
+  # ssh_access.dev_01.idEd25519: "TODO"
+
+  ssh_access.dev_03.enable: "true"
+  ssh_access.dev_03.idEd25519: '"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos"'
+
+group_services: {}
+
+group_luxnix: {}

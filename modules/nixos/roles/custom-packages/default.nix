@@ -28,6 +28,7 @@ with lib.luxnix; let
     easyrsa
     e2fsprogs
     keepassxc
+    vlc
   ];
 
   visuals = with pkgs; [

@@ -1,6 +1,6 @@
 admin_password_file: '{{ local_users_passwords_dir }}/admin_raw'
-admin_password_file_source: '{{ luxnix_dev_repo }}/secrets/user-passwords/{{ inventory_hostname
-  }}/admin_raw'
+admin_password_file_source: '{{ lx_vault_dir_src }}/secrets/password/local/admin@{{
+  inventory_hostname }}/admin@{{ inventory_hostname }}_password'
 aglnet_conf:
   backupNameservers:
     - 8.8.8.8
@@ -101,5 +101,7 @@ lx_vault_key_src: /home/admin/.lxv.key
 lx_vault_psk: '{{ secret_dir }}/.psk'
 network_conf:
   domain: endo-reg.net
+os_extra_user_names:
+  - demodemo
 secret_dir: /etc/secrets
 template_name: main

@@ -8,60 +8,99 @@ import secrets
 from faker import Faker
 from datetime import datetime
 import shutil
-from pydantic import BaseModel
-from typing import Union, Tuple, Optional, List, Dict, LiteralString, Literal
+from pydantic import BaseModel, field_validator, model_validator
+from typing import Union, Tuple, Optional, List, Literal
+from passlib.hash import sha512_crypt
 
 
 class PasswordGenerator(BaseModel):
+    """Password and passphrase generator with configurable settings."""
+
     mode: Union[Literal["password"], Literal["passphrase"]] = "passphrase"
-    length: Optional[int] = 12
-    security_level: Optional[int] = 1
-    num_words: Optional[int] = 3
+    key_length: int = 32  # Default length for passwords
+    min_length: int = 12  # Minimum length for passwords
+    num_words: int = 4  # Default number of words for passphrases
+    require_upper: bool = True
+    require_lower: bool = True
+    require_digits: bool = True
+    require_special: bool = True
 
-    def generate_random_password(self):
-        """
-        Generate a random password containing letters, digits, and punctuation.
+    @model_validator(mode="after")
+    def validate_length(self) -> "PasswordGenerator":
+        if self.mode == "password" and self.key_length < self.min_length:
+            raise ValueError(f"Password length must be at least {self.min_length}")
+        return self
 
-        :return: A random password string.
-        """
-        characters = string.ascii_letters + string.digits + string.punctuation
-        password = "".join(secrets.choice(characters) for _ in range(self.length))
-        # Ensure the password contains at least one digit
-        if not any(c.isdigit() for c in password):
-            password = list(password)
-            password[0] = secrets.choice(string.digits)
-            secrets.SystemRandom().shuffle(password)
-            password = "".join(password)
-        return password
+    def generate_random_password(self) -> str:
+        """Generate a random password with required complexity."""
+        characters = ""
+        if self.require_upper:
+            characters += string.ascii_uppercase
+        if self.require_lower:
+            characters += string.ascii_lowercase
+        if self.require_digits:
+            characters += string.digits
+        if self.require_special:
+            characters += string.punctuation
 
-    def generate_random_passphrase(self):
-        """
-        Generate a random passphrase consisting of a specified number of words.
+        # Generate initial password
+        password = [secrets.choice(characters) for _ in range(self.key_length)]
 
-        :param num_words: Number of words in the passphrase.
-        :return: A random passphrase string.
-        """
+        # Ensure all required character types are included
+        requirements = []
+        if self.require_upper:
+            requirements.append((string.ascii_uppercase, any))
+        if self.require_lower:
+            requirements.append((string.ascii_lowercase, any))
+        if self.require_digits:
+            requirements.append((string.digits, any))
+        if self.require_special:
+            requirements.append((string.punctuation, any))
+
+        # Replace characters if requirements not met
+        for char_set, check_func in requirements:
+            if not check_func(c in char_set for c in password):
+                pos = secrets.randbelow(self.key_length)
+                password[pos] = secrets.choice(char_set)
+
+        # Shuffle the final password
+        secrets.SystemRandom().shuffle(password)
+        return "".join(password)
+
+    def generate_random_passphrase(self) -> str:
+        """Generate a random passphrase with improved word selection."""
         fake = Faker()
-        words = [fake.word() for _ in range(self.num_words)]
+        words = []
+        total_words = self.num_words
+
+        # Reduce word count if we need to add digits/special chars
+        if self.require_digits:
+            total_words -= 1
+        if self.require_special:
+            total_words -= 1
+
+        while len(words) < total_words:
+            word = fake.word()
+            # Ensure word meets minimum quality standards
+            if len(word) >= 3 and word.isalpha():
+                words.append(word)
+
+        # Add required elements
+        if self.require_digits:
+            words.append(str(secrets.randbelow(1000)))
+        if self.require_special:
+            words.append(secrets.choice(string.punctuation))
+
+        # Shuffle words
+        secrets.SystemRandom().shuffle(words)
         return "-".join(words)
 
-    def create_password_hash(self, password):
+    def create_password_hash(self, password: str) -> str:
         """
-        Create a hash of the given password using PBKDF2HMAC.
-
-        :param password: The password to hash.
-        :return: A base64 encoded hash of the password.
+        Create a password hash using SHA-512 (compatible with NixOS).
+        Uses passlib's sha512_crypt which is compatible with crypt's SHA512 format.
         """
-        salt = os.urandom(16)
-        kdf = PBKDF2HMAC(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=salt,
-            iterations=100000,
-            backend=default_backend(),
-        )
-        key = kdf.derive(password.encode())
-        return base64.urlsafe_b64encode(salt + key).decode()
+        return sha512_crypt.hash(password)
 
     def create_user_passphrase_file(self, username, hostname, n_words=4):
         passphrase = self.generate_random_passphrase(n_words)
@@ -85,34 +124,18 @@ class PasswordGenerator(BaseModel):
         with open(hashed_path, "w") as hashed_file:
             hashed_file.write(hashed)  #
 
-    def verify_password_hash(self, password, password_hash):
+    def verify_password_hash(self, password: str, password_hash: str) -> bool:
         """
-        Verify a password against a given hash.
-
-        :param password: The password to verify.
-        :param password_hash: The hash to verify against.
-        :return: True if the password matches the hash, False otherwise.
+        Verify a password against a given hash using SHA-512.
         """
-        salt = base64.urlsafe_b64decode(password_hash.encode())[:16]
-        kdf = PBKDF2HMAC(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=salt,
-            iterations=100000,
-            backend=default_backend(),
-        )
-        key = kdf.derive(password.encode())
-        return base64.urlsafe_b64encode(salt + key).decode() == password_hash
+        return sha512_crypt.verify(password, password_hash)
 
-    def pipe(
-        self,
-    ) -> Tuple[str, str]:
+    def pipe(self) -> List[Tuple[str, str]]:
+        """Generate password/passphrase and its hash."""
         if self.mode == "password":
             result = self.generate_random_password()
-
-        elif self.mode == "passphrase":
+        else:
             result = self.generate_random_passphrase()
 
         hashed_result = self.create_password_hash(result)
-
         return [("password", result), ("password_hash", hashed_result)]

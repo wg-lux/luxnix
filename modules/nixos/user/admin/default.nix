@@ -7,10 +7,11 @@
 with lib;
 with lib.luxnix; let
   cfg = config.user.admin;
-  passwordFile = "/etc/user-passwords/${cfg.name}_hashed";
+  passwordFile = config.luxnix.vault.adminPasswordHashedFile;
+  # passwordFile = "/etc/user-passwords/${cfg.name}_hashed";
 in {
   options.user.admin = with types; {
-    name = mkOpt str "lux_t" "The name of the user's account";
+    name = mkOpt str "admin" "The name of the user's account";
     passwordFile =
       mkOpt str passwordFile
       "The hashed password file to use";

@@ -8,14 +8,19 @@
     touch .repo_initialized
   '';
 
+  # Make sure ./conf/ansible.cfg exists, if not, create it by copying .conf/TEMPLATE_ansible.cfg
+  ensure-ansible-config.exec = "cp -n ./conf/TEMPLATE_ansible.cfg ./conf/ansible.cfg";
+
   ac.exec = "devenv tasks run autoconf:finished";
 
   # hi.exec = "${pkgs.uv}/bin/uv run python lx_administration/ansible/hostinfo.py";
   bnsc.exec = "${pkgs.uv}/bin/uv run python scripts/autoconf-pipeline.py";
-  
+  blxv.exec = "${pkgs.uv}/bin/uv run python scripts/bootstrap-lx-vault.py";
+
   run-ansible.exec = "${pkgs.uv}/bin/uv run ansible-playbook ansible/site.yml";
   
   ssh-all.exec = "./tmux/all-luxnix-dir.sh";
+
 
   init-server-ssh.exec = "./tmux/init-server-ssh.sh";
   kill-server-ssh.exec = "tmux kill-session -t ssh-servers";

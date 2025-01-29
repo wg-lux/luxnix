@@ -13,14 +13,143 @@ from .config import (
 )
 import warnings
 from .psk import PreSharedKey
-from .access_key import AccessKey
 from .secret import Secret
 from .secret_template import SecretTemplate
 from .manager_utils import _get_by_name, _assert_unique_list
 from datetime import datetime as dt, timedelta as td
 
 from icecream import ic
-from ...utils.vault_deployment import get_access_keys_for_client
+
+from configparser import ConfigParser
+import socket
+
+
+class AnsibleCfgDefaults(BaseModel):
+    inventory: str = "./ansible/inventory/hosts.ini"
+    group_vars: str = "./ansible/inventory/group_vars"
+    host_vars: str = "./ansible/inventory/host_vars"
+    roles_path: str = "./ansible/roles"
+    log_path: str = "./ansible/ansible.log"
+    library: str = "./ansible/modules"
+    vault_identity_list: Optional[str] = None
+
+    def get_vid_list(self):
+        if self.vault_identity_list:
+            return self.vault_identity_list.split(",")
+        else:
+            return []
+
+    def get_vid_dict(self):
+        vid_list = self.get_vid_list()
+        vid_dict = {}
+        for vid in vid_list:
+            # print(vid)
+            host, path = vid.split("@")
+            vid_dict[host] = path
+
+        return vid_dict
+
+    def vid_dict2list(self, vid_dict):
+        vid_list = []
+        for host, path in vid_dict.items():
+            vid_list.append(f"{host}@{path}")
+        return vid_list
+
+    def vid_list2str(self, vid_list):
+        return ",".join(vid_list)
+
+    def update_vid_entry(self, host, path):
+        vid_dict = self.get_vid_dict()
+        vid_dict[host] = path
+        vault_identity_list = self.vid_dict2list(vid_dict)
+        self.vault_identity_list = self.vid_list2str(vault_identity_list)
+        self.drop_missing_vid()
+
+    def drop_missing_vid(self):
+        file_not_found = []
+        vid_dict = self.get_vid_dict()
+        for host, path in vid_dict.items():
+            if not Path(path).exists():
+                file_not_found.append(host)
+
+        for host in file_not_found:
+            del vid_dict[host]
+
+        self.vault_identity_list = self.vid_list2str(self.vid_dict2list(vid_dict))
+
+        if file_not_found:
+            ic(
+                f"Removing vault_identities with missing files in ansible.cfg: {file_not_found}"
+            )
+
+    def validate(self):
+        self.drop_missing_vid()
+
+
+class AnsibleCfgPrivilegeEscalation(BaseModel):
+    become: bool = True
+    become_method: str = "sudo"
+    become_user: str = "admin"
+    become_ask_pass: bool = False
+
+    def validate(self):
+        pass
+
+
+class AnsibleCfg(BaseModel):
+    defaults: AnsibleCfgDefaults = AnsibleCfgDefaults()
+    privilege_escalation: AnsibleCfgPrivilegeEscalation = (
+        AnsibleCfgPrivilegeEscalation()
+    )
+
+    @classmethod
+    def ensure_vault_id_pwdfile(cls, cfg_path: str, host: str, path: str):
+        """Ensure vault_id and password_file entries in ansible.cfg"""
+        host = host.replace("@", "_")
+        path = path.replace("@", "_")
+        ansible_cfg = cls.from_file(cfg_path)
+        ansible_cfg.defaults.update_vid_entry(host, path)
+        ansible_cfg.save_to_file(cfg_path)
+
+    @classmethod
+    def from_file(cls, file: str):
+        """Load ansible.cfg file"""
+        config = ConfigParser()
+        config.read(file)
+
+        # Convert ConfigParser to dict structure
+        data = {"defaults": {}, "privilege_escalation": {}}
+
+        if config.has_section("defaults"):
+            data["defaults"] = dict(config["defaults"])
+
+        if config.has_section("privilege_escalation"):
+            # Convert string 'True'/'False' to boolean for boolean fields
+            priv_esc = dict(config["privilege_escalation"])
+            for key in ["become", "become_ask_pass"]:
+                if key in priv_esc:
+                    priv_esc[key] = config.getboolean("privilege_escalation", key)
+            data["privilege_escalation"] = priv_esc
+
+        return cls.model_validate(data)
+
+    class Config:
+        arbitrary_types_allowed = True
+        extra = "allow"
+
+    def validate(self):
+        """Validate ansible.cfg model"""
+        self.defaults.validate()
+        self.privilege_escalation.validate()
+
+    def save_to_file(self, file: str):
+        """Save ansible.cfg file"""
+        config = ConfigParser()
+        config["defaults"] = self.defaults.model_dump()
+        config["privilege_escalation"] = self.privilege_escalation.model_dump()
+
+        with open(file, "w") as f:
+            config.write(f)
 
 
 class Vault(BaseModel):
@@ -29,9 +158,9 @@ class Vault(BaseModel):
     """
 
     secrets: List[Secret] = []
-    access_keys: List[AccessKey] = []
     dir: str = "~/.lxv/"
     key: str = "~/.lxv.key"
+    ansible_cfg_path: str = "./conf/ansible.cfg"
     owner_types: List[str] = OWNER_TYPES.copy()
     secret_types: List[str] = SECRET_TYPES.copy()
     default_client_secret_types: List[str] = BASE_CLIENT_SECRET_TYPES.copy()
@@ -123,10 +252,6 @@ class Vault(BaseModel):
             ]
             data["pre_shared_keys"] = pre_shared_keys
 
-        if "access_keys" in data and data["access_keys"]:
-            access_keys = [AccessKey.model_validate(key) for key in data["access_keys"]]
-            data["access_keys"] = access_keys
-
         if "secrets" in data and data["secrets"]:
             secrets = [Secret.model_validate(secret) for secret in data["secrets"]]
             data["secrets"] = secrets
@@ -178,7 +303,6 @@ class Vault(BaseModel):
             "\n-------\n"
             f"Vault Summary:\n"
             f"Secrets: {len(self.secrets)}\n"
-            f"Access Keys: {len(self.access_keys)}\n"
             f"Secret Templates: {len(self.secret_templates)}\n"
             f"Pre-Shared Keys: {len(self.pre_shared_keys)}\n"
             "-------\n"
@@ -200,14 +324,8 @@ class Vault(BaseModel):
             template.validate()
 
     def _validate_access_keys(self):
-        """
-        Validate all access keys within the vault.
-
-        Raises:
-            AssertionError: If any access key is invalid.
-        """
-        for access_key in self.access_keys:
-            access_key.validate()
+        # remove or comment out, since AccessKey no longer exists
+        pass
 
     def _validate_secrets(self):
         """
@@ -253,7 +371,7 @@ class Vault(BaseModel):
         self.inventory = AnsibleInventory.from_file(inventory_file)
         return self.inventory
 
-    def get_secret_template_by_name(self, name: str):
+    def get_secret_template_by_name(self, name: str) -> Optional[SecretTemplate]:
         """
         Retrieves a secret template by its name from the available secret templates.
 
@@ -507,31 +625,9 @@ class Vault(BaseModel):
         secret_templates.extend(_secret_templates)
         created_secret_templates.extend(_created_secret_templates)
 
-        # Get or create secret templates for clients
-        # _secret_templates, _created_secret_templates = (
-        #     self._build_client_secret_templates()
-        # )
-        # secret_templates.extend(_secret_templates)
-        # created_secret_templates.extend(_created_secret_templates)
-
-        #         logger.info(f"Synced {len(secret_templates)} secret templates.")
-        #         logger.info(f"Created {len(created_secret_templates)} secret templates:")
-
-        #         logger.info(
-        #             f"Existing secret templates: \
-        # {[template.name for template in secret_templates]}"
-        #         )
-
-        #         logger.info(
-        #             f"Created secret templates: \
-        # {[template.name for template in created_secret_templates]}"
-        #         )
-
         for template in self.secret_templates:
             template.validate()
-            _success = template.create_or_update_secrets(vault=self)
-
-            # template.pipe()
+            _success = template.create_or_update_secrets(vault=self, logger=logger)
 
     def _sync_client_psk(self, logger=None) -> List[PreSharedKey]:
         """Create PSKs for all clients in inventory"""
@@ -579,8 +675,18 @@ class Vault(BaseModel):
         """Get PSK for a specific client"""
         if not logger:
             logger = get_logger("Vaults-get_client_psk", reset=True)
-        psks = self.pre_shared_keys
-        psk = _get_by_name(psks, client_name)
+
+        # First check in memory
+        psk = _get_by_name(self.pre_shared_keys, client_name)
+        if not psk:
+            return None
+
+        # Then verify file exists
+        psk_path = Path(psk.file).expanduser().resolve()
+        if not psk_path.exists():
+            logger.warning(f"PSK file not found: {psk_path}")
+            return None
+
         return psk
 
     def get_paths(self):
@@ -596,202 +702,202 @@ class Vault(BaseModel):
         """dump as yml"""
         if not logger:
             logger = get_logger("Vaults-save_to_file", reset=True)
+
         if not file:
             vault_dir, _vault_key, vault_file = self.get_paths()
         else:
             vault_file = Path(file).expanduser().resolve()
             vault_dir = vault_file.parent
 
-        if not vault_dir.exists():
-            vault_dir.mkdir(parents=True)
+        # Ensure all parent directories exist
+        vault_file.parent.mkdir(parents=True, exist_ok=True)
 
         logger.info(f"Saving vault to {vault_file}")
 
         # Convert model to dict with explicit path string conversion
-        raw = self.model_dump(mode="json", exclude_none=True)  # Add exclude_none=True
+        raw = self.model_dump(mode="json", exclude_none=True)
 
-        # Ensure pre_shared_keys are properly serialized with ISO format
+        # Handle PSK serialization
         if "pre_shared_keys" in raw and raw["pre_shared_keys"]:
             raw["pre_shared_keys"] = [
                 psk.model_dump(mode="json", exclude_none=True)
                 for psk in self.pre_shared_keys
             ]
-            # Convert validity to ISO format
             for psk in raw["pre_shared_keys"]:
                 if "validity" in psk and isinstance(psk["validity"], (str, td)):
                     if isinstance(psk["validity"], td):
                         psk["validity"] = f"P{psk['validity'].days}D"
 
-        # print indented str to logg
         logger.debug(raw.__repr__())
 
-        # Additional path string conversion might be needed here
-        # if there are nested Path objects that weren't caught
-
+        # Use the dump_yaml function which now handles directory creation
         dump_yaml(raw, vault_file, format_yaml, ansible_lint)
+
+    def ensure_vault_id(self, obj: PreSharedKey):
+        conf_file = self.ansible_cfg_path
+        host = obj.vault_id_prefix
+        path = obj.file
+        AnsibleCfg.ensure_vault_id_pwdfile(cfg_path=conf_file, host=host, path=path)
 
     def get_or_create_psk(self, name: str, logger=None) -> Tuple[PreSharedKey, bool]:
         """Get existing PSK or create new one"""
         if not logger:
             logger = get_logger("Vaults-get_or_create_psk", reset=True)
 
-        # logger.info(f"Searching for PSK for client {name}")
-        # logger.info(f"Existing PSKs: {[psk.name for psk in self.pre_shared_keys]}")
         existing_key = self.get_client_psk(name, logger)
         if existing_key:
             logger.info(f"Found existing PSK for client {name}")
             logger.info(f"PSK: {existing_key}")
+            self.ensure_vault_id(existing_key)
             return existing_key, False
 
-        else:
-            logger.info(f"Creating new PSK for client {name}")
+        logger.info(f"Creating new PSK for client {name}")
+        psk_dir = Path(self.dir).expanduser().resolve() / "psk"
+        psk_dir.mkdir(parents=True, exist_ok=True)
+        psk = PreSharedKey.generate(name, psk_dir, logger)
+        self.ensure_vault_id(psk)
+        self.pre_shared_keys.append(psk)
+        return psk, True
 
-            psk_dir = Path(self.dir).expanduser().resolve() / "psk"
-            psk_dir.mkdir(parents=True, exist_ok=True)
-            psk = PreSharedKey.generate(name, psk_dir, logger)
-            self.pre_shared_keys.append(psk)
-            return psk, True
+    def export_secrets_by_client(self, logger=None):
+        """Export access keys for all hosts in the inventory."""
+        from tqdm import tqdm
+        import shutil
 
-    def prepare_access_key_deployment(self, access_key: AccessKey, target: str):
-        """Prepare an access key for deployment by encrypting it with target's PSK"""
-        psk, _created = self.get_or_create_psk(target)
-        encrypted_dir = (
-            Path(self.dir).expanduser().resolve() / "encrypted_keys" / target
-        )
-        encrypted_dir.mkdir(parents=True, exist_ok=True)
-
-        target_path = encrypted_dir / f"{access_key.name}.key.enc"
-        psk.encrypt_access_key(Path(access_key.file), target_path)
-        return target_path
-
-    def export_host_keys(self, hostname: str, logger=None) -> Dict:
-        """
-        Export all relevant access keys for a specific host.
-
-        Args:
-            hostname (str): Name of the host to export keys for
-            logger (Logger, optional): Logger instance
-
-        Returns:
-            Dict: Dictionary containing access keys organized by type
-        """
         if not logger:
-            logger = get_logger("Vaults-export_host_keys", reset=True)
-
-        host = self.inventory.get_host_by_name(hostname)
-        if not host:
-            logger.error(f"Host {hostname} not found in inventory")
-            return {}
-
-        # Get all access keys for this host
-        keys = get_access_keys_for_client(
-            host.model_dump(), self.access_keys, logger=logger
-        )
-
-        # access_keys = [AccessKey.model_validate(key) for key in keys]
-
-        return {"hostname": hostname, "access_keys": keys}
-
-    def export_all_host_keys(self, logger=None):
-        """
-        Export access keys for all hosts in the inventory.
-        Creates a YAML file for each host in the {vault_dir}/deploy directory.
-
-        Args:
-            logger (Logger, optional): Logger instance
-        """
-        if not logger:
-            logger = get_logger("Vaults-export_all_host_keys", reset=True)
+            logger = get_logger("Vaults-export_secrets_by_client", reset=True)
 
         # Create deploy directory
         deploy_dir = Path(self.dir).expanduser().resolve() / "deploy"
+        if deploy_dir.exists():
+            shutil.rmtree(deploy_dir)
         deploy_dir.mkdir(parents=True, exist_ok=True)
 
         hostnames = self.inventory.get_hostnames()
-        for hostname in hostnames:
-            logger.info(f"Exporting keys for host: {hostname}")
+        for hostname in tqdm(hostnames):
+            logger.info(f"Exporting secrets for client: {hostname}")
+
+            # Get PSK first and verify it exists
+            psk = self.get_client_psk(hostname)
+            if not psk:
+                logger.error(f"No valid PSK found for host {hostname}, skipping...")
+                continue
+
+            psk_file = Path(psk.file)
+            if not psk_file.exists():
+                logger.error(f"PSK file not found: {psk_file}, skipping...")
+                continue
 
             # Export keys for this host
-            keys_data = self.export_host_keys(hostname, logger)
+            host_secrets = self.get_host_secrets(hostname)
+            logger.info(f"Found {len(host_secrets)} secrets for host {hostname}")
 
-            # Save to file
-            output_file = deploy_dir / f"{hostname}.yml"
-            # dump_yaml(keys_data, output_file, format_yaml, ansible_lint)
-            dump_yaml(keys_data, output_file, format_yaml)
-            logger.info(f"Exported keys to: {output_file}")
+            host_secret_dir = deploy_dir / hostname
+            host_secret_dir.mkdir(parents=True, exist_ok=True)
 
-    # Utility Methods:
-    def get_access_key(
-        self, name: str, owner_type, secret_type: str = None, logger=None
-    ) -> Optional[AccessKey]:
-        """
-        Retrieve an access key by name with optional owner_type and secret_type filtering.
-
-        Args:
-            name (str): The name of the access key to retrieve.
-            owner_type (str): Owner type associated with the key.
-            secret_type (str, optional): Secret type if needed for further context.
-            logger (Logger, optional): Logger instance for debug messages.
-
-        Returns:
-            AccessKey | None: The matched access key or None if not found.
-        """
-        if not logger:
-            logger = get_logger("Vaults-get_access_key_by_name", reset=True)
-
-        key = _get_by_name(self.access_keys, name, logger)
-        if key:
-            assert isinstance(key, AccessKey), f"Invalid key type: {type(key)}"
-
-            if owner_type:
-                if key.owner_type != owner_type:
-                    logger.warning(
-                        f"Access key {name} has owner_type {key.owner_type}, not {owner_type}"
+            # Re-encrypt secrets using host's PSK
+            for secret in tqdm(host_secrets):
+                target_filename = secret.target_name
+                target_path = host_secret_dir / target_filename
+                try:
+                    secret.create_re_encrypted_file(
+                        target_path.as_posix(), psk_file.as_posix(), self
                     )
-                    # ic(key)
-                    # ic(owner_type)
-                    raise AssertionError(f"Invalid owner_type: {key.owner_type}")
-                    # return None
+                except Exception as e:
+                    logger.error(f"Failed to re-encrypt secret {secret.name}: {str(e)}")
 
-        return key
+    def get_local_hostname(self) -> str:
+        return socket.gethostname()
 
-    def get_or_create_key(
-        self,
-        name: str,
-        owner_type: str,
-        secret_type: str,
-        local_vault_key: str,
-        vault_dir=None,
-        logger=None,
-    ):
+    def get_vault_id_for_hostname(self, hostname: str) -> str:
+        # Optionally parse self.ansible_cfg to find matching vault ID
+        # For now, just return the hostname
+        return hostname
+
+    def get_local_vault_id(self) -> str:
+        return self.get_vault_id_for_hostname(self.get_local_hostname())
+
+    def get_local_psk(self) -> Optional[PreSharedKey]:
+        return self.get_client_psk(self.get_local_hostname())
+
+    def get_local_vault_id_with_path(self) -> str:
+        return f"{self.get_local_hostname()}@{self.get_local_psk().file}"
+
+    def _get_template_secrets(self, template_name: str) -> List[Secret]:
         """
-        Retrieve an existing access key or create a new one if not found.
+        Get all secrets associated with a template by name.
 
         Args:
-            name (str): Name of the access key.
-            owner_type (str): The owner type for the key.
-            secret_type (str): The secret type.
-            local_vault_key (str): Path to the vault key file.
-            vault_dir (str, optional): Directory for the vault. Defaults to self.dir.
-            logger (Logger, optional): A logger instance.
+            template_name (str): Name of the template
 
         Returns:
-            AccessKey: The existing or newly created access key.
+            List[Secret]: List of secrets associated with the template
+
+        Raises:
+            ValueError: If any secret referenced by the template is not found
         """
-        if not vault_dir:
-            vault_dir = self.dir
 
+        template = self.get_secret_template_by_name(template_name)
+        assert template, f"Template '{template_name}' not found"
+
+        secrets = []
+        for secret_name in template.secret_names:
+            secret = next((s for s in self.secrets if s.name == secret_name), None)
+            if not secret:
+                raise ValueError(
+                    f"Secret '{secret_name}' referenced by template '{template_name}' not found"
+                )
+            secrets.append(secret)
+        return secrets
+
+    def get_host_secrets(self, hostname: str, logger=None) -> List[Secret]:
+        """
+        Determine which secrets belong to this host by checking roles, groups,
+        or matching local/clients secrets with hostname.
+        """
         if not logger:
-            logger = get_logger("Vaults-get_or_create_key", reset=True)
-        key = self.get_access_key(name, owner_type, secret_type, logger)
+            logger = get_logger("Vaults-get_host_secrets", reset=True)
 
-        if key:
-            key.validate()
-            return key
+        host = self.inventory.get_host_by_name(hostname)
 
-        else:
-            key = AccessKey.create(
-                name, owner_type, secret_type, local_vault_key, vault_dir, logger
-            )
-            self.access_keys.append(key)
-            return key
+        host_roles = host.ansible_role_names
+        host_groups = host.ansible_group_names
+        hostname = host.hostname
+
+        logger.info("---------get_host_secrets---------")
+        logger.info(f"Checking secrets for host: {hostname}")
+        logger.info(f"Host roles: {host_roles}")
+        logger.info(f"Host groups: {host_groups}")
+
+        matched_secrets = []
+
+        for st in self.secret_templates:
+            logger.info(f"Checking template: {st.name}")
+            logger.info(f"Owner type: {st.owner_type}")
+            # logger.info(st.model_dump().__repr__())
+            should_include = False
+            if st.owner_type == "roles":
+                # logger.info(f"Checking roles in roles for: {st.name}")
+                if st.name in host_roles:
+                    logger.info(f"Matched role: {st.name}")
+                    should_include = True
+            elif st.owner_type == "groups":
+                logger.info(f"Checking groups in groups for: {st.name}")
+                if st.name in host_groups:
+                    logger.info(f"Matched group: {st.name}")
+                    should_include = True
+            elif st.owner_type in ("local", "clients"):
+                logger.info(f"Checking local/client for: {st.name}")
+                if st.name.endswith(f"@{hostname}"):
+                    logger.info(f"Matched local/client: {st.name}")
+                    should_include = True
+
+            else:
+                raise ValueError(f"Unknown owner_type: {st.owner_type}")
+
+            if should_include:
+                _secrets = self._get_template_secrets(st.name)
+                logger.info(f"Matched secrets: {_secrets}")
+                matched_secrets.extend(_secrets)
+
+        return matched_secrets
