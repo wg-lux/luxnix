@@ -818,9 +818,11 @@ roles:
 
           host  all all 172.16.255.106/32 scram-sha-256 map=superuser_map
 
-          host  replication ${cfg.replUser} 172.16.255.106/32 scram-sha-256
+          host  replication ${config.roles.postgres.main.replUser} 172.16.255.106/32
+          scram-sha-256
 
-          host  ${cfg.devUser} ${cfg.devUser} 172.16.255.106/32 scram-sha-256
+          host  ${config.roles.postgres.main.devUser} ${config.roles.postgres.main.devUser}
+          172.16.255.106/32 scram-sha-256
 
           '
         postgres.main.enable: 'true'
@@ -828,7 +830,7 @@ roles:
 
           superuser_map      root      postgres
 
-          superuser_map      root      ${cfg.replUser}
+          superuser_map      root      ${config.roles.postgres.main.replUser}
 
           superuser_map      ${config.user.admin.name}     ${config.user.admin.name}
 
