@@ -1,4 +1,4 @@
-postgres_host_main_luxnix:
+postgres_host_main_roles:
   postgres.main.enable: "true"
   postgres.main.authentication: |
     #type database DBuser address auth-method optional_ident_map

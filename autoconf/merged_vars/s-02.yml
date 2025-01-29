@@ -90,7 +90,7 @@ lx_vault_key_src: /home/admin/.lxv.key
 lx_vault_psk: '{{ secret_dir }}/.psk'
 network_conf:
   domain: endo-reg.net
-role_luxnix:
+role_roles:
   postgres.main.authentication: '#type database DBuser address auth-method optional_ident_map
 
     local sameuser all peer map=superuser_map
