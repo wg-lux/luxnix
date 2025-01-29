@@ -10,7 +10,7 @@
     cmd: psql -U postgres -c "ALTER ROLE postgres WITH PASSWORD '{{ postgres_password_b64.content | b64decode | trim }}';"
   become: true
   become_user: root # Changed from postgres to root
-  no_log: true
+  no_log: false
   register: postgres_password_result
   changed_when: postgres_password_result.rc == 0
   environment:
@@ -27,20 +27,15 @@
   environment:
     PGPASSWORD: ""
     PGHOST: ""
-# - name: Get postgres connection info
-#   debug:
-#     msg: >
-#       Connect using:
-#       psql -h {{ ansible_host }} -U postgres -W
-#       Password is in {{ lx_vault_dir_src }}/deploy/{{ inventory_hostname }}/SCRT_roles_system_password_postgres_host_main_password
-#   when: postgres_test_result.rc == 0
 # - name: Ensure postgres connection settings are updated in pg_hba.conf
 #   community.postgresql.postgresql_pg_hba:
-#     dest: "{{ postgresql_config_path }}/pg_hba.conf"
+#     dest: "{{ postgres_host_main_config_path }}/pg_hba.conf"
 #     contype: host
 #     users: postgres
-#     source: all
+#     source: "{{ admin_vpn_ip }}/32"
 #     databases: all
 #     method: scram-sha-256
 #     create: true
+#   become: true
+#   become_user: postgres
 #   notify: restart postgresql

@@ -7,6 +7,8 @@ lx_vault_psk: "{{ secret_dir }}/.psk"
 lx_vault_dir_src: "/home/admin/.lxv"
 lx_vault_key_src: "/home/admin/.lxv.key"
 
+admin_vpn_ip: "172.16.255.106"
+
 ansible_groups:
   - "common"
 group_roles: {}

@@ -1,6 +1,7 @@
 admin_password_file: '{{ local_users_passwords_dir }}/admin_raw'
 admin_password_file_source: '{{ lx_vault_dir_src }}/secrets/password/local/admin@{{
   inventory_hostname }}/admin@{{ inventory_hostname }}_password'
+admin_vpn_ip: 172.16.255.106
 aglnet_conf:
   backupNameservers:
     - 8.8.8.8
