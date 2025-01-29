@@ -1,6 +1,6 @@
 admin_password_file: '{{ local_users_passwords_dir }}/admin_raw'
-admin_password_file_source: '{{ luxnix_dev_repo }}/secrets/user-passwords/{{ inventory_hostname
-  }}/admin_raw'
+admin_password_file_source: '{{ lx_vault_dir_src }}/secrets/password/local/admin@{{
+  inventory_hostname }}/admin@{{ inventory_hostname }}_password'
 aglnet_conf:
   backupNameservers:
     - 8.8.8.8
@@ -47,6 +47,10 @@ group_roles:
   aglnet.client.enable: 'true'
   base_server.enable: 'true'
   endoreg_client.enable: 'false'
+  ssh_access.dev_01.enable: 'false'
+  ssh_access.dev_01.idEd25519: TODO
+  ssh_access.dev_03.enable: 'true'
+  ssh_access.dev_03.idEd25519: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos
 group_services: {}
 host_luxnix:
   generic_settings.enable: 'true'

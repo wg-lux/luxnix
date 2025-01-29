@@ -21,6 +21,10 @@
     aglnet.client.enable = true;
     base-server.enable = true;
     endoreg-client.enable = false;
+    ssh-access.dev-01.enable = false;
+    ssh-access.dev-01.idEd25519 = TODO;
+    ssh-access.dev-03.enable = true;
+    ssh-access.dev-03.idEd25519 = ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos;
     };
 
   services = {
