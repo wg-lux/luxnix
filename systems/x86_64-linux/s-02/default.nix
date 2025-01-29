@@ -55,10 +55,10 @@ vault.psk = "/etc/secrets/.psk";
 generic-settings.postgres.activeAuthentication = ''
 #type database DBuser address auth-method optional_ident_map
 local sameuser all peer map=superuser_map
-host  all all ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256 map=superuser_map
+host  all all ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
 host  replication ${config.roles.postgres.main.replUser} ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
 host  ${config.roles.postgres.main.devUser} ${config.roles.postgres.main.devUser} ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
-host  all postgres ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256 map=superuser_map
+host  all postgres ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
 ''; 
   generic-settings.postgres.activeIdentMap = ''
 # ArbitraryMapName systemUser DBUser

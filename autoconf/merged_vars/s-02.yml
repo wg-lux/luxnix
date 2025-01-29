@@ -98,7 +98,7 @@ role_luxnix:
 
     local sameuser all peer map=superuser_map
 
-    host  all all ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256 map=superuser_map
+    host  all all ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
 
     host  replication ${config.roles.postgres.main.replUser} ${config.luxnix.generic-settings.adminVpnIp}/32
     scram-sha-256
@@ -107,7 +107,6 @@ role_luxnix:
     ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
 
     host  all postgres ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
-    map=superuser_map
 
     '
   generic-settings.postgres.activeIdentMap: '# ArbitraryMapName systemUser DBUser
