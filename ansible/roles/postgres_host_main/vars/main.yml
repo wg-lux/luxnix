@@ -1,6 +1,7 @@
 postgres_host_main_roles:
   postgres.main.enable: "true"
-  postgres.main.authentication: |
+postgres_host_main_luxnix:
+  generic-settings.postgres.activeAuthentication: |
     #type database DBuser address auth-method optional_ident_map
     local sameuser all peer map=superuser_map
     host  all all ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256 map=superuser_map
@@ -8,7 +9,7 @@ postgres_host_main_roles:
     host  ${config.roles.postgres.main.devUser} ${config.roles.postgres.main.devUser} ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
     host  all postgres ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256 map=superuser_map
 
-  postgres.main.identMap: |
+  generic-settings.postgres.identMap: |
     # ArbitraryMapName systemUser DBUser
     superuser_map      root      postgres
     superuser_map      root      ${config.roles.postgres.main.replUser}
