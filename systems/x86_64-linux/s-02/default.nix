@@ -49,19 +49,19 @@ vault.key = "/etc/secrets/.key";
 
 vault.psk = "/etc/secrets/.psk";
 
-postgres.main.authentication = ''
+postgres-main.authentication = ''
 #type database DBuser address auth-method optional_ident_map
 local sameuser all peer map=superuser_map
 host  all all 172.16.255.106/32 scram-sha-256 map=superuser_map
-host  replication ${config.roles.postgres.main.replUser} 172.16.255.106/32 scram-sha-256
-host  ${config.roles.postgres.main.devUser} ${config.roles.postgres.main.devUser} 172.16.255.106/32 scram-sha-256
+host  replication ${config.roles.postgres_main.replUser} 172.16.255.106/32 scram-sha-256
+host  ${config.roles.postgres_main.devUser} ${config.roles.postgres_main.devUser} 172.16.255.106/32 scram-sha-256
 ''; 
-  postgres.main.enable = true;
+  postgres-main.enable = true;
 
-postgres.main.identMap = ''
+postgres-main.identMap = ''
 # ArbitraryMapName systemUser DBUser
 superuser_map      root      postgres
-superuser_map      root      ${config.roles.postgres.main.replUser}
+superuser_map      root      ${config.roles.postgres_main.replUser}
 superuser_map      ${config.user.admin.name}     ${config.user.admin.name}
 superuser_map      ${config.user.admin.name}     endoregClient
 superuser_map      postgres  postgres
