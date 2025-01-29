@@ -859,7 +859,7 @@ roles:
           map=superuser_map
 
           '
-        generic-settings.postgres.identMap: '# ArbitraryMapName systemUser DBUser
+        generic-settings.postgres.activeIdentMap: '# ArbitraryMapName systemUser DBUser
 
           superuser_map      root      postgres
 

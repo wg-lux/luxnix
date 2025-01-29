@@ -60,7 +60,7 @@ host  replication ${config.roles.postgres.main.replUser} ${config.luxnix.generic
 host  ${config.roles.postgres.main.devUser} ${config.roles.postgres.main.devUser} ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
 host  all postgres ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256 map=superuser_map
 ''; 
-  generic-settings.postgres.identMap = ''
+  generic-settings.postgres.activeIdentMap = ''
 # ArbitraryMapName systemUser DBUser
 superuser_map      root      postgres
 superuser_map      root      ${config.roles.postgres.main.replUser}
