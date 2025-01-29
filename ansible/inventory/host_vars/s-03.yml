@@ -8,6 +8,8 @@ host_services: {}
 
 luxnix_branch: "postgres-implementation"
 
+ansible_roles: []
+
 host_luxnix:
   generic_settings.enable: "true"
   generic_settings.hostPlatform: '"x86_64-linux"'

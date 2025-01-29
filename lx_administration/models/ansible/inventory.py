@@ -89,6 +89,16 @@ class AnsibleInventoryHost(BaseModel):
     def update_facts(self, facts: AnsibleFactsModel):
         self.facts = facts
 
+    def init_ansible_role_names(self):
+        self.ansible_role_names = []
+
+        existing_role_names = self.vars.get("ansible_roles", [])
+
+        for _ in existing_role_names:
+            assert isinstance(_, str), f"Role name must be a string, got {_}"
+
+        self.ansible_role_names.extend(existing_role_names)
+
 
 class AnsibleInventoryGroup(BaseModel):
     name: str
@@ -186,6 +196,7 @@ class AnsibleInventory(BaseModel):
 
         inventory.load_roles(ansible_root_dir)
         inventory.load_group_vars(ansible_inventory_dir)
+        inventory.load_role_vars(ansible_inventory_dir)
 
         log_heading(logger, f"Loaded Inventory from {file}")
 
@@ -230,30 +241,62 @@ class AnsibleInventory(BaseModel):
         assert host, f"No host found with name {hostname}"
 
         group_names = host.ansible_group_names
+        role_names = host.ansible_role_names
 
         _check_again = True
 
         while _check_again:
             _check_again = False
             new_group_names = []
+            new_role_names = []
             for group_name in group_names:
                 group = self.get_group_by_name(group_name)
                 _new_group_names = group.vars.get("ansible_groups", [])
+                _new_role_names = group.vars.get("ansible_roles", [])
 
                 for group_name in _new_group_names:
                     if group_name not in group_names:
                         new_group_names.append(group_name)
                         _check_again = True
 
-                if _check_again:
-                    group_names = group_names + new_group_names
+                for role_name in _new_role_names:
+                    if role_name not in role_names:
+                        new_role_names.append(role_name)
+                        _check_again = True
+
+            for role_name in role_names:
+                role = self.get_role_by_name(role_name)
+                _new_group_names = role.vars.get("ansible_groups", [])
+                _new_role_names = role.vars.get("ansible_roles", [])
+
+                for group_name in _new_group_names:
+                    if group_name not in group_names:
+                        new_group_names.append(group_name)
+                        _check_again = True
+
+                for role_name in _new_role_names:
+                    if role_name not in role_names:
+                        new_role_names.append(role_name)
+                        _check_again = True
+
+            if _check_again:
+                group_names = group_names + new_group_names
+                group_names = list(set(group_names))
+                role_names = role_names + new_role_names
+                role_names = list(set(role_names))
 
         group_vars = {}
         for group_name in group_names:
             group = self.get_group_by_name(group_name)
             group_vars = deep_update(group_vars, group.vars)
 
-        merged_vars = deep_update(group_vars, host.vars)
+        role_vars = {}
+        for role_name in role_names:
+            role = self.get_role_by_name(role_name)
+            role_vars = deep_update(role_vars, role.vars)
+
+        merged_vars = deep_update(group_vars, role_vars)
+        merged_vars = deep_update(merged_vars, host.vars)
 
         return merged_vars
 
@@ -282,6 +325,9 @@ class AnsibleInventory(BaseModel):
     def group_name_exists(self, group_name: str):
         return any(group_name in group.name for group in self.groups)
 
+    def role_name_exists(self, role_name: str):
+        return any(role_name in role.name for role in self.roles)
+
     def get_group_by_name(self, group_name: str, logger=None):
         if not logger:
             logger = get_logger("AnsibleInventory-get_group_by_name", reset=True)
@@ -296,6 +342,21 @@ class AnsibleInventory(BaseModel):
             group = self.get_group_by_name(group_name)
             return group
 
+    def get_role_by_name(self, role_name: str, logger=None) -> AnsibleInventoryRole:
+        if not logger:
+            logger = get_logger("AnsibleInventory-get_role_by_name", reset=True)
+        role = [_ for _ in self.roles if _.name == role_name]
+        if role:
+            assert len(role) == 1, f"Multiple roles found with name {role_name}"
+            return role[0]
+
+        else:
+            raise Exception(f"No role found with name {role_name}")
+            logger.warning(f"No role found with name {role_name}, adding")
+            self.add_role_by_name(role_name)
+            role = self.get_role_by_name(role_name)
+            return role
+
     def host_name_exists(self, host_name: str):
         _host = [_ for _ in self.all if _.hostname == host_name]
         return bool(_host)
@@ -303,6 +364,10 @@ class AnsibleInventory(BaseModel):
     def add_group_by_name(self, group_name: str):
         if not self.group_name_exists(group_name):
             self.groups.append(AnsibleInventoryGroup(name=group_name))
+
+    def add_role_by_name(self, role_name: str):
+        if not self.role_name_exists(role_name):
+            self.roles.append(AnsibleInventoryRole(name=role_name))
 
     def add_host_by_name(self, hostname: str):
         if not self.host_name_exists(hostname):
@@ -340,6 +405,11 @@ class AnsibleInventory(BaseModel):
         host.ansible_group_names.append(group_name)
         host.ansible_group_names = list(set(host.ansible_group_names))
 
+    def add_role_to_host(self, host_name: str, role_name: str):
+        host = self.get_host_by_name(host_name)
+        host.ansible_role_names.append(role_name)
+        host.ansible_role_names = list(set(host.ansible_role_names))
+
     def load_roles(self, ansible_root_dir: Path):
         from lx_administration.autoconf.imports.utils import load_roles
 
@@ -351,6 +421,21 @@ class AnsibleInventory(BaseModel):
         ]
 
         self.roles = roles
+
+    def load_role_vars(self, ansible_inventory_dir: Path):
+        from lx_administration.autoconf.imports.utils import (
+            load_roles_vars,
+            deep_update,
+        )
+
+        role_vars_dir = ansible_inventory_dir / "role_vars"
+
+        role_vars = load_roles_vars(role_vars_dir)
+
+        for role_name, vars in role_vars.items():
+            role = self.get_role_by_name(role_name)
+            assert isinstance(vars, dict)
+            role.vars = deep_update(role.vars, vars)
 
     def load_group_vars(self, ansible_inventory_dir: Path):
         from lx_administration.autoconf.imports.utils import (
@@ -392,6 +477,9 @@ class AnsibleInventory(BaseModel):
             group_luxnix=merged_data.get("group_luxnix", {}),
             group_roles=merged_data.get("group_roles", {}),
             group_services=merged_data.get("group_services", {}),
+            role_luxnix=merged_data.get("role_luxnix", {}),
+            role_roles=merged_data.get("role_roles", {}),
+            role_services=merged_data.get("role_services", {}),
             host_luxnix=merged_data.get("host_luxnix", {}),
             host_roles=merged_data.get("host_roles", {}),
             host_services=merged_data.get("host_services", {}),

@@ -46,6 +46,10 @@ def ansible_etl(ansible_root: Path, autoconf_out: Path, subnet: str, logger=None
     for host, facts in host_facts.items():
         inventory.hostname_update_ansible_facts(host, facts)
 
+    for host in inventory.all:
+        # Bootstrap group names for heach host
+        host.init_ansible_role_names()
+
     inventory.save_to_file(autoconf_out / "inventory.yml")
 
     merged_vars_out = autoconf_out / "merged_vars"
@@ -55,7 +59,6 @@ def ansible_etl(ansible_root: Path, autoconf_out: Path, subnet: str, logger=None
     for host in inventory.all:
         merged_vars = inventory.export_merged_host_vars(host.hostname)
 
-        # validate merged_vars
         try:
             MergedHostVars(**merged_vars)
         except Exception as e:

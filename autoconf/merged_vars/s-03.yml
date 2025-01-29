@@ -80,7 +80,7 @@ host_roles: {}
 host_services: {}
 local_users_passwords_dir: '{{ luxnix_dest }}/secrets/user-passwords/{{ inventory_hostname
   }}'
-luxnix_branch: main
+luxnix_branch: postgres-implementation
 luxnix_dest: /home/admin/lx-production
 luxnix_dev_repo: /home/admin/dev/luxnix
 luxnix_repo: https://github.com/wg-lux/luxnix.git
