@@ -7,12 +7,33 @@
 
 - name: Set postgres user password
   ansible.builtin.command:
-    cmd: psql -c "ALTER ROLE postgres WITH PASSWORD '{{ postgres_password_b64.content | b64decode | trim }}';"
+    cmd: psql -U postgres -c "ALTER ROLE postgres WITH PASSWORD '{{ postgres_password_b64.content | b64decode | trim }}';"
   become: true
-  become_user: postgres
+  become_user: root # Changed from postgres to root
   no_log: true
   register: postgres_password_result
   changed_when: postgres_password_result.rc == 0
+  environment:
+    PGPASSWORD: "" # Ensure no password is used for peer authentication
+    PGHOST: "" # Force local socket connection
+
+- name: Test local postgres connection
+  ansible.builtin.command:
+    cmd: psql -U postgres -c "SELECT version();"
+  become: true
+  become_user: root
+  register: postgres_test_result
+  changed_when: false
+  environment:
+    PGPASSWORD: ""
+    PGHOST: ""
+# - name: Get postgres connection info
+#   debug:
+#     msg: >
+#       Connect using:
+#       psql -h {{ ansible_host }} -U postgres -W
+#       Password is in {{ lx_vault_dir_src }}/deploy/{{ inventory_hostname }}/SCRT_roles_system_password_postgres_host_main_password
+#   when: postgres_test_result.rc == 0
 # - name: Ensure postgres connection settings are updated in pg_hba.conf
 #   community.postgresql.postgresql_pg_hba:
 #     dest: "{{ postgresql_config_path }}/pg_hba.conf"

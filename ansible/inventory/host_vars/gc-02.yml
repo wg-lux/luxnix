@@ -10,6 +10,7 @@ host_services: {}
 host_luxnix:
   generic_settings.configurationPathRelative: '"luxnix"'
   generic_settings.configurationPath: 'lib.mkForce "/home/admin/luxnix"'
+  generic_settings.vpnIp: '"172.16.255.102"'
 
   generic_settings.hostPlatform: '"x86_64-linux"'
   generic_settings.systemStateVersion: '"23.11"'

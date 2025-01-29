@@ -16,6 +16,7 @@ host_luxnix:
   generic_settings.systemStateVersion: '"23.11"'
 
   generic_settings.linux.cpuMicrocode: '"intel"'
+  generic_settings.vpnIp: '"172.16.255.108"'
 
   generic_settings.linux.kernelModules:
     - "intel"

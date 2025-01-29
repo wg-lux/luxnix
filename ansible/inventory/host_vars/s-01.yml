@@ -11,6 +11,7 @@ host_services: {}
 host_luxnix:
   generic_settings.hostPlatform: '"x86_64-linux"'
   generic_settings.systemStateVersion: '"23.11"'
+  generic_settings.vpnIp: '"172.16.255.1"'
 
   generic_settings.linux.cpuMicrocode: '"amd"'
 

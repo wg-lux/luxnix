@@ -87,6 +87,7 @@ in {
 
     services = {
       postgresql = {
+        listenAddresses = "localhost,${config.luxnix.generic-settings.vpnIp}";
         ensureDatabases = [
           "replication"
           cfg.replUser

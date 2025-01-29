@@ -43,7 +43,7 @@ in {
     };
 
     programs.zsh.shellAliases = {
-      reset-psql = "sudo rm -rf ${cfg.postgresqlDataDir}";
+      reset-psql = "sudo rm -rf ${cfg.postgresqlDataDir}"; #TODO Add to documentation
     };
 
     services = {
