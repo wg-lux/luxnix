@@ -28,16 +28,6 @@
   services = {
     };
 
-  # create an extra user named "test-admin" which uses "/etc/secrets/vault/SCRT_local_password_admin_password_hash"
-  # as hashed password file
-  users.extraUsers.test-admin = {
-    name = "test-admin";
-    hashedPasswordFile = "/etc/secrets/vault/SCRT_local_password_admin_password_hash"; # take-@-pick-648 
-    home = "/home/test-admin";
-    extraGroups = [ "wheel" "networkmanager" ];
-    isNormalUser = true;
-  };
-
   luxnix = {
     boot-decryption-stick.enable = true;
 

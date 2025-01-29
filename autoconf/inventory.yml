@@ -131,6 +131,7 @@ all:
       host_services: {}
       template_name: main
   - ansible_group_names:
+      - core_dev_ssh_access
       - all
       - gpu_server
       - managed
@@ -367,8 +368,9 @@ all:
       template_name: main
   - ansible_group_names:
       - all
-      - test_group
       - base_server
+      - core_dev_ssh_access
+      - test_group
       - managed
     ansible_host: 172.16.255.13
     ansible_role_names: []
@@ -629,8 +631,8 @@ groups:
     name: all
     vars:
       admin_password_file: '{{ local_users_passwords_dir }}/admin_raw'
-      admin_password_file_source: '{{ luxnix_dev_repo }}/secrets/user-passwords/{{
-        inventory_hostname }}/admin_raw'
+      admin_password_file_source: '{{ lx_vault_dir_src }}/secrets/password/local/admin@{{
+        inventory_hostname }}/admin@{{ inventory_hostname }}_password'
       aglnet_conf:
         backupNameservers:
           - 8.8.8.8
@@ -751,6 +753,15 @@ groups:
     files: []
     name: test_group
     vars: {}
+  - extra_user_names: []
+    files: []
+    name: core_dev_ssh_access
+    vars:
+      group_luxnix: {}
+      group_roles:
+        ssh_access.dev_03.enable: 'true'
+        ssh_access.dev_03.idEd25519: '"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos"'
+      group_services: {}
   - extra_user_names: []
     files: []
     name: hetzner_server
