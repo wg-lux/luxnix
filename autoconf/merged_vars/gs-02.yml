@@ -32,6 +32,7 @@ authentication:
   dev_03:
     id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos
 group_luxnix:
+  generic_settings.adminVpnIp: '"172.16.255.106"'
   generic_settings.enable: 'true'
   generic_settings.linux.kernelPackages: pkgs.linuxPackages_6_12
   maintenance.autoUpdates.dates: '"06:00"'
@@ -75,6 +76,7 @@ host_luxnix:
     - nfs
     - btrfs
   generic_settings.systemStateVersion: '"23.11"'
+  generic_settings.vpnIp: '"172.16.255.22"'
 host_roles: {}
 host_services: {}
 local_users_passwords_dir: '{{ luxnix_dest }}/secrets/user-passwords/{{ inventory_hostname

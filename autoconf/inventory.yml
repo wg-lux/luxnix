@@ -4,6 +4,7 @@ all:
       - gpu_client
     ansible_host: 172.16.255.107
     ansible_role_names: []
+    extra_secret_names: []
     extra_user_names:
       - admin
       - maintenance
@@ -34,6 +35,7 @@ all:
         generic_settings.linux.supportedFilesystems:
           - btrfs
         generic_settings.systemStateVersion: '"23.11"'
+        generic_settings.vpnIp: '"172.16.255.107"'
         nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
         nvidia_prime.onboardBusId: '"PCI:0:2:0"'
         nvidia_prime.onboardGpuType: '"intel"'
@@ -45,6 +47,7 @@ all:
       - gpu_client
     ansible_host: 172.16.255.108
     ansible_role_names: []
+    extra_secret_names: []
     extra_user_names:
       - admin
       - maintenance
@@ -78,6 +81,7 @@ all:
           - nfs
           - btrfs
         generic_settings.systemStateVersion: '"23.11"'
+        generic_settings.vpnIp: '"172.16.255.108"'
         nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
         nvidia_prime.onboardBusId: '"PCI:0:2:0"'
         nvidia_prime.onboardGpuType: '"intel"'
@@ -94,6 +98,7 @@ all:
       - gpu_client
     ansible_host: 172.16.255.109
     ansible_role_names: []
+    extra_secret_names: []
     extra_user_names:
       - admin
       - maintenance
@@ -123,6 +128,7 @@ all:
         generic_settings.linux.supportedFilesystems:
           - btrfs
         generic_settings.systemStateVersion: '"23.11"'
+        generic_settings.vpnIp: '"172.16.255.109"'
         nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
         nvidia_prime.onboardBusId: '"PCI:0:2:0"'
         nvidia_prime.onboardGpuType: '"intel"'
@@ -137,6 +143,7 @@ all:
       - managed
     ansible_host: 172.16.255.21
     ansible_role_names: []
+    extra_secret_names: []
     extra_user_names:
       - admin
       - maintenance
@@ -185,6 +192,7 @@ all:
         generic_settings.linux.supportedFilesystems:
           - btrfs
         generic_settings.systemStateVersion: '"23.11"'
+        generic_settings.vpnIp: '"172.16.255.21"'
       host_roles: {}
       host_services: {}
       template_name: main
@@ -195,6 +203,7 @@ all:
       - managed
     ansible_host: 172.16.255.22
     ansible_role_names: []
+    extra_secret_names: []
     extra_user_names:
       - admin
       - maintenance
@@ -245,6 +254,7 @@ all:
           - nfs
           - btrfs
         generic_settings.systemStateVersion: '"23.11"'
+        generic_settings.vpnIp: '"172.16.255.22"'
       host_roles: {}
       host_services: {}
       template_name: main
@@ -255,6 +265,7 @@ all:
       - managed
     ansible_host: 172.16.255.1
     ansible_role_names: []
+    extra_secret_names: []
     extra_user_names:
       - admin
       - maintenance
@@ -300,6 +311,7 @@ all:
         generic_settings.linux.supportedFilesystems:
           - btrfs
         generic_settings.systemStateVersion: '"23.11"'
+        generic_settings.vpnIp: '"172.16.255.1"'
       host_roles:
         aglnet.client.enable: lib.mkForce false
         aglnet.host.enable: 'true'
@@ -312,6 +324,7 @@ all:
     ansible_host: 172.16.255.12
     ansible_role_names:
       - postgres_host_main
+    extra_secret_names: []
     extra_user_names:
       - admin
       - maintenance
@@ -361,6 +374,7 @@ all:
           - nfs
           - btrfs
         generic_settings.systemStateVersion: '"23.11"'
+        generic_settings.vpnIp: '"172.16.255.12"'
       host_roles: {}
       host_services: {}
       luxnix_branch: postgres-implementation
@@ -373,6 +387,7 @@ all:
       - managed
     ansible_host: 172.16.255.13
     ansible_role_names: []
+    extra_secret_names: []
     extra_user_names:
       - admin
       - maintenance
@@ -422,6 +437,7 @@ all:
           - nfs
           - btrfs
         generic_settings.systemStateVersion: '"23.11"'
+        generic_settings.vpnIp: '"172.16.255.13"'
       host_roles: {}
       host_services: {}
       luxnix_branch: postgres-implementation
@@ -431,6 +447,7 @@ all:
       - gpu_client
     ansible_host: 172.16.255.105
     ansible_role_names: []
+    extra_secret_names: []
     extra_user_names:
       - admin
       - maintenance
@@ -461,6 +478,7 @@ all:
         generic_settings.linux.supportedFilesystems:
           - btrfs
         generic_settings.systemStateVersion: '"23.11"'
+        generic_settings.vpnIp: '"172.16.255.105"'
         nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
         nvidia_prime.onboardBusId: '"PCI:0:2:0"'
         nvidia_prime.onboardGpuType: '"intel"'
@@ -473,6 +491,7 @@ all:
       - gpu_client
     ansible_host: 172.16.255.102
     ansible_role_names: []
+    extra_secret_names: []
     extra_user_names:
       - admin
       - maintenance
@@ -504,6 +523,7 @@ all:
         generic_settings.linux.supportedFilesystems:
           - btrfs
         generic_settings.systemStateVersion: '"23.11"'
+        generic_settings.vpnIp: '"172.16.255.102"'
         nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
         nvidia_prime.onboardBusId: '"PCI:0:2:0"'
         nvidia_prime.onboardGpuType: '"intel"'
@@ -517,6 +537,8 @@ all:
       - test_group
     ansible_host: 172.16.255.106
     ansible_role_names: []
+    extra_secret_names:
+      - SCRT_roles_system_password_postgres_host_main_password
     extra_user_names:
       - admin
       - maintenance
@@ -542,6 +564,8 @@ all:
     subnet: 172.16.255.
     vars:
       ansible_python_interpreter: '{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python'
+      extra_secret_names:
+        - SCRT_roles_system_password_postgres_host_main_password
       host_luxnix:
         generic_settings.configurationPath: lib.mkForce "/home/admin/dev/luxnix"
         generic_settings.hostPlatform: '"x86_64-linux"'
@@ -570,6 +594,7 @@ all:
           - btrfs
           - nfs
         generic_settings.systemStateVersion: '"23.11"'
+        generic_settings.vpnIp: '"172.16.255.106"'
         maintenance.autoUpdates.enable: 'false'
         nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
         nvidia_prime.onboardBusId: '"PCI:0:2:0"'
@@ -591,6 +616,7 @@ all:
       - gpu_client
     ansible_host: 172.16.255.101
     ansible_role_names: []
+    extra_secret_names: []
     extra_user_names:
       - admin
       - maintenance
@@ -604,6 +630,7 @@ all:
       - gpu_client
     ansible_host: 172.16.255.103
     ansible_role_names: []
+    extra_secret_names: []
     extra_user_names:
       - admin
       - maintenance
@@ -617,6 +644,7 @@ all:
       - gpu_client
     ansible_host: 172.16.255.104
     ansible_role_names: []
+    extra_secret_names: []
     extra_user_names:
       - admin
       - maintenance
@@ -665,6 +693,7 @@ groups:
         dev_03:
           id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos
       group_luxnix:
+        generic_settings.adminVpnIp: '"172.16.255.106"'
         generic_settings.enable: 'true'
         generic_settings.linux.kernelPackages: pkgs.linuxPackages_6_12
         vault.dir: '"/etc/secrets/vault"'
@@ -816,13 +845,17 @@ roles:
 
           local sameuser all peer map=superuser_map
 
-          host  all all 172.16.255.106/32 scram-sha-256 map=superuser_map
+          host  all all ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
+          map=superuser_map
 
-          host  replication ${config.roles.postgres.main.replUser} 172.16.255.106/32
+          host  replication ${config.roles.postgres.main.replUser} ${config.luxnix.generic-settings.adminVpnIp}/32
           scram-sha-256
 
           host  ${config.roles.postgres.main.devUser} ${config.roles.postgres.main.devUser}
-          172.16.255.106/32 scram-sha-256
+          ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
+
+          host  all postgres ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
+          map=superuser_map
 
           '
         postgres.main.enable: 'true'
@@ -833,6 +866,8 @@ roles:
           superuser_map      root      ${config.roles.postgres.main.replUser}
 
           superuser_map      ${config.user.admin.name}     ${config.user.admin.name}
+
+          superuser_map      ${config.user.admin.name}     postgres
 
           superuser_map      ${config.user.admin.name}     endoregClient
 

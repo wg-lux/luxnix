@@ -39,6 +39,7 @@ class AnsibleInventoryHost(BaseModel):
     hostname: Optional[str]
     ansible_group_names: List[str] = []
     ansible_role_names: List[str] = []
+    extra_secret_names: List[str] = []
     extra_user_names: List[str] = [
         "dev"
     ]  # ["dev", "maintenance", "root", "center-user"]
@@ -85,6 +86,9 @@ class AnsibleInventoryHost(BaseModel):
             raise ValueError(
                 f"ansible_host {self.ansible_host} is not in subnet {self.subnet}"
             )
+
+        extra_secret_names = self.vars.get("extra_secret_names", [])
+        self.extra_secret_names = extra_secret_names
 
     def update_facts(self, facts: AnsibleFactsModel):
         self.facts = facts

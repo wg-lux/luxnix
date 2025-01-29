@@ -35,6 +35,7 @@ authentication:
     id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos
 group_luxnix:
   boot_decryption_stick.enable: 'true'
+  generic_settings.adminVpnIp: '"172.16.255.106"'
   generic_settings.enable: 'true'
   generic_settings.linux.kernelPackages: pkgs.linuxPackages_6_12
   maintenance.autoUpdates.dates: '"04:00"'
@@ -75,6 +76,7 @@ host_luxnix:
     - nfs
     - btrfs
   generic_settings.systemStateVersion: '"23.11"'
+  generic_settings.vpnIp: '"172.16.255.12"'
 host_roles: {}
 host_services: {}
 local_users_passwords_dir: '{{ luxnix_dest }}/secrets/user-passwords/{{ inventory_hostname
@@ -95,12 +97,16 @@ role_roles:
 
     local sameuser all peer map=superuser_map
 
-    host  all all 172.16.255.106/32 scram-sha-256 map=superuser_map
+    host  all all ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256 map=superuser_map
 
-    host  replication ${config.roles.postgres.main.replUser} 172.16.255.106/32 scram-sha-256
+    host  replication ${config.roles.postgres.main.replUser} ${config.luxnix.generic-settings.adminVpnIp}/32
+    scram-sha-256
 
     host  ${config.roles.postgres.main.devUser} ${config.roles.postgres.main.devUser}
-    172.16.255.106/32 scram-sha-256
+    ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
+
+    host  all postgres ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
+    map=superuser_map
 
     '
   postgres.main.enable: 'true'
@@ -111,6 +117,8 @@ role_roles:
     superuser_map      root      ${config.roles.postgres.main.replUser}
 
     superuser_map      ${config.user.admin.name}     ${config.user.admin.name}
+
+    superuser_map      ${config.user.admin.name}     postgres
 
     superuser_map      ${config.user.admin.name}     endoregClient
 

@@ -32,6 +32,8 @@
   luxnix = {
     boot-decryption-stick.enable = true;
 
+generic-settings.adminVpnIp = "172.16.255.106";
+
 generic-settings.configurationPathRelative = "lx-production";
 
 generic-settings.enable = true;
@@ -74,6 +76,8 @@ generic-settings.linux.resumeDevice = "/dev/disk/by-label/nixos";
 
 generic-settings.linux.supportedFilesystems = ["nfs" "btrfs"];
 generic-settings.systemStateVersion = "23.11";
+
+generic-settings.vpnIp = "172.16.255.108";
 
 nvidia-prime.nvidiaBusId = "PCI:1:0:0";
 

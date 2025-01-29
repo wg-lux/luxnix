@@ -31,8 +31,11 @@ authentication:
   dev_02: {}
   dev_03:
     id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos
+extra_secret_names:
+  - SCRT_roles_system_password_postgres_host_main_password
 group_luxnix:
   boot_decryption_stick.enable: 'true'
+  generic_settings.adminVpnIp: '"172.16.255.106"'
   generic_settings.configurationPathRelative: '"lx-production"'
   generic_settings.enable: 'true'
   generic_settings.linux.kernelPackages: pkgs.linuxPackages_6_12
@@ -79,6 +82,7 @@ host_luxnix:
     - btrfs
     - nfs
   generic_settings.systemStateVersion: '"23.11"'
+  generic_settings.vpnIp: '"172.16.255.106"'
   maintenance.autoUpdates.enable: 'false'
   nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
   nvidia_prime.onboardBusId: '"PCI:0:2:0"'

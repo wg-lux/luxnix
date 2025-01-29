@@ -24,9 +24,10 @@
     postgres.main.authentication = ''
 #type database DBuser address auth-method optional_ident_map
 local sameuser all peer map=superuser_map
-host  all all 172.16.255.106/32 scram-sha-256 map=superuser_map
-host  replication ${config.roles.postgres.main.replUser} 172.16.255.106/32 scram-sha-256
-host  ${config.roles.postgres.main.devUser} ${config.roles.postgres.main.devUser} 172.16.255.106/32 scram-sha-256
+host  all all ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256 map=superuser_map
+host  replication ${config.roles.postgres.main.replUser} ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
+host  ${config.roles.postgres.main.devUser} ${config.roles.postgres.main.devUser} ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
+host  all postgres ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256 map=superuser_map
 '';
   postgres.main.enable = true;
     postgres.main.identMap = ''
@@ -34,6 +35,7 @@ host  ${config.roles.postgres.main.devUser} ${config.roles.postgres.main.devUser
 superuser_map      root      postgres
 superuser_map      root      ${config.roles.postgres.main.replUser}
 superuser_map      ${config.user.admin.name}     ${config.user.admin.name}
+superuser_map      ${config.user.admin.name}     postgres
 superuser_map      ${config.user.admin.name}     endoregClient
 superuser_map      postgres  postgres
 
@@ -47,6 +49,8 @@ superuser_map      /^(.*)$   \1
 
   luxnix = {
     boot-decryption-stick.enable = true;
+
+generic-settings.adminVpnIp = "172.16.255.106";
 
 generic-settings.enable = true;
 
@@ -82,6 +86,8 @@ generic-settings.linux.resumeDevice = "/dev/disk/by-label/nixos";
 
 generic-settings.linux.supportedFilesystems = ["nfs" "btrfs"];
 generic-settings.systemStateVersion = "23.11";
+
+generic-settings.vpnIp = "172.16.255.12";
 
 };
 }
