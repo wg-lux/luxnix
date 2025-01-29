@@ -12,9 +12,9 @@ template_name: "main"
 #   - "aglnet.host"
 #   - "postgres.main"
 
-ansible_roles:
-  - "dev-01-access"
-  - "dev-03-access"
+ansible_roles: []
+
+luxnix_branch: "postgres-implementation"
 
 host_roles: {}
 host_services: {}
