@@ -1,0 +1,25 @@
+---
+- name: Read postgres user password from vault
+  ansible.builtin.slurp:
+    src: "{{ lx_vault_dir }}/SCRT_roles_system_password_postgres_host_main_password"
+  register: postgres_password_b64
+  no_log: true
+
+- name: Set postgres user password
+  ansible.builtin.command:
+    cmd: psql -c "ALTER ROLE postgres WITH PASSWORD '{{ postgres_password_b64.content | b64decode | trim }}';"
+  become: true
+  become_user: postgres
+  no_log: true
+  register: postgres_password_result
+  changed_when: postgres_password_result.rc == 0
+# - name: Ensure postgres connection settings are updated in pg_hba.conf
+#   community.postgresql.postgresql_pg_hba:
+#     dest: "{{ postgresql_config_path }}/pg_hba.conf"
+#     contype: host
+#     users: postgres
+#     source: all
+#     databases: all
+#     method: scram-sha-256
+#     create: true
+#   notify: restart postgresql

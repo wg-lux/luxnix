@@ -11,15 +11,13 @@ from pathlib import Path
 from typing import List
 
 
-BASE_LOGGER = get_logger("bootstrap-lx-vault", reset=True)
+BASE_LOGGER = get_logger("lxv-postgres-secrets", reset=True)
 
 
 def main(logger=None):
     if not logger:
         logger = BASE_LOGGER
 
-    ##### PROTOTYPING #####
-    # remove directory and key if they exist
     dirpath = Path("~/.lxv").expanduser()
     keypath = Path("~/.lsv.key").expanduser()
 
@@ -38,12 +36,3 @@ def main(logger=None):
 
     logger.info("Syncing inventory...")
     vault.sync_inventory("./autoconf/inventory.yml", logger=logger)
-
-    logger.info("Exporting Secrets...")
-    vault.export_secrets_by_client(logger=logger)
-
-    logger.info(vault.summary())
-
-
-if __name__ == "__main__":
-    main()
