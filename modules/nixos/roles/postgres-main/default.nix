@@ -87,7 +87,6 @@ in {
 
     services = {
       postgresql = {
-        settings.listen_adresses = lib.mkForce "localhost,${config.luxnix.generic-settings.vpnIp}";
         ensureDatabases = [
           "replication"
           cfg.replUser
