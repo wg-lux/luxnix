@@ -24,11 +24,18 @@
 #   roles:
 #     - postgres_host_main
 
-- name: Set role postgres_host_main for host "s-02"
-  hosts: s-03
+# - name: Set role postgres_host_test for host "s-03"
+#   hosts: s-03
+#   become: true
+#   roles:
+#     - postgres_host_test
+
+- name: Set Dev-Access Roles
+  # hosts: gc-02, gc-08, gc-06
+  hosts: gc-06, gc-08
   become: true
   roles:
-    - postgres_host_test
+    - dev_access
 # - name: Set base_server group's roles
 #   hosts: base_server
 #   become: true

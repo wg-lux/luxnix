@@ -34,6 +34,7 @@ authentication:
     id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos
 extra_secret_names:
   - SCRT_roles_system_password_postgres_host_main_password
+  - SCRT_roles_system_password_postgres_host_test_password
 group_luxnix:
   boot_decryption_stick.enable: 'true'
   generic_settings.adminVpnIp: '"172.16.255.106"'
@@ -108,5 +109,8 @@ network_conf:
   domain: endo-reg.net
 os_extra_user_names:
   - demodemo
+postgres_host_main_password_filename: SCRT_roles_system_password_postgres_host_main_password
+postgres_host_test_ip: 172.16.255.13
+postgres_host_test_password_filename: SCRT_roles_system_password_postgres_host_test_password
 secret_dir: /etc/secrets
 template_name: main

@@ -1,7 +1,26 @@
 ---
+- name: Ensure vault directory exists
+  ansible.builtin.file:
+    path: "{{ lx_vault_dir }}"
+    state: directory
+    mode: "0700"
+    owner: "{{ ansible_user }}"
+  become: true
+
+- name: Deploy postgres password from source
+  ansible.builtin.copy:
+    src: "{{ lx_vault_dir_src }}/deploy/{{ inventory_hostname }}/{{ postgres_host_main_password_filename }}"
+    dest: "{{ lx_vault_dir }}/{{ postgres_host_main_password_filename }}"
+    mode: "0600"
+    owner: "{{ ansible_user }}"
+  become: true
+  no_log: true
+  vars:
+    ansible_vault_identity: "{{ inventory_hostname }}@{{ lx_vault_dir_src }}/psk/{{ inventory_hostname }}.psk"
+
 - name: Read postgres user password from vault
   ansible.builtin.slurp:
-    src: "{{ lx_vault_dir }}/SCRT_roles_system_password_postgres_host_main_password"
+    src: "{{ lx_vault_dir }}/{{ postgres_host_main_password_filename }}"
   register: postgres_password_b64
   no_log: true
 
@@ -27,3 +46,25 @@
   environment:
     PGPASSWORD: ""
     PGHOST: ""
+
+- name: Check PostgreSQL is listening on correct ports
+  ansible.builtin.shell: set -o pipefail; netstat -tuln | grep 5432
+  register: postgres_ports
+  changed_when: false
+
+- name: Show PostgreSQL configuration
+  ansible.builtin.command:
+    cmd: psql -U postgres -c "SHOW listen_addresses;"
+  become: true
+  become_user: postgres
+  register: postgres_config
+  changed_when: false
+  environment:
+    PGPASSWORD: ""
+    PGHOST: ""
+
+- name: Display debug information
+  ansible.builtin.debug:
+    msg:
+      - "Listening ports: {{ postgres_ports.stdout }}"
+      - "PostgreSQL config: {{ postgres_config.stdout }}"

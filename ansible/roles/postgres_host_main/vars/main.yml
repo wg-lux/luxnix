@@ -1,3 +1,4 @@
+---
 postgres_host_main_roles:
   postgres.main.enable: "true"
 postgres_host_main_luxnix:

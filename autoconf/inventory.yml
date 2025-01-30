@@ -547,6 +547,7 @@ all:
     ansible_role_names: []
     extra_secret_names:
       - SCRT_roles_system_password_postgres_host_main_password
+      - SCRT_roles_system_password_postgres_host_test_password
     extra_user_names:
       - admin
       - maintenance
@@ -574,6 +575,7 @@ all:
       ansible_python_interpreter: '{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python'
       extra_secret_names:
         - SCRT_roles_system_password_postgres_host_main_password
+        - SCRT_roles_system_password_postgres_host_test_password
       host_luxnix:
         generic_settings.configurationPath: lib.mkForce "/home/admin/dev/luxnix"
         generic_settings.hostPlatform: '"x86_64-linux"'
@@ -724,6 +726,9 @@ groups:
       lx_vault_psk: '{{ secret_dir }}/.psk'
       network_conf:
         domain: endo-reg.net
+      postgres_host_main_password_filename: SCRT_roles_system_password_postgres_host_main_password
+      postgres_host_test_ip: 172.16.255.13
+      postgres_host_test_password_filename: SCRT_roles_system_password_postgres_host_test_password
       secret_dir: /etc/secrets
   - extra_user_names: []
     files: []
@@ -946,4 +951,8 @@ roles:
   - extra_user_names: []
     files: []
     name: traefik_host_main
+    vars: {}
+  - extra_user_names: []
+    files: []
+    name: dev_access
     vars: {}

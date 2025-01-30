@@ -9,6 +9,7 @@ luxnix_branch: "migrate-01"
 
 extra_secret_names:
   - "SCRT_roles_system_password_postgres_host_main_password"
+  - "SCRT_roles_system_password_postgres_host_test_password"
 
 os_extra_user_names:
   - "demodemo"

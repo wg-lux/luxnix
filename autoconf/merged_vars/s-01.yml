@@ -92,5 +92,8 @@ lx_vault_key_src: /home/admin/.lxv.key
 lx_vault_psk: '{{ secret_dir }}/.psk'
 network_conf:
   domain: endo-reg.net
+postgres_host_main_password_filename: SCRT_roles_system_password_postgres_host_main_password
+postgres_host_test_ip: 172.16.255.13
+postgres_host_test_password_filename: SCRT_roles_system_password_postgres_host_test_password
 secret_dir: /etc/secrets
 template_name: main
