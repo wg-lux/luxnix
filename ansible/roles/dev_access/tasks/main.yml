@@ -1,0 +1,44 @@
+---
+- name: Ensure vault directory exists
+  ansible.builtin.file:
+    path: "{{ lx_vault_dir }}"
+    state: directory
+    mode: "0700"
+    owner: "{{ ansible_user }}"
+  become: true
+
+- name: Deploy postgres password from source
+  ansible.builtin.copy:
+    src: "{{ lx_vault_dir_src }}/deploy/{{ inventory_hostname }}/{{ postgres_host_test_password_filename }}"
+    dest: "{{ lx_vault_dir }}/{{ postgres_host_test_password_filename }}"
+    mode: "0600"
+    owner: "{{ ansible_user }}"
+  become: true
+  no_log: true
+  vars:
+    ansible_vault_identity: "{{ inventory_hostname }}@{{ lx_vault_dir_src }}/psk/{{ inventory_hostname }}.psk"
+
+- name: Read postgres user password from vault
+  ansible.builtin.slurp:
+    src: "{{ lx_vault_dir }}/{{ postgres_host_test_password_filename }}"
+  register: postgres_password_b64
+  no_log: true
+
+- name: Test remote postgres connection to test DB
+  ansible.builtin.command:
+    cmd: psql -h {{ postgres_host_test_ip }} -U postgres -c "SELECT version();"
+  become: true
+  become_user: root
+  register: postgres_remote_test_result
+  changed_when: false
+  environment:
+    PGPASSWORD: "{{ postgres_password_b64.content | b64decode | trim }}"
+  ignore_errors: true
+
+- name: Show remote connection test results
+  ansible.builtin.debug:
+    msg:
+      - "Remote connection test result: {{ 'SUCCESS' if postgres_remote_test_result.rc == 0 else 'FAILED' }}"
+      - "Output: {{ postgres_remote_test_result.stdout | default('') }}"
+      - "Error: {{ postgres_remote_test_result.stderr | default('') }}"
+  when: postgres_remote_test_result is defined

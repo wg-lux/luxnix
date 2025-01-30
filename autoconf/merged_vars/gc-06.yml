@@ -1,6 +1,7 @@
 admin_password_file: '{{ local_users_passwords_dir }}/admin_raw'
 admin_password_file_source: '{{ lx_vault_dir_src }}/secrets/password/local/admin@{{
   inventory_hostname }}/admin@{{ inventory_hostname }}_password'
+admin_vpn_ip: 172.16.255.106
 aglnet_conf:
   backupNameservers:
     - 8.8.8.8
@@ -31,8 +32,12 @@ authentication:
   dev_02: {}
   dev_03:
     id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos
+extra_secret_names:
+  - SCRT_roles_system_password_postgres_host_main_password
+  - SCRT_roles_system_password_postgres_host_test_password
 group_luxnix:
   boot_decryption_stick.enable: 'true'
+  generic_settings.adminVpnIp: '"172.16.255.106"'
   generic_settings.configurationPathRelative: '"lx-production"'
   generic_settings.enable: 'true'
   generic_settings.linux.kernelPackages: pkgs.linuxPackages_6_12
@@ -79,6 +84,7 @@ host_luxnix:
     - btrfs
     - nfs
   generic_settings.systemStateVersion: '"23.11"'
+  generic_settings.vpnIp: '"172.16.255.106"'
   maintenance.autoUpdates.enable: 'false'
   nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
   nvidia_prime.onboardBusId: '"PCI:0:2:0"'
@@ -103,5 +109,8 @@ network_conf:
   domain: endo-reg.net
 os_extra_user_names:
   - demodemo
+postgres_host_main_password_filename: SCRT_roles_system_password_postgres_host_main_password
+postgres_host_test_ip: 172.16.255.13
+postgres_host_test_password_filename: SCRT_roles_system_password_postgres_host_test_password
 secret_dir: /etc/secrets
 template_name: main

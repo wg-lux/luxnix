@@ -21,6 +21,22 @@ in {
       '';
     };
 
+    vpnIp = mkOption {
+      type = types.str;
+      default = "172.16.255.x";
+      description = ''
+        The VPN IP.
+      '';
+    };
+
+    adminVpnIp = mkOption {
+      type = types.str;
+      default = "172.16.255.106";
+      description = ''
+        The VPN IP of the admin.
+      '';
+    };
+
     secretDir = mkOption {
       type = types.path;
       default = "/etc/secrets";

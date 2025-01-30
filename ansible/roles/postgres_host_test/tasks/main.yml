@@ -1,0 +1,70 @@
+---
+- name: Ensure vault directory exists
+  ansible.builtin.file:
+    path: "{{ lx_vault_dir }}"
+    state: directory
+    mode: "0700"
+    owner: "{{ ansible_user }}"
+  become: true
+
+- name: Deploy postgres password from source
+  ansible.builtin.copy:
+    src: "{{ lx_vault_dir_src }}/deploy/{{ inventory_hostname }}/{{ postgres_host_test_password_filename }}"
+    dest: "{{ lx_vault_dir }}/{{ postgres_host_test_password_filename }}"
+    mode: "0600"
+    owner: "{{ ansible_user }}"
+  become: true
+  no_log: true
+  vars:
+    ansible_vault_identity: "{{ inventory_hostname }}@{{ lx_vault_dir_src }}/psk/{{ inventory_hostname }}.psk"
+
+- name: Read postgres user password from vault
+  ansible.builtin.slurp:
+    src: "{{ lx_vault_dir }}/{{ postgres_host_test_password_filename }}"
+  register: postgres_password_b64
+  no_log: false
+
+- name: Set postgres user password
+  ansible.builtin.command:
+    cmd: psql -U postgres -c "ALTER ROLE postgres WITH PASSWORD '{{ postgres_password_b64.content | b64decode | trim }}';"
+  become: true
+  become_user: root # Changed from postgres to root
+  no_log: true
+  register: postgres_password_result
+  changed_when: postgres_password_result.rc == 0
+  environment:
+    PGPASSWORD: "" # Ensure no password is used for peer authentication
+    PGHOST: "" # Force local socket connection
+
+- name: Test local postgres connection
+  ansible.builtin.command:
+    cmd: psql -U postgres -c "SELECT version();"
+  become: true
+  become_user: root
+  register: postgres_test_result
+  changed_when: false
+  environment:
+    PGPASSWORD: ""
+    PGHOST: ""
+
+- name: Check PostgreSQL is listening on correct ports
+  ansible.builtin.shell: set -o pipefail; netstat -tuln | grep 5432
+  register: postgres_ports
+  changed_when: false
+
+- name: Show PostgreSQL configuration
+  ansible.builtin.command:
+    cmd: psql -U postgres -c "SHOW listen_addresses;"
+  become: true
+  become_user: postgres
+  register: postgres_config
+  changed_when: false
+  environment:
+    PGPASSWORD: ""
+    PGHOST: ""
+
+- name: Display debug information
+  ansible.builtin.debug:
+    msg:
+      - "Listening ports: {{ postgres_ports.stdout }}"
+      - "PostgreSQL config: {{ postgres_config.stdout }}"

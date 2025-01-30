@@ -18,6 +18,11 @@ in {
   options.roles.postgres.main = {
     enable = mkEnableOption "main internal postgres configuration";
 
+    listen_addresses = mkOption {
+      type = types.str;
+      default = "localhost,127.0.0.1,${config.luxnix.generic-settings.vpnIp}";
+    };
+
     authentication = mkOption {
       # multi line string
       type = types.str;

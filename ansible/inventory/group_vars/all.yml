@@ -7,6 +7,12 @@ lx_vault_psk: "{{ secret_dir }}/.psk"
 lx_vault_dir_src: "/home/admin/.lxv"
 lx_vault_key_src: "/home/admin/.lxv.key"
 
+postgres_host_main_password_filename: "SCRT_roles_system_password_postgres_host_main_password"
+postgres_host_test_password_filename: "SCRT_roles_system_password_postgres_host_test_password"
+
+admin_vpn_ip: "172.16.255.106"
+postgres_host_test_ip: "172.16.255.13"
+
 ansible_groups:
   - "common"
 group_roles: {}
@@ -14,6 +20,7 @@ group_services: {}
 group_luxnix:
   generic_settings.enable: "true"
   generic_settings.linux.kernelPackages: "pkgs.linuxPackages_6_12"
+  generic_settings.adminVpnIp: '"172.16.255.106"'
   vault.enable: "true"
   vault.dir: '"/etc/secrets/vault"'
   vault.key: '"/etc/secrets/.key"' # Depreceated ?

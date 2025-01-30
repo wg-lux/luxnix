@@ -850,6 +850,14 @@ class Vault(BaseModel):
             secrets.append(secret)
         return secrets
 
+    def get_secret_by_target_name(self, name: str) -> Optional[Secret]:
+        from .manager_utils import _get_by_target_name
+
+        secret = _get_by_target_name(self.secrets, name)
+        assert secret, f"Secret '{name}' not found"
+
+        return secret
+
     def get_host_secrets(self, hostname: str, logger=None) -> List[Secret]:
         """
         Determine which secrets belong to this host by checking roles, groups,
@@ -899,5 +907,11 @@ class Vault(BaseModel):
                 _secrets = self._get_template_secrets(st.name)
                 logger.info(f"Matched secrets: {_secrets}")
                 matched_secrets.extend(_secrets)
+
+        # fetch hosts extra secrets
+        extra_secret_names = host.extra_secret_names
+        secrets = [self.get_secret_by_target_name(name) for name in extra_secret_names]
+
+        matched_secrets.extend(secrets)
 
         return matched_secrets

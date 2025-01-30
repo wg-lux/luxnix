@@ -1,6 +1,7 @@
 admin_password_file: '{{ local_users_passwords_dir }}/admin_raw'
 admin_password_file_source: '{{ lx_vault_dir_src }}/secrets/password/local/admin@{{
   inventory_hostname }}/admin@{{ inventory_hostname }}_password'
+admin_vpn_ip: 172.16.255.106
 aglnet_conf:
   backupNameservers:
     - 8.8.8.8
@@ -21,9 +22,7 @@ ansible_groups:
 ansible_key_dir: '{{ luxnix_dest }}/secrets/ansible-vault-keys'
 ansible_key_source_dir: '{{ luxnix_dev_repo }}/secrets/ansible-vault-keys-source'
 ansible_python_interpreter: '{{ luxnix_dest }}/.devenv/state/venv/bin/python'
-ansible_roles:
-  - dev-01-access
-  - dev-03-access
+ansible_roles: []
 ansible_ssh_private_key_file: ~/.ssh/id_ed25519
 ansible_user: admin
 authentication:
@@ -35,6 +34,7 @@ authentication:
   dev_03:
     id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos
 group_luxnix:
+  generic_settings.adminVpnIp: '"172.16.255.106"'
   generic_settings.enable: 'true'
   generic_settings.linux.kernelPackages: pkgs.linuxPackages_6_12
   maintenance.autoUpdates.dates: '"06:00"'
@@ -76,6 +76,7 @@ host_luxnix:
   generic_settings.linux.supportedFilesystems:
     - btrfs
   generic_settings.systemStateVersion: '"23.11"'
+  generic_settings.vpnIp: '"172.16.255.21"'
 host_roles: {}
 host_services: {}
 local_users_passwords_dir: '{{ luxnix_dest }}/secrets/user-passwords/{{ inventory_hostname
@@ -91,5 +92,8 @@ lx_vault_key_src: /home/admin/.lxv.key
 lx_vault_psk: '{{ secret_dir }}/.psk'
 network_conf:
   domain: endo-reg.net
+postgres_host_main_password_filename: SCRT_roles_system_password_postgres_host_main_password
+postgres_host_test_ip: 172.16.255.13
+postgres_host_test_password_filename: SCRT_roles_system_password_postgres_host_test_password
 secret_dir: /etc/secrets
 template_name: main
