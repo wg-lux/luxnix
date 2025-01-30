@@ -11,6 +11,9 @@ host_roles:
 
 host_services: {}
 
+extra_secret_names:
+  - "SCRT_roles_system_password_postgres_host_test_password"
+
 host_luxnix:
   generic_settings.hostPlatform: '"x86_64-linux"'
   generic_settings.systemStateVersion: '"23.11"'

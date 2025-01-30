@@ -47,7 +47,8 @@ all:
       - gpu_client
     ansible_host: 172.16.255.108
     ansible_role_names: []
-    extra_secret_names: []
+    extra_secret_names:
+      - SCRT_roles_system_password_postgres_host_test_password
     extra_user_names:
       - admin
       - maintenance
@@ -56,6 +57,8 @@ all:
     hostname: gc-08
     subnet: 172.16.255.
     vars:
+      extra_secret_names:
+        - SCRT_roles_system_password_postgres_host_test_password
       host_luxnix:
         generic_settings.hostPlatform: '"x86_64-linux"'
         generic_settings.linux.cpuMicrocode: '"intel"'
@@ -493,7 +496,8 @@ all:
       - gpu_client
     ansible_host: 172.16.255.102
     ansible_role_names: []
-    extra_secret_names: []
+    extra_secret_names:
+      - SCRT_roles_system_password_postgres_host_test_password
     extra_user_names:
       - admin
       - maintenance
@@ -502,6 +506,8 @@ all:
     hostname: gc-02
     subnet: 172.16.255.
     vars:
+      extra_secret_names:
+        - SCRT_roles_system_password_postgres_host_test_password
       host_luxnix:
         generic_settings.configurationPath: lib.mkForce "/home/admin/luxnix"
         generic_settings.configurationPathRelative: '"luxnix"'

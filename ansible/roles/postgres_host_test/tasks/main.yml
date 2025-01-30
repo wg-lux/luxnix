@@ -3,14 +3,14 @@
   ansible.builtin.slurp:
     src: "{{ lx_vault_dir }}/SCRT_roles_system_password_postgres_host_test_password"
   register: postgres_password_b64
-  no_log: true
+  no_log: false
 
 - name: Set postgres user password
   ansible.builtin.command:
     cmd: psql -U postgres -c "ALTER ROLE postgres WITH PASSWORD '{{ postgres_password_b64.content | b64decode | trim }}';"
   become: true
   become_user: root # Changed from postgres to root
-  no_log: false
+  no_log: true
   register: postgres_password_result
   changed_when: postgres_password_result.rc == 0
   environment:
@@ -27,3 +27,35 @@
   environment:
     PGPASSWORD: ""
     PGHOST: ""
+
+- name: Check PostgreSQL is listening on correct ports
+  ansible.builtin.shell: set -o pipefail; netstat -tuln | grep 5432
+  register: postgres_ports
+  changed_when: false
+
+- name: Show PostgreSQL configuration
+  ansible.builtin.command:
+    cmd: psql -U postgres -c "SHOW listen_addresses;"
+  become: true
+  become_user: postgres
+  register: postgres_config
+  changed_when: false
+  environment:
+    PGPASSWORD: ""
+    PGHOST: ""
+
+- name: Check PostgreSQL logs for connection issues
+  ansible.builtin.command:
+    cmd: tail -n 50 /var/log/postgresql/postgresql*.log
+  become: true
+  become_user: postgres
+  register: postgres_logs
+  changed_when: false
+  ignore_errors: true
+
+- name: Display debug information
+  ansible.builtin.debug:
+    msg:
+      - "Listening ports: {{ postgres_ports.stdout }}"
+      - "PostgreSQL config: {{ postgres_config.stdout }}"
+      - "Recent logs: {{ postgres_logs.stdout }}"
