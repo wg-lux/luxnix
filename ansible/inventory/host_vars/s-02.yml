@@ -1,21 +1,9 @@
 # inventory/host_vars/s-02.yml
 ---
-# defines the template set (see conf/nix-templates)main
-# autoconf:
-#   template_set: "base-server"
-#   overide_template: {} # key is original template name, value is new template name
-
 template_name: "main"
-
-# ansible_groups:
-#   - "base-server"
-#   - "aglnet.host"
-#   - "postgres.main"
 
 ansible_roles:
   - "postgres_host_main"
-
-luxnix_branch: "postgres-implementation"
 
 host_roles: {}
 host_services: {}

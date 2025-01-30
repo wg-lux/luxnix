@@ -6,8 +6,6 @@ host_roles: {}
 
 host_services: {}
 
-luxnix_branch: "postgres-implementation"
-
 ansible_roles:
   - "postgres_host_test"
 
