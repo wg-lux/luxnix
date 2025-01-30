@@ -27,15 +27,3 @@
   environment:
     PGPASSWORD: ""
     PGHOST: ""
-# - name: Ensure postgres connection settings are updated in pg_hba.conf
-#   community.postgresql.postgresql_pg_hba:
-#     dest: "{{ postgres_host_main_config_path }}/pg_hba.conf"
-#     contype: host
-#     users: postgres
-#     source: "{{ admin_vpn_ip }}/32"
-#     databases: all
-#     method: scram-sha-256
-#     create: true
-#   become: true
-#   become_user: postgres
-#   notify: restart postgresql

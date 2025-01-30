@@ -93,7 +93,6 @@ lx_vault_key_src: /home/admin/.lxv.key
 lx_vault_psk: '{{ secret_dir }}/.psk'
 network_conf:
   domain: endo-reg.net
-role_config_path: /var/lib/postgresql/16
 role_luxnix:
   generic-settings.postgres.activeAuthentication: '#type database DBuser address auth-method
     optional_ident_map

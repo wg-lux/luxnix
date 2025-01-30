@@ -23,6 +23,12 @@
   become: true
   roles:
     - postgres_host_main
+
+- name: Set role postgres_host_main for host "s-02"
+  hosts: s-03
+  become: true
+  roles:
+    - postgres_host_test
 # - name: Set base_server group's roles
 #   hosts: base_server
 #   become: true

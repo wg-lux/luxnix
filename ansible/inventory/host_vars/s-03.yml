@@ -8,7 +8,8 @@ host_services: {}
 
 luxnix_branch: "postgres-implementation"
 
-ansible_roles: []
+ansible_roles:
+  - "postgres_host_test"
 
 host_luxnix:
   generic_settings.enable: "true"
