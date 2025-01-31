@@ -24,6 +24,7 @@ ansible_key_source_dir: '{{ luxnix_dev_repo }}/secrets/ansible-vault-keys-source
 ansible_python_interpreter: '{{ luxnix_dest }}/.devenv/state/venv/bin/python'
 ansible_roles:
   - postgres_host_main
+  - traefik_host
 ansible_ssh_private_key_file: ~/.ssh/id_ed25519
 ansible_user: admin
 authentication:
@@ -142,5 +143,8 @@ role_luxnix:
     '
 role_roles:
   postgres.main.enable: 'true'
+  traefikHost.dashboard: 'true'
+  traefikHost.enable: 'true'
+  traefikHost.insecure: 'false'
 secret_dir: /etc/secrets
 template_name: main

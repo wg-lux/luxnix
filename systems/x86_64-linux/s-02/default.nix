@@ -22,6 +22,9 @@
     base-server.enable = true;
     endoreg-client.enable = false;
     postgres.main.enable = true;
+    traefikHost.dashboard = true;
+    traefikHost.enable = true;
+    traefikHost.insecure = false;
     };
 
   services = {

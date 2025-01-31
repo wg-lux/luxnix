@@ -504,13 +504,15 @@ all:
       host_services: {}
       template_name: main
   - ansible_group_names:
-      - active_clients
       - all
       - base_server
+      - active_clients
+      - traefik_host
       - managed
     ansible_host: 172.16.255.12
     ansible_role_names:
       - postgres_host_main
+      - traefik_host
     extra_secret_names: []
     extra_user_names:
       - admin
@@ -536,6 +538,7 @@ all:
     vars:
       ansible_roles:
         - postgres_host_main
+        - traefik_host
       host_luxnix:
         generic_settings.hostPlatform: '"x86_64-linux"'
         generic_settings.linux.cpuMicrocode: '"intel"'
@@ -869,6 +872,10 @@ groups:
       group_services: {}
   - extra_user_names: []
     files: []
+    name: traefik_host
+    vars: {}
+  - extra_user_names: []
+    files: []
     name: hetzner_server
     vars:
       group_luxnix: {}
@@ -1011,13 +1018,17 @@ roles:
         postgres.main.enable: 'true'
   - extra_user_names: []
     files: []
-    name: traefik_host_main
-    vars: {}
-  - extra_user_names: []
-    files: []
     name: dev_access
     vars: {}
   - extra_user_names: []
     files: []
     name: local_endoreg_db
     vars: {}
+  - extra_user_names: []
+    files: []
+    name: traefik_host
+    vars:
+      role_roles:
+        traefikHost.dashboard: 'true'
+        traefikHost.enable: 'true'
+        traefikHost.insecure: 'false'

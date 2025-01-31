@@ -7,7 +7,6 @@ host_roles:
   aglnet.host.enable: "true"
 
 host_services: {}
-
 host_luxnix:
   generic_settings.hostPlatform: '"x86_64-linux"'
   generic_settings.systemStateVersion: '"23.11"'

@@ -17,10 +17,6 @@
     settings.mutable = false;
   };
 
-  services.luxnix.traefik.enable = true;
-  services.luxnix.traefik.dashboard = true;
-  services.luxnix.traefik.insecure = true;
-
   roles = { 
     aglnet.client.enable = true;
     endoreg-client.enable = true;
