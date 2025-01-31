@@ -20,6 +20,7 @@
   roles = { 
     aglnet.client.enable = true;
     endoreg-client.enable = true;
+    postgres.default.enable = true;
     custom-packages.baseDevelopment = true;
     };
 
@@ -29,7 +30,26 @@
   luxnix = {
     boot-decryption-stick.enable = true;
 
-generic-settings.adminVpnIp = "172.16.255.106";
+generic-settings.postgres.activeAuthentication = ''
+#type database DBuser address auth-method optional_ident_map
+local sameuser all peer map=superuser_map
+host postgres postgres 127.0.0.1/32 scram-sha-256
+host ${config.roles.postgres.default.defaultDbName} ${config.roles.postgres.default.defaultDbName} 127.0.0.1/32 scram-sha-256
+''; 
+  generic-settings.postgres.activeIdentMap = ''
+# ArbitraryMapName systemUser DBUser
+superuser_map      root      postgres
+superuser_map      root      ${config.roles.postgres.main.replUser}
+superuser_map      ${config.user.admin.name}     ${config.user.admin.name}
+superuser_map      ${config.user.admin.name}     postgres
+superuser_map      ${config.user.admin.name}     endoregClient
+superuser_map      ${config.user.admin.name} ${config.roles.postgres.default.defaultDbName}
+superuser_map      postgres  postgres
+
+# Let other names login as themselves
+superuser_map      /^(.*)$   \1
+''; 
+  generic-settings.adminVpnIp = "172.16.255.106";
 
 generic-settings.configurationPathRelative = "luxnix";
 

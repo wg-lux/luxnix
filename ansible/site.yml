@@ -36,11 +36,11 @@
 #   roles:
 #     - dev_access
 
-# - name: Set role local_endoreg_db
-#   hosts: local_endoreg_db
-#   become: true
-#   roles:
-#     - local_endoreg_db
+- name: Set role local_endoreg_db
+  hosts: local_endoreg_db
+  become: true
+  roles:
+    - local_endoreg_db
 ####### PRODUCTION END #########
 
 # - name: Set base_server group's roles

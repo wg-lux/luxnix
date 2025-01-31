@@ -3,6 +3,7 @@ all:
       - active_clients
       - all
       - gpu_client
+      - local_endoreg_db
     ansible_host: 172.16.255.102
     ansible_role_names: []
     extra_secret_names:
@@ -223,6 +224,7 @@ all:
       - active_clients
       - all
       - gpu_client
+      - local_endoreg_db
     ansible_host: 172.16.255.108
     ansible_role_names: []
     extra_secret_names:
@@ -834,7 +836,10 @@ groups:
 
           local sameuser all peer map=superuser_map
 
-          host endoregDbLocal endoregDbLocal 127.0.0.1/32 scram-sha-256
+          host postgres postgres 127.0.0.1/32 scram-sha-256
+
+          host ${config.roles.postgres.default.defaultDbName} ${config.roles.postgres.default.defaultDbName}
+          127.0.0.1/32 scram-sha-256
 
           '
         generic-settings.postgres.activeIdentMap: '# ArbitraryMapName systemUser DBUser
@@ -848,6 +853,8 @@ groups:
           superuser_map      ${config.user.admin.name}     postgres
 
           superuser_map      ${config.user.admin.name}     endoregClient
+
+          superuser_map      ${config.user.admin.name} ${config.roles.postgres.default.defaultDbName}
 
           superuser_map      postgres  postgres
 
