@@ -46,7 +46,7 @@ in {
 
           api = mkIf cfg.dashboard {
             dashboard = true;
-            insecure = cfg.insecure;
+            insecure = true;  # Changed to true temporarily for debugging
           };
 
           providers = {
@@ -74,8 +74,24 @@ in {
                 rule = "Host(`${cfg.dashboardHost}`)";
                 service = "api@internal";
                 middlewares = ["ipwhitelist"];
-                entryPoints = ["websecure"];
-                tls = true;
+                entryPoints = ["websecure" "web"];  # Allow both HTTP and HTTPS
+                tls = {
+                  domains = [
+                    {
+                      main = "${cfg.dashboardHost}";
+                    }
+                  ];
+                };
+              };
+            };
+          };
+
+          # Add default TLS configuration for internal domains
+          tls = {
+            options = {
+              default = {
+                minVersion = "VersionTLS12";
+                sniStrict = false;  # Allow non-SNI clients
               };
             };
           };
@@ -84,9 +100,9 @@ in {
       ];
     };
 
-    # Add dashboard hostname to /etc/hosts if it's the internal domain
+    # Modified hosts entry to use VPN IP instead of localhost
     networking.hosts = mkIf (hasSuffix "endoreg.local" cfg.dashboardHost) {
-      "127.0.0.1" = [ cfg.dashboardHost ];
+      "${cfg.bindIP}" = [ cfg.dashboardHost ];
     };
 
     # Create config directory for file provider
