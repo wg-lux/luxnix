@@ -22,9 +22,8 @@
     base-server.enable = true;
     endoreg-client.enable = false;
     postgres.main.enable = true;
-    traefikHost.allowedIPs = ["172.16.255.106" "127.0.0.1"];    
-    traefikHost.dashboard = true;
-    traefikHost.dashboardHost = "dashboard.traefik.local";
+    traefikHost.allowedIPs = ["172.16.255.106" "127.0.0.1"];    traefikHost.dashboard = true;
+    traefikHost.dashboardHost = "traefik.endoreg.local";
     traefikHost.enable = true;
     traefikHost.insecure = false;
     };
