@@ -51,6 +51,7 @@ in {
       description = ''
         The traefik dashboard host.
       '';
+    };
 
     secretDir = mkOption {
       type = types.path;

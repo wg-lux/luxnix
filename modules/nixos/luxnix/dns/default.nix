@@ -8,7 +8,7 @@ with lib;
 with lib.luxnix; let
   cfg = config.luxnix.dns;
 
-  gs = config.generic-settings;
+  gs = config.luxnix.generic-settings;
 
   hosts = {
     "${gs.traefikHostIp}" = [ gs.traefikHostDomain ];
