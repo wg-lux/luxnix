@@ -42,6 +42,7 @@ extra_secret_names:
   - SCRT_roles_system_password_postgres_host_test_password
 group_luxnix:
   boot_decryption_stick.enable: 'true'
+  dns.enable: 'true'
   generic-settings.postgres.activeAuthentication: '#type database DBuser address auth-method
     optional_ident_map
 
@@ -79,6 +80,8 @@ group_luxnix:
   generic_settings.configurationPathRelative: '"lx-production"'
   generic_settings.enable: 'true'
   generic_settings.linux.kernelPackages: pkgs.linuxPackages_6_12
+  generic_settings.traefikHostDomain: '"traefik.endoreg.local"'
+  generic_settings.traefikHostIp: '"172.16.255.12"'
   gpu_eval.enable: 'true'
   maintenance.autoUpdates.dates: '"09:00"'
   maintenance.autoUpdates.enable: 'true'

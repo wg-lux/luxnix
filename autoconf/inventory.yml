@@ -722,9 +722,12 @@ groups:
       endoreg_db_dest: /home/admin/endoreg-db-production
       endoreg_db_repo: https://github.com/wg-lux/endoreg-db.git
       group_luxnix:
+        dns.enable: 'true'
         generic_settings.adminVpnIp: '"172.16.255.106"'
         generic_settings.enable: 'true'
         generic_settings.linux.kernelPackages: pkgs.linuxPackages_6_12
+        generic_settings.traefikHostDomain: '"traefik.endoreg.local"'
+        generic_settings.traefikHostIp: '"172.16.255.12"'
         vault.dir: '"/etc/secrets/vault"'
         vault.enable: 'true'
         vault.key: '"/etc/secrets/.key"'

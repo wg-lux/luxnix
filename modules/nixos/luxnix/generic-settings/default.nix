@@ -37,6 +37,21 @@ in {
       '';
     };
 
+    traefikHostDomain = mkOption {
+      type = types.str;
+      default = "traefik.endoreg.local";
+      description = ''
+        The traefik dashboard host.
+      '';
+    };
+
+    traefikHostIp = mkOption {
+      type = types.str;
+      default = "172.16.255.106";
+      description = ''
+        The traefik dashboard host.
+      '';
+
     secretDir = mkOption {
       type = types.path;
       default = "/etc/secrets";

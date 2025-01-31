@@ -28,11 +28,17 @@
     };
 
   luxnix = {
-    generic-settings.adminVpnIp = "172.16.255.106";
+    dns.enable = true;
+
+generic-settings.adminVpnIp = "172.16.255.106";
 
 generic-settings.enable = true;
 
 generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
+
+generic-settings.traefikHostDomain = "traefik.endoreg.local";
+
+generic-settings.traefikHostIp = "172.16.255.12";
 
 maintenance.autoUpdates.dates = "06:00";
 

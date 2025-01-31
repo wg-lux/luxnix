@@ -32,6 +32,8 @@
   luxnix = {
     boot-decryption-stick.enable = true;
 
+dns.enable = true;
+
 generic-settings.postgres.activeAuthentication = ''
 #type database DBuser address auth-method optional_ident_map
 local sameuser all peer map=superuser_map
@@ -58,6 +60,10 @@ generic-settings.configurationPathRelative = "lx-production";
 generic-settings.enable = true;
 
 generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
+
+generic-settings.traefikHostDomain = "traefik.endoreg.local";
+
+generic-settings.traefikHostIp = "172.16.255.12";
 
 gpu-eval.enable = true;
 
