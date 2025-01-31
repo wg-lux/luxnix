@@ -32,6 +32,9 @@ in {
 
       postgresql = {
         enable = true;
+        settings = {
+          listen_addresses = "*";
+        };
         # TODO: look at using default postgres
         package = pkgs.postgresql_16_jit;
         extensions = ps: with ps; [pgvecto-rs];

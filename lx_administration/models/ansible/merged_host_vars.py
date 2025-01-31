@@ -32,6 +32,9 @@ class MergedHostVars(BaseModel):
     group_luxnix: Optional[Dict[str, Union[List[str], str]]] = {}
     group_roles: Optional[Dict[str, Union[List[str], str]]] = {}
     group_services: Optional[Dict[str, Union[List[str], str]]] = {}
+    role_luxnix: Optional[Dict[str, Union[List[str], str]]] = {}
+    role_roles: Optional[Dict[str, Union[List[str], str]]] = {}
+    role_services: Optional[Dict[str, Union[List[str], str]]] = {}
     host_luxnix: Optional[Dict[str, Union[List[str], str]]] = {}
     host_roles: Optional[Dict[str, Union[List[str], str]]] = {}
     host_services: Optional[Dict[str, Union[List[str], str]]] = {}
@@ -50,6 +53,9 @@ class MergedHostVars(BaseModel):
         group_luxnix = data.get("group_luxnix", {})
         group_roles = data.get("group_roles", {})
         group_services = data.get("group_services", {})
+        role_luxnix = data.get("role_luxnix", {})
+        role_roles = data.get("role_roles", {})
+        role_services = data.get("role_services", {})
         host_luxnix = data.get("host_luxnix", {})
         host_roles = data.get("host_roles", {})
         host_services = data.get("host_services", {})
@@ -59,6 +65,9 @@ class MergedHostVars(BaseModel):
             group_luxnix=group_luxnix,
             group_roles=group_roles,
             group_services=group_services,
+            role_luxnix=role_luxnix,
+            role_roles=role_roles,
+            role_services=role_services,
             host_luxnix=host_luxnix,
             host_roles=host_roles,
             host_services=host_services,
@@ -82,6 +91,7 @@ class MergedHostVars(BaseModel):
         role_configs = {}
         # merge group_roles and host_roles
         role_configs = deep_update(role_configs, self.group_roles)
+        role_configs = deep_update(role_configs, self.role_roles)
         role_configs = deep_update(role_configs, self.host_roles)
         role_configs = _dictkey_replace_underscore_keys(role_configs)
 
@@ -94,6 +104,7 @@ class MergedHostVars(BaseModel):
 
         # merge group_services and host_services
         service_configs = deep_update(service_configs, self.group_services)
+        service_configs = deep_update(service_configs, self.role_services)
         service_configs = deep_update(service_configs, self.host_services)
 
         service_configs = _dictkey_replace_underscore_keys(service_configs)
@@ -107,6 +118,7 @@ class MergedHostVars(BaseModel):
 
         # merge group_luxnix and host_luxnix
         luxnix_configs = deep_update(luxnix_configs, self.group_luxnix)
+        luxnix_configs = deep_update(luxnix_configs, self.role_luxnix)
         luxnix_configs = deep_update(luxnix_configs, self.host_luxnix)
 
         luxnix_configs = _dictkey_replace_underscore_keys(luxnix_configs)

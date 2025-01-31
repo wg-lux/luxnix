@@ -7,6 +7,14 @@ lx_vault_psk: "{{ secret_dir }}/.psk"
 lx_vault_dir_src: "/home/admin/.lxv"
 lx_vault_key_src: "/home/admin/.lxv.key"
 
+maintenance_password_filename: "SCRT_local_password_maintenance_password"
+
+postgres_host_main_password_filename: "SCRT_roles_system_password_postgres_host_main_password"
+postgres_host_test_password_filename: "SCRT_roles_system_password_postgres_host_test_password"
+
+admin_vpn_ip: "172.16.255.106"
+postgres_host_test_ip: "172.16.255.13"
+
 ansible_groups:
   - "common"
 group_roles: {}
@@ -14,6 +22,7 @@ group_services: {}
 group_luxnix:
   generic_settings.enable: "true"
   generic_settings.linux.kernelPackages: "pkgs.linuxPackages_6_12"
+  generic_settings.adminVpnIp: '"172.16.255.106"'
   vault.enable: "true"
   vault.dir: '"/etc/secrets/vault"'
   vault.key: '"/etc/secrets/.key"' # Depreceated ?
@@ -27,6 +36,14 @@ luxnix_repo: "https://github.com/wg-lux/luxnix.git"
 luxnix_dest: "/home/admin/lx-production"
 luxnix_branch: "main"
 # luxnix_secrets: []
+
+endoreg_db_repo: "https://github.com/wg-lux/endoreg-db.git"
+endoreg_db_dest: "/home/admin/endoreg-db-production"
+endoreg_db_branch: "main"
+
+endoreg_db_api_repo: "https://github.com/wg-lux/endoreg-db-api.git"
+endoreg_db_api_dest: "/home/admin/endoreg-db-api-production"
+endoreg_db_api_branch: "main"
 
 ansible_user: admin
 ansible_become_user: admin

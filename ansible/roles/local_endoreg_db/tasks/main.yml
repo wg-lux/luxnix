@@ -1,0 +1,10 @@
+- name: Clone or update the wg-lux/endoreg-db-api repository
+  ansible.builtin.git:
+    repo: "{{ endoreg_db_api_repo }}"
+    dest: "{{ endoreg_db_api_dest }}"
+    version: "{{ endoreg_db_branch }}"
+    update: true
+    force: false
+  register: git_update
+  notify:
+    - Initialize endoreg-db api

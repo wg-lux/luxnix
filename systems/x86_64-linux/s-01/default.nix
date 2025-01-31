@@ -30,6 +30,8 @@
   luxnix = {
     boot-decryption-stick.enable = true;
 
+generic-settings.adminVpnIp = "172.16.255.106";
+
 generic-settings.enable = true;
 
 generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
@@ -64,6 +66,8 @@ generic-settings.linux.resumeDevice = "/dev/disk/by-label/nixos";
 
 generic-settings.linux.supportedFilesystems = ["btrfs"];
 generic-settings.systemStateVersion = "23.11";
+
+generic-settings.vpnIp = "172.16.255.1";
 
 };
 }

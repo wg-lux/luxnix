@@ -86,6 +86,21 @@ def _get_by_name(obj_list: List, name: str, logger=None):
     objs = [obj for obj in obj_list if obj.name == name]
     if not len(objs) <= 1:
         logger.warning(f"Found more than one object: {len(objs)}")
+        raise ValueError(f"Found more than one object: {len(objs)}")
+
+    if objs:
+        return objs[0]
+    else:
+        return None
+
+
+def _get_by_target_name(obj_list: List, target_name: str, logger=None):
+    if not logger:
+        logger = get_logger("lx_vault__get_by_target_name")
+    objs = [obj for obj in obj_list if obj.target_name == target_name]
+    if not len(objs) <= 1:
+        logger.warning(f"Found more than one object: {len(objs)}")
+        raise ValueError(f"Found more than one object: {len(objs)}")
 
     if objs:
         return objs[0]

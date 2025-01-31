@@ -1,0 +1,19 @@
+---
+- name: Ensure vault directory exists
+  ansible.builtin.file:
+    path: "{{ lx_vault_dir }}"
+    state: directory
+    mode: "0700"
+    owner: "{{ ansible_user }}"
+  become: true
+
+- name: Deploy maintenance password from source
+  ansible.builtin.copy:
+    src: "{{ lx_vault_dir_src }}/deploy/{{ inventory_hostname }}/{{ maintenance_password_filename }}"
+    dest: "{{ lx_vault_dir }}/{{ maintenance_password_filename }}"
+    mode: "0600"
+    owner: "{{ ansible_user }}"
+  become: true
+  no_log: true
+  vars:
+    ansible_vault_identity: "{{ inventory_hostname }}@{{ lx_vault_dir_src }}/psk/{{ inventory_hostname }}.psk"

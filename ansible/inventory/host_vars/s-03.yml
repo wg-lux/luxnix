@@ -6,10 +6,14 @@ host_roles: {}
 
 host_services: {}
 
+ansible_roles:
+  - "postgres_host_test"
+
 host_luxnix:
   generic_settings.enable: "true"
   generic_settings.hostPlatform: '"x86_64-linux"'
   generic_settings.systemStateVersion: '"23.11"'
+  generic_settings.vpnIp: '"172.16.255.13"'
 
   generic_settings.linux.cpuMicrocode: '"amd"'
 

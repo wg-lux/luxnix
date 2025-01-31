@@ -1,0 +1,9 @@
+- name: Initialize endoreg-db api
+  ansible.builtin.shell: |
+    direnv allow
+    devenv shell -i init-environment
+  args:
+    chdir: "{{ endoreg_db_api_dest }}"
+  changed_when: false
+  async: 900 # 15 minutes
+  poll: 5

@@ -1,9 +1,13 @@
 all:
   - ansible_group_names:
+      - active_clients
       - all
       - gpu_client
+      - local_endoreg_db
     ansible_host: 172.16.255.102
     ansible_role_names: []
+    extra_secret_names:
+      - SCRT_roles_system_password_postgres_host_test_password
     extra_user_names:
       - admin
       - maintenance
@@ -12,6 +16,8 @@ all:
     hostname: gc-02
     subnet: 172.16.255.
     vars:
+      extra_secret_names:
+        - SCRT_roles_system_password_postgres_host_test_password
       host_luxnix:
         generic_settings.configurationPath: lib.mkForce "/home/admin/luxnix"
         generic_settings.configurationPathRelative: '"luxnix"'
@@ -35,6 +41,7 @@ all:
         generic_settings.linux.supportedFilesystems:
           - btrfs
         generic_settings.systemStateVersion: '"23.11"'
+        generic_settings.vpnIp: '"172.16.255.102"'
         nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
         nvidia_prime.onboardBusId: '"PCI:0:2:0"'
         nvidia_prime.onboardGpuType: '"intel"'
@@ -47,6 +54,7 @@ all:
       - gpu_client
     ansible_host: 172.16.255.105
     ansible_role_names: []
+    extra_secret_names: []
     extra_user_names:
       - admin
       - maintenance
@@ -77,6 +85,7 @@ all:
         generic_settings.linux.supportedFilesystems:
           - btrfs
         generic_settings.systemStateVersion: '"23.11"'
+        generic_settings.vpnIp: '"172.16.255.105"'
         nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
         nvidia_prime.onboardBusId: '"PCI:0:2:0"'
         nvidia_prime.onboardGpuType: '"intel"'
@@ -87,8 +96,93 @@ all:
   - ansible_group_names:
       - all
       - gpu_client
+      - active_clients
+      - local_endoreg_db
+      - test_group
+    ansible_host: 172.16.255.106
+    ansible_role_names: []
+    extra_secret_names:
+      - SCRT_roles_system_password_postgres_host_main_password
+      - SCRT_roles_system_password_postgres_host_test_password
+    extra_user_names:
+      - admin
+      - maintenance
+      - demodemo
+    facts:
+      all_ipv4_addresses:
+        - 172.16.255.106
+        - 192.168.0.115
+        - 192.168.0.235
+      bios:
+        date: 07/23/2024
+        vendor: American Megatrends International, LLC.
+        version: E17L5IMS.117
+      current_date: '2025-01-17T12:45:53Z'
+      default_ipv4:
+        address: 192.168.0.235
+        gateway: 192.168.0.1
+        interface: enp3s0
+        netmask: 255.255.255.0
+      machine: x86_64
+    files: []
+    hostname: gc-06
+    subnet: 172.16.255.
+    vars:
+      ansible_python_interpreter: '{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python'
+      extra_secret_names:
+        - SCRT_roles_system_password_postgres_host_main_password
+        - SCRT_roles_system_password_postgres_host_test_password
+      host_luxnix:
+        generic_settings.configurationPath: lib.mkForce "/home/admin/dev/luxnix"
+        generic_settings.hostPlatform: '"x86_64-linux"'
+        generic_settings.linux.cpuMicrocode: '"intel"'
+        generic_settings.linux.extraModulePackages: []
+        generic_settings.linux.initrd.availableKernelModules:
+          - vmd
+          - xhci_pci
+          - ahci
+          - nvme
+          - usb_storage
+          - sd_mod
+        generic_settings.linux.initrd.kernelModules:
+          - dm-snapshot
+          - nfs
+          - btrfs
+        generic_settings.linux.initrd.supportedFilesystems:
+          - nfs
+          - btrfs
+        generic_settings.linux.kernelModules:
+          - kvm-intel
+        generic_settings.linux.kernelModulesBlacklist: []
+        generic_settings.linux.kernelParams: []
+        generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+        generic_settings.linux.supportedFilesystems:
+          - btrfs
+          - nfs
+        generic_settings.systemStateVersion: '"23.11"'
+        generic_settings.vpnIp: '"172.16.255.106"'
+        maintenance.autoUpdates.enable: 'false'
+        nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
+        nvidia_prime.onboardBusId: '"PCI:0:2:0"'
+        nvidia_prime.onboardGpuType: '"intel"'
+      host_roles:
+        custom_packages.baseDevelopment: 'true'
+        custom_packages.videoEditing: 'true'
+        custom_packages.visuals: 'true'
+      host_services: {}
+      luxnix_branch: migrate-01
+      luxnix_dest: /home/admin/luxnix-production
+      luxnix_dev_repo: /home/admin/dev/luxnix
+      luxnix_repo: https://github.com/wg-lux/luxnix.git
+      os_extra_user_names:
+        - demodemo
+      template_name: main
+  - ansible_group_names:
+      - all
+      - gpu_client
     ansible_host: 172.16.255.107
     ansible_role_names: []
+    extra_secret_names: []
     extra_user_names:
       - admin
       - maintenance
@@ -119,6 +213,7 @@ all:
         generic_settings.linux.supportedFilesystems:
           - btrfs
         generic_settings.systemStateVersion: '"23.11"'
+        generic_settings.vpnIp: '"172.16.255.107"'
         nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
         nvidia_prime.onboardBusId: '"PCI:0:2:0"'
         nvidia_prime.onboardGpuType: '"intel"'
@@ -126,10 +221,14 @@ all:
       host_services: {}
       template_name: main
   - ansible_group_names:
+      - active_clients
       - all
       - gpu_client
+      - local_endoreg_db
     ansible_host: 172.16.255.108
     ansible_role_names: []
+    extra_secret_names:
+      - SCRT_roles_system_password_postgres_host_test_password
     extra_user_names:
       - admin
       - maintenance
@@ -138,6 +237,8 @@ all:
     hostname: gc-08
     subnet: 172.16.255.
     vars:
+      extra_secret_names:
+        - SCRT_roles_system_password_postgres_host_test_password
       host_luxnix:
         generic_settings.hostPlatform: '"x86_64-linux"'
         generic_settings.linux.cpuMicrocode: '"intel"'
@@ -163,6 +264,7 @@ all:
           - nfs
           - btrfs
         generic_settings.systemStateVersion: '"23.11"'
+        generic_settings.vpnIp: '"172.16.255.108"'
         nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
         nvidia_prime.onboardBusId: '"PCI:0:2:0"'
         nvidia_prime.onboardGpuType: '"intel"'
@@ -179,6 +281,7 @@ all:
       - gpu_client
     ansible_host: 172.16.255.109
     ansible_role_names: []
+    extra_secret_names: []
     extra_user_names:
       - admin
       - maintenance
@@ -208,6 +311,7 @@ all:
         generic_settings.linux.supportedFilesystems:
           - btrfs
         generic_settings.systemStateVersion: '"23.11"'
+        generic_settings.vpnIp: '"172.16.255.109"'
         nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
         nvidia_prime.onboardBusId: '"PCI:0:2:0"'
         nvidia_prime.onboardGpuType: '"intel"'
@@ -216,12 +320,14 @@ all:
       host_services: {}
       template_name: main
   - ansible_group_names:
-      - core_dev_ssh_access
       - all
       - gpu_server
+      - active_clients
+      - core_dev_ssh_access
       - managed
     ansible_host: 172.16.255.21
     ansible_role_names: []
+    extra_secret_names: []
     extra_user_names:
       - admin
       - maintenance
@@ -245,9 +351,7 @@ all:
     hostname: gs-01
     subnet: 172.16.255.
     vars:
-      ansible_roles:
-        - dev-01-access
-        - dev-03-access
+      ansible_roles: []
       host_luxnix:
         boot_decryption_stick_gs_01.enable: 'true'
         generic_settings.hostPlatform: '"x86_64-linux"'
@@ -272,16 +376,19 @@ all:
         generic_settings.linux.supportedFilesystems:
           - btrfs
         generic_settings.systemStateVersion: '"23.11"'
+        generic_settings.vpnIp: '"172.16.255.21"'
       host_roles: {}
       host_services: {}
       template_name: main
   - ansible_group_names:
       - all
       - gpu_server
+      - active_clients
       - test_group
       - managed
     ansible_host: 172.16.255.22
     ansible_role_names: []
+    extra_secret_names: []
     extra_user_names:
       - admin
       - maintenance
@@ -332,16 +439,19 @@ all:
           - nfs
           - btrfs
         generic_settings.systemStateVersion: '"23.11"'
+        generic_settings.vpnIp: '"172.16.255.22"'
       host_roles: {}
       host_services: {}
       template_name: main
   - ansible_group_names:
       - all
-      - openvpn_host
       - base_server
+      - active_clients
+      - openvpn_host
       - managed
     ansible_host: 172.16.255.1
     ansible_role_names: []
+    extra_secret_names: []
     extra_user_names:
       - admin
       - maintenance
@@ -387,17 +497,21 @@ all:
         generic_settings.linux.supportedFilesystems:
           - btrfs
         generic_settings.systemStateVersion: '"23.11"'
+        generic_settings.vpnIp: '"172.16.255.1"'
       host_roles:
         aglnet.client.enable: lib.mkForce false
         aglnet.host.enable: 'true'
       host_services: {}
       template_name: main
   - ansible_group_names:
+      - active_clients
       - all
       - base_server
       - managed
     ansible_host: 172.16.255.12
-    ansible_role_names: []
+    ansible_role_names:
+      - postgres_host_main
+    extra_secret_names: []
     extra_user_names:
       - admin
       - maintenance
@@ -421,8 +535,7 @@ all:
     subnet: 172.16.255.
     vars:
       ansible_roles:
-        - dev-01-access
-        - dev-03-access
+        - postgres_host_main
       host_luxnix:
         generic_settings.hostPlatform: '"x86_64-linux"'
         generic_settings.linux.cpuMicrocode: '"intel"'
@@ -448,17 +561,21 @@ all:
           - nfs
           - btrfs
         generic_settings.systemStateVersion: '"23.11"'
+        generic_settings.vpnIp: '"172.16.255.12"'
       host_roles: {}
       host_services: {}
       template_name: main
   - ansible_group_names:
       - all
       - base_server
+      - active_clients
       - core_dev_ssh_access
       - test_group
       - managed
     ansible_host: 172.16.255.13
-    ansible_role_names: []
+    ansible_role_names:
+      - postgres_host_test
+    extra_secret_names: []
     extra_user_names:
       - admin
       - maintenance
@@ -481,6 +598,8 @@ all:
     hostname: s-03
     subnet: 172.16.255.
     vars:
+      ansible_roles:
+        - postgres_host_test
       host_luxnix:
         generic_settings.enable: 'true'
         generic_settings.hostPlatform: '"x86_64-linux"'
@@ -507,89 +626,16 @@ all:
           - nfs
           - btrfs
         generic_settings.systemStateVersion: '"23.11"'
+        generic_settings.vpnIp: '"172.16.255.13"'
       host_roles: {}
       host_services: {}
       template_name: main
   - ansible_group_names:
       - all
       - gpu_client
-      - test_group
-    ansible_host: 172.16.255.106
-    ansible_role_names: []
-    extra_user_names:
-      - admin
-      - maintenance
-      - demodemo
-    facts:
-      all_ipv4_addresses:
-        - 172.16.255.106
-        - 192.168.0.115
-        - 192.168.0.235
-      bios:
-        date: 07/23/2024
-        vendor: American Megatrends International, LLC.
-        version: E17L5IMS.117
-      current_date: '2025-01-17T12:45:53Z'
-      default_ipv4:
-        address: 192.168.0.235
-        gateway: 192.168.0.1
-        interface: enp3s0
-        netmask: 255.255.255.0
-      machine: x86_64
-    files: []
-    hostname: gc-06
-    subnet: 172.16.255.
-    vars:
-      ansible_python_interpreter: '{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python'
-      host_luxnix:
-        generic_settings.configurationPath: lib.mkForce "/home/admin/dev/luxnix"
-        generic_settings.hostPlatform: '"x86_64-linux"'
-        generic_settings.linux.cpuMicrocode: '"intel"'
-        generic_settings.linux.extraModulePackages: []
-        generic_settings.linux.initrd.availableKernelModules:
-          - vmd
-          - xhci_pci
-          - ahci
-          - nvme
-          - usb_storage
-          - sd_mod
-        generic_settings.linux.initrd.kernelModules:
-          - dm-snapshot
-          - nfs
-          - btrfs
-        generic_settings.linux.initrd.supportedFilesystems:
-          - nfs
-          - btrfs
-        generic_settings.linux.kernelModules:
-          - kvm-intel
-        generic_settings.linux.kernelModulesBlacklist: []
-        generic_settings.linux.kernelParams: []
-        generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
-        generic_settings.linux.supportedFilesystems:
-          - btrfs
-          - nfs
-        generic_settings.systemStateVersion: '"23.11"'
-        maintenance.autoUpdates.enable: 'false'
-        nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
-        nvidia_prime.onboardBusId: '"PCI:0:2:0"'
-        nvidia_prime.onboardGpuType: '"intel"'
-      host_roles:
-        custom_packages.baseDevelopment: 'true'
-        custom_packages.videoEditing: 'true'
-        custom_packages.visuals: 'true'
-      host_services: {}
-      luxnix_branch: migrate-01
-      luxnix_dest: /home/admin/luxnix-production
-      luxnix_dev_repo: /home/admin/dev/luxnix
-      luxnix_repo: https://github.com/wg-lux/luxnix.git
-      os_extra_user_names:
-        - demodemo
-      template_name: main
-  - ansible_group_names:
-      - all
-      - gpu_client
     ansible_host: 172.16.255.101
     ansible_role_names: []
+    extra_secret_names: []
     extra_user_names:
       - admin
       - maintenance
@@ -603,6 +649,7 @@ all:
       - gpu_client
     ansible_host: 172.16.255.103
     ansible_role_names: []
+    extra_secret_names: []
     extra_user_names:
       - admin
       - maintenance
@@ -616,6 +663,7 @@ all:
       - gpu_client
     ansible_host: 172.16.255.104
     ansible_role_names: []
+    extra_secret_names: []
     extra_user_names:
       - admin
       - maintenance
@@ -633,6 +681,7 @@ groups:
       admin_password_file: '{{ local_users_passwords_dir }}/admin_raw'
       admin_password_file_source: '{{ lx_vault_dir_src }}/secrets/password/local/admin@{{
         inventory_hostname }}/admin@{{ inventory_hostname }}_password'
+      admin_vpn_ip: 172.16.255.106
       aglnet_conf:
         backupNameservers:
           - 8.8.8.8
@@ -663,7 +712,14 @@ groups:
         dev_02: {}
         dev_03:
           id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos
+      endoreg_db_api_branch: main
+      endoreg_db_api_dest: /home/admin/endoreg-db-api-production
+      endoreg_db_api_repo: https://github.com/wg-lux/endoreg-db-api.git
+      endoreg_db_branch: main
+      endoreg_db_dest: /home/admin/endoreg-db-production
+      endoreg_db_repo: https://github.com/wg-lux/endoreg-db.git
       group_luxnix:
+        generic_settings.adminVpnIp: '"172.16.255.106"'
         generic_settings.enable: 'true'
         generic_settings.linux.kernelPackages: pkgs.linuxPackages_6_12
         vault.dir: '"/etc/secrets/vault"'
@@ -683,9 +739,17 @@ groups:
       lx_vault_key: '{{ secret_dir }}/.key'
       lx_vault_key_src: /home/admin/.lxv.key
       lx_vault_psk: '{{ secret_dir }}/.psk'
+      maintenance_password_filename: SCRT_local_password_maintenance_password
       network_conf:
         domain: endo-reg.net
+      postgres_host_main_password_filename: SCRT_roles_system_password_postgres_host_main_password
+      postgres_host_test_ip: 172.16.255.13
+      postgres_host_test_password_filename: SCRT_roles_system_password_postgres_host_test_password
       secret_dir: /etc/secrets
+  - extra_user_names: []
+    files: []
+    name: active_clients
+    vars: {}
   - extra_user_names: []
     files: []
     name: openvpn_host
@@ -764,6 +828,47 @@ groups:
       group_services: {}
   - extra_user_names: []
     files: []
+    name: local_endoreg_db
+    vars:
+      group_luxnix:
+        generic-settings.postgres.activeAuthentication: '#type database DBuser address
+          auth-method optional_ident_map
+
+          local sameuser all peer map=superuser_map
+
+          host postgres postgres 127.0.0.1/32 scram-sha-256
+
+          host ${config.roles.postgres.default.defaultDbName} ${config.roles.postgres.default.defaultDbName}
+          127.0.0.1/32 scram-sha-256
+
+          '
+        generic-settings.postgres.activeIdentMap: '# ArbitraryMapName systemUser DBUser
+
+          superuser_map      root      postgres
+
+          superuser_map      root      ${config.roles.postgres.main.replUser}
+
+          superuser_map      ${config.user.admin.name}     ${config.user.admin.name}
+
+          superuser_map      ${config.user.admin.name}     postgres
+
+          superuser_map      ${config.user.admin.name}     endoregClient
+
+          superuser_map      ${config.user.admin.name} ${config.roles.postgres.default.defaultDbName}
+
+          superuser_map      postgres  postgres
+
+
+          # Let other names login as themselves
+
+          superuser_map      /^(.*)$   \1
+
+          '
+      group_roles:
+        postgres.default.enable: 'true'
+      group_services: {}
+  - extra_user_names: []
+    files: []
     name: hetzner_server
     vars:
       group_luxnix: {}
@@ -777,82 +882,142 @@ roles:
   - extra_user_names: []
     files: []
     name: ansible_main
-    vars:
+    vars: {}
   - extra_user_names: []
     files: []
     name: common
-    vars:
-  - extra_user_names: []
-    files: []
-    name: dev-01-access
-    vars:
-      host_roles:
-        ssh_access.dev_01.enable: 'true'
-        ssh_access.dev_01.idEd25519: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK
+    vars: {}
   - extra_user_names: []
     files: []
     name: keycloak_host
-    vars:
+    vars: {}
   - extra_user_names: []
     files: []
     name: lx-anonymizer
-    vars:
+    vars: {}
   - extra_user_names: []
     files: []
     name: managed
-    vars:
+    vars: {}
   - extra_user_names: []
     files: []
     name: openvpn_client
-    vars:
+    vars: {}
   - extra_user_names: []
     files: []
     name: openvpn_host
-    vars:
-      openvpn_host_vars:
-        role_roles:
-          aglnet.host.autoStart: 'true'
-          aglnet.host.backupNameservers: '{{ aglnet_conf.backupNameservers }}'
-          aglnet.host.cipher: AES-256-GCM
-          aglnet.host.clientToClient: 'true'
-          aglnet.host.dev: tun
-          aglnet.host.enable: 'true'
-          aglnet.host.keepalive: 10 1200
-          aglnet.host.mainDomain: vpn{{  aglnet_conf.domain }}
-          aglnet.host.networkName: aglnet
-          aglnet.host.persistKey: 'true'
-          aglnet.host.persistTun: 'true'
-          aglnet.host.port: 1194
-          aglnet.host.protocol: TCP
-          aglnet.host.protocolLc: tcp
-          aglnet.host.resolvRetry: infinite
-          aglnet.host.restartAfterSleep: 'true'
-          aglnet.host.subnet: '{{ aglnet_conf.subnet }}'
-          aglnet.host.subnetIntern: '{{ aglnet_conf.subnetIntern }}'
-          aglnet.host.subnetSuffix: '{{ aglnet_conf.subnetSuffix }}'
-          aglnet.host.topology: subnet
-          aglnet.host.updateResolvConf: 'false'
-          aglnet.host.verbosity: '3'
+    vars: {}
   - extra_user_names: []
     files: []
     name: postgres_host_backup
-    vars:
+    vars: {}
   - extra_user_names: []
     files: []
     name: postgres_host_main
     vars:
+      role_luxnix:
+        generic-settings.postgres.activeAuthentication: '#type database DBuser address
+          auth-method optional_ident_map
+
+          local sameuser all peer map=superuser_map
+
+          host  all all ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
+
+          host  replication ${config.roles.postgres.main.replUser} ${config.luxnix.generic-settings.adminVpnIp}/32
+          scram-sha-256
+
+          host  ${config.roles.postgres.main.devUser} ${config.roles.postgres.main.devUser}
+          ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
+
+          host  all postgres ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
+
+          '
+        generic-settings.postgres.activeIdentMap: '# ArbitraryMapName systemUser DBUser
+
+          superuser_map      root      postgres
+
+          superuser_map      root      ${config.roles.postgres.main.replUser}
+
+          superuser_map      ${config.user.admin.name}     ${config.user.admin.name}
+
+          superuser_map      ${config.user.admin.name}     postgres
+
+          superuser_map      ${config.user.admin.name}     endoregClient
+
+          superuser_map      postgres  postgres
+
+
+          # Let other names login as themselves
+
+          superuser_map      /^(.*)$   \1
+
+          '
+      role_roles:
+        postgres.main.enable: 'true'
   - extra_user_names: []
     files: []
     name: postgres_host_test
     vars:
+      role_luxnix:
+        generic-settings.postgres.activeAuthentication: '#type database DBuser address
+          auth-method optional_ident_map
+
+          local sameuser all peer map=superuser_map
+
+          host  all all ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
+
+          host  replication ${config.roles.postgres.main.replUser} ${config.luxnix.generic-settings.adminVpnIp}/32
+          scram-sha-256
+
+          host  ${config.roles.postgres.main.devUser} ${config.roles.postgres.main.devUser}
+          ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
+
+          host  all postgres ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
+
+          # dev-01
+
+          host  all all 172.16.255.102/32 scram-sha-256
+
+          host  all postgres 172.16.255.102/32 scram-sha-256
+
+          # dev-02
+
+          host  all all 172.16.255.108/32 scram-sha-256
+
+          host  all postgres 172.16.255.108/32 scram-sha-256
+
+          '
+        generic-settings.postgres.activeIdentMap: '# ArbitraryMapName systemUser DBUser
+
+          superuser_map      root      postgres
+
+          superuser_map      root      ${config.roles.postgres.main.replUser}
+
+          superuser_map      ${config.user.admin.name}     ${config.user.admin.name}
+
+          superuser_map      ${config.user.admin.name}     postgres
+
+          superuser_map      ${config.user.admin.name}     endoregClient
+
+          superuser_map      postgres  postgres
+
+
+          # Let other names login as themselves
+
+          superuser_map      /^(.*)$   \1
+
+          '
+      role_roles:
+        postgres.main.enable: 'true'
   - extra_user_names: []
     files: []
     name: traefik_host_main
-    vars:
+    vars: {}
   - extra_user_names: []
     files: []
-    name: dev-03-access
-    vars:
-      host_roles:
-        ssh_access.dev_03.enable: 'true'
-        ssh_access.dev_03.idEd25519: '"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos"'
+    name: dev_access
+    vars: {}
+  - extra_user_names: []
+    files: []
+    name: local_endoreg_db
+    vars: {}
