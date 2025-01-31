@@ -16,6 +16,12 @@ in {
   };
 
   config = mkIf cfg.enable {
+    # Generate self-signed certificate for local development
+    security.acme = {
+      acceptTerms = true;
+      defaults.email = "admin@endoreg.local";
+    };
+
     services.traefik = {
       enable = true;
       staticConfigOptions = mkMerge [
@@ -27,26 +33,21 @@ in {
 
           entryPoints = {
             web = {
-              address = "${cfg.bindIP}:80";
-              forwardedHeaders.insecure = cfg.insecure;
-              http = {
-                redirections = {
-                  entryPoint = {
-                    to = "websecure";
-                    scheme = "https";
-                  };
-                };
+              address = ":80";
+              http.redirections.entryPoint = {
+                to = "websecure";
+                scheme = "https";
               };
             };
             websecure = {
-              address = "${cfg.bindIP}:443";
+              address = ":443";
               forwardedHeaders.insecure = cfg.insecure;
             };
           };
 
           api = mkIf cfg.dashboard {
             dashboard = true;
-            insecure = true;  # Changed to true temporarily for debugging
+            insecure = false;  # Changed to false for security
           };
 
           providers = {
@@ -74,20 +75,20 @@ in {
                 rule = "Host(`${cfg.dashboardHost}`)";
                 service = "api@internal";
                 middlewares = ["ipwhitelist"];
-                entryPoints = ["websecure" "web"];  # Allow both HTTP and HTTPS
-                tls = {
-                  domains = [
-                    {
-                      main = "${cfg.dashboardHost}";
-                    }
-                  ];
-                };
+                entryPoints = ["websecure"];
+                tls = true;
               };
             };
           };
 
-          # Add default TLS configuration for internal domains
+          # Configure TLS
           tls = {
+            certificates = [
+              {
+                certFile = "/var/lib/traefik/certificates/${cfg.dashboardHost}.crt";
+                keyFile = "/var/lib/traefik/certificates/${cfg.dashboardHost}.key";
+              }
+            ];
             options = {
               default = {
                 minVersion = "VersionTLS12";
@@ -105,10 +106,35 @@ in {
       "${cfg.bindIP}" = [ cfg.dashboardHost ];
     };
 
-    # Create config directory for file provider
+    # Generate self-signed certificate
     systemd.tmpfiles.rules = [
+      "d /var/lib/traefik/certificates 0750 traefik traefik -"
       "d /etc/traefik/config 0755 root root -"
     ];
+
+    # Create self-signed certificate using OpenSSL
+    systemd.services.create-traefik-cert = {
+      description = "Create self-signed certificate for Traefik";
+      wantedBy = [ "traefik.service" ];
+      before = [ "traefik.service" ];
+      path = [ pkgs.openssl ];
+      script = ''
+        # Only create if it doesn't exist
+        if [ ! -f "/var/lib/traefik/certificates/${cfg.dashboardHost}.crt" ]; then
+          openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+            -keyout "/var/lib/traefik/certificates/${cfg.dashboardHost}.key" \
+            -out "/var/lib/traefik/certificates/${cfg.dashboardHost}.crt" \
+            -subj "/CN=${cfg.dashboardHost}/O=Endoreg Local/C=DE"
+          chown traefik:traefik "/var/lib/traefik/certificates/${cfg.dashboardHost}.key"
+          chown traefik:traefik "/var/lib/traefik/certificates/${cfg.dashboardHost}.crt"
+          chmod 600 "/var/lib/traefik/certificates/${cfg.dashboardHost}.key"
+        fi
+      '';
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+      };
+    };
 
     # Open required ports
     networking.firewall = {
