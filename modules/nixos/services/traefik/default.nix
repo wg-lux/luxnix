@@ -9,8 +9,9 @@ in {
     dashboard = mkBoolOpt true "Enable traefik dashboard";
     insecure = mkBoolOpt false "Allow insecure configurations";
     staticConfigOptions = mkOpt types.attrs {} "Additional static configuration options";
-    dashboardHost = mkOpt types.str "dashboard.traefik.local" "Hostname for the dashboard";
+    dashboardHost = mkOpt types.str "traefik.endoreg.local" "Hostname for the dashboard";
     allowedIPs = mkOpt (types.listOf types.str) ["127.0.0.1"] "IPs allowed to access the dashboard";
+    externalCertResolver = mkOpt types.str "" "Name of the certificate resolver for external domains";
   };
 
   config = mkIf cfg.enable {
@@ -27,6 +28,14 @@ in {
             web = {
               address = ":80";
               forwardedHeaders.insecure = cfg.insecure;
+              http = {
+                redirections = {
+                  entryPoint = {
+                    to = "websecure";
+                    scheme = "https";
+                  };
+                };
+              };
             };
             websecure = {
               address = ":443";
@@ -65,6 +74,7 @@ in {
                 service = "api@internal";
                 middlewares = ["ipwhitelist"];
                 entryPoints = ["websecure"];
+                tls = true;
               };
             };
           };
@@ -73,8 +83,8 @@ in {
       ];
     };
 
-    # Add dashboard hostname to /etc/hosts if it's the default
-    networking.hosts = mkIf (cfg.dashboardHost == "dashboard.traefik.local") {
+    # Add dashboard hostname to /etc/hosts if it's the internal domain
+    networking.hosts = mkIf (hasSuffix "endoreg.local" cfg.dashboardHost) {
       "127.0.0.1" = [ cfg.dashboardHost ];
     };
 

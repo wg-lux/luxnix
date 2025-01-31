@@ -28,7 +28,6 @@ in {
   config = mkIf cfg.enable {
     environment.systemPackages = cfg.packages;
 
-
     systemd.services.NetworkManager-wait-online.enable = lib.mkForce false;
     systemd.services.systemd-networkd-wait-online.enable = lib.mkForce false;
     security.rtkit.enable = lib.mkDefault true;
