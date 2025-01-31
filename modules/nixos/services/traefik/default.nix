@@ -13,6 +13,8 @@ in {
     allowedIPs = mkOpt (types.listOf types.str) ["127.0.0.1"] "IPs allowed to access the dashboard";
     externalCertResolver = mkOpt types.str "" "Name of the certificate resolver for external domains";
     bindIP = mkOpt types.str "0.0.0.0" "IP address to bind Traefik to";
+    sslCertPath = mkOpt types.path config.luxnix.generic-settings.sslCertificatePath "Path to SSL certificate";
+    sslKeyPath = mkOpt types.path config.luxnix.generic-settings.sslCertificateKeyPath "Path to SSL key";
   };
 
   config = mkIf cfg.enable {
@@ -81,18 +83,18 @@ in {
             };
           };
 
-          # Configure TLS
+          # Configure TLS with existing wildcard certificate
           tls = {
             certificates = [
               {
-                certFile = "/var/lib/traefik/certificates/${cfg.dashboardHost}.crt";
-                keyFile = "/var/lib/traefik/certificates/${cfg.dashboardHost}.key";
+                certFile = cfg.sslCertPath;
+                keyFile = cfg.sslKeyPath;
               }
             ];
             options = {
               default = {
                 minVersion = "VersionTLS12";
-                sniStrict = false;  # Allow non-SNI clients
+                sniStrict = true;  # Enable SNI since we're using proper certificates
               };
             };
           };
@@ -106,35 +108,12 @@ in {
       "${cfg.bindIP}" = [ cfg.dashboardHost ];
     };
 
-    # Generate self-signed certificate
+    # Remove the self-signed certificate parts
     systemd.tmpfiles.rules = [
-      "d /var/lib/traefik/certificates 0750 traefik traefik -"
       "d /etc/traefik/config 0755 root root -"
     ];
 
-    # Create self-signed certificate using OpenSSL
-    systemd.services.create-traefik-cert = {
-      description = "Create self-signed certificate for Traefik";
-      wantedBy = [ "traefik.service" ];
-      before = [ "traefik.service" ];
-      path = [ pkgs.openssl ];
-      script = ''
-        # Only create if it doesn't exist
-        if [ ! -f "/var/lib/traefik/certificates/${cfg.dashboardHost}.crt" ]; then
-          openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-            -keyout "/var/lib/traefik/certificates/${cfg.dashboardHost}.key" \
-            -out "/var/lib/traefik/certificates/${cfg.dashboardHost}.crt" \
-            -subj "/CN=${cfg.dashboardHost}/O=Endoreg Local/C=DE"
-          chown traefik:traefik "/var/lib/traefik/certificates/${cfg.dashboardHost}.key"
-          chown traefik:traefik "/var/lib/traefik/certificates/${cfg.dashboardHost}.crt"
-          chmod 600 "/var/lib/traefik/certificates/${cfg.dashboardHost}.key"
-        fi
-      '';
-      serviceConfig = {
-        Type = "oneshot";
-        RemainAfterExit = true;
-      };
-    };
+    # Remove create-traefik-cert service since we're using existing certificates
 
     # Open required ports
     networking.firewall = {
