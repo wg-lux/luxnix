@@ -16,6 +16,11 @@ in {
       default = 5432;
     };
 
+    defaultDbName = mkOption {
+      type = types.str;
+      default = "endoregDbLocal";
+    };
+
     postgresSshAuthorizedKeys = mkOption {
       type = types.listOf types.str;
       default = defaultAuthKeys;
@@ -67,11 +72,19 @@ in {
         };
         ensureDatabases = [ 
             config.user.admin.name
+            cfg.defaultDbName
         ];
 
         ensureUsers = [
           {
             name = config.user.admin.name;
+            ensureDBOwnership = true;
+            ensureClauses = {
+              replication = true;
+            };
+          }
+          {
+            name = cfg.defaultDbName;
             ensureDBOwnership = true;
             ensureClauses = {
               replication = true;

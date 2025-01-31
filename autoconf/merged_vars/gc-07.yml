@@ -32,6 +32,12 @@ authentication:
   dev_02: {}
   dev_03:
     id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos
+endoreg_db_api_branch: main
+endoreg_db_api_dest: /home/admin/endoreg-db-api-production
+endoreg_db_api_repo: https://github.com/wg-lux/endoreg-db-api.git
+endoreg_db_branch: main
+endoreg_db_dest: /home/admin/endoreg-db-production
+endoreg_db_repo: https://github.com/wg-lux/endoreg-db.git
 group_luxnix:
   boot_decryption_stick.enable: 'true'
   generic_settings.adminVpnIp: '"172.16.255.106"'
@@ -92,6 +98,7 @@ lx_vault_dir_src: /home/admin/.lxv
 lx_vault_key: '{{ secret_dir }}/.key'
 lx_vault_key_src: /home/admin/.lxv.key
 lx_vault_psk: '{{ secret_dir }}/.psk'
+maintenance_password_filename: SCRT_local_password_maintenance_password
 network_conf:
   domain: endo-reg.net
 postgres_host_main_password_filename: SCRT_roles_system_password_postgres_host_main_password
