@@ -28,5 +28,26 @@ in {
       generateNixPathFromInputs = true;
       linkInputs = true;
     };
+    # Systemd service and timer for automatic nix store optimization
+    /*systemd.services.nix-store-optimise = {
+      enable = true;
+      description = "Run nix store optimise to deduplicate files";
+      serviceConfig = {
+        Type = "oneshot"; #uns a command once and then stops immediately
+        ExecStart = "/run/current-system/sw/bin/nix store optimise";
+      };
+    };
+
+    systemd.timers.nix-store-optimise = {
+      enable = true;
+      description = "Schedule nix store optimisation";
+      wantedBy = ["timers.target"];
+      timerConfig = {
+        OnCalendar = "weekly";  # Runs every week
+        Persistent = true; #Ensures optimization runs evenif the system was powered off 
+      };
+    };*/
   };
 }
+
+    

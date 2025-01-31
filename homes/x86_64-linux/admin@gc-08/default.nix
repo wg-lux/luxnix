@@ -1,9 +1,9 @@
 {pkgs, ...}: {
     cli.programs.git = {
       enable = true;
-      userName = "maddonix";
-      email = "tlux14@googlemail.com";
-      allowedSigners = "SHA256:LNfWnvEthO0QL8DzUxtxHD4VnLxvCZWFmcDhZodk29o";
+      userName = "hamzaukw";
+      email = "hamza.ukw@gmail.com";
+      allowedSigners = "SHA256:h8mCzXwuV6bbZVgKiaaoL8sWjgzerZz1lsHonWBrkO0";
     };
 
   desktops = {
@@ -15,6 +15,9 @@
   services.luxnix = {
     # syncthing.enable = false;
   };
+
+  services.ssh-agent.enable = true;
+
 
   # luxnix.django-demo-app = {
   #   enable = true;
