@@ -1,130 +1,72 @@
-{...}:{}
-# {
-#   config,
-#   lib,
-#   ...
-# }:
-# #CHANGEME Set up traefik
-# with lib; 
-# with lib.luxnix; let
-#   cfg = config.services.luxnix.traefik;
-# in {
-#   options.services.luxnix.traefik = {
-#     enable = mkBoolOpt false "Enable traefik";
-#   };
+{config, lib, ...}: 
 
-#   config = mkIf cfg.enable {
-#     # allow firewall
+with lib; 
+with lib.luxnix; let
+  cfg = config.services.luxnix.traefik;
+in {
+  options.services.luxnix.traefik = {
+    enable = mkBoolOpt false "Enable traefik";
+    dashboard = mkBoolOpt true "Enable traefik dashboard";
+    insecure = mkBoolOpt false "Allow insecure configurations";
+    staticConfigOptions = mkOpt types.attrs {} "Additional static configuration options";
+  };
 
-#     systemd.tmpfiles.rules = [
-#       "d /etc/traefik 0700 admin users -" 
-#     ];
-# ######
+  config = mkIf cfg.enable {
+    services.traefik = {
+      enable = true;
+      staticConfigOptions = mkMerge [
+        {
+          global = {
+            checkNewVersion = false;
+            sendAnonymousUsage = false;
+          };
 
+          entryPoints = {
+            web = {
+              address = ":80";
+              forwardedHeaders.insecure = cfg.insecure;
+            };
+            websecure = {
+              address = ":443";
+              forwardedHeaders.insecure = cfg.insecure;
+            };
+          };
 
+          api = mkIf cfg.dashboard {
+            dashboard = true;
+            insecure = cfg.insecure;
+          };
 
+          providers = {
+            docker = {
+              endpoint = "unix:///var/run/docker.sock";
+              exposedByDefault = false;
+              watch = true;
+            };
+            file = {
+              directory = "/etc/traefik/config";
+              watch = true;
+            };
+          };
+        }
+        cfg.staticConfigOptions
+      ];
+    };
 
-# #######
-#     # systemd.services.traefik = {
-#     #   environment = {
-#     #     # CF_API_EMAIL = "hello@haseebmajid.dev";
-#     #   };
-#     #   serviceConfig = {
-#     #     # EnvironmentFile = [config.sops.secrets.cloudflare_api_key.path];
-#     #   };
-#     # };
+    # Create config directory for file provider
+    systemd.tmpfiles.rules = [
+      "d /etc/traefik/config 0755 root root -"
+    ];
 
-#     # sops.secrets.cloudflare_api_key = {
-#     #   sopsFile = ../secrets.yaml;
-#     # };
+    # Open required ports
+    networking.firewall = {
+      allowedTCPPorts = [ 80 443 ];
+      allowedTCPPortRanges = mkIf cfg.dashboard [
+        { from = 8080; to = 8080; }
+      ];
+    };
 
-
-#     # systemd.services.traefik.restartIfChanged = true;
-#     # systemd.services.traefik.wantedBy = [ "multi-user.target" ];
-
-
-#     # services = {
-#     #   # tailscale.permitCertUid = "traefik";
-
-#     #   traefik = {
-#     #     enable = true;
-
-#     #     staticConfigOptions = {
-#     #       log = {
-#     #         level = "INFO";
-#     #         filePath = "/var/log/traefik.log";
-#     #         format = "json";
-#     #         noColor = false;
-#     #         maxSize = 100;
-#     #         compress = true;
-#     #       };
-
-#     #       metrics = {
-#     #         prometheus = {};
-#     #       };
-
-#     #       # tracing = {};
-
-#     #       accessLog = {
-#     #         addInternals = true;
-#     #         filePath = "/var/log/traefik-access.log";
-#     #         bufferingSize = 100;
-#     #         fields = {
-#     #           names = {
-#     #             StartUTC = "drop";
-#     #           };
-#     #         };
-#     #         filters = {
-#     #           statusCodes = [
-#     #             "204-299"
-#     #             "400-499"
-#     #             "500-599"
-#     #           ];
-#     #         };
-#     #       };
-#     #       api = {
-#     #         dashboard = true;
-#     #       };
-
-#     #       # certificatesResolvers = {
-#     #       #   tailscale.tailscale = {};
-#     #       #   letsencrypt = {
-#     #       #     acme = {
-#     #       #       email = "hello@haseebmajid.dev";
-#     #       #       storage = "/var/lib/traefik/cert.json";
-#     #       #       dnsChallenge = {
-#     #       #         provider = "cloudflare";
-#     #       #       };
-#     #       #     };
-#     #       #   };
-#     #       # };
-#     #       entryPoints.redis = {
-#     #         address = "0.0.0.0:6381";
-#     #       };
-#     #       entryPoints.web = {
-#     #         address = "0.0.0.0:80";
-#     #         http.redirections.entryPoint = {
-#     #           to = "websecure";
-#     #           scheme = "https";
-#     #           permanent = true;
-#     #         };
-#     #       };
-#     #       entryPoints.websecure = {
-#     #         address = "0.0.0.0:443";
-#     #         http.tls = {
-#     #           certResolver = "letsencrypt";
-#     #           domains = [
-#     #             {
-#     #               main = "endo-reg.net";
-#     #               sans = ["*.endo-reg.net"];
-#     #             }
-#     #           ];
-#     #         };
-#     #       };
-#     #     };
-
-#         # dynamicConfigOptions
-#       };
-#     # };
-#   # };
-# }
+    # Enable Docker integration
+    virtualisation.docker.enable = true;
+  };
+}
