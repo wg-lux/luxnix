@@ -9,6 +9,8 @@ in {
     dashboard = mkBoolOpt true "Enable traefik dashboard";
     insecure = mkBoolOpt false "Allow insecure configurations";
     staticConfigOptions = mkOpt types.attrs {} "Additional static configuration options";
+    dashboardHost = mkOpt types.str "dashboard.traefik.local" "Hostname for the dashboard";
+    allowedIPs = mkOpt (types.listOf types.str) ["127.0.0.1"] "IPs allowed to access the dashboard";
   };
 
   config = mkIf cfg.enable {
@@ -48,9 +50,32 @@ in {
               watch = true;
             };
           };
+
+          http = {
+            middlewares = {
+              ipwhitelist = {
+                ipWhiteList = {
+                  sourceRange = cfg.allowedIPs;
+                };
+              };
+            };
+            routers = {
+              dashboard = {
+                rule = "Host(`${cfg.dashboardHost}`)";
+                service = "api@internal";
+                middlewares = ["ipwhitelist"];
+                entryPoints = ["websecure"];
+              };
+            };
+          };
         }
         cfg.staticConfigOptions
       ];
+    };
+
+    # Add dashboard hostname to /etc/hosts if it's the default
+    networking.hosts = mkIf (cfg.dashboardHost == "dashboard.traefik.local") {
+      "127.0.0.1" = [ cfg.dashboardHost ];
     };
 
     # Create config directory for file provider

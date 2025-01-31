@@ -9,6 +9,9 @@ in {
     dashboard = mkBoolOpt true "Enable traefik dashboard";
     insecure = mkBoolOpt false "Allow insecure configurations";
     staticConfigOptions = mkOpt types.attrs {} "Additional static configuration options";
+    dashboardHost = mkOpt types.str "dashboard.traefik.local" "Hostname for the dashboard";
+    allowedIPs = mkOpt (types.listOf types.str) ["127.0.0.1"] "IPs allowed to access the dashboard";
+
   };
 
   config = mkIf cfg.enable {
@@ -17,6 +20,8 @@ in {
       dashboard = cfg.dashboard;
       insecure = cfg.insecure;
       staticConfigOptions = cfg.staticConfigOptions;
+      dashboardHost = cfg.dashboardHost;
+      allowedIPs = cfg.allowedIPs;
     };
   };
 }

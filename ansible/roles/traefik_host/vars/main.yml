@@ -2,3 +2,7 @@ traefik_host_roles:
   traefikHost.enable: "true"
   traefikHost.dashboard: "true"
   traefikHost.insecure: "false"
+  traefikHost.dashboardHost: '"dashboard.traefik.local"'
+  traefikHost.allowedIPs:
+    - "172.16.255.106"
+    - "127.0.0.1"
