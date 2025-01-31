@@ -12,6 +12,7 @@ in {
     dashboardHost = mkOpt types.str "traefik.endoreg.local" "Hostname for the dashboard";
     allowedIPs = mkOpt (types.listOf types.str) ["127.0.0.1"] "IPs allowed to access the dashboard";
     externalCertResolver = mkOpt types.str "" "Name of the certificate resolver for external domains";
+    bindIP = mkOpt types.str "0.0.0.0" "IP address to bind Traefik to";
   };
 
   config = mkIf cfg.enable {
@@ -26,7 +27,7 @@ in {
 
           entryPoints = {
             web = {
-              address = ":80";
+              address = "${cfg.bindIP}:80";
               forwardedHeaders.insecure = cfg.insecure;
               http = {
                 redirections = {
@@ -38,7 +39,7 @@ in {
               };
             };
             websecure = {
-              address = ":443";
+              address = "${cfg.bindIP}:443";
               forwardedHeaders.insecure = cfg.insecure;
             };
           };
