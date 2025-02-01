@@ -9,4 +9,4 @@ traefik_host_roles:
 
 traefik_host_luxnix:
   generic-settings.sslCertificatePath: '"/home/admin/.ssl/__endo-reg_net.pem"'
-  generic-settings.sslKeyPath: '"/home/admin/.ssl/endo-reg-net.key"'
+  generic-settings.sslCertificateKeyPath: '"/home/admin/.ssl/endo-reg-net.key"'

@@ -144,8 +144,8 @@ role_luxnix:
     superuser_map      /^(.*)$   \1
 
     '
+  generic-settings.sslCertificateKeyPath: '"/home/admin/.ssl/endo-reg-net.key"'
   generic-settings.sslCertificatePath: '"/home/admin/.ssl/__endo-reg_net.pem"'
-  generic-settings.sslKeyPath: '"/home/admin/.ssl/endo-reg-net.key"'
 role_roles:
   postgres.main.enable: 'true'
   traefikHost.allowedIPs:
