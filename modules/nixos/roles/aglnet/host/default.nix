@@ -240,7 +240,7 @@ in {
         interfaces = {
           "${cfg.dev}0" = {
             allowedUDPPorts = [ 53 ];
-            allowedTCPPorts = [ 53 ];
+            allowedTCPPorts = [ 53 8080 ];  # Add dashboard port
           };
         };
       };

@@ -43,6 +43,9 @@ in {
           };
 
           entryPoints = {
+            dashboard = {
+              address = "172.16.255.12:8080";  # VPN IP for dashboard
+            };
             web = {
               address = ":80";
               # http.redirections.entryPoint = {
@@ -86,7 +89,7 @@ in {
                 rule = "Host(`${cfg.dashboardHost}`)";
                 service = "api@internal";
                 middlewares = ["ipwhitelist"];
-                entryPoints = ["websecure"];
+                entryPoints = ["dashboard"];  # Use dashboard entrypoint
                 tls = true;  # Use local certificates instead of Let's Encrypt
               };
             };
