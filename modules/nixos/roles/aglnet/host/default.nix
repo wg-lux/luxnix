@@ -253,7 +253,7 @@ in {
         local = "/${cfg.localDomain}/";
         
         # Only listen on VPN interface
-        interface = cfg.dev;
+        interface = "${cfg.dev}0";
         bind-interfaces = true;
         listen-address = "172.16.255.1";  # VPN server IP
         
