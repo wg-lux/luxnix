@@ -45,10 +45,10 @@ in {
           entryPoints = {
             web = {
               address = ":80";
-              # http.redirections.entryPoint = {
-              #   to = "websecure";
-              #   scheme = "https";
-              # };
+              http.redirections.entryPoint = {
+                to = "websecure";
+                scheme = "https";
+              };
             };
             websecure = {
               address = ":443";
@@ -58,7 +58,7 @@ in {
 
           api = mkIf cfg.dashboard {
             dashboard = true;
-            insecure = false;  # Changed to false for security
+            insecure = true;  # Changed to false for security
           };
 
           providers = {
@@ -87,26 +87,13 @@ in {
                 service = "api@internal";
                 middlewares = ["ipwhitelist"];
                 entryPoints = ["websecure"];
-                tls = true;
+                tls = false;
               };
             };
           };
 
           # Configure TLS with existing wildcard certificate
-          tls = {
-            certificates = [
-              {
-                certFile = cfg.sslCertPath;
-                keyFile = cfg.sslKeyPath;
-              }
-            ];
-            options = {
-              default = {
-                minVersion = "VersionTLS12";
-                sniStrict = true;  # Enable SNI since we're using proper certificates
-              };
-            };
-          };
+  
         }
         cfg.staticConfigOptions
       ];
