@@ -130,7 +130,6 @@ in {
       ];
     };
 
-    # Enable Docker integration
-    virtualisation.docker.enable = true;
+
   };
 }
