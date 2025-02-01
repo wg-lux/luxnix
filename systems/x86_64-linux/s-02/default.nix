@@ -23,7 +23,7 @@
     endoreg-client.enable = false;
     postgres.main.enable = true;
     traefikHost.allowedIPs = ["172.16.255.106" "127.0.0.1"];    traefikHost.dashboard = true;
-    traefikHost.dashboardHost = "traefik.endo-reg.net";
+    traefikHost.dashboardHost = "traefik.endoreg.local";
     traefikHost.enable = true;
     traefikHost.insecure = false;
     };
@@ -42,7 +42,7 @@ generic-settings.enable = true;
 
 generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
 
-generic-settings.traefikHostDomain = "traefik.endo-reg.net";
+generic-settings.traefikHostDomain = "traefik.endoreg.local";
 
 generic-settings.traefikHostIp = "172.16.255.12";
 

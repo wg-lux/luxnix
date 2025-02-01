@@ -61,7 +61,7 @@ generic-settings.enable = true;
 
 generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
 
-generic-settings.traefikHostDomain = "traefik.endo-reg.net";
+generic-settings.traefikHostDomain = "traefik.endoreg.local";
 
 generic-settings.traefikHostIp = "172.16.255.12";
 

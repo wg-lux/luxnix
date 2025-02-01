@@ -210,6 +210,12 @@ in {
       description = "Client to client for the VPN";
     };
 
+    localDomain = mkOption {
+      type = types.str;
+      default = "endoreg.local";
+      description = "Local domain for VPN network";
+    };
+
   };
 
 
@@ -233,6 +239,33 @@ in {
         "allowed${cfg.protocol}Ports" = [ cfg.port ];
       };
       nameservers = cfg.backupNameservers;
+    };
+
+    # Configure dnsmasq
+    services.dnsmasq = {
+      enable = true;
+      settings = {
+        # Only use upstream DNS for non-local domains
+        server = cfg.backupNameservers;
+        
+        # Only handle .local domain internally
+        domain = cfg.localDomain;
+        local = "/${cfg.localDomain}/";
+        
+        # Only listen on VPN interface
+        interface = cfg.dev;
+        bind-interfaces = true;
+        listen-address = "172.16.255.1";  # VPN server IP
+        
+        # Don't modify non-local queries
+        domain-needed = true;
+        bogus-priv = true;
+        no-resolv = false;
+        no-poll = true;
+        
+        # Don't read /etc/hosts
+        no-hosts = true;
+      };
     };
 
     services.openvpn = let 
@@ -260,7 +293,12 @@ in {
         topology ${cfg.topology}
 
         ${if cfg.client-to-client then "client-to-client" else ""}
-      
+
+        # DNS configuration
+        push "route 172.16.255.1 255.255.255.255"  # Ensure DNS server is reachable
+        push "dhcp-option DNS 172.16.255.1"
+        push "dhcp-option DOMAIN ${cfg.localDomain}"
+        push "dhcp-option DOMAIN-ROUTE ${cfg.localDomain}"
       '';
     
     in {

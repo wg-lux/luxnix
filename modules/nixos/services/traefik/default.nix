@@ -9,11 +9,14 @@ in {
     dashboard = mkBoolOpt true "Enable traefik dashboard";
     insecure = mkBoolOpt false "Allow insecure configurations";
     staticConfigOptions = mkOpt types.attrs {} "Additional static configuration options";
-    dashboardHost = mkOpt types.str "traefik.endo-reg.net" "Hostname for the dashboard";
+    dashboardHost = mkOpt types.str "traefik.endoreg.local" "Hostname for the dashboard";
     allowedIPs = mkOpt (types.listOf types.str) ["127.0.0.1"] "IPs allowed to access the dashboard";
     bindIP = mkOpt types.str "0.0.0.0" "IP address to bind Traefik to";
     sslCertPath = mkOpt types.path config.luxnix.generic-settings.sslCertificatePath "Path to SSL certificate";
     sslKeyPath = mkOpt types.path config.luxnix.generic-settings.sslCertificateKeyPath "Path to SSL key";
+    email = mkOpt types.str "admin@endoreg.local" "Email address for Let's Encrypt";
+    dnsProvider = mkOpt types.str "cloudflare" "DNS provider for ACME DNS challenge";
+    dnsEnvVars = mkOpt types.attrs {} "Environment variables for DNS provider";
   };
 
   config = mkIf cfg.enable {
@@ -84,7 +87,7 @@ in {
                 service = "api@internal";
                 middlewares = ["ipwhitelist"];
                 entryPoints = ["websecure"];
-                tls = true;
+                tls = true;  # Use local certificates instead of Let's Encrypt
               };
             };
           };
@@ -104,15 +107,28 @@ in {
               };
             };
           };
+
+          certificatesResolvers = {
+            letsencrypt = {
+              acme = {
+                email = cfg.email;
+                storage = "/var/lib/traefik/acme.json";
+                dnsChallenge = {
+                  provider = cfg.dnsProvider;
+                  resolvers = ["1.1.1.1:53" "8.8.8.8:53"];
+                };
+              };
+            };
+          };
         }
         cfg.staticConfigOptions
       ];
 
     };
 
-    # Modified hosts entry to use VPN IP instead of localhost
-    networking.hosts = mkIf (hasSuffix "endo-reg.net" cfg.dashboardHost) {
-      "${cfg.bindIP}" = [ cfg.dashboardHost ];
+    # Add local DNS entry
+    networking.hosts = {
+      "127.0.0.1" = [ cfg.dashboardHost ];
     };
 
     # Remove the self-signed certificate parts
@@ -130,6 +146,6 @@ in {
       ];
     };
 
-
+    systemd.services.traefik.environment = cfg.dnsEnvVars;
   };
 }

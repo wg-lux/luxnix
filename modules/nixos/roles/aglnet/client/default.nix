@@ -215,8 +215,15 @@ in {
         key ${cfg.serverKeyPath}
         cipher ${cfg.cipher}
         
-        route-nopull      
+        # Route only VPN subnet through tunnel
+        route-nopull
         route ${cfg.subnet} ${cfg.subnetIntern}
+
+        # Allow server to push specific routes
+        pull-filter accept "route 172.16.255.1"
+        pull-filter accept "dhcp-option DNS"
+        pull-filter accept "dhcp-option DOMAIN"
+        pull-filter accept "dhcp-option DOMAIN-ROUTE"
 
         remote-cert-tls server
         verb ${cfg.verbosity}      
