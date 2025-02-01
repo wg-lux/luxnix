@@ -903,6 +903,7 @@ roles:
     files: []
     name: keycloak_host
     vars:
+      role_psql_keycloak_pw_file: /etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password
       role_roles:
         keycloakHost.adminInitialPassword: '"admin"'
         keycloakHost.adminUsername: '"admin"'

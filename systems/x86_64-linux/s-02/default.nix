@@ -78,10 +78,8 @@ local sameuser all peer map=superuser_map
 host  all all ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
 host  replication ${config.roles.postgres.main.replUser} ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
 host  ${config.roles.postgres.main.devUser} ${config.roles.postgres.main.devUser} ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
-host  all postgres ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256'' 
-    + (if config.roles.keycloakHost.enable then ''
-host  ${config.roles.keycloakHost.dbUsername} ${config.roles.keycloakHost.dbUsername} 127.0.0.1/32 scram-sha-256
-'' else ""); 
+host  all postgres ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
+''; 
   generic-settings.postgres.activeIdentMap = ''
 # ArbitraryMapName systemUser DBUser
 superuser_map      root      postgres
