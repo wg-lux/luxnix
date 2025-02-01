@@ -24,7 +24,7 @@ in {
       traefik = {
         isSystemUser = true;
         group = "traefik";
-        extraGroups = [ "docker" ];
+        extraGroups = [ "docker" "podman" ];
         home = "/var/lib/traefik";
         createHome = true;
       };
