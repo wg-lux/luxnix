@@ -9,7 +9,7 @@ in {
     dashboard = mkBoolOpt true "Enable traefik dashboard";
     insecure = mkBoolOpt false "Allow insecure configurations";
     staticConfigOptions = mkOpt types.attrs {} "Additional static configuration options";
-    dashboardHost = mkOpt types.str "traefik.endoreg.intern" "Hostname for the dashboard";
+    dashboardHost = mkOpt types.str "traefik.endo-reg.net" "Hostname for the dashboard";
     allowedIPs = mkOpt (types.listOf types.str) ["127.0.0.1"] "IPs allowed to access the dashboard";
     bindIP = mkOpt types.str "0.0.0.0" "IP address to bind Traefik to";
     sslCertPath = mkOpt types.path config.luxnix.generic-settings.sslCertificatePath "Path to SSL certificate";
@@ -43,9 +43,6 @@ in {
           };
 
           entryPoints = {
-            dashboard = {
-              address = "172.16.255.12:9050";  # Changed port to 9050
-            };
             web = {
               address = ":80";
               # http.redirections.entryPoint = {
@@ -61,7 +58,7 @@ in {
 
           api = mkIf cfg.dashboard {
             dashboard = true;
-            insecure = true; #FIXME rm after prototyping  # Changed to false for security
+            insecure = false;  # Changed to false for security
           };
 
           providers = {
@@ -89,8 +86,8 @@ in {
                 rule = "Host(`${cfg.dashboardHost}`)";
                 service = "api@internal";
                 middlewares = ["ipwhitelist"];
-                entryPoints = ["dashboard"];  # Use dashboard entrypoint
-                tls = true;  # Use local certificates instead of Let's Encrypt
+                entryPoints = ["websecure"];
+                tls = true;
               };
             };
           };
@@ -110,28 +107,15 @@ in {
               };
             };
           };
-
-          certificatesResolvers = {
-            letsencrypt = {
-              acme = {
-                email = cfg.email;
-                storage = "/var/lib/traefik/acme.json";
-                dnsChallenge = {
-                  provider = cfg.dnsProvider;
-                  resolvers = ["1.1.1.1:53" "8.8.8.8:53"];
-                };
-              };
-            };
-          };
         }
         cfg.staticConfigOptions
       ];
 
     };
 
-    # Add local DNS entry
-    networking.hosts = {
-      "127.0.0.1" = [ cfg.dashboardHost ];
+    # Modified hosts entry to use VPN IP instead of localhost
+    networking.hosts = mkIf (hasSuffix "endoreg.intern" cfg.dashboardHost) {
+      "${cfg.bindIP}" = [ cfg.dashboardHost ];
     };
 
     # Remove the self-signed certificate parts
@@ -145,10 +129,10 @@ in {
     networking.firewall = {
       allowedTCPPorts = [ 80 443 ];
       allowedTCPPortRanges = mkIf cfg.dashboard [
-        { from = 9050; to = 9050; }  # Changed port to 9050
+        { from = 8080; to = 8080; }
       ];
     };
 
-    systemd.services.traefik.environment = cfg.dnsEnvVars;
+
   };
 }

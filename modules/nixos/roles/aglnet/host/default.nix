@@ -241,7 +241,7 @@ in {
         interfaces = {
           "${cfg.dev}0" = {
             allowedUDPPorts = [ 53 ];
-            allowedTCPPorts = [ 53 9050 ];  # Changed dashboard port to 9050
+            allowedTCPPorts = [ 53 ];  
           };
         };
       };
@@ -271,9 +271,9 @@ in {
         no-resolv = false;
         no-poll = true;
         
-        # Add static DNS entries with explicit TTL
+        # Add static DNS entries (without TTL)
         address = [
-          "/traefik.${cfg.localDomain}/172.16.255.12#3600"  # Add TTL
+          "/traefik.${cfg.localDomain}/172.16.255.12"  # Remove TTL notation
         ];
         
         # Don't read /etc/hosts
