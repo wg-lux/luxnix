@@ -85,6 +85,8 @@ in {
 
   config = mkIf cfg.enable {
     services.luxnix.postgresql.enable = true;
+    services.luxnix.postgresql.authentication = lib.mkOverride 100 cfg.authentication;
+    services.luxnix.postgresql.identMap = lib.mkOverride 100 cfg.identMap;
 
     roles.postgres.default.enable = true;
     # Allow port:
@@ -116,8 +118,7 @@ in {
         # host  replication               ${cfg.replUser}              ${conf.ip-backup}/32        scram-sha-256
         # host  ${conf.users.aglnet-base.name} ${conf.users.aglnet-base.name} 172.16.255.142/32 scram-sha-256
         
-        authentication = lib.mkOverride 100 cfg.authentication;
-        identMap = lib.mkOverride 100  cfg.identMap;
+
       };
     };
 
