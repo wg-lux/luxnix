@@ -11,6 +11,7 @@
   become: true
   roles:
     - common
+
 # - name: Set role managed for managed hosts
 #   hosts: managed
 #   become: true
@@ -41,6 +42,12 @@
   become: true
   roles:
     - local_endoreg_db
+
+- name: Set role keycloak_host for keycloak_host
+  hosts: s-02
+  become: true
+  roles:
+    - keycloak_host
 ####### PRODUCTION END #########
 
 # - name: Set base_server group's roles

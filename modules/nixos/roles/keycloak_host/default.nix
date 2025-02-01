@@ -7,15 +7,10 @@
 with lib; 
 with lib.luxnix; let
 
-  cfg = config.services.luxnix.keycloak;
+  cfg = config.roles.keycloakHost;
 
-  appendAuth = ''
-    host    ${cfg.dbUsername} ${cfg.dbUsername} 127.0.0.1/32 scram-sha-256
-  '';
-  keycloakAuthentication = config.luxnix.generic-settings.postgres.defaultAuthentication + appendAuth;
-
-in {
-  options.services.luxnix.keycloak = {
+  in {
+  options.roles.keycloakHost = {
     enable = mkBoolOpt false "Enable keycloak";
 
     httpPort = mkOption {
@@ -92,8 +87,6 @@ in {
       }  
     ];
 
-    # tmpfilerule to make sure /etc/keycloak exists and  belongs to keycloak user
-
     users.users = {
       keycloak = {
         # isNormalUser = true;
@@ -111,12 +104,6 @@ in {
         gid = cfg.gid;
       };
     };
-
-    # TODO REMOVE AFTER PROTOTYPING
-    ## provide password file using etc files
-    environment.etc."keycloak/db-password".text = ''''; #  ${cfg.adminInitialPassword}
-    
-    luxnix.generic-settings.postgres.activeAuthentication = keycloakAuthentication;
 
     services.postgresql.ensureDatabases = [ cfg.dbUsername ];
 

@@ -21,11 +21,21 @@
     aglnet.client.enable = true;
     base-server.enable = true;
     endoreg-client.enable = false;
+    adminInitialPassword = "admin";
+    adminUsername = "admin";
+    dbPasswordfile = "/etc/secrets/SCRT_roles_system_password_keycloak_host_password";
+    dbUsername = "keycloak";
+    hostname = "keycloak.endo-reg.net";
+    hostnameAdmin = "keycloak-admin.endo-reg.net";
+    httpPort = 9080;
+    httpsPort = 9443;
+    keycloakHost.enable = true;
     postgres.main.enable = true;
     traefikHost.allowedIPs = ["172.16.255.106" "172.16.255.1" "127.0.0.1"];    traefikHost.dashboard = true;
     traefikHost.dashboardHost = "traefik.endoreg.intern";
     traefikHost.enable = true;
     traefikHost.insecure = false;
+    vpnIP = "172.16.255.12";
     };
 
   services = {

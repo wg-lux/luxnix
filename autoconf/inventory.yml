@@ -513,6 +513,7 @@ all:
     ansible_role_names:
       - postgres_host_main
       - traefik_host
+      - keycloak_host
     extra_secret_names: []
     extra_user_names:
       - admin
@@ -539,6 +540,7 @@ all:
       ansible_roles:
         - postgres_host_main
         - traefik_host
+        - keycloak_host
       host_luxnix:
         generic_settings.hostPlatform: '"x86_64-linux"'
         generic_settings.linux.cpuMicrocode: '"intel"'
@@ -900,7 +902,18 @@ roles:
   - extra_user_names: []
     files: []
     name: keycloak_host
-    vars: {}
+    vars:
+      role_roles:
+        adminInitialPassword: '"admin"'
+        adminUsername: '"admin"'
+        dbPasswordfile: '"/etc/secrets/SCRT_roles_system_password_keycloak_host_password"'
+        dbUsername: '"keycloak"'
+        hostname: '"keycloak.endo-reg.net"'
+        hostnameAdmin: '"keycloak-admin.endo-reg.net"'
+        httpPort: '9080'
+        httpsPort: '9443'
+        keycloakHost.enable: 'true'
+        vpnIP: '"172.16.255.12"'
   - extra_user_names: []
     files: []
     name: lx-anonymizer

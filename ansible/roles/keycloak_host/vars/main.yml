@@ -1,0 +1,11 @@
+keycloak_host_roles:
+  keycloakHost.enable: "true"
+  httpPort: "9080"
+  httpsPort: "9443"
+  adminUsername: '"admin"'
+  adminInitialPassword: '"admin"'
+  dbUsername: '"keycloak"'
+  dbPasswordfile: '"/etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password"'
+  hostname: '"keycloak.endo-reg.net"'
+  hostnameAdmin: '"keycloak-admin.endo-reg.net"'
+  vpnIP: '"172.16.255.12"'
