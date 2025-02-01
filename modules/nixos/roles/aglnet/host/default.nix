@@ -271,7 +271,7 @@ in {
         
         # Add static DNS entries
         address = [
-          "/traefik.${cfg.localDomain}/172.16.255.12"
+          "/traefik.${cfg.localDomain}/172.16.255.12:8080"
         ];
         
         # Don't read /etc/hosts
