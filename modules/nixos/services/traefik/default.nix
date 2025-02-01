@@ -48,7 +48,7 @@ in {
 
           providers = {
             docker = {
-              endpoint = "unix:///var/run/docker.sock";
+              endpoint = "unix:///run/docker.sock"; 
               exposedByDefault = false;
               watch = true;
             };
@@ -95,6 +95,11 @@ in {
         }
         cfg.staticConfigOptions
       ];
+
+      # Ensure traefik user has access to Docker socket
+      user = "traefik";
+      group = "traefik";
+      supplementaryGroups = [ "docker" ];
     };
 
     # Modified hosts entry to use VPN IP instead of localhost

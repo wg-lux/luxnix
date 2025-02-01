@@ -27,7 +27,7 @@ in {
 
   config = mkIf cfg.enable {
     environment.systemPackages = cfg.packages;
-
+    
     systemd.services.NetworkManager-wait-online.enable = lib.mkForce false;
     systemd.services.systemd-networkd-wait-online.enable = lib.mkForce false;
     security.rtkit.enable = lib.mkDefault true;
@@ -64,6 +64,8 @@ in {
       zsh.enable = true;
       command-not-found.enable = true;
     };
+
+    services.virtualisation.podman.enable = true;
 
     system = {
       nix.enable = true;
