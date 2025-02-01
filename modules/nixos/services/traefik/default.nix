@@ -18,6 +18,8 @@ in {
 
   config = mkIf cfg.enable {
 
+    users.groups.traefik = {};
+
     users.extraUsers = {
       groups.traefik = {};  
       users.traefik = {
