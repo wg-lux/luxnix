@@ -269,6 +269,11 @@ in {
         no-resolv = false;
         no-poll = true;
         
+        # Add static DNS entries
+        address = [
+          "/traefik.${cfg.localDomain}/172.16.255.1"
+        ];
+        
         # Don't read /etc/hosts
         no-hosts = true;
       };
