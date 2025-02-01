@@ -240,7 +240,7 @@ in {
         interfaces = {
           "${cfg.dev}0" = {
             allowedUDPPorts = [ 53 ];
-            allowedTCPPorts = [ 53 8080 ];  # Add dashboard port
+            allowedTCPPorts = [ 53 9050 ];  # Changed dashboard port to 9050
           };
         };
       };
@@ -271,7 +271,7 @@ in {
         
         # Add static DNS entries
         address = [
-          "/traefik.${cfg.localDomain}/172.16.255.12"
+          "/traefik.${cfg.localDomain}/172.16.255.12"  # Point to Traefik IP
         ];
         
         # Don't read /etc/hosts
@@ -307,6 +307,7 @@ in {
 
         # DNS configuration
         push "route 172.16.255.1 255.255.255.255"  # Ensure DNS server is reachable
+        push "route 172.16.255.12 255.255.255.255" # Traefik server
         push "dhcp-option DNS 172.16.255.1"
         push "dhcp-option DOMAIN ${cfg.localDomain}"
         push "dhcp-option DOMAIN-ROUTE ${cfg.localDomain}"

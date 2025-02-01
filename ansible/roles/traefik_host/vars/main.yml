@@ -5,6 +5,7 @@ traefik_host_roles:
   traefikHost.dashboardHost: '"traefik.endoreg.local"'
   traefikHost.allowedIPs:
     - "172.16.255.106"
+    - "172.16.255.1"
     - "127.0.0.1"
 
 traefik_host_luxnix:

@@ -44,7 +44,7 @@ in {
 
           entryPoints = {
             dashboard = {
-              address = "172.16.255.12:8080";  # VPN IP for dashboard
+              address = "172.16.255.12:9050";  # Changed port to 9050
             };
             web = {
               address = ":80";
@@ -145,7 +145,7 @@ in {
     networking.firewall = {
       allowedTCPPorts = [ 80 443 ];
       allowedTCPPortRanges = mkIf cfg.dashboard [
-        { from = 8080; to = 8080; }
+        { from = 9050; to = 9050; }  # Changed port to 9050
       ];
     };
 
