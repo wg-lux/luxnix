@@ -21,7 +21,7 @@ in {
     users.groups.traefik = {};
 
     users.extraUsers = {
-      users.traefik = {
+      traefik = {
         isSystemUser = true;
         group = "traefik";
         extraGroups = [ "docker" ];
