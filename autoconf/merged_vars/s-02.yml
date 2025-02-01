@@ -1,7 +1,6 @@
-admin_password_file: "{{ local_users_passwords_dir }}/admin_raw"
-admin_password_file_source:
-  "{{ lx_vault_dir_src }}/secrets/password/local/admin@{{
-  inventory_hostname }}/admin@{{ inventory_hostname }}_password"
+admin_password_file: '{{ local_users_passwords_dir }}/admin_raw'
+admin_password_file_source: '{{ lx_vault_dir_src }}/secrets/password/local/admin@{{
+  inventory_hostname }}/admin@{{ inventory_hostname }}_password'
 admin_vpn_ip: 172.16.255.106
 aglnet_conf:
   backupNameservers:
@@ -10,19 +9,19 @@ aglnet_conf:
   caPath: /etc/openvpn/ca.pem
   clientConfigDir: /etc/openvpn/ccd
   dhPath: /etc/openvpn/dh.pem
-  domain: "{{ network_conf.domain }}"
+  domain: '{{ network_conf.domain }}'
   serverCertPath: /etc/openvpn/crt.crt
   serverKeyPath: /etc/openvpn/key.key
   subnet: 172.16.255.0
   subnetIntern: 255.255.255.0
-  subnetSuffix: "32"
+  subnetSuffix: '32'
   tlsAuthPath: /etc/openvpn/tls.pem
 ansible_become_user: admin
 ansible_groups:
   - common
-ansible_key_dir: "{{ luxnix_dest }}/secrets/ansible-vault-keys"
-ansible_key_source_dir: "{{ luxnix_dev_repo }}/secrets/ansible-vault-keys-source"
-ansible_python_interpreter: "{{ luxnix_dest }}/.devenv/state/venv/bin/python"
+ansible_key_dir: '{{ luxnix_dest }}/secrets/ansible-vault-keys'
+ansible_key_source_dir: '{{ luxnix_dev_repo }}/secrets/ansible-vault-keys-source'
+ansible_python_interpreter: '{{ luxnix_dest }}/.devenv/state/venv/bin/python'
 ansible_roles:
   - postgres_host_main
   - traefik_host
@@ -43,25 +42,25 @@ endoreg_db_branch: main
 endoreg_db_dest: /home/admin/endoreg-db-production
 endoreg_db_repo: https://github.com/wg-lux/endoreg-db.git
 group_luxnix:
-  boot_decryption_stick.enable: "true"
-  dns.enable: "true"
+  boot_decryption_stick.enable: 'true'
+  dns.enable: 'true'
   generic_settings.adminVpnIp: '"172.16.255.106"'
-  generic_settings.enable: "true"
+  generic_settings.enable: 'true'
   generic_settings.linux.kernelPackages: pkgs.linuxPackages_6_12
   generic_settings.traefikHostDomain: '"traefik.endoreg.local"'
   generic_settings.traefikHostIp: '"172.16.255.12"'
   maintenance.autoUpdates.dates: '"04:00"'
-  maintenance.autoUpdates.enable: "true"
+  maintenance.autoUpdates.enable: 'true'
   maintenance.autoUpdates.flake: '"github:wg-lux/luxnix"'
-  nvidia_prime.enable: "false"
+  nvidia_prime.enable: 'false'
   vault.dir: '"/etc/secrets/vault"'
-  vault.enable: "true"
+  vault.enable: 'true'
   vault.key: '"/etc/secrets/.key"'
   vault.psk: '"/etc/secrets/.psk"'
 group_roles:
-  aglnet.client.enable: "true"
-  base_server.enable: "true"
-  endoreg_client.enable: "false"
+  aglnet.client.enable: 'true'
+  base_server.enable: 'true'
+  endoreg_client.enable: 'false'
 group_services: {}
 host_luxnix:
   generic_settings.hostPlatform: '"x86_64-linux"'
@@ -91,18 +90,17 @@ host_luxnix:
   generic_settings.vpnIp: '"172.16.255.12"'
 host_roles: {}
 host_services: {}
-local_users_passwords_dir:
-  "{{ luxnix_dest }}/secrets/user-passwords/{{ inventory_hostname
-  }}"
+local_users_passwords_dir: '{{ luxnix_dest }}/secrets/user-passwords/{{ inventory_hostname
+  }}'
 luxnix_branch: main
 luxnix_dest: /home/admin/lx-production
 luxnix_dev_repo: /home/admin/dev/luxnix
 luxnix_repo: https://github.com/wg-lux/luxnix.git
-lx_vault_dir: "{{ secret_dir }}/vault"
+lx_vault_dir: '{{ secret_dir }}/vault'
 lx_vault_dir_src: /home/admin/.lxv
-lx_vault_key: "{{ secret_dir }}/.key"
+lx_vault_key: '{{ secret_dir }}/.key'
 lx_vault_key_src: /home/admin/.lxv.key
-lx_vault_psk: "{{ secret_dir }}/.psk"
+lx_vault_psk: '{{ secret_dir }}/.psk'
 maintenance_password_filename: SCRT_local_password_maintenance_password
 network_conf:
   domain: endo-reg.net
@@ -110,8 +108,7 @@ postgres_host_main_password_filename: SCRT_roles_system_password_postgres_host_m
 postgres_host_test_ip: 172.16.255.13
 postgres_host_test_password_filename: SCRT_roles_system_password_postgres_host_test_password
 role_luxnix:
-  generic-settings.postgres.activeAuthentication:
-    "#type database DBuser address auth-method
+  generic-settings.postgres.activeAuthentication: '#type database DBuser address auth-method
     optional_ident_map
 
     local sameuser all peer map=superuser_map
@@ -126,9 +123,8 @@ role_luxnix:
 
     host  all postgres ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
 
-    "
-  generic-settings.postgres.activeIdentMap:
-    '# ArbitraryMapName systemUser DBUser
+    '
+  generic-settings.postgres.activeIdentMap: '# ArbitraryMapName systemUser DBUser
 
     superuser_map      root      postgres
 
@@ -151,13 +147,14 @@ role_luxnix:
   generic-settings.sslCertificateKeyPath: '"/home/admin/.ssl/endo-reg-net.key"'
   generic-settings.sslCertificatePath: '"/home/admin/.ssl/__endo-reg_net.pem"'
 role_roles:
-  postgres.main.enable: "true"
+  postgres.main.enable: 'true'
   traefikHost.allowedIPs:
     - 172.16.255.106
+    - 172.16.255.1
     - 127.0.0.1
-  traefikHost.dashboard: "true"
-  traefikHost.dashboardHost: '"traefik.endoreg.local"'
-  traefikHost.enable: "true"
-  traefikHost.insecure: "false"
+  traefikHost.dashboard: 'true'
+  traefikHost.dashboardHost: '"traefik.endoreg.intern"'
+  traefikHost.enable: 'true'
+  traefikHost.insecure: 'false'
 secret_dir: /etc/secrets
 template_name: main
