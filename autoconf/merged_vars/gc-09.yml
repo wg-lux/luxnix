@@ -45,7 +45,7 @@ group_luxnix:
   generic_settings.configurationPathRelative: '"lx-production"'
   generic_settings.enable: 'true'
   generic_settings.linux.kernelPackages: pkgs.linuxPackages_6_12
-  generic_settings.traefikHostDomain: '"traefik.endoreg.local"'
+  generic_settings.traefikHostDomain: '"traefik.endo-reg.net"'
   generic_settings.traefikHostIp: '"172.16.255.12"'
   gpu_eval.enable: 'true'
   maintenance.autoUpdates.dates: '"09:00"'
