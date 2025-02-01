@@ -237,6 +237,12 @@ in {
     networking = {
       firewall = {
         "allowed${cfg.protocol}Ports" = [ cfg.port ];
+        interfaces = {
+          "${cfg.dev}0" = {
+            allowedUDPPorts = [ 53 ];
+            allowedTCPPorts = [ 53 ];
+          };
+        };
       };
       nameservers = cfg.backupNameservers;
     };
