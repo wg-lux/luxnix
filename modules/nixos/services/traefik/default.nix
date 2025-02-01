@@ -60,7 +60,7 @@ in {
 
           providers = {
             docker = {
-              endpoint = "unix:///run/docker.sock"; 
+              endpoint = "unix:///var/run/podman/podman.sock"; 
               exposedByDefault = false;
               watch = true;
             };
