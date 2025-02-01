@@ -42,20 +42,20 @@ in {
           entryPoints = {
             web = {
               address = ":80";
-              http.redirections.entryPoint = {
-                to = "websecure";
-                scheme = "https";
-              };
+              # http.redirections.entryPoint = {
+              #   to = "websecure";
+              #   scheme = "https";
+              # };
             };
             websecure = {
               address = ":443";
-              forwardedHeaders.insecure = cfg.insecure;
+              # forwardedHeaders.insecure = cfg.insecure;
             };
           };
 
           api = mkIf cfg.dashboard {
             dashboard = true;
-            insecure = false;  # Changed to false for security
+            insecure = true; #FIXME rm after prototyping  # Changed to false for security
           };
 
           providers = {
