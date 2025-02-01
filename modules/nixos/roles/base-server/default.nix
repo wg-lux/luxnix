@@ -71,7 +71,7 @@ in {
 
     services = {
       luxnix.avahi.enable = false;
-      virtualisation.podman.enable = false;
+      virtualisation.podman.enable = lib.mkDefault true;
     };
   
 
