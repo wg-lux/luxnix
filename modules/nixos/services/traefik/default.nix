@@ -18,6 +18,17 @@ in {
 
   config = mkIf cfg.enable {
 
+    users.extraUsers = {
+      groups.traefik = {};  
+      users.traefik = {
+        isSystemUser = true;
+        group = "traefik";
+        extraGroups = [ "docker" ];
+        home = "/var/lib/traefik";
+        createHome = true;
+      };
+    };
+
     services.traefik = {
       enable = true;
       staticConfigOptions = mkMerge [
@@ -96,10 +107,6 @@ in {
         cfg.staticConfigOptions
       ];
 
-      # Ensure traefik user has access to Docker socket
-      user = "traefik";
-      group = "traefik";
-      supplementaryGroups = [ "docker" ];
     };
 
     # Modified hosts entry to use VPN IP instead of localhost
