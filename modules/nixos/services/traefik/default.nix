@@ -21,7 +21,6 @@ in {
     users.groups.traefik = {};
 
     users.extraUsers = {
-      groups.traefik = {};  
       users.traefik = {
         isSystemUser = true;
         group = "traefik";
