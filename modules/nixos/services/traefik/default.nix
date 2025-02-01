@@ -9,20 +9,14 @@ in {
     dashboard = mkBoolOpt true "Enable traefik dashboard";
     insecure = mkBoolOpt false "Allow insecure configurations";
     staticConfigOptions = mkOpt types.attrs {} "Additional static configuration options";
-    dashboardHost = mkOpt types.str "traefik.endoreg.local" "Hostname for the dashboard";
+    dashboardHost = mkOpt types.str "traefik.endo-reg.net" "Hostname for the dashboard";
     allowedIPs = mkOpt (types.listOf types.str) ["127.0.0.1"] "IPs allowed to access the dashboard";
-    externalCertResolver = mkOpt types.str "" "Name of the certificate resolver for external domains";
     bindIP = mkOpt types.str "0.0.0.0" "IP address to bind Traefik to";
     sslCertPath = mkOpt types.path config.luxnix.generic-settings.sslCertificatePath "Path to SSL certificate";
     sslKeyPath = mkOpt types.path config.luxnix.generic-settings.sslCertificateKeyPath "Path to SSL key";
   };
 
   config = mkIf cfg.enable {
-    # Generate self-signed certificate for local development
-    security.acme = {
-      acceptTerms = true;
-      defaults.email = "admin@endoreg.local";
-    };
 
     services.traefik = {
       enable = true;
@@ -104,7 +98,7 @@ in {
     };
 
     # Modified hosts entry to use VPN IP instead of localhost
-    networking.hosts = mkIf (hasSuffix "endoreg.local" cfg.dashboardHost) {
+    networking.hosts = mkIf (hasSuffix "endo-reg.net" cfg.dashboardHost) {
       "${cfg.bindIP}" = [ cfg.dashboardHost ];
     };
 

@@ -82,7 +82,11 @@ superuser_map      postgres  postgres
 # Let other names login as themselves
 superuser_map      /^(.*)$   \1
 ''; 
-  generic-settings.hostPlatform = "x86_64-linux";
+  generic-settings.sslCertificatePath = "/home/admin/.ssl/__endo-reg_net.pem";
+
+generic-settings.sslKeyPath = "/home/admin/.ssl/endo-reg-net.key";
+
+generic-settings.hostPlatform = "x86_64-linux";
 
 generic-settings.linux.cpuMicrocode = "intel";
 

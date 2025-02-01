@@ -1031,6 +1031,9 @@ roles:
     files: []
     name: traefik_host
     vars:
+      role_luxnix:
+        generic-settings.sslCertificatePath: '"/home/admin/.ssl/__endo-reg_net.pem"'
+        generic-settings.sslKeyPath: '"/home/admin/.ssl/endo-reg-net.key"'
       role_roles:
         traefikHost.allowedIPs:
           - 172.16.255.106

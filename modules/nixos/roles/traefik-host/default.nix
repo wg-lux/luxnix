@@ -11,6 +11,9 @@ in {
     staticConfigOptions = mkOpt types.attrs {} "Additional static configuration options";
     dashboardHost = mkOpt types.str "dashboard.traefik.local" "Hostname for the dashboard";
     allowedIPs = mkOpt (types.listOf types.str) ["127.0.0.1"] "IPs allowed to access the dashboard";
+    bindIP = mkOpt types.str "0.0.0.0" "IP address to bind Traefik to";
+    sslCertPath = mkOpt types.path config.luxnix.generic-settings.sslCertificatePath "Path to SSL certificate";
+    sslKeyPath = mkOpt types.path config.luxnix.generic-settings.sslCertificateKeyPath "Path to SSL key";
 
   };
 
@@ -22,6 +25,9 @@ in {
       staticConfigOptions = cfg.staticConfigOptions;
       dashboardHost = cfg.dashboardHost;
       allowedIPs = cfg.allowedIPs;
+      bindIP = cfg.bindIP;
+      sslCertPath = cfg.sslCertPath;
+      sslKeyPath = cfg.sslKeyPath;
     };
   };
 }
