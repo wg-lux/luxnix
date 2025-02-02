@@ -108,6 +108,19 @@ with lib.luxnix; let
 
     services.postgresql.ensureDatabases = [ cfg.dbUsername ];
 
+    # Ensure password file permissions
+    systemd.services.keycloak.serviceConfig = {
+      SupplementaryGroups = [ config.luxnix.generic-settings.sensitiveServiceGroupName ];
+    };
+
+    # Ensure the password file exists and has correct permissions
+    system.activationScripts.keycloakSetup = ''
+      if [ -f ${cfg.dbPasswordfile} ]; then
+        chown root:${config.luxnix.generic-settings.sensitiveServiceGroupName} ${cfg.dbPasswordfile}
+        chmod 640 ${cfg.dbPasswordfile}
+      fi
+    '';
+
     services.keycloak = {
       enable = true;
       initialAdminPassword = cfg.adminInitialPassword;
@@ -116,6 +129,8 @@ with lib.luxnix; let
         username = cfg.dbUsername; # 
         # useSSL = false;
         passwordFile = "${cfg.dbPasswordfile}";
+        # Add explicit type to ensure proper database configuration
+        type = "postgresql";
 
         host = "localhost";
         name = cfg.dbUsername; # defaults to keycloak
