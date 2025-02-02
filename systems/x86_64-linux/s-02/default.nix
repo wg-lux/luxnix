@@ -23,7 +23,7 @@
     endoreg-client.enable = false;
     keycloakHost.adminInitialPassword = "admin";
     keycloakHost.adminUsername = "admin";
-    keycloakHost.dbPasswordfile = "/etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password_service";
+    keycloakHost.dbPasswordfile = "/etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password";
     keycloakHost.dbUsername = "keycloak";
     keycloakHost.enable = true;
     keycloakHost.hostname = "keycloak.endo-reg.net";
