@@ -24,7 +24,7 @@ with lib.luxnix; let
 
   auth = ''
       #type database                  DBuser                      address                     auth-method         optional_ident_map
-      local all                       postgres                                                trust               map=superuser_map
+      local all                       postgres                                                trust
       local all                       postgres                                                peer                map=superuser_map
       local sameuser                  all                                                     peer                map=superuser_map
       host  all                       all                         127.0.0.1/32                scram-sha-256
