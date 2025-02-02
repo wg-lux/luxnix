@@ -1,0 +1,9 @@
+- name: Set Keycloak database user password
+  community.postgresql.postgresql_user:
+    name: '{{ keycloak_host_roles["keycloakHost.dbUsername"] | regex_replace(''"'', '''') }}'
+    password: "{{ lookup('file', keycloak_host_psql_keycloak_pw_src) }}"
+    state: present
+    db: postgres
+  become: true
+  become_user: postgres
+  become_method: ansible.builtin.sudo

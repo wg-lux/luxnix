@@ -6,12 +6,11 @@
 #     - openvpn_host
 
 ######### PRODUCTION #########
-- name: Set role common for active_clients
-  hosts: active_clients
-  become: true
-  roles:
-    - common
-
+# - name: Set role common for active_clients
+#   hosts: active_clients
+#   become: true
+#   roles:
+#     - common
 # - name: Set role managed for managed hosts
 #   hosts: managed
 #   become: true
@@ -37,11 +36,11 @@
 #   roles:
 #     - dev_access
 
-- name: Set role local_endoreg_db
-  hosts: local_endoreg_db
-  become: true
-  roles:
-    - local_endoreg_db
+# - name: Set role local_endoreg_db
+#   hosts: local_endoreg_db
+#   become: true
+#   roles:
+#     - local_endoreg_db
 
 - name: Set role keycloak_host for keycloak_host
   hosts: s-02

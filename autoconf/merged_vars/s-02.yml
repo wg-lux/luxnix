@@ -113,6 +113,7 @@ role_luxnix:
   generic-settings.sslCertificateKeyPath: '"/home/admin/.ssl/endo-reg-net.key"'
   generic-settings.sslCertificatePath: '"/home/admin/.ssl/__endo-reg_net.pem"'
 role_psql_keycloak_pw_file: /etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password
+role_psql_keycloak_pw_src: /home/admin/.lxv/deploy/{{ inventory_hostname }}/SCRT_roles_system_password_keycloak_host_password
 role_roles:
   keycloakHost.adminInitialPassword: '"admin"'
   keycloakHost.adminUsername: '"admin"'
