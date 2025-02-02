@@ -90,9 +90,10 @@ with lib.luxnix; let
     users.users = {
       keycloak = {
         # isNormalUser = true;
-        # home = "/var/lib/keycloak";
-        # createHome = true;
+        home = "/var/lib/keycloak";
+        createHome = true;
         # shell = "/sbin/nologin";
+        isNormalUser = true;
         group = cfg.dbUsername;
         extraGroups = [ config.luxnix.generic-settings.sensitiveServiceGroupName ];
         # uid = cfg.uid;
