@@ -40,7 +40,7 @@ generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
 
 generic-settings.postgres.enable = true;
 
-generic-settings.sensitiveServiceGroupName = sensitiveServices;
+generic-settings.sensitiveServiceGroupName = "sensitiveServices";
 
 generic-settings.traefikHostDomain = "traefik.endoreg.local";
 
