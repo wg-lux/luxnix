@@ -45,7 +45,7 @@ with lib.luxnix; let
 
     dbPasswordfile = mkOption {
       type = types.str;
-      default = "/etc/keycloak/db-password";
+      default = "/etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password";
       # default = "/home/${cfg.dbUserName}/keycloak-db-password";
       description = "path to passwordfile for keycloak";
     };
@@ -95,7 +95,7 @@ with lib.luxnix; let
         # shell = "/sbin/nologin";
         group = cfg.dbUsername;
         extraGroups = [ config.luxnix.generic-settings.sensitiveServiceGroupName ];
-        uid = cfg.uid;
+        # uid = cfg.uid;
       };
     };
 
@@ -114,7 +114,7 @@ with lib.luxnix; let
         # createLocally = true;
         username = cfg.dbUsername; # 
         # useSSL = false;
-        passwordFile = cfg.dbPasswordfile;
+        passwordFile = "${cfg.dbPasswordfile}_service";
 
         host = "localhost";
         name = cfg.dbUsername; # defaults to keycloak
