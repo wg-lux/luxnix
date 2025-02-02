@@ -23,7 +23,7 @@ in {
     };
 
     additionalPostgresAuthKeys = mkOption {
-      type = types.ListOf types.str;
+      type = types.listOf types.str;
       default = [];
       description = "Additional authorized keys for postgres user";
     };
