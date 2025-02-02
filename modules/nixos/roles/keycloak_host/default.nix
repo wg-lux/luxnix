@@ -112,7 +112,7 @@ with lib.luxnix; let
       enable = true;
       initialAdminPassword = cfg.adminInitialPassword;
       database = {
-        # createLocally = true;
+        createLocally = false;
         username = cfg.dbUsername; # 
         # useSSL = false;
         passwordFile = "${cfg.dbPasswordfile}_service";
