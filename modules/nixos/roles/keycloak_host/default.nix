@@ -115,7 +115,7 @@ with lib.luxnix; let
         createLocally = false;
         username = cfg.dbUsername; # 
         # useSSL = false;
-        passwordFile = "${cfg.dbPasswordfile}_service";
+        passwordFile = "${cfg.dbPasswordfile}";
 
         host = "localhost";
         name = cfg.dbUsername; # defaults to keycloak
