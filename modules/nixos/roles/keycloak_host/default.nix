@@ -45,7 +45,8 @@ with lib.luxnix; let
 
     dbPasswordfile = mkOption {
       type = types.str;
-      default = "/etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password";
+      default = "/etc/secrets/vault/SCRT_local_password_admin_password";
+      # default = "/etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password";
       # default = "/home/${cfg.dbUserName}/keycloak-db-password";
       description = "path to passwordfile for keycloak";
     };
