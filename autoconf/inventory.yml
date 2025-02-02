@@ -728,6 +728,7 @@ groups:
         generic_settings.adminVpnIp: '"172.16.255.106"'
         generic_settings.enable: 'true'
         generic_settings.linux.kernelPackages: pkgs.linuxPackages_6_12
+        generic_settings.postgres.enable: 'true'
         generic_settings.traefikHostDomain: '"traefik.endoreg.local"'
         generic_settings.traefikHostIp: '"172.16.255.12"'
         vault.dir: '"/etc/secrets/vault"'
@@ -838,40 +839,7 @@ groups:
     files: []
     name: local_endoreg_db
     vars:
-      group_luxnix:
-        generic-settings.postgres.activeAuthentication: '#type database DBuser address
-          auth-method optional_ident_map
-
-          local sameuser all peer map=superuser_map
-
-          host postgres postgres 127.0.0.1/32 scram-sha-256
-
-          host ${config.roles.postgres.default.defaultDbName} ${config.roles.postgres.default.defaultDbName}
-          127.0.0.1/32 scram-sha-256
-
-          '
-        generic-settings.postgres.activeIdentMap: '# ArbitraryMapName systemUser DBUser
-
-          superuser_map      root      postgres
-
-          superuser_map      root      ${config.roles.postgres.main.replUser}
-
-          superuser_map      ${config.user.admin.name}     ${config.user.admin.name}
-
-          superuser_map      ${config.user.admin.name}     postgres
-
-          superuser_map      ${config.user.admin.name}     endoregClient
-
-          superuser_map      ${config.user.admin.name} ${config.roles.postgres.default.defaultDbName}
-
-          superuser_map      postgres  postgres
-
-
-          # Let other names login as themselves
-
-          superuser_map      /^(.*)$   \1
-
-          '
+      group_luxnix: {}
       group_roles:
         postgres.default.enable: 'true'
       group_services: {}
@@ -939,43 +907,7 @@ roles:
     files: []
     name: postgres_host_main
     vars:
-      role_luxnix:
-        generic-settings.postgres.activeAuthentication: '#type database DBuser address
-          auth-method optional_ident_map
-
-          local sameuser all peer map=superuser_map
-
-          host  all all ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
-
-          host  replication ${config.roles.postgres.main.replUser} ${config.luxnix.generic-settings.adminVpnIp}/32
-          scram-sha-256
-
-          host  ${config.roles.postgres.main.devUser} ${config.roles.postgres.main.devUser}
-          ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
-
-          host  all postgres ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
-
-          '
-        generic-settings.postgres.activeIdentMap: '# ArbitraryMapName systemUser DBUser
-
-          superuser_map      root      postgres
-
-          superuser_map      root      ${config.roles.postgres.main.replUser}
-
-          superuser_map      ${config.user.admin.name}     ${config.user.admin.name}
-
-          superuser_map      ${config.user.admin.name}     postgres
-
-          superuser_map      ${config.user.admin.name}     endoregClient
-
-          superuser_map      postgres  postgres
-
-
-          # Let other names login as themselves
-
-          superuser_map      /^(.*)$   \1
-
-          '
+      role_luxnix: {}
       role_roles:
         postgres.main.enable: 'true'
   - extra_user_names: []
@@ -983,22 +915,7 @@ roles:
     name: postgres_host_test
     vars:
       role_luxnix:
-        generic-settings.postgres.activeAuthentication: '#type database DBuser address
-          auth-method optional_ident_map
-
-          local sameuser all peer map=superuser_map
-
-          host  all all ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
-
-          host  replication ${config.roles.postgres.main.replUser} ${config.luxnix.generic-settings.adminVpnIp}/32
-          scram-sha-256
-
-          host  ${config.roles.postgres.main.devUser} ${config.roles.postgres.main.devUser}
-          ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
-
-          host  all postgres ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
-
-          # dev-01
+        generic-settings.postgres.extraAuthentication: '# dev-01
 
           host  all all 172.16.255.102/32 scram-sha-256
 
@@ -1009,26 +926,6 @@ roles:
           host  all all 172.16.255.108/32 scram-sha-256
 
           host  all postgres 172.16.255.108/32 scram-sha-256
-
-          '
-        generic-settings.postgres.activeIdentMap: '# ArbitraryMapName systemUser DBUser
-
-          superuser_map      root      postgres
-
-          superuser_map      root      ${config.roles.postgres.main.replUser}
-
-          superuser_map      ${config.user.admin.name}     ${config.user.admin.name}
-
-          superuser_map      ${config.user.admin.name}     postgres
-
-          superuser_map      ${config.user.admin.name}     endoregClient
-
-          superuser_map      postgres  postgres
-
-
-          # Let other names login as themselves
-
-          superuser_map      /^(.*)$   \1
 
           '
       role_roles:

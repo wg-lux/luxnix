@@ -43,6 +43,7 @@ group_luxnix:
   generic_settings.adminVpnIp: '"172.16.255.106"'
   generic_settings.enable: 'true'
   generic_settings.linux.kernelPackages: pkgs.linuxPackages_6_12
+  generic_settings.postgres.enable: 'true'
   generic_settings.traefikHostDomain: '"traefik.endoreg.local"'
   generic_settings.traefikHostIp: '"172.16.255.12"'
   maintenance.autoUpdates.dates: '"06:00"'

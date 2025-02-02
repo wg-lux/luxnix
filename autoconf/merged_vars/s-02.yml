@@ -48,6 +48,7 @@ group_luxnix:
   generic_settings.adminVpnIp: '"172.16.255.106"'
   generic_settings.enable: 'true'
   generic_settings.linux.kernelPackages: pkgs.linuxPackages_6_12
+  generic_settings.postgres.enable: 'true'
   generic_settings.traefikHostDomain: '"traefik.endoreg.local"'
   generic_settings.traefikHostIp: '"172.16.255.12"'
   maintenance.autoUpdates.dates: '"04:00"'
@@ -109,42 +110,6 @@ postgres_host_main_password_filename: SCRT_roles_system_password_postgres_host_m
 postgres_host_test_ip: 172.16.255.13
 postgres_host_test_password_filename: SCRT_roles_system_password_postgres_host_test_password
 role_luxnix:
-  generic-settings.postgres.activeAuthentication: '#type database DBuser address auth-method
-    optional_ident_map
-
-    local sameuser all peer map=superuser_map
-
-    host  all all ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
-
-    host  replication ${config.roles.postgres.main.replUser} ${config.luxnix.generic-settings.adminVpnIp}/32
-    scram-sha-256
-
-    host  ${config.roles.postgres.main.devUser} ${config.roles.postgres.main.devUser}
-    ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
-
-    host  all postgres ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
-
-    '
-  generic-settings.postgres.activeIdentMap: '# ArbitraryMapName systemUser DBUser
-
-    superuser_map      root      postgres
-
-    superuser_map      root      ${config.roles.postgres.main.replUser}
-
-    superuser_map      ${config.user.admin.name}     ${config.user.admin.name}
-
-    superuser_map      ${config.user.admin.name}     postgres
-
-    superuser_map      ${config.user.admin.name}     endoregClient
-
-    superuser_map      postgres  postgres
-
-
-    # Let other names login as themselves
-
-    superuser_map      /^(.*)$   \1
-
-    '
   generic-settings.sslCertificateKeyPath: '"/home/admin/.ssl/endo-reg-net.key"'
   generic-settings.sslCertificatePath: '"/home/admin/.ssl/__endo-reg_net.pem"'
 role_psql_keycloak_pw_file: /etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password
