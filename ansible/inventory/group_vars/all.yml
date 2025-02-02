@@ -20,7 +20,7 @@ ansible_groups:
 group_roles: {}
 group_services: {}
 group_luxnix:
-  generic_settings.sensitiveServiceGroupName: "sensitiveServices"
+  generic_settings.sensitiveServiceGroupName: '"sensitiveServices"'
   generic_settings.postgres.enable: "true"
   dns.enable: "true"
   generic_settings.enable: "true"
