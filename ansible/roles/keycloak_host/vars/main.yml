@@ -8,7 +8,7 @@ keycloak_host_roles:
   keycloakHost.adminUsername: '"admin"'
   keycloakHost.adminInitialPassword: '"admin"'
   keycloakHost.dbUsername: '"keycloak"'
-  keycloakHost.dbPasswordfile: '"/etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password"'
+  keycloakHost.dbPasswordfile: '"/etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password_service"'
   keycloakHost.hostname: '"keycloak.endo-reg.net"'
   keycloakHost.hostnameAdmin: '"keycloak-admin.endo-reg.net"'
   keycloakHost.vpnIP: '"172.16.255.12"'
