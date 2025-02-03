@@ -58,20 +58,23 @@ in {
             };
             websecure = {
               address = ":443";
-              # Configure TLS settings at entrypoint level
-              http.tls = {
-                certResolver = "default";
-                domains = [
-                  {
-                    main = "endo-reg.net";
-                    sans = ["*.endo-reg.net"];
-                  }
-                ];
-                # Use the vault certificate files
-                certificates = [{
+            };
+          };
+
+          # Move TLS configuration to top level
+          tls = {
+            stores = {
+              default = {
+                defaultCertificate = {
                   certFile = config.luxnix.vault.sslCert;
                   keyFile = config.luxnix.vault.sslKey;
-                }];
+                };
+              };
+            };
+            options = {
+              default = {
+                sniStrict = true;
+                minVersion = "VersionTLS12";
               };
             };
           };
