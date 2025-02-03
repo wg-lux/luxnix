@@ -154,19 +154,11 @@ with lib.luxnix; let
         port = config.services.postgresql.settings.port;
       };
       settings = {
-        # hostname = cfg.hostname;
         http-host = "0.0.0.0";  # Listen on all interfaces
         http-port = cfg.httpPort;
         http-enabled = true;  # Explicitly enable HTTP
-        # Remove deprecated proxy setting
-        proxy = null;
-        # Use the new proxy configuration
-        http-relative-path = "/auth";
-        proxy-headers = "forwarded";
-        proxy-address-forwarding = "true";
-        proxy-trusted-addresses = "127.0.0.1,172.16.255.0/24";
-        hostname = "https://${cfg.hostname}";
-        hostname-admin = "https://${cfg.hostnameAdmin}";
+        hostname = "${cfg.hostname}"; # remove leading 'https://'
+        hostname-admin = "${cfg.hostnameAdmin}";
         hostname-strict = false;
         hostname-strict-https = false;
       };
@@ -176,7 +168,7 @@ with lib.luxnix; let
       CREDENTIALS_DIRECTORY = "/etc/secrets/vault";
     };
 
-    networking.firewall.allowedTCPPorts = [ cfg.httpPort cfg.httpsPort ];
+    networking.firewall.allowedTCPPorts = [ cfg.httpPort ];
   
   };
 

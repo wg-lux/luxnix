@@ -14,11 +14,12 @@ in {
     bindIP = mkOpt types.str "0.0.0.0" "IP address to bind Traefik to";
     sslCertPath = mkOpt types.path config.luxnix.generic-settings.sslCertificatePath "Path to SSL certificate";
     sslKeyPath = mkOpt types.path config.luxnix.generic-settings.sslCertificateKeyPath "Path to SSL key";
-    email = mkOpt types.str "admin@endoreg.intern" "Email address for Let's Encrypt";
-    dnsProvider = mkOpt types.str "cloudflare" "DNS provider for ACME DNS challenge";
-    dnsEnvVars = mkOpt types.attrs {} "Environment variables for DNS provider";
     keycloak = {
-      enable = mkBoolOpt false "Enable Keycloak routing";
+      enable = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Enable Keycloak routing";
+      };
       domain = mkOpt types.str "keycloak.endo-reg.net" "Keycloak domain";
       port = mkOpt types.port 9080 "Keycloak HTTP port";
     };
@@ -46,7 +47,7 @@ in {
 
     services.traefik = {
       enable = true;
-      staticConfigOptions = mkMerge [
+      staticConfigOptions = [
         {
           global = {
             checkNewVersion = false;
@@ -56,6 +57,7 @@ in {
           entryPoints = {
             web = {
               address = ":80";
+              asDefault = true;
               http.redirections.entryPoint = {
                 to = "websecure";
                 scheme = "https";
@@ -63,6 +65,7 @@ in {
             };
             websecure = {
               address = ":443";
+              asDefault = true;
             };
           };
 
@@ -78,6 +81,12 @@ in {
                 }
               ];
             }];
+          };
+
+          log = {
+            level = "INFO";
+            filePath = "${config.services.traefik.dataDir}/traefik.log";
+            format = "json";
           };
 
           api = mkIf cfg.dashboard {

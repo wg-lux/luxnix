@@ -17,7 +17,7 @@ in {
     keycloak = {
       enable = mkBoolOpt false "Enable Keycloak routing";
       domain = mkOpt types.str "keycloak.endo-reg.net" "Keycloak domain";
-      port = mkOpt types.port 9080 "Keycloak HTTP port";
+      port = mkOpt types.str "9080" "Keycloak HTTP port";
     };
   };
 

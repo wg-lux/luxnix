@@ -33,12 +33,14 @@
     keycloakHost.vpnIP = "172.16.255.12";
     postgres.main.enable = true;
     traefikHost.allowedIPs = ["172.16.255.106" "172.16.255.1" "127.0.0.1"];    traefikHost.dashboard = true;
-    traefikHost.dashboardHost = "traefik.endoreg.intern";
+    traefikHost.dashboardHost = "traefik.endo-reg.net";
     traefikHost.enable = true;
     traefikHost.insecure = false;
     traefikHost.keycloak.domain = "keycloak.endo-reg.net";
     traefikHost.keycloak.enable = true;
     traefikHost.keycloak.port = 9080;
+    traefikHost.sslCertPath = "/etc/secrets/vault/ssl_cert";
+    traefikHost.sslKeyPath = "/etc/secrets/vault/ssl_key";
     };
 
   services = {
@@ -59,7 +61,7 @@ generic-settings.postgres.enable = true;
 
 generic-settings.sensitiveServiceGroupName = "sensitiveServices";
 
-generic-settings.traefikHostDomain = "traefik.endoreg.local";
+generic-settings.traefikHostDomain = "traefik.endo-reg.net";
 
 generic-settings.traefikHostIp = "172.16.255.12";
 

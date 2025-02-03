@@ -27,7 +27,7 @@ group_luxnix:
   generic_settings.linux.kernelPackages: "pkgs.linuxPackages_6_12"
   generic_settings.adminVpnIp: '"172.16.255.106"'
   generic_settings.traefikHostIp: '"172.16.255.12"'
-  generic_settings.traefikHostDomain: '"traefik.endoreg.local"'
+  generic_settings.traefikHostDomain: '"traefik.endo-reg.net"'
   vault.enable: "true"
   vault.dir: '"/etc/secrets/vault"'
   vault.key: '"/etc/secrets/.key"' # Depreceated ?

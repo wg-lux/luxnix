@@ -2,7 +2,9 @@ traefik_host_roles:
   traefikHost.enable: "true"
   traefikHost.dashboard: "true"
   traefikHost.insecure: "false"
-  traefikHost.dashboardHost: '"traefik.endoreg.intern"'
+  traefikHost.dashboardHost: '"traefik.endo-reg.net"'
+  traefikHost.sslCertPath: '"/etc/secrets/vault/ssl_cert"'
+  traefikHost.sslKeyPath: '"/etc/secrets/vault/ssl_key"'
   traefikHost.allowedIPs:
     - "172.16.255.106"
     - "172.16.255.1"
