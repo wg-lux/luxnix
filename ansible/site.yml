@@ -43,7 +43,7 @@
 #     - local_endoreg_db
 
 - name: Set role keycloak_host for keycloak_host
-  hosts: s-02
+  hosts: gc-06
   become: true
   roles:
     - keycloak_host

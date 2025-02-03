@@ -22,6 +22,8 @@ ansible_groups:
 ansible_key_dir: '{{ luxnix_dest }}/secrets/ansible-vault-keys'
 ansible_key_source_dir: '{{ luxnix_dev_repo }}/secrets/ansible-vault-keys-source'
 ansible_python_interpreter: '{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python'
+ansible_roles:
+  - keycloak_host
 ansible_ssh_private_key_file: ~/.ssh/id_ed25519
 ansible_user: admin
 authentication:
@@ -125,5 +127,18 @@ os_extra_user_names:
 postgres_host_main_password_filename: SCRT_roles_system_password_postgres_host_main_password
 postgres_host_test_ip: 172.16.255.13
 postgres_host_test_password_filename: SCRT_roles_system_password_postgres_host_test_password
+role_psql_keycloak_pw_file: /etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password
+role_psql_keycloak_pw_src: /home/admin/.lxv/deploy/{{ inventory_hostname }}/SCRT_roles_system_password_keycloak_host_password
+role_roles:
+  keycloakHost.adminInitialPassword: '"admin"'
+  keycloakHost.adminUsername: '"admin"'
+  keycloakHost.dbPasswordfile: '"/etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password"'
+  keycloakHost.dbUsername: '"keycloak"'
+  keycloakHost.enable: 'true'
+  keycloakHost.hostname: '"keycloak.endo-reg.net"'
+  keycloakHost.hostnameAdmin: '"keycloak-admin.endo-reg.net"'
+  keycloakHost.httpPort: '9080'
+  keycloakHost.httpsPort: '9443'
+  keycloakHost.vpnIP: '"172.16.255.12"'
 secret_dir: /etc/secrets
 template_name: main

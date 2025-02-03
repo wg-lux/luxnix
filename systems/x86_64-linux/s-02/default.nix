@@ -21,16 +21,6 @@
     aglnet.client.enable = true;
     base-server.enable = true;
     endoreg-client.enable = false;
-    keycloakHost.adminInitialPassword = "admin";
-    keycloakHost.adminUsername = "admin";
-    keycloakHost.dbPasswordfile = "/etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password";
-    keycloakHost.dbUsername = "keycloak";
-    keycloakHost.enable = true;
-    keycloakHost.hostname = "keycloak.endo-reg.net";
-    keycloakHost.hostnameAdmin = "keycloak-admin.endo-reg.net";
-    keycloakHost.httpPort = 9080;
-    keycloakHost.httpsPort = 9443;
-    keycloakHost.vpnIP = "172.16.255.12";
     postgres.main.enable = true;
     traefikHost.allowedIPs = ["172.16.255.106" "172.16.255.1" "127.0.0.1"];    traefikHost.dashboard = true;
     traefikHost.dashboardHost = "traefik.endoreg.intern";

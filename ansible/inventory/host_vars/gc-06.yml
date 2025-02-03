@@ -7,6 +7,11 @@ luxnix_repo: "https://github.com/wg-lux/luxnix.git"
 luxnix_dest: "/home/admin/luxnix-production"
 luxnix_branch: "migrate-01"
 
+ansible_roles:
+  # - postgres_host_main
+  # - traefik_host
+  - keycloak_host
+
 extra_secret_names:
   - "SCRT_roles_system_password_postgres_host_main_password"
   - "SCRT_roles_system_password_postgres_host_test_password"

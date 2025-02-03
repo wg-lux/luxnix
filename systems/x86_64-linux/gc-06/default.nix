@@ -21,6 +21,16 @@
     aglnet.client.enable = true;
     endoreg-client.enable = true;
     postgres.default.enable = true;
+    keycloakHost.adminInitialPassword = "admin";
+    keycloakHost.adminUsername = "admin";
+    keycloakHost.dbPasswordfile = "/etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password";
+    keycloakHost.dbUsername = "keycloak";
+    keycloakHost.enable = true;
+    keycloakHost.hostname = "keycloak.endo-reg.net";
+    keycloakHost.hostnameAdmin = "keycloak-admin.endo-reg.net";
+    keycloakHost.httpPort = 9080;
+    keycloakHost.httpsPort = 9443;
+    keycloakHost.vpnIP = "172.16.255.12";
     custom-packages.baseDevelopment = true;
     custom-packages.videoEditing = true;
     custom-packages.visuals = true;
