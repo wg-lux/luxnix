@@ -25,6 +25,7 @@ ansible_python_interpreter: '{{ luxnix_dest }}/.devenv/state/venv/bin/python'
 ansible_roles:
   - postgres_host_main
   - traefik_host
+  - keycloak_host
 ansible_ssh_private_key_file: ~/.ssh/id_ed25519
 ansible_user: admin
 authentication:
@@ -112,7 +113,20 @@ postgres_host_test_password_filename: SCRT_roles_system_password_postgres_host_t
 role_luxnix:
   generic-settings.sslCertificateKeyPath: '"/home/admin/.ssl/endo-reg-net.key"'
   generic-settings.sslCertificatePath: '"/home/admin/.ssl/__endo-reg_net.pem"'
+role_psql_keycloak_pw_file: /etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password
+role_psql_keycloak_pw_src: /home/admin/.lxv/deploy/{{ inventory_hostname }}/SCRT_roles_system_password_keycloak_host_password
 role_roles:
+  keycloakHost.adminInitialPassword: '"admin"'
+  keycloakHost.adminUsername: '"admin"'
+  keycloakHost.dbPasswordfile: '"/etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password"'
+  keycloakHost.dbUsername: '"keycloak"'
+  keycloakHost.enable: 'true'
+  keycloakHost.homeDir: '"/home/keycloak"'
+  keycloakHost.hostname: '"keycloak.endo-reg.net"'
+  keycloakHost.hostnameAdmin: '"keycloak-admin.endo-reg.net"'
+  keycloakHost.httpPort: '9080'
+  keycloakHost.httpsPort: '9444'
+  keycloakHost.vpnIP: '"172.16.255.12"'
   postgres.main.enable: 'true'
   traefikHost.allowedIPs:
     - 172.16.255.106

@@ -100,8 +100,7 @@ all:
       - local_endoreg_db
       - test_group
     ansible_host: 172.16.255.106
-    ansible_role_names:
-      - keycloak_host
+    ansible_role_names: []
     extra_secret_names:
       - SCRT_roles_system_password_postgres_host_main_password
       - SCRT_roles_system_password_postgres_host_test_password
@@ -130,8 +129,7 @@ all:
     subnet: 172.16.255.
     vars:
       ansible_python_interpreter: '{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python'
-      ansible_roles:
-        - keycloak_host
+      ansible_roles: []
       extra_secret_names:
         - SCRT_roles_system_password_postgres_host_main_password
         - SCRT_roles_system_password_postgres_host_test_password
@@ -173,7 +171,7 @@ all:
         custom_packages.videoEditing: 'true'
         custom_packages.visuals: 'true'
       host_services: {}
-      luxnix_branch: migrate-01
+      luxnix_branch: traefik
       luxnix_dest: /home/admin/luxnix-production
       luxnix_dev_repo: /home/admin/dev/luxnix
       luxnix_repo: https://github.com/wg-lux/luxnix.git
@@ -516,6 +514,7 @@ all:
     ansible_role_names:
       - postgres_host_main
       - traefik_host
+      - keycloak_host
     extra_secret_names: []
     extra_user_names:
       - admin
@@ -542,6 +541,7 @@ all:
       ansible_roles:
         - postgres_host_main
         - traefik_host
+        - keycloak_host
       host_luxnix:
         generic_settings.hostPlatform: '"x86_64-linux"'
         generic_settings.linux.cpuMicrocode: '"intel"'
@@ -886,7 +886,7 @@ roles:
         keycloakHost.hostnameAdmin: '"keycloak-admin.endo-reg.net"'
         keycloakHost.httpPort: '9080'
         keycloakHost.httpsPort: '9444'
-        keycloakHost.vpnIP: '"172.16.255.106"'
+        keycloakHost.vpnIP: '"172.16.255.12"'
   - extra_user_names: []
     files: []
     name: lx-anonymizer
