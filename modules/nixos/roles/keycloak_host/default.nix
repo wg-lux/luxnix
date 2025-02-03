@@ -154,7 +154,7 @@ with lib.luxnix; let
         port = config.services.postgresql.settings.port;
       };
       settings = {
-        hostname = cfg.hostname;
+        # hostname = cfg.hostname;
         http-host = "0.0.0.0";  # Listen on all interfaces
         http-port = cfg.httpPort;
         http-enabled = true;  # Explicitly enable HTTP
@@ -165,8 +165,8 @@ with lib.luxnix; let
         proxy-headers = "forwarded";
         proxy-address-forwarding = "true";
         proxy-trusted-addresses = "127.0.0.1,172.16.255.0/24";
-        hostname-url = "https://${cfg.hostname}";
-        hostname-admin-url = "https://${cfg.hostnameAdmin}";
+        hostname = "https://${cfg.hostname}";
+        hostname-admin = "https://${cfg.hostnameAdmin}";
         hostname-strict = false;
         hostname-strict-https = false;
       };
