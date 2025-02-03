@@ -58,7 +58,21 @@ in {
             };
             websecure = {
               address = ":443";
-              # forwardedHeaders.insecure = cfg.insecure;
+              # Configure TLS settings at entrypoint level
+              http.tls = {
+                certResolver = "default";
+                domains = [
+                  {
+                    main = "endo-reg.net";
+                    sans = ["*.endo-reg.net"];
+                  }
+                ];
+                # Use the vault certificate files
+                certificates = [{
+                  certFile = config.luxnix.vault.sslCert;
+                  keyFile = config.luxnix.vault.sslKey;
+                }];
+              };
             };
           };
 
@@ -136,12 +150,6 @@ in {
             };
           };
 
-          tls = {
-            certificates = [{
-              certFile = config.luxnix.vault.sslCert;
-              keyFile = config.luxnix.vault.sslKey;
-            }];
-          };
         }
         cfg.staticConfigOptions
       ];
