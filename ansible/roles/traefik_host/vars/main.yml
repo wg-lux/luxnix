@@ -15,4 +15,4 @@ traefik_host_luxnix:
   # generic-settings.sslCertificatePath: '"/home/admin/.ssl/__endo-reg_net.pem"'
   # generic-settings.sslCertificateKeyPath: '"/home/admin/.ssl/endo-reg-net.key"'
   generic-settings.sslCertificatePath: '"/etc/secrets/vault/ssl_cert"'
-  generic-settings.sslCertificateKeyPath: '"/etc/secrets/vault/ssl_cert"'
+  generic-settings.sslCertificateKeyPath: '"/etc/secrets/vault/ssl_key"'

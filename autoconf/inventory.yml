@@ -883,7 +883,6 @@ roles:
         keycloakHost.enable: 'true'
         keycloakHost.homeDir: '"/home/keycloak"'
         keycloakHost.hostname: '"keycloak.endo-reg.net"'
-        keycloakHost.hostnameAdmin: '"keycloak-admin.endo-reg.net"'
         keycloakHost.httpPort: '9080'
         keycloakHost.httpsPort: '9444'
         keycloakHost.vpnIP: '"172.16.255.12"'
@@ -947,8 +946,8 @@ roles:
     name: traefik_host
     vars:
       role_luxnix:
-        generic-settings.sslCertificateKeyPath: '"/home/admin/.ssl/endo-reg-net.key"'
-        generic-settings.sslCertificatePath: '"/home/admin/.ssl/__endo-reg_net.pem"'
+        generic-settings.sslCertificateKeyPath: '"/etc/secrets/vault/ssl_key"'
+        generic-settings.sslCertificatePath: '"/etc/secrets/vault/ssl_cert"'
       role_roles:
         traefikHost.allowedIPs:
           - 172.16.255.106
@@ -958,3 +957,6 @@ roles:
         traefikHost.dashboardHost: '"traefik.endoreg.intern"'
         traefikHost.enable: 'true'
         traefikHost.insecure: 'false'
+        traefikHost.keycloak.domain: '"keycloak.endo-reg.net"'
+        traefikHost.keycloak.enable: 'true'
+        traefikHost.keycloak.port: '9080'

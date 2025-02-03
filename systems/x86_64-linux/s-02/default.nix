@@ -28,7 +28,6 @@
     keycloakHost.enable = true;
     keycloakHost.homeDir = "/home/keycloak";
     keycloakHost.hostname = "keycloak.endo-reg.net";
-    keycloakHost.hostnameAdmin = "keycloak-admin.endo-reg.net";
     keycloakHost.httpPort = 9080;
     keycloakHost.httpsPort = 9444;
     keycloakHost.vpnIP = "172.16.255.12";
@@ -37,6 +36,9 @@
     traefikHost.dashboardHost = "traefik.endoreg.intern";
     traefikHost.enable = true;
     traefikHost.insecure = false;
+    traefikHost.keycloak.domain = "keycloak.endo-reg.net";
+    traefikHost.keycloak.enable = true;
+    traefikHost.keycloak.port = 9080;
     };
 
   services = {
@@ -77,9 +79,9 @@ vault.key = "/etc/secrets/.key";
 
 vault.psk = "/etc/secrets/.psk";
 
-generic-settings.sslCertificateKeyPath = "/home/admin/.ssl/endo-reg-net.key";
+generic-settings.sslCertificateKeyPath = "/etc/secrets/vault/ssl_key";
 
-generic-settings.sslCertificatePath = "/home/admin/.ssl/__endo-reg_net.pem";
+generic-settings.sslCertificatePath = "/etc/secrets/vault/ssl_cert";
 
 generic-settings.hostPlatform = "x86_64-linux";
 
