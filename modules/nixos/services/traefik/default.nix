@@ -47,7 +47,7 @@ in {
 
     services.traefik = {
       enable = true;
-      staticConfigOptions = [
+      staticConfigOptions = mkMerge [
         {
           global = {
             checkNewVersion = false;
