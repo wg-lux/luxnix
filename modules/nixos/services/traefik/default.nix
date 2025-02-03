@@ -27,7 +27,13 @@ in {
       traefik = {
         isSystemUser = true;
         group = "traefik";
-        extraGroups = [ "docker" "podman" ];
+        extraGroups = [ 
+          "docker"
+          "podman"
+          "networkmanager"
+          "sslCert"
+          "sensitiveServices"
+          ];
         home = "/var/lib/traefik";
         createHome = true;
       };
@@ -128,6 +134,13 @@ in {
                 };
               };
             };
+          };
+
+          tls = {
+            certificates = [{
+              certFile = config.luxnix.vault.sslCert;
+              keyFile = config.luxnix.vault.sslKey;
+            }];
           };
         }
         cfg.staticConfigOptions
