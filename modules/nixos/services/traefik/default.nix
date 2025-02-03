@@ -94,6 +94,39 @@ in {
 
           # Configure TLS with existing wildcard certificate
   
+          tcp = {
+            routers = {
+              keycloak_router = {
+                entryPoints = [ "websecure" ];
+                rule = "HostSNI(`keycloak.endo-reg.net`)";
+                service = "keycloak_svc";
+              };
+              keycloak_admin_router = {
+                entryPoints = [ "websecure" ];
+                rule = "HostSNI(`keycloak-admin.endo-reg.net`)";
+                service = "keycloak_svc";
+                middlewares = [ "keycloak_admin_ip_whitelist" ];
+              };
+            };
+            services = {
+              keycloak_svc = {
+                loadBalancer = {
+                  servers = [
+                    {
+                      address = "172.16.255.12:9444";
+                    }
+                  ];
+                };
+              };
+            };
+            middlewares = {
+              keycloak_admin_ip_whitelist = {
+                ipWhiteList = {
+                  sourceRange = [ "172.16.255.0/24" ];
+                };
+              };
+            };
+          };
         }
         cfg.staticConfigOptions
       ];
