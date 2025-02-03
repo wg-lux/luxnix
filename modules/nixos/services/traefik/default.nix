@@ -93,6 +93,21 @@ in {
                   sourceRange = cfg.allowedIPs;
                 };
               };
+              keycloak-headers = {
+                headers = {
+                  customRequestHeaders = {
+                    "X-Forwarded-Proto" = "https";
+                    "X-Forwarded-Host" = "keycloak.endo-reg.net";
+                    "X-Forwarded-For" = "true";
+                    "X-Real-IP" = "true";
+                  };
+                };
+              };
+              keycloak_admin_ip_whitelist = {
+                ipWhiteList = {
+                  sourceRange = cfg.allowedIPs;
+                };
+              };
             };
             routers = {
               dashboard = {
@@ -102,41 +117,28 @@ in {
                 entryPoints = ["websecure"];
                 tls = false;
               };
-            };
-          };
-
-          # Remove TCP passthrough since we want Traefik to handle TLS
-          tcp = {
-            routers = {
-              keycloak_router = {
-                entryPoints = [ "websecure" ];
-                rule = "HostSNI(`keycloak.endo-reg.net`)";
-                service = "keycloak_svc";
-                # Remove tls.passthrough
+              keycloak = {
+                rule = "Host(`keycloak.endo-reg.net`)";
+                service = "keycloak";
+                entryPoints = ["websecure"];
+                middlewares = ["keycloak-headers"];
+                tls = {};
               };
-              keycloak_admin_router = {
-                entryPoints = [ "websecure" ];
-                rule = "HostSNI(`keycloak-admin.endo-reg.net`)";
-                service = "keycloak_svc";
-                middlewares = [ "keycloak_admin_ip_whitelist" ];
-                tls.passthrough = true;
+              keycloak_admin = {
+                rule = "Host(`keycloak-admin.endo-reg.net`)";
+                service = "keycloak";
+                middlewares = ["keycloak_admin_ip_whitelist"];
+                entryPoints = ["websecure"];
+                tls = {};
               };
             };
             services = {
-              keycloak_svc = {
+              keycloak = {
                 loadBalancer = {
                   servers = [
-                    {
-                      address = "172.16.255.12:9444";
-                    }
+                    { url = "http://172.16.255.3:9080"; }  # Note the semicolon here
                   ];
-                };
-              };
-            };
-            middlewares = {
-              keycloak_admin_ip_whitelist = {
-                ipWhiteList = {
-                  sourceRange = [ "172.16.255.0/24" ];
+                  passHostHeader = true;
                 };
               };
             };
@@ -147,18 +149,9 @@ in {
       ];
 
     };
-
-    # # Modified hosts entry to use VPN IP instead of localhost
-    # networking.hosts = mkIf (hasSuffix "endoreg.intern" cfg.dashboardHost) {
-    #   "${cfg.bindIP}" = [ cfg.dashboardHost ];
-    # };
-
-    # Remove the self-signed certificate parts
     systemd.tmpfiles.rules = [
       "d /etc/traefik/config 0755 root root -"
     ];
-
-    # Remove create-traefik-cert service since we're using existing certificates
 
     # Open required ports
     networking.firewall = {

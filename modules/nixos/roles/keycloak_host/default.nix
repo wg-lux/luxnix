@@ -158,13 +158,17 @@ with lib.luxnix; let
         http-host = "0.0.0.0";  # Listen on all interfaces
         http-port = cfg.httpPort;
         http-enabled = true;  # Explicitly enable HTTP
-        # Remove https-port setting since we're not using HTTPS directly
-        proxy-headers = "xforwarded";
+        # Remove deprecated proxy setting
+        proxy = null;
+        # Use the new proxy configuration
+        http-relative-path = "/auth";
+        proxy-headers = "forwarded";
+        proxy-address-forwarding = "true";
         proxy-trusted-addresses = "127.0.0.1,172.16.255.0/24";
+        hostname-url = "https://${cfg.hostname}";
+        hostname-admin-url = "https://${cfg.hostnameAdmin}";
         hostname-strict = false;
-        hostname-strict-https = true;
-        domain = cfg.hostname;
-        domain-admin = cfg.hostnameAdmin;
+        hostname-strict-https = false;
       };
     };
 
