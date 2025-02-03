@@ -71,12 +71,18 @@ in {
             certificates = [{
               certFile = cfg.sslCertPath;
               keyFile = cfg.sslKeyPath;
+              domains = [
+                {
+                  main = "endo-reg.net";
+                  sans = [ "*.endo-reg.net" ];
+                }
+              ];
             }];
           };
 
           api = mkIf cfg.dashboard {
             dashboard = true;
-            insecure = true;  # Changed to false for security
+            insecure = false;
           };
 
           providers = {
