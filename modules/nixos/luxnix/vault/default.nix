@@ -8,7 +8,8 @@ with lib;
 with lib.luxnix; let
   cfg = config.luxnix.vault;
   adminName = config.user.admin.name;
-  
+  sensitiveServiceGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
+
 in {
   options.luxnix.vault = {
     enable = mkEnableOption "Enable Default Vault configuration";
@@ -48,7 +49,7 @@ in {
   config = mkIf cfg.enable {
     # make sure vault dir exists with correct permissions (700)
     systemd.tmpfiles.rules = [
-      "d ${cfg.dir} 0700 ${adminName} users"
+      "d ${cfg.dir} 0750 ${adminName} ${sensitiveServiceGroupName}"
     ];
   };
 }

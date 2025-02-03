@@ -5,12 +5,9 @@ ansible_python_interpreter: "{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python
 luxnix_dev_repo: "/home/admin/dev/luxnix"
 luxnix_repo: "https://github.com/wg-lux/luxnix.git"
 luxnix_dest: "/home/admin/luxnix-production"
-luxnix_branch: "migrate-01"
+luxnix_branch: "traefik"
 
-ansible_roles:
-  # - postgres_host_main
-  # - traefik_host
-  - keycloak_host
+ansible_roles: []
 
 extra_secret_names:
   - "SCRT_roles_system_password_postgres_host_main_password"

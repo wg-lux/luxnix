@@ -21,7 +21,7 @@ with lib.luxnix; let
 
     httpsPort = mkOption {
       type = types.int;
-      default = 9443;
+      default = 9843;
       description = "Port to run keycloak on";
     };
 
@@ -37,6 +37,12 @@ with lib.luxnix; let
       description = "Admin initial password for keycloak";
     };
 
+    homeDir = mkOption {
+      type = types.str;
+      default = "/home/keycloak";
+      description = "Home directory for keycloak";
+    };
+
     dbUsername = mkOption {
       type = types.str;
       default = "keycloak";
@@ -45,7 +51,7 @@ with lib.luxnix; let
 
     dbPasswordfile = mkOption {
       type = types.str;
-      default = "/etc/secrets/vault/SCRT_local_password_admin_password";
+      default = "/etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password";
       # default = "/etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password";
       # default = "/home/${cfg.dbUserName}/keycloak-db-password";
       description = "path to passwordfile for keycloak";
@@ -91,12 +97,17 @@ with lib.luxnix; let
     users.users = {
       keycloak = {
         # isNormalUser = true;
-        home = "/var/lib/keycloak";
-        createHome = true;
+        # home = cfg.homeDir;
+        # createHome = true;
         # shell = "/sbin/nologin";
-        isNormalUser = true;
+        # hashedPasswordFile = "${cfg.dbPasswordfile}_hash";
+        # isNormalUser = true;
+        isSystemUser = true;
         group = cfg.dbUsername;
-        extraGroups = [ config.luxnix.generic-settings.sensitiveServiceGroupName ];
+        extraGroups = [ 
+          config.luxnix.generic-settings.sensitiveServiceGroupName 
+          "sslCert"
+        ];
         # uid = cfg.uid;
       };
     };
@@ -126,9 +137,9 @@ with lib.luxnix; let
       enable = true;
       initialAdminPassword = cfg.adminInitialPassword;
       database = {
-        createLocally = false;
+        createLocally = true;
         username = cfg.dbUsername; # 
-        # useSSL = false;
+        # useSSL = false; #FIXME harden
         passwordFile = "${cfg.dbPasswordfile}";
         # Add explicit type to ensure proper database configuration
         type = "postgresql";
@@ -140,6 +151,7 @@ with lib.luxnix; let
       settings = {
         hostname = cfg.hostname;
         http-host = cfg.vpnIP;
+        # http-host = "0.0.0.0"; #FIXME harden
         http-port = cfg.httpPort;
         https-port = cfg.httpsPort; 
         # proxy = conf.proxy;# edge
@@ -150,8 +162,16 @@ with lib.luxnix; let
       sslCertificate = config.luxnix.generic-settings.sslCertificatePath;
     };
 
+    systemd.services.keycloak.environment = {
+      CREDENTIALS_DIRECTORY = "/etc/secrets/vault";
+    };
 
     networking.firewall.allowedTCPPorts = [ cfg.httpPort cfg.httpsPort ];
+  
+    # add hosts entry for keycloak
+    networking.hosts = {
+      "${cfg.vpnIP}" = [ cfg.hostname cfg.hostnameAdmin ];
+    };
   };
 
 }

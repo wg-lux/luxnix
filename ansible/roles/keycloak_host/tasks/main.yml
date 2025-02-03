@@ -1,0 +1,16 @@
+- name: Read keycloak database password from file
+  ansible.builtin.command: "cat /etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password"
+  register: keycloak_db_password
+  become: true
+  become_user: root
+  changed_when: false
+  no_log: false
+
+- name: Set PostgreSQL password for keycloak user
+  community.postgresql.postgresql_user:
+    name: keycloak
+    password: "{{ keycloak_db_password.stdout }}"
+    state: present
+  become: true
+  become_user: postgres
+  no_log: false

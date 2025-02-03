@@ -10,6 +10,13 @@ with lib.luxnix; let
   hostname = config.networking.hostName;
   username = config.user.admin.name;
 
+
+  sensitiveServiceGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
+  adminUserName = config.user.admin.name;
+  keycloakEnabled = config.roles.keycloakHost.enable;
+  keycloakUserName = config.roles.keycloakHost.dbUsername;
+
+
 in {
   options.luxnix.generic-settings = {
     enable = mkEnableOption "Enable generic settings";
@@ -185,12 +192,16 @@ in {
 
   config = {
     # Create Sensitive Service Group
+    #TODO Migrate to groups
     users.groups = {
       "${cfg.sensitiveServiceGroupName}" = {
         gid = cfg.sensitiveServiceGID;
+        name = sensitiveServiceGroupName;
+        members = [ 
+          adminUserName
+        ] ++ ( if keycloakEnabled then [ keycloakUserName ] else [] );
       };
     };
-
     # Set PostGres Authentication & IdentMap
     roles.postgres.default.enable = cfg.postgres.enable;
 
