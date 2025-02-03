@@ -14,7 +14,11 @@ in {
     bindIP = mkOpt types.str "0.0.0.0" "IP address to bind Traefik to";
     sslCertPath = mkOpt types.path config.luxnix.generic-settings.sslCertificatePath "Path to SSL certificate";
     sslKeyPath = mkOpt types.path config.luxnix.generic-settings.sslCertificateKeyPath "Path to SSL key";
-
+    keycloak = {
+      enable = mkBoolOpt false "Enable Keycloak routing";
+      domain = mkOpt types.str "keycloak.endo-reg.net" "Keycloak domain";
+      port = mkOpt types.port 9080 "Keycloak HTTP port";
+    };
   };
 
   config = mkIf cfg.enable {
@@ -28,6 +32,11 @@ in {
       bindIP = cfg.bindIP;
       sslCertPath = cfg.sslCertPath;
       sslKeyPath = cfg.sslKeyPath;
+      keycloak = {
+        enable = cfg.keycloak.enable;
+        domain = cfg.keycloak.domain;
+        port = cfg.keycloak.port;
+      };
     };
   };
 }

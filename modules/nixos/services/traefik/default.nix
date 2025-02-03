@@ -17,6 +17,11 @@ in {
     email = mkOpt types.str "admin@endoreg.intern" "Email address for Let's Encrypt";
     dnsProvider = mkOpt types.str "cloudflare" "DNS provider for ACME DNS challenge";
     dnsEnvVars = mkOpt types.attrs {} "Environment variables for DNS provider";
+    keycloak = {
+      enable = mkBoolOpt false "Enable Keycloak routing";
+      domain = mkOpt types.str "keycloak.endo-reg.net" "Keycloak domain";
+      port = mkOpt types.port 9080 "Keycloak HTTP port";
+    };
   };
 
   config = mkIf cfg.enable {
@@ -86,49 +91,12 @@ in {
             };
           };
 
-          http = {
-            middlewares = {
-              ipwhitelist = {
-                ipWhiteList = {
-                  sourceRange = cfg.allowedIPs;
-                };
-              };
-              keycloak-headers = {
-                headers = {
-                  customRequestHeaders = {
-                    "X-Forwarded-Proto" = "https";
-                    "X-Forwarded-Host" = "keycloak.endo-reg.net";
-                    "X-Forwarded-For" = "true";
-                    "X-Real-IP" = "true";
-                  };
-                };
-              };
-              keycloak_admin_ip_whitelist = {
-                ipWhiteList = {
-                  sourceRange = cfg.allowedIPs;
-                };
-              };
-            };
+          http = mkIf cfg.keycloak.enable {
             routers = {
-              dashboard = {
-                rule = "Host(`${cfg.dashboardHost}`)";
-                service = "api@internal";
-                middlewares = ["ipwhitelist"];
-                entryPoints = ["websecure"];
-                tls = false;
-              };
               keycloak = {
-                rule = "Host(`keycloak.endo-reg.net`)";
+                rule = "Host(`${cfg.keycloak.domain}`)";
                 service = "keycloak";
-                entryPoints = ["websecure"];
-                middlewares = ["keycloak-headers"];
-                tls = {};
-              };
-              keycloak_admin = {
-                rule = "Host(`keycloak-admin.endo-reg.net`)";
-                service = "keycloak";
-                middlewares = ["keycloak_admin_ip_whitelist"];
-                entryPoints = ["websecure"];
+                entryPoints = [ "websecure" ];
                 tls = {};
               };
             };
@@ -136,9 +104,8 @@ in {
               keycloak = {
                 loadBalancer = {
                   servers = [
-                    { url = "http://172.16.255.3:9080"; }  # Note the semicolon here
+                    { url = "http://127.0.0.1:${toString cfg.keycloak.port}"; }
                   ];
-                  passHostHeader = true;
                 };
               };
             };
@@ -153,7 +120,6 @@ in {
       "d /etc/traefik/config 0755 root root -"
     ];
 
-    # Open required ports
     networking.firewall = {
       allowedTCPPorts = [ 80 443 ];
       allowedTCPPortRanges = mkIf cfg.dashboard [
