@@ -100,12 +100,14 @@ in {
                 entryPoints = [ "websecure" ];
                 rule = "HostSNI(`keycloak.endo-reg.net`)";
                 service = "keycloak_svc";
+                tls.passthrough = true;
               };
               keycloak_admin_router = {
                 entryPoints = [ "websecure" ];
                 rule = "HostSNI(`keycloak-admin.endo-reg.net`)";
                 service = "keycloak_svc";
                 middlewares = [ "keycloak_admin_ip_whitelist" ];
+                tls.passthrough = true;
               };
             };
             services = {
@@ -133,10 +135,10 @@ in {
 
     };
 
-    # Modified hosts entry to use VPN IP instead of localhost
-    networking.hosts = mkIf (hasSuffix "endoreg.intern" cfg.dashboardHost) {
-      "${cfg.bindIP}" = [ cfg.dashboardHost ];
-    };
+    # # Modified hosts entry to use VPN IP instead of localhost
+    # networking.hosts = mkIf (hasSuffix "endoreg.intern" cfg.dashboardHost) {
+    #   "${cfg.bindIP}" = [ cfg.dashboardHost ];
+    # };
 
     # Remove the self-signed certificate parts
     systemd.tmpfiles.rules = [

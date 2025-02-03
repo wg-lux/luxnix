@@ -173,10 +173,6 @@ with lib.luxnix; let
 
     networking.firewall.allowedTCPPorts = [ cfg.httpPort cfg.httpsPort ];
   
-    # add hosts entry for keycloak
-    networking.hosts = {
-      "${cfg.vpnIP}" = [ cfg.hostname cfg.hostnameAdmin ];
-    };
   };
 
 }
