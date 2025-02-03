@@ -158,7 +158,7 @@ with lib.luxnix; let
         http-port = cfg.httpPort;
         http-enabled = true;  # Explicitly enable HTTP
         hostname = "${cfg.hostname}"; # remove leading 'https://'
-        hostname-admin = "https://${cfg.hostnameAdmin}";
+        # hostname-admin = "https://${cfg.hostnameAdmin}";
         hostname-strict = false;
         hostname-strict-https = false;
       };
