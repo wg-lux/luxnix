@@ -158,7 +158,7 @@ with lib.luxnix; let
         http-host = "0.0.0.0";  # Listen on all interfaces
         http-port = cfg.httpPort;
         https-port = cfg.httpsPort;
-        proxy-headers = ["forwarded" "x-forwarded-for" "x-forwarded-proto" "x-forwarded-host"];
+        proxy = "passthrough";
         hostname-strict = false;
         hostname-strict-https = true;
         domain = cfg.hostname;
