@@ -3,7 +3,9 @@
 template_name: "main"
 
 ansible_roles:
-  - "postgres_host_main"
+  - postgres_host_main
+  - traefik_host
+  - keycloak_host
 
 host_roles: {}
 host_services: {}

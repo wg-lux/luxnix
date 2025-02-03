@@ -40,10 +40,15 @@ endoreg_db_dest: /home/admin/endoreg-db-production
 endoreg_db_repo: https://github.com/wg-lux/endoreg-db.git
 group_luxnix:
   boot_decryption_stick.enable: 'true'
+  dns.enable: 'true'
   generic_settings.adminVpnIp: '"172.16.255.106"'
   generic_settings.configurationPathRelative: '"lx-production"'
   generic_settings.enable: 'true'
   generic_settings.linux.kernelPackages: pkgs.linuxPackages_6_12
+  generic_settings.postgres.enable: 'true'
+  generic_settings.sensitiveServiceGroupName: '"sensitiveServices"'
+  generic_settings.traefikHostDomain: '"traefik.endoreg.local"'
+  generic_settings.traefikHostIp: '"172.16.255.12"'
   gpu_eval.enable: 'true'
   maintenance.autoUpdates.dates: '"09:00"'
   maintenance.autoUpdates.enable: 'true'

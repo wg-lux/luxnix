@@ -21,7 +21,22 @@
     aglnet.client.enable = true;
     base-server.enable = true;
     endoreg-client.enable = false;
+    keycloakHost.adminInitialPassword = "admin";
+    keycloakHost.adminUsername = "admin";
+    keycloakHost.dbPasswordfile = "/etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password";
+    keycloakHost.dbUsername = "keycloak";
+    keycloakHost.enable = true;
+    keycloakHost.homeDir = "/home/keycloak";
+    keycloakHost.hostname = "keycloak.endo-reg.net";
+    keycloakHost.hostnameAdmin = "keycloak-admin.endo-reg.net";
+    keycloakHost.httpPort = 9080;
+    keycloakHost.httpsPort = 9444;
+    keycloakHost.vpnIP = "172.16.255.12";
     postgres.main.enable = true;
+    traefikHost.allowedIPs = ["172.16.255.106" "172.16.255.1" "127.0.0.1"];    traefikHost.dashboard = true;
+    traefikHost.dashboardHost = "traefik.endoreg.intern";
+    traefikHost.enable = true;
+    traefikHost.insecure = false;
     };
 
   services = {
@@ -30,11 +45,21 @@
   luxnix = {
     boot-decryption-stick.enable = true;
 
+dns.enable = true;
+
 generic-settings.adminVpnIp = "172.16.255.106";
 
 generic-settings.enable = true;
 
 generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
+
+generic-settings.postgres.enable = true;
+
+generic-settings.sensitiveServiceGroupName = "sensitiveServices";
+
+generic-settings.traefikHostDomain = "traefik.endoreg.local";
+
+generic-settings.traefikHostIp = "172.16.255.12";
 
 maintenance.autoUpdates.dates = "04:00";
 
@@ -52,27 +77,11 @@ vault.key = "/etc/secrets/.key";
 
 vault.psk = "/etc/secrets/.psk";
 
-generic-settings.postgres.activeAuthentication = ''
-#type database DBuser address auth-method optional_ident_map
-local sameuser all peer map=superuser_map
-host  all all ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
-host  replication ${config.roles.postgres.main.replUser} ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
-host  ${config.roles.postgres.main.devUser} ${config.roles.postgres.main.devUser} ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
-host  all postgres ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
-''; 
-  generic-settings.postgres.activeIdentMap = ''
-# ArbitraryMapName systemUser DBUser
-superuser_map      root      postgres
-superuser_map      root      ${config.roles.postgres.main.replUser}
-superuser_map      ${config.user.admin.name}     ${config.user.admin.name}
-superuser_map      ${config.user.admin.name}     postgres
-superuser_map      ${config.user.admin.name}     endoregClient
-superuser_map      postgres  postgres
+generic-settings.sslCertificateKeyPath = "/home/admin/.ssl/endo-reg-net.key";
 
-# Let other names login as themselves
-superuser_map      /^(.*)$   \1
-''; 
-  generic-settings.hostPlatform = "x86_64-linux";
+generic-settings.sslCertificatePath = "/home/admin/.ssl/__endo-reg_net.pem";
+
+generic-settings.hostPlatform = "x86_64-linux";
 
 generic-settings.linux.cpuMicrocode = "intel";
 

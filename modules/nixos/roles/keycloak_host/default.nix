@@ -7,15 +7,10 @@
 with lib; 
 with lib.luxnix; let
 
-  cfg = config.services.luxnix.keycloak;
+  cfg = config.roles.keycloakHost;
 
-  appendAuth = ''
-    host    ${cfg.dbUsername} ${cfg.dbUsername} 127.0.0.1/32 scram-sha-256
-  '';
-  keycloakAuthentication = config.luxnix.generic-settings.postgres.defaultAuthentication + appendAuth;
-
-in {
-  options.services.luxnix.keycloak = {
+  in {
+  options.roles.keycloakHost = {
     enable = mkBoolOpt false "Enable keycloak";
 
     httpPort = mkOption {
@@ -26,7 +21,7 @@ in {
 
     httpsPort = mkOption {
       type = types.int;
-      default = 9443;
+      default = 9843;
       description = "Port to run keycloak on";
     };
 
@@ -42,6 +37,12 @@ in {
       description = "Admin initial password for keycloak";
     };
 
+    homeDir = mkOption {
+      type = types.str;
+      default = "/home/keycloak";
+      description = "Home directory for keycloak";
+    };
+
     dbUsername = mkOption {
       type = types.str;
       default = "keycloak";
@@ -50,7 +51,8 @@ in {
 
     dbPasswordfile = mkOption {
       type = types.str;
-      default = "/etc/keycloak/db-password";
+      default = "/etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password";
+      # default = "/etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password";
       # default = "/home/${cfg.dbUserName}/keycloak-db-password";
       description = "path to passwordfile for keycloak";
     };
@@ -92,17 +94,21 @@ in {
       }  
     ];
 
-    # tmpfilerule to make sure /etc/keycloak exists and  belongs to keycloak user
-
     users.users = {
       keycloak = {
         # isNormalUser = true;
-        # home = "/var/lib/keycloak";
+        # home = cfg.homeDir;
         # createHome = true;
         # shell = "/sbin/nologin";
+        # hashedPasswordFile = "${cfg.dbPasswordfile}_hash";
+        # isNormalUser = true;
+        isSystemUser = true;
         group = cfg.dbUsername;
-        extraGroups = [ config.luxnix.generic-settings.sensitiveServiceGroupName ];
-        uid = cfg.uid;
+        extraGroups = [ 
+          config.luxnix.generic-settings.sensitiveServiceGroupName 
+          "sslCert"
+        ];
+        # uid = cfg.uid;
       };
     };
 
@@ -112,22 +118,31 @@ in {
       };
     };
 
-    # TODO REMOVE AFTER PROTOTYPING
-    ## provide password file using etc files
-    environment.etc."keycloak/db-password".text = ''''; #  ${cfg.adminInitialPassword}
-    
-    luxnix.generic-settings.postgres.activeAuthentication = keycloakAuthentication;
-
     services.postgresql.ensureDatabases = [ cfg.dbUsername ];
+
+    # Ensure password file permissions
+    systemd.services.keycloak.serviceConfig = {
+      SupplementaryGroups = [ config.luxnix.generic-settings.sensitiveServiceGroupName ];
+    };
+
+    # Ensure the password file exists and has correct permissions
+    system.activationScripts.keycloakSetup = ''
+      if [ -f ${cfg.dbPasswordfile} ]; then
+        chown root:${config.luxnix.generic-settings.sensitiveServiceGroupName} ${cfg.dbPasswordfile}
+        chmod 640 ${cfg.dbPasswordfile}
+      fi
+    '';
 
     services.keycloak = {
       enable = true;
       initialAdminPassword = cfg.adminInitialPassword;
       database = {
-        # createLocally = true;
+        createLocally = true;
         username = cfg.dbUsername; # 
-        # useSSL = false;
-        passwordFile = cfg.dbPasswordfile;
+        # useSSL = false; #FIXME harden
+        passwordFile = "${cfg.dbPasswordfile}";
+        # Add explicit type to ensure proper database configuration
+        type = "postgresql";
 
         host = "localhost";
         name = cfg.dbUsername; # defaults to keycloak
@@ -136,6 +151,7 @@ in {
       settings = {
         hostname = cfg.hostname;
         http-host = cfg.vpnIP;
+        # http-host = "0.0.0.0"; #FIXME harden
         http-port = cfg.httpPort;
         https-port = cfg.httpsPort; 
         # proxy = conf.proxy;# edge
@@ -146,8 +162,16 @@ in {
       sslCertificate = config.luxnix.generic-settings.sslCertificatePath;
     };
 
+    systemd.services.keycloak.environment = {
+      CREDENTIALS_DIRECTORY = "/etc/secrets/vault";
+    };
 
     networking.firewall.allowedTCPPorts = [ cfg.httpPort cfg.httpsPort ];
+  
+    # add hosts entry for keycloak
+    networking.hosts = {
+      "${cfg.vpnIP}" = [ cfg.hostname cfg.hostnameAdmin ];
+    };
   };
 
 }

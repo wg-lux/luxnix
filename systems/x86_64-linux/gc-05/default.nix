@@ -28,6 +28,8 @@
   luxnix = {
     boot-decryption-stick.enable = true;
 
+dns.enable = true;
+
 generic-settings.adminVpnIp = "172.16.255.106";
 
 generic-settings.configurationPathRelative = "lx-production";
@@ -35,6 +37,14 @@ generic-settings.configurationPathRelative = "lx-production";
 generic-settings.enable = true;
 
 generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
+
+generic-settings.postgres.enable = true;
+
+generic-settings.sensitiveServiceGroupName = "sensitiveServices";
+
+generic-settings.traefikHostDomain = "traefik.endoreg.local";
+
+generic-settings.traefikHostIp = "172.16.255.12";
 
 gpu-eval.enable = true;
 

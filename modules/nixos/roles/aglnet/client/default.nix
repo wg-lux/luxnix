@@ -215,8 +215,18 @@ in {
         key ${cfg.serverKeyPath}
         cipher ${cfg.cipher}
         
-        route-nopull      
+        # Route only VPN subnet through tunnel
+        route-nopull
         route ${cfg.subnet} ${cfg.subnetIntern}
+
+        # Allow server to push specific routes and DNS settings
+        pull-filter accept "route 172.16.255.0"
+        pull-filter accept "route 172.16.255.1"
+        pull-filter accept "route 172.16.255.12"
+        pull-filter accept "dhcp-option DNS"
+        pull-filter accept "dhcp-option DOMAIN endoreg.intern"
+        pull-filter accept "dhcp-option DOMAIN-ROUTE endoreg.intern"
+        pull-filter accept "dhcp-option DOMAIN-SEARCH endoreg.intern"
 
         remote-cert-tls server
         verb ${cfg.verbosity}      

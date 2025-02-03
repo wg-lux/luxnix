@@ -29,6 +29,7 @@ with lib.luxnix; let
     e2fsprogs
     keepassxc
     vlc
+    bind
   ];
 
   visuals = with pkgs; [

@@ -10,6 +10,13 @@ with lib.luxnix; let
   hostname = config.networking.hostName;
   username = config.user.admin.name;
 
+
+  sensitiveServiceGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
+  adminUserName = config.user.admin.name;
+  keycloakEnabled = config.roles.keycloakHost.enable;
+  keycloakUserName = config.roles.keycloakHost.dbUsername;
+
+
 in {
   options.luxnix.generic-settings = {
     enable = mkEnableOption "Enable generic settings";
@@ -34,6 +41,22 @@ in {
       default = "172.16.255.106";
       description = ''
         The VPN IP of the admin.
+      '';
+    };
+
+    traefikHostDomain = mkOption {
+      type = types.str;
+      default = "traefik.endoreg.local";
+      description = ''
+        The traefik dashboard host.
+      '';
+    };
+
+    traefikHostIp = mkOption {
+      type = types.str;
+      default = "172.16.255.106";
+      description = ''
+        The traefik dashboard host.
       '';
     };
 
@@ -84,43 +107,38 @@ in {
     };
 
     postgres = {
-      defaultAuthentication = mkOption {
-        type = types.str;
-        default = ''
-            #type database                  DBuser                      address                     auth-method         optional_ident_map
-            local sameuser                  all                                                     peer                map=superuser_map
-        '';
-        description = ''
-          The default ident map for postgres.
-        '';
-      };
-      activeAuthentication = mkOption {
-        type = types.str;
-        default = cfg.postgres.defaultAuthentication;
-        description = ''
-          The active ident map for postgres.
-        '';
+      enable = lib.mkOption {
+        type = types.bool;
+        default = false;
+        description = "Enable postgres configuration.";
       };
 
-      defaultIdentMap = mkOption {
-        type = types.str;
-        default = ''
-          # ArbitraryMapName systemUser DBUser
-          superuser_map      root      postgres
-          superuser_map      ${config.user.admin.name}     postgres
-          superuser_map      postgres  postgres
-
-          # Let other names login as themselves
-          superuser_map      /^(.*)$   \1
-      '';
+      remote = {
+        admin = {
+            enable = lib.mkOption {
+              type = types.bool;
+              default = false;
+              description = "Enable remote admin.";
+          };
+          vpnIp = mkOption {
+            type = types.str;
+            default = config.luxnix.generic-settings.adminVpnIp;
+            description = "The remote admin ip.";
+          };
+        };
       };
 
-      activeIdentMap = mkOption {
+      extraAuthentication = mkOption {
         type = types.str;
-        default = cfg.postgres.defaultIdentMap;
+        default = '''';
         description = ''
-          The active ident map for postgres.
+          The active authentication settings for postgres.
         '';
+      };
+
+      extraIdentMap = mkOption {
+        type = types.str;
+        default = '''';
       };
 
     };
@@ -174,12 +192,25 @@ in {
 
   config = {
     # Create Sensitive Service Group
+    #TODO Migrate to groups
     users.groups = {
       "${cfg.sensitiveServiceGroupName}" = {
         gid = cfg.sensitiveServiceGID;
+        name = sensitiveServiceGroupName;
+        members = [ 
+          adminUserName
+        ] ++ ( if keycloakEnabled then [ keycloakUserName ] else [] );
       };
     };
+    # Set PostGres Authentication & IdentMap
+    roles.postgres.default.enable = cfg.postgres.enable;
 
+    # pass extra auth and ident map to postgresql
+    services.luxnix.postgresql.extraAuthentication = cfg.postgres.extraAuthentication;
+    services.luxnix.postgresql.extraIdentMap = cfg.postgres.extraIdentMap;
+
+
+    # TODO Add to System summary Log
     users.mutableUsers = lib.mkDefault cfg.mutableUsers;
     system.stateVersion = cfg.systemStateVersion;
     networking.useDHCP = lib.mkDefault cfg.useDHCP;

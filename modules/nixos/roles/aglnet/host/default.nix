@@ -43,6 +43,7 @@ with lib; let
 
   defaultUpdateResolvConf = false;
 
+  defaultLocalDomain = "endoreg.intern";  # Change default domain
 
 in {
   options.roles.aglnet.host = {
@@ -210,6 +211,12 @@ in {
       description = "Client to client for the VPN";
     };
 
+    localDomain = mkOption {
+      type = types.str;
+      default = defaultLocalDomain;
+      description = "Local domain for VPN network";
+    };
+
   };
 
 
@@ -231,8 +238,53 @@ in {
     networking = {
       firewall = {
         "allowed${cfg.protocol}Ports" = [ cfg.port ];
+        interfaces = {
+          "${cfg.dev}0" = {
+            allowedUDPPorts = [ 53 ];
+            allowedTCPPorts = [ 53 ];  
+          };
+        };
       };
-      nameservers = cfg.backupNameservers;
+      nameservers = [ "172.16.255.1" ];  # Override system nameserver to ensure VPN DNS is used
+      search = [ cfg.localDomain ];  # Add explicit DNS search domain
+    };
+
+    # Configure dnsmasq
+    services.dnsmasq = {
+      enable = true;
+      settings = {
+        # Only use upstream DNS for non-local domains
+        server = cfg.backupNameservers;
+        
+        # Only handle .intern domain internally
+        domain = cfg.localDomain;
+        local = "/${cfg.localDomain}/";
+        
+        # Only listen on VPN interface
+        interface = "${cfg.dev}0";
+        bind-interfaces = true;
+        listen-address = "172.16.255.1";  # VPN server IP
+        
+        # Don't modify non-local queries
+        domain-needed = true;
+        bogus-priv = true;
+        no-resolv = false;
+        no-poll = true;
+        
+        # Add static DNS entries (without TTL)
+        address = [
+          "/traefik.${cfg.localDomain}/172.16.255.12"  # Remove TTL notation
+        ];
+        
+        # Don't read /etc/hosts
+        no-hosts = true;
+
+        # Explicitly set DNS order
+        strict-order = true;
+        
+        # Log DNS queries for debugging
+        log-queries = true;
+      };
     };
 
     services.openvpn = let 
@@ -260,7 +312,16 @@ in {
         topology ${cfg.topology}
 
         ${if cfg.client-to-client then "client-to-client" else ""}
-      
+
+        # DNS and routing configuration
+        push "route 172.16.255.0 255.255.255.0"  # Route all VPN subnet traffic
+        push "route 172.16.255.1 255.255.255.255"  # Ensure DNS server is reachable
+        push "route 172.16.255.12 255.255.255.255" # Traefik server
+        push "dhcp-option DNS 172.16.255.1"
+        push "dhcp-option DOMAIN ${cfg.localDomain}"
+        push "dhcp-option DOMAIN-ROUTE ${cfg.localDomain}"
+        push "dhcp-option DOMAIN-SEARCH ${cfg.localDomain}"  # Add search domain
+        
       '';
     
     in {

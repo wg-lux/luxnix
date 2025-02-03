@@ -129,6 +129,7 @@ all:
     subnet: 172.16.255.
     vars:
       ansible_python_interpreter: '{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python'
+      ansible_roles: []
       extra_secret_names:
         - SCRT_roles_system_password_postgres_host_main_password
         - SCRT_roles_system_password_postgres_host_test_password
@@ -170,7 +171,7 @@ all:
         custom_packages.videoEditing: 'true'
         custom_packages.visuals: 'true'
       host_services: {}
-      luxnix_branch: migrate-01
+      luxnix_branch: traefik
       luxnix_dest: /home/admin/luxnix-production
       luxnix_dev_repo: /home/admin/dev/luxnix
       luxnix_repo: https://github.com/wg-lux/luxnix.git
@@ -504,13 +505,16 @@ all:
       host_services: {}
       template_name: main
   - ansible_group_names:
-      - active_clients
       - all
       - base_server
+      - active_clients
+      - traefik_host
       - managed
     ansible_host: 172.16.255.12
     ansible_role_names:
       - postgres_host_main
+      - traefik_host
+      - keycloak_host
     extra_secret_names: []
     extra_user_names:
       - admin
@@ -536,6 +540,8 @@ all:
     vars:
       ansible_roles:
         - postgres_host_main
+        - traefik_host
+        - keycloak_host
       host_luxnix:
         generic_settings.hostPlatform: '"x86_64-linux"'
         generic_settings.linux.cpuMicrocode: '"intel"'
@@ -719,9 +725,14 @@ groups:
       endoreg_db_dest: /home/admin/endoreg-db-production
       endoreg_db_repo: https://github.com/wg-lux/endoreg-db.git
       group_luxnix:
+        dns.enable: 'true'
         generic_settings.adminVpnIp: '"172.16.255.106"'
         generic_settings.enable: 'true'
         generic_settings.linux.kernelPackages: pkgs.linuxPackages_6_12
+        generic_settings.postgres.enable: 'true'
+        generic_settings.sensitiveServiceGroupName: '"sensitiveServices"'
+        generic_settings.traefikHostDomain: '"traefik.endoreg.local"'
+        generic_settings.traefikHostIp: '"172.16.255.12"'
         vault.dir: '"/etc/secrets/vault"'
         vault.enable: 'true'
         vault.key: '"/etc/secrets/.key"'
@@ -830,43 +841,14 @@ groups:
     files: []
     name: local_endoreg_db
     vars:
-      group_luxnix:
-        generic-settings.postgres.activeAuthentication: '#type database DBuser address
-          auth-method optional_ident_map
-
-          local sameuser all peer map=superuser_map
-
-          host postgres postgres 127.0.0.1/32 scram-sha-256
-
-          host ${config.roles.postgres.default.defaultDbName} ${config.roles.postgres.default.defaultDbName}
-          127.0.0.1/32 scram-sha-256
-
-          '
-        generic-settings.postgres.activeIdentMap: '# ArbitraryMapName systemUser DBUser
-
-          superuser_map      root      postgres
-
-          superuser_map      root      ${config.roles.postgres.main.replUser}
-
-          superuser_map      ${config.user.admin.name}     ${config.user.admin.name}
-
-          superuser_map      ${config.user.admin.name}     postgres
-
-          superuser_map      ${config.user.admin.name}     endoregClient
-
-          superuser_map      ${config.user.admin.name} ${config.roles.postgres.default.defaultDbName}
-
-          superuser_map      postgres  postgres
-
-
-          # Let other names login as themselves
-
-          superuser_map      /^(.*)$   \1
-
-          '
+      group_luxnix: {}
       group_roles:
         postgres.default.enable: 'true'
       group_services: {}
+  - extra_user_names: []
+    files: []
+    name: traefik_host
+    vars: {}
   - extra_user_names: []
     files: []
     name: hetzner_server
@@ -890,7 +872,21 @@ roles:
   - extra_user_names: []
     files: []
     name: keycloak_host
-    vars: {}
+    vars:
+      role_psql_keycloak_pw_file: /etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password
+      role_psql_keycloak_pw_src: /home/admin/.lxv/deploy/{{ inventory_hostname }}/SCRT_roles_system_password_keycloak_host_password
+      role_roles:
+        keycloakHost.adminInitialPassword: '"admin"'
+        keycloakHost.adminUsername: '"admin"'
+        keycloakHost.dbPasswordfile: '"/etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password"'
+        keycloakHost.dbUsername: '"keycloak"'
+        keycloakHost.enable: 'true'
+        keycloakHost.homeDir: '"/home/keycloak"'
+        keycloakHost.hostname: '"keycloak.endo-reg.net"'
+        keycloakHost.hostnameAdmin: '"keycloak-admin.endo-reg.net"'
+        keycloakHost.httpPort: '9080'
+        keycloakHost.httpsPort: '9444'
+        keycloakHost.vpnIP: '"172.16.255.12"'
   - extra_user_names: []
     files: []
     name: lx-anonymizer
@@ -915,43 +911,7 @@ roles:
     files: []
     name: postgres_host_main
     vars:
-      role_luxnix:
-        generic-settings.postgres.activeAuthentication: '#type database DBuser address
-          auth-method optional_ident_map
-
-          local sameuser all peer map=superuser_map
-
-          host  all all ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
-
-          host  replication ${config.roles.postgres.main.replUser} ${config.luxnix.generic-settings.adminVpnIp}/32
-          scram-sha-256
-
-          host  ${config.roles.postgres.main.devUser} ${config.roles.postgres.main.devUser}
-          ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
-
-          host  all postgres ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
-
-          '
-        generic-settings.postgres.activeIdentMap: '# ArbitraryMapName systemUser DBUser
-
-          superuser_map      root      postgres
-
-          superuser_map      root      ${config.roles.postgres.main.replUser}
-
-          superuser_map      ${config.user.admin.name}     ${config.user.admin.name}
-
-          superuser_map      ${config.user.admin.name}     postgres
-
-          superuser_map      ${config.user.admin.name}     endoregClient
-
-          superuser_map      postgres  postgres
-
-
-          # Let other names login as themselves
-
-          superuser_map      /^(.*)$   \1
-
-          '
+      role_luxnix: {}
       role_roles:
         postgres.main.enable: 'true'
   - extra_user_names: []
@@ -959,22 +919,7 @@ roles:
     name: postgres_host_test
     vars:
       role_luxnix:
-        generic-settings.postgres.activeAuthentication: '#type database DBuser address
-          auth-method optional_ident_map
-
-          local sameuser all peer map=superuser_map
-
-          host  all all ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
-
-          host  replication ${config.roles.postgres.main.replUser} ${config.luxnix.generic-settings.adminVpnIp}/32
-          scram-sha-256
-
-          host  ${config.roles.postgres.main.devUser} ${config.roles.postgres.main.devUser}
-          ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
-
-          host  all postgres ${config.luxnix.generic-settings.adminVpnIp}/32 scram-sha-256
-
-          # dev-01
+        generic-settings.postgres.extraAuthentication: '# dev-01
 
           host  all all 172.16.255.102/32 scram-sha-256
 
@@ -987,32 +932,8 @@ roles:
           host  all postgres 172.16.255.108/32 scram-sha-256
 
           '
-        generic-settings.postgres.activeIdentMap: '# ArbitraryMapName systemUser DBUser
-
-          superuser_map      root      postgres
-
-          superuser_map      root      ${config.roles.postgres.main.replUser}
-
-          superuser_map      ${config.user.admin.name}     ${config.user.admin.name}
-
-          superuser_map      ${config.user.admin.name}     postgres
-
-          superuser_map      ${config.user.admin.name}     endoregClient
-
-          superuser_map      postgres  postgres
-
-
-          # Let other names login as themselves
-
-          superuser_map      /^(.*)$   \1
-
-          '
       role_roles:
         postgres.main.enable: 'true'
-  - extra_user_names: []
-    files: []
-    name: traefik_host_main
-    vars: {}
   - extra_user_names: []
     files: []
     name: dev_access
@@ -1021,3 +942,19 @@ roles:
     files: []
     name: local_endoreg_db
     vars: {}
+  - extra_user_names: []
+    files: []
+    name: traefik_host
+    vars:
+      role_luxnix:
+        generic-settings.sslCertificateKeyPath: '"/home/admin/.ssl/endo-reg-net.key"'
+        generic-settings.sslCertificatePath: '"/home/admin/.ssl/__endo-reg_net.pem"'
+      role_roles:
+        traefikHost.allowedIPs:
+          - 172.16.255.106
+          - 172.16.255.1
+          - 127.0.0.1
+        traefikHost.dashboard: 'true'
+        traefikHost.dashboardHost: '"traefik.endoreg.intern"'
+        traefikHost.enable: 'true'
+        traefikHost.insecure: 'false'
