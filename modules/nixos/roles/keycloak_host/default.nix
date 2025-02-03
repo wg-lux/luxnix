@@ -107,6 +107,7 @@ with lib.luxnix; let
         extraGroups = [ 
           config.luxnix.generic-settings.sensitiveServiceGroupName 
           "sslCert"
+          "networkmanager"  
         ];
         # uid = cfg.uid;
       };
@@ -122,7 +123,11 @@ with lib.luxnix; let
 
     # Ensure password file permissions
     systemd.services.keycloak.serviceConfig = {
-      SupplementaryGroups = [ config.luxnix.generic-settings.sensitiveServiceGroupName ];
+      SupplementaryGroups = [ 
+        config.luxnix.generic-settings.sensitiveServiceGroupName
+        # Network Management
+        "networkmanager"  
+      ];
     };
 
     # Ensure the password file exists and has correct permissions
