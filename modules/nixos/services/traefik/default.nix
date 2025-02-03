@@ -61,22 +61,12 @@ in {
             };
           };
 
-          # Move TLS configuration to top level
+          # Simplified TLS configuration
           tls = {
-            stores = {
-              default = {
-                defaultCertificate = {
-                  certFile = config.luxnix.vault.sslCert;
-                  keyFile = config.luxnix.vault.sslKey;
-                };
-              };
-            };
-            options = {
-              default = {
-                sniStrict = true;
-                minVersion = "VersionTLS12";
-              };
-            };
+            certificates = [{
+              certFile = cfg.sslCertPath;
+              keyFile = cfg.sslKeyPath;
+            }];
           };
 
           api = mkIf cfg.dashboard {
@@ -115,15 +105,14 @@ in {
             };
           };
 
-          # Configure TLS with existing wildcard certificate
-  
+          # Remove TCP passthrough since we want Traefik to handle TLS
           tcp = {
             routers = {
               keycloak_router = {
                 entryPoints = [ "websecure" ];
                 rule = "HostSNI(`keycloak.endo-reg.net`)";
                 service = "keycloak_svc";
-                tls.passthrough = true;
+                # Remove tls.passthrough
               };
               keycloak_admin_router = {
                 entryPoints = [ "websecure" ];

@@ -156,12 +156,13 @@ with lib.luxnix; let
       settings = {
         hostname = cfg.hostname;
         http-host = "0.0.0.0";  # Listen on all interfaces
-        proxy = "edge";  # Trust X-Forwarded-* headers
         http-port = cfg.httpPort;
-        https-port = cfg.httpsPort; 
-        # proxy = conf.proxy;# edge
-        domain = cfg.hostname; # currently "keycloak.endo-reg.net"
-        domain-admin = cfg.hostnameAdmin; # currently "keycloak-admin.endo-reg.net"
+        https-port = cfg.httpsPort;
+        proxy-headers = ["forwarded" "x-forwarded-for" "x-forwarded-proto" "x-forwarded-host"];
+        hostname-strict = false;
+        hostname-strict-https = true;
+        domain = cfg.hostname;
+        domain-admin = cfg.hostnameAdmin;
       };
     };
 
