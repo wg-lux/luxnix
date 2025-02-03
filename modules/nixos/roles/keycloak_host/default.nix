@@ -157,8 +157,10 @@ with lib.luxnix; let
         hostname = cfg.hostname;
         http-host = "0.0.0.0";  # Listen on all interfaces
         http-port = cfg.httpPort;
-        proxy-headers = "xforwarded";  # Enable X-Forwarded-* headers
-        proxy-trusted-addresses = "127.0.0.1,172.16.255.0/24";  # Trust localhost and VPN subnet
+        http-enabled = true;  # Explicitly enable HTTP
+        # Remove https-port setting since we're not using HTTPS directly
+        proxy-headers = "xforwarded";
+        proxy-trusted-addresses = "127.0.0.1,172.16.255.0/24";
         hostname-strict = false;
         hostname-strict-https = true;
         domain = cfg.hostname;
