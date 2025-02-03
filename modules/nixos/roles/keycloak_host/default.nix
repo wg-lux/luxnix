@@ -155,16 +155,14 @@ with lib.luxnix; let
       };
       settings = {
         hostname = cfg.hostname;
-        http-host = cfg.vpnIP;
-        # http-host = "0.0.0.0"; #FIXME harden
+        http-host = "0.0.0.0";  # Listen on all interfaces
+        proxy = "edge";  # Trust X-Forwarded-* headers
         http-port = cfg.httpPort;
         https-port = cfg.httpsPort; 
         # proxy = conf.proxy;# edge
         domain = cfg.hostname; # currently "keycloak.endo-reg.net"
         domain-admin = cfg.hostnameAdmin; # currently "keycloak-admin.endo-reg.net"
       };
-      sslCertificateKey = config.luxnix.generic-settings.sslCertificateKeyPath;
-      sslCertificate = config.luxnix.generic-settings.sslCertificatePath;
     };
 
     systemd.services.keycloak.environment = {
