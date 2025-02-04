@@ -78,12 +78,12 @@ in {
       dynamicConfigOptions = {
         http = {
           routers = {
-            defaultRouter = { 
-              entryPoints = [ "websecure" ];
-              service = "basePage";
-              rule = "Host(`endo-reg.net`)";
-              tls = {};
-            };
+            # defaultRouter = { 
+            #   entryPoints = [ "websecure" ];
+            #   service = "basePage";
+            #   rule = "Host(`endo-reg.net`)";
+            #   tls = {};
+            # };
             testPage = {
               rule = "Host(`test.endo-reg.net`)";
               service = "testPage";
@@ -93,13 +93,13 @@ in {
           };
 
           services = {
-            basePage = {
-              loadBalancer = {
-                servers = [
-                  { url = "http://127.0.0.1:8080"; }
-                ];
-              };
-            };
+            # basePage = {
+            #   loadBalancer = {
+            #     servers = [
+            #       { url = "http://127.0.0.1:8080"; }
+            #     ];
+            #   };
+            # };
 
             testPage = {
               loadBalancer = {
