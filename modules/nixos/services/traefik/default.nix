@@ -52,6 +52,10 @@ in {
     systemd.tmpfiles.rules = [
       "d /etc/traefik 0750 traefik traefik -"
       "d /var/lib/traefik 0750 traefik traefik -"
+      
+      # log files
+      "f /etc/traefik/traefik.log 0640 traefik traefik -"
+      "f /etc/traefik/traefik-access.log 0640 traefik traefik -"
     ];
     systemd.services.traefik.restartIfChanged = true;
     systemd.services.traefik.wantedBy = [ "multi-user.target" ];
