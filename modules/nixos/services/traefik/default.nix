@@ -133,18 +133,26 @@ in {
           websecure = {
             address = "0.0.0.0:443";
             http = {
-              tls = {
+              tls = {}
+            };
+          };
+        };
+
+        tls = {
+          stores = {
+            default = {
+              defaultCertificate = {
                 certFile = "/etc/traefik/ssl_cert.pem";
                 keyFile = "/etc/traefik/ssl_key.pem";
-                domains = [
-                  {
-                    main = "endo-reg.net";
-                    sans = [ "*.endo-reg.net" ];
-                  }
-                ];
               };
             };
           };
+          certificates = [
+            {
+              certFile = "/etc/traefik/ssl_cert.pem";
+              keyFile = "/etc/traefik/ssl_key.pem";
+            }
+          ];
         };
       };
     };
