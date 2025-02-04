@@ -88,7 +88,7 @@ in {
               rule = "Host(`test.endo-reg.net`)";
               service = "testPage";
               entryPoints = [ "websecure" ];
-              tls = {};
+              # tls = {};
             };
           };
 
