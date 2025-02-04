@@ -144,7 +144,7 @@ in {
                     main = "endo-reg.net";
                     sans = [ "*.endo-reg.net" ];
                   }
-                ]
+                ];
               };
             };
           };
