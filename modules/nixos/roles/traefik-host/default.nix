@@ -40,25 +40,22 @@ in {
       };
     };
 
-    # Test Page
-      services = {
-        systemd.services.testPage = {
-          description = "Simple test page service";
-          wantedBy = [ "multi-user.target" ];
-          after = [ "network-online.target" ];
-          serviceConfig = {
-            ExecStart = "${pkgs.busybox}/bin/busybox httpd -f -v -h /opt/test-page -p ${hostVpnIp}:8081";
-          };
-        };
+    systemd.services.testPage = {
+      description = "Simple test page service";
+      wantedBy = [ "multi-user.target" ];
+      after = [ "network-online.target" ];
+      serviceConfig = {
+        ExecStart = "${pkgs.busybox}/bin/busybox httpd -f -v -h /opt/test-page -p ${hostVpnIp}:8081";
       };
+    };
 
-      environment.etc."opt/test-page/index.html".text = ''
-        <html>
-          <body>
-            <h1>Hello from test.endo-reg.net!</h1>
-          </body>
-        </html>
-      '';
+    environment.etc."opt/test-page/index.html".text = ''
+      <html>
+        <body>
+          <h1>Hello from test.endo-reg.net!</h1>
+        </body>
+      </html>
+    '';
 
   };
 }
