@@ -53,79 +53,29 @@ in {
             checkNewVersion = false;
             sendAnonymousUsage = false;
           };
-
           entryPoints = {
             web = {
               address = ":80";
-              asDefault = true;
-              http.redirections.entryPoint = {
-                to = "websecure";
-                scheme = "https";
-              };
-            };
-            websecure = {
-              address = ":443";
-              asDefault = true;
             };
           };
-
-          # Simplified TLS configuration
-          tls = {
-            certificates = [{
-              certFile = cfg.sslCertPath;
-              keyFile = cfg.sslKeyPath;
-              domains = [
-                {
-                  main = "endo-reg.net";
-                  sans = [ "*.endo-reg.net" ];
-                }
-              ];
-            }];
-          };
-
-          log = {
-            level = "INFO";
-            filePath = "${config.services.traefik.dataDir}/traefik.log";
-            format = "json";
-          };
-
-          api = mkIf cfg.dashboard {
-            dashboard = true;
-            insecure = false;
-          };
-
-          providers = {
-            docker = {
-              endpoint = "unix:///var/run/podman/podman.sock"; 
-              exposedByDefault = false;
-              watch = true;
-            };
-            file = {
-              directory = "/etc/traefik/config";
-              watch = true;
-            };
-          };
-
-          http = mkIf cfg.keycloak.enable {
+          http = {
             routers = {
-              keycloak = {
-                rule = "Host(`${cfg.keycloak.domain}`)";
-                service = "keycloak";
-                entryPoints = [ "websecure" ];
-                tls = {};
+              testPage = {
+                rule = "Host(`test.endo-reg.net`)";
+                service = "testPage";
+                entryPoints = [ "web" ];
               };
             };
             services = {
-              keycloak = {
+              testPage = {
                 loadBalancer = {
                   servers = [
-                    { url = "http://127.0.0.1:${toString cfg.keycloak.port}"; }
+                    { url = "http://172.16.255.12:8081"; }
                   ];
                 };
               };
             };
           };
-
         }
         cfg.staticConfigOptions
       ];

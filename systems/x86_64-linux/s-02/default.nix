@@ -43,8 +43,6 @@
     traefikHost.sslKeyPath = "/etc/secrets/vault/ssl_key";
     };
 
-  services = {
-    };
 
   luxnix = {
     boot-decryption-stick.enable = true;
