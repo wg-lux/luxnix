@@ -93,9 +93,6 @@ in {
           level = "INFO";
           filePath = "/var/log/traefik.log";
           format = "json";
-          noColor = false;
-          maxSize = 100;
-          compress = true;
         };
         metrics = {
           prometheus = {};
