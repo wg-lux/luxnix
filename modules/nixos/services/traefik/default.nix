@@ -75,6 +75,15 @@ in {
           };
         };
         tls = {
+          stores = {
+            default = {
+              defaultCertificate = {
+                certFile = cfg.sslCertPath;
+                keyFile = cfg.sslKeyPath;
+              };
+            };
+          };
+
           certificates = [{
             certFile = cfg.sslCertPath;
             keyFile = cfg.sslKeyPath;
