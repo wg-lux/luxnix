@@ -47,38 +47,53 @@ in {
 
     services.traefik = {
       enable = true;
-      staticConfigOptions = mkMerge [
-        {
-          global = {
-            checkNewVersion = false;
-            sendAnonymousUsage = false;
+      staticConfigOptions = {
+        global = {
+          checkNewVersion = false;
+          sendAnonymousUsage = false;
+        };
+        entryPoints = {
+          web = {
+            address = ":80";
           };
-          entryPoints = {
-            web = {
-              address = ":80";
+        };
+      };
+      dynamicConfigOptions = {
+        http = {
+          routers = {
+            defaultRouter = { 
+              entryPoints = [ "web" ];
+              service = "basePage";
+              rule = "Host(`endo-reg.net`)";
+            };
+            testPage = {
+              rule = "Host(`test.endo-reg.net`)";
+              service = "testPage";
+              entryPoints = [ "web" ];
             };
           };
-          http = {
-            routers = {
-              testPage = {
-                rule = "Host(test.endo-reg.net)";
-                service = "testPage";
-                entryPoints = [ "web" ];
+          
+          services = {
+
+            defaultRouter = {
+              loadBalancer = {
+                servers = [
+                  { url = "http://127.0.0.1:8080"; }
+                ];
               };
             };
-            services = {
-              testPage = {
-                loadBalancer = {
-                  servers = [
-                    { url = "http://172.16.255.12:8081"; }
-                  ];
-                };
+
+            testPage = {
+              loadBalancer = {
+                servers = [
+                  { url = "http://172.16.255.12:8081"; }
+                ];
               };
             };
+
           };
-        }
-        cfg.staticConfigOptions
-      ];
+        };
+      };
 
     };
     systemd.tmpfiles.rules = [
