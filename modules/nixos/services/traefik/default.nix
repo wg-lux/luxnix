@@ -133,7 +133,7 @@ in {
           websecure = {
             address = "0.0.0.0:443";
             http = {
-              tls = {}
+              tls = {};
             };
           };
         };
