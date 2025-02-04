@@ -91,7 +91,7 @@ in {
       staticConfigOptions = {
         log = {
           level = "INFO";
-          filePath = "/var/log/traefik.log";
+          filePath = "/etc/traefik/traefik.log";
           format = "json";
         };
         metrics = {
@@ -100,7 +100,7 @@ in {
 
         accessLog = {
           addInternals = true;
-          filePath = "/var/log/traefik-access.log";
+          filePath = "/etc/traefik/traefik-access.log";
           bufferingSize = 100;
           fields = {
             names = {
