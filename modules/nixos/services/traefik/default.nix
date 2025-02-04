@@ -54,18 +54,24 @@ in {
         };
         entryPoints = {
           web = {
-            address = ":80";
-            http = {
-              redirections = {
-                entryPoint = {
-                  to = "websecure";
-                  scheme = "https";
-                };
-              };
+            address = "0.0.0.0:80";
+            http.redirections.entryPoint = {
+              to = "websecure";
+              scheme = "https";
+              permanent = true;
             };
+
           };
           websecure = {
-            address = ":443";
+            address = "0.0.0.0:443";
+            http.tls = {
+              domains = [
+                {
+                  main = "endo-reg.net";
+                  sans = [ "*.endo-reg.net" ];
+                }
+              ];
+            };
           };
         };
         tls = {
