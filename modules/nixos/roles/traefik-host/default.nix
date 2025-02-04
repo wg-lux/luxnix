@@ -45,7 +45,7 @@ in {
       wantedBy = [ "multi-user.target" ];
       after = [ "network-online.target" ];
       serviceConfig = {
-        ExecStart = "${pkgs.busybox}/bin/busybox httpd -f -v -h /opt/test-page -p ${hostVpnIp}:8081";
+        ExecStart = "${pkgs.busybox}/bin/busybox httpd -f -v -h /etc/opt/test-page -p ${hostVpnIp}:8081";
       };
     };
 
