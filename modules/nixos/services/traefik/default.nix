@@ -108,7 +108,7 @@ in {
         };
         providers = {
           file = {
-            filename = "/etc/traefik/dynamic_conf.yaml";
+            filename = "/etc/traefik/${cfg.dynamicConfigFile}";
             watch = true;
           };
         };
