@@ -53,6 +53,10 @@ in {
       "d /etc/traefik 0750 traefik traefik -"
       "d /var/lib/traefik 0750 traefik traefik -"
     ];
+    systemd.services.traefik.restartIfChanged = true;
+    systemd.services.traefik.wantedBy = [ "multi-user.target" ];
+
+
 
     environment.etc = {
       "traefik/ssl_cert.pem" = { 
@@ -85,36 +89,67 @@ in {
       # and “dynamic” config for routers, services, and middlewares.)
       dynamicConfigFile = cfg.dynamicConfigFile;
       staticConfigOptions = {
+        log = {
+          level = "INFO";
+          filePath = "/var/log/traefik.log";
+          format = "json";
+          noColor = false;
+          maxSize = 100;
+          compress = true;
+        };
+        metrics = {
+          prometheus = {};
+        };
 
+        accessLog = {
+          addInternals = true;
+          filePath = "/var/log/traefik-access.log";
+          bufferingSize = 100;
+          fields = {
+            names = {
+              StartUTC = "drop";
+            };
+          };
+          filters = {
+            statusCodes = [
+              "204-299"
+              "400-499"
+              "500-599"
+            ];
+          };
+        };
+        api = {
+          dashboard = true;
+        };
+
+        tracing = {};
+        
         entryPoints = {
           web = {
-            address = ":80";
+            address = "0.0.0.0:80";
+            http.redirections.entryPoint = {
+              to = "websecure";
+              scheme = "https";
+              permanent = true;
+            };
           };
           websecure = {
-            address = ":443";
+            address = "0.0.0.0:443";
             http = {
               tls = {
                 certFile = "/etc/traefik/ssl_cert.pem";
                 keyFile = "/etc/traefik/ssl_key.pem";
+                domains = [
+                  {
+                    main = "endo-reg.net";
+                    sans = [ "*.endo-reg.net" ];
+                  }
+                ]
               };
             };
           };
         };
-        # providers = {
-        #   file = {
-        #     filename = "/etc/traefik/${cfg.dynamicConfigFile}";
-        #     watch = true;
-        #   };
-        # };
-        metrics = {
-          prometheus = {
-            addEntryPointsLabels = true;
-            addServicesLabels = true;
-          };
-        };
       };
-
-
     };
 
     # (Optional) Ensure Traefik can read the certificate and key.
@@ -126,7 +161,5 @@ in {
         { from = 8080; to = 8080; }
       ];
     };
-
-
   };
 }
