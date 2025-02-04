@@ -25,7 +25,7 @@ in {
 
   config = mkIf cfg.enable {
 
-    environment.etc."traefik/${dynamicConfigFile}" = {
+    environment.etc."traefik/${cfg.dynamicConfigFile}" = {
       # use "./dynamic_conf.yaml" for the dynamic configuration file
       source = ./dynamic_conf.yaml;
       mode = "0644";
