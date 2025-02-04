@@ -14,7 +14,7 @@ in {
     bindIP = mkOpt types.str "0.0.0.0" "IP address to bind Traefik to";
     sslCertPath = mkOpt types.path config.luxnix.generic-settings.sslCertificatePath "Path to SSL certificate";
     sslKeyPath = mkOpt types.path config.luxnix.generic-settings.sslCertificateKeyPath "Path to SSL key";
-    dynamicConfigFile = mkOpt types.path "/etc/traefik/dynamic.toml" "Path to dynamic configuration file";
+    dynamicConfigFile = mkOpt types.str "dynamic.toml" "Path to dynamic configuration file";
     keycloak = {
       enable = mkOption {
         type = types.bool;
