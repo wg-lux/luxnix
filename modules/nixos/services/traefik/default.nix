@@ -55,26 +55,44 @@ in {
         entryPoints = {
           web = {
             address = ":80";
+            http = {
+              redirections = {
+                entryPoint = {
+                  to = "websecure";
+                  scheme = "https";
+                };
+              };
+            };
           };
+          websecure = {
+            address = ":443";
+          };
+        };
+        tls = {
+          certificates = [{
+            certFile = cfg.sslCertPath;
+            keyFile = cfg.sslKeyPath;
+          }];
         };
       };
       dynamicConfigOptions = {
         http = {
           routers = {
             defaultRouter = { 
-              entryPoints = [ "web" ];
+              entryPoints = [ "websecure" ];
               service = "basePage";
               rule = "Host(`endo-reg.net`)";
+              tls = {};
             };
             testPage = {
               rule = "Host(`test.endo-reg.net`)";
               service = "testPage";
-              entryPoints = [ "web" ];
+              entryPoints = [ "websecure" ];
+              tls = {};
             };
           };
 
           services = {
-
             basePage = {
               loadBalancer = {
                 servers = [
@@ -90,7 +108,6 @@ in {
                 ];
               };
             };
-
           };
         };
       };
