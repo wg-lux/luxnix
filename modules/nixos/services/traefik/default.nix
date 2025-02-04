@@ -79,19 +79,20 @@ in {
       package = pkgs.traefik;  # This should be v3.2 as per your channel
       group = "traefik";
       dataDir = "/var/lib/traefik";
+      log = {
+        level = "INFO";
+        filePath = "/etc/traefik/traefik.log"; #TODO dump to central log dir
+      };
+      accessLog = {
+        bufferingSize = 100;
+      };
 
       # The static (global) configuration for Traefik.
       # (Traefik uses “static” config for entrypoints, providers, etc.
       # and “dynamic” config for routers, services, and middlewares.)
 
       staticConfigOptions = {
-        log = {
-          level = "INFO";
-          filePath = "/etc/traefik/traefik.log"; #TODO dump to central log dir
-        };
-        accessLog = {
-          bufferingSize = 100;
-        };
+
         entryPoints = {
           web = {
             address = ":80";
