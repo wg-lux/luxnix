@@ -83,7 +83,7 @@ in {
       # The static (global) configuration for Traefik.
       # (Traefik uses “static” config for entrypoints, providers, etc.
       # and “dynamic” config for routers, services, and middlewares.)
-
+      dynamicConfigFile = cfg.dynamicConfigFile;
       staticConfigOptions = {
 
         entryPoints = {
@@ -100,12 +100,12 @@ in {
             };
           };
         };
-        providers = {
-          file = {
-            filename = "/etc/traefik/${cfg.dynamicConfigFile}";
-            watch = true;
-          };
-        };
+        # providers = {
+        #   file = {
+        #     filename = "/etc/traefik/${cfg.dynamicConfigFile}";
+        #     watch = true;
+        #   };
+        # };
         metrics = {
           prometheus = {
             addEntryPointsLabels = true;
