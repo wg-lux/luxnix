@@ -45,6 +45,21 @@ in {
       };
     };
 
+    # 1) Create a dedicated directory and copy/symlink your cert/key files there.
+    #    Adjust paths and permissions so that "traefik" can read them.
+    environment.etc = {
+      "traefik/ssl_cert.pem".source = cfg.sslCertPath;
+      "traefik/ssl_cert.pem".user = "traefik";
+      "traefik/ssl_cert.pem".group = "traefik";
+      "traefik/ssl_cert.pem".mode = "0644";
+
+      "traefik/ssl_key.pem".source = cfg.sslKeyPath;
+      "traefik/ssl_key.pem".user = "traefik";
+      "traefik/ssl_key.pem".group = "traefik";
+      "traefik/ssl_key.pem".mode = "0640";
+    };
+
+    # 2) Define the Traefik service configuration
     services.traefik = {
       enable = true;
       staticConfigOptions = {
@@ -52,6 +67,7 @@ in {
           checkNewVersion = false;
           sendAnonymousUsage = false;
         };
+
         entryPoints = {
           web = {
             address = "0.0.0.0:80";
@@ -60,7 +76,6 @@ in {
               scheme = "https";
               permanent = true;
             };
-
           };
           websecure = {
             address = "0.0.0.0:443";
@@ -74,22 +89,27 @@ in {
             };
           };
         };
+
         tls = {
           stores = {
             default = {
               defaultCertificate = {
-                certFile = cfg.sslCertPath;
-                keyFile = cfg.sslKeyPath;
+                # 3) Point to the new paths in /etc/traefik/
+                certFile = "/etc/traefik/ssl_cert.pem";
+                keyFile  = "/etc/traefik/ssl_key.pem";
               };
             };
           };
 
-          certificates = [{
-            certFile = cfg.sslCertPath;
-            keyFile = cfg.sslKeyPath;
-          }];
+          certificates = [
+            {
+              certFile = "/etc/traefik/ssl_cert.pem";
+              keyFile  = "/etc/traefik/ssl_key.pem";
+            }
+          ];
         };
       };
+
       dynamicConfigOptions = {
         http = {
           routers = {
@@ -112,11 +132,13 @@ in {
           };
         };
       };
-
     };
+
+    # 3) (Optional) Firewall rules & any tmpfiles if needed
     systemd.tmpfiles.rules = [
       "d /etc/traefik/config 0755 root root -"
     ];
+
 
     networking.firewall = {
       allowedTCPPorts = [ 80 443 ];
