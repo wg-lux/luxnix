@@ -3,6 +3,7 @@
 with lib; 
 with lib.luxnix; let
   cfg = config.services.luxnix.traefik;
+  dynCfgFile = "./${cfg.dynamicConfigFile}";
 in {
   options.services.luxnix.traefik = {
     enable = mkBoolOpt false "Enable traefik";
@@ -14,7 +15,6 @@ in {
     bindIP = mkOpt types.str "0.0.0.0" "IP address to bind Traefik to";
     sslCertPath = mkOpt types.path config.luxnix.generic-settings.sslCertificatePath "Path to SSL certificate";
     sslKeyPath = mkOpt types.path config.luxnix.generic-settings.sslCertificateKeyPath "Path to SSL key";
-    dynamicConfigFile = mkOpt types.str "dynamic.toml" "Path to dynamic configuration file";
     keycloak = {
       enable = mkOption {
         type = types.bool;
@@ -87,7 +87,7 @@ in {
       # The static (global) configuration for Traefik.
       # (Traefik uses “static” config for entrypoints, providers, etc.
       # and “dynamic” config for routers, services, and middlewares.)
-      dynamicConfigFile = cfg.dynamicConfigFile;
+      dynamicConfigFile = ./dynamic_conf.yaml;
       staticConfigOptions = {
         log = {
           level = "INFO";
