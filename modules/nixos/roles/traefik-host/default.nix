@@ -10,6 +10,7 @@ in {
     dashboard = mkBoolOpt true "Enable traefik dashboard";
     insecure = mkBoolOpt false "Allow insecure configurations";
     staticConfigOptions = mkOpt types.attrs {} "Additional static configuration options";
+    dynamicConfigFile = mkOpt types.path "/etc/traefik/dynamic.toml" "Path to dynamic configuration file";
     dashboardHost = mkOpt types.str "dashboard.traefik.local" "Hostname for the dashboard";
     allowedIPs = mkOpt (types.listOf types.str) ["127.0.0.1"] "IPs allowed to access the dashboard";
     bindIP = mkOpt types.str "0.0.0.0" "IP address to bind Traefik to";
@@ -23,6 +24,15 @@ in {
   };
 
   config = mkIf cfg.enable {
+
+    environment.etc."${cfg.dynamicConfigFile}" = {
+      # use "./dynamic_conf.yaml" for the dynamic configuration file
+      source = ./dynamic_conf.yaml;
+      mode = "0644";
+      owner = "traefik";
+      group = "traefik";
+    };
+
     services.luxnix.traefik = {
       enable = cfg.enable;
       dashboard = cfg.dashboard;
@@ -33,6 +43,7 @@ in {
       bindIP = cfg.bindIP;
       sslCertPath = cfg.sslCertPath;
       sslKeyPath = cfg.sslKeyPath;
+      dynamicConfigFile = cfg.dynamicConfigFile;
       keycloak = {
         enable = cfg.keycloak.enable;
         domain = cfg.keycloak.domain;

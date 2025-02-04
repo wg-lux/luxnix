@@ -14,6 +14,7 @@ in {
     bindIP = mkOpt types.str "0.0.0.0" "IP address to bind Traefik to";
     sslCertPath = mkOpt types.path config.luxnix.generic-settings.sslCertificatePath "Path to SSL certificate";
     sslKeyPath = mkOpt types.path config.luxnix.generic-settings.sslCertificateKeyPath "Path to SSL key";
+    dynamicConfigFile = mkOpt types.path "/etc/traefik/dynamic.toml" "Path to dynamic configuration file";
     keycloak = {
       enable = mkOption {
         type = types.bool;
@@ -40,106 +41,91 @@ in {
           "sslCert"
           "sensitiveServices"
           ];
-        home = "/var/lib/traefik";
-        createHome = true;
+        # home = "/var/lib/traefik";
+        # createHome = true;
       };
     };
 
     # 1) Create a dedicated directory and copy/symlink your cert/key files there.
     #    Adjust paths and permissions so that "traefik" can read them.
-    environment.etc = {
-      "traefik/ssl_cert.pem".source = cfg.sslCertPath;
-      "traefik/ssl_cert.pem".user = "traefik";
-      "traefik/ssl_cert.pem".group = "traefik";
-      "traefik/ssl_cert.pem".mode = "0644";
+    
+    systemd.tmpfiles.rules = [
+      "d /etc/traefik 0750 traefik traefik -"
+      "d /var/lib/traefik 0750 traefik traefik -"
+    ];
 
-      "traefik/ssl_key.pem".source = cfg.sslKeyPath;
-      "traefik/ssl_key.pem".user = "traefik";
-      "traefik/ssl_key.pem".group = "traefik";
-      "traefik/ssl_key.pem".mode = "0640";
+    environment.etc = {
+      "traefik/ssl_cert.pem" = { 
+        source = cfg.sslCertPath;
+        user = "traefik";
+        group = "traefik";
+        mode = "0644";
+      };
+
+      "traefik/ssl_key.pem" = {
+        source = cfg.sslKeyPath;
+        user = "traefik";
+        group = "traefik";
+        mode = "0640";
+      };
+
     };
+
+
 
     # 2) Define the Traefik service configuration
     services.traefik = {
       enable = true;
-      staticConfigOptions = {
-        global = {
-          checkNewVersion = false;
-          sendAnonymousUsage = false;
-        };
+      package = pkgs.traefik;  # This should be v3.2 as per your channel
+      group = "traefik";
+      dataDir = "/var/lib/traefik";
 
+      # The static (global) configuration for Traefik.
+      # (Traefik uses “static” config for entrypoints, providers, etc.
+      # and “dynamic” config for routers, services, and middlewares.)
+
+      staticConfigOptions = {
+        log = {
+          level = "INFO";
+          filePath = "/etc/traefik/traefik.log"; #TODO dump to central log dir
+        };
+        accessLog = {
+          bufferingSize = 100;
+        };
         entryPoints = {
           web = {
-            address = "0.0.0.0:80";
-            http.redirections.entryPoint = {
-              to = "websecure";
-              scheme = "https";
-              permanent = true;
-            };
+            address = ":80";
           };
           websecure = {
-            address = "0.0.0.0:443";
-            http.tls = {
-              domains = [
-                {
-                  main = "endo-reg.net";
-                  sans = [ "*.endo-reg.net" ];
-                }
-              ];
-            };
-          };
-        };
-
-        tls = {
-          stores = {
-            default = {
-              defaultCertificate = {
-                # 3) Point to the new paths in /etc/traefik/
+            address = ":443";
+            http = {
+              tls = {
                 certFile = "/etc/traefik/ssl_cert.pem";
-                keyFile  = "/etc/traefik/ssl_key.pem";
-              };
-            };
-          };
-
-          certificates = [
-            {
-              certFile = "/etc/traefik/ssl_cert.pem";
-              keyFile  = "/etc/traefik/ssl_key.pem";
-            }
-          ];
-        };
-      };
-
-      dynamicConfigOptions = {
-        http = {
-          routers = {
-            testPage = {
-              rule = "Host(`test.endo-reg.net`)";
-              service = "testPage";
-              entryPoints = [ "websecure" ];
-              tls = {};
-            };
-          };
-
-          services = {
-            testPage = {
-              loadBalancer = {
-                servers = [
-                  { url = "http://172.16.255.12:8081"; }
-                ];
+                keyFile = "/etc/traefik/ssl_key.pem";
               };
             };
           };
         };
+        providers = {
+          file = {
+            filename = "/etc/traefik/dynamic_conf.yaml";
+            watch = true;
+          };
+        };
+        metrics = {
+          prometheus = {
+            addEntryPointsLabels = true;
+            addServicesLabels = true;
+          };
+        };
       };
+
+
     };
 
-    # 3) (Optional) Firewall rules & any tmpfiles if needed
-    systemd.tmpfiles.rules = [
-      "d /etc/traefik/config 0755 root root -"
-    ];
-
-
+    # (Optional) Ensure Traefik can read the certificate and key.
+    # Here we “import” the files into NixOS’s /etc – adjust if you manage secrets differently.
+    
     networking.firewall = {
       allowedTCPPorts = [ 80 443 ];
       allowedTCPPortRanges = mkIf cfg.dashboard [
