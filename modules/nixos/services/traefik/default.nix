@@ -61,7 +61,7 @@ in {
           http = {
             routers = {
               testPage = {
-                rule = "Host(`test.endo-reg.net`)";
+                rule = "Host(test.endo-reg.net)";
                 service = "testPage";
                 entryPoints = [ "web" ];
               };

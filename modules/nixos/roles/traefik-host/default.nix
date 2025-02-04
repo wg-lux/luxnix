@@ -50,7 +50,7 @@ in {
     };
 
     # allow firewall access to the test page
-    networking.firewall.allowedTCPPorts = [ 8081 ];
+    networking.firewall.allowedTCPPorts = [ 80 8081 ];
 
     environment.etc."opt/test-page/index.html".text = ''
       <html>
