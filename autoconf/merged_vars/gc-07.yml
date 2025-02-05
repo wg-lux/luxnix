@@ -45,6 +45,8 @@ group_luxnix:
   generic_settings.configurationPathRelative: '"lx-production"'
   generic_settings.enable: 'true'
   generic_settings.linux.kernelPackages: pkgs.linuxPackages_6_12
+  generic_settings.network.keycloak.port: '9080'
+  generic_settings.network.keycloak.vpnIp: '"172.16.255.12"'
   generic_settings.postgres.enable: 'true'
   generic_settings.sensitiveServiceGroupName: '"sensitiveServices"'
   generic_settings.traefikHostDomain: '"traefik.endo-reg.net"'

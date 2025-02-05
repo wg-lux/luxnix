@@ -7,6 +7,8 @@ with lib.luxnix; let
   vpnIp = config.luxnix.generic-settings.vpnIp;
   vpnSubnet = config.luxnix.generic-settings.vpnSubnet;
 
+  keycloakConfig = config.luxnix.generic-settings.network.keycloak;
+
   all-extraConfig = ''
       proxy_headers_hash_bucket_size ${toString cfg.settings.proxyHeadersHashBucketSize};
       proxy_headers_hash_max_size ${toString cfg.settings.proxyHeadersHashMaxSize};
@@ -154,32 +156,40 @@ in {
         };
       } else {}) 
       // (if cfg.keycloak.enable then {
-        # "${cfg.keycloak.adminDomain}" = {
-        #   forceSSL = true;
-        #   sslCertificate = cfg.sslCertPath;
-        #   sslCertificateKey = cfg.sslKeyPath;
+        "${cfg.keycloak.adminDomain}" = {
+          forceSSL = true;
+          sslCertificate = cfg.sslCertPath;
+          sslCertificateKey = cfg.sslKeyPath;
 
-        #   locations."/" = {
-        #       proxyPass = "http://${keycloak-host-vpn-ip}:${toString network.ports.keycloak.http}"; # TODO FIXME
-        #       extraConfig = base.all-extraConfig + intern-endoreg-net-extraConfig;
-        #   };
-        # };
+          locations."/" = {
+              proxyPass = "http://${keycloakConfig.vpnIp}:${toString keycloakConfig.port}";
+              extraConfig = base.all-extraConfig + intern-endoreg-net-extraConfig;
+          };
+        };
 
-        # "${cfg.keycloak.domain}" = {
-        #   forceSSL = true;
-        #   sslCertificate = cfg.sslCertPath;
-        #   sslCertificateKey = cfg.sslKeyPath;
+        "${cfg.keycloak.domain}" = {
+          forceSSL = true;
+          sslCertificate = cfg.sslCertPath;
+          sslCertificateKey = cfg.sslKeyPath;
 
-        #   locations."/" = {
-        #     proxyPass = "http://${keycloak-host-vpn-ip}:${toString network.ports.keycloak.http}"; # TODO FIXME
-        #     extraConfig = base.all-extraConfig;
-        #   };
-        # };
+          locations."/" = {
+              proxyPass = "http://${keycloakConfig.vpnIp}:${toString keycloakConfig.port}";
+            extraConfig = base.all-extraConfig;
+          };
+        };
       } else {});
     };
 
   };
 }
+
+
+    # keycloak = {
+    #   enable = mkBoolOpt false "Enable Keycloak routing";
+    #   domain = mkOpt types.str "keycloak.endo-reg.net" "Keycloak domain";
+    #   adminDomain = mkOpt types.str "keycloak-admin.endo-reg.net" "Keycloak admin domain";
+    #   port = mkOpt types.port 9080 "Keycloak HTTP port";
+    # };
 
 ##### FOR REFERENCE 
 # "drive-intern.endo-reg.net" = {

@@ -45,6 +45,10 @@ generic-settings.language = "english";
 
 generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
 
+generic-settings.network.keycloak.port = 9080;
+
+generic-settings.network.keycloak.vpnIp = "172.16.255.12";
+
 generic-settings.postgres.enable = true;
 
 generic-settings.sensitiveServiceGroupName = "sensitiveServices";

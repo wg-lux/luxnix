@@ -20,6 +20,8 @@ ansible_groups:
 group_roles: {}
 group_services: {}
 group_luxnix:
+  generic_settings.network.keycloak.vpnIp: '"172.16.255.12"'
+  generic_settings.network.keycloak.port: "9080"
   generic_settings.vpnSubnet: '"172.16.255.0/24"'
   generic_settings.sensitiveServiceGroupName: '"sensitiveServices"'
   generic_settings.postgres.enable: "true"
