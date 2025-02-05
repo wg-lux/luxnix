@@ -123,6 +123,8 @@ with lib.luxnix; let
 
     # Ensure password file permissions
     systemd.services.keycloak.serviceConfig = {
+      User = "keycloak";
+      Group = config.luxnix.generic-settings.sensitiveServiceGroupName;
       SupplementaryGroups = [ 
         config.luxnix.generic-settings.sensitiveServiceGroupName
         # Network Management
@@ -132,10 +134,8 @@ with lib.luxnix; let
 
     # Ensure the password file exists and has correct permissions
     system.activationScripts.keycloakSetup = ''
-      if [ -f ${cfg.dbPasswordfile} ]; then
-        chown keycloak:${config.luxnix.generic-settings.sensitiveServiceGroupName} ${cfg.dbPasswordfile}
-        chmod 640 ${cfg.dbPasswordfile}
-      fi
+      chown keycloak:${config.luxnix.generic-settings.sensitiveServiceGroupName} ${cfg.dbPasswordfile}
+      chmod 640 ${cfg.dbPasswordfile}
     '';
 
     # systemd.services.keycloak = {
