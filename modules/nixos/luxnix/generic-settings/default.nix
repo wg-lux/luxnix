@@ -78,7 +78,7 @@ in {
 
     sensitiveServiceGroupName = mkOption {
       type = types.str;
-      default = "sensitive-service-group";
+      default = "sensitiveServices";  # changed from "sensitive-service-group"
       description = ''
         The name of the sensitive service group.
       '';
