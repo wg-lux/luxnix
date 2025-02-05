@@ -133,7 +133,7 @@ with lib.luxnix; let
     # Ensure the password file exists and has correct permissions
     system.activationScripts.keycloakSetup = ''
       if [ -f ${cfg.dbPasswordfile} ]; then
-        chown root:${config.luxnix.generic-settings.sensitiveServiceGroupName} ${cfg.dbPasswordfile}
+        chown keycloak:${config.luxnix.generic-settings.sensitiveServiceGroupName} ${cfg.dbPasswordfile}
         chmod 640 ${cfg.dbPasswordfile}
       fi
     '';
