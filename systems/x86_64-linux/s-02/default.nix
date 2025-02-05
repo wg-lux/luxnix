@@ -43,7 +43,7 @@
     nginxHost.settings.recommendedProxySettings = true;
     nginxHost.settings.recommendedTlsSettings = true;
     nginxHost.testPage.domain = "test.endo-reg.net";
-    nginxHost.testPage.enable = true;
+    nginxHost.testPage.enable = false;
     nginxHost.testPage.port = 8081;
     postgres.main.enable = true;
     };
