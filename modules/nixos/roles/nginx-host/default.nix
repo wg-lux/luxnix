@@ -142,8 +142,8 @@ in {
       appendHttpConfig = appendHttpConfig;
       virtualHosts = {} // (if cfg.testPage.enable then {
         "${cfg.testPage.domain}" = {
-          forceSSL = false;
-          # forceSSL = true;
+          # forceSSL = false;
+          forceSSL = true;
           sslCertificate = cfg.sslCertPath;
           sslCertificateKey = cfg.sslKeyPath;
 
