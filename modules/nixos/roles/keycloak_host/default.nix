@@ -132,16 +132,7 @@ with lib.luxnix; let
       ];
     };
 
-    # Ensure the password file exists and has correct permissions
-    system.activationScripts.keycloakSetup = ''
-      # if password file does not exist, create it (generate random 8 digit password)
-      if [ ! -f ${cfg.dbPasswordfile} ]; then
-      echo "Generating random password for keycloak database user"
-      echo $(${pkgs.pwgen}/bin/pwgen 8 1) > ${cfg.dbPasswordfile}
-      chown admin:${config.luxnix.generic-settings.sensitiveServiceGroupName} ${cfg.dbPasswordfile}
-      chmod 660 ${cfg.dbPasswordfile}
-      fi
-    '';
+
 
     # systemd.services.keycloak = {
     #     wants = [ "openvpn-aglNet.service" "network-online.target" ];
