@@ -7,7 +7,7 @@ nginx_host_ssl_key_dest: "/etc/secrets/vault/ssl_key"
 nginx_host_roles:
   nginxHost.enable: "true"
 
-  nginxHost.testPage.enable: "true"
+  nginxHost.testPage.enable: "false"
   nginxHost.testPage.domain: '"test.endo-reg.net"'
   nginxHost.testPage.port: "8081"
 

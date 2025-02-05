@@ -168,7 +168,9 @@ with lib.luxnix; let
       CREDENTIALS_DIRECTORY = "/etc/secrets/vault";
     };
 
-    networking.firewall.allowedTCPPorts = [ cfg.httpPort ];
+    # networking.firewall.allowedTCPPorts = [ cfg.httpPort ];
+    # allow port on tun0
+    networking.firewall.interfaces.tun0.allowedTCPPorts = [ cfg.httpPort ]; #FIXME #TODO tun0 should be automatically inferred from defined vpn
   
   };
 
