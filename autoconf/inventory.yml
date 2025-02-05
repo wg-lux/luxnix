@@ -1,8 +1,9 @@
 all:
   - ansible_group_names:
-      - active_clients
+      - language_english
       - all
       - gpu_client
+      - active_clients
       - local_endoreg_db
     ansible_host: 172.16.255.102
     ansible_role_names: []
@@ -137,9 +138,10 @@ all:
       host_services: {}
       template_name: main
   - ansible_group_names:
-      - active_clients
+      - language_english
       - all
       - gpu_client
+      - active_clients
       - local_endoreg_db
     ansible_host: 172.16.255.108
     ansible_role_names: []
@@ -236,6 +238,7 @@ all:
       host_services: {}
       template_name: main
   - ansible_group_names:
+      - language_english
       - all
       - gpu_server
       - active_clients
@@ -297,6 +300,7 @@ all:
       host_services: {}
       template_name: main
   - ansible_group_names:
+      - language_english
       - all
       - gpu_server
       - active_clients
@@ -360,6 +364,7 @@ all:
       host_services: {}
       template_name: main
   - ansible_group_names:
+      - language_english
       - all
       - base_server
       - active_clients
@@ -425,6 +430,7 @@ all:
       host_services: {}
       template_name: main
   - ansible_group_names:
+      - language_english
       - all
       - gpu_client
       - active_clients
@@ -510,6 +516,7 @@ all:
         - demodemo
       template_name: main
   - ansible_group_names:
+      - language_english
       - all
       - base_server
       - active_clients
@@ -570,6 +577,7 @@ all:
       host_services: {}
       template_name: main
   - ansible_group_names:
+      - language_english
       - all
       - base_server
       - active_clients
@@ -762,6 +770,14 @@ groups:
     files: []
     name: active_clients
     vars: {}
+  - extra_user_names: []
+    files: []
+    name: language_english
+    vars:
+      group_luxnix:
+        generic_settings.language: '"english"'
+      group_roles: {}
+      group_services: {}
   - extra_user_names: []
     files: []
     name: openvpn_host

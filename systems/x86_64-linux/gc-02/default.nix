@@ -38,6 +38,8 @@ generic-settings.configurationPathRelative = "luxnix";
 
 generic-settings.enable = true;
 
+generic-settings.language = "english";
+
 generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
 
 generic-settings.postgres.enable = true;

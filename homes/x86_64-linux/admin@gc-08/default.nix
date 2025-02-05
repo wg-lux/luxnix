@@ -18,6 +18,7 @@
   luxnix.generic-settings = {
       enable = true;
       configurationPath = "dev/luxnix";
+      language = "english";
     };
 
   roles = {

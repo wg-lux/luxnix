@@ -47,6 +47,7 @@ group_luxnix:
   dns.enable: 'true'
   generic_settings.adminVpnIp: '"172.16.255.106"'
   generic_settings.enable: 'true'
+  generic_settings.language: '"english"'
   generic_settings.linux.kernelPackages: pkgs.linuxPackages_6_12
   generic_settings.postgres.enable: 'true'
   generic_settings.sensitiveServiceGroupName: '"sensitiveServices"'

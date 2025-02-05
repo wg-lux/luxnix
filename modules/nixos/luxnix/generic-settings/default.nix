@@ -114,6 +114,14 @@ in {
       '';
     };
 
+    language = mkOption {
+      type = types.enum [ "english" "german" ];
+      default = "german";
+      description = ''
+        Choose system language (e.g. "english", "german").
+      '';
+    };
+
     postgres = {
       enable = lib.mkOption {
         type = types.bool;
