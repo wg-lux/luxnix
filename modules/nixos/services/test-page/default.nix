@@ -14,12 +14,6 @@ in {
       description = "Port to bind the test page to";
     };
 
-    bindIP = mkOption {
-      type = types.str;
-      default = vpnIp;
-      description = "IP address to bind the test page to";
-    };
-
   };
 
   config = mkIf cfg.enable {
@@ -28,7 +22,7 @@ in {
       wantedBy = [ "multi-user.target" ];
       after = [ "network-online.target" ];
       serviceConfig = {
-        ExecStart = "${pkgs.busybox}/bin/busybox httpd -f -v -h /etc/opt/test-page -p ${cfg.bindIP}:${toString cfg.port}";
+        ExecStart = "${pkgs.busybox}/bin/busybox httpd -f -v -h /etc/opt/test-page -p 0.0.0.0:${toString cfg.port}";
       };
     };
 

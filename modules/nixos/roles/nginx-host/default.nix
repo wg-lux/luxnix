@@ -112,7 +112,6 @@ in {
     services.luxnix.testPage = {
       enable = cfg.testPage.enable;
       port = cfg.testPage.port;
-      bindIP = vpnIp;
     };
 
     # make sure the user exists
