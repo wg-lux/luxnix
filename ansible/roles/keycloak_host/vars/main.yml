@@ -1,5 +1,6 @@
-keycloak_host_psql_keycloak_pw_file: /etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password
-keycloak_host_psql_keycloak_pw_src: /home/admin/.lxv/deploy/{{ inventory_hostname }}/SCRT_roles_system_password_keycloak_host_password
+keycloak_host_password_filename: "SCRT_roles_system_password_keycloak_host_password"
+keycloak_host_psql_keycloak_pw_file: /etc/secrets/vault/{{ keycloak_host_psql_keycloak_pw_file }}
+keycloak_host_psql_keycloak_pw_src: /home/admin/.lxv/deploy/{{ inventory_hostname }}/{{ keycloak_host_psql_keycloak_pw_file }}
 
 keycloak_host_roles:
   keycloakHost.enable: "true"

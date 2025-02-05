@@ -38,7 +38,7 @@
 #     - dev_access
 
 - name: Set role local_endoreg_db
-  hosts: managed, gc-06, gc-02, gc-08
+  hosts: managed # , gc-06, gc-02, gc-08
   become: true
   roles:
     - local_endoreg_db

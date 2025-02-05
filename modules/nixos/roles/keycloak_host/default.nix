@@ -132,6 +132,9 @@ with lib.luxnix; let
       ];
     };
 
+    # make sure keycloak group exists
+    users.groups.keycloak = {};
+
 
 
     # systemd.services.keycloak = {

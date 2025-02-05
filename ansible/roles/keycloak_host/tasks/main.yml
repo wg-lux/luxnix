@@ -6,7 +6,8 @@
     owner: "{{ ansible_user }}"
     group: "keycloak"
   become: true
-  no_log: true
+  become_user: root
+  no_log: false
   vars:
     ansible_vault_identity: "{{ inventory_hostname }}@{{ lx_vault_dir_src }}/psk/{{ inventory_hostname }}.psk"
 
