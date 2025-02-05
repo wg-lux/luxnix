@@ -18,15 +18,14 @@
 
   luxnix.generic-settings = {
     enable = true;
-    configurationPath = "dev/luxnix";
-    language = "english";
+    configurationPath = "luxnix";
   };
 
   roles = {
     development.enable = true;
     social.enable = true;
-    #"gpu.enable = true;"
-    #"video.enable = true;"
+    gpu.enable = true;
+    video.enable = true;
   };
 
   home.stateVersion = "23.11";
