@@ -123,8 +123,8 @@ with lib.luxnix; let
 
     # Ensure password file permissions
     systemd.services.keycloak.serviceConfig = {
-      User = "keycloak";
-      Group = config.luxnix.generic-settings.sensitiveServiceGroupName;
+      User = "keycloak"; # hardcoded in keycloak nix package
+      Group = "keycloak"; # hardcoded in keycloak nix package
       SupplementaryGroups = [ 
         config.luxnix.generic-settings.sensitiveServiceGroupName
         # Network Management
@@ -177,6 +177,7 @@ with lib.luxnix; let
         hostname-admin = "https://${cfg.hostnameAdmin}";
         hostname-strict = false;
         hostname-strict-https = false;
+        hostname-backchannel-dynamic = true;
       };
     };
 
