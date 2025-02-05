@@ -6,22 +6,22 @@
 #     - openvpn_host
 
 ######### PRODUCTION #########
-# - name: Set role common for active_clients
-#   hosts: active_clients
-#   become: true
-#   roles:
-#     - common
+- name: Set role common for active_clients
+  hosts: active_clients
+  become: true
+  roles:
+    - common
 # - name: Set role managed for managed hosts
 #   hosts: managed
 #   become: true
 #   roles:
 # - managed
 
-# - name: Set role postgres_host_main for host "s-02"
-#   hosts: s-02
-#   become: true
-#   roles:
-#     - postgres_host_main
+- name: Set role postgres_host_main for host "s-02"
+  hosts: s-02
+  become: true
+  roles:
+    - postgres_host_main
 
 # - name: Set role postgres_host_test for host "s-03"
 #   hosts: s-03
@@ -29,24 +29,30 @@
 #   roles:
 #     - postgres_host_test
 
-# - name: Set Dev-Access Roles
-#   # hosts: gc-02, gc-08, gc-06
-#   hosts: gc-06, gc-08
-#   become: true
-#   roles:
-#     - dev_access
-
-# - name: Set role local_endoreg_db
-#   hosts: local_endoreg_db
-#   become: true
-#   roles:
-#     - local_endoreg_db
-
-- name: Set role keycloak_host for keycloak_host
-  hosts: s-02
+- name: Set Dev-Access Roles
+  hosts: gc-02, gc-08, gc-06
+  # hosts: gc-06, gc-08
   become: true
   roles:
-    - keycloak_host
+    - dev_access
+
+- name: Set role local_endoreg_db
+  hosts: local_endoreg_db
+  become: true
+  roles:
+    - local_endoreg_db
+
+# - name: Set role keycloak_host for keycloak_host
+#   hosts: s-02
+#   become: true
+#   roles:
+#     - keycloak_host
+
+- name: Set role nginx_host for nginx_host
+  hosts: nginx_host
+  become: true
+  roles:
+    - nginx_host
 ####### PRODUCTION END #########
 
 # - name: Set base_server group's roles

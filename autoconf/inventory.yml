@@ -508,12 +508,12 @@ all:
       - all
       - base_server
       - active_clients
-      - traefik_host
+      - nginx_host
       - managed
     ansible_host: 172.16.255.12
     ansible_role_names:
       - postgres_host_main
-      - traefik_host
+      - nginx_host
       - keycloak_host
     extra_secret_names: []
     extra_user_names:
@@ -540,7 +540,7 @@ all:
     vars:
       ansible_roles:
         - postgres_host_main
-        - traefik_host
+        - nginx_host
         - keycloak_host
       host_luxnix:
         generic_settings.hostPlatform: '"x86_64-linux"'
@@ -733,6 +733,7 @@ groups:
         generic_settings.sensitiveServiceGroupName: '"sensitiveServices"'
         generic_settings.traefikHostDomain: '"traefik.endo-reg.net"'
         generic_settings.traefikHostIp: '"172.16.255.12"'
+        generic_settings.vpnSubnet: '"172.16.255.0/24"'
         vault.dir: '"/etc/secrets/vault"'
         vault.enable: 'true'
         vault.key: '"/etc/secrets/.key"'
@@ -847,7 +848,7 @@ groups:
       group_services: {}
   - extra_user_names: []
     files: []
-    name: traefik_host
+    name: nginx_host
     vars: {}
   - extra_user_names: []
     files: []
@@ -962,3 +963,30 @@ roles:
         traefikHost.keycloak.port: '9080'
         traefikHost.sslCertPath: '"/etc/secrets/vault/ssl_cert"'
         traefikHost.sslKeyPath: '"/etc/secrets/vault/ssl_key"'
+  - extra_user_names: []
+    files: []
+    name: nginx_host
+    vars:
+      role_luxnix:
+        generic-settings.sslCertificateKeyPath: '"/etc/secrets/vault/ssl_key"'
+        generic-settings.sslCertificatePath: '"/etc/secrets/vault/ssl_cert"'
+      role_password_filename: SCRT_roles_system_password_nginx_host_password
+      role_roles:
+        nginxHost.enable: 'true'
+        nginxHost.keycloak.adminDomain: '"keycloak-admin.endo-reg.net"'
+        nginxHost.keycloak.domain: '"keycloak.endo-reg.net"'
+        nginxHost.keycloak.enable: 'false'
+        nginxHost.keycloak.port: '9080'
+        nginxHost.settings.proxyHeadersHashBucketSize: '64'
+        nginxHost.settings.proxyHeadersHashMaxSize: '512'
+        nginxHost.settings.recommendedGzipSettings: 'true'
+        nginxHost.settings.recommendedOptimisation: 'true'
+        nginxHost.settings.recommendedProxySettings: 'true'
+        nginxHost.settings.recommendedTlsSettings: 'true'
+        nginxHost.testPage.domain: '"test.endo-reg.net"'
+        nginxHost.testPage.enable: 'true'
+        nginxHost.testPage.port: '8081'
+      role_ssl_cert_dest: /etc/secrets/vault/ssl_cert
+      role_ssl_cert_src: /home/admin/dev/luxnix/secrets/ssl/ssl_cert
+      role_ssl_key_dest: /etc/secrets/vault/ssl_key
+      role_ssl_key_src: /home/admin/dev/luxnix/secrets/ssl/ssl_key

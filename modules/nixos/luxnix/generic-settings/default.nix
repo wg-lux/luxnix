@@ -36,6 +36,14 @@ in {
       '';
     };
 
+    vpnSubnet = mkOption {
+      type = types.str;
+      default = "172.16.255.0/24";
+      description = ''
+        The VPN subnet.
+      '';
+    };
+
     adminVpnIp = mkOption {
       type = types.str;
       default = "172.16.255.106";

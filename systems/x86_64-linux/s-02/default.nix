@@ -31,18 +31,25 @@
     keycloakHost.httpPort = 9080;
     keycloakHost.httpsPort = 9444;
     keycloakHost.vpnIP = "172.16.255.12";
+    nginxHost.enable = true;
+    nginxHost.keycloak.adminDomain = "keycloak-admin.endo-reg.net";
+    nginxHost.keycloak.domain = "keycloak.endo-reg.net";
+    nginxHost.keycloak.enable = false;
+    nginxHost.keycloak.port = 9080;
+    nginxHost.settings.proxyHeadersHashBucketSize = 64;
+    nginxHost.settings.proxyHeadersHashMaxSize = 512;
+    nginxHost.settings.recommendedGzipSettings = true;
+    nginxHost.settings.recommendedOptimisation = true;
+    nginxHost.settings.recommendedProxySettings = true;
+    nginxHost.settings.recommendedTlsSettings = true;
+    nginxHost.testPage.domain = "test.endo-reg.net";
+    nginxHost.testPage.enable = true;
+    nginxHost.testPage.port = 8081;
     postgres.main.enable = true;
-    traefikHost.allowedIPs = ["172.16.255.106" "172.16.255.1" "127.0.0.1"];    traefikHost.dashboard = true;
-    traefikHost.dashboardHost = "traefik.endo-reg.net";
-    traefikHost.enable = true;
-    traefikHost.insecure = false;
-    traefikHost.keycloak.domain = "keycloak.endo-reg.net";
-    traefikHost.keycloak.enable = true;
-    traefikHost.keycloak.port = 9080;
-    traefikHost.sslCertPath = "/etc/secrets/vault/ssl_cert";
-    traefikHost.sslKeyPath = "/etc/secrets/vault/ssl_key";
     };
 
+  services = {
+    };
 
   luxnix = {
     boot-decryption-stick.enable = true;
@@ -62,6 +69,8 @@ generic-settings.sensitiveServiceGroupName = "sensitiveServices";
 generic-settings.traefikHostDomain = "traefik.endo-reg.net";
 
 generic-settings.traefikHostIp = "172.16.255.12";
+
+generic-settings.vpnSubnet = "172.16.255.0/24";
 
 maintenance.autoUpdates.dates = "04:00";
 

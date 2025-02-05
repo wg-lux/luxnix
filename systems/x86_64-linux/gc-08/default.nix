@@ -51,6 +51,8 @@ generic-settings.traefikHostDomain = "traefik.endo-reg.net";
 
 generic-settings.traefikHostIp = "172.16.255.12";
 
+generic-settings.vpnSubnet = "172.16.255.0/24";
+
 gpu-eval.enable = true;
 
 maintenance.autoUpdates.dates = "09:00";

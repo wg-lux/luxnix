@@ -48,6 +48,7 @@ group_luxnix:
   generic_settings.sensitiveServiceGroupName: '"sensitiveServices"'
   generic_settings.traefikHostDomain: '"traefik.endo-reg.net"'
   generic_settings.traefikHostIp: '"172.16.255.12"'
+  generic_settings.vpnSubnet: '"172.16.255.0/24"'
   maintenance.autoUpdates.dates: '"04:00"'
   maintenance.autoUpdates.enable: 'true'
   maintenance.autoUpdates.flake: '"github:wg-lux/luxnix"'
