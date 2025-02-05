@@ -96,91 +96,6 @@ all:
   - ansible_group_names:
       - all
       - gpu_client
-      - active_clients
-      - local_endoreg_db
-      - test_group
-    ansible_host: 172.16.255.106
-    ansible_role_names: []
-    extra_secret_names:
-      - SCRT_roles_system_password_postgres_host_main_password
-      - SCRT_roles_system_password_postgres_host_test_password
-    extra_user_names:
-      - admin
-      - maintenance
-      - demodemo
-    facts:
-      all_ipv4_addresses:
-        - 172.16.255.106
-        - 192.168.0.115
-        - 192.168.0.235
-      bios:
-        date: 07/23/2024
-        vendor: American Megatrends International, LLC.
-        version: E17L5IMS.117
-      current_date: '2025-01-17T12:45:53Z'
-      default_ipv4:
-        address: 192.168.0.235
-        gateway: 192.168.0.1
-        interface: enp3s0
-        netmask: 255.255.255.0
-      machine: x86_64
-    files: []
-    hostname: gc-06
-    subnet: 172.16.255.
-    vars:
-      ansible_python_interpreter: '{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python'
-      ansible_roles: []
-      extra_secret_names:
-        - SCRT_roles_system_password_postgres_host_main_password
-        - SCRT_roles_system_password_postgres_host_test_password
-      host_luxnix:
-        generic_settings.configurationPath: lib.mkForce "/home/admin/dev/luxnix"
-        generic_settings.hostPlatform: '"x86_64-linux"'
-        generic_settings.linux.cpuMicrocode: '"intel"'
-        generic_settings.linux.extraModulePackages: []
-        generic_settings.linux.initrd.availableKernelModules:
-          - vmd
-          - xhci_pci
-          - ahci
-          - nvme
-          - usb_storage
-          - sd_mod
-        generic_settings.linux.initrd.kernelModules:
-          - dm-snapshot
-          - nfs
-          - btrfs
-        generic_settings.linux.initrd.supportedFilesystems:
-          - nfs
-          - btrfs
-        generic_settings.linux.kernelModules:
-          - kvm-intel
-        generic_settings.linux.kernelModulesBlacklist: []
-        generic_settings.linux.kernelParams: []
-        generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
-        generic_settings.linux.supportedFilesystems:
-          - btrfs
-          - nfs
-        generic_settings.systemStateVersion: '"23.11"'
-        generic_settings.vpnIp: '"172.16.255.106"'
-        maintenance.autoUpdates.enable: 'false'
-        nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
-        nvidia_prime.onboardBusId: '"PCI:0:2:0"'
-        nvidia_prime.onboardGpuType: '"intel"'
-      host_roles:
-        custom_packages.baseDevelopment: 'true'
-        custom_packages.videoEditing: 'true'
-        custom_packages.visuals: 'true'
-      host_services: {}
-      luxnix_branch: traefik
-      luxnix_dest: /home/admin/luxnix-production
-      luxnix_dev_repo: /home/admin/dev/luxnix
-      luxnix_repo: https://github.com/wg-lux/luxnix.git
-      os_extra_user_names:
-        - demodemo
-      template_name: main
-  - ansible_group_names:
-      - all
-      - gpu_client
     ansible_host: 172.16.255.107
     ansible_role_names: []
     extra_secret_names: []
@@ -448,6 +363,156 @@ all:
       - all
       - base_server
       - active_clients
+      - core_dev_ssh_access
+      - test_group
+      - managed
+    ansible_host: 172.16.255.13
+    ansible_role_names:
+      - postgres_host_test
+    extra_secret_names: []
+    extra_user_names:
+      - admin
+      - maintenance
+    facts:
+      all_ipv4_addresses:
+        - 192.168.1.24
+        - 172.16.255.13
+      bios:
+        date: 06/21/2023
+        vendor: American Megatrends International, LLC.
+        version: '0.22'
+      current_date: '2025-01-17T12:45:56Z'
+      default_ipv4:
+        address: 192.168.1.24
+        gateway: 192.168.178.1
+        interface: wlp3s0
+        netmask: 255.255.0.0
+      machine: x86_64
+    files: []
+    hostname: s-03
+    subnet: 172.16.255.
+    vars:
+      ansible_roles:
+        - postgres_host_test
+      host_luxnix:
+        generic_settings.enable: 'true'
+        generic_settings.hostPlatform: '"x86_64-linux"'
+        generic_settings.linux.cpuMicrocode: '"amd"'
+        generic_settings.linux.initrd.availableKernelModules:
+          - xhci_pci
+          - ahci
+          - usbhid
+          - nvme
+          - usb_storage
+          - sd_mod
+        generic_settings.linux.initrd.kernelModules:
+          - nfs
+          - btrfs
+        generic_settings.linux.initrd.supportedFilesystems:
+          - nfs
+          - btrfs
+        generic_settings.linux.kernelModules:
+          - kvm-amd
+        generic_settings.linux.kernelModulesBlacklist: []
+        generic_settings.linux.kernelParams: []
+        generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+        generic_settings.linux.supportedFilesystems:
+          - nfs
+          - btrfs
+        generic_settings.systemStateVersion: '"23.11"'
+        generic_settings.vpnIp: '"172.16.255.13"'
+      host_roles: {}
+      host_services: {}
+      template_name: main
+  - ansible_group_names:
+      - all
+      - gpu_client
+      - active_clients
+      - local_endoreg_db
+      - test_group
+    ansible_host: 172.16.255.106
+    ansible_role_names: []
+    extra_secret_names:
+      - SCRT_roles_system_password_postgres_host_main_password
+      - SCRT_roles_system_password_postgres_host_test_password
+    extra_user_names:
+      - admin
+      - maintenance
+      - demodemo
+    facts:
+      all_ipv4_addresses:
+        - 172.16.255.106
+        - 192.168.0.115
+        - 192.168.0.235
+      bios:
+        date: 07/23/2024
+        vendor: American Megatrends International, LLC.
+        version: E17L5IMS.117
+      current_date: '2025-01-17T12:45:53Z'
+      default_ipv4:
+        address: 192.168.0.235
+        gateway: 192.168.0.1
+        interface: enp3s0
+        netmask: 255.255.255.0
+      machine: x86_64
+    files: []
+    hostname: gc-06
+    subnet: 172.16.255.
+    vars:
+      ansible_python_interpreter: '{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python'
+      ansible_roles: []
+      extra_secret_names:
+        - SCRT_roles_system_password_postgres_host_main_password
+        - SCRT_roles_system_password_postgres_host_test_password
+      host_luxnix:
+        generic_settings.configurationPath: lib.mkForce "/home/admin/dev/luxnix"
+        generic_settings.hostPlatform: '"x86_64-linux"'
+        generic_settings.linux.cpuMicrocode: '"intel"'
+        generic_settings.linux.extraModulePackages: []
+        generic_settings.linux.initrd.availableKernelModules:
+          - vmd
+          - xhci_pci
+          - ahci
+          - nvme
+          - usb_storage
+          - sd_mod
+        generic_settings.linux.initrd.kernelModules:
+          - dm-snapshot
+          - nfs
+          - btrfs
+        generic_settings.linux.initrd.supportedFilesystems:
+          - nfs
+          - btrfs
+        generic_settings.linux.kernelModules:
+          - kvm-intel
+        generic_settings.linux.kernelModulesBlacklist: []
+        generic_settings.linux.kernelParams: []
+        generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+        generic_settings.linux.supportedFilesystems:
+          - btrfs
+          - nfs
+        generic_settings.systemStateVersion: '"23.11"'
+        generic_settings.vpnIp: '"172.16.255.106"'
+        maintenance.autoUpdates.enable: 'false'
+        nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
+        nvidia_prime.onboardBusId: '"PCI:0:2:0"'
+        nvidia_prime.onboardGpuType: '"intel"'
+      host_roles:
+        custom_packages.baseDevelopment: 'true'
+        custom_packages.videoEditing: 'true'
+        custom_packages.visuals: 'true'
+      host_services: {}
+      luxnix_branch: traefik
+      luxnix_dest: /home/admin/luxnix-production
+      luxnix_dev_repo: /home/admin/dev/luxnix
+      luxnix_repo: https://github.com/wg-lux/luxnix.git
+      os_extra_user_names:
+        - demodemo
+      template_name: main
+  - ansible_group_names:
+      - all
+      - base_server
+      - active_clients
       - openvpn_host
       - managed
     ansible_host: 172.16.255.1
@@ -568,71 +633,6 @@ all:
           - btrfs
         generic_settings.systemStateVersion: '"23.11"'
         generic_settings.vpnIp: '"172.16.255.12"'
-      host_roles: {}
-      host_services: {}
-      template_name: main
-  - ansible_group_names:
-      - all
-      - base_server
-      - active_clients
-      - core_dev_ssh_access
-      - test_group
-      - managed
-    ansible_host: 172.16.255.13
-    ansible_role_names:
-      - postgres_host_test
-    extra_secret_names: []
-    extra_user_names:
-      - admin
-      - maintenance
-    facts:
-      all_ipv4_addresses:
-        - 192.168.1.24
-        - 172.16.255.13
-      bios:
-        date: 06/21/2023
-        vendor: American Megatrends International, LLC.
-        version: '0.22'
-      current_date: '2025-01-17T12:45:56Z'
-      default_ipv4:
-        address: 192.168.1.24
-        gateway: 192.168.178.1
-        interface: wlp3s0
-        netmask: 255.255.0.0
-      machine: x86_64
-    files: []
-    hostname: s-03
-    subnet: 172.16.255.
-    vars:
-      ansible_roles:
-        - postgres_host_test
-      host_luxnix:
-        generic_settings.enable: 'true'
-        generic_settings.hostPlatform: '"x86_64-linux"'
-        generic_settings.linux.cpuMicrocode: '"amd"'
-        generic_settings.linux.initrd.availableKernelModules:
-          - xhci_pci
-          - ahci
-          - usbhid
-          - nvme
-          - usb_storage
-          - sd_mod
-        generic_settings.linux.initrd.kernelModules:
-          - nfs
-          - btrfs
-        generic_settings.linux.initrd.supportedFilesystems:
-          - nfs
-          - btrfs
-        generic_settings.linux.kernelModules:
-          - kvm-amd
-        generic_settings.linux.kernelModulesBlacklist: []
-        generic_settings.linux.kernelParams: []
-        generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
-        generic_settings.linux.supportedFilesystems:
-          - nfs
-          - btrfs
-        generic_settings.systemStateVersion: '"23.11"'
-        generic_settings.vpnIp: '"172.16.255.13"'
       host_roles: {}
       host_services: {}
       template_name: main
@@ -944,27 +944,6 @@ roles:
     vars: {}
   - extra_user_names: []
     files: []
-    name: traefik_host
-    vars:
-      role_luxnix:
-        generic-settings.sslCertificateKeyPath: '"/etc/secrets/vault/ssl_key"'
-        generic-settings.sslCertificatePath: '"/etc/secrets/vault/ssl_cert"'
-      role_roles:
-        traefikHost.allowedIPs:
-          - 172.16.255.106
-          - 172.16.255.1
-          - 127.0.0.1
-        traefikHost.dashboard: 'true'
-        traefikHost.dashboardHost: '"traefik.endo-reg.net"'
-        traefikHost.enable: 'true'
-        traefikHost.insecure: 'false'
-        traefikHost.keycloak.domain: '"keycloak.endo-reg.net"'
-        traefikHost.keycloak.enable: 'true'
-        traefikHost.keycloak.port: '9080'
-        traefikHost.sslCertPath: '"/etc/secrets/vault/ssl_cert"'
-        traefikHost.sslKeyPath: '"/etc/secrets/vault/ssl_key"'
-  - extra_user_names: []
-    files: []
     name: nginx_host
     vars:
       role_luxnix:
@@ -990,3 +969,24 @@ roles:
       role_ssl_cert_src: /home/admin/dev/luxnix/secrets/ssl/ssl_cert
       role_ssl_key_dest: /etc/secrets/vault/ssl_key
       role_ssl_key_src: /home/admin/dev/luxnix/secrets/ssl/ssl_key
+  - extra_user_names: []
+    files: []
+    name: traefik_host
+    vars:
+      role_luxnix:
+        generic-settings.sslCertificateKeyPath: '"/etc/secrets/vault/ssl_key"'
+        generic-settings.sslCertificatePath: '"/etc/secrets/vault/ssl_cert"'
+      role_roles:
+        traefikHost.allowedIPs:
+          - 172.16.255.106
+          - 172.16.255.1
+          - 127.0.0.1
+        traefikHost.dashboard: 'true'
+        traefikHost.dashboardHost: '"traefik.endo-reg.net"'
+        traefikHost.enable: 'true'
+        traefikHost.insecure: 'false'
+        traefikHost.keycloak.domain: '"keycloak.endo-reg.net"'
+        traefikHost.keycloak.enable: 'true'
+        traefikHost.keycloak.port: '9080'
+        traefikHost.sslCertPath: '"/etc/secrets/vault/ssl_cert"'
+        traefikHost.sslKeyPath: '"/etc/secrets/vault/ssl_key"'
