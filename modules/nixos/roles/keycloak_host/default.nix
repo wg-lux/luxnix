@@ -114,9 +114,7 @@ with lib.luxnix; let
     };
 
     users.groups = {
-      "${cfg.dbUsername}" = {
-        gid = cfg.gid;
-      };
+      "${cfg.dbUsername}" = {};
     };
 
     services.postgresql.ensureDatabases = [ cfg.dbUsername ];
@@ -131,10 +129,6 @@ with lib.luxnix; let
         "networkmanager"  
       ];
     };
-
-    # make sure keycloak group exists
-    users.groups.keycloak = {};
-
 
 
     # systemd.services.keycloak = {
