@@ -6,17 +6,17 @@
 #     - openvpn_host
 
 ######### PRODUCTION #########
-- name: Set role common for active_clients
-  hosts: active_clients
-  become: true
-  roles:
-    - common
+# - name: Set role common for active_clients
+#   hosts: active_clients
+#   become: true
+#   roles:
+#     - common
 
-- name: Set role managed for managed hosts
-  hosts: managed
-  become: true
-  roles:
-    - managed
+# - name: Set role managed for managed hosts
+#   hosts: managed
+#   become: true
+#   roles:
+#     - managed
 
 - name: Set role postgres_host_main for host "s-02"
   hosts: s-02
