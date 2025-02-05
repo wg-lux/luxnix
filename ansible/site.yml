@@ -43,11 +43,11 @@
   roles:
     - local_endoreg_db
 
-# - name: Set role keycloak_host for keycloak_host
-#   hosts: s-02
-#   become: true
-#   roles:
-#     - keycloak_host
+- name: Set role keycloak_host for keycloak_host
+  hosts: s-02
+  become: true
+  roles:
+    - keycloak_host
 
 - name: Set role nginx_host for nginx_host
   hosts: nginx_host
