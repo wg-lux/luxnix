@@ -138,9 +138,9 @@ with lib.luxnix; let
       if [ ! -f ${cfg.dbPasswordfile} ]; then
       echo "Generating random password for keycloak database user"
       echo $(${pkgs.pwgen}/bin/pwgen 8 1) > ${cfg.dbPasswordfile}
-      fi
       chown admin:${config.luxnix.generic-settings.sensitiveServiceGroupName} ${cfg.dbPasswordfile}
-      chmod 640 ${cfg.dbPasswordfile}
+      chmod 660 ${cfg.dbPasswordfile}
+      fi
     '';
 
     # systemd.services.keycloak = {
