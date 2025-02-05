@@ -1,0 +1,18 @@
+[http.routers]
+[http.routers.my-app]
+rule = "Host(`app.endo-reg.net`)"
+entryPoints = ["websecure"]
+service = "my-app-service"
+tls = true
+
+[http.services]
+[http.services.my-app-service.loadBalancer]
+[[http.services.my-app-service.loadBalancer.servers]]
+# Point to the internal service you'd like to expose.
+# Replace IP and port with the actual internal service address.
+url = "http://192.168.1.100:8080"
+
+[tls]
+[[tls.certificates]]
+certFile = "/etc/traefik/certs/endo-reg.net.crt"
+keyFile = "/etc/traefik/certs/endo-reg.net.key"

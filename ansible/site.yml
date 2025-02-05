@@ -11,11 +11,12 @@
 #   become: true
 #   roles:
 #     - common
+
 # - name: Set role managed for managed hosts
 #   hosts: managed
 #   become: true
 #   roles:
-# - managed
+#     - managed
 
 # - name: Set role postgres_host_main for host "s-02"
 #   hosts: s-02
@@ -30,8 +31,8 @@
 #     - postgres_host_test
 
 # - name: Set Dev-Access Roles
-#   # hosts: gc-02, gc-08, gc-06
-#   hosts: gc-06, gc-08
+#   hosts: gc-02, gc-08, gc-06
+#   # hosts: gc-06, gc-08
 #   become: true
 #   roles:
 #     - dev_access
@@ -42,11 +43,17 @@
 #   roles:
 #     - local_endoreg_db
 
-- name: Set role keycloak_host for keycloak_host
-  hosts: s-02
+# - name: Set role keycloak_host for keycloak_host
+#   hosts: s-02
+#   become: true
+#   roles:
+#     - keycloak_host
+
+- name: Set role nginx_host for nginx_host
+  hosts: nginx_host
   become: true
   roles:
-    - keycloak_host
+    - nginx_host
 ####### PRODUCTION END #########
 
 # - name: Set base_server group's roles

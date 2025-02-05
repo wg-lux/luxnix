@@ -1,0 +1,29 @@
+http:
+  routers:
+    test-router:
+      rule: "Host(`test.endo-reg.net`)"
+      entryPoints:
+        - web
+        - websecure
+      service: test-service
+      # Enable TLS on the router (it will use the certificate defined in the entrypoint)
+      tls: {}
+      # (Optional) Attach middleware if needed; e.g. for logging or rate limiting.
+      # middlewares:
+      #   - internal-ip-whitelist
+
+  services:
+    test-service:
+      loadBalancer:
+        servers:
+          - url: "http://172.16.255.12:8081"
+
+  # Example middleware for IP whitelisting.
+  # In the future, you could activate this on specific routers (e.g. for *-intern.endo-reg.net)
+  middlewares:
+    internal-ip-whitelist:
+      ipWhiteList:
+        sourceRange:
+          # Update this list with the CIDR ranges you want to allow.
+          - "192.168.1.0/24"
+          - "172.16.255.0/24"

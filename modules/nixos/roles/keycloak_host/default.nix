@@ -107,6 +107,7 @@ with lib.luxnix; let
         extraGroups = [ 
           config.luxnix.generic-settings.sensitiveServiceGroupName 
           "sslCert"
+          "networkmanager"  
         ];
         # uid = cfg.uid;
       };
@@ -122,7 +123,11 @@ with lib.luxnix; let
 
     # Ensure password file permissions
     systemd.services.keycloak.serviceConfig = {
-      SupplementaryGroups = [ config.luxnix.generic-settings.sensitiveServiceGroupName ];
+      SupplementaryGroups = [ 
+        config.luxnix.generic-settings.sensitiveServiceGroupName
+        # Network Management
+        "networkmanager"  
+      ];
     };
 
     # Ensure the password file exists and has correct permissions
@@ -149,29 +154,22 @@ with lib.luxnix; let
         port = config.services.postgresql.settings.port;
       };
       settings = {
-        hostname = cfg.hostname;
-        http-host = cfg.vpnIP;
-        # http-host = "0.0.0.0"; #FIXME harden
+        http-host = "0.0.0.0";  # Listen on all interfaces
         http-port = cfg.httpPort;
-        https-port = cfg.httpsPort; 
-        # proxy = conf.proxy;# edge
-        domain = cfg.hostname; # currently "keycloak.endo-reg.net"
-        domain-admin = cfg.hostnameAdmin; # currently "keycloak-admin.endo-reg.net"
+        http-enabled = true;  # Explicitly enable HTTP
+        hostname = "${cfg.hostname}"; # remove leading 'https://'
+        # hostname-admin = "https://${cfg.hostnameAdmin}";
+        hostname-strict = false;
+        hostname-strict-https = false;
       };
-      sslCertificateKey = config.luxnix.generic-settings.sslCertificateKeyPath;
-      sslCertificate = config.luxnix.generic-settings.sslCertificatePath;
     };
 
     systemd.services.keycloak.environment = {
       CREDENTIALS_DIRECTORY = "/etc/secrets/vault";
     };
 
-    networking.firewall.allowedTCPPorts = [ cfg.httpPort cfg.httpsPort ];
+    networking.firewall.allowedTCPPorts = [ cfg.httpPort ];
   
-    # add hosts entry for keycloak
-    networking.hosts = {
-      "${cfg.vpnIP}" = [ cfg.hostname cfg.hostnameAdmin ];
-    };
   };
 
 }

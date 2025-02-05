@@ -1,0 +1,44 @@
+nginx_host_password_filename: "SCRT_roles_system_password_nginx_host_password"
+nginx_host_ssl_cert_src: "/home/admin/dev/luxnix/secrets/ssl/ssl_cert"
+nginx_host_ssl_key_src: "/home/admin/dev/luxnix/secrets/ssl/ssl_key"
+nginx_host_ssl_cert_dest: "/etc/secrets/vault/ssl_cert"
+nginx_host_ssl_key_dest: "/etc/secrets/vault/ssl_key"
+
+nginx_host_roles:
+  nginxHost.enable: "true"
+
+  nginxHost.testPage.enable: "true"
+  nginxHost.testPage.domain: '"test.endo-reg.net"'
+  nginxHost.testPage.port: "8081"
+
+  nginxHost.keycloak.enable: "false"
+  nginxHost.keycloak.domain: '"keycloak.endo-reg.net"'
+  nginxHost.keycloak.port: "9080"
+  nginxHost.keycloak.adminDomain: '"keycloak-admin.endo-reg.net"'
+
+  nginxHost.settings.proxyHeadersHashMaxSize: "512"
+  nginxHost.settings.proxyHeadersHashBucketSize: "64"
+  nginxHost.settings.recommendedGzipSettings: "true"
+  nginxHost.settings.recommendedProxySettings: "true"
+  nginxHost.settings.recommendedTlsSettings: "true"
+  nginxHost.settings.recommendedOptimisation: "true"
+
+  # traefikHost.enable: "true"
+  # traefikHost.dashboard: "true"
+  # traefikHost.insecure: "false"
+  # traefikHost.dashboardHost: '"traefik.endo-reg.net"'
+  # traefikHost.sslCertPath: '"/etc/secrets/vault/ssl_cert"'
+  # traefikHost.sslKeyPath: '"/etc/secrets/vault/ssl_key"'
+  # traefikHost.allowedIPs:
+  #   - "172.16.255.106"
+  #   - "172.16.255.1"
+  #   - "127.0.0.1"
+  # traefikHost.keycloak.enable: "true"
+  # traefikHost.keycloak.domain: '"keycloak.endo-reg.net"'
+  # traefikHost.keycloak.port: "9080"
+
+nginx_host_luxnix:
+  # generic-settings.sslCertificatePath: '"/home/admin/.ssl/__endo-reg_net.pem"'
+  # generic-settings.sslCertificateKeyPath: '"/home/admin/.ssl/endo-reg-net.key"'
+  generic-settings.sslCertificatePath: '"/etc/secrets/vault/ssl_cert"'
+  generic-settings.sslCertificateKeyPath: '"/etc/secrets/vault/ssl_key"'

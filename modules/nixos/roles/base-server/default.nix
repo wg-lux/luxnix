@@ -67,6 +67,7 @@ in {
 
     roles = {
       desktop.enable = true;
+      custom-packages.baseDevelopment = true;
     };
 
     services = {

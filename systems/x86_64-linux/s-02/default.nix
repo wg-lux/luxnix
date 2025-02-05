@@ -28,15 +28,24 @@
     keycloakHost.enable = true;
     keycloakHost.homeDir = "/home/keycloak";
     keycloakHost.hostname = "keycloak.endo-reg.net";
-    keycloakHost.hostnameAdmin = "keycloak-admin.endo-reg.net";
     keycloakHost.httpPort = 9080;
     keycloakHost.httpsPort = 9444;
     keycloakHost.vpnIP = "172.16.255.12";
+    nginxHost.enable = true;
+    nginxHost.keycloak.adminDomain = "keycloak-admin.endo-reg.net";
+    nginxHost.keycloak.domain = "keycloak.endo-reg.net";
+    nginxHost.keycloak.enable = false;
+    nginxHost.keycloak.port = 9080;
+    nginxHost.settings.proxyHeadersHashBucketSize = 64;
+    nginxHost.settings.proxyHeadersHashMaxSize = 512;
+    nginxHost.settings.recommendedGzipSettings = true;
+    nginxHost.settings.recommendedOptimisation = true;
+    nginxHost.settings.recommendedProxySettings = true;
+    nginxHost.settings.recommendedTlsSettings = true;
+    nginxHost.testPage.domain = "test.endo-reg.net";
+    nginxHost.testPage.enable = true;
+    nginxHost.testPage.port = 8081;
     postgres.main.enable = true;
-    traefikHost.allowedIPs = ["172.16.255.106" "172.16.255.1" "127.0.0.1"];    traefikHost.dashboard = true;
-    traefikHost.dashboardHost = "traefik.endoreg.intern";
-    traefikHost.enable = true;
-    traefikHost.insecure = false;
     };
 
   services = {
@@ -57,9 +66,11 @@ generic-settings.postgres.enable = true;
 
 generic-settings.sensitiveServiceGroupName = "sensitiveServices";
 
-generic-settings.traefikHostDomain = "traefik.endoreg.local";
+generic-settings.traefikHostDomain = "traefik.endo-reg.net";
 
 generic-settings.traefikHostIp = "172.16.255.12";
+
+generic-settings.vpnSubnet = "172.16.255.0/24";
 
 maintenance.autoUpdates.dates = "04:00";
 
@@ -77,9 +88,9 @@ vault.key = "/etc/secrets/.key";
 
 vault.psk = "/etc/secrets/.psk";
 
-generic-settings.sslCertificateKeyPath = "/home/admin/.ssl/endo-reg-net.key";
+generic-settings.sslCertificateKeyPath = "/etc/secrets/vault/ssl_key";
 
-generic-settings.sslCertificatePath = "/home/admin/.ssl/__endo-reg_net.pem";
+generic-settings.sslCertificatePath = "/etc/secrets/vault/ssl_cert";
 
 generic-settings.hostPlatform = "x86_64-linux";
 

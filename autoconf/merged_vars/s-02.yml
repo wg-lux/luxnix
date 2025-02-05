@@ -24,7 +24,7 @@ ansible_key_source_dir: '{{ luxnix_dev_repo }}/secrets/ansible-vault-keys-source
 ansible_python_interpreter: '{{ luxnix_dest }}/.devenv/state/venv/bin/python'
 ansible_roles:
   - postgres_host_main
-  - traefik_host
+  - nginx_host
   - keycloak_host
 ansible_ssh_private_key_file: ~/.ssh/id_ed25519
 ansible_user: admin
@@ -50,8 +50,9 @@ group_luxnix:
   generic_settings.linux.kernelPackages: pkgs.linuxPackages_6_12
   generic_settings.postgres.enable: 'true'
   generic_settings.sensitiveServiceGroupName: '"sensitiveServices"'
-  generic_settings.traefikHostDomain: '"traefik.endoreg.local"'
+  generic_settings.traefikHostDomain: '"traefik.endo-reg.net"'
   generic_settings.traefikHostIp: '"172.16.255.12"'
+  generic_settings.vpnSubnet: '"172.16.255.0/24"'
   maintenance.autoUpdates.dates: '"04:00"'
   maintenance.autoUpdates.enable: 'true'
   maintenance.autoUpdates.flake: '"github:wg-lux/luxnix"'
@@ -111,8 +112,9 @@ postgres_host_main_password_filename: SCRT_roles_system_password_postgres_host_m
 postgres_host_test_ip: 172.16.255.13
 postgres_host_test_password_filename: SCRT_roles_system_password_postgres_host_test_password
 role_luxnix:
-  generic-settings.sslCertificateKeyPath: '"/home/admin/.ssl/endo-reg-net.key"'
-  generic-settings.sslCertificatePath: '"/home/admin/.ssl/__endo-reg_net.pem"'
+  generic-settings.sslCertificateKeyPath: '"/etc/secrets/vault/ssl_key"'
+  generic-settings.sslCertificatePath: '"/etc/secrets/vault/ssl_cert"'
+role_password_filename: SCRT_roles_system_password_nginx_host_password
 role_psql_keycloak_pw_file: /etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password
 role_psql_keycloak_pw_src: /home/admin/.lxv/deploy/{{ inventory_hostname }}/SCRT_roles_system_password_keycloak_host_password
 role_roles:
@@ -123,18 +125,27 @@ role_roles:
   keycloakHost.enable: 'true'
   keycloakHost.homeDir: '"/home/keycloak"'
   keycloakHost.hostname: '"keycloak.endo-reg.net"'
-  keycloakHost.hostnameAdmin: '"keycloak-admin.endo-reg.net"'
   keycloakHost.httpPort: '9080'
   keycloakHost.httpsPort: '9444'
   keycloakHost.vpnIP: '"172.16.255.12"'
+  nginxHost.enable: 'true'
+  nginxHost.keycloak.adminDomain: '"keycloak-admin.endo-reg.net"'
+  nginxHost.keycloak.domain: '"keycloak.endo-reg.net"'
+  nginxHost.keycloak.enable: 'false'
+  nginxHost.keycloak.port: '9080'
+  nginxHost.settings.proxyHeadersHashBucketSize: '64'
+  nginxHost.settings.proxyHeadersHashMaxSize: '512'
+  nginxHost.settings.recommendedGzipSettings: 'true'
+  nginxHost.settings.recommendedOptimisation: 'true'
+  nginxHost.settings.recommendedProxySettings: 'true'
+  nginxHost.settings.recommendedTlsSettings: 'true'
+  nginxHost.testPage.domain: '"test.endo-reg.net"'
+  nginxHost.testPage.enable: 'true'
+  nginxHost.testPage.port: '8081'
   postgres.main.enable: 'true'
-  traefikHost.allowedIPs:
-    - 172.16.255.106
-    - 172.16.255.1
-    - 127.0.0.1
-  traefikHost.dashboard: 'true'
-  traefikHost.dashboardHost: '"traefik.endoreg.intern"'
-  traefikHost.enable: 'true'
-  traefikHost.insecure: 'false'
+role_ssl_cert_dest: /etc/secrets/vault/ssl_cert
+role_ssl_cert_src: /home/admin/dev/luxnix/secrets/ssl/ssl_cert
+role_ssl_key_dest: /etc/secrets/vault/ssl_key
+role_ssl_key_src: /home/admin/dev/luxnix/secrets/ssl/ssl_key
 secret_dir: /etc/secrets
 template_name: main

@@ -23,6 +23,8 @@ with lib.luxnix; let
 
   baseDevelopment = with pkgs; [
     # vscode-fhs
+    cacert
+    openssl
     vscode
     gparted exfatprogs ntfs3g
     easyrsa
