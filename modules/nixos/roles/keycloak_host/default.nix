@@ -138,6 +138,21 @@ with lib.luxnix; let
       fi
     '';
 
+    # systemd.services.keycloak = {
+    #     wants = [ "openvpn-aglNet.service" "network-online.target" ];
+    #     after = [ "openvpn-aglNet.service" "network-online.target" ];
+    #     serviceConfig = {
+    #     # Add a pre-start script to check for database connectivity
+    #     ExecStartPre = pkgs.writeScript "check-db-connectivity.sh" ''
+    #         #!/bin/sh
+    #         until ${pkgs.netcat}/bin/nc -z ${conf.database.host} ${toString conf.database.port}; do
+    #         echo "Waiting for database connectivity..."
+    #         sleep 1
+    #         done
+    #     '';
+    #     };
+    # };
+
     services.keycloak = {
       enable = true;
       initialAdminPassword = cfg.adminInitialPassword;
@@ -155,10 +170,11 @@ with lib.luxnix; let
       };
       settings = {
         http-host = "0.0.0.0";  # Listen on all interfaces
+        # http-host = "localhost";  # Listen on all interfaces
         http-port = cfg.httpPort;
         http-enabled = true;  # Explicitly enable HTTP
-        hostname = "${cfg.hostname}"; # remove leading 'https://'
-        # hostname-admin = "https://${cfg.hostnameAdmin}";
+        hostname = "http://${cfg.hostname}"; # remove leading 'https://'
+        hostname-admin = "https://${cfg.hostnameAdmin}";
         hostname-strict = false;
         hostname-strict-https = false;
       };
@@ -168,9 +184,9 @@ with lib.luxnix; let
       CREDENTIALS_DIRECTORY = "/etc/secrets/vault";
     };
 
-    # networking.firewall.allowedTCPPorts = [ cfg.httpPort ];
+    networking.firewall.allowedTCPPorts = [ cfg.httpPort ];
     # allow port on tun0
-    networking.firewall.interfaces.tun0.allowedTCPPorts = [ cfg.httpPort ]; #FIXME #TODO tun0 should be automatically inferred from defined vpn
+    # networking.firewall.interfaces.tun0.allowedTCPPorts = [ cfg.httpPort ]; #FIXME #TODO tun0 should be automatically inferred from defined vpn
   
   };
 
