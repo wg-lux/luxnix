@@ -176,7 +176,7 @@ with lib.luxnix; let
         createLocally = false;
         username = cfg.dbUsername; # 
         # useSSL = false; #FIXME harden
-        passwordFile = "${cfg.homeDir}/db-password";
+        passwordFile = "db-password";
         # Add explicit type to ensure proper database configuration
         type = "postgresql";
 
@@ -198,7 +198,7 @@ with lib.luxnix; let
     };
 
     systemd.services.keycloak.environment = {
-      CREDENTIALS_DIRECTORY = "/etc/secrets/vault";
+      CREDENTIALS_DIRECTORY = "${cfg.homeDir}";
     };
 
     networking.firewall.allowedTCPPorts = [ cfg.httpPort ];
