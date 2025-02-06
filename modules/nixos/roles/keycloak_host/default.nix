@@ -185,7 +185,7 @@ with lib.luxnix; let
         port = config.services.postgresql.settings.port;
       };
       settings = {
-        http-host = "0.0.0.0";  # Listen on all interfaces
+        http-host = "172.16.255.12";  # Listen on all interfaces
         # http-host = "localhost";  # Listen on all interfaces
         http-port = cfg.httpPort;
         http-enabled = true;  # Explicitly enable HTTP
