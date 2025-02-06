@@ -180,7 +180,7 @@ with lib.luxnix; let
         # Add explicit type to ensure proper database configuration
         type = "postgresql";
 
-        host = "localhost";
+        host = "127.0.0.1";
         name = cfg.dbUsername; # defaults to keycloak
         port = config.services.postgresql.settings.port;
       };
