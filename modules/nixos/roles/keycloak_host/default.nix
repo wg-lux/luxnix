@@ -42,7 +42,7 @@ with lib.luxnix; let
 
     homeDir = mkOption {
       type = types.str;
-      default = "/home/keycloak";
+      default = "/etc/keycloak";
       description = "Home directory for keycloak";
     };
 
@@ -164,7 +164,7 @@ with lib.luxnix; let
         createLocally = false;
         username = cfg.dbUsername; # 
         # useSSL = false; #FIXME harden
-        passwordFile = "/etc/keycloak/keycloak-db-password";
+        passwordFile = cfg.dbPasswordfile;
         # Add explicit type to ensure proper database configuration
         type = "postgresql";
 
