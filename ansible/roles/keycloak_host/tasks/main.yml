@@ -1,16 +1,18 @@
-- name: Deploy keycloak role password from source
+- name: Deploy keycloak role password
   ansible.builtin.copy:
     src: "{{ lx_vault_dir_src }}/deploy/{{ inventory_hostname }}/{{ keycloak_host_password_filename }}"
-    dest: "{{ lx_vault_dir }}/{{ keycloak_host_password_filename }}"
-    owner: "{{ ansible_user }}"
+    dest: "/etc/keycloak/{{ keycloak_host_password_filename }}"
+    owner: keycloak
+    group: keycloak
     mode: "0600"
   become: true
+  become_user: root
   no_log: false
   vars:
     ansible_vault_identity: "{{ inventory_hostname }}@{{ lx_vault_dir_src }}/psk/{{ inventory_hostname }}.psk"
 
 - name: Read keycloak database password from file
-  ansible.builtin.command: "cat {{ lx_vault_dir }}/{{ keycloak_host_password_filename }}"
+  ansible.builtin.command: "cat /etc/keycloak/{{ keycloak_host_password_filename }}"
   register: keycloak_db_password
   become: true
   become_user: root
