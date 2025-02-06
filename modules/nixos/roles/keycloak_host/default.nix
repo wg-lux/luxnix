@@ -145,9 +145,9 @@ with lib.luxnix; let
       wantedBy = [ "multi-user.target" ];
       # Runs only once on boot
       serviceConfig.ExecStart = ''
-        ${pkgs.coreutils}/bin/cp /etc/secrets/vault/${cfg.dbPasswordfile} ${cfg.homeDir}/db-password
-        ${pkgs.coreutils}/bin/chown keycloak:keycloak ${cfg.homeDir}/db-password
-        ${pkgs.coreutils}/bin/chmod 0600 ${cfg.homeDir}/db-password
+        cp /etc/secrets/vault/${cfg.dbPasswordfile} ${cfg.homeDir}/db-password
+        chown keycloak:keycloak ${cfg.homeDir}/db-password
+        chmod 0600 ${cfg.homeDir}/db-password
       '';
     };
 
@@ -176,7 +176,7 @@ with lib.luxnix; let
         createLocally = false;
         username = cfg.dbUsername; # 
         # useSSL = false; #FIXME harden
-        passwordFile = "./db-password";
+        passwordFile = "${cfg.homeDir}/db-password";
         # Add explicit type to ensure proper database configuration
         type = "postgresql";
 
@@ -198,7 +198,7 @@ with lib.luxnix; let
     };
 
     systemd.services.keycloak.environment = {
-      CREDENTIALS_DIRECTORY = "${cfg.homeDir}";
+      CREDENTIALS_DIRECTORY = "${cfg.homeDir}/";
     };
 
     networking.firewall.allowedTCPPorts = [ cfg.httpPort ];
