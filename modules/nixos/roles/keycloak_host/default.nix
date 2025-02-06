@@ -145,9 +145,9 @@ with lib.luxnix; let
       serviceConfig = {
         Type = "oneshot";
         ExecStart = ''
-          cp /etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password /etc/keycloak/keycloak-db-password
-          chown keycloak:keycloak /etc/keycloak/keycloak-db-password
-          chmod 600 /etc/keycloak/keycloak-db-password
+          ${pkgs.coreutils}/bin/cp /etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password /etc/keycloak/keycloak-db-password
+          ${pkgs.coreutils}/bin/chown keycloak:keycloak /etc/keycloak/keycloak-db-password
+          ${pkgs.coreutils}/bin/chmod 600 /etc/keycloak/keycloak-db-password
         '';
       };
     };
