@@ -145,9 +145,9 @@ with lib.luxnix; let
       wantedBy = [ "multi-user.target" ];
       # Runs only once on boot
       serviceConfig.ExecStart = ''
-        cp /etc/secrets/vault/${cfg.dbPasswordfile} ${cfg.homeDir}/db-password
-        chown keycloak:keycloak ${cfg.homeDir}/db-password
-        chmod 0600 ${cfg.homeDir}/db-password
+        ${pkgs.coreutils}/bin/cp /etc/secrets/vault/${cfg.dbPasswordfile} ${cfg.homeDir}/db-password
+        ${pkgs.coreutils}/bin/chown keycloak:keycloak ${cfg.homeDir}/db-password
+        ${pkgs.coreutils}/bin/chmod 0600 ${cfg.homeDir}/db-password
       '';
     };
 
