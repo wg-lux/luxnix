@@ -176,7 +176,7 @@ with lib.luxnix; let
         createLocally = false;
         username = cfg.dbUsername; # 
         # useSSL = false; #FIXME harden
-        passwordFile = "db-password";
+        passwordFile = "./db-password";
         # Add explicit type to ensure proper database configuration
         type = "postgresql";
 
