@@ -140,9 +140,19 @@ with lib.luxnix; let
       "d ${cfg.homeDir} 0770 keycloak ${sensitiveServicesGroupName} -"
     ];
 
+    systemd.services.keycloak-prepare-secret = {
+      description = "Copy Keycloak DB password file with correct permissions";
+      wantedBy = [ "multi-user.target" ];
+      # Runs only once on boot
+      serviceConfig.ExecStart = ''
+        cp /etc/secrets/vault/${cfg.dbPasswordfile} ${cfg.homeDir}/db-password
+        chown keycloak:keycloak ${cfg.homeDir}/db-password
+        chmod 0600 ${cfg.homeDir}/db-password
+      '';
+    };
 
-    systemd.services.keycloak.wants = [ "openvpn-aglNet.service" ];
-    systemd.services.keycloak.after = [ "openvpn-aglNet.service" ];
+    systemd.services.keycloak.wants = [ "openvpn-aglNet.service" "keycloak-prepare-secret.service" ];
+    systemd.services.keycloak.after = [ "openvpn-aglNet.service" "keycloak-prepare-secret.service" ];
 
     # systemd.services.keycloak = {
     #     wants = [ "openvpn-aglNet.service" "network-online.target" ];
@@ -166,7 +176,7 @@ with lib.luxnix; let
         createLocally = false;
         username = cfg.dbUsername; # 
         # useSSL = false; #FIXME harden
-        passwordFile = "/etc/secrets/vault/${cfg.dbPasswordfile}";
+        passwordFile = "${cfg.homeDir}/db-password";
         # Add explicit type to ensure proper database configuration
         type = "postgresql";
 

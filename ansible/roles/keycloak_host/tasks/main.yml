@@ -2,14 +2,22 @@
   ansible.builtin.copy:
     src: "{{ keycloak_host_psql_keycloak_pw_src }}"
     dest: "/etc/secrets/vault/{{ keycloak_host_password_filename }}"
-    owner: keycloak
-    group: keycloak
-    mode: "0600"
+    owner: "{{ ansible_user }}"
+    mode: "0700"
   become: true
-  become_user: root
   no_log: false
   vars:
     ansible_vault_identity: "{{ inventory_hostname }}@{{ lx_vault_dir_src }}/psk/{{ inventory_hostname }}.psk"
+
+- name: Change password group to keycloak
+  ansible.builtin.file:
+    path: "/etc/secrets/vault/{{ keycloak_host_password_filename }}"
+    group: keycloak
+  become: true
+  become_method: "ansible.builtin.su"
+  become_user: root
+  changed_when: false
+  no_log: false
 
 - name: Read keycloak database password from file
   ansible.builtin.command: "cat /etc/secrets/vault/{{ keycloak_host_password_filename }}"

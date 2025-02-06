@@ -18,11 +18,11 @@
 #   roles:
 #     - managed
 
-- name: Set role postgres_host_main for host "s-02"
-  hosts: s-02
-  become: true
-  roles:
-    - postgres_host_main
+# - name: Set role postgres_host_main for host "s-02"
+#   hosts: s-02
+#   become: true
+#   roles:
+#     - postgres_host_main
 
 # - name: Set role postgres_host_test for host "s-03"
 #   hosts: s-03
@@ -37,23 +37,22 @@
 #   roles:
 #     - dev_access
 
-- name: Set role local_endoreg_db
-  hosts: managed # , gc-06, gc-02, gc-08
-  become: true
-  roles:
-    - local_endoreg_db
+# - name: Set role local_endoreg_db
+#   hosts: managed # , gc-06, gc-02, gc-08
+#   become: true
+#   roles:
+#     - local_endoreg_db
 
 - name: Set role keycloak_host for keycloak_host
   hosts: s-02
   become: true
   roles:
     - keycloak_host
-
-- name: Set role nginx_host for nginx_host
-  hosts: nginx_host
-  become: true
-  roles:
-    - nginx_host
+# - name: Set role nginx_host for nginx_host
+#   hosts: nginx_host
+#   become: true
+#   roles:
+#     - nginx_host
 ####### PRODUCTION END #########
 
 # - name: Set base_server group's roles
