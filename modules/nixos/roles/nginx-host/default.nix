@@ -164,16 +164,17 @@ in {
       #   };
       # } else {}) 
       // (if cfg.keycloak.enable then {
-        # "${cfg.keycloak.adminDomain}" = {
-        #   forceSSL = true;
-        #   sslCertificate = cfg.sslCertPath;
-        #   sslCertificateKey = cfg.sslKeyPath;
+        "${cfg.keycloak.adminDomain}" = {
+          forceSSL = true;
+          sslCertificate = cfg.sslCertPath;
+          sslCertificateKey = cfg.sslKeyPath;
 
-        #   locations."/" = {
-        #       proxyPass = "http://${keycloakConfig.vpnIp}:${toString keycloakConfig.port}";
-        #       extraConfig = base.all-extraConfig + intern-endoreg-net-extraConfig;
-        #   };
-        # };
+          locations."/" = {
+              # proxyPass = "http://${keycloakConfig.vpnIp}:${toString keycloakConfig.port}";
+              proxyPass = "http://172.16.255.12:9080";
+              extraConfig = base.all-extraConfig + intern-endoreg-net-extraConfig;
+          };
+        };
 
         "${cfg.keycloak.domain}" = {
           forceSSL = true;
