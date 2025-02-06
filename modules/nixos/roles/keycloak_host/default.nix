@@ -7,6 +7,9 @@
 with lib; 
 with lib.luxnix; let
 
+  sslCertGroupName = config.users.groups.sslcert.name;
+  sensitiveServicesGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
+  
   cfg = config.roles.keycloakHost;
 
   in {
@@ -105,8 +108,8 @@ with lib.luxnix; let
         isSystemUser = true;
         group = cfg.dbUsername;
         extraGroups = [ 
-          config.luxnix.generic-settings.sensitiveServiceGroupName 
-          "sslCert"
+          sslCertGroupName 
+          sensitiveServicesGroupName
           "networkmanager"  
         ];
         # uid = cfg.uid;
@@ -124,8 +127,9 @@ with lib.luxnix; let
       User = "keycloak"; # hardcoded in keycloak nix package
       Group = "keycloak"; # hardcoded in keycloak nix package
       SupplementaryGroups = [ 
-        config.luxnix.generic-settings.sensitiveServiceGroupName
+        sensitiveServicesGroupName
         # Network Management
+        "${sslCertGroupName}"
         "networkmanager"  
       ];
     };

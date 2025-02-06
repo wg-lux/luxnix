@@ -6,7 +6,9 @@ with lib.luxnix; let
   conf = cfg.settings;
   vpnIp = config.luxnix.generic-settings.vpnIp;
   vpnSubnet = config.luxnix.generic-settings.vpnSubnet;
-
+  sslCertGroupName = config.users.groups.sslcert.name;
+  sensitiveServicesGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
+  
   keycloakConfig = config.luxnix.generic-settings.network.keycloak;
 
   all-extraConfig = ''
@@ -102,7 +104,12 @@ in {
       extraGroups = mkOption {
         type = types.listOf types.str;
         default = [
-          "wheel" "docker" "podman" "networkmanager" "sslCert" "sensitiveServices"
+          "wheel"
+          "docker"
+          "podman"
+          "networkmanager"
+          "${sslCertGroupName}"
+          "${sensitiveServicesGroupName}"
         ];
         description = "Extra groups for the NGINX user";
       };
