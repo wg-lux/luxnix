@@ -10,6 +10,6 @@ keycloak_host_roles:
   keycloakHost.adminInitialPassword: '"admin"'
   keycloakHost.homeDir: '"/home/keycloak"'
   keycloakHost.dbUsername: '"keycloak"'
-  keycloakHost.dbPasswordfile: '"/etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password"' # Remove "_service" suffix
+  keycloakHost.dbPasswordfile: '"/etc/keycloak/keycloak-db-password"' # Remove "_service" suffix
   keycloakHost.hostname: '"keycloak.endo-reg.net"'
   keycloakHost.vpnIP: '"172.16.255.12"'

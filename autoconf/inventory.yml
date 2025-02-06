@@ -892,12 +892,15 @@ roles:
     files: []
     name: keycloak_host
     vars:
-      role_psql_keycloak_pw_file: /etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password
-      role_psql_keycloak_pw_src: /home/admin/.lxv/deploy/{{ inventory_hostname }}/SCRT_roles_system_password_keycloak_host_password
+      role_password_filename: SCRT_roles_system_password_keycloak_host_password
+      role_psql_keycloak_pw_file: /etc/secrets/vault/{{ keycloak_host_psql_keycloak_pw_file
+        }}
+      role_psql_keycloak_pw_src: /home/admin/.lxv/deploy/{{ inventory_hostname }}/{{
+        keycloak_host_psql_keycloak_pw_file }}
       role_roles:
         keycloakHost.adminInitialPassword: '"admin"'
         keycloakHost.adminUsername: '"admin"'
-        keycloakHost.dbPasswordfile: '"/etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password"'
+        keycloakHost.dbPasswordfile: '"/etc/keycloak/keycloak-db-password"'
         keycloakHost.dbUsername: '"keycloak"'
         keycloakHost.enable: 'true'
         keycloakHost.homeDir: '"/home/keycloak"'

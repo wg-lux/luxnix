@@ -117,13 +117,15 @@ postgres_host_test_password_filename: SCRT_roles_system_password_postgres_host_t
 role_luxnix:
   generic-settings.sslCertificateKeyPath: '"/etc/secrets/vault/ssl_key"'
   generic-settings.sslCertificatePath: '"/etc/secrets/vault/ssl_cert"'
-role_password_filename: SCRT_roles_system_password_nginx_host_password
-role_psql_keycloak_pw_file: /etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password
-role_psql_keycloak_pw_src: /home/admin/.lxv/deploy/{{ inventory_hostname }}/SCRT_roles_system_password_keycloak_host_password
+role_password_filename: SCRT_roles_system_password_keycloak_host_password
+role_psql_keycloak_pw_file: /etc/secrets/vault/{{ keycloak_host_psql_keycloak_pw_file
+  }}
+role_psql_keycloak_pw_src: /home/admin/.lxv/deploy/{{ inventory_hostname }}/{{ keycloak_host_psql_keycloak_pw_file
+  }}
 role_roles:
   keycloakHost.adminInitialPassword: '"admin"'
   keycloakHost.adminUsername: '"admin"'
-  keycloakHost.dbPasswordfile: '"/etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password"'
+  keycloakHost.dbPasswordfile: '"/etc/keycloak/keycloak-db-password"'
   keycloakHost.dbUsername: '"keycloak"'
   keycloakHost.enable: 'true'
   keycloakHost.homeDir: '"/home/keycloak"'
