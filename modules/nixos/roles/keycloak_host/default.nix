@@ -166,7 +166,7 @@ with lib.luxnix; let
         createLocally = false;
         username = cfg.dbUsername; # 
         # useSSL = false; #FIXME harden
-        passwordFile = /etc/secrets/vault/${cfg.dbPasswordfile};
+        passwordFile = "/etc/secrets/vault/${cfg.dbPasswordfile}";
         # Add explicit type to ensure proper database configuration
         type = "postgresql";
 
