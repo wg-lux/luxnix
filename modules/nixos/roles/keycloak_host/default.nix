@@ -171,13 +171,13 @@ with lib.luxnix; let
     # };
 
     services.keycloak = {
-      enable = false;
+      enable = true;
       initialAdminPassword = cfg.adminInitialPassword;
       database = {
         createLocally = false;
         username = cfg.dbUsername; # 
         # useSSL = false; #FIXME harden
-        passwordFile = "${cfg.dbPasswordfile}";
+        passwordFile = "/etc/keycloak/keycloak-db-password";
         # Add explicit type to ensure proper database configuration
         type = "postgresql";
 
