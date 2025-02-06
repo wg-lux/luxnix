@@ -90,13 +90,6 @@ with lib.luxnix; let
   };
   
   config = mkIf cfg.enable {
-    services.postgresql.ensureUsers = [
-      {
-        name = cfg.dbUsername;
-        ensureDBOwnership = true; # allows system users
-      }  
-    ];
-
     users.users = {
       keycloak = {
         # isNormalUser = true;
@@ -120,6 +113,13 @@ with lib.luxnix; let
       "${cfg.dbUsername}" = {};
     };
 
+    # ensure db user and db exist
+    services.postgresql.ensureUsers = [
+      {
+        name = cfg.dbUsername;
+        ensureDBOwnership = true;
+      }  
+    ];
     services.postgresql.ensureDatabases = [ cfg.dbUsername ];
 
     # Ensure password file permissions
@@ -171,10 +171,10 @@ with lib.luxnix; let
     # };
 
     services.keycloak = {
-      enable = true;
+      enable = false;
       initialAdminPassword = cfg.adminInitialPassword;
       database = {
-        createLocally = true;
+        createLocally = false;
         username = cfg.dbUsername; # 
         # useSSL = false; #FIXME harden
         passwordFile = "${cfg.dbPasswordfile}";
