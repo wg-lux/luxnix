@@ -99,19 +99,20 @@ with lib.luxnix; let
         # hashedPasswordFile = "${cfg.dbPasswordfile}_hash";
         # isNormalUser = true;
         # isSystemUser = true;
-        group = cfg.dbUsername;
+        group = "keycloak";
         extraGroups = [ 
           sslCertGroupName 
           sensitiveServicesGroupName
           "networkmanager"  
         ];
         uid = cfg.uid;
-        gid = cfg.gid;
       };
     };
 
     users.groups = {
-      "${cfg.dbUsername}" = {};
+      keycloak = {
+        gid = cfg.gid;
+      };
     };
 
     # ensure db user and db exist
