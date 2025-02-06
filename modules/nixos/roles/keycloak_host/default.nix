@@ -7,7 +7,7 @@
 with lib; 
 with lib.luxnix; let
 
-  sslCertGroupName = config.users.groups.sslcert.name;
+  sslCertGroupName = config.users.groups.sslCert.name;
   sensitiveServicesGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
   
   cfg = config.roles.keycloakHost;
