@@ -98,14 +98,15 @@ with lib.luxnix; let
         # shell = "/sbin/nologin";
         # hashedPasswordFile = "${cfg.dbPasswordfile}_hash";
         # isNormalUser = true;
-        isSystemUser = true;
+        # isSystemUser = true;
         group = cfg.dbUsername;
         extraGroups = [ 
           sslCertGroupName 
           sensitiveServicesGroupName
           "networkmanager"  
         ];
-        # uid = cfg.uid;
+        uid = cfg.uid;
+        gid = cfg.gid;
       };
     };
 

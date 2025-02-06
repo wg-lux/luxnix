@@ -23,10 +23,10 @@
     endoreg-client.enable = false;
     keycloakHost.adminInitialPassword = "admin";
     keycloakHost.adminUsername = "admin";
-    keycloakHost.dbPasswordfile = "/etc/keycloak/keycloak-db-password";
+    keycloakHost.dbPasswordfile = "keycloak-db-password";
     keycloakHost.dbUsername = "keycloak";
     keycloakHost.enable = true;
-    keycloakHost.homeDir = "/home/keycloak";
+    keycloakHost.homeDir = "/etc/keycloak";
     keycloakHost.hostname = "keycloak.endo-reg.net";
     keycloakHost.httpPort = 9080;
     keycloakHost.httpsPort = 9444;
