@@ -54,7 +54,7 @@ with lib.luxnix; let
 
     dbPasswordfile = mkOption {
       type = types.str;
-      default = "/etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password";
+      default = "SCRT_roles_system_password_keycloak_host_password";
       # default = "/etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password";
       # default = "/home/${cfg.dbUserName}/keycloak-db-password";
       description = "path to passwordfile for keycloak";
@@ -137,7 +137,7 @@ with lib.luxnix; let
     };
 
     systemd.tmpfiles.rules = [
-      "d /etc/keycloak 0770 keycloak ${sensitiveServicesGroupName} -"
+      "d ${cfg.homeDir} 0770 keycloak ${sensitiveServicesGroupName} -"
     ];
 
 
@@ -166,7 +166,7 @@ with lib.luxnix; let
         createLocally = false;
         username = cfg.dbUsername; # 
         # useSSL = false; #FIXME harden
-        passwordFile = cfg.dbPasswordfile;
+        passwordFile = /etc/secrets/vault/${cfg.dbPasswordfile};
         # Add explicit type to ensure proper database configuration
         type = "postgresql";
 

@@ -63,7 +63,7 @@ in {
   config = mkIf cfg.enable {
     # make sure vault dir exists with correct permissions (700)
     systemd.tmpfiles.rules = [
-      "d ${cfg.dir} 0750 ${adminName} ${sensitiveServiceGroupName}"
+      "d ${cfg.dir} 0770 ${adminName} ${sensitiveServiceGroupName}"
       "f ${cfg.sslCert} 0640 root ${sslCertGroupName} - -"
       "f ${cfg.sslKey} 0640 root ${sslCertGroupName} - -"
     ];
