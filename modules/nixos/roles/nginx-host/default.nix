@@ -6,7 +6,7 @@ with lib.luxnix; let
   conf = cfg.settings;
   vpnIp = config.luxnix.generic-settings.vpnIp;
   vpnSubnet = config.luxnix.generic-settings.vpnSubnet;
-  sslCertGroupName = config.users.groups.sslcert.name;
+  sslCertGroupName = config.users.groups.sslCert.name;
   sensitiveServicesGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
   
   keycloakConfig = config.luxnix.generic-settings.network.keycloak;
