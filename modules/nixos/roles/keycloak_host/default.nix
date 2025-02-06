@@ -130,7 +130,7 @@ with lib.luxnix; let
       ];
     };
 
-    services.tmpfiles.rules = [
+    systemd.tmpfiles.rules = [
       "d /etc/keycloak 0700 keycloak keycloak -"
     ];
 
