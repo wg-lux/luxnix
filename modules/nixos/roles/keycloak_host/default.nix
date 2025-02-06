@@ -130,6 +130,26 @@ with lib.luxnix; let
       ];
     };
 
+    services.tmpfiles.rules = [
+      "d /etc/keycloak 0700 keycloak keycloak -"
+    ];
+
+    systemd.services.keycloak-password-provision = {
+      description = "Copy keycloak password from vault";
+      wantedBy = [ "multi-user.target" ];
+      before = [ "keycloak.service" ];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = ''
+          cp /etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password /etc/keycloak/keycloak-db-password
+          chown keycloak:keycloak /etc/keycloak/keycloak-db-password
+          chmod 600 /etc/keycloak/keycloak-db-password
+        '';
+      };
+    };
+
+    systemd.services.keycloak.wants = [ "openvpn-aglNet.service" "keycloak-password-provision.service" ];
+    systemd.services.keycloak.after = [ "openvpn-aglNet.service" "keycloak-password-provision.service" ];
 
     # systemd.services.keycloak = {
     #     wants = [ "openvpn-aglNet.service" "network-online.target" ];

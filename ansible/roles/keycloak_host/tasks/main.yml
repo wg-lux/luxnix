@@ -2,11 +2,9 @@
   ansible.builtin.copy:
     src: "{{ lx_vault_dir_src }}/deploy/{{ inventory_hostname }}/{{ keycloak_host_password_filename }}"
     dest: "{{ lx_vault_dir }}/{{ keycloak_host_password_filename }}"
-    mode: "0660"
     owner: "{{ ansible_user }}"
-    group: "keycloak"
+    mode: "0600"
   become: true
-  become_user: root
   no_log: false
   vars:
     ansible_vault_identity: "{{ inventory_hostname }}@{{ lx_vault_dir_src }}/psk/{{ inventory_hostname }}.psk"
