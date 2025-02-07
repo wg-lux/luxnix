@@ -146,13 +146,16 @@ in {
     };
 
     # Add Service which runs before nginx as root and copies the secrets file to the nextcloud directory
-    services.nextcloud-secrets = {
-      enable = true;
-      description = ''
-        Copy the secrets file to the nextcloud directory:
-          ${sslCertFile} -> ${nextcloudSslCertFile} (Owner: nginx:${sslCertGroupName}, Permissions: 600)
-          ${sslKeyFile} -> ${nextcloudSslKeyFile} (Owner: nginx:${sslCertGroupName}, Permissions: 600)
-      '';
+    systemd.services.nextcloud-secrets = {
+      description = "Copy SSL certificates for Nextcloud";
+      requires = [ "local-fs.target" ];
+      before = [ "nginx.service" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        User = "root";
+        Group = "root";
+      };
       script = ''
         ${pkgs.sudo}/bin/sudo ${pkgs.coreutils}/bin/cp ${sslCertFile} ${nextcloudSslCertFile} 
         ${pkgs.sudo}/bin/sudo ${pkgs.coreutils}/bin/cp ${sslKeyFile} ${nextcloudSslKeyFile} 
