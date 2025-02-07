@@ -431,6 +431,67 @@ all:
       template_name: main
   - ansible_group_names:
       - language_english
+      - all
+      - base_server
+      - active_clients
+      - openvpn_host
+      - managed
+    ansible_host: 172.16.255.1
+    ansible_role_names: []
+    extra_secret_names: []
+    extra_user_names:
+      - admin
+      - maintenance
+    facts:
+      all_ipv4_addresses:
+        - 172.16.255.1
+        - 192.168.179.1
+      bios:
+        date: 06/21/2023
+        vendor: American Megatrends International, LLC.
+        version: '0.22'
+      current_date: '2025-01-17T12:45:52Z'
+      default_ipv4:
+        address: 192.168.179.1
+        gateway: 192.168.178.1
+        interface: eno1
+        netmask: 255.255.0.0
+      machine: x86_64
+    files: []
+    hostname: s-01
+    subnet: 172.16.255.
+    vars:
+      host_luxnix:
+        generic_settings.hostPlatform: '"x86_64-linux"'
+        generic_settings.linux.cpuMicrocode: '"amd"'
+        generic_settings.linux.initrd.availableKernelModules:
+          - xhci_pci
+          - uas
+          - ahci
+          - usbhid
+          - nvme
+          - usb_storage
+          - sd_mod
+        generic_settings.linux.initrd.kernelModules:
+          - nfs
+        generic_settings.linux.initrd.supportedFilesystems:
+          - nfs
+        generic_settings.linux.kernelModules:
+          - kvm-amd
+        generic_settings.linux.kernelModulesBlacklist: []
+        generic_settings.linux.kernelParams: []
+        generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+        generic_settings.linux.supportedFilesystems:
+          - btrfs
+        generic_settings.systemStateVersion: '"23.11"'
+        generic_settings.vpnIp: '"172.16.255.1"'
+      host_roles:
+        aglnet.client.enable: lib.mkForce false
+        aglnet.host.enable: 'true'
+      host_services: {}
+      template_name: main
+  - ansible_group_names:
+      - language_english
       - ssl_cert
       - all
       - gpu_client
@@ -520,67 +581,6 @@ all:
       luxnix_repo: https://github.com/wg-lux/luxnix.git
       os_extra_user_names:
         - demodemo
-      template_name: main
-  - ansible_group_names:
-      - language_english
-      - all
-      - base_server
-      - active_clients
-      - openvpn_host
-      - managed
-    ansible_host: 172.16.255.1
-    ansible_role_names: []
-    extra_secret_names: []
-    extra_user_names:
-      - admin
-      - maintenance
-    facts:
-      all_ipv4_addresses:
-        - 172.16.255.1
-        - 192.168.179.1
-      bios:
-        date: 06/21/2023
-        vendor: American Megatrends International, LLC.
-        version: '0.22'
-      current_date: '2025-01-17T12:45:52Z'
-      default_ipv4:
-        address: 192.168.179.1
-        gateway: 192.168.178.1
-        interface: eno1
-        netmask: 255.255.0.0
-      machine: x86_64
-    files: []
-    hostname: s-01
-    subnet: 172.16.255.
-    vars:
-      host_luxnix:
-        generic_settings.hostPlatform: '"x86_64-linux"'
-        generic_settings.linux.cpuMicrocode: '"amd"'
-        generic_settings.linux.initrd.availableKernelModules:
-          - xhci_pci
-          - uas
-          - ahci
-          - usbhid
-          - nvme
-          - usb_storage
-          - sd_mod
-        generic_settings.linux.initrd.kernelModules:
-          - nfs
-        generic_settings.linux.initrd.supportedFilesystems:
-          - nfs
-        generic_settings.linux.kernelModules:
-          - kvm-amd
-        generic_settings.linux.kernelModulesBlacklist: []
-        generic_settings.linux.kernelParams: []
-        generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
-        generic_settings.linux.supportedFilesystems:
-          - btrfs
-        generic_settings.systemStateVersion: '"23.11"'
-        generic_settings.vpnIp: '"172.16.255.1"'
-      host_roles:
-        aglnet.client.enable: lib.mkForce false
-        aglnet.host.enable: 'true'
-      host_services: {}
       template_name: main
   - ansible_group_names:
       - language_english
@@ -696,7 +696,7 @@ all:
     hostname: gc-04
     subnet: 172.16.255.
     vars: {}
-file: /home/admin/dev/luxnix/ansible/inventory/hosts.ini
+file: /home/admin/lx-production/ansible/inventory/hosts.ini
 groups:
   - extra_user_names: []
     files: []
@@ -918,8 +918,8 @@ roles:
     name: keycloak_host
     vars:
       role_password_filename: SCRT_roles_system_password_keycloak_host_password
-      role_psql_pw_src: '{{ lx_vault_dir_src }}/deploy/{{ inventory_hostname }}/{{
-        keycloak_host_password_filename }}'
+      role_pw_src: '{{ lx_vault_dir_src }}/deploy/{{ inventory_hostname }}/{{ keycloak_host_password_filename
+        }}'
       role_roles:
         keycloakHost.adminInitialPassword: '"admin"'
         keycloakHost.adminUsername: '"admin"'
@@ -988,6 +988,27 @@ roles:
     vars: {}
   - extra_user_names: []
     files: []
+    name: traefik_host
+    vars:
+      role_luxnix:
+        generic-settings.sslCertificateKeyPath: '"/etc/secrets/vault/ssl_key"'
+        generic-settings.sslCertificatePath: '"/etc/secrets/vault/ssl_cert"'
+      role_roles:
+        traefikHost.allowedIPs:
+          - 172.16.255.106
+          - 172.16.255.1
+          - 127.0.0.1
+        traefikHost.dashboard: 'true'
+        traefikHost.dashboardHost: '"traefik.endo-reg.net"'
+        traefikHost.enable: 'true'
+        traefikHost.insecure: 'false'
+        traefikHost.keycloak.domain: '"keycloak.endo-reg.net"'
+        traefikHost.keycloak.enable: 'true'
+        traefikHost.keycloak.port: '9080'
+        traefikHost.sslCertPath: '"/etc/secrets/vault/ssl_cert"'
+        traefikHost.sslKeyPath: '"/etc/secrets/vault/ssl_key"'
+  - extra_user_names: []
+    files: []
     name: nginx_host
     vars:
       role_luxnix:
@@ -1013,27 +1034,6 @@ roles:
       role_ssl_cert_src: /home/admin/dev/luxnix/secrets/ssl/ssl_cert
       role_ssl_key_dest: /etc/secrets/vault/ssl_key
       role_ssl_key_src: /home/admin/dev/luxnix/secrets/ssl/ssl_key
-  - extra_user_names: []
-    files: []
-    name: traefik_host
-    vars:
-      role_luxnix:
-        generic-settings.sslCertificateKeyPath: '"/etc/secrets/vault/ssl_key"'
-        generic-settings.sslCertificatePath: '"/etc/secrets/vault/ssl_cert"'
-      role_roles:
-        traefikHost.allowedIPs:
-          - 172.16.255.106
-          - 172.16.255.1
-          - 127.0.0.1
-        traefikHost.dashboard: 'true'
-        traefikHost.dashboardHost: '"traefik.endo-reg.net"'
-        traefikHost.enable: 'true'
-        traefikHost.insecure: 'false'
-        traefikHost.keycloak.domain: '"keycloak.endo-reg.net"'
-        traefikHost.keycloak.enable: 'true'
-        traefikHost.keycloak.port: '9080'
-        traefikHost.sslCertPath: '"/etc/secrets/vault/ssl_cert"'
-        traefikHost.sslKeyPath: '"/etc/secrets/vault/ssl_key"'
   - extra_user_names: []
     files: []
     name: nextcloud_host

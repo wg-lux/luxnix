@@ -119,7 +119,7 @@ role_luxnix:
   generic-settings.sslCertificateKeyPath: '"/etc/secrets/vault/ssl_key"'
   generic-settings.sslCertificatePath: '"/etc/secrets/vault/ssl_cert"'
 role_password_filename: SCRT_roles_system_password_keycloak_host_password
-role_psql_pw_src: '{{ lx_vault_dir_src }}/deploy/{{ inventory_hostname }}/{{ keycloak_host_password_filename
+role_pw_src: '{{ lx_vault_dir_src }}/deploy/{{ inventory_hostname }}/{{ keycloak_host_password_filename
   }}'
 role_role_dest: /etc/secrets/vault/ssl_cert
 role_role_src: /home/admin/dev/luxnix/secrets/ssl/ssl_cert
