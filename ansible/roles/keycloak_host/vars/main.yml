@@ -1,6 +1,6 @@
-keycloak_host_password_filename: "keycloak-db-password"
+keycloak_host_password_filename: "SCRT_roles_system_password_keycloak_host_password"
 keycloak_host_psql_keycloak_pw_file: /etc/secrets/vault/{{ keycloak_host_psql_keycloak_pw_file }}
-keycloak_host_psql_keycloak_pw_src: "{{ lx_vault_dir_src }}/deploy/{{ inventory_hostname }}//SCRT_roles_system_password_keycloak_host_password"
+keycloak_host_psql_keycloak_pw_src: "{{ lx_vault_dir_src }}/deploy/{{ inventory_hostname }}/{{ keycloak_host_password_filename }}"
 
 keycloak_host_roles:
   keycloakHost.enable: "true"
@@ -10,6 +10,6 @@ keycloak_host_roles:
   keycloakHost.adminInitialPassword: '"admin"'
   keycloakHost.homeDir: '"/etc/keycloak"'
   keycloakHost.dbUsername: '"keycloak"'
-  keycloakHost.dbPasswordfile: '"keycloak-db-password"'
+  keycloakHost.dbPasswordfile: '"SCRT_roles_system_password_keycloak_host_password"' # Same as keycloak_host_password_filename
   keycloakHost.hostname: '"keycloak.endo-reg.net"'
   keycloakHost.vpnIP: '"172.16.255.12"'

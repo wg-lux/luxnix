@@ -43,18 +43,26 @@
 #   roles:
 #     - local_endoreg_db
 
-- name: Set role keycloak_host for keycloak_host
-  hosts: s-02
-  become: true
-  roles:
-    - keycloak_host
+# - name: Set role keycloak_host for keycloak_host
+#   hosts: s-02
+#   become: true
+#   roles:
+#     - keycloak_host
+
 # - name: Set role nginx_host for nginx_host
 #   hosts: nginx_host
 #   become: true
 #   roles:
+#     - ssl_cert
 #     - nginx_host
 ####### PRODUCTION END #########
 
+- name: Set nextcloud role for nextcloud_host
+  hosts: nextcloud_host
+  become: true
+  roles:
+    - ssl_cert
+    - nextcloud_host
 # - name: Set base_server group's roles
 #   hosts: base_server
 #   become: true

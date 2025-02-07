@@ -434,10 +434,13 @@ all:
       - all
       - gpu_client
       - active_clients
+      - nextcloud_host
       - local_endoreg_db
       - test_group
     ansible_host: 172.16.255.106
-    ansible_role_names: []
+    ansible_role_names:
+      - ssl_cert
+      - nextcloud_host
     extra_secret_names:
       - SCRT_roles_system_password_postgres_host_main_password
       - SCRT_roles_system_password_postgres_host_test_password
@@ -466,7 +469,9 @@ all:
     subnet: 172.16.255.
     vars:
       ansible_python_interpreter: '{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python'
-      ansible_roles: []
+      ansible_roles:
+        - ssl_cert
+        - nextcloud_host
       extra_secret_names:
         - SCRT_roles_system_password_postgres_host_main_password
         - SCRT_roles_system_password_postgres_host_test_password
@@ -508,7 +513,7 @@ all:
         custom_packages.videoEditing: 'true'
         custom_packages.visuals: 'true'
       host_services: {}
-      luxnix_branch: traefik
+      luxnix_branch: main
       luxnix_dest: /home/admin/luxnix-production
       luxnix_dev_repo: /home/admin/dev/luxnix
       luxnix_repo: https://github.com/wg-lux/luxnix.git
@@ -870,7 +875,18 @@ groups:
     vars: {}
   - extra_user_names: []
     files: []
+    name: nextcloud_host
+    vars: {}
+  - extra_user_names: []
+    files: []
     name: hetzner_server
+    vars:
+      group_luxnix: {}
+      group_roles: {}
+      group_services: {}
+  - extra_user_names: []
+    files: []
+    name: ssl_cert
     vars:
       group_luxnix: {}
       group_roles: {}
@@ -892,14 +908,15 @@ roles:
     files: []
     name: keycloak_host
     vars:
-      role_password_filename: keycloak-db-password
+      role_password_filename: SCRT_roles_system_password_keycloak_host_password
       role_psql_keycloak_pw_file: /etc/secrets/vault/{{ keycloak_host_psql_keycloak_pw_file
         }}
-      role_psql_keycloak_pw_src: /home/admin/.lxv/deploy/{{ inventory_hostname }}/SCRT_roles_system_password_keycloak_host_password
+      role_psql_keycloak_pw_src: '{{ lx_vault_dir_src }}/deploy/{{ inventory_hostname
+        }}/{{ keycloak_host_password_filename }}'
       role_roles:
         keycloakHost.adminInitialPassword: '"admin"'
         keycloakHost.adminUsername: '"admin"'
-        keycloakHost.dbPasswordfile: '"keycloak-db-password"'
+        keycloakHost.dbPasswordfile: '"SCRT_roles_system_password_keycloak_host_password"'
         keycloakHost.dbUsername: '"keycloak"'
         keycloakHost.enable: 'true'
         keycloakHost.homeDir: '"/etc/keycloak"'
@@ -1010,3 +1027,28 @@ roles:
         traefikHost.keycloak.port: '9080'
         traefikHost.sslCertPath: '"/etc/secrets/vault/ssl_cert"'
         traefikHost.sslKeyPath: '"/etc/secrets/vault/ssl_key"'
+  - extra_user_names: []
+    files: []
+    name: nextcloud_host
+    vars:
+      role_password_filename: SCRT_roles_system_password_nextcloud_host_password
+      role_pw_src: '{{ lx_vault_dir_src }}/deploy/{{ inventory_hostname }}/{{ nextcloud_host_password_filename
+        }}'
+      role_roles:
+        nextcloudHost.enable: 'true'
+        nextcloudHost.hostname: '"cloud.endo-reg.net"'
+        nextcloudHost.maxUploadSize: '"10G"'
+        nextcloudHost.package: pkgs.nextcloud30
+        nextcloudHost.passwordFilePath: '"/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_password"'
+  - extra_user_names: []
+    files: []
+    name: ssl_cert
+    vars:
+      role_luxnix:
+        generic-settings.sslCertificateKeyPath: '"/etc/secrets/vault/ssl_key"'
+        generic-settings.sslCertificatePath: '"/etc/secrets/vault/ssl_cert"'
+      role_role_dest: /etc/secrets/vault/ssl_cert
+      role_role_src: /home/admin/dev/luxnix/secrets/ssl/ssl_cert
+      role_roles: {}
+      role_ssl_key_dest: /etc/secrets/vault/ssl_key
+      role_ssl_key_src: /home/admin/dev/luxnix/secrets/ssl/ssl_key

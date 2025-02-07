@@ -150,7 +150,7 @@ in {
 
       appendHttpConfig = appendHttpConfig;
       virtualHosts = {} 
-      # // (if cfg.testPage.enable then {
+      // (if cfg.testPage.enable then {
       #   "${cfg.testPage.domain}" = {
       #     # forceSSL = false;
       #     forceSSL = true;
@@ -162,7 +162,7 @@ in {
       #         extraConfig = all-extraConfig;
       #     };
       #   };
-      # } else {}) 
+      } else {}) 
       // (if cfg.keycloak.enable then {
         "${cfg.keycloak.adminDomain}" = {
           forceSSL = true;
