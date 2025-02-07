@@ -26,6 +26,7 @@ ansible_roles:
   - postgres_host_main
   - nginx_host
   - keycloak_host
+  - ssl_cert
 ansible_ssh_private_key_file: ~/.ssh/id_ed25519
 ansible_user: admin
 authentication:
@@ -118,10 +119,10 @@ role_luxnix:
   generic-settings.sslCertificateKeyPath: '"/etc/secrets/vault/ssl_key"'
   generic-settings.sslCertificatePath: '"/etc/secrets/vault/ssl_cert"'
 role_password_filename: SCRT_roles_system_password_keycloak_host_password
-role_psql_keycloak_pw_file: /etc/secrets/vault/{{ keycloak_host_psql_keycloak_pw_file
-  }}
-role_psql_keycloak_pw_src: '{{ lx_vault_dir_src }}/deploy/{{ inventory_hostname }}/{{
-  keycloak_host_password_filename }}'
+role_psql_pw_src: '{{ lx_vault_dir_src }}/deploy/{{ inventory_hostname }}/{{ keycloak_host_password_filename
+  }}'
+role_role_dest: /etc/secrets/vault/ssl_cert
+role_role_src: /home/admin/dev/luxnix/secrets/ssl/ssl_cert
 role_roles:
   keycloakHost.adminInitialPassword: '"admin"'
   keycloakHost.adminUsername: '"admin"'

@@ -50,23 +50,6 @@ def generate_ansible_key(key_path: Path, mode="password"):
     key_path.chmod(0o600)
 
 
-def generate_access_key_path(
-    name: str, vault_dir: Path, owner_type: str, secret_type: str
-) -> Path:
-    assert owner_type in OWNER_TYPES, f"Invalid owner_type: {owner_type}"
-    assert secret_type in SECRET_TYPES, f"Invalid secret_type: {secret_type}"
-
-    vault_dir = Path(vault_dir).expanduser().resolve()
-    secret_path: Path = (
-        vault_dir / "access_keys" / f"{secret_type}/{owner_type}/{name}.key"
-    )
-
-    secret_dir = secret_path.parent
-    secret_dir.mkdir(mode=0o755, parents=True, exist_ok=True)
-
-    return secret_path
-
-
 def generate_secret_dir_path(
     name: str, vault_dir: Path, owner_type: str, secret_type: str
 ):

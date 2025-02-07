@@ -1,7 +1,7 @@
 - name: Deploy keycloak role password
   ansible.builtin.copy:
-    src: "{{ keycloak_host_psql_keycloak_pw_src }}"
-    dest: "/etc/secrets/vault/{{ keycloak_host_password_filename }}"
+    src: "{{ keycloak_host_pw_src }}"
+    dest: "{{ lx_vault_dir }}/{{ keycloak_host_password_filename }}"
     owner: "{{ ansible_user }}"
     mode: "0700"
   become: true
