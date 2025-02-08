@@ -7,13 +7,12 @@ nginx_host_ssl_key_dest: "/etc/secrets/vault/ssl_key"
 nginx_host_roles:
   nginxHost.enable: "true"
 
-  nginxHost.testPage.enable: "false"
-  nginxHost.testPage.domain: '"test.endo-reg.net"'
-  nginxHost.testPage.port: "8081"
-
   nginxHost.keycloak.enable: "true"
   nginxHost.keycloak.domain: '"keycloak.endo-reg.net"'
   nginxHost.keycloak.adminDomain: '"keycloak-admin.endo-reg.net"'
+
+  nginxHost.nextcloud.enable: "true"
+  nginxHost.nextcloud.domain: '"cloud.endo-reg.net"'
 
   nginxHost.settings.proxyHeadersHashMaxSize: "512"
   nginxHost.settings.proxyHeadersHashBucketSize: "64"

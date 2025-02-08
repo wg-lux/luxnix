@@ -9,7 +9,11 @@ with lib.luxnix; let
   sslCertGroupName = config.users.groups.sslCert.name;
   sensitiveServicesGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
   
-  keycloakConfig = config.luxnix.generic-settings.network.keycloak;
+  networkConfig = config.luxnix.generic-settings.network;
+  keycloakConfig = networkConfig.keycloak;
+  nextcloudConfig = networkConfig.nextcloud;
+  psqlMainConfig = networkConfig.psql-main;
+  psqlTestConfig = networkConfig.psql-test;
 
   all-extraConfig = ''
       proxy_headers_hash_bucket_size ${toString cfg.settings.proxyHeadersHashBucketSize};
@@ -50,11 +54,19 @@ in {
       domain = mkOpt types.str "keycloak.endo-reg.net" "Keycloak domain";
       adminDomain = mkOpt types.str "keycloak-admin.endo-reg.net" "Keycloak admin domain";
     };
-    testPage = {
-      enable = mkBoolOpt false "Enable test page";
-      domain = mkOpt types.str "test.endo-reg.net" "Test page domain";
-      port = mkOpt types.port 8081 "Test page port";
+    nextcloud = {
+      enable = mkBoolOpt false "Enable Nextcloud routing";
+      domain = mkOpt types.str "cloud.endo-reg.net" "Nextcloud domain";
     };
+    # psqlMain = {
+    #   enable = mkBoolOpt false "Enable PostgreSQL main routing";
+    #   domain = mkOpt types.str "psql-main.endo-reg.net" "PostgreSQL main domain";
+    # };
+    # psqlTest = {
+    #   enable = mkBoolOpt false "Enable PostgreSQL test routing";
+    #   domain = mkOpt types.str "psql-test.endo-reg.net" "PostgreSQL test domain";
+    # };
+
 
     settings = {
       hostIp = mkOption {
@@ -172,19 +184,18 @@ in {
 
       appendHttpConfig = appendHttpConfig;
       virtualHosts = {} 
-      // (if cfg.testPage.enable then {
-      #   "${cfg.testPage.domain}" = {
-      #     # forceSSL = false;
-      #     forceSSL = true;
-      #     sslCertificate = cfg.sslCertPath;
-      #     sslCertificateKey = cfg.sslKeyPath;
+      // (if cfg.nextcloud.enable then {
+        "${cfg.nextcloud.domain}" = {
+          forceSSL = true;
+          sslCertificate = cfg.sslCertPath;
+          sslCertificateKey = cfg.sslKeyPath;
 
-      #     locations."/" = {
-      #         proxyPass = "http://${vpnIp}:${toString cfg.testPage.port}";
-      #         extraConfig = all-extraConfig;
-      #     };
-      #   };
-      } else {}) 
+          locations."/" = {
+              proxyPass = "https://${nextcloudConfig.vpnIp}:${toString nextcloudConfig.port}";
+              extraConfig = all-extraConfig;
+          };
+        };
+      } else {})
       // (if cfg.keycloak.enable then {
         # "${cfg.keycloak.adminDomain}" = {
         #   forceSSL = true;

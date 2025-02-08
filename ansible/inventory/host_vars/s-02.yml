@@ -6,6 +6,7 @@ ansible_roles:
   - postgres_host_main
   - nginx_host
   - keycloak_host
+  - nextcloud_host
   - ssl_cert
 
 host_roles: {}

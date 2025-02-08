@@ -496,13 +496,10 @@ all:
       - all
       - gpu_client
       - active_clients
-      - nextcloud_host
       - local_endoreg_db
       - test_group
     ansible_host: 172.16.255.106
-    ansible_role_names:
-      - ssl_cert
-      - nextcloud_host
+    ansible_role_names: []
     extra_secret_names:
       - SCRT_roles_system_password_postgres_host_main_password
       - SCRT_roles_system_password_postgres_host_test_password
@@ -531,9 +528,7 @@ all:
     subnet: 172.16.255.
     vars:
       ansible_python_interpreter: '{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python'
-      ansible_roles:
-        - ssl_cert
-        - nextcloud_host
+      ansible_roles: []
       extra_secret_names:
         - SCRT_roles_system_password_postgres_host_main_password
         - SCRT_roles_system_password_postgres_host_test_password
@@ -586,16 +581,18 @@ all:
       - language_english
       - ssl_cert
       - all
-      - keycloak_host
       - base_server
       - active_clients
-      - nginx_host
       - managed
+      - nextcloud_host
+      - nginx_host
+      - keycloak_host
     ansible_host: 172.16.255.12
     ansible_role_names:
       - postgres_host_main
       - nginx_host
       - keycloak_host
+      - nextcloud_host
       - ssl_cert
     extra_secret_names: []
     extra_user_names:
@@ -624,6 +621,7 @@ all:
         - postgres_host_main
         - nginx_host
         - keycloak_host
+        - nextcloud_host
         - ssl_cert
       host_luxnix:
         generic_settings.hostPlatform: '"x86_64-linux"'
@@ -1025,15 +1023,14 @@ roles:
         nginxHost.keycloak.adminDomain: '"keycloak-admin.endo-reg.net"'
         nginxHost.keycloak.domain: '"keycloak.endo-reg.net"'
         nginxHost.keycloak.enable: 'true'
+        nginxHost.nextcloud.domain: '"cloud.endo-reg.net"'
+        nginxHost.nextcloud.enable: 'true'
         nginxHost.settings.proxyHeadersHashBucketSize: '64'
         nginxHost.settings.proxyHeadersHashMaxSize: '512'
         nginxHost.settings.recommendedGzipSettings: 'true'
         nginxHost.settings.recommendedOptimisation: 'true'
         nginxHost.settings.recommendedProxySettings: 'true'
         nginxHost.settings.recommendedTlsSettings: 'true'
-        nginxHost.testPage.domain: '"test.endo-reg.net"'
-        nginxHost.testPage.enable: 'false'
-        nginxHost.testPage.port: '8081'
       role_ssl_cert_dest: /etc/secrets/vault/ssl_cert
       role_ssl_cert_src: /home/admin/dev/luxnix/secrets/ssl/ssl_cert
       role_ssl_key_dest: /etc/secrets/vault/ssl_key

@@ -30,19 +30,23 @@
     keycloakHost.hostname = "keycloak.endo-reg.net";
     keycloakHost.httpPort = 8080;
     keycloakHost.httpsPort = 8443;
+    nextcloudHost.enable = true;
+    nextcloudHost.hostname = "cloud.endo-reg.net";
+    nextcloudHost.maxUploadSize = "10G";
+    nextcloudHost.package = pkgs.nextcloud30;
+    nextcloudHost.passwordFilePath = "/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_password";
     nginxHost.enable = true;
     nginxHost.keycloak.adminDomain = "keycloak-admin.endo-reg.net";
     nginxHost.keycloak.domain = "keycloak.endo-reg.net";
     nginxHost.keycloak.enable = true;
+    nginxHost.nextcloud.domain = "cloud.endo-reg.net";
+    nginxHost.nextcloud.enable = true;
     nginxHost.settings.proxyHeadersHashBucketSize = 64;
     nginxHost.settings.proxyHeadersHashMaxSize = 512;
     nginxHost.settings.recommendedGzipSettings = true;
     nginxHost.settings.recommendedOptimisation = true;
     nginxHost.settings.recommendedProxySettings = true;
     nginxHost.settings.recommendedTlsSettings = true;
-    nginxHost.testPage.domain = "test.endo-reg.net";
-    nginxHost.testPage.enable = false;
-    nginxHost.testPage.port = 8081;
     postgres.main.enable = true;
     };
 

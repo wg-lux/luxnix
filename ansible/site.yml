@@ -1,115 +1,115 @@
-# - name: Set role openvpn_host for openvpn_host
-#   hosts: openvpn_host
-#   become: true
-#   roles:
-#     - common
-#     - openvpn_host
+# # - name: Set role openvpn_host for openvpn_host
+# #   hosts: openvpn_host
+# #   become: true
+# #   roles:
+# #     - common
+# #     - openvpn_host
 
-######### PRODUCTION #########
-# - name: Set role common for active_clients
-#   hosts: active_clients
-#   become: true
-#   roles:
-#     - common
+# ######### PRODUCTION #########
+# # - name: Set role common for active_clients
+# #   hosts: active_clients
+# #   become: true
+# #   roles:
+# #     - common
 
-# - name: Set role managed for managed hosts
-#   hosts: managed
-#   become: true
-#   roles:
-#     - managed
+# # - name: Set role managed for managed hosts
+# #   hosts: managed
+# #   become: true
+# #   roles:
+# #     - managed
 
-# - name: Set role postgres_host_main for host "s-02"
-#   hosts: s-02
-#   become: true
-#   roles:
-#     - postgres_host_main
+# # - name: Set role postgres_host_main for host "s-02"
+# #   hosts: s-02
+# #   become: true
+# #   roles:
+# #     - postgres_host_main
 
-# - name: Set role postgres_host_test for host "s-03"
-#   hosts: s-03
-#   become: true
-#   roles:
-#     - postgres_host_test
+# # - name: Set role postgres_host_test for host "s-03"
+# #   hosts: s-03
+# #   become: true
+# #   roles:
+# #     - postgres_host_test
 
-# - name: Set Dev-Access Roles
-#   hosts: gc-02, gc-08, gc-06
-#   # hosts: gc-06, gc-08
-#   become: true
-#   roles:
-#     - dev_access
+# # - name: Set Dev-Access Roles
+# #   hosts: gc-02, gc-08, gc-06
+# #   # hosts: gc-06, gc-08
+# #   become: true
+# #   roles:
+# #     - dev_access
 
-# - name: Set role local_endoreg_db
+# # - name: Set role local_endoreg_db
+# #   gather_facts: false
+# #   hosts: managed # , gc-06, gc-02, gc-08
+# #   become: true
+# #   roles:
+# #     - local_endoreg_db
+
+# - name: Set role ssl_cert for ssl_cert
 #   gather_facts: false
-#   hosts: managed # , gc-06, gc-02, gc-08
-#   become: true
-#   roles:
-#     - local_endoreg_db
-
-- name: Set role ssl_cert for ssl_cert
-  gather_facts: false
-  hosts: ssl_cert
-  become: true
-  roles:
-    - ssl_cert
-
-- name: Set role nginx_host for nginx_host
-  gather_facts: false
-  hosts: nginx_host
-  become: true
-  roles:
-    - nginx_host
-
-- name: Set role keycloak_host for keycloak_host
-  gather_facts: false
-  hosts: keycloak_host
-  become: true
-  roles:
-    - keycloak_host
-####### PRODUCTION END #########
-
-# - name: Set nextcloud role for nextcloud_host
-#   hosts: nextcloud_host
+#   hosts: ssl_cert
 #   become: true
 #   roles:
 #     - ssl_cert
-#     - nextcloud_host
-# - name: Set base_server group's roles
-#   hosts: base_server
+
+# - name: Set role nginx_host for nginx_host
+#   gather_facts: false
+#   hosts: nginx_host
 #   become: true
 #   roles:
-#     - common
+#     - nginx_host
 
-# - name: Set gpu_server group's roles
-#   hosts: base_server
-#   become: true
-
-# - name: Set gpu_client group's roles
-#   hosts: gpu_server
-#   become: true
-
-# - name: Set gpu_client_dev group's roles
-#   hosts: gpu_client
-#   become: true
-#   # roles:
-#   #   - nvidia_prime
-
-# - name: Set s-02 host roles
-#   hosts: s-02
+# - name: Set role keycloak_host for keycloak_host
+#   gather_facts: false
+#   hosts: keycloak_host
 #   become: true
 #   roles:
 #     - keycloak_host
-#     - postgres_host_main
+# ####### PRODUCTION END #########
 
-# - name: Set s-03 host roles
-#   hosts: s-03
-#   become: true
-#   roles:
-#     - postgres_host_test
+# # - name: Set nextcloud role for nextcloud_host
+# #   hosts: nextcloud_host
+# #   become: true
+# #   roles:
+# #     - ssl_cert
+# #     - nextcloud_host
+# # - name: Set base_server group's roles
+# #   hosts: base_server
+# #   become: true
+# #   roles:
+# #     - common
 
-# - name: Set gs-01 host roles
-#   hosts: gs-01
-#   become: true
-#   # roles:
-#   #   - gpu_server
+# # - name: Set gpu_server group's roles
+# #   hosts: base_server
+# #   become: true
 
-# - name: Update-managed-luxnix playbook
-#   ansible.builtin.import_playbook: "playbooks/managed-update-luxnix.yml"
+# # - name: Set gpu_client group's roles
+# #   hosts: gpu_server
+# #   become: true
+
+# # - name: Set gpu_client_dev group's roles
+# #   hosts: gpu_client
+# #   become: true
+# #   # roles:
+# #   #   - nvidia_prime
+
+# # - name: Set s-02 host roles
+# #   hosts: s-02
+# #   become: true
+# #   roles:
+# #     - keycloak_host
+# #     - postgres_host_main
+
+# # - name: Set s-03 host roles
+# #   hosts: s-03
+# #   become: true
+# #   roles:
+# #     - postgres_host_test
+
+# # - name: Set gs-01 host roles
+# #   hosts: gs-01
+# #   become: true
+# #   # roles:
+# #   #   - gpu_server
+
+# # - name: Update-managed-luxnix playbook
+# #   ansible.builtin.import_playbook: "playbooks/managed-update-luxnix.yml"
