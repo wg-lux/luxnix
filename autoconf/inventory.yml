@@ -694,7 +694,7 @@ all:
     hostname: gc-04
     subnet: 172.16.255.
     vars: {}
-file: /home/admin/lx-production/ansible/inventory/hosts.ini
+file: /home/admin/dev/luxnix/ansible/inventory/hosts.ini
 groups:
   - extra_user_names: []
     files: []
@@ -896,7 +896,10 @@ groups:
   - extra_user_names: []
     files: []
     name: nextcloud_host
-    vars: {}
+    vars:
+      group_luxnix: {}
+      group_roles: {}
+      group_services: {}
   - extra_user_names: []
     files: []
     name: hetzner_server
@@ -991,27 +994,6 @@ roles:
     vars: {}
   - extra_user_names: []
     files: []
-    name: traefik_host
-    vars:
-      role_luxnix:
-        generic-settings.sslCertificateKeyPath: '"/etc/secrets/vault/ssl_key"'
-        generic-settings.sslCertificatePath: '"/etc/secrets/vault/ssl_cert"'
-      role_roles:
-        traefikHost.allowedIPs:
-          - 172.16.255.106
-          - 172.16.255.1
-          - 127.0.0.1
-        traefikHost.dashboard: 'true'
-        traefikHost.dashboardHost: '"traefik.endo-reg.net"'
-        traefikHost.enable: 'true'
-        traefikHost.insecure: 'false'
-        traefikHost.keycloak.domain: '"keycloak.endo-reg.net"'
-        traefikHost.keycloak.enable: 'true'
-        traefikHost.keycloak.port: '9080'
-        traefikHost.sslCertPath: '"/etc/secrets/vault/ssl_cert"'
-        traefikHost.sslKeyPath: '"/etc/secrets/vault/ssl_key"'
-  - extra_user_names: []
-    files: []
     name: nginx_host
     vars:
       role_luxnix:
@@ -1035,6 +1017,27 @@ roles:
       role_ssl_cert_src: /home/admin/dev/luxnix/secrets/ssl/ssl_cert
       role_ssl_key_dest: /etc/secrets/vault/ssl_key
       role_ssl_key_src: /home/admin/dev/luxnix/secrets/ssl/ssl_key
+  - extra_user_names: []
+    files: []
+    name: traefik_host
+    vars:
+      role_luxnix:
+        generic-settings.sslCertificateKeyPath: '"/etc/secrets/vault/ssl_key"'
+        generic-settings.sslCertificatePath: '"/etc/secrets/vault/ssl_cert"'
+      role_roles:
+        traefikHost.allowedIPs:
+          - 172.16.255.106
+          - 172.16.255.1
+          - 127.0.0.1
+        traefikHost.dashboard: 'true'
+        traefikHost.dashboardHost: '"traefik.endo-reg.net"'
+        traefikHost.enable: 'true'
+        traefikHost.insecure: 'false'
+        traefikHost.keycloak.domain: '"keycloak.endo-reg.net"'
+        traefikHost.keycloak.enable: 'true'
+        traefikHost.keycloak.port: '9080'
+        traefikHost.sslCertPath: '"/etc/secrets/vault/ssl_cert"'
+        traefikHost.sslKeyPath: '"/etc/secrets/vault/ssl_key"'
   - extra_user_names: []
     files: []
     name: nextcloud_host

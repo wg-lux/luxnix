@@ -16,7 +16,6 @@
     dest: "{{ ssl_cert_ssl_key_dest }}"
     mode: "0700"
     owner: "{{ ansible_user }}"
-    group: "sslCert"
   become: true
   no_log: false
   # vars:
