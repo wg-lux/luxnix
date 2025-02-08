@@ -31,6 +31,15 @@ with lib.luxnix; let
       proxy_pass_header Authorization;
   '';
 
+  nginxPrepareScript = pkgs.writeScript "nginx-prepare-files.sh" ''
+    #!/bin/sh
+    set -e
+    cp ${cfg.sslCertPath} /etc/nginx-host/ssl_cert
+    cp ${cfg.sslKeyPath} /etc/nginx-host/ssl_key
+    chown nginx:nginx /etc/nginx-host/ssl_cert /etc/nginx-host/ssl_key
+    chmod 600 /etc/nginx-host/ssl_cert /etc/nginx-host/ssl_key
+  '';
+
 in {
   options.roles.nginxHost = {
     enable = mkBoolOpt false "Enable NGINX";
@@ -96,11 +105,7 @@ in {
         default = true;
         description = "Enable recommended TLS settings";
       };
-      user = mkOption {
-        type = types.str;
-        default = "nginx";
-        description = "User to run NGINX as";
-      };
+
       extraGroups = mkOption {
         type = types.listOf types.str;
         default = [
@@ -123,15 +128,34 @@ in {
       port = cfg.testPage.port;
     };
 
+    # systemd.tmpfile.rule to make sure /etc/nginx-host exists
+    systemd.tmpfiles.rules = [
+      "d /etc/nginx-host 0700 nginx nginx -"
+    ];
+
+    systemd.services.nginx-prepare-files = {
+      description = "Deploy SSL certificate and key for NGINX";
+      before = [ "nginx.service" ];
+      requiredBy = [ "nginx.service" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = "${nginxPrepareScript}";
+      };
+    };
+
+    systemd.services.nginx.wants = [ "nginx-prepare-files.service" ];
+    systemd.services.nginx.after = [ "nginx-prepare-files.service" ];
+
     # make sure the user exists
-    users.extraUsers."${conf.user}" = {
+    users.extraUsers."nginx" = {
       isSystemUser = true;
-      group = "${conf.user}";
+      group = "nginx";
       extraGroups = conf.extraGroups;
     };
 
     # make sure the group exists
-    users.groups."${conf.user}" = {};
+    users.groups."nginx" = {};
 
     # Allow default http and https ports
         networking.firewall.allowedTCPPorts = [ 
@@ -140,9 +164,8 @@ in {
 
     services.nginx = {
       enable = true;
-      # user = "root";
-      # user = "nginx";
-      # user = conf.user; # should be "nginx"
+      user = "nginx";
+      group = "nginx";
       recommendedGzipSettings = conf.recommendedGzipSettings;
       recommendedOptimisation = conf.recommendedOptimisation;
       recommendedProxySettings = conf.recommendedProxySettings;
@@ -164,17 +187,17 @@ in {
       #   };
       } else {}) 
       // (if cfg.keycloak.enable then {
-        "${cfg.keycloak.adminDomain}" = {
-          forceSSL = true;
-          sslCertificate = cfg.sslCertPath;
-          sslCertificateKey = cfg.sslKeyPath;
+        # "${cfg.keycloak.adminDomain}" = {
+        #   forceSSL = true;
+        #   sslCertificate = cfg.sslCertPath;
+        #   sslCertificateKey = cfg.sslKeyPath;
 
-          locations."/" = {
-              # proxyPass = "http://${keycloakConfig.vpnIp}:${toString keycloakConfig.port}";
-              proxyPass = "http://172.16.255.12:9080";
-              extraConfig = base.all-extraConfig + intern-endoreg-net-extraConfig;
-          };
-        };
+        #   locations."/" = {
+        #       # proxyPass = "http://${keycloakConfig.vpnIp}:${toString keycloakConfig.port}";
+        #       proxyPass = "http://172.16.255.12:9080";
+        #       extraConfig = base.all-extraConfig + intern-endoreg-net-extraConfig;
+        #   };
+        # };
 
         "${cfg.keycloak.domain}" = {
           forceSSL = true;
@@ -183,8 +206,8 @@ in {
 
           locations."/" = {
               # proxyPass = "http://${keycloakConfig.vpnIp}:${toString keycloakConfig.port}";
-              proxyPass = "http://172.16.255.12:9080";
-            extraConfig = base.all-extraConfig;
+              proxyPass = "http://172.16.255.12:8443";
+            extraConfig = all-extraConfig;
           };
         };
       } else {});

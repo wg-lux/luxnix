@@ -3,12 +3,13 @@ keycloak_host_pw_src: "{{ lx_vault_dir_src }}/deploy/{{ inventory_hostname }}/{{
 
 keycloak_host_roles:
   keycloakHost.enable: "true"
-  keycloakHost.httpPort: "9080"
-  keycloakHost.httpsPort: "9444"
+  keycloakHost.httpPort: "8080"
+  keycloakHost.httpsPort: "8443"
   keycloakHost.adminUsername: '"admin"'
   keycloakHost.adminInitialPassword: '"admin"'
   keycloakHost.homeDir: '"/etc/keycloak"'
   keycloakHost.dbUsername: '"keycloak"'
   keycloakHost.dbPasswordfile: '"SCRT_roles_system_password_keycloak_host_password"' # Same as keycloak_host_password_filename
   keycloakHost.hostname: '"keycloak.endo-reg.net"'
+  # keycloakHost.hostnameAdmin: '"keycloak-admin.endo-reg.net"'
   keycloakHost.vpnIP: '"172.16.255.12"'

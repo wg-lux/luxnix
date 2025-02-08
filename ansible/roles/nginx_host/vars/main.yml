@@ -11,7 +11,7 @@ nginx_host_roles:
   nginxHost.testPage.domain: '"test.endo-reg.net"'
   nginxHost.testPage.port: "8081"
 
-  nginxHost.keycloak.enable: "false"
+  nginxHost.keycloak.enable: "true"
   nginxHost.keycloak.domain: '"keycloak.endo-reg.net"'
   nginxHost.keycloak.port: "9080"
   nginxHost.keycloak.adminDomain: '"keycloak-admin.endo-reg.net"'

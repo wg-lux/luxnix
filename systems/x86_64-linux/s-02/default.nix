@@ -28,13 +28,13 @@
     keycloakHost.enable = true;
     keycloakHost.homeDir = "/etc/keycloak";
     keycloakHost.hostname = "keycloak.endo-reg.net";
-    keycloakHost.httpPort = 9080;
-    keycloakHost.httpsPort = 9444;
+    keycloakHost.httpPort = 8080;
+    keycloakHost.httpsPort = 8443;
     keycloakHost.vpnIP = "172.16.255.12";
     nginxHost.enable = true;
     nginxHost.keycloak.adminDomain = "keycloak-admin.endo-reg.net";
     nginxHost.keycloak.domain = "keycloak.endo-reg.net";
-    nginxHost.keycloak.enable = false;
+    nginxHost.keycloak.enable = true;
     nginxHost.keycloak.port = 9080;
     nginxHost.settings.proxyHeadersHashBucketSize = 64;
     nginxHost.settings.proxyHeadersHashMaxSize = 512;

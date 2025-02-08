@@ -11,6 +11,20 @@ with lib.luxnix; let
   sensitiveServicesGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
   
   cfg = config.roles.keycloakHost;
+  sslCertFile = config.luxnix.generic-settings.sslCertificatePath;
+  sslKeyFile = config.luxnix.generic-settings.sslCertificateKeyPath;
+
+  keycloakPrepareScript = pkgs.writeScript "keycloak-prepare-files.sh" ''
+    #!/bin/sh
+    set -e
+    cp /etc/secrets/vault/${cfg.dbPasswordfile} ${cfg.homeDir}/db-password
+    chown keycloak:keycloak ${cfg.homeDir}/db-password
+    chmod 0600 ${cfg.homeDir}/db-password
+    cp ${sslCertFile} ${cfg.homeDir}/tls.crt
+    cp ${sslKeyFile} ${cfg.homeDir}/tls.key
+    chown keycloak:keycloak ${cfg.homeDir}/tls.crt ${cfg.homeDir}/tls.key
+    chmod 600 ${cfg.homeDir}/tls.crt ${cfg.homeDir}/tls.key
+  '';
 
   in {
   options.roles.keycloakHost = {
@@ -18,13 +32,13 @@ with lib.luxnix; let
 
     httpPort = mkOption {
       type = types.int;
-      default = 9080;
+      default = 8080;
       description = "Port to run keycloak on";
     };
 
     httpsPort = mkOption {
       type = types.int;
-      default = 9843;
+      default = 8443;
       description = "Port to run keycloak on";
     };
 
@@ -92,13 +106,6 @@ with lib.luxnix; let
   config = mkIf cfg.enable {
     users.users = {
       keycloak = {
-        # isNormalUser = true;
-        # home = cfg.homeDir;
-        # createHome = true;
-        # shell = "/sbin/nologin";
-        # hashedPasswordFile = "${cfg.dbPasswordfile}_hash";
-        # isNormalUser = true;
-        # isSystemUser = true;
         group = "keycloak";
         extraGroups = [ 
           sslCertGroupName 
@@ -140,34 +147,19 @@ with lib.luxnix; let
       "d ${cfg.homeDir} 0770 keycloak ${sensitiveServicesGroupName} -"
     ];
 
-    systemd.services.keycloak-prepare-secret = {
-      description = "Copy Keycloak DB password file with correct permissions";
-      wantedBy = [ "multi-user.target" ];
-      # Runs only once on boot
-      serviceConfig.ExecStart = ''
-        ${pkgs.coreutils}/bin/cp /etc/secrets/vault/${cfg.dbPasswordfile} ${cfg.homeDir}/db-password
-        ${pkgs.coreutils}/bin/chown keycloak:keycloak ${cfg.homeDir}/db-password
-        ${pkgs.coreutils}/bin/chmod 0600 ${cfg.homeDir}/db-password
-      '';
+    systemd.services.keycloak-prepare-files = {
+      description = "Deploy DB password file and TLS certificates for Keycloak";
+      before = [ "keycloak.service" ];
+      requiredBy = [ "keycloak.service" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = "${keycloakPrepareScript}";
+      };
     };
 
-    systemd.services.keycloak.wants = [ "openvpn-aglNet.service" "keycloak-prepare-secret.service" ];
-    systemd.services.keycloak.after = [ "openvpn-aglNet.service" "keycloak-prepare-secret.service" ];
-
-    # systemd.services.keycloak = {
-    #     wants = [ "openvpn-aglNet.service" "network-online.target" ];
-    #     after = [ "openvpn-aglNet.service" "network-online.target" ];
-    #     serviceConfig = {
-    #     # Add a pre-start script to check for database connectivity
-    #     ExecStartPre = pkgs.writeScript "check-db-connectivity.sh" ''
-    #         #!/bin/sh
-    #         until ${pkgs.netcat}/bin/nc -z ${conf.database.host} ${toString conf.database.port}; do
-    #         echo "Waiting for database connectivity..."
-    #         sleep 1
-    #         done
-    #     '';
-    #     };
-    # };
+    systemd.services.keycloak.wants = [ "openvpn-aglNet.service" "keycloak-prepare-files.service" ];
+    systemd.services.keycloak.after = [ "openvpn-aglNet.service" "keycloak-prepare-files.service" ];
 
     services.keycloak = {
       enable = true;
@@ -185,15 +177,20 @@ with lib.luxnix; let
         port = config.services.postgresql.settings.port;
       };
       settings = {
-        http-host = "172.16.255.12";  # Listen on all interfaces
-        # http-host = "localhost";  # Listen on all interfaces
+        http-relative-path = "/";
+        http-host = "172.16.255.12";  
         http-port = cfg.httpPort;
-        http-enabled = true;  # Explicitly enable HTTP
-        hostname = "http://${cfg.hostname}"; # remove leading 'https://'
-        hostname-admin = "https://${cfg.hostnameAdmin}";
+        https-port = cfg.httpsPort;
+        https-certificate-file = "${cfg.homeDir}/tls.crt";
+        https-certificate-key-file = "${cfg.homeDir}/tls.key";
+        # Remove or comment out hostname since it's causing issues
+        hostname = "keycloak.endo-reg.net";
+        hostname-port = cfg.httpsPort;   # or set explicitly to 8443
+        http-enabled = false;            # set true if you need HTTP
+        proxy-headers = "xforwarded";
         hostname-strict = false;
         hostname-strict-https = false;
-        hostname-backchannel-dynamic = true;
+        hostname-backchannel-dynamic = false;
       };
     };
 
@@ -201,7 +198,7 @@ with lib.luxnix; let
       CREDENTIALS_DIRECTORY = "${cfg.homeDir}/";
     };
 
-    networking.firewall.allowedTCPPorts = [ cfg.httpPort ];
+    networking.firewall.allowedTCPPorts = [ cfg.httpPort cfg.httpsPort ];
     # allow port on tun0
     # networking.firewall.interfaces.tun0.allowedTCPPorts = [ cfg.httpPort ]; #FIXME #TODO tun0 should be automatically inferred from defined vpn
   
