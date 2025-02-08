@@ -206,7 +206,7 @@ in {
 
           locations."/" = {
               # proxyPass = "http://${keycloakConfig.vpnIp}:${toString keycloakConfig.port}";
-              proxyPass = "http://172.16.255.12:8443";
+              proxyPass = "https://172.16.255.12:8443";
             extraConfig = all-extraConfig;
           };
         };

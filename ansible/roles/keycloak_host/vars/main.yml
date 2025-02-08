@@ -11,5 +11,4 @@ keycloak_host_roles:
   keycloakHost.dbUsername: '"keycloak"'
   keycloakHost.dbPasswordfile: '"SCRT_roles_system_password_keycloak_host_password"' # Same as keycloak_host_password_filename
   keycloakHost.hostname: '"keycloak.endo-reg.net"'
-  # keycloakHost.hostnameAdmin: '"keycloak-admin.endo-reg.net"'
   keycloakHost.vpnIP: '"172.16.255.12"'

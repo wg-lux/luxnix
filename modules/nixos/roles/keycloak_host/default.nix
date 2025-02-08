@@ -166,14 +166,13 @@ with lib.luxnix; let
       initialAdminPassword = cfg.adminInitialPassword;
       database = {
         createLocally = false;
-        username = cfg.dbUsername; # 
+        username = cfg.dbUsername; 
         # useSSL = false; #FIXME harden
         passwordFile = "${cfg.homeDir}/db-password";
-        # Add explicit type to ensure proper database configuration
         type = "postgresql";
 
         host = "localhost";
-        name = cfg.dbUsername; # defaults to keycloak
+        name = cfg.dbUsername;
         port = config.services.postgresql.settings.port;
       };
       settings = {
@@ -183,10 +182,9 @@ with lib.luxnix; let
         https-port = cfg.httpsPort;
         https-certificate-file = "${cfg.homeDir}/tls.crt";
         https-certificate-key-file = "${cfg.homeDir}/tls.key";
-        # Remove or comment out hostname since it's causing issues
         hostname = "keycloak.endo-reg.net";
-        hostname-port = cfg.httpsPort;   # or set explicitly to 8443
-        http-enabled = false;            # set true if you need HTTP
+        hostname-port = cfg.httpsPort;   
+        http-enabled = false;          
         proxy-headers = "xforwarded";
         hostname-strict = false;
         hostname-strict-https = false;
