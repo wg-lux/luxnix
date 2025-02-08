@@ -9,7 +9,8 @@ with lib.luxnix; let
 
   sslCertGroupName = config.users.groups.sslCert.name;
   sensitiveServicesGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
-  
+  vpnIp = config.luxnix.generic-settings.vpnIp;
+
   cfg = config.roles.keycloakHost;
   sslCertFile = config.luxnix.generic-settings.sslCertificatePath;
   sslKeyFile = config.luxnix.generic-settings.sslCertificateKeyPath;
@@ -86,10 +87,6 @@ with lib.luxnix; let
       description = "Hostname for keycloak admin";
     };
 
-    vpnIP = mkOption {
-      type = types.str;
-      default = "172.16.255.3";
-    };
 
     gid = mkOption {
       type = types.int;
@@ -177,12 +174,12 @@ with lib.luxnix; let
       };
       settings = {
         http-relative-path = "/";
-        http-host = "172.16.255.12";  
+        http-host = vpnIp;  
         http-port = cfg.httpPort;
         https-port = cfg.httpsPort;
         https-certificate-file = "${cfg.homeDir}/tls.crt";
         https-certificate-key-file = "${cfg.homeDir}/tls.key";
-        hostname = "keycloak.endo-reg.net";
+        hostname = cfg.hostname;
         hostname-port = cfg.httpsPort;   
         http-enabled = false;          
         proxy-headers = "xforwarded";

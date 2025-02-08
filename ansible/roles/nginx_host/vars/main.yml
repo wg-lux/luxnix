@@ -13,7 +13,6 @@ nginx_host_roles:
 
   nginxHost.keycloak.enable: "true"
   nginxHost.keycloak.domain: '"keycloak.endo-reg.net"'
-  nginxHost.keycloak.port: "8443"
   nginxHost.keycloak.adminDomain: '"keycloak-admin.endo-reg.net"'
 
   nginxHost.settings.proxyHeadersHashMaxSize: "512"

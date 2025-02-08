@@ -747,8 +747,14 @@ groups:
         generic_settings.adminVpnIp: '"172.16.255.106"'
         generic_settings.enable: 'true'
         generic_settings.linux.kernelPackages: pkgs.linuxPackages_6_12
-        generic_settings.network.keycloak.port: '9080'
+        generic_settings.network.keycloak.port: '8443'
         generic_settings.network.keycloak.vpnIp: '"172.16.255.12"'
+        generic_settings.network.nextcloud.port: '8444'
+        generic_settings.network.nextcloud.vpnIp: '"172.16.255.12"'
+        generic_settings.network.psql_main.port: '5432'
+        generic_settings.network.psql_main.vpnIp: '"172.16.255.12"'
+        generic_settings.network.psql_test.port: '5432'
+        generic_settings.network.psql_test.vpnIp: '"172.16.255.13"'
         generic_settings.postgres.enable: 'true'
         generic_settings.sensitiveServiceGroupName: '"sensitiveServices"'
         generic_settings.traefikHostDomain: '"traefik.endo-reg.net"'
@@ -930,7 +936,6 @@ roles:
         keycloakHost.hostname: '"keycloak.endo-reg.net"'
         keycloakHost.httpPort: '8080'
         keycloakHost.httpsPort: '8443'
-        keycloakHost.vpnIP: '"172.16.255.12"'
   - extra_user_names: []
     files: []
     name: lx-anonymizer
@@ -1020,7 +1025,6 @@ roles:
         nginxHost.keycloak.adminDomain: '"keycloak-admin.endo-reg.net"'
         nginxHost.keycloak.domain: '"keycloak.endo-reg.net"'
         nginxHost.keycloak.enable: 'true'
-        nginxHost.keycloak.port: '8443'
         nginxHost.settings.proxyHeadersHashBucketSize: '64'
         nginxHost.settings.proxyHeadersHashMaxSize: '512'
         nginxHost.settings.recommendedGzipSettings: 'true'

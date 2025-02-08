@@ -49,7 +49,6 @@ in {
       enable = mkBoolOpt false "Enable Keycloak routing";
       domain = mkOpt types.str "keycloak.endo-reg.net" "Keycloak domain";
       adminDomain = mkOpt types.str "keycloak-admin.endo-reg.net" "Keycloak admin domain";
-      port = mkOpt types.port 9080 "Keycloak HTTP port";
     };
     testPage = {
       enable = mkBoolOpt false "Enable test page";
@@ -205,8 +204,7 @@ in {
           sslCertificateKey = cfg.sslKeyPath;
 
           locations."/" = {
-              # proxyPass = "http://${keycloakConfig.vpnIp}:${toString keycloakConfig.port}";
-              proxyPass = "https://172.16.255.12:8443";
+            proxyPass = "https://${keycloakConfig.vpnIp}:${toString keycloakConfig.port}";
             extraConfig = all-extraConfig;
           };
         };

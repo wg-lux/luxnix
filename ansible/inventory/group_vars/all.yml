@@ -21,7 +21,14 @@ group_roles: {}
 group_services: {}
 group_luxnix:
   generic_settings.network.keycloak.vpnIp: '"172.16.255.12"'
-  generic_settings.network.keycloak.port: "9080"
+  generic_settings.network.keycloak.port: "8443"
+  generic_settings.network.nextcloud.vpnIp: '"172.16.255.12"'
+  generic_settings.network.nextcloud.port: "8444"
+  generic_settings.network.psql_main.vpnIp: '"172.16.255.12"'
+  generic_settings.network.psql_main.port: "5432"
+  generic_settings.network.psql_test.vpnIp: '"172.16.255.13"'
+  generic_settings.network.psql_test.port: "5432"
+
   generic_settings.vpnSubnet: '"172.16.255.0/24"'
   generic_settings.sensitiveServiceGroupName: '"sensitiveServices"'
   generic_settings.postgres.enable: "true"

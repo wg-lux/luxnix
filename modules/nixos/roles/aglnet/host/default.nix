@@ -316,7 +316,7 @@ in {
         # DNS and routing configuration
         push "route 172.16.255.0 255.255.255.0"  # Route all VPN subnet traffic
         push "route 172.16.255.1 255.255.255.255"  # Ensure DNS server is reachable
-        push "route 172.16.255.12 255.255.255.255" # Traefik server
+        push "route 172.16.255.12 255.255.255.255" # Nginx, keycloak
         push "dhcp-option DNS 172.16.255.1"
         push "dhcp-option DOMAIN ${cfg.localDomain}"
         push "dhcp-option DOMAIN-ROUTE ${cfg.localDomain}"
