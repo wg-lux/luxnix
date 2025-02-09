@@ -152,7 +152,7 @@ in {
 
     # Allow default http and https ports
         networking.firewall.allowedTCPPorts = [ 
-            nginxConfig.port
+            80 443
      ];
 
     services.nginx = {
@@ -199,8 +199,11 @@ in {
           sslCertificateKey = nginx_key_path;
 
           locations."/" = {
-              proxyPass = "https://${nextcloudConfig.vpnIp}";
-              extraConfig = all-extraConfig;  # Removed intern-endoreg-net-extraConfig
+            proxyPass = "http://${nextcloudConfig.vpnIp}:80";
+            extraConfig = all-extraConfig; #+ ''
+              #   ssl_stapling off;
+              #   ssl_stapling_verify off;
+              # '';
           };
         };
       } else {})

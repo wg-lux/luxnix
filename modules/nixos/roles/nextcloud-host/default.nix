@@ -156,8 +156,7 @@ in {
 
     environment.systemPackages = [ pkgs.minio-client ];
 
-  services.nginx.virtualHosts."localhost".listen = [ { addr = "127.0.0.1"; port = 8444; } ];
-  networking.firewall.allowedTCPPorts = [ 80 443 8444 ];
+  networking.firewall.allowedTCPPorts = [ 80 443 ];
 
   };
 }
