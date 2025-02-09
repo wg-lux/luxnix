@@ -73,7 +73,6 @@ in {
       configureRedis = true;
       package = cfg.package;
       hostName = "cloud.endo-reg.net"; 
-      listenPort = conf.port;
       extraApps = {
         inherit (config.services.nextcloud.package.packages.apps) news contacts calendar tasks forms;
       };
@@ -157,7 +156,8 @@ in {
 
     environment.systemPackages = [ pkgs.minio-client ];
 
-  networking.firewall.allowedTCPPorts = [ conf.port ];
+  services.nginx.virtualHosts."localhost".listen = [ { addr = "127.0.0.1"; port = 8444; } ];
+  networking.firewall.allowedTCPPorts = [ 80 443 8444 ];
 
   };
 }

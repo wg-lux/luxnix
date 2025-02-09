@@ -199,7 +199,7 @@ in {
           sslCertificateKey = nginx_key_path;
 
           locations."/" = {
-              proxyPass = "https://${nextcloudConfig.vpnIp}:${toString nextcloudConfig.port}";
+              proxyPass = "https://${nextcloudConfig.vpnIp}";
               extraConfig = all-extraConfig;  # Removed intern-endoreg-net-extraConfig
           };
         };
