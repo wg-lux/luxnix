@@ -72,7 +72,6 @@ in {
       https = false;
       configureRedis = true;
       package = cfg.package;
-      # hostName = conf.domain; #FIXME?
       hostName = "cloud.endo-reg.net";
       extraApps = {
         inherit (config.services.nextcloud.package.packages.apps) news contacts calendar tasks forms;
@@ -150,30 +149,24 @@ in {
       '';
     };
 
-    # services.nginx.virtualHosts."localhost".listen = [
-    #   { addr = "127.0.0.1"; port = conf.port; }
-    #   { addr = conf.vpnIp; port = conf.port; }
-    # ];
+  services.nginx.virtualHosts."${config.services.nextcloud.hostName}".listen = [ 
+    {
+      addr = "127.0.0.1"; #TODO make vpn ip?
+      port = 8444; # NOT an exposed port
+    } 
+    {
+      addr = conf.vpnIp;
+      port = 8444;
+    }
+  ];
 
-    # services.nginx.virtualHosts."${config.services.nextcloud.hostName}" = {
-    #   sslCertificate = sslCertFile;
-    #   sslCertificateKey = sslKeyFile;
-    #   listen = [ 
-    #     {
-    #       addr = "127.0.0.1";
-    #       port = conf.port; # NOT an exposed port
-    #     }
-    #     { # listen to the VPN IP
-    #       addr = conf.vpnIp;
-    #       port = conf.port;
-    #       ssl = true;
-    #     }
-    #   ];
-    # };
+
+
+
 # [ { addr = "127.0.0.1"; port = 8080; } ]
     environment.systemPackages = [ pkgs.minio-client ];
 
-  # networking.firewall.allowedTCPPorts = [ conf.port ];
+  networking.firewall.allowedTCPPorts = [ conf.port ];
 
   };
 }

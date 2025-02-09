@@ -205,6 +205,17 @@ in {
         };
       } else {})
       // (if cfg.keycloak.enable then {
+        "${keycloakConfig.domain}" = {
+          forceSSL = true;
+          sslCertificate = nginx_cert_path;
+          sslCertificateKey = nginx_key_path;
+
+          locations."/" = {
+            proxyPass = "https://${keycloakConfig.vpnIp}:${toString keycloakConfig.port}";
+            extraConfig = all-extraConfig;
+          };
+        };
+        
         "${keycloakConfig.adminDomain}" = {
           forceSSL = true;
           sslCertificate = nginx_cert_path;
@@ -216,16 +227,6 @@ in {
           };
         };
 
-        "${keycloakConfig.domain}" = {
-          forceSSL = true;
-          sslCertificate = nginx_cert_path;
-          sslCertificateKey = nginx_key_path;
-
-          locations."/" = {
-            proxyPass = "https://${keycloakConfig.vpnIp}:${toString keycloakConfig.port}";
-            extraConfig = all-extraConfig;
-          };
-        };
       } else {});
     };
 
