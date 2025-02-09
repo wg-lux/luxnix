@@ -165,72 +165,71 @@ in {
       recommendedTlsSettings = conf.recommendedTlsSettings;
 
       appendHttpConfig = appendHttpConfig;
-      virtualHosts = {
+      virtualHosts = lib.mkMerge [
+        (mkIf cfg.psqlMain.enable { #TODO domain in psql config
+          "${psqlMainConfig.domain}" = {
+            forceSSL = true;
+            sslCertificate = nginx_cert_path;
+            sslCertificateKey = nginx_key_path;
 
-      } 
-      // (if cfg.psqlMain.enable then { #TODO domain in psql config
-        "${psqlMainConfig.domain}" = {
-          forceSSL = true;
-          sslCertificate = nginx_cert_path;
-          sslCertificateKey = nginx_key_path;
-
-          locations."/" = {
-              proxyPass = "https://${psqlMainConfig.vpnIp}:${toString psqlMainConfig.port}";
-              extraConfig = all-extraConfig + intern-endoreg-net-extraConfig;
+            locations."/" = {
+                proxyPass = "https://${psqlMainConfig.vpnIp}:${toString psqlMainConfig.port}";
+                extraConfig = all-extraConfig + intern-endoreg-net-extraConfig;
+            };
           };
-        };
-      } else {})
-      // (if cfg.psqlTest.enable then { #TODO domain in psql config
-        "${psqlTestConfig.domain}" = {
-          forceSSL = true;
-          sslCertificate = nginx_cert_path;
-          sslCertificateKey = nginx_key_path;
+        })
+        (mkIf cfg.psqlTest.enable { #TODO domain in psql config
+          "${psqlTestConfig.domain}" = {
+            forceSSL = true;
+            sslCertificate = nginx_cert_path;
+            sslCertificateKey = nginx_key_path;
 
-          locations."/" = {
-              proxyPass = "https://${psqlTestConfig.vpnIp}:${toString psqlTestConfig.port}";
-              extraConfig = all-extraConfig + intern-endoreg-net-extraConfig;
+            locations."/" = {
+                proxyPass = "https://${psqlTestConfig.vpnIp}:${toString psqlTestConfig.port}";
+                extraConfig = all-extraConfig + intern-endoreg-net-extraConfig;
+            };
           };
-        };
-      } else {})
-      (if cfg.nextcloud.enable then {
-        "${nextcloudConfig.domain}" = {
-          forceSSL = true;
-          sslCertificate = nginx_cert_path;
-          sslCertificateKey = nginx_key_path;
+        })
+        (mkIf cfg.nextcloud.enable {
+          "${nextcloudConfig.domain}" = {
+            forceSSL = true;
+            sslCertificate = nginx_cert_path;
+            sslCertificateKey = nginx_key_path;
 
-          locations."/" = {
-            proxyPass = "http://${nextcloudConfig.vpnIp}:80";
-            extraConfig = all-extraConfig; #+ ''
+            locations."/" = {
+              proxyPass = "http://${nextcloudConfig.vpnIp}:80";
+              extraConfig = all-extraConfig; #+ ''
               #   ssl_stapling off;
               #   ssl_stapling_verify off;
               # '';
+            };
           };
-        };
-      } else {})
-      // (if cfg.keycloak.enable then {
-        "${keycloakConfig.domain}" = {
-          forceSSL = true;
-          sslCertificate = nginx_cert_path;
-          sslCertificateKey = nginx_key_path;
+        })
+        (mkIf cfg.keycloak.enable {
+          "${keycloakConfig.domain}" = {
+            forceSSL = true;
+            sslCertificate = nginx_cert_path;
+            sslCertificateKey = nginx_key_path;
 
-          locations."/" = {
-            proxyPass = "https://${keycloakConfig.vpnIp}:${toString keycloakConfig.port}";
-            extraConfig = all-extraConfig;
-          };
-        };
-        
-        "${keycloakConfig.adminDomain}" = {
-          forceSSL = true;
-          sslCertificate = nginx_cert_path;
-          sslCertificateKey = nginx_key_path;
-
-          locations."/" = {
+            locations."/" = {
               proxyPass = "https://${keycloakConfig.vpnIp}:${toString keycloakConfig.port}";
-              extraConfig = all-extraConfig + intern-endoreg-net-extraConfig;
+              extraConfig = all-extraConfig;
+            };
           };
-        };
+          
+          "${keycloakConfig.adminDomain}" = {
+            forceSSL = true;
+            sslCertificate = nginx_cert_path;
+            sslCertificateKey = nginx_key_path;
 
-      } else {});
+            locations."/" = {
+                proxyPass = "https://${keycloakConfig.vpnIp}:${toString keycloakConfig.port}";
+                extraConfig = all-extraConfig + intern-endoreg-net-extraConfig;
+            };
+          };
+
+        })
+      ];
     };
 
   };
