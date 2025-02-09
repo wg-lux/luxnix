@@ -157,9 +157,9 @@ with lib.luxnix; let
         https-certificate-file = "${cfg.homeDir}/tls.crt";
         https-certificate-key-file = "${cfg.homeDir}/tls.key";
         hostname = "https://${conf.domain}";
-        hostname-admin = "https://${conf.adminDomain}";
+        # hostname-admin = "https://${conf.adminDomain}"; #FIXME
         hostname-port = conf.port;   
-        hostname-admin-port = conf.port;
+        # hostname-admin-port = conf.port; #FIXME
         http-enabled = false;          
         proxy-headers = "xforwarded";
         hostname-strict = false;
