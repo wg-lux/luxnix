@@ -194,12 +194,12 @@ in {
       } else {})
       // (if cfg.nextcloud.enable then {
         "${nextcloudConfig.domain}" = {
-          forceSSL = true;
+          # forceSSL = true;
           sslCertificate = nginx_cert_path;
           sslCertificateKey = nginx_key_path;
 
           locations."/" = {
-            proxyPass = "http://${nextcloudConfig.vpnIp}:80";
+            proxyPass = "${nextcloudConfig.vpnIp}";
             extraConfig = all-extraConfig; #+ ''
               #   ssl_stapling off;
               #   ssl_stapling_verify off;

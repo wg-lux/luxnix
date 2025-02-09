@@ -112,8 +112,8 @@ in {
           "OC\\Preview\\XBitmap"
           "OC\\Preview\\HEIC"
         ];
-        overwritehost = "cloud.endo-reg.net";
-        overwriteprotocol = "https";
+        # overwritehost = "cloud.endo-reg.net";
+        # overwriteprotocol = "https";
       };
     };
 
@@ -154,7 +154,7 @@ in {
     };
 
 
-    environment.systemPackages = [ pkgs.minio-client ];
+  environment.systemPackages = [ pkgs.minio-client ];
 
   networking.firewall.allowedTCPPorts = [ 80 443 ];
 
