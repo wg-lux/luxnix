@@ -432,92 +432,6 @@ all:
   - ansible_group_names:
       - language_english
       - all
-      - gpu_client
-      - active_clients
-      - local_endoreg_db
-      - test_group
-    ansible_host: 172.16.255.106
-    ansible_role_names: []
-    extra_secret_names:
-      - SCRT_roles_system_password_postgres_host_main_password
-      - SCRT_roles_system_password_postgres_host_test_password
-    extra_user_names:
-      - admin
-      - maintenance
-      - demodemo
-    facts:
-      all_ipv4_addresses:
-        - 172.16.255.106
-        - 192.168.0.115
-        - 192.168.0.235
-      bios:
-        date: 07/23/2024
-        vendor: American Megatrends International, LLC.
-        version: E17L5IMS.117
-      current_date: '2025-01-17T12:45:53Z'
-      default_ipv4:
-        address: 192.168.0.235
-        gateway: 192.168.0.1
-        interface: enp3s0
-        netmask: 255.255.255.0
-      machine: x86_64
-    files: []
-    hostname: gc-06
-    subnet: 172.16.255.
-    vars:
-      ansible_python_interpreter: '{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python'
-      ansible_roles: []
-      extra_secret_names:
-        - SCRT_roles_system_password_postgres_host_main_password
-        - SCRT_roles_system_password_postgres_host_test_password
-      host_luxnix:
-        generic_settings.configurationPath: lib.mkForce "/home/admin/dev/luxnix"
-        generic_settings.hostPlatform: '"x86_64-linux"'
-        generic_settings.linux.cpuMicrocode: '"intel"'
-        generic_settings.linux.extraModulePackages: []
-        generic_settings.linux.initrd.availableKernelModules:
-          - vmd
-          - xhci_pci
-          - ahci
-          - nvme
-          - usb_storage
-          - sd_mod
-        generic_settings.linux.initrd.kernelModules:
-          - dm-snapshot
-          - nfs
-          - btrfs
-        generic_settings.linux.initrd.supportedFilesystems:
-          - nfs
-          - btrfs
-        generic_settings.linux.kernelModules:
-          - kvm-intel
-        generic_settings.linux.kernelModulesBlacklist: []
-        generic_settings.linux.kernelParams: []
-        generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
-        generic_settings.linux.supportedFilesystems:
-          - btrfs
-          - nfs
-        generic_settings.systemStateVersion: '"23.11"'
-        generic_settings.vpnIp: '"172.16.255.106"'
-        maintenance.autoUpdates.enable: 'false'
-        nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
-        nvidia_prime.onboardBusId: '"PCI:0:2:0"'
-        nvidia_prime.onboardGpuType: '"intel"'
-      host_roles:
-        custom_packages.baseDevelopment: 'true'
-        custom_packages.videoEditing: 'true'
-        custom_packages.visuals: 'true'
-      host_services: {}
-      luxnix_branch: traefik
-      luxnix_dest: /home/admin/luxnix-production
-      luxnix_dev_repo: /home/admin/dev/luxnix
-      luxnix_repo: https://github.com/wg-lux/luxnix.git
-      os_extra_user_names:
-        - demodemo
-      template_name: main
-  - ansible_group_names:
-      - language_english
-      - all
       - base_server
       - active_clients
       - openvpn_host
@@ -578,7 +492,101 @@ all:
       template_name: main
   - ansible_group_names:
       - language_english
+      - ssl_cert
       - all
+      - gpu_client
+      - active_clients
+      - nextcloud_host
+      - local_endoreg_db
+      - test_group
+    ansible_host: 172.16.255.106
+    ansible_role_names:
+      - ssl_cert
+      - nextcloud_host
+    extra_secret_names:
+      - SCRT_roles_system_password_postgres_host_main_password
+      - SCRT_roles_system_password_postgres_host_test_password
+    extra_user_names:
+      - admin
+      - maintenance
+      - demodemo
+    facts:
+      all_ipv4_addresses:
+        - 172.16.255.106
+        - 192.168.0.115
+        - 192.168.0.235
+      bios:
+        date: 07/23/2024
+        vendor: American Megatrends International, LLC.
+        version: E17L5IMS.117
+      current_date: '2025-01-17T12:45:53Z'
+      default_ipv4:
+        address: 192.168.0.235
+        gateway: 192.168.0.1
+        interface: enp3s0
+        netmask: 255.255.255.0
+      machine: x86_64
+    files: []
+    hostname: gc-06
+    subnet: 172.16.255.
+    vars:
+      ansible_python_interpreter: '{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python'
+      ansible_roles:
+        - ssl_cert
+        - nextcloud_host
+      extra_secret_names:
+        - SCRT_roles_system_password_postgres_host_main_password
+        - SCRT_roles_system_password_postgres_host_test_password
+      host_luxnix:
+        generic_settings.configurationPath: lib.mkForce "/home/admin/dev/luxnix"
+        generic_settings.hostPlatform: '"x86_64-linux"'
+        generic_settings.linux.cpuMicrocode: '"intel"'
+        generic_settings.linux.extraModulePackages: []
+        generic_settings.linux.initrd.availableKernelModules:
+          - vmd
+          - xhci_pci
+          - ahci
+          - nvme
+          - usb_storage
+          - sd_mod
+        generic_settings.linux.initrd.kernelModules:
+          - dm-snapshot
+          - nfs
+          - btrfs
+        generic_settings.linux.initrd.supportedFilesystems:
+          - nfs
+          - btrfs
+        generic_settings.linux.kernelModules:
+          - kvm-intel
+        generic_settings.linux.kernelModulesBlacklist: []
+        generic_settings.linux.kernelParams: []
+        generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+        generic_settings.linux.supportedFilesystems:
+          - btrfs
+          - nfs
+        generic_settings.systemStateVersion: '"23.11"'
+        generic_settings.vpnIp: '"172.16.255.106"'
+        maintenance.autoUpdates.enable: 'false'
+        nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
+        nvidia_prime.onboardBusId: '"PCI:0:2:0"'
+        nvidia_prime.onboardGpuType: '"intel"'
+      host_roles:
+        custom_packages.baseDevelopment: 'true'
+        custom_packages.videoEditing: 'true'
+        custom_packages.visuals: 'true'
+      host_services: {}
+      luxnix_branch: main
+      luxnix_dest: /home/admin/luxnix-production
+      luxnix_dev_repo: /home/admin/dev/luxnix
+      luxnix_repo: https://github.com/wg-lux/luxnix.git
+      os_extra_user_names:
+        - demodemo
+      template_name: main
+  - ansible_group_names:
+      - language_english
+      - ssl_cert
+      - all
+      - keycloak_host
       - base_server
       - active_clients
       - nginx_host
@@ -588,6 +596,8 @@ all:
       - postgres_host_main
       - nginx_host
       - keycloak_host
+      - nextcloud_host
+      - ssl_cert
     extra_secret_names: []
     extra_user_names:
       - admin
@@ -615,6 +625,8 @@ all:
         - postgres_host_main
         - nginx_host
         - keycloak_host
+        - nextcloud_host
+        - ssl_cert
       host_luxnix:
         generic_settings.hostPlatform: '"x86_64-linux"'
         generic_settings.linux.cpuMicrocode: '"intel"'
@@ -737,6 +749,20 @@ groups:
         generic_settings.adminVpnIp: '"172.16.255.106"'
         generic_settings.enable: 'true'
         generic_settings.linux.kernelPackages: pkgs.linuxPackages_6_12
+        generic_settings.network.keycloak.adminDomain: '"keycloak-admin.endo-reg.net"'
+        generic_settings.network.keycloak.domain: '"keycloak.endo-reg.net"'
+        generic_settings.network.keycloak.port: '8443'
+        generic_settings.network.keycloak.vpnIp: '"172.16.255.12"'
+        generic_settings.network.nextcloud.domain: '"cloud.endo-reg.net"'
+        generic_settings.network.nextcloud.port: '8444'
+        generic_settings.network.nextcloud.vpnIp: '"172.16.255.106"'
+        generic_settings.network.nginx.vpnIp: '"172.16.255.12"'
+        generic_settings.network.psqlMain.domain: '"psql-main.endo-reg.net"'
+        generic_settings.network.psqlMain.port: '5432'
+        generic_settings.network.psqlMain.vpnIp: '"172.16.255.12"'
+        generic_settings.network.psqlTest.domain: '"psql-test.endo-reg.net"'
+        generic_settings.network.psqlTest.port: '5432'
+        generic_settings.network.psqlTest.vpnIp: '"172.16.255.13"'
         generic_settings.postgres.enable: 'true'
         generic_settings.sensitiveServiceGroupName: '"sensitiveServices"'
         generic_settings.traefikHostDomain: '"traefik.endo-reg.net"'
@@ -864,8 +890,26 @@ groups:
       group_services: {}
   - extra_user_names: []
     files: []
+    name: ssl_cert
+    vars:
+      group_luxnix: {}
+      group_roles: {}
+      group_services: {}
+  - extra_user_names: []
+    files: []
     name: nginx_host
     vars: {}
+  - extra_user_names: []
+    files: []
+    name: keycloak_host
+    vars: {}
+  - extra_user_names: []
+    files: []
+    name: nextcloud_host
+    vars:
+      group_luxnix: {}
+      group_roles: {}
+      group_services: {}
   - extra_user_names: []
     files: []
     name: hetzner_server
@@ -890,19 +934,16 @@ roles:
     files: []
     name: keycloak_host
     vars:
-      role_psql_keycloak_pw_file: /etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password
-      role_psql_keycloak_pw_src: /home/admin/.lxv/deploy/{{ inventory_hostname }}/SCRT_roles_system_password_keycloak_host_password
+      role_password_filename: SCRT_roles_system_password_keycloak_host_password
+      role_pw_src: '{{ lx_vault_dir_src }}/deploy/{{ inventory_hostname }}/{{ keycloak_host_password_filename
+        }}'
       role_roles:
         keycloakHost.adminInitialPassword: '"admin"'
         keycloakHost.adminUsername: '"admin"'
-        keycloakHost.dbPasswordfile: '"/etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password"'
+        keycloakHost.dbPasswordfile: '"SCRT_roles_system_password_keycloak_host_password"'
         keycloakHost.dbUsername: '"keycloak"'
         keycloakHost.enable: 'true'
-        keycloakHost.homeDir: '"/home/keycloak"'
-        keycloakHost.hostname: '"keycloak.endo-reg.net"'
-        keycloakHost.httpPort: '9080'
-        keycloakHost.httpsPort: '9444'
-        keycloakHost.vpnIP: '"172.16.255.12"'
+        keycloakHost.homeDir: '"/etc/keycloak"'
   - extra_user_names: []
     files: []
     name: lx-anonymizer
@@ -968,19 +1009,14 @@ roles:
       role_password_filename: SCRT_roles_system_password_nginx_host_password
       role_roles:
         nginxHost.enable: 'true'
-        nginxHost.keycloak.adminDomain: '"keycloak-admin.endo-reg.net"'
-        nginxHost.keycloak.domain: '"keycloak.endo-reg.net"'
-        nginxHost.keycloak.enable: 'false'
-        nginxHost.keycloak.port: '9080'
+        nginxHost.keycloak.enable: 'true'
+        nginxHost.nextcloud.enable: 'true'
         nginxHost.settings.proxyHeadersHashBucketSize: '64'
         nginxHost.settings.proxyHeadersHashMaxSize: '512'
         nginxHost.settings.recommendedGzipSettings: 'true'
         nginxHost.settings.recommendedOptimisation: 'true'
         nginxHost.settings.recommendedProxySettings: 'true'
         nginxHost.settings.recommendedTlsSettings: 'true'
-        nginxHost.testPage.domain: '"test.endo-reg.net"'
-        nginxHost.testPage.enable: 'true'
-        nginxHost.testPage.port: '8081'
       role_ssl_cert_dest: /etc/secrets/vault/ssl_cert
       role_ssl_cert_src: /home/admin/dev/luxnix/secrets/ssl/ssl_cert
       role_ssl_key_dest: /etc/secrets/vault/ssl_key
@@ -1006,3 +1042,27 @@ roles:
         traefikHost.keycloak.port: '9080'
         traefikHost.sslCertPath: '"/etc/secrets/vault/ssl_cert"'
         traefikHost.sslKeyPath: '"/etc/secrets/vault/ssl_key"'
+  - extra_user_names: []
+    files: []
+    name: nextcloud_host
+    vars:
+      role_password_filename: SCRT_roles_system_password_nextcloud_host_password
+      role_pw_src: '{{ lx_vault_dir_src }}/deploy/{{ inventory_hostname }}/{{ nextcloud_host_password_filename
+        }}'
+      role_roles:
+        nextcloudHost.enable: 'true'
+        nextcloudHost.maxUploadSize: '"10G"'
+        nextcloudHost.package: pkgs.nextcloud30
+        nextcloudHost.passwordFilePath: '"/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_password"'
+  - extra_user_names: []
+    files: []
+    name: ssl_cert
+    vars:
+      role_luxnix:
+        generic-settings.sslCertificateKeyPath: '"/etc/secrets/vault/ssl_key"'
+        generic-settings.sslCertificatePath: '"/etc/secrets/vault/ssl_cert"'
+      role_role_dest: /etc/secrets/vault/ssl_cert
+      role_role_src: /home/admin/dev/luxnix/secrets/ssl/ssl_cert
+      role_roles: {}
+      role_ssl_key_dest: /etc/secrets/vault/ssl_key
+      role_ssl_key_src: /home/admin/dev/luxnix/secrets/ssl/ssl_key

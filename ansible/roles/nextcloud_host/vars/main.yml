@@ -1,0 +1,8 @@
+nextcloud_host_password_filename: "SCRT_roles_system_password_nextcloud_host_password"
+nextcloud_host_pw_src: "{{ lx_vault_dir_src }}/deploy/{{ inventory_hostname }}/{{ nextcloud_host_password_filename }}"
+
+nextcloud_host_roles:
+  nextcloudHost.enable: "true"
+  nextcloudHost.package: "pkgs.nextcloud30"
+  nextcloudHost.passwordFilePath: '"/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_password"'
+  nextcloudHost.maxUploadSize: '"10G"'

@@ -7,7 +7,10 @@
 with lib;
 with lib.luxnix; let
   cfg = config.user.admin;
+  sslCertGroupName = config.users.groups.sslCert.name;
   passwordFile = config.luxnix.vault.adminPasswordHashedFile;
+  sensitiveServicesGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
+  
   # passwordFile = "/etc/user-passwords/${cfg.name}_hashed";
 in {
   options.user.admin = with types; {
@@ -59,6 +62,10 @@ in {
             "podman"
             "kvm"
             "libvirtd"
+          ]
+          ++ [
+            sslCertGroupName
+            sensitiveServicesGroupName
           ]
           ++ cfg.extraGroups;
       }

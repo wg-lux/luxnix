@@ -1,14 +1,10 @@
-keycloak_host_psql_keycloak_pw_file: /etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password
-keycloak_host_psql_keycloak_pw_src: /home/admin/.lxv/deploy/{{ inventory_hostname }}/SCRT_roles_system_password_keycloak_host_password
+keycloak_host_password_filename: "SCRT_roles_system_password_keycloak_host_password"
+keycloak_host_pw_src: "{{ lx_vault_dir_src }}/deploy/{{ inventory_hostname }}/{{ keycloak_host_password_filename }}"
 
 keycloak_host_roles:
   keycloakHost.enable: "true"
-  keycloakHost.httpPort: "9080"
-  keycloakHost.httpsPort: "9444"
   keycloakHost.adminUsername: '"admin"'
   keycloakHost.adminInitialPassword: '"admin"'
-  keycloakHost.homeDir: '"/home/keycloak"'
+  keycloakHost.homeDir: '"/etc/keycloak"'
   keycloakHost.dbUsername: '"keycloak"'
-  keycloakHost.dbPasswordfile: '"/etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password"' # Remove "_service" suffix
-  keycloakHost.hostname: '"keycloak.endo-reg.net"'
-  keycloakHost.vpnIP: '"172.16.255.12"'
+  keycloakHost.dbPasswordfile: '"SCRT_roles_system_password_keycloak_host_password"' # Same as keycloak_host_password_filename

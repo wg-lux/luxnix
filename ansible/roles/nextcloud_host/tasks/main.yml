@@ -1,0 +1,10 @@
+- name: Deploy nextcloud role password
+  ansible.builtin.copy:
+    src: "{{ nextcloud_host_pw_src }}"
+    dest: "{{ lx_vault_dir }}/{{ nextcloud_host_password_filename }}"
+    owner: "{{ ansible_user }}"
+    mode: "0700"
+  become: true
+  no_log: true
+  vars:
+    ansible_vault_identity: "{{ inventory_hostname }}@{{ lx_vault_dir_src }}/psk/{{ inventory_hostname }}.psk"

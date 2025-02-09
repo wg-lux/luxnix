@@ -31,9 +31,12 @@ with lib.luxnix; let
       host  replication               ${defaults.replUser}        127.0.0.1/32                scram-sha-256 
       host  ${defaults.devUser}            ${defaults.devUser}    127.0.0.1/32                scram-sha-256 
     '' 
-    + cfg.extraAuthentication + 
-      (if enableKeycloak then "\nhost ${keycloakDbUser} ${keycloakDbUser} 127.0.0.1/32 scram-sha-256" else "")
-
+    + cfg.extraAuthentication
+    + (if enableKeycloak then ''
+      
+      host ${keycloakDbUser} ${keycloakDbUser} 127.0.0.1/32 scram-sha-256
+      host ${keycloakDbUser} ${keycloakDbUser} ::1/128 scram-sha-256
+      '' else "")
     + (if remoteAdmin then "\nhost all all ${adminVpnIp}/32 scram-sha-256" else "")
     + (if remoteAdmin then "\nhost ${defaults.devUser} ${defaults.devUser} ${adminVpnIp}/32 scram-sha-256" else "") 
     + (if remoteAdmin then "\nhost  all postgres ${adminVpnIp}/32 scram-sha-256" else "")

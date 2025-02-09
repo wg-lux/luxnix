@@ -26,6 +26,8 @@ ansible_roles:
   - postgres_host_main
   - nginx_host
   - keycloak_host
+  - nextcloud_host
+  - ssl_cert
 ansible_ssh_private_key_file: ~/.ssh/id_ed25519
 ansible_user: admin
 authentication:
@@ -49,6 +51,20 @@ group_luxnix:
   generic_settings.enable: 'true'
   generic_settings.language: '"english"'
   generic_settings.linux.kernelPackages: pkgs.linuxPackages_6_12
+  generic_settings.network.keycloak.adminDomain: '"keycloak-admin.endo-reg.net"'
+  generic_settings.network.keycloak.domain: '"keycloak.endo-reg.net"'
+  generic_settings.network.keycloak.port: '8443'
+  generic_settings.network.keycloak.vpnIp: '"172.16.255.12"'
+  generic_settings.network.nextcloud.domain: '"cloud.endo-reg.net"'
+  generic_settings.network.nextcloud.port: '8444'
+  generic_settings.network.nextcloud.vpnIp: '"172.16.255.106"'
+  generic_settings.network.nginx.vpnIp: '"172.16.255.12"'
+  generic_settings.network.psqlMain.domain: '"psql-main.endo-reg.net"'
+  generic_settings.network.psqlMain.port: '5432'
+  generic_settings.network.psqlMain.vpnIp: '"172.16.255.12"'
+  generic_settings.network.psqlTest.domain: '"psql-test.endo-reg.net"'
+  generic_settings.network.psqlTest.port: '5432'
+  generic_settings.network.psqlTest.vpnIp: '"172.16.255.13"'
   generic_settings.postgres.enable: 'true'
   generic_settings.sensitiveServiceGroupName: '"sensitiveServices"'
   generic_settings.traefikHostDomain: '"traefik.endo-reg.net"'
@@ -115,34 +131,31 @@ postgres_host_test_password_filename: SCRT_roles_system_password_postgres_host_t
 role_luxnix:
   generic-settings.sslCertificateKeyPath: '"/etc/secrets/vault/ssl_key"'
   generic-settings.sslCertificatePath: '"/etc/secrets/vault/ssl_cert"'
-role_password_filename: SCRT_roles_system_password_nginx_host_password
-role_psql_keycloak_pw_file: /etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password
-role_psql_keycloak_pw_src: /home/admin/.lxv/deploy/{{ inventory_hostname }}/SCRT_roles_system_password_keycloak_host_password
+role_password_filename: SCRT_roles_system_password_keycloak_host_password
+role_pw_src: '{{ lx_vault_dir_src }}/deploy/{{ inventory_hostname }}/{{ keycloak_host_password_filename
+  }}'
+role_role_dest: /etc/secrets/vault/ssl_cert
+role_role_src: /home/admin/dev/luxnix/secrets/ssl/ssl_cert
 role_roles:
   keycloakHost.adminInitialPassword: '"admin"'
   keycloakHost.adminUsername: '"admin"'
-  keycloakHost.dbPasswordfile: '"/etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password"'
+  keycloakHost.dbPasswordfile: '"SCRT_roles_system_password_keycloak_host_password"'
   keycloakHost.dbUsername: '"keycloak"'
   keycloakHost.enable: 'true'
-  keycloakHost.homeDir: '"/home/keycloak"'
-  keycloakHost.hostname: '"keycloak.endo-reg.net"'
-  keycloakHost.httpPort: '9080'
-  keycloakHost.httpsPort: '9444'
-  keycloakHost.vpnIP: '"172.16.255.12"'
+  keycloakHost.homeDir: '"/etc/keycloak"'
+  nextcloudHost.enable: 'true'
+  nextcloudHost.maxUploadSize: '"10G"'
+  nextcloudHost.package: pkgs.nextcloud30
+  nextcloudHost.passwordFilePath: '"/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_password"'
   nginxHost.enable: 'true'
-  nginxHost.keycloak.adminDomain: '"keycloak-admin.endo-reg.net"'
-  nginxHost.keycloak.domain: '"keycloak.endo-reg.net"'
-  nginxHost.keycloak.enable: 'false'
-  nginxHost.keycloak.port: '9080'
+  nginxHost.keycloak.enable: 'true'
+  nginxHost.nextcloud.enable: 'true'
   nginxHost.settings.proxyHeadersHashBucketSize: '64'
   nginxHost.settings.proxyHeadersHashMaxSize: '512'
   nginxHost.settings.recommendedGzipSettings: 'true'
   nginxHost.settings.recommendedOptimisation: 'true'
   nginxHost.settings.recommendedProxySettings: 'true'
   nginxHost.settings.recommendedTlsSettings: 'true'
-  nginxHost.testPage.domain: '"test.endo-reg.net"'
-  nginxHost.testPage.enable: 'true'
-  nginxHost.testPage.port: '8081'
   postgres.main.enable: 'true'
 role_ssl_cert_dest: /etc/secrets/vault/ssl_cert
 role_ssl_cert_src: /home/admin/dev/luxnix/secrets/ssl/ssl_cert

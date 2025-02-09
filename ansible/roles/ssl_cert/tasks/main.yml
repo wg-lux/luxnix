@@ -1,0 +1,22 @@
+---
+- name: Deploy ssl_cert from source
+  ansible.builtin.copy:
+    src: "{{ ssl_cert_ssl_cert_src }}"
+    dest: "{{ ssl_cert_ssl_cert_dest }}"
+    mode: "0700"
+    owner: "{{ ansible_user }}"
+  become: true
+  no_log: false
+  # vars:
+  # ansible_vault_identity: "{{ inventory_hostname }}@{{ lx_vault_dir_src }}/psk/{{ inventory_hostname }}.psk"
+
+- name: Deploy ssl_key from source
+  ansible.builtin.copy:
+    src: "{{ ssl_cert_ssl_key_src }}"
+    dest: "{{ ssl_cert_ssl_key_dest }}"
+    mode: "0700"
+    owner: "{{ ansible_user }}"
+  become: true
+  no_log: false
+  # vars:
+  # ansible_vault_identity: "{{ inventory_hostname }}@{{ lx_vault_dir_src }}/psk/{{ inventory_hostname }}.psk"

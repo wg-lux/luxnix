@@ -23,28 +23,23 @@
     endoreg-client.enable = false;
     keycloakHost.adminInitialPassword = "admin";
     keycloakHost.adminUsername = "admin";
-    keycloakHost.dbPasswordfile = "/etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password";
+    keycloakHost.dbPasswordfile = "SCRT_roles_system_password_keycloak_host_password";
     keycloakHost.dbUsername = "keycloak";
     keycloakHost.enable = true;
-    keycloakHost.homeDir = "/home/keycloak";
-    keycloakHost.hostname = "keycloak.endo-reg.net";
-    keycloakHost.httpPort = 9080;
-    keycloakHost.httpsPort = 9444;
-    keycloakHost.vpnIP = "172.16.255.12";
+    keycloakHost.homeDir = "/etc/keycloak";
+    nextcloudHost.enable = true;
+    nextcloudHost.maxUploadSize = "10G";
+    nextcloudHost.package = pkgs.nextcloud30;
+    nextcloudHost.passwordFilePath = "/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_password";
     nginxHost.enable = true;
-    nginxHost.keycloak.adminDomain = "keycloak-admin.endo-reg.net";
-    nginxHost.keycloak.domain = "keycloak.endo-reg.net";
-    nginxHost.keycloak.enable = false;
-    nginxHost.keycloak.port = 9080;
+    nginxHost.keycloak.enable = true;
+    nginxHost.nextcloud.enable = true;
     nginxHost.settings.proxyHeadersHashBucketSize = 64;
     nginxHost.settings.proxyHeadersHashMaxSize = 512;
     nginxHost.settings.recommendedGzipSettings = true;
     nginxHost.settings.recommendedOptimisation = true;
     nginxHost.settings.recommendedProxySettings = true;
     nginxHost.settings.recommendedTlsSettings = true;
-    nginxHost.testPage.domain = "test.endo-reg.net";
-    nginxHost.testPage.enable = true;
-    nginxHost.testPage.port = 8081;
     postgres.main.enable = true;
     };
 
@@ -63,6 +58,34 @@ generic-settings.enable = true;
 generic-settings.language = "english";
 
 generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
+
+generic-settings.network.keycloak.adminDomain = "keycloak-admin.endo-reg.net";
+
+generic-settings.network.keycloak.domain = "keycloak.endo-reg.net";
+
+generic-settings.network.keycloak.port = 8443;
+
+generic-settings.network.keycloak.vpnIp = "172.16.255.12";
+
+generic-settings.network.nextcloud.domain = "cloud.endo-reg.net";
+
+generic-settings.network.nextcloud.port = 8444;
+
+generic-settings.network.nextcloud.vpnIp = "172.16.255.106";
+
+generic-settings.network.nginx.vpnIp = "172.16.255.12";
+
+generic-settings.network.psqlMain.domain = "psql-main.endo-reg.net";
+
+generic-settings.network.psqlMain.port = 5432;
+
+generic-settings.network.psqlMain.vpnIp = "172.16.255.12";
+
+generic-settings.network.psqlTest.domain = "psql-test.endo-reg.net";
+
+generic-settings.network.psqlTest.port = 5432;
+
+generic-settings.network.psqlTest.vpnIp = "172.16.255.13";
 
 generic-settings.postgres.enable = true;
 

@@ -6,6 +6,18 @@ with lib.luxnix; let
   conf = cfg.settings;
   vpnIp = config.luxnix.generic-settings.vpnIp;
   vpnSubnet = config.luxnix.generic-settings.vpnSubnet;
+  sslCertGroupName = config.users.groups.sslCert.name;
+  sensitiveServicesGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
+  
+  networkConfig = config.luxnix.generic-settings.network;
+  nginxConfig = networkConfig.nginx;
+  keycloakConfig = networkConfig.keycloak;
+  nextcloudConfig = networkConfig.nextcloud;
+  psqlMainConfig = networkConfig.psqlMain;
+  psqlTestConfig = networkConfig.psqlTest;
+
+  nginx_cert_path = "/etc/nginx-host/ssl_cert";
+  nginx_key_path = "/etc/nginx-host/ssl_key";
 
   all-extraConfig = ''
       proxy_headers_hash_bucket_size ${toString cfg.settings.proxyHeadersHashBucketSize};
@@ -27,41 +39,36 @@ with lib.luxnix; let
       proxy_pass_header Authorization;
   '';
 
+  nginxPrepareScript = pkgs.writeScript "nginx-prepare-files.sh" ''
+    #!/bin/sh
+    set -e
+    cp ${cfg.sslCertPath} ${nginx_cert_path}
+    cp ${cfg.sslKeyPath} ${nginx_key_path}
+    chown nginx:nginx ${nginx_cert_path} ${nginx_key_path}
+    chmod 600 ${nginx_cert_path} ${nginx_key_path}
+  '';
+
 in {
+  #TODO MIGRATE DOMAIN SETTINGS TO GENERIC SETTINGS SO THAT THEY ARE AVAILABLE ON ALL MACHINES
   options.roles.nginxHost = {
     enable = mkBoolOpt false "Enable NGINX";
     sslCertPath = mkOpt types.path config.luxnix.generic-settings.sslCertificatePath "Path to SSL certificate";
     sslKeyPath = mkOpt types.path config.luxnix.generic-settings.sslCertificateKeyPath "Path to SSL key";
     keycloak = {
       enable = mkBoolOpt false "Enable Keycloak routing";
-      domain = mkOpt types.str "keycloak.endo-reg.net" "Keycloak domain";
-      adminDomain = mkOpt types.str "keycloak-admin.endo-reg.net" "Keycloak admin domain";
-      port = mkOpt types.port 9080 "Keycloak HTTP port";
     };
-    testPage = {
-      enable = mkBoolOpt false "Enable test page";
-      domain = mkOpt types.str "test.endo-reg.net" "Test page domain";
-      port = mkOpt types.port 8081 "Test page port";
+    nextcloud = {
+      enable = mkBoolOpt false "Enable Nextcloud routing";
+    };
+    psqlMain = {
+      enable = mkBoolOpt false "Enable PostgreSQL main routing";
+    };
+    psqlTest = {
+      enable = mkBoolOpt false "Enable PostgreSQL test routing";
     };
 
     settings = {
-      hostIp = mkOption {
-        type = types.str;
-        default = vpnIp;
-        description = "IP address to bind NGINX to";
-      };
-      ports = {
-        http = mkOption {
-          type = types.int;
-          default = 80;
-          description = "Port to bind the NGINX to";
-        };
-        https = mkOption {
-          type = types.int;
-          default = 443;
-          description = "Port to bind the NGINX to";
-        };
-      };
+      
       proxyHeadersHashMaxSize = mkOption {
         type = types.int;
         default = 512;
@@ -92,15 +99,16 @@ in {
         default = true;
         description = "Enable recommended TLS settings";
       };
-      user = mkOption {
-        type = types.str;
-        default = "nginx";
-        description = "User to run NGINX as";
-      };
+
       extraGroups = mkOption {
         type = types.listOf types.str;
         default = [
-          "wheel" "docker" "podman" "networkmanager" "sslCert" "sensitiveServices"
+          "wheel"
+          "docker"
+          "podman"
+          "networkmanager"
+          "${sslCertGroupName}"
+          "${sensitiveServicesGroupName}"
         ];
         description = "Extra groups for the NGINX user";
       };
@@ -114,72 +122,123 @@ in {
       port = cfg.testPage.port;
     };
 
-    # make sure the user exists
-    users.extraUsers."${conf.user}" = {
-      isSystemUser = true;
-      group = "${conf.user}";
-      extraGroups = conf.extraGroups;
+    # systemd.tmpfile.rule to make sure /etc/nginx-host exists
+    systemd.tmpfiles.rules = [
+      "d /etc/nginx-host 0700 nginx nginx -"
+    ];
+
+    systemd.services.nginx-prepare-files = {
+      description = "Deploy SSL certificate and key for NGINX";
+      before = [ "nginx.service" ];
+      requiredBy = [ "nginx.service" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = "${nginxPrepareScript}";
+      };
     };
 
+    systemd.services.nginx.wants = [ "nginx-prepare-files.service" ];
+    systemd.services.nginx.after = [ "nginx-prepare-files.service" ];
+
+    # make sure the user exists
+    users.extraUsers."nginx" = {
+      isSystemUser = true;
+      group = "nginx";
+      extraGroups = conf.extraGroups;
+    };
     # make sure the group exists
-    users.groups."${conf.user}" = {};
+    users.groups."nginx" = {};
 
     # Allow default http and https ports
         networking.firewall.allowedTCPPorts = [ 
-            conf.ports.http conf.ports.https
+            nginxConfig.port
      ];
 
     services.nginx = {
       enable = true;
-      # user = "root";
-      # user = "nginx";
-      # user = conf.user; # should be "nginx"
+      user = "nginx";
+      group = "nginx";
       recommendedGzipSettings = conf.recommendedGzipSettings;
       recommendedOptimisation = conf.recommendedOptimisation;
       recommendedProxySettings = conf.recommendedProxySettings;
       recommendedTlsSettings = conf.recommendedTlsSettings;
 
       appendHttpConfig = appendHttpConfig;
-      virtualHosts = {} // (if cfg.testPage.enable then {
-        "${cfg.testPage.domain}" = {
-          # forceSSL = false;
+      virtualHosts = {
+
+      } 
+      // (if cfg.psqlMain.enable then { #TODO domain in psql config
+        "${psqlMainConfig.domain}" = {
           forceSSL = true;
-          sslCertificate = cfg.sslCertPath;
-          sslCertificateKey = cfg.sslKeyPath;
+          sslCertificate = nginx_cert_path;
+          sslCertificateKey = nginx_key_path;
 
           locations."/" = {
-              proxyPass = "http://${vpnIp}:${toString cfg.testPage.port}";
-              extraConfig = all-extraConfig;
+              proxyPass = "https://${psqlMainConfig.vpnIp}:${toString psqlMainConfig.port}";
+              extraConfig = all-extraConfig + intern-endoreg-net-extraConfig;
           };
         };
-      } else {}) 
+      } else {})
+      // (if cfg.psqlTest.enable then { #TODO domain in psql config
+        "${psqlTestConfig.domain}" = {
+          forceSSL = true;
+          sslCertificate = nginx_cert_path;
+          sslCertificateKey = nginx_key_path;
+
+          locations."/" = {
+              proxyPass = "https://${psqlTestConfig.vpnIp}:${toString psqlTestConfig.port}";
+              extraConfig = all-extraConfig + intern-endoreg-net-extraConfig;
+          };
+        };
+      } else {})
+      // (if cfg.nextcloud.enable then {
+        "${nextcloudConfig.domain}" = {
+          forceSSL = true;
+          sslCertificate = nginx_cert_path;
+          sslCertificateKey = nginx_key_path;
+
+          locations."/" = {
+              proxyPass = "https://${nextcloudConfig.vpnIp}:${toString nextcloudConfig.port}";
+              extraConfig = all-extraConfig  + intern-endoreg-net-extraConfig; # TODO open to public
+          };
+        };
+      } else {})
       // (if cfg.keycloak.enable then {
-        # "${cfg.keycloak.adminDomain}" = {
-        #   forceSSL = true;
-        #   sslCertificate = cfg.sslCertPath;
-        #   sslCertificateKey = cfg.sslKeyPath;
+        "${keycloakConfig.adminDomain}" = {
+          forceSSL = true;
+          sslCertificate = nginx_cert_path;
+          sslCertificateKey = nginx_key_path;
 
-        #   locations."/" = {
-        #       proxyPass = "http://${keycloak-host-vpn-ip}:${toString network.ports.keycloak.http}"; # TODO FIXME
-        #       extraConfig = base.all-extraConfig + intern-endoreg-net-extraConfig;
-        #   };
-        # };
+          locations."/" = {
+              proxyPass = "https://${keycloakConfig.vpnIp}:${toString keycloakConfig.port}";
+              extraConfig = all-extraConfig + intern-endoreg-net-extraConfig;
+          };
+        };
 
-        # "${cfg.keycloak.domain}" = {
-        #   forceSSL = true;
-        #   sslCertificate = cfg.sslCertPath;
-        #   sslCertificateKey = cfg.sslKeyPath;
+        "${keycloakConfig.domain}" = {
+          forceSSL = true;
+          sslCertificate = nginx_cert_path;
+          sslCertificateKey = nginx_key_path;
 
-        #   locations."/" = {
-        #     proxyPass = "http://${keycloak-host-vpn-ip}:${toString network.ports.keycloak.http}"; # TODO FIXME
-        #     extraConfig = base.all-extraConfig;
-        #   };
-        # };
+          locations."/" = {
+            proxyPass = "https://${keycloakConfig.vpnIp}:${toString keycloakConfig.port}";
+            extraConfig = all-extraConfig;
+          };
+        };
       } else {});
     };
 
   };
 }
+
+
+    # keycloak = {
+    #   enable = mkBoolOpt false "Enable Keycloak routing";
+    #   domain = mkOpt types.str "keycloak.endo-reg.net" "Keycloak domain";
+    #   adminDomain = mkOpt types.str "keycloak-admin.endo-reg.net" "Keycloak admin domain";
+    #   port = mkOpt types.port 9080 "Keycloak HTTP port";
+    # };
 
 ##### FOR REFERENCE 
 # "drive-intern.endo-reg.net" = {

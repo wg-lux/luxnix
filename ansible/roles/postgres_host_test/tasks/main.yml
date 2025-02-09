@@ -1,12 +1,4 @@
 ---
-- name: Ensure vault directory exists
-  ansible.builtin.file:
-    path: "{{ lx_vault_dir }}"
-    state: directory
-    mode: "0700"
-    owner: "{{ ansible_user }}"
-  become: true
-
 - name: Deploy postgres password from source
   ansible.builtin.copy:
     src: "{{ lx_vault_dir_src }}/deploy/{{ inventory_hostname }}/{{ postgres_host_test_password_filename }}"
