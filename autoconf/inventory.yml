@@ -747,7 +747,7 @@ groups:
         generic_settings.adminVpnIp: '"172.16.255.106"'
         generic_settings.enable: 'true'
         generic_settings.linux.kernelPackages: pkgs.linuxPackages_6_12
-        generic_settings.network.keycloak.adminDomain: '"keycloak-admin.endo-reg.net"'
+        generic_settings.network.keycloak.adminDomain: '"adminKeycloak.endo-reg.net"'
         generic_settings.network.keycloak.domain: '"keycloak.endo-reg.net"'
         generic_settings.network.keycloak.port: '8443'
         generic_settings.network.keycloak.vpnIp: '"172.16.255.12"'
