@@ -596,7 +596,6 @@ all:
       - postgres_host_main
       - nginx_host
       - keycloak_host
-      - nextcloud_host
       - ssl_cert
     extra_secret_names: []
     extra_user_names:
@@ -625,7 +624,6 @@ all:
         - postgres_host_main
         - nginx_host
         - keycloak_host
-        - nextcloud_host
         - ssl_cert
       host_luxnix:
         generic_settings.hostPlatform: '"x86_64-linux"'

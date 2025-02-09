@@ -27,10 +27,6 @@
     keycloakHost.dbUsername = "keycloak";
     keycloakHost.enable = true;
     keycloakHost.homeDir = "/etc/keycloak";
-    nextcloudHost.enable = true;
-    nextcloudHost.maxUploadSize = "10G";
-    nextcloudHost.package = pkgs.nextcloud30;
-    nextcloudHost.passwordFilePath = "/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_password";
     nginxHost.enable = true;
     nginxHost.keycloak.enable = true;
     nginxHost.nextcloud.enable = true;
