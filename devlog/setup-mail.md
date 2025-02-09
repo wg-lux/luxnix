@@ -29,6 +29,11 @@ smtp_use_tls = yes
 
 sudo nano /etc/postfix/sasl_passwd
 
+POP3 Server: mail.noip.com, port 110 or 995 with SSL enabled
+IMAP Server: mail.noip.com, port 143 or 993 with SSL enabled
+Outbound SMTP: mail.noip.com, port 587 or 465 with SSL enabled (requires authentication)
+Username: Your complete email address, e.g. user@example.co
+
 [smtp-auth.no-ip.com]:3325 example.com@noip-smtp:YourSMTPPassowrd
 
 # NixOS Postfix Example

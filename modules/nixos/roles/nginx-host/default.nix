@@ -200,7 +200,7 @@ in {
 
           locations."/" = {
               proxyPass = "https://${nextcloudConfig.vpnIp}:${toString nextcloudConfig.port}";
-              extraConfig = all-extraConfig  + intern-endoreg-net-extraConfig; # TODO open to public
+              extraConfig = all-extraConfig;  # Removed intern-endoreg-net-extraConfig
           };
         };
       } else {})

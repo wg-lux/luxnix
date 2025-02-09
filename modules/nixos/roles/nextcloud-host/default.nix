@@ -72,7 +72,8 @@ in {
       https = false;
       configureRedis = true;
       package = cfg.package;
-      hostName = "cloud.endo-reg.net";
+      hostName = "cloud.endo-reg.net"; 
+      listenPort = conf.port;
       extraApps = {
         inherit (config.services.nextcloud.package.packages.apps) news contacts calendar tasks forms;
       };
@@ -95,6 +96,8 @@ in {
 
       settings = let
       in {
+        trusted_domains = [ "localhost" "cloud.endo-reg.net" ];
+        trusted_proxies = [ config.luxnix.generic-settings.network.nginx.vpnIp "172.16.255.12" ];
         mail_smtpmode = "sendmail";
         mail_sendmailmode = "pipe";
         enabledPreviewProviders = [
@@ -110,6 +113,8 @@ in {
           "OC\\Preview\\XBitmap"
           "OC\\Preview\\HEIC"
         ];
+        overwritehost = "cloud.endo-reg.net";
+        overwriteprotocol = "https";
       };
     };
 
@@ -149,21 +154,7 @@ in {
       '';
     };
 
-  services.nginx.virtualHosts."${config.services.nextcloud.hostName}".listen = [ 
-    {
-      addr = "127.0.0.1"; #TODO make vpn ip?
-      port = 8444; # NOT an exposed port
-    } 
-    {
-      addr = conf.vpnIp;
-      port = 8444;
-    }
-  ];
 
-
-
-
-# [ { addr = "127.0.0.1"; port = 8080; } ]
     environment.systemPackages = [ pkgs.minio-client ];
 
   networking.firewall.allowedTCPPorts = [ conf.port ];
