@@ -70,6 +70,16 @@ in {
     services.nextcloud = {
       enable = true;
       https = false;
+      # nginx.enable = true; # Re-enable internal nginx
+      # sslCertFile = nextcloudSslCertFile;
+      # sslKeyFile = nextcloudSslKeyFile;
+      # listen = [ # Remove this block
+      #   {
+      #     address = "0.0.0.0";
+      #     port = 443;
+      #     ssl = true;
+      #   }
+      # ];
       configureRedis = true;
       package = cfg.package;
       hostName = "cloud.endo-reg.net"; 
@@ -113,7 +123,7 @@ in {
           "OC\\Preview\\HEIC"
         ];
         # overwritehost = "cloud.endo-reg.net";
-        # overwriteprotocol = "https";
+        # overwriteprotocol = "http";
       };
     };
 
@@ -156,7 +166,7 @@ in {
 
   environment.systemPackages = [ pkgs.minio-client ];
 
-  networking.firewall.allowedTCPPorts = [ 80 443 ];
+  networking.firewall.allowedTCPPorts = [ 443 ];
 
   };
 }

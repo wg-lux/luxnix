@@ -192,14 +192,14 @@ in {
           };
         };
       } else {})
-      // (if cfg.nextcloud.enable then {
+      (if cfg.nextcloud.enable then {
         "${nextcloudConfig.domain}" = {
-          # forceSSL = true;
+          forceSSL = true;
           sslCertificate = nginx_cert_path;
           sslCertificateKey = nginx_key_path;
 
           locations."/" = {
-            proxyPass = "${nextcloudConfig.vpnIp}";
+            proxyPass = "http://${nextcloudConfig.vpnIp}:80";
             extraConfig = all-extraConfig; #+ ''
               #   ssl_stapling off;
               #   ssl_stapling_verify off;
