@@ -7,7 +7,9 @@ luxnix_repo: "https://github.com/wg-lux/luxnix.git"
 luxnix_dest: "/home/admin/luxnix-production"
 luxnix_branch: "main"
 
-ansible_roles: []
+ansible_roles:
+  - ssl_cert
+  - nextcloud_host
 
 extra_secret_names:
   - "SCRT_roles_system_password_postgres_host_main_password"

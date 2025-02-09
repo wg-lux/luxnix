@@ -16,6 +16,8 @@ with lib.luxnix; let
   nextcloudSslCertFile = config.luxnix.generic-settings.sslCertificatePath;
   nextcloudSslKeyFile = config.luxnix.generic-settings.sslCertificateKeyPath;
 
+  conf = config.luxnix.generic-settings.network.nextcloud;
+
   accessKey = "nextcloud";
   secretKey = "test12345";
 
@@ -23,10 +25,6 @@ with lib.luxnix; let
     MINIO_ROOT_USER=nextcloud
     MINIO_ROOT_PASSWORD=test12345
   '';
-
-  # vpnIp = config.luxnix.generic-settings.vpnIp;
-  nextcloudHostIp = config.luxnix.generic-settings.network.nextcloud.vpnIp;
-  nextcloudPort = config.luxnix.generic-settings.network.nextcloud.port;
 
 
 in {
@@ -71,11 +69,11 @@ in {
 
     services.nextcloud = {
       enable = true;
-      https = true;
+      https = false;
       configureRedis = true;
       package = cfg.package;
-      # hostName = cfg.hostname;
-      hostName = "https://${nextcloudHostIp}:${toString nextcloudPort}";
+      # hostName = conf.domain; #FIXME?
+      hostName = "cloud.endo-reg.net";
       extraApps = {
         inherit (config.services.nextcloud.package.packages.apps) news contacts calendar tasks forms;
       };
@@ -124,10 +122,7 @@ in {
     # mc config host add minio http://localhost:9000 nextcloud test12345 --api s3v4
     # mc mb minio/nextcloud
     
-    services.nginx.virtualHosts."localhost".listen = [
-      { addr = "127.0.0.1"; port = nextcloudPort; }
-      { addr = nextcloudHostIp; port = nextcloudPort; }
-    ];
+
 
 
     services.minio = {
@@ -155,24 +150,30 @@ in {
       '';
     };
 
+    # services.nginx.virtualHosts."localhost".listen = [
+    #   { addr = "127.0.0.1"; port = conf.port; }
+    #   { addr = conf.vpnIp; port = conf.port; }
+    # ];
+
     # services.nginx.virtualHosts."${config.services.nextcloud.hostName}" = {
     #   sslCertificate = sslCertFile;
     #   sslCertificateKey = sslKeyFile;
     #   listen = [ 
     #     {
     #       addr = "127.0.0.1";
-    #       port = 8080; # NOT an exposed port
+    #       port = conf.port; # NOT an exposed port
     #     }
     #     { # listen to the VPN IP
-    #       addr = "${vpnIp}";
-    #       port = 443;
+    #       addr = conf.vpnIp;
+    #       port = conf.port;
     #       ssl = true;
     #     }
     #   ];
     # };
-
+# [ { addr = "127.0.0.1"; port = 8080; } ]
     environment.systemPackages = [ pkgs.minio-client ];
 
+  # networking.firewall.allowedTCPPorts = [ conf.port ];
 
   };
 }

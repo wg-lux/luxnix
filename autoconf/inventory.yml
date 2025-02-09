@@ -496,10 +496,13 @@ all:
       - all
       - gpu_client
       - active_clients
+      - nextcloud_host
       - local_endoreg_db
       - test_group
     ansible_host: 172.16.255.106
-    ansible_role_names: []
+    ansible_role_names:
+      - ssl_cert
+      - nextcloud_host
     extra_secret_names:
       - SCRT_roles_system_password_postgres_host_main_password
       - SCRT_roles_system_password_postgres_host_test_password
@@ -528,7 +531,9 @@ all:
     subnet: 172.16.255.
     vars:
       ansible_python_interpreter: '{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python'
-      ansible_roles: []
+      ansible_roles:
+        - ssl_cert
+        - nextcloud_host
       extra_secret_names:
         - SCRT_roles_system_password_postgres_host_main_password
         - SCRT_roles_system_password_postgres_host_test_password
@@ -581,12 +586,11 @@ all:
       - language_english
       - ssl_cert
       - all
+      - keycloak_host
       - base_server
       - active_clients
-      - managed
-      - nextcloud_host
       - nginx_host
-      - keycloak_host
+      - managed
     ansible_host: 172.16.255.12
     ansible_role_names:
       - postgres_host_main
@@ -694,7 +698,7 @@ all:
     hostname: gc-04
     subnet: 172.16.255.
     vars: {}
-file: /home/admin/lx-production/ansible/inventory/hosts.ini
+file: /home/admin/dev/luxnix/ansible/inventory/hosts.ini
 groups:
   - extra_user_names: []
     files: []
@@ -751,7 +755,8 @@ groups:
         generic_settings.network.keycloak.vpnIp: '"172.16.255.12"'
         generic_settings.network.nextcloud.domain: '"cloud.endo-reg.net"'
         generic_settings.network.nextcloud.port: '8444'
-        generic_settings.network.nextcloud.vpnIp: '"172.16.255.12"'
+        generic_settings.network.nextcloud.vpnIp: '"172.16.255.106"'
+        generic_settings.network.nginx.vpnIp: '"172.16.255.12"'
         generic_settings.network.psqlMain.domain: '"psql-main.endo-reg.net"'
         generic_settings.network.psqlMain.port: '5432'
         generic_settings.network.psqlMain.vpnIp: '"172.16.255.12"'
@@ -996,27 +1001,6 @@ roles:
     vars: {}
   - extra_user_names: []
     files: []
-    name: traefik_host
-    vars:
-      role_luxnix:
-        generic-settings.sslCertificateKeyPath: '"/etc/secrets/vault/ssl_key"'
-        generic-settings.sslCertificatePath: '"/etc/secrets/vault/ssl_cert"'
-      role_roles:
-        traefikHost.allowedIPs:
-          - 172.16.255.106
-          - 172.16.255.1
-          - 127.0.0.1
-        traefikHost.dashboard: 'true'
-        traefikHost.dashboardHost: '"traefik.endo-reg.net"'
-        traefikHost.enable: 'true'
-        traefikHost.insecure: 'false'
-        traefikHost.keycloak.domain: '"keycloak.endo-reg.net"'
-        traefikHost.keycloak.enable: 'true'
-        traefikHost.keycloak.port: '9080'
-        traefikHost.sslCertPath: '"/etc/secrets/vault/ssl_cert"'
-        traefikHost.sslKeyPath: '"/etc/secrets/vault/ssl_key"'
-  - extra_user_names: []
-    files: []
     name: nginx_host
     vars:
       role_luxnix:
@@ -1037,6 +1021,27 @@ roles:
       role_ssl_cert_src: /home/admin/dev/luxnix/secrets/ssl/ssl_cert
       role_ssl_key_dest: /etc/secrets/vault/ssl_key
       role_ssl_key_src: /home/admin/dev/luxnix/secrets/ssl/ssl_key
+  - extra_user_names: []
+    files: []
+    name: traefik_host
+    vars:
+      role_luxnix:
+        generic-settings.sslCertificateKeyPath: '"/etc/secrets/vault/ssl_key"'
+        generic-settings.sslCertificatePath: '"/etc/secrets/vault/ssl_cert"'
+      role_roles:
+        traefikHost.allowedIPs:
+          - 172.16.255.106
+          - 172.16.255.1
+          - 127.0.0.1
+        traefikHost.dashboard: 'true'
+        traefikHost.dashboardHost: '"traefik.endo-reg.net"'
+        traefikHost.enable: 'true'
+        traefikHost.insecure: 'false'
+        traefikHost.keycloak.domain: '"keycloak.endo-reg.net"'
+        traefikHost.keycloak.enable: 'true'
+        traefikHost.keycloak.port: '9080'
+        traefikHost.sslCertPath: '"/etc/secrets/vault/ssl_cert"'
+        traefikHost.sslKeyPath: '"/etc/secrets/vault/ssl_key"'
   - extra_user_names: []
     files: []
     name: nextcloud_host
