@@ -24,7 +24,9 @@ with lib.luxnix; let
     MINIO_ROOT_PASSWORD=test12345
   '';
 
-  vpnIp = config.luxnix.generic-settings.vpnIp;
+  # vpnIp = config.luxnix.generic-settings.vpnIp;
+  nextcloudHostIp = config.luxnix.generic-settings.network.nextcloud.vpnIp;
+  nextcloudPort = config.luxnix.generic-settings.network.nextcloud.port;
 
 
 in {
@@ -67,21 +69,13 @@ in {
       text = "InitialDefaultPWD123!";
     };
 
-    # TODO Should be on by default on nginx-host
-    ## Add nginx to the sslCertGroupName
-    users.users.nginx.extraGroups = [ sslCertGroupName ];
-    
-    networking.firewall.allowedTCPPorts = [ 80 443 8080 9000 ];
-
-    networking.hosts = {
-        "${vpnIp}" = [ cfg.hostname ];
-    };
-
     services.nextcloud = {
       enable = true;
+      https = true;
       configureRedis = true;
       package = cfg.package;
-      hostName = cfg.hostname;
+      # hostName = cfg.hostname;
+      hostName = "https://${nextcloudHostIp}:${toString nextcloudPort}";
       extraApps = {
         inherit (config.services.nextcloud.package.packages.apps) news contacts calendar tasks forms;
       };
@@ -103,9 +97,6 @@ in {
       };
 
       settings = let
-        prot = "http"; # or https
-        host = "127.0.0.1";
-        dir = ""; # e.g. "/nextcloud"
       in {
         mail_smtpmode = "sendmail";
         mail_sendmailmode = "pipe";
@@ -122,11 +113,6 @@ in {
           "OC\\Preview\\XBitmap"
           "OC\\Preview\\HEIC"
         ];
-        # overwriteprotocol = prot;
-        # overwritehost = host;
-        # overwritewebroot = dir;
-        # overwrite.cli.url = "${prot}://${host}${dir}/";
-        # htaccess.RewriteBase = dir;
       };
     };
 
@@ -138,6 +124,12 @@ in {
     # mc config host add minio http://localhost:9000 nextcloud test12345 --api s3v4
     # mc mb minio/nextcloud
     
+    services.nginx.virtualHosts."localhost".listen = [
+      { addr = "127.0.0.1"; port = nextcloudPort; }
+      { addr = nextcloudHostIp; port = nextcloudPort; }
+    ];
+
+
     services.minio = {
       enable = true;
       listenAddress = "127.0.0.1:9000";
@@ -163,21 +155,21 @@ in {
       '';
     };
 
-    services.nginx.virtualHosts."${config.services.nextcloud.hostName}" = {
-      sslCertificate = sslCertFile;
-      sslCertificateKey = sslKeyFile;
-      listen = [ 
-        {
-          addr = "127.0.0.1";
-          port = 8080; # NOT an exposed port
-        }
-        { # listen to the VPN IP
-          addr = "${vpnIp}";
-          port = 443;
-          ssl = true;
-        }
-      ];
-    };
+    # services.nginx.virtualHosts."${config.services.nextcloud.hostName}" = {
+    #   sslCertificate = sslCertFile;
+    #   sslCertificateKey = sslKeyFile;
+    #   listen = [ 
+    #     {
+    #       addr = "127.0.0.1";
+    #       port = 8080; # NOT an exposed port
+    #     }
+    #     { # listen to the VPN IP
+    #       addr = "${vpnIp}";
+    #       port = 443;
+    #       ssl = true;
+    #     }
+    #   ];
+    # };
 
     environment.systemPackages = [ pkgs.minio-client ];
 

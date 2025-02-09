@@ -12,6 +12,7 @@ with lib.luxnix; let
   vpnIp = config.luxnix.generic-settings.vpnIp;
 
   cfg = config.roles.keycloakHost;
+  conf = config.luxnix.generic-settings.network.keycloak;
   sslCertFile = config.luxnix.generic-settings.sslCertificatePath;
   sslKeyFile = config.luxnix.generic-settings.sslCertificateKeyPath;
 
@@ -30,19 +31,6 @@ with lib.luxnix; let
   in {
   options.roles.keycloakHost = {
     enable = mkBoolOpt false "Enable keycloak";
-
-    httpPort = mkOption {
-      type = types.int;
-      default = 8080;
-      description = "Port to run keycloak on";
-    };
-
-    httpsPort = mkOption {
-      type = types.int;
-      default = 8443;
-      description = "Port to run keycloak on";
-    };
-
     adminUsername = mkOption {
       type = types.str;
       default = "admin";
@@ -75,17 +63,6 @@ with lib.luxnix; let
       description = "path to passwordfile for keycloak";
     };
 
-    hostname = mkOption {
-      type = types.str;
-      default = "keycloak.endo-reg.net";
-      description = "Hostname for keycloak";
-    };
-
-    hostnameAdmin = mkOption {
-      type = types.str;
-      default = "keycloak-admin.endo-reg.net";
-      description = "Hostname for keycloak admin";
-    };
 
 
     gid = mkOption {
@@ -175,12 +152,14 @@ with lib.luxnix; let
       settings = {
         http-relative-path = "/";
         http-host = vpnIp;  
-        http-port = cfg.httpPort;
-        https-port = cfg.httpsPort;
+        http-port = 8080;
+        https-port = conf.port;
         https-certificate-file = "${cfg.homeDir}/tls.crt";
         https-certificate-key-file = "${cfg.homeDir}/tls.key";
-        hostname = cfg.hostname;
-        hostname-port = cfg.httpsPort;   
+        hostname = "https://${conf.domain}";
+        hostname-admin = "https://${conf.adminDomain}";
+        hostname-port = conf.port;   
+        hostname-admin-port = conf.port;
         http-enabled = false;          
         proxy-headers = "xforwarded";
         hostname-strict = false;
@@ -193,8 +172,8 @@ with lib.luxnix; let
       CREDENTIALS_DIRECTORY = "${cfg.homeDir}/";
     };
 
-    networking.firewall.allowedTCPPorts = [ cfg.httpPort cfg.httpsPort ];
-    # allow port on tun0
+    networking.firewall.allowedTCPPorts = [ conf.port ];
+    # allow port on tun0 #TODO
     # networking.firewall.interfaces.tun0.allowedTCPPorts = [ cfg.httpPort ]; #FIXME #TODO tun0 should be automatically inferred from defined vpn
   
   };

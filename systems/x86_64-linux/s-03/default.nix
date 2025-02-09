@@ -42,21 +42,31 @@ generic-settings.language = "english";
 
 generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
 
+generic-settings.network.keycloak.adminDomain = "keycloak-admin.endo-reg.net";
+
+generic-settings.network.keycloak.domain = "keycloak.endo-reg.net";
+
 generic-settings.network.keycloak.port = 8443;
 
 generic-settings.network.keycloak.vpnIp = "172.16.255.12";
+
+generic-settings.network.nextcloud.domain = "cloud.endo-reg.net";
 
 generic-settings.network.nextcloud.port = 8444;
 
 generic-settings.network.nextcloud.vpnIp = "172.16.255.12";
 
-generic-settings.network.psql-main.port = 5432;
+generic-settings.network.psqlMain.domain = "psql-main.endo-reg.net";
 
-generic-settings.network.psql-main.vpnIp = "172.16.255.12";
+generic-settings.network.psqlMain.port = 5432;
 
-generic-settings.network.psql-test.port = 5432;
+generic-settings.network.psqlMain.vpnIp = "172.16.255.12";
 
-generic-settings.network.psql-test.vpnIp = "172.16.255.13";
+generic-settings.network.psqlTest.domain = "psql-test.endo-reg.net";
+
+generic-settings.network.psqlTest.port = 5432;
+
+generic-settings.network.psqlTest.vpnIp = "172.16.255.13";
 
 generic-settings.postgres.enable = true;
 

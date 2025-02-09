@@ -8,11 +8,8 @@ nginx_host_roles:
   nginxHost.enable: "true"
 
   nginxHost.keycloak.enable: "true"
-  nginxHost.keycloak.domain: '"keycloak.endo-reg.net"'
-  nginxHost.keycloak.adminDomain: '"keycloak-admin.endo-reg.net"'
 
   nginxHost.nextcloud.enable: "true"
-  nginxHost.nextcloud.domain: '"cloud.endo-reg.net"'
 
   nginxHost.settings.proxyHeadersHashMaxSize: "512"
   nginxHost.settings.proxyHeadersHashBucketSize: "64"
