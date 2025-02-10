@@ -118,7 +118,7 @@ in {
       config = {
         adminuser = "root";
         adminpassFile = "/etc/nextcloud-admin-pass"; # initial pwd for user "root"
-        dbtype = "psql";
+        dbtype = "pgsql";
         objectstore.s3 = {
           enable = true;
           bucket = "nextcloud";
