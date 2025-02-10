@@ -83,7 +83,6 @@ in {
     services.nextcloud = {
       enable = cfg.enable;
       https = false; # ssl is terminated by reverse proxy
-      enableBrokenCiphersForSSE = false;
       package = cfg.package;
       hostName = conf.domain;
       maxUploadSize = cfg.maxUploadSize;
