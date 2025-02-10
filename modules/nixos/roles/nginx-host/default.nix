@@ -217,15 +217,6 @@ in {
               proxyPass = "http://${nextcloudConfig.vpnIp}/";
               extraConfig = all-extraConfig; 
             };
-          "office.endo-reg.net" = {
-            forceSSL = true;
-            sslCertificate = nginx_cert_path;
-            sslCertificateKey = nginx_key_path;
-
-            locations."/" = {
-              proxyPass = "http://${nextcloudConfig.vpnIp}/";
-              extraConfig = all-extraConfig;
-            };
           };
         })
         (mkIf cfg.keycloak.enable {
