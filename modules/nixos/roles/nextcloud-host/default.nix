@@ -136,7 +136,7 @@ in {
           "OC\\Preview\\XBitmap"
           "OC\\Preview\\HEIC"
         ];
-        # overwritehost = "cloud.endo-reg.net";
+        overwritehost = "cloud.endo-reg.net";
         # overwriteprotocol = "http";
       };
     };
