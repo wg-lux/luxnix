@@ -181,7 +181,7 @@ in {
       };
     };
 
-  environment.systemPackages = [ pkgs.minio-client ];
+  environment.systemPackages = [ pkgs.minio-client cfg.package];
 
   networking.firewall.allowedTCPPorts = [ 443 ];
 
