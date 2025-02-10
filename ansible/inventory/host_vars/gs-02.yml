@@ -6,7 +6,7 @@ host_roles: {}
 
 host_services: {}
 
-ansible_host:
+ansible_roles:
   - "ssl_cert"
   - "nextcloud_host"
 

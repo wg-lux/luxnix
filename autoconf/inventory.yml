@@ -308,7 +308,9 @@ all:
       - test_group
       - managed
     ansible_host: 172.16.255.22
-    ansible_role_names: []
+    ansible_role_names:
+      - ssl_cert
+      - nextcloud_host
     extra_secret_names: []
     extra_user_names:
       - admin
@@ -332,7 +334,7 @@ all:
     hostname: gs-02
     subnet: 172.16.255.
     vars:
-      ansible_host:
+      ansible_roles:
         - ssl_cert
         - nextcloud_host
       host_luxnix:
