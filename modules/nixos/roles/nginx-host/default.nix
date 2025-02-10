@@ -63,7 +63,6 @@ with lib.luxnix; let
     chown nginx:nginx ${nginx_cert_path} ${nginx_key_path}
     chmod 600 ${nginx_cert_path} ${nginx_key_path}
   '';
-
 in {
   #TODO MIGRATE DOMAIN SETTINGS TO GENERIC SETTINGS SO THAT THEY ARE AVAILABLE ON ALL MACHINES
   options.roles.nginxHost = {
@@ -92,6 +91,7 @@ in {
       };
       proxyHeadersHashBucketSize = mkOption {
         type = types.int;
+
         default = 64;
         description = "Size of the hash bucket for storing headers";
       };
