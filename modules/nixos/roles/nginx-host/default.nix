@@ -198,10 +198,7 @@ in {
 
             locations."/" = {
               proxyPass = "https://${nextcloudConfig.vpnIp}";
-              extraConfig = all-extraConfig; #+ ''
-              #   ssl_stapling off;
-              #   ssl_stapling_verify off;
-              # '';
+              extraConfig = all-extraConfig; 
             };
           };
         })

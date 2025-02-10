@@ -8,6 +8,8 @@ host_services: {}
 
 ansible_roles:
   - "postgres_host_test"
+  - "ssl_cert"
+  - "nextcloud_host"
 
 host_luxnix:
   generic_settings.enable: "true"

@@ -24,6 +24,8 @@ ansible_key_source_dir: '{{ luxnix_dev_repo }}/secrets/ansible-vault-keys-source
 ansible_python_interpreter: '{{ luxnix_dest }}/.devenv/state/venv/bin/python'
 ansible_roles:
   - postgres_host_test
+  - ssl_cert
+  - nextcloud_host
 ansible_ssh_private_key_file: ~/.ssh/id_ed25519
 ansible_user: admin
 authentication:
@@ -141,7 +143,20 @@ role_luxnix:
     host  all postgres 172.16.255.108/32 scram-sha-256
 
     '
+  generic-settings.sslCertificateKeyPath: '"/etc/secrets/vault/ssl_key"'
+  generic-settings.sslCertificatePath: '"/etc/secrets/vault/ssl_cert"'
+role_password_filename: SCRT_roles_system_password_nextcloud_host_password
+role_pw_src: '{{ lx_vault_dir_src }}/deploy/{{ inventory_hostname }}/{{ nextcloud_host_password_filename
+  }}'
+role_role_dest: /etc/secrets/vault/ssl_cert
+role_role_src: /home/admin/dev/luxnix/secrets/ssl/ssl_cert
 role_roles:
+  nextcloudHost.enable: 'true'
+  nextcloudHost.maxUploadSize: '"10G"'
+  nextcloudHost.package: pkgs.nextcloud30
+  nextcloudHost.passwordFilePath: '"/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_password"'
   postgres.main.enable: 'true'
+role_ssl_key_dest: /etc/secrets/vault/ssl_key
+role_ssl_key_src: /home/admin/dev/luxnix/secrets/ssl/ssl_key
 secret_dir: /etc/secrets
 template_name: main

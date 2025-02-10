@@ -13,8 +13,17 @@ with lib.luxnix; let
   sslKeyFile = config.luxnix.generic-settings.sslCertificateKeyPath;
   sslCertGroupName = config.users.groups.sslCert.name;
 
-  nextcloudSslCertFile = config.luxnix.generic-settings.sslCertificatePath;
-  nextcloudSslKeyFile = config.luxnix.generic-settings.sslCertificateKeyPath;
+  nginx_cert_path = "/etc/nginx-host/ssl_cert";
+  nginx_key_path = "/etc/nginx-host/ssl_key";
+
+  nginxPrepareScript = pkgs.writeScript "nginx-prepare-files_nxtcld.sh" ''
+    #!/bin/sh
+    set -e
+    cp ${sslCertFile} ${nginx_cert_path}
+    cp ${sslKeyFile} ${nginx_key_path}
+    chown nginx:nginx ${nginx_cert_path} ${nginx_key_path}
+    chmod 600 ${nginx_cert_path} ${nginx_key_path}
+  '';
 
   conf = config.luxnix.generic-settings.network.nextcloud;
 
@@ -127,8 +136,8 @@ in {
     
     services.nginx.virtualHosts."cloud.endo-reg.net" = {
       forceSSL = true;
-      sslCertificate = nextcloudSslCertFile;
-      sslCertificateKey = nextcloudSslKeyFile;
+      sslCertificate = nginx_cert_path;
+      sslCertificateKey = nginx_key_path;
       locations."/" = {
         proxyPass = "http://localhost";
       };
@@ -141,24 +150,21 @@ in {
       inherit rootCredentialsFile;
     };
 
-    # Add Service which runs before nginx as root and copies the secrets file to the nextcloud directory
-    systemd.services.nextcloud-secrets = {
-      description = "Copy SSL certificates for Nextcloud";
-      requires = [ "local-fs.target" ];
+    # systemd.tmpfile.rule to make sure /etc/nginx-host exists
+    systemd.tmpfiles.rules = [
+      "d /etc/nginx-host 0700 nginx nginx -"
+    ];
+
+    systemd.services.nginx-prepare-files = {
+      description = "Deploy SSL certificate and key for NGINX";
       before = [ "nginx.service" ];
+      requiredBy = [ "nginx.service" ];
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
-        User = "root";
-        Group = "root";
+        ExecStart = "${nginxPrepareScript}";
       };
-      script = ''
-        ${pkgs.sudo}/bin/sudo ${pkgs.coreutils}/bin/cp ${sslCertFile} ${nextcloudSslCertFile} 
-        ${pkgs.sudo}/bin/sudo ${pkgs.coreutils}/bin/cp ${sslKeyFile} ${nextcloudSslKeyFile} 
-
-      '';
     };
-
 
   environment.systemPackages = [ pkgs.minio-client ];
 
