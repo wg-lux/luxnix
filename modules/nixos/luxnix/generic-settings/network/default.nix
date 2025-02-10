@@ -150,6 +150,25 @@ in {
 
   config = {
     networking.hosts = mergeHosts [
+      #FIXME make dynamic
+      { "172.16.255.1" = [ "s-01" "s01.intern"]; } # s-01
+      { "172.16.255.12" = [ "s-02" "s02.intern"]; } # s-02
+      { "172.16.255.13" = [ "s-03" "s03.intern"]; } # s-03
+      { "172.16.255.14" = [ "s-04" "s04.intern"]; } # s-04
+      { "172.16.255.21" = [ "gs-01" "gs01.intern"]; } # gs-01
+      { "172.16.255.22" = [ "gs-02" "gs02.intern"]; } # gs-01
+
+      # gpu-clients 1-9 (gc-01 - gc-09; 172.16.255.101 to 109)
+      { "172.16.255.101" = [ "gc-01" "gc01.intern" ] }
+      { "172.16.255.102" = [ "gc-02" "gc02.intern" ] }
+      { "172.16.255.103" = [ "gc-03" "gc03.intern" ] }
+      { "172.16.255.104" = [ "gc-04" "gc04.intern" ] }
+      { "172.16.255.105" = [ "gc-05" "gc05.intern" ] }
+      { "172.16.255.106" = [ "gc-06" "gc06.intern" ] }
+      { "172.16.255.107" = [ "gc-07" "gc07.intern" ] }
+      { "172.16.255.108" = [ "gc-08" "gc08.intern" ] }
+      { "172.16.255.109" = [ "gc-09" "gc09.intern" ] }
+
       { "${cfg.keycloak.vpnIp}" = [ cfg.keycloak.domain cfg.keycloak.adminDomain ]; }
       { "${cfg.psqlMain.vpnIp}" = [ cfg.psqlMain.domain ]; }
       { "${cfg.psqlTest.vpnIp}" = [ cfg.psqlTest.domain ]; }
