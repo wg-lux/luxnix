@@ -109,6 +109,7 @@ in {
         usePathStyle = true;
         region = "us-east-1";
       };
+      listenAddresses = [ "127.0.0.1:80" cfg.vpnIp ];
 
       settings = let
       in {
@@ -187,7 +188,7 @@ in {
 
   environment.systemPackages = [ pkgs.minio-client cfg.package];
 
-  networking.firewall.allowedTCPPorts = [ 443 ];
+  networking.firewall.allowedTCPPorts = [ 80 443 ];
 
   };
 }
