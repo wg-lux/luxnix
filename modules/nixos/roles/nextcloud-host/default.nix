@@ -9,6 +9,8 @@ with lib;
 with lib.luxnix; let
   cfg = config.roles.nextcloudHost;
 
+  ncApps = config.services.nextcloud.package.packages.apps;
+
   sslCertFile = config.luxnix.generic-settings.sslCertificatePath;
   sslKeyFile = config.luxnix.generic-settings.sslCertificateKeyPath;
   sslCertGroupName = config.users.groups.sslCert.name;
@@ -39,11 +41,6 @@ with lib.luxnix; let
 in {
   options.roles.nextcloudHost = {
     enable = mkBoolOpt false "Enable NGINX";
-    hostname = mkOption {
-      type = types.str;
-      default = "cloud.endo-reg.net";
-      description = "Hostname for the Nextcloud instance";
-    };
     passwordFilePath = mkOption {
       type = types.path;
       default = "/etc/nextcloud-admin-pass";
@@ -84,35 +81,61 @@ in {
     };
 
     services.nextcloud = {
-      enable = true;
-      https = false;
-      configureRedis = true;
+      enable = cfg.enable;
+      https = false; # ssl is terminated by reverse proxy
+      enableBrokenCiphersForSSE = false;
       package = cfg.package;
-      hostName = "cloud.endo-reg.net"; #FIXME
-      extraApps = {
-        inherit (config.services.nextcloud.package.packages.apps) news contacts calendar tasks forms;
-      };
-      extraAppsEnable = true;
+      hostName = conf.domain;
       maxUploadSize = cfg.maxUploadSize;
-      config.adminuser = "root";
-      config.adminpassFile = "/etc/nextcloud-admin-pass"; # initial pwd for user "root"
-      config.dbtype = "sqlite";
-      config.objectstore.s3 = {
-        enable = true;
-        bucket = "nextcloud";
-        autocreate = true;
-        key = accessKey;
-        secretFile = "${pkgs.writeText "secret" "test12345"}";
-        hostname = "localhost";
-        useSsl = false;
-        port = 9000;
-        usePathStyle = true;
-        region = "us-east-1";
+
+
+      # Applications
+      # Available apps: https://github.com/NixOS/nixpkgs/blob/master/pkgs/servers/nextcloud/packages/nextcloud-apps.json
+      extraAppsEnable = true;
+      extraApps = {
+        inherit (ncApps) news contacts calendar tasks forms;
+        inherit (ncApps) groupfolders deck notes polls;
+        inherit (ncApps) integration_paperless twofactor_totp sociallogin previewgenerator end_to_end_encryption;
+        inherit (ncApps) music memories files_markdown files_automatedtagging files_mindmap files_retention files_texteditor;
+
+        ## Example of adding a custom app      
+        # cookbook = pkgs.fetchNextcloudApp rec {
+        #   url =
+        #     "https://github.com/nextcloud/cookbook/releases/download/v0.10.2/Cookbook-0.10.2.tar.gz";
+        #   sha256 = "sha256-XgBwUr26qW6wvqhrnhhhhcN4wkI+eXDHnNSm1HDbP6M=";
+        # };
+
+      };
+      
+      database.createLocally = true;
+
+      # Maintenance
+      autoUpdateApps.enable = true;
+
+
+      configureRedis = true;
+
+      config = {
+        adminuser = "root";
+        adminpassFile = "/etc/nextcloud-admin-pass"; # initial pwd for user "root"
+        dbtype = "psql";
+        objectstore.s3 = {
+          enable = true;
+          bucket = "nextcloud";
+          autocreate = true;
+          key = accessKey;
+          secretFile = "${pkgs.writeText "secret" "test12345"}";
+          hostname = "localhost";
+          useSsl = false;
+          port = 9000;
+          usePathStyle = true;
+          region = "us-east-1";
+        };
       };
       
       settings = let
       in {
-        trusted_domains = [ "localhost" "cloud.endo-reg.net" ];
+        trusted_domains = [ "localhost" "cloud.endo-reg.net"];
         trusted_proxies = [ 
           config.luxnix.generic-settings.network.nginx.vpnIp 
           config.luxnix.generic-settings.network.nextcloud.vpnIp 
