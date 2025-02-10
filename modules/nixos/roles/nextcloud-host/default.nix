@@ -109,7 +109,7 @@ in {
         usePathStyle = true;
         region = "us-east-1";
       };
-      listenAddresses = [ "127.0.0.1:80" config.luxnix.generic-settings.network.vpnIp ];
+      listenAddresses = [ "127.0.0.1:80" config.luxnix.generic-settings.vpnIp ];
 
       settings = let
       in {
