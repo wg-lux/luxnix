@@ -36,7 +36,7 @@ generic-settings.language = "english";
 
 generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
 
-generic-settings.network.keycloak.adminDomain = "keycloak-admin.endo-reg.net";
+generic-settings.network.keycloak.adminDomain = "adminKeycloak.endo-reg.net";
 
 generic-settings.network.keycloak.domain = "keycloak.endo-reg.net";
 

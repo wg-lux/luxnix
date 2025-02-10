@@ -21,10 +21,6 @@
     aglnet.client.enable = true;
     endoreg-client.enable = true;
     postgres.default.enable = true;
-    nextcloudHost.enable = true;
-    nextcloudHost.maxUploadSize = "10G";
-    nextcloudHost.package = pkgs.nextcloud30;
-    nextcloudHost.passwordFilePath = "/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_password";
     custom-packages.baseDevelopment = true;
     custom-packages.videoEditing = true;
     custom-packages.visuals = true;
@@ -48,7 +44,7 @@ generic-settings.language = "english";
 
 generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
 
-generic-settings.network.keycloak.adminDomain = "keycloak-admin.endo-reg.net";
+generic-settings.network.keycloak.adminDomain = "adminKeycloak.endo-reg.net";
 
 generic-settings.network.keycloak.domain = "keycloak.endo-reg.net";
 
@@ -107,10 +103,6 @@ vault.enable = true;
 vault.key = "/etc/secrets/.key";
 
 vault.psk = "/etc/secrets/.psk";
-
-generic-settings.sslCertificateKeyPath = "/etc/secrets/vault/ssl_key";
-
-generic-settings.sslCertificatePath = "/etc/secrets/vault/ssl_cert";
 
 generic-settings.configurationPath = lib.mkForce "/home/admin/dev/luxnix";
 

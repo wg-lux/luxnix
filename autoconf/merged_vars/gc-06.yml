@@ -22,9 +22,7 @@ ansible_groups:
 ansible_key_dir: '{{ luxnix_dest }}/secrets/ansible-vault-keys'
 ansible_key_source_dir: '{{ luxnix_dev_repo }}/secrets/ansible-vault-keys-source'
 ansible_python_interpreter: '{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python'
-ansible_roles:
-  - ssl_cert
-  - nextcloud_host
+ansible_roles: []
 ansible_ssh_private_key_file: ~/.ssh/id_ed25519
 ansible_user: admin
 authentication:
@@ -52,7 +50,7 @@ group_luxnix:
   generic_settings.enable: 'true'
   generic_settings.language: '"english"'
   generic_settings.linux.kernelPackages: pkgs.linuxPackages_6_12
-  generic_settings.network.keycloak.adminDomain: '"keycloak-admin.endo-reg.net"'
+  generic_settings.network.keycloak.adminDomain: '"adminKeycloak.endo-reg.net"'
   generic_settings.network.keycloak.domain: '"keycloak.endo-reg.net"'
   generic_settings.network.keycloak.port: '8443'
   generic_settings.network.keycloak.vpnIp: '"172.16.255.12"'
@@ -144,20 +142,5 @@ os_extra_user_names:
 postgres_host_main_password_filename: SCRT_roles_system_password_postgres_host_main_password
 postgres_host_test_ip: 172.16.255.13
 postgres_host_test_password_filename: SCRT_roles_system_password_postgres_host_test_password
-role_luxnix:
-  generic-settings.sslCertificateKeyPath: '"/etc/secrets/vault/ssl_key"'
-  generic-settings.sslCertificatePath: '"/etc/secrets/vault/ssl_cert"'
-role_password_filename: SCRT_roles_system_password_nextcloud_host_password
-role_pw_src: '{{ lx_vault_dir_src }}/deploy/{{ inventory_hostname }}/{{ nextcloud_host_password_filename
-  }}'
-role_role_dest: /etc/secrets/vault/ssl_cert
-role_role_src: /home/admin/dev/luxnix/secrets/ssl/ssl_cert
-role_roles:
-  nextcloudHost.enable: 'true'
-  nextcloudHost.maxUploadSize: '"10G"'
-  nextcloudHost.package: pkgs.nextcloud30
-  nextcloudHost.passwordFilePath: '"/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_password"'
-role_ssl_key_dest: /etc/secrets/vault/ssl_key
-role_ssl_key_src: /home/admin/dev/luxnix/secrets/ssl/ssl_key
 secret_dir: /etc/secrets
 template_name: main

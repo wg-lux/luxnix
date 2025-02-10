@@ -27,10 +27,6 @@
     keycloakHost.dbUsername = "keycloak";
     keycloakHost.enable = true;
     keycloakHost.homeDir = "/etc/keycloak";
-    nextcloudHost.enable = true;
-    nextcloudHost.maxUploadSize = "10G";
-    nextcloudHost.package = pkgs.nextcloud30;
-    nextcloudHost.passwordFilePath = "/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_password";
     nginxHost.enable = true;
     nginxHost.keycloak.enable = true;
     nginxHost.nextcloud.enable = true;
@@ -59,7 +55,7 @@ generic-settings.language = "english";
 
 generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
 
-generic-settings.network.keycloak.adminDomain = "keycloak-admin.endo-reg.net";
+generic-settings.network.keycloak.adminDomain = "adminKeycloak.endo-reg.net";
 
 generic-settings.network.keycloak.domain = "keycloak.endo-reg.net";
 

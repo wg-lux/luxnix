@@ -22,7 +22,7 @@ group_services: {}
 group_luxnix:
   generic_settings.network.nginx.vpnIp: '"172.16.255.12"'
   generic_settings.network.keycloak.domain: '"keycloak.endo-reg.net"'
-  generic_settings.network.keycloak.adminDomain: '"keycloak-admin.endo-reg.net"'
+  generic_settings.network.keycloak.adminDomain: '"adminKeycloak.endo-reg.net"'
   generic_settings.network.keycloak.vpnIp: '"172.16.255.12"'
   generic_settings.network.keycloak.port: "8443"
   generic_settings.network.nextcloud.vpnIp: '"172.16.255.106"'

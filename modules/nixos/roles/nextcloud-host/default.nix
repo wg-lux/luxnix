@@ -13,8 +13,17 @@ with lib.luxnix; let
   sslKeyFile = config.luxnix.generic-settings.sslCertificateKeyPath;
   sslCertGroupName = config.users.groups.sslCert.name;
 
-  nextcloudSslCertFile = config.luxnix.generic-settings.sslCertificatePath;
-  nextcloudSslKeyFile = config.luxnix.generic-settings.sslCertificateKeyPath;
+  nginx_cert_path = "/etc/nginx-host/ssl_cert";
+  nginx_key_path = "/etc/nginx-host/ssl_key";
+
+  nginxPrepareScript = pkgs.writeScript "nginx-prepare-files_nxtcld.sh" ''
+    #!/bin/sh
+    set -e
+    cp ${sslCertFile} ${nginx_cert_path}
+    cp ${sslKeyFile} ${nginx_key_path}
+    chown nginx:nginx ${nginx_cert_path} ${nginx_key_path}
+    chmod 600 ${nginx_cert_path} ${nginx_key_path}
+  '';
 
   conf = config.luxnix.generic-settings.network.nextcloud;
 
@@ -72,8 +81,7 @@ in {
       https = false;
       configureRedis = true;
       package = cfg.package;
-      # hostName = conf.domain; #FIXME?
-      hostName = "cloud.endo-reg.net";
+      hostName = "cloud.endo-reg.net"; 
       extraApps = {
         inherit (config.services.nextcloud.package.packages.apps) news contacts calendar tasks forms;
       };
@@ -96,6 +104,8 @@ in {
 
       settings = let
       in {
+        trusted_domains = [ "localhost" "cloud.endo-reg.net" ];
+        trusted_proxies = [ config.luxnix.generic-settings.network.nginx.vpnIp "172.16.255.12" ];
         mail_smtpmode = "sendmail";
         mail_sendmailmode = "pipe";
         enabledPreviewProviders = [
@@ -111,6 +121,8 @@ in {
           "OC\\Preview\\XBitmap"
           "OC\\Preview\\HEIC"
         ];
+        # overwritehost = "cloud.endo-reg.net";
+        # overwriteprotocol = "http";
       };
     };
 
@@ -122,8 +134,14 @@ in {
     # mc config host add minio http://localhost:9000 nextcloud test12345 --api s3v4
     # mc mb minio/nextcloud
     
-
-
+    services.nginx.virtualHosts."cloud.endo-reg.net" = {
+      forceSSL = true;
+      sslCertificate = nginx_cert_path;
+      sslCertificateKey = nginx_key_path;
+      locations."/" = {
+        proxyPass = "http://localhost";
+      };
+    };
 
     services.minio = {
       enable = true;
@@ -132,48 +150,25 @@ in {
       inherit rootCredentialsFile;
     };
 
-    # Add Service which runs before nginx as root and copies the secrets file to the nextcloud directory
-    systemd.services.nextcloud-secrets = {
-      description = "Copy SSL certificates for Nextcloud";
-      requires = [ "local-fs.target" ];
+    # systemd.tmpfile.rule to make sure /etc/nginx-host exists
+    systemd.tmpfiles.rules = [
+      "d /etc/nginx-host 0700 nginx nginx -"
+    ];
+
+    systemd.services.nginx-prepare-files = {
+      description = "Deploy SSL certificate and key for NGINX";
       before = [ "nginx.service" ];
+      requiredBy = [ "nginx.service" ];
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
-        User = "root";
-        Group = "root";
+        ExecStart = "${nginxPrepareScript}";
       };
-      script = ''
-        ${pkgs.sudo}/bin/sudo ${pkgs.coreutils}/bin/cp ${sslCertFile} ${nextcloudSslCertFile} 
-        ${pkgs.sudo}/bin/sudo ${pkgs.coreutils}/bin/cp ${sslKeyFile} ${nextcloudSslKeyFile} 
-
-      '';
     };
 
-    # services.nginx.virtualHosts."localhost".listen = [
-    #   { addr = "127.0.0.1"; port = conf.port; }
-    #   { addr = conf.vpnIp; port = conf.port; }
-    # ];
+  environment.systemPackages = [ pkgs.minio-client ];
 
-    # services.nginx.virtualHosts."${config.services.nextcloud.hostName}" = {
-    #   sslCertificate = sslCertFile;
-    #   sslCertificateKey = sslKeyFile;
-    #   listen = [ 
-    #     {
-    #       addr = "127.0.0.1";
-    #       port = conf.port; # NOT an exposed port
-    #     }
-    #     { # listen to the VPN IP
-    #       addr = conf.vpnIp;
-    #       port = conf.port;
-    #       ssl = true;
-    #     }
-    #   ];
-    # };
-# [ { addr = "127.0.0.1"; port = 8080; } ]
-    environment.systemPackages = [ pkgs.minio-client ];
-
-  # networking.firewall.allowedTCPPorts = [ conf.port ];
+  networking.firewall.allowedTCPPorts = [ 443 ];
 
   };
 }
