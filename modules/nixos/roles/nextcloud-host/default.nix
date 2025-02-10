@@ -109,8 +109,7 @@ in {
         usePathStyle = true;
         region = "us-east-1";
       };
-      listenAddresses = [ "127.0.0.1:80" config.luxnix.generic-settings.vpnIp ];
-
+      
       settings = let
       in {
         trusted_domains = [ "localhost" "cloud.endo-reg.net" ];
@@ -145,23 +144,13 @@ in {
     # mc config host add minio http://localhost:9000 nextcloud test12345 --api s3v4
     # mc mb minio/nextcloud
     
-    services.nginx = 
-    {
-      recommendedGzipSettings = true;
-      recommendedOptimisation = true;
-      recommendedProxySettings = true;
+    services.nginx.virtualHosts."${config.services.nextcloud.hostName}".listen = [ 
+      {
+        addr = config.luxnix.generic-settings.vpnIp;
+        port = 80; # NOT an exposed port
+      } 
+    ];
 
-      # appendHttpConfig = appendHttpConfig;
-      virtualHosts."cloud.endo-reg.net" = {
-        sslCertificate = nginx_cert_path;
-        sslCertificateKey = nginx_key_path;
-        locations."/" = {
-          proxyPass = "http://127.0.0.1/";
-          # extraConfig = '''';
-
-        };
-      };
-    };
 
     services.minio = {
       enable = true;
