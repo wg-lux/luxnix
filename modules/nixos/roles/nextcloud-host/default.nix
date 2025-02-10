@@ -146,9 +146,9 @@ in {
     
     services.nginx = 
     {
-      recommendedGzipSettings = conf.recommendedGzipSettings;
-      recommendedOptimisation = conf.recommendedOptimisation;
-      recommendedProxySettings = conf.recommendedProxySettings;
+      recommendedGzipSettings = true;
+      recommendedOptimisation = true;
+      recommendedProxySettings = true;
 
       # appendHttpConfig = appendHttpConfig;
       virtualHosts."cloud.endo-reg.net" = {
