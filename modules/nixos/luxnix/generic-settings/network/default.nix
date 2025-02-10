@@ -151,10 +151,9 @@ in {
   config = {
     networking.hosts = mergeHosts [
       { "${cfg.keycloak.vpnIp}" = [ cfg.keycloak.domain cfg.keycloak.adminDomain ]; }
-      { "${cfg.nextcloud.vpnIp}" = [ cfg.nextcloud.domain ]; }
       { "${cfg.psqlMain.vpnIp}" = [ cfg.psqlMain.domain ]; }
       { "${cfg.psqlTest.vpnIp}" = [ cfg.psqlTest.domain ]; }
-      { "${cfg.nginx.vpnIp}" = [ cfg.nginx.domain ]; }
+      { "${cfg.nginx.vpnIp}" = [ cfg.nginx.domain cfg.nextcloud.domain ]; }
     ];
   };
 

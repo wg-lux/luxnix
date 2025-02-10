@@ -29,6 +29,6 @@ in {
 
   config = mkIf cfg.enable {
 
-    networking.hosts = hosts;
+    # networking.hosts = hosts;
   };
 }
