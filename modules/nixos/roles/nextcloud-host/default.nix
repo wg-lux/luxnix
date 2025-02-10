@@ -152,22 +152,31 @@ in {
     # mc config host add minio http://localhost:9000 nextcloud test12345 --api s3v4
     # mc mb minio/nextcloud
     
-    services.nginx.virtualHosts."cloud.endo-reg.net" = {
-      forceSSL = true;
-      sslCertificate = nginx_cert_path;
-      sslCertificateKey = nginx_key_path;
-      locations."/" = {
-        proxyPass = "http://127.0.0.1/";
-        extraConfig = ''
-          proxy_set_header X-Real-IP $remote_addr;
-          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-          proxy_set_header X-NginX-Proxy true;
-          proxy_set_header X-Forwarded-Proto http;
-          proxy_set_header Host $host;
-          proxy_cache_bypass $http_upgrade;
-          proxy_redirect off;
-        '';
+    services.nginx = 
+    {
+      # recommendedGzipSettings = conf.recommendedGzipSettings;
+      # recommendedOptimisation = conf.recommendedOptimisation;
+      # recommendedProxySettings = conf.recommendedProxySettings;
+      # recommendedTlsSettings = conf.recommendedTlsSettings;
 
+      # appendHttpConfig = appendHttpConfig;
+      virtualHosts."cloud.endo-reg.net" = {
+        forceSSL = true;
+        sslCertificate = nginx_cert_path;
+        sslCertificateKey = nginx_key_path;
+        locations."/" = {
+          proxyPass = "http://127.0.0.1/";
+          extraConfig = ''
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-NginX-Proxy true;
+            proxy_set_header X-Forwarded-Proto http;
+            proxy_set_header Host $host;
+            proxy_cache_bypass $http_upgrade;
+            proxy_redirect off;
+          '';
+
+        };
       };
     };
 
