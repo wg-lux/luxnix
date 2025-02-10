@@ -48,7 +48,7 @@ generic-settings.network.nextcloud.domain = "cloud.endo-reg.net";
 
 generic-settings.network.nextcloud.port = 8444;
 
-generic-settings.network.nextcloud.vpnIp = "172.16.255.106";
+generic-settings.network.nextcloud.vpnIp = "172.16.255.13";
 
 generic-settings.network.nginx.vpnIp = "172.16.255.12";
 

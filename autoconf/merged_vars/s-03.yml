@@ -55,7 +55,7 @@ group_luxnix:
   generic_settings.network.keycloak.vpnIp: '"172.16.255.12"'
   generic_settings.network.nextcloud.domain: '"cloud.endo-reg.net"'
   generic_settings.network.nextcloud.port: '8444'
-  generic_settings.network.nextcloud.vpnIp: '"172.16.255.106"'
+  generic_settings.network.nextcloud.vpnIp: '"172.16.255.13"'
   generic_settings.network.nginx.vpnIp: '"172.16.255.12"'
   generic_settings.network.psqlMain.domain: '"psql-main.endo-reg.net"'
   generic_settings.network.psqlMain.port: '5432'
