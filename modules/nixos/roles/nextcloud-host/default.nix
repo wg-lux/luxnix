@@ -5,6 +5,10 @@
 # https://github.com/helsinki-systems/nc4nix (Nextcloud4Nix)
 # https://nixos.wiki/wiki/Nextcloud
 
+#TODO Docs:
+# To reset delete stateful dirs:
+# rm -r /var/lib/mysql /var/lib/nextcloud
+
 with lib; 
 with lib.luxnix; let
   cfg = config.roles.nextcloudHost;
@@ -75,7 +79,7 @@ in {
       extraGroups = [ sslCertGroupName ];
     };
     
-    # TODO Service to supply from vault
+    # TODO Add to docs that this needs to be changed after setup
     environment.etc."nextcloud-admin-pass" = {
       text = "InitialDefaultPWD123!";
     };
@@ -117,19 +121,25 @@ in {
         adminuser = "root";
         adminpassFile = "/etc/nextcloud-admin-pass"; # initial pwd for user "root"
         dbtype = "pgsql";
-        objectstore.s3 = {
-          enable = true;
-          bucket = "nextcloud";
-          autocreate = true;
-          key = accessKey;
-          secretFile = "${pkgs.writeText "secret" "test12345"}";
-          hostname = "localhost";
-          useSsl = false;
-          port = 9000;
-          usePathStyle = true;
-          region = "us-east-1";
-        };
+        defaultPhoneRegion = "DE";
+        # objectstore.s3 = {
+        #   enable = true;
+        #   bucket = "nextcloud";
+        #   autocreate = true;
+        #   key = accessKey;
+        #   secretFile = "${pkgs.writeText "secret" "test12345"}";
+        #   hostname = "localhost";
+        #   useSsl = false;
+        #   port = 9000;
+        #   usePathStyle = true;
+        #   region = "us-east-1";
+        # };
       };
+
+      phpOptions = {
+        "opcache.interned_strings_buffer" = "16";
+      };
+
       
       settings = let
       in {
