@@ -51,6 +51,13 @@
   roles:
     - ssl_cert
 
+- name: Set role smtp_cred for smtp_cred
+  gather_facts: false
+  hosts: smtp_cred
+  become: true
+  roles:
+    - smtp_cred
+
 - name: Set role nginx_host for nginx_host
   gather_facts: false
   hosts: nginx_host

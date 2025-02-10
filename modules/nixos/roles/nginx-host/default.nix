@@ -54,6 +54,7 @@ with lib.luxnix; let
       proxy_pass_header Authorization;
   
       proxy_set_header X-NginX-Proxy true;
+      add_header Strict-Transport-Security "max-age=15552000; includeSubDomains; preload";
   '';
 
   nginxPrepareScript = pkgs.writeScript "nginx-prepare-files.sh" ''

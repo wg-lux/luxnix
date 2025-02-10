@@ -1,8 +1,8 @@
 ---
-- name: Deploy ssl_cert from source
+- name: Deploy smtp pwd from source
   ansible.builtin.copy:
-    src: "{{ ssl_cert_ssl_cert_src }}"
-    dest: "{{ ssl_cert_ssl_cert_dest }}"
+    src: "{{ smtp_cred_pwd_src }}"
+    dest: "{{ smtp_cred_pwd_dest }}"
     mode: "0700"
     owner: "{{ ansible_user }}"
   become: true
@@ -10,10 +10,10 @@
   # vars:
   # ansible_vault_identity: "{{ inventory_hostname }}@{{ lx_vault_dir_src }}/psk/{{ inventory_hostname }}.psk"
 
-- name: Deploy ssl_key from source
+- name: Deploy smtp user from source
   ansible.builtin.copy:
-    src: "{{ ssl_cert_ssl_key_src }}"
-    dest: "{{ ssl_cert_ssl_key_dest }}"
+    src: "{{ smtp_cred_user_src }}"
+    dest: "{{ smtp_cred_user_dest }}"
     mode: "0700"
     owner: "{{ ansible_user }}"
   become: true

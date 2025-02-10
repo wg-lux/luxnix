@@ -25,6 +25,7 @@ ansible_python_interpreter: '{{ luxnix_dest }}/.devenv/state/venv/bin/python'
 ansible_roles:
   - ssl_cert
   - nextcloud_host
+  - smtp_cred
 ansible_ssh_private_key_file: ~/.ssh/id_ed25519
 ansible_user: admin
 authentication:
@@ -43,6 +44,10 @@ endoreg_db_dest: /home/admin/endoreg-db-production
 endoreg_db_repo: https://github.com/wg-lux/endoreg-db.git
 group_luxnix:
   dns.enable: 'true'
+  generic-settings.smtpPwdFilePath: '"/etc/secrets/vault/smtp_pwd"'
+  generic-settings.smtpUserFilePath: '"/etc/secrets/vault/smtp_user"'
+  generic-settings.sslCertificateKeyPath: '"/etc/secrets/vault/ssl_key"'
+  generic-settings.sslCertificatePath: '"/etc/secrets/vault/ssl_cert"'
   generic_settings.adminVpnIp: '"172.16.255.106"'
   generic_settings.enable: 'true'
   generic_settings.language: '"english"'
@@ -127,12 +132,12 @@ network_conf:
 postgres_host_main_password_filename: SCRT_roles_system_password_postgres_host_main_password
 postgres_host_test_ip: 172.16.255.13
 postgres_host_test_password_filename: SCRT_roles_system_password_postgres_host_test_password
-role_luxnix:
-  generic-settings.sslCertificateKeyPath: '"/etc/secrets/vault/ssl_key"'
-  generic-settings.sslCertificatePath: '"/etc/secrets/vault/ssl_cert"'
+role_luxnix: {}
 role_password_filename: SCRT_roles_system_password_nextcloud_host_password
 role_pw_src: '{{ lx_vault_dir_src }}/deploy/{{ inventory_hostname }}/{{ nextcloud_host_password_filename
   }}'
+role_pwd_dest: /etc/secrets/vault/smtp_pwd
+role_pwd_src: /home/admin/dev/luxnix/secrets/smtp/smtp_pwd
 role_role_dest: /etc/secrets/vault/ssl_cert
 role_role_src: /home/admin/dev/luxnix/secrets/ssl/ssl_cert
 role_roles:
@@ -142,5 +147,7 @@ role_roles:
   nextcloudHost.passwordFilePath: '"/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_password"'
 role_ssl_key_dest: /etc/secrets/vault/ssl_key
 role_ssl_key_src: /home/admin/dev/luxnix/secrets/ssl/ssl_key
+role_user_dest: /etc/secrets/vault/smtp_user
+role_user_src: /home/admin/dev/luxnix/secrets/smtp/smtp_user
 secret_dir: /etc/secrets
 template_name: main

@@ -6,6 +6,4 @@ ssl_cert_ssl_key_dest: "/etc/secrets/vault/ssl_key"
 
 ssl_cert_roles: {}
 
-ssl_cert_luxnix:
-  generic-settings.sslCertificatePath: '"/etc/secrets/vault/ssl_cert"'
-  generic-settings.sslCertificateKeyPath: '"/etc/secrets/vault/ssl_key"'
+ssl_cert_luxnix: {}

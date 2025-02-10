@@ -84,6 +84,8 @@ in {
       text = "InitialDefaultPWD123!";
     };
 
+    environment.etc."noip-smtp-pass".text = "ReplaceThisWithYourSecret";
+
     services.nextcloud = {
       enable = cfg.enable;
       https = false; # ssl is terminated by reverse proxy
@@ -148,8 +150,6 @@ in {
           config.luxnix.generic-settings.network.nginx.vpnIp 
           config.luxnix.generic-settings.network.nextcloud.vpnIp 
         ];
-        mail_smtpmode = "sendmail";
-        mail_sendmailmode = "pipe";
         enabledPreviewProviders = [
           "OC\\Preview\\BMP"
           "OC\\Preview\\GIF"
@@ -165,6 +165,18 @@ in {
         ];
         overwritehost = "cloud.endo-reg.net";
         overwriteprotocol = "https";
+        maintenance.window_start = 2;
+        log_type = "file";
+        mail_smtpauthtype = "LOGIN";
+        mail_smtpmode = "smtp";
+        mail_smtphost = "mail.noip.com";
+        mail_smtpport = 587;
+        mail_smtpsecure = "tls";
+        mail_smtpauth = 1;
+        mail_smtpname = "webmaster@endo-reg.net";
+        mail_smtppassword = builtins.readFile "/etc/noip-smtp-pass";
+        mail_domain = "endo-reg.net";
+        mail_from_address = "webmaster";
       };
     };
 

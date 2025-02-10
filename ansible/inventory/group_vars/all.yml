@@ -34,6 +34,10 @@ group_luxnix:
   generic_settings.network.psqlTest.vpnIp: '"172.16.255.13"'
   generic_settings.network.psqlTest.port: "5432"
   generic_settings.network.psqlTest.domain: '"psql-test.endo-reg.net"'
+  generic-settings.sslCertificatePath: '"/etc/secrets/vault/ssl_cert"'
+  generic-settings.sslCertificateKeyPath: '"/etc/secrets/vault/ssl_key"'
+  generic-settings.smtpUserFilePath: '"/etc/secrets/vault/smtp_user"'
+  generic-settings.smtpPwdFilePath: '"/etc/secrets/vault/smtp_pwd"'
 
   generic_settings.vpnSubnet: '"172.16.255.0/24"'
   generic_settings.sensitiveServiceGroupName: '"sensitiveServices"'

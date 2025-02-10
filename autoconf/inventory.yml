@@ -307,11 +307,13 @@ all:
       - active_clients
       - nextcloud_host
       - test_group
+      - smtp_cred
       - managed
     ansible_host: 172.16.255.22
     ansible_role_names:
       - ssl_cert
       - nextcloud_host
+      - smtp_cred
     extra_secret_names: []
     extra_user_names:
       - admin
@@ -338,6 +340,7 @@ all:
       ansible_roles:
         - ssl_cert
         - nextcloud_host
+        - smtp_cred
       host_luxnix:
         boot_decryption_stick_gs_01.enable: 'true'
         generic_settings.hostPlatform: '"x86_64-linux"'
@@ -747,6 +750,10 @@ groups:
       endoreg_db_repo: https://github.com/wg-lux/endoreg-db.git
       group_luxnix:
         dns.enable: 'true'
+        generic-settings.smtpPwdFilePath: '"/etc/secrets/vault/smtp_pwd"'
+        generic-settings.smtpUserFilePath: '"/etc/secrets/vault/smtp_user"'
+        generic-settings.sslCertificateKeyPath: '"/etc/secrets/vault/ssl_key"'
+        generic-settings.sslCertificatePath: '"/etc/secrets/vault/ssl_cert"'
         generic_settings.adminVpnIp: '"172.16.255.106"'
         generic_settings.enable: 'true'
         generic_settings.linux.kernelPackages: pkgs.linuxPackages_6_12
@@ -913,6 +920,10 @@ groups:
       group_services: {}
   - extra_user_names: []
     files: []
+    name: smtp_cred
+    vars: {}
+  - extra_user_names: []
+    files: []
     name: hetzner_server
     vars:
       group_luxnix: {}
@@ -1059,11 +1070,19 @@ roles:
     files: []
     name: ssl_cert
     vars:
-      role_luxnix:
-        generic-settings.sslCertificateKeyPath: '"/etc/secrets/vault/ssl_key"'
-        generic-settings.sslCertificatePath: '"/etc/secrets/vault/ssl_cert"'
+      role_luxnix: {}
       role_role_dest: /etc/secrets/vault/ssl_cert
       role_role_src: /home/admin/dev/luxnix/secrets/ssl/ssl_cert
       role_roles: {}
       role_ssl_key_dest: /etc/secrets/vault/ssl_key
       role_ssl_key_src: /home/admin/dev/luxnix/secrets/ssl/ssl_key
+  - extra_user_names: []
+    files: []
+    name: smtp_cred
+    vars:
+      role_luxnix: {}
+      role_pwd_dest: /etc/secrets/vault/smtp_pwd
+      role_pwd_src: /home/admin/dev/luxnix/secrets/smtp/smtp_pwd
+      role_roles: {}
+      role_user_dest: /etc/secrets/vault/smtp_user
+      role_user_src: /home/admin/dev/luxnix/secrets/smtp/smtp_user
