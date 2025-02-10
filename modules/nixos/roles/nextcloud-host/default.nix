@@ -95,7 +95,7 @@ in {
         inherit (ncApps) news contacts calendar tasks forms;
         inherit (ncApps) groupfolders deck notes polls;
         inherit (ncApps) integration_paperless twofactor_totp sociallogin previewgenerator end_to_end_encryption;
-        inherit (ncApps) music memories files_markdown files_automatedtagging files_mindmap files_retention files_texteditor;
+        inherit (ncApps) music memories;
 
         ## Example of adding a custom app      
         # cookbook = pkgs.fetchNextcloudApp rec {
