@@ -174,6 +174,22 @@ in {
       '';
     };
 
+    smtpUserFilePath = mkOption {
+      type = types.path;
+      default = "/etc/secrets/vault/smtp_user";
+      description = ''
+        Path to the smtp user file.
+      '';
+    };
+
+    smtpPwdFilePath = mkOption {
+      type = types.str;
+      default = "/etc/secrets/vault/smtp_pwd";
+      description = ''
+        The smtp user file.
+      '';
+    };
+
     configurationPathRelative = mkOption {
       type = types.str;
       default = "lx-production";

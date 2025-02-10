@@ -5,9 +5,15 @@
 # https://github.com/helsinki-systems/nc4nix (Nextcloud4Nix)
 # https://nixos.wiki/wiki/Nextcloud
 
+#TODO Docs:
+# To reset delete stateful dirs:
+# rm -r /var/lib/mysql /var/lib/nextcloud
+
 with lib; 
 with lib.luxnix; let
   cfg = config.roles.nextcloudHost;
+
+  ncApps = config.services.nextcloud.package.packages.apps;
 
   sslCertFile = config.luxnix.generic-settings.sslCertificatePath;
   sslKeyFile = config.luxnix.generic-settings.sslCertificateKeyPath;
@@ -39,11 +45,6 @@ with lib.luxnix; let
 in {
   options.roles.nextcloudHost = {
     enable = mkBoolOpt false "Enable NGINX";
-    hostname = mkOption {
-      type = types.str;
-      default = "cloud.endo-reg.net";
-      description = "Hostname for the Nextcloud instance";
-    };
     passwordFilePath = mkOption {
       type = types.path;
       default = "/etc/nextcloud-admin-pass";
@@ -71,13 +72,6 @@ in {
 
   config = mkIf cfg.enable {
 
-    # make sure nextcloud user and group exist; nextcloud is systemuser
-    # make sure nextcloud dir exists with correct permissions (750) (nextcloud:nextcloud)
-    # make sure nextcloud has extra group sslCert
-    # make sure nextcloud has access to sslCert files
-    # make sure nextcloud has access to sslKey files
-    # make sure nextcloud has access to /etc/nextcloud-admin-pass
-
     users.users.nextcloud = {
       isSystemUser = true;
       home = "/var/lib/nextcloud";
@@ -85,44 +79,77 @@ in {
       extraGroups = [ sslCertGroupName ];
     };
     
-    # TODO Service to supply from vault
+    # TODO Add to docs that this needs to be changed after setup
     environment.etc."nextcloud-admin-pass" = {
       text = "InitialDefaultPWD123!";
     };
 
+    environment.etc."noip-smtp-pass".text = "ReplaceThisWithYourSecret";
+
     services.nextcloud = {
-      enable = true;
-      https = false;
-      configureRedis = true;
+      enable = cfg.enable;
+      https = false; # ssl is terminated by reverse proxy
       package = cfg.package;
-      hostName = "cloud.endo-reg.net"; 
-      extraApps = {
-        inherit (config.services.nextcloud.package.packages.apps) news contacts calendar tasks forms;
-      };
-      extraAppsEnable = true;
+      hostName = conf.domain;
       maxUploadSize = cfg.maxUploadSize;
-      config.adminuser = "root";
-      config.adminpassFile = "/etc/nextcloud-admin-pass"; # initial pwd for user "root"
-      config.dbtype = "sqlite";
-      config.objectstore.s3 = {
-        enable = true;
-        bucket = "nextcloud";
-        autocreate = true;
-        key = accessKey;
-        secretFile = "${pkgs.writeText "secret" "test12345"}";
-        hostname = "localhost";
-        useSsl = false;
-        port = 9000;
-        usePathStyle = true;
-        region = "us-east-1";
+
+
+      # Applications
+      # Available apps: https://github.com/NixOS/nixpkgs/blob/master/pkgs/servers/nextcloud/packages/nextcloud-apps.json
+      extraAppsEnable = true;
+      extraApps = {
+        inherit (ncApps) news contacts calendar tasks forms;
+        inherit (ncApps) groupfolders deck notes polls;
+        inherit (ncApps) music memories;
+
+        ## Example of adding a custom app      
+        # cookbook = pkgs.fetchNextcloudApp rec {
+        #   url =
+        #     "https://github.com/nextcloud/cookbook/releases/download/v0.10.2/Cookbook-0.10.2.tar.gz";
+        #   sha256 = "sha256-XgBwUr26qW6wvqhrnhhhhcN4wkI+eXDHnNSm1HDbP6M=";
+        # };
+
+      };
+      
+      database.createLocally = true;
+
+      # Maintenance
+      autoUpdateApps.enable = true;
+
+
+      configureRedis = true;
+
+      config = {
+        adminuser = "root";
+        adminpassFile = "/etc/nextcloud-admin-pass"; # initial pwd for user "root"
+        dbtype = "pgsql";
+        defaultPhoneRegion = "DE";
+        # objectstore.s3 = {
+        #   enable = true;
+        #   bucket = "nextcloud";
+        #   autocreate = true;
+        #   key = accessKey;
+        #   secretFile = "${pkgs.writeText "secret" "test12345"}";
+        #   hostname = "localhost";
+        #   useSsl = false;
+        #   port = 9000;
+        #   usePathStyle = true;
+        #   region = "us-east-1";
+        # };
       };
 
+      phpOptions = {
+        "opcache.interned_strings_buffer" = "16";
+      };
+
+      
       settings = let
       in {
-        trusted_domains = [ "localhost" "cloud.endo-reg.net" ];
-        trusted_proxies = [ config.luxnix.generic-settings.network.nginx.vpnIp "172.16.255.12" ];
-        mail_smtpmode = "sendmail";
-        mail_sendmailmode = "pipe";
+        trusted_domains = [ "localhost" "cloud.endo-reg.net"];
+        trusted_proxies = [ 
+          config.luxnix.generic-settings.network.nginx.vpnIp 
+          config.luxnix.generic-settings.network.nextcloud.vpnIp 
+        ];
         enabledPreviewProviders = [
           "OC\\Preview\\BMP"
           "OC\\Preview\\GIF"
@@ -136,27 +163,31 @@ in {
           "OC\\Preview\\XBitmap"
           "OC\\Preview\\HEIC"
         ];
-        # overwritehost = "cloud.endo-reg.net";
-        # overwriteprotocol = "http";
+        overwritehost = "cloud.endo-reg.net";
+        overwriteprotocol = "https";
+        maintenance.window_start = 2;
+        log_type = "file";
+        mail_smtpauthtype = "LOGIN";
+        mail_smtpmode = "smtp";
+        mail_smtphost = "mail.noip.com";
+        mail_smtpport = 3325;
       };
     };
 
 
     # manually run 
-    
+    #TODO Add to docs
     # mc config host add minio http://localhost:9000 ${accessKey} ${secretKey} --api s3v4
-    
     # mc config host add minio http://localhost:9000 nextcloud test12345 --api s3v4
     # mc mb minio/nextcloud
     
-    services.nginx.virtualHosts."cloud.endo-reg.net" = {
-      forceSSL = true;
-      sslCertificate = nginx_cert_path;
-      sslCertificateKey = nginx_key_path;
-      locations."/" = {
-        proxyPass = "http://localhost";
-      };
-    };
+    services.nginx.virtualHosts."${config.services.nextcloud.hostName}".listen = [ 
+      {
+        addr = config.luxnix.generic-settings.vpnIp;
+        port = 80; # NOT an exposed port
+      } 
+    ];
+
 
     services.minio = {
       enable = true;
@@ -183,7 +214,7 @@ in {
 
   environment.systemPackages = [ pkgs.minio-client cfg.package];
 
-  networking.firewall.allowedTCPPorts = [ 443 ];
+  networking.firewall.allowedTCPPorts = [ 80 443 ];
 
   };
 }

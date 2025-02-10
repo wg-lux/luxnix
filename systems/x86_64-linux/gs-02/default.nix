@@ -32,6 +32,14 @@
   luxnix = {
     dns.enable = true;
 
+generic-settings.smtpPwdFilePath = "/etc/secrets/vault/smtp_pwd";
+
+generic-settings.smtpUserFilePath = "/etc/secrets/vault/smtp_user";
+
+generic-settings.sslCertificateKeyPath = "/etc/secrets/vault/ssl_key";
+
+generic-settings.sslCertificatePath = "/etc/secrets/vault/ssl_cert";
+
 generic-settings.adminVpnIp = "172.16.255.106";
 
 generic-settings.enable = true;
@@ -95,10 +103,6 @@ vault.enable = true;
 vault.key = "/etc/secrets/.key";
 
 vault.psk = "/etc/secrets/.psk";
-
-generic-settings.sslCertificateKeyPath = "/etc/secrets/vault/ssl_key";
-
-generic-settings.sslCertificatePath = "/etc/secrets/vault/ssl_cert";
 
 boot-decryption-stick-gs-01.enable = true;
 

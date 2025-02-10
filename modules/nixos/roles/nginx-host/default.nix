@@ -29,14 +29,32 @@ with lib.luxnix; let
       deny all;
   '';
 
+  # test add: X-NginX-Proxy true; proxy
+  # removed:   proxy_ssl_server_name  # 
+
+  ### OLD ONE
+  # appendHttpConfig = ''
+  #   proxy_set_header Host $host;
+  #   proxy_set_header X-Forwarded-Host $host;
+  #   proxy_set_header X-Forwarded-Proto $scheme;
+  #   proxy_set_header X-Real-IP $remote_addr;
+  #   proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  #   proxy_pass_header Authorization;
+  #   proxy_ssl_server_name on;
+  # '';
+  ###
+
+      # proxy_set_header X-Forwarded-Proto $scheme;
   appendHttpConfig = ''
       proxy_set_header Host $host;
       proxy_set_header X-Forwarded-Host $host;
-      proxy_set_header X-Forwarded-Proto $scheme;
       proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-Proto https;
       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-      proxy_ssl_server_name on;
       proxy_pass_header Authorization;
+  
+      proxy_set_header X-NginX-Proxy true;
+      add_header Strict-Transport-Security "max-age=15552000; includeSubDomains; preload";
   '';
 
   nginxPrepareScript = pkgs.writeScript "nginx-prepare-files.sh" ''
@@ -47,7 +65,6 @@ with lib.luxnix; let
     chown nginx:nginx ${nginx_cert_path} ${nginx_key_path}
     chmod 600 ${nginx_cert_path} ${nginx_key_path}
   '';
-
 in {
   #TODO MIGRATE DOMAIN SETTINGS TO GENERIC SETTINGS SO THAT THEY ARE AVAILABLE ON ALL MACHINES
   options.roles.nginxHost = {
@@ -76,6 +93,7 @@ in {
       };
       proxyHeadersHashBucketSize = mkOption {
         type = types.int;
+
         default = 64;
         description = "Size of the hash bucket for storing headers";
       };
@@ -197,7 +215,7 @@ in {
             sslCertificateKey = nginx_key_path;
 
             locations."/" = {
-              proxyPass = "https://${nextcloudConfig.vpnIp}";
+              proxyPass = "http://${nextcloudConfig.vpnIp}/";
               extraConfig = all-extraConfig; 
             };
           };

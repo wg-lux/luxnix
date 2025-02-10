@@ -21,7 +21,7 @@
     cmd: psql -U postgres -c "ALTER ROLE postgres WITH PASSWORD '{{ postgres_password_b64.content | b64decode | trim }}';"
   become: true
   become_user: root # Changed from postgres to root
-  no_log: false
+  no_log: true
   register: postgres_password_result
   changed_when: postgres_password_result.rc == 0
   environment:

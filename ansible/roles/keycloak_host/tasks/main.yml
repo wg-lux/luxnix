@@ -5,7 +5,7 @@
     owner: "{{ ansible_user }}"
     mode: "0700"
   become: true
-  no_log: false
+  no_log: true
   vars:
     ansible_vault_identity: "{{ inventory_hostname }}@{{ lx_vault_dir_src }}/psk/{{ inventory_hostname }}.psk"
 
