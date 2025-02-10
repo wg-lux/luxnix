@@ -172,7 +172,7 @@ in {
       { "${cfg.keycloak.vpnIp}" = [ cfg.keycloak.domain cfg.keycloak.adminDomain ]; }
       { "${cfg.psqlMain.vpnIp}" = [ cfg.psqlMain.domain ]; }
       { "${cfg.psqlTest.vpnIp}" = [ cfg.psqlTest.domain ]; }
-      { "${cfg.nginx.vpnIp}" = [ cfg.nginx.domain cfg.nextcloud.domain ]; }
+      { "${cfg.nginx.vpnIp}" = [ cfg.nginx.domain ]; }
     ];
   };
 

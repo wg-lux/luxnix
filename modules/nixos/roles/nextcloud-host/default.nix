@@ -71,13 +71,6 @@ in {
 
   config = mkIf cfg.enable {
 
-    # make sure nextcloud user and group exist; nextcloud is systemuser
-    # make sure nextcloud dir exists with correct permissions (750) (nextcloud:nextcloud)
-    # make sure nextcloud has extra group sslCert
-    # make sure nextcloud has access to sslCert files
-    # make sure nextcloud has access to sslKey files
-    # make sure nextcloud has access to /etc/nextcloud-admin-pass
-
     users.users.nextcloud = {
       isSystemUser = true;
       home = "/var/lib/nextcloud";
@@ -170,7 +163,7 @@ in {
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-NginX-Proxy true;
-            proxy_set_header X-Forwarded-Proto http;
+            proxy_set_header X-Forwarded-Proto https;
             proxy_set_header Host $host;
             proxy_cache_bypass $http_upgrade;
             proxy_redirect off;
