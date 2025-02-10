@@ -132,16 +132,15 @@ in {
           "OC\\Preview\\XBitmap"
           "OC\\Preview\\HEIC"
         ];
-        # overwritehost = "cloud.endo-reg.net";
-        # overwriteprotocol = "https";
+        overwritehost = "cloud.endo-reg.net";
+        overwriteprotocol = "https";
       };
     };
 
 
     # manually run 
-    
+    #TODO Add to docs
     # mc config host add minio http://localhost:9000 ${accessKey} ${secretKey} --api s3v4
-    
     # mc config host add minio http://localhost:9000 nextcloud test12345 --api s3v4
     # mc mb minio/nextcloud
     
@@ -159,15 +158,7 @@ in {
         sslCertificateKey = nginx_key_path;
         locations."/" = {
           proxyPass = "http://127.0.0.1/";
-          extraConfig = ''
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-NginX-Proxy true;
-            proxy_set_header X-Forwarded-Proto https;
-            proxy_set_header Host $host;
-            proxy_cache_bypass $http_upgrade;
-            proxy_redirect off;
-          '';
+          # extraConfig = '''';
 
         };
       };
