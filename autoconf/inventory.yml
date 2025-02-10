@@ -365,6 +365,7 @@ all:
       template_name: main
   - ansible_group_names:
       - language_english
+      - ssl_cert
       - all
       - base_server
       - active_clients
