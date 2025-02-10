@@ -274,6 +274,7 @@ in {
         # Add static DNS entries (without TTL)
         address = [
           "/traefik.${cfg.localDomain}/172.16.255.12"  # Remove TTL notation
+          "/cloud.endo-reg.net/172.16.255.12" # point to reverse proxy which forwards to nginx
         ];
         
         # Don't read /etc/hosts
