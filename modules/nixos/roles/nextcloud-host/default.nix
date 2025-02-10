@@ -95,7 +95,7 @@ in {
       https = false;
       configureRedis = true;
       package = cfg.package;
-      hostName = "cloud.endo-reg.net"; 
+      hostName = "cloud.endo-reg.net"; #FIXME
       extraApps = {
         inherit (config.services.nextcloud.package.packages.apps) news contacts calendar tasks forms;
       };
@@ -120,7 +120,10 @@ in {
       settings = let
       in {
         trusted_domains = [ "localhost" "cloud.endo-reg.net" ];
-        trusted_proxies = [ config.luxnix.generic-settings.network.nginx.vpnIp "172.16.255.12" ];
+        trusted_proxies = [ 
+          config.luxnix.generic-settings.network.nginx.vpnIp 
+          config.luxnix.generic-settings.network.nextcloud.vpnIp 
+        ];
         mail_smtpmode = "sendmail";
         mail_sendmailmode = "pipe";
         enabledPreviewProviders = [
@@ -154,7 +157,18 @@ in {
       sslCertificate = nginx_cert_path;
       sslCertificateKey = nginx_key_path;
       locations."/" = {
-        proxyPass = "http://localhost";
+        proxyPass = "http://127.0.0.1/";
+        extraConfig = ''
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-NginX-Proxy true;
+          proxy_set_header X-Forwarded-Proto http;
+          proxy_pass http://127.0.0.1/; # tailing / is important!
+          proxy_set_header Host $host;
+          proxy_cache_bypass $http_upgrade;
+          proxy_redirect off;
+        '';
+
       };
     };
 

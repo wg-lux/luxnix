@@ -29,14 +29,32 @@ with lib.luxnix; let
       deny all;
   '';
 
+  # test add: X-NginX-Proxy true; proxy
+  # removed:   proxy_ssl_server_name  # 
+
+  ### OLD ONE
+  # appendHttpConfig = ''
+  #   proxy_set_header Host $host;
+  #   proxy_set_header X-Forwarded-Host $host;
+  #   proxy_set_header X-Forwarded-Proto $scheme;
+  #   proxy_set_header X-Real-IP $remote_addr;
+  #   proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  #   proxy_pass_header Authorization;
+  #   proxy_ssl_server_name on;
+  # '';
+  ###
+
   appendHttpConfig = ''
       proxy_set_header Host $host;
       proxy_set_header X-Forwarded-Host $host;
       proxy_set_header X-Forwarded-Proto $scheme;
       proxy_set_header X-Real-IP $remote_addr;
       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-      proxy_ssl_server_name on;
       proxy_pass_header Authorization;
+  
+      proxy_set_header X-NginX-Proxy true;
+      proxy_redirect off; 
+      proxy_cache_bypass $http_upgrade;
   '';
 
   nginxPrepareScript = pkgs.writeScript "nginx-prepare-files.sh" ''
