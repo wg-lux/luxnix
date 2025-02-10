@@ -21,7 +21,7 @@ in {
 
     configurationPath = mkOption {
       type = types.str;
-      default = "luxnix-production";
+      default = "lx-production";
       description = "The directory where the luxnix repository is located";
     };
   };

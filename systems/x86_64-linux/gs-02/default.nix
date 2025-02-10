@@ -20,6 +20,10 @@
   roles = { 
     aglnet.client.enable = true;
     base-server.enable = true;
+    nextcloudHost.enable = true;
+    nextcloudHost.maxUploadSize = "10G";
+    nextcloudHost.package = pkgs.nextcloud30;
+    nextcloudHost.passwordFilePath = "/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_password";
     };
 
   services = {
@@ -48,7 +52,7 @@ generic-settings.network.nextcloud.domain = "cloud.endo-reg.net";
 
 generic-settings.network.nextcloud.port = 8444;
 
-generic-settings.network.nextcloud.vpnIp = "172.16.255.106";
+generic-settings.network.nextcloud.vpnIp = "172.16.255.22";
 
 generic-settings.network.nginx.vpnIp = "172.16.255.12";
 
@@ -91,6 +95,10 @@ vault.enable = true;
 vault.key = "/etc/secrets/.key";
 
 vault.psk = "/etc/secrets/.psk";
+
+generic-settings.sslCertificateKeyPath = "/etc/secrets/vault/ssl_key";
+
+generic-settings.sslCertificatePath = "/etc/secrets/vault/ssl_cert";
 
 boot-decryption-stick-gs-01.enable = true;
 

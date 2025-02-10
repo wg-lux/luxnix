@@ -21,7 +21,7 @@ with lib.luxnix; let
     set -e
     cp ${sslCertFile} ${nginx_cert_path}
     cp ${sslKeyFile} ${nginx_key_path}
-    chown nginx:nginx ${nginx_cert_path} ${nginx_key_path}
+    chown nginx:sslCert ${nginx_cert_path} ${nginx_key_path}
     chmod 600 ${nginx_cert_path} ${nginx_key_path}
   '';
 
@@ -70,6 +70,20 @@ in {
   };
 
   config = mkIf cfg.enable {
+
+    # make sure nextcloud user and group exist; nextcloud is systemuser
+    # make sure nextcloud dir exists with correct permissions (750) (nextcloud:nextcloud)
+    # make sure nextcloud has extra group sslCert
+    # make sure nextcloud has access to sslCert files
+    # make sure nextcloud has access to sslKey files
+    # make sure nextcloud has access to /etc/nextcloud-admin-pass
+
+    users.users.nextcloud = {
+      isSystemUser = true;
+      home = "/var/lib/nextcloud";
+      group = "nextcloud";
+      extraGroups = [ sslCertGroupName ];
+    };
     
     # TODO Service to supply from vault
     environment.etc."nextcloud-admin-pass" = {
@@ -87,6 +101,7 @@ in {
       };
       extraAppsEnable = true;
       maxUploadSize = cfg.maxUploadSize;
+      config.adminuser = "root";
       config.adminpassFile = "/etc/nextcloud-admin-pass"; # initial pwd for user "root"
       config.dbtype = "sqlite";
       config.objectstore.s3 = {
@@ -166,7 +181,7 @@ in {
       };
     };
 
-  environment.systemPackages = [ pkgs.minio-client ];
+  environment.systemPackages = [ pkgs.minio-client cfg.package];
 
   networking.firewall.allowedTCPPorts = [ 443 ];
 

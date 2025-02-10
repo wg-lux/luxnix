@@ -4,14 +4,14 @@ from lx_administration.password.generator import PasswordGenerator
 
 # example usage:
 # Lets say you named postgres_host_main_password
-# TODO @hamzahsn: Add the following to the docs
+# TODO @hamza: Add the following to the docs
 
 # change export SECRET_NAME=postgres_host_main_password as required
 
 _bash = """
 ## CHANGE THIS AS REQUIRED
-export SECRET_TEMPLATE_NAME=keycloak_host
-export SECRET_NAME=keycloak_host_password
+export SECRET_TEMPLATE_NAME=nextcloud_host
+export SECRET_NAME=nextcloud_host_password
 
 
 export VAULT_DIR=~/.lxv
