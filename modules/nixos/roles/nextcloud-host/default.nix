@@ -144,26 +144,6 @@ in {
     # mc config host add minio http://localhost:9000 nextcloud test12345 --api s3v4
     # mc mb minio/nextcloud
     
-    services.nginx = 
-    {
-      # recommendedGzipSettings = conf.recommendedGzipSettings;
-      # recommendedOptimisation = conf.recommendedOptimisation;
-      # recommendedProxySettings = conf.recommendedProxySettings;
-      # recommendedTlsSettings = conf.recommendedTlsSettings;
-
-      # appendHttpConfig = appendHttpConfig;
-      virtualHosts."cloud.endo-reg.net" = {
-        forceSSL = true;
-        sslCertificate = nginx_cert_path;
-        sslCertificateKey = nginx_key_path;
-        locations."/" = {
-          proxyPass = "http://127.0.0.1/";
-          # extraConfig = '''';
-
-        };
-      };
-    };
-
     services.minio = {
       enable = true;
       listenAddress = "127.0.0.1:9000";
