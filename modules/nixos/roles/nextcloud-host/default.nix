@@ -70,16 +70,6 @@ in {
     services.nextcloud = {
       enable = true;
       https = false;
-      # nginx.enable = true; # Re-enable internal nginx
-      # sslCertFile = nextcloudSslCertFile;
-      # sslKeyFile = nextcloudSslKeyFile;
-      # listen = [ # Remove this block
-      #   {
-      #     address = "0.0.0.0";
-      #     port = 443;
-      #     ssl = true;
-      #   }
-      # ];
       configureRedis = true;
       package = cfg.package;
       hostName = "cloud.endo-reg.net"; 
@@ -135,8 +125,14 @@ in {
     # mc config host add minio http://localhost:9000 nextcloud test12345 --api s3v4
     # mc mb minio/nextcloud
     
-
-
+    services.nginx.virtualHosts."cloud.endo-reg.net" = {
+      forceSSL = true;
+      sslCertificate = nextcloudSslCertFile;
+      sslCertificateKey = nextcloudSslKeyFile;
+      locations."/" = {
+        proxyPass = "http://localhost";
+      };
+    };
 
     services.minio = {
       enable = true;

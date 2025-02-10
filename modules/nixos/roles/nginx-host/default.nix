@@ -197,7 +197,7 @@ in {
             sslCertificateKey = nginx_key_path;
 
             locations."/" = {
-              proxyPass = "http://${nextcloudConfig.vpnIp}:80";
+              proxyPass = "https://${nextcloudConfig.vpnIp}";
               extraConfig = all-extraConfig; #+ ''
               #   ssl_stapling off;
               #   ssl_stapling_verify off;
