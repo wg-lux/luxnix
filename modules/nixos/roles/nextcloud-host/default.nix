@@ -170,13 +170,7 @@ in {
         mail_smtpauthtype = "LOGIN";
         mail_smtpmode = "smtp";
         mail_smtphost = "mail.noip.com";
-        mail_smtpport = 587;
-        mail_smtpsecure = "tls";
-        mail_smtpauth = 1;
-        mail_smtpname = "webmaster@endo-reg.net";
-        mail_smtppassword = builtins.readFile "/etc/noip-smtp-pass";
-        mail_domain = "endo-reg.net";
-        mail_from_address = "webmaster";
+        mail_smtpport = 3325;
       };
     };
 
