@@ -140,7 +140,7 @@ in {
           "OC\\Preview\\HEIC"
         ];
         overwritehost = "cloud.endo-reg.net";
-        # overwriteprotocol = "http";
+        overwriteprotocol = "https";
       };
     };
 
