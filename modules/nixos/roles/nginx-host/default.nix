@@ -53,7 +53,6 @@ with lib.luxnix; let
       proxy_pass_header Authorization;
   
       proxy_set_header X-NginX-Proxy true;
-      proxy_cache_bypass $http_upgrade;
   '';
 
   nginxPrepareScript = pkgs.writeScript "nginx-prepare-files.sh" ''
