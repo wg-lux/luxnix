@@ -301,6 +301,7 @@ all:
       template_name: main
   - ansible_group_names:
       - language_english
+      - ssl_cert
       - all
       - gpu_server
       - active_clients
