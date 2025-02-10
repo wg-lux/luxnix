@@ -139,5 +139,7 @@ in {
     
     programs.obs-studio.enable = cfg.videoEditing;
 
+    programs.thunderbird.enable = cfg.office;
+
   };
 }
