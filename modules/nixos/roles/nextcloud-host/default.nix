@@ -74,7 +74,6 @@ in {
 
     users.users.nextcloud = {
       isSystemUser = true;
-      home = "/var/lib/nextcloud";
       group = "nextcloud";
       extraGroups = [ sslCertGroupName ];
     };
