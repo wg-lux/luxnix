@@ -123,7 +123,7 @@ in {
         adminuser = "root";
         adminpassFile = "/etc/nextcloud-admin-pass"; # initial pwd for user "root"
         dbtype = "pgsql";
-        defaultPhoneRegion = "DE";
+        
         # objectstore.s3 = {
         #   enable = true;
         #   bucket = "nextcloud";
@@ -145,6 +145,7 @@ in {
       
       settings = let
       in {
+        default_phone_region = "DE";
         trusted_domains = [ "localhost" "cloud.endo-reg.net"];
         trusted_proxies = [ 
           config.luxnix.generic-settings.network.nginx.vpnIp 
