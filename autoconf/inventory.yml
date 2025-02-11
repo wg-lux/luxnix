@@ -370,7 +370,6 @@ all:
       - all
       - base_server
       - active_clients
-      - core_dev_ssh_access
       - nextcloud_host
       - smtp_cred
       - managed

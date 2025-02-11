@@ -21,7 +21,7 @@
     aglnet.client.enable = true;
     base-server.enable = true;
     endoreg-client.enable = false;
-    nextcloudHost.enable = false;
+    nextcloudHost.enable = true;
     nextcloudHost.maxUploadSize = "10G";
     nextcloudHost.package = pkgs.nextcloud30;
     nextcloudHost.passwordFilePath = "/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_password";
