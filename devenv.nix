@@ -47,12 +47,12 @@ in
 
   enterShell = ''
     . .devenv/state/venv/bin/activate
-    ensure-ansible-config
+    # ensure-ansible-config
     uv pip install -e .
     # devenv tasks run "autoconf:initialize-vault"
     python -m unittest
     hello
-    python mermaid_report_of_autoconf_hosts.py
+    # python mermaid_report_of_autoconf_hosts.py
   '';
 
   enterTest = ''
