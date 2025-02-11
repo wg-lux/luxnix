@@ -21,9 +21,7 @@
     aglnet.client.enable = true;
     base-server.enable = true;
     endoreg-client.enable = false;
-    ssh-access.dev-03.enable = true;
-    ssh-access.dev-03.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos";
-    nextcloudHost.enable = true;
+    nextcloudHost.enable = false;
     nextcloudHost.maxUploadSize = "10G";
     nextcloudHost.package = pkgs.nextcloud30;
     nextcloudHost.passwordFilePath = "/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_password";
