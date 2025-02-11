@@ -1,8 +1,10 @@
 - name: Read admin password
   ansible.builtin.slurp:
-    src: "{{ managed_admin_password_file_source }}"
+    src: "{{ lx_vault_dir }}/{{ admin_password_filename }}"
   register: user_password
-  no_log: true
+  no_log: false
+  vars:
+    ansible_vault_identity: "{{ inventory_hostname }}@{{ lx_vault_dir_src }}/psk/{{ inventory_hostname }}.psk"
 
 - name: Clone or update the wg-lux/luxnix repository
   ansible.builtin.git:

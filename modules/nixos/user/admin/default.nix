@@ -25,7 +25,7 @@ in {
   };
 
   config = {
-    system.activationScripts.createDefaultHashedPasswordDev01 = {
+    system.activationScripts.createDefaultHashedPasswordAdmin = {
       text = ''
         set -e
         if [ ! -f ${passwordFile} ]; then
