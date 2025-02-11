@@ -304,7 +304,6 @@ all:
       - all
       - gpu_server
       - active_clients
-      - nextcloud_host
       - test_group
       - managed
     ansible_host: 172.16.255.22
@@ -372,7 +371,7 @@ all:
       - base_server
       - active_clients
       - core_dev_ssh_access
-      - test_group
+      - nextcloud_host
       - smtp_cred
       - managed
     ansible_host: 172.16.255.13
