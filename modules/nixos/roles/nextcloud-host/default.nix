@@ -77,6 +77,12 @@ in {
       group = "nextcloud";
       extraGroups = [ sslCertGroupName ];
     };
+
+    # make sure directories exist and are owned by the right user / group
+    systemd.tmpfiles.rules = [
+      "d /etc/nextcloud 0755 nextcloud nextcloud -"
+      "d /etc/nginx-host 0700 nginx nginx -"
+    ];
     
     # TODO Add to docs that this needs to be changed after setup
     environment.etc."nextcloud-admin-pass" = {
@@ -193,10 +199,6 @@ in {
       inherit rootCredentialsFile;
     };
 
-    # systemd.tmpfile.rule to make sure /etc/nginx-host exists
-    systemd.tmpfiles.rules = [
-      "d /etc/nginx-host 0700 nginx nginx -"
-    ];
 
     systemd.services.nginx-prepare-files = {
       description = "Deploy SSL certificate and key for NGINX";
