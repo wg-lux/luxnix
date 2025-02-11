@@ -7,7 +7,9 @@ host_roles: {}
 host_services: {}
 
 ansible_roles:
-  - "postgres_host_test"
+  - "ssl_cert"
+  - "nextcloud_host"
+  - "smtp_cred"
 
 host_luxnix:
   generic_settings.enable: "true"

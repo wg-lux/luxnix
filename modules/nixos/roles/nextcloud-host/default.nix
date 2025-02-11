@@ -7,7 +7,7 @@
 
 #TODO Docs:
 # To reset delete stateful dirs:
-# rm -r /var/lib/mysql /var/lib/nextcloud
+# rm -r /var/lib/postgresql /var/lib/nextcloud
 
 with lib; 
 with lib.luxnix; let
@@ -74,20 +74,26 @@ in {
 
     users.users.nextcloud = {
       isSystemUser = true;
-      home = "/var/lib/nextcloud";
       group = "nextcloud";
       extraGroups = [ sslCertGroupName ];
     };
+
+    # make sure directories exist and are owned by the right user / group
+    systemd.tmpfiles.rules = [
+      "d /etc/nginx-host 0700 nginx nginx -"
+    ];
     
     # TODO Add to docs that this needs to be changed after setup
     environment.etc."nextcloud-admin-pass" = {
       text = "InitialDefaultPWD123!";
     };
 
-    environment.etc."noip-smtp-pass".text = "ReplaceThisWithYourSecret";
+    # environment.etc."noip-smtp-pass".text = "ReplaceThisWithYourSecret";
+
+    services.postgresql.enable = true;
 
     services.nextcloud = {
-      enable = cfg.enable;
+      enable = true;
       https = false; # ssl is terminated by reverse proxy
       package = cfg.package;
       hostName = conf.domain;
@@ -111,31 +117,31 @@ in {
 
       };
       
+      # EXPECTS THAT ONLY NEXTCLOUD USES PSQL
       database.createLocally = true;
 
       # Maintenance
       autoUpdateApps.enable = true;
-
-
       configureRedis = true;
 
       config = {
         adminuser = "root";
         adminpassFile = "/etc/nextcloud-admin-pass"; # initial pwd for user "root"
-        dbtype = "pgsql";
-        defaultPhoneRegion = "DE";
-        # objectstore.s3 = {
-        #   enable = true;
-        #   bucket = "nextcloud";
-        #   autocreate = true;
-        #   key = accessKey;
-        #   secretFile = "${pkgs.writeText "secret" "test12345"}";
-        #   hostname = "localhost";
-        #   useSsl = false;
-        #   port = 9000;
-        #   usePathStyle = true;
-        #   region = "us-east-1";
-        # };
+        dbtype = "mysql";
+        # dbhost = "127.0.0.1";
+        
+        objectstore.s3 = {
+          enable = true;
+          bucket = "nextcloud";
+          autocreate = true;
+          key = accessKey;
+          secretFile = "${pkgs.writeText "secret" "test12345"}"; #FIXME
+          hostname = "localhost";
+          useSsl = false;
+          port = 9000;
+          usePathStyle = true;
+          region = "us-east-1";
+        };
       };
 
       phpOptions = {
@@ -144,11 +150,13 @@ in {
 
       
       settings = let
+      # see also: https://docs.nextcloud.com/server/latest/admin_manual/configuration_server/config_sample_php_parameters.html
       in {
+        default_phone_region = "DE";
         trusted_domains = [ "localhost" "cloud.endo-reg.net"];
         trusted_proxies = [ 
           config.luxnix.generic-settings.network.nginx.vpnIp 
-          config.luxnix.generic-settings.network.nextcloud.vpnIp 
+          config.luxnix.generic-settings.vpnIp 
         ];
         enabledPreviewProviders = [
           "OC\\Preview\\BMP"
@@ -165,12 +173,6 @@ in {
         ];
         overwritehost = "cloud.endo-reg.net";
         overwriteprotocol = "https";
-        maintenance.window_start = 2;
-        log_type = "file";
-        mail_smtpauthtype = "LOGIN";
-        mail_smtpmode = "smtp";
-        mail_smtphost = "mail.noip.com";
-        mail_smtpport = 3325;
       };
     };
 
@@ -196,10 +198,6 @@ in {
       inherit rootCredentialsFile;
     };
 
-    # systemd.tmpfile.rule to make sure /etc/nginx-host exists
-    systemd.tmpfiles.rules = [
-      "d /etc/nginx-host 0700 nginx nginx -"
-    ];
 
     systemd.services.nginx-prepare-files = {
       description = "Deploy SSL certificate and key for NGINX";

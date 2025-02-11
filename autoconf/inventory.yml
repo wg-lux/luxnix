@@ -301,19 +301,13 @@ all:
       template_name: main
   - ansible_group_names:
       - language_english
-      - ssl_cert
       - all
       - gpu_server
       - active_clients
-      - nextcloud_host
       - test_group
-      - smtp_cred
       - managed
     ansible_host: 172.16.255.22
-    ansible_role_names:
-      - ssl_cert
-      - nextcloud_host
-      - smtp_cred
+    ansible_role_names: []
     extra_secret_names: []
     extra_user_names:
       - admin
@@ -337,10 +331,7 @@ all:
     hostname: gs-02
     subnet: 172.16.255.
     vars:
-      ansible_roles:
-        - ssl_cert
-        - nextcloud_host
-        - smtp_cred
+      ansible_roles: []
       host_luxnix:
         boot_decryption_stick_gs_01.enable: 'true'
         generic_settings.hostPlatform: '"x86_64-linux"'
@@ -379,12 +370,14 @@ all:
       - all
       - base_server
       - active_clients
-      - core_dev_ssh_access
-      - test_group
+      - nextcloud_host
+      - smtp_cred
       - managed
     ansible_host: 172.16.255.13
     ansible_role_names:
-      - postgres_host_test
+      - ssl_cert
+      - nextcloud_host
+      - smtp_cred
     extra_secret_names: []
     extra_user_names:
       - admin
@@ -409,7 +402,9 @@ all:
     subnet: 172.16.255.
     vars:
       ansible_roles:
-        - postgres_host_test
+        - ssl_cert
+        - nextcloud_host
+        - smtp_cred
       host_luxnix:
         generic_settings.enable: 'true'
         generic_settings.hostPlatform: '"x86_64-linux"'
@@ -762,15 +757,11 @@ groups:
         generic_settings.network.keycloak.port: '8443'
         generic_settings.network.keycloak.vpnIp: '"172.16.255.12"'
         generic_settings.network.nextcloud.domain: '"cloud.endo-reg.net"'
-        generic_settings.network.nextcloud.port: '8444'
-        generic_settings.network.nextcloud.vpnIp: '"172.16.255.22"'
+        generic_settings.network.nextcloud.vpnIp: '"172.16.255.13"'
         generic_settings.network.nginx.vpnIp: '"172.16.255.12"'
-        generic_settings.network.psqlMain.domain: '"psql-main.endo-reg.net"'
         generic_settings.network.psqlMain.port: '5432'
         generic_settings.network.psqlMain.vpnIp: '"172.16.255.12"'
         generic_settings.network.psqlTest.domain: '"psql-test.endo-reg.net"'
-        generic_settings.network.psqlTest.port: '5432'
-        generic_settings.network.psqlTest.vpnIp: '"172.16.255.13"'
         generic_settings.postgres.enable: 'true'
         generic_settings.sensitiveServiceGroupName: '"sensitiveServices"'
         generic_settings.traefikHostDomain: '"traefik.endo-reg.net"'
@@ -1066,6 +1057,7 @@ roles:
         nextcloudHost.maxUploadSize: '"10G"'
         nextcloudHost.package: pkgs.nextcloud30
         nextcloudHost.passwordFilePath: '"/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_password"'
+        postgres.default.enable: 'false'
   - extra_user_names: []
     files: []
     name: ssl_cert
