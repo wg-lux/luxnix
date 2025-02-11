@@ -149,7 +149,7 @@ in {
       settings = let
       # see also: https://docs.nextcloud.com/server/latest/admin_manual/configuration_server/config_sample_php_parameters.html
       in {
-        # default_phone_region = "DE";
+        default_phone_region = "DE";
         trusted_domains = [ "localhost" "cloud.endo-reg.net"];
         trusted_proxies = [ 
           config.luxnix.generic-settings.network.nginx.vpnIp 
