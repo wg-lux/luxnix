@@ -7,7 +7,7 @@
 
 #TODO Docs:
 # To reset delete stateful dirs:
-# rm -r /var/lib/mysql /var/lib/nextcloud
+# rm -r /var/lib/postgresql /var/lib/nextcloud
 
 with lib; 
 with lib.luxnix; let
@@ -90,6 +90,8 @@ in {
 
     # environment.etc."noip-smtp-pass".text = "ReplaceThisWithYourSecret";
 
+    services.postgresql.enable = true;
+
     services.nextcloud = {
       enable = true;
       https = false; # ssl is terminated by reverse proxy
@@ -126,6 +128,7 @@ in {
         adminuser = "root";
         adminpassFile = "/etc/nextcloud-admin-pass"; # initial pwd for user "root"
         dbtype = "pgsql";
+        # dbhost = "127.0.0.1";
         
         objectstore.s3 = {
           enable = true;
