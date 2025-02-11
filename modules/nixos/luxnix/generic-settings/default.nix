@@ -235,7 +235,7 @@ in {
       };
     };
     # Set PostGres Authentication & IdentMap
-    roles.postgres.default.enable = cfg.postgres.enable;
+    roles.postgres.default.enable = lib.mkDefault cfg.postgres.enable;
 
     # pass extra auth and ident map to postgresql
     services.luxnix.postgresql.extraAuthentication = cfg.postgres.extraAuthentication;
