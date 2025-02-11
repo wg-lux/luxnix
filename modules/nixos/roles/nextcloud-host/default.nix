@@ -80,7 +80,6 @@ in {
 
     # make sure directories exist and are owned by the right user / group
     systemd.tmpfiles.rules = [
-      "d /etc/nextcloud 0755 nextcloud nextcloud -"
       "d /etc/nginx-host 0700 nginx nginx -"
     ];
     
