@@ -127,7 +127,7 @@ in {
       config = {
         adminuser = "root";
         adminpassFile = "/etc/nextcloud-admin-pass"; # initial pwd for user "root"
-        dbtype = "pgsql";
+        dbtype = "mysql";
         # dbhost = "127.0.0.1";
         
         objectstore.s3 = {
