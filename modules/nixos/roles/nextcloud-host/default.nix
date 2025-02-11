@@ -128,7 +128,7 @@ in {
       config = {
         adminuser = "root";
         adminpassFile = "/etc/nextcloud-admin-pass"; # initial pwd for user "root"
-        dbtype = "pgsql";
+        dbtype = "mysql";
         
         objectstore.s3 = {
           enable = true;
@@ -150,6 +150,7 @@ in {
 
       
       settings = let
+      # see also: https://docs.nextcloud.com/server/latest/admin_manual/configuration_server/config_sample_php_parameters.html
       in {
         default_phone_region = "DE";
         trusted_domains = [ "localhost" "cloud.endo-reg.net"];
