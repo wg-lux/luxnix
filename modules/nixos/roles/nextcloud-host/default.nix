@@ -168,9 +168,6 @@ in {
         maintenance.window_start = 2;
         log_type = "file";
         mail_smtpauthtype = "LOGIN";
-        mail_smtpmode = "smtp";
-        mail_smtphost = "mail.noip.com";
-        mail_smtpport = 3325;
       };
     };
 
