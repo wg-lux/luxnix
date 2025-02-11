@@ -89,7 +89,7 @@ in {
       text = "InitialDefaultPWD123!";
     };
 
-    environment.etc."noip-smtp-pass".text = "ReplaceThisWithYourSecret";
+    # environment.etc."noip-smtp-pass".text = "ReplaceThisWithYourSecret";
 
     services.nextcloud = {
       enable = cfg.enable;
@@ -121,8 +121,6 @@ in {
 
       # Maintenance
       autoUpdateApps.enable = true;
-
-
       configureRedis = true;
 
       config = {
@@ -174,8 +172,6 @@ in {
         overwritehost = "cloud.endo-reg.net";
         overwriteprotocol = "https";
         maintenance.window_start = 2;
-        log_type = "file";
-        mail_smtpauthtype = "LOGIN";
       };
     };
 
