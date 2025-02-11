@@ -6,9 +6,14 @@ lx_vault_key: "{{ secret_dir }}/.key"
 lx_vault_psk: "{{ secret_dir }}/.psk"
 lx_vault_dir_src: "/home/admin/.lxv"
 lx_vault_key_src: "/home/admin/.lxv.key"
+lx_vault_host_deploy_dir: "{{ lx_vault_dir_src }}/deploy/{{ inventory_hostname }}"
+
+# admin_password_file: "{{ local_users_passwords_dir }}/admin_raw"
+# admin_password_hashed_file: "{{ local_users_passwords_dir }}/admin_hashed"
 
 maintenance_password_filename: "SCRT_local_password_maintenance_password"
-
+admin_password_filename: "SCRT_local_password_admin_password"
+admin_password_hashed_filename: "{{ admin_password_filename }}_hash"
 postgres_host_main_password_filename: "SCRT_roles_system_password_postgres_host_main_password"
 postgres_host_test_password_filename: "SCRT_roles_system_password_postgres_host_test_password"
 
@@ -73,11 +78,6 @@ ansible_user: admin
 ansible_become_user: admin
 ansible_ssh_private_key_file: ~/.ssh/id_ed25519
 ansible_python_interpreter: "{{ luxnix_dest }}/.devenv/state/venv/bin/python"
-
-local_users_passwords_dir: "{{ luxnix_dest }}/secrets/user-passwords/{{ inventory_hostname }}"
-admin_password_file: "{{ local_users_passwords_dir }}/admin_raw"
-# admin_password_file_source: "{{ luxnix_dev_repo }}/secrets/user-passwords/{{ inventory_hostname }}/admin_raw"
-admin_password_file_source: "{{ lx_vault_dir_src }}/secrets/password/local/admin@{{ inventory_hostname }}/admin@{{ inventory_hostname }}_password"
 
 authentication:
   dev_01:

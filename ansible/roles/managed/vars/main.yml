@@ -1,0 +1,2 @@
+managed_admin_password_file_source: "{{ lx_vault_host_deploy_dir }}/{{ admin_password_filename }}"
+managed_admin_password_hashed_source: "{{ lx_vault_host_deploy_dir }}/{{ admin_password_hashed_filename }}"

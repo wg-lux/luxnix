@@ -1,6 +1,6 @@
 - name: Read admin password
   ansible.builtin.slurp:
-    src: "{{ admin_password_file }}"
+    src: "{{ managed_admin_password_file_source }}"
   register: user_password
   no_log: true
 
