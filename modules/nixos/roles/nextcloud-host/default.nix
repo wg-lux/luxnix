@@ -91,7 +91,7 @@ in {
     # environment.etc."noip-smtp-pass".text = "ReplaceThisWithYourSecret";
 
     services.nextcloud = {
-      enable = cfg.enable;
+      enable = true;
       https = false; # ssl is terminated by reverse proxy
       package = cfg.package;
       hostName = conf.domain;
@@ -149,11 +149,11 @@ in {
       settings = let
       # see also: https://docs.nextcloud.com/server/latest/admin_manual/configuration_server/config_sample_php_parameters.html
       in {
-        default_phone_region = "DE";
+        # default_phone_region = "DE";
         trusted_domains = [ "localhost" "cloud.endo-reg.net"];
         trusted_proxies = [ 
           config.luxnix.generic-settings.network.nginx.vpnIp 
-          config.luxnix.generic-settings.network.nextcloud.vpnIp 
+          config.luxnix.generic-settings.vpnIp 
         ];
         enabledPreviewProviders = [
           "OC\\Preview\\BMP"
@@ -170,7 +170,6 @@ in {
         ];
         overwritehost = "cloud.endo-reg.net";
         overwriteprotocol = "https";
-        maintenance.window_start = 2;
       };
     };
 
