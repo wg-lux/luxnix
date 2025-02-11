@@ -23,7 +23,11 @@
     endoreg-client.enable = false;
     ssh-access.dev-03.enable = true;
     ssh-access.dev-03.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos";
-    postgres.main.enable = true;
+    nextcloudHost.enable = true;
+    nextcloudHost.maxUploadSize = "10G";
+    nextcloudHost.package = pkgs.nextcloud30;
+    nextcloudHost.passwordFilePath = "/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_password";
+    postgres.default.enable = false;
     };
 
   services = {
@@ -60,23 +64,15 @@ generic-settings.network.keycloak.vpnIp = "172.16.255.12";
 
 generic-settings.network.nextcloud.domain = "cloud.endo-reg.net";
 
-generic-settings.network.nextcloud.port = 8444;
-
-generic-settings.network.nextcloud.vpnIp = "172.16.255.22";
+generic-settings.network.nextcloud.vpnIp = "172.16.255.13";
 
 generic-settings.network.nginx.vpnIp = "172.16.255.12";
-
-generic-settings.network.psqlMain.domain = "psql-main.endo-reg.net";
 
 generic-settings.network.psqlMain.port = 5432;
 
 generic-settings.network.psqlMain.vpnIp = "172.16.255.12";
 
 generic-settings.network.psqlTest.domain = "psql-test.endo-reg.net";
-
-generic-settings.network.psqlTest.port = 5432;
-
-generic-settings.network.psqlTest.vpnIp = "172.16.255.13";
 
 generic-settings.postgres.enable = true;
 
@@ -104,15 +100,7 @@ vault.key = "/etc/secrets/.key";
 
 vault.psk = "/etc/secrets/.psk";
 
-generic-settings.postgres.extraAuthentication = ''
-# dev-01
-host  all all 172.16.255.102/32 scram-sha-256
-host  all postgres 172.16.255.102/32 scram-sha-256
-# dev-02
-host  all all 172.16.255.108/32 scram-sha-256
-host  all postgres 172.16.255.108/32 scram-sha-256
-''; 
-  generic-settings.hostPlatform = "x86_64-linux";
+generic-settings.hostPlatform = "x86_64-linux";
 
 generic-settings.linux.cpuMicrocode = "amd";
 

@@ -20,10 +20,6 @@
   roles = { 
     aglnet.client.enable = true;
     base-server.enable = true;
-    nextcloudHost.enable = true;
-    nextcloudHost.maxUploadSize = "10G";
-    nextcloudHost.package = pkgs.nextcloud30;
-    nextcloudHost.passwordFilePath = "/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_password";
     };
 
   services = {
@@ -58,23 +54,15 @@ generic-settings.network.keycloak.vpnIp = "172.16.255.12";
 
 generic-settings.network.nextcloud.domain = "cloud.endo-reg.net";
 
-generic-settings.network.nextcloud.port = 8444;
-
-generic-settings.network.nextcloud.vpnIp = "172.16.255.22";
+generic-settings.network.nextcloud.vpnIp = "172.16.255.13";
 
 generic-settings.network.nginx.vpnIp = "172.16.255.12";
-
-generic-settings.network.psqlMain.domain = "psql-main.endo-reg.net";
 
 generic-settings.network.psqlMain.port = 5432;
 
 generic-settings.network.psqlMain.vpnIp = "172.16.255.12";
 
 generic-settings.network.psqlTest.domain = "psql-test.endo-reg.net";
-
-generic-settings.network.psqlTest.port = 5432;
-
-generic-settings.network.psqlTest.vpnIp = "172.16.255.13";
 
 generic-settings.postgres.enable = true;
 

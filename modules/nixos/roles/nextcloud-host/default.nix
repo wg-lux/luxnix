@@ -116,6 +116,7 @@ in {
 
       };
       
+      # EXPECTS THAT ONLY NEXTCLOUD USES PSQL
       database.createLocally = true;
 
       # Maintenance
