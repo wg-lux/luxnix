@@ -130,18 +130,18 @@ in {
         adminpassFile = "/etc/nextcloud-admin-pass"; # initial pwd for user "root"
         dbtype = "pgsql";
         
-        # objectstore.s3 = {
-        #   enable = true;
-        #   bucket = "nextcloud";
-        #   autocreate = true;
-        #   key = accessKey;
-        #   secretFile = "${pkgs.writeText "secret" "test12345"}";
-        #   hostname = "localhost";
-        #   useSsl = false;
-        #   port = 9000;
-        #   usePathStyle = true;
-        #   region = "us-east-1";
-        # };
+        objectstore.s3 = {
+          enable = true;
+          bucket = "nextcloud";
+          autocreate = true;
+          key = accessKey;
+          secretFile = "${pkgs.writeText "secret" "test12345"}";
+          hostname = "localhost";
+          useSsl = false;
+          port = 9000;
+          usePathStyle = true;
+          region = "us-east-1";
+        };
       };
 
       phpOptions = {
