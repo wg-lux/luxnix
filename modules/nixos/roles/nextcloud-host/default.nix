@@ -132,7 +132,7 @@ in {
           bucket = "nextcloud";
           autocreate = true;
           key = accessKey;
-          secretFile = "${pkgs.writeText "secret" "test12345"}";
+          secretFile = "${pkgs.writeText "secret" "test12345"}"; #FIXME
           hostname = "localhost";
           useSsl = false;
           port = 9000;
