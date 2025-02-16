@@ -20,26 +20,12 @@ _NoIP Postfix guide_: https://www.noip.com/support/knowledgebase/configure-postf
 
 # Variables for setup
 
-[smtp-auth.no-ip.com]: 3325
+mail.noip.com
+465
 
-smtp_sasl_auth_enable = yes
-smtp_sasl_security_options = noanonymous
-smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd
-smtp_use_tls = yes
-
-sudo nano /etc/postfix/sasl_passwd
-
-POP3 Server: mail.noip.com, port 110 or 995 with SSL enabled
-
-IMAP Server: mail.noip.com, port 143 or 993 with SSL enabled
-
-Outbound SMTP: mail.noip.com, port 587 or 465 with SSL enabled (requires authentication)
-
-Username: webmaster@endo-reg.net
-password: i would like to provide the password using a file
-
-[smtp-auth.no-ip.com]:3325 example.com@noip-smtp:YourSMTPPassowrd
-
+authentication on
+webmaster@endo-reg.net
+port 465
 # NixOS Postfix Example
 
 services.postfix = {

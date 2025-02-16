@@ -20,6 +20,8 @@
   roles = { 
     aglnet.client.enable = true;
     base-server.enable = true;
+    custom-packages.cloud = true;
+    custom-packages.enable = true;
     endoreg-client.enable = false;
     nextcloudHost.enable = true;
     nextcloudHost.maxUploadSize = "10G";

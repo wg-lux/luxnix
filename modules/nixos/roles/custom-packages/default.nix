@@ -75,6 +75,10 @@ with lib.luxnix; let
     unzip
   ];
 
+  cloud = with pkgs; [
+    nextcloud-talk-desktop
+  ];
+
   ldCuda = with pkgs; [
     # cudaPackages.cudatoolkit
     mesa
@@ -106,6 +110,10 @@ with lib.luxnix; let
     ++ (if cfg.baseDevelopment then baseDevelopment else [])
     ++ (if cfg.office then office else [])
     ++ (if cfg.visuals then visuals else [])
+    ++ (if cfg.dev01 then dev01 else [])
+    ++ (if cfg.dev02 then dev02 else [])
+    ++ (if cfg.dev03 then dev03 else [])
+    ++ (if cfg.cloud then cloud else [])
     ;
 
   ldPackages = lib.mkIf cfg.ld.enable (
@@ -126,6 +134,7 @@ in {
     ld = {
       enable = mkBoolOpt true "Enable nix-ld";
     };
+    cloud = mkBoolOpt false "Add Cloud packages to custom packages";
   };
 
 

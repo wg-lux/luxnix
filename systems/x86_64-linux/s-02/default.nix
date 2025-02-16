@@ -20,6 +20,8 @@
   roles = { 
     aglnet.client.enable = true;
     base-server.enable = true;
+    custom-packages.cloud = true;
+    custom-packages.enable = true;
     endoreg-client.enable = false;
     keycloakHost.adminInitialPassword = "admin";
     keycloakHost.adminUsername = "admin";

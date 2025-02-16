@@ -21,6 +21,8 @@
     aglnet.client.enable = lib.mkForce false;
     aglnet.host.enable = true;
     base-server.enable = true;
+    custom-packages.cloud = true;
+    custom-packages.enable = true;
     endoreg-client.enable = false;
     };
 

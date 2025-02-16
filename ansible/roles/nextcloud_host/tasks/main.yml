@@ -8,3 +8,20 @@
   no_log: true
   vars:
     ansible_vault_identity: "{{ inventory_hostname }}@{{ lx_vault_dir_src }}/psk/{{ inventory_hostname }}.psk"
+
+- name: Read nextcloud host password from vault
+  ansible.builtin.slurp:
+    src: "{{ lx_vault_dir }}/{{ nextcloud_host_password_filename }}"
+  register: nextcloud_host_password_b64
+  no_log: true
+
+- name: Set nextcloud_host_password fact
+  ansible.builtin.set_fact:
+    nextcloud_host_password: "{{ nextcloud_host_password_b64.content | b64decode }}"
+
+- name: Deploy Minio credentials securely
+  ansible.builtin.template:
+    src: minio_cred.j2
+    dest: "{{ lx_vault_dir }}"
+    mode: "0600"
+  no_log: false

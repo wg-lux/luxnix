@@ -19,6 +19,8 @@
 
   roles = { 
     aglnet.client.enable = true;
+    custom-packages.cloud = true;
+    custom-packages.enable = true;
     endoreg-client.enable = true;
     };
 

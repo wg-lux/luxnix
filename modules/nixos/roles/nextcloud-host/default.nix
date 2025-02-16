@@ -22,6 +22,13 @@ with lib.luxnix; let
   nginx_cert_path = "/etc/nginx-host/ssl_cert";
   nginx_key_path = "/etc/nginx-host/ssl_key";
 
+  lxVaultDir = config.luxnix.vault.dir;
+  
+  nextcloudPwdFile = cfg.customDir + "/admin-pwd";
+  rootCredentialsFile = cfg.customDir + "/minio_cred";
+  accessKey = "nextcloud";
+
+
   nginxPrepareScript = pkgs.writeScript "nginx-prepare-files_nxtcld.sh" ''
     #!/bin/sh
     set -e
@@ -31,15 +38,16 @@ with lib.luxnix; let
     chmod 600 ${nginx_cert_path} ${nginx_key_path}
   '';
 
+  nextcloudPrepareScript = pkgs.writeScript "nextcloud-prepare-files_nxtcld.sh" ''
+    #!/bin/sh
+    set -e
+    cp ${cfg.passwordFilePath} /etc/nextcloud-admin-pass
+    chown root:nextcloud /etc/nextcloud-admin-pass
+    chmod 600 /etc/nextcloud-admin-pass
+  '';
+
   conf = config.luxnix.generic-settings.network.nextcloud;
 
-  accessKey = "nextcloud";
-  secretKey = "test12345";
-
-  rootCredentialsFile = pkgs.writeText "minio-credentials-full" ''
-    MINIO_ROOT_USER=nextcloud
-    MINIO_ROOT_PASSWORD=test12345
-  '';
 
 
 in {
@@ -47,14 +55,18 @@ in {
     enable = mkBoolOpt false "Enable NGINX";
     passwordFilePath = mkOption {
       type = types.path;
-      default = "/etc/nextcloud-admin-pass";
+      default = "/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_password";
       description = "Path to the file containing the Nextcloud admin password";
     };
-
-    secretFile = mkOption {
+    customDir = mkOption {
       type = types.path;
-      default = "/etc/nextcloud-secrets.json";
-      description = "Path to the file containing the Nextcloud admin password";
+      default = "/etc/nextcloud";
+      description = "Path to the directory containing the Nextcloud configuration";
+    };
+    minioCredentialsFilePath = mkOption {
+      type = types.path;
+      default = "/etc/secrets/vault/minio_cred";
+      description = "Path to the file containing the Minio admin credentials";
     };
 
     package = mkOption {
@@ -81,12 +93,20 @@ in {
     # make sure directories exist and are owned by the right user / group
     systemd.tmpfiles.rules = [
       "d /etc/nginx-host 0700 nginx nginx -"
+      "d /etc/nextcloud 0700 nextcloud nextcloud -"
     ];
-    
-    # TODO Add to docs that this needs to be changed after setup
-    environment.etc."nextcloud-admin-pass" = {
-      text = "InitialDefaultPWD123!";
+
+    systemd.services.nginx-prepare-files = {
+      description = "Deploy SSL certificate and key for NGINX";
+      before = [ "nginx.service" ];
+      requiredBy = [ "nginx.service" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = "${nginxPrepareScript}";
+      };
     };
+    
 
     # environment.etc."noip-smtp-pass".text = "ReplaceThisWithYourSecret";
 
@@ -199,16 +219,7 @@ in {
     };
 
 
-    systemd.services.nginx-prepare-files = {
-      description = "Deploy SSL certificate and key for NGINX";
-      before = [ "nginx.service" ];
-      requiredBy = [ "nginx.service" ];
-      serviceConfig = {
-        Type = "oneshot";
-        RemainAfterExit = true;
-        ExecStart = "${nginxPrepareScript}";
-      };
-    };
+    
 
   environment.systemPackages = [ pkgs.minio-client cfg.package];
 
