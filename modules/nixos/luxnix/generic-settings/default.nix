@@ -248,6 +248,11 @@ in {
     systemd.tmpfiles.rules = [
       "d ${cfg.secretDir} 0755 ${username} users"
     ];
+
+    environment.systemPackages = with pkgs; [
+      cacert
+    ];
+
   };
 
 

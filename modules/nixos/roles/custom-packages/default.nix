@@ -135,6 +135,7 @@ in {
       enable = mkBoolOpt true "Enable nix-ld";
     };
     cloud = mkBoolOpt false "Add Cloud packages to custom packages";
+    hardwareAcceleration = mkBoolOpt false "Add Hardware Acceleration packages to custom packages";
   };
 
 
@@ -149,6 +150,15 @@ in {
     programs.obs-studio.enable = cfg.videoEditing;
 
     programs.thunderbird.enable = cfg.office;
+
+    hardware.graphics = {
+      enable = lib.mkDefault cfg.hardwareAcceleration;
+      extraPackages = with pkgs; (if cfg.hardwareAcceleration then [
+        intel-vaapi-driver
+        vpl-gpu-rt
+      ] else []);
+
+    };
 
   };
 }

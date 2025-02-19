@@ -121,6 +121,7 @@ host_luxnix:
   nvidia_prime.onboardGpuType: '"intel"'
 host_roles:
   custom_packages.baseDevelopment: 'true'
+  custom_packages.hardwareAcceleration: 'true'
   custom_packages.videoEditing: 'true'
   custom_packages.visuals: 'true'
 host_services: {}

@@ -22,6 +22,8 @@
     custom-packages.cloud = true;
     custom-packages.enable = true;
     endoreg-client.enable = true;
+    postgres.default.enable = true;
+    custom-packages.baseDevelopment = true;
     };
 
   services = {
@@ -42,7 +44,7 @@ generic-settings.sslCertificatePath = "/etc/secrets/vault/ssl_cert";
 
 generic-settings.adminVpnIp = "172.16.255.106";
 
-generic-settings.configurationPathRelative = "lx-production";
+generic-settings.configurationPathRelative = "luxnix";
 
 generic-settings.enable = true;
 
@@ -100,11 +102,13 @@ vault.key = "/etc/secrets/.key";
 
 vault.psk = "/etc/secrets/.psk";
 
+generic-settings.configurationPath = lib.mkForce "/home/admin/luxnix";
+
 generic-settings.hostPlatform = "x86_64-linux";
 
 generic-settings.linux.cpuMicrocode = "intel";
 
-generic-settings.linux.initrd.availableKernelModules = ["xhci_pci" "ahci" "nvme" "usbhid" "usb_storage" "sd_mod"];
+generic-settings.linux.initrd.availableKernelModules = ["xhci_pci" "ahci" "nvme" "usb_storage" "sd_mod"];
 generic-settings.linux.initrd.kernelModules = ["nfs"];
 generic-settings.linux.initrd.supportedFilesystems = ["nfs"];
 generic-settings.linux.kernelModules = ["kvm-intel"];

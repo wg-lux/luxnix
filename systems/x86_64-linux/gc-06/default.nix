@@ -24,6 +24,7 @@
     endoreg-client.enable = true;
     postgres.default.enable = true;
     custom-packages.baseDevelopment = true;
+    custom-packages.hardwareAcceleration = true;
     custom-packages.videoEditing = true;
     custom-packages.visuals = true;
     };

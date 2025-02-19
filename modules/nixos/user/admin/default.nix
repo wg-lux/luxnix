@@ -1,8 +1,7 @@
-{
-  pkgs,
-  config,
-  lib,
-  ...
+{ pkgs
+, config
+, lib
+, ...
 }:
 with lib;
 with lib.luxnix; let
@@ -10,18 +9,19 @@ with lib.luxnix; let
   sslCertGroupName = config.users.groups.sslCert.name;
   passwordFile = config.luxnix.vault.adminPasswordHashedFile;
   sensitiveServicesGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
-  
+
   # passwordFile = "/etc/user-passwords/${cfg.name}_hashed";
-in {
+in
+{
   options.user.admin = with types; {
     name = mkOpt str "admin" "The name of the user's account";
     passwordFile =
       mkOpt str passwordFile
-      "The hashed password file to use";
-    extraGroups = mkOpt (listOf str) [] "Groups for the user to be assigned.";
+        "The hashed password file to use";
+    extraGroups = mkOpt (listOf str) [ ] "Groups for the user to be assigned.";
     extraOptions =
-      mkOpt attrs {}
-      "Extra options passed to users.users.<name>";
+      mkOpt attrs { }
+        "Extra options passed to users.users.<name>";
   };
 
   config = {
@@ -30,7 +30,7 @@ in {
         set -e
         if [ ! -f ${passwordFile} ]; then
           echo "Creating default hashed password file for user ${cfg.name}"
-          mkdir -p /etc/user-passwords
+          mkdir -p /etc/secrets/vault
           # Default hashed password (as requested)
           # This is a SHA-512 crypt hash that you trust and know beforehand.
           # theater-chief

@@ -128,6 +128,7 @@ postgres_host_main_password_filename: SCRT_roles_system_password_postgres_host_m
 postgres_host_test_ip: 172.16.255.13
 postgres_host_test_password_filename: SCRT_roles_system_password_postgres_host_test_password
 role_luxnix: {}
+role_minio_cred_filename: minio_cred
 role_password_filename: SCRT_roles_system_password_nextcloud_host_password
 role_pw_src: '{{ lx_vault_dir_src }}/deploy/{{ inventory_hostname }}/{{ nextcloud_host_password_filename
   }}'
@@ -138,6 +139,7 @@ role_role_src: /home/admin/dev/luxnix/secrets/ssl/ssl_cert
 role_roles:
   nextcloudHost.enable: 'true'
   nextcloudHost.maxUploadSize: '"10G"'
+  nextcloudHost.minioCredentialsFilePath: '"/etc/secrets/vault/minio_cred"'
   nextcloudHost.package: pkgs.nextcloud30
   nextcloudHost.passwordFilePath: '"/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_password"'
   postgres.default.enable: 'false'
