@@ -18,7 +18,7 @@
   blxv.exec = "${pkgs.uv}/bin/uv run python scripts/bootstrap-lx-vault.py";
 
   run-ansible.exec = "${pkgs.uv}/bin/uv run ansible-playbook ansible/site.yml";
-  
+
   ssh-all.exec = "./tmux/all-luxnix-dir.sh";
 
 
@@ -28,5 +28,20 @@
 
   sync-secrets.exec = "ansible-playbook ./ansible/playbooks/deploy_secrets.yml";
 
+  #WARNING: This will overwrite the existing ssh keys
+  create-ed25519-keypair.exec = ''
+    # warn user and ask whether to proceed
+    echo "This will overwrite the existing ssh keys. Do you want to proceed? (y/n)"
+    read proceed
+    if [ "$proceed" != "y" ]; then
+      echo "Aborted"
+      exit 1
+    fi
+    # get hostname from env var
+    ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -C "admin@$hostname"
+
+    chmod 600 ~/.ssh/id_ed25519
+    chmod 644 ~/.ssh/id_ed25519.pub
+  '';
 
 }

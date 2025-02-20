@@ -54,6 +54,7 @@ all:
       - all
       - gpu_client
       - local_endoreg_db
+      - managed
     ansible_host: 172.16.255.105
     ansible_role_names: []
     extra_secret_names:
@@ -202,6 +203,8 @@ all:
   - ansible_group_names:
       - all
       - gpu_client
+      - local_endoreg_db
+      - managed
     ansible_host: 172.16.255.109
     ansible_role_names: []
     extra_secret_names: []
@@ -213,7 +216,10 @@ all:
     hostname: gc-09
     subnet: 172.16.255.
     vars:
+      extra_secret_names: []
       host_luxnix:
+        generic_settings.configurationPath: lib.mkForce "/home/admin/luxnix"
+        generic_settings.configurationPathRelative: '"luxnix"'
         generic_settings.hostPlatform: '"x86_64-linux"'
         generic_settings.linux.cpuMicrocode: '"intel"'
         generic_settings.linux.initrd.availableKernelModules:
@@ -239,7 +245,7 @@ all:
         nvidia_prime.onboardBusId: '"PCI:0:2:0"'
         nvidia_prime.onboardGpuType: '"intel"'
       host_roles:
-        aglnet.client.enable: 'true'
+        custom_packages.baseDevelopment: 'true'
       host_services: {}
       template_name: main
   - ansible_group_names:
