@@ -1,10 +1,10 @@
-{pkgs, ...}: {
-    cli.programs.git = {
-      enable = true;
-      userName = "maddonix";
-      email = "tlux14@googlemail.com";
-      allowedSigners = "SHA256:LNfWnvEthO0QL8DzUxtxHD4VnLxvCZWFmcDhZodk29o";
-    };
+{ pkgs, ... }: {
+  cli.programs.git = {
+    enable = true;
+    userName = "PeterKczyk";
+    email = "peter.kowalczyk21@gmail.com";
+    # allowedSigners = "";
+  };
 
   desktops = {
     plasma = {
@@ -16,9 +16,12 @@
     # syncthing.enable = false;
   };
 
-  # luxnix.django-demo-app = {
-  #   enable = true;
-  # };
+
+  luxnix.generic-settings = {
+    enable = true;
+    configurationPath = "dev/luxnix";
+    language = "english";
+  };
 
   roles = {
     development.enable = true;

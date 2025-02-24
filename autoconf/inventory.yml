@@ -101,11 +101,14 @@ all:
       host_services: {}
       template_name: main
   - ansible_group_names:
+      - active_clients
       - all
+      - language_english
       - gpu_client
     ansible_host: 172.16.255.107
     ansible_role_names: []
-    extra_secret_names: []
+    extra_secret_names:
+      - SCRT_roles_system_password_postgres_host_test_password
     extra_user_names:
       - admin
       - maintenance
@@ -114,6 +117,8 @@ all:
     hostname: gc-07
     subnet: 172.16.255.
     vars:
+      extra_secret_names:
+        - SCRT_roles_system_password_postgres_host_test_password
       host_luxnix:
         generic_settings.hostPlatform: '"x86_64-linux"'
         generic_settings.linux.cpuMicrocode: '"intel"'
@@ -126,21 +131,27 @@ all:
           - sd_mod
         generic_settings.linux.initrd.kernelModules:
           - nfs
+          - btrfs
         generic_settings.linux.initrd.supportedFilesystems:
           - nfs
+          - btrfs
         generic_settings.linux.kernelModules:
           - intel
         generic_settings.linux.kernelModulesBlacklist: []
         generic_settings.linux.kernelParams: []
         generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
         generic_settings.linux.supportedFilesystems:
+          - nfs
           - btrfs
         generic_settings.systemStateVersion: '"23.11"'
         generic_settings.vpnIp: '"172.16.255.107"'
         nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
         nvidia_prime.onboardBusId: '"PCI:0:2:0"'
         nvidia_prime.onboardGpuType: '"intel"'
-      host_roles: {}
+      host_roles:
+        custom_packages.baseDevelopment: 'true'
+        custom_packages.cuda: 'true'
+        custom_packages.office: 'true'
       host_services: {}
       template_name: main
   - ansible_group_names:

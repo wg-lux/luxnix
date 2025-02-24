@@ -1,9 +1,9 @@
-{pkgs, ...}: {
-    cli.programs.git = {
-      enable = true;
-      email = "hamza.ukw@gmail.com";
-      allowedSigners = "";
-    };
+{ pkgs, ... }: {
+  cli.programs.git = {
+    enable = true;
+    email = "hamza.ukw@gmail.com";
+    allowedSigners = "";
+  };
 
   desktops = {
     plasma = {
@@ -16,10 +16,10 @@
   };
 
   luxnix.generic-settings = {
-      enable = true;
-      configurationPath = "dev/luxnix";
-      language = "english";
-    };
+    enable = true;
+    configurationPath = "dev/luxnix";
+    language = "english";
+  };
 
   roles = {
     development.enable = true;

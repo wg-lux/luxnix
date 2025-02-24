@@ -37,6 +37,8 @@ endoreg_db_api_repo: https://github.com/wg-lux/endoreg-db-api.git
 endoreg_db_branch: main
 endoreg_db_dest: /home/admin/endoreg-db-production
 endoreg_db_repo: https://github.com/wg-lux/endoreg-db.git
+extra_secret_names:
+  - SCRT_roles_system_password_postgres_host_test_password
 group_luxnix:
   boot_decryption_stick.enable: 'true'
   dns.enable: 'true'
@@ -47,6 +49,7 @@ group_luxnix:
   generic_settings.adminVpnIp: '"172.16.255.106"'
   generic_settings.configurationPathRelative: '"lx-production"'
   generic_settings.enable: 'true'
+  generic_settings.language: '"english"'
   generic_settings.linux.kernelPackages: pkgs.linuxPackages_6_12
   generic_settings.network.keycloak.adminDomain: '"adminKeycloak.endo-reg.net"'
   generic_settings.network.keycloak.domain: '"keycloak.endo-reg.net"'
@@ -92,21 +95,27 @@ host_luxnix:
     - sd_mod
   generic_settings.linux.initrd.kernelModules:
     - nfs
+    - btrfs
   generic_settings.linux.initrd.supportedFilesystems:
     - nfs
+    - btrfs
   generic_settings.linux.kernelModules:
     - intel
   generic_settings.linux.kernelModulesBlacklist: []
   generic_settings.linux.kernelParams: []
   generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
   generic_settings.linux.supportedFilesystems:
+    - nfs
     - btrfs
   generic_settings.systemStateVersion: '"23.11"'
   generic_settings.vpnIp: '"172.16.255.107"'
   nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
   nvidia_prime.onboardBusId: '"PCI:0:2:0"'
   nvidia_prime.onboardGpuType: '"intel"'
-host_roles: {}
+host_roles:
+  custom_packages.baseDevelopment: 'true'
+  custom_packages.cuda: 'true'
+  custom_packages.office: 'true'
 host_services: {}
 luxnix_branch: main
 luxnix_dest: /home/admin/lx-production

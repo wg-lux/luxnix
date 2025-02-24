@@ -22,6 +22,9 @@
     custom-packages.cloud = true;
     custom-packages.enable = true;
     endoreg-client.enable = true;
+    custom-packages.baseDevelopment = true;
+    custom-packages.cuda = true;
+    custom-packages.office = true;
     };
 
   services = {
@@ -45,6 +48,8 @@ generic-settings.adminVpnIp = "172.16.255.106";
 generic-settings.configurationPathRelative = "lx-production";
 
 generic-settings.enable = true;
+
+generic-settings.language = "english";
 
 generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
 
@@ -105,14 +110,14 @@ generic-settings.hostPlatform = "x86_64-linux";
 generic-settings.linux.cpuMicrocode = "intel";
 
 generic-settings.linux.initrd.availableKernelModules = ["vmd" "xhci_pci" "ahci" "nvme" "usb_storage" "sd_mod"];
-generic-settings.linux.initrd.kernelModules = ["nfs"];
-generic-settings.linux.initrd.supportedFilesystems = ["nfs"];
+generic-settings.linux.initrd.kernelModules = ["nfs" "btrfs"];
+generic-settings.linux.initrd.supportedFilesystems = ["nfs" "btrfs"];
 generic-settings.linux.kernelModules = ["intel"];
 generic-settings.linux.kernelModulesBlacklist = [];
 generic-settings.linux.kernelParams = [];
 generic-settings.linux.resumeDevice = "/dev/disk/by-label/nixos";
 
-generic-settings.linux.supportedFilesystems = ["btrfs"];
+generic-settings.linux.supportedFilesystems = ["nfs" "btrfs"];
 generic-settings.systemStateVersion = "23.11";
 
 generic-settings.vpnIp = "172.16.255.107";
