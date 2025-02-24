@@ -1,9 +1,9 @@
 { pkgs, ... }: {
   cli.programs.git = {
     enable = true;
-    userName = "maddonix";
-    email = "tlux14@googlemail.com";
-    allowedSigners = "SHA256:LNfWnvEthO0QL8DzUxtxHD4VnLxvCZWFmcDhZodk29o";
+    # userName = "maddonix";
+    # email = "tlux14@googlemail.com";
+    # allowedSigners = "SHA256:LNfWnvEthO0QL8DzUxtxHD4VnLxvCZWFmcDhZodk29o";
   };
 
   desktops = {
@@ -19,6 +19,7 @@
   luxnix.generic-settings = {
     enable = true;
     configurationPath = "lx-production";
+    language = "english";
   };
 
   roles = {

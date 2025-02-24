@@ -82,6 +82,7 @@ group_roles:
   custom_packages.cloud: 'true'
   custom_packages.enable: 'true'
   endoreg_client.enable: 'true'
+  postgres.default.enable: 'true'
 group_services: {}
 host_luxnix:
   generic_settings.hostPlatform: '"x86_64-linux"'

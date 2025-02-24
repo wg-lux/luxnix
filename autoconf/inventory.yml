@@ -53,6 +53,7 @@ all:
   - ansible_group_names:
       - all
       - gpu_client
+      - active_clients
       - local_endoreg_db
       - managed
     ansible_host: 172.16.255.105
@@ -101,10 +102,12 @@ all:
       host_services: {}
       template_name: main
   - ansible_group_names:
-      - active_clients
-      - all
       - language_english
+      - all
       - gpu_client
+      - active_clients
+      - local_endoreg_db
+      - managed
     ansible_host: 172.16.255.107
     ansible_role_names: []
     extra_secret_names:
@@ -212,8 +215,10 @@ all:
       host_services: {}
       template_name: main
   - ansible_group_names:
+      - language_english
       - all
       - gpu_client
+      - active_clients
       - local_endoreg_db
       - managed
     ansible_host: 172.16.255.109

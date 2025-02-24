@@ -22,6 +22,7 @@
     custom-packages.cloud = true;
     custom-packages.enable = true;
     endoreg-client.enable = true;
+    postgres.default.enable = true;
     custom-packages.baseDevelopment = true;
     custom-packages.cuda = true;
     custom-packages.office = true;
