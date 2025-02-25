@@ -124,6 +124,10 @@ in
       package = cfg.package;
       hostName = conf.domain;
       maxUploadSize = cfg.maxUploadSize;
+      home = cfg.customDir;
+      notify_push.enable = true;
+      # datadir = is home by default
+      appstoreEnable = true;
 
 
       # Applications
@@ -180,6 +184,7 @@ in
           # see also: https://docs.nextcloud.com/server/latest/admin_manual/configuration_server/config_sample_php_parameters.html
         in
         {
+          "profile.enabled" = true;
           default_phone_region = "DE";
           trusted_domains = [ "localhost" "cloud.endo-reg.net" ];
           trusted_proxies = [
@@ -201,7 +206,6 @@ in
           ];
           overwritehost = "cloud.endo-reg.net";
           overwriteprotocol = "https";
-          config_is_read_only = true;
         };
     };
 
