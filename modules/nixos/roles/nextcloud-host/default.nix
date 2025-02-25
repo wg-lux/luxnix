@@ -98,8 +98,8 @@ in
     # make sure directories exist and are owned by the right user / group
     systemd.tmpfiles.rules = [
       "d /etc/nginx-host 0700 nginx nginx -"
-      "d /etc/nextcloud 0750 nextcloud nextcloud -"
-      "d /var/lib/nextcloud 0750 nextcloud nextcloud -"
+      # "d /etc/nextcloud 0750 nextcloud nextcloud -"
+      # "d /var/lib/nextcloud 0750 nextcloud nextcloud -"
     ];
 
     systemd.services.nginx-prepare-files = {
