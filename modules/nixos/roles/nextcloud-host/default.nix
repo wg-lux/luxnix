@@ -95,10 +95,15 @@ in
       extraGroups = [ sslCertGroupName ];
     };
 
+    # make group nextcloudutils and make sure nextcloud and nginx are in it
+    users.groups.nextcloudutils = {
+      members = [ "nextcloud" "nginx" ];
+    };
+
     # make sure directories exist and are owned by the right user / group
     systemd.tmpfiles.rules = [
       "d /etc/nginx-host 0700 nginx nginx -"
-      # "d /etc/nextcloud 0750 nextcloud nextcloud -"
+      "d /etc/nextcloud 0770 nextcloud nextcloudutils -"
       # "d /var/lib/nextcloud 0750 nextcloud nextcloud -"
     ];
 
