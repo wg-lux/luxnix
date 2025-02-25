@@ -1,4 +1,4 @@
-{config, lib, pkgs, ...}: 
+{ config, lib, pkgs, ... }:
 
 
 # Useful documentation: 
@@ -9,7 +9,7 @@
 # To reset delete stateful dirs:
 # rm -r /var/lib/postgresql /var/lib/nextcloud
 
-with lib; 
+with lib;
 with lib.luxnix; let
   cfg = config.roles.nextcloudHost;
 
@@ -23,7 +23,7 @@ with lib.luxnix; let
   nginx_key_path = "/etc/nginx-host/ssl_key";
 
   lxVaultDir = config.luxnix.vault.dir;
-  
+
   nextcloudPwdFile = cfg.customDir + "/admin-pwd";
   rootCredentialsFile = cfg.customDir + "/minio_cred";
   accessKey = "nextcloud";
@@ -50,7 +50,8 @@ with lib.luxnix; let
 
 
 
-in {
+in
+{
   options.roles.nextcloudHost = {
     enable = mkBoolOpt false "Enable NGINX";
     passwordFilePath = mkOption {
@@ -106,7 +107,7 @@ in {
         ExecStart = "${nginxPrepareScript}";
       };
     };
-    
+
 
     # environment.etc."noip-smtp-pass".text = "ReplaceThisWithYourSecret";
 
@@ -122,21 +123,21 @@ in {
 
       # Applications
       # Available apps: https://github.com/NixOS/nixpkgs/blob/master/pkgs/servers/nextcloud/packages/nextcloud-apps.json
-      extraAppsEnable = true;
-      extraApps = {
-        inherit (ncApps) news contacts calendar tasks forms;
-        inherit (ncApps) groupfolders deck notes polls;
-        inherit (ncApps) music memories;
+      # extraAppsEnable = true;
+      # extraApps = {
+      #   inherit (ncApps) news contacts calendar tasks forms;
+      #   inherit (ncApps) groupfolders deck notes polls;
+      #   inherit (ncApps) music memories;
 
-        ## Example of adding a custom app      
-        # cookbook = pkgs.fetchNextcloudApp rec {
-        #   url =
-        #     "https://github.com/nextcloud/cookbook/releases/download/v0.10.2/Cookbook-0.10.2.tar.gz";
-        #   sha256 = "sha256-XgBwUr26qW6wvqhrnhhhhcN4wkI+eXDHnNSm1HDbP6M=";
-        # };
+      #   ## Example of adding a custom app      
+      #   # cookbook = pkgs.fetchNextcloudApp rec {
+      #   #   url =
+      #   #     "https://github.com/nextcloud/cookbook/releases/download/v0.10.2/Cookbook-0.10.2.tar.gz";
+      #   #   sha256 = "sha256-XgBwUr26qW6wvqhrnhhhhcN4wkI+eXDHnNSm1HDbP6M=";
+      #   # };
 
-      };
-      
+      # };
+
       # EXPECTS THAT ONLY NEXTCLOUD USES PSQL
       database.createLocally = true;
 
@@ -149,7 +150,7 @@ in {
         adminpassFile = "/etc/nextcloud-admin-pass"; # initial pwd for user "root"
         dbtype = "mysql";
         # dbhost = "127.0.0.1";
-        
+
         objectstore.s3 = {
           enable = true;
           bucket = "nextcloud";
@@ -168,32 +169,34 @@ in {
         "opcache.interned_strings_buffer" = "16";
       };
 
-      
-      settings = let
-      # see also: https://docs.nextcloud.com/server/latest/admin_manual/configuration_server/config_sample_php_parameters.html
-      in {
-        default_phone_region = "DE";
-        trusted_domains = [ "localhost" "cloud.endo-reg.net"];
-        trusted_proxies = [ 
-          config.luxnix.generic-settings.network.nginx.vpnIp 
-          config.luxnix.generic-settings.vpnIp 
-        ];
-        enabledPreviewProviders = [
-          "OC\\Preview\\BMP"
-          "OC\\Preview\\GIF"
-          "OC\\Preview\\JPEG"
-          "OC\\Preview\\Krita"
-          "OC\\Preview\\MarkDown"
-          "OC\\Preview\\MP3"
-          "OC\\Preview\\OpenDocument"
-          "OC\\Preview\\PNG"
-          "OC\\Preview\\TXT"
-          "OC\\Preview\\XBitmap"
-          "OC\\Preview\\HEIC"
-        ];
-        overwritehost = "cloud.endo-reg.net";
-        overwriteprotocol = "https";
-      };
+
+      settings =
+        let
+          # see also: https://docs.nextcloud.com/server/latest/admin_manual/configuration_server/config_sample_php_parameters.html
+        in
+        {
+          default_phone_region = "DE";
+          trusted_domains = [ "localhost" "cloud.endo-reg.net" ];
+          trusted_proxies = [
+            config.luxnix.generic-settings.network.nginx.vpnIp
+            config.luxnix.generic-settings.vpnIp
+          ];
+          enabledPreviewProviders = [
+            "OC\\Preview\\BMP"
+            "OC\\Preview\\GIF"
+            "OC\\Preview\\JPEG"
+            "OC\\Preview\\Krita"
+            "OC\\Preview\\MarkDown"
+            "OC\\Preview\\MP3"
+            "OC\\Preview\\OpenDocument"
+            "OC\\Preview\\PNG"
+            "OC\\Preview\\TXT"
+            "OC\\Preview\\XBitmap"
+            "OC\\Preview\\HEIC"
+          ];
+          overwritehost = "cloud.endo-reg.net";
+          overwriteprotocol = "https";
+        };
     };
 
 
@@ -202,12 +205,12 @@ in {
     # mc config host add minio http://localhost:9000 ${accessKey} ${secretKey} --api s3v4
     # mc config host add minio http://localhost:9000 nextcloud test12345 --api s3v4
     # mc mb minio/nextcloud
-    
-    services.nginx.virtualHosts."${config.services.nextcloud.hostName}".listen = [ 
+
+    services.nginx.virtualHosts."${config.services.nextcloud.hostName}".listen = [
       {
         addr = config.luxnix.generic-settings.vpnIp;
         port = 80; # NOT an exposed port
-      } 
+      }
     ];
 
 
@@ -219,11 +222,11 @@ in {
     };
 
 
-    
 
-  environment.systemPackages = [ pkgs.minio-client cfg.package];
 
-  networking.firewall.allowedTCPPorts = [ 80 443 ];
+    environment.systemPackages = [ pkgs.minio-client cfg.package ];
+
+    networking.firewall.allowedTCPPorts = [ 80 443 ];
 
   };
 }
