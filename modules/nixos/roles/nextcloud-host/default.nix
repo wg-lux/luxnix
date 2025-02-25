@@ -99,6 +99,7 @@ in
     systemd.tmpfiles.rules = [
       "d /etc/nginx-host 0700 nginx nginx -"
       "d /etc/nextcloud 0750 nextcloud nextcloud -"
+      "d /var/lib/nextcloud 0750 nextcloud nextcloud -"
     ];
 
     systemd.services.nginx-prepare-files = {
@@ -127,7 +128,7 @@ in
 
       # Applications
       # Available apps: https://github.com/NixOS/nixpkgs/blob/master/pkgs/servers/nextcloud/packages/nextcloud-apps.json
-      # extraAppsEnable = true;
+      extraAppsEnable = false;
       # extraApps = {
       #   inherit (ncApps) news contacts calendar tasks forms;
       #   inherit (ncApps) groupfolders deck notes polls;
@@ -200,7 +201,7 @@ in
           ];
           overwritehost = "cloud.endo-reg.net";
           overwriteprotocol = "https";
-          config_is_read_only = false;
+          config_is_read_only = true;
         };
     };
 
