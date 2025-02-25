@@ -3,7 +3,10 @@
 template_name: "main"
 
 host_roles:
+  custom_packages.videoEditing: "true"
   custom_packages.baseDevelopment: "true"
+  custom_packages.visuals: "true"
+  custom_packages.hardwareAcceleration: "true"
 
 host_services: {}
 
