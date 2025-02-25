@@ -85,6 +85,10 @@ in
 
   config = mkIf cfg.enable {
 
+    #FIXME Needs to be hardened
+    # Make sure the nextcloud config dir exists and is owned by the right user
+
+
     users.users.nextcloud = {
       isSystemUser = true;
       group = "nextcloud";
@@ -94,7 +98,7 @@ in
     # make sure directories exist and are owned by the right user / group
     systemd.tmpfiles.rules = [
       "d /etc/nginx-host 0700 nginx nginx -"
-      "d /etc/nextcloud 0700 nextcloud nextcloud -"
+      "d /etc/nextcloud 0750 nextcloud nextcloud -"
     ];
 
     systemd.services.nginx-prepare-files = {
@@ -196,6 +200,7 @@ in
           ];
           overwritehost = "cloud.endo-reg.net";
           overwriteprotocol = "https";
+          config_is_read_only = false;
         };
     };
 
