@@ -109,6 +109,15 @@ class Secret(BaseModel):
         vault_id = vault.get_local_vault_id() if vault else None
 
         try:
+            # if vault_id:
+            #     rekey_args = [
+            #         "ansible-vault",
+            #         "rekey",
+            #         "--encrypt-vault-id",
+            #         vault_id,
+            #         target_path.as_posix(),
+            #     ]
+            # # else:
             rekey_args = [
                 "ansible-vault",
                 "rekey",
@@ -116,18 +125,16 @@ class Secret(BaseModel):
                 pre_shared_key_path.as_posix(),
                 target_path.as_posix(),
             ]
-            if vault_id:
-                rekey_args.insert(2, f"--new-vault-id={vault_id}")
 
-            result = subprocess.run(
+            _result = subprocess.run(
                 rekey_args,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 check=True,
                 text=True,
             )
-            if result.stderr:
-                warnings.warn(f"Rekey warning: {result.stderr}")
+            # if result.stderr:
+            #     warnings.warn(f"Rekey warning: {result.stderr}")
 
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Failed to rekey file: {e.stderr}")

@@ -1,0 +1,9 @@
+exclude_paths:
+    - modules/
+    - mkdocs.yaml
+    - docs/
+    - conf/
+    - examples/
+
+skip_list:
+    - role-name # Skip the role name validation rule

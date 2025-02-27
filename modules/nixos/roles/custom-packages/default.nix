@@ -1,15 +1,14 @@
-{
-  lib,
-  pkgs,
-  config,
-  ...
+{ lib
+, pkgs
+, config
+, ...
 }:
-with lib; 
+with lib;
 with lib.luxnix; let
   cfg = config.roles.custom-packages;
 
-  dev01 = [];
-  dev02 = [];
+  dev01 = [ ];
+  dev02 = [ ];
   dev03 = [
     obsidian
     balena-cli
@@ -26,7 +25,9 @@ with lib.luxnix; let
     cacert
     openssl
     vscode
-    gparted exfatprogs ntfs3g
+    gparted
+    exfatprogs
+    ntfs3g
     easyrsa
     e2fsprogs
     keepassxc
@@ -105,21 +106,25 @@ with lib.luxnix; let
     cudaPackages.libcublas
   ];
 
-  customPackages = [] 
-    ++ (if cfg.kdePlasma then kdePlasma else [])
-    ++ (if cfg.baseDevelopment then baseDevelopment else [])
-    ++ (if cfg.office then office else [])
-    ++ (if cfg.visuals then visuals else [])
-    ++ (if cfg.dev01 then dev01 else [])
-    ++ (if cfg.dev02 then dev02 else [])
-    ++ (if cfg.dev03 then dev03 else [])
-    ++ (if cfg.cloud then cloud else [])
-    ;
+  customPackages = [
+    pkgs.bash
+    pkgs.bashInteractive
+  ]
+  ++ (if cfg.kdePlasma then kdePlasma else [ ])
+  ++ (if cfg.baseDevelopment then baseDevelopment else [ ])
+  ++ (if cfg.office then office else [ ])
+  ++ (if cfg.visuals then visuals else [ ])
+  ++ (if cfg.dev01 then dev01 else [ ])
+  ++ (if cfg.dev02 then dev02 else [ ])
+  ++ (if cfg.dev03 then dev03 else [ ])
+  ++ (if cfg.cloud then cloud else [ ])
+  ;
 
   ldPackages = lib.mkIf cfg.ld.enable (
-    ldBase ++ (if cfg.cuda then ldCuda else [])
+    ldBase ++ (if cfg.cuda then ldCuda else [ ])
   );
-in {
+in
+{
   options.roles.custom-packages = {
     enable = mkBoolOpt false "Enable common configuration";
     office = mkBoolOpt false "Add Office Packages to custom packages";
@@ -141,12 +146,12 @@ in {
 
   config = mkIf cfg.enable {
     environment.systemPackages = customPackages;
-    
+
     cli.programs.nix-ld = {
       enable = lib.mkForce cfg.ld.enable;
       libraries = ldPackages;
     };
-    
+
     programs.obs-studio.enable = cfg.videoEditing;
 
     programs.thunderbird.enable = cfg.office;
@@ -156,7 +161,7 @@ in {
       extraPackages = with pkgs; (if cfg.hardwareAcceleration then [
         intel-vaapi-driver
         vpl-gpu-rt
-      ] else []);
+      ] else [ ]);
 
     };
 

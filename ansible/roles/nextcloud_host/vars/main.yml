@@ -1,6 +1,7 @@
 nextcloud_host_password_filename: "SCRT_roles_system_password_nextcloud_host_password"
-nextcloud_host_minio_cred_filename: "minio_cred"
+nextcloud_host_minio_cred_filename: "SCRT_roles_system_password_nextcloud_host_minio_credentials"
 nextcloud_host_pw_src: "{{ lx_vault_dir_src }}/deploy/{{ inventory_hostname }}/{{ nextcloud_host_password_filename }}"
+nextcloud_host_minio_cred_src: "{{ lx_vault_dir_src }}//secrets/system_password/roles/nextcloud_host/nextcloud_host_minio_credentials"
 
 nextcloud_host_roles:
   nextcloudHost.enable: "true"

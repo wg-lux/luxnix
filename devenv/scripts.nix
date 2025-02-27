@@ -1,7 +1,20 @@
 { pkgs, ... }:
 {
-
+  hello.package = pkgs.zsh;
+  bnsc.package = pkgs.zsh;
+  blxv.package = pkgs.zsh;
+  run-ansible.package = pkgs.zsh;
+  ssh-all.package = pkgs.zsh;
+  init-server-ssh.package = pkgs.zsh;
+  kill-server-ssh.package = pkgs.zsh;
+  conn-server-ssh.package = pkgs.zsh;
+  sync-secrets.package = pkgs.zsh;
+  create-ed25519-keypair.package = pkgs.zsh;
   hello.exec = "${pkgs.uv}/bin/uv run python hello.py";
+  ac.package = pkgs.zsh;
+  ensure-ansible-config.package = pkgs.zsh;
+
+  utest.package = pkgs.zsh;
   utest.exec = "${pkgs.uv}/bin/uv run python -m unittest";
   initialize-luxnix-repo.exec = ''
     direnv allow
@@ -9,11 +22,15 @@
   '';
 
   # Make sure ./conf/ansible.cfg exists, if not, create it by copying .conf/TEMPLATE_ansible.cfg
+
   ensure-ansible-config.exec = "cp -n ./conf/TEMPLATE_ansible.cfg ./conf/ansible.cfg";
+
 
   ac.exec = "devenv tasks run autoconf:finished";
 
   # hi.exec = "${pkgs.uv}/bin/uv run python lx_administration/ansible/hostinfo.py";
+
+
   bnsc.exec = "${pkgs.uv}/bin/uv run python scripts/autoconf-pipeline.py";
   blxv.exec = "${pkgs.uv}/bin/uv run python scripts/bootstrap-lx-vault.py";
 

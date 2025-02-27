@@ -22,7 +22,12 @@
     custom-packages.cloud = true;
     custom-packages.enable = true;
     endoreg-client.enable = true;
-    postgres.default.enable = true;
+    postgres.default.enable = false;
+    nextcloudHost.enable = true;
+    nextcloudHost.maxUploadSize = "10G";
+    nextcloudHost.minioCredentialsFilePath = "/etc/secrets/vault/minio_cred";
+    nextcloudHost.package = pkgs.nextcloud30;
+    nextcloudHost.passwordFilePath = "/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_password";
     custom-packages.baseDevelopment = true;
     custom-packages.hardwareAcceleration = true;
     custom-packages.videoEditing = true;

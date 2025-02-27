@@ -1,8 +1,7 @@
-{
-  lib,
-  pkgs,
-  config,
-  ...
+{ lib
+, pkgs
+, config
+, ...
 }:
 
 with lib; let
@@ -46,10 +45,11 @@ with lib; let
   # defaultClientToClient = true;
 
 
-in {
+in
+{
   options.roles.aglnet.client = {
     enable = mkEnableOption "Enable aglnet-host openvpn configuration";
-  
+
     networkName = mkOption {
       type = types.str;
       default = "aglnet";
@@ -85,7 +85,7 @@ in {
       type = types.bool;
       default = defaultNoBind;
       description = "Whether to add 'nobind' to config.";
-    }; 
+    };
 
     restartAfterSleep = mkOption {
       type = types.bool;
@@ -181,7 +181,7 @@ in {
     persistTun = mkOption {
       type = types.bool;
       default = defaultPersistTun;
-      description = "Persist tun for the VPN";  
+      description = "Persist tun for the VPN";
     };
   };
 
@@ -192,57 +192,59 @@ in {
         openvpn
       ];
     };
-#
+    #
     systemd.tmpfiles.rules = [
-      "d /etc/openvpn 0750 admin users -"
+      "d /etc/openvpn 0750 admin users -" #TODO Harden?
     ];
 
-    services.openvpn = let 
-      config = ''
-        client
-        proto ${cfg.protocolLc}
-        dev ${cfg.dev}
-        remote ${cfg.mainDomain} ${toString cfg.port}
+    services.openvpn =
+      let
+        config = ''
+          client
+          proto ${cfg.protocolLc}
+          dev ${cfg.dev}
+          remote ${cfg.mainDomain} ${toString cfg.port}
         
-        resolv-retry ${cfg.resolvRetry}
-        ${if cfg.noBind then "nobind" else ""}
-        ${if cfg.persistKey then "persist-key" else ""}
-        ${if cfg.persistTun then "persist-tun" else ""}
+          resolv-retry ${cfg.resolvRetry}
+          ${if cfg.noBind then "nobind" else ""}
+          ${if cfg.persistKey then "persist-key" else ""}
+          ${if cfg.persistTun then "persist-tun" else ""}
 
-        ca ${cfg.caPath}  
-        tls-auth ${cfg.tlsAuthPath} 1
-        cert ${cfg.serverCertPath}
-        key ${cfg.serverKeyPath}
-        cipher ${cfg.cipher}
+          ca ${cfg.caPath}  
+          tls-auth ${cfg.tlsAuthPath} 1
+          cert ${cfg.serverCertPath}
+          key ${cfg.serverKeyPath}
+          cipher ${cfg.cipher}
         
-        # Route only VPN subnet through tunnel
-        route-nopull
-        route ${cfg.subnet} ${cfg.subnetIntern}
+          # Route only VPN subnet through tunnel
+          route-nopull
+          route ${cfg.subnet} ${cfg.subnetIntern}
 
-        # Allow server to push specific routes and DNS settings
-        pull-filter accept "route 172.16.255.0"
-        pull-filter accept "route 172.16.255.1"
-        pull-filter accept "route 172.16.255.12"
-        pull-filter accept "dhcp-option DNS"
-        pull-filter accept "dhcp-option DOMAIN endoreg.intern"
-        pull-filter accept "dhcp-option DOMAIN-ROUTE endoreg.intern"
-        pull-filter accept "dhcp-option DOMAIN-SEARCH endoreg.intern"
+          # Allow server to push specific routes and DNS settings
+          pull-filter accept "route 172.16.255.0"
+          pull-filter accept "route 172.16.255.1"
+          pull-filter accept "route 172.16.255.12"
+          pull-filter accept "dhcp-option DNS"
+          pull-filter accept "dhcp-option DOMAIN endoreg.intern"
+          pull-filter accept "dhcp-option DOMAIN-ROUTE endoreg.intern"
+          pull-filter accept "dhcp-option DOMAIN-SEARCH endoreg.intern"
 
-        remote-cert-tls server
-        verb ${cfg.verbosity}      
-      '';
-    
-    in {
-      restartAfterSleep = cfg.restartAfterSleep;
+          remote-cert-tls server
+          verb ${cfg.verbosity}      
+        '';
 
-      servers = {
-        "${cfg.networkName}" = {
-          config = config;
-          autoStart = cfg.autoStart;
-          updateResolvConf = cfg.updateResolvConf;
+      in
+      {
+        restartAfterSleep = cfg.restartAfterSleep;
+
+        servers = {
+          "${cfg.networkName}" = {
+            config = config;
+            autoStart = cfg.autoStart;
+            updateResolvConf = cfg.updateResolvConf;
+          };
         };
       };
-    };
 
   };
 

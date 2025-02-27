@@ -56,7 +56,7 @@ class TestVaultModel(unittest.TestCase):
         mock_exists.return_value = True
         mock_psk = PreSharedKey(
             name="test-host",
-            file="/tmp/test.psk",
+            file=str(Path(self.test_dir) / "psk" / "test.psk"),
             created=datetime.now(),
             updated=datetime.now(),
             validity=timedelta(days=30),

@@ -1,27 +1,27 @@
-{
-  pkgs,
-  lib,
-  config,
-  host,
-  ...
+{ pkgs
+, lib
+, config
+, host
+, ...
 }:
 with lib;
 with lib.luxnix; let
   cfg = config.cli.shells.zsh;
-in {
+in
+{
   options.cli.shells.zsh = with types; {
     enable = mkBoolOpt true "enable zsh shell";
   };
 
   config = mkIf cfg.enable {
     #  programs.bash.bashrcExtra = ''
-	  #     # exec zsh
+    #     # exec zsh
     #  '';
-     programs.zsh = {
+    programs.zsh = {
       enable = true;
       autosuggestion.enable = true;
       syntaxHighlighting.enable = true;
-      
+
       oh-my-zsh = {
         enable = true;
         package = pkgs.oh-my-zsh;
@@ -36,7 +36,7 @@ in {
       };
 
       initExtra = ''
-          eval "$(direnv hook zsh)"
+        eval "$(direnv hook zsh)"
       '';
 
       #TODO read shell aliases from .json file; 
@@ -70,13 +70,12 @@ in {
         nfu = "nix flake update";
 
 
-
         # hms = "home-manager switch --flake ~/luxnix#${config.luxnix.user.admin.name}@${host}";
         # nrs = "sudo nixos-rebuild switch --flake ~/luxnix#${host}";
 
         # other
         tldrf = "${pkgs.tldr}/bin/tldr --list | fzf --preview \"${pkgs.tldr}/bin/tldr {1} --color\" --preview-window=right,70% | xargs tldr";
-        
+
 
       };
 

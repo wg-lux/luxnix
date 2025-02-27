@@ -1,8 +1,7 @@
-{
-  lib,
-  pkgs,
-  config,
-  ...
+{ lib
+, pkgs
+, config
+, ...
 }:
 with lib; let
   cfg = config.roles.postgres.default;
@@ -11,10 +10,11 @@ with lib; let
   mkDefaultUser = user: {
     name = user;
     ensureDBOwnership = true;
-    ensureClauses = {};
+    ensureClauses = { };
   };
 
-in {
+in
+{
   options.roles.postgres.default = {
     enable = mkEnableOption "Enable common configuration";
     postgresqlEnable = mkEnableOption "Enable PostgreSQL";
@@ -65,7 +65,7 @@ in {
 
     additionalPostgresAuthKeys = mkOption {
       type = types.listOf types.str;
-      default = [];
+      default = [ ];
       description = "Additional authorized keys for postgres user";
     };
 
@@ -108,7 +108,7 @@ in {
           # log_disconnections = true;
           # log_destination = "syslog";
         };
-        ensureDatabases = [ 
+        ensureDatabases = [
           config.user.admin.name
           cfg.defaultDbName
           "replication"
