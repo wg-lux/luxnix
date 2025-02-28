@@ -415,8 +415,6 @@ in
         recommendedTlsSettings = true;
 
         virtualHosts."collabora.endo-reg.net" = {
-          enableACME = true;
-          forceSSL = true;
           locations."/" = {
             proxyPass = "http://[::1]:${toString config.services.collabora-online.port}";
             proxyWebsockets = true; # collabora uses websockets

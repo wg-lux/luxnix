@@ -1,6 +1,6 @@
-{config, lib, pkgs, ...}: 
+{ config, lib, pkgs, ... }:
 
-with lib; 
+with lib;
 with lib.luxnix; let
   cfg = config.roles.nginxHost;
   conf = cfg.settings;
@@ -8,7 +8,7 @@ with lib.luxnix; let
   vpnSubnet = config.luxnix.generic-settings.vpnSubnet;
   sslCertGroupName = config.users.groups.sslCert.name;
   sensitiveServicesGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
-  
+
   networkConfig = config.luxnix.generic-settings.network;
   nginxConfig = networkConfig.nginx;
   keycloakConfig = networkConfig.keycloak;
@@ -20,13 +20,13 @@ with lib.luxnix; let
   nginx_key_path = "/etc/nginx-host/ssl_key";
 
   all-extraConfig = ''
-      proxy_headers_hash_bucket_size ${toString cfg.settings.proxyHeadersHashBucketSize};
-      proxy_headers_hash_max_size ${toString cfg.settings.proxyHeadersHashMaxSize};
+    proxy_headers_hash_bucket_size ${toString cfg.settings.proxyHeadersHashBucketSize};
+    proxy_headers_hash_max_size ${toString cfg.settings.proxyHeadersHashMaxSize};
   '';
-  
+
   intern-endoreg-net-extraConfig = ''
-      allow ${vpnSubnet};
-      deny all;
+    allow ${vpnSubnet};
+    deny all;
   '';
 
   # test add: X-NginX-Proxy true; proxy
@@ -44,17 +44,17 @@ with lib.luxnix; let
   # '';
   ###
 
-      # proxy_set_header X-Forwarded-Proto $scheme;
+  # proxy_set_header X-Forwarded-Proto $scheme;
   appendHttpConfig = ''
-      proxy_set_header Host $host;
-      proxy_set_header X-Forwarded-Host $host;
-      proxy_set_header X-Real-IP $remote_addr;
-      proxy_set_header X-Forwarded-Proto https;
-      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-      proxy_pass_header Authorization;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_pass_header Authorization;
   
-      proxy_set_header X-NginX-Proxy true;
-      add_header Strict-Transport-Security "max-age=15552000; includeSubDomains; preload";
+    proxy_set_header X-NginX-Proxy true;
+    add_header Strict-Transport-Security "max-age=15552000; includeSubDomains; preload";
   '';
 
   nginxPrepareScript = pkgs.writeScript "nginx-prepare-files.sh" ''
@@ -65,7 +65,8 @@ with lib.luxnix; let
     chown nginx:nginx ${nginx_cert_path} ${nginx_key_path}
     chmod 600 ${nginx_cert_path} ${nginx_key_path}
   '';
-in {
+in
+{
   #TODO MIGRATE DOMAIN SETTINGS TO GENERIC SETTINGS SO THAT THEY ARE AVAILABLE ON ALL MACHINES
   options.roles.nginxHost = {
     enable = mkBoolOpt false "Enable NGINX";
@@ -85,7 +86,7 @@ in {
     };
 
     settings = {
-      
+
       proxyHeadersHashMaxSize = mkOption {
         type = types.int;
         default = 512;
@@ -166,12 +167,13 @@ in {
       extraGroups = conf.extraGroups;
     };
     # make sure the group exists
-    users.groups."nginx" = {};
+    users.groups."nginx" = { };
 
     # Allow default http and https ports
-        networking.firewall.allowedTCPPorts = [ 
-            80 443
-     ];
+    networking.firewall.allowedTCPPorts = [
+      80
+      443
+    ];
 
     services.nginx = {
       enable = true;
@@ -184,27 +186,29 @@ in {
 
       appendHttpConfig = appendHttpConfig;
       virtualHosts = lib.mkMerge [
-        (mkIf cfg.psqlMain.enable { #TODO domain in psql config
+        (mkIf cfg.psqlMain.enable {
+          #TODO domain in psql config
           "${psqlMainConfig.domain}" = {
             forceSSL = true;
             sslCertificate = nginx_cert_path;
             sslCertificateKey = nginx_key_path;
 
             locations."/" = {
-                proxyPass = "https://${psqlMainConfig.vpnIp}:${toString psqlMainConfig.port}";
-                extraConfig = all-extraConfig + intern-endoreg-net-extraConfig;
+              proxyPass = "https://${psqlMainConfig.vpnIp}:${toString psqlMainConfig.port}";
+              extraConfig = all-extraConfig + intern-endoreg-net-extraConfig;
             };
           };
         })
-        (mkIf cfg.psqlTest.enable { #TODO domain in psql config
+        (mkIf cfg.psqlTest.enable {
+          #TODO domain in psql config
           "${psqlTestConfig.domain}" = {
             forceSSL = true;
             sslCertificate = nginx_cert_path;
             sslCertificateKey = nginx_key_path;
 
             locations."/" = {
-                proxyPass = "https://${psqlTestConfig.vpnIp}:${toString psqlTestConfig.port}";
-                extraConfig = all-extraConfig + intern-endoreg-net-extraConfig;
+              proxyPass = "https://${psqlTestConfig.vpnIp}:${toString psqlTestConfig.port}";
+              extraConfig = all-extraConfig + intern-endoreg-net-extraConfig;
             };
           };
         })
@@ -216,32 +220,42 @@ in {
 
             locations."/" = {
               proxyPass = "http://${nextcloudConfig.vpnIp}/";
-              extraConfig = all-extraConfig; 
-            };
-          };
-        })
-        (mkIf cfg.keycloak.enable {
-          "${keycloakConfig.domain}" = {
-            forceSSL = true;
-            sslCertificate = nginx_cert_path;
-            sslCertificateKey = nginx_key_path;
-
-            locations."/" = {
-              proxyPass = "https://${keycloakConfig.vpnIp}:${toString keycloakConfig.port}";
               extraConfig = all-extraConfig;
             };
           };
-          
-          "${keycloakConfig.adminDomain}" = {
+          "collabora.endo-reg.net" = {
             forceSSL = true;
             sslCertificate = nginx_cert_path;
             sslCertificateKey = nginx_key_path;
 
             locations."/" = {
-                proxyPass = "https://${keycloakConfig.vpnIp}:${toString keycloakConfig.port}";
-                extraConfig = all-extraConfig + intern-endoreg-net-extraConfig;
+              proxyPass = "http://${nextcloudConfig.vpnIp}/";
+              extraConfig = all-extraConfig;
             };
+          }
+            })
+            (mkIf cfg.keycloak.enable {
+            "${keycloakConfig.domain}" = {
+            forceSSL = true;
+          sslCertificate = nginx_cert_path;
+          sslCertificateKey = nginx_key_path;
+
+          locations."/" = {
+            proxyPass = "https://${keycloakConfig.vpnIp}:${toString keycloakConfig.port}";
+            extraConfig = all-extraConfig;
           };
+        };
+
+        "${keycloakConfig.adminDomain}" = {
+        forceSSL = true;
+        sslCertificate = nginx_cert_path;
+        sslCertificateKey = nginx_key_path;
+
+        locations."/" = {
+          proxyPass = "https://${keycloakConfig.vpnIp}:${toString keycloakConfig.port}";
+          extraConfig = all-extraConfig + intern-endoreg-net-extraConfig;
+        };
+      };
 
         })
       ];
@@ -251,24 +265,24 @@ in {
 }
 
 
-    # keycloak = {
-    #   enable = mkBoolOpt false "Enable Keycloak routing";
-    #   domain = mkOpt types.str "keycloak.endo-reg.net" "Keycloak domain";
-    #   adminDomain = mkOpt types.str "keycloak-admin.endo-reg.net" "Keycloak admin domain";
-    #   port = mkOpt types.port 9080 "Keycloak HTTP port";
-    # };
+# keycloak = {
+#   enable = mkBoolOpt false "Enable Keycloak routing";
+#   domain = mkOpt types.str "keycloak.endo-reg.net" "Keycloak domain";
+#   adminDomain = mkOpt types.str "keycloak-admin.endo-reg.net" "Keycloak admin domain";
+#   port = mkOpt types.port 9080 "Keycloak HTTP port";
+# };
 
 ##### FOR REFERENCE 
 # "drive-intern.endo-reg.net" = {
-    # forceSSL = true;
-    # sslCertificate = sslCertificatePath;
-    # sslCertificateKey = sslCertificateKeyPath;
-    # locations."/" = {
-    #     proxyPass = "https://${agl-network-config.services.synology-drive.ip}:${toString agl-network-config.services.synology-drive.port}";
-    #     extraConfig = all-extraConfig +  intern-endoreg-net-extraConfig;
-    #     proxyWebsockets = true;
-    # };
-    # extraConfig = ''
-    #     client_max_body_size 100000M;
-    # '';
+# forceSSL = true;
+# sslCertificate = sslCertificatePath;
+# sslCertificateKey = sslCertificateKeyPath;
+# locations."/" = {
+#     proxyPass = "https://${agl-network-config.services.synology-drive.ip}:${toString agl-network-config.services.synology-drive.port}";
+#     extraConfig = all-extraConfig +  intern-endoreg-net-extraConfig;
+#     proxyWebsockets = true;
+# };
+# extraConfig = ''
+#     client_max_body_size 100000M;
+# '';
 # };
