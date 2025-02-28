@@ -272,7 +272,7 @@ in
       hostName = conf.domain; # "localhost"
       nginx = {
         recommendedHttpHeaders = true; # default = true
-        hstsMaxAge = "15552000"; # default = "15552000";
+        hstsMaxAge = 15552000; # default = 15552000;
       };
 
       # ###### Database ########
