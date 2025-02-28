@@ -232,30 +232,30 @@ in
               proxyPass = "http://${nextcloudConfig.vpnIp}/";
               extraConfig = all-extraConfig;
             };
-          }
-            })
-            (mkIf cfg.keycloak.enable {
-            "${keycloakConfig.domain}" = {
-            forceSSL = true;
-          sslCertificate = nginx_cert_path;
-          sslCertificateKey = nginx_key_path;
-
-          locations."/" = {
-            proxyPass = "https://${keycloakConfig.vpnIp}:${toString keycloakConfig.port}";
-            extraConfig = all-extraConfig;
           };
-        };
+        })
+        (mkIf cfg.keycloak.enable {
+          "${keycloakConfig.domain}" = {
+            forceSSL = true;
+            sslCertificate = nginx_cert_path;
+            sslCertificateKey = nginx_key_path;
 
-        "${keycloakConfig.adminDomain}" = {
-        forceSSL = true;
-        sslCertificate = nginx_cert_path;
-        sslCertificateKey = nginx_key_path;
+            locations."/" = {
+              proxyPass = "https://${keycloakConfig.vpnIp}:${toString keycloakConfig.port}";
+              extraConfig = all-extraConfig;
+            };
+          };
 
-        locations."/" = {
-          proxyPass = "https://${keycloakConfig.vpnIp}:${toString keycloakConfig.port}";
-          extraConfig = all-extraConfig + intern-endoreg-net-extraConfig;
-        };
-      };
+          "${keycloakConfig.adminDomain}" = {
+            forceSSL = true;
+            sslCertificate = nginx_cert_path;
+            sslCertificateKey = nginx_key_path;
+
+            locations."/" = {
+              proxyPass = "https://${keycloakConfig.vpnIp}:${toString keycloakConfig.port}";
+              extraConfig = all-extraConfig + intern-endoreg-net-extraConfig;
+            };
+          };
 
         })
       ];
