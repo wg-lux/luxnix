@@ -265,6 +265,16 @@ in
             "OC\\Preview\\XBitmap"
             "OC\\Preview\\HEIC"
           ];
+
+          mail_smtpmode = "smtp";
+          mail_smtpsecure = "ssl";
+          mail_sendmailmode = "smtp";
+          mail_smtphost = "mail.noip.com";
+          mail_smtpport = "465";
+          mail_smtpauth = "1";
+          mail_smtpauthtype = "LOGIN";
+          mail_from_address = "webmaster";
+          mail_domain = "endo-reg.net";
         };
 
         # ###### Hosting ######
