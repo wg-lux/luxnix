@@ -25,7 +25,7 @@
     endoreg-client.enable = false;
     nextcloudHost.enable = true;
     nextcloudHost.maxUploadSize = "10G";
-    nextcloudHost.minioCredentialsFilePath = "/etc/secrets/vault/minio_cred";
+    nextcloudHost.minioCredentialsFilePath = "/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_minio_credentials";
     nextcloudHost.package = pkgs.nextcloud30;
     nextcloudHost.passwordFilePath = "/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_password";
     postgres.default.enable = false;

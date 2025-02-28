@@ -86,7 +86,7 @@ in
     };
     minioCredentialsFilePath = mkOption {
       type = types.path;
-      default = "/etc/secrets/vault/SCRT_roles_system_password_nextcloud_minio_credentials";
+      default = "/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_minio_credentials";
       description = "Path to the file containing the Minio admin credentials (format: MINIO_ROOT_USER=username\\nMINIO_ROOT_PASSWORD=password)";
     };
 
@@ -136,9 +136,8 @@ in
     };
 
     # manually run 
-    #TODO Add to docs
+    #TODO Check if actually necessary and add to docs
     # mc config host add minio http://localhost:9000 ${accessKey} ${secretKey} --api s3v4
-    # mc config host add minio http://localhost:9000 nextcloud theaterChief --api s3v4
     # mc mb minio/nextcloud
     services.minio = {
       enable = true;
