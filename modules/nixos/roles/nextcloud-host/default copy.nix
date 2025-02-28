@@ -177,6 +177,10 @@ in
           usePathStyle = true;
           region = "us-east-1";
         };
+        # Remove or comment the clamscan_path setting:
+        # "files_antivirus.clamscan_path" = "${pkgs.clamav}/bin/clamscan";
+        # Add ClamAV daemon socket setting:
+        "files_antivirus.clamd_socket" = "/run/clamav/clamd.ctl";
       };
 
       phpOptions = {
@@ -237,9 +241,22 @@ in
     };
 
 
+    services.clamav = {
+      daemon.enable = true;
+      updater.enable = true;
+      updater.interval = "hourly";
+      scanner.enable = true;
+      scanner.scanDirectories = [
+        "/home"
+        "/var/lib"
+        "/tmp"
+        "/etc"
+        "/var/tmp"
+      ];
+      scanner.interval = "*-*-* 04:00:00";
+    };
 
-
-    environment.systemPackages = [ pkgs.minio-client cfg.package ];
+    environment.systemPackages = [ pkgs.minio-client cfg.package pkgs.clamav ];
 
     networking.firewall.allowedTCPPorts = [ 80 443 ];
 

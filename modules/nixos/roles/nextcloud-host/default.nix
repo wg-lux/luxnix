@@ -147,7 +147,7 @@ in
         inherit rootCredentialsFile;
       };
 
-      environment.systemPackages = [ pkgs.minio-client cfg.package ];
+      environment.systemPackages = [ pkgs.minio-client cfg.package pkgs.clamav ];
       networking.firewall.allowedTCPPorts = [ 80 443 ];
 
       # systemd.tmpfiles.rules = [
@@ -196,9 +196,6 @@ in
             bucket = "nextcloud";
             autocreate = true;
             key = accessKey;
-            # The full path to a file that contains the access secret.
-            # Must be readable by user nextcloud.
-            # secretFile = "${pkgs.writeText "secret" "test12345"}";
             secretFile = minioSecretFile;
             hostname = "localhost";
             useSsl = false;
@@ -206,6 +203,11 @@ in
             usePathStyle = true;
             region = "us-east-1";
           };
+
+          # Configure ClamAV executable location:
+          # "files_antivirus.clamscan_path" = "${pkgs.clamav}/bin/clamscan";
+          # Add ClamAV daemon socket setting:
+          "files_antivirus.clamd_socket" = "/run/clamav/clamd.ctl";
         };
 
         # Extra options which should be appended to 
