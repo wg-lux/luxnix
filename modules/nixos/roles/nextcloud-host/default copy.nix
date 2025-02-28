@@ -243,6 +243,13 @@ in
 
     services.clamav = {
       daemon.enable = true;
+      daemon.settings = {
+        DatabaseDirectory = "/var/lib/clamav";
+        LocalSocket = "/run/clamav/clamd.ctl";
+        PidFile = "/run/clamav/clamd.pid";
+        User = "clamav";
+        Foreground = true;
+      };
       updater.enable = true;
       updater.interval = "hourly";
       scanner.enable = true;

@@ -205,7 +205,7 @@ in
           };
 
           # Configure ClamAV executable location:
-          "files_antivirus.clamscan_path" = "${pkgs.clamav}/bin/clamscan";
+          # "files_antivirus.clamscan_path" = "${pkgs.clamav}/bin/clamscan";
           # Add ClamAV daemon socket setting:
           # Set manually in UI:
           # "files_antivirus.clamd_socket" = "/run/clamav/clamd.ctl"; 
@@ -445,6 +445,28 @@ in
       #     ExecStartPost = "${pkgs.bash}/bin/bash -c 'chown -R nextcloud:nextcloud /var/lib/nextcloud/config && chmod -R 770 /var/lib/nextcloud/config'";
       #   };
       # };
+
+      services.clamav = {
+        daemon.enable = true;
+        daemon.settings = {
+          DatabaseDirectory = "/var/lib/clamav";
+          LocalSocket = "/run/clamav/clamd.ctl";
+          PidFile = "/run/clamav/clamd.pid";
+          User = "clamav";
+          Foreground = true;
+        };
+        updater.enable = true;
+        updater.interval = "hourly";
+        scanner.enable = true;
+        scanner.scanDirectories = [
+          "/home"
+          "/var/lib"
+          "/tmp"
+          "/etc"
+          "/var/tmp"
+        ];
+        scanner.interval = "*-*-* 04:00:00";
+      };
 
       # Add systemd service to prepare files
       systemd.services.nextcloud-prepare-files = {
