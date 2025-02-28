@@ -407,54 +407,53 @@ in
           server_name = "collabora.endo-reg.net";
         };
       };
-    };
 
-  services.nginx = {
-    enable = true;
-    # I recommend these, but it's up to you
-    recommendedProxySettings = true;
-    recommendedTlsSettings = true;
+      services.nginx = {
+        enable = true;
+        # I recommend these, but it's up to you
+        recommendedProxySettings = true;
+        recommendedTlsSettings = true;
 
-    virtualHosts."collabora.endo-reg.net" = {
-      enableACME = true;
-      forceSSL = true;
-      locations."/" = {
-        proxyPass = "http://[::1]:${toString config.services.collabora-online.port}";
-        proxyWebsockets = true; # collabora uses websockets
+        virtualHosts."collabora.endo-reg.net" = {
+          enableACME = true;
+          forceSSL = true;
+          locations."/" = {
+            proxyPass = "http://[::1]:${toString config.services.collabora-online.port}";
+            proxyWebsockets = true; # collabora uses websockets
+          };
+        };
       };
+
+      networking.hosts = {
+        "127.0.0.1" = [ "nextcloud.endo-reg.net" "collabora.endo-reg.net" ];
+        "::1" = [ "nextcloud.endo-reg.net" "collabora.endo-reg.net" ];
+      };
+
+
+      # Add a post-install hook to fix permissions
+      # systemd.services.nextcloud-setup = {
+      #   serviceConfig = {
+      #     ExecStartPost = "${pkgs.bash}/bin/bash -c 'chown -R nextcloud:nextcloud /var/lib/nextcloud/config && chmod -R 770 /var/lib/nextcloud/config'";
+      #   };
+      # };
+
+      # Add systemd service to prepare files
+      systemd.services.nextcloud-prepare-files = {
+        description = "Prepare files for Nextcloud";
+        wantedBy = [ "multi-user.target" ];
+        before = [ "nextcloud-setup.service" "minio.service" ];
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+          ExecStart = "${nextcloudPrepareScript}";
+        };
+      };
+
+      # Add post-install hook for minio
+      systemd.services.minio = {
+        after = [ "nextcloud-prepare-files.service" ];
+        requires = [ "nextcloud-prepare-files.service" ];
+      };
+
     };
-  };
-
-  networking.hosts = {
-    "127.0.0.1" = [ "nextcloud.endo-reg.net" "collabora.endo-reg.net" ];
-    "::1" = [ "nextcloud.endo-reg.net" "collabora.endo-reg.net" ];
-  };
-
-
-  # Add a post-install hook to fix permissions
-  # systemd.services.nextcloud-setup = {
-  #   serviceConfig = {
-  #     ExecStartPost = "${pkgs.bash}/bin/bash -c 'chown -R nextcloud:nextcloud /var/lib/nextcloud/config && chmod -R 770 /var/lib/nextcloud/config'";
-  #   };
-  # };
-
-  # Add systemd service to prepare files
-  systemd.services.nextcloud-prepare-files = {
-    description = "Prepare files for Nextcloud";
-    wantedBy = [ "multi-user.target" ];
-    before = [ "nextcloud-setup.service" "minio.service" ];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      ExecStart = "${nextcloudPrepareScript}";
-    };
-  };
-
-  # Add post-install hook for minio
-  systemd.services.minio = {
-    after = [ "nextcloud-prepare-files.service" ];
-    requires = [ "nextcloud-prepare-files.service" ];
-  };
-
-};
 }
