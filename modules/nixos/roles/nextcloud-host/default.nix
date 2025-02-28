@@ -215,7 +215,7 @@ in
           config.luxnix.generic-settings.network.nginx.vpnIp
           config.luxnix.generic-settings.vpnIp
         ];
-        trusted_domains = [ "localhost" "cloud.endo-reg.net" ];
+        trusted_domains = [ "localhost" conf.domain ];
 
         # The directory where the skeleton files are located. 
         # These files will be copied to the data directory of new users. 
@@ -226,7 +226,8 @@ in
         # Nextcloud uses the currently used protocol by default, 
         # but when behind a reverse-proxy, it may use http for everything
         # although Nextcloud may be served via HTTPS.
-        overwriteprotocol = ""; # default #TODO "https";
+        overwriteprotocol = "https"; # default = "" 
+        overwritehost = conf.domain; # default = "";
 
         # 1 (info): Log activity such as user logins and file activities, 
         # plus warnings, errors, and fatal errors.
@@ -264,14 +265,11 @@ in
           "OC\\Preview\\XBitmap"
           "OC\\Preview\\HEIC"
         ];
-        #TODO enable in production
-        # overwritehost = "cloud.endo-reg.net";
-        # overwriteprotocol = "https";
       };
 
       # ###### Hosting ######
-      https = false; # default = false;
-      hostName = "localhost"; #TODO Changeme
+      https = true; # default = false;
+      hostName = conf.domain; # "localhost"
       nginx = {
         recommendedHttpHeaders = true; # default = true
         hstsMaxAge = "15552000"; # default = "15552000";
