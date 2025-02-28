@@ -205,7 +205,7 @@ in
           };
 
           # Configure ClamAV executable location:
-          # "files_antivirus.clamscan_path" = "${pkgs.clamav}/bin/clamscan";
+          "files_antivirus.clamscan_path" = "${pkgs.clamav}/bin/clamscan";
           # Add ClamAV daemon socket setting:
           # Set manually in UI:
           # "files_antivirus.clamd_socket" = "/run/clamav/clamd.ctl"; 
