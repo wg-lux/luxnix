@@ -1,5 +1,5 @@
 .repo_initialized
-
+.ansible/.lock
 conf/ansible.cfg
 
 # direnv

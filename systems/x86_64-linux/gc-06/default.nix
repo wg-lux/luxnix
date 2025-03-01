@@ -22,6 +22,7 @@
     custom-packages.cloud = true;
     custom-packages.enable = true;
     endoreg-client.enable = true;
+    nextcloudClient.enable = true;
     postgres.default.enable = false;
     nextcloudHost.enable = true;
     nextcloudHost.maxUploadSize = "10G";

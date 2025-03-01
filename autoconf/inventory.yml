@@ -51,6 +51,113 @@ all:
       host_services: {}
       template_name: main
   - ansible_group_names:
+      - all
+      - gpu_client
+      - active_clients
+      - local_endoreg_db
+      - managed
+    ansible_host: 172.16.255.105
+    ansible_role_names: []
+    extra_secret_names:
+      - SCRT_roles_system_password_postgres_host_test_password
+    extra_user_names:
+      - admin
+      - maintenance
+    facts:
+    files: []
+    hostname: gc-05
+    subnet: 172.16.255.
+    vars:
+      extra_secret_names:
+        - SCRT_roles_system_password_postgres_host_test_password
+      host_luxnix:
+        generic_settings.configurationPath: lib.mkForce "/home/admin/luxnix"
+        generic_settings.configurationPathRelative: '"luxnix"'
+        generic_settings.hostPlatform: '"x86_64-linux"'
+        generic_settings.linux.cpuMicrocode: '"intel"'
+        generic_settings.linux.initrd.availableKernelModules:
+          - xhci_pci
+          - ahci
+          - nvme
+          - usb_storage
+          - sd_mod
+        generic_settings.linux.initrd.kernelModules:
+          - nfs
+        generic_settings.linux.initrd.supportedFilesystems:
+          - nfs
+        generic_settings.linux.kernelModules:
+          - kvm-intel
+        generic_settings.linux.kernelModulesBlacklist: []
+        generic_settings.linux.kernelParams: []
+        generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+        generic_settings.linux.supportedFilesystems:
+          - btrfs
+        generic_settings.systemStateVersion: '"23.11"'
+        generic_settings.vpnIp: '"172.16.255.105"'
+        nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
+        nvidia_prime.onboardBusId: '"PCI:0:2:0"'
+        nvidia_prime.onboardGpuType: '"intel"'
+      host_roles:
+        custom_packages.baseDevelopment: 'true'
+      host_services: {}
+      template_name: main
+  - ansible_group_names:
+      - language_english
+      - all
+      - gpu_client
+      - active_clients
+      - local_endoreg_db
+      - managed
+    ansible_host: 172.16.255.107
+    ansible_role_names: []
+    extra_secret_names:
+      - SCRT_roles_system_password_postgres_host_test_password
+    extra_user_names:
+      - admin
+      - maintenance
+    facts:
+    files: []
+    hostname: gc-07
+    subnet: 172.16.255.
+    vars:
+      extra_secret_names:
+        - SCRT_roles_system_password_postgres_host_test_password
+      host_luxnix:
+        generic_settings.hostPlatform: '"x86_64-linux"'
+        generic_settings.linux.cpuMicrocode: '"intel"'
+        generic_settings.linux.initrd.availableKernelModules:
+          - vmd
+          - xhci_pci
+          - ahci
+          - nvme
+          - usb_storage
+          - sd_mod
+        generic_settings.linux.initrd.kernelModules:
+          - nfs
+          - btrfs
+        generic_settings.linux.initrd.supportedFilesystems:
+          - nfs
+          - btrfs
+        generic_settings.linux.kernelModules:
+          - intel
+        generic_settings.linux.kernelModulesBlacklist: []
+        generic_settings.linux.kernelParams: []
+        generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+        generic_settings.linux.supportedFilesystems:
+          - nfs
+          - btrfs
+        generic_settings.systemStateVersion: '"23.11"'
+        generic_settings.vpnIp: '"172.16.255.107"'
+        nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
+        nvidia_prime.onboardBusId: '"PCI:0:2:0"'
+        nvidia_prime.onboardGpuType: '"intel"'
+      host_roles:
+        custom_packages.baseDevelopment: 'true'
+        custom_packages.cuda: 'true'
+        custom_packages.office: 'true'
+      host_services: {}
+      template_name: main
+  - ansible_group_names:
       - language_english
       - all
       - gpu_client
@@ -105,6 +212,56 @@ all:
         custom_packages.cuda: 'true'
         custom_packages.dev03: 'true'
         custom_packages.office: 'true'
+      host_services: {}
+      template_name: main
+  - ansible_group_names:
+      - language_english
+      - all
+      - gpu_client
+      - active_clients
+      - local_endoreg_db
+      - managed
+    ansible_host: 172.16.255.109
+    ansible_role_names: []
+    extra_secret_names: []
+    extra_user_names:
+      - admin
+      - maintenance
+    facts:
+    files: []
+    hostname: gc-09
+    subnet: 172.16.255.
+    vars:
+      extra_secret_names: []
+      host_luxnix:
+        generic_settings.configurationPath: lib.mkForce "/home/admin/luxnix"
+        generic_settings.configurationPathRelative: '"luxnix"'
+        generic_settings.hostPlatform: '"x86_64-linux"'
+        generic_settings.linux.cpuMicrocode: '"intel"'
+        generic_settings.linux.initrd.availableKernelModules:
+          - xhci_pci
+          - ahci
+          - nvme
+          - usb_storage
+          - sd_mod
+        generic_settings.linux.initrd.kernelModules:
+          - nfs
+        generic_settings.linux.initrd.supportedFilesystems:
+          - nfs
+        generic_settings.linux.kernelModules:
+          - kvm-intel
+        generic_settings.linux.kernelModulesBlacklist: []
+        generic_settings.linux.kernelParams: []
+        generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+        generic_settings.linux.supportedFilesystems:
+          - btrfs
+        generic_settings.systemStateVersion: '"23.11"'
+        generic_settings.vpnIp: '"172.16.255.109"'
+        nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
+        nvidia_prime.onboardBusId: '"PCI:0:2:0"'
+        nvidia_prime.onboardGpuType: '"intel"'
+      host_roles:
+        custom_packages.baseDevelopment: 'true'
       host_services: {}
       template_name: main
   - ansible_group_names:
@@ -234,374 +391,8 @@ all:
       - language_english
       - ssl_cert
       - all
-      - keycloak_host
-      - base_server
-      - active_clients
-      - nginx_host
-      - managed
-    ansible_host: 172.16.255.12
-    ansible_role_names:
-      - postgres_host_main
-      - nginx_host
-      - keycloak_host
-      - ssl_cert
-    extra_secret_names: []
-    extra_user_names:
-      - admin
-      - maintenance
-    facts:
-      all_ipv4_addresses:
-        - 172.16.255.12
-        - 192.168.179.2
-      bios:
-        date: 07/13/2023
-        vendor: American Megatrends International, LLC.
-        version: '5.19'
-      current_date: '2025-01-17T12:45:52Z'
-      default_ipv4:
-        address: 192.168.179.2
-        gateway: 192.168.178.1
-        interface: enp2s0
-        netmask: 255.255.0.0
-      machine: x86_64
-    files: []
-    hostname: s-02
-    subnet: 172.16.255.
-    vars:
-      ansible_roles:
-        - postgres_host_main
-        - nginx_host
-        - keycloak_host
-        - ssl_cert
-      host_luxnix:
-        generic_settings.hostPlatform: '"x86_64-linux"'
-        generic_settings.linux.cpuMicrocode: '"intel"'
-        generic_settings.linux.initrd.availableKernelModules:
-          - xhci_pci
-          - ahci
-          - usbhid
-          - nvme
-          - usb_storage
-          - sd_mod
-        generic_settings.linux.initrd.kernelModules:
-          - nfs
-          - btrfs
-        generic_settings.linux.initrd.supportedFilesystems:
-          - nfs
-          - btrfs
-        generic_settings.linux.kernelModules:
-          - kvm-intel
-        generic_settings.linux.kernelModulesBlacklist: []
-        generic_settings.linux.kernelParams: []
-        generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
-        generic_settings.linux.supportedFilesystems:
-          - nfs
-          - btrfs
-        generic_settings.systemStateVersion: '"23.11"'
-        generic_settings.vpnIp: '"172.16.255.12"'
-      host_roles: {}
-      host_services: {}
-      template_name: main
-  - ansible_group_names:
-      - language_english
-      - all
-      - gpu_server
-      - active_clients
-      - test_group
-      - managed
-    ansible_host: 172.16.255.22
-    ansible_role_names: []
-    extra_secret_names: []
-    extra_user_names:
-      - admin
-      - maintenance
-    facts:
-      all_ipv4_addresses:
-        - 172.16.255.22
-        - 192.168.0.56
-      bios:
-        date: 11/12/2024
-        vendor: American Megatrends International, LLC.
-        version: F4g
-      current_date: '2025-01-17T12:45:53Z'
-      default_ipv4:
-        address: 192.168.0.56
-        gateway: 192.168.0.1
-        interface: enp15s0
-        netmask: 255.255.255.0
-      machine: x86_64
-    files: []
-    hostname: gs-02
-    subnet: 172.16.255.
-    vars:
-      ansible_roles: []
-      host_luxnix:
-        boot_decryption_stick_gs_01.enable: 'true'
-        generic_settings.hostPlatform: '"x86_64-linux"'
-        generic_settings.linux.cpuMicrocode: '"amd"'
-        generic_settings.linux.initrd.availableKernelModules:
-          - xhci_pci
-          - ahci
-          - thunderbolt
-          - nvme
-          - usb_storage
-          - usbhid
-          - sd_mod
-        generic_settings.linux.initrd.kernelModules:
-          - nfs
-          - btrfs
-          - dm-snapshot
-        generic_settings.linux.initrd.supportedFilesystems:
-          - nfs
-          - btrfs
-        generic_settings.linux.kernelModules:
-          - kvm-amd
-        generic_settings.linux.kernelModulesBlacklist: []
-        generic_settings.linux.kernelParams: []
-        generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
-        generic_settings.linux.supportedFilesystems:
-          - nfs
-          - btrfs
-        generic_settings.systemStateVersion: '"23.11"'
-        generic_settings.vpnIp: '"172.16.255.22"'
-      host_roles: {}
-      host_services: {}
-      template_name: main
-  - ansible_group_names:
-      - language_english
-      - ssl_cert
-      - all
-      - base_server
-      - active_clients
-      - nextcloud_host
-      - smtp_cred
-      - managed
-    ansible_host: 172.16.255.13
-    ansible_role_names:
-      - ssl_cert
-      - nextcloud_host
-      - smtp_cred
-    extra_secret_names: []
-    extra_user_names:
-      - admin
-      - maintenance
-    facts:
-      all_ipv4_addresses:
-        - 192.168.1.24
-        - 172.16.255.13
-      bios:
-        date: 06/21/2023
-        vendor: American Megatrends International, LLC.
-        version: '0.22'
-      current_date: '2025-01-17T12:45:56Z'
-      default_ipv4:
-        address: 192.168.1.24
-        gateway: 192.168.178.1
-        interface: wlp3s0
-        netmask: 255.255.0.0
-      machine: x86_64
-    files: []
-    hostname: s-03
-    subnet: 172.16.255.
-    vars:
-      ansible_roles:
-        - ssl_cert
-        - nextcloud_host
-        - smtp_cred
-      host_luxnix:
-        generic_settings.enable: 'true'
-        generic_settings.hostPlatform: '"x86_64-linux"'
-        generic_settings.linux.cpuMicrocode: '"amd"'
-        generic_settings.linux.initrd.availableKernelModules:
-          - xhci_pci
-          - ahci
-          - usbhid
-          - nvme
-          - usb_storage
-          - sd_mod
-        generic_settings.linux.initrd.kernelModules:
-          - nfs
-          - btrfs
-        generic_settings.linux.initrd.supportedFilesystems:
-          - nfs
-          - btrfs
-        generic_settings.linux.kernelModules:
-          - kvm-amd
-        generic_settings.linux.kernelModulesBlacklist: []
-        generic_settings.linux.kernelParams: []
-        generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
-        generic_settings.linux.supportedFilesystems:
-          - nfs
-          - btrfs
-        generic_settings.systemStateVersion: '"23.11"'
-        generic_settings.vpnIp: '"172.16.255.13"'
-      host_roles: {}
-      host_services: {}
-      template_name: main
-  - ansible_group_names:
-      - all
       - gpu_client
       - active_clients
-      - local_endoreg_db
-      - managed
-    ansible_host: 172.16.255.105
-    ansible_role_names: []
-    extra_secret_names:
-      - SCRT_roles_system_password_postgres_host_test_password
-    extra_user_names:
-      - admin
-      - maintenance
-    facts:
-    files: []
-    hostname: gc-05
-    subnet: 172.16.255.
-    vars:
-      extra_secret_names:
-        - SCRT_roles_system_password_postgres_host_test_password
-      host_luxnix:
-        generic_settings.configurationPath: lib.mkForce "/home/admin/luxnix"
-        generic_settings.configurationPathRelative: '"luxnix"'
-        generic_settings.hostPlatform: '"x86_64-linux"'
-        generic_settings.linux.cpuMicrocode: '"intel"'
-        generic_settings.linux.initrd.availableKernelModules:
-          - xhci_pci
-          - ahci
-          - nvme
-          - usb_storage
-          - sd_mod
-        generic_settings.linux.initrd.kernelModules:
-          - nfs
-        generic_settings.linux.initrd.supportedFilesystems:
-          - nfs
-        generic_settings.linux.kernelModules:
-          - kvm-intel
-        generic_settings.linux.kernelModulesBlacklist: []
-        generic_settings.linux.kernelParams: []
-        generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
-        generic_settings.linux.supportedFilesystems:
-          - btrfs
-        generic_settings.systemStateVersion: '"23.11"'
-        generic_settings.vpnIp: '"172.16.255.105"'
-        nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
-        nvidia_prime.onboardBusId: '"PCI:0:2:0"'
-        nvidia_prime.onboardGpuType: '"intel"'
-      host_roles:
-        custom_packages.baseDevelopment: 'true'
-      host_services: {}
-      template_name: main
-  - ansible_group_names:
-      - language_english
-      - all
-      - gpu_client
-      - active_clients
-      - local_endoreg_db
-      - managed
-    ansible_host: 172.16.255.107
-    ansible_role_names: []
-    extra_secret_names:
-      - SCRT_roles_system_password_postgres_host_test_password
-    extra_user_names:
-      - admin
-      - maintenance
-    facts:
-    files: []
-    hostname: gc-07
-    subnet: 172.16.255.
-    vars:
-      extra_secret_names:
-        - SCRT_roles_system_password_postgres_host_test_password
-      host_luxnix:
-        generic_settings.hostPlatform: '"x86_64-linux"'
-        generic_settings.linux.cpuMicrocode: '"intel"'
-        generic_settings.linux.initrd.availableKernelModules:
-          - vmd
-          - xhci_pci
-          - ahci
-          - nvme
-          - usb_storage
-          - sd_mod
-        generic_settings.linux.initrd.kernelModules:
-          - nfs
-          - btrfs
-        generic_settings.linux.initrd.supportedFilesystems:
-          - nfs
-          - btrfs
-        generic_settings.linux.kernelModules:
-          - intel
-        generic_settings.linux.kernelModulesBlacklist: []
-        generic_settings.linux.kernelParams: []
-        generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
-        generic_settings.linux.supportedFilesystems:
-          - nfs
-          - btrfs
-        generic_settings.systemStateVersion: '"23.11"'
-        generic_settings.vpnIp: '"172.16.255.107"'
-        nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
-        nvidia_prime.onboardBusId: '"PCI:0:2:0"'
-        nvidia_prime.onboardGpuType: '"intel"'
-      host_roles:
-        custom_packages.baseDevelopment: 'true'
-        custom_packages.cuda: 'true'
-        custom_packages.office: 'true'
-      host_services: {}
-      template_name: main
-  - ansible_group_names:
-      - language_english
-      - all
-      - gpu_client
-      - active_clients
-      - local_endoreg_db
-      - managed
-    ansible_host: 172.16.255.109
-    ansible_role_names: []
-    extra_secret_names: []
-    extra_user_names:
-      - admin
-      - maintenance
-    facts:
-    files: []
-    hostname: gc-09
-    subnet: 172.16.255.
-    vars:
-      extra_secret_names: []
-      host_luxnix:
-        generic_settings.configurationPath: lib.mkForce "/home/admin/luxnix"
-        generic_settings.configurationPathRelative: '"luxnix"'
-        generic_settings.hostPlatform: '"x86_64-linux"'
-        generic_settings.linux.cpuMicrocode: '"intel"'
-        generic_settings.linux.initrd.availableKernelModules:
-          - xhci_pci
-          - ahci
-          - nvme
-          - usb_storage
-          - sd_mod
-        generic_settings.linux.initrd.kernelModules:
-          - nfs
-        generic_settings.linux.initrd.supportedFilesystems:
-          - nfs
-        generic_settings.linux.kernelModules:
-          - kvm-intel
-        generic_settings.linux.kernelModulesBlacklist: []
-        generic_settings.linux.kernelParams: []
-        generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
-        generic_settings.linux.supportedFilesystems:
-          - btrfs
-        generic_settings.systemStateVersion: '"23.11"'
-        generic_settings.vpnIp: '"172.16.255.109"'
-        nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
-        nvidia_prime.onboardBusId: '"PCI:0:2:0"'
-        nvidia_prime.onboardGpuType: '"intel"'
-      host_roles:
-        custom_packages.baseDevelopment: 'true'
-      host_services: {}
-      template_name: main
-  - ansible_group_names:
-      - language_english
-      - ssl_cert
-      - all
-      - gpu_client
-      - active_clients
-      - nextcloud_host
       - local_endoreg_db
       - test_group
     ansible_host: 172.16.255.106
@@ -687,6 +478,214 @@ all:
         - demodemo
       template_name: main
   - ansible_group_names:
+      - language_english
+      - all
+      - gpu_server
+      - active_clients
+      - test_group
+      - managed
+    ansible_host: 172.16.255.22
+    ansible_role_names: []
+    extra_secret_names: []
+    extra_user_names:
+      - admin
+      - maintenance
+    facts:
+      all_ipv4_addresses:
+        - 172.16.255.22
+        - 192.168.0.56
+      bios:
+        date: 11/12/2024
+        vendor: American Megatrends International, LLC.
+        version: F4g
+      current_date: '2025-01-17T12:45:53Z'
+      default_ipv4:
+        address: 192.168.0.56
+        gateway: 192.168.0.1
+        interface: enp15s0
+        netmask: 255.255.255.0
+      machine: x86_64
+    files: []
+    hostname: gs-02
+    subnet: 172.16.255.
+    vars:
+      ansible_roles: []
+      host_luxnix:
+        boot_decryption_stick_gs_01.enable: 'true'
+        generic_settings.hostPlatform: '"x86_64-linux"'
+        generic_settings.linux.cpuMicrocode: '"amd"'
+        generic_settings.linux.initrd.availableKernelModules:
+          - xhci_pci
+          - ahci
+          - thunderbolt
+          - nvme
+          - usb_storage
+          - usbhid
+          - sd_mod
+        generic_settings.linux.initrd.kernelModules:
+          - nfs
+          - btrfs
+          - dm-snapshot
+        generic_settings.linux.initrd.supportedFilesystems:
+          - nfs
+          - btrfs
+        generic_settings.linux.kernelModules:
+          - kvm-amd
+        generic_settings.linux.kernelModulesBlacklist: []
+        generic_settings.linux.kernelParams: []
+        generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+        generic_settings.linux.supportedFilesystems:
+          - nfs
+          - btrfs
+        generic_settings.systemStateVersion: '"23.11"'
+        generic_settings.vpnIp: '"172.16.255.22"'
+      host_roles: {}
+      host_services: {}
+      template_name: main
+  - ansible_group_names:
+      - language_english
+      - ssl_cert
+      - all
+      - keycloak_host
+      - base_server
+      - active_clients
+      - nginx_host
+      - managed
+    ansible_host: 172.16.255.12
+    ansible_role_names:
+      - postgres_host_main
+      - nginx_host
+      - keycloak_host
+      - ssl_cert
+    extra_secret_names: []
+    extra_user_names:
+      - admin
+      - maintenance
+    facts:
+      all_ipv4_addresses:
+        - 172.16.255.12
+        - 192.168.179.2
+      bios:
+        date: 07/13/2023
+        vendor: American Megatrends International, LLC.
+        version: '5.19'
+      current_date: '2025-01-17T12:45:52Z'
+      default_ipv4:
+        address: 192.168.179.2
+        gateway: 192.168.178.1
+        interface: enp2s0
+        netmask: 255.255.0.0
+      machine: x86_64
+    files: []
+    hostname: s-02
+    subnet: 172.16.255.
+    vars:
+      ansible_roles:
+        - postgres_host_main
+        - nginx_host
+        - keycloak_host
+        - ssl_cert
+      host_luxnix:
+        generic_settings.hostPlatform: '"x86_64-linux"'
+        generic_settings.linux.cpuMicrocode: '"intel"'
+        generic_settings.linux.initrd.availableKernelModules:
+          - xhci_pci
+          - ahci
+          - usbhid
+          - nvme
+          - usb_storage
+          - sd_mod
+        generic_settings.linux.initrd.kernelModules:
+          - nfs
+          - btrfs
+        generic_settings.linux.initrd.supportedFilesystems:
+          - nfs
+          - btrfs
+        generic_settings.linux.kernelModules:
+          - kvm-intel
+        generic_settings.linux.kernelModulesBlacklist: []
+        generic_settings.linux.kernelParams: []
+        generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+        generic_settings.linux.supportedFilesystems:
+          - nfs
+          - btrfs
+        generic_settings.systemStateVersion: '"23.11"'
+        generic_settings.vpnIp: '"172.16.255.12"'
+      host_roles: {}
+      host_services: {}
+      template_name: main
+  - ansible_group_names:
+      - language_english
+      - ssl_cert
+      - all
+      - base_server
+      - active_clients
+      - nextcloud_host
+      - smtp_cred
+      - managed
+    ansible_host: 172.16.255.13
+    ansible_role_names:
+      - ssl_cert
+      - nextcloud_host
+      - smtp_cred
+    extra_secret_names: []
+    extra_user_names:
+      - admin
+      - maintenance
+    facts:
+      all_ipv4_addresses:
+        - 192.168.1.24
+        - 172.16.255.13
+      bios:
+        date: 06/21/2023
+        vendor: American Megatrends International, LLC.
+        version: '0.22'
+      current_date: '2025-01-17T12:45:56Z'
+      default_ipv4:
+        address: 192.168.1.24
+        gateway: 192.168.178.1
+        interface: wlp3s0
+        netmask: 255.255.0.0
+      machine: x86_64
+    files: []
+    hostname: s-03
+    subnet: 172.16.255.
+    vars:
+      ansible_roles:
+        - ssl_cert
+        - nextcloud_host
+        - smtp_cred
+      host_luxnix:
+        generic_settings.enable: 'true'
+        generic_settings.hostPlatform: '"x86_64-linux"'
+        generic_settings.linux.cpuMicrocode: '"amd"'
+        generic_settings.linux.initrd.availableKernelModules:
+          - xhci_pci
+          - ahci
+          - usbhid
+          - nvme
+          - usb_storage
+          - sd_mod
+        generic_settings.linux.initrd.kernelModules:
+          - nfs
+          - btrfs
+        generic_settings.linux.initrd.supportedFilesystems:
+          - nfs
+          - btrfs
+        generic_settings.linux.kernelModules:
+          - kvm-amd
+        generic_settings.linux.kernelModulesBlacklist: []
+        generic_settings.linux.kernelParams: []
+        generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+        generic_settings.linux.supportedFilesystems:
+          - nfs
+          - btrfs
+        generic_settings.systemStateVersion: '"23.11"'
+        generic_settings.vpnIp: '"172.16.255.13"'
+      host_roles: {}
+      host_services: {}
+      template_name: main
+  - ansible_group_names:
       - all
       - gpu_client
     ansible_host: 172.16.255.101
@@ -728,7 +727,7 @@ all:
     hostname: gc-04
     subnet: 172.16.255.
     vars: {}
-file: /home/admin/lx-production/ansible/inventory/hosts.ini
+file: /home/admin/dev/luxnix/ansible/inventory/hosts.ini
 groups:
   - extra_user_names: []
     files: []
@@ -890,6 +889,7 @@ groups:
       group_roles:
         aglnet.client.enable: 'true'
         endoreg_client.enable: 'true'
+        nextcloudClient.enable: 'true'
       group_services: {}
   - extra_user_names: []
     files: []
@@ -1040,27 +1040,6 @@ roles:
     vars: {}
   - extra_user_names: []
     files: []
-    name: traefik_host
-    vars:
-      role_luxnix:
-        generic-settings.sslCertificateKeyPath: '"/etc/secrets/vault/ssl_key"'
-        generic-settings.sslCertificatePath: '"/etc/secrets/vault/ssl_cert"'
-      role_roles:
-        traefikHost.allowedIPs:
-          - 172.16.255.106
-          - 172.16.255.1
-          - 127.0.0.1
-        traefikHost.dashboard: 'true'
-        traefikHost.dashboardHost: '"traefik.endo-reg.net"'
-        traefikHost.enable: 'true'
-        traefikHost.insecure: 'false'
-        traefikHost.keycloak.domain: '"keycloak.endo-reg.net"'
-        traefikHost.keycloak.enable: 'true'
-        traefikHost.keycloak.port: '9080'
-        traefikHost.sslCertPath: '"/etc/secrets/vault/ssl_cert"'
-        traefikHost.sslKeyPath: '"/etc/secrets/vault/ssl_key"'
-  - extra_user_names: []
-    files: []
     name: nginx_host
     vars:
       role_luxnix:
@@ -1083,6 +1062,27 @@ roles:
       role_ssl_key_src: /home/admin/dev/luxnix/secrets/ssl/ssl_key
   - extra_user_names: []
     files: []
+    name: traefik_host
+    vars:
+      role_luxnix:
+        generic-settings.sslCertificateKeyPath: '"/etc/secrets/vault/ssl_key"'
+        generic-settings.sslCertificatePath: '"/etc/secrets/vault/ssl_cert"'
+      role_roles:
+        traefikHost.allowedIPs:
+          - 172.16.255.106
+          - 172.16.255.1
+          - 127.0.0.1
+        traefikHost.dashboard: 'true'
+        traefikHost.dashboardHost: '"traefik.endo-reg.net"'
+        traefikHost.enable: 'true'
+        traefikHost.insecure: 'false'
+        traefikHost.keycloak.domain: '"keycloak.endo-reg.net"'
+        traefikHost.keycloak.enable: 'true'
+        traefikHost.keycloak.port: '9080'
+        traefikHost.sslCertPath: '"/etc/secrets/vault/ssl_cert"'
+        traefikHost.sslKeyPath: '"/etc/secrets/vault/ssl_key"'
+  - extra_user_names: []
+    files: []
     name: nextcloud_host
     vars:
       role_minio_cred_filename: SCRT_roles_system_password_nextcloud_host_minio_credentials
@@ -1099,16 +1099,6 @@ roles:
         postgres.default.enable: 'false'
   - extra_user_names: []
     files: []
-    name: ssl_cert
-    vars:
-      role_luxnix: {}
-      role_role_dest: /etc/secrets/vault/ssl_cert
-      role_role_src: /home/admin/dev/luxnix/secrets/ssl/ssl_cert
-      role_roles: {}
-      role_ssl_key_dest: /etc/secrets/vault/ssl_key
-      role_ssl_key_src: /home/admin/dev/luxnix/secrets/ssl/ssl_key
-  - extra_user_names: []
-    files: []
     name: smtp_cred
     vars:
       role_luxnix: {}
@@ -1117,3 +1107,13 @@ roles:
       role_roles: {}
       role_user_dest: /etc/secrets/vault/smtp_user
       role_user_src: /home/admin/dev/luxnix/secrets/smtp/smtp_user
+  - extra_user_names: []
+    files: []
+    name: ssl_cert
+    vars:
+      role_luxnix: {}
+      role_role_dest: /etc/secrets/vault/ssl_cert
+      role_role_src: /home/admin/dev/luxnix/secrets/ssl/ssl_cert
+      role_roles: {}
+      role_ssl_key_dest: /etc/secrets/vault/ssl_key
+      role_ssl_key_src: /home/admin/dev/luxnix/secrets/ssl/ssl_key

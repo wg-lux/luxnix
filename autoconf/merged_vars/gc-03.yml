@@ -79,6 +79,7 @@ group_roles:
   custom_packages.cloud: 'true'
   custom_packages.enable: 'true'
   endoreg_client.enable: 'true'
+  nextcloudClient.enable: 'true'
 group_services: {}
 luxnix_branch: main
 luxnix_dest: /home/admin/lx-production

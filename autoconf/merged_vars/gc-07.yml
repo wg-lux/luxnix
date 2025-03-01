@@ -82,6 +82,7 @@ group_roles:
   custom_packages.cloud: 'true'
   custom_packages.enable: 'true'
   endoreg_client.enable: 'true'
+  nextcloudClient.enable: 'true'
   postgres.default.enable: 'true'
 group_services: {}
 host_luxnix:
