@@ -148,7 +148,7 @@ in
       };
 
       environment.systemPackages = [ pkgs.minio-client cfg.package pkgs.clamav ];
-      networking.firewall.allowedTCPPorts = [ 80 443 ];
+      networking.firewall.allowedTCPPorts = [ 80 443 3002 ];
 
       # systemd.tmpfiles.rules = [
       #   "d /etc/nextcloud 0770 nextcloud nextcloud -"
@@ -176,7 +176,7 @@ in
           # configure app via terminal or console:
           # nextcloud-occ config:app:set whiteboard collabBackendUrl --value="http://localhost:3002"
           # nextcloud-occ config:app:set whiteboard jwt_secret_key --value="test123"
-          "/etc/nextcloud-jwt"
+          /etc/nextcloud-jwt
         ];
       };
 
