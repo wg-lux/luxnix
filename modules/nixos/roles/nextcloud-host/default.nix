@@ -167,16 +167,18 @@ in
         "d /var/lib/minio/config 0750 minio minio - -"
       ];
 
-      services.nextcloud-whiteboard-server.enable = true;
-      services.nextcloud-whiteboard-server.settings = {
-        NEXTCLOUD_URL = "https://cloud.endo-reg.net";
+      services.nextcloud-whiteboard-server = {
+        enable = true;
+        settings.NEXTCLOUD_URL = "http://localhost";
+        secrets = [
+          #TODO Docs: Create manually, e.g.:
+          # JWT_SECRET_KEY=SUPER_SECRET_KEY_VALUE
+          # configure app via terminal or console:
+          # nextcloud-occ config:app:set whiteboard collabBackendUrl --value="http://localhost:3002"
+          # nextcloud-occ config:app:set whiteboard jwt_secret_key --value="test123"
+          "/etc/nextcloud-jwt"
+        ];
       };
-
-      services.nextcloud-whiteboard-server.secrets = [
-        #TODO Docs: Create manually, e.g.:
-        # JWT_SECRET_KEY=SUPER_SECRET_KEY_VALUE
-        "/etc/nextcloud-jwt"
-      ];
 
       services.nextcloud = {
         enable = true;
@@ -202,7 +204,6 @@ in
           ## defaults to socket for sqlite and pgsql if createLocally is true
           # dbhost = "localhost"; # default = "localhost"; 
           # dbpassFile = ; # defualt is null
-
           objectstore.s3 = {
             enable = true;
             bucket = "nextcloud";
