@@ -444,6 +444,20 @@ in
             proxyWebsockets = true; # collabora uses websockets
           };
         };
+        # locations."/whiteboard/" = {
+        #     proxyPass = "http://127.0.0.1:3002/";
+        #     proxy_http_version = "1.1";
+
+        #     # proxy_set_header Upgrade $http_upgrade;
+        #     # proxy_set_header Connection "Upgrade";
+        #     extraConfig = all-extraConfig + ''
+        #       proxy_set_header Upgrade $http_upgrade
+        #       proxy_set_header Connection "Upgrade"'';
+        #   };
+        virtualHosts."cloud.endo-reg-net".locations."/whiteboard" = {
+          proxyPass = "http://localhost:3002";
+          proxyWebsockets = true; # whiteboard uses websockets
+        };
       };
 
       networking.hosts = {

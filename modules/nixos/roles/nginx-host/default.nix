@@ -222,16 +222,6 @@ in
               proxyPass = "http://${nextcloudConfig.vpnIp}/";
               extraConfig = all-extraConfig;
             };
-            locations."/whiteboard/" = {
-              proxyPass = "http://127.0.0.1:3002/";
-              proxy_http_version = "1.1";
-
-              # proxy_set_header Upgrade $http_upgrade;
-              # proxy_set_header Connection "Upgrade";
-              extraConfig = all-extraConfig + ''
-                proxy_set_header Upgrade $http_upgrade
-                proxy_set_header Connection "Upgrade"'';
-            };
           };
         })
         (mkIf cfg.keycloak.enable {
