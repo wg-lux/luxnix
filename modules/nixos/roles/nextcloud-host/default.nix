@@ -176,7 +176,7 @@ in
           # configure app via terminal or console:
           # nextcloud-occ config:app:set whiteboard collabBackendUrl --value="http://localhost:3002"
           # nextcloud-occ config:app:set whiteboard jwt_secret_key --value="test123"
-          /etc/nextcloud-jwt
+          "/etc/nextcloud-jwt"
         ];
       };
 
