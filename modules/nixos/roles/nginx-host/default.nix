@@ -218,6 +218,17 @@ in
             sslCertificate = nginx_cert_path;
             sslCertificateKey = nginx_key_path;
 
+            locations."/whiteboard/" = {
+              proxyPass = "http://${nextcloudConfig.vpnIp}:3002/";
+              proxy_http_version = "1.1";
+              proxyWebsockets = true; #
+              # proxy_set_header Upgrade $http_upgrade;
+              # proxy_set_header Connection "Upgrade";
+              extraConfig = all-extraConfig + ''
+                proxy_set_header Upgrade $http_upgrade
+                proxy_set_header Connection "Upgrade"'';
+            };
+
             locations."/" = {
               proxyPass = "http://${nextcloudConfig.vpnIp}/";
               extraConfig = all-extraConfig;
@@ -232,6 +243,7 @@ in
 
             locations."/" = {
               proxyPass = "https://${keycloakConfig.vpnIp}:${toString keycloakConfig.port}";
+              proxyWebsockets = true;
               extraConfig = all-extraConfig;
             };
           };
