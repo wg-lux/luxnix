@@ -447,8 +447,8 @@ in
       };
 
       networking.hosts = {
-        "127.0.0.1" = [ "nextcloud.endo-reg.net" "collabora.endo-reg.net" ];
-        "::1" = [ "nextcloud.endo-reg.net" "collabora.endo-reg.net" ];
+        "127.0.0.1" = [ "cloud.endo-reg.net" "collabora.endo-reg.net" ];
+        "::1" = [ "cloud.endo-reg.net" "collabora.endo-reg.net" ];
       };
 
 
