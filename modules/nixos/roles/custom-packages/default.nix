@@ -160,6 +160,7 @@ in
       enable = lib.mkDefault cfg.hardwareAcceleration;
       extraPackages = with pkgs; (if cfg.hardwareAcceleration then [
         intel-vaapi-driver
+        intel-media-driver
         vpl-gpu-rt
       ] else [ ]);
 

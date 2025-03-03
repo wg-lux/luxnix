@@ -167,9 +167,21 @@ in
         "d /var/lib/minio/config 0750 minio minio - -"
       ];
 
+      services.nextcloud-whiteboard-server.enable = true;
+      services.nextcloud-whiteboard-server.settings = {
+        NEXTCLOUD_URL = "https://${conf.domain}";
+      };
+
+      services.nextcloud-whiteboard-server.secrets = [
+        #TODO Docs: Create manually, e.g.:
+        # JWT_SECRET_KEY=SUPER_SECRET_KEY_VALUE
+        "/etc/secrets/vault/nextcloud-jwt"
+      ];
+
       services.nextcloud = {
         enable = true;
         package = cfg.package;
+
         config = {
           dbuser = "nextcloud"; # default = "nextcloud";
           dbtype = "pgsql"; # default = "sqlite";
