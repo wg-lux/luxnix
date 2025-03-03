@@ -169,7 +169,7 @@ in
 
       services.nextcloud-whiteboard-server = {
         enable = true;
-        settings.NEXTCLOUD_URL = "http://localhost";
+        settings.NEXTCLOUD_URL = "http://cloud.endo-reg.net";
         secrets = [
           #TODO Docs: Create manually, e.g.:
           # JWT_SECRET_KEY=SUPER_SECRET_KEY_VALUE
