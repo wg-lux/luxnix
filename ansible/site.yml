@@ -9,6 +9,12 @@
   roles:
     - postgres_host_main
 
+- name: Set role dev-04 Dev-Access
+  hosts: gs-01
+  become: true
+  roles:
+    - dev_access
+
 # - name: Set role ssl_cert for ssl_cert
 #   gather_facts: false
 #   hosts: ssl_cert

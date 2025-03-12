@@ -2,7 +2,8 @@
 ---
 template_name: "main"
 
-ansible_roles: []
+ansible_roles:
+  - "dev_access"
 
 host_roles: {}
 

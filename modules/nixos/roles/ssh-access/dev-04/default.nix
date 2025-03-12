@@ -10,12 +10,12 @@ in
 {
   options.roles.ssh-access.dev-04 = {
     enable = mkBoolOpt false ''
-      Enable ssh access for dev-04 (defaults to gc-08 pub key)
+      Enable ssh access for dev-04 
     '';
 
     idEd25519 = mkOption {
       type = types.str;
-      default = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK";
+      default = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICSpoZVcX+K6NdrfqcUVPTU8Ljqlp83YDzzEHjTHU2NO";
       description = ''
         Access key for user
       '';
