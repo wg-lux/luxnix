@@ -1,0 +1,40 @@
+# inventory/host_vars/s-01.yml
+---
+template_name: "main"
+
+host_roles:
+  aglnet.client.enable: "lib.mkForce false"
+  aglnet.host.enable: "true"
+
+host_services: {}
+host_luxnix:
+  boot_decryption_stick.enable: "false"
+  generic_settings.hostPlatform: '"x86_64-linux"'
+  generic_settings.systemStateVersion: '"23.11"'
+  generic_settings.vpnIp: '"172.16.255.14"'
+
+  generic_settings.linux.cpuMicrocode: '"intel"'
+
+  generic_settings.linux.kernelModules:
+    - "kvm-intel"
+  generic_settings.linux.initrd.supportedFilesystems:
+    - "btrfs"
+    - "nfs"
+  generic_settings.linux.initrd.kernelModules:
+    - "btrfs"
+    - "nfs"
+  generic_settings.linux.initrd.availableKernelModules:
+    - "xhci_pci"
+    - "uas"
+    - "ahci"
+    - "usbhid"
+    - "nvme"
+    - "usb_storage"
+    - "sd_mod"
+    - "sdhci_pci"
+  generic_settings.linux.supportedFilesystems:
+    - "btrfs"
+    - "nfs"
+  generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+  generic_settings.linux.kernelParams: []
+  generic_settings.linux.kernelModulesBlacklist: []

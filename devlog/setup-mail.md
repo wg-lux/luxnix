@@ -21,11 +21,11 @@ _NoIP Postfix guide_: https://www.noip.com/support/knowledgebase/configure-postf
 # Variables for setup
 
 mail.noip.com
-465
-
+ssl on
 authentication on
 webmaster@endo-reg.net
 port 465
+
 # NixOS Postfix Example
 
 services.postfix = {
