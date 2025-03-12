@@ -29,7 +29,7 @@
     };
 
   luxnix = {
-    boot-decryption-stick.enable = false;
+    boot-decryption-stick.enable = true;
 
 dns.enable = true;
 

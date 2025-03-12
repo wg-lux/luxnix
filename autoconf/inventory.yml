@@ -700,7 +700,6 @@ all:
     subnet: 172.16.255.
     vars:
       host_luxnix:
-        boot_decryption_stick.enable: 'false'
         generic_settings.hostPlatform: '"x86_64-linux"'
         generic_settings.linux.cpuMicrocode: '"intel"'
         generic_settings.linux.initrd.availableKernelModules:
