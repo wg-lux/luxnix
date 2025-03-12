@@ -1,5 +1,5 @@
 ---
 dev_access_roles:
   ssh_access.dev_04.enable: "true"
-  ssh_access.dev_04.idEd25519: '"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICSpoZVcX+K6NdrfqcUVPTU8Ljqlp83YDzzEHjTHU2NO"'
+  ssh_access.dev_04.idEd25519: '"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICSpoZVcX+K6NdrfqcUVPTU8Ljqlp83YDzzEHjTHU2NO flippos@inexen9"'
 dev_access_luxnix: {}
