@@ -729,8 +729,7 @@ all:
         generic_settings.systemStateVersion: '"23.11"'
         generic_settings.vpnIp: '"172.16.255.14"'
       host_roles:
-        aglnet.client.enable: lib.mkForce false
-        aglnet.host.enable: 'true'
+        aglnet.client.enable: 'true'
       host_services: {}
       template_name: main
   - ansible_group_names:

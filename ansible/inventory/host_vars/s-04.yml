@@ -3,8 +3,7 @@
 template_name: "main"
 
 host_roles:
-  aglnet.client.enable: "lib.mkForce false"
-  aglnet.host.enable: "true"
+  aglnet.client.enable: "true"
 
 host_services: {}
 host_luxnix:

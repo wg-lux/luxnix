@@ -108,8 +108,7 @@ host_luxnix:
   generic_settings.systemStateVersion: '"23.11"'
   generic_settings.vpnIp: '"172.16.255.14"'
 host_roles:
-  aglnet.client.enable: lib.mkForce false
-  aglnet.host.enable: 'true'
+  aglnet.client.enable: 'true'
 host_services: {}
 luxnix_branch: main
 luxnix_dest: /home/admin/lx-production
