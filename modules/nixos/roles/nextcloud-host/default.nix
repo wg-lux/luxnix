@@ -290,9 +290,9 @@ in
           mail_smtpauthtype = "LOGIN";
           mail_domain = "endo-reg.net"; #FIXME Move to Options
 
-          oidc_login_provider_url = "https://keycloak.endo-reg.net/auth/realms/master"; #FIXME Move to Options
+          oidc_login_provider_url = "https://keycloak.endo-reg.net/realms/master";
           oidc_login_end_session_redirect = true;
-          oidc_login_logout_url = "https://cloud.endo-reg.net/apps/oidc_login/oidc"; #FIXME Move to Options
+          oidc_login_logout_url = "https://keycloak.endo-reg.net/realms/master/protocol/openid-connect/logout";
           oidc_login_auto_redirect = true;
           oidc_login_redir_fallback = true;
           oidc_login_attributes = {
