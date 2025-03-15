@@ -26,6 +26,7 @@
     postgres.default.enable = true;
     custom-packages.baseDevelopment = true;
     custom-packages.hardwareAcceleration = true;
+    custom-packages.protonmail = true;
     custom-packages.videoEditing = true;
     custom-packages.visuals = true;
     };

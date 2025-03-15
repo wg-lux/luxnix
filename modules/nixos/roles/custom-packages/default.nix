@@ -118,6 +118,11 @@ with lib.luxnix; let
   ++ (if cfg.dev02 then dev02 else [ ])
   ++ (if cfg.dev03 then dev03 else [ ])
   ++ (if cfg.cloud then cloud else [ ])
+  ++ (if cfg.protonmail then [
+    pkgs.protonmail-bridge-gui
+    pkgs.protonmail-desktop
+    pkgs.proton-pass
+  ] else [ ])
   ;
 
   ldPackages = lib.mkIf cfg.ld.enable (
@@ -136,6 +141,7 @@ in
     dev01 = mkBoolOpt false "Add dev01 packages to custom packages";
     dev02 = mkBoolOpt false "Add dev02 packages to custom packages";
     dev03 = mkBoolOpt false "Add dev03 packages to custom packages";
+    protonmail = mkBoolOpt false "Add Protonmail packages to custom packages";
     ld = {
       enable = mkBoolOpt true "Enable nix-ld";
     };

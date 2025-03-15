@@ -21,6 +21,7 @@ host_roles:
   custom_packages.baseDevelopment: "true"
   custom_packages.visuals: "true"
   custom_packages.hardwareAcceleration: "true"
+  custom_packages.protonmail: "true"
 
 host_services: {}
 

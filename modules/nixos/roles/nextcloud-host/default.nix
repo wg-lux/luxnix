@@ -288,8 +288,24 @@ in
           mail_smtpport = "465";
           mail_smtpauth = "1";
           mail_smtpauthtype = "LOGIN";
-          mail_domain = "endo-reg.net";
+          mail_domain = "endo-reg.net"; #FIXME Move to Options
+
+          oidc_login_provider_url = "https://keycloak.endo-reg.net/auth/realms/master"; #FIXME Move to Options
+          oidc_login_end_session_redirect = true;
+          oidc_login_logout_url = "https://cloud.endo-reg.net/apps/oidc_login/oidc"; #FIXME Move to Options
+          oidc_login_auto_redirect = true;
+          oidc_login_redir_fallback = true;
+          oidc_login_attributes = {
+            id = "preferred_username";
+            mail = "email";
+          };
         };
+
+        # Secret options which will be appended to Nextcloud’s config.php file (written as JSON, in the same form as 
+        # the services.nextcloud.settings option), for example 
+        # {"redis":{"password":"secret"}}.
+        # default is null
+        secretFile = "/etc/nextcloud-secrets.json"; #FIXME Move to options and add to ansible managed secrets
 
         # ###### Hosting ######
         https = true; # default = false;

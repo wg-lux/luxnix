@@ -123,6 +123,7 @@ host_luxnix:
 host_roles:
   custom_packages.baseDevelopment: 'true'
   custom_packages.hardwareAcceleration: 'true'
+  custom_packages.protonmail: 'true'
   custom_packages.videoEditing: 'true'
   custom_packages.visuals: 'true'
 host_services: {}
