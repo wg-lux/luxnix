@@ -300,10 +300,9 @@ in
           oidc_login_attributes = {
             id = "preferred_username";
             mail = "email";
-            groups = "ownCloudGroups";
+            groups = "roles";
             login_filter = "realm_access_roles";
           };
-          oidc_login_default_group = "oidc";
           oidc_login_use_id_token = false; # Use ID Token instead of UserInfo
           oidc_login_disable_registration = true; # Disable registration
           oidc_create_groups = true; # Create groups
