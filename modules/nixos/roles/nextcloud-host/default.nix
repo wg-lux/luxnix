@@ -292,13 +292,22 @@ in
 
           oidc_login_provider_url = "https://keycloak.endo-reg.net/realms/master";
           oidc_login_end_session_redirect = true;
-          oidc_login_logout_url = "https://keycloak.endo-reg.net/realms/master/protocol/openid-connect/logout";
-          oidc_login_auto_redirect = true;
+          oidc_login_logout_url = "https://cloud.endo-reg.net";
+          oidc_login_auto_redirect = false;
           oidc_login_redir_fallback = true;
+          oidc_login_button_text = "Login with Keycloak";
+          oidc_login_hide_password_form = false; # Hide the change pwd form
           oidc_login_attributes = {
             id = "preferred_username";
             mail = "email";
+            groups = "ownCloudGroups";
+            login_filter = "realm_access_roles";
           };
+          oidc_login_default_group = "oidc";
+          oidc_login_use_id_token = false; # Use ID Token instead of UserInfo
+          oidc_login_disable_registration = true; # Disable registration
+          oidc_create_groups = true; # Create groups
+
         };
 
         # Secret options which will be appended to Nextcloud’s config.php file (written as JSON, in the same form as 
