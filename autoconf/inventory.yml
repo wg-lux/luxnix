@@ -599,6 +599,7 @@ all:
       template_name: main
   - ansible_group_names:
       - language_english
+      - endoreg_db_api_local
       - ssl_cert
       - all
       - gpu_client
@@ -994,6 +995,15 @@ groups:
     files: []
     name: smtp_cred
     vars: {}
+  - extra_user_names: []
+    files: []
+    name: endoreg_db_api_local
+    vars:
+      group_luxnix: {}
+      group_roles:
+        endoreg_client.dbApiLocal: 'true'
+        endoreg_client.enable: 'true'
+      group_services: {}
   - extra_user_names: []
     files: []
     name: hetzner_server
