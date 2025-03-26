@@ -40,9 +40,6 @@ in {
     roles.postgres.default.enable = lib.mkDefault true; 
     roles.custom-packages.enable = lib.mkDefault true;
 
-    ########### MOVE TO MAINTENANCE BOOTMODE
-    #TODO limit to vpn subnet
-    services.ssh.enable = true;
 
     hardware = {
       networking.enable = true;
@@ -67,6 +64,9 @@ in {
 
     services.virtualisation.podman.enable = true;
 
+
+    ########### MOVE TO MAINTENANCE BOOTMODE
+    #TODO limit to vpn subnet
     services.ssh = {
       enable = true;
       authorizedKeys = [
