@@ -31,11 +31,11 @@ with lib.luxnix; let
     fi
     cd ${repoDir}
 
-    # checkout and pull branch "v0.1.1"
-    git checkout v0.1.1
+    # we can also use specific branches: checkout and pull branch "v0.1.1"
+    # git checkout v0.1.1
     git pull
 
-    devenv up django --detach
+    exec devenv shell -- run-prod-server
   '';
 
 
@@ -59,11 +59,13 @@ in
       description = "Clone or pull endoreg-db-api and run devenv up";
       wantedBy = [ "multi-user.target" ];
       serviceConfig = {
-        Type = "simple";
+        Type = "exec";
         User = endoreg-service-user-name;
         # WorkingDirectory = repoDir;
         Environment = "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:/run/current-system/sw/bin";
         ExecStart = "${runLocalEndoRegDbApiScript}/bin/${scriptName}";
+        # Restart = "always"; # optionally restart if crashes occur
+        # RestartSec = 120; # optional wait time before restart
       };
     };
   };
