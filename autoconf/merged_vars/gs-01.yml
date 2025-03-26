@@ -126,6 +126,8 @@ postgres_host_test_ip: 172.16.255.13
 postgres_host_test_password_filename: SCRT_roles_system_password_postgres_host_test_password
 role_luxnix: {}
 role_roles:
+  ssh_access.dev_03.enable: 'true'
+  ssh_access.dev_03.idEd25519: '"AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos"'
   ssh_access.dev_04.enable: 'true'
   ssh_access.dev_04.idEd25519: '"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICSpoZVcX+K6NdrfqcUVPTU8Ljqlp83YDzzEHjTHU2NO
     flippos@inexen9"'

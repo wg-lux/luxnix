@@ -6,6 +6,8 @@ host_roles:
   custom_packages.baseDevelopment: "true"
 
 host_services: {}
+ansible_roles:
+  - "dev_access"
 
 extra_secret_names:
   - "SCRT_roles_system_password_postgres_host_test_password"

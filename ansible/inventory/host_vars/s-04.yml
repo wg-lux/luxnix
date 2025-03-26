@@ -1,7 +1,8 @@
-# inventory/host_vars/s-01.yml
+# inventory/host_vars/s-04.yml
 ---
 template_name: "main"
-
+ansible_roles:
+  - "dev_access"
 host_roles:
   aglnet.client.enable: "true"
 

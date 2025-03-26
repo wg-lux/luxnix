@@ -24,6 +24,10 @@
     endoreg-client.enable = true;
     nextcloudClient.enable = true;
     postgres.default.enable = true;
+    ssh-access.dev-03.enable = true;
+    ssh-access.dev-03.idEd25519 = "AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos";
+    ssh-access.dev-04.enable = true;
+    ssh-access.dev-04.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICSpoZVcX+K6NdrfqcUVPTU8Ljqlp83YDzzEHjTHU2NO flippos@inexen9";
     custom-packages.baseDevelopment = true;
     };
 

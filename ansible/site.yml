@@ -9,8 +9,8 @@
   roles:
     - postgres_host_main
 
-- name: Set role dev-04 Dev-Access
-  hosts: gs-01
+- name: Set role Dev-Access
+  hosts: gs-01, gs-02, gc-05, s-04
   become: true
   roles:
     - dev_access

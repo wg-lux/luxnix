@@ -17,7 +17,7 @@ in
       type = types.str;
       default = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICSpoZVcX+K6NdrfqcUVPTU8Ljqlp83YDzzEHjTHU2NO";
       description = ''
-        Access key for user
+        Access key for user PS
       '';
     };
   };

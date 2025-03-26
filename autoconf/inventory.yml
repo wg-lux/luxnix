@@ -57,7 +57,8 @@ all:
       - local_endoreg_db
       - managed
     ansible_host: 172.16.255.105
-    ansible_role_names: []
+    ansible_role_names:
+      - dev_access
     extra_secret_names:
       - SCRT_roles_system_password_postgres_host_test_password
     extra_user_names:
@@ -68,6 +69,8 @@ all:
     hostname: gc-05
     subnet: 172.16.255.
     vars:
+      ansible_roles:
+        - dev_access
       extra_secret_names:
         - SCRT_roles_system_password_postgres_host_test_password
       host_luxnix:
@@ -397,7 +400,8 @@ all:
       - test_group
       - managed
     ansible_host: 172.16.255.22
-    ansible_role_names: []
+    ansible_role_names:
+      - dev_access
     extra_secret_names: []
     extra_user_names:
       - admin
@@ -421,7 +425,8 @@ all:
     hostname: gs-02
     subnet: 172.16.255.
     vars:
-      ansible_roles: []
+      ansible_roles:
+        - dev_access
       host_luxnix:
         boot_decryption_stick_gs_01.enable: 'true'
         generic_settings.hostPlatform: '"x86_64-linux"'
@@ -693,7 +698,8 @@ all:
       - base_server
       - managed
     ansible_host: 172.16.255.14
-    ansible_role_names: []
+    ansible_role_names:
+      - dev_access
     extra_secret_names: []
     extra_user_names:
       - admin
@@ -703,6 +709,8 @@ all:
     hostname: s-04
     subnet: 172.16.255.
     vars:
+      ansible_roles:
+        - dev_access
       host_luxnix:
         generic_settings.hostPlatform: '"x86_64-linux"'
         generic_settings.linux.cpuMicrocode: '"intel"'
@@ -1095,6 +1103,8 @@ roles:
     vars:
       role_luxnix: {}
       role_roles:
+        ssh_access.dev_03.enable: 'true'
+        ssh_access.dev_03.idEd25519: '"AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos"'
         ssh_access.dev_04.enable: 'true'
         ssh_access.dev_04.idEd25519: '"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICSpoZVcX+K6NdrfqcUVPTU8Ljqlp83YDzzEHjTHU2NO
           flippos@inexen9"'
