@@ -78,6 +78,8 @@ group_roles:
   base-server.enable: 'true'
   custom_packages.cloud: 'true'
   custom_packages.enable: 'true'
+  endoreg_client.dbApiLocal: 'true'
+  endoreg_client.enable: 'true'
 group_services: {}
 host_luxnix:
   boot_decryption_stick_gs_01.enable: 'true'

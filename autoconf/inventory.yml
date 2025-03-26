@@ -51,6 +51,7 @@ all:
       host_services: {}
       template_name: main
   - ansible_group_names:
+      - endoreg_db_api_local
       - all
       - gpu_client
       - active_clients
@@ -269,6 +270,7 @@ all:
       template_name: main
   - ansible_group_names:
       - language_english
+      - endoreg_db_api_local
       - all
       - gpu_server
       - active_clients
@@ -394,6 +396,7 @@ all:
       template_name: main
   - ansible_group_names:
       - language_english
+      - endoreg_db_api_local
       - all
       - gpu_server
       - active_clients

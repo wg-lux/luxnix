@@ -22,6 +22,8 @@
     base-server.enable = true;
     custom-packages.cloud = true;
     custom-packages.enable = true;
+    endoreg-client.dbApiLocal = true;
+    endoreg-client.enable = true;
     ssh-access.dev-03.enable = true;
     ssh-access.dev-03.idEd25519 = "AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos";
     ssh-access.dev-04.enable = true;
