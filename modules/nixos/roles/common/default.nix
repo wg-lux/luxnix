@@ -67,6 +67,14 @@ in {
 
     services.virtualisation.podman.enable = true;
 
+    services.ssh = {
+      enable = true;
+      authorizedKeys = [
+        # just adds authorized keys for admin user, does not enable ssh!
+        "${config.luxnix.generic-settings.rootIdED25519}"
+      ];
+    };
+
     system = {
       nix.enable = true;
       boot.enable = true;

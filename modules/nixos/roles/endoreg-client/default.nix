@@ -36,13 +36,7 @@ in
       enable = cfg.dbApiLocal;
     };
 
-    services.ssh = {
-      enable = true;
-      authorizedKeys = [
-        # just adds authorized keys for admin user, does not enable ssh!
-        "${config.luxnix.generic-settings.rootIdED25519}"
-      ];
-    };
+    
 
     systemd.tmpfiles.rules = [
       # USB Encrypter
