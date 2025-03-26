@@ -1,7 +1,7 @@
 ---
 dev_access_roles:
-  # ssh_access.dev_01.enable: "true"
-  # ssh_access.dev_01.idEd25519: '"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC5z5
+  ssh_access.dev_01.enable: "true"
+  ssh_access.dev_01.idEd25519: '"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK"'
 
   ssh_access.dev_03.enable: "true"
   ssh_access.dev_03.idEd25519: '"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos"'

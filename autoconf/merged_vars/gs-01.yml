@@ -128,6 +128,8 @@ postgres_host_test_ip: 172.16.255.13
 postgres_host_test_password_filename: SCRT_roles_system_password_postgres_host_test_password
 role_luxnix: {}
 role_roles:
+  ssh_access.dev_01.enable: 'true'
+  ssh_access.dev_01.idEd25519: '"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK"'
   ssh_access.dev_03.enable: 'true'
   ssh_access.dev_03.idEd25519: '"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos"'
   ssh_access.dev_04.enable: 'true'
