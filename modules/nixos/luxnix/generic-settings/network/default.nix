@@ -169,6 +169,8 @@ in {
       { "172.16.255.108" = [ "gc-08" "gc08.intern" ]; }
       { "172.16.255.109" = [ "gc-09" "gc09.intern" ]; }
 
+      { "172.16.255.131" = [ "c-01" "c-01.intern"]; }
+
       { "${cfg.keycloak.vpnIp}" = [ cfg.keycloak.domain cfg.keycloak.adminDomain ]; }
       { "${cfg.psqlMain.vpnIp}" = [ cfg.psqlMain.domain ]; }
       { "${cfg.psqlTest.vpnIp}" = [ cfg.psqlTest.domain ]; }
