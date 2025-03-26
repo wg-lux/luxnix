@@ -76,6 +76,7 @@ group_luxnix:
 group_roles:
   aglnet.client.enable: 'true'
   base-server.enable: 'true'
+  common.enable: 'true'
   custom_packages.cloud: 'true'
   custom_packages.enable: 'true'
   endoreg_client.dbApiLocal: 'true'

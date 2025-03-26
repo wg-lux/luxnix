@@ -25,6 +25,7 @@ ansible_groups:
 group_roles:
   custom_packages.enable: "true"
   custom_packages.cloud: "true"
+  common.enable: "true"
 group_services: {}
 group_luxnix:
   generic_settings.network.nginx.vpnIp: '"172.16.255.12"'

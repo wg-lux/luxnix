@@ -81,6 +81,7 @@ group_luxnix:
   vault.psk: '"/etc/secrets/.psk"'
 group_roles:
   aglnet.client.enable: 'true'
+  common.enable: 'true'
   custom_packages.cloud: 'true'
   custom_packages.enable: 'true'
   endoreg_client.dbApiLocal: 'true'

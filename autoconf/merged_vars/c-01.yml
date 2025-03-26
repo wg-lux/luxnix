@@ -38,7 +38,6 @@ endoreg_db_branch: main
 endoreg_db_dest: /home/admin/endoreg-db-production
 endoreg_db_repo: https://github.com/wg-lux/endoreg-db.git
 group_luxnix:
-  boot_decryption_stick.enable: 'true'
   dns.enable: 'true'
   generic-settings.smtpPwdFilePath: '"/etc/secrets/vault/smtp_pwd"'
   generic-settings.smtpUserFilePath: '"/etc/secrets/vault/smtp_user"'
@@ -46,7 +45,6 @@ group_luxnix:
   generic-settings.sslCertificatePath: '"/etc/secrets/vault/ssl_cert"'
   generic_settings.adminVpnIp: '"172.16.255.106"'
   generic_settings.enable: 'true'
-  generic_settings.language: '"english"'
   generic_settings.linux.kernelPackages: pkgs.linuxPackages_6_12
   generic_settings.network.keycloak.adminDomain: '"adminKeycloak.endo-reg.net"'
   generic_settings.network.keycloak.domain: '"keycloak.endo-reg.net"'
@@ -63,26 +61,18 @@ group_luxnix:
   generic_settings.traefikHostDomain: '"traefik.endo-reg.net"'
   generic_settings.traefikHostIp: '"172.16.255.12"'
   generic_settings.vpnSubnet: '"172.16.255.0/24"'
-  maintenance.autoUpdates.dates: '"04:00"'
-  maintenance.autoUpdates.enable: 'true'
-  maintenance.autoUpdates.flake: '"github:wg-lux/luxnix"'
-  nvidia_prime.enable: 'false'
   vault.dir: '"/etc/secrets/vault"'
   vault.enable: 'true'
   vault.key: '"/etc/secrets/.key"'
   vault.psk: '"/etc/secrets/.psk"'
 group_roles:
-  aglnet.client.enable: 'true'
-  aglnet.host.enable: 'true'
-  base_server.enable: 'true'
   common.enable: 'true'
   custom_packages.cloud: 'true'
   custom_packages.enable: 'true'
-  endoreg_client.enable: 'false'
 group_services: {}
 host_luxnix:
   generic_settings.hostPlatform: '"x86_64-linux"'
-  generic_settings.linux.cpuMicrocode: '"amd"'
+  generic_settings.linux.cpuMicrocode: '"intel"'
   generic_settings.linux.initrd.availableKernelModules:
     - xhci_pci
     - uas
@@ -91,22 +81,27 @@ host_luxnix:
     - nvme
     - usb_storage
     - sd_mod
+    - sdhci_pci
   generic_settings.linux.initrd.kernelModules:
+    - btrfs
     - nfs
   generic_settings.linux.initrd.supportedFilesystems:
+    - btrfs
     - nfs
   generic_settings.linux.kernelModules:
-    - kvm-amd
+    - kvm-intel
   generic_settings.linux.kernelModulesBlacklist: []
   generic_settings.linux.kernelParams: []
   generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
   generic_settings.linux.supportedFilesystems:
     - btrfs
+    - nfs
   generic_settings.systemStateVersion: '"23.11"'
-  generic_settings.vpnIp: '"172.16.255.1"'
+  generic_settings.vpnIp: '"172.16.255.131"'
 host_roles:
-  aglnet.client.enable: lib.mkForce false
-  aglnet.host.enable: 'true'
+  aglnet.client.enable: 'true'
+  custom_packages.hardwareAcceleration: 'true'
+  desktop.enable: 'true'
 host_services: {}
 luxnix_branch: main
 luxnix_dest: /home/admin/lx-production

@@ -19,6 +19,7 @@
 
   roles = { 
     aglnet.client.enable = true;
+    common.enable = true;
     custom-packages.cloud = true;
     custom-packages.enable = true;
     endoreg-client.dbApiLocal = true;
