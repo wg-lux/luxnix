@@ -55,6 +55,7 @@ generic-settings.language = "english";
 
 generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
 
+generic-settings.linux.kernelParams = [];
 generic-settings.network.keycloak.adminDomain = "adminKeycloak.endo-reg.net";
 
 generic-settings.network.keycloak.domain = "keycloak.endo-reg.net";
@@ -114,7 +115,6 @@ generic-settings.linux.initrd.kernelModules = ["nfs" "dm-snapshot"];
 generic-settings.linux.initrd.supportedFilesystems = ["nfs"];
 generic-settings.linux.kernelModules = ["kvm-amd"];
 generic-settings.linux.kernelModulesBlacklist = [];
-generic-settings.linux.kernelParams = [];
 generic-settings.linux.resumeDevice = "/dev/disk/by-label/nixos";
 
 generic-settings.linux.supportedFilesystems = ["btrfs"];

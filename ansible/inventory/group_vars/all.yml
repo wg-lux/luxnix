@@ -28,6 +28,7 @@ group_roles:
   common.enable: "true"
 group_services: {}
 group_luxnix:
+  generic_settings.linux.kernelParams: ["mem_sleep_default=deep"]
   generic_settings.network.nginx.vpnIp: '"172.16.255.12"'
   generic_settings.network.keycloak.domain: '"keycloak.endo-reg.net"'
   generic_settings.network.keycloak.adminDomain: '"adminKeycloak.endo-reg.net"'
