@@ -49,6 +49,8 @@ group_luxnix:
   generic_settings.enable: 'true'
   generic_settings.language: '"english"'
   generic_settings.linux.kernelPackages: pkgs.linuxPackages_6_12
+  generic_settings.linux.kernelParams:
+    - mem_sleep_default=deep
   generic_settings.network.keycloak.adminDomain: '"adminKeycloak.endo-reg.net"'
   generic_settings.network.keycloak.domain: '"keycloak.endo-reg.net"'
   generic_settings.network.keycloak.port: '8443'

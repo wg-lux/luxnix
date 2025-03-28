@@ -51,6 +51,8 @@ group_luxnix:
   generic_settings.enable: 'true'
   generic_settings.language: '"english"'
   generic_settings.linux.kernelPackages: pkgs.linuxPackages_6_12
+  generic_settings.linux.kernelParams:
+    - mem_sleep_default=deep
   generic_settings.network.keycloak.adminDomain: '"adminKeycloak.endo-reg.net"'
   generic_settings.network.keycloak.domain: '"keycloak.endo-reg.net"'
   generic_settings.network.keycloak.port: '8443'
@@ -115,6 +117,9 @@ host_luxnix:
   nvidia_prime.onboardGpuType: '"intel"'
 host_roles:
   custom_packages.baseDevelopment: 'true'
+  custom_packages.hardwareAcceleration: 'true'
+  custom_packages.videoEditing: 'true'
+  custom_packages.visuals: 'true'
 host_services: {}
 luxnix_branch: main
 luxnix_dest: /home/admin/lx-production
