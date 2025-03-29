@@ -1,10 +1,10 @@
-{pkgs, ...}: {
-    cli.programs.git = {
-      enable = true;
-      userName = "maxhild";
-      email = "maxhild10@gmail.com";
-      allowedSigners = "SHA256:LNfWnvEthO0QL8DzUxtxHD4VnLxvCZWFmcDhZodk29o";
-    };
+{ pkgs, ... }: {
+  cli.programs.git = {
+    enable = true;
+    userName = "maxhild";
+    email = "maxhild10@gmail.com";
+    allowedSigners = "SHA256:LNfWnvEthO0QL8DzUxtxHD4VnLxvCZWFmcDhZodk29o";
+  };
 
   desktops = {
     plasma = {
@@ -18,7 +18,7 @@
 
   luxnix.generic-settings = {
     enable = true;
-    configurationPath = "luxnix";
+    configurationPath = "dev/luxnix";
   };
 
   roles = {
