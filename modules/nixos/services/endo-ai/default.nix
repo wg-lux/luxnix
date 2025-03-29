@@ -32,7 +32,7 @@ with lib.luxnix; let
     cd ${repoDir}
 
     # we can also use specific branches: checkout and pull branch "v0.1.1"
-    # git checkout v0.1.1
+    git checkout minor-fix
     git pull
     exec devenv shell -- run-prod-server
   '';
