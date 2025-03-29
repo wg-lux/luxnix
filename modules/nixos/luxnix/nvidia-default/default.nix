@@ -49,14 +49,15 @@ in
     hardware.graphics = {
       enable = true;
       extraPackages = with pkgs; [
-        mesa
+        # nvidia-vaapi-driver
+        # vpl-gpu-rt
       ];
     };
 
     nixpkgs.config.cudaSupport = true;
 
-    services.xserver.videoDrivers = [ "nvidia" ];
-    boot.initrd.kernelModules = [ "nvidia" ];
+    services.xserver.videoDrivers = [ "modesetting" "nvidia" ];
+    boot.initrd.kernelModules = [ "modesetting" "nvidia" ];
 
     hardware.nvidia = {
       modesetting.enable = true;

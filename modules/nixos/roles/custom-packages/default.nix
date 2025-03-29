@@ -123,6 +123,13 @@ with lib.luxnix; let
     pkgs.protonmail-desktop
     pkgs.proton-pass
   ] else [ ])
+  ++ (if cfg.hardwareAcceleration then [
+    pkgs.pciutils
+    pkgs.libva
+
+    pkgs.vdpauinfo # sudo vainfo
+    pkgs.libva-utils # sudo vainfo
+  ] else [ ])
   ;
 
   ldPackages = lib.mkIf cfg.ld.enable (
@@ -165,11 +172,20 @@ in
     hardware.graphics = {
       enable = lib.mkDefault cfg.hardwareAcceleration;
       extraPackages = with pkgs; (if cfg.hardwareAcceleration then [
-        intel-vaapi-driver
+        # intel-vaapi-driver
         intel-media-driver
-        vpl-gpu-rt
-      ] else [ ]);
+        # https://discourse.nixos.org/t/nvidia-open-breaks-hardware-acceleration/58770/2
 
+        # libva
+
+        # vpl-gpu-rt
+      ] else [ ]);
+    };
+
+    environment.variables = {
+      LIBVA_DRIVER_NAME = lib.mkForce "iHD";
+
+      NVD_BACKEND = "direct";
     };
 
   };
