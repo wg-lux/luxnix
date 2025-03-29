@@ -19,6 +19,12 @@ in
       default = false;
       description = "Enable local endoreg-db-api service";
     };
+
+    endoAi = mkOption {
+      type = types.bool;
+      default = true;
+      description = "Enable endoAi service";
+    };
   };
 
   config = mkIf cfg.enable {
@@ -36,7 +42,11 @@ in
       enable = cfg.dbApiLocal;
     };
 
-    
+    services.luxnix.endoAi = {
+      enable = cfg.endoAi;
+    };
+
+
 
     systemd.tmpfiles.rules = [
       # USB Encrypter

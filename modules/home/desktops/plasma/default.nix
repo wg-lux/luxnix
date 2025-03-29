@@ -1,15 +1,15 @@
-{
-  config,
-  pkgs,
-  lib,
-  ...
+{ config
+, pkgs
+, lib
+, ...
 }:
-with lib; 
+with lib;
 with lib.luxnix;
 let
   cfg = config.desktops.plasma;
   # https://nix-community.github.io/plasma-manager/
-in {
+in
+{
   # imports = lib.snowfall.fs.get-non-default-nix-files ./.;
 
   options.desktops.plasma = {
@@ -23,10 +23,10 @@ in {
       #
       # Some high-level settings:
 
-        # Run to get options
-        # plasma-apply-colorscheme     plasma-apply-lookandfeel   
-        # plasma-apply-cursortheme     plasma-apply-wallpaperimage
-        # plasma-apply-desktoptheme  
+      # Run to get options
+      # plasma-apply-colorscheme     plasma-apply-lookandfeel   
+      # plasma-apply-cursortheme     plasma-apply-wallpaperimage
+      # plasma-apply-desktoptheme  
 
       workspace = {
         clickItemTo = "select";
@@ -62,16 +62,16 @@ in {
 
       desktop.widgets = [
         # {
-          # plasmusicToolbar = {
-          #   position = {
-          #     horizontal = 51;
-          #     vertical = 100;
-          #   };
-          #   size = {
-          #     width = 250;
-          #     height = 250;
-          #   };
-          # };
+        # plasmusicToolbar = {
+        #   position = {
+        #     horizontal = 51;
+        #     vertical = 100;
+        #   };
+        #   size = {
+        #     width = 250;
+        #     height = 250;
+        #   };
+        # };
         # }
       ];
 
@@ -79,7 +79,7 @@ in {
         # Windows-like panel at the bottom
         {
           location = "bottom";
-          widgets = [           
+          widgets = [
             {
               name = "org.kde.plasma.kickoff";
               config = {
@@ -89,8 +89,8 @@ in {
                 };
               };
             }
-{
-            iconTasks = {
+            {
+              iconTasks = {
                 launchers = [
                   # "applications:org.kde.dolphin.desktop"
                   "applications:org.kde.konsole.desktop"
@@ -224,8 +224,8 @@ in {
       };
 
       kwin = {
-        edgeBarrier = 0;        # Disables the edge-barriers introduced in plasma 6.1
-        cornerBarrier = true;  # When enabled, prevents the cursor from crossing at screen-corners.
+        edgeBarrier = 0; # Disables the edge-barriers introduced in plasma 6.1
+        cornerBarrier = true; # When enabled, prevents the cursor from crossing at screen-corners.
 
         scripts.polonium.enable = true;
         borderlessMaximizedWindows = true;
@@ -258,7 +258,7 @@ in {
         passwordRequired = true;
         passwordRequiredDelay = 10; # The time it takes in seconds for the password to be required after the screen is locked.
 
-        
+
       };
 
       #
@@ -292,14 +292,15 @@ in {
           # Forces kde to not change this value (even through the settings app).
           immutable = true;
         };
+        ksmserverrc."General".loginMode = "emptySession";
         # kscreenlockerrc = {
         #   Greeter.WallpaperPlugin = "org.kde.potd";
         #   # To use nested groups use / as a separator. In the below example,
         #   # Provider will be added to [Greeter][Wallpaper][org.kde.potd][General].
         #   "Greeter/Wallpaper/org.kde.potd/General".Provider = "bing";
         # };
+      };
     };
-    };
-   
+
   };
 }

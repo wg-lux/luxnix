@@ -11,10 +11,10 @@ with lib.luxnix; let
   gsp = gs.postgres;
 
   adminName = config.user.admin.name;
-  scriptName = "runLocalEndoRegDbApi";
+  scriptName = "runEndoAi";
 
-  gitURL = "https://github.com/wg-lux/endoreg-db-api";
-  repoDirName = "endoreg-db-api";
+  gitURL = "https://github.com/wg-lux/endo-ai";
+  repoDirName = "endo-ai";
 
 
   endoreg-service-user-name = config.user.endoreg-service-user.name;
@@ -22,7 +22,7 @@ with lib.luxnix; let
   endoreg-service-user-home = endoreg-service-user.home;
   repoDir = "${endoreg-service-user-home}/${repoDirName}";
 
-  runLocalEndoRegDbApiScript = pkgs.writeShellScriptBin "${scriptName}" ''
+  runEndoAiScript = pkgs.writeShellScriptBin "${scriptName}" ''
     if [ ! -d ${repoDir} ]; then
       git clone ${gitURL} ${repoDir}
     else
@@ -40,29 +40,21 @@ with lib.luxnix; let
 
 in
 {
-  options.services.luxnix.endoregDbApiLocal = {
-    enable = mkBoolOpt false "Enable EndoRegDbApi Service";
-
-
+  options.services.luxnix.endoAi = {
+    enable = mkBoolOpt false "Enable EndoAI Service";
   };
 
   config = mkIf cfg.enable {
 
-    # service to deploy secretfile
-    # src /etc/secrets/vault/SCRT_local_password_maintenance_password
-    # dst "${endoreg-service-user-home}/SCRT_local_password_maintenance_password"
-
-
-
-    systemd.services."endoreg-db-api-boot" = {
-      description = "Clone or pull endoreg-db-api and run prod-server";
+    systemd.services."endo-ai" = {
+      description = "Clone or pull endoreg-ai and run prod server";
       wantedBy = [ "multi-user.target" ];
       serviceConfig = {
         Type = "exec";
         User = endoreg-service-user-name;
         # WorkingDirectory = repoDir;
         Environment = "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:/run/current-system/sw/bin";
-        ExecStart = "${runLocalEndoRegDbApiScript}/bin/${scriptName}";
+        ExecStart = "${runEndoAiScript}/bin/${scriptName}";
         # Restart = "always"; # optionally restart if crashes occur
         # RestartSec = 120; # optional wait time before restart
       };
