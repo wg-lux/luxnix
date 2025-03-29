@@ -172,21 +172,11 @@ in
     hardware.graphics = {
       enable = lib.mkDefault cfg.hardwareAcceleration;
       extraPackages = with pkgs; (if cfg.hardwareAcceleration then [
-        # intel-vaapi-driver
         intel-media-driver
-        # https://discourse.nixos.org/t/nvidia-open-breaks-hardware-acceleration/58770/2
-
-        # libva
-
-        # vpl-gpu-rt
       ] else [ ]);
     };
 
-    environment.variables = {
-      LIBVA_DRIVER_NAME = lib.mkForce "iHD";
-
-      NVD_BACKEND = "direct";
-    };
+    environment.variables = { };
 
   };
 }
