@@ -68,7 +68,6 @@ in
     hardware.graphics = {
       enable = true;
       extraPackages = with pkgs; [
-        mesa
       ];
     };
 
@@ -84,7 +83,7 @@ in
         "${cfg.onboardGpuType}BusId" = cfg.onboardBusId;
       };
 
-      modesetting.enable = true;
+      modesetting.enable = false;
       powerManagement.enable = true;
       powerManagement.finegrained = false;
       open = false;
