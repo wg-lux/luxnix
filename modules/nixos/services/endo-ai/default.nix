@@ -6,7 +6,7 @@
 #CHANGEME
 with lib;
 with lib.luxnix; let
-  cfg = config.services.luxnix.endoregDbApiLocal;
+  cfg = config.services.luxnix.endoAi;
   gs = config.luxnix.generic-settings;
   gsp = gs.postgres;
 
