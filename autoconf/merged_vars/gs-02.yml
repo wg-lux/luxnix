@@ -77,12 +77,13 @@ group_luxnix:
   vault.psk: '"/etc/secrets/.psk"'
 group_roles:
   aglnet.client.enable: 'true'
-  base-server.enable: 'true'
+  base_server.enable: 'true'
   common.enable: 'true'
   custom_packages.cloud: 'true'
   custom_packages.enable: 'true'
   endoreg_client.dbApiLocal: 'true'
   endoreg_client.enable: 'true'
+  gpu_server.enable: 'true'
 group_services: {}
 host_luxnix:
   boot_decryption_stick_gs_01.enable: 'true'

@@ -46,7 +46,6 @@ in
         };
       };
 
-
       hotkeys.commands."launch-konsole" = {
         name = "Launch Konsole";
         key = "Meta+Alt+K";
@@ -92,7 +91,11 @@ in
             {
               iconTasks = {
                 launchers = [
-                  # "applications:org.kde.dolphin.desktop"
+                  # Firefox
+                  "applications:firefox.desktop"
+                  # Nextcloud Talk
+                  "applications:nextcloud-talk-desktop.desktop"
+                  "applications:org.kde.dolphin.desktop"
                   "applications:org.kde.konsole.desktop"
                 ];
               };
@@ -111,10 +114,10 @@ in
                 shown = [
                   "org.kde.plasma.battery"
                   "org.kde.plasma.networkmanagement"
+                  "org.kde.plasma.volume"
                 ];
                 # And explicitly hide
                 hidden = [
-                  "org.kde.plasma.volume"
                   "org.kde.plasma.bluetooth"
                 ];
               };
@@ -217,6 +220,7 @@ in
         battery = {
           powerButtonAction = "sleep";
           whenSleepingEnter = "standbyThenHibernate";
+          whenLaptopLidClosed = "hibernate";
         };
         lowBattery = {
           whenLaptopLidClosed = "hibernate";
@@ -246,7 +250,8 @@ in
         appearance = {
           alwaysShowClock = true;
           wallpaperPictureOfTheDay = {
-            provider = "bing";
+            # null or one of “apod”, “bing”, “flickr”, “natgeo”, “noaa”, “wcpotd”, “epod”, “simonstalenhag”
+            provider = "wcpotd";
           };
           # wallpaper = "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Kay/contents/images/1080x1920.png";
 

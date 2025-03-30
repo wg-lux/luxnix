@@ -1,6 +1,7 @@
 .repo_initialized
 .ansible/.lock
 conf/ansible.cfg
+result
 
 # direnv
 .direnv

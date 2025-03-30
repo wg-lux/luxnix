@@ -765,8 +765,8 @@ all:
       extra_secret_names:
         - SCRT_roles_system_password_postgres_host_test_password
       host_luxnix:
-        generic_settings.configurationPath: lib.mkForce "/home/admin/luxnix"
-        generic_settings.configurationPathRelative: '"luxnix"'
+        generic_settings.configurationPath: lib.mkForce "/home/admin/dev/luxnix"
+        generic_settings.configurationPathRelative: '"dev/luxnix"'
         generic_settings.hostPlatform: '"x86_64-linux"'
         generic_settings.linux.cpuMicrocode: '"intel"'
         generic_settings.linux.initrd.availableKernelModules:
@@ -985,7 +985,8 @@ groups:
         nvidia_default.enable: 'true'
       group_roles:
         aglnet.client.enable: 'true'
-        base-server.enable: 'true'
+        base_server.enable: 'true'
+        gpu_server.enable: 'true'
       group_services: {}
   - extra_user_names: []
     files: []

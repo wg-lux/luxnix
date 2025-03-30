@@ -6,7 +6,7 @@
 #CHANGEME
 with lib;
 with lib.luxnix; let
-  cfg = config.services.luxnix.endoregDbApiLocal;
+  cfg = config.services.luxnix.endoAi;
   gs = config.luxnix.generic-settings;
   gsp = gs.postgres;
 
@@ -32,7 +32,7 @@ with lib.luxnix; let
     cd ${repoDir}
 
     # we can also use specific branches: checkout and pull branch "v0.1.1"
-    # git checkout v0.1.1
+    git checkout stable
     git pull
     exec devenv shell -- run-prod-server
   '';

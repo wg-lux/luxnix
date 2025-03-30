@@ -89,8 +89,8 @@ group_roles:
   postgres.default.enable: 'true'
 group_services: {}
 host_luxnix:
-  generic_settings.configurationPath: lib.mkForce "/home/admin/luxnix"
-  generic_settings.configurationPathRelative: '"luxnix"'
+  generic_settings.configurationPath: lib.mkForce "/home/admin/dev/luxnix"
+  generic_settings.configurationPathRelative: '"dev/luxnix"'
   generic_settings.hostPlatform: '"x86_64-linux"'
   generic_settings.linux.cpuMicrocode: '"intel"'
   generic_settings.linux.initrd.availableKernelModules:

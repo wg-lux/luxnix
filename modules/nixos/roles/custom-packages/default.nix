@@ -33,6 +33,7 @@ with lib.luxnix; let
     keepassxc
     vlc
     bind
+    nixd
   ];
 
   visuals = with pkgs; [
