@@ -429,32 +429,32 @@ in
       #   "::1"
       # ];
 
-      services.collabora-online = {
-        enable = true;
-        port = 9980; # default
-        settings = {
-          # Rely on reverse proxy for SSL
-          ssl = {
-            enable = false;
-            termination = true;
-          };
+      # services.collabora-online = {
+      #   enable = true;
+      #   port = 9980; # default
+      #   settings = {
+      #     # Rely on reverse proxy for SSL
+      #     ssl = {
+      #       enable = false;
+      #       termination = true;
+      #     };
 
-          # Listen on loopback interface only, and accept requests from ::1
-          net = {
-            listen = "loopback";
-            post_allow.host = [ "::1" ];
-          };
+      #     # Listen on loopback interface only, and accept requests from ::1
+      #     net = {
+      #       listen = "loopback";
+      #       post_allow.host = [ "::1" ];
+      #     };
 
-          # Restrict loading documents from WOPI Host nextcloud.example.com
-          storage.wopi = {
-            "@allow" = true;
-            host = [ "cloud.endo-reg.net" ];
-          };
+      #     # Restrict loading documents from WOPI Host nextcloud.example.com
+      #     storage.wopi = {
+      #       "@allow" = true;
+      #       host = [ "cloud.endo-reg.net" ];
+      #     };
 
-          # Set FQDN of server
-          server_name = "collabora.endo-reg.net";
-        };
-      };
+      #     # Set FQDN of server
+      #     server_name = "collabora.endo-reg.net";
+      #   };
+      # };
 
       services.nginx = {
         enable = true;
