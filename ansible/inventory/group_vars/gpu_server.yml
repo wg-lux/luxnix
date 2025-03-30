@@ -1,6 +1,7 @@
 group_roles:
   aglnet.client.enable: "true"
-  base-server.enable: "true"
+  base_server.enable: "true"
+  gpu_server.enable: "true"
 group_services: {}
 group_luxnix:
   nvidia_default.enable: "true"

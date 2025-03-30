@@ -49,7 +49,7 @@ generic-settings.sslCertificatePath = "/etc/secrets/vault/ssl_cert";
 
 generic-settings.adminVpnIp = "172.16.255.106";
 
-generic-settings.configurationPathRelative = "luxnix";
+generic-settings.configurationPathRelative = "dev/luxnix";
 
 generic-settings.enable = true;
 
@@ -110,7 +110,7 @@ vault.key = "/etc/secrets/.key";
 
 vault.psk = "/etc/secrets/.psk";
 
-generic-settings.configurationPath = lib.mkForce "/home/admin/luxnix";
+generic-settings.configurationPath = lib.mkForce "/home/admin/dev/luxnix";
 
 generic-settings.hostPlatform = "x86_64-linux";
 
