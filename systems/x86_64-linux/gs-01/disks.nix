@@ -122,6 +122,7 @@
                         "subvol=swap"
                         "noatime"
                         "nodatacow"
+                        "compress=none"
                       ];
                       swap.swapfile.size = "64G";
                     };
