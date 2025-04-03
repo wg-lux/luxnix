@@ -84,10 +84,13 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # nixvim = {
-    #   url = "github:nix-community/nixvim";
-    #   inputs.nixpkgs.follows = "nixpkgs";
-    # };
+    nixvim = {
+    # url = "github:nix-community/nixvim";
+    # If you are not running an unstable channel of nixpkgs, select the corresponding branch of nixvim.
+    url = "github:nix-community/nixvim/nixos-24.11";
+    inputs.nixpkgs.follows = "nixpkgs";
+  };
+
 
     # gx-nvim = {
     #   url = "github:chrishrb/gx.nvim";
@@ -138,6 +141,7 @@
       # Add modules to all homes
       homes.modules = with inputs; [
         plasma-manager.homeManagerModules.plasma-manager
+        nixvim.homeManagerModules.nixvim
       ];
 
       systems.modules.nixos = with inputs; [
@@ -149,6 +153,7 @@
         impermanence.nixosModules.impermanence
         sops-nix.nixosModules.sops
         nix-topology.nixosModules.default
+        
         # authentik-nix.nixosModules.default
       ];
 

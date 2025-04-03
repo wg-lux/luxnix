@@ -140,15 +140,6 @@
                       mountpoint = "/var/log";
                       mountOptions = ["subvol=log" "compress=zstd" "noatime"];
                     };
-                    "/swap" = {
-                      mountpoint = "/swap";
-                      mountOptions = [
-                        "subvol=swap"
-                        "noatime"
-                        "nodatacow"
-                      ];
-                      swap.swapfile.size = "64G";
-                    };
                   };
                 };
               };
@@ -165,4 +156,10 @@
 
   fileSystems."/persist".neededForBoot = true;
   fileSystems."/var/log".neededForBoot = true;
+
+  zramSwap = {
+    enable = true;
+    memoryPercent = 20; # Use 30% of RAM for compressed swap
+    priority = 100; # Higher priority than disk-based swap
+  };
 }
