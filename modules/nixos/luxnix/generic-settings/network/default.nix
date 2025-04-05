@@ -8,8 +8,12 @@ with lib;
 with lib.luxnix; let
   cfg = config.luxnix.generic-settings.network;
   hostname = config.networking.hostName;
-  ownNetConfig = cfg.hosts.${hostname};
-  ownNetworkCluster = ownNetConfig.network-cluster;
+  
+  # Add proper null handling for host config lookup
+  ownNetConfig = cfg.hosts.${hostname} or {};
+  
+  # Add proper null handling for network-cluster
+  ownNetworkCluster = ownNetConfig.network-cluster or null;
 
   mergeHosts = hostsList:
     builtins.foldl' (acc: hosts:
@@ -18,16 +22,30 @@ with lib.luxnix; let
       in acc // { "${ip}" = (if builtins.hasAttr ip acc then acc.${ip} else []) ++ names; }
     ) {} hostsList;
 
+  # Update generateHosts to handle null network-cluster values
   generateHosts = hosts:
     mapAttrs (hostName: hostConfig:
       let
-        ip = if hostConfig.network-cluster == ownNetworkCluster
+        # Get cluster values with null handling
+        hostCluster = hostConfig.network-cluster or null;
+        myCluster = ownNetworkCluster;
+        
+        # Default to VPN IP if either cluster is null
+        sameCluster = hostCluster != null && myCluster != null && hostCluster == myCluster;
+        
+        # Choose appropriate IP with fallbacks
+        ip = if sameCluster && hostConfig.ip-local != null
              then hostConfig.ip-local
              else hostConfig.ip-vpn;
-      in { "${ip}" = [ hostName ] ++ hostConfig.domains; }
+             
+        # Default to empty list if domains is null
+        domains = hostConfig.domains or ["localhost"];
+      in { 
+        "${ip}" = [ hostName ] ++ domains;
+      }
     ) hosts;
 
-    merged_hosts = mergeHosts (builtins.attrValues (generateHosts cfg.hosts));
+  merged_hosts = mergeHosts (builtins.attrValues (generateHosts cfg.hosts));
 
 in {
   options.luxnix.generic-settings.network = {#

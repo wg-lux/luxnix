@@ -87,8 +87,6 @@ generic-settings.network.hosts.gc-06.ip-local = "172.31.179.8";
 
 generic-settings.network.hosts.gc-06.ip-vpn = "172.16.255.106";
 
-generic-settings.network.hosts.gc-06.network-cluster = "L1";
-
 generic-settings.network.hosts.gc-06.syncthing-id = "MJU2YAF-4IXFRSS-I3JHU2Z-6LUSSTN-L6BR5HS-PLS6ACJ-4E2X2UQ-5AVBUAQ";
 
 generic-settings.network.hosts.gc-07.domains = ["gc-07.intern"];

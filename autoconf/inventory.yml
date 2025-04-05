@@ -902,7 +902,6 @@ groups:
           - gc-06.intern
         generic_settings.network.hosts.gc_06.ip_local: '"172.31.179.8"'
         generic_settings.network.hosts.gc_06.ip_vpn: '"172.16.255.106"'
-        generic_settings.network.hosts.gc_06.network_cluster: '"L1"'
         generic_settings.network.hosts.gc_06.syncthing_id: '"MJU2YAF-4IXFRSS-I3JHU2Z-6LUSSTN-L6BR5HS-PLS6ACJ-4E2X2UQ-5AVBUAQ"'
         generic_settings.network.hosts.gc_07.domains:
           - gc-07.intern
