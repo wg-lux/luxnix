@@ -57,12 +57,14 @@ with lib.luxnix; let
         (hostName: hostConfig: hostConfig.syncthing-id != null && hostConfig.syncthing-id != "") 
         hostConfigs;
     
-    # Create devices attribute set
+    # Create devices attribute set with introducer flag set to true
     syncthingDevices = mapAttrs 
         (hostName: hostConfig: {
             name = hostName;
             id = hostConfig.syncthing-id;
             addresses = get_syncthing_addresses hostName;
+            introducer = true;  # Add this line to auto-accept introduced devices
+            autoAcceptFolders = true;  # Add this to auto-accept folders
         }) 
         hostsWithSyncthing;
     
@@ -121,10 +123,12 @@ in
                     globalAnnounceEnabled = false;
                 };
 
-                # Properly structure the devices attribute set
-                devices = builtins.trace 
-                    "syncthingDevices: ${builtins.toJSON finalDevices}" 
-                    finalDevices;
+                # Print more detailed debug information
+                devices = let 
+                    devs = builtins.trace 
+                        "Configured Syncthing devices: ${builtins.concatStringsSep ", " (attrNames syncthingDevices)}"
+                        finalDevices;
+                in devs;
 
                 folders = {
                     "base-share" = {
