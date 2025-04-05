@@ -27,6 +27,8 @@ with lib.luxnix; let
       in { "${ip}" = [ hostName ] ++ hostConfig.domains; }
     ) hosts;
 
+    merged_hosts = mergeHosts (builtins.attrValues (generateHosts cfg.hosts));
+
 in {
   options.luxnix.generic-settings.network = {#
 
@@ -222,7 +224,7 @@ in {
 
 
   config = {
-    networking.hosts = mergeHosts (builtins.attrValues (generateHosts cfg.hosts));
+    networking.hosts =  merged_hosts;
 
   };
 

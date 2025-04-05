@@ -15,7 +15,7 @@ in
         gui = mkBoolOpt false "Enable syncthing GUI";
         gui_public = mkBoolOpt false "Enable syncthing GUI";
         relay = mkBoolOpt false "Enable syncthing relay";
-        gui_ip = mkOption {
+        gui-ip = mkOption {
             type = types.str;
             default = "127.0.0.1";
             description = "IP address for the syncthing GUI";
@@ -25,24 +25,18 @@ in
         portTCP = mkOpt types.port 22000 "Port for the syncthing TCP connection";
         defaultFolderPath = mkOpt types.path "/var/lib/syncthing" "Default folder path for syncthing";
         adminConfigReadPermission = mkBoolOpt true "Grant admin read permission";
+        localAnnounceEnabled = mkBoolOpt true "Enable Local Announcements";
+        localAnnouncePort = mkOpt types.int 21027 "Local Announcement TDP";
     };
 
-    config = {
+    config = mkIf cfg.enable {
 
-        users.users.${cfg.user} = {
-            group = lib.mkDefault "syncthing";
-            isSystemUser = true;
-        };
+
         users.users.${adminUser}.extraGroups = [ syncthingGroup ];
 
 
-
-        systemd.tmpfiles.rules = [
-            "f ${cfg.defaultFolderPath}/.config/syncthing/config.xml 0750 ${cfg.user} ${syncthingGroup} -"
-        ];
-
         networking.firewall.allowedTCPPorts = [ cfg.portTCP ];
-    #   networking.firewall.allowedUDPPorts = [ 21027 ]; # Disabled since we dont use
+      networking.firewall.allowedUDPPorts = [ cfg.localAnnouncePort ]; # Disabled since we dont use
         services.syncthing = {
             enable = cfg.enable; 
             # enable = false; 
@@ -60,12 +54,12 @@ in
                 gui = {
                     enabled = true;
                     # Only localhost for safety, or "0.0.0.0:8384" if you want LAN access
-                    address = cfg.gui_ip + ":" + toString cfg.port;
+                    address = cfg.gui-ip + ":" + toString cfg.port;
                 };
                 options = {
                     urAccepted = -1; # no anonymous usage reporting
-                    # localAnnouncePort = 21027; # local LAN broadcast port
-                    localAnnounceEnabled = false;  # disable local LAN broadcast
+                    localAnnouncePort = cfg.localAnnouncePort; # local LAN broadcast port
+                    localAnnounceEnabled = cfg.localAnnounceEnabled;  # enable local LAN broadcast
                     globalAnnounceEnabled = false; # disable use of public relay discovery
                 };
 
