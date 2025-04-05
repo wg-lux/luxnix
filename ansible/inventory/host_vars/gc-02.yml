@@ -16,7 +16,6 @@ extra_secret_names:
 host_luxnix:
   generic_settings.configurationPathRelative: '"dev/luxnix"'
   generic_settings.configurationPath: 'lib.mkForce "/home/admin/dev/luxnix"'
-  generic_settings.vpnIp: '"172.16.255.102"'
 
   generic_settings.hostPlatform: '"x86_64-linux"'
   generic_settings.systemStateVersion: '"23.11"'

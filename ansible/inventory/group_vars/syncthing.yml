@@ -1,0 +1,7 @@
+group_roles:
+  endoreg_client.enable: "true"
+  aglnet.client.enable: "true"
+  nextcloudClient.enable: "true"
+group_services: {}
+group_luxnix:
+  generic_settings.syncthing.enable: "true"
