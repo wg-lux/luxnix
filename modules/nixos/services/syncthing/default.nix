@@ -18,6 +18,12 @@ with lib.luxnix; let
     # Get the home directory of the syncthing user
     syncthingHome = config.users.users.${cfg.user}.home;
     
+    # Helper to resolve paths with proper home dir
+    resolvePath = path:
+        if hasPrefix "~/" path then
+            "${syncthingHome}/${removePrefix "~/" path}"
+        else
+            path;
     
     # return list of all device ids
     getSyncthingIds = hostConfigs: 
@@ -85,15 +91,34 @@ with lib.luxnix; let
     finalDevices = if syncthingDevices == {} 
                   then { "dummy-device" = { name = "dummy-device"; id = "DUMMY"; addresses = []; }; }
                   else syncthingDevices;
+
+    # Map from device names to their IDs for easier reference
+    deviceIds = mapAttrs (_: device: device.id) syncthingDevices;
     
-    # Generate folder configuration from options with path resolution
+    # Reverse mapping from IDs to device names
+    idToName = mapAttrs' (name: device: nameValuePair device.id name) syncthingDevices;
+    
+    # Generate folder configuration with proper device references
     generateFolders = folders:
         mapAttrs (folderName: folderOpts: {
             enable = folderOpts.enable;
-            path = folderOpts.path;
-            label = folderOpts.label;
+            path = resolvePath folderOpts.path;
+            label = if folderOpts.label != null 
+                    then folderOpts.label 
+                    else folderOpts.id;
             id = folderOpts.id;
-            devices = attrNames syncthingDevices;
+            # Format each device entry correctly with deviceId field
+            devices = map (deviceName: 
+                if hasAttr deviceName deviceIds then
+                    # If it's a known device name, use that name
+                    deviceName
+                else if hasAttr deviceName idToName then
+                    # If it's a known device ID, use the corresponding name
+                    idToName.${deviceName}
+                else
+                    # For unrecognized IDs, create a direct deviceId reference
+                    { deviceId = deviceName; }
+            ) folderOpts.devices;
             type = folderOpts.type;
             versioning = 
                 if folderOpts.versioning.enable then {
@@ -101,7 +126,6 @@ with lib.luxnix; let
                     params = folderOpts.versioning.params;
                 } else null;
         }) folders;
-
 
 in
 {
@@ -138,12 +162,23 @@ in
                         description = "Path to the folder on disk";
                     };
                     label = mkOption {
-                        type = types.str;
+                        type = types.nullOr types.str;  # Changed from types.str to types.nullOr types.str
+                        default = null;
                         description = "Display name for the folder";
                     };
                     id = mkOption {
                         type = types.str;
-                        description = "Unique ID for the folder";
+                        description = "Unique ID for the folder - must be the same across all devices";
+                    };
+                    devices = mkOption {
+                        type = types.listOf types.str;
+                        default = [];
+                        description = "Devices to share this folder with (names or IDs)";
+                    };
+                    fsWatcherEnabled = mkOption {
+                        type = types.bool;
+                        default = true;
+                        description = "Watch for changes in real time (inotify)";
                     };
                     type = mkOption {
                         type = types.enum ["sendreceive" "sendonly" "receiveonly" "receiveencrypted"];
@@ -174,9 +209,11 @@ in
             });
             default = {
                 "base-share" = {
-                    path = "/var/lib/syncthing/base-share";  # Changed from ~/base-share to absolute path
-                    label = "base-share";
+                    path = "/var/lib/syncthing/base-share";
                     id = "base-share";
+                    label = "base-share";  # Added explicit label to match id
+                    # Default to sharing with all devices
+                    devices = attrNames hostsWithSyncthing;
                     type = "sendreceive";
                     versioning = {
                         enable = true;
@@ -197,7 +234,7 @@ in
         systemd.tmpfiles.rules = [
             "d ${syncthingHome}/base-share 0755 ${cfg.user} ${syncthingGroup} -"
         ] ++ (mapAttrsToList (name: folder: 
-            "d ${folder.path} 0755 ${cfg.user} ${syncthingGroup} -"
+            "d ${resolvePath folder.path} 0755 ${cfg.user} ${syncthingGroup} -"
         ) cfg.folders);
 
         users.users.${adminUser}.extraGroups = [ syncthingGroup ];
@@ -231,17 +268,25 @@ in
                 # Print more detailed debug information
                 devices = let 
                     devs = builtins.trace 
-                        "Configured Syncthing devices: ${builtins.concatStringsSep ", " (attrNames syncthingDevices)}"
+                        "Syncthing devices: ${builtins.toJSON syncthingDevices}"
                         finalDevices;
                 in devs;
 
                 folders = let
                     generatedFolders = generateFolders cfg.folders;
+                    
+                    # Additional debugging information
+                    deviceIdsList = builtins.trace 
+                        "Available device names: ${builtins.concatStringsSep ", " (attrNames syncthingDevices)}"
+                        deviceIds;
+                    
+                    reverseMapDebug = builtins.trace 
+                        "ID to Name mapping: ${builtins.toJSON idToName}"
+                        idToName;
+                    
                     foldersDebug = builtins.trace 
-                        # "Folder paths after resolution: ${builtins.toJSON (mapAttrs (n: v: v.path) generatedFolders)}"
-                        "${builtins.toJSON generatedFolders}"
-                        generatedFolders
-                        ;
+                        "Syncthing folders: ${builtins.toJSON generatedFolders}"
+                        generatedFolders;
                 in foldersDebug;
             };
             # Using ["--reset-deltas"] can be helpful if you’re troubleshooting
