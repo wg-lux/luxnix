@@ -102,6 +102,7 @@ with lib.luxnix; let
                 } else null;
         }) folders;
 
+
 in
 {
     options.services.luxnix.syncthing = {
@@ -121,6 +122,7 @@ in
         adminConfigReadPermission = mkBoolOpt true "Grant admin read permission";
         localAnnounceEnabled = mkBoolOpt true "Enable Local Announcements";
         localAnnouncePort = mkOpt types.int 21027 "Local Announcement TDP";
+        extraFlags = mkOpt (types.listOf types.str) [] "Extra flags for syncthing";
         
         # New folder options
         folders = mkOption {
@@ -245,7 +247,7 @@ in
             # Using ["--reset-deltas"] can be helpful if you’re troubleshooting
             # issues with incremental sync. It forces Syncthing to rebuild its internal index of file blocks, 
             # sometimes resolving corruption or mismatch.
-            extraFlags = ["--reset-deltas"];
+            extraFlags = cfg.extraFlags;
         };
     };
 }

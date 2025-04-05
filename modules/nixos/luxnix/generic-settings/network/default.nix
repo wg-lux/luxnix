@@ -77,6 +77,7 @@ in {
           Identifier for the network cluster the host belongs to.
         '';
         };
+        
       };
       });
       default = {};
@@ -90,6 +91,15 @@ in {
         - syncthing_id
         - network_cluster
       '';
+    };
+    syncthing = {
+      extraFlags = mkOption {
+        type = types.listOf types.str;
+        default = [];
+        description = ''
+          Extra flags for Syncthing.
+        '';
+      };
     };
     keycloak = {
       vpnIp = mkOption {
@@ -225,6 +235,7 @@ in {
 
   config = {
     networking.hosts =  merged_hosts;
+    services.luxnix.syncthing.extraFlags = lib.mkDefault cfg.syncthing.extraFlags;
 
   };
 

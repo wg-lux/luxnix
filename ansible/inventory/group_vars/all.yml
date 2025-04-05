@@ -121,6 +121,10 @@ group_luxnix:
     - "gc-09.intern"
 
   generic_settings.linux.kernelParams: ["mem_sleep_default=deep"]
+
+  generic_settings.network.syncthing.extraFlags: []
+
+  # TODO Remove REferences to this in rest od the code in favour of above stuff
   generic_settings.network.nginx.vpnIp: '"172.16.255.12"'
   generic_settings.network.keycloak.domain: '"keycloak.endo-reg.net"'
   generic_settings.network.keycloak.adminDomain: '"adminKeycloak.endo-reg.net"'
