@@ -79,6 +79,8 @@ generic-settings.network.hosts.gc-06.ip-vpn = "172.16.255.106";
 
 generic-settings.network.hosts.gc-06.network-cluster = "L1";
 
+generic-settings.network.hosts.gc-06.syncthing-id = "MJU2YAF-4IXFRSS-I3JHU2Z-6LUSSTN-L6BR5HS-PLS6ACJ-4E2X2UQ-5AVBUAQ";
+
 generic-settings.network.hosts.gc-07.domains = ["gc-07.intern"];
 generic-settings.network.hosts.gc-07.ip-vpn = "172.16.255.107";
 
@@ -109,6 +111,8 @@ generic-settings.network.hosts.s-01.ip-vpn = "172.16.255.1";
 
 generic-settings.network.hosts.s-01.network-cluster = "L1";
 
+generic-settings.network.hosts.s-01.syncthing-id = "WTGG7YQ-AGGOG6H-PQPA54T-HQRCF4P-2T52JSI-OQTIBUG-JUCC45Y-MBCB4QS";
+
 generic-settings.network.hosts.s-02.domains = ["nginx.endo-reg.net" "cloud.endo-reg.net" "keycloak.endo-reg.net" "s-02.intern"];
 generic-settings.network.hosts.s-02.ip-local = "192.168.179.2";
 
@@ -116,12 +120,16 @@ generic-settings.network.hosts.s-02.ip-vpn = "172.16.255.12";
 
 generic-settings.network.hosts.s-02.network-cluster = "L1";
 
+generic-settings.network.hosts.s-02.syncthing-id = "GF7EOBC-UVEYSV7-BK77MKA-DIK62JP-TPVG4M3-3NUUWS7-B724MAI-OK2J7AW";
+
 generic-settings.network.hosts.s-03.domains = ["s-03.intern"];
 generic-settings.network.hosts.s-03.ip-local = "192.168.179.3";
 
 generic-settings.network.hosts.s-03.ip-vpn = "172.16.255.13";
 
 generic-settings.network.hosts.s-03.network-cluster = "L1";
+
+generic-settings.network.hosts.s-03.syncthing-id = "MLC6QP7-MI5RMNB-H7JCOTE-ODXOCV7-UIIOMUS-ZRJULS7-5ZLD2LB-LYZVZAF";
 
 generic-settings.network.keycloak.adminDomain = "adminKeycloak.endo-reg.net";
 
