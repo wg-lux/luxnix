@@ -90,11 +90,13 @@ group_luxnix:
   generic_settings.network.hosts.gs_01.ip_local: '"192.168.0.228"'
   generic_settings.network.hosts.gs_01.ip_vpn: '"172.16.255.21"'
   generic_settings.network.hosts.gs_01.network_cluster: '"L2"'
+  generic_settings.network.hosts.gs_01.syncthing_id: '"X2KFB5D-HJWUNFK-GS6TP7A-GV4TGEF-ZYH3RHL-AWWJIW4-76SSCHP-YIMUUAA"'
   generic_settings.network.hosts.gs_02.domains:
     - gs-02.intern
   generic_settings.network.hosts.gs_02.ip_local: '"192.168.0.56"'
   generic_settings.network.hosts.gs_02.ip_vpn: '"172.16.255.22"'
   generic_settings.network.hosts.gs_02.network_cluster: '"L2"'
+  generic_settings.network.hosts.gs_02.syncthing_id: '"XSAKTSB-36K6OY4-NEPJ2K4-WHGZF2D-EMDOMFQ-Q5DEVO6-2BYD2MS-JWPFVQ4"'
   generic_settings.network.hosts.s_01.domains:
     - s-01.intern
   generic_settings.network.hosts.s_01.ip_local: '"192.168.179.1"'
@@ -126,6 +128,7 @@ group_luxnix:
   generic_settings.network.psqlMain.port: '5432'
   generic_settings.network.psqlMain.vpnIp: '"172.16.255.12"'
   generic_settings.network.psqlTest.domain: '"psql-test.endo-reg.net"'
+  generic_settings.network.syncthing.extraFlags: []
   generic_settings.postgres.enable: 'true'
   generic_settings.sensitiveServiceGroupName: '"sensitiveServices"'
   generic_settings.traefikHostDomain: '"traefik.endo-reg.net"'

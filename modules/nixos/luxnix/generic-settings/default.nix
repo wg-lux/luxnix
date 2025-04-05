@@ -238,7 +238,7 @@ in {
     roles.postgres.default.enable = lib.mkDefault cfg.postgres.enable;
     services.luxnix.postgresql.extraAuthentication = lib.mkDefault cfg.postgres.extraAuthentication;
     services.luxnix.postgresql.extraIdentMap = lib.mkDefault cfg.postgres.extraIdentMap;
-
+    
     
     # TODO Add to System summary Log
     users.mutableUsers = lib.mkDefault cfg.mutableUsers;

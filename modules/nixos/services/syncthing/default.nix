@@ -15,6 +15,19 @@ with lib.luxnix; let
 
     syncthingGroup = config.users.users.${config.services.syncthing.user}.group;
     
+    # Get the home directory of the syncthing user
+    syncthingHome = config.users.users.${cfg.user}.home;
+    
+    
+    # return list of all device ids
+    getSyncthingIds = hostConfigs: 
+        mapAttrs (hostName: hostConfig: hostConfig.syncthing-id) hostConfigs;
+
+    # Define a function which expects a list of hostnames and 
+    # returns a list of their syncthing-ids
+    getSyncthingIdsOfHosts = hostNames: 
+        map (hostName: hostConfigs.${hostName}.syncthing-id) hostNames;
+
     # Function to get valid IP addresses for a hostname with proper prioritization
     get_syncthing_addresses = hostName: 
         let
@@ -72,6 +85,23 @@ with lib.luxnix; let
     finalDevices = if syncthingDevices == {} 
                   then { "dummy-device" = { name = "dummy-device"; id = "DUMMY"; addresses = []; }; }
                   else syncthingDevices;
+    
+    # Generate folder configuration from options with path resolution
+    generateFolders = folders:
+        mapAttrs (folderName: folderOpts: {
+            enable = folderOpts.enable;
+            path = folderOpts.path;
+            label = folderOpts.label;
+            id = folderOpts.id;
+            devices = attrNames syncthingDevices;
+            type = folderOpts.type;
+            versioning = 
+                if folderOpts.versioning.enable then {
+                    type = folderOpts.versioning.type;
+                    params = folderOpts.versioning.params;
+                } else null;
+        }) folders;
+
 
 in
 {
@@ -92,9 +122,84 @@ in
         adminConfigReadPermission = mkBoolOpt true "Grant admin read permission";
         localAnnounceEnabled = mkBoolOpt true "Enable Local Announcements";
         localAnnouncePort = mkOpt types.int 21027 "Local Announcement TDP";
+        extraFlags = mkOpt (types.listOf types.str) [] "Extra flags for syncthing";
+        
+        # New folder options
+        folders = mkOption {
+            type = types.attrsOf (types.submodule {
+                options = {
+                    enable = mkOption {
+                        type = types.bool;
+                        default = true;
+                        description = "Whether to enable this folder";
+                    };
+                    path = mkOption {
+                        type = types.str;
+                        description = "Path to the folder on disk";
+                    };
+                    label = mkOption {
+                        type = types.str;
+                        description = "Display name for the folder";
+                    };
+                    id = mkOption {
+                        type = types.str;
+                        description = "Unique ID for the folder";
+                    };
+                    type = mkOption {
+                        type = types.enum ["sendreceive" "sendonly" "receiveonly" "receiveencrypted"];
+                        default = "sendreceive";
+                        description = "Folder sharing type";
+                    };
+                    versioning = {
+                        enable = mkOption {
+                            type = types.bool;
+                            default = true;
+                            description = "Whether to enable versioning for this folder";
+                        };
+                        type = mkOption {
+                            type = types.enum ["simple" "staggered" "trashcan" "external"];
+                            default = "simple";
+                            description = "Versioning strategy type";
+                        };
+                        params = mkOption {
+                            type = types.attrsOf types.anything;
+                            default = {
+                                interval = 1;
+                                maxAge = 30;
+                            };
+                            description = "Parameters for the versioning strategy";
+                        };
+                    };
+                };
+            });
+            default = {
+                "base-share" = {
+                    path = "/var/lib/syncthing/base-share";  # Changed from ~/base-share to absolute path
+                    label = "base-share";
+                    id = "base-share";
+                    type = "sendreceive";
+                    versioning = {
+                        enable = true;
+                        type = "simple";
+                        params = {
+                            interval = 1;
+                            maxAge = 30;
+                        };
+                    };
+                };
+            };
+            description = "Folders to be shared by Syncthing";
+        };
     };
 
     config = mkIf cfg.enable {
+        # Create necessary directories
+        systemd.tmpfiles.rules = [
+            "d ${syncthingHome}/base-share 0755 ${cfg.user} ${syncthingGroup} -"
+        ] ++ (mapAttrsToList (name: folder: 
+            "d ${folder.path} 0755 ${cfg.user} ${syncthingGroup} -"
+        ) cfg.folders);
+
         users.users.${adminUser}.extraGroups = [ syncthingGroup ];
 
         networking.firewall.allowedTCPPorts = [ cfg.portTCP ];
@@ -130,29 +235,19 @@ in
                         finalDevices;
                 in devs;
 
-                folders = {
-                    "base-share" = {
-                        enable = true;
-                        path = "~/base-share";
-                        label = "base-share";
-                        id = "base-share";
-                        # Map device names to strings (not objects)
-                        devices = attrNames syncthingDevices;
-                        type = "sendreceive";
-                        versioning = {
-                            type = "simple";
-                            params = {
-                                interval = 1;
-                                maxAge = 30;
-                            };
-                        };
-                    };
-                };
+                folders = let
+                    generatedFolders = generateFolders cfg.folders;
+                    foldersDebug = builtins.trace 
+                        # "Folder paths after resolution: ${builtins.toJSON (mapAttrs (n: v: v.path) generatedFolders)}"
+                        "${builtins.toJSON generatedFolders}"
+                        generatedFolders
+                        ;
+                in foldersDebug;
             };
             # Using ["--reset-deltas"] can be helpful if you’re troubleshooting
             # issues with incremental sync. It forces Syncthing to rebuild its internal index of file blocks, 
             # sometimes resolving corruption or mismatch.
-            extraFlags = [];
+            extraFlags = cfg.extraFlags;
         };
     };
 }

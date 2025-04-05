@@ -87,12 +87,16 @@ generic-settings.network.hosts.gs-01.ip-vpn = "172.16.255.21";
 
 generic-settings.network.hosts.gs-01.network-cluster = "L2";
 
+generic-settings.network.hosts.gs-01.syncthing-id = "X2KFB5D-HJWUNFK-GS6TP7A-GV4TGEF-ZYH3RHL-AWWJIW4-76SSCHP-YIMUUAA";
+
 generic-settings.network.hosts.gs-02.domains = ["gs-02.intern"];
 generic-settings.network.hosts.gs-02.ip-local = "192.168.0.56";
 
 generic-settings.network.hosts.gs-02.ip-vpn = "172.16.255.22";
 
 generic-settings.network.hosts.gs-02.network-cluster = "L2";
+
+generic-settings.network.hosts.gs-02.syncthing-id = "XSAKTSB-36K6OY4-NEPJ2K4-WHGZF2D-EMDOMFQ-Q5DEVO6-2BYD2MS-JWPFVQ4";
 
 generic-settings.network.hosts.s-01.domains = ["s-01.intern"];
 generic-settings.network.hosts.s-01.ip-local = "192.168.179.1";
@@ -141,6 +145,7 @@ generic-settings.network.psqlMain.vpnIp = "172.16.255.12";
 
 generic-settings.network.psqlTest.domain = "psql-test.endo-reg.net";
 
+generic-settings.network.syncthing.extraFlags = [];
 generic-settings.postgres.enable = true;
 
 generic-settings.sensitiveServiceGroupName = "sensitiveServices";
