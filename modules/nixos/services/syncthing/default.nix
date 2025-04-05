@@ -98,7 +98,22 @@ with lib.luxnix; let
     # Reverse mapping from IDs to device names
     idToName = mapAttrs' (name: device: nameValuePair device.id name) syncthingDevices;
     
-    # Generate folder configuration with proper string conversion for numbers
+    # More robust device resolution with logging for unrecognized devices
+    resolveDeviceName = deviceName:
+        if hasAttr deviceName deviceIds then
+            # It's a known device name
+            { resolved = true; name = deviceName; }
+        else if hasAttr deviceName idToName then
+            # It's a known device ID, convert to name
+            { resolved = true; name = idToName.${deviceName}; }
+        else
+            # Unrecognized device - log and return as-is
+            let
+                _ = builtins.trace "Warning: Unrecognized Syncthing device '${deviceName}'. " null;
+            in
+            { resolved = false; name = deviceName; };
+
+    # Generate folder configuration with improved validation and stringification
     generateFolders = folders:
         mapAttrs (folderName: folderOpts: {
             enable = folderOpts.enable;
@@ -107,13 +122,16 @@ with lib.luxnix; let
                     then folderOpts.label 
                     else folderOpts.id;
             id = folderOpts.id;
-            # Format each device entry correctly
+            
+            # More robust device resolution
             devices = map (deviceName: 
-                if hasAttr deviceName deviceIds then deviceName
-                else if hasAttr deviceName idToName then idToName.${deviceName}
-                else deviceName
+                let result = resolveDeviceName deviceName;
+                in result.name
             ) folderOpts.devices;
+            
+            # Pass through other folder options
             type = folderOpts.type;
+            fsWatcherEnabled = folderOpts.fsWatcherEnabled or true;
             # Convert numeric parameters to strings for the Syncthing API
             versioning = 
                 if folderOpts.versioning.enable then {
@@ -123,6 +141,20 @@ with lib.luxnix; let
                     ) folderOpts.versioning.params;
                 } else null;
         }) folders;
+
+    # Function to redact sensitive info for logging
+    redactFolderConfig = config:
+        mapAttrs (name: folder: {
+            id = folder.id;
+            label = folder.label;
+            type = folder.type;
+            enabled = folder.enable or true;
+            # Mask actual path to avoid leaking sensitive locations
+            path = if cfg.debugMode 
+                   then folder.path 
+                   else "<redacted>";
+            deviceCount = length (folder.devices or []);
+        }) config;
 
 in
 {
@@ -145,6 +177,25 @@ in
         localAnnouncePort = mkOpt types.int 21027 "Local Announcement TDP";
         extraFlags = mkOpt (types.listOf types.str) [] "Extra flags for syncthing";
         
+        # Security and privacy settings
+        folderPermissions = mkOption {
+            type = types.str;
+            default = "0750"; # More restrictive default for shared folders
+            description = "Permissions for syncthing folders (in octal format)";
+        };
+        
+        debugMode = mkOption {
+            type = types.bool;
+            default = false;
+            description = "Enable verbose debug logging (may include sensitive information)";
+        };
+        
+        apiWaitTimeoutSecs = mkOption {
+            type = types.int;
+            default = 60;
+            description = "Maximum time to wait for the Syncthing API to be available (in seconds)";
+        };
+
         # New folder options
         folders = mkOption {
             type = types.attrsOf (types.submodule {
@@ -227,21 +278,23 @@ in
     };
 
     config = mkIf cfg.enable {
-        # Create necessary directories with specific permissions
+        # Create necessary directories with configurable permissions
         systemd.tmpfiles.rules = [
+            # System directories - moderate permissions
             "d /var/lib/syncthing 0755 ${cfg.user} ${syncthingGroup} -"
             "d ${cfg.defaultFolderPath} 0755 ${cfg.user} ${syncthingGroup} -"
         ] ++ (mapAttrsToList (name: folder: 
-            "d ${resolvePath folder.path} 0755 ${cfg.user} ${syncthingGroup} -"
+            # Shared folders - use configurable permissions
+            "d ${resolvePath folder.path} ${cfg.folderPermissions} ${cfg.user} ${syncthingGroup} -"
         ) cfg.folders);
         
-        # Ensure the base folder exists and is writable
+        # Ensure the base folder exists and is writable with proper permissions
         system.activationScripts.createSyncthingFolders = {
             deps = [];
             text = ''
                 mkdir -p /var/lib/syncthing/base-share
                 chown -R ${cfg.user}:${syncthingGroup} /var/lib/syncthing
-                chmod -R 755 /var/lib/syncthing
+                chmod -R ${cfg.folderPermissions} /var/lib/syncthing
             '';
         };
 
@@ -273,19 +326,23 @@ in
                     globalAnnounceEnabled = false;
                 };
 
-                # Print more detailed debug information
+                # Print more detailed debug information with privacy controls
                 devices = let 
-                    devs = builtins.trace 
-                        "Syncthing devices: ${builtins.toJSON syncthingDevices}"
+                    devs = if cfg.debugMode then
+                        builtins.trace "Syncthing devices: ${builtins.toJSON syncthingDevices}" finalDevices
+                    else
+                        builtins.trace "Configured ${toString (length (attrNames syncthingDevices))} Syncthing devices" 
                         finalDevices;
                 in devs;
 
                 folders = let
                     generatedFolders = generateFolders cfg.folders;
                     
-                    # Print the exact folder configuration being sent to Syncthing API
+                    # Print folder config with sensitive data redacted unless in debug mode
+                    redactedConfig = redactFolderConfig generatedFolders;
+                    
                     finalFolders = builtins.trace 
-                        "Final Syncthing folder config: ${builtins.toJSON generatedFolders}"
+                        "Syncthing folders: ${builtins.toJSON redactedConfig}"
                         generatedFolders;
                 in finalFolders;
             };
@@ -294,7 +351,7 @@ in
             extraFlags = cfg.extraFlags ++ ["--reset-deltas"];
         };
         
-        # Create a script that will wait for Syncthing API to be ready
+        # Wait for Syncthing API with configurable timeout
         systemd.services.syncthing-wait-api = {
             description = "Wait for Syncthing API to be available";
             after = [ "syncthing.service" ];
@@ -309,9 +366,9 @@ in
                     #!/bin/bash
                     set -euo pipefail
                     
-                    echo "Waiting for Syncthing to start up..."
-                    # Wait up to 60 seconds for Syncthing to be up
-                    for i in {1..60}; do
+                    echo "Waiting for Syncthing to start up (timeout: ${toString cfg.apiWaitTimeoutSecs}s)..."
+                    # Wait for configurable timeout
+                    for i in $(seq 1 ${toString cfg.apiWaitTimeoutSecs}); do
                         if [ -f ${cfg.defaultFolderPath}/.config/syncthing/config.xml ]; then
                             echo "Configuration file found, checking API..."
                             # Try to get API key
@@ -342,7 +399,7 @@ in
             wantedBy = [ "multi-user.target" ];
         };
         
-        # Update the folder-check service with better error handling
+        # Enhanced folder-check service with more detailed validation
         systemd.services.syncthing-folder-check = {
             description = "Check Syncthing Folder Status";
             after = [ "syncthing.service" "syncthing-init.service" "syncthing-wait-api.service" ];
@@ -379,15 +436,30 @@ in
                     fi
                     
                     echo "Current folders configuration:"
-                    echo "$FOLDERS_JSON" | ${pkgs.jq}/bin/jq -C .
+                    echo "$FOLDERS_JSON" | ${pkgs.jq}/bin/jq -C '. | map({id: .id, path: .path, devices: (.devices | length)})'
                     
                     FOLDER_COUNT=$(echo "$FOLDERS_JSON" | ${pkgs.jq}/bin/jq 'length')
                     echo "Configured folder count: $FOLDER_COUNT"
                     
+                    # Enhanced folder validation
                     if [ "$FOLDER_COUNT" -eq 0 ]; then
                         echo "WARNING: No folders are configured in Syncthing!"
                     else
-                        echo "Syncthing folder configuration looks good"
+                        # Check if folders have devices
+                        NO_DEVICE_FOLDERS=$(echo "$FOLDERS_JSON" | ${pkgs.jq}/bin/jq 'map(select(.devices | length == 0)) | length')
+                        if [ "$NO_DEVICE_FOLDERS" -gt 0 ]; then
+                            echo "WARNING: Found $NO_DEVICE_FOLDERS folders with no devices! These won't sync."
+                        fi
+                        
+                        # Check folder states
+                        echo "Checking folder states..."
+                        FOLDER_IDS=$(echo "$FOLDERS_JSON" | ${pkgs.jq}/bin/jq -r '.[].id')
+                        for id in $FOLDER_IDS; do
+                            STATUS=$(${pkgs.curl}/bin/curl -s -f -H "X-API-Key: $API_KEY" \
+                                "http://127.0.0.1:${toString cfg.port}/rest/db/status?folder=$id")
+                            STATE=$(echo "$STATUS" | ${pkgs.jq}/bin/jq -r '.state')
+                            echo "Folder $id: $STATE"
+                        done
                     fi
                 '';
             };
