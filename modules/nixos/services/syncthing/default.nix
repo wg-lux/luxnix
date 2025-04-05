@@ -76,14 +76,22 @@ with lib.luxnix; let
         (hostName: hostConfig: hostConfig.syncthing-id != null && hostConfig.syncthing-id != "") 
         hostConfigs;
     
-    # Create devices attribute set with introducer flag set to true
+    # Determine if a device should be an introducer
+    shouldBeIntroducer = hostName:
+        # Only the designated introducer gets this flag
+        # AND only on systems that are not the introducer themselves
+        hostName == cfg.introducerHost && hostname != cfg.introducerHost;
+    
+    # Create devices attribute set with conditional introducer flag
     syncthingDevices = mapAttrs 
         (hostName: hostConfig: {
             name = hostName;
             id = hostConfig.syncthing-id;
             addresses = get_syncthing_addresses hostName;
-            introducer = true;  # Add this line to auto-accept introduced devices
-            autoAcceptFolders = true;  # Add this to auto-accept folders
+            # Only set introducer flag for the designated introducer host
+            introducer = shouldBeIntroducer hostName;
+            # Always allow auto-accepting folders
+            autoAcceptFolders = true;
         }) 
         hostsWithSyncthing;
     
@@ -275,6 +283,17 @@ in
             };
             description = "Folders to be shared by Syncthing";
         };
+
+        # Single designated introducer host
+        introducerHost = mkOption {
+            type = types.str;
+            default = "gc-06";
+            description = ''
+              The host that will act as introducer for Syncthing. 
+              Only this host will have the introducer flag set to true
+              on other systems.
+            '';
+        };
     };
 
     config = mkIf cfg.enable {
@@ -326,12 +345,14 @@ in
                     globalAnnounceEnabled = false;
                 };
 
-                # Print more detailed debug information with privacy controls
+                # Print device configuration with introducer information
                 devices = let 
+                    introducers = filter (name: shouldBeIntroducer name) (attrNames syncthingDevices);
+                    
                     devs = if cfg.debugMode then
                         builtins.trace "Syncthing devices: ${builtins.toJSON syncthingDevices}" finalDevices
                     else
-                        builtins.trace "Configured ${toString (length (attrNames syncthingDevices))} Syncthing devices" 
+                        builtins.trace "Configured ${toString (length (attrNames syncthingDevices))} Syncthing devices (introducer: ${if introducers == [] then "none" else head introducers})" 
                         finalDevices;
                 in devs;
 
