@@ -129,7 +129,7 @@
   # Alternatively, create a dedicated swap file on a specific device
   zramSwap = {
     enable = true;
-    memoryPercent = 20; # Use 30% of RAM for compressed swap
+    memoryPercent = 20; # Use 20% of RAM for compressed swap
     priority = 100; # Higher priority than disk-based swap
   };
 

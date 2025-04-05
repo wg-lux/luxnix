@@ -53,6 +53,63 @@ group_luxnix:
   generic_settings.linux.kernelPackages: pkgs.linuxPackages_6_12
   generic_settings.linux.kernelParams:
     - mem_sleep_default=deep
+  generic_settings.network.hosts.gc_01.domains:
+    - gc-01.intern
+  generic_settings.network.hosts.gc_01.ip_vpn: '"172.16.255.101"'
+  generic_settings.network.hosts.gc_02.domains:
+    - gc-02.intern
+  generic_settings.network.hosts.gc_02.ip_vpn: '"172.16.255.102"'
+  generic_settings.network.hosts.gc_03.domains:
+    - gc-03.intern
+  generic_settings.network.hosts.gc_03.ip_vpn: '"172.16.255.103"'
+  generic_settings.network.hosts.gc_04.domains:
+    - gc-04.intern
+  generic_settings.network.hosts.gc_04.ip_vpn: '"172.16.255.104"'
+  generic_settings.network.hosts.gc_05.domains:
+    - gc-05.intern
+  generic_settings.network.hosts.gc_05.ip_vpn: '"172.16.255.105"'
+  generic_settings.network.hosts.gc_06.domains:
+    - gc-06.intern
+  generic_settings.network.hosts.gc_06.ip_local: '"172.31.179.8"'
+  generic_settings.network.hosts.gc_06.ip_vpn: '"172.16.255.106"'
+  generic_settings.network.hosts.gc_06.network_cluster: '"L1"'
+  generic_settings.network.hosts.gc_07.domains:
+    - gc-07.intern
+  generic_settings.network.hosts.gc_07.ip_vpn: '"172.16.255.107"'
+  generic_settings.network.hosts.gc_08.domains:
+    - gc-08.intern
+  generic_settings.network.hosts.gc_08.ip_vpn: '"172.16.255.108"'
+  generic_settings.network.hosts.gc_09.domains:
+    - gc-09.intern
+  generic_settings.network.hosts.gc_09.ip_vpn: '"172.16.255.109"'
+  generic_settings.network.hosts.gs_01.domains:
+    - gs-01.intern
+  generic_settings.network.hosts.gs_01.ip_local: '"192.168.0.228"'
+  generic_settings.network.hosts.gs_01.ip_vpn: '"172.16.255.21"'
+  generic_settings.network.hosts.gs_01.network_cluster: '"L2"'
+  generic_settings.network.hosts.gs_02.domains:
+    - gs-02.intern
+  generic_settings.network.hosts.gs_02.ip_local: '"192.168.0.56"'
+  generic_settings.network.hosts.gs_02.ip_vpn: '"172.16.255.22"'
+  generic_settings.network.hosts.gs_02.network_cluster: '"L2"'
+  generic_settings.network.hosts.s_01.domains:
+    - s-01.intern
+  generic_settings.network.hosts.s_01.ip_local: '"192.168.179.1"'
+  generic_settings.network.hosts.s_01.ip_vpn: '"172.16.255.1"'
+  generic_settings.network.hosts.s_01.network_cluster: '"L1"'
+  generic_settings.network.hosts.s_02.domains:
+    - nginx.endo-reg.net
+    - cloud.endo-reg.net
+    - keycloak.endo-reg.net
+    - s-02.intern
+  generic_settings.network.hosts.s_02.ip_local: '"192.168.179.2"'
+  generic_settings.network.hosts.s_02.ip_vpn: '"172.16.255.12"'
+  generic_settings.network.hosts.s_02.network_cluster: '"L1"'
+  generic_settings.network.hosts.s_03.domains:
+    - s-03.intern
+  generic_settings.network.hosts.s_03.ip_local: '"192.168.179.3"'
+  generic_settings.network.hosts.s_03.ip_vpn: '"172.16.255.13"'
+  generic_settings.network.hosts.s_03.network_cluster: '"L1"'
   generic_settings.network.keycloak.adminDomain: '"adminKeycloak.endo-reg.net"'
   generic_settings.network.keycloak.domain: '"keycloak.endo-reg.net"'
   generic_settings.network.keycloak.port: '8443'
@@ -113,7 +170,6 @@ host_luxnix:
     - nfs
     - btrfs
   generic_settings.systemStateVersion: '"23.11"'
-  generic_settings.vpnIp: '"172.16.255.107"'
   nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
   nvidia_prime.onboardBusId: '"PCI:0:2:0"'
   nvidia_prime.onboardGpuType: '"intel"'

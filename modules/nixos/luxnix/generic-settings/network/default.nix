@@ -7,16 +7,88 @@
 with lib;
 with lib.luxnix; let
   cfg = config.luxnix.generic-settings.network;
+  hostname = config.networking.hostName;
+  ownNetConfig = cfg.hosts.${hostname};
+  ownNetworkCluster = ownNetConfig.network-cluster;
 
   mergeHosts = hostsList:
     builtins.foldl' (acc: hosts:
       let ip = builtins.head (builtins.attrNames hosts);
           names = hosts.${ip};
       in acc // { "${ip}" = (if builtins.hasAttr ip acc then acc.${ip} else []) ++ names; }
-      ) {} hostsList;
-      
+    ) {} hostsList;
+
+  generateHosts = hosts:
+    mapAttrs (hostName: hostConfig:
+      let
+        ip = if hostConfig.network-cluster == ownNetworkCluster
+             then hostConfig.ip-local
+             else hostConfig.ip-vpn;
+      in { "${ip}" = [ hostName ] ++ hostConfig.domains; }
+    ) hosts;
+
 in {
-  options.luxnix.generic-settings.network = {
+  options.luxnix.generic-settings.network = {#
+
+    hosts = mkOption {
+      type = types.attrsOf (types.submodule {
+      options = {
+        ip-local = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = ''
+          Local IP address for hosts in the same network cluster.
+        '';
+        };
+        ip-vpn = mkOption {
+        type = types.str;
+        default = "172.16.255.x";
+        description = ''
+          VPN IP address for hosts outside the local network cluster.
+        '';
+        };
+        hostname = mkOption {
+        type = types.str;
+        default = "";
+        description = ''
+          Host name. Defaults to the attribute key if unset.
+        '';
+        };
+        domains = mkOption {
+        type = types.nullOr (types.listOf types.str);
+        default = null;
+        description = ''
+          A list of alternative domains for the host.
+        '';
+        };
+        syncthing-id = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = ''
+          Optional Syncthing identifier.
+        '';
+        };
+        network-cluster = mkOption {
+        type = types.nullOr types.str;
+        default = config.networking.hostName;
+        description = ''
+          Identifier for the network cluster the host belongs to.
+        '';
+        };
+      };
+      });
+      default = {};
+      description = ''
+      Host configuration passed from Ansible inventory.
+      Each host (<name>) can configure:
+        - ip_local
+        - ip_vpn
+        - hostname
+        - domains
+        - syncthing_id
+        - network_cluster
+      '';
+    };
     keycloak = {
       vpnIp = mkOption {
         type = types.str;
@@ -71,6 +143,7 @@ in {
         '';
       };
     };
+
 
     psqlMain = {
       vpnIp = mkOption {
@@ -149,33 +222,8 @@ in {
 
 
   config = {
-    networking.hosts = mergeHosts [
-      #FIXME make dynamic
-      { "172.16.255.1" = [ "s-01" "s01.intern"]; } # s-01
-      { "172.16.255.12" = [ "s-02" "s02.intern"]; } # s-02
-      { "172.16.255.13" = [ "s-03" "s03.intern"]; } # s-03
-      { "172.16.255.14" = [ "s-04" "s04.intern"]; } # s-04
-      { "172.16.255.21" = [ "gs-01" "gs01.intern"]; } # gs-01
-      { "172.16.255.22" = [ "gs-02" "gs02.intern"]; } # gs-01
+    networking.hosts = mergeHosts (builtins.attrValues (generateHosts cfg.hosts));
 
-      # gpu-clients 1-9 (gc-01 - gc-09; 172.16.255.101 to 109)
-      { "172.16.255.101" = [ "gc-01" "gc01.intern" ]; }
-      { "172.16.255.102" = [ "gc-02" "gc02.intern" ]; }
-      { "172.16.255.103" = [ "gc-03" "gc03.intern" ]; }
-      { "172.16.255.104" = [ "gc-04" "gc04.intern" ]; }
-      { "172.16.255.105" = [ "gc-05" "gc05.intern" ]; }
-      { "172.16.255.106" = [ "gc-06" "gc06.intern" ]; }
-      { "172.16.255.107" = [ "gc-07" "gc07.intern" ]; }
-      { "172.16.255.108" = [ "gc-08" "gc08.intern" ]; }
-      { "172.16.255.109" = [ "gc-09" "gc09.intern" ]; }
-
-      { "172.16.255.131" = [ "c-01" "c-01.intern"]; }
-
-      { "${cfg.keycloak.vpnIp}" = [ cfg.keycloak.domain cfg.keycloak.adminDomain ]; }
-      { "${cfg.psqlMain.vpnIp}" = [ cfg.psqlMain.domain ]; }
-      { "${cfg.psqlTest.vpnIp}" = [ cfg.psqlTest.domain ]; }
-      { "${cfg.nginx.vpnIp}" = [ cfg.nginx.domain ]; }
-    ];
   };
 
 }
