@@ -98,7 +98,7 @@ with lib.luxnix; let
     # Reverse mapping from IDs to device names
     idToName = mapAttrs' (name: device: nameValuePair device.id name) syncthingDevices;
     
-    # Generate folder configuration with proper device references
+    # Generate folder configuration with proper string conversion for numbers
     generateFolders = folders:
         mapAttrs (folderName: folderOpts: {
             enable = folderOpts.enable;
@@ -107,23 +107,20 @@ with lib.luxnix; let
                     then folderOpts.label 
                     else folderOpts.id;
             id = folderOpts.id;
-            # Format each device entry correctly with deviceId field
+            # Format each device entry correctly
             devices = map (deviceName: 
-                if hasAttr deviceName deviceIds then
-                    # If it's a known device name, use that name
-                    deviceName
-                else if hasAttr deviceName idToName then
-                    # If it's a known device ID, use the corresponding name
-                    idToName.${deviceName}
-                else
-                    # For unrecognized IDs, create a direct deviceId reference
-                    { deviceId = deviceName; }
+                if hasAttr deviceName deviceIds then deviceName
+                else if hasAttr deviceName idToName then idToName.${deviceName}
+                else deviceName
             ) folderOpts.devices;
             type = folderOpts.type;
+            # Convert numeric parameters to strings for the Syncthing API
             versioning = 
                 if folderOpts.versioning.enable then {
                     type = folderOpts.versioning.type;
-                    params = folderOpts.versioning.params;
+                    params = mapAttrs (name: value: 
+                        if isInt value || isFloat value then toString value else value
+                    ) folderOpts.versioning.params;
                 } else null;
         }) folders;
 
@@ -230,12 +227,23 @@ in
     };
 
     config = mkIf cfg.enable {
-        # Create necessary directories
+        # Create necessary directories with specific permissions
         systemd.tmpfiles.rules = [
-            "d ${syncthingHome}/base-share 0755 ${cfg.user} ${syncthingGroup} -"
+            "d /var/lib/syncthing 0755 ${cfg.user} ${syncthingGroup} -"
+            "d ${cfg.defaultFolderPath} 0755 ${cfg.user} ${syncthingGroup} -"
         ] ++ (mapAttrsToList (name: folder: 
             "d ${resolvePath folder.path} 0755 ${cfg.user} ${syncthingGroup} -"
         ) cfg.folders);
+        
+        # Ensure the base folder exists and is writable
+        system.activationScripts.createSyncthingFolders = {
+            deps = [];
+            text = ''
+                mkdir -p /var/lib/syncthing/base-share
+                chown -R ${cfg.user}:${syncthingGroup} /var/lib/syncthing
+                chmod -R 755 /var/lib/syncthing
+            '';
+        };
 
         users.users.${adminUser}.extraGroups = [ syncthingGroup ];
 
@@ -275,24 +283,114 @@ in
                 folders = let
                     generatedFolders = generateFolders cfg.folders;
                     
-                    # Additional debugging information
-                    deviceIdsList = builtins.trace 
-                        "Available device names: ${builtins.concatStringsSep ", " (attrNames syncthingDevices)}"
-                        deviceIds;
-                    
-                    reverseMapDebug = builtins.trace 
-                        "ID to Name mapping: ${builtins.toJSON idToName}"
-                        idToName;
-                    
-                    foldersDebug = builtins.trace 
-                        "Syncthing folders: ${builtins.toJSON generatedFolders}"
+                    # Print the exact folder configuration being sent to Syncthing API
+                    finalFolders = builtins.trace 
+                        "Final Syncthing folder config: ${builtins.toJSON generatedFolders}"
                         generatedFolders;
-                in foldersDebug;
+                in finalFolders;
             };
-            # Using ["--reset-deltas"] can be helpful if you’re troubleshooting
-            # issues with incremental sync. It forces Syncthing to rebuild its internal index of file blocks, 
-            # sometimes resolving corruption or mismatch.
-            extraFlags = cfg.extraFlags;
+            
+            # Add flags to reset database to ensure clean state
+            extraFlags = cfg.extraFlags ++ ["--reset-deltas"];
+        };
+        
+        # Create a script that will wait for Syncthing API to be ready
+        systemd.services.syncthing-wait-api = {
+            description = "Wait for Syncthing API to be available";
+            after = [ "syncthing.service" ];
+            bindsTo = [ "syncthing.service" ];
+            before = [ "syncthing-init.service" "syncthing-folder-check.service" ];
+            wantedBy = [ "multi-user.target" ];
+            serviceConfig = {
+                Type = "oneshot";
+                User = cfg.user;
+                RemainAfterExit = true;
+                ExecStart = pkgs.writeShellScript "wait-syncthing-api" ''
+                    #!/bin/bash
+                    set -euo pipefail
+                    
+                    echo "Waiting for Syncthing to start up..."
+                    # Wait up to 60 seconds for Syncthing to be up
+                    for i in {1..60}; do
+                        if [ -f ${cfg.defaultFolderPath}/.config/syncthing/config.xml ]; then
+                            echo "Configuration file found, checking API..."
+                            # Try to get API key
+                            if API_KEY=$(grep -o 'apikey>[^<]*' ${cfg.defaultFolderPath}/.config/syncthing/config.xml | sed 's/apikey>//'); then
+                                echo "API key found, testing API..."
+                                # Test if API is responsive
+                                if ${pkgs.curl}/bin/curl -s -f -H "X-API-Key: $API_KEY" \
+                                    "http://127.0.0.1:${toString cfg.port}/rest/system/ping" > /dev/null; then
+                                    echo "Syncthing API is ready!"
+                                    exit 0
+                                fi
+                            fi
+                        fi
+                        sleep 1
+                    done
+                    
+                    echo "Timed out waiting for Syncthing API to be available"
+                    exit 1
+                '';
+            };
+        };
+        
+        # Update the init service to depend on the wait-api service
+        systemd.services.syncthing-init = {
+            after = [ "syncthing.service" "syncthing-wait-api.service" ];
+            bindsTo = [ "syncthing.service" ];
+            requires = [ "syncthing-wait-api.service" ];
+            wantedBy = [ "multi-user.target" ];
+        };
+        
+        # Update the folder-check service with better error handling
+        systemd.services.syncthing-folder-check = {
+            description = "Check Syncthing Folder Status";
+            after = [ "syncthing.service" "syncthing-init.service" "syncthing-wait-api.service" ];
+            requires = [ "syncthing-wait-api.service" ];
+            bindsTo = [ "syncthing.service" ];
+            wantedBy = [ "multi-user.target" ];
+            serviceConfig = {
+                Type = "oneshot";
+                User = cfg.user;
+                ExecStart = pkgs.writeShellScript "check-syncthing-folders" ''
+                    #!/usr/bin/env zsh
+                    set -euo pipefail
+                    
+                    echo "Getting API key from config.xml..."
+                    CONFIG_FILE="${cfg.defaultFolderPath}/.config/syncthing/config.xml"
+                    if [ ! -f "$CONFIG_FILE" ]; then
+                        echo "Config file not found at $CONFIG_FILE"
+                        exit 1
+                    fi
+                    
+                    API_KEY=$(grep -o 'apikey>[^<]*' "$CONFIG_FILE" | sed 's/apikey>//')
+                    if [ -z "$API_KEY" ]; then
+                        echo "Could not find API key in config file"
+                        exit 1
+                    fi
+                    
+                    echo "Checking folders configuration..."
+                    FOLDERS_JSON=$(${pkgs.curl}/bin/curl -s -f -H "X-API-Key: $API_KEY" \
+                        "http://127.0.0.1:${toString cfg.port}/rest/config/folders")
+                    
+                    if [ $? -ne 0 ] || [ -z "$FOLDERS_JSON" ]; then
+                        echo "Failed to get folders from API"
+                        exit 1
+                    fi
+                    
+                    echo "Current folders configuration:"
+                    echo "$FOLDERS_JSON" | ${pkgs.jq}/bin/jq -C .
+                    
+                    FOLDER_COUNT=$(echo "$FOLDERS_JSON" | ${pkgs.jq}/bin/jq 'length')
+                    echo "Configured folder count: $FOLDER_COUNT"
+                    
+                    if [ "$FOLDER_COUNT" -eq 0 ]; then
+                        echo "WARNING: No folders are configured in Syncthing!"
+                    else
+                        echo "Syncthing folder configuration looks good"
+                    fi
+                '';
+            };
         };
     };
 }
