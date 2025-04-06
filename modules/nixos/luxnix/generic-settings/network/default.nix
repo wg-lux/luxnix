@@ -124,8 +124,7 @@ in {
     # New option to map services to host names
     serviceHosts = mkOption {
       type = types.attrsOf types.str;
-      default = {};
-      example = {
+      default = {
         keycloak = "s-02";
         nextcloud = "s-03";
         psqlMain = "gs-02";
