@@ -9,7 +9,9 @@ with lib.luxnix; let
 
   sslCertGroupName = config.users.groups.sslCert.name;
   sensitiveServicesGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
-  vpnIp = config.luxnix.generic-settings.vpnIp;
+  
+  # Get VPN IP from network config instead of global settings
+  vpnIp = config.luxnix.generic-settings.network.keycloak.vpnIp;
 
   cfg = config.roles.keycloakHost;
   conf = config.luxnix.generic-settings.network.keycloak;

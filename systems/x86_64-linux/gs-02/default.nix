@@ -5,7 +5,7 @@
 {
   imports = [
     (modulesPath + "/installer/scan/not-detected.nix")
-    ./boot-decryption-config.nix
+    # ./boot-decryption-config.nix
     ./disks.nix
   ];
 

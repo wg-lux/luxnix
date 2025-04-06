@@ -29,22 +29,6 @@ with lib.luxnix; let
     deny all;
   '';
 
-  # test add: X-NginX-Proxy true; proxy
-  # removed:   proxy_ssl_server_name  # 
-
-  ### OLD ONE
-  # appendHttpConfig = ''
-  #   proxy_set_header Host $host;
-  #   proxy_set_header X-Forwarded-Host $host;
-  #   proxy_set_header X-Forwarded-Proto $scheme;
-  #   proxy_set_header X-Real-IP $remote_addr;
-  #   proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-  #   proxy_pass_header Authorization;
-  #   proxy_ssl_server_name on;
-  # '';
-  ###
-
-  # proxy_set_header X-Forwarded-Proto $scheme;
   appendHttpConfig = ''
     proxy_set_header Host $host;
     proxy_set_header X-Forwarded-Host $host;
@@ -126,8 +110,8 @@ in
           "docker"
           "podman"
           "networkmanager"
-          "${sslCertGroupName}"
-          "${sensitiveServicesGroupName}"
+          sslCertGroupName
+          sensitiveServicesGroupName
         ];
         description = "Extra groups for the NGINX user";
       };
@@ -153,7 +137,7 @@ in
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
-        ExecStart = "${nginxPrepareScript}";
+        ExecStart = nginxPrepareScript;
       };
     };
 
@@ -167,7 +151,7 @@ in
       extraGroups = conf.extraGroups;
     };
     # make sure the group exists
-    users.groups."nginx" = { };
+    users.groups.nginx = { };
 
     # Allow default http and https ports
     networking.firewall.allowedTCPPorts = [
@@ -188,7 +172,7 @@ in
       virtualHosts = lib.mkMerge [
         (mkIf cfg.psqlMain.enable {
           #TODO domain in psql config
-          "${psqlMainConfig.domain}" = {
+          ${psqlMainConfig.domain} = {
             forceSSL = true;
             sslCertificate = nginx_cert_path;
             sslCertificateKey = nginx_key_path;
@@ -201,7 +185,7 @@ in
         })
         (mkIf cfg.psqlTest.enable {
           #TODO domain in psql config
-          "${psqlTestConfig.domain}" = {
+          ${psqlTestConfig.domain} = {
             forceSSL = true;
             sslCertificate = nginx_cert_path;
             sslCertificateKey = nginx_key_path;
@@ -213,7 +197,7 @@ in
           };
         })
         (mkIf cfg.nextcloud.enable {
-          "${nextcloudConfig.domain}" = {
+          ${nextcloudConfig.domain} = {
             forceSSL = true;
             sslCertificate = nginx_cert_path;
             sslCertificateKey = nginx_key_path;
