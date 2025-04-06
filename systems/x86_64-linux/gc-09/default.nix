@@ -137,19 +137,19 @@ generic-settings.network.keycloak.domain = "keycloak.endo-reg.net";
 
 generic-settings.network.keycloak.port = 8443;
 
-generic-settings.network.keycloak.vpnIp = "172.16.255.12";
-
 generic-settings.network.nextcloud.domain = "cloud.endo-reg.net";
-
-generic-settings.network.nextcloud.vpnIp = "172.16.255.13";
-
-generic-settings.network.nginx.vpnIp = "172.16.255.12";
 
 generic-settings.network.psqlMain.port = 5432;
 
-generic-settings.network.psqlMain.vpnIp = "172.16.255.12";
-
 generic-settings.network.psqlTest.domain = "psql-test.endo-reg.net";
+
+generic-settings.network.serviceHosts.keycloak = "s-02";
+
+generic-settings.network.serviceHosts.nextcloud = "s-03";
+
+generic-settings.network.serviceHosts.psqlMain = "gs-02";
+
+generic-settings.network.serviceHosts.psqlTest = "s-04";
 
 generic-settings.network.syncthing.extraFlags = [];
 generic-settings.postgres.enable = true;

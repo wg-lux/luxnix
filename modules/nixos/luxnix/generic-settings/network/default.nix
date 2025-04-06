@@ -46,10 +46,20 @@ with lib.luxnix; let
     ) hosts;
 
   merged_hosts = mergeHosts (builtins.attrValues (generateHosts cfg.hosts));
+  
+  # Get the VPN IP for a specific service based on its host mapping
+  getServiceVpnIp = service:
+    let 
+      hostName = cfg.serviceHosts.${service} or null;
+      hostConfig = if hostName != null then cfg.hosts.${hostName} or null else null;
+    in
+      if hostConfig != null && hostConfig.ip-vpn != null
+      then hostConfig.ip-vpn
+      else -1; # "172.16.255.x"; # Default fallback
 
 in {
-  options.luxnix.generic-settings.network = {#
-
+  options.luxnix.generic-settings.network = {
+    
     hosts = mkOption {
       type = types.attrsOf (types.submodule {
       options = {
@@ -110,6 +120,22 @@ in {
         - network_cluster
       '';
     };
+    
+    # New option to map services to host names
+    serviceHosts = mkOption {
+      type = types.attrsOf types.str;
+      default = {
+        keycloak = "s-02";
+        nextcloud = "s-03";
+        psqlMain = "gs-02";
+        psqlTest = "s-04";
+      };
+      description = ''
+        Maps service names to the hostname where they are deployed.
+        This allows automatic derivation of VPN IPs for services.
+      '';
+    };
+    
     syncthing = {
       extraFlags = mkOption {
         type = types.listOf types.str;
@@ -119,12 +145,13 @@ in {
         '';
       };
     };
+    
     keycloak = {
       vpnIp = mkOption {
         type = types.str;
-        default = "172.16.255.x";
+        default = getServiceVpnIp "keycloak";
         description = ''
-          The VPN IP.
+          The VPN IP of the keycloak host (derived from serviceHosts mapping).
         '';
       };
       port = mkOption {
@@ -153,9 +180,9 @@ in {
     nextcloud = {
       vpnIp = mkOption {
         type = types.str;
-        default = "172.16.255.x";
+        default = getServiceVpnIp "nextcloud";
         description = ''
-          The VPN IP.
+          The VPN IP of the nextcloud host (derived from serviceHosts mapping).
         '';
       };
       port = mkOption {
@@ -178,9 +205,9 @@ in {
     psqlMain = {
       vpnIp = mkOption {
         type = types.str;
-        default = "172.16.255.x";
+        default = getServiceVpnIp "psqlMain";
         description = ''
-          The VPN IP.
+          The VPN IP of the main PostgreSQL host (derived from serviceHosts mapping).
         '';
       };
       port = mkOption {
@@ -202,9 +229,9 @@ in {
     psqlTest = {
       vpnIp = mkOption {
         type = types.str;
-        default = "172.16.255.x";
+        default = getServiceVpnIp "psqlTest";
         description = ''
-          The VPN IP.
+          The VPN IP of the test PostgreSQL host (derived from serviceHosts mapping).
         '';
       };
       port = mkOption {
@@ -226,9 +253,9 @@ in {
     nginx = {
       vpnIp = mkOption {
         type = types.str;
-        default = "172.16.255.x";
+        default = getServiceVpnIp "nginx";
         description = ''
-          The VPN IP.
+          The VPN IP of the nginx host (derived from serviceHosts mapping).
         '';
       };
       port = mkOption {
@@ -246,15 +273,10 @@ in {
         '';
       };
     };
-
-
   };
-
 
   config = {
-    networking.hosts =  merged_hosts;
+    networking.hosts = merged_hosts;
     services.luxnix.syncthing.extraFlags = lib.mkDefault cfg.syncthing.extraFlags;
-
   };
-
 }

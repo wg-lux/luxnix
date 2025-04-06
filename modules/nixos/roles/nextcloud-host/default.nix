@@ -23,6 +23,9 @@ with lib.luxnix; let
   nginx_cert_path = "/etc/nginx-host/ssl_cert";
   nginx_key_path = "/etc/nginx-host/ssl_key";
 
+  networkSettings = config.luxnix.generic-settings.network;
+  serviceHosts = networkSettings.hosts;
+
   lxVaultDir = config.luxnix.vault.dir;
 
   nextcloudPwdFile = "/etc/nextcloud-admin-pass";
