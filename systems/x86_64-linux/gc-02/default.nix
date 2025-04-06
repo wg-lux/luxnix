@@ -150,6 +150,8 @@ generic-settings.network.serviceHosts.keycloak = "s-02";
 
 generic-settings.network.serviceHosts.nextcloud = "s-03";
 
+generic-settings.network.serviceHosts.nginx = "s-02";
+
 generic-settings.network.serviceHosts.psqlMain = "gs-02";
 
 generic-settings.network.serviceHosts.psqlTest = "s-04";
