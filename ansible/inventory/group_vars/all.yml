@@ -128,6 +128,7 @@ group_luxnix:
   generic_settings.network.serviceHosts.keycloak: '"s-02"'
   generic_settings.network.serviceHosts.nextcloud: '"s-03"'
   generic_settings.network.serviceHosts.psqlMain: '"gs-02"'
+  generic_settings.network.serviceHosts.psqlTest: '"s-04"'
 
   # TODO Remove REferences to this in rest od the code in favour of above stuff
   # generic_settings.network.nginx.vpnIp: '"172.16.255.12"'

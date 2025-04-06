@@ -124,6 +124,7 @@ group_luxnix:
   generic_settings.network.serviceHosts.keycloak: '"s-02"'
   generic_settings.network.serviceHosts.nextcloud: '"s-03"'
   generic_settings.network.serviceHosts.psqlMain: '"gs-02"'
+  generic_settings.network.serviceHosts.psqlTest: '"s-04"'
   generic_settings.network.syncthing.extraFlags: []
   generic_settings.postgres.enable: 'true'
   generic_settings.sensitiveServiceGroupName: '"sensitiveServices"'

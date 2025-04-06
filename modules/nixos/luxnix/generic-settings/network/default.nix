@@ -128,6 +128,7 @@ in {
         keycloak = "s-02";
         nextcloud = "s-03";
         psqlMain = "gs-02";
+        psqlTest = "s-04";
       };
       description = ''
         Maps service names to the hostname where they are deployed.
