@@ -9,7 +9,7 @@ with lib.luxnix; let
 
   dev01 = [ ];
   dev02 = [ ];
-  dev03 = [
+  dev03 = with pkgs; [
     obsidian
     balena-cli
   ];

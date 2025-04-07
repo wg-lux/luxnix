@@ -26,6 +26,7 @@ dependencies = [
     "icecream>=2.1.4",
     "passlib>=1.7.4",
     "psycopg[binary]>=3.2.4",
+    "obsidian>=1.2",
 ]
 
 [tool.setuptools]
