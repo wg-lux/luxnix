@@ -22,6 +22,7 @@ with lib.luxnix; let
 
   baseDevelopment = with pkgs; [
     # vscode-fhs
+    nixfmt-rfc-style
     cacert
     openssl
     vscode
