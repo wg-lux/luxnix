@@ -1,0 +1,5 @@
+group_roles: {}
+group_services: {}
+group_luxnix:
+  luxnix.generic_settings.linux.rmem_max: 4194304
+  luxnix.generic_settings.linux.wmem_max: 4194304
