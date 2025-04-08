@@ -959,6 +959,7 @@ groups:
         generic_settings.network.psqlTest.domain: '"psql-test.endo-reg.net"'
         generic_settings.network.serviceHosts.keycloak: '"s-02"'
         generic_settings.network.serviceHosts.nextcloud: '"s-03"'
+        generic_settings.network.serviceHosts.nginx: '"s-02"'
         generic_settings.network.serviceHosts.psqlMain: '"gs-02"'
         generic_settings.network.serviceHosts.psqlTest: '"s-04"'
         generic_settings.network.syncthing.extraFlags: []

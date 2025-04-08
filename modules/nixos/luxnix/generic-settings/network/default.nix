@@ -125,6 +125,8 @@ in {
     serviceHosts = mkOption {
       type = types.attrsOf types.str;
       default = {
+        openvpn = "s-01";
+        nginx = "s-02";
         keycloak = "s-02";
         nextcloud = "s-03";
         psqlMain = "gs-02";
