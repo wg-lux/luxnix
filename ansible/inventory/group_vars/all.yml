@@ -120,7 +120,7 @@ group_luxnix:
   generic_settings.network.hosts.gc_09.domains:
     - "gc-09.intern"
 
-  generic_settings.linux.kernelParams: ["mem_sleep_default=deep"]
+  # generic_settings.linux.kernelParams: ["mem_sleep_default=deep"]
 
   generic_settings.network.syncthing.extraFlags: []
 

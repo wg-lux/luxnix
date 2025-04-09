@@ -17,15 +17,18 @@
     settings.mutable = false;
   };
 
+  boot.shell_on_fail = true;
+  
+
   roles = { 
     aglnet.client.enable = true;
     common.enable = true;
     custom-packages.cloud = true;
     custom-packages.enable = true;
-    endoreg-client.dbApiLocal = true;
-    endoreg-client.enable = true;
-    nextcloudClient.enable = true;
-    postgres.default.enable = true;
+    # endoreg-client.dbApiLocal = true;
+    # endoreg-client.enable = true;
+    # nextcloudClient.enable = true;
+    # postgres.default.enable = true;
     ssh-access.dev-01.enable = true;
     ssh-access.dev-01.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK";
     ssh-access.dev-03.enable = true;
@@ -39,7 +42,7 @@
     };
 
   luxnix = {
-    boot-decryption-stick.enable = true;
+    # boot-decryption-stick.enable = true;
 
 dns.enable = true;
 
