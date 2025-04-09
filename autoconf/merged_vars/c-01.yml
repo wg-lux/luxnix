@@ -46,8 +46,6 @@ group_luxnix:
   generic_settings.adminVpnIp: '"172.16.255.106"'
   generic_settings.enable: 'true'
   generic_settings.linux.kernelPackages: pkgs.linuxPackages_6_12
-  generic_settings.linux.kernelParams:
-    - mem_sleep_default=deep
   generic_settings.network.hosts.gc_01.domains:
     - gc-01.intern
   generic_settings.network.hosts.gc_01.ip_vpn: '"172.16.255.101"'
@@ -121,6 +119,7 @@ group_luxnix:
   generic_settings.network.serviceHosts.nginx: '"s-02"'
   generic_settings.network.serviceHosts.psqlMain: '"gs-02"'
   generic_settings.network.serviceHosts.psqlTest: '"s-04"'
+  generic_settings.network.syncthing.enable: 'true'
   generic_settings.network.syncthing.extraFlags: []
   generic_settings.postgres.enable: 'true'
   generic_settings.sensitiveServiceGroupName: '"sensitiveServices"'

@@ -121,7 +121,7 @@ group_luxnix:
     - "gc-09.intern"
 
   # generic_settings.linux.kernelParams: ["mem_sleep_default=deep"]
-
+  generic_settings.network.syncthing.enable: "true"
   generic_settings.network.syncthing.extraFlags: []
 
   # Service Hosts

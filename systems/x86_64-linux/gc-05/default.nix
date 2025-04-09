@@ -22,10 +22,10 @@
     common.enable = true;
     custom-packages.cloud = true;
     custom-packages.enable = true;
-    # endoreg-client.dbApiLocal = true;
-    # endoreg-client.enable = true;
-    # nextcloudClient.enable = true;
-    # postgres.default.enable = true;
+    endoreg-client.dbApiLocal = true;
+    endoreg-client.enable = true;
+    nextcloudClient.enable = true;
+    postgres.default.enable = true;
     ssh-access.dev-01.enable = true;
     ssh-access.dev-01.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK";
     ssh-access.dev-03.enable = true;
@@ -39,7 +39,7 @@
     };
 
   luxnix = {
-    # boot-decryption-stick.enable = true;
+    boot-decryption-stick.enable = true;
 
 dns.enable = true;
 
@@ -59,7 +59,6 @@ generic-settings.enable = true;
 
 generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
 
-generic-settings.linux.kernelParams = [];
 generic-settings.network.hosts.gc-01.domains = ["gc-01.intern"];
 generic-settings.network.hosts.gc-01.ip-vpn = "172.16.255.101";
 
@@ -158,6 +157,8 @@ generic-settings.network.serviceHosts.psqlMain = "gs-02";
 
 generic-settings.network.serviceHosts.psqlTest = "s-04";
 
+generic-settings.network.syncthing.enable = true;
+
 generic-settings.network.syncthing.extraFlags = [];
 generic-settings.postgres.enable = true;
 
@@ -202,6 +203,7 @@ generic-settings.linux.initrd.kernelModules = ["nfs"];
 generic-settings.linux.initrd.supportedFilesystems = ["nfs"];
 generic-settings.linux.kernelModules = ["kvm-intel"];
 generic-settings.linux.kernelModulesBlacklist = [];
+generic-settings.linux.kernelParams = [];
 generic-settings.linux.resumeDevice = "/dev/disk/by-label/nixos";
 
 generic-settings.linux.supportedFilesystems = ["btrfs"];

@@ -17,8 +17,8 @@ in {
 
   config = mkIf cfg.enable {
 
-    # boot.kernel.sysctl."net.core.rmem_max" = config.luxnix.generic-settings.linux.rmem_max;
-    # boot.kernel.sysctl."net.core.wmem_max" = config.luxnix.generic-settings.linux.wmem_max;
+    boot.kernel.sysctl."net.core.rmem_max" = config.luxnix.generic-settings.linux.rmem_max;
+    boot.kernel.sysctl."net.core.wmem_max" = config.luxnix.generic-settings.linux.wmem_max;
 
     environment.systemPackages = with pkgs;
       [
