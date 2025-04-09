@@ -2,7 +2,7 @@
 .ansible/.lock
 conf/ansible.cfg
 result
-
+autoconf/
 # direnv
 .direnv
 .devenv_built
