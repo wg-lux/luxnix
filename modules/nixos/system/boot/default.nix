@@ -39,7 +39,7 @@ in {
       ];
       # initrd.verbose = lib.optionals cfg.plymouth false;
       # consoleLogLevel = lib.optionals cfg.plymouth 0;
-      initrd.systemd.enable = false;
+      initrd.systemd.enable = true;
 
       # lanzaboote = mkIf cfg.secureBoot {
       #   enable = true;
