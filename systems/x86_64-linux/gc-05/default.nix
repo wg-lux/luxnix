@@ -17,9 +17,6 @@
     settings.mutable = false;
   };
 
-  boot.shell_on_fail = true;
-  
-
   roles = { 
     aglnet.client.enable = true;
     common.enable = true;
