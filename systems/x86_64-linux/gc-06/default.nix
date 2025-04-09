@@ -59,7 +59,6 @@ generic-settings.language = "english";
 
 generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
 
-generic-settings.linux.kernelParams = [];
 generic-settings.network.hosts.gc-01.domains = ["gc-01.intern"];
 generic-settings.network.hosts.gc-01.ip-vpn = "172.16.255.101";
 
@@ -158,6 +157,8 @@ generic-settings.network.serviceHosts.psqlMain = "gs-02";
 
 generic-settings.network.serviceHosts.psqlTest = "s-04";
 
+generic-settings.network.syncthing.enable = true;
+
 generic-settings.network.syncthing.extraFlags = [];
 generic-settings.postgres.enable = true;
 
@@ -207,6 +208,7 @@ generic-settings.linux.initrd.kernelModules = ["dm-snapshot" "nfs" "btrfs"];
 generic-settings.linux.initrd.supportedFilesystems = ["nfs" "btrfs"];
 generic-settings.linux.kernelModules = ["kvm-intel"];
 generic-settings.linux.kernelModulesBlacklist = [];
+generic-settings.linux.kernelParams = [];
 generic-settings.linux.resumeDevice = "/dev/disk/by-label/nixos";
 
 generic-settings.linux.supportedFilesystems = ["btrfs" "nfs"];

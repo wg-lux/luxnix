@@ -139,6 +139,13 @@ in {
     };
     
     syncthing = {
+      enable = mkOption {
+        type = types.bool;
+        default = false;
+        description = ''
+          Enable Syncthing.
+        '';
+      };
       extraFlags = mkOption {
         type = types.listOf types.str;
         default = [];
@@ -279,6 +286,7 @@ in {
 
   config = {
     networking.hosts = merged_hosts;
+    services.luxnix.syncthing.enable = lib.mkDefault cfg.syncthing.enable;
     services.luxnix.syncthing.extraFlags = lib.mkDefault cfg.syncthing.extraFlags;
   };
 }

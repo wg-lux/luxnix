@@ -39,8 +39,7 @@ in {
 
     roles.postgres.default.enable = lib.mkDefault true; 
     roles.custom-packages.enable = lib.mkDefault true;
-    services.luxnix.syncthing.enable = lib.mkDefault true;
-
+    
 
     hardware = {
       networking.enable = true;
