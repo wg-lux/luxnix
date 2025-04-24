@@ -1,0 +1,22 @@
+---
+- name: Deploy smtp pwd from source
+  ansible.builtin.copy:
+    src: "{{ smtp_cred_pwd_src }}"
+    dest: "{{ smtp_cred_pwd_dest }}"
+    mode: "0700"
+    owner: "{{ ansible_user }}"
+  become: true
+  no_log: true
+  # vars:
+  # ansible_vault_identity: "{{ inventory_hostname }}@{{ lx_vault_dir_src }}/psk/{{ inventory_hostname }}.psk"
+
+- name: Deploy smtp user from source
+  ansible.builtin.copy:
+    src: "{{ smtp_cred_user_src }}"
+    dest: "{{ smtp_cred_user_dest }}"
+    mode: "0700"
+    owner: "{{ ansible_user }}"
+  become: true
+  no_log: true
+  # vars:
+  # ansible_vault_identity: "{{ inventory_hostname }}@{{ lx_vault_dir_src }}/psk/{{ inventory_hostname }}.psk"

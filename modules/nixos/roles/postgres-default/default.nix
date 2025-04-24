@@ -1,13 +1,20 @@
-{
-  lib,
-  pkgs,
-  config,
-  ...
+{ lib
+, pkgs
+, config
+, ...
 }:
 with lib; let
   cfg = config.roles.postgres.default;
-  defaultAuthKeys = config.users.users.${config.user.admin.name}.openssh.authorizedKeys.keys;
-in {
+
+  # Utility function to create attributes for a user
+  mkDefaultUser = user: {
+    name = user;
+    ensureDBOwnership = true;
+    ensureClauses = { };
+  };
+
+in
+{
   options.roles.postgres.default = {
     enable = mkEnableOption "Enable common configuration";
     postgresqlEnable = mkEnableOption "Enable PostgreSQL";
@@ -16,19 +23,50 @@ in {
       default = 5432;
     };
 
+    replUser = mkOption {
+      type = types.str;
+      default = "replUser";
+    };
+
+    testUser = mkOption {
+      type = types.str;
+      default = "testUser";
+    };
+
+    devUser = mkOption {
+      type = types.str;
+      default = "devUser";
+    };
+
+    lxClientUser = mkOption {
+      type = types.str;
+      default = "lxClientUser";
+    };
+
+    stagingUser = mkOption {
+      type = types.str;
+      default = "stagingUser";
+    };
+
+    productionUser = mkOption {
+      type = types.str;
+      default = "prodUser";
+    };
+
     defaultDbName = mkOption {
       type = types.str;
       default = "endoregDbLocal";
     };
 
-    postgresSshAuthorizedKeys = mkOption {
-      type = types.listOf types.str;
-      default = defaultAuthKeys;
-    };
-
     postgresqlDataDir = mkOption {
       type = types.str;
       default = "/var/lib/postgresql/${config.services.postgresql.package.psqlSchema}";
+    };
+
+    additionalPostgresAuthKeys = mkOption {
+      type = types.listOf types.str;
+      default = [ ];
+      description = "Additional authorized keys for postgres user";
     };
 
   };
@@ -37,13 +75,13 @@ in {
   config = mkIf cfg.enable {
     services.luxnix.postgresql.enable = true;
 
+
     users.users = {
       postgres = {
-        # isSystemUser = true;
-        # home = "/var/lib/postgresql";
-        # createHome = false;
-        # shell = "/run/current-system/sw/bin/nologin";
-        openssh.authorizedKeys.keys = cfg.postgresSshAuthorizedKeys;
+        # Dont allow ssh access for postgres by default
+        # But enable adding keys easily using postgres-default role
+        openssh.authorizedKeys.keys = cfg.additionalPostgresAuthKeys;
+
       };
     };
 
@@ -70,9 +108,16 @@ in {
           # log_disconnections = true;
           # log_destination = "syslog";
         };
-        ensureDatabases = [ 
-            config.user.admin.name
-            cfg.defaultDbName
+        ensureDatabases = [
+          config.user.admin.name
+          cfg.defaultDbName
+          "replication"
+          cfg.replUser
+          cfg.testUser
+          cfg.devUser
+          cfg.lxClientUser
+          cfg.stagingUser
+          cfg.productionUser
         ];
 
         ensureUsers = [
@@ -90,23 +135,15 @@ in {
               replication = true;
             };
           }
-          # {
-          #   name = cfg.replUser;
-          #   ensureDBOwnership = true;
-          #   ensureClauses = {
-          #     replication = true;
-          #   };
-          # }
-        ];
-        
-        # host  ${conf.keycloak-user}     ${conf.keycloak-user}       127.0.0.1/32                scram-sha-256 
-        # host  ${conf.keycloak-user}     ${conf.keycloak-user}       ${conf.host-keycloak-ip}/32 scram-sha-256
-        # host  replication               ${cfg.replUser}              ${conf.ip-backup}/32        scram-sha-256
-        # host  ${conf.users.aglnet-base.name} ${conf.users.aglnet-base.name} 172.16.255.142/32 scram-sha-256
-        
-        authentication = lib.mkOverride 10 config.luxnix.generic-settings.postgres.activeAuthentication;
 
-        identMap = lib.mkOverride 10 config.luxnix.generic-settings.postgres.activeIdentMap;
+          (mkDefaultUser cfg.replUser)
+          (mkDefaultUser cfg.testUser)
+          (mkDefaultUser cfg.devUser)
+          (mkDefaultUser cfg.lxClientUser)
+          (mkDefaultUser cfg.stagingUser)
+          (mkDefaultUser cfg.productionUser)
+        ];
+
       };
     };
 

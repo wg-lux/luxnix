@@ -10,6 +10,13 @@ with lib.luxnix; let
   hostname = config.networking.hostName;
   username = config.user.admin.name;
 
+
+  sensitiveServiceGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
+  adminUserName = config.user.admin.name;
+  keycloakEnabled = config.roles.keycloakHost.enable;
+  keycloakUserName = config.roles.keycloakHost.dbUsername;
+
+
 in {
   options.luxnix.generic-settings = {
     enable = mkEnableOption "Enable generic settings";
@@ -29,11 +36,35 @@ in {
       '';
     };
 
+    vpnSubnet = mkOption {
+      type = types.str;
+      default = "172.16.255.0/24";
+      description = ''
+        The VPN subnet.
+      '';
+    };
+
     adminVpnIp = mkOption {
       type = types.str;
       default = "172.16.255.106";
       description = ''
         The VPN IP of the admin.
+      '';
+    };
+
+    traefikHostDomain = mkOption {
+      type = types.str;
+      default = "traefik.endoreg.local";
+      description = ''
+        The traefik dashboard host.
+      '';
+    };
+
+    traefikHostIp = mkOption {
+      type = types.str;
+      default = "172.16.255.106";
+      description = ''
+        The traefik dashboard host.
       '';
     };
 
@@ -47,7 +78,7 @@ in {
 
     sensitiveServiceGroupName = mkOption {
       type = types.str;
-      default = "sensitive-service-group";
+      default = "sensitiveServices";  # changed from "sensitive-service-group"
       description = ''
         The name of the sensitive service group.
       '';
@@ -83,44 +114,47 @@ in {
       '';
     };
 
-    postgres = {
-      defaultAuthentication = mkOption {
-        type = types.str;
-        default = ''
-            #type database                  DBuser                      address                     auth-method         optional_ident_map
-            local sameuser                  all                                                     peer                map=superuser_map
-        '';
-        description = ''
-          The default ident map for postgres.
-        '';
-      };
-      activeAuthentication = mkOption {
-        type = types.str;
-        default = cfg.postgres.defaultAuthentication;
-        description = ''
-          The active ident map for postgres.
-        '';
-      };
-
-      defaultIdentMap = mkOption {
-        type = types.str;
-        default = ''
-          # ArbitraryMapName systemUser DBUser
-          superuser_map      root      postgres
-          superuser_map      ${config.user.admin.name}     postgres
-          superuser_map      postgres  postgres
-
-          # Let other names login as themselves
-          superuser_map      /^(.*)$   \1
+    language = mkOption {
+      type = types.enum [ "english" "german" ];
+      default = "german";
+      description = ''
+        Choose system language (e.g. "english", "german").
       '';
+    };
+
+    postgres = {
+      enable = lib.mkOption {
+        type = types.bool;
+        default = false;
+        description = "Enable postgres configuration.";
       };
 
-      activeIdentMap = mkOption {
+      remote = {
+        admin = {
+            enable = lib.mkOption {
+              type = types.bool;
+              default = false;
+              description = "Enable remote admin.";
+          };
+          vpnIp = mkOption {
+            type = types.str;
+            default = config.luxnix.generic-settings.adminVpnIp;
+            description = "The remote admin ip.";
+          };
+        };
+      };
+
+      extraAuthentication = mkOption {
         type = types.str;
-        default = cfg.postgres.defaultIdentMap;
+        default = '''';
         description = ''
-          The active ident map for postgres.
+          The active authentication settings for postgres.
         '';
+      };
+
+      extraIdentMap = mkOption {
+        type = types.str;
+        default = '''';
       };
 
     };
@@ -137,6 +171,22 @@ in {
       default = "/home/${config.user.admin.name}/.ssl/__endo-reg_net.pem";
       description = ''
         Path to the ssl certificate.
+      '';
+    };
+
+    smtpUserFilePath = mkOption {
+      type = types.path;
+      default = "/etc/secrets/vault/smtp_user";
+      description = ''
+        Path to the smtp user file.
+      '';
+    };
+
+    smtpPwdFilePath = mkOption {
+      type = types.str;
+      default = "/etc/secrets/vault/smtp_pwd";
+      description = ''
+        The smtp user file.
       '';
     };
 
@@ -174,12 +224,23 @@ in {
 
   config = {
     # Create Sensitive Service Group
+    #TODO Migrate to groups
     users.groups = {
       "${cfg.sensitiveServiceGroupName}" = {
         gid = cfg.sensitiveServiceGID;
+        name = sensitiveServiceGroupName;
+        members = [ 
+          adminUserName
+        ] ++ ( if keycloakEnabled then [ keycloakUserName ] else [] );
       };
     };
-
+    # Set PostGres Authentication & IdentMap
+    roles.postgres.default.enable = lib.mkDefault cfg.postgres.enable;
+    services.luxnix.postgresql.extraAuthentication = lib.mkDefault cfg.postgres.extraAuthentication;
+    services.luxnix.postgresql.extraIdentMap = lib.mkDefault cfg.postgres.extraIdentMap;
+    
+    
+    # TODO Add to System summary Log
     users.mutableUsers = lib.mkDefault cfg.mutableUsers;
     system.stateVersion = cfg.systemStateVersion;
     networking.useDHCP = lib.mkDefault cfg.useDHCP;
@@ -187,6 +248,11 @@ in {
     systemd.tmpfiles.rules = [
       "d ${cfg.secretDir} 0755 ${username} users"
     ];
+
+    environment.systemPackages = with pkgs; [
+      cacert
+    ];
+
   };
 
 

@@ -1,0 +1,17 @@
+---
+galaxy_info:
+  author: LuxNix Team
+  description: ROLE_DESCRIPTION
+  company: LuxNix
+  license: MIT
+  min_ansible_version: 2.9
+  platforms:
+    - name: NixOS
+      versions:
+        - all
+  galaxy_tags:
+    - nixos
+    - TAG1
+    - TAG2
+
+dependencies: []

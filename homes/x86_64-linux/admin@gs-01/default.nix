@@ -16,9 +16,10 @@
     # syncthing.enable = false;
   };
 
-  # luxnix.django-demo-app = {
-  #   enable = true;
-  # };
+  luxnix.generic-settings = {
+    enable = true;
+    language = "english";
+  };
 
   roles = {
     development.enable = true;

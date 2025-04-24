@@ -1,19 +1,19 @@
-{
-  lib,
-  config,
-  ...
+{ lib
+, config
+, ...
 }:
-with lib; 
+with lib;
 with lib.luxnix; let
   cfg = config.cli.terminals.tmux;
-in {
+in
+{
   options.cli.terminals.tmux = {
     enable = mkBoolOpt false "Enable tmux configuration";
   };
 
   config = mkIf cfg.enable {
     programs.tmux = {
-      enable=true;
+      enable = true;
       baseIndex = 1; # default is 0
       clock24 = true; # default is false
       mouse = true; # default is false

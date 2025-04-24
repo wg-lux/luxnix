@@ -23,6 +23,7 @@ class Secret(BaseModel):
     created: Optional[dt] = None
     updated: Optional[dt] = None
     validity: Optional[td] = td(days=180)
+    value: Optional[str] = None
 
     class Config:
         arbitrary_types_allowed = True
@@ -108,6 +109,15 @@ class Secret(BaseModel):
         vault_id = vault.get_local_vault_id() if vault else None
 
         try:
+            # if vault_id:
+            #     rekey_args = [
+            #         "ansible-vault",
+            #         "rekey",
+            #         "--encrypt-vault-id",
+            #         vault_id,
+            #         target_path.as_posix(),
+            #     ]
+            # # else:
             rekey_args = [
                 "ansible-vault",
                 "rekey",
@@ -115,21 +125,55 @@ class Secret(BaseModel):
                 pre_shared_key_path.as_posix(),
                 target_path.as_posix(),
             ]
-            if vault_id:
-                rekey_args.insert(2, f"--new-vault-id={vault_id}")
 
-            result = subprocess.run(
+            _result = subprocess.run(
                 rekey_args,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 check=True,
                 text=True,
             )
-            if result.stderr:
-                warnings.warn(f"Rekey warning: {result.stderr}")
+            # if result.stderr:
+            #     warnings.warn(f"Rekey warning: {result.stderr}")
 
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Failed to rekey file: {e.stderr}")
+
+    def update_file_encryption(self, vault: "Vault"):
+        """
+        Overwrite the existing secret file with self.value, then encrypt it.
+        Preserves original file permissions.
+        """
+        import subprocess
+        import os
+        from lx_administration.models import Vault
+
+        vault: Vault = vault
+        file_path = Path(self.file).expanduser().resolve()
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Store original permissions if file exists
+        orig_mode = None
+        if file_path.exists():
+            orig_mode = file_path.stat().st_mode
+
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(self.value or "")
+
+        # Set default permissions (700) or restore original
+        os.chmod(file_path, orig_mode if orig_mode else 0o700)
+        os.chown(file_path, os.getuid(), os.getgid())
+
+        vault_id = vault.get_local_vault_id()
+        subprocess.run(
+            [
+                "ansible-vault",
+                "encrypt",
+                f"--encrypt-vault-id={vault_id}",
+                file_path.as_posix(),
+            ],
+            check=True,
+        )
 
     def validate(self):
         logger = get_logger("Secret-validate")

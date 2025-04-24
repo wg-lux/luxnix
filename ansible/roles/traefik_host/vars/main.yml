@@ -1,0 +1,20 @@
+traefik_host_roles:
+  traefikHost.enable: "true"
+  traefikHost.dashboard: "true"
+  traefikHost.insecure: "false"
+  traefikHost.dashboardHost: '"traefik.endo-reg.net"'
+  traefikHost.sslCertPath: '"/etc/secrets/vault/ssl_cert"'
+  traefikHost.sslKeyPath: '"/etc/secrets/vault/ssl_key"'
+  traefikHost.allowedIPs:
+    - "172.16.255.106"
+    - "172.16.255.1"
+    - "127.0.0.1"
+  traefikHost.keycloak.enable: "true"
+  traefikHost.keycloak.domain: '"keycloak.endo-reg.net"'
+  traefikHost.keycloak.port: "9080"
+
+traefik_host_luxnix:
+  # generic-settings.sslCertificatePath: '"/home/admin/.ssl/__endo-reg_net.pem"'
+  # generic-settings.sslCertificateKeyPath: '"/home/admin/.ssl/endo-reg-net.key"'
+  generic-settings.sslCertificatePath: '"/etc/secrets/vault/ssl_cert"'
+  generic-settings.sslCertificateKeyPath: '"/etc/secrets/vault/ssl_key"'

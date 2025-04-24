@@ -8,7 +8,10 @@ with lib;
 with lib.luxnix; let
   cfg = config.luxnix.vault;
   adminName = config.user.admin.name;
-  
+  sensitiveServiceGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
+
+  sslCertGroupName = "sslCert";
+
 in {
   options.luxnix.vault = {
     enable = mkEnableOption "Enable Default Vault configuration";
@@ -42,13 +45,25 @@ in {
       description = "The path to the psk file";
     };
 
+    sslCert = mkOption {
+      default = "${cfg.dir}/ssl_cert";
+      type = types.str;
+      description = "Path to SSL certificate in vault";
+    };
+
+    sslKey = mkOption {
+      default = "${cfg.dir}/ssl_key";
+      type = types.str;
+      description = "Path to SSL key in vault";
+    };
+
   };
 
 
   config = mkIf cfg.enable {
-    # make sure vault dir exists with correct permissions (700)
+    # make sure vault dir exists with correct permissions (700) #FIXME
     systemd.tmpfiles.rules = [
-      "d ${cfg.dir} 0700 ${adminName} users"
+      "d ${cfg.dir} 0770 ${adminName} ${sensitiveServiceGroupName}"
     ];
   };
 }

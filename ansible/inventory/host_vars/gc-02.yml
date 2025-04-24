@@ -3,7 +3,10 @@
 template_name: "main"
 
 host_roles:
+  custom_packages.videoEditing: "true"
   custom_packages.baseDevelopment: "true"
+  custom_packages.visuals: "true"
+  custom_packages.hardwareAcceleration: "true"
 
 host_services: {}
 
@@ -11,9 +14,8 @@ extra_secret_names:
   - "SCRT_roles_system_password_postgres_host_test_password"
 
 host_luxnix:
-  generic_settings.configurationPathRelative: '"luxnix"'
-  generic_settings.configurationPath: 'lib.mkForce "/home/admin/luxnix"'
-  generic_settings.vpnIp: '"172.16.255.102"'
+  generic_settings.configurationPathRelative: '"dev/luxnix"'
+  generic_settings.configurationPath: 'lib.mkForce "/home/admin/dev/luxnix"'
 
   generic_settings.hostPlatform: '"x86_64-linux"'
   generic_settings.systemStateVersion: '"23.11"'

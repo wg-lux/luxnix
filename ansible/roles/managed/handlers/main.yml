@@ -3,7 +3,7 @@
     command: "nh os switch"
     timeout: 900 # 15 Minutes
     responses:
-      "(?i)\\[sudo\\]\\s*passwort\\s*für\\s*admin:": "{{ ansible_sudo_pass }}"
+      "(?i)\\[sudo\\]\\s*(?:passwort|password)\\s*(?:für|for)\\s*admin:": "{{ ansible_sudo_pass }}"
   become: true
   become_user: "{{ ansible_become_user }}"
   vars:
@@ -16,7 +16,7 @@
     command: "nh home switch"
     timeout: 900 # 15 Minutes
     responses:
-      "(?i)\\[sudo\\]\\s*passwort\\s*für\\s*admin:": "{{ ansible_sudo_pass }}"
+      "(?i)\\[sudo\\]\\s*(?:passwort|password)\\s*(?:für|for)\\s*admin:": "{{ ansible_sudo_pass }}"
   become: true
   become_user: "{{ ansible_become_user }}"
   vars:

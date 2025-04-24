@@ -1,0 +1,9 @@
+ssl_cert_ssl_cert_src: "/home/admin/dev/luxnix/secrets/ssl/ssl_cert"
+ssl_cert_ssl_cert_dest: "/etc/secrets/vault/ssl_cert"
+
+ssl_cert_ssl_key_src: "/home/admin/dev/luxnix/secrets/ssl/ssl_key"
+ssl_cert_ssl_key_dest: "/etc/secrets/vault/ssl_key"
+
+ssl_cert_roles: {}
+
+ssl_cert_luxnix: {}

@@ -7,6 +7,8 @@
 with lib;
 with lib.luxnix; let
   cfg = config.group.endoreg-service;
+
+  
 in {
   options.group.endoreg-service = with types; {
     name = mkOpt str "endoreg-service" "The name of the group";
@@ -23,6 +25,11 @@ in {
         members = cfg.members;
         gid = cfg.gid;
       };
+
+    users.groups."sslCert" = {
+      name = "sslCert";
+      members = cfg.members;
+    };
 
     home-manager = {
       useGlobalPkgs = true;

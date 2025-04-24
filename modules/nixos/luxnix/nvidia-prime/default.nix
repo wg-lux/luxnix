@@ -1,9 +1,8 @@
-{
-  config,
-  inputs,
-  pkgs,
-  lib,
-  ...
+{ config
+, inputs
+, pkgs
+, lib
+, ...
 }:
 
 with lib;
@@ -18,19 +17,20 @@ with lib.luxnix; let
 
     # Custom imports
     "555_58" = {
-        version = "555.58";
-        sha256_64bit = "sha256-bXvcXkg2kQZuCNKRZM5QoTaTjF4l2TtrsKUvyicj5ew=";
-        sha256_aarch64 = pkgs.lib.fakeSha256;
-        openSha256 = pkgs.lib.fakeSha256;
-        settingsSha256 = "sha256-vWnrXlBCb3K5uVkDFmJDVq51wrCoqgPF03lSjZOuU8M=";
-        persistencedSha256 = pkgs.lib.fakeSha256;
+      version = "555.58";
+      sha256_64bit = "sha256-bXvcXkg2kQZuCNKRZM5QoTaTjF4l2TtrsKUvyicj5ew=";
+      sha256_aarch64 = pkgs.lib.fakeSha256;
+      openSha256 = pkgs.lib.fakeSha256;
+      settingsSha256 = "sha256-vWnrXlBCb3K5uVkDFmJDVq51wrCoqgPF03lSjZOuU8M=";
+      persistencedSha256 = pkgs.lib.fakeSha256;
     };
   };
 
   # we need to find out what system we are working on (eg linux, darwin, ...)
   system = config.system.build.host.system;
-  
-in {
+
+in
+{
   options.luxnix.nvidia-prime = with types; {
     enable = mkBoolOpt false "Enable or disable the Nvidia GPU Support";
 
@@ -68,15 +68,14 @@ in {
     hardware.graphics = {
       enable = true;
       extraPackages = with pkgs; [
-        mesa
       ];
     };
 
     nixpkgs.config.cudaSupport = true;
 
-    services.xserver.videoDrivers = ["nvidia"];
+    services.xserver.videoDrivers = [ "nvidia" ];
     boot.initrd.kernelModules = [ "nvidia" ];
-    
+
     hardware.nvidia = {
       prime = {
         sync.enable = true;
@@ -85,7 +84,7 @@ in {
       };
 
       modesetting.enable = true;
-      powerManagement.enable = false;
+      powerManagement.enable = true;
       powerManagement.finegrained = false;
       open = false;
       nvidiaSettings = true;
@@ -93,5 +92,5 @@ in {
       package = nvidiaDrivers."${cfg.nvidiaDriver}";
     };
   };
-  
+
 }

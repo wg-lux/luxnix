@@ -23,10 +23,11 @@ class PasswordGenerator(BaseModel):
     require_upper: bool = True
     require_lower: bool = True
     require_digits: bool = True
-    require_special: bool = True
+    require_special: bool = False
 
     @model_validator(mode="after")
     def validate_length(self) -> "PasswordGenerator":
+        """Ensure password length meets minimum requirements."""
         if self.mode == "password" and self.key_length < self.min_length:
             raise ValueError(f"Password length must be at least {self.min_length}")
         return self
@@ -103,7 +104,8 @@ class PasswordGenerator(BaseModel):
         return sha512_crypt.hash(password)
 
     def create_user_passphrase_file(self, username, hostname, n_words=4):
-        passphrase = self.generate_random_passphrase(n_words)
+        # TODO rm n_words
+        passphrase = self.generate_random_passphrase()
         hashed = self.create_password_hash(passphrase)
 
         timestamp = datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
@@ -118,10 +120,10 @@ class PasswordGenerator(BaseModel):
                 shutil.move(src, dest)
 
         os.makedirs(os.path.dirname(raw_path), exist_ok=True)
-        with open(raw_path, "w") as raw_file:
+        with open(raw_path, "w", encoding="utf-8") as raw_file:
             raw_file.write(passphrase)
 
-        with open(hashed_path, "w") as hashed_file:
+        with open(hashed_path, "w", encoding="utf-8") as hashed_file:
             hashed_file.write(hashed)  #
 
     def verify_password_hash(self, password: str, password_hash: str) -> bool:

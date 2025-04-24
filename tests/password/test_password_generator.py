@@ -29,7 +29,7 @@ class TestPasswordGenerator(unittest.TestCase):
         self.assertTrue(any(c.isupper() for c in password))
         self.assertTrue(any(c.islower() for c in password))
         self.assertTrue(any(c.isdigit() for c in password))
-        self.assertTrue(any(c in string.punctuation for c in password))
+        # self.assertTrue(any(c in string.punctuation for c in password)) # removed punctuation requirement
 
     def test_password_minimum_length(self):
         """Test minimum length validation."""

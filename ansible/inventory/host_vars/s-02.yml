@@ -3,7 +3,11 @@
 template_name: "main"
 
 ansible_roles:
-  - "postgres_host_main"
+  - postgres_host_main
+  - nginx_host
+  - keycloak_host
+  # - nextcloud_host
+  - ssl_cert
 
 host_roles: {}
 host_services: {}
@@ -11,7 +15,6 @@ host_services: {}
 host_luxnix:
   generic_settings.hostPlatform: '"x86_64-linux"'
   generic_settings.systemStateVersion: '"23.11"'
-  generic_settings.vpnIp: '"172.16.255.12"'
 
   generic_settings.linux.cpuMicrocode: '"intel"'
 

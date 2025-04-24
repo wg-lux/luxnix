@@ -27,8 +27,7 @@ in {
 
   config = mkIf cfg.enable {
     environment.systemPackages = cfg.packages;
-
-
+    
     systemd.services.NetworkManager-wait-online.enable = lib.mkForce false;
     systemd.services.systemd-networkd-wait-online.enable = lib.mkForce false;
     security.rtkit.enable = lib.mkDefault true;
@@ -40,10 +39,7 @@ in {
 
     roles.postgres.default.enable = lib.mkDefault true; 
     roles.custom-packages.enable = lib.mkDefault true;
-
-    ########### MOVE TO MAINTENANCE BOOTMODE
-    #TODO limit to vpn subnet
-    services.ssh.enable = true;
+    
 
     hardware = {
       networking.enable = true;
@@ -64,6 +60,19 @@ in {
     programs = {
       zsh.enable = true;
       command-not-found.enable = true;
+    };
+
+    services.virtualisation.podman.enable = true;
+
+
+    ########### MOVE TO MAINTENANCE BOOTMODE
+    #TODO limit to vpn subnet
+    services.ssh = {
+      enable = true;
+      authorizedKeys = [
+        # just adds authorized keys for admin user, does not enable ssh!
+        "${config.luxnix.generic-settings.rootIdED25519}"
+      ];
     };
 
     system = {

@@ -1,8 +1,10 @@
 - name: Read admin password
   ansible.builtin.slurp:
-    src: "{{ admin_password_file }}"
+    src: "{{ lx_vault_dir }}/{{ admin_password_filename }}"
   register: user_password
   no_log: true
+  vars:
+    ansible_vault_identity: "{{ inventory_hostname }}@{{ lx_vault_dir_src }}/psk/{{ inventory_hostname }}.psk"
 
 - name: Clone or update the wg-lux/luxnix repository
   ansible.builtin.git:
@@ -12,6 +14,7 @@
     update: true
     force: false
   register: git_update
+  no_log: true
   notify:
     - Run nho
     - Run nhh

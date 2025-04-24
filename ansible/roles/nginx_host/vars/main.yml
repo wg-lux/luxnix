@@ -1,0 +1,23 @@
+nginx_host_password_filename: "SCRT_roles_system_password_nginx_host_password"
+nginx_host_ssl_cert_src: "/home/admin/dev/luxnix/secrets/ssl/ssl_cert"
+nginx_host_ssl_key_src: "/home/admin/dev/luxnix/secrets/ssl/ssl_key"
+nginx_host_ssl_cert_dest: "/etc/secrets/vault/ssl_cert"
+nginx_host_ssl_key_dest: "/etc/secrets/vault/ssl_key"
+
+nginx_host_roles:
+  nginxHost.enable: "true"
+
+  nginxHost.keycloak.enable: "true"
+
+  nginxHost.nextcloud.enable: "true"
+
+  nginxHost.settings.proxyHeadersHashMaxSize: "512"
+  nginxHost.settings.proxyHeadersHashBucketSize: "64"
+  nginxHost.settings.recommendedGzipSettings: "true"
+  nginxHost.settings.recommendedProxySettings: "true"
+  nginxHost.settings.recommendedTlsSettings: "true"
+  nginxHost.settings.recommendedOptimisation: "true"
+
+nginx_host_luxnix:
+  generic-settings.sslCertificatePath: '"/etc/secrets/vault/ssl_cert"'
+  generic-settings.sslCertificateKeyPath: '"/etc/secrets/vault/ssl_key"'

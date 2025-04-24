@@ -1,15 +1,30 @@
-{
-  lib,
-  config,
-  pkgs,
-  ...
+{ lib
+, config
+, pkgs
+, ...
 }:
 with lib;
 with lib.luxnix; let
   cfg = config.roles.endoreg-client;
-in {
+
+
+  sensitiveServiceGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
+in
+{
   options.roles.endoreg-client = {
     enable = mkEnableOption "Enable endoreg client configuration";
+
+    dbApiLocal = mkOption {
+      type = types.bool;
+      default = false;
+      description = "Enable local endoreg-db-api service";
+    };
+
+    endoAi = mkOption {
+      type = types.bool;
+      default = true;
+      description = "Enable endoAi service";
+    };
   };
 
   config = mkIf cfg.enable {
@@ -23,16 +38,19 @@ in {
 
     luxnix.nvidia-prime.enable = true;
 
-    services.ssh = {
-      enable = true;
-        authorizedKeys = [ # just adds authorized keys for admin user, does not enable ssh!
-        "${config.luxnix.generic-settings.rootIdED25519}" 
-        ];
-      };
+    services.luxnix.endoregDbApiLocal = {
+      enable = cfg.dbApiLocal;
+    };
+
+    services.luxnix.endoAi = {
+      enable = cfg.endoAi;
+    };
+
+
 
     systemd.tmpfiles.rules = [
-       # USB Encrypter
-      "d /mnt/endoreg-sensitive-data 0770 admin endoreg-service -"
+      # USB Encrypter
+      "d /mnt/endoreg-sensitive-data 0770 root ${sensitiveServiceGroupName} -"
     ];
   };
 }

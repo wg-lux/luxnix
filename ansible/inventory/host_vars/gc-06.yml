@@ -5,7 +5,9 @@ ansible_python_interpreter: "{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python
 luxnix_dev_repo: "/home/admin/dev/luxnix"
 luxnix_repo: "https://github.com/wg-lux/luxnix.git"
 luxnix_dest: "/home/admin/luxnix-production"
-luxnix_branch: "migrate-01"
+luxnix_branch: "main"
+
+ansible_roles: []
 
 extra_secret_names:
   - "SCRT_roles_system_password_postgres_host_main_password"
@@ -18,6 +20,8 @@ host_roles:
   custom_packages.videoEditing: "true"
   custom_packages.baseDevelopment: "true"
   custom_packages.visuals: "true"
+  custom_packages.hardwareAcceleration: "true"
+  custom_packages.protonmail: "true"
 
 host_services: {}
 
@@ -30,7 +34,6 @@ host_luxnix:
 
   generic_settings.hostPlatform: '"x86_64-linux"'
   generic_settings.systemStateVersion: '"23.11"'
-  generic_settings.vpnIp: '"172.16.255.106"'
 
   generic_settings.linux.cpuMicrocode: '"intel"'
 

@@ -6,9 +6,11 @@ host_roles: {}
 
 host_services: {}
 
+ansible_roles:
+  - "dev_access"
+
 host_luxnix:
   boot_decryption_stick_gs_01.enable: "true"
-  generic_settings.vpnIp: '"172.16.255.22"'
 
   generic_settings.hostPlatform: '"x86_64-linux"'
   generic_settings.systemStateVersion: '"23.11"'

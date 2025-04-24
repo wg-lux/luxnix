@@ -1,6 +1,16 @@
-from pydantic import BaseModel, model_validator
-from typing import Optional, List, Union, Tuple, Dict
+"""
+Vault manager module for handling vault operations, secrets, and configuration.
+"""
+
+from configparser import ConfigParser
+from datetime import timedelta as td
 from pathlib import Path
+import socket
+from typing import Optional, List, Union, Tuple
+
+from icecream import ic
+from pydantic import BaseModel
+
 from lx_administration.logging import get_logger
 from lx_administration.yaml import dump_yaml, format_yaml, ansible_lint
 from ..ansible import AnsibleInventory
@@ -11,145 +21,11 @@ from .config import (
     LOCAL_USER_SECRET_TYPES,
     yaml,
 )
-import warnings
 from .psk import PreSharedKey
 from .secret import Secret
 from .secret_template import SecretTemplate
-from .manager_utils import _get_by_name, _assert_unique_list
-from datetime import datetime as dt, timedelta as td
-
-from icecream import ic
-
-from configparser import ConfigParser
-import socket
-
-
-class AnsibleCfgDefaults(BaseModel):
-    inventory: str = "./ansible/inventory/hosts.ini"
-    group_vars: str = "./ansible/inventory/group_vars"
-    host_vars: str = "./ansible/inventory/host_vars"
-    roles_path: str = "./ansible/roles"
-    log_path: str = "./ansible/ansible.log"
-    library: str = "./ansible/modules"
-    vault_identity_list: Optional[str] = None
-
-    def get_vid_list(self):
-        if self.vault_identity_list:
-            return self.vault_identity_list.split(",")
-        else:
-            return []
-
-    def get_vid_dict(self):
-        vid_list = self.get_vid_list()
-        vid_dict = {}
-        for vid in vid_list:
-            # print(vid)
-            host, path = vid.split("@")
-            vid_dict[host] = path
-
-        return vid_dict
-
-    def vid_dict2list(self, vid_dict):
-        vid_list = []
-        for host, path in vid_dict.items():
-            vid_list.append(f"{host}@{path}")
-        return vid_list
-
-    def vid_list2str(self, vid_list):
-        return ",".join(vid_list)
-
-    def update_vid_entry(self, host, path):
-        vid_dict = self.get_vid_dict()
-        vid_dict[host] = path
-        vault_identity_list = self.vid_dict2list(vid_dict)
-        self.vault_identity_list = self.vid_list2str(vault_identity_list)
-        self.drop_missing_vid()
-
-    def drop_missing_vid(self):
-        file_not_found = []
-        vid_dict = self.get_vid_dict()
-        for host, path in vid_dict.items():
-            if not Path(path).exists():
-                file_not_found.append(host)
-
-        for host in file_not_found:
-            del vid_dict[host]
-
-        self.vault_identity_list = self.vid_list2str(self.vid_dict2list(vid_dict))
-
-        if file_not_found:
-            ic(
-                f"Removing vault_identities with missing files in ansible.cfg: {file_not_found}"
-            )
-
-    def validate(self):
-        self.drop_missing_vid()
-
-
-class AnsibleCfgPrivilegeEscalation(BaseModel):
-    become: bool = True
-    become_method: str = "sudo"
-    become_user: str = "admin"
-    become_ask_pass: bool = False
-
-    def validate(self):
-        pass
-
-
-class AnsibleCfg(BaseModel):
-    defaults: AnsibleCfgDefaults = AnsibleCfgDefaults()
-    privilege_escalation: AnsibleCfgPrivilegeEscalation = (
-        AnsibleCfgPrivilegeEscalation()
-    )
-
-    @classmethod
-    def ensure_vault_id_pwdfile(cls, cfg_path: str, host: str, path: str):
-        """Ensure vault_id and password_file entries in ansible.cfg"""
-        host = host.replace("@", "_")
-        path = path.replace("@", "_")
-        ansible_cfg = cls.from_file(cfg_path)
-        ansible_cfg.defaults.update_vid_entry(host, path)
-        ansible_cfg.save_to_file(cfg_path)
-
-    @classmethod
-    def from_file(cls, file: str):
-        """Load ansible.cfg file"""
-        config = ConfigParser()
-        config.read(file)
-
-        # Convert ConfigParser to dict structure
-        data = {"defaults": {}, "privilege_escalation": {}}
-
-        if config.has_section("defaults"):
-            data["defaults"] = dict(config["defaults"])
-
-        if config.has_section("privilege_escalation"):
-            # Convert string 'True'/'False' to boolean for boolean fields
-            priv_esc = dict(config["privilege_escalation"])
-            for key in ["become", "become_ask_pass"]:
-                if key in priv_esc:
-                    priv_esc[key] = config.getboolean("privilege_escalation", key)
-            data["privilege_escalation"] = priv_esc
-
-        return cls.model_validate(data)
-
-    class Config:
-        arbitrary_types_allowed = True
-        extra = "allow"
-
-    def validate(self):
-        """Validate ansible.cfg model"""
-        self.defaults.validate()
-        self.privilege_escalation.validate()
-
-    def save_to_file(self, file: str):
-        """Save ansible.cfg file"""
-        config = ConfigParser()
-        config["defaults"] = self.defaults.model_dump()
-        config["privilege_escalation"] = self.privilege_escalation.model_dump()
-
-        with open(file, "w") as f:
-            config.write(f)
+from .manager_utils import _get_by_name, _assert_unique_list, _get_by_target_name
+from .ansible_cfg import AnsibleCfg, AnsibleCfgDefaults, AnsibleCfgPrivilegeEscalation
 
 
 class Vault(BaseModel):
@@ -323,10 +199,6 @@ class Vault(BaseModel):
         for template in self.secret_templates:
             template.validate()
 
-    def _validate_access_keys(self):
-        # remove or comment out, since AccessKey no longer exists
-        pass
-
     def _validate_secrets(self):
         """
         Validate all secrets within the vault.
@@ -339,13 +211,12 @@ class Vault(BaseModel):
 
     def validate(self):
         """
-        Validate the vault by verifying secret templates, access keys, and secrets.
+        Validate the vault by verifying secret templates and secrets.
 
         Raises:
-            AssertionError: If any template, access key, or secret is invalid.
+            AssertionError: If any template or secret is invalid.
         """
         self._validate_secret_templates()
-        self._validate_access_keys()
         self._validate_secrets()
 
     def load_inventory(self, inventory_file: str):
@@ -712,10 +583,14 @@ class Vault(BaseModel):
         # Ensure all parent directories exist
         vault_file.parent.mkdir(parents=True, exist_ok=True)
 
-        logger.info(f"Saving vault to {vault_file}")
+        logger.info("Saving vault to %s", vault_file)
 
         # Convert model to dict with explicit path string conversion
-        raw = self.model_dump(mode="json", exclude_none=True)
+        raw = self.model_dump(
+            mode="json",
+            exclude={"secrets": {"__all__": {"value"}}},
+            exclude_none=True,
+        )
 
         # Handle PSK serialization
         if "pre_shared_keys" in raw and raw["pre_shared_keys"]:
@@ -851,8 +726,18 @@ class Vault(BaseModel):
         return secrets
 
     def get_secret_by_target_name(self, name: str) -> Optional[Secret]:
-        from .manager_utils import _get_by_target_name
+        """
+        Retrieve a secret by its target name from the vault's secrets.
 
+        Args:
+            name (str): The target name of the secret to retrieve.
+
+        Returns:
+            Optional[Secret]: The secret with the matching target name if found.
+
+        Raises:
+            AssertionError: If no secret with the given target name is found.
+        """
         secret = _get_by_target_name(self.secrets, name)
         assert secret, f"Secret '{name}' not found"
 
@@ -873,31 +758,31 @@ class Vault(BaseModel):
         hostname = host.hostname
 
         logger.info("---------get_host_secrets---------")
-        logger.info(f"Checking secrets for host: {hostname}")
-        logger.info(f"Host roles: {host_roles}")
-        logger.info(f"Host groups: {host_groups}")
+        logger.info("Checking secrets for host: %s", hostname)
+        logger.info("Host roles: %s", host_roles)
+        logger.info("Host groups: %s", host_groups)
 
         matched_secrets = []
 
         for st in self.secret_templates:
-            logger.info(f"Checking template: {st.name}")
-            logger.info(f"Owner type: {st.owner_type}")
+            logger.info("Checking template: %s", st.name)
+            logger.info("Owner type: %s", st.owner_type)
             # logger.info(st.model_dump().__repr__())
             should_include = False
             if st.owner_type == "roles":
-                # logger.info(f"Checking roles in roles for: {st.name}")
+                # logger.info("Checking roles in roles for: %s", st.name)
                 if st.name in host_roles:
-                    logger.info(f"Matched role: {st.name}")
+                    logger.info("Matched role: %s", st.name)
                     should_include = True
             elif st.owner_type == "groups":
-                logger.info(f"Checking groups in groups for: {st.name}")
+                logger.info("Checking groups in groups for: %s", st.name)
                 if st.name in host_groups:
-                    logger.info(f"Matched group: {st.name}")
+                    logger.info("Matched group: %s", st.name)
                     should_include = True
             elif st.owner_type in ("local", "clients"):
-                logger.info(f"Checking local/client for: {st.name}")
+                logger.info("Checking local/client for: %s", st.name)
                 if st.name.endswith(f"@{hostname}"):
-                    logger.info(f"Matched local/client: {st.name}")
+                    logger.info("Matched local/client: %s", st.name)
                     should_include = True
 
             else:
@@ -905,7 +790,7 @@ class Vault(BaseModel):
 
             if should_include:
                 _secrets = self._get_template_secrets(st.name)
-                logger.info(f"Matched secrets: {_secrets}")
+                logger.info("Matched secrets: %s", _secrets)
                 matched_secrets.extend(_secrets)
 
         # fetch hosts extra secrets
@@ -915,3 +800,34 @@ class Vault(BaseModel):
         matched_secrets.extend(secrets)
 
         return matched_secrets
+
+    def update_secret_value(
+        self, secret_name: str, new_value: str, save_multiple: bool = False
+    ):
+        """
+        Update the value of an existing secret and save the vault.
+
+        Args:
+            secret_name (str): Name of the secret to update
+            new_value (str): New value to set
+            save_multiple (bool, optional): If True, updates all matching secrets. If False, raises error if multiple secrets found. Defaults to False.
+
+        Raises:
+            ValueError: If secret not found or if multiple secrets found and save_multiple=False
+        """
+        matching_secrets = [s for s in self.secrets if s.name == secret_name]
+
+        if not matching_secrets:
+            raise ValueError(f"Secret '{secret_name}' not found in vault.")
+
+        if len(matching_secrets) > 1 and not save_multiple:
+            raise ValueError(
+                f"Multiple secrets found with name '{secret_name}'. Set save_multiple=True to update all."
+            )
+
+        for secret in matching_secrets:
+            secret: Secret
+            secret.value = new_value
+            secret.update_file_encryption(self)
+
+        self.save_to_file()

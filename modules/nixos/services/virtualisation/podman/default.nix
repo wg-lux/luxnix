@@ -21,5 +21,11 @@ in {
         };
       };
     };
+
+    # Ensure docker socket has correct permissions
+    # systemd.tmpfiles.rules = [
+    #   "d /run/docker 0750 root docker -"
+    #   "z /run/docker.sock 0660 root docker -"
+    # ];
   };
 }

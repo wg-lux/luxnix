@@ -1,0 +1,39 @@
+# inventory/host_vars/c-01.yml
+---
+template_name: "main"
+
+host_roles:
+  aglnet.client.enable: "true"
+  custom_packages.hardwareAcceleration: "true"
+  desktop.enable: "true"
+
+host_services: {}
+host_luxnix:
+  generic_settings.hostPlatform: '"x86_64-linux"'
+  generic_settings.systemStateVersion: '"23.11"'
+
+  generic_settings.linux.cpuMicrocode: '"intel"'
+
+  generic_settings.linux.kernelModules:
+    - "kvm-intel"
+  generic_settings.linux.initrd.supportedFilesystems:
+    - "btrfs"
+    - "nfs"
+  generic_settings.linux.initrd.kernelModules:
+    - "btrfs"
+    - "nfs"
+  generic_settings.linux.initrd.availableKernelModules:
+    - "xhci_pci"
+    - "uas"
+    - "ahci"
+    - "usbhid"
+    - "nvme"
+    - "usb_storage"
+    - "sd_mod"
+    - "sdhci_pci"
+  generic_settings.linux.supportedFilesystems:
+    - "btrfs"
+    - "nfs"
+  generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+  generic_settings.linux.kernelParams: []
+  generic_settings.linux.kernelModulesBlacklist: []

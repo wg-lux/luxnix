@@ -1,0 +1,33 @@
+---
+- name: Deploy nginx role password from source
+  ansible.builtin.copy:
+    src: "{{ lx_vault_dir_src }}/deploy/{{ inventory_hostname }}/{{ nginx_host_password_filename }}"
+    dest: "{{ lx_vault_dir }}/{{ nginx_host_password_filename }}"
+    mode: "0600"
+    owner: "{{ ansible_user }}"
+  become: true
+  no_log: true
+  vars:
+    ansible_vault_identity: "{{ inventory_hostname }}@{{ lx_vault_dir_src }}/psk/{{ inventory_hostname }}.psk"
+
+- name: Deploy ssl_cert from source
+  ansible.builtin.copy:
+    src: "{{ nginx_host_ssl_cert_src }}"
+    dest: "{{ nginx_host_ssl_cert_dest }}"
+    mode: "0600"
+    owner: "{{ ansible_user }}"
+    # owner: "nginx"
+    # group: "sslCert"
+  become: true
+  no_log: true
+
+- name: Deploy ssl_key from source
+  ansible.builtin.copy:
+    src: "{{ nginx_host_ssl_key_src }}"
+    dest: "{{ nginx_host_ssl_key_dest }}"
+    mode: "0600"
+    owner: "{{ ansible_user }}"
+    # owner: "nginx"
+    # group: "sslCert"
+  become: true
+  no_log: true
