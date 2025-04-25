@@ -27,6 +27,7 @@ dependencies = [
     "passlib>=1.7.4",
     "psycopg[binary]>=3.2.4",
     "obsidian>=1.2",
+    "sphinx-rtd-theme>=3.0.2",
 ]
 
 [tool.setuptools]
