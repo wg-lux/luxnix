@@ -171,10 +171,6 @@ generic-settings.vpnSubnet = "172.16.255.0/24";
 
 gpu-eval.enable = true;
 
-luxnix.generic-settings.linux.rmem-max = 4194304;
-
-luxnix.generic-settings.linux.wmem-max = 4194304;
-
 maintenance.autoUpdates.dates = "09:00";
 
 maintenance.autoUpdates.enable = false;

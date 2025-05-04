@@ -1132,9 +1132,7 @@ groups:
     files: []
     name: high_rmem_wmem
     vars:
-      group_luxnix:
-        luxnix.generic_settings.linux.rmem_max: '4194304'
-        luxnix.generic_settings.linux.wmem_max: '4194304'
+      group_luxnix: {}
       group_roles: {}
       group_services: {}
   - extra_user_names: []

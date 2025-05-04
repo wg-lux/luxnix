@@ -134,8 +134,6 @@ group_luxnix:
   generic_settings.traefikHostDomain: '"traefik.endo-reg.net"'
   generic_settings.traefikHostIp: '"172.16.255.12"'
   generic_settings.vpnSubnet: '"172.16.255.0/24"'
-  luxnix.generic_settings.linux.rmem_max: '4194304'
-  luxnix.generic_settings.linux.wmem_max: '4194304'
   maintenance.autoUpdates.dates: '"04:00"'
   maintenance.autoUpdates.enable: 'true'
   maintenance.autoUpdates.flake: '"github:wg-lux/luxnix"'
