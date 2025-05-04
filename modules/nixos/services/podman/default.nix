@@ -4,6 +4,7 @@ with lib;
 with lib.luxnix; let
   cfg = config.services.luxnix.podman;
   adminUser = config.user.admin.name;
+  cudaSupport = luxnix.nvidia-default.enable;
 in {
   options.services.luxnix.podman = {
     enable = mkBoolOpt false "Enable Podman";
@@ -11,7 +12,7 @@ in {
     podmanCompose = mkBoolOpt false "Enable podman-compose";
     # Enable podman-docker
     dockerDropIn = mkBoolOpt true "Enable podman as docker drop-in replacement";
-    nvidia = mkBoolOpt true "Enable NVIDIA support";
+    nvidia = mkBoolOpt cudaSupport "Enable NVIDIA support";
     networkSocket = mkBoolOpt false "Enable network socket";
     extraPackages = mkOpt (types.listOf types.package) [] "Additional packages to install";
     autoPrune = mkBoolOpt true "Enable auto-prune";
