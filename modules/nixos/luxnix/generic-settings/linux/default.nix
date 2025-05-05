@@ -10,12 +10,12 @@ with lib.luxnix; let
 
 in {
   options.luxnix.generic-settings.linux = {
-    rmem_max = mkOption {
+    rmemMax = mkOption {
       type = types.int;
       default = 1048576 * 2;
       description = "Default net.core.rmem_max";
     };
-    wmem_max = mkOption {
+    wmemMax = mkOption {
       type = types.int;
       default = 1048576 * 2;
       description = "Default net.core.wmem_max (2MB)";
