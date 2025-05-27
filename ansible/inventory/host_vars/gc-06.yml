@@ -53,6 +53,7 @@ host_luxnix:
     - "nvme"
     - "usb_storage"
     - "sd_mod"
+    - "thunderbolt"
   generic_settings.linux.supportedFilesystems:
     - "btrfs"
     - "nfs"

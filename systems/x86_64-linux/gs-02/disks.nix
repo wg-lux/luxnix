@@ -49,36 +49,58 @@ in
               };
             };
 
-            root = {
-              label = "root";
-              name = "root";
-              size = "100%";
+            rootEncrypted = {
+              label = "root_luks";
+              name = "root_luks";
+              size = "1T"; # System partition around 1TB
+              content = {
+                type = "luks";
+                name = "cryptroot"; # Name for /dev/mapper/cryptroot
+                # Add keyFile or passwordFile options here if needed for unlocking
+                # settings.keyFile = "/path/to/keyfile";
+                content = {
+                  type = "btrfs";
+                  extraArgs = [
+                    "-f"
+                    "-L" "nixos"  # Btrfs volume label
+                  ];
+                  subvolumes = {
+                    "root" = {
+                      mountpoint = "/";
+                      mountOptions = [ "subvol=root" "compress=zstd" "noatime" ];
+                    };
+                    "home" = {
+                      mountpoint = "/home";
+                      mountOptions = [ "subvol=home" "compress=zstd" "noatime" ];
+                    };
+                    "nix" = {
+                      mountpoint = "/nix";
+                      mountOptions = [ "subvol=nix" "compress=zstd" "noatime" ];
+                    };
+                    "persist" = {
+                      mountpoint = "/persist";
+                      mountOptions = [ "subvol=persist" "compress=zstd" "noatime" ];
+                    };
+                    "log" = {
+                      mountpoint = "/var/log";
+                      mountOptions = [ "subvol=log" "compress=zstd" "noatime" ];
+                    };
+                  };
+                };
+              };
+            };
+
+            dataOnPrimary = {
+              label = "data2_primary";
+              name = "data2_primary";
+              size = "100%"; # Remaining space
               content = {
                 type = "btrfs";
-                extraArgs = [
-                  "-f"
-                  "-L" "nixos"  # Btrfs volume label
-                ];
+                extraArgs = [ "-f" "-L" "data2_primary" ];
                 subvolumes = {
-                  "root" = {
-                    mountpoint = "/";
-                    mountOptions = [ "subvol=root" "compress=zstd" "noatime" ];
-                  };
-                  "home" = {
-                    mountpoint = "/home";
-                    mountOptions = [ "subvol=home" "compress=zstd" "noatime" ];
-                  };
-                  "nix" = {
-                    mountpoint = "/nix";
-                    mountOptions = [ "subvol=nix" "compress=zstd" "noatime" ];
-                  };
-                  "persist" = {
-                    mountpoint = "/persist";
-                    mountOptions = [ "subvol=persist" "compress=zstd" "noatime" ];
-                  };
-                  "log" = {
-                    mountpoint = "/var/log";
-                    mountOptions = [ "subvol=log" "compress=zstd" "noatime" ];
+                  "main" = {
+                    mountpoint = "/data2"; # Mounted as /data2
+                    mountOptions = [ "subvol=main" "compress=zstd" "noatime" ];
                   };
                 };
               };
@@ -90,21 +112,21 @@ in
       ########################################################################
       # TWO Additional NVMes for Data
       ########################################################################
-      data1 = {
+      data_aux1_disk = { # Renamed from data1
         device = dataNVME1;
         type = "disk";
         content = {
           type = "gpt";
           partitions = {
             data = {
-              label = "data1";
+              label = "data_aux1"; # Changed label
               size = "100%";
               content = {
                 type = "btrfs";
-                extraArgs = [ "-f" "-L" "data1" ];
+                extraArgs = [ "-f" "-L" "data_aux1" ]; # Changed Btrfs label
                 subvolumes = {
                   "main" = {
-                    mountpoint = "/data1";
+                    mountpoint = "/data_aux1"; # Changed mountpoint
                     mountOptions = [ "subvol=main" "compress=zstd" "noatime" ];
                   };
                 };
@@ -114,21 +136,21 @@ in
         };
       };
 
-      data2 = {
+      data_aux2_disk = { # Renamed from data2
         device = dataNVME2;
         type = "disk";
         content = {
           type = "gpt";
           partitions = {
             data = {
-              label = "data2";
+              label = "data_aux2"; # Changed label
               size = "100%";
               content = {
                 type = "btrfs";
-                extraArgs = [ "-f" "-L" "data2" ];
+                extraArgs = [ "-f" "-L" "data_aux2" ]; # Changed Btrfs label
                 subvolumes = {
                   "main" = {
-                    mountpoint = "/data2";
+                    mountpoint = "/data_aux2"; # Changed mountpoint
                     mountOptions = [ "subvol=main" "compress=zstd" "noatime" ];
                   };
                 };
@@ -138,9 +160,6 @@ in
         };
       };
 
-      ########################################################################
-      # Four 6 TB HDDs with LUKS Encryption + Btrfs RAID1
-      ########################################################################
       hdd0 = {
         device = hdd0;
         type = "disk";
