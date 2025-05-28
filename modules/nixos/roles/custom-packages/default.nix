@@ -111,6 +111,9 @@ with lib.luxnix; let
   customPackages = [
     pkgs.bash
     pkgs.bashInteractive
+    pkgs.iftop
+    pkgs.bmon
+    pkgs.nload
   ]
   ++ (if cfg.kdePlasma then kdePlasma else [ ])
   ++ (if cfg.baseDevelopment then baseDevelopment else [ ])

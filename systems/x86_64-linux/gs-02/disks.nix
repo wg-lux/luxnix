@@ -49,36 +49,58 @@ in
               };
             };
 
-            root = {
-              label = "root";
-              name = "root";
-              size = "100%";
+            rootEncrypted = {
+              label = "root_luks";
+              name = "root_luks";
+              size = "1T"; # System partition around 1TB
+              content = {
+                type = "luks";
+                name = "cryptroot"; # Name for /dev/mapper/cryptroot
+                # Add keyFile or passwordFile options here if needed for unlocking
+                # settings.keyFile = "/path/to/keyfile";
+                content = {
+                  type = "btrfs";
+                  extraArgs = [
+                    "-f"
+                    "-L" "nixos"  # Btrfs volume label
+                  ];
+                  subvolumes = {
+                    "root" = {
+                      mountpoint = "/";
+                      mountOptions = [ "subvol=root" "compress=zstd" "noatime" ];
+                    };
+                    "home" = {
+                      mountpoint = "/home";
+                      mountOptions = [ "subvol=home" "compress=zstd" "noatime" ];
+                    };
+                    "nix" = {
+                      mountpoint = "/nix";
+                      mountOptions = [ "subvol=nix" "compress=zstd" "noatime" ];
+                    };
+                    "persist" = {
+                      mountpoint = "/persist";
+                      mountOptions = [ "subvol=persist" "compress=zstd" "noatime" ];
+                    };
+                    "log" = {
+                      mountpoint = "/var/log";
+                      mountOptions = [ "subvol=log" "compress=zstd" "noatime" ];
+                    };
+                  };
+                };
+              };
+            };
+
+            dataOnPrimary = {
+              label = "data2_primary";
+              name = "data2_primary";
+              size = "100%"; # Remaining space
               content = {
                 type = "btrfs";
-                extraArgs = [
-                  "-f"
-                  "-L" "nixos"  # Btrfs volume label
-                ];
+                extraArgs = [ "-f" "-L" "data2_primary" ];
                 subvolumes = {
-                  "root" = {
-                    mountpoint = "/";
-                    mountOptions = [ "subvol=root" "compress=zstd" "noatime" ];
-                  };
-                  "home" = {
-                    mountpoint = "/home";
-                    mountOptions = [ "subvol=home" "compress=zstd" "noatime" ];
-                  };
-                  "nix" = {
-                    mountpoint = "/nix";
-                    mountOptions = [ "subvol=nix" "compress=zstd" "noatime" ];
-                  };
-                  "persist" = {
-                    mountpoint = "/persist";
-                    mountOptions = [ "subvol=persist" "compress=zstd" "noatime" ];
-                  };
-                  "log" = {
-                    mountpoint = "/var/log";
-                    mountOptions = [ "subvol=log" "compress=zstd" "noatime" ];
+                  "main" = {
+                    mountpoint = "/data2"; # Mounted as /data2
+                    mountOptions = [ "subvol=main" "compress=zstd" "noatime" ];
                   };
                 };
               };
@@ -90,21 +112,21 @@ in
       ########################################################################
       # TWO Additional NVMes for Data
       ########################################################################
-      data1 = {
+      data_aux1_disk = { # Renamed from data1
         device = dataNVME1;
         type = "disk";
         content = {
           type = "gpt";
           partitions = {
             data = {
-              label = "data1";
+              label = "data_aux1"; # Changed label
               size = "100%";
               content = {
                 type = "btrfs";
-                extraArgs = [ "-f" "-L" "data1" ];
+                extraArgs = [ "-f" "-L" "data_aux1" ]; # Changed Btrfs label
                 subvolumes = {
                   "main" = {
-                    mountpoint = "/data1";
+                    mountpoint = "/data_aux1"; # Changed mountpoint
                     mountOptions = [ "subvol=main" "compress=zstd" "noatime" ];
                   };
                 };
@@ -114,21 +136,21 @@ in
         };
       };
 
-      data2 = {
+      data_aux2_disk = { # Renamed from data2
         device = dataNVME2;
         type = "disk";
         content = {
           type = "gpt";
           partitions = {
             data = {
-              label = "data2";
+              label = "data_aux2"; # Changed label
               size = "100%";
               content = {
                 type = "btrfs";
-                extraArgs = [ "-f" "-L" "data2" ];
+                extraArgs = [ "-f" "-L" "data_aux2" ]; # Changed Btrfs label
                 subvolumes = {
                   "main" = {
-                    mountpoint = "/data2";
+                    mountpoint = "/data_aux2"; # Changed mountpoint
                     mountOptions = [ "subvol=main" "compress=zstd" "noatime" ];
                   };
                 };
@@ -138,31 +160,21 @@ in
         };
       };
 
-      ########################################################################
-      # Four 6 TB HDDs with LUKS Encryption + Btrfs RAID1
-      ########################################################################
       hdd0 = {
         device = hdd0;
         type = "disk";
         content = {
           type = "gpt";
           partitions = {
-            luks = {
-              label = "luksHDD0";
+            data = { # Renamed from luks to data
+              label = "btrfsHDD0"; # Changed label
               size = "100%";
               content = {
-                type = "luks";
-                name = "cryptHDD0";
-                extraOpenArgs = [
-                  "--allow-discards"
-                  "--perf-no_read_workqueue"
-                  "--perf-no_write_workqueue"
-                ];
-                settings = {
-                  # For passphrase-based, remove or adjust
-                  # crypttabExtraOpts = [ "fido2-device=auto" "token-timeout=10" ];
-                };
-                # Btrfs array is defined in hdd3's config
+                type = "btrfs"; # Changed from luks
+                # This partition will be part of the Btrfs array defined in hdd3
+                # No subvolumes or mountpoints defined here directly.
+                # extraArgs can be added if specific formatting options are needed for this individual device
+                # before it's added to the array, but usually not necessary.
               };
             };
           };
@@ -175,20 +187,12 @@ in
         content = {
           type = "gpt";
           partitions = {
-            luks = {
-              label = "luksHDD1";
+            data = { # Renamed from luks to data
+              label = "btrfsHDD1"; # Changed label
               size = "100%";
               content = {
-                type = "luks";
-                name = "cryptHDD1";
-                extraOpenArgs = [
-                  "--allow-discards"
-                  "--perf-no_read_workqueue"
-                  "--perf-no_write_workqueue"
-                ];
-                settings = {
-                  # crypttabExtraOpts = [ "fido2-device=auto" "token-timeout=10" ];
-                };
+                type = "btrfs"; # Changed from luks
+                # Part of Btrfs array in hdd3
               };
             };
           };
@@ -201,20 +205,12 @@ in
         content = {
           type = "gpt";
           partitions = {
-            luks = {
-              label = "luksHDD2";
+            data = { # Renamed from luks to data
+              label = "btrfsHDD2"; # Changed label
               size = "100%";
               content = {
-                type = "luks";
-                name = "cryptHDD2";
-                extraOpenArgs = [
-                  "--allow-discards"
-                  "--perf-no_read_workqueue"
-                  "--perf-no_write_workqueue"
-                ];
-                settings = {
-                  # crypttabExtraOpts = [ "fido2-device=auto" "token-timeout=10" ];
-                };
+                type = "btrfs"; # Changed from luks
+                # Part of Btrfs array in hdd3
               };
             };
           };
@@ -228,41 +224,31 @@ in
         content = {
           type = "gpt";
           partitions = {
-            luks = {
-              label = "luksHDD3";
+            data = { # Renamed from luks to data
+              label = "btrfsHDD3"; # Changed label
               size = "100%";
               content = {
-                type = "luks";
-                name = "cryptHDD3";
-                extraOpenArgs = [
-                  "--allow-discards"
-                  "--perf-no_read_workqueue"
-                  "--perf-no_write_workqueue"
+                type = "btrfs"; # Changed from luks
+                # This device itself is also part of the Btrfs array.
+                # The array is defined here, incorporating the other HDDs.
+                extraArgs = [
+                  "-f"
+                  "-L" "archive"
+                  "-m" "raid1"  # metadata = RAID1
+                  "-d" "raid1"  # data = RAID1
+                  hdd0 # Use direct device variable
+                  hdd1 # Use direct device variable
+                  hdd2 # Use direct device variable
+                  # hdd3 is implicitly included as the device where mkfs.btrfs is run
                 ];
-                settings = {
-                  # crypttabExtraOpts = [ "fido2-device=auto" "token-timeout=10" ];
-                };
-                content = {
-                  type = "btrfs";
-                  extraArgs = [
-                    "-f"
-                    "-L" "archive"
-                    "-m" "raid1"  # metadata = RAID1
-                    "-d" "raid1"  # data = RAID1
-                    "/dev/mapper/cryptHDD0"
-                    "/dev/mapper/cryptHDD1"
-                    "/dev/mapper/cryptHDD2"
-                    # cryptHDD3 is implicit
-                  ];
-                  subvolumes = {
-                    "archive" = {
-                      mountpoint = "/archive";
-                      mountOptions = [
-                        "subvol=archive"
-                        "compress=zstd"
-                        "noatime"
-                      ];
-                    };
+                subvolumes = {
+                  "archive" = {
+                    mountpoint = "/archive";
+                    mountOptions = [
+                      "subvol=archive"
+                      "compress=zstd"
+                      "noatime"
+                    ];
                   };
                 };
               };
