@@ -166,22 +166,15 @@ in
         content = {
           type = "gpt";
           partitions = {
-            luks = {
-              label = "luksHDD0";
+            data = { # Renamed from luks to data
+              label = "btrfsHDD0"; # Changed label
               size = "100%";
               content = {
-                type = "luks";
-                name = "cryptHDD0";
-                extraOpenArgs = [
-                  "--allow-discards"
-                  "--perf-no_read_workqueue"
-                  "--perf-no_write_workqueue"
-                ];
-                settings = {
-                  # For passphrase-based, remove or adjust
-                  # crypttabExtraOpts = [ "fido2-device=auto" "token-timeout=10" ];
-                };
-                # Btrfs array is defined in hdd3's config
+                type = "btrfs"; # Changed from luks
+                # This partition will be part of the Btrfs array defined in hdd3
+                # No subvolumes or mountpoints defined here directly.
+                # extraArgs can be added if specific formatting options are needed for this individual device
+                # before it's added to the array, but usually not necessary.
               };
             };
           };
@@ -194,20 +187,12 @@ in
         content = {
           type = "gpt";
           partitions = {
-            luks = {
-              label = "luksHDD1";
+            data = { # Renamed from luks to data
+              label = "btrfsHDD1"; # Changed label
               size = "100%";
               content = {
-                type = "luks";
-                name = "cryptHDD1";
-                extraOpenArgs = [
-                  "--allow-discards"
-                  "--perf-no_read_workqueue"
-                  "--perf-no_write_workqueue"
-                ];
-                settings = {
-                  # crypttabExtraOpts = [ "fido2-device=auto" "token-timeout=10" ];
-                };
+                type = "btrfs"; # Changed from luks
+                # Part of Btrfs array in hdd3
               };
             };
           };
@@ -220,20 +205,12 @@ in
         content = {
           type = "gpt";
           partitions = {
-            luks = {
-              label = "luksHDD2";
+            data = { # Renamed from luks to data
+              label = "btrfsHDD2"; # Changed label
               size = "100%";
               content = {
-                type = "luks";
-                name = "cryptHDD2";
-                extraOpenArgs = [
-                  "--allow-discards"
-                  "--perf-no_read_workqueue"
-                  "--perf-no_write_workqueue"
-                ];
-                settings = {
-                  # crypttabExtraOpts = [ "fido2-device=auto" "token-timeout=10" ];
-                };
+                type = "btrfs"; # Changed from luks
+                # Part of Btrfs array in hdd3
               };
             };
           };
@@ -247,41 +224,31 @@ in
         content = {
           type = "gpt";
           partitions = {
-            luks = {
-              label = "luksHDD3";
+            data = { # Renamed from luks to data
+              label = "btrfsHDD3"; # Changed label
               size = "100%";
               content = {
-                type = "luks";
-                name = "cryptHDD3";
-                extraOpenArgs = [
-                  "--allow-discards"
-                  "--perf-no_read_workqueue"
-                  "--perf-no_write_workqueue"
+                type = "btrfs"; # Changed from luks
+                # This device itself is also part of the Btrfs array.
+                # The array is defined here, incorporating the other HDDs.
+                extraArgs = [
+                  "-f"
+                  "-L" "archive"
+                  "-m" "raid1"  # metadata = RAID1
+                  "-d" "raid1"  # data = RAID1
+                  hdd0 # Use direct device variable
+                  hdd1 # Use direct device variable
+                  hdd2 # Use direct device variable
+                  # hdd3 is implicitly included as the device where mkfs.btrfs is run
                 ];
-                settings = {
-                  # crypttabExtraOpts = [ "fido2-device=auto" "token-timeout=10" ];
-                };
-                content = {
-                  type = "btrfs";
-                  extraArgs = [
-                    "-f"
-                    "-L" "archive"
-                    "-m" "raid1"  # metadata = RAID1
-                    "-d" "raid1"  # data = RAID1
-                    "/dev/mapper/cryptHDD0"
-                    "/dev/mapper/cryptHDD1"
-                    "/dev/mapper/cryptHDD2"
-                    # cryptHDD3 is implicit
-                  ];
-                  subvolumes = {
-                    "archive" = {
-                      mountpoint = "/archive";
-                      mountOptions = [
-                        "subvol=archive"
-                        "compress=zstd"
-                        "noatime"
-                      ];
-                    };
+                subvolumes = {
+                  "archive" = {
+                    mountpoint = "/archive";
+                    mountOptions = [
+                      "subvol=archive"
+                      "compress=zstd"
+                      "noatime"
+                    ];
                   };
                 };
               };

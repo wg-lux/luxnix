@@ -3,7 +3,7 @@ let
   systemDiskId = "/dev/disk/by-id/ata-KOWIN_KAE2000A256NS47_001B230300103264";
 
   # Placeholder for future external NVMe
-  futureExternalNVMeId = "/dev/disk/by-id/placeholder-future-external-nvme";
+  # futureExternalNVMeId = "/dev/disk/by-id/placeholder-future-external-nvme";
 
   swapSize = "16G"; # Adjust as needed
 in
@@ -76,32 +76,32 @@ in
       };
 
       # Placeholder for Future External NVMe
-      future_external_nvme = {
-        device = futureExternalNVMeId;
-        type = "disk";
-        # This part is commented out to prevent errors if the disk doesn't exist.
-        # Uncomment and adjust when adding the disk.
-        # content = {
-        #   type = "gpt";
-        #   partitions = {
-        #     data = {
-        #       label = "external_data";
-        #       size = "100%";
-        #       content = {
-        #         type = "btrfs";
-        #         label = "external_nvme_data";
-        #         extraArgs = [ "-f" ];
-        #         subvolumes = {
-        #           "main" = {
-        #             mountpoint = "/data_external";
-        #             mountOptions = [ "subvol=main" "compress=zstd" "noatime" ];
-        #           };
-        #         };
-        #       };
-        #     };
-        #   };
-        # };
-      };
+      # future_external_nvme = {
+      #   device = futureExternalNVMeId;
+      #   type = "disk";
+      #   # This part is commented out to prevent errors if the disk doesn't exist.
+      #   # Uncomment and adjust when adding the disk.
+      #   # content = {
+      #   #   type = "gpt";
+      #   #   partitions = {
+      #   #     data = {
+      #   #       label = "external_data";
+      #   #       size = "100%";
+      #   #       content = {
+      #   #         type = "btrfs";
+      #   #         label = "external_nvme_data";
+      #   #         extraArgs = [ "-f" ];
+      #   #         subvolumes = {
+      #   #           "main" = {
+      #   #             mountpoint = "/data_external";
+      #   #             mountOptions = [ "subvol=main" "compress=zstd" "noatime" ];
+      #   #           };
+      #   #         };
+      #   #       };
+      #   #     };
+      #   #   };
+      #   # };
+      # };
     };
   };
 
