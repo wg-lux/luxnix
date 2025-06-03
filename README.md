@@ -111,6 +111,40 @@ For issues and questions:
 - Check the documentation in `docs/`
 - Review the deployment guide for common problems
 
+## Keycloak and Nextcloud login
+Make sure account has been created.
+
+## Step 1: Access Keycloak
+
+Please visit the following link:  
+ [https://keycloak.endo-reg.net/](https://keycloak.endo-reg.net/)  
+Use the provided credentials to log in.
+
+## Step 2: Complete Required Actions
+
+After logging in, you will be automatically guided through the following steps:
+
+-  Verify your email address  
+-  Set up OTP (two-factor authentication)  
+-  Change your password  
+
+Make sure to complete all steps.
+
+## Step 3: Log In to Nextcloud
+
+Once all steps are completed, go to:  
+ [https://cloud.endo-reg.net/login](https://cloud.endo-reg.net/login)
+
+Click **"Login with Keycloak"**.
+
+You can now use your **Keycloak credentials** to access **Nextcloud**.
+
+## Ste 4: Log In to Nextcloud Mobile Application
+Download the mobile app.
+Use this link: https://cloud.endo-reg.net
+Enter credential/login using keyscloak
+
+
 ## 📜 License
 
 MIT - see LICENSE
