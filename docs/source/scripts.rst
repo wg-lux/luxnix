@@ -33,6 +33,7 @@ BNSC Command
 
 **Purpose:**  
 Executes ``scripts/autoconf-pipeline.py`` using ``uv``.
+Rebuild the configuration.
 
 **Equivalent shell command:**
 
