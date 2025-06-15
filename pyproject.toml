@@ -27,6 +27,7 @@ dependencies = [
     "passlib>=1.7.4",
     "psycopg[binary]>=3.2.4",
     "obsidian>=1.2",
+    "mypy>=1.16.0",
 ]
 
 [tool.setuptools]

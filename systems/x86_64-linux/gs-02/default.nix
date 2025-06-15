@@ -26,10 +26,10 @@
     endoreg-client.dbApiLocal = true;
     endoreg-client.enable = true;
     gpu-server.enable = true;
-    ssh-access.dev-01.enable = true;
-    ssh-access.dev-01.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK";
     ssh-access.dev-03.enable = true;
     ssh-access.dev-03.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos";
+    ssh-access.dev-01.enable = true;
+    ssh-access.dev-01.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK";
     ssh-access.dev-04.enable = true;
     ssh-access.dev-04.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICSpoZVcX+K6NdrfqcUVPTU8Ljqlp83YDzzEHjTHU2NO flippos@inexen9";
     };
@@ -86,6 +86,9 @@ generic-settings.network.hosts.gc-08.ip-vpn = "172.16.255.108";
 
 generic-settings.network.hosts.gc-09.domains = ["gc-09.intern"];
 generic-settings.network.hosts.gc-09.ip-vpn = "172.16.255.109";
+
+generic-settings.network.hosts.gc-10.domains = ["gc-10.intern"];
+generic-settings.network.hosts.gc-10.ip-vpn = "172.16.255.110";
 
 generic-settings.network.hosts.gs-01.domains = ["gs-01.intern"];
 generic-settings.network.hosts.gs-01.ip-local = "192.168.0.228";

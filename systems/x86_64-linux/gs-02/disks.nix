@@ -3,8 +3,8 @@ let
   primaryNVME = "/dev/disk/by-id/nvme-KINGSTON_SFYRD4000G_50026B7686F7C454";
 
   # Additional NVMe disks
-  dataNVME1   = "/dev/disk/by-id/nvme-KINGSTON_SFYRD4000G_50026B7686F7C8E05";
-  dataNVME2   = "/dev/disk/by-id/nvme-KINGSTON_SFYRD4000G_50026B7686F7C8E35";
+  dataNVME1   = "/dev/disk/by-id/nvme-KINGSTON_SFYRD4000G_50026B7686F7C8E0";
+  dataNVME2   = "/dev/disk/by-id/nvme-KINGSTON_SFYRD4000G_50026B7686F7C8E3";
 
   # Four 6 TB HDD drives (LUKS + Btrfs RAID1)
   hdd0        = "/dev/disk/by-id/ata-ST6000NE000-2KR101_WSD9GTCG";
@@ -92,8 +92,8 @@ in
 
             dataOnPrimary = {
               label = "data2_primary";
-              name = "data2_primary";
-              size = "100%"; # Remaining space
+              name = "data_primary_nvme_part"; 
+              size = "100%";
               content = {
                 type = "btrfs";
                 extraArgs = [ "-f" "-L" "data2_primary" ];
@@ -119,11 +119,12 @@ in
           type = "gpt";
           partitions = {
             data = {
-              label = "data_aux1"; # Changed label
+              label = "data_aux1"; 
+              name = "data_aux1_nvme_part"; 
               size = "100%";
               content = {
                 type = "btrfs";
-                extraArgs = [ "-f" "-L" "data_aux1" ]; # Changed Btrfs label
+                extraArgs = [ "-f" "-L" "data_aux1" ]; 
                 subvolumes = {
                   "main" = {
                     mountpoint = "/data_aux1"; # Changed mountpoint
@@ -144,6 +145,7 @@ in
           partitions = {
             data = {
               label = "data_aux2"; # Changed label
+              name = "data_aux2_nvme_part"; # ADDED GPT partition name
               size = "100%";
               content = {
                 type = "btrfs";
@@ -167,15 +169,10 @@ in
           type = "gpt";
           partitions = {
             data = { # Renamed from luks to data
-              label = "btrfsHDD0"; # Changed label
+              name = "btrfsHDD0_part"; # GPT partition name
+              label = "archive_hdd0"; # ADDED GPT partition label
               size = "100%";
-              content = {
-                type = "btrfs"; # Changed from luks
-                # This partition will be part of the Btrfs array defined in hdd3
-                # No subvolumes or mountpoints defined here directly.
-                # extraArgs can be added if specific formatting options are needed for this individual device
-                # before it's added to the array, but usually not necessary.
-              };
+              # No 'content' block here, this partition is a member of the Btrfs array defined on hdd3
             };
           };
         };
@@ -188,12 +185,10 @@ in
           type = "gpt";
           partitions = {
             data = { # Renamed from luks to data
-              label = "btrfsHDD1"; # Changed label
+              name = "btrfsHDD1_part"; # GPT partition name
+              label = "archive_hdd1"; # ADDED GPT partition label
               size = "100%";
-              content = {
-                type = "btrfs"; # Changed from luks
-                # Part of Btrfs array in hdd3
-              };
+              # No 'content' block here, this partition is a member of the Btrfs array defined on hdd3
             };
           };
         };
@@ -206,12 +201,10 @@ in
           type = "gpt";
           partitions = {
             data = { # Renamed from luks to data
-              label = "btrfsHDD2"; # Changed label
+              name = "btrfsHDD2_part"; # GPT partition name
+              label = "archive_hdd2"; # ADDED GPT partition label
               size = "100%";
-              content = {
-                type = "btrfs"; # Changed from luks
-                # Part of Btrfs array in hdd3
-              };
+              # No 'content' block here, this partition is a member of the Btrfs array defined on hdd3
             };
           };
         };
@@ -225,21 +218,20 @@ in
           type = "gpt";
           partitions = {
             data = { # Renamed from luks to data
-              label = "btrfsHDD3"; # Changed label
+              name = "btrfsHDD3_part"; # GPT partition name
+              label = "archive_hdd3"; # ADDED GPT partition label
               size = "100%";
               content = {
-                type = "btrfs"; # Changed from luks
-                # This device itself is also part of the Btrfs array.
-                # The array is defined here, incorporating the other HDDs.
+                type = "btrfs";
                 extraArgs = [
                   "-f"
                   "-L" "archive"
-                  "-m" "raid1"  # metadata = RAID1
-                  "-d" "raid1"  # data = RAID1
-                  hdd0 # Use direct device variable
-                  hdd1 # Use direct device variable
-                  hdd2 # Use direct device variable
-                  # hdd3 is implicitly included as the device where mkfs.btrfs is run
+                  "-m" "raid1c3"  # metadata = RAID1c3 for 4 drives
+                  "-d" "raid1"    # data = RAID1
+                  "/dev/disk/by-partname/btrfsHDD0_part"
+                  "/dev/disk/by-partname/btrfsHDD1_part"
+                  "/dev/disk/by-partname/btrfsHDD2_part"
+                  # The partition on hdd3 (/dev/disk/by-partname/btrfsHDD3_part) is implicitly the first device
                 ];
                 subvolumes = {
                   "archive" = {

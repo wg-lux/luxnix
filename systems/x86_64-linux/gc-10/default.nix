@@ -19,26 +19,23 @@
 
   roles = { 
     aglnet.client.enable = true;
-    base-server.enable = true;
     common.enable = true;
     custom-packages.cloud = true;
     custom-packages.enable = true;
-    endoreg-client.dbApiLocal = true;
     endoreg-client.enable = true;
-    gpu-server.enable = true;
+    nextcloudClient.enable = true;
     ssh-access.dev-03.enable = true;
     ssh-access.dev-03.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos";
-    ssh-access.dev-01.enable = true;
-    ssh-access.dev-01.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK";
-    ssh-access.dev-04.enable = true;
-    ssh-access.dev-04.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICSpoZVcX+K6NdrfqcUVPTU8Ljqlp83YDzzEHjTHU2NO flippos@inexen9";
+    custom-packages.baseDevelopment = true;
     };
 
   services = {
     };
 
   luxnix = {
-    dns.enable = true;
+    boot-decryption-stick.enable = true;
+
+dns.enable = true;
 
 generic-settings.smtpPwdFilePath = "/etc/secrets/vault/smtp_pwd";
 
@@ -49,6 +46,8 @@ generic-settings.sslCertificateKeyPath = "/etc/secrets/vault/ssl_key";
 generic-settings.sslCertificatePath = "/etc/secrets/vault/ssl_cert";
 
 generic-settings.adminVpnIp = "172.16.255.106";
+
+generic-settings.configurationPathRelative = "luxnix";
 
 generic-settings.enable = true;
 
@@ -170,7 +169,9 @@ generic-settings.traefikHostIp = "172.16.255.12";
 
 generic-settings.vpnSubnet = "172.16.255.0/24";
 
-maintenance.autoUpdates.dates = "06:00";
+gpu-eval.enable = true;
+
+maintenance.autoUpdates.dates = "09:00";
 
 maintenance.autoUpdates.enable = true;
 
@@ -178,7 +179,9 @@ maintenance.autoUpdates.flake = "github:wg-lux/luxnix";
 
 maintenance.autoUpdates.operation = "switch";
 
-nvidia-default.enable = true;
+nvidia-prime.enable = true;
+
+nvidia-prime.nvidiaDriver = "beta";
 
 vault.dir = "/etc/secrets/vault";
 
@@ -188,22 +191,28 @@ vault.key = "/etc/secrets/.key";
 
 vault.psk = "/etc/secrets/.psk";
 
-boot-decryption-stick-gs-01.enable = true;
+generic-settings.configurationPath = lib.mkForce "/home/admin/luxnix";
 
 generic-settings.hostPlatform = "x86_64-linux";
 
-generic-settings.linux.cpuMicrocode = "amd";
+generic-settings.linux.cpuMicrocode = "intel";
 
-generic-settings.linux.initrd.availableKernelModules = ["xhci_pci" "ahci" "mpt3sas" "usb_storage" "usbhid" "sd_mod"];
-generic-settings.linux.initrd.kernelModules = ["nfs" "dm-snapshot"];
+generic-settings.linux.initrd.availableKernelModules = ["xhci_pci" "ahci" "nvme" "usb_storage" "sd_mod" "thunderbolt" "vmd"];
+generic-settings.linux.initrd.kernelModules = ["nfs"];
 generic-settings.linux.initrd.supportedFilesystems = ["nfs"];
-generic-settings.linux.kernelModules = ["kvm-amd"];
+generic-settings.linux.kernelModules = ["kvm-intel"];
 generic-settings.linux.kernelModulesBlacklist = [];
 generic-settings.linux.kernelParams = [];
 generic-settings.linux.resumeDevice = "/dev/disk/by-label/nixos";
 
 generic-settings.linux.supportedFilesystems = ["btrfs"];
 generic-settings.systemStateVersion = "23.11";
+
+nvidia-prime.nvidiaBusId = "PCI:1:0:0";
+
+nvidia-prime.onboardBusId = "PCI:0:2:0";
+
+nvidia-prime.onboardGpuType = "intel";
 
 };
 }

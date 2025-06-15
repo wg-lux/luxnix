@@ -120,6 +120,11 @@ group_luxnix:
   generic_settings.network.hosts.gc_09.domains:
     - "gc-09.intern"
 
+  # gc-10
+  generic_settings.network.hosts.gc_10.ip_vpn: '"172.16.255.110"'
+  generic_settings.network.hosts.gc_10.domains:
+    - "gc-10.intern"
+
   # generic_settings.linux.kernelParams: ["mem_sleep_default=deep"]
   generic_settings.network.syncthing.enable: "true"
   generic_settings.network.syncthing.extraFlags: []

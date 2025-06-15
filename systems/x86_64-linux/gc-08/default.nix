@@ -88,6 +88,9 @@ generic-settings.network.hosts.gc-08.ip-vpn = "172.16.255.108";
 generic-settings.network.hosts.gc-09.domains = ["gc-09.intern"];
 generic-settings.network.hosts.gc-09.ip-vpn = "172.16.255.109";
 
+generic-settings.network.hosts.gc-10.domains = ["gc-10.intern"];
+generic-settings.network.hosts.gc-10.ip-vpn = "172.16.255.110";
+
 generic-settings.network.hosts.gs-01.domains = ["gs-01.intern"];
 generic-settings.network.hosts.gs-01.ip-local = "192.168.0.228";
 
