@@ -1,9 +1,12 @@
 group_roles:
-  # ssh_access.dev_01.enable: "false"
-  # ssh_access.dev_01.idEd25519: "TODO"
+  ssh_access.dev_01.enable: "true"
+  ssh_access.dev_01.idEd25519: '"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK"' # max?
 
   ssh_access.dev_03.enable: "true"
-  ssh_access.dev_03.idEd25519: '"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos"'
+  ssh_access.dev_03.idEd25519: '"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos"' # hamza
+
+  ssh_access.dev_04.enable: "true"
+  ssh_access.dev_04.idEd25519: '"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICSpoZVcX+K6NdrfqcUVPTU8Ljqlp83YDzzEHjTHU2NO flippos@inexen9"'
 
 group_services: {}
 
