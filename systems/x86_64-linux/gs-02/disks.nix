@@ -27,79 +27,67 @@ in
         content = {
           type = "gpt";
           partitions = {
-            EFI = {
+            ESP = {
               label = "boot";
-              name = "EFI";
+              name = "ESP";
               size = "512M";
-              type = "EF00";  # EFI partition
+              type = "EF00";
               content = {
                 type = "filesystem";
                 format = "vfat";
                 mountpoint = "/boot";
               };
             };
-
-            swapPartition = {
+            swap = {
               label = "swap";
               name = "swap";
               size = swapSize;
-              type = "8200";  # Linux swap
+              type = "8200";
               content = {
                 type = "swap";
               };
             };
-
-            rootEncrypted = {
-              label = "root_luks";
-              name = "root_luks";
-              size = "1T"; # System partition around 1TB
+            root_os = {
+              label = "nixos_root";
+              name = "root_os";
+              size = "1T";
               content = {
-                type = "luks";
-                name = "cryptroot"; # Name for /dev/mapper/cryptroot
-                # Add keyFile or passwordFile options here if needed for unlocking
-                # settings.keyFile = "/path/to/keyfile";
-                content = {
-                  type = "btrfs";
-                  extraArgs = [
-                    "-f"
-                    "-L" "nixos"  # Btrfs volume label
-                  ];
-                  subvolumes = {
-                    "root" = {
-                      mountpoint = "/";
-                      mountOptions = [ "subvol=root" "compress=zstd" "noatime" ];
-                    };
-                    "home" = {
-                      mountpoint = "/home";
-                      mountOptions = [ "subvol=home" "compress=zstd" "noatime" ];
-                    };
-                    "nix" = {
-                      mountpoint = "/nix";
-                      mountOptions = [ "subvol=nix" "compress=zstd" "noatime" ];
-                    };
-                    "persist" = {
-                      mountpoint = "/persist";
-                      mountOptions = [ "subvol=persist" "compress=zstd" "noatime" ];
-                    };
-                    "log" = {
-                      mountpoint = "/var/log";
-                      mountOptions = [ "subvol=log" "compress=zstd" "noatime" ];
-                    };
+                type = "btrfs";
+                extraArgs = [ "-f" "-L" "nixos" ];
+                subvolumes = {
+                  "root" = {
+                    mountpoint = "/";
+                    mountOptions = [ "subvol=root" "compress=zstd" "noatime" ];
+                  };
+                  "home" = {
+                    mountpoint = "/home";
+                    mountOptions = [ "subvol=home" "compress=zstd" "noatime" ];
+                  };
+                  "nix" = {
+                    mountpoint = "/nix";
+                    mountOptions = [ "subvol=nix" "compress=zstd" "noatime" ];
+                  };
+                  "persist" = {
+                    mountpoint = "/persist";
+                    mountOptions = [ "subvol=persist" "compress=zstd" "noatime" ];
+                  };
+                  "log" = {
+                    mountpoint = "/var/log";
+                    mountOptions = [ "subvol=log" "compress=zstd" "noatime" ];
                   };
                 };
               };
             };
-
             dataOnPrimary = {
               label = "data2_primary";
-              name = "data_primary_nvme_part"; 
+              name = "data_primary_nvme_part";
               size = "100%";
               content = {
                 type = "btrfs";
                 extraArgs = [ "-f" "-L" "data2_primary" ];
                 subvolumes = {
                   "main" = {
-                    mountpoint = "/data2"; # Mounted as /data2
+                    mountpoint = "/data2";
                     mountOptions = [ "subvol=main" "compress=zstd" "noatime" ];
                   };
                 };
@@ -228,9 +216,9 @@ in
                   "-L" "archive"
                   "-m" "raid1c3"  # metadata = RAID1c3 for 4 drives
                   "-d" "raid1"    # data = RAID1
-                  "/dev/disk/by-partname/btrfsHDD0_part"
-                  "/dev/disk/by-partname/btrfsHDD1_part"
-                  "/dev/disk/by-partname/btrfsHDD2_part"
+                  "/dev/disk/by-partlabel/archive_hdd0"
+                  "/dev/disk/by-partlabel/archive_hdd1"
+                  "/dev/disk/by-partlabel/archive_hdd2"
                   # The partition on hdd3 (/dev/disk/by-partname/btrfsHDD3_part) is implicitly the first device
                 ];
                 subvolumes = {
