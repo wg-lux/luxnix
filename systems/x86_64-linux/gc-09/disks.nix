@@ -1,67 +1,91 @@
+let
+  # --- User-configurable Disk Identifiers ---
+  systemDiskId = "/dev/disk/by-id/nvme-Phison_512GB_ESO512GHLCA1-21C-2MS_511231127249015467";
+  swapSize = "32G"; # Adjusted swap size
+in
 {
   disko.devices = {
     disk = {
-      nvme0n1 = {
+      # Primary System Disk (only disk)
+      system_disk = {
+        device = systemDiskId;
         type = "disk";
-        device = "/dev/nvme0n1";
         content = {
           type = "gpt";
           partitions = {
             ESP = {
-              label = "boot";
-              name = "ESP";
+              label = "boot"; # GPT Label
+              name = "ESP"; # Nix attr name
               size = "512M";
-              type = "EF00";
+              type = "EF00"; # EFI System Partition
               content = {
                 type = "filesystem";
                 format = "vfat";
                 mountpoint = "/boot";
-                mountOptions = [
-                  "defaults"
-                ];
               };
             };
-            luks = {
-              size = "100%";
-              label = "luks";
+            swap = {
+              label = "swap"; # GPT Label
+              name = "swap"; # Nix attr name
+              size = swapSize;
+              type = "8200"; # Linux swap
               content = {
-                type = "luks";
-                name = "cryptroot";
-                extraOpenArgs = [
-                  "--allow-discards"
-                  "--perf-no_read_workqueue"
-                  "--perf-no_write_workqueue"
+                type = "swap";
+              };
+            };
+            root_os = {
+              # Renamed from luks_root
+              label = "nixos_root"; # GPT Label
+              name = "root_os"; # Nix attr name
+              size = "100%"; # Use remaining space
+              content = {
+                # Directly BTRFS, no LUKS
+                type = "btrfs";
+                extraArgs = [
+                  "-f"
+                  "-L"
+                  "nixos"
                 ];
-                # https://0pointer.net/blog/unlocking-luks2-volumes-with-tpm2-fido2-pkcs11-security-hardware-on-systemd-248.html
-                settings = {crypttabExtraOpts = ["fido2-device=auto" "token-timeout=10"];};
-                content = {
-                  type = "btrfs";
-                  extraArgs = ["-L" "nixos" "-f"];
-                  subvolumes = {
-                    "/root" = {
-                      mountpoint = "/";
-                      mountOptions = ["subvol=root" "compress=zstd" "noatime"];
-                    };
-                    "/home" = {
-                      mountpoint = "/home";
-                      mountOptions = ["subvol=home" "compress=zstd" "noatime"];
-                    };
-                    "/nix" = {
-                      mountpoint = "/nix";
-                      mountOptions = ["subvol=nix" "compress=zstd" "noatime"];
-                    };
-                    "/persist" = {
-                      mountpoint = "/persist";
-                      mountOptions = ["subvol=persist" "compress=zstd" "noatime"];
-                    };
-                    "/log" = {
-                      mountpoint = "/var/log";
-                      mountOptions = ["subvol=log" "compress=zstd" "noatime"];
-                    };
-                    "/swap" = {
-                      mountpoint = "/swap";
-                      swap.swapfile.size = "16G";
-                    };
+                subvolumes = {
+                  "root" = {
+                    mountpoint = "/";
+                    mountOptions = [
+                      "subvol=root"
+                      "compress=zstd"
+                      "noatime"
+                    ];
+                  };
+                  "home" = {
+                    mountpoint = "/home";
+                    mountOptions = [
+                      "subvol=home"
+                      "compress=zstd"
+                      "noatime"
+                    ];
+                  };
+                  "nix" = {
+                    mountpoint = "/nix";
+                    mountOptions = [
+                      "subvol=nix"
+                      "compress=zstd"
+                      "noatime"
+                    ];
+                  };
+                  "persist" = {
+                    mountpoint = "/persist";
+                    mountOptions = [
+                      "subvol=persist"
+                      "compress=zstd"
+                      "noatime"
+                    ];
+                  };
+                  "log" = {
+                    mountpoint = "/var/log";
+                    mountOptions = [
+                      "subvol=log"
+                      "compress=zstd"
+                      "noatime"
+                    ];
                   };
                 };
               };
@@ -72,6 +96,17 @@
     };
   };
 
-  fileSystems."/persist".neededForBoot = true;
-  fileSystems."/var/log".neededForBoot = true;
+  # Mark subvolumes needed for boot
+  fileSystems = {
+    "/persist".neededForBoot = true;
+    "/var/log".neededForBoot = true;
+    # If you create other critical mount points on the root filesystem, list them here.
+  };
+
+  # ZRAM Swap settings
+  zramSwap = {
+    enable = true;
+    memoryPercent = 20; # Use 20% of RAM for compressed swap
+    priority = 100; # Higher priority than disk-based swap partition
+  };
 }
