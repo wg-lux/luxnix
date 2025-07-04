@@ -3,8 +3,8 @@
 
 cli.programs.git.allowedSigners = "";
 cli.programs.git.enable = true;
-cli.programs.git.email = "hamza.ukw@gmail.com";
-desktops.plasma.enable = true;
+cli.programs.git.email = "alice.ukw@gmail.com";
+desktops.plasma.enable = "false";
 services.luxnix.syncthing.enable = false;
 luxnix.generic-settings.configurationPath = "dev/luxnix";
 luxnix.generic-settings.language = "english";

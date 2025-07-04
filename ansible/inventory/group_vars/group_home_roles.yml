@@ -1,0 +1,3 @@
+group_home_roles:
+  development.enable: true
+  video.enable: true

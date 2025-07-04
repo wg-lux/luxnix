@@ -1,10 +1,12 @@
 from pydantic import BaseModel
-
+from collections import defaultdict
+import pprint
 # make model based on merged_vars/gc-06.yml
-from typing import Dict, List, Union, Optional
+from typing import Dict, List, Union, Optional, Any
 import yaml
 from lx_administration.logging import get_logger
-
+from lx_administration.autoconf.imports.utils import deep_update, _dictkey_replace_underscore_keys
+from lx_administration.autoconf.imports.utils import deep_update
 
 # TODO REFACTOR
 def _dictkey_replace_underscore_keys(
@@ -27,6 +29,35 @@ def _dictkey_replace_underscore_keys(
 
     return transformed_config_data
 
+def dotkey_to_nested_dict(flat_dict):
+    nested = {}
+    for flat_key, value in flat_dict.items():
+        keys = flat_key.split(".")
+        d = nested
+        for key in keys[:-1]:
+            d = d.setdefault(key, {})
+        d[keys[-1]] = value
+    return nested
+
+
+def strip_common_prefix(flat_dict):
+    """Auto-detect and strip common prefix like 'cli.', 'luxnix.', etc."""
+    if not flat_dict:
+        return flat_dict
+
+    first_key = next(iter(flat_dict))
+    if "." not in first_key:
+        return flat_dict  # Already fine
+
+    prefix = first_key.split(".")[0] + "."
+
+    if all(k.startswith(prefix) for k in flat_dict):
+        return {k[len(prefix):]: v for k, v in flat_dict.items()}
+    else:
+        return flat_dict
+
+
+
 
 class MergedHostVars(BaseModel):
     group_luxnix: Optional[Dict[str, Union[List[str], str]]] = {}
@@ -40,6 +71,31 @@ class MergedHostVars(BaseModel):
     host_services: Optional[Dict[str, Union[List[str], str]]] = {}
     template_name: Optional[str] = "main"
     system_users: Optional[List[str]] = ["admin"]
+
+    #for autoconfig
+    home_users: Optional[List[str]] = []
+    home_configs: Optional[Dict[str, Dict[str, str]]] = {}
+
+    group_home_roles: Optional[Dict[str, Any]] = {}
+    host_home_roles: Optional[Dict[str, Any]] = {}
+
+    group_home_services: Optional[Dict[str, Any]] = {}
+    host_home_services: Optional[Dict[str, Any]] = {}
+
+    group_home_luxnix: Optional[Dict[str, Any]] = {}
+    host_home_luxnix: Optional[Dict[str, Any]] = {}
+
+    group_home_cli: Optional[Dict[str, Any]] = {}
+    host_home_cli: Optional[Dict[str, Any]] = {}
+
+    group_home_desktops: Optional[Dict[str, Any]] = {}
+    host_home_desktops: Optional[Dict[str, Any]] = {}
+
+    group_home_editors: Optional[Dict[str, Any]] = {}
+    host_home_editors: Optional[Dict[str, Any]] = {}
+
+    group_home_networking: Optional[Dict[str, Any]] = {}
+    host_home_networking: Optional[Dict[str, Any]] = {}
 
     @classmethod
     def load_from_file(cls, file: str, logger=None):
@@ -60,6 +116,8 @@ class MergedHostVars(BaseModel):
         host_roles = data.get("host_roles", {})
         host_services = data.get("host_services", {})
         template_name = data.get("template_name", "main")
+        home_users = data.get("home_users", [])
+        home_configs = data.get("home_configs", {})
 
         mergerd_vars = cls(
             group_luxnix=group_luxnix,
@@ -96,6 +154,75 @@ class MergedHostVars(BaseModel):
         role_configs = _dictkey_replace_underscore_keys(role_configs)
 
         return role_configs
+    
+    # for autoconfig home configuartion
+    
+    '''def prepare_home_config(self, username=None): #working one
+        base_config = {
+            "cli": deep_update(self.group_home_cli or {}, self.host_home_cli or {}),
+            "desktops": deep_update(self.group_home_desktops or {}, self.host_home_desktops or {}),
+            "editors": deep_update(self.group_home_editors or {}, self.host_home_editors or {}),
+            "networking": deep_update(self.group_home_networking or {}, self.host_home_networking or {}),
+            "services": deep_update(self.group_home_services or {}, self.host_home_services or {}),
+            "luxnix": deep_update(self.group_home_luxnix or {}, self.host_home_luxnix or {}),
+            "roles": deep_update(self.group_home_roles or {}, self.host_home_roles or {}),
+        }
+
+        # Apply user-specific overrides
+        if username and self.home_configs and username in self.home_configs:
+            overrides = self.home_configs.get(username, {})
+            for key, val in overrides.items():
+                if "." in key:
+                    section = key.split(".")[0]
+                    if section not in base_config:
+                        base_config[section] = {}
+                    base_config[section] = deep_update(base_config[section], {key: val})
+                else:
+                    # fallback: treat top-level (e.g. plain "networking")
+                    base_config[key] = val
+
+        # Final nested structure using dotkey parser
+        final_config = {
+            section: dotkey_to_nested_dict(strip_common_prefix(data))
+            for section, data in base_config.items()
+        }
+        final_config["stateVersion"] = "23.11"
+        return final_config
+'''
+
+
+    def prepare_home_config(self, username=None): 
+        base_config = {
+            "cli": deep_update(self.group_home_cli or {}, self.host_home_cli or {}),
+            "desktops": deep_update(self.group_home_desktops or {}, self.host_home_desktops or {}),
+            "editors": deep_update(self.group_home_editors or {}, self.host_home_editors or {}),
+            "networking": deep_update(self.group_home_networking or {}, self.host_home_networking or {}),
+            "services": deep_update(self.group_home_services or {}, self.host_home_services or {}),
+            "luxnix": deep_update(self.group_home_luxnix or {}, self.host_home_luxnix or {}),
+            "roles": deep_update(self.group_home_roles or {}, self.host_home_roles or {}),
+
+        }
+
+        # Apply user-specific overrides
+        if username and self.home_configs and username in self.home_configs:
+            overrides = self.home_configs.get(username, {})
+            for key, val in overrides.items():
+                if "." in key:
+                    section = key.split(".")[0]
+                    if section not in base_config:
+                        base_config[section] = {}
+                    base_config[section] = deep_update(base_config[section], {key: val})
+                else:
+                    # fallback: treat top-level (e.g. plain "networking")
+                    base_config[key] = val
+
+        # Final nested structure using dotkey parser
+        final_config = {
+            section: dotkey_to_nested_dict(strip_common_prefix(data))
+            for section, data in base_config.items()
+        }
+        final_config["stateVersion"] = "23.11"
+        return final_config
 
     def prepare_services(self):
         from lx_administration.autoconf.imports.utils import deep_update
@@ -112,7 +239,6 @@ class MergedHostVars(BaseModel):
         return service_configs
 
     def prepare_luxnix(self):
-        from lx_administration.autoconf.imports.utils import deep_update
 
         luxnix_configs = {}
 
@@ -147,7 +273,53 @@ class MergedHostVars(BaseModel):
             logger = get_logger("MergedHostVars-get_host_platform")
 
         logger.info(f"Getting host platform for {self}")
+
+        # First try regular system luxnix (as before)
         luxnix = self.prepare_luxnix()
-        logger.info(f"luxnix: {luxnix}")
-        platform = luxnix.get("generic-settings.hostPlatform").replace('"', "")
-        return platform
+        platform = luxnix.get("generic-settings.hostPlatform")
+
+        if platform:
+            return platform.replace('"', "")
+
+        # Then fallback to home luxnix
+        from lx_administration.autoconf.imports.utils import deep_update
+
+        home_luxnix = deep_update(self.group_home_luxnix or {}, self.host_home_luxnix or {})
+        platform = home_luxnix.get("luxnix.generic-settings.hostPlatform")
+
+        if platform:
+            return platform.replace('"', "")
+
+        raise ValueError("Missing 'generic-settings.hostPlatform' in host_luxnix/group_luxnix or home_luxnix")
+
+    # for autocofig of home configuration
+    @classmethod
+    def load_home_from_file(cls, file: str, logger=None):
+        #print("in load_home_from_file in the merged_host_vars.py")
+        with open(file, "r") as f:
+            data = yaml.safe_load(f)
+
+        if not logger:
+            logger = get_logger("MergedHostVars-load_home_from_file")
+
+        return cls(
+            host_home_roles=data.get("host_home_roles", {}),
+            group_home_roles=data.get("group_home_roles", {}),
+            host_home_services=data.get("host_home_services", {}),
+            group_home_services=data.get("group_home_services", {}),
+            host_home_luxnix=data.get("host_home_luxnix", {}),
+            group_home_luxnix=data.get("group_home_luxnix", {}),
+            host_home_cli=data.get("host_home_cli", {}),
+            group_home_cli=data.get("group_home_cli", {}),
+            host_home_desktops=data.get("host_home_desktops", {}),
+            group_home_desktops=data.get("group_home_desktops", {}),
+            host_luxnix=data.get("host_luxnix", {}),
+            system_users=data.get("system_users", []),  #HERE:to use the sub user settings
+            home_configs=data.get("home_configs", {}),  
+            group_home_editors=data.get("group_home_editors", {}),
+            host_home_editors=data.get("host_home_editors", {}),
+            group_home_networking=data.get("group_home_networking", {}),
+            host_home_networking=data.get("host_home_networking", {}),
+
+            
+        )

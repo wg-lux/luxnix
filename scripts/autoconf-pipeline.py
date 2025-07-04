@@ -10,4 +10,5 @@ if __name__ == "__main__":
     autoconf_out = Path("./autoconf")
     nix_out = Path(".")
 
+
     pipe(ansible_root, autoconf_out, nix_out)

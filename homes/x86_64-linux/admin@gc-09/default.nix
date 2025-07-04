@@ -1,33 +1,17 @@
+# /default.nix
 { pkgs, ... }: {
-  cli.programs.git = {
-    enable = true;
-    # userName = "maddonix";
-    # email = "tlux14@googlemail.com";
-    # allowedSigners = "SHA256:LNfWnvEthO0QL8DzUxtxHD4VnLxvCZWFmcDhZodk29o";
-  };
 
-  desktops = {
-    plasma = {
-      enable = true;
-    };
-  };
+cli.programs.git.allowedSigners = "";
+cli.programs.git.enable = true;
+desktops.plasma.enable = true;
+services.luxnix.syncthing.enable = false;
+luxnix.generic-settings.configurationPath = "lx-production";
+luxnix.generic-settings.language = "english";
+luxnix.generic-settings.enable = true;
+luxnix.generic-settings.hostPlatform = "x86_64-linux";
+roles.development.enable = true;
+roles.video.enable = true;
 
-  services.luxnix = {
-    # syncthing.enable = false;
-  };
+home.stateVersion = "23.11";
 
-  luxnix.generic-settings = {
-    enable = true;
-    configurationPath = "lx-production";
-    language = "english";
-  };
-
-  roles = {
-    development.enable = true;
-    social.enable = true;
-    gpu.enable = true;
-    video.enable = true;
-  };
-
-  home.stateVersion = "23.11";
 }
