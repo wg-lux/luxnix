@@ -1,20 +1,10 @@
-system_users:
-  - admin
-  - alice
-
 host_home_cli:
   cli.programs.git.email: "hamza.ukw@gmail.com"
 
 host_home_roles:
   social.enable: true
   gpu.enable: true
-  development.enable: false
-  video.enable: false
-
+  development.enable: true
+  video.enable: true
 host_home_luxnix:
   luxnix.generic-settings.hostPlatform: "x86_64-linux"
-
-home_configs:
-  alice:
-    cli.programs.git.email: "alice.ukw@gmail.com"
-    desktops.plasma.enable: false

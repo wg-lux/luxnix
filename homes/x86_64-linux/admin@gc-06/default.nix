@@ -7,7 +7,6 @@ cli.programs.git.email = "tlux14@googlemail.com";
 cli.programs.git.userName = "maddonix";
 desktops.plasma.enable = true;
 programs.nixvim.enable = true;
-services.luxnix.syncthing.enable = false;
 luxnix.generic-settings.configurationPath = "dev/luxnix";
 luxnix.generic-settings.language = "english";
 luxnix.generic-settings.enable = true;

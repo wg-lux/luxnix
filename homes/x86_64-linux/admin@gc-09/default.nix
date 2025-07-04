@@ -4,7 +4,6 @@
 cli.programs.git.allowedSigners = "";
 cli.programs.git.enable = true;
 desktops.plasma.enable = true;
-services.luxnix.syncthing.enable = false;
 luxnix.generic-settings.configurationPath = "lx-production";
 luxnix.generic-settings.language = "english";
 luxnix.generic-settings.enable = true;
