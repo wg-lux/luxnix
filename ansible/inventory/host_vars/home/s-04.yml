@@ -1,0 +1,9 @@
+host_home_cli:
+  cli.programs.git.userName: "maddonix"
+  cli.programs.git.email: "tlux14@googlemail.com"
+  cli.programs.git.allowedSigners: "SHA256:LNfWnvEthO0QL8DzUxtxHD4VnLxvCZWFmcDhZodk29o"
+host_home_luxnix:
+  luxnix.generic-settings.enable: true
+  luxnix.generic-settings.configurationPath: "lx-production"
+  luxnix.generic-settings.language: "english"
+  luxnix.generic-settings.hostPlatform: '"x86_64-linux"'

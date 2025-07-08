@@ -1,0 +1,53 @@
+# /default.nix
+{ pkgs, ... }: {
+{% raw %}
+{% endraw %}
+
+{%- macro render_dict(data, parent_key='') %}
+{%- for key, value in data.items() %}
+  {%- set full_key = parent_key ~ "." ~ key if parent_key else key %}
+  {%- if value is mapping %}
+{{ render_dict(value, full_key) }}
+  {%- else %}
+{{ full_key }} = {{ value | to_nix }};
+  {% endif %}
+{%- endfor %}
+{%- endmacro %}
+
+{%- if cli %}
+{{ render_dict(cli, "cli") }}
+{%- endif %}
+
+{%- if desktops %}
+{{ render_dict(desktops, "desktops") }}
+{%- endif %}
+
+{%- if networking %}
+{{ render_dict(networking, "networking") }}
+{%- endif %}
+
+{%- if editors %}
+{{ render_dict(editors, "programs") }}
+{%- endif %}
+
+{%- if services %}
+{{ render_dict(services, "services") }}
+{%- endif %}
+
+{%- if luxnix %}
+{{ render_dict(luxnix, "luxnix") }}
+{%- endif %}
+
+
+
+{%- if roles %}
+{%- for role_key, role_dict in roles.items() %}
+  {%- for subkey, subval in role_dict.items() %}
+roles.{{ role_key }}.{{ subkey }} = {{ subval | to_nix }};
+  {% endfor %}
+{%- endfor %}
+{%- endif %}
+
+home.stateVersion = "23.11";
+
+}

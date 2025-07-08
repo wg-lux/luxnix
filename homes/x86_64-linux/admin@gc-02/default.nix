@@ -1,32 +1,20 @@
+# /default.nix
 { pkgs, ... }: {
-  cli.programs.git = {
-    enable = true;
-    userName = "maxhild";
-    email = "maxhild10@gmail.com";
-    allowedSigners = "SHA256:LNfWnvEthO0QL8DzUxtxHD4VnLxvCZWFmcDhZodk29o";
-  };
 
-  desktops = {
-    plasma = {
-      enable = true;
-    };
-  };
+cli.programs.git.allowedSigners = "SHA256:LNfWnvEthO0QL8DzUxtxHD4VnLxvCZWFmcDhZodk29o";
+cli.programs.git.enable = true;
+cli.programs.git.email = "maxhild10@gmail.com";
+cli.programs.git.userName = "maxhild";
+desktops.plasma.enable = true;
+luxnix.generic-settings.configurationPath = "dev/luxnix";
+luxnix.generic-settings.language = "english";
+luxnix.generic-settings.enable = true;
+luxnix.generic-settings.hostPlatform = "x86_64-linux";
+roles.development.enable = true;
+roles.video.enable = true;
+roles.gpu.enable = true;
+roles.social.enable = true;
 
-  services.luxnix = {
-    # syncthing.enable = false;
-  };
+home.stateVersion = "23.11";
 
-  luxnix.generic-settings = {
-    enable = true;
-    configurationPath = "dev/luxnix";
-  };
-
-  roles = {
-    development.enable = true;
-    social.enable = true;
-    gpu.enable = true;
-    video.enable = true;
-  };
-
-  home.stateVersion = "23.11";
 }

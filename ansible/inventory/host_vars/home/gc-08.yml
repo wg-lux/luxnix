@@ -1,0 +1,10 @@
+host_home_cli:
+  cli.programs.git.email: "hamza.ukw@gmail.com"
+
+host_home_roles:
+  social.enable: true
+  gpu.enable: true
+  development.enable: true
+  video.enable: true
+host_home_luxnix:
+  luxnix.generic-settings.hostPlatform: "x86_64-linux"
