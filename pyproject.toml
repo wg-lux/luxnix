@@ -3,7 +3,7 @@ name = "lx-administration"
 version = "0.1.0"
 description = "Utilities for Luxnix Administration"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     "cryptography>=44.0.0",
     "myst-parser[linkify]>=4.0.0",
@@ -28,10 +28,15 @@ dependencies = [
     "psycopg[binary]>=3.2.4",
     "obsidian>=1.2",
     "mypy>=1.16.0",
+    "types-pyyaml>=6.0.12.20250516",
 ]
 
 [tool.setuptools]
 packages = ["lx_administration"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.ruff]
 lint.select = ["E", "F", "W"]

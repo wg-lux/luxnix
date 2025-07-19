@@ -50,7 +50,7 @@ in {
   };
 
   config = mkIf cfg.enable {
-    programs.nix-ld.dev = {
+    programs.nix-ld = {
       enable = true;
       libraries = cfg.libraries;
     };

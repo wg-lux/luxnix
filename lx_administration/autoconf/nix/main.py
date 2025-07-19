@@ -7,6 +7,7 @@ from lx_administration.logging import get_logger, log_heading
 
 from lx_administration.models import MergedHostVars
 
+from .home import home_pipe 
 
 def get_template_dir_for_host(
     merged_vars: MergedHostVars, nix_template_dir: Path
@@ -53,6 +54,7 @@ def pipe(
     nix_template_dir=Path("./conf"),
     nix_out: Path = Path("."),
     logger=None,
+    home_only_hosts: set[str] = set() #home system issue,added home_only_hosts
 ):
     # load config data
     if not logger:
@@ -62,6 +64,10 @@ def pipe(
 
     for merged_vars_file in merged_vars_dir.glob("*.yml"):
         hostname = merged_vars_file.stem
+        if hostname in home_only_hosts:#home system issue,
+            logger.info(f"[SKIP SYSTEM CONFIG] {hostname} is home-only")#home system issue,to skips generating systems/x86_64-linux/<host>/default.nix.
+            continue#home system issue,
+
         merged_vars = MergedHostVars.load_from_file(merged_vars_file)
 
         try:
@@ -82,3 +88,11 @@ def pipe(
                 out_dir=nix_out,
                 logger=logger,
             )
+
+    home_pipe(
+    autoconf_out / "home_merged_vars", 
+    nix_template_dir,
+    nix_out,
+    logger=logger,
+)
+

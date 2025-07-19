@@ -1,0 +1,12 @@
+host_home_cli:
+  cli.programs.git.userName: "maxhild"
+  cli.programs.git.email: "maxhild10@gmail.com"
+  cli.programs.git.allowedSigners: "SHA256:LNfWnvEthO0QL8DzUxtxHD4VnLxvCZWFmcDhZodk29o"
+
+host_home_luxnix:
+  luxnix.generic-settings.enable: true
+  luxnix.generic-settings.hostPlatform: '"x86_64-linux"'
+
+host_home_roles:
+  social.enable: true
+  gpu.enable: true

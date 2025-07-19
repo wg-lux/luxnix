@@ -18,6 +18,13 @@ in {
       '';
     };
 
+    hostPlatform = mkOption {
+      type = types.str;
+      default = "x86_64-linux";
+      description = ''
+        The platform of the host system, e.g. "x86_64-linux".
+      '';
+    };
 
     configurationPath = mkOption {
       type = types.str;

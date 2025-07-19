@@ -72,7 +72,8 @@ in
       // cfg.extraOptions;
 
     home-manager = {
-      useGlobalPkgs = true;
+      # modified due to this warning: evaluation warning: admin profile: You have set either `nixpkgs.config` or `nixpkgs.overlays` while using `home-manager.useGlobalPkgs`.
+      useGlobalPkgs = false;
       useUserPackages = true;
     };
   };

@@ -92,8 +92,8 @@ in {
     services.syncthing = {
       inherit (cfg) enable user;
       dataDir = syncthingHome;
-      overrideDevices = true;
-      overrideFolders = true;
+      # overrideDevices = true;
+      # overrideFolders = true;
       settings = {
         gui = {
           enabled = true;

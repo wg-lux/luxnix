@@ -1,0 +1,8 @@
+host_home_luxnix:
+  luxnix.generic-settings.enable: true
+  luxnix.generic-settings.configurationPath: "lx-production"
+  luxnix.generic-settings.hostPlatform: '"x86_64-linux"'
+
+host_home_roles:
+  social.enable: true
+  gpu.enable: true

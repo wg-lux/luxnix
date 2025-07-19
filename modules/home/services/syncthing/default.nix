@@ -23,7 +23,7 @@ in {
 
   config = mkIf cfg.enable {
     services.syncthing = {
-      enable = true;
+      enable = false; #TODO REACTIVATE LATER
       tray.enable = true;
       extraOptions = ["--gui-address=127.0.0.1:8384"];
     };
