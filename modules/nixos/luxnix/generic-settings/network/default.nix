@@ -286,7 +286,7 @@ in {
 
   config = {
     networking.hosts = merged_hosts;
-    services.luxnix.syncthing.enable = cfg.syncthing.enable;
-    services.luxnix.syncthing.extraFlags = lib.mkDefault cfg.syncthing.extraFlags;
+    # services.luxnix.syncthing.enable = cfg.syncthing.enable;
+    # services.luxnix.syncthing.extraFlags = lib.mkDefault cfg.syncthing.extraFlags;
   };
 }

@@ -2,10 +2,10 @@
   description = "AGL's Nix/NixOS Config";
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-24.11";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-25.05";
 
     home-manager = {
-      url = "github:nix-community/home-manager/release-24.11";
+      url = "github:nix-community/home-manager/release-25.05";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -45,9 +45,9 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    nix-ld.url = "github:Mic92/nix-ld/911665df070e3d6c970e5a248fc4a38550bd5689"; #TODO Unpin when naked_asm is stable
-    nix-ld.inputs.nixpkgs.follows = "nixpkgs";
-    # nix-ld.ref = "v2.0.3";
+    # nix-ld.url = "github:Mic92/nix-ld"; #TODO Unpin when naked_asm is stable
+    # nix-ld.inputs.nixpkgs.follows = "nixpkgs";
+    # # nix-ld.ref = "v2.0.3";
 
     nixos-anywhere = {
       url = "github:numtide/nixos-anywhere";
@@ -87,7 +87,7 @@
     nixvim = {
     # url = "github:nix-community/nixvim";
     # If you are not running an unstable channel of nixpkgs, select the corresponding branch of nixvim.
-    url = "github:nix-community/nixvim/nixos-24.11";
+    url = "github:nix-community/nixvim/nixos-25.05";
     inputs.nixpkgs.follows = "nixpkgs";
   };
 
@@ -145,7 +145,7 @@
       ];
 
       systems.modules.nixos = with inputs; [
-        nix-ld.nixosModules.nix-ld
+        # nix-ld.nixosModules.nix-ld
         # stylix.nixosModules.stylix
         home-manager.nixosModules.home-manager
         disko.nixosModules.disko
