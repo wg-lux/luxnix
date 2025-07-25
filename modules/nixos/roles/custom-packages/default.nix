@@ -49,6 +49,7 @@ with lib.luxnix; let
     pandoc
     obsidian
     spotify
+    zotero
   ];
 
   cuda = with pkgs; [
