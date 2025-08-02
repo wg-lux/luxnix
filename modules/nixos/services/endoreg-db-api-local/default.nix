@@ -72,6 +72,9 @@ in
   };
 
   config = mkIf cfg.enable {
+    luxnix.generic-settings.postgres = {
+      enable = true;
+    };
     systemd.services."endo-api-boot" = {
       description = "Clone or pull endoreg-db-api and run prod-server";
       wantedBy = [ "multi-user.target" ];
