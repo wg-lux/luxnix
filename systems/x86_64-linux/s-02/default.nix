@@ -23,7 +23,9 @@
     common.enable = true;
     custom-packages.cloud = true;
     custom-packages.enable = true;
-    endoreg-client.enable = false;
+    endoreg-client.dbApiLocal = true;
+    endoreg-client.enable = true;
+    postgres.default.enable = true;
     keycloakHost.adminInitialPassword = "admin";
     keycloakHost.adminUsername = "admin";
     keycloakHost.dbPasswordfile = "SCRT_roles_system_password_keycloak_host_password";
