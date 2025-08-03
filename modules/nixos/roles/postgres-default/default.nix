@@ -21,6 +21,21 @@ with lib; let
   setupEndoregDbLocalUser = pkgs.writeShellScript "setup-endoreg-db-local-user" ''
     set -euo pipefail
     
+    # Wait for PostgreSQL to be ready
+    echo "Waiting for PostgreSQL to be ready..."
+    for i in {1..30}; do
+      if ${config.services.postgresql.package}/bin/pg_isready -U postgres -d postgres; then
+        echo "PostgreSQL is ready"
+        break
+      fi
+      if [ $i -eq 30 ]; then
+        echo "ERROR: PostgreSQL not ready after 30 attempts"
+        exit 1
+      fi
+      echo "Attempt $i: PostgreSQL not ready, waiting 2 seconds..."
+      sleep 2
+    done
+    
     # Create password if it doesn't exist
     if [ ! -f ${maintenancePasswordFile} ]; then
       echo "Generating password for endoregDbLocal user..."
@@ -42,7 +57,7 @@ with lib; let
     # Set the password in PostgreSQL
     PASSWORD=$(cat ${endoregDbLocalPasswordFile})
     ${config.services.postgresql.package}/bin/psql -U postgres -d postgres -c \
-      "ALTER USER ${cfg.defaultDbName} WITH PASSWORD '$PASSWORD';" || true
+      "ALTER USER ${cfg.defaultDbName} WITH PASSWORD '$PASSWORD';"
       
     echo "endoregDbLocal user password configured successfully"
   '';
@@ -113,12 +128,17 @@ in
     systemd.services.postgres-endoreg-setup = {
       description = "Set up endoregDbLocal PostgreSQL user password";
       after = [ "postgresql.service" ];
+      requires = [ "postgresql.service" ];
       wantedBy = [ "multi-user.target" ];
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
         User = "root";
         ExecStart = setupEndoregDbLocalUser;
+        # Retry if PostgreSQL isn't ready yet
+        Restart = "on-failure";
+        RestartSec = "5s";
+        StartLimitBurst = 3;
       };
     };
 

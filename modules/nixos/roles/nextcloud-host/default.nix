@@ -136,7 +136,7 @@ in
         show-psql-conf = "sudo cat /var/lib/postgresql/${config.services.postgresql.package.psqlSchema}/postgresql.conf";
         reset-psql = "sudo rm -rf /var/lib/postgresql/${config.services.postgresql.package.psqlSchema}"; #TODO Add to documentation
         reset-minio = "sudo rm -rf /var/lib/minio";
-        reset-nextcloud = "sudo rm -rf ${cfg.customDir}";
+        # reset-nextcloud = "sudo rm -rf ${cfg.customDir}"; remove for now, dangerous
       };
 
       # manually run 
