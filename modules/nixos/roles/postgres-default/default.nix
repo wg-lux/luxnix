@@ -57,7 +57,7 @@ with lib; let
     # Set the password in PostgreSQL
     PASSWORD=$(cat ${endoregDbLocalPasswordFile})
     ${config.services.postgresql.package}/bin/psql -U postgres -d postgres -c \
-      "ALTER USER ${cfg.defaultDbName} WITH PASSWORD '$PASSWORD';"
+      "ALTER USER \"${cfg.defaultDbName}\" WITH PASSWORD '$PASSWORD';"
       
     echo "endoregDbLocal user password configured successfully"
   '';
