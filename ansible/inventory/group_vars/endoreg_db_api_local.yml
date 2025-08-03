@@ -1,5 +1,8 @@
 group_roles:
   endoreg_client.enable: "true"
   endoreg_client.dbApiLocal: "true"
+  endoreg_client.centralNodes:
+    - "s-04"
+
 group_services: {}
 group_luxnix: {}

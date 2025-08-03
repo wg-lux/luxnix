@@ -23,7 +23,7 @@
     common.enable = true;
     custom-packages.cloud = true;
     custom-packages.enable = true;
-    endoreg-client.dbApiLocal = true;
+    endoreg-client.centralNodes = ["s-04"];    endoreg-client.dbApiLocal = true;
     endoreg-client.enable = true;
     gpu-server.enable = true;
     postgres.default.enable = true;
