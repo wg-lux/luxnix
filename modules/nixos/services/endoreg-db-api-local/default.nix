@@ -42,8 +42,8 @@ with lib.luxnix; let
     git submodule update --remote --recursive
 
     # Copy database password from vault (managed by postgres-default role)
-    if [ -f ~/secrets/vault/SCRT_local_password_maintenance_password ]; then
-      cp ~/secrets/vault/SCRT_local_password_maintenance_password ${repoDir}/conf/db_pwd
+    if [ -f /etc/secrets/vault/SCRT_local_password_maintenance_password ]; then
+      cp /etc/secrets/vault/SCRT_local_password_maintenance_password ${repoDir}/conf/db_pwd
       echo "Database password copied from vault to ${repoDir}/conf/db_pwd"
     else
       echo "ERROR: Database password not found in vault. PostgreSQL setup may not be complete."
