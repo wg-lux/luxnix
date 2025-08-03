@@ -17,6 +17,85 @@ with lib; let
     ensureClauses = { };
   };
 
+  # Safe PostgreSQL maintenance script
+  postgresMaintenanceScript = pkgs.writeShellScript "postgres-maintenance.sh" ''
+    #!${pkgs.bash}/bin/bash
+    set -e
+
+    show_help() {
+      echo "PostgreSQL Maintenance Script"
+      echo "Usage: $0 [OPTION]"
+      echo ""
+      echo "Options:"
+      echo "  --reset-psql       Reset PostgreSQL data (interactive confirmation required)"
+      echo "  --show-psql-conf   Show PostgreSQL configuration"
+      echo "  --help             Show this help message"
+      echo ""
+      echo "WARNING: Reset operations will permanently delete data!"
+      echo "Make sure to backup your data before running any reset commands."
+    }
+
+    confirm_action() {
+      local service="$1"
+      local path="$2"
+      echo "WARNING: This will permanently delete all $service data at $path"
+      echo "This action cannot be undone!"
+      echo -n "Are you sure you want to proceed? Type 'yes' to continue: "
+      read confirmation
+      if [ "$confirmation" != "yes" ]; then
+        echo "Operation cancelled."
+        exit 1
+      fi
+    }
+
+    reset_postgresql() {
+      local psql_dir="${cfg.postgresqlDataDir}"
+      
+      if [ ! -d "$psql_dir" ]; then
+        echo "PostgreSQL data directory $psql_dir does not exist."
+        return 0
+      fi
+
+      confirm_action "PostgreSQL" "$psql_dir"
+      
+      echo "Stopping PostgreSQL service..."
+      sudo systemctl stop postgresql.service || true
+      
+      echo "Removing PostgreSQL data directory: $psql_dir"
+      sudo rm -rf "$psql_dir"
+      
+      echo "PostgreSQL data has been reset."
+      echo "Run: nixos-rebuild switch to reinitialize PostgreSQL."
+    }
+
+    show_psql_conf() {
+      local psql_conf="${cfg.postgresqlDataDir}/postgresql.conf"
+      if [ -f "$psql_conf" ]; then
+        sudo cat "$psql_conf"
+      else
+        echo "PostgreSQL configuration file not found at: $psql_conf"
+        echo "PostgreSQL may not be initialized yet."
+      fi
+    }
+
+    case "''${1:-}" in
+      --reset-psql)
+        reset_postgresql
+        ;;
+      --show-psql-conf)
+        show_psql_conf
+        ;;
+      --help|"")
+        show_help
+        ;;
+      *)
+        echo "Unknown option: $1"
+        show_help
+        exit 1
+        ;;
+    esac
+  '';
+
   # Script to set up endoregDbLocal user password
   setupEndoregDbLocalUser = pkgs.writeShellScript "setup-endoreg-db-local-user" ''
     set -euo pipefail
@@ -54,10 +133,16 @@ with lib; let
     chown postgres:postgres ${endoregDbLocalPasswordFile}
     chmod 600 ${endoregDbLocalPasswordFile}
     
-    # Set the password in PostgreSQL
+    # Set the password in PostgreSQL safely using dollar-quoted strings
+    # Dollar-quoting prevents SQL injection by treating the content as a literal string
+    echo "Setting password for user ${cfg.defaultDbName}..."
+    
     PASSWORD=$(cat ${endoregDbLocalPasswordFile})
+    
+    # Use dollar-quoted strings ($tag$...$tag$) which safely handle any special characters
+    # including single quotes, backslashes, and other SQL metacharacters
     ${config.services.postgresql.package}/bin/psql -U postgres -d postgres -c \
-      "ALTER USER \"${cfg.defaultDbName}\" WITH PASSWORD '$PASSWORD';"
+      "ALTER USER \"${cfg.defaultDbName}\" WITH PASSWORD \$securepass\$''${PASSWORD}\$securepass\$;"
       
     echo "endoregDbLocal user password configured successfully"
   '';
@@ -122,6 +207,9 @@ in
 
 
   config = mkIf cfg.enable {
+    # Add maintenance script to system packages
+    environment.systemPackages = [ postgresMaintenanceScript ];
+
     services.luxnix.postgresql.enable = true;
 
     # Create systemd service to set up endoregDbLocal user password
@@ -144,8 +232,8 @@ in
 
     # Create tmpfiles rule for password directory
     systemd.tmpfiles.rules = [
-      "d /etc/secrets 0755 root root -"
-      "d /etc/secrets/vault 0755 root root -"
+      "d /etc/secrets 0700 root root -"
+      "d /etc/secrets/vault 0700 root root -"
     ];
 
     users.users = {
@@ -158,8 +246,11 @@ in
     };
 
     programs.zsh.shellAliases = {
-      show-psql-conf = "sudo cat ${cfg.postgresqlDataDir}/postgresql.conf";
-      reset-psql = "sudo rm -rf ${cfg.postgresqlDataDir}"; #TODO Add to documentation
+      # Safe maintenance aliases that use the interactive maintenance script
+      show-psql-conf = "${postgresMaintenanceScript} --show-psql-conf";
+      postgres-maintenance = "${postgresMaintenanceScript}";
+      # Interactive reset command with confirmation prompt
+      reset-psql-safe = "${postgresMaintenanceScript} --reset-psql";
     };
 
     services = {

@@ -226,8 +226,11 @@ grep -n "::1" /var/lib/postgresql/16/pg_hba.conf
 # Connect as postgres superuser
 sudo -u postgres psql
 
-# Set password for endoregDbLocal user
-ALTER USER "endoregDbLocal" WITH PASSWORD 'your_password_here';
+# Set password for endoregDbLocal user (using safe dollar-quoting)
+ALTER USER "endoregDbLocal" WITH PASSWORD $securepass$your_password_here$securepass$;
+
+# Alternative: Use \password command for interactive password setting
+\password endoregDbLocal
 
 # Verify user exists and has correct privileges
 \du endoregDbLocal
@@ -337,8 +340,11 @@ sudo -u postgres psql -d endoregDbLocal -U postgres
 # Show PostgreSQL configuration
 show-psql-conf
 
-# Reset PostgreSQL data (destructive!)
-reset-psql
+# Reset PostgreSQL data (safe with confirmation)
+reset-psql-safe
+
+# For Nextcloud hosts, use the maintenance script
+nextcloud-maintenance --reset-psql
 
 # Manual backup
 sudo -u postgres pg_dump endoregDbLocal > backup.sql
