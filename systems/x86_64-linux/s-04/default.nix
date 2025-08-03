@@ -178,7 +178,7 @@ maintenance.autoUpdates.enable = true;
 
 maintenance.autoUpdates.flake = "github:wg-lux/luxnix";
 
-nvidia-prime.enable = false;
+nvidia-prime.enable = lib.mkForce false;
 
 vault.dir = "/etc/secrets/vault";
 
