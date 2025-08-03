@@ -15,7 +15,7 @@ with lib.luxnix; let
   # Use configuration options or fallback to defaults
   gitURL = cfg.repository.url or "https://github.com/wg-lux/endo-api";
   repoDirName = "endo-api";
-  branchName = cfg.repository.branch or "environment-setup";
+  branchName = cfg.repository.branch or "main";
 
   endoreg-service-user-name = config.user.endoreg-service-user.name;
   endoreg-service-user = config.users.users.${endoreg-service-user-name};
