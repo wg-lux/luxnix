@@ -41,6 +41,7 @@ with lib.luxnix; let
     + (if remoteAdmin then "\nhost ${defaults.devUser} ${defaults.devUser} ${adminVpnIp}/32 scram-sha-256" else "") 
     + (if remoteAdmin then "\nhost  all postgres ${adminVpnIp}/32 scram-sha-256" else "")
     + (if defaults.enable then "\nhost ${defaults.defaultDbName} ${defaults.defaultDbName} 127.0.0.1/32 scram-sha-256" else "")
+    + (if defaults.enable then "\nhost ${defaults.defaultDbName} ${defaults.defaultDbName} ::1/128 scram-sha-256" else "")
 
     ;
 

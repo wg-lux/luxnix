@@ -57,6 +57,7 @@ in
         # TODO: set in modules
         extraGroups =
           [
+            config.luxnix.generic-settings.sensitiveServiceGroupName
           ]
           ++ cfg.extraGroups;
       }

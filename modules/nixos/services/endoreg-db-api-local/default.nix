@@ -41,22 +41,13 @@ with lib.luxnix; let
     git submodule init
     git submodule update --remote --recursive
 
-    # ensure db_pwd file exists
-    # TODO REFACTOR TO CENTRAL PWD MANAGEMENT
-    if [ ! -f ${repoDir}/conf/db_pwd ]; then
-      # Check if the vault password file exists
-      if [ -f ~/secrets/vault/SCRT_local_password_maintenance_password ]; then
-        echo "Found existing vault password, copying to db_pwd"
-        cp ~/secrets/vault/SCRT_local_password_maintenance_password ${repoDir}/conf/db_pwd
-      else
-        echo "No vault password found, generating new password"
-        # Generate a random password and write to vault file first
-        mkdir -p ~/secrets/vault
-        openssl rand -base64 32 > ~/secrets/vault/SCRT_local_password_maintenance_password
-        # Copy to db_pwd location
-        cp ~/secrets/vault/SCRT_local_password_maintenance_password ${repoDir}/conf/db_pwd
-      fi
-      echo "Database password file created at ${repoDir}/conf/db_pwd"
+    # Copy database password from vault (managed by postgres-default role)
+    if [ -f ~/secrets/vault/SCRT_local_password_maintenance_password ]; then
+      cp ~/secrets/vault/SCRT_local_password_maintenance_password ${repoDir}/conf/db_pwd
+      echo "Database password copied from vault to ${repoDir}/conf/db_pwd"
+    else
+      echo "ERROR: Database password not found in vault. PostgreSQL setup may not be complete."
+      exit 1
     fi
 
     exec devenv shell -- run-prod-server
@@ -78,6 +69,8 @@ in
     systemd.services."endo-api-boot" = {
       description = "Clone or pull endoreg-db-api and run prod-server";
       wantedBy = [ "multi-user.target" ];
+      after = [ "postgres-endoreg-setup.service" ];
+      requires = [ "postgres-endoreg-setup.service" ];
       serviceConfig = {
         Type = "exec";
         User = endoreg-service-user-name;

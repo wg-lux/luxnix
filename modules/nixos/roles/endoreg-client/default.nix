@@ -29,6 +29,7 @@ in
 
   config = mkIf cfg.enable {
     user.endoreg-service-user.enable = true;
+    group.endoreg-service.enable = true;  # Ensure the group is created
 
     roles = {
       desktop.enable = true;

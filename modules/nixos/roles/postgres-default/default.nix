@@ -6,12 +6,46 @@
 with lib; let
   cfg = config.roles.postgres.default;
 
+  # Password file paths
+  endoregDbLocalPasswordFile = "/var/lib/postgresql/endoregDbLocal.password";
+  maintenancePasswordFile = "/etc/secrets/vault/SCRT_local_password_maintenance_password";
+
   # Utility function to create attributes for a user
   mkDefaultUser = user: {
     name = user;
     ensureDBOwnership = true;
     ensureClauses = { };
   };
+
+  # Script to set up endoregDbLocal user password
+  setupEndoregDbLocalUser = pkgs.writeShellScript "setup-endoreg-db-local-user" ''
+    set -euo pipefail
+    
+    # Create password if it doesn't exist
+    if [ ! -f ${maintenancePasswordFile} ]; then
+      echo "Generating password for endoregDbLocal user..."
+      mkdir -p $(dirname ${maintenancePasswordFile})
+      ${pkgs.openssl}/bin/openssl rand -base64 32 > ${maintenancePasswordFile}
+      chmod 640 ${maintenancePasswordFile}
+      chown root:${config.luxnix.generic-settings.sensitiveServiceGroupName} ${maintenancePasswordFile}
+    fi
+    
+    # Ensure correct permissions on existing file
+    chmod 640 ${maintenancePasswordFile}
+    chown root:${config.luxnix.generic-settings.sensitiveServiceGroupName} ${maintenancePasswordFile}
+    
+    # Copy password for PostgreSQL access
+    cp ${maintenancePasswordFile} ${endoregDbLocalPasswordFile}
+    chown postgres:postgres ${endoregDbLocalPasswordFile}
+    chmod 600 ${endoregDbLocalPasswordFile}
+    
+    # Set the password in PostgreSQL
+    PASSWORD=$(cat ${endoregDbLocalPasswordFile})
+    ${config.services.postgresql.package}/bin/psql -U postgres -d postgres -c \
+      "ALTER USER ${cfg.defaultDbName} WITH PASSWORD '$PASSWORD';" || true
+      
+    echo "endoregDbLocal user password configured successfully"
+  '';
 
 in
 {
@@ -75,6 +109,24 @@ in
   config = mkIf cfg.enable {
     services.luxnix.postgresql.enable = true;
 
+    # Create systemd service to set up endoregDbLocal user password
+    systemd.services.postgres-endoreg-setup = {
+      description = "Set up endoregDbLocal PostgreSQL user password";
+      after = [ "postgresql.service" ];
+      wantedBy = [ "multi-user.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        User = "root";
+        ExecStart = setupEndoregDbLocalUser;
+      };
+    };
+
+    # Create tmpfiles rule for password directory
+    systemd.tmpfiles.rules = [
+      "d /etc/secrets 0755 root root -"
+      "d /etc/secrets/vault 0755 root root -"
+    ];
 
     users.users = {
       postgres = {
@@ -146,7 +198,6 @@ in
 
       };
     };
-
 
 
 

@@ -11,14 +11,16 @@ with lib.luxnix; let
   
 in {
   options.group.endoreg-service = with types; {
+    enable = mkBoolOpt false "Enable the endoreg-service group";
     name = mkOpt str "endoreg-service" "The name of the group";
     members = mkOpt (listOf str) [
       "admin"
+      "endoreg-service-user"
     ] "Groups for the user to be assigned.";
     gid = mkOpt int 101 "The group id";
   };
 
-  config = {
+  config = mkIf cfg.enable {
     users.groups.${cfg.name} =
       {
         name = cfg.name; 
