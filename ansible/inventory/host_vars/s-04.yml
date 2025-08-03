@@ -5,6 +5,7 @@ ansible_roles:
   - "dev_access"
 host_roles:
   aglnet.client.enable: "true"
+  endoreg_client.enable: "true" # Manual override of false in base_server.yml
 
 host_services: {}
 host_luxnix:
