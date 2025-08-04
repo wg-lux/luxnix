@@ -12,7 +12,7 @@ with lib; let
     # PostgreSQL maintenance password
     maintenance_password = {
       path = "/etc/secrets/vault/SCRT_local_password_maintenance_password";
-      generator = "openssl rand -base64 32";
+      generator = "${pkgs.openssl}/bin/openssl rand -base64 32";
       owner = "root";
       group = sensitiveServiceGroupName;
       permissions = "640";
@@ -22,7 +22,7 @@ with lib; let
     # Django secret key for local instances
     django_secret_key = {
       path = "/etc/secrets/vault/django_secret_key";
-      generator = "openssl rand -base64 50";
+      generator = "${pkgs.openssl}/bin/openssl rand -base64 50";
       owner = "root";
       group = sensitiveServiceGroupName;
       permissions = "640";
@@ -32,7 +32,7 @@ with lib; let
     # Django secret key for central instances
     django_central_secret_key = {
       path = "/etc/secrets/vault/django_central_secret_key";
-      generator = "openssl rand -base64 50";
+      generator = "${pkgs.openssl}/bin/openssl rand -base64 50";
       owner = "root";
       group = sensitiveServiceGroupName;
       permissions = "640";
@@ -42,7 +42,7 @@ with lib; let
     # Nextcloud admin password
     nextcloud_admin_password = {
       path = "/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_password";
-      generator = "openssl rand -base64 32";
+      generator = "${pkgs.openssl}/bin/openssl rand -base64 32";
       owner = "root";
       group = sensitiveServiceGroupName;
       permissions = "640";
@@ -54,7 +54,7 @@ with lib; let
       path = "/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_minio_credentials";
       generator = ''
         MINIO_ROOT_USER="nextcloud"
-        MINIO_ROOT_PASSWORD="$(openssl rand -base64 32)"
+        MINIO_ROOT_PASSWORD="$(${pkgs.openssl}/bin/openssl rand -base64 32)"
         echo "MINIO_ROOT_USER=$MINIO_ROOT_USER" > "$TARGET_FILE"
         echo "MINIO_ROOT_PASSWORD=$MINIO_ROOT_PASSWORD" >> "$TARGET_FILE"
       '';
@@ -159,7 +159,7 @@ in
           generator = mkOption {
             type = types.str;
             description = "Command to generate the secret content";
-            example = "openssl rand -base64 32";
+            example = "${pkgs.openssl}/bin/openssl rand -base64 32";
           };
           
           owner = mkOption {
