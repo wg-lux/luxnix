@@ -157,11 +157,22 @@ with lib.luxnix; let
 
     # Copy Django configuration
     echo "Setting up Django configuration..."
+    # Ensure config directory exists with correct permissions
+    if [ ! -d "${endoreg-service-user-home}/config" ]; then
+      echo "Creating config directory: ${endoreg-service-user-home}/config"
+      mkdir -p ${endoreg-service-user-home}/config || { echo "ERROR: Failed to create config directory"; exit 1; }
+    fi
+    
     # Create a local copy outside the git repository to avoid conflicts
-    mkdir -p ${endoreg-service-user-home}/config
-    cp ${djangoConfigFile} ${endoreg-service-user-home}/config/local_settings.py
-    # Create symlink in the repository
-    ln -sf ${endoreg-service-user-home}/config/local_settings.py ${repoDir}/local_settings.py
+    cp ${djangoConfigFile} ${endoreg-service-user-home}/config/local_settings.py || { echo "ERROR: Failed to copy Django configuration"; exit 1; }
+    echo "Django configuration copied to ${endoreg-service-user-home}/config/local_settings.py"
+    
+    # Create symlink in the repository (remove existing symlink first if it exists)
+    if [ -L ${repoDir}/local_settings.py ]; then
+      rm ${repoDir}/local_settings.py
+    fi
+    ln -sf ${endoreg-service-user-home}/config/local_settings.py ${repoDir}/local_settings.py || { echo "ERROR: Failed to create symlink"; exit 1; }
+    echo "Created symlink: ${repoDir}/local_settings.py -> ${endoreg-service-user-home}/config/local_settings.py"
 
     ${lib.optionalString ((cfg.service.extraEnvironment or {}) != {}) ''
     # Set additional environment variables
@@ -259,15 +270,15 @@ in
     
     # Ensure directory structure exists with correct permissions
     systemd.tmpfiles.rules = [
-      "d ${endoreg-service-user-home} 0755 ${endoreg-service-user-name} endoreg-service -"
-      "d ${endoreg-service-user-home}/config 0755 ${endoreg-service-user-name} endoreg-service -"
+      "d ${endoreg-service-user-home} 0755 ${endoreg-service-user-name} endoreg-service - -"
+      "d ${endoreg-service-user-home}/config 0755 ${endoreg-service-user-name} endoreg-service - -"
     ];
     
     systemd.services."endo-api-boot" = {
       description = "Clone or pull endoreg-db-api and run prod-server";
       wantedBy = [ "multi-user.target" ];
-      after = [ "postgres-endoreg-setup.service" "endoreg-django-setup.service" ];
-      requires = [ "postgres-endoreg-setup.service" ];
+      after = [ "postgres-endoreg-setup.service" "endoreg-django-setup.service" "systemd-tmpfiles-setup.service" ];
+      requires = [ "postgres-endoreg-setup.service" "systemd-tmpfiles-setup.service" ];
       serviceConfig = {
         Type = "exec";
         User = endoreg-service-user-name;
