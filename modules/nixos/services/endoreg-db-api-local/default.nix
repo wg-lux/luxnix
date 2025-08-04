@@ -157,22 +157,47 @@ with lib.luxnix; let
 
     # Copy Django configuration
     echo "Setting up Django configuration..."
-    # Ensure config directory exists with correct permissions
-    if [ ! -d "${endoreg-service-user-home}/config" ]; then
-      echo "Creating config directory: ${endoreg-service-user-home}/config"
-      mkdir -p ${endoreg-service-user-home}/config || { echo "ERROR: Failed to create config directory"; exit 1; }
+    echo "Service user home: ${endoreg-service-user-home}"
+    echo "Current user: $(whoami)"
+    echo "Current directory: $(pwd)"
+    
+    # Check if home directory exists and is accessible
+    if [ ! -d "${endoreg-service-user-home}" ]; then
+      echo "ERROR: Home directory ${endoreg-service-user-home} does not exist"
+      exit 1
     fi
     
+    # Ensure config directory exists with correct permissions
+    CONFIG_DIR="${endoreg-service-user-home}/config"
+    echo "Checking config directory: $CONFIG_DIR"
+    
+    if [ ! -d "$CONFIG_DIR" ]; then
+      echo "Creating config directory: $CONFIG_DIR"
+      mkdir -p "$CONFIG_DIR" || { echo "ERROR: Failed to create config directory $CONFIG_DIR"; ls -la "${endoreg-service-user-home}"; exit 1; }
+    else
+      echo "Config directory already exists"
+    fi
+    
+    # Check permissions
+    ls -la "${endoreg-service-user-home}/" || echo "Cannot list home directory contents"
+    
     # Create a local copy outside the git repository to avoid conflicts
-    cp ${djangoConfigFile} ${endoreg-service-user-home}/config/local_settings.py || { echo "ERROR: Failed to copy Django configuration"; exit 1; }
-    echo "Django configuration copied to ${endoreg-service-user-home}/config/local_settings.py"
+    echo "Copying Django configuration file..."
+    cp ${djangoConfigFile} "$CONFIG_DIR/local_settings.py" || { 
+      echo "ERROR: Failed to copy Django configuration to $CONFIG_DIR/local_settings.py"
+      echo "Directory permissions:"
+      ls -la "$CONFIG_DIR" 2>/dev/null || echo "Cannot access $CONFIG_DIR"
+      ls -la "${endoreg-service-user-home}" 2>/dev/null || echo "Cannot access ${endoreg-service-user-home}"
+      exit 1
+    }
+    echo "Django configuration copied to $CONFIG_DIR/local_settings.py"
     
     # Create symlink in the repository (remove existing symlink first if it exists)
     if [ -L ${repoDir}/local_settings.py ]; then
       rm ${repoDir}/local_settings.py
     fi
-    ln -sf ${endoreg-service-user-home}/config/local_settings.py ${repoDir}/local_settings.py || { echo "ERROR: Failed to create symlink"; exit 1; }
-    echo "Created symlink: ${repoDir}/local_settings.py -> ${endoreg-service-user-home}/config/local_settings.py"
+    ln -sf "$CONFIG_DIR/local_settings.py" ${repoDir}/local_settings.py || { echo "ERROR: Failed to create symlink"; exit 1; }
+    echo "Created symlink: ${repoDir}/local_settings.py -> $CONFIG_DIR/local_settings.py"
 
     ${lib.optionalString ((cfg.service.extraEnvironment or {}) != {}) ''
     # Set additional environment variables
@@ -270,8 +295,10 @@ in
     
     # Ensure directory structure exists with correct permissions
     systemd.tmpfiles.rules = [
-      "d ${endoreg-service-user-home} 0755 ${endoreg-service-user-name} endoreg-service - -"
-      "d ${endoreg-service-user-home}/config 0755 ${endoreg-service-user-name} endoreg-service - -"
+      # Create the service user home directory
+      "d ${endoreg-service-user-home} 0755 ${endoreg-service-user-name} ${endoreg-service-user-name} - -"
+      # Create the config subdirectory  
+      "d ${endoreg-service-user-home}/config 0755 ${endoreg-service-user-name} ${endoreg-service-user-name} - -"
     ];
     
     systemd.services."endo-api-boot" = {
