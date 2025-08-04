@@ -104,8 +104,8 @@ with lib; let
     
     # Ensure base directories exist with correct permissions
     mkdir -p /etc/secrets
-    chown root:root /etc/secrets
-    chmod 700 /etc/secrets
+    chown root:${sensitiveServiceGroupName} /etc/secrets
+    chmod 750 /etc/secrets
     
     mkdir -p /etc/secrets/vault
     chown root:${sensitiveServiceGroupName} /etc/secrets/vault
@@ -238,7 +238,7 @@ in
 
     # Create tmpfiles rules to ensure directory structure
     systemd.tmpfiles.rules = [
-      "d /etc/secrets 0700 root root -"
+      "d /etc/secrets 0750 root ${sensitiveServiceGroupName} -"
       "d /etc/secrets/vault 0750 root ${sensitiveServiceGroupName} -"
     ];
 
