@@ -102,8 +102,8 @@ with lib; let
     
     echo "Starting managed secrets generation..."
     
-    # Verify sensitive service group exists
-    if ! getent group "${sensitiveServiceGroupName}" >/dev/null; then
+    # Verify sensitive service group exists by checking /etc/group
+    if ! grep -q "^${sensitiveServiceGroupName}:" /etc/group; then
       echo "ERROR: Group ${sensitiveServiceGroupName} does not exist"
       exit 1
     fi
