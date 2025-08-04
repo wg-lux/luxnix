@@ -102,14 +102,30 @@ with lib; let
     
     echo "Starting managed secrets generation..."
     
-    # Ensure base directories exist with correct permissions
-    mkdir -p /etc/secrets
-    chown root:${sensitiveServiceGroupName} /etc/secrets
-    chmod 750 /etc/secrets
+    # Verify sensitive service group exists
+    if ! getent group "${sensitiveServiceGroupName}" >/dev/null; then
+      echo "ERROR: Group ${sensitiveServiceGroupName} does not exist"
+      exit 1
+    fi
     
-    mkdir -p /etc/secrets/vault
-    chown root:${sensitiveServiceGroupName} /etc/secrets/vault
-    chmod 750 /etc/secrets/vault
+    # Ensure base directories exist with correct permissions
+    echo "Creating /etc/secrets directory..."
+    mkdir -p /etc/secrets || { echo "ERROR: Failed to create /etc/secrets"; exit 1; }
+    chown root:${sensitiveServiceGroupName} /etc/secrets || { echo "ERROR: Failed to set ownership of /etc/secrets"; exit 1; }
+    chmod 750 /etc/secrets || { echo "ERROR: Failed to set permissions of /etc/secrets"; exit 1; }
+    
+    echo "Creating /etc/secrets/vault directory..."
+    mkdir -p /etc/secrets/vault || { echo "ERROR: Failed to create /etc/secrets/vault"; exit 1; }
+    chown root:${sensitiveServiceGroupName} /etc/secrets/vault || { echo "ERROR: Failed to set ownership of /etc/secrets/vault"; exit 1; }
+    chmod 750 /etc/secrets/vault || { echo "ERROR: Failed to set permissions of /etc/secrets/vault"; exit 1; }
+    
+    # Verify directories are accessible
+    if [ ! -d "/etc/secrets" ] || [ ! -d "/etc/secrets/vault" ]; then
+      echo "ERROR: Secret directories do not exist after creation"
+      exit 1
+    fi
+    
+    echo "Directory setup completed successfully"
     
     ${lib.concatStringsSep "\n" (lib.mapAttrsToList (name: config: ''
       ${mkSecretScript name config}
@@ -218,28 +234,24 @@ in
       description = "Generate and manage system secrets";
       wantedBy = [ "multi-user.target" ];
       before = cfg.runBefore;
-      after = [ "local-fs.target" ];
+      after = [ "local-fs.target" "systemd-tmpfiles-setup.service" ];
       wants = [ "local-fs.target" ];
+      requires = [ "systemd-tmpfiles-setup.service" ];
       
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
         User = "root";
         ExecStart = generateSecretsScript;
-        # Ensure this runs early in the boot process
-        DefaultDependencies = false;
-      };
-      
-      unitConfig = {
-        # This is a critical service for system functionality
-        DefaultDependencies = false;
       };
     };
 
     # Create tmpfiles rules to ensure directory structure
     systemd.tmpfiles.rules = [
-      "d /etc/secrets 0750 root ${sensitiveServiceGroupName} -"
-      "d /etc/secrets/vault 0750 root ${sensitiveServiceGroupName} -"
+      # Create base secrets directory with proper permissions
+      "d /etc/secrets 0750 root ${sensitiveServiceGroupName} - -"
+      # Create vault subdirectory with proper permissions  
+      "d /etc/secrets/vault 0750 root ${sensitiveServiceGroupName} - -"
     ];
 
     # Add a maintenance command for manual secret management
