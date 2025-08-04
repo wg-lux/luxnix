@@ -230,11 +230,8 @@ in
       };
     };
 
-    # Create tmpfiles rule for password directory
-    systemd.tmpfiles.rules = [
-      "d /etc/secrets 0700 root root -"
-      "d /etc/secrets/vault 0700 root root -"
-    ];
+    # Secret directories are now managed by the managed-secrets role
+    # No tmpfiles rules needed here
 
     users.users = {
       postgres = {

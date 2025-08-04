@@ -143,15 +143,42 @@ with lib.luxnix; let
 
     # Copy database password from vault (managed by postgres-default role)
     echo "Setting up database configuration..."
+    echo "Current user: $(whoami)"
+    echo "User groups: $(groups)"
+    echo "Checking for database password file: ${cfg.database.passwordFile or "/etc/secrets/vault/SCRT_local_password_maintenance_password"}"
+    
+    # Debug secret file access
+    SECRET_FILE="${cfg.database.passwordFile or "/etc/secrets/vault/SCRT_local_password_maintenance_password"}"
+    if [ -f "$SECRET_FILE" ]; then
+      echo "Secret file exists: $SECRET_FILE"
+      ls -la "$SECRET_FILE" || echo "Cannot stat secret file"
+      echo "Testing read access..."
+      if head -c 10 "$SECRET_FILE" >/dev/null 2>&1; then
+        echo "✓ Can read secret file"
+      else
+        echo "✗ Cannot read secret file"
+        echo "File permissions:"
+        ls -la "$SECRET_FILE" 2>/dev/null || echo "Cannot access file"
+        echo "Directory permissions:"
+        ls -la "$(dirname "$SECRET_FILE")" 2>/dev/null || echo "Cannot access directory" 
+        echo "Parent directory permissions:"
+        ls -la "/etc/secrets" 2>/dev/null || echo "Cannot access /etc/secrets"
+      fi
+    else
+      echo "Secret file does not exist: $SECRET_FILE"
+      echo "Directory contents:"
+      ls -la "$(dirname "$SECRET_FILE")" 2>/dev/null || echo "Cannot access $(dirname "$SECRET_FILE")"
+      ls -la "/etc/secrets" 2>/dev/null || echo "Cannot access /etc/secrets"
+    fi
     
     # Ensure conf directory exists (it might be in .gitignore)
     mkdir -p ${repoDir}/conf
     
-    if [ -f ${cfg.database.passwordFile or "/etc/secrets/vault/SCRT_local_password_maintenance_password"} ]; then
-      cp ${cfg.database.passwordFile or "/etc/secrets/vault/SCRT_local_password_maintenance_password"} ${repoDir}/conf/db_pwd
+    if [ -f "$SECRET_FILE" ] && head -c 1 "$SECRET_FILE" >/dev/null 2>&1; then
+      cp "$SECRET_FILE" ${repoDir}/conf/db_pwd
       echo "Database password copied from vault to ${repoDir}/conf/db_pwd"
     else
-      echo "ERROR: Database password not found in vault. PostgreSQL setup may not be complete."
+      echo "ERROR: Database password not found in vault or not accessible. PostgreSQL setup may not be complete."
       exit 1
     fi
 
