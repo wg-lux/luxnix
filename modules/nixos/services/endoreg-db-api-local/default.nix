@@ -177,6 +177,49 @@ with lib.luxnix; let
     if [ -f "$SECRET_FILE" ] && head -c 1 "$SECRET_FILE" >/dev/null 2>&1; then
       cp "$SECRET_FILE" ${repoDir}/conf/db_pwd
       echo "Database password copied from vault to ${repoDir}/conf/db_pwd"
+      
+      # Run Django application's configuration setup
+      echo "Running Django application configuration setup..."
+      cd ${repoDir}
+      
+      # Set environment variables needed by the Django config scripts
+      export DATA_DIR="${repoDir}/data"
+      export CONF_DIR="${repoDir}/conf"
+      export CONF_TEMPLATE_DIR="${repoDir}/conf_template"
+      export DJANGO_MODULE="endo_api"
+      export HTTP_PROTOCOL="http"
+      export DJANGO_HOST="localhost"
+      export DJANGO_PORT="8118"
+      export BASE_URL="http://localhost:8118"
+      
+      # Ensure devenv is available and run the configuration script
+      if command -v devenv >/dev/null 2>&1; then
+        echo "Running Django configuration setup via devenv..."
+        devenv shell env-init-conf || { 
+          echo "WARNING: devenv env-init-conf failed, trying direct script execution"
+          # Fallback to direct execution if devenv fails
+          if [ -f "scripts/make_conf.py" ]; then
+            python scripts/make_conf.py || echo "WARNING: make_conf.py execution failed"
+          fi
+        }
+      else
+        echo "devenv not available, trying direct script execution..."
+        if [ -f "scripts/make_conf.py" ]; then
+          python scripts/make_conf.py || echo "WARNING: make_conf.py execution failed"
+        else
+          echo "WARNING: scripts/make_conf.py not found"
+        fi
+      fi
+      
+      # Verify that the required db.yaml file was created
+      if [ -f "${repoDir}/conf/db.yaml" ]; then
+        echo "✓ Django configuration file created: ${repoDir}/conf/db.yaml"
+      else
+        echo "WARNING: Django configuration file ${repoDir}/conf/db.yaml was not created"
+        echo "Contents of conf directory:"
+        ls -la "${repoDir}/conf/" 2>/dev/null || echo "Cannot access conf directory"
+      fi
+      
     else
       echo "ERROR: Database password not found in vault or not accessible. PostgreSQL setup may not be complete."
       exit 1
@@ -240,7 +283,7 @@ with lib.luxnix; let
     ${lib.concatStringsSep "\n" (lib.mapAttrsToList (name: value: "export ${name}='${value}'") cfg.service.extraEnvironment)}
     ''}
 
-    echo "Starting Django development server..."
+    echo "Starting Django server..."
     echo "Hostname: ${cfg.api.hostname or "localhost"}"
     echo "Port: ${toString (cfg.api.port or 8118)}"
     echo "Protocol: ${if (cfg.api.useHttps or false) then "HTTPS" else "HTTP"}"
