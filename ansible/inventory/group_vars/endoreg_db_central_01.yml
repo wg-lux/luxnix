@@ -1,0 +1,26 @@
+group_roles:
+  endoreg_db_central_01.enable: "true"
+  endoreg_db_central_01.centralNodes:
+    - "s-04"
+  endoreg_db_central_01.localNodes:
+    - "s-04"
+    - "gs-01"
+    - "gs-02"
+    - "gc-05"
+    - "gc-06"
+    - "gc-10"
+  endoreg_db_central_01.api.hostname: "0.0.0.0"
+  endoreg_db_central_01.api.port: "8118"
+  endoreg_db_central_01.api.useHttps: "false"
+  endoreg_db_central_01.api.djangoAllowedHosts:
+    - "s-04"
+    - "s-04.local"
+    - "172.16.255.14"
+  endoreg_db_central_01.api.djangoDebug: "false"
+  endoreg_db_central_01.api.logLevel: "INFO"
+  endoreg_db_central_01.database.name: "endoregDbCentral"
+  endoreg_db_central_01.database.user: "endoregDbCentral"
+  endoreg_db_central_01.service.workers: "4"
+  endoreg_db_central_01.service.maxRequests: "5000"
+group_services: {}
+group_luxnix: {}

@@ -246,7 +246,7 @@ in {
     networking.useDHCP = lib.mkDefault cfg.useDHCP;
     # use tmpfile rule to create secret directory belonging to admin:users
     systemd.tmpfiles.rules = [
-      "d ${cfg.secretDir} 0755 ${username} users"
+      "d ${cfg.secretDir} 0700 ${username} users"
     ];
 
     environment.systemPackages = with pkgs; [

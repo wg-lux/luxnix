@@ -6,7 +6,8 @@
 with lib;
 with lib.luxnix; let
   cfg = config.user.admin;
-  sslCertGroupName = config.users.groups.sslCert.name;
+  # Only reference sslCert group if it exists
+  sslCertGroupName = if (config.users.groups ? sslCert) then config.users.groups.sslCert.name else null;
   passwordFile = config.luxnix.vault.adminPasswordHashedFile;
   sensitiveServicesGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
 
@@ -64,9 +65,9 @@ in
             "libvirtd"
           ]
           ++ [
-            sslCertGroupName
             sensitiveServicesGroupName
           ]
+          ++ (lib.optional (sslCertGroupName != null) sslCertGroupName)
           ++ cfg.extraGroups;
       }
       // cfg.extraOptions;

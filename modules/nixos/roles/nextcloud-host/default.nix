@@ -5,9 +5,8 @@
 # https://github.com/helsinki-systems/nc4nix (Nextcloud4Nix)
 # https://nixos.wiki/wiki/Nextcloud
 
-#TODO Docs:
-# To reset delete stateful dirs:
-# rm -r /var/lib/postgresql /var/lib/nextcloud
+# Safe maintenance operations documented in README.md
+# Use 'nextcloud-maintenance' script for safe data reset operations
 
 with lib;
 with lib.luxnix; let
@@ -44,6 +43,134 @@ with lib.luxnix; let
     cp ${sslKeyFile} ${nginx_key_path}
     chown nginx:${sslCertGroupName} ${nginx_cert_path} ${nginx_key_path}
     chmod 600 ${nginx_cert_path} ${nginx_key_path}
+  '';
+
+  # Safe maintenance script for resetting Nextcloud services
+  nextcloudMaintenanceScript = pkgs.writeShellScript "nextcloud-maintenance.sh" ''
+    #!${pkgs.bash}/bin/bash
+    set -e
+
+    show_help() {
+      echo "Nextcloud Maintenance Script"
+      echo "Usage: $0 [OPTION]"
+      echo ""
+      echo "Options:"
+      echo "  --reset-psql       Reset PostgreSQL data (interactive confirmation required)"
+      echo "  --reset-minio      Reset MinIO data (interactive confirmation required)"
+      echo "  --reset-all        Reset all Nextcloud data (interactive confirmation required)"
+      echo "  --show-psql-conf   Show PostgreSQL configuration"
+      echo "  --help             Show this help message"
+      echo ""
+      echo "WARNING: Reset operations will permanently delete data!"
+      echo "Make sure to backup your data before running any reset commands."
+    }
+
+    confirm_action() {
+      local service="$1"
+      local path="$2"
+      echo "WARNING: This will permanently delete all $service data at $path"
+      echo "This action cannot be undone!"
+      echo -n "Are you sure you want to proceed? Type 'yes' to continue: "
+      read confirmation
+      if [ "$confirmation" != "yes" ]; then
+        echo "Operation cancelled."
+        exit 1
+      fi
+    }
+
+    stop_services() {
+      echo "Stopping services..."
+      sudo systemctl stop nextcloud-setup.service nextcloud-cron.service nginx.service postgresql.service minio.service || true
+    }
+
+    start_services() {
+      echo "Starting services..."
+      sudo systemctl start postgresql.service minio.service nginx.service || true
+    }
+
+    reset_postgresql() {
+      local psql_dir="/var/lib/postgresql/${config.services.postgresql.package.psqlSchema}"
+      
+      if [ ! -d "$psql_dir" ]; then
+        echo "PostgreSQL data directory $psql_dir does not exist."
+        return 0
+      fi
+
+      confirm_action "PostgreSQL" "$psql_dir"
+      
+      echo "Stopping services before PostgreSQL reset..."
+      stop_services
+      
+      echo "Removing PostgreSQL data directory: $psql_dir"
+      sudo rm -rf "$psql_dir"
+      
+      echo "PostgreSQL data has been reset. You will need to reconfigure the database."
+      echo "Consider running: nixos-rebuild switch to reinitialize services."
+    }
+
+    reset_minio() {
+      local minio_dir="/var/lib/minio"
+      
+      if [ ! -d "$minio_dir" ]; then
+        echo "MinIO data directory $minio_dir does not exist."
+        return 0
+      fi
+
+      confirm_action "MinIO" "$minio_dir"
+      
+      echo "Stopping services before MinIO reset..."
+      stop_services
+      
+      echo "Removing MinIO data directory: $minio_dir"
+      sudo rm -rf "$minio_dir"
+      
+      echo "MinIO data has been reset. You will need to reconfigure MinIO."
+      echo "Consider running: nixos-rebuild switch to reinitialize services."
+    }
+
+    reset_all() {
+      echo "This will reset ALL Nextcloud-related data!"
+      confirm_action "ALL Nextcloud services" "/var/lib/postgresql and /var/lib/minio"
+      
+      reset_postgresql
+      reset_minio
+      
+      echo "All Nextcloud data has been reset."
+      echo "Run: nixos-rebuild switch to reinitialize all services."
+    }
+
+    show_psql_conf() {
+      local psql_conf="/var/lib/postgresql/${config.services.postgresql.package.psqlSchema}/postgresql.conf"
+      if [ -f "$psql_conf" ]; then
+        sudo cat "$psql_conf"
+      else
+        echo "PostgreSQL configuration file not found at: $psql_conf"
+        echo "PostgreSQL may not be initialized yet."
+      fi
+    }
+
+    case "''${1:-}" in
+      --reset-psql)
+        reset_postgresql
+        ;;
+      --reset-minio)
+        reset_minio
+        ;;
+      --reset-all)
+        reset_all
+        ;;
+      --show-psql-conf)
+        show_psql_conf
+        ;;
+      --help|"")
+        show_help
+        ;;
+      *)
+        echo "Unknown option: $1"
+        show_help
+        exit 1
+        ;;
+    esac
   '';
 
   nextcloudPrepareScript = pkgs.writeShellScript "nextcloud-prepare-files_nxtcld.sh" ''
@@ -133,10 +260,13 @@ in
         home = cfg.customDir;
       };
       programs.zsh.shellAliases = {
-        show-psql-conf = "sudo cat /var/lib/postgresql/${config.services.postgresql.package.psqlSchema}/postgresql.conf";
-        reset-psql = "sudo rm -rf /var/lib/postgresql/${config.services.postgresql.package.psqlSchema}"; #TODO Add to documentation
-        reset-minio = "sudo rm -rf /var/lib/minio";
-        reset-nextcloud = "sudo rm -rf ${cfg.customDir}";
+        # Safe maintenance aliases that use the interactive maintenance script
+        show-psql-conf = "${nextcloudMaintenanceScript} --show-psql-conf";
+        nextcloud-maintenance = "${nextcloudMaintenanceScript}";
+        # Interactive reset commands with confirmation prompts
+        reset-psql-safe = "${nextcloudMaintenanceScript} --reset-psql";
+        reset-minio-safe = "${nextcloudMaintenanceScript} --reset-minio";
+        reset-nextcloud-all = "${nextcloudMaintenanceScript} --reset-all";
       };
 
       # manually run 
@@ -150,7 +280,12 @@ in
         inherit rootCredentialsFile;
       };
 
-      environment.systemPackages = [ pkgs.minio-client cfg.package pkgs.clamav ];
+      environment.systemPackages = [ 
+        pkgs.minio-client 
+        cfg.package 
+        pkgs.clamav 
+        nextcloudMaintenanceScript
+      ];
       networking.firewall.allowedTCPPorts = [ 80 443 3002 ];
 
       # systemd.tmpfiles.rules = [

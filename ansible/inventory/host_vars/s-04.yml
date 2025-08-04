@@ -5,12 +5,14 @@ ansible_roles:
   - "dev_access"
 host_roles:
   aglnet.client.enable: "true"
+  endoreg_client.enable: "true" # Manual override of false in base_server.yml
 
 host_services: {}
 host_luxnix:
   generic_settings.hostPlatform: '"x86_64-linux"'
   generic_settings.systemStateVersion: '"23.11"'
   generic_settings.linux.cpuMicrocode: '"intel"'
+  nvidia_prime.enable: "lib.mkForce false"
 
   generic_settings.linux.kernelModules:
     - "kvm-intel"
