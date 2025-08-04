@@ -648,6 +648,8 @@ in
         description = "Prepare files for Nextcloud";
         wantedBy = [ "multi-user.target" ];
         before = [ "nextcloud-setup.service" "minio.service" ];
+        after = [ "managed-secrets-setup.service" ];
+        requires = [ "managed-secrets-setup.service" ];
         serviceConfig = {
           Type = "oneshot";
           RemainAfterExit = true;
