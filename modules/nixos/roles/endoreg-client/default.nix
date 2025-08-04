@@ -208,7 +208,7 @@ in
 
       branch = mkOption {
         type = types.str;
-        default = "environment-setup";
+        default = "main";
         description = "Git branch to checkout";
       };
 
