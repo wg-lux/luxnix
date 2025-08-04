@@ -210,6 +210,15 @@ with lib.luxnix; let
     
     # Create a local copy outside the git repository to avoid conflicts
     echo "Copying Django configuration file..."
+    # Remove existing file if it exists (it might be read-only)
+    if [ -f "$CONFIG_DIR/local_settings.py" ]; then
+      echo "Removing existing local_settings.py file"
+      rm -f "$CONFIG_DIR/local_settings.py" || { 
+        echo "Existing file is read-only, making it writable first"
+        chmod +w "$CONFIG_DIR/local_settings.py" 2>/dev/null || true
+        rm -f "$CONFIG_DIR/local_settings.py"
+      }
+    fi
     cp ${djangoConfigFile} "$CONFIG_DIR/local_settings.py" || { 
       echo "ERROR: Failed to copy Django configuration to $CONFIG_DIR/local_settings.py"
       echo "Directory permissions:"
