@@ -17,9 +17,9 @@ with lib; let
     ensureClauses = { };
   };
 
-  # Safe PostgreSQL maintenance script
-  postgresMaintenanceScript = pkgs.writeShellScript "postgres-maintenance.sh" ''
-    #!${pkgs.bash}/bin/bash
+  # Safe PostgreSQL maintenance script package
+  postgresMaintenanceScript = pkgs.writeScriptBin "postgres-maintenance" ''
+    #!${pkgs.zsh}/bin/zsh
     set -e
 
     show_help() {
@@ -247,10 +247,10 @@ in
 
     programs.zsh.shellAliases = {
       # Safe maintenance aliases that use the interactive maintenance script
-      show-psql-conf = "${postgresMaintenanceScript} --show-psql-conf";
-      postgres-maintenance = "${postgresMaintenanceScript}";
+      show-psql-conf = "postgres-maintenance --show-psql-conf";
+      postgres-maintenance = "postgres-maintenance";
       # Interactive reset command with confirmation prompt
-      reset-psql-safe = "${postgresMaintenanceScript} --reset-psql";
+      reset-psql-safe = "postgres-maintenance --reset-psql";
     };
 
     services = {
