@@ -75,12 +75,14 @@ with lib.luxnix; let
 
     # File Upload Settings
     DATA_UPLOAD_MAX_MEMORY_SIZE = ${toString (
-      if (cfg.api.maxRequestSize or "100M") == "100M" then 104857600
-      else if hasSuffix "M" cfg.api.maxRequestSize then 
-        (lib.toInt (removeSuffix "M" cfg.api.maxRequestSize)) * 1048576
-      else if hasSuffix "G" cfg.api.maxRequestSize then
-        (lib.toInt (removeSuffix "G" cfg.api.maxRequestSize)) * 1073741824
-      else lib.toInt cfg.api.maxRequestSize
+      let
+        sizeStr   = cfg.api.maxRequestSize or "100M";
+        parseSize = size:
+          if hasSuffix "G" size then (lib.toInt (removeSuffix "G" size)) * 1073741824
+          else if hasSuffix "M" size then (lib.toInt (removeSuffix "M" size)) * 1048576
+          else if hasSuffix "K" size then (lib.toInt (removeSuffix "K" size)) * 1024
+          else lib.toInt size;
+      in parseSize sizeStr
     )}
 
     # Central Nodes Configuration
@@ -128,14 +130,14 @@ with lib.luxnix; let
       ''}
     fi
     
-    cd ${repoDir}
-
     # Checkout specified branch
     echo "Checking out branch: ${branchName}"
-    git checkout ${branchName}
-    ${if (cfg.repository.updateOnBoot or true) then "git pull" else ""}
+    git checkout ${branchName} || { echo "ERROR: Failed to checkout branch ${branchName}"; exit 1; }
+    ${if (cfg.repository.updateOnBoot or true) then "git pull || { echo \"ERROR: Failed to pull latest changes\"; exit 1; }" else ""}
 
     echo "Initializing submodules..."
+    git submodule init || { echo "ERROR: Failed to initialize submodules"; exit 1; }
+    git submodule update --remote --recursive || { echo "ERROR: Failed to update submodules"; exit 1; }
     git submodule init
     git submodule update --remote --recursive
 

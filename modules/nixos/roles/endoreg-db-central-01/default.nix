@@ -50,7 +50,7 @@ in
         description = "Whether to use HTTPS for the central API service";
       };
 
-      sslCertificatePath = mkOption {
+      sslCertificatePath = mkOption { #ALREADY CENTRALLY AVAILABLE SOMEWHERE, Refactor to use available implementation here
         type = types.nullOr types.path;
         default = null;
         description = "Path to SSL certificate file (required if useHttps is true)";
@@ -306,6 +306,7 @@ in
     };
 
     # Configure nginx reverse proxy if HTTPS is enabled
+    # REVISE, we use a central nginx to handle requests to the coloreg.de domain
     services.nginx = mkIf cfg.api.useHttps {
       enable = true;
       virtualHosts."${head cfg.api.djangoAllowedHosts}" = {
