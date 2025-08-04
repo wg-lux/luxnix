@@ -37,7 +37,7 @@ with lib.luxnix; let
 
 
   nginxPrepareScript = pkgs.writeShellScript "nginx-prepare-files_nxtcld.sh" ''
-    #!${pkgs.bash}/bin/bash
+    #!${pkgs.zsh}/bin/zsh
     set -e
     cp ${sslCertFile} ${nginx_cert_path}
     cp ${sslKeyFile} ${nginx_key_path}
@@ -46,8 +46,8 @@ with lib.luxnix; let
   '';
 
   # Safe maintenance script for resetting Nextcloud services
-  nextcloudMaintenanceScript = pkgs.writeShellScript "nextcloud-maintenance.sh" ''
-    #!${pkgs.bash}/bin/bash
+  nextcloudMaintenanceScript = pkgs.writeScriptBin "nextcloud-maintenance" ''
+    #!${pkgs.zsh}/bin/zsh
     set -e
 
     show_help() {
@@ -174,7 +174,7 @@ with lib.luxnix; let
   '';
 
   nextcloudPrepareScript = pkgs.writeShellScript "nextcloud-prepare-files_nxtcld.sh" ''
-    #!${pkgs.bash}/bin/bash
+    #!${pkgs.zsh}/bin/zsh
     set -e
     
     # Copy admin password
@@ -261,12 +261,12 @@ in
       };
       programs.zsh.shellAliases = {
         # Safe maintenance aliases that use the interactive maintenance script
-        show-psql-conf = "${nextcloudMaintenanceScript} --show-psql-conf";
-        nextcloud-maintenance = "${nextcloudMaintenanceScript}";
+        show-psql-conf = "nextcloud-maintenance --show-psql-conf";
+        nextcloud-maintenance = "nextcloud-maintenance";
         # Interactive reset commands with confirmation prompts
-        reset-psql-safe = "${nextcloudMaintenanceScript} --reset-psql";
-        reset-minio-safe = "${nextcloudMaintenanceScript} --reset-minio";
-        reset-nextcloud-all = "${nextcloudMaintenanceScript} --reset-all";
+        reset-psql-safe = "nextcloud-maintenance --reset-psql";
+        reset-minio-safe = "nextcloud-maintenance --reset-minio";
+        reset-nextcloud-all = "nextcloud-maintenance --reset-all";
       };
 
       # manually run 
