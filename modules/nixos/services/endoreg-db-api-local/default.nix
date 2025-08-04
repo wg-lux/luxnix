@@ -118,15 +118,15 @@ with lib.luxnix; let
     if [ ! -d ${repoDir} ]; then
       echo "Cloning repository..."
       git clone ${gitURL} ${repoDir}
+      cd ${repoDir}
     else
+      cd ${repoDir}
       ${if (cfg.repository.updateOnBoot or true) then ''
         echo "Updating repository..."
-        cd ${repoDir}
         git fetch origin
         git pull
       '' else ''
         echo "Repository update disabled, using existing code"
-        cd ${repoDir}
       ''}
     fi
     
@@ -143,6 +143,10 @@ with lib.luxnix; let
 
     # Copy database password from vault (managed by postgres-default role)
     echo "Setting up database configuration..."
+    
+    # Ensure conf directory exists (it might be in .gitignore)
+    mkdir -p ${repoDir}/conf
+    
     if [ -f ${cfg.database.passwordFile or "/etc/secrets/vault/SCRT_local_password_maintenance_password"} ]; then
       cp ${cfg.database.passwordFile or "/etc/secrets/vault/SCRT_local_password_maintenance_password"} ${repoDir}/conf/db_pwd
       echo "Database password copied from vault to ${repoDir}/conf/db_pwd"
@@ -252,6 +256,12 @@ in
     luxnix.generic-settings.postgres = {
       enable = true;
     };
+    
+    # Ensure directory structure exists with correct permissions
+    systemd.tmpfiles.rules = [
+      "d ${endoreg-service-user-home} 0755 ${endoreg-service-user-name} endoreg-service -"
+      "d ${endoreg-service-user-home}/config 0755 ${endoreg-service-user-name} endoreg-service -"
+    ];
     
     systemd.services."endo-api-boot" = {
       description = "Clone or pull endoreg-db-api and run prod-server";
