@@ -25,7 +25,7 @@
     custom-packages.enable = true;
     endoreg-client.centralNodes = ["s-04"];    endoreg-client.dbApiLocal = true;
     endoreg-client.enable = true;
-    endoreg-client.repository.branch = main;
+    endoreg-client.repository.branch = "main";
     gpu-server.enable = true;
     postgres.default.enable = true;
     ssh-access.dev-01.enable = true;

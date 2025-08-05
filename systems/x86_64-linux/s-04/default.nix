@@ -24,14 +24,14 @@
     custom-packages.cloud = true;
     custom-packages.enable = true;
     endoreg-client.enable = true;
-    endoreg-client.repository.branch = main;
+    endoreg-client.repository.branch = "main";
     endoreg-db-central-01.api.djangoAllowedHosts = ["s-04" "s-04.local" "172.16.255.14"];    endoreg-db-central-01.api.djangoDebug = false;
-    endoreg-db-central-01.api.hostname = 0.0.0.0;
-    endoreg-db-central-01.api.logLevel = INFO;
+    endoreg-db-central-01.api.hostname = "0.0.0.0";
+    endoreg-db-central-01.api.logLevel = "INFO";
     endoreg-db-central-01.api.port = 8118;
     endoreg-db-central-01.api.useHttps = false;
     endoreg-db-central-01.centralNodes = ["s-04"];    endoreg-db-central-01.database.name = endoregDbCentral;
-    endoreg-db-central-01.database.user = endoregDbCentral;
+    endoreg-db-central-01.database.user = "endoregDbCentral";
     endoreg-db-central-01.enable = true;
     endoreg-db-central-01.localNodes = ["s-04" "gs-01" "gs-02" "gc-05" "gc-06" "gc-10"];    endoreg-db-central-01.service.maxRequests = 5000;
     endoreg-db-central-01.service.workers = 4;
