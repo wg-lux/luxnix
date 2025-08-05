@@ -206,6 +206,7 @@ with lib.luxnix; let
       cd ${repoDir}
       
       # Set environment variables needed by the Django config scripts
+      #TODO QUICK FIX, Improve
       export DATA_DIR="${repoDir}/data"
       export CONF_DIR="${repoDir}/conf"
       export CONF_TEMPLATE_DIR="${repoDir}/conf_template"

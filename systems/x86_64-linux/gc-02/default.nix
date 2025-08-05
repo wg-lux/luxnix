@@ -22,7 +22,9 @@
     common.enable = true;
     custom-packages.cloud = true;
     custom-packages.enable = true;
+    endoreg-client.centralNodes = ["s-04"];    endoreg-client.dbApiLocal = true;
     endoreg-client.enable = true;
+    endoreg-client.repository.branch = "main";
     nextcloudClient.enable = true;
     postgres.default.enable = true;
     custom-packages.baseDevelopment = true;

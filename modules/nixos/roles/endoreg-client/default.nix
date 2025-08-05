@@ -122,6 +122,8 @@ in
       };
     };
 
+    # lxAnnotate = {};
+
     # Database Configuration Options
     database = {
       host = mkOption {
