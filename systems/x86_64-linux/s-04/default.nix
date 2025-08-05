@@ -24,6 +24,7 @@
     custom-packages.cloud = true;
     custom-packages.enable = true;
     endoreg-client.enable = true;
+    endoreg-client.repository.branch = main;
     endoreg-db-central-01.api.djangoAllowedHosts = ["s-04" "s-04.local" "172.16.255.14"];    endoreg-db-central-01.api.djangoDebug = false;
     endoreg-db-central-01.api.hostname = 0.0.0.0;
     endoreg-db-central-01.api.logLevel = INFO;

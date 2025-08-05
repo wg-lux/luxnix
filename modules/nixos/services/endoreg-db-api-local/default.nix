@@ -358,7 +358,7 @@ in
       type = types.nullOr (types.submodule {
         options = {
           url = mkOption { type = types.str; default = "https://github.com/wg-lux/endo-api"; };
-          branch = mkOption { type = types.str; default = "environment-setup"; };
+          branch = mkOption { type = types.str; default = "main"; };
           updateOnBoot = mkOption { type = types.bool; default = true; };
         };
       });
