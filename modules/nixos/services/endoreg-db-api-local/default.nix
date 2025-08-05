@@ -123,17 +123,40 @@ with lib.luxnix; let
       cd ${repoDir}
       ${if (cfg.repository.updateOnBoot or true) then ''
         echo "Updating repository..."
-        git fetch origin
-        git pull
+        git fetch origin || { echo "ERROR: Failed to fetch from origin"; exit 1; }
       '' else ''
         echo "Repository update disabled, using existing code"
       ''}
     fi
     
-    # Checkout specified branch
+    # Checkout specified branch with proper remote tracking
     echo "Checking out branch: ${branchName}"
-    git checkout ${branchName} || { echo "ERROR: Failed to checkout branch ${branchName}"; exit 1; }
-    ${if (cfg.repository.updateOnBoot or true) then "git pull || { echo \"ERROR: Failed to pull latest changes\"; exit 1; }" else ""}
+    if git show-ref --verify --quiet refs/heads/${branchName}; then
+      # Local branch exists, switch to it
+      echo "Local branch ${branchName} exists, switching to it"
+      git checkout ${branchName} || { echo "ERROR: Failed to checkout local branch ${branchName}"; exit 1; }
+    elif git show-ref --verify --quiet refs/remotes/origin/${branchName}; then
+      # Remote branch exists, create local tracking branch
+      echo "Remote branch origin/${branchName} exists, creating local tracking branch"
+      git checkout -b ${branchName} origin/${branchName} || { echo "ERROR: Failed to create tracking branch for ${branchName}"; exit 1; }
+    else
+      echo "ERROR: Branch ${branchName} does not exist locally or on remote"
+      echo "Available remote branches:"
+      git branch -r || echo "Could not list remote branches"
+      exit 1
+    fi
+    
+    ${if (cfg.repository.updateOnBoot or true) then ''
+    # Update the current branch
+    echo "Updating branch ${branchName}..."
+    git pull origin ${branchName} || { 
+      echo "WARNING: Failed to pull latest changes for ${branchName}, trying to reset to remote"
+      git reset --hard origin/${branchName} || { 
+        echo "ERROR: Failed to update branch ${branchName}"
+        exit 1
+      }
+    }
+    '' else ""}
 
     echo "Initializing submodules..."
     git submodule init || { echo "ERROR: Failed to initialize submodules"; exit 1; }
