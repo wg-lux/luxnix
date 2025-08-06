@@ -122,6 +122,8 @@ in
       };
     };
 
+    # lxAnnotate = {};
+
     # Database Configuration Options
     database = {
       host = mkOption {
@@ -208,7 +210,7 @@ in
 
       branch = mkOption {
         type = types.str;
-        default = "environment-setup";
+        default = "main";
         description = "Git branch to checkout";
       };
 
@@ -264,9 +266,11 @@ in
 
     # Generate Django secret key if it doesn't exist
     systemd.services.endoreg-django-setup = mkIf cfg.dbApiLocal {
-      description = "Generate Django secret key and configuration";
+      description = "Django configuration setup (handled by managed-secrets)";
       wantedBy = [ "multi-user.target" ];
       before = [ "endo-api-boot.service" ];
+      after = [ "managed-secrets-setup.service" ];
+      requires = [ "managed-secrets-setup.service" ];
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
@@ -274,20 +278,18 @@ in
         ExecStart = pkgs.writeShellScript "setup-django-config" ''
           set -euo pipefail
           
-          # Generate Django secret key if it doesn't exist
+          # Verify that Django secret key exists (should be created by managed-secrets)
           if [ ! -f ${cfg.api.djangoSecretKeyFile} ]; then
-            echo "Generating Django secret key..."
-            mkdir -p $(dirname ${cfg.api.djangoSecretKeyFile})
-            ${pkgs.openssl}/bin/openssl rand -base64 50 > ${cfg.api.djangoSecretKeyFile}
-            chmod 640 ${cfg.api.djangoSecretKeyFile}
-            chown root:${sensitiveServiceGroupName} ${cfg.api.djangoSecretKeyFile}
+            echo "ERROR: Django secret key not found at ${cfg.api.djangoSecretKeyFile}"
+            echo "This should have been created by managed-secrets-setup.service"
+            exit 1
           fi
           
-          # Ensure correct permissions
+          # Ensure correct permissions (managed-secrets should handle this, but double-check)
           chmod 640 ${cfg.api.djangoSecretKeyFile}
           chown root:${sensitiveServiceGroupName} ${cfg.api.djangoSecretKeyFile}
           
-          echo "Django configuration setup completed"
+          echo "Django configuration verification completed"
         '';
       };
     };

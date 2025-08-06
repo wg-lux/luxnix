@@ -244,10 +244,7 @@ in {
     users.mutableUsers = lib.mkDefault cfg.mutableUsers;
     system.stateVersion = cfg.systemStateVersion;
     networking.useDHCP = lib.mkDefault cfg.useDHCP;
-    # use tmpfile rule to create secret directory belonging to admin:users
-    systemd.tmpfiles.rules = [
-      "d ${cfg.secretDir} 0700 ${username} users"
-    ];
+    # Note: /etc/secrets directory is now managed by the managed-secrets role
 
     environment.systemPackages = with pkgs; [
       cacert

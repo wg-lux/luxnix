@@ -26,8 +26,6 @@ in {
 
     };
   
-    services.luxnix.endoregDbApiLocal.enable = true;
-    services.luxnix.endoAi.enable = true;
-    
+    services.luxnix.endoregDbApiLocal.enable = true;   
   };
 }

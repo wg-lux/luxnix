@@ -61,9 +61,7 @@ in {
 
 
   config = mkIf cfg.enable {
-    # make sure vault dir exists with correct permissions (700) #FIXME
-    systemd.tmpfiles.rules = [
-      "d ${cfg.dir} 0770 ${adminName} ${sensitiveServiceGroupName}"
-    ];
+    # Vault directory is now managed by the managed-secrets role
+    # No tmpfiles rules needed here
   };
 }

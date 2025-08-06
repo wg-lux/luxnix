@@ -3,6 +3,7 @@ group_roles:
   endoreg_client.dbApiLocal: "true"
   endoreg_client.centralNodes:
     - "s-04"
+  endoreg_client.repository.branch: '"main"'
 
 group_services: {}
 group_luxnix: {}

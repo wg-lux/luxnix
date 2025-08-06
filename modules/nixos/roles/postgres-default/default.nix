@@ -215,8 +215,8 @@ in
     # Create systemd service to set up endoregDbLocal user password
     systemd.services.postgres-endoreg-setup = {
       description = "Set up endoregDbLocal PostgreSQL user password";
-      after = [ "postgresql.service" ];
-      requires = [ "postgresql.service" ];
+      after = [ "postgresql.service" "managed-secrets-setup.service" ];
+      requires = [ "postgresql.service" "managed-secrets-setup.service" ];
       wantedBy = [ "multi-user.target" ];
       serviceConfig = {
         Type = "oneshot";
@@ -230,11 +230,8 @@ in
       };
     };
 
-    # Create tmpfiles rule for password directory
-    systemd.tmpfiles.rules = [
-      "d /etc/secrets 0700 root root -"
-      "d /etc/secrets/vault 0700 root root -"
-    ];
+    # Secret directories are now managed by the managed-secrets role
+    # No tmpfiles rules needed here
 
     users.users = {
       postgres = {

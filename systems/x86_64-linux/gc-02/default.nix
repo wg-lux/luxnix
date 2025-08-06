@@ -22,7 +22,9 @@
     common.enable = true;
     custom-packages.cloud = true;
     custom-packages.enable = true;
+    endoreg-client.centralNodes = ["s-04"];    endoreg-client.dbApiLocal = true;
     endoreg-client.enable = true;
+    endoreg-client.repository.branch = "main";
     nextcloudClient.enable = true;
     postgres.default.enable = true;
     custom-packages.baseDevelopment = true;
@@ -135,6 +137,11 @@ generic-settings.network.hosts.s-03.ip-vpn = "172.16.255.13";
 generic-settings.network.hosts.s-03.network-cluster = "L1";
 
 generic-settings.network.hosts.s-03.syncthing-id = "MLC6QP7-MI5RMNB-H7JCOTE-ODXOCV7-UIIOMUS-ZRJULS7-5ZLD2LB-LYZVZAF";
+
+generic-settings.network.hosts.s-04.domains = ["s-04.intern"];
+generic-settings.network.hosts.s-04.ip-local = "192.168.0.194";
+
+generic-settings.network.hosts.s-04.ip-vpn = "172.16.255.14";
 
 generic-settings.network.keycloak.adminDomain = "adminKeycloak.endo-reg.net";
 
