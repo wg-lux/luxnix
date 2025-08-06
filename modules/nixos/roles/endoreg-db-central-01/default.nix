@@ -145,7 +145,7 @@ in
 
       passwordFile = mkOption {
         type = types.path;
-        default = "/etc/secrets/vault/SCRT_central_password_maintenance_password";
+        default = "/etc/secrets/vault/SCRT_local_password_maintenance_password";
         description = "Path to file containing central database password";
       };
 
