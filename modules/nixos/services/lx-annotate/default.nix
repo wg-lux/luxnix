@@ -11,20 +11,21 @@ let
   serviceUser = config.users.users.${serviceUserName};
   serviceUserHome = serviceUser.home;
   repoDir = "${serviceUserHome}/${repoDirName}";
-  passwordFile = cfg.database.passwordFile or "/etc/secrets/vault/SCRT_local_password_lx_annotate";
-  dbName = cfg.database.name or "lxAnnotateDb";
-  dbUser = cfg.database.user or "lxAnnotateUser";
+  dbName = cfg.database.name or "endoregDbLocal";
+  dbUser = cfg.database.user or "endoregDbLocal";
+  passwordFile = cfg.database.passwordFile or "/etc/secrets/vault/SCRT_local_password_maintenance_password";
+
   dbHost = cfg.database.host or "localhost";
   dbPort = toString (cfg.database.port or 5432);
 
   # Example: generate a config file for the app (adapt as needed for your app)
-  appConfigFile = pkgs.writeText "lx-annotate-db.conf" ''
-    DB_NAME=${dbName}
-    DB_USER=${dbUser}
-    DB_PASSWORD=$(cat ${passwordFile})
-    DB_HOST=${dbHost}
-    DB_PORT=${dbPort}
-  '';
+  #appConfigFile = pkgs.writeText "lx-annotate-db.conf" ''
+  #  DB_NAME=${dbName}
+  #  DB_USER=${dbUser}
+  #  DB_PASSWORD=$(cat ${passwordFile})
+  #  DB_HOST=${dbHost}
+  #  DB_PORT=${dbPort}
+  #'';
 
   runLxAnnotateScript = pkgs.writeShellScriptBin scriptName ''
     set -euo pipefail
@@ -51,10 +52,11 @@ let
       git branch -r || echo "Could not list remote branches"
       exit 1
     fi
-    echo "Copying DB config..."
+    echo "Copying DB password from vault to conf..."
     mkdir -p ${repoDir}/conf
-    cp ${appConfigFile} ${repoDir}/conf/db.conf
-    echo "DB config copied to ${repoDir}/conf/db.conf"
+    cp ${passwordFile} ${repoDir}/conf/db_pwd
+    chmod 600 ${repoDir}/conf/db_pwd
+    echo "DB password copied to ${repoDir}/conf/db_pwd"
     echo "Starting application..."
     exec devenv shell -- run-prod-server
   '';
@@ -97,8 +99,9 @@ in
     systemd.services."lx-annotate" = {
       description = "Clone or pull lx-annotate and run prod server";
       wantedBy = [ "multi-user.target" ];
-      after = [ "postgres-lx-annotate-setup.service" "systemd-tmpfiles-setup.service" ];
-      requires = [ "postgres-lx-annotate-setup.service" "systemd-tmpfiles-setup.service" ];
+      after = [ "postgres-endoreg-setup.service" "systemd-tmpfiles-setup.service" ];
+      requires = [ "postgres-endoreg-setup.service" "systemd-tmpfiles-setup.service" ];
+
       serviceConfig = {
         Type = "exec";
         User = serviceUserName;
