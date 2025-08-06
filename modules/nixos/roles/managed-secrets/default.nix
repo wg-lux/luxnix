@@ -108,17 +108,6 @@ with lib; let
       exit 1
     fi
     
-    # Ensure base directories exist with correct permissions
-    echo "Creating /etc/secrets directory..."
-    mkdir -p /etc/secrets || { echo "ERROR: Failed to create /etc/secrets"; exit 1; }
-    chown root:${sensitiveServiceGroupName} /etc/secrets || { echo "ERROR: Failed to set ownership of /etc/secrets"; exit 1; }
-    chmod 750 /etc/secrets || { echo "ERROR: Failed to set permissions of /etc/secrets"; exit 1; }
-    
-    echo "Creating /etc/secrets/vault directory..."
-    mkdir -p /etc/secrets/vault || { echo "ERROR: Failed to create /etc/secrets/vault"; exit 1; }
-    chown root:${sensitiveServiceGroupName} /etc/secrets/vault || { echo "ERROR: Failed to set ownership of /etc/secrets/vault"; exit 1; }
-    chmod 750 /etc/secrets/vault || { echo "ERROR: Failed to set permissions of /etc/secrets/vault"; exit 1; }
-    
     # Verify directories are accessible
     if [ ! -d "/etc/secrets" ] || [ ! -d "/etc/secrets/vault" ]; then
       echo "ERROR: Secret directories do not exist after creation"
