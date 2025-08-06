@@ -7,9 +7,8 @@ let
   gitURL = cfg.repository.url or "https://github.com/wg-lux/lx-annotate.git";
   repoDirName = "lx-annotate";
   branchName = cfg.repository.branch or "main";
-  serviceUserName = config.user.lx-annotate-service-user.name or "lx-annotate-service-user";
-  serviceUser = config.users.users.${serviceUserName};
-  serviceUserHome = serviceUser.home;
+  serviceUserName = config.user.admin.name or "admin";
+  serviceUserHome = "/home/${serviceUserName}";
   repoDir = "${serviceUserHome}/${repoDirName}";
   dbName = cfg.database.name or "endoregDbLocal";
   dbUser = cfg.database.user or "endoregDbLocal";
@@ -92,10 +91,6 @@ in
   };
 
   config = mkIf cfg.enable {
-    systemd.tmpfiles.rules = [
-      "d ${serviceUserHome} 0755 ${serviceUserName} ${serviceUserName} - -"
-      "d ${serviceUserHome}/config 0755 ${serviceUserName} ${serviceUserName} - -"
-    ];
     systemd.services."lx-annotate" = {
       description = "Clone or pull lx-annotate and run prod server";
       wantedBy = [ "multi-user.target" ];
