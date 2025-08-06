@@ -61,7 +61,8 @@ let
 in
 {
   options.services.luxnix.lxAnnotate = {
-    enable = mkBoolOpt false "Enable lx-annotate Service";
+   #enable = mkBoolOpt false "Enable lx-annotate Service";
+    enable = mkEnableOption "Enable lx-annotate Service";
     database = mkOption {
       type = types.nullOr (types.submodule {
         options = {

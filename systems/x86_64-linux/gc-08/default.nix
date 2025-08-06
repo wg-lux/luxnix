@@ -218,9 +218,7 @@ nvidia-prime.onboardGpuType = "intel";
 
 };
 
-lx-annotate-service-user = {
-      enable = true;
-    };
+user.lx-annotate-service-user.enable = true;
+services.luxnix.lxAnnotate.enable = true;
 
-  services.luxnix.lxAnnotate.enable = true;
 }

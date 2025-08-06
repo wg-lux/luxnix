@@ -357,7 +357,11 @@ in
           (mkDefaultUser cfg.lxClientUser)
           (mkDefaultUser cfg.stagingUser)
           (mkDefaultUser cfg.productionUser)
-          (mkDefaultUser "lxAnnotateUser")
+          {
+            name = "lxAnnotateUser";
+            ensureDBOwnership = false; # No same-name DB required
+            ensureClauses = { };
+          }
         ];
 
       };
