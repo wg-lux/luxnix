@@ -9,6 +9,8 @@ with lib; let
   # Password file paths
   endoregDbLocalPasswordFile = "/var/lib/postgresql/endoregDbLocal.password";
   maintenancePasswordFile = "/etc/secrets/vault/SCRT_local_password_maintenance_password";
+  lxAnnotateDbPasswordFile = "/var/lib/postgresql/lxAnnotateDb.password";
+  lxAnnotatePasswordFile = "/etc/secrets/vault/SCRT_local_password_lx_annotate";
 
   # Utility function to create attributes for a user
   mkDefaultUser = user: {
@@ -147,6 +149,41 @@ with lib; let
     echo "endoregDbLocal user password configured successfully"
   '';
 
+  # Script to set up lxAnnotateUser password
+  setupLxAnnotateUser = pkgs.writeShellScript "setup-lx-annotate-user" ''
+    set -euo pipefail
+    echo "Waiting for PostgreSQL to be ready..."
+    for i in {1..30}; do
+      if ${config.services.postgresql.package}/bin/pg_isready -U postgres -d postgres; then
+        echo "PostgreSQL is ready"
+        break
+      fi
+      if [ $i -eq 30 ]; then
+        echo "ERROR: PostgreSQL not ready after 30 attempts"
+        exit 1
+      fi
+      echo "Attempt $i: PostgreSQL not ready, waiting 2 seconds..."
+      sleep 2
+    done
+    if [ ! -f ${lxAnnotatePasswordFile} ]; then
+      echo "Generating password for lxAnnotateUser..."
+      mkdir -p $(dirname ${lxAnnotatePasswordFile})
+      ${pkgs.openssl}/bin/openssl rand -base64 32 > ${lxAnnotatePasswordFile}
+      chmod 640 ${lxAnnotatePasswordFile}
+      chown root:${config.luxnix.generic-settings.sensitiveServiceGroupName} ${lxAnnotatePasswordFile}
+    fi
+    chmod 640 ${lxAnnotatePasswordFile}
+    chown root:${config.luxnix.generic-settings.sensitiveServiceGroupName} ${lxAnnotatePasswordFile}
+    cp ${lxAnnotatePasswordFile} ${lxAnnotateDbPasswordFile}
+    chown postgres:postgres ${lxAnnotateDbPasswordFile}
+    chmod 600 ${lxAnnotateDbPasswordFile}
+    echo "Setting password for user lxAnnotateUser..."
+    PASSWORD=$(cat ${lxAnnotateDbPasswordFile})
+    ${config.services.postgresql.package}/bin/psql -U postgres -d postgres -c \
+      "ALTER USER \"lxAnnotateUser\" WITH PASSWORD \$securepass\$''${PASSWORD}\$securepass\$;"
+    echo "lxAnnotateUser password configured successfully"
+  '';
+
 in
 {
   options.roles.postgres.default = {
@@ -230,6 +267,23 @@ in
       };
     };
 
+    # Create systemd service to set up lxAnnotateUser password
+    systemd.services.postgres-lx-annotate-setup = {
+      description = "Set up lxAnnotateUser PostgreSQL user password";
+      after = [ "postgresql.service" "managed-secrets-setup.service" ];
+      requires = [ "postgresql.service" "managed-secrets-setup.service" ];
+      wantedBy = [ "multi-user.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        User = "root";
+        ExecStart = setupLxAnnotateUser;
+        Restart = "on-failure";
+        RestartSec = "5s";
+        StartLimitBurst = 3;
+      };
+    };
+
     # Secret directories are now managed by the managed-secrets role
     # No tmpfiles rules needed here
 
@@ -278,6 +332,7 @@ in
           cfg.lxClientUser
           cfg.stagingUser
           cfg.productionUser
+          "lxAnnotateDb"
         ];
 
         ensureUsers = [
@@ -302,6 +357,7 @@ in
           (mkDefaultUser cfg.lxClientUser)
           (mkDefaultUser cfg.stagingUser)
           (mkDefaultUser cfg.productionUser)
+          (mkDefaultUser "lxAnnotateUser")
         ];
 
       };

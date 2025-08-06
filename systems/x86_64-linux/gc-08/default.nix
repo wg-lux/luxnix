@@ -217,4 +217,10 @@ nvidia-prime.onboardBusId = "PCI:0:2:0";
 nvidia-prime.onboardGpuType = "intel";
 
 };
+
+lx-annotate-service-user = {
+      enable = true;
+    };
+
+  services.luxnix.lxAnnotate.enable = true;
 }
