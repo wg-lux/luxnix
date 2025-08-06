@@ -9,7 +9,7 @@ let
   branchName = cfg.repository.branch or "main";
   serviceUserName = config.user.admin.name or "admin";
   serviceUserHome = "/home/${serviceUserName}";
-  repoDir = "${serviceUserHome}/${repoDirName}";
+  repoDir = "${serviceUserHome}/dev/${repoDirName}";
   dbName = cfg.database.name or "endoregDbLocal";
   dbUser = cfg.database.user or "endoregDbLocal";
   passwordFile = cfg.database.passwordFile or "/etc/secrets/vault/SCRT_local_password_maintenance_password";
@@ -69,14 +69,18 @@ in
         options = {
           host = mkOption { type = types.str; default = "localhost"; };
           port = mkOption { type = types.port; default = 5432; };
-          name = mkOption { type = types.str; default = "lxAnnotateDb"; };
-          user = mkOption { type = types.str; default = "lxAnnotateUser"; };
-          passwordFile = mkOption { type = types.path; default = "/etc/secrets/vault/SCRT_local_password_lx_annotate"; };
+          name = mkOption { type = types.str; default = "endoregDbLocal"; };
+          user = mkOption { type = types.str; default = "endoregDbLocal"; };
+          passwordFile = mkOption {
+            type = types.path;
+            default = "/etc/secrets/vault/SCRT_local_password_maintenance_password";
+          };
         };
       });
       default = null;
       description = "Database configuration options";
     };
+
     repository = mkOption {
       type = types.nullOr (types.submodule {
         options = {
