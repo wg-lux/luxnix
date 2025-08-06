@@ -18,8 +18,9 @@ group_roles:
     - "172.16.255.14"
   endoreg_db_central_01.api.djangoDebug: "false"
   endoreg_db_central_01.api.logLevel: '"INFO"'
-  endoreg_db_central_01.database.name: "endoregDbCentral"
+  endoreg_db_central_01.database.name: '"endoregDbCentral"'
   endoreg_db_central_01.database.user: '"endoregDbCentral"'
+  endoreg_db_central_01.database.sslMode: '"allow"'
   endoreg_db_central_01.service.workers: "4"
   endoreg_db_central_01.service.maxRequests: "5000"
   endoreg_client.repository.branch: '"main"'

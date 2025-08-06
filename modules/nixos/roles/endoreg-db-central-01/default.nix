@@ -145,7 +145,7 @@ in
 
       passwordFile = mkOption {
         type = types.path;
-        default = "/etc/secrets/vault/SCRT_central_password_maintenance_password";
+        default = "/etc/secrets/vault/SCRT_local_password_maintenance_password";
         description = "Path to file containing central database password";
       };
 
@@ -233,7 +233,7 @@ in
 
     # Calculate combined allowed hosts (original + local nodes)
     services.luxnix.endoregDbApiLocal = {
-      enable = true;
+      enable = mkForce true;
       
       # Pass configuration options to the service with central node modifications
       api = cfg.api // {
