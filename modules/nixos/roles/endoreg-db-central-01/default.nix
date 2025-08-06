@@ -233,7 +233,7 @@ in
 
     # Calculate combined allowed hosts (original + local nodes)
     services.luxnix.endoregDbApiLocal = {
-      enable = true;
+      enable = mkForce true;
       
       # Pass configuration options to the service with central node modifications
       api = cfg.api // {

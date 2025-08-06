@@ -234,8 +234,8 @@ in
 
     luxnix.nvidia-prime.enable = true;
 
-    services.luxnix.endoregDbApiLocal = {
-      enable = cfg.dbApiLocal;
+    services.luxnix.endoregDbApiLocal = mkIf (!config.roles.endoreg-db-central-01.enable) {
+      enable = mkDefault cfg.dbApiLocal;
       
       # Pass configuration options to the service
       api = cfg.api // {
