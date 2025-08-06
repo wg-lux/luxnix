@@ -30,7 +30,7 @@
     endoreg-db-central-01.api.logLevel = "INFO";
     endoreg-db-central-01.api.port = 8118;
     endoreg-db-central-01.api.useHttps = false;
-    endoreg-db-central-01.centralNodes = ["s-04"];    endoreg-db-central-01.database.name = endoregDbCentral;
+    endoreg-db-central-01.centralNodes = ["s-04"];    endoreg-db-central-01.database.name = "endoregDbCentral";
     endoreg-db-central-01.database.user = "endoregDbCentral";
     endoreg-db-central-01.enable = true;
     endoreg-db-central-01.localNodes = ["s-04" "gs-01" "gs-02" "gc-05" "gc-06" "gc-10"];    endoreg-db-central-01.service.maxRequests = 5000;
