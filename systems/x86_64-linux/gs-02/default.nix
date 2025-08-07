@@ -1,4 +1,4 @@
-# /default.nix
+# host: gs-02
 
 { config, pkgs, lib, modulesPath, ... }:
 
