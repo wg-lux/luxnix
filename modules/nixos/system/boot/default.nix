@@ -66,12 +66,12 @@ in {
 
     # Boot space management configuration
     nix = mkIf cfg.spaceManagement {
-      gc = {
-        automatic = true;
-        dates = "weekly";
-        options = "--delete-older-than 30d";
-        persistent = true;
-      };
+      #gc = {
+      #  automatic = true;
+       # dates = "weekly";
+      #  options = "--delete-older-than 30d";
+      #  persistent = true;
+      #};
       settings.auto-optimise-store = true;
     };
 
