@@ -251,7 +251,7 @@ in
           alwaysShowClock = true;
           wallpaperPictureOfTheDay = {
             # null or one of “apod”, “bing”, “flickr”, “natgeo”, “noaa”, “wcpotd”, “epod”, “simonstalenhag”
-            provider = "wcpotd";
+            provider = "bing";
           };
           # wallpaper = "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Kay/contents/images/1080x1920.png";
 

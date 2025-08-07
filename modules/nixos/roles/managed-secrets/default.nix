@@ -64,6 +64,16 @@ with lib; let
       description = "MinIO credentials for Nextcloud object storage";
       customScript = true;
     };
+
+    # Keycloak database password
+    keycloak_host_password = {
+      path = "/etc/secrets/vault/SCRT_roles_system_password_keycloak_host_password";
+      generator = "${pkgs.openssl}/bin/openssl rand -base64 32";
+      owner = "root";
+      group = sensitiveServiceGroupName;
+      permissions = "640";
+      description = "Keycloak database user password";
+    };
   };
 
   # Generate script for creating a secret file
