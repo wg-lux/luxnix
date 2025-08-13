@@ -16,6 +16,10 @@
     ansible.enable = true;
     settings.mutable = false;
   };
+  # Make admin part of the sensitiveServices group so lx-annotate can read secrets
+  users.users.admin.extraGroups = [
+    config.luxnix.generic-settings.sensitiveServiceGroupName
+  ];
 
   roles = { 
     aglnet.client.enable = true;
