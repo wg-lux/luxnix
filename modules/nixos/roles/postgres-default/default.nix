@@ -10,6 +10,7 @@ with lib; let
   endoregDbLocalPasswordFile = "/var/lib/postgresql/endoregDbLocal.password";
   maintenancePasswordFile = "/etc/secrets/vault/SCRT_local_password_maintenance_password";
 
+
   # Utility function to create attributes for a user
   mkDefaultUser = user: {
     name = user;
@@ -146,6 +147,7 @@ with lib; let
       
     echo "endoregDbLocal user password configured successfully"
   '';
+
 
 in
 {
@@ -302,6 +304,7 @@ in
           (mkDefaultUser cfg.lxClientUser)
           (mkDefaultUser cfg.stagingUser)
           (mkDefaultUser cfg.productionUser)
+
         ];
 
       };
