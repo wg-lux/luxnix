@@ -1,12 +1,11 @@
 # my_nix_manager/main.py
 import os
 from pathlib import Path
-from .config_loader import load_config
+from typing import Any, Dict
 from .template_renderer import render_nix_template
 from .utils import (
     get_merged_host_config,
 )
-from .validation import validate_default_nix_file
 
 
 def generate_nix_system_configuration(
@@ -18,17 +17,18 @@ def generate_nix_system_configuration(
     # conf_root = conf_parent / "nix-configs"
 
     # config_path = conf_root / f"{hostname}.yml"
-    config_data = get_merged_host_config(hostname)
+    config_data: Dict[str, Any] = get_merged_host_config(hostname)
 
     print(f"Config data for {hostname}: {config_data}")
 
     template_name = config_data.get("template_name")
+    assert isinstance(template_name, str) and template_name, "template_name missing"
 
     template_root = conf_parent / "nix-templates"
     template_dir = template_root / "systems" / system_type / template_name
 
     # Render default.nix from template:
-    default_nix = render_nix_template(template_dir, "default.nix.j2", config_data)
+    default_nix = render_nix_template(str(template_dir), "default.nix.j2", config_data)
     default_nix_path = out_dir / "systems" / system_type / hostname / "default.nix"
 
     os.makedirs(default_nix_path.parent, exist_ok=True)
@@ -43,7 +43,7 @@ def generate_nix_system_configuration(
     print(f"Validated {default_nix_path}")
 
     # render luxnix_nix from template:
-    luxnix_nix = render_nix_template(template_dir, "luxnix.nix.j2", config_data)
+    luxnix_nix = render_nix_template(str(template_dir), "luxnix.nix.j2", config_data)
 
     luxnix_nix_path = out_dir / "systems" / system_type / hostname / "luxnix.nix"
 

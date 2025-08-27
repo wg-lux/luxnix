@@ -1,5 +1,5 @@
 from pathlib import Path
-from lx_administration.logging import get_logger, log_heading
+from lx_administration.logging import get_logger
 from lx_administration.models import MergedHostVars
 from .home_template_renderer import render_home_nix_template as render_nix_template
 from .utils import write_nix_file
@@ -14,7 +14,7 @@ def home_pipe(autoconf_out: Path, nix_template_dir: Path, nix_out: Path, logger=
 
     for merged_vars_file in merged_vars_dir.glob("*.yml"):
         hostname = merged_vars_file.stem
-        merged_vars = MergedHostVars.load_home_from_file(merged_vars_file)
+        merged_vars = MergedHostVars.load_home_from_file(merged_vars_file.as_posix())
         platform = merged_vars.get_host_platform()
         users = merged_vars.system_users or ["admin"] #this needs to ensure
 
@@ -30,7 +30,7 @@ def home_pipe(autoconf_out: Path, nix_template_dir: Path, nix_out: Path, logger=
 
             template_path = nix_template_dir / "homes" / platform
             rendered = render_nix_template(
-                template_path,
+                str(template_path),
                 "default.nix.j2",
                 home_config,
             )

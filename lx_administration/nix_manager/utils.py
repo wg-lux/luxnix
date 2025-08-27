@@ -1,6 +1,7 @@
 from pathlib import Path
 from yaml import safe_load
 import re
+from typing import Any, Dict
 
 
 def find_duplicates(content, section):
@@ -140,7 +141,7 @@ def get_ansible_host_vars_file(hostname: str, ansible_root: Path) -> Path:
 
 
 def get_ansible_inventory_file(hostname: str, ansible_root: Path) -> Path:
-    inventory_dir = get_ansible_inventory_dir(hostname, ansible_root)
+    inventory_dir = get_ansible_inventory_dir(ansible_root)
     inventory_file = inventory_dir / "hosts.ini"
     assert inventory_file.is_file()
 
@@ -148,7 +149,7 @@ def get_ansible_inventory_file(hostname: str, ansible_root: Path) -> Path:
 
 
 def get_template_name(hostname: str) -> str:
-    template_name = TEMPLATE_LOOKUP.get(hostname, None)
+    template_name = TEMPLATE_LOOKUP.get(hostname)
 
     if not template_name:
         for prefix, template in TEMPLATE_LOOKUP.items():
@@ -156,26 +157,29 @@ def get_template_name(hostname: str) -> str:
                 template_name = template
                 break
 
+    if not template_name:
+        template_name = "base-server"
+
     return template_name
 
 
 def get_merged_host_config(
     hostname: str,
     ansible_root: Path = Path("./ansible"),
-) -> str:
-    merged_config = {}
+) -> Dict[str, Any]:
+    merged_config: Dict[str, Any] = {}
 
     common_vars_file = get_ansible_group_vars_file("all", ansible_root)
-    common_vars = safe_load(common_vars_file.read_text())
+    common_vars = safe_load(common_vars_file.read_text()) or {}
 
     host_vars_file = get_ansible_host_vars_file(hostname, ansible_root)
-    host_vars = safe_load(host_vars_file.read_text())
+    host_vars = safe_load(host_vars_file.read_text()) or {}
 
     primary_group = host_vars.get("primary_group", None)
     assert primary_group, f"Primary group not found for {hostname}"
 
     group_vars_file = get_ansible_group_vars_file(primary_group, ansible_root)
-    group_vars = safe_load(group_vars_file.read_text())
+    group_vars = safe_load(group_vars_file.read_text()) or {}
     group_vars["primary_group"] = primary_group
 
     # add base config to merged config:
@@ -188,8 +192,8 @@ def get_merged_host_config(
     merged_config.update(host_vars)
 
     # FIXME: both group_vars and host_vars have a 'nvidia_prime' key
-    nvidia_prime_h = host_vars.get("nvidia_prime", {})
-    nvidia_prime_g = group_vars.get("nvidia_prime", {})
+    nvidia_prime_h = host_vars.get("nvidia_prime", {}) or {}
+    nvidia_prime_g = group_vars.get("nvidia_prime", {}) or {}
 
     nvidia_prime = {**nvidia_prime_g, **nvidia_prime_h}
     merged_config["nvidia_prime"] = nvidia_prime

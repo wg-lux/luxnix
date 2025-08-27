@@ -6,4 +6,10 @@ group_roles:
   endoreg_client.repository.branch: '"main"'
 
 group_services: {}
-group_luxnix: {}
+group_luxnix:
+  generic_settings.virtualization.enable: "true"
+  generic_settings.virtualization.podman: "{}"
+  generic_settings.virtualization.kvm: "{}"
+  generic_settings.virtualization.vfio: "{}"
+  generic_settings.virtualization.supportedArchitectures: '[]'
+  generic_settings.virtualization.userGroups: '[]'

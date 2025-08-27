@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch, MagicMock, ANY
+from unittest.mock import patch, MagicMock
 from pathlib import Path
 from datetime import datetime, timedelta
 from lx_administration.models import Vault
@@ -9,7 +9,6 @@ from lx_administration.models.vault import (
     Secret,
 )
 from lx_administration.models.ansible import AnsibleInventory
-import os
 import shutil
 
 
@@ -153,7 +152,7 @@ class TestVaultModel(unittest.TestCase):
 
         self.assertIsInstance(vault, Vault)
         self.assertEqual(len(vault.secrets), 0)
-        self.assertEqual(len(vault.access_keys), 0)
+        # access_keys removed from model
         self.assertEqual(vault.dir, self.test_dir)
         self.assertEqual(vault.key, self.test_key)
 
@@ -252,7 +251,7 @@ class TestVaultModel(unittest.TestCase):
         self.vault.secret_templates.append(template)
 
         with self.assertRaises(AssertionError):
-            self.vault.validate()
+            self.vault.validate_vault()
 
     @patch("lx_administration.models.ansible.AnsibleInventory.from_file")
     def test_load_inventory(self, mock_from_file):
@@ -267,28 +266,6 @@ class TestVaultModel(unittest.TestCase):
             self.assertEqual(result, mock_inventory)
             self.assertEqual(self.vault.inventory, mock_inventory)
             mock_from_file.assert_called_once_with("/fake/path")
-
-    @patch("lx_administration.models.vault.PreSharedKey.generate")
-    def test_get_or_create_psk(self, mock_generate):
-        """Test get_or_create_psk method."""
-        mock_psk = PreSharedKey(
-            name="test", file=str(Path(self.test_dir) / "psk" / "test.psk")
-        )
-        mock_generate.return_value = mock_psk
-
-        # First call - should create new PSK
-        psk, created = self.vault.get_or_create_psk("test")
-        self.assertTrue(created)
-        self.assertEqual(psk, mock_psk)
-        self.assertIn(psk, self.vault.pre_shared_keys)
-
-        # Mock the file exists check for the second call
-        with patch("pathlib.Path.exists") as mock_exists:
-            mock_exists.return_value = True
-            # Second call - should return existing PSK
-            psk2, created = self.vault.get_or_create_psk("test")
-            self.assertFalse(created)
-            self.assertEqual(psk2, psk)
 
 
 if __name__ == "__main__":

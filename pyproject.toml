@@ -3,7 +3,7 @@ name = "lx-administration"
 version = "0.1.0"
 description = "Utilities for Luxnix Administration"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 dependencies = [
     "cryptography>=44.0.0",
     "myst-parser[linkify]>=4.0.0",
@@ -29,6 +29,7 @@ dependencies = [
     "obsidian>=1.2",
     "mypy>=1.16.0",
     "types-pyyaml>=6.0.12.20250516",
+    "pytest>=8.4.1",
 ]
 
 [tool.setuptools]
