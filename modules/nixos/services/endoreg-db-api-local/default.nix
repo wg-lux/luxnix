@@ -249,6 +249,61 @@ with lib.luxnix; let
       exit 1
     fi
 
+    # --- Populate .env BEFORE creating local_settings.py (deterministic) ---
+    echo "Populating .env using env-pipe..."
+    cd ${repoDir}
+
+    # If a stale local_settings.py exists (file or symlink), remove it so env-pipe won't skip env-build
+    if [ -e "${repoDir}/local_settings.py" ]; then
+      echo "Removing stale ${repoDir}/local_settings.py before env build"
+      rm -f "${repoDir}/local_settings.py"
+    fi
+
+    # Export exactly what endo-api/env_setup.py expects
+    export WORKING_DIR="${repoDir}"
+    export HOME_DIR="${endoreg-service-user-home}"
+    export CONF_DIR="${repoDir}/conf"
+    export CONF_TEMPLATE_DIR="${repoDir}/conf_template"
+    export DB_PWD_FILE="${repoDir}/conf/db_pwd"
+
+    export DJANGO_MODULE="endo_api"
+    export DJANGO_SETTINGS_MODULE_PRODUCTION="endo_api.settings_prod"
+    export DJANGO_SETTINGS_MODULE_DEVELOPMENT="endo_api.settings_dev"
+    export DJANGO_SETTINGS_MODULE_CENTRAL="endo_api.settings_central"
+
+    export DJANGO_HOST="${cfg.api.hostname or "localhost"}"
+    export DJANGO_PORT="${toString (cfg.api.port or 8118)}"
+    export DATA_DIR="${repoDir}/data"
+    export STORAGE_DIR="${repoDir}/data"
+
+    export HTTP_PROTOCOL="${if (cfg.api.useHttps or false) then "https" else "http"}"
+    export BASE_URL="$HTTP_PROTOCOL://$DJANGO_HOST:$DJANGO_PORT"
+
+    # Force a fresh build
+    rm -f .env
+
+    # Try the normal pipeline first (runs env-init-conf + env-build since we removed local_settings.py)
+    if ! devenv shell env-pipe; then
+      echo "env-pipe failed or skipped; running builder directly"
+      # Call env_build directly (what env-pipe would have done)
+      if ! devenv shell env-build; then
+        echo "devenv env-build not available; falling back to direct Python call"
+        ${pkgs.uv}/bin/uv run env_setup.py || python env_setup.py
+      fi
+    fi
+
+    # Verify and load it for the remainder of the script
+    if [ -f ".env" ]; then
+      set -a; . ./.env; set +a
+      echo ".env created and loaded."
+    else
+      echo "ERROR: .env was not created"; exit 1
+    fi
+    # --- end .env population ---
+
+
+
+
     # Copy Django configuration
     echo "Setting up Django configuration..."
     echo "Service user home: ${endoreg-service-user-home}"
@@ -408,6 +463,7 @@ in
       description = "Clone or pull endoreg-db-api and run prod-server";
       wantedBy = [ "multi-user.target" ];
       after = [ "postgres-endoreg-setup.service" "endoreg-django-setup.service" "systemd-tmpfiles-setup.service" ];
+      #wants = [ "network-online.target" ]; #his prevents git fetch/pull from racing the network on boot.
       requires = [ "postgres-endoreg-setup.service" "systemd-tmpfiles-setup.service" ];
       serviceConfig = {
         Type = "exec";

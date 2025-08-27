@@ -222,6 +222,7 @@ nvidia-prime.onboardGpuType = "intel";
 
 };
 
-services.luxnix.lxAnnotate.enable = true;
+services.luxnix.lxAnnotate.enable = true; #for lx-annotate endoreg-service-user
+services.luxnix.endoregDbApiLocal.enable = true; # for endo-api endoreg-service-user
 
 }
