@@ -54,6 +54,10 @@ generic-settings.adminVpnIp = "172.16.255.106";
 
 generic-settings.enable = true;
 
+generic-settings.gpu.nvidia.driver = "stable";
+
+generic-settings.gpu.nvidia.enable = true;
+
 generic-settings.language = "english";
 
 generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
@@ -175,6 +179,16 @@ generic-settings.traefikHostDomain = "traefik.endo-reg.net";
 
 generic-settings.traefikHostIp = "172.16.255.12";
 
+generic-settings.virtualization.enable = true;
+
+generic-settings.virtualization.kvm = {};
+
+generic-settings.virtualization.podman = {};
+
+generic-settings.virtualization.supportedArchitectures = [];
+generic-settings.virtualization.userGroups = [];
+generic-settings.virtualization.vfio = {};
+
 generic-settings.vpnSubnet = "172.16.255.0/24";
 
 maintenance.autoUpdates.dates = "06:00";
@@ -184,8 +198,6 @@ maintenance.autoUpdates.enable = true;
 maintenance.autoUpdates.flake = "github:wg-lux/luxnix";
 
 maintenance.autoUpdates.operation = "switch";
-
-nvidia-default.enable = true;
 
 vault.dir = "/etc/secrets/vault";
 

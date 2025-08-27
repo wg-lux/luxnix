@@ -1,14 +1,6 @@
-#!/usr/bin/env python3
-
-from lx_administration.models import Vault, Secret
+from lx_administration.models import Vault
 from lx_administration.logging import get_logger
-from lx_administration.yaml import dump_yaml, format_yaml
-
-import os
-import shutil
 from pathlib import Path
-
-from typing import List
 
 
 BASE_LOGGER = get_logger("lxv-postgres-secrets", reset=True)
@@ -24,8 +16,8 @@ def main(logger=None):
     vault = Vault(
         dir=dirpath.resolve().as_posix(),
         key=keypath.resolve().as_posix(),
-        ansible_cfg="./conf/ansible.cfg",
-        key_owner_types=["local", "roles", "services", "luxnix", "clients"],
+        ansible_cfg_path="./conf/ansible.cfg",
+        owner_types=["local", "roles", "services", "luxnix", "clients"],
         default_system_users=["admin"],
         subnet="172.16.255.",
     )  # ...you may specify custom paths or arguments if needed...

@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 from lx_administration.models import Vault, Secret
 from lx_administration.logging import get_logger
 from lx_administration.yaml import dump_yaml, format_yaml

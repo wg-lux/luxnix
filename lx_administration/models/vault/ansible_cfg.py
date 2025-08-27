@@ -1,8 +1,9 @@
 from configparser import ConfigParser
 from pydantic import BaseModel
+from pydantic import ConfigDict
 from pathlib import Path
-from typing import Optional
-from icecream import ic
+from typing import Optional, Dict, Any, List
+import warnings
 
 
 class AnsibleCfgDefaults(BaseModel):
@@ -21,7 +22,7 @@ class AnsibleCfgDefaults(BaseModel):
     library: str = "./ansible/modules"
     vault_identity_list: Optional[str] = None
 
-    def get_vid_list(self):
+    def get_vid_list(self) -> List[str]:
         """
         Get the vault identity list as a list of strings.
 
@@ -33,7 +34,7 @@ class AnsibleCfgDefaults(BaseModel):
         else:
             return []
 
-    def get_vid_dict(self) -> dict:
+    def get_vid_dict(self) -> Dict[str, str]:
         """
         Convert vault identity list into a dictionary mapping hosts to paths.
 
@@ -41,7 +42,7 @@ class AnsibleCfgDefaults(BaseModel):
             dict: Dictionary with host as key and path as value.
         """
         vid_list = self.get_vid_list()
-        vid_dict = {}
+        vid_dict: Dict[str, str] = {}
         for vid in vid_list:
             if "@" in vid:
                 host, path = vid.split("@", 1)
@@ -49,7 +50,7 @@ class AnsibleCfgDefaults(BaseModel):
 
         return vid_dict
 
-    def vid_dict2list(self, vid_dict):
+    def vid_dict2list(self, vid_dict: Dict[str, str]) -> List[str]:
         """
         Convert a dictionary of vault identities to a list format.
 
@@ -59,15 +60,15 @@ class AnsibleCfgDefaults(BaseModel):
         Returns:
             list: List of strings in format 'host@path'.
         """
-        vid_list = []
+        vid_list: List[str] = []
         for host, path in vid_dict.items():
             vid_list.append(f"{host}@{path}")
         return vid_list
 
-    def vid_list2str(self, vid_list):
+    def vid_list2str(self, vid_list: List[str]) -> str:
         return ",".join(vid_list)
 
-    def update_vid_entry(self, host, path):
+    def update_vid_entry(self, host: str, path: str):
         vid_dict = self.get_vid_dict()
         vid_dict[host] = path
         vault_identity_list = self.vid_dict2list(vid_dict)
@@ -75,7 +76,7 @@ class AnsibleCfgDefaults(BaseModel):
         self.drop_missing_vid()
 
     def drop_missing_vid(self):
-        file_not_found = []
+        file_not_found: List[str] = []
         vid_dict = self.get_vid_dict()
         for host, path in vid_dict.items():
             if not Path(path).exists():
@@ -87,11 +88,11 @@ class AnsibleCfgDefaults(BaseModel):
         self.vault_identity_list = self.vid_list2str(self.vid_dict2list(vid_dict))
 
         if file_not_found:
-            ic(
+            warnings.warn(
                 f"Removing vault_identities with missing files in ansible.cfg: {file_not_found}"
             )
 
-    def validate(self):
+    def validate_cfg(self):
         self.drop_missing_vid()
 
 
@@ -101,11 +102,13 @@ class AnsibleCfgPrivilegeEscalation(BaseModel):
     become_user: str = "admin"
     become_ask_pass: bool = False
 
-    def validate(self):
+    def validate_cfg(self):
         pass
 
 
 class AnsibleCfg(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="allow")
+
     defaults: AnsibleCfgDefaults = AnsibleCfgDefaults()
     privilege_escalation: AnsibleCfgPrivilegeEscalation = (
         AnsibleCfgPrivilegeEscalation()
@@ -127,14 +130,14 @@ class AnsibleCfg(BaseModel):
         config.read(file)
 
         # Convert ConfigParser to dict structure
-        data = {"defaults": {}, "privilege_escalation": {}}
+        data: Dict[str, Dict[str, Any]] = {"defaults": {}, "privilege_escalation": {}}
 
         if config.has_section("defaults"):
             data["defaults"] = dict(config["defaults"])
 
         if config.has_section("privilege_escalation"):
             # Convert string 'True'/'False' to boolean for boolean fields
-            priv_esc = dict(config["privilege_escalation"])
+            priv_esc: Dict[str, Any] = dict(config["privilege_escalation"])
             for key in ["become", "become_ask_pass"]:
                 if key in priv_esc:
                     priv_esc[key] = config.getboolean("privilege_escalation", key)
@@ -142,14 +145,10 @@ class AnsibleCfg(BaseModel):
 
         return cls.model_validate(data)
 
-    class Config:
-        arbitrary_types_allowed = True
-        extra = "allow"
-
-    def validate(self):
+    def validate_cfg(self):
         """Validate ansible.cfg model"""
-        self.defaults.validate()
-        self.privilege_escalation.validate()
+        self.defaults.validate_cfg()
+        self.privilege_escalation.validate_cfg()
 
     def save_to_file(self, file: str):
         """Save ansible.cfg file"""

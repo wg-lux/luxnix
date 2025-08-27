@@ -1,7 +1,7 @@
 from pathlib import Path
 from datetime import datetime as dt, timedelta as td
-from typing import Optional, List, Union, Tuple
-import warnings
+from typing import Optional, List, Union, Literal, Sequence
+from collections.abc import Hashable
 from lx_administration.logging import get_logger
 from .config import OWNER_TYPES, SECRET_TYPES
 
@@ -34,14 +34,14 @@ def ensure_local_vault_key(path: Union[Path, str], logger=None):
         generate_ansible_key(local_vault_key)
 
 
-def generate_ansible_key(key_path: Path, mode="password"):
+def generate_ansible_key(key_path: Path, mode: Literal["password", "passphrase"] = "password"):
     from ...password import PasswordGenerator
     # Generate a passphrase file, no longer encrypting it with ansible-vault
 
     assert not key_path.exists(), f"File {key_path} already exists!"
 
     key_path = key_path.expanduser().resolve()
-    pg = PasswordGenerator(mode=mode, n_words=4)
+    pg = PasswordGenerator(mode=mode, num_words=4)
     results = pg.pipe()
     passphrase = results[0][1]
 
@@ -91,14 +91,14 @@ def _get_by_target_name(obj_list: List, target_name: str, logger=None):
         return None
 
 
-def _check_unique_list(lst: List[str]) -> bool:
+def _check_unique_list(lst: Sequence[Hashable]) -> bool:
     if not len(lst) == len(set(lst)):
         return False
 
     return True
 
 
-def _assert_unique_list(lst: List[str]) -> bool:
+def _assert_unique_list(lst: Sequence[Hashable]) -> bool:
     from collections import Counter
 
     duplicates = [item for item, count in Counter(lst).items() if count > 1]

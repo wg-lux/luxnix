@@ -35,6 +35,10 @@ host_luxnix:
   generic_settings.linux.kernelParams: []
   generic_settings.linux.kernelModulesBlacklist: []
 
-  nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
-  nvidia_prime.onboardBusId: '"PCI:0:2:0"'
-  nvidia_prime.onboardGpuType: '"intel"'
+  # GPU Configuration (New Unified System)
+  generic_settings.gpu.nvidia.enable: "true"
+  generic_settings.gpu.nvidia.prime.enable: "true"
+  generic_settings.gpu.nvidia.prime.nvidiaBusId: '"PCI:1:0:0"'
+  generic_settings.gpu.nvidia.prime.onboardBusId: '"PCI:0:2:0"'
+  generic_settings.gpu.nvidia.prime.onboardType: '"intel"'
+  generic_settings.gpu.nvidia.driver: '"beta"'

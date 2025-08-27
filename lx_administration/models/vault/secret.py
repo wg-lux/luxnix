@@ -1,5 +1,6 @@
-from typing import Optional
+from typing import Optional, TYPE_CHECKING, Any
 from pydantic import BaseModel
+from pydantic import ConfigDict
 from datetime import datetime as dt, timedelta as td
 from pathlib import Path
 import warnings
@@ -7,11 +8,16 @@ from lx_administration.logging import get_logger
 from lx_administration.utils.paths import str2path
 from .manager_utils import _is_valid, _get_by_name
 
+if TYPE_CHECKING:
+    pass
+
 
 class Secret(BaseModel):
     """
     Stores an individual encrypted secret and references its AccessKey.
     """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     name: str
     file: str
@@ -25,20 +31,16 @@ class Secret(BaseModel):
     validity: Optional[td] = td(days=180)
     value: Optional[str] = None
 
-    class Config:
-        arbitrary_types_allowed = True
-
     @classmethod
     def create_secret(
         cls,
         secret: str,
         file: str,
-        vault: "Vault",  # noqa: F821
+        vault: Any,
     ):
         import subprocess
-        from lx_administration.models import Vault
 
-        _vault: Vault = vault
+        _vault: Any = vault
 
         file_path = Path(file).expanduser().resolve()
         with open(file_path, "w") as f:
@@ -64,7 +66,7 @@ class Secret(BaseModel):
         return secret
 
     @classmethod
-    def check_exists(cls, name: str, file: str, vault: "Vault"):  # noqa: F821
+    def check_exists(cls, name: str, file: str, vault: Any):
         fp = Path(file)
         if not fp.exists() and not _get_by_name(vault.secrets, name):
             return False
@@ -82,7 +84,7 @@ class Secret(BaseModel):
         self,
         target_file: str,
         pre_shared_key_file: str,
-        vault: "Vault",  # noqa: F821
+        vault: Any,
     ):
         """Create a copy of the encrypted file with a new key."""
         import subprocess
@@ -106,18 +108,10 @@ class Secret(BaseModel):
         # Copy the source file to target location
         shutil.copy2(source_path, target_path)
 
-        vault_id = vault.get_local_vault_id() if vault else None
+        _vault = vault
+        _ = _vault.get_local_vault_id() if _vault else None
 
         try:
-            # if vault_id:
-            #     rekey_args = [
-            #         "ansible-vault",
-            #         "rekey",
-            #         "--encrypt-vault-id",
-            #         vault_id,
-            #         target_path.as_posix(),
-            #     ]
-            # # else:
             rekey_args = [
                 "ansible-vault",
                 "rekey",
@@ -133,26 +127,22 @@ class Secret(BaseModel):
                 check=True,
                 text=True,
             )
-            # if result.stderr:
-            #     warnings.warn(f"Rekey warning: {result.stderr}")
 
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Failed to rekey file: {e.stderr}")
 
-    def update_file_encryption(self, vault: "Vault"):
+    def update_file_encryption(self, vault: Any):
         """
         Overwrite the existing secret file with self.value, then encrypt it.
         Preserves original file permissions.
         """
         import subprocess
         import os
-        from lx_administration.models import Vault
 
-        vault: Vault = vault
+        _vault = vault
         file_path = Path(self.file).expanduser().resolve()
         file_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Store original permissions if file exists
         orig_mode = None
         if file_path.exists():
             orig_mode = file_path.stat().st_mode
@@ -160,11 +150,10 @@ class Secret(BaseModel):
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(self.value or "")
 
-        # Set default permissions (700) or restore original
         os.chmod(file_path, orig_mode if orig_mode else 0o700)
         os.chown(file_path, os.getuid(), os.getgid())
 
-        vault_id = vault.get_local_vault_id()
+        vault_id = _vault.get_local_vault_id()
         subprocess.run(
             [
                 "ansible-vault",
@@ -175,9 +164,12 @@ class Secret(BaseModel):
             check=True,
         )
 
-    def validate(self):
+    def validate_secret(self):
         logger = get_logger("Secret-validate")
-        _validity_status = _is_valid(self.validity, self.created, self.updated, logger)
+        validity = self.validity or td(days=180)
+        created = self.created or dt.now()
+        updated = self.updated or created
+        _validity_status = _is_valid(validity, created, updated, logger)
 
         directory = str2path(self.file, expanduser=True, resolve=True)
         if not directory.exists():

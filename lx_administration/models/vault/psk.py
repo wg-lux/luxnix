@@ -1,9 +1,9 @@
 from pathlib import Path
 from pydantic import BaseModel, model_validator
+from pydantic import ConfigDict
 from typing import Optional
 from datetime import datetime as dt, timedelta as td
 from ...password import PasswordGenerator
-from .config import yaml
 import warnings
 from ...logging import get_logger
 
@@ -13,15 +13,14 @@ class PreSharedKey(BaseModel):
     Pre-shared key used for secure distribution of other secrets.
     """
 
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     name: str
     file: str  # Changed from Path to str for YAML serialization
     created: Optional[dt] = None
     updated: Optional[dt] = None
     validity: Optional[td] = td(days=30)  # PSKs are shorter-lived than regular keys
     vault_id_prefix: Optional[str] = None
-
-    class Config:
-        arbitrary_types_allowed = True
 
     @model_validator(mode="before")
     @classmethod
@@ -95,7 +94,7 @@ class PreSharedKey(BaseModel):
 
         # Generate PSK using PasswordGenerator
         pg = PasswordGenerator(
-            mode="passphrase", n_words=6
+            mode="passphrase", num_words=6
         )  # Longer passphrase for PSK
         results = pg.pipe()
         psk = results[0][1]
@@ -116,12 +115,12 @@ class PreSharedKey(BaseModel):
         with open(self.file_path, "r") as f:
             psk = f.read().encode()
         key = base64.urlsafe_b64encode(psk[:32].ljust(32, b"\0"))
-        f = Fernet(key)
+        fernet = Fernet(key)
 
         # Encrypt access key
         with open(access_key_path, "rb") as f_in:
             data = f_in.read()
-        encrypted = f.encrypt(data)
+        encrypted = fernet.encrypt(data)
 
         # Write encrypted data
         with open(target_path, "wb") as f_out:
@@ -136,12 +135,12 @@ class PreSharedKey(BaseModel):
         with open(self.file_path, "r") as f:
             psk = f.read().encode()
         key = base64.urlsafe_b64encode(psk[:32].ljust(32, b"\0"))
-        f = Fernet(key)
+        fernet = Fernet(key)
 
         # Decrypt access key
         with open(encrypted_path, "rb") as f_in:
             encrypted = f_in.read()
-        decrypted = f.decrypt(encrypted)
+        decrypted = fernet.decrypt(encrypted)
 
         # Write decrypted data
         with open(target_path, "wb") as f_out:

@@ -1,7 +1,5 @@
-import pydantic
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
-import json
 from ..hardware import BiosModel, NetworkInterfaceModel
 
 
@@ -10,4 +8,4 @@ class AnsibleFactsModel(BaseModel):
     current_date: Optional[str]
     machine: Optional[str]
     default_ipv4: Optional[NetworkInterfaceModel]
-    all_ipv4_addresses: List[str] = []
+    all_ipv4_addresses: List[str] = Field(default_factory=list)
