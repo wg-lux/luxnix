@@ -8,17 +8,17 @@ with lib.luxnix; let
   cfg = config.services.luxnix.lxAnnotate;
 
   # Use the same service user model as endoreg-db-api-local
-  #endoreg-service-user-name = config.user.endoreg-service-user.name;
-  # endoreg-service-user = config.users.users.${endoreg-service-user-name};
-  # endoreg-service-user-home = endoreg-service-user.home;
-
-  # Force lx-annotate to run as admin
-  endoreg-service-user-name = "admin";
+  endoreg-service-user-name = config.user.endoreg-service-user.name;
   endoreg-service-user = config.users.users.${endoreg-service-user-name};
   endoreg-service-user-home = endoreg-service-user.home;
 
+  # Force lx-annotate to run as admin
+  # endoreg-service-user-name = "admin";
+  # endoreg-service-user = config.users.users.${endoreg-service-user-name};
+  # endoreg-service-user-home = endoreg-service-user.home;
+
   # Clone into /home/admin/dev
-  repoDir = "${endoreg-service-user-home}/dev/${repoDirName}";
+  # repoDir = "${endoreg-service-user-home}/dev/${repoDirName}";
 
 
   scriptName = "runLocalLxAnnotate";
@@ -27,7 +27,7 @@ with lib.luxnix; let
   gitURL = cfg.repository.url or "https://github.com/wg-lux/lx-annotate.git";
   repoDirName = "lx-annotate";
   branchName = cfg.repository.branch or "main";
-  #repoDir = "${endoreg-service-user-home}/${repoDirName}";
+  repoDir = "${endoreg-service-user-home}/${repoDirName}";
   #repoDir = "${endoreg-service-user-home}/dev/${repoDirName}";
 
   # Django local settings file (same schema as endo-api module)
@@ -231,6 +231,36 @@ with lib.luxnix; let
       echo "ERROR: Database password not found in vault or not accessible. PostgreSQL setup may not be complete."
       exit 1
     fi
+
+    # --- Populate .env before creating local_settings.py ---
+    echo "Populating .env using env-pipe..."
+
+    cd ${repoDir}
+
+    # Provide environment variables required by env_setup.py
+    export WORKING_DIR="${repoDir}"
+    export HOME_DIR="${endoreg-service-user-home}"
+    export CONF_DIR="${repoDir}/conf"
+    export CONF_TEMPLATE_DIR="${repoDir}/conf_template"
+    export DB_PWD_FILE="${repoDir}/conf/db_pwd"
+
+    export DJANGO_MODULE="lx_annotate"
+    export DJANGO_HOST="${cfg.api.hostname or "localhost"}"
+    export DJANGO_PORT="${toString (cfg.api.port or 8119)}"
+    export DATA_DIR="${repoDir}/data"
+    export STORAGE_DIR="${repoDir}/data"
+
+    export DJANGO_SETTINGS_MODULE_PRODUCTION="lx_annotate.settings_prod"
+    export DJANGO_SETTINGS_MODULE_DEVELOPMENT="lx_annotate.settings_dev"
+    export DJANGO_SETTINGS_MODULE_CENTRAL="lx_annotate.settings_central"
+
+
+
+    rm -f .env
+    # Run env-pipe (this will build .env since local_settings.py doesn't exist yet)
+    devenv shell env-pipe
+    # --- end .env population ---
+
 
     # Write Django configuration to a stable location in the service user's home
     echo "Setting up Django configuration..."
