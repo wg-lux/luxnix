@@ -56,8 +56,6 @@ in
 
     services.xserver.videoDrivers = [ "nvidia" ];
     boot.initrd.kernelModules = [ "nvidia" ];
-
-
     hardware.nvidia = {
       modesetting.enable = true;
       powerManagement.enable = true;

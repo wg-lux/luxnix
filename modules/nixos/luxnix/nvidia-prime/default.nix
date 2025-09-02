@@ -75,7 +75,7 @@ in
 
     services.xserver.videoDrivers = [ "nvidia" ];
     boot.initrd.kernelModules = [ "nvidia" ];
-
+    hardware.nvidia-container-toolkit.enable = lib.mkDefault true;
     hardware.nvidia = {
       prime = {
         sync.enable = true;

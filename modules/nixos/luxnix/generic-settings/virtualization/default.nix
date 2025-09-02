@@ -198,7 +198,15 @@ in {
 
   config = mkIf cfg.enable {
     # Enable core virtualization services based on configuration
-    services.virtualisation.podman.enable = mkIf cfg.podman.enable true;
+    # Use luxnix.podman if nvidia is available for container toolkit support
+    services.luxnix.podman.enable = mkIf (cfg.podman.enable && 
+      ((config.luxnix.nvidia-default.enable or false) || 
+       (config.luxnix.nvidia-prime.enable or false) || 
+       (config.luxnix.generic-settings.gpu.nvidia.enable or false))) true;
+    services.virtualisation.podman.enable = mkIf (cfg.podman.enable &&
+      !((config.luxnix.nvidia-default.enable or false) || 
+        (config.luxnix.nvidia-prime.enable or false) || 
+        (config.luxnix.generic-settings.gpu.nvidia.enable or false))) true;
     services.virtualisation.kvm.enable = mkIf cfg.kvm.enable false;
     services.virtualisation.vfio.enable = mkIf cfg.vfio.enable false;
 

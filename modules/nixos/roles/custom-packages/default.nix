@@ -6,6 +6,10 @@
 with lib;
 with lib.luxnix; let
   cfg = config.roles.custom-packages;
+  
+  # Check if both podman and nvidia are enabled  
+  podmanEnabled = config.services.luxnix.podman.enable or config.services.virtualisation.podman.enable or config.luxnix.generic-settings.virtualization.enable or false;
+  nvidiaEnabled = (config.luxnix.nvidia-default.enable or false) || (config.luxnix.nvidia-prime.enable or false) || (config.luxnix.generic-settings.gpu.nvidia.enable or false);
 
   dev01 = [ ];
   dev02 = [ ];
@@ -109,6 +113,12 @@ with lib.luxnix; let
     cudaPackages.libcublas
   ];
 
+  # Packages for podman + nvidia combination (for development)
+  podmanNvidia = with pkgs; [
+    cudaPackages.cudatoolkit  # Keep for CUDA development
+    nvidia-container-toolkit
+  ];
+
   customPackages = [
     pkgs.bash
     pkgs.bashInteractive
@@ -136,6 +146,7 @@ with lib.luxnix; let
     pkgs.vdpauinfo # sudo vainfo
     pkgs.libva-utils # sudo vainfo
   ] else [ ])
+  ++ (if (podmanEnabled && nvidiaEnabled) then podmanNvidia else [ ])
   ;
 
   ldPackages = lib.mkIf cfg.ld.enable (
