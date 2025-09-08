@@ -159,8 +159,7 @@ with lib.luxnix; let
     echo "Initializing submodules..."
     git submodule init || { echo "ERROR: Failed to initialize submodules"; exit 1; }
     git submodule update --remote --recursive || { echo "ERROR: Failed to update submodules"; exit 1; }
-    git submodule init
-    git submodule update --remote --recursive
+ 
 
     # Copy database password from vault (same file as endo-api)
     echo "Setting up database configuration..."
