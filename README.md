@@ -165,6 +165,9 @@ The following documents have been moved from the repository into the **[Luxnix W
 - [Postgres gc 10 Declarative Setup Summary](https://github.com/wg-lux/luxnix/wiki/Postgres-gc-10-Declarative-Setup-Summary)
 - [Endoreg Central Architecture](https://github.com/wg-lux/luxnix/wiki/Endoreg-Central-Architecture)
 - [Ansible CMDB Readme](https://github.com/wg-lux/luxnix/wiki/Ansible-CMDB-Readme)
+- [Adding a New User Configuration](https://github.com/wg-lux/luxnix/wiki/Adding-a-New-User-Configuration)  
+- [Process flow of creating Hosts, Roles, Groups](https://github.com/wg-lux/luxnix/wiki/Process-flow-of-creating-Hosts,-Roles,-Groups)
+
 
 
 ## 📜 License
