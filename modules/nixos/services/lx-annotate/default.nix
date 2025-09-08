@@ -208,8 +208,8 @@ with lib.luxnix; let
       export DJANGO_MODULE="lx_annotate"   # app module name, adjust if repo expects something else
       export HTTP_PROTOCOL="http"
       export DJANGO_HOST="localhost"
-      export DJANGO_PORT="${toString (api.port or 8118)}"
-      export BASE_URL="http://localhost:${toString (api.port or 8118)}"
+      export DJANGO_PORT="${toString (api.port or 8119)}"
+      export BASE_URL="http://localhost:${toString (api.port or 8119)}"
 
       if command -v devenv >/dev/null 2>&1; then
         echo "Running configuration via devenv..."
@@ -322,7 +322,7 @@ with lib.luxnix; let
 
     echo "Starting Django server..."
     echo "Hostname: ${api.hostname or "localhost"}"
-    echo "Port: ${toString (api.port or 8118)}"
+    echo "Port: ${toString (api.port or 8119)}"
     echo "Protocol: ${if (api.useHttps or false) then "HTTPS" else "HTTP"}"
 
     exec devenv shell -- run-prod-server
@@ -336,7 +336,7 @@ in
       type = types.nullOr (types.submodule {
         options = {
           hostname = mkOption { type = types.str; default = "localhost"; };
-          port = mkOption { type = types.port; default = 8118; };
+          port = mkOption { type = types.port; default = 9; };
           useHttps = mkOption { type = types.bool; default = false; };
           sslCertificatePath = mkOption { type = types.nullOr types.path; default = null; };
           sslKeyPath = mkOption { type = types.nullOr types.path; default = null; };
