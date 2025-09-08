@@ -144,6 +144,28 @@ Download the mobile app.
 Use this link: https://cloud.endo-reg.net
 Enter credential/login using keyscloak
 
+## 📚 Documentation Wiki
+
+The following documents have been moved from the repository into the **[Luxnix Wiki](https://github.com/wg-lux/luxnix/wiki)** for easier access and centralized maintenance:
+
+- [Flake.nix & Garbage Collection](https://github.com/wg-lux/luxnix/wiki/Flake.nix-%26-Garbage-Collection)
+- [Access Management](https://github.com/wg-lux/luxnix/wiki/Access-Management)
+- [Roles](https://github.com/wg-lux/luxnix/wiki/Roles)
+- [LX Cheatsheet](https://github.com/wg-lux/luxnix/wiki/LX-Cheatsheet)
+- [Deployment Guide](https://github.com/wg-lux/luxnix/wiki/Deployment-Guide)
+- [Development](https://github.com/wg-lux/luxnix/wiki/Development)
+- [Hardware Setup](https://github.com/wg-lux/luxnix/wiki/Hardware-Setup)
+- [Network Architecture](https://github.com/wg-lux/luxnix/wiki/Network-Architecture)
+- [Security Improvements](https://github.com/wg-lux/luxnix/wiki/Security-Improvements)
+- [Security](https://github.com/wg-lux/luxnix/wiki/Security)
+- [Service Architecture](https://github.com/wg-lux/luxnix/wiki/Service-Architecture)
+- [User Management](https://github.com/wg-lux/luxnix/wiki/User-Management)
+- [Postgres Config Guide](https://github.com/wg-lux/luxnix/wiki/Postgres-Config-Guide)
+- [Postgres Documentation](https://github.com/wg-lux/luxnix/wiki/Postgres-Documentation)
+- [Postgres gc 10 Declarative Setup Summary](https://github.com/wg-lux/luxnix/wiki/Postgres-gc-10-Declarative-Setup-Summary)
+- [Endoreg Central Architecture](https://github.com/wg-lux/luxnix/wiki/Endoreg-Central-Architecture)
+- [Ansible CMDB Readme](https://github.com/wg-lux/luxnix/wiki/Ansible-CMDB-Readme)
+
 
 ## 📜 License
 
