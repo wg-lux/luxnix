@@ -8,10 +8,20 @@ with lib.luxnix; let
   cfg = config.services.luxnix.lxAnnotate;
 
   # Guard null submodules so attr selection never hits null
-  api  = cfg.api  or {};
-  db   = cfg.database  or {};
-  repo = cfg.repository or {};
-  svc  = cfg.service or {};
+  api  = if cfg.api == null then {} else cfg.api;
+  repo = if cfg.repository == null then {} else cfg.repository;
+  svc  = if cfg.service == null then {} else cfg.service;
+
+  # DB: inherit endo-api DB when not explicitly set on lx-annotate
+  endoDb =
+    if lib.hasAttrByPath [ "services" "luxnix" "endoregDbApiLocal" "database" ] config
+       && config.services.luxnix.endoregDbApiLocal.database != null
+    then config.services.luxnix.endoregDbApiLocal.database
+    else {};
+
+  db = if cfg.database != null then cfg.database else endoDb;
+
+
 
 
   # Use the same service user model as endoreg-db-api-local
