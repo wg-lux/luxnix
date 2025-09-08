@@ -336,7 +336,7 @@ in
       type = types.nullOr (types.submodule {
         options = {
           hostname = mkOption { type = types.str; default = "localhost"; };
-          port = mkOption { type = types.port; default = 9; };
+          port = mkOption { type = types.port; default = 8119; };
           useHttps = mkOption { type = types.bool; default = false; };
           sslCertificatePath = mkOption { type = types.nullOr types.path; default = null; };
           sslKeyPath = mkOption { type = types.nullOr types.path; default = null; };
@@ -415,8 +415,10 @@ in
     systemd.services."lx-annotate" = {
       description = "Clone or pull lx-annotate and run prod server";
       wantedBy = [ "multi-user.target" ];
-      after = [ "postgres-endoreg-setup.service" "endoreg-django-setup.service" "systemd-tmpfiles-setup.service" ];
-      requires = [ "postgres-endoreg-setup.service" "systemd-tmpfiles-setup.service" ];
+      #after = [ "postgres-endoreg-setup.service" "endoreg-django-setup.service" "systemd-tmpfiles-setup.service" ];
+      #requires = [ "postgres-endoreg-setup.service" "systemd-tmpfiles-setup.service" ];
+      after    = [ "endo-api-boot.service" "systemd-tmpfiles-setup.service" ];
+      requires = [ "endo-api-boot.service" "systemd-tmpfiles-setup.service" ];
       serviceConfig = {
         Type = "exec";
         User = endoreg-service-user-name;
