@@ -7,6 +7,13 @@ with lib;
 with lib.luxnix; let
   cfg = config.services.luxnix.lxAnnotate;
 
+  # Guard null submodules so attr selection never hits null
+  api  = cfg.api  or {};
+  db   = cfg.database  or {};
+  repo = cfg.repository or {};
+  svc  = cfg.service or {};
+
+
   # Use the same service user model as endoreg-db-api-local
   endoreg-service-user-name = config.user.endoreg-service-user.name;
   endoreg-service-user = config.users.users.${endoreg-service-user-name};
@@ -24,9 +31,9 @@ with lib.luxnix; let
   scriptName = "runLocalLxAnnotate";
 
   # Repo settings (mirrors endo-api structure)
-  gitURL = cfg.repository.url or "https://github.com/wg-lux/lx-annotate.git";
+  gitURL = repo.url or "https://github.com/wg-lux/lx-annotate.git";
   repoDirName = "lx-annotate";
-  branchName = cfg.repository.branch or "main";
+  branchName = repo.branch or "main";
   repoDir = "${endoreg-service-user-home}/${repoDirName}";
   #repoDir = "${endoreg-service-user-home}/dev/${repoDirName}";
 
@@ -39,39 +46,39 @@ with lib.luxnix; let
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
-            'NAME': '${cfg.database.name or "endoregDbLocal"}',
-            'USER': '${cfg.database.user or "endoregDbLocal"}',
-            'PASSWORD': open('${cfg.database.passwordFile or "/etc/secrets/vault/SCRT_local_password_maintenance_password"}').read().strip(),
-            'HOST': '${cfg.database.host or "localhost"}',
-            'PORT': '${toString (cfg.database.port or 5432)}',
+            'NAME': '${db.name or "endoregDbLocal"}',
+            'USER': '${db.user or "endoregDbLocal"}',
+            'PASSWORD': open('${db.passwordFile or "/etc/secrets/vault/SCRT_local_password_maintenance_password"}').read().strip(),
+            'HOST': '${db.host or "localhost"}',
+            'PORT': '${toString (db.port or 5432)}',
             'OPTIONS': {
-                'sslmode': '${cfg.database.sslMode or "prefer"}',
+                'sslmode': '${db.sslMode or "prefer"}',
             },
         }
     }
 
-    SECRET_KEY = open('${cfg.api.djangoSecretKeyFile or "/etc/secrets/vault/django_secret_key"}').read().strip()
-    DEBUG = ${if (cfg.api.djangoDebug or false) then "True" else "False"}
-    ALLOWED_HOSTS = ${builtins.toJSON (cfg.api.djangoAllowedHosts or ["localhost" "127.0.0.1"])}
+    SECRET_KEY = open('${api.djangoSecretKeyFile or "/etc/secrets/vault/django_secret_key"}').read().strip()
+    DEBUG = ${if (api.djangoDebug or false) then "True" else "False"}
+    ALLOWED_HOSTS = ${builtins.toJSON (api.djangoAllowedHosts or ["localhost" "127.0.0.1"])}
 
-    ${if (cfg.api.corsAllowedOrigins or []) != [] then ''
-    CORS_ALLOWED_ORIGINS = ${builtins.toJSON cfg.api.corsAllowedOrigins}
+    ${if (api.corsAllowedOrigins or []) != [] then ''
+    CORS_ALLOWED_ORIGINS = ${builtins.toJSON api.corsAllowedOrigins}
     CORS_ALLOW_CREDENTIALS = True
     '' else ""}
 
-    TIME_ZONE = '${cfg.api.timeZone or "UTC"}'
-    LANGUAGE_CODE = '${cfg.api.language or "en-us"}'
+    TIME_ZONE = '${api.timeZone or "UTC"}'
+    LANGUAGE_CODE = '${api.language or "en-us"}'
 
     LOGGING = {
         'version': 1,
         'disable_existing_loggers': False,
         'handlers': { 'console': { 'class': 'logging.StreamHandler', }, },
-        'root': { 'handlers': ['console'], 'level': '${cfg.api.logLevel or "INFO"}', },
+        'root': { 'handlers': ['console'], 'level': '${api.logLevel or "INFO"}', },
     }
 
     DATA_UPLOAD_MAX_MEMORY_SIZE = ${toString (
       let
-        sizeStr   = cfg.api.maxRequestSize or "100M";
+        sizeStr   = api.maxRequestSize or "100M";
         parseSize = size:
           if hasSuffix "G" size then (lib.toInt (removeSuffix "G" size)) * 1073741824
           else if hasSuffix "M" size then (lib.toInt (removeSuffix "M" size)) * 1048576
@@ -80,11 +87,11 @@ with lib.luxnix; let
       in parseSize sizeStr
     )}
 
-    ${lib.optionalString ((cfg.api.extraSettings.CENTRAL_NODES or []) != []) ''
-    CENTRAL_NODES = ${builtins.toJSON cfg.api.extraSettings.CENTRAL_NODES}
+    ${lib.optionalString ((api.extraSettings.CENTRAL_NODES or []) != []) ''
+    CENTRAL_NODES = ${builtins.toJSON api.extraSettings.CENTRAL_NODES}
     ''}
 
-    IS_CENTRAL_NODE = ${if (cfg.api.extraSettings.IS_CENTRAL_NODE or false) then "True" else "False"}
+    IS_CENTRAL_NODE = ${if (api.extraSettings.IS_CENTRAL_NODE or false) then "True" else "False"}
 
     ${lib.concatStringsSep "\n"
       (lib.mapAttrsToList
@@ -93,7 +100,7 @@ with lib.luxnix; let
             "${name} = ${if builtins.isString value then "'${value}'" else builtins.toJSON value}"
           else ""
         )
-        (cfg.api.extraSettings or {})
+        (api.extraSettings or {})
       )
     }
   '';
@@ -114,7 +121,7 @@ with lib.luxnix; let
       cd ${repoDir}
     else
       cd ${repoDir}
-      ${if (cfg.repository.updateOnBoot or true) then ''
+      ${if (repo.updateOnBoot or true) then ''
         echo "Updating repository..."
         git fetch origin || { echo "ERROR: Failed to fetch from origin"; exit 1; }
       '' else ''
@@ -137,7 +144,7 @@ with lib.luxnix; let
       exit 1
     fi
 
-    ${if (cfg.repository.updateOnBoot or true) then ''
+    ${if (repo.updateOnBoot or true) then ''
     # Update the current branch
     echo "Updating branch ${branchName}..."
     git pull origin ${branchName} || {
@@ -159,9 +166,9 @@ with lib.luxnix; let
     echo "Setting up database configuration..."
     echo "Current user: $(whoami)"
     echo "User groups: $(groups)"
-    echo "Checking for database password file: ${cfg.database.passwordFile or "/etc/secrets/vault/SCRT_local_password_maintenance_password"}"
+    echo "Checking for database password file: ${db.passwordFile or "/etc/secrets/vault/SCRT_local_password_maintenance_password"}"
 
-    SECRET_FILE="${cfg.database.passwordFile or "/etc/secrets/vault/SCRT_local_password_maintenance_password"}"
+    SECRET_FILE="${db.passwordFile or "/etc/secrets/vault/SCRT_local_password_maintenance_password"}"
     if [ -f "$SECRET_FILE" ]; then
       echo "Secret file exists: $SECRET_FILE"
       ls -la "$SECRET_FILE" || echo "Cannot stat secret file"
@@ -201,8 +208,8 @@ with lib.luxnix; let
       export DJANGO_MODULE="lx_annotate"   # app module name, adjust if repo expects something else
       export HTTP_PROTOCOL="http"
       export DJANGO_HOST="localhost"
-      export DJANGO_PORT="${toString (cfg.api.port or 8118)}"
-      export BASE_URL="http://localhost:${toString (cfg.api.port or 8118)}"
+      export DJANGO_PORT="${toString (api.port or 8118)}"
+      export BASE_URL="http://localhost:${toString (api.port or 8118)}"
 
       if command -v devenv >/dev/null 2>&1; then
         echo "Running configuration via devenv..."
@@ -245,8 +252,8 @@ with lib.luxnix; let
     export DB_PWD_FILE="${repoDir}/conf/db_pwd"
 
     export DJANGO_MODULE="lx_annotate"
-    export DJANGO_HOST="${cfg.api.hostname or "localhost"}"
-    export DJANGO_PORT="${toString (cfg.api.port or 8119)}"
+    export DJANGO_HOST="${api.hostname or "localhost"}"
+    export DJANGO_PORT="${toString (api.port or 8119)}"
     export DATA_DIR="${repoDir}/data"
     export STORAGE_DIR="${repoDir}/data"
 
@@ -308,15 +315,15 @@ with lib.luxnix; let
     ln -sf "$CONFIG_DIR/local_settings.py" ${repoDir}/local_settings.py || { echo "ERROR: Failed to create symlink"; exit 1; }
     echo "Created symlink: ${repoDir}/local_settings.py -> $CONFIG_DIR/local_settings.py"
 
-    ${lib.optionalString ((cfg.service.extraEnvironment or {}) != {}) ''
+    ${lib.optionalString ((svc.extraEnvironment or {}) != {}) ''
     # Additional environment variables
-    ${lib.concatStringsSep "\n" (lib.mapAttrsToList (name: value: "export ${name}='${value}'") cfg.service.extraEnvironment)}
+    ${lib.concatStringsSep "\n" (lib.mapAttrsToList (name: value: "export ${name}='${value}'") svc.extraEnvironment)}
     ''}
 
     echo "Starting Django server..."
-    echo "Hostname: ${cfg.api.hostname or "localhost"}"
-    echo "Port: ${toString (cfg.api.port or 8118)}"
-    echo "Protocol: ${if (cfg.api.useHttps or false) then "HTTPS" else "HTTP"}"
+    echo "Hostname: ${api.hostname or "localhost"}"
+    echo "Port: ${toString (api.port or 8118)}"
+    echo "Protocol: ${if (api.useHttps or false) then "HTTPS" else "HTTP"}"
 
     exec devenv shell -- run-prod-server
   '';
