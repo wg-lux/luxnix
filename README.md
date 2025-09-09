@@ -148,25 +148,57 @@ Enter credential/login using keyscloak
 
 The following documents have been moved from the repository into the **[Luxnix Wiki](https://github.com/wg-lux/luxnix/wiki)** for easier access and centralized maintenance:
 
-- [Flake.nix & Garbage Collection](https://github.com/wg-lux/luxnix/wiki/Flake.nix-%26-Garbage-Collection)
-- [Access Management](https://github.com/wg-lux/luxnix/wiki/Access-Management)
-- [Roles](https://github.com/wg-lux/luxnix/wiki/Roles)
-- [LX Cheatsheet](https://github.com/wg-lux/luxnix/wiki/LX-Cheatsheet)
-- [Deployment Guide](https://github.com/wg-lux/luxnix/wiki/Deployment-Guide)
-- [Development](https://github.com/wg-lux/luxnix/wiki/Development)
-- [Hardware Setup](https://github.com/wg-lux/luxnix/wiki/Hardware-Setup)
-- [Network Architecture](https://github.com/wg-lux/luxnix/wiki/Network-Architecture)
-- [Security Improvements](https://github.com/wg-lux/luxnix/wiki/Security-Improvements)
-- [Security](https://github.com/wg-lux/luxnix/wiki/Security)
-- [Service Architecture](https://github.com/wg-lux/luxnix/wiki/Service-Architecture)
-- [User Management](https://github.com/wg-lux/luxnix/wiki/User-Management)
-- [Postgres Config Guide](https://github.com/wg-lux/luxnix/wiki/Postgres-Config-Guide)
-- [Postgres Documentation](https://github.com/wg-lux/luxnix/wiki/Postgres-Documentation)
-- [Postgres gc 10 Declarative Setup Summary](https://github.com/wg-lux/luxnix/wiki/Postgres-gc-10-Declarative-Setup-Summary)
-- [Endoreg Central Architecture](https://github.com/wg-lux/luxnix/wiki/Endoreg-Central-Architecture)
-- [Ansible CMDB Readme](https://github.com/wg-lux/luxnix/wiki/Ansible-CMDB-Readme)
-- [Adding a New User Configuration](https://github.com/wg-lux/luxnix/wiki/Adding-a-New-User-Configuration)  
-- [Process flow of creating Hosts, Roles, Groups](https://github.com/wg-lux/luxnix/wiki/Process-flow-of-creating-Hosts,-Roles,-Groups)
+### Luxnix Documentation
+- [Installation Guide - NixOS and Setting Up Luxnix](https://github.com/wg-lux/endoreg-db/wiki/Installation-Guide---NixOS-and-Setting-Up-Luxnix)
+- [Flake.nix & Garbage Collection](https://github.com/wg-lux/endoreg-db/wiki/Flake.nix-&-Garbage-Collection)
+- [Access Management](https://github.com/wg-lux/endoreg-db/wiki/Access-Management)
+- [Roles](https://github.com/wg-lux/endoreg-db/wiki/Roles)
+- [LX Cheatsheet](https://github.com/wg-lux/endoreg-db/wiki/LX-Cheatsheet)
+- [Deployment Guide](https://github.com/wg-lux/endoreg-db/wiki/Deployment-Guide)
+- [Development](https://github.com/wg-lux/endoreg-db/wiki/Development)
+- [Hardware Setup](https://github.com/wg-lux/endoreg-db/wiki/Hardware-Setup)
+- [Network Architecture](https://github.com/wg-lux/endoreg-db/wiki/Network-Architecture)
+- [Security Improvements](https://github.com/wg-lux/endoreg-db/wiki/Security-Improvements)
+- [Security](https://github.com/wg-lux/endoreg-db/wiki/Security)
+- [Service Architecture](https://github.com/wg-lux/endoreg-db/wiki/Service-Architecture)
+- [User Management](https://github.com/wg-lux/endoreg-db/wiki/User-Management)
+- [Systemd tmpfiles Rules in NixOS](https://github.com/wg-lux/endoreg-db/wiki/Systemd-tmpfiles-Rules-in-NixOS)
+- [Common Errors](https://github.com/wg-lux/endoreg-db/wiki/Common-Errors)
+- [NixOs Configuration Testing with Eval](https://github.com/wg-lux/endoreg-db/wiki/NixOs-Configuration-Testing-with-Eval)
+- [System Language Change](https://github.com/wg-lux/endoreg-db/wiki/System-Language-Change)
+- [Roles Documentation](https://github.com/wg-lux/endoreg-db/wiki/Roles-Documentation)
+- [Doc Maintenance Schedule](https://github.com/wg-lux/endoreg-db/wiki/Doc-Maintenance-Schedule)
+- [Luxnix Server Setup with example](https://github.com/wg-lux/endoreg-db/wiki/Luxnix-Server-Setup-with-example)
+
+### Database Documentation
+- [Postgres Config Guide](https://github.com/wg-lux/endoreg-db/wiki/Postgres-Config-Guide)
+- [Postgres Documentation](https://github.com/wg-lux/endoreg-db/wiki/Postgres-Documentation)
+- [Postgres gc-10 Declarative Setup Summary](https://github.com/wg-lux/endoreg-db/wiki/Postgres-gc-10-Declarative-Setup-Summary)
+- [Endoreg Central Architecture](https://github.com/wg-lux/endoreg-db/wiki/Endoreg-Central-Architecture)
+
+### Ansible
+- [Ansible CMDB Readme](https://github.com/wg-lux/endoreg-db/wiki/Ansible-CMDB-Readme)
+- [Process flow of creating Hosts, Roles, Groups](https://github.com/wg-lux/endoreg-db/wiki/Process-flow-of-creating-Hosts,-Roles,-Groups)
+- [Adding a New User Configuration](https://github.com/wg-lux/endoreg-db/wiki/Adding-a-New-User-Configuration)
+- [Maintenance & Security: Auto Update #6](https://github.com/wg-lux/endoreg-db/wiki/Maintenance-&-Security:-Auto-Update-#6)
+- [Home Configuration Autoconf Flow (Step-by-Step)](https://github.com/wg-lux/endoreg-db/wiki/Home-Configuration-Autoconf-Flow-(Step-by-Step))
+- [Guide to Define New Setting With Example](https://github.com/wg-lux/endoreg-db/wiki/Guide-to-Define-New-Setting-With-Example)
+- [Autoconfig- create inventory.yml using Python Script](https://github.com/wg-lux/endoreg-db/wiki/Autoconfig--create-inventory.yml-using-Python-Script)
+- [Updated : Generating home config files using autoconfig](https://github.com/wg-lux/endoreg-db/wiki/Updated-:-Generating-home-config-files-using-autoconfig)
+
+### Figures
+- [Diagram for Luxnix](https://github.com/wg-lux/endoreg-db/wiki/Diagram-for-Luxnix)
+- [Cloudflare-traefik](https://github.com/wg-lux/endoreg-db/wiki/Cloudflare-traefik)
+- [Forward Auth Sonarr](https://github.com/wg-lux/endoreg-db/wiki/Forward-Auth-Sonarr)
+- [HTTP Basic Auth](https://github.com/wg-lux/endoreg-db/wiki/HTTP-Basic-Auth)
+- [tls-cloudflare-issue](https://github.com/wg-lux/endoreg-db/wiki/tls-cloudflare-issue)
+- [Tunnel Order](https://github.com/wg-lux/endoreg-db/wiki/Tunnel-Order)
+- [update-outpost](https://github.com/wg-lux/endoreg-db/wiki/update-outpost)
+
+### Miscellaneous
+- [Style Guide](https://github.com/wg-lux/endoreg-db/wiki/Style-Guide)
+
+
 
 
 
