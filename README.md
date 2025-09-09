@@ -154,6 +154,7 @@ The following documents have been moved from the repository into the **[Luxnix W
 - [Access Management](https://github.com/wg-lux/luxnix/wiki/Access-Management)
 - [Roles](https://github.com/wg-lux/luxnix/wiki/Roles)
 - [LX Cheatsheet](https://github.com/wg-lux/luxnix/wiki/LX-Cheatsheet)
+- [tmux CLI Cheatsheet](https://github.com/wg-lux/luxnix/wiki/tmux-CLI-Cheatsheet)
 - [Deployment Guide](https://github.com/wg-lux/luxnix/wiki/Deployment-Guide)
 - [Development](https://github.com/wg-lux/luxnix/wiki/Development)
 - [Hardware Setup](https://github.com/wg-lux/luxnix/wiki/Hardware-Setup)
