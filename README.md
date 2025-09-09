@@ -177,6 +177,7 @@ The following documents have been moved from the repository into the **[Luxnix W
 - [Endoreg Central Architecture](https://github.com/wg-lux/luxnix/wiki/Endoreg-Central-Architecture)
 
 ### Ansible
+- [Readme](https://github.com/wg-lux/luxnix/wiki/Readme)
 - [Ansible CMDB Readme](https://github.com/wg-lux/luxnix/wiki/Ansible-CMDB-Readme)
 - [Process flow of creating Hosts, Roles, Groups](https://github.com/wg-lux/luxnix/wiki/Process-flow-of-creating-Hosts,-Roles,-Groups)
 - [Adding a New User Configuration](https://github.com/wg-lux/luxnix/wiki/Adding-a-New-User-Configuration)
