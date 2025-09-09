@@ -187,6 +187,19 @@ The following documents have been moved from the repository into the **[Luxnix W
 - [Autoconfig- create inventory.yml using Python Script](https://github.com/wg-lux/luxnix/wiki/Autoconfig--create-inventory.yml-using-Python-Script)
 - [Updated : Generating home config files using autoconfig](https://github.com/wg-lux/luxnix/wiki/Updated-:-Generating-home-config-files-using-autoconfig)
 
+### Devlog
+- [git](https://github.com/wg-lux/luxnix/wiki/git)
+- [vscode](https://github.com/wg-lux/luxnix/wiki/vscode)
+- [fix_long_lines](https://github.com/wg-lux/luxnix/wiki/fix_long_lines)
+- [kernel](https://github.com/wg-lux/luxnix/wiki/kernel)
+- [keycloak-setup](https://github.com/wg-lux/luxnix/wiki/keycloak-setup)
+- [network](https://github.com/wg-lux/luxnix/wiki/network)
+- [setup-mail](https://github.com/wg-lux/luxnix/wiki/setup-mail)
+- [setup-s04](https://github.com/wg-lux/luxnix/wiki/setup-s04)
+- [syncthing](https://github.com/wg-lux/luxnix/wiki/syncthing)
+- [2025-01-29 - postgres](https://github.com/wg-lux/luxnix/wiki/2025-01-29---postgres)
+
+
 ### Figures
 - [Diagram for Luxnix](https://github.com/wg-lux/luxnix/wiki/Diagram-for-Luxnix)
 - [Cloudflare-traefik](https://github.com/wg-lux/luxnix/wiki/Cloudflare-traefik)
