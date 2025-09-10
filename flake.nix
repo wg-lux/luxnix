@@ -140,6 +140,8 @@
 
       # Add modules to all homes
       homes.modules = with inputs; [
+        # plasma-manager.homeModules.plasma-manager
+        # nixvim.homeModules.nixvim
         plasma-manager.homeManagerModules.plasma-manager
         nixvim.homeManagerModules.nixvim
       ];
