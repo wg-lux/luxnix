@@ -22,6 +22,9 @@ with lib.luxnix; let
     kdePackages.xdg-desktop-portal-kde
     kdePackages.svgpart
     kdePackages.systemsettings
+    kdePackages.kwallet
+    kdePackages.kwalletmanager
+    kwalletcli
   ];
 
   baseDevelopment = with pkgs; [
@@ -39,6 +42,7 @@ with lib.luxnix; let
     vlc
     bind
     nixd
+    ncdu
   ];
 
   visuals = with pkgs; [
@@ -138,6 +142,7 @@ with lib.luxnix; let
     pkgs.protonmail-bridge-gui
     pkgs.protonmail-desktop
     pkgs.proton-pass
+    pkgs.planify
   ] else [ ])
   ++ (if cfg.hardwareAcceleration then [
     pkgs.pciutils
