@@ -11,21 +11,21 @@ This infrastructure was built in the context of the ColoReg study. Here the main
 ## 🔎 Overview 
 
 
-### [Table Of Contents - automatically generated](TABLE_OF_CONTENTS.md)
-### [Shortcuts For Easy LuxNix Usage](LxCheatsheet.md)
-### [Common Errors In LuxNix](CommonErrors.md)
-### [Prerequisites](docs/hardware-setup.md#hardware-setup)
+### [Table Of Contents - automatically generated](https://github.com/wg-lux/luxnix/wiki)
+### [Shortcuts For Easy LuxNix Usage](https://github.com/wg-lux/luxnix/wiki/LX-Cheatsheet)
+### [Common Errors In LuxNix](https://github.com/wg-lux/luxnix/wiki/Common-Errors)
+### [Prerequisites](https://github.com/wg-lux/luxnix/wiki/Hardware-Setup#hardware-setup)
 - NixOS installation media
 - UEFI-capable system
 - Storage device (NVMe or SATA)
 - USB drive for boot decryption (optional)
 - FIDO2 security key (optional)
-### [Example Of Deploying LuxNix: Deployment Guide](docs/deployment-guide.md#Deployment)
-### [LUKS Secrets Management](docs/security.md#luks-encryption-management)
-### [Boot Decryption & USB Stick Setup](docs/security.md#boot-decryption-usb-stick-setup)
-### [Service Management](docs/service-architecture.md#overview)
-### [Access Management](docs/access-management.md#access-control)
-### [Tools For Development](docs/development.md#development)
+### [Example Of Deploying LuxNix: Deployment Guide](https://github.com/wg-lux/luxnix/wiki/Deployment-Guide#Deployment)
+### [LUKS Secrets Management](https://github.com/wg-lux/luxnix/wiki/Security#luks-encryption-management)
+### [Boot Decryption & USB Stick Setup](https://github.com/wg-lux/luxnix/wiki/Security#boot-decryption-usb-stick-setup)
+### [Service Management](https://github.com/wg-lux/luxnix/wiki/Service-Architecture#overview)
+### [Access Management](https://github.com/wg-lux/luxnix/wiki/Access-Management#access-control)
+### [Tools For Development](https://github.com/wg-lux/luxnix/wiki/Development#development)
 
 ## 🛠️ Initial Setup
 1. Verify UEFI boot mode
@@ -47,7 +47,7 @@ This infrastructure was built in the context of the ColoReg study. Here the main
 
 ### Quick Start
 1. Boot from NixOS installation media
-2. Follow the deployment guide in `docs/deployment-guide.md`
+2. Follow the [deployment guide in the Wiki](https://github.com/wg-lux/luxnix/wiki/Deployment-Guide)
 3. Choose appropriate system configuration from `systems/x86_64-linux/`
 
 ### Deployment
@@ -97,19 +97,19 @@ luxnix/
 
 ## 📚 Documentation
 
-Detailed documentation is available in the `docs/` directory:
-- Deployment Guide
-- Network Architecture
-- Service Configuration
-- Hardware Setup
-- User Management
+Comprehensive documentation is available in the **[Luxnix Wiki](https://github.com/wg-lux/luxnix/wiki)**:
+- [Deployment Guide](https://github.com/wg-lux/luxnix/wiki/Deployment-Guide)
+- [Network Architecture](https://github.com/wg-lux/luxnix/wiki/Network-Architecture)
+- [Service Configuration](https://github.com/wg-lux/luxnix/wiki/Service-Architecture)
+- [Hardware Setup](https://github.com/wg-lux/luxnix/wiki/Hardware-Setup)
+- [User Management](https://github.com/wg-lux/luxnix/wiki/User-Management)
 
 ## 🛟 Support
 
 For issues and questions:
 - Create an issue in the repository
-- Check the documentation in `docs/`
-- Review the deployment guide for common problems
+- Check the **[Luxnix Wiki](https://github.com/wg-lux/luxnix/wiki)** for documentation
+- Review the **[deployment guide](https://github.com/wg-lux/luxnix/wiki/Deployment-Guide)** for common problems
 
 ## Keycloak and Nextcloud login
 Make sure account has been created.
