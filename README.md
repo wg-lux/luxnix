@@ -11,21 +11,21 @@ This infrastructure was built in the context of the ColoReg study. Here the main
 ## 🔎 Overview 
 
 
-### [Table Of Contents - automatically generated](TABLE_OF_CONTENTS.md)
-### [Shortcuts For Easy LuxNix Usage](LxCheatsheet.md)
-### [Common Errors In LuxNix](CommonErrors.md)
-### [Prerequisites](docs/hardware-setup.md#hardware-setup)
+### [Table Of Contents - automatically generated](https://github.com/wg-lux/luxnix/wiki)
+### [Shortcuts For Easy LuxNix Usage](https://github.com/wg-lux/luxnix/wiki/LX-Cheatsheet)
+### [Common Errors In LuxNix](https://github.com/wg-lux/luxnix/wiki/Common-Errors)
+### [Prerequisites](https://github.com/wg-lux/luxnix/wiki/Hardware-Setup#hardware-setup)
 - NixOS installation media
 - UEFI-capable system
 - Storage device (NVMe or SATA)
 - USB drive for boot decryption (optional)
 - FIDO2 security key (optional)
-### [Example Of Deploying LuxNix: Deployment Guide](docs/deployment-guide.md#Deployment)
-### [LUKS Secrets Management](docs/security.md#luks-encryption-management)
-### [Boot Decryption & USB Stick Setup](docs/security.md#boot-decryption-usb-stick-setup)
-### [Service Management](docs/service-architecture.md#overview)
-### [Access Management](docs/access-management.md#access-control)
-### [Tools For Development](docs/development.md#development)
+### [Example Of Deploying LuxNix: Deployment Guide](https://github.com/wg-lux/luxnix/wiki/Deployment-Guide#Deployment)
+### [LUKS Secrets Management](https://github.com/wg-lux/luxnix/wiki/Security#luks-encryption-management)
+### [Boot Decryption & USB Stick Setup](https://github.com/wg-lux/luxnix/wiki/Security#boot-decryption-usb-stick-setup)
+### [Service Management](https://github.com/wg-lux/luxnix/wiki/Service-Architecture#overview)
+### [Access Management](https://github.com/wg-lux/luxnix/wiki/Access-Management#access-control)
+### [Tools For Development](https://github.com/wg-lux/luxnix/wiki/Development#development)
 
 ## 🛠️ Initial Setup
 1. Verify UEFI boot mode
@@ -47,7 +47,7 @@ This infrastructure was built in the context of the ColoReg study. Here the main
 
 ### Quick Start
 1. Boot from NixOS installation media
-2. Follow the deployment guide in `docs/deployment-guide.md`
+2. Follow the [deployment guide in the Wiki](https://github.com/wg-lux/luxnix/wiki/Deployment-Guide)
 3. Choose appropriate system configuration from `systems/x86_64-linux/`
 
 ### Deployment
@@ -97,19 +97,19 @@ luxnix/
 
 ## 📚 Documentation
 
-Detailed documentation is available in the `docs/` directory:
-- Deployment Guide
-- Network Architecture
-- Service Configuration
-- Hardware Setup
-- User Management
+Comprehensive documentation is available in the **[Luxnix Wiki](https://github.com/wg-lux/luxnix/wiki)**:
+- [Deployment Guide](https://github.com/wg-lux/luxnix/wiki/Deployment-Guide)
+- [Network Architecture](https://github.com/wg-lux/luxnix/wiki/Network-Architecture)
+- [Service Configuration](https://github.com/wg-lux/luxnix/wiki/Service-Architecture)
+- [Hardware Setup](https://github.com/wg-lux/luxnix/wiki/Hardware-Setup)
+- [User Management](https://github.com/wg-lux/luxnix/wiki/User-Management)
 
 ## 🛟 Support
 
 For issues and questions:
 - Create an issue in the repository
-- Check the documentation in `docs/`
-- Review the deployment guide for common problems
+- Check the **[Luxnix Wiki](https://github.com/wg-lux/luxnix/wiki)** for documentation
+- Review the **[deployment guide](https://github.com/wg-lux/luxnix/wiki/Deployment-Guide)** for common problems
 
 ## Keycloak and Nextcloud login
 Make sure account has been created.
@@ -143,6 +143,77 @@ You can now use your **Keycloak credentials** to access **Nextcloud**.
 Download the mobile app.
 Use this link: https://cloud.endo-reg.net
 Enter credential/login using keyscloak
+
+## 📚 Documentation Wiki
+
+The following documents have been moved from the repository into the **[Luxnix Wiki](https://github.com/wg-lux/luxnix/wiki)** for easier access and centralized maintenance:
+
+### Luxnix Documentation
+- [Installation Guide - NixOS and Setting Up Luxnix](https://github.com/wg-lux/luxnix/wiki/Installation-Guide---NixOS-and-Setting-Up-Luxnix)
+- [Flake.nix & Garbage Collection](https://github.com/wg-lux/luxnix/wiki/Flake.nix-&-Garbage-Collection)
+- [Access Management](https://github.com/wg-lux/luxnix/wiki/Access-Management)
+- [Roles](https://github.com/wg-lux/luxnix/wiki/Roles)
+- [LX Cheatsheet](https://github.com/wg-lux/luxnix/wiki/LX-Cheatsheet)
+- [tmux CLI Cheatsheet](https://github.com/wg-lux/luxnix/wiki/tmux-CLI-Cheatsheet)
+- [Deployment Guide](https://github.com/wg-lux/luxnix/wiki/Deployment-Guide)
+- [Development](https://github.com/wg-lux/luxnix/wiki/Development)
+- [Hardware Setup](https://github.com/wg-lux/luxnix/wiki/Hardware-Setup)
+- [Network Architecture](https://github.com/wg-lux/luxnix/wiki/Network-Architecture)
+- [Security Improvements](https://github.com/wg-lux/luxnix/wiki/Security-Improvements)
+- [Security](https://github.com/wg-lux/luxnix/wiki/Security)
+- [Service Architecture](https://github.com/wg-lux/luxnix/wiki/Service-Architecture)
+- [User Management](https://github.com/wg-lux/luxnix/wiki/User-Management)
+- [Systemd tmpfiles Rules in NixOS](https://github.com/wg-lux/luxnix/wiki/Systemd-tmpfiles-Rules-in-NixOS)
+- [Common Errors](https://github.com/wg-lux/luxnix/wiki/Common-Errors)
+- [NixOs Configuration Testing with Eval](https://github.com/wg-lux/luxnix/wiki/NixOs-Configuration-Testing-with-Eval)
+- [System Language Change](https://github.com/wg-lux/luxnix/wiki/System-Language-Change)
+- [Roles Documentation](https://github.com/wg-lux/luxnix/wiki/Roles-Documentation)
+- [Doc Maintenance Schedule](https://github.com/wg-lux/luxnix/wiki/Doc-Maintenance-Schedule)
+- [Luxnix Server Setup with example](https://github.com/wg-lux/luxnix/wiki/Luxnix-Server-Setup-with-example)
+
+### Database Documentation
+- [Postgres Config Guide](https://github.com/wg-lux/luxnix/wiki/Postgres-Config-Guide)
+- [Postgres Documentation](https://github.com/wg-lux/luxnix/wiki/Postgres-Documentation)
+- [Postgres gc-10 Declarative Setup Summary](https://github.com/wg-lux/luxnix/wiki/Postgres-gc-10-Declarative-Setup-Summary)
+- [Endoreg Central Architecture](https://github.com/wg-lux/luxnix/wiki/Endoreg-Central-Architecture)
+
+### Ansible
+- [Readme](https://github.com/wg-lux/luxnix/wiki/Readme)
+- [Ansible CMDB Readme](https://github.com/wg-lux/luxnix/wiki/Ansible-CMDB-Readme)
+- [Process flow of creating Hosts, Roles, Groups](https://github.com/wg-lux/luxnix/wiki/Process-flow-of-creating-Hosts,-Roles,-Groups)
+- [Adding a New User Configuration](https://github.com/wg-lux/luxnix/wiki/Adding-a-New-User-Configuration)
+- [Maintenance & Security: Auto Update #6](https://github.com/wg-lux/luxnix/wiki/Maintenance-&-Security:-Auto-Update-%236)
+- [Home Configuration Autoconf Flow (Step-by-Step)](https://github.com/wg-lux/luxnix/wiki/Home-Configuration-Autoconf-Flow-%28Step-by-Step%29)
+- [Guide to Define New Setting With Example](https://github.com/wg-lux/luxnix/wiki/Guide-to-Define-New-Setting-With-Example)
+- [Autoconfig- create inventory.yml using Python Script](https://github.com/wg-lux/luxnix/wiki/Autoconfig--create-inventory.yml-using-Python-Script)
+- [Updated : Generating home config files using autoconfig](https://github.com/wg-lux/luxnix/wiki/Updated-:-Generating-home-config-files-using-autoconfig)
+
+### Devlog
+- [git](https://github.com/wg-lux/luxnix/wiki/git)
+- [vscode](https://github.com/wg-lux/luxnix/wiki/vscode)
+- [fix_long_lines](https://github.com/wg-lux/luxnix/wiki/fix_long_lines)
+- [kernel](https://github.com/wg-lux/luxnix/wiki/kernel)
+- [keycloak-setup](https://github.com/wg-lux/luxnix/wiki/keycloak-setup)
+- [network](https://github.com/wg-lux/luxnix/wiki/network)
+- [setup-mail](https://github.com/wg-lux/luxnix/wiki/setup-mail)
+- [setup-s04](https://github.com/wg-lux/luxnix/wiki/setup-s04)
+- [syncthing](https://github.com/wg-lux/luxnix/wiki/syncthing)
+- [2025-01-29 - postgres](https://github.com/wg-lux/luxnix/wiki/2025-01-29---postgres)
+
+
+### Figures
+- [Diagram for Luxnix](https://github.com/wg-lux/luxnix/wiki/Diagram-for-Luxnix)
+- [Cloudflare-traefik](https://github.com/wg-lux/luxnix/wiki/Cloudflare-traefik)
+- [Forward Auth Sonarr](https://github.com/wg-lux/luxnix/wiki/Forward-Auth-Sonarr)
+- [HTTP Basic Auth](https://github.com/wg-lux/luxnix/wiki/HTTP-Basic-Auth)
+- [tls-cloudflare-issue](https://github.com/wg-lux/luxnix/wiki/tls-cloudflare-issue)
+- [Tunnel Order](https://github.com/wg-lux/luxnix/wiki/Tunnel-Order)
+- [update-outpost](https://github.com/wg-lux/luxnix/wiki/update-outpost)
+
+### Miscellaneous
+- [Style Guide](https://github.com/wg-lux/luxnix/wiki/Style-Guide)
+
+
 
 
 ## 📜 License
