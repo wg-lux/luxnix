@@ -16,6 +16,10 @@
     ansible.enable = true;
     settings.mutable = false;
   };
+  # Make admin part of the sensitiveServices group so lx-annotate can read secrets
+  users.users.admin.extraGroups = [
+    config.luxnix.generic-settings.sensitiveServiceGroupName
+  ];
 
   roles = { 
     aglnet.client.enable = true;
@@ -222,4 +226,8 @@ nvidia-prime.onboardBusId = "PCI:0:2:0";
 nvidia-prime.onboardGpuType = "intel";
 
 };
+
+services.luxnix.lxAnnotate.enable = true; #for lx-annotate endoreg-service-user
+services.luxnix.endoregDbApiLocal.enable = true; # for endo-api endoreg-service-user
+
 }
