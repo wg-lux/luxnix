@@ -76,7 +76,7 @@ in {
     };
 
     #TODO @Hamzaukw add to documentation
-    systemd.services.boot-space-monitor = mkIf cfg.spaceManagement {
+    systemd.services.boot-space-monitor = mkIf false { # cfg.spaceManagement {
       description = "Monitor and clean boot partition space";
       serviceConfig = {
         Type = "oneshot";
@@ -130,7 +130,7 @@ in {
       '';
     };
 
-    systemd.timers.boot-space-monitor = mkIf cfg.spaceManagement {
+    systemd.timers.boot-space-monitor = mkIf false { #cfg.spaceManagement {
       wantedBy = [ "timers.target" ];
       timerConfig = {
         OnCalendar = "daily";
