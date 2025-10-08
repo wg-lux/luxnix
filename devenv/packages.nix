@@ -1,7 +1,7 @@
 { pkgs }:
 {
   buildInputs = with pkgs; [
-    python313Full
+    # python313Full
     stdenv.cc.cc
     tesseract
     glib
@@ -14,7 +14,7 @@
 
   packages = with pkgs; [
     cudaPackages.cuda_nvcc
-    python313Full
+    # python313Full
     jq
     age
     openssh

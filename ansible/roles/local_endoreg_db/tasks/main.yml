@@ -5,6 +5,6 @@
     version: "{{ endoreg_db_branch }}"
     update: true
     force: false
-  register: git_update
+  register: local_endoreg_db_git_update
   notify:
     - Initialize endoreg-db api
