@@ -189,7 +189,7 @@ in
 
     programs.obs-studio.enable = cfg.videoEditing;
 
-    programs.thunderbird.enable = cfg.office;
+    programs.thunderbird.enable = false; # cfg.office;
 
     hardware.graphics = {
       enable = lib.mkDefault cfg.hardwareAcceleration;

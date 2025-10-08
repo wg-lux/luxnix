@@ -54,7 +54,7 @@ in {
 
         systemd-boot = {
           enable = !cfg.secureBoot;
-          configurationLimit = if cfg.spaceManagement then 2 else 20;
+          configurationLimit = if cfg.spaceManagement then 5 else 20;
           editor = false;
         };
       };

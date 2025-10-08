@@ -1,6 +1,13 @@
 {
   description = "AGL's Nix/NixOS Config";
-
+  nixConfig = {
+    extra-substituters = [
+      "https://nix-community.cachix.org"
+    ];
+    extra-trusted-public-keys = [
+      "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
+    ];
+  };
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-25.05";
 
@@ -142,7 +149,7 @@
       homes.modules = with inputs; [
         # plasma-manager.homeModules.plasma-manager
         # nixvim.homeModules.nixvim
-        plasma-manager.homeManagerModules.plasma-manager
+        plasma-manager.homeModules.plasma-manager
         nixvim.homeManagerModules.nixvim
       ];
 

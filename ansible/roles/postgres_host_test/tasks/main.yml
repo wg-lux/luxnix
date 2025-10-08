@@ -13,17 +13,17 @@
 - name: Read postgres user password from vault
   ansible.builtin.slurp:
     src: "{{ lx_vault_dir }}/{{ postgres_host_test_password_filename }}"
-  register: postgres_password_b64
+  register: postgres_host_test_password_b64
   no_log: false
 
 - name: Set postgres user password
   ansible.builtin.command:
-    cmd: psql -U postgres -c "ALTER ROLE postgres WITH PASSWORD '{{ postgres_password_b64.content | b64decode | trim }}';"
+    cmd: psql -U postgres -c "ALTER ROLE postgres WITH PASSWORD '{{ postgres_host_test_password_b64.content | b64decode | trim }}';"
   become: true
   become_user: root # Changed from postgres to root
   no_log: true
-  register: postgres_password_result
-  changed_when: postgres_password_result.rc == 0
+  register: postgres_host_test_password_result
+  changed_when: postgres_host_test_password_result.rc == 0
   environment:
     PGPASSWORD: "" # Ensure no password is used for peer authentication
     PGHOST: "" # Force local socket connection
@@ -33,7 +33,7 @@
     cmd: psql -U postgres -c "SELECT version();"
   become: true
   become_user: root
-  register: postgres_test_result
+  register: postgres_host_test_test_result
   changed_when: false
   environment:
     PGPASSWORD: ""
@@ -41,7 +41,7 @@
 
 - name: Check PostgreSQL is listening on correct ports
   ansible.builtin.shell: set -o pipefail; netstat -tuln | grep 5432
-  register: postgres_ports
+  register: postgres_host_test_ports
   changed_when: false
 
 - name: Show PostgreSQL configuration
@@ -49,7 +49,7 @@
     cmd: psql -U postgres -c "SHOW listen_addresses;"
   become: true
   become_user: postgres
-  register: postgres_config
+  register: postgres_host_test_config
   changed_when: false
   environment:
     PGPASSWORD: ""
@@ -58,5 +58,5 @@
 - name: Display debug information
   ansible.builtin.debug:
     msg:
-      - "Listening ports: {{ postgres_ports.stdout }}"
-      - "PostgreSQL config: {{ postgres_config.stdout }}"
+      - "Listening ports: {{ postgres_host_test_ports.stdout }}"
+      - "PostgreSQL config: {{ postgres_host_test_config.stdout }}"
