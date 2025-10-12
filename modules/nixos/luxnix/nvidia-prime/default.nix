@@ -86,7 +86,7 @@ in
       modesetting.enable = true;
       powerManagement.enable = true;
       powerManagement.finegrained = false;
-      open = false;
+      open = lib.mkDefault true;
       nvidiaSettings = true;
 
       package = nvidiaDrivers."${cfg.nvidiaDriver}";
