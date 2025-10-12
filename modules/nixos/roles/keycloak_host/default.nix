@@ -7,12 +7,14 @@
 with lib; 
 with lib.luxnix; let
 
-  sslCertGroupName = config.users.groups.sslCert.name;
   sensitiveServicesGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
+  sslCertGroupName =
+    if config.users.groups ? sslCert
+    then config.users.groups.sslCert.name
+    else sensitiveServicesGroupName;
   
   # Use the host's VPN IP since keycloak.vpnIp is not defined
   vpnIp = config.luxnix.generic-settings.network.hosts.s-02.ip-vpn or "127.0.0.1";
-
   cfg = config.roles.keycloakHost;
   conf = config.luxnix.generic-settings.network.keycloak;
   sslCertFile = config.luxnix.generic-settings.sslCertificatePath;
