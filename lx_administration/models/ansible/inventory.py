@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 from typing import Dict, List, Optional, Union, Any, cast
 from pathlib import Path
 from lx_administration.logging import log_heading, get_logger
@@ -111,9 +111,27 @@ class AnsibleInventoryHost(BaseModel):
 
 class AnsibleInventoryGroup(BaseModel):
     name: str
-    vars: Dict[str, Union[str, Dict, List[str]]] = {}
-    files: List[str] = []
-    extra_user_names: List[str] = []
+    vars: Dict[str, Union[str, Dict, List[str]]] = Field(default_factory=dict)
+    files: List[str] = Field(default_factory=list)
+    extra_user_names: List[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_optional_fields(cls, values: Dict[str, Any]):
+        vars_val = values.get("vars")
+        if vars_val is None:
+            values["vars"] = {}
+        elif isinstance(vars_val, dict):
+            values["vars"] = {
+                key: ({} if val is None else val) for key, val in vars_val.items()
+            }
+        files_val = values.get("files")
+        if files_val is None:
+            values["files"] = []
+        extra_val = values.get("extra_user_names")
+        if extra_val is None:
+            values["extra_user_names"] = []
+        return values
 
     def __str__(self):
         return super().__str__()
@@ -129,9 +147,31 @@ class AnsibleInventoryGroup(BaseModel):
 
 class AnsibleInventoryRole(BaseModel):
     name: str
-    vars: Optional[Dict[str, Union[str, Dict, List[str]]]] = {}
-    files: List[str] = []
-    extra_user_names: List[str] = []
+    vars: Optional[Dict[str, Union[str, Dict, List[str]]]] = None
+    files: List[str] = Field(default_factory=list)
+    extra_user_names: List[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_optional_fields(cls, values: Dict[str, Any]):
+        if values.get("vars") is None:
+            values["vars"] = {}
+        elif isinstance(values["vars"], dict):
+            values["vars"] = {
+                key: ({} if val is None else val)
+                for key, val in values["vars"].items()
+            }
+        if values.get("files") is None:
+            values["files"] = []
+        if values.get("extra_user_names") is None:
+            values["extra_user_names"] = []
+        return values
+
+    @model_validator(mode="after")
+    def _normalize_vars(self):
+        if self.vars is None:
+            self.vars = {}
+        return self
 
     def get_extra_user_names(self) -> List[str]:
         if not self.vars:

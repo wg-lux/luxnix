@@ -170,11 +170,13 @@ generic-settings.traefikHostIp = "172.16.255.12";
 
 generic-settings.vpnSubnet = "172.16.255.0/24";
 
-maintenance.autoUpdates.dates = "04:00";
+maintenance.autoUpdates.dates = "17:00";
 
 maintenance.autoUpdates.enable = true;
 
-maintenance.autoUpdates.flake = "github:wg-lux/luxnix";
+maintenance.autoUpdates.flake = "github:wg-lux/luxnix/prototype";
+
+maintenance.autoUpdates.operation = "switch";
 
 nvidia-prime.enable = false;
 

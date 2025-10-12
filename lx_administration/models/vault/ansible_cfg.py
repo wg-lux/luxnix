@@ -18,9 +18,10 @@ class AnsibleCfgDefaults(BaseModel):
     group_vars: str = "./ansible/inventory/group_vars"
     host_vars: str = "./ansible/inventory/host_vars"
     roles_path: str = "./ansible/roles"
-    log_path: str = "./ansible/ansible.log"
+    log_path: str = "./logs/ansible.log"
     library: str = "./ansible/modules"
     vault_identity_list: Optional[str] = None
+    private_key_file: Optional[str] = None
 
     def get_vid_list(self) -> List[str]:
         """

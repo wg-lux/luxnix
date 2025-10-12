@@ -14,6 +14,7 @@ luxnix.code-workspace
 docs/hostinfo/
 docs/luxnix-hostinfo.md
 conf/hostinfo.json
+logs/
 
 *.key
 
@@ -25,6 +26,7 @@ untracked-notes.md
 .vscode
 result/
 secrets/
+ansible/secrets/admin-passwords.yml
 .ruff_cache/
 .devenv
 untracked_notes.md

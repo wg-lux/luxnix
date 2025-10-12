@@ -52,6 +52,7 @@ class Vault(BaseModel):
     subnet: str = "172.16.255."
     secret_templates: List[SecretTemplate] = Field(default_factory=list)
     pre_shared_keys: List[PreSharedKey] = Field(default_factory=list)
+    local_hostname_override: Optional[str] = None
 
     @classmethod
     def _get_vault_paths(cls, dir: str, key: str) -> Tuple[Path, Path, Path]:
@@ -506,6 +507,8 @@ class Vault(BaseModel):
                     logger.error(f"Failed to re-encrypt secret {secret.name}: {str(e)}")
 
     def get_local_hostname(self) -> str:
+        if self.local_hostname_override:
+            return self.local_hostname_override
         return socket.gethostname()
 
     def get_vault_id_for_hostname(self, hostname: str) -> str:
