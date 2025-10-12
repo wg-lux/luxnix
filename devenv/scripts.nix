@@ -32,7 +32,13 @@
 
 
   bnsc.exec = "${pkgs.uv}/bin/uv run python scripts/autoconf-pipeline.py";
-  blxv.exec = "${pkgs.uv}/bin/uv run python scripts/bootstrap-lx-vault.py";
+  blxv.exec = ''${pkgs.uv}/bin/uv run python scripts/bootstrap-lx-vault.py "$@"'';
+  vault-bootstrap.package = pkgs.zsh;
+  vault-bootstrap.exec = ''${pkgs.uv}/bin/uv run python scripts/bootstrap-lx-vault.py "$@"'';
+  validate-admin-passwords.package = pkgs.zsh;
+  validate-admin-passwords.exec = ''${pkgs.uv}/bin/uv run python scripts/validate-admin-passwords.py "$@"'';
+  check-connectivity.package = pkgs.zsh;
+  check-connectivity.exec = ''./scripts/check-connectivity.sh "$@"'';
 
   run-ansible.exec = "${pkgs.uv}/bin/uv run ansible-playbook ansible/site.yml";
 

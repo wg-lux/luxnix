@@ -9,6 +9,3 @@ group_luxnix:
   generic_settings.gpu.nvidia.driver: '"stable"'
   # Note: Servers typically don't need PRIME hybrid graphics
   maintenance.autoUpdates.enable: "true"
-  maintenance.autoUpdates.operation: '"switch"'
-  maintenance.autoUpdates.flake: '"github:wg-lux/luxnix"'
-  maintenance.autoUpdates.dates: '"06:00"'

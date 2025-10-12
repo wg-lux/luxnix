@@ -1,5 +1,7 @@
 # inventory/host_vars/gc-08.yml
 ---
+ansible_python_interpreter: "{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python"
+luxnix_dev_repo: "/home/admin/dev/luxnix"
 template_name: "main"
 
 host_roles:
@@ -49,3 +51,4 @@ host_luxnix:
   generic_settings.gpu.nvidia.prime.onboardBusId: '"PCI:0:2:0"'
   generic_settings.gpu.nvidia.prime.onboardType: '"intel"'
   generic_settings.gpu.nvidia.driver: '"beta"'
+  maintenance.autoUpdates.enable: "false"

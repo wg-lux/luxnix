@@ -165,6 +165,12 @@ generic-settings.traefikHostIp = "172.16.255.12";
 
 generic-settings.vpnSubnet = "172.16.255.0/24";
 
+maintenance.autoUpdates.dates = "17:00";
+
+maintenance.autoUpdates.flake = "github:wg-lux/luxnix/prototype";
+
+maintenance.autoUpdates.operation = "switch";
+
 vault.dir = "/etc/secrets/vault";
 
 vault.enable = true;

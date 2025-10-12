@@ -1,0 +1,160 @@
+#!/usr/bin/env python3
+"""Verify admin passwords stored in the Luxnix vault against a source file."""
+
+from __future__ import annotations
+
+import argparse
+import subprocess
+import sys
+from pathlib import Path
+from typing import Dict, List, Tuple
+
+import yaml
+
+from lx_administration.logging import get_logger
+from lx_administration.models.vault.manager import Vault
+from lx_administration.password.generator import PasswordGenerator
+
+LOGGER = get_logger("validate-admin-passwords", reset=True)
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Validate admin passwords stored in the Luxnix vault"
+    )
+    parser.add_argument(
+        "--vault-dir",
+        default="~/.lxv",
+        help="Vault directory (where secrets and PSKs are stored)",
+    )
+    parser.add_argument(
+        "--vault-key",
+        default="~/.lxv.key",
+        help="Path to the local vault key used to encrypt secrets",
+    )
+    parser.add_argument(
+        "--admin-passwords",
+        default="ansible/secrets/admin-passwords.yml",
+        help="YAML file containing admin passwords under 'admin_passwords'",
+    )
+    parser.add_argument(
+        "--vault-id",
+        default=None,
+        help=(
+            "Vault identity to use when decrypting secrets (defaults to the value "
+            "saved in the vault or the current hostname)."
+        ),
+    )
+    return parser.parse_args()
+
+
+def _load_admin_passwords(path: Path) -> Dict[str, str]:
+    if not path.exists():
+        raise FileNotFoundError(f"Admin password file not found: {path}")
+
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not data:
+        return {}
+    if isinstance(data, dict):
+        mapping = data.get("admin_passwords", {})
+        if isinstance(mapping, dict):
+            return {str(k): str(v) for k, v in mapping.items() if v is not None}
+    raise ValueError("Admin passwords file must define a mapping under 'admin_passwords'.")
+
+
+def _secret_paths(vault_dir: Path, hostname: str) -> Tuple[Path, Path]:
+    base = vault_dir / "secrets" / "password" / "local" / f"admin@{hostname}"
+    password_file = base / f"admin@{hostname}_password"
+    hash_file = base / f"admin@{hostname}_password_hash"
+    return password_file, hash_file
+
+
+def _decrypt_secret(file_path: Path, vault_id: str, key_path: Path) -> str:
+    if not file_path.exists():
+        raise FileNotFoundError(file_path)
+
+    cmd = [
+        "ansible-vault",
+        "view",
+        f"--vault-id={vault_id}@{key_path.as_posix()}",
+        file_path.as_posix(),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"Failed to decrypt {file_path}: {proc.stderr.strip() or proc.stdout.strip()}"
+        )
+    return proc.stdout.strip()
+
+
+def main() -> None:
+    args = _parse_args()
+
+    vault_dir = Path(args.vault_dir).expanduser().resolve()
+    vault_key = Path(args.vault_key).expanduser().resolve()
+    admin_file = Path(args.admin_passwords).expanduser().resolve()
+
+    vault = Vault.load_dir(vault_dir.as_posix(), vault_key.as_posix())
+    vault.dir = vault_dir.as_posix()
+    vault.key = vault_key.as_posix()
+
+    vault_id = (
+        args.vault_id
+        or getattr(vault, "local_hostname_override", None)
+        or vault.get_local_hostname()
+    )
+
+    LOGGER.info("Using vault id '%s' with key %s", vault_id, vault_key)
+
+    passwords = _load_admin_passwords(admin_file)
+    if not passwords:
+        LOGGER.warning("No admin passwords found in %s", admin_file)
+        sys.exit(0)
+
+    mismatches: List[str] = []
+    missing: List[str] = []
+    generator = PasswordGenerator(mode="password", require_special=False)
+
+    for hostname, password in passwords.items():
+        password_file, hash_file = _secret_paths(vault_dir, hostname)
+        try:
+            stored_password = _decrypt_secret(password_file, vault_id, vault_key)
+        except FileNotFoundError:
+            missing.append(f"{hostname}: missing password secret {password_file}")
+            continue
+        except RuntimeError as exc:
+            mismatches.append(f"{hostname}: {exc}")
+            continue
+
+        if stored_password != password:
+            mismatches.append(
+                f"{hostname}: plaintext mismatch (vault='{stored_password}', file='{password}')"
+            )
+
+        try:
+            stored_hash = _decrypt_secret(hash_file, vault_id, vault_key)
+        except FileNotFoundError:
+            missing.append(f"{hostname}: missing password hash secret {hash_file}")
+            continue
+        except RuntimeError as exc:
+            mismatches.append(f"{hostname}: {exc}")
+            continue
+
+        if not generator.verify_password_hash(password, stored_hash):
+            mismatches.append(f"{hostname}: password hash mismatch")
+
+    if missing or mismatches:
+        for msg in missing:
+            LOGGER.error(msg)
+        for msg in mismatches:
+            LOGGER.error(msg)
+        LOGGER.error(
+            "Validation failed: %d missing secrets, %d mismatches", len(missing), len(mismatches)
+        )
+        sys.exit(1)
+
+    LOGGER.info("All %d admin passwords match the vault entries", len(passwords))
+
+
+if __name__ == "__main__":
+    main()
