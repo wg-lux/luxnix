@@ -71,7 +71,7 @@ in
 
       djangoAllowedHosts = mkOption {
         type = types.listOf types.str;
-        default = [ "localhost" "127.0.0.1" ];
+        default = [ "localhost" "127.0.0.1"];
         description = "Django ALLOWED_HOSTS setting";
         example = [ "api.example.com" "localhost" "127.0.0.1" ];
       };
@@ -119,6 +119,103 @@ in
         default = "en-us";
         description = "Django language setting";
         example = "de-de";
+      };
+
+      settingsProfile = mkOption {
+        type = types.enum [ "dev" "prod" "central" "test" ];
+        default = "prod";
+        description = "Base settings profile to derive Django settings module.";
+      };
+
+      settingsModule = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Explicit Django settings module (overrides settingsProfile).";
+      };
+
+      djangoEnv = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Value for DJANGO_ENV; inferred from settingsProfile when null.";
+      };
+
+      #TODO unify data and storage dir
+      dataDir = mkOption {
+        type = types.str;
+        default = "data";
+        description = "Relative path to the data directory inside the repository.";
+      };
+
+      storageDir = mkOption {
+        type = types.str;
+        default = "data/storage";
+        description = "Relative or absolute path used for STORAGE_DIR.";
+      };
+
+      confDir = mkOption {
+        type = types.str;
+        default = "conf";
+        description = "Relative path to configuration directory inside the repository.";
+      };
+
+      confTemplateDir = mkOption {
+        type = types.str;
+        default = "conf_template";
+        description = "Relative path to configuration template directory.";
+      };
+
+      djangoModule = mkOption {
+        type = types.str;
+        default = "endo_api";
+        description = "Python module containing the Django project.";
+      };
+
+      assetDir = mkOption {
+        type = types.str;
+        default = "tests/assets";
+        description = "Relative or absolute path for ASSET_DIR.";
+      };
+
+      httpProtocol = mkOption {
+        type = types.enum [ "http" "https" ];
+        default = "http";
+        description = "Explicit HTTP protocol to advertise in BASE_URL.";
+      };
+
+      baseUrl = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Explicit BASE_URL; constructed from protocol/host/port when null.";
+      };
+
+      staticUrl = mkOption {
+        type = types.str;
+        default = "/static/";
+        description = "STATIC_URL value exported to the application.";
+      };
+
+      mediaUrl = mkOption {
+        type = types.str;
+        default = "/media/";
+        description = "MEDIA_URL value exported to the application.";
+      };
+
+      runVideoTests = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Whether to enable RUN_VIDEO_TESTS environment flag.";
+      };
+
+      skipExpensiveTests = mkOption {
+        type = types.bool;
+        default = true;
+        description = "Whether to enable SKIP_EXPENSIVE_TESTS environment flag.";
+      };
+
+      extraSettings = mkOption {
+        type = types.attrsOf types.anything;
+        default = {};
+        description = "Additional attributes exported into Django local settings.";
       };
     };
 
@@ -230,6 +327,7 @@ in
       desktop.enable = true;
       custom-packages.cuda = true;
       aglnet.client.enable = true;
+      managed-secrets.enable = mkDefault true;
     };
 
     luxnix.nvidia-prime.enable = true;
@@ -240,7 +338,7 @@ in
       # Pass configuration options to the service
       api = cfg.api // {
         # Add central nodes information
-        extraSettings = {
+        extraSettings = recursiveUpdate cfg.api.extraSettings {
           CENTRAL_NODES = cfg.centralNodes;
           IS_CENTRAL_NODE = false;
         };

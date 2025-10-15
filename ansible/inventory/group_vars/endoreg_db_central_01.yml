@@ -23,6 +23,6 @@ group_roles:
   endoreg_db_central_01.database.sslMode: '"allow"'
   endoreg_db_central_01.service.workers: "4"
   endoreg_db_central_01.service.maxRequests: "5000"
-  endoreg_client.repository.branch: '"main"'
+  endoreg_client.repository.branch: '"container"'
 group_services: {}
 group_luxnix: {}

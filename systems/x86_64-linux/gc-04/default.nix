@@ -22,7 +22,14 @@
     common.enable = true;
     custom-packages.cloud = true;
     custom-packages.enable = true;
+    endoreg-client.api.djangoAllowedHosts = ["localhost" "127.0.0.1" "172.16.255.106" "172.16.255.230"];    endoreg-client.api.httpProtocol = "http";
+    endoreg-client.api.language = "en-us";
+    endoreg-client.api.logLevel = "WARNING";
+    endoreg-client.api.maxRequestSize = "50G";
+    endoreg-client.api.settingsProfile = "prod";
+    endoreg-client.centralNodes = ["s-04"];    endoreg-client.dbApiLocal = true;
     endoreg-client.enable = true;
+    endoreg-client.repository.branch = "container";
     nextcloudClient.enable = true;
     ssh-access.dev-01.enable = true;
     ssh-access.dev-01.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK";
@@ -181,6 +188,16 @@ generic-settings.sensitiveServiceGroupName = "sensitiveServices";
 generic-settings.traefikHostDomain = "traefik.endo-reg.net";
 
 generic-settings.traefikHostIp = "172.16.255.12";
+
+generic-settings.virtualization.enable = true;
+
+generic-settings.virtualization.kvm = {};
+
+generic-settings.virtualization.podman = {};
+
+generic-settings.virtualization.supportedArchitectures = [];
+generic-settings.virtualization.userGroups = [];
+generic-settings.virtualization.vfio = {};
 
 generic-settings.vpnSubnet = "172.16.255.0/24";
 
