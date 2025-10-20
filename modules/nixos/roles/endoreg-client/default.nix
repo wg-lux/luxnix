@@ -319,9 +319,28 @@ in
     };
   };
 
-  config = mkIf cfg.enable {
+  config = mkIf cfg.enable (let
+    clientUserName =
+      if config ? user && config.user ? client && config.user.client ? name
+      then config.user.client.name
+      else "client-user";
+    clientUserHome =
+      let
+        maybeHome = if config ? user && config.user ? client && config.user.client ? home then config.user.client.home else null;
+      in
+        if maybeHome != null then maybeHome else "/home/${clientUserName}";
+    clientHomeStateVersion =
+      if config ? user && config.user ? client && config.user.client ? homeStateVersion
+      then config.user.client.homeStateVersion
+      else (config.system.stateVersion or "24.05");
+    storageBaseDir = "/var/lib/endoreg-client";
+    videoInputDir = "${storageBaseDir}/video_input";
+    pdfInputDir = "${storageBaseDir}/pdf_input";
+  in {
+    user.client.enable = mkDefault true;
     user.endoreg-service-user.enable = true;
     group.endoreg-service.enable = true;  # Ensure the group is created
+    group.endoreg-service.members = mkAfter [ clientUserName ];
 
     roles = {
       desktop.enable = true;
@@ -360,7 +379,30 @@ in
       "d /etc/endoreg-api 0755 root root -"
       # Service user config directory
       "d /var/endoreg-service-user/config 0755 endoreg-service-user endoreg-service -"
+    ] ++ [
+      "d ${storageBaseDir} 0770 root endoreg-service -"
+      "d ${videoInputDir} 0770 root endoreg-service -"
+      "d ${pdfInputDir} 0770 root endoreg-service -"
     ];
+
+    home-manager.users.${clientUserName} = { config, ... }: let
+      outOfStore = config.lib.file.mkOutOfStoreSymlink;
+    in {
+      home.username = mkDefault clientUserName;
+      home.homeDirectory = mkDefault clientUserHome;
+      home.stateVersion = mkDefault clientHomeStateVersion;
+
+      roles.desktop.enable = mkDefault true;
+
+      home.file."Desktop/Video Input" = {
+        source = outOfStore videoInputDir;
+        force = true;
+      };
+      home.file."Desktop/PDF Input" = {
+        source = outOfStore pdfInputDir;
+        force = true;
+      };
+    };
 
     # Generate Django secret key if it doesn't exist
     systemd.services.endoreg-django-setup = mkIf cfg.dbApiLocal {
@@ -391,5 +433,5 @@ in
         '';
       };
     };
-  };
+  });
 }
