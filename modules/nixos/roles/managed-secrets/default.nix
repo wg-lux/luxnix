@@ -443,7 +443,7 @@ EOF
             exit 1
           fi
           if [[ "$quiet" != "true" ]]; then
-            printf '--- %s (%s) ---%s' "$name" "$path" "\n"
+            printf -- '--- %s (%s) ---\n' "$name" "$path"
           fi
           sudo cat "$path"
           if [[ "$quiet" != "true" ]]; then
