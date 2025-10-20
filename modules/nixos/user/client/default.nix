@@ -18,8 +18,8 @@ in {
       description = "Optional override for the client user's home directory";
     };
     hashedPasswordFile = mkOption {
-      type = nullOr path;
-      default = null;
+      type = nullOr str;
+      default = "/etc/secrets/vault/SCRT_client_user_password_hash";
       description = "Path to a hashed password file for the client user";
     };
     extraGroups = mkOpt (listOf str) [] "Additional groups for the client user";

@@ -343,7 +343,7 @@ PY
 
 in
 {
-  options.services.luxnix.endoregDbApiLocal = {
+  options.services.luxnix.lxAnnotateLocal = {
     enable = mkBoolOpt false "Enable EndoRegDbApi Service";
 
     # Configuration options (passed from endoreg-client role)
