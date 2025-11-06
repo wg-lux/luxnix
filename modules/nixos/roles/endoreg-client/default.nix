@@ -317,6 +317,208 @@ in
         description = "Whether to update the repository on service start";
       };
     };
+
+    environmentDefaults = {
+      hfHome = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Default HuggingFace home directory. When null, derived from the service user home.";
+      };
+
+      hfHubCache = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Default HuggingFace hub cache directory. When null, derived from the service user home.";
+      };
+
+      transformersCache = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Default transformers cache directory. When null, derived from the service user home.";
+      };
+
+      hfHubEnableTransfer = mkOption {
+        type = types.bool;
+        default = true;
+        description = "Whether to enable HF_HUB_ENABLE_HF_TRANSFER by default.";
+      };
+
+      ollamaModelsDir = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Default Ollama models directory. When null, derived from the service user home.";
+      };
+
+      ollamaKeepAlive = mkOption {
+        type = types.str;
+        default = "4h";
+        description = "Default keep-alive duration for Ollama.";
+      };
+    };
+
+    lxAnnotate = {
+      enable = mkOption {
+        type = types.bool;
+        default = true;
+        description = "Enable the lx-annotate-local service on endoreg clients.";
+      };
+
+      debug = mkOption {
+        type = types.submodule {
+          options = {
+            enable = mkOption {
+              type = types.bool;
+              default = false;
+              description = "Enable verbose debug output for the lx-annotate-local service.";
+            };
+          };
+        };
+        default = {};
+        description = "Debug configuration for lx-annotate-local.";
+      };
+
+      source = mkOption {
+        type = types.submodule {
+          options = {
+            url = mkOption {
+              type = types.str;
+              default = "https://github.com/wg-lux/lx-annotate";
+              description = "Git repository URL for the lx-annotate application.";
+            };
+
+            branch = mkOption {
+              type = types.str;
+              default = "erc";
+              description = "Git branch to checkout for lx-annotate.";
+            };
+
+            updateOnBoot = mkOption {
+              type = types.bool;
+              default = true;
+              description = "Whether to update the lx-annotate repository on service start.";
+            };
+          };
+        };
+        default = {};
+        description = "Repository configuration for lx-annotate.";
+      };
+
+      django = mkOption {
+        type = types.submodule {
+          options = {
+            djangoModule = mkOption {
+              type = types.str;
+              default = "lx_annotate";
+              description = "Python module containing the lx-annotate Django project.";
+            };
+
+            dataDir = mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              description = "Override for the lx-annotate data directory. Uses the shared API value when null.";
+            };
+
+            storageDir = mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              description = "Override for the lx-annotate storage directory. Uses the shared API value when null.";
+            };
+
+            confDir = mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              description = "Override for the lx-annotate configuration directory. Uses the shared API value when null.";
+            };
+
+            confTemplateDir = mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              description = "Override for the lx-annotate configuration template directory. Uses the shared API value when null.";
+            };
+
+            assetDir = mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              description = "Override for the lx-annotate asset directory. Uses the shared API value when null.";
+            };
+          };
+        };
+        default = {};
+        description = "Overrides for lx-annotate Django-specific paths.";
+      };
+
+      runtime = mkOption {
+        type = types.submodule {
+          options = {
+            limits = mkOption {
+              type = types.submodule {
+                options = {
+                  memoryMax = mkOption {
+                    type = types.str;
+                    default = "8G";
+                    description = "MemoryMax limit applied to the lx-annotate-local service.";
+                  };
+
+                  cpuQuota = mkOption {
+                    type = types.str;
+                    default = "800%";
+                    description = "CPUQuota assigned to the lx-annotate-local service.";
+                  };
+                };
+              };
+              default = {};
+              description = "Resource limit configuration for lx-annotate-local.";
+            };
+
+            environment = mkOption {
+              type = types.submodule {
+                options = {
+                  hfHome = mkOption {
+                    type = types.nullOr types.str;
+                    default = null;
+                    description = "Override HuggingFace home directory for lx-annotate.";
+                  };
+
+                  hfHubCache = mkOption {
+                    type = types.nullOr types.str;
+                    default = null;
+                    description = "Override HuggingFace hub cache directory for lx-annotate.";
+                  };
+
+                  transformersCache = mkOption {
+                    type = types.nullOr types.str;
+                    default = null;
+                    description = "Override transformers cache directory for lx-annotate.";
+                  };
+
+                  hfHubEnableTransfer = mkOption {
+                    type = types.nullOr types.bool;
+                    default = null;
+                    description = "Override HF_HUB_ENABLE_HF_TRANSFER for lx-annotate.";
+                  };
+
+                  ollamaModelsDir = mkOption {
+                    type = types.nullOr types.str;
+                    default = null;
+                    description = "Override Ollama models directory for lx-annotate.";
+                  };
+
+                  ollamaKeepAlive = mkOption {
+                    type = types.nullOr types.str;
+                    default = null;
+                    description = "Override Ollama keep-alive duration for lx-annotate.";
+                  };
+                };
+              };
+              default = {};
+              description = "Environment variable overrides for lx-annotate-local.";
+            };
+          };
+        };
+        default = {};
+        description = "Runtime configuration for lx-annotate-local.";
+      };
+    };
   };
 
   config = mkIf cfg.enable (let
@@ -336,6 +538,70 @@ in
     storageBaseDir = "/var/lib/endoreg-client";
     videoInputDir = "${storageBaseDir}/video_input";
     pdfInputDir = "${storageBaseDir}/pdf_input";
+
+    firstNonNull = values: lib.foldl' (acc: val: if acc != null then acc else val) null values;
+
+    endoregServiceUserName =
+      if config ? user && config.user ? endoreg-service-user && config.user.endoreg-service-user ? name
+      then config.user.endoreg-service-user.name
+      else "endoreg-service-user";
+    endoregServiceUserHome =
+      let
+        maybeHome = if config ? user && config.user ? endoreg-service-user && config.user.endoreg-service-user ? home
+          then config.user.endoreg-service-user.home
+          else null;
+      in
+      if maybeHome != null then maybeHome else "/var/${endoregServiceUserName}";
+
+    envDefaultsCfg = cfg.environmentDefaults;
+    envOverrides = cfg.lxAnnotate.runtime.environment;
+
+    defaultHfHome = "${endoregServiceUserHome}/.cache/huggingface";
+    defaultHfHubCache = "${endoregServiceUserHome}/.cache/huggingface/hub";
+    defaultTransformersCache = defaultHfHubCache;
+    defaultOllamaModelsDir = "${endoregServiceUserHome}/.ollama/models";
+
+    resolvedHfHome = firstNonNull [ envOverrides.hfHome envDefaultsCfg.hfHome defaultHfHome ];
+    resolvedHfHubCache = firstNonNull [ envOverrides.hfHubCache envDefaultsCfg.hfHubCache defaultHfHubCache ];
+    resolvedTransformersCache = firstNonNull [ envOverrides.transformersCache envDefaultsCfg.transformersCache defaultTransformersCache ];
+    resolvedOllamaModelsDir = firstNonNull [ envOverrides.ollamaModelsDir envDefaultsCfg.ollamaModelsDir defaultOllamaModelsDir ];
+    resolvedOllamaKeepAlive = firstNonNull [ envOverrides.ollamaKeepAlive envDefaultsCfg.ollamaKeepAlive ];
+    resolvedHfHubEnableTransfer =
+      let specific = envOverrides.hfHubEnableTransfer;
+      in if specific != null then specific else envDefaultsCfg.hfHubEnableTransfer;
+
+    annotateEnvironment = {
+      hfHome = resolvedHfHome;
+      hfHubCache = resolvedHfHubCache;
+      transformersCache = resolvedTransformersCache;
+      hfHubEnableTransfer = resolvedHfHubEnableTransfer;
+      ollamaModelsDir = resolvedOllamaModelsDir;
+      ollamaKeepAlive = resolvedOllamaKeepAlive;
+    };
+
+    annotateRuntimeLimits = cfg.lxAnnotate.runtime.limits;
+
+    annotateDjangoOverrides = {
+      djangoModule = cfg.lxAnnotate.django.djangoModule;
+      dataDir = if cfg.lxAnnotate.django.dataDir != null then cfg.lxAnnotate.django.dataDir else cfg.api.dataDir;
+      storageDir = if cfg.lxAnnotate.django.storageDir != null then cfg.lxAnnotate.django.storageDir else cfg.api.storageDir;
+      confDir = if cfg.lxAnnotate.django.confDir != null then cfg.lxAnnotate.django.confDir else cfg.api.confDir;
+      confTemplateDir = if cfg.lxAnnotate.django.confTemplateDir != null then cfg.lxAnnotate.django.confTemplateDir else cfg.api.confTemplateDir;
+      assetDir = if cfg.lxAnnotate.django.assetDir != null then cfg.lxAnnotate.django.assetDir else cfg.api.assetDir;
+    };
+
+    annotateExtraSettings =
+      let
+        baseExtraSettings = cfg.api.extraSettings;
+      in
+      recursiveUpdate baseExtraSettings {
+        CENTRAL_NODES = cfg.centralNodes;
+        IS_CENTRAL_NODE = false;
+      };
+
+    annotateDjango = recursiveUpdate cfg.api (annotateDjangoOverrides // {
+      extraSettings = annotateExtraSettings;
+    });
   in {
     user.client.enable = mkDefault true;
     user.endoreg-service-user.enable = true;
@@ -365,6 +631,19 @@ in
       database = cfg.database;
       service = cfg.service;
       repository = cfg.repository;
+    };
+
+    services.luxnix.lxAnnotateLocal = {
+      enable = mkDefault cfg.lxAnnotate.enable;
+      debug.enable = cfg.lxAnnotate.debug.enable;
+      source = cfg.lxAnnotate.source;
+      django = annotateDjango;
+      database = cfg.database;
+      runtime = {
+        server = cfg.service;
+        limits = annotateRuntimeLimits;
+        environment = annotateEnvironment;
+      };
     };
 
     services.luxnix.endoAi = {
