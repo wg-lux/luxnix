@@ -118,6 +118,7 @@ with lib.luxnix; let
     }
     '' else ""}
 
+    #################### DB SETUP ####################
     # Copy database password from vault (managed by postgres-default role)
     echo "Setting up database configuration..."
     
