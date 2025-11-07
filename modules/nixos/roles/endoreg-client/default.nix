@@ -34,6 +34,13 @@ in
       description = "Enable endoAi service";
     };
 
+    defaultCenter = mkOption {
+      type = types.str;
+      default = "university_hospital_wuerzburg";
+      description = "Default center value for endoreg client";
+      example = "university_hospital_wuerzburg";
+    };
+
     # Django API Configuration Options
     api = {
       hostname = mkOption {
@@ -639,11 +646,6 @@ in
       source = cfg.lxAnnotate.source;
       django = annotateDjango;
       database = cfg.database;
-      runtime = {
-        server = cfg.service;
-        limits = annotateRuntimeLimits;
-        environment = annotateEnvironment;
-      };
     };
 
     services.luxnix.endoAi = {
