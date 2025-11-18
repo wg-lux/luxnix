@@ -16,62 +16,65 @@ with lib.luxnix; let
   adminName = config.user.admin.name;
   scriptName = "runLocalLxAnnotate";
 
-  # Use configuration options or fallback to defaults
-  gitURL = cfg.repository.url;
+  # Use configuration options from new structure
+  gitURL = cfg.source.url;
   repoDirName = "lx-annotate";
-  branchName = cfg.repository.branch;
+  branchName = cfg.source.branch;
 
   endoreg-service-user-name = config.user.endoreg-service-user.name;
   endoreg-service-user = config.users.users.${endoreg-service-user-name};
   endoreg-service-user-home = endoreg-service-user.home;
   repoDir = "${endoreg-service-user-home}/${repoDirName}";
 
-  # Environment variable configuration
-  envDataDir = "${repoDir}/${cfg.api.dataDir}";
-  envConfDir = "${repoDir}/${cfg.api.confDir}";
-  envConfTemplateDir = "${repoDir}/${cfg.api.confTemplateDir}";
-  envDjangoModule = cfg.api.djangoModule;
-  envHttpProtocol = if cfg.api.httpProtocol != "http" then cfg.api.httpProtocol else (if cfg.api.useHttps then "https" else "http");
-  envDjangoHost = cfg.api.hostname;
-  envDjangoPort = toString cfg.api.port;
+  # Environment variable configuration from django submodule
+  envDataDir = "${repoDir}/${cfg.django.dataDir}";
+  envConfDir = "${repoDir}/${cfg.django.confDir}";
+  envConfTemplateDir = "${repoDir}/${cfg.django.confTemplateDir}";
+  envDjangoModule = cfg.django.djangoModule;
+  envHttpProtocol = if cfg.django.httpProtocol != "http" then cfg.django.httpProtocol else (if cfg.django.useHttps then "https" else "http");
+  envDjangoHost = cfg.django.hostname;
+  envDjangoPort = toString cfg.django.port;
   envBaseUrl = 
-    if cfg.api.baseUrl != null 
-    then cfg.api.baseUrl 
+    if cfg.django.baseUrl != null 
+    then cfg.django.baseUrl 
     else "${envHttpProtocol}://${envDjangoHost}:${envDjangoPort}";
 
   makeAbsolute = path: if lib.hasPrefix "/" path then path else "${repoDir}/${path}";
 
-  envStorageDir = makeAbsolute cfg.api.storageDir;
-  envAssetDir = makeAbsolute cfg.api.assetDir;
-  envStaticUrl = cfg.api.staticUrl;
-  envMediaUrl = cfg.api.mediaUrl;
-  envRunVideoTests = if cfg.api.runVideoTests then "true" else "false";
-  envSkipExpensiveTests = if cfg.api.skipExpensiveTests then "true" else "false";
+  envStorageDir = makeAbsolute cfg.django.storageDir;
+  envAssetDir = makeAbsolute cfg.django.assetDir;
+  envStaticUrl = cfg.django.staticUrl;
+  envMediaUrl = cfg.django.mediaUrl;
+  envRunVideoTests = if cfg.django.runVideoTests then "true" else "false";
+  envSkipExpensiveTests = if cfg.django.skipExpensiveTests then "true" else "false";
 
-  settingsProfile = cfg.api.settingsProfile;
-  envIsCentralNode = cfg.api.extraSettings.IS_CENTRAL_NODE or false;
+  settingsProfile = cfg.django.settingsProfile;
+  envIsCentralNode = cfg.django.extraSettings.IS_CENTRAL_NODE or false;
   derivedSettingsModule =
     if settingsProfile == "dev" then "config.settings.dev"
     else if settingsProfile == "central" then "config.settings.central"
     else if settingsProfile == "test" then "config.settings.test"
     else "config.settings.prod";
   envDjangoSettingsModule =
-    if cfg.api.settingsModule != null then cfg.api.settingsModule
+    if cfg.django.settingsModule != null then cfg.django.settingsModule
     else if envIsCentralNode && settingsProfile != "dev" && settingsProfile != "test" then "config.settings.central"
     else derivedSettingsModule;
   envDjangoEnv =
-    if cfg.api.djangoEnv != null then cfg.api.djangoEnv
+    if cfg.django.djangoEnv != null then cfg.django.djangoEnv
     else if envIsCentralNode || settingsProfile == "central" then "central"
     else if settingsProfile == "dev" then "development"
     else if settingsProfile == "test" then "test"
     else "production";
   envCentralNodeFlag = if envIsCentralNode || settingsProfile == "central" then "true" else "false";
+  
+  # Default center from django extraSettings
+  envDefaultCenter = cfg.django.extraSettings.DEFAULT_CENTER or "university_hospital_wuerzburg";
 
   runLocalLxAnnotateScript = pkgs.writeShellScriptBin "${scriptName}" ''
     set -euo pipefail
     
     # Debug mode flag - controls verbose logging
-    DEBUG_MODE=${if cfg.debugMode then "true" else "false"}
+    DEBUG_MODE=${if cfg.debug.enable then "true" else "false"}
 
     echo "Starting LxAnnotate service..."
     echo "Repository: ${gitURL}"
@@ -83,9 +86,10 @@ with lib.luxnix; let
       echo "Cloning repository..."
       git clone ${gitURL} ${repoDir}
       cd ${repoDir}
+      direnv allow
     else
       cd ${repoDir}
-      ${if cfg.repository.updateOnBoot then ''
+      ${if cfg.source.updateOnBoot then ''
         echo "Updating repository..."
         git fetch origin || { echo "ERROR: Failed to fetch from origin"; exit 1; }
       '' else ''
@@ -110,7 +114,7 @@ with lib.luxnix; let
       exit 1
     fi
     
-    ${if cfg.repository.updateOnBoot then ''
+    ${if cfg.source.updateOnBoot then ''
     # Update the current branch
     echo "Updating branch ${branchName}..."
     git pull origin ${branchName} || { 
@@ -122,6 +126,7 @@ with lib.luxnix; let
     }
     '' else ""}
 
+    #################### DB SETUP ####################
     # Copy database password from vault (managed by postgres-default role)
     echo "Setting up database configuration..."
     
@@ -193,7 +198,7 @@ with lib.luxnix; let
       export DJANGO_HOST="${envDjangoHost}"
       export DJANGO_PORT="${envDjangoPort}"
       export BASE_URL="${envBaseUrl}"
-      export TIME_ZONE="${cfg.api.timeZone}"
+      export TIME_ZONE="${cfg.django.timeZone}"
       export STATIC_URL="${envStaticUrl}"
       export MEDIA_URL="${envMediaUrl}"
       export ASSET_DIR="${envAssetDir}"
@@ -208,6 +213,7 @@ with lib.luxnix; let
       export DB_HOST="${cfg.database.host}"
       export DB_PORT="${toString cfg.database.port}"
       export DB_SSLMODE="${cfg.database.sslMode}"
+
       
       # Ensure devenv is available and run the configuration script
       if command -v devenv >/dev/null 2>&1; then
@@ -329,29 +335,73 @@ PY
     
     # Check permissions
     ls -la "${endoreg-service-user-home}/" || echo "Cannot list home directory contents"
-    
-   
-    ${lib.optionalString (cfg.service.extraEnvironment != {}) ''
-    # Set additional environment variables
-    ${lib.concatStringsSep "\n" (lib.mapAttrsToList (name: value: "export ${name}='${value}'") cfg.service.extraEnvironment)}
-    ''}
 
     echo "Starting Django server..."
     echo "Hostname: ${envDjangoHost}"
     echo "Port: ${envDjangoPort}"
     echo "Protocol: ${envHttpProtocol}"
     
-    # Start the Django application
+    # Write essential environment variables to .env.systemd for devenv
+    cat > ${repoDir}/.env.systemd <<EOF
+HOME_DIR=${endoreg-service-user-home}
+DATA_DIR=${envDataDir}
+STORAGE_DIR=${envStorageDir}
+CONF_DIR=${envConfDir}
+CONF_TEMPLATE_DIR=${envConfTemplateDir}
+WORKING_DIR=${repoDir}
+EOF
+
+    # Start the Django application with devenv
     exec devenv shell -- run-server
   '';
 
 in
 {
   options.services.luxnix.lxAnnotateLocal = {
-    enable = mkBoolOpt false "Enable EndoRegDbApi Service";
+    enable = mkBoolOpt false "Enable LxAnnotate Service";
+    
+    # Debug configuration
+    debug = mkOption {
+      type = types.submodule {
+        options = {
+          enable = mkOption {
+            type = types.bool;
+            default = false;
+            description = "Enable verbose debug output including sensitive file information. Should be disabled in production.";
+          };
+        };
+      };
+      default = {};
+      description = "Debug configuration for lx-annotate-local.";
+    };
 
-    # Configuration options (passed from endoreg-client role)
-    api = mkOption {
+    # Source/Repository configuration
+    source = mkOption {
+      type = types.submodule {
+        options = {
+          url = mkOption {
+            type = types.str;
+            default = "https://github.com/wg-lux/lx-annotate";
+            description = "Git repository URL for the lx-annotate application.";
+          };
+          branch = mkOption {
+            type = types.str;
+            default = "main";
+            description = "Git branch to checkout for lx-annotate.";
+          };
+          updateOnBoot = mkOption {
+            type = types.bool;
+            default = true;
+            description = "Whether to update the lx-annotate repository on service start.";
+          };
+        };
+      };
+      default = {};
+      description = "Repository configuration for lx-annotate.";
+    };
+
+    # Django configuration (passed from endoreg-client role)
+    django = mkOption {
       type = types.submodule {
         options = {
           hostname = mkOption { type = types.str; default = "localhost"; };
@@ -454,54 +504,23 @@ in
         };
       };
       default = {};
-      description = "API configuration options";
+      description = "Django configuration options for lx-annotate.";
     };
 
+    # Database configuration
     database = mkOption {
       type = types.submodule {
         options = {
           host = mkOption { type = types.str; default = "localhost"; };
-          port = mkOption { type = types.port; default = 5432; };
-          name = mkOption { type = types.str; default = "endoregDbLocal"; };
-          user = mkOption { type = types.str; default = "endoregDbLocal"; };
+          port = mkOption { type = types.port; default = 5433; };
+          name = mkOption { type = types.str; default = "lxAnnotateLocal"; };
+          user = mkOption { type = types.str; default = "lxAnnotateLocal"; };
           passwordFile = mkOption { type = types.path; default = "/etc/secrets/vault/SCRT_local_password_maintenance_password"; };
           sslMode = mkOption { type = types.str; default = "prefer"; };
         };
       };
       default = {};
       description = "Database configuration options";
-    };
-
-    service = mkOption {
-      type = types.submodule {
-        options = {
-          workers = mkOption { type = types.int; default = 1; };
-          maxRequests = mkOption { type = types.int; default = 1000; };
-          timeout = mkOption { type = types.int; default = 30; };
-          keepAlive = mkOption { type = types.int; default = 60; };
-          extraEnvironment = mkOption { type = types.attrsOf types.str; default = {}; };
-        };
-      };
-      default = {};
-      description = "Service configuration options";
-    };
-
-    repository = mkOption {
-      type = types.submodule {
-        options = {
-          url = mkOption { type = types.str; default = "https://github.com/wg-lux/endo-api"; };
-          branch = mkOption { type = types.str; default = "main"; };
-          updateOnBoot = mkOption { type = types.bool; default = true; };
-        };
-      };
-      default = {};
-      description = "Repository configuration options";
-    };
-
-    debugMode = mkOption {
-      type = types.bool;
-      default = false;
-      description = "Enable verbose debug output including sensitive file information. Should be disabled in production.";
     };
   };
 
@@ -518,8 +537,8 @@ in
       "d ${endoreg-service-user-home}/config 0755 ${endoreg-service-user-name} ${endoreg-service-user-name} - -"
     ];
     
-    systemd.services."endo-api-boot" = {
-      description = "Clone or pull endoreg-db-api and run prod-server";
+    systemd.services."lx-annotate-boot" = {
+      description = "Clone or pull lx-annotate and run prod-server";
       wantedBy = [ "multi-user.target" ];
       after = [ "postgres-endoreg-setup.service" "endoreg-django-setup.service" "systemd-tmpfiles-setup.service" ];
       requires = [ "postgres-endoreg-setup.service" "systemd-tmpfiles-setup.service" ];
@@ -527,7 +546,7 @@ in
         Type = "exec";
         User = endoreg-service-user-name;
         Environment = "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:/run/current-system/sw/bin";
-        ExecStart = "${runLocalEndoApiScript}/bin/${scriptName}";
+        ExecStart = "${runLocalLxAnnotateScript}/bin/${scriptName}";
         Restart = "on-failure";
         RestartSec = "10s";
         # Resource limits
