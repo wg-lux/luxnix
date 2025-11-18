@@ -6,6 +6,7 @@
 with lib; 
 with lib.luxnix; let
   cfg = config.services.luxnix.ollama;
+  erc = config.roles.endoreg-client;
 in {
   options.services.luxnix.ollama = {
     enable = mkOption {
@@ -17,6 +18,7 @@ in {
 
   config = mkIf cfg.enable {
     services.ollama.enable = true;
+    services.ollama.port = erc.ollama.port or 11434;
     services.open-webui.enable = true;
     services.open-webui.port = 8085;
 
