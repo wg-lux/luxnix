@@ -8,6 +8,10 @@ with lib.luxnix; let
   cfg = config.services.luxnix.lxAnnotateLocal;
   gs = config.luxnix.generic-settings;
   gsp = gs.postgres;
+  erc-settings = config.roles.endoreg-client;
+  storageBaseDir = erc-settings.storageBaseDir;
+  videoInputDir = erc-settings.videoInputDir;
+  pdfInputDir = erc-settings.pdfInputDir;
 
   adminName = config.user.admin.name;
   scriptName = "runLocalLxAnnotate";

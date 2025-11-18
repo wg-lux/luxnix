@@ -14,6 +14,24 @@ in
   options.roles.endoreg-client = {
     enable = mkEnableOption "Enable endoreg client configuration";
 
+    storageBaseDir = mkOption {
+      type = types.str;
+      default = "/var/lib/endoreg-client";
+      description = "Base directory for endoreg client storage";
+    };
+
+    videoInputDir = mkOption {
+      type = types.str;
+      description = "Directory for video input files; by default inside storageBaseDir";
+      default = "${cfg.storageBaseDir}/video_input";
+    };
+
+    pdfInputDir = mkOption {
+      type = types.str;
+      description = "Directory for PDF input files; by default inside storageBaseDir";
+      default = "${cfg.storageBaseDir}/pdf_input";
+    };
+
     # Central Nodes Configuration
     centralNodes = mkOption {
       type = types.listOf types.str;
@@ -190,13 +208,13 @@ in
 
       staticUrl = mkOption {
         type = types.str;
-        default = "/static/";
+        default = "static/";
         description = "STATIC_URL value exported to the application.";
       };
 
       mediaUrl = mkOption {
         type = types.str;
-        default = "/media/";
+        default = "media/";
         description = "MEDIA_URL value exported to the application.";
       };
 
@@ -333,7 +351,7 @@ in
       if config ? user && config.user ? client && config.user.client ? homeStateVersion
       then config.user.client.homeStateVersion
       else (config.system.stateVersion or "24.05");
-    storageBaseDir = "/var/lib/endoreg-client";
+    storageBaseDir = cfg.storageBaseDir;
     videoInputDir = "${storageBaseDir}/video_input";
     pdfInputDir = "${storageBaseDir}/pdf_input";
   in {
