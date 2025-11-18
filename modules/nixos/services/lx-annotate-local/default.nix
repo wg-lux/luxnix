@@ -51,10 +51,10 @@ with lib.luxnix; let
   settingsProfile = cfg.django.settingsProfile;
   envIsCentralNode = cfg.django.extraSettings.IS_CENTRAL_NODE or false;
   derivedSettingsModule =
-    if settingsProfile == "dev" then "config.settings.dev"
-    else if settingsProfile == "central" then "config.settings.central"
-    else if settingsProfile == "test" then "config.settings.test"
-    else "config.settings.prod";
+    if settingsProfile == "dev" then "settings_dev"
+    # else if settingsProfile == "central" then ".settings.central"
+    # else if settingsProfile == "test" then "settings_test"
+    else "settings_prod";
   envDjangoSettingsModule =
     if cfg.django.settingsModule != null then cfg.django.settingsModule
     else if envIsCentralNode && settingsProfile != "dev" && settingsProfile != "test" then "config.settings.central"

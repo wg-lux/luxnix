@@ -40,6 +40,7 @@
     };
 
   services = {
+    luxnix.lxAnnotateLocal.django.settingsProfile = "dev";
     };
 
   luxnix = {
