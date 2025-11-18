@@ -26,7 +26,7 @@
     endoreg-client.api.language = "en-us";
     endoreg-client.api.logLevel = "WARNING";
     endoreg-client.api.maxRequestSize = "50G";
-    endoreg-client.api.settingsProfile = "prod";
+    endoreg-client.api.settingsProfile = "dev";
     endoreg-client.centralNodes = ["s-04"];    endoreg-client.dbApiLocal = true;
     endoreg-client.enable = true;
     endoreg-client.ollama.enable = true;
@@ -45,7 +45,6 @@
     };
 
   services = {
-    luxnix.lxAnnotateLocal.django.settingsProfile = "dev";
     };
 
   luxnix = {

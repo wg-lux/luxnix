@@ -1,11 +1,10 @@
 group_roles:
   endoreg_client.enable: "true"
   endoreg_client.ollama.enable: "true"
-
+  endoreg_client.api.settingsProfile: '"dev"'
   aglnet.client.enable: "true"
   nextcloudClient.enable: "true"
-group_services:
-  luxnix.lxAnnotateLocal.django.settingsProfile: '"dev"'
+group_services: {}
 group_luxnix:
   generic_settings.enable: "true"
   # GPU Configuration (New Unified System)

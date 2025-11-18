@@ -22,6 +22,7 @@
     common.enable = true;
     custom-packages.cloud = true;
     custom-packages.enable = true;
+    endoreg-client.api.settingsProfile = "dev";
     endoreg-client.enable = true;
     endoreg-client.ollama.enable = true;
     nextcloudClient.enable = true;
@@ -32,7 +33,6 @@
     };
 
   services = {
-    luxnix.lxAnnotateLocal.django.settingsProfile = "dev";
     };
 
   luxnix = {
