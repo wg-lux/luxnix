@@ -6,6 +6,9 @@ template_name: "main"
 
 host_roles:
   custom_packages.baseDevelopment: "true"
+  endoreg_client.workers: "4"
+  endoreg_client.settingsProfile: '"prod"'
+  endoreg_client.defaultCenter: '"rbk_stuttgart"'
 
 host_services: {}
 ansible_roles:
