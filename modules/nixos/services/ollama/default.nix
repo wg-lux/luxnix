@@ -10,7 +10,7 @@ in {
   options.services.luxnix.ollama = {
     enable = mkOption {
       type = types.bool;
-      default = mkDefault false;
+      default = false;
       description = "Enable ollama and web ui";
     };
   };
