@@ -9,6 +9,9 @@ with lib.luxnix; let
   gs = config.luxnix.generic-settings;
   gsp = gs.postgres;
   erc-settings = config.roles.endoreg-client;
+  settingsProfile = erc-settings.api.settingsProfile;
+  envDefaultCenter = erc-settings.defaultCenter;
+
   storageBaseDir = erc-settings.storageBaseDir;
   videoInputDir = erc-settings.videoInputDir;
   pdfInputDir = erc-settings.pdfInputDir;
@@ -27,9 +30,9 @@ with lib.luxnix; let
   repoDir = "${endoreg-service-user-home}/${repoDirName}";
 
   # Environment variable configuration from django submodule
-  envDataDir = "${repoDir}/${cfg.django.dataDir}";
-  envConfDir = "${repoDir}/${cfg.django.confDir}";
-  envConfTemplateDir = "${repoDir}/${cfg.django.confTemplateDir}";
+  envDataDir = "${repoDir}/data";
+  envConfDir = "${repoDir}/conf";
+  envConfTemplateDir = "${repoDir}/conf_template";
   envDjangoModule = cfg.django.djangoModule;
   envHttpProtocol = if cfg.django.httpProtocol != "http" then cfg.django.httpProtocol else (if cfg.django.useHttps then "https" else "http");
   envDjangoHost = cfg.django.hostname;
@@ -41,35 +44,21 @@ with lib.luxnix; let
 
   makeAbsolute = path: if lib.hasPrefix "/" path then path else "${repoDir}/${path}";
 
-  envStorageDir = makeAbsolute cfg.django.storageDir;
-  envAssetDir = makeAbsolute cfg.django.assetDir;
   envStaticUrl = cfg.django.staticUrl;
   envMediaUrl = cfg.django.mediaUrl;
   envRunVideoTests = if cfg.django.runVideoTests then "true" else "false";
   envSkipExpensiveTests = if cfg.django.skipExpensiveTests then "true" else "false";
 
-  settingsProfile = cfg.django.settingsProfile;
-  envIsCentralNode = cfg.django.extraSettings.IS_CENTRAL_NODE or false;
   derivedSettingsModule =
-    if settingsProfile == "dev" then "lx_annotate.settings_dev"
-    # else if settingsProfile == "central" then ".settings.central"
-    # else if settingsProfile == "test" then "settings_test"
+    if settingsProfile == "dev" then "lx_annotate.settings_dev_2"
     else "lx_annotate.settings_prod";
   envDjangoSettingsModule =
     if cfg.django.settingsModule != null then cfg.django.settingsModule
-    # else if envIsCentralNode && settingsProfile != "dev" && settingsProfile != "test" then "config.settings.central"
     else derivedSettingsModule;
   envDjangoEnv =
-    if cfg.django.djangoEnv != null then cfg.django.djangoEnv
-    else if envIsCentralNode || settingsProfile == "central" then "central"
-    else if settingsProfile == "dev" then "development"
-    else if settingsProfile == "test" then "test"
+    if settingsProfile == "dev" then "development"
     else "production";
-  envCentralNodeFlag = if envIsCentralNode || settingsProfile == "central" then "true" else "false";
   
-  # Default center from django extraSettings
-  envDefaultCenter = cfg.django.extraSettings.DEFAULT_CENTER or "university_hospital_wuerzburg";
-
   runLocalLxAnnotateScript = pkgs.writeShellScriptBin "${scriptName}" ''
     set -euo pipefail
     
@@ -169,7 +158,7 @@ with lib.luxnix; let
     fi
     
   # Ensure runtime directories exist (they might be ignored in git)
-  mkdir -p ${envConfDir} ${envDataDir} ${envStorageDir}
+  mkdir -p ${envConfDir} ${envDataDir}
     
     if [ -f "$SECRET_FILE" ] && head -c 1 "$SECRET_FILE" >/dev/null 2>&1; then
       cp "$SECRET_FILE" ${envConfDir}/db_pwd
@@ -178,41 +167,47 @@ with lib.luxnix; let
       # Run Django application's configuration setup
       echo "Running Django application configuration setup..."
       cd ${repoDir}
-      
-      # Set environment variables needed by the Django config scripts
-      export DATA_DIR="${envDataDir}"
-      export STORAGE_DIR="${envStorageDir}"
-      export CONF_DIR="${envConfDir}"
-      export CONF_TEMPLATE_DIR="${envConfTemplateDir}"
-      export WORKING_DIR="${repoDir}"
-      export HOME_DIR="${endoreg-service-user-home}"
-      export DB_PWD_FILE="${envConfDir}/db_pwd"
-      export DJANGO_MODULE="${envDjangoModule}"
-      export DJANGO_SETTINGS_MODULE="${envDjangoSettingsModule}"
-      export DJANGO_SETTINGS_MODULE_PRODUCTION="config.settings.prod"
-      export DJANGO_SETTINGS_MODULE_DEVELOPMENT="config.settings.dev"
-      export DJANGO_SETTINGS_MODULE_CENTRAL="config.settings.central"
-      export DJANGO_ENV="${envDjangoEnv}"
-      export CENTRAL_NODE="${envCentralNodeFlag}"
-      export HTTP_PROTOCOL="${envHttpProtocol}"
-      export DJANGO_HOST="${envDjangoHost}"
-      export DJANGO_PORT="${envDjangoPort}"
-      export BASE_URL="${envBaseUrl}"
-      export TIME_ZONE="${cfg.django.timeZone}"
-      export STATIC_URL="${envStaticUrl}"
-      export MEDIA_URL="${envMediaUrl}"
-      export ASSET_DIR="${envAssetDir}"
-      export RUN_VIDEO_TESTS="${envRunVideoTests}"
-      export SKIP_EXPENSIVE_TESTS="${envSkipExpensiveTests}"
 
       DB_PASSWORD_VALUE="$(tr -d '\n' < ${envConfDir}/db_pwd 2>/dev/null || true)"
-      export DB_ENGINE="django.db.backends.postgresql"
-      export DB_NAME="${cfg.database.name}"
-      export DB_USER="${cfg.database.user}"
-      export DB_PASSWORD="$DB_PASSWORD_VALUE"
-      export DB_HOST="${cfg.database.host}"
-      export DB_PORT="${toString cfg.database.port}"
-      export DB_SSLMODE="${cfg.database.sslMode}"
+
+      # Persist all environment values for devenv/systemd consumers
+      cat > ${repoDir}/.env.systemd <<EOF
+HOME_DIR="${endoreg-service-user-home}"
+VIDEO_IMPORT_DIR="${videoInputDir}"
+REPORT_IMPORT_DIR="${pdfInputDir}"
+CONF_DIR="${envConfDir}"
+CONF_TEMPLATE_DIR="${envConfTemplateDir}"
+WORKING_DIR="${repoDir}"
+DB_PWD_FILE="${envConfDir}/db_pwd"
+DJANGO_MODULE="${envDjangoModule}"
+DJANGO_SETTINGS_MODULE="${envDjangoSettingsModule}"
+DJANGO_ENV="${envDjangoEnv}"
+HTTP_PROTOCOL="${envHttpProtocol}"
+DJANGO_HOST="${envDjangoHost}"
+DJANGO_PORT="${envDjangoPort}"
+BASE_URL="${envBaseUrl}"
+TIME_ZONE="${cfg.django.timeZone}"
+STATIC_URL="${envStaticUrl}"
+MEDIA_URL="${envMediaUrl}"
+RUN_VIDEO_TESTS="${envRunVideoTests}"
+SKIP_EXPENSIVE_TESTS="${envSkipExpensiveTests}"
+DB_ENGINE="django.db.backends.postgresql"
+DB_NAME="${cfg.database.name}"
+DB_USER="${cfg.database.user}"
+DB_PASSWORD="$DB_PASSWORD_VALUE"
+DB_HOST="${cfg.database.host}"
+DB_PORT="${toString cfg.database.port}"
+DB_SSLMODE="${cfg.database.sslMode}"
+EOF
+
+      # Export .env.systemd and optional .env so current shell inherits the config (.env overrides)
+      set -a
+      . ${repoDir}/.env.systemd
+      if [ -f .env ]; then
+        echo "Loading overrides from .env"
+        . .env
+      fi
+      set +a
 
       
       # Ensure devenv is available and run the configuration script
@@ -336,20 +331,14 @@ PY
     # Check permissions
     ls -la "${endoreg-service-user-home}/" || echo "Cannot list home directory contents"
 
+    # migrate and load base db data using devenv
+    echo "Applying database migrations..."
     echo "Starting Django server..."
     echo "Hostname: ${envDjangoHost}"
     echo "Port: ${envDjangoPort}"
     echo "Protocol: ${envHttpProtocol}"
     
-    # Write essential environment variables to .env.systemd for devenv
-    cat > ${repoDir}/.env.systemd <<EOF
-HOME_DIR=${endoreg-service-user-home}
-DATA_DIR=${envDataDir}
-STORAGE_DIR=${envStorageDir}
-CONF_DIR=${envConfDir}
-CONF_TEMPLATE_DIR=${envConfTemplateDir}
-WORKING_DIR=${repoDir}
-EOF
+
 
     # Start the Django application with devenv
     exec devenv shell -- run-server
@@ -432,18 +421,6 @@ in
             type = types.nullOr types.str;
             default = null;
             description = "Value for DJANGO_ENV; inferred from settingsProfile when null.";
-          };
-          
-          # Environment variable configuration options
-          dataDir = mkOption { 
-            type = types.str; 
-            default = "data"; 
-            description = "Relative path to data directory within the repository";
-          };
-          storageDir = mkOption {
-            type = types.str;
-            default = "storage";
-            description = "Relative or absolute path used for STORAGE_DIR.";
           };
           confDir = mkOption { 
             type = types.str; 

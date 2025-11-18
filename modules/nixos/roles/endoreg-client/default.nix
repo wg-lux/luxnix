@@ -428,50 +428,6 @@ in
         description = "Repository configuration for lx-annotate.";
       };
 
-      django = mkOption {
-        type = types.submodule {
-          options = {
-            djangoModule = mkOption {
-              type = types.str;
-              default = "lx_annotate";
-              description = "Python module containing the lx-annotate Django project.";
-            };
-
-            dataDir = mkOption {
-              type = types.nullOr types.str;
-              default = null;
-              description = "Override for the lx-annotate data directory. Uses the shared API value when null.";
-            };
-
-            storageDir = mkOption {
-              type = types.nullOr types.str;
-              default = null;
-              description = "Override for the lx-annotate storage directory. Uses the shared API value when null.";
-            };
-
-            confDir = mkOption {
-              type = types.nullOr types.str;
-              default = null;
-              description = "Override for the lx-annotate configuration directory. Uses the shared API value when null.";
-            };
-
-            confTemplateDir = mkOption {
-              type = types.nullOr types.str;
-              default = null;
-              description = "Override for the lx-annotate configuration template directory. Uses the shared API value when null.";
-            };
-
-            assetDir = mkOption {
-              type = types.nullOr types.str;
-              default = null;
-              description = "Override for the lx-annotate asset directory. Uses the shared API value when null.";
-            };
-          };
-        };
-        default = {};
-        description = "Overrides for lx-annotate Django-specific paths.";
-      };
-
       runtime = mkOption {
         type = types.submodule {
           options = {
@@ -547,6 +503,11 @@ in
 
     ollama = {
       enable = mkBoolOpt false "Enable Ollama service on endoreg client";
+      port = mkOption {
+        type = types.port;
+        default = 11434;
+        description = "Port for the Ollama service";
+      };
     };
   };
 
@@ -610,14 +571,6 @@ in
 
     annotateRuntimeLimits = cfg.lxAnnotate.runtime.limits;
 
-    annotateDjangoOverrides = {
-      djangoModule = cfg.lxAnnotate.django.djangoModule;
-      dataDir = if cfg.lxAnnotate.django.dataDir != null then cfg.lxAnnotate.django.dataDir else cfg.api.dataDir;
-      storageDir = if cfg.lxAnnotate.django.storageDir != null then cfg.lxAnnotate.django.storageDir else cfg.api.storageDir;
-      confDir = if cfg.lxAnnotate.django.confDir != null then cfg.lxAnnotate.django.confDir else cfg.api.confDir;
-      confTemplateDir = if cfg.lxAnnotate.django.confTemplateDir != null then cfg.lxAnnotate.django.confTemplateDir else cfg.api.confTemplateDir;
-      assetDir = if cfg.lxAnnotate.django.assetDir != null then cfg.lxAnnotate.django.assetDir else cfg.api.assetDir;
-    };
 
     annotateExtraSettings =
       let
@@ -628,9 +581,6 @@ in
         IS_CENTRAL_NODE = false;
       };
 
-    annotateDjango = recursiveUpdate cfg.api (annotateDjangoOverrides // {
-      extraSettings = annotateExtraSettings;
-    });
   in {
     user.client.enable = mkDefault true;
     user.endoreg-service-user.enable = true;
@@ -668,7 +618,6 @@ in
       enable = mkDefault cfg.lxAnnotate.enable;
       debug.enable = cfg.lxAnnotate.debug.enable;
       source = cfg.lxAnnotate.source;
-      django = annotateDjango;
       database = cfg.database;
     };
 
