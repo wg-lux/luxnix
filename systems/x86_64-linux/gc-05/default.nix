@@ -41,7 +41,7 @@
     ssh-access.dev-04.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICSpoZVcX+K6NdrfqcUVPTU8Ljqlp83YDzzEHjTHU2NO flippos@inexen9";
     custom-packages.baseDevelopment = true;
     endoreg-client.defaultCenter = "rbk_stuttgart";
-    endoreg-client.workers = 4;
+    endoreg-client.service.workers = 4;
     };
 
   services = {
