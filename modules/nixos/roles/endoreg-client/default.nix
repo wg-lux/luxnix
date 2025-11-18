@@ -544,6 +544,10 @@ in
         description = "Runtime configuration for lx-annotate-local.";
       };
     };
+
+    ollama = {
+      enable = mkBoolOpt false "Enable Ollama service on endoreg client";
+    };
   };
 
   config = mkIf cfg.enable (let
@@ -561,8 +565,8 @@ in
       then config.user.client.homeStateVersion
       else (config.system.stateVersion or "24.05");
     storageBaseDir = cfg.storageBaseDir;
-    videoInputDir = "${storageBaseDir}/video_input";
-    pdfInputDir = "${storageBaseDir}/pdf_input";
+    videoInputDir = cfg.videoInputDir;
+    pdfInputDir = cfg.pdfInputDir;
 
     firstNonNull = values: lib.foldl' (acc: val: if acc != null then acc else val) null values;
 
@@ -657,6 +661,8 @@ in
       service = cfg.service;
       repository = cfg.repository;
     };
+
+    services.ollama.enable = cfg.ollama.enable;
 
     services.luxnix.lxAnnotateLocal = {
       enable = mkDefault cfg.lxAnnotate.enable;

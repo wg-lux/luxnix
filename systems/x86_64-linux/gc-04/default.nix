@@ -29,6 +29,7 @@
     endoreg-client.api.settingsProfile = "prod";
     endoreg-client.centralNodes = ["s-04"];    endoreg-client.dbApiLocal = true;
     endoreg-client.enable = true;
+    endoreg-client.ollama.enable = true;
     endoreg-client.repository.branch = "container";
     nextcloudClient.enable = true;
     ssh-access.dev-01.enable = true;

@@ -23,6 +23,7 @@
     custom-packages.cloud = true;
     custom-packages.enable = true;
     endoreg-client.enable = true;
+    endoreg-client.ollama.enable = true;
     nextcloudClient.enable = true;
     postgres.default.enable = true;
     custom-packages.baseDevelopment = true;
