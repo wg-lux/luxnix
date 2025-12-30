@@ -5,6 +5,7 @@ roles:
     enable: "true"
   - name: aglnet_client
     enable: "true"
+  - name: postgres
+    enable: "true"
 
 primary_group: "gpu_server"
-

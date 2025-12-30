@@ -1,6 +1,6 @@
 # New generation of LuxNix
 
-These shortcuts (and more) are defined at:
+These shortcuts for building the sytem config (and more) are defined at:
 luxnix/modules/home/cli/shells/shared/default.nix
 
 ## Shortcut
@@ -20,13 +20,16 @@ nh os switch
 sudo nixos-rebuild switch --flake .
 ```
 
-# Deleting old nix Generations
+# Deleting old nix generations
 
 ```bash
 `sudo rm /nix/var/nix/gcroots/auto/*`
 ```
 
 # Changes to User Environment (Home)
+
+LuxNix systems/ is partly populated from the ansible config using yaml files.
+Changes here need to be persisted into the actual nix config files used to build the system.
 
 ## Update home generation
 
@@ -53,14 +56,14 @@ cleanup-roots
 ## Fallback
 
 ```bash
-Nix-collect-garbage -d
-Nix-store --gc
+nix-collect-garbage -d
+nix-store --gc
 ```
 
 ### After garbage cleaning:
 
 ```bash
-Nix-store --verify --check-contents --repair
+nix-store --verify --check-contents --repair
 ```
 
 # VPN Client

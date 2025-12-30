@@ -16,6 +16,7 @@ admin_password_filename: "SCRT_local_password_admin_password"
 admin_password_hashed_filename: "{{ admin_password_filename }}_hash"
 postgres_host_main_password_filename: "SCRT_roles_system_password_postgres_host_main_password"
 postgres_host_test_password_filename: "SCRT_roles_system_password_postgres_host_test_password"
+postgres_host_sandbox_password_filename: "SCRT_roles_system_password_postgres_host_sandbox_password"
 
 admin_vpn_ip: "172.16.255.106"
 postgres_host_test_ip: "172.16.255.13"

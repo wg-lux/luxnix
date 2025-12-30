@@ -1,0 +1,4 @@
+---
+postgres_host_sandbox_roles:
+  postgres.main.enable: "true"
+postgres_host_sandbox_luxnix: {}

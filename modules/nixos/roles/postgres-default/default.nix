@@ -6,18 +6,17 @@
 with lib; let
   cfg = config.roles.postgres.default;
 
-  # Password file paths
-  endoregDbLocalPasswordFile = "/var/lib/postgresql/endoregDbLocal.password";
-  maintenancePasswordFile = "/etc/secrets/vault/SCRT_local_password_maintenance_password";
+  # This file lets you create a default user attribute set for Postgres. 
+  # Also full databases are created.
 
-  # Utility function to create attributes for a user
+  # --- Helper: User Attribute Generator ---
   mkDefaultUser = user: {
     name = user;
     ensureDBOwnership = true;
     ensureClauses = { };
   };
 
-  # Safe PostgreSQL maintenance script package
+  # --- Helper: Maintenance Script ---
   postgresMaintenanceScript = pkgs.writeScriptBin "postgres-maintenance" ''
     #!${pkgs.zsh}/bin/zsh
     set -e
@@ -96,56 +95,81 @@ with lib; let
     esac
   '';
 
-  # Script to set up endoregDbLocal user password
-  setupEndoregDbLocalUser = pkgs.writeShellScript "setup-endoreg-db-local-user" ''
-    set -euo pipefail
-    
-    # Wait for PostgreSQL to be ready
-    echo "Waiting for PostgreSQL to be ready..."
-    for i in {1..30}; do
-      if ${config.services.postgresql.package}/bin/pg_isready -U postgres -d postgres; then
-        echo "PostgreSQL is ready"
-        break
-      fi
-      if [ $i -eq 30 ]; then
-        echo "ERROR: PostgreSQL not ready after 30 attempts"
-        exit 1
-      fi
-      echo "Attempt $i: PostgreSQL not ready, waiting 2 seconds..."
-      sleep 2
-    done
-    
-    # Create password if it doesn't exist
-    if [ ! -f ${maintenancePasswordFile} ]; then
-      echo "Generating password for endoregDbLocal user..."
-      mkdir -p $(dirname ${maintenancePasswordFile})
-      ${pkgs.openssl}/bin/openssl rand -base64 32 > ${maintenancePasswordFile}
-      chmod 640 ${maintenancePasswordFile}
-      chown root:${config.luxnix.generic-settings.sensitiveServiceGroupName} ${maintenancePasswordFile}
-    fi
-    
-    # Ensure correct permissions on existing file
-    chmod 640 ${maintenancePasswordFile}
-    chown root:${config.luxnix.generic-settings.sensitiveServiceGroupName} ${maintenancePasswordFile}
-    
-    # Copy password for PostgreSQL access
-    cp ${maintenancePasswordFile} ${endoregDbLocalPasswordFile}
-    chown postgres:postgres ${endoregDbLocalPasswordFile}
-    chmod 600 ${endoregDbLocalPasswordFile}
-    
-    # Set the password in PostgreSQL safely using dollar-quoted strings
-    # Dollar-quoting prevents SQL injection by treating the content as a literal string
-    echo "Setting password for user ${cfg.defaultDbName}..."
-    
-    PASSWORD=$(cat ${endoregDbLocalPasswordFile})
-    
-    # Use dollar-quoted strings ($tag$...$tag$) which safely handle any special characters
-    # including single quotes, backslashes, and other SQL metacharacters
-    ${config.services.postgresql.package}/bin/psql -U postgres -d postgres -c \
-      "ALTER USER \"${cfg.defaultDbName}\" WITH PASSWORD \$securepass\$''${PASSWORD}\$securepass\$;"
+  # --- Reusable DB Setup Generator ---
+  # This function generates a systemd service and script for ANY database/user pair.
+  mkPostgresDbSetup = { 
+    name,               # Unique suffix for the service (e.g., "endoreg-local")
+    dbUser,             # The Postgres username (e.g., cfg.defaultDbName)
+    passwordFileSource, # Path to the persistent secret (e.g., in /etc/secrets)
+    passwordFileDest,   # Path where Postgres reads it (e.g., /var/lib/postgresql/...)
+    serviceName ? "postgres-setup-${name}",
+    aliases ? [ ]
+  }: 
+  let 
+    setupScript = pkgs.writeShellScript "setup-db-${name}" ''
+      set -euo pipefail
       
-    echo "endoregDbLocal user password configured successfully"
-  '';
+      # 1. Wait for PostgreSQL
+      echo "[${name}] Waiting for PostgreSQL to be ready..."
+      for i in {1..30}; do
+        if ${config.services.postgresql.package}/bin/pg_isready -U postgres -d postgres; then
+          echo "[${name}] PostgreSQL is ready"
+          break
+        fi
+        if [ $i -eq 30 ]; then
+          echo "[${name}] ERROR: PostgreSQL not ready after 30 attempts"
+          exit 1
+        fi
+        sleep 2
+      done
+      
+      # 2. Generate Password if missing
+      if [ ! -f "${passwordFileSource}" ]; then
+        echo "[${name}] Generating new password..."
+        mkdir -p "$(dirname "${passwordFileSource}")"
+        ${pkgs.openssl}/bin/openssl rand -base64 32 > "${passwordFileSource}"
+        chmod 640 "${passwordFileSource}"
+        # Using the sensitive group from your config
+        chown root:${config.luxnix.generic-settings.sensitiveServiceGroupName} "${passwordFileSource}"
+      fi
+      
+      # 3. Ensure Source Permissions (idempotency)
+      chmod 640 "${passwordFileSource}"
+      chown root:${config.luxnix.generic-settings.sensitiveServiceGroupName} "${passwordFileSource}"
+      
+      # 4. Copy to Postgres Location
+      cp "${passwordFileSource}" "${passwordFileDest}"
+      chown postgres:postgres "${passwordFileDest}"
+      chmod 600 "${passwordFileDest}"
+      
+      # 5. Apply Password to Postgres User
+      echo "[${name}] Setting password for user ${dbUser}..."
+      PASSWORD=$(cat "${passwordFileDest}")
+      
+      ${config.services.postgresql.package}/bin/psql -U postgres -d postgres -c \
+        "ALTER USER \"${dbUser}\" WITH PASSWORD \$securepass\$''${PASSWORD}\$securepass\$;"
+        
+      echo "[${name}] Password configured successfully."
+    '';
+  in {
+    # Return the systemd service definition
+    systemd.services."${serviceName}" = {
+      description = "Set up PostgreSQL password for ${name}";
+      after = [ "postgresql.service" "managed-secrets-setup.service" ];
+      requires = [ "postgresql.service" "managed-secrets-setup.service" ];
+      wantedBy = [ "multi-user.target" ];
+      inherit aliases;
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        User = "root";
+        ExecStart = setupScript;
+        Restart = "on-failure";
+        RestartSec = "5s";
+        StartLimitBurst = 3;
+      };
+    };
+  };
 
 in
 {
@@ -156,42 +180,14 @@ in
       type = types.int;
       default = 5432;
     };
-
-    replUser = mkOption {
-      type = types.str;
-      default = "replUser";
-    };
-
-    testUser = mkOption {
-      type = types.str;
-      default = "testUser";
-    };
-
-    devUser = mkOption {
-      type = types.str;
-      default = "devUser";
-    };
-
-    lxClientUser = mkOption {
-      type = types.str;
-      default = "lxClientUser";
-    };
-
-    stagingUser = mkOption {
-      type = types.str;
-      default = "stagingUser";
-    };
-
-    productionUser = mkOption {
-      type = types.str;
-      default = "prodUser";
-    };
-
-    defaultDbName = mkOption {
-      type = types.str;
-      default = "endoregDbLocal";
-    };
-
+    replUser = mkOption { type = types.str; default = "replUser"; };
+    testUser = mkOption { type = types.str; default = "testUser"; };
+    devUser = mkOption { type = types.str; default = "devUser"; };
+    lxClientUser = mkOption { type = types.str; default = "lxClientUser"; };
+    stagingUser = mkOption { type = types.str; default = "stagingUser"; };
+    productionUser = mkOption { type = types.str; default = "prodUser"; };
+    defaultDbName = mkOption { type = types.str; default = "endoregDbLocal"; };
+    
     postgresqlDataDir = mkOption {
       type = types.str;
       default = "/var/lib/postgresql/${config.services.postgresql.package.psqlSchema}";
@@ -202,56 +198,24 @@ in
       default = [ ];
       description = "Additional authorized keys for postgres user";
     };
-
   };
 
+  # Use mkMerge to combine the base config with the generated services
+  config = mkIf cfg.enable (mkMerge [
+    # --- BLOCK 1: Base Configuration ---
+    {
+      environment.systemPackages = [ postgresMaintenanceScript ];
+      services.luxnix.postgresql.enable = true;
 
-  config = mkIf cfg.enable {
-    # Add maintenance script to system packages
-    environment.systemPackages = [ postgresMaintenanceScript ];
+      users.users.postgres.openssh.authorizedKeys.keys = cfg.additionalPostgresAuthKeys;
 
-    services.luxnix.postgresql.enable = true;
-
-    # Create systemd service to set up endoregDbLocal user password
-    systemd.services.postgres-endoreg-setup = {
-      description = "Set up endoregDbLocal PostgreSQL user password";
-      after = [ "postgresql.service" "managed-secrets-setup.service" ];
-      requires = [ "postgresql.service" "managed-secrets-setup.service" ];
-      wantedBy = [ "multi-user.target" ];
-      serviceConfig = {
-        Type = "oneshot";
-        RemainAfterExit = true;
-        User = "root";
-        ExecStart = setupEndoregDbLocalUser;
-        # Retry if PostgreSQL isn't ready yet
-        Restart = "on-failure";
-        RestartSec = "5s";
-        StartLimitBurst = 3;
+      programs.zsh.shellAliases = {
+        show-psql-conf = "postgres-maintenance --show-psql-conf";
+        postgres-maintenance = "postgres-maintenance";
+        reset-psql-safe = "postgres-maintenance --reset-psql";
       };
-    };
 
-    # Secret directories are now managed by the managed-secrets role
-    # No tmpfiles rules needed here
-
-    users.users = {
-      postgres = {
-        # Dont allow ssh access for postgres by default
-        # But enable adding keys easily using postgres-default role
-        openssh.authorizedKeys.keys = cfg.additionalPostgresAuthKeys;
-
-      };
-    };
-
-    programs.zsh.shellAliases = {
-      # Safe maintenance aliases that use the interactive maintenance script
-      show-psql-conf = "postgres-maintenance --show-psql-conf";
-      postgres-maintenance = "postgres-maintenance";
-      # Interactive reset command with confirmation prompt
-      reset-psql-safe = "postgres-maintenance --reset-psql";
-    };
-
-    services = {
-      postgresql = {
+      services.postgresql = {
         enableTCPIP = true;
         dataDir = cfg.postgresqlDataDir;
         settings = {
@@ -261,16 +225,12 @@ in
           max_wal_senders = lib.mkDefault 5;
           wal_keep_size = lib.mkDefault "512MB";
           password_encryption = "scram-sha-256";
-          # hot_standby = true;
-          # log_connections = true;
-          # log_statement = "all";
-          # logging_collector = true;
-          # log_disconnections = true;
-          # log_destination = "syslog";
         };
         ensureDatabases = [
           config.user.admin.name
           cfg.defaultDbName
+          "datahub"
+          "datahubUser"
           "replication"
           cfg.replUser
           cfg.testUser
@@ -279,23 +239,21 @@ in
           cfg.stagingUser
           cfg.productionUser
         ];
-
         ensureUsers = [
           {
             name = config.user.admin.name;
             ensureDBOwnership = true;
-            ensureClauses = {
-              replication = true;
-            };
+            ensureClauses.replication = true;
           }
           {
             name = cfg.defaultDbName;
             ensureDBOwnership = true;
-            ensureClauses = {
-              replication = true;
-            };
+            ensureClauses.replication = true;
           }
-
+          {
+            name = "datahubUser";
+            ensureDBOwnership = true;
+          }
           (mkDefaultUser cfg.replUser)
           (mkDefaultUser cfg.testUser)
           (mkDefaultUser cfg.devUser)
@@ -303,11 +261,35 @@ in
           (mkDefaultUser cfg.stagingUser)
           (mkDefaultUser cfg.productionUser)
         ];
-
       };
-    };
+    }
 
+    # --- BLOCK 2: Default DB Setup (The Original One) ---
+    (mkPostgresDbSetup {
+      name = "endoreg-local";
+      dbUser = cfg.defaultDbName;
+      passwordFileSource = "/etc/secrets/vault/SCRT_local_password_maintenance_password";
+      passwordFileDest = "/var/lib/postgresql/endoregDbLocal.password";
+      serviceName = "postgres-endoreg-setup";
+      aliases = [ "postgres-setup-endoreg-local.service" ];
+    })
+    (mkPostgresDbSetup {
+      name = "datahub-local";
+      dbUser = "datahubUser";
+      passwordFileSource = "/etc/secrets/vault/SCRT_local_password_maintenance_password";
+      passwordFileDest = "/var/lib/postgresql/datahub-local.password";
+      serviceName = "postgres-datahub-setup";
+      aliases = [ "postgres-setup-datahub-local.service" ];
+    })
 
-
-  };
+    # --- Example: How to add Staging (Uncomment to use) ---
+    /*
+    (mkPostgresDbSetup {
+      name = "endoreg-staging";
+      dbUser = cfg.stagingUser;
+      passwordFileSource = "/etc/secrets/vault/SCRT_staging_password";
+      passwordFileDest = "/var/lib/postgresql/endoregDbStaging.password";
+    })
+    */
+  ]);
 }
