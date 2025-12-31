@@ -1,6 +1,6 @@
 # New generation of LuxNix
 
-These shortcuts for building the sytem config (and more) are defined at:
+These shortcuts for building the system config (and more) are defined at:
 luxnix/modules/home/cli/shells/shared/default.nix
 
 ## Shortcut
