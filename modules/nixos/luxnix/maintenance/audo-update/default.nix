@@ -28,7 +28,7 @@ in {
 
     flake = mkOption {
       type = with types; str;
-      default = "github:wg-lux/luxnix"; #TODO Create Production Branch and use it here
+      default = "github:wg-lux/luxnix"; 
       description = "The flake to upgrade";
     };
 

@@ -180,7 +180,7 @@ gpu-eval.enable = true;
 
 maintenance.autoUpdates.dates = "09:00";
 
-maintenance.autoUpdates.enable = true;
+maintenance.autoUpdates.enable = false;
 
 maintenance.autoUpdates.flake = "github:wg-lux/luxnix";
 
