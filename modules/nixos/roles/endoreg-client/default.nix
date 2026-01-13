@@ -80,7 +80,7 @@ in
         type = types.listOf types.str;
         default = [ "localhost" "127.0.0.1"];
         description = "Django ALLOWED_HOSTS setting";
-        example = [ "api.example.com" "localhost" "127.0.0.1" ];
+        example = [ "lx-annotate.endo-reg.net" "localhost" "127.0.0.1" ];
       };
 
       djangoDebug = mkOption {
@@ -99,7 +99,7 @@ in
         type = types.listOf types.str;
         default = [];
         description = "CORS allowed origins for the API";
-        example = [ "https://frontend.example.com" "http://localhost:3000" ];
+        example = [ "lx-annotate.endo-reg.net" "http://localhost:3000" ];
       };
 
       logLevel = mkOption {
