@@ -47,13 +47,13 @@ with lib.luxnix; let
   settingsProfile = cfg.django.settingsProfile;
   envIsCentralNode = cfg.django.extraSettings.IS_CENTRAL_NODE or false;
   derivedSettingsModule =
-    if settingsProfile == "dev" then "config.settings.dev"
-    else if settingsProfile == "central" then "config.settings.central"
-    else if settingsProfile == "test" then "config.settings.test"
-    else "config.settings.prod";
+    if settingsProfile == "dev" then "lx_annotate.settings.settings_dev"
+    else if settingsProfile == "central" then "lx_annotate.settings.settings_central"
+    else if settingsProfile == "test" then "lx_annotate.settings.settings_test"
+    else "lx_annotate.settings.settings_prod";
   envDjangoSettingsModule =
     if cfg.django.settingsModule != null then cfg.django.settingsModule
-    else if envIsCentralNode && settingsProfile != "dev" && settingsProfile != "test" then "config.settings.central"
+    else if envIsCentralNode && settingsProfile != "dev" && settingsProfile != "test" then "lx_annotate.settings.settings_central"
     else derivedSettingsModule;
   envDjangoEnv =
     if cfg.django.djangoEnv != null then cfg.django.djangoEnv
@@ -185,9 +185,9 @@ with lib.luxnix; let
       export DB_PWD_FILE="${envConfDir}/db_pwd"
       export DJANGO_MODULE="${envDjangoModule}"
       export DJANGO_SETTINGS_MODULE="${envDjangoSettingsModule}"
-      export DJANGO_SETTINGS_MODULE_PRODUCTION="config.settings.prod"
-      export DJANGO_SETTINGS_MODULE_DEVELOPMENT="config.settings.dev"
-      export DJANGO_SETTINGS_MODULE_CENTRAL="config.settings.central"
+      export DJANGO_SETTINGS_MODULE_PRODUCTION="settings.settings_prod"
+      export DJANGO_SETTINGS_MODULE_DEVELOPMENT="settings.settings_dev"
+      export DJANGO_SETTINGS_MODULE_CENTRAL="settings.settings_central"
       export DJANGO_ENV="${envDjangoEnv}"
       export CENTRAL_NODE="${envCentralNodeFlag}"
       export HTTP_PROTOCOL="${envHttpProtocol}"
@@ -200,6 +200,7 @@ with lib.luxnix; let
       export ASSET_DIR="${envAssetDir}"
       export RUN_VIDEO_TESTS="${envRunVideoTests}"
       export SKIP_EXPENSIVE_TESTS="${envSkipExpensiveTests}"
+
 
       DB_PASSWORD_VALUE="$(tr -d '\n' < ${envConfDir}/db_pwd 2>/dev/null || true)"
       export DB_ENGINE="django.db.backends.postgresql"
