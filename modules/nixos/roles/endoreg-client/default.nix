@@ -212,7 +212,7 @@ in
 
       httpProtocol = mkOption {
         type = types.enum [ "http" "https" ];
-        default = "http";
+        default = "https";
         description = "Explicit HTTP protocol to advertise in BASE_URL.";
       };
 
