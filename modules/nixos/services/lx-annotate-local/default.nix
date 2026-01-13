@@ -209,6 +209,11 @@ with lib.luxnix; let
       export DB_HOST="${cfg.database.host}"
       export DB_PORT="${toString cfg.database.port}"
       export DB_SSLMODE="${cfg.database.sslMode}"
+      export DJANGO_ALLOWED_HOSTS="${lib.concatStringsSep "," cfg.django.djangoAllowedHosts}"
+      export DJANGO_CORS_ALLOWED_ORIGINS="${lib.concatStringsSep "," cfg.django.corsAllowedOrigins}"
+      export DJANGO_CSRF_TRUSTED_ORIGINS="${lib.concatStringsSep "," cfg.django.corsAllowedOrigins}"
+      DJANGO_SECRET_KEY_VALUE="$(tr -d '\n' < ${cfg.django.djangoSecretKeyFile} 2>/dev/null || true)"
+      export DJANGO_SECRET_KEY="$DJANGO_SECRET_KEY_VALUE"
 
       
       # Ensure devenv is available and run the configuration script
@@ -408,6 +413,11 @@ in
           djangoAllowedHosts = mkOption { type = types.listOf types.str; default = ["localhost" "127.0.0.1"]; };
           djangoDebug = mkOption { type = types.bool; default = false; };
           djangoSecretKeyFile = mkOption { type = types.path; default = "/etc/secrets/vault/django_secret_key"; };
+          keycloakEnvFile = mkOption {
+            type = types.nullOr types.path;
+            default = "/etc/secrets/vault/keycloak.env";
+            description = "Environment file containing OIDC_RP_CLIENT_ID and OIDC_RP_CLIENT_SECRET.";
+          };
           corsAllowedOrigins = mkOption { type = types.listOf types.str; default = []; };
           logLevel = mkOption { type = types.str; default = "INFO"; };
           maxRequestSize = mkOption { type = types.str; default = "100M"; };
@@ -521,6 +531,21 @@ in
   };
 
   config = mkIf cfg.enable {
+    services.luxnix.lxAnnotateLocal.django.djangoAllowedHosts = mkAfter [
+      cfg.django.hostname
+    ];
+
+    #sops.secrets = lib.mkIf (cfg.django.keycloakEnvFile != null) {
+    #  lx_annotate_keycloak_env = {
+    #    sopsFile = ../secrets_new.yaml;
+    #    format = "dotenv";
+    #    path = cfg.django.keycloakEnvFile;
+    #    owner = "root";
+    #    group = config.luxnix.generic-settings.sensitiveServiceGroupName;
+    #    mode = "0640";
+    #  };
+    #};
+
     luxnix.generic-settings.postgres = {
       enable = true;
     };
@@ -548,6 +573,8 @@ in
         # Resource limits
         MemoryMax = "2G";
         CPUQuota = "200%";
+      } // lib.optionalAttrs (cfg.django.keycloakEnvFile != null) {
+        EnvironmentFile = cfg.django.keycloakEnvFile;
       };
     };
   };
