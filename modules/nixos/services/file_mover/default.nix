@@ -4,8 +4,8 @@ with lib.luxnix; let
   cfg = config.services.luxnix.fileMover;
   
   # Define paths in variables so we don't typo them between the 3 sections
-  sourceVideo = "/home/admin/video_import/";
-  sourceReport = "/home/admin/report_import/";
+  sourceVideo = "/home/admin/Desktop/video_import/";
+  sourceReport = "/home/admin/Desktop/report_import/";
   destVideo = "/home/admin/dev/lx-annotate/data/import/video_import/";
   destReport = "/home/admin/dev/lx-annotate/data/import/report_import/";
 in {
