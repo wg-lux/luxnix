@@ -30,7 +30,36 @@
     custom-packages.office = true;
     };
 
+  networking.hosts."127.0.0.1" = [ "lx-annotate.endo-reg.net" ];
+
+  networking.firewall.allowedTCPPorts = lib.mkAfter [ 80 443 ];
+
   services = {
+    nginx = {
+      enable = true;
+      recommendedProxySettings = true;
+      recommendedTlsSettings = true;
+      recommendedOptimisation = true;
+      recommendedGzipSettings = true;
+
+      virtualHosts."lx-annotate.endo-reg.net" = {
+        forceSSL = true;
+        sslCertificate = config.luxnix.generic-settings.sslCertificatePath;
+        sslCertificateKey = config.luxnix.generic-settings.sslCertificateKeyPath;
+        locations."/" = {
+          proxyPass = "http://127.0.0.1:8118";
+          proxyWebsockets = true;
+        };
+      };
+    };
+
+    luxnix.lxAnnotateLocal.django = {
+      hostname = "lx-annotate.endo-reg.net";
+      baseUrl = "https://lx-annotate.endo-reg.net";
+      httpProtocol = "https";
+      useHttps = true;
+      djangoAllowedHosts = [ "lx-annotate.endo-reg.net" "localhost" "127.0.0.1" ];
+    };
     };
 
   luxnix = {
@@ -47,8 +76,6 @@ generic-settings.sslCertificateKeyPath = "/etc/secrets/vault/ssl_key";
 generic-settings.sslCertificatePath = "/etc/secrets/vault/ssl_cert";
 
 generic-settings.adminVpnIp = "172.16.255.106";
-
-generic-settings.configurationPathRelative = "lx-production";
 
 generic-settings.enable = true;
 
@@ -187,7 +214,7 @@ maintenance.autoUpdates.dates = "17:00";
 
 maintenance.autoUpdates.enable = true;
 
-maintenance.autoUpdates.flake = "github:wg-lux/luxnix/prototype";
+maintenance.autoUpdates.flake = "github:wg-lux/luxnix";
 
 maintenance.autoUpdates.operation = "switch";
 

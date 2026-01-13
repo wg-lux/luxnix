@@ -27,7 +27,7 @@
     endoreg-client.api.logLevel = "WARNING";
     endoreg-client.api.maxRequestSize = "50G";
     endoreg-client.api.settingsProfile = "prod";
-    endoreg-client.centralNodes = ["s-04"];    endoreg-client.dbApiLocal = true;
+    endoreg-client.centralNodes = ["s-04"];
     endoreg-client.enable = true;
     endoreg-client.repository.branch = "container";
     nextcloudClient.enable = true;
@@ -38,7 +38,36 @@
     custom-packages.visuals = true;
     };
 
+  networking.hosts."127.0.0.1" = [ "lx-annotate.endo-reg.net" ];
+
+  networking.firewall.allowedTCPPorts = lib.mkAfter [ 80 443 ];
+
   services = {
+    nginx = {
+      enable = true;
+      recommendedProxySettings = true;
+      recommendedTlsSettings = true;
+      recommendedOptimisation = true;
+      recommendedGzipSettings = true;
+
+      virtualHosts."lx-annotate.endo-reg.net" = {
+        forceSSL = true;
+        sslCertificate = config.luxnix.generic-settings.sslCertificatePath;
+        sslCertificateKey = config.luxnix.generic-settings.sslCertificateKeyPath;
+        locations."/" = {
+          proxyPass = "http://127.0.0.1:8118";
+          proxyWebsockets = true;
+        };
+      };
+    };
+
+    luxnix.lxAnnotateLocal.django = {
+      hostname = "lx-annotate.endo-reg.net";
+      baseUrl = "https://lx-annotate.endo-reg.net";
+      httpProtocol = "https";
+      useHttps = true;
+      djangoAllowedHosts = [ "lx-annotate.endo-reg.net" "localhost" "127.0.0.1" ];
+    };
     };
 
   luxnix = {
@@ -55,8 +84,6 @@ generic-settings.sslCertificateKeyPath = "/etc/secrets/vault/ssl_key";
 generic-settings.sslCertificatePath = "/etc/secrets/vault/ssl_cert";
 
 generic-settings.adminVpnIp = "172.16.255.106";
-
-generic-settings.configurationPathRelative = "dev/luxnix";
 
 generic-settings.enable = true;
 
@@ -205,7 +232,7 @@ maintenance.autoUpdates.dates = "17:00";
 
 maintenance.autoUpdates.enable = false;
 
-maintenance.autoUpdates.flake = "github:wg-lux/luxnix/prototype";
+maintenance.autoUpdates.flake = "github:wg-lux/luxnix";
 
 maintenance.autoUpdates.operation = "switch";
 
@@ -216,8 +243,6 @@ vault.enable = true;
 vault.key = "/etc/secrets/.key";
 
 vault.psk = "/etc/secrets/.psk";
-
-generic-settings.configurationPath = lib.mkForce "/home/admin/dev/luxnix";
 
 generic-settings.gpu.nvidia.prime.nvidiaBusId = "PCI:1:0:0";
 

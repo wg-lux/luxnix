@@ -450,40 +450,6 @@ in
           };
 
           environment = mkOption {
-            type = types.submodule {
-              options = {
-                hfHome = mkOption {
-                  type = types.str;
-                  default = "${endoreg-service-user-home}/.cache/huggingface";
-                  description = "Location used for HF_HOME.";
-                };
-                hfHubCache = mkOption {
-                  type = types.str;
-                  default = "${endoreg-service-user-home}/.cache/huggingface/hub";
-                  description = "Location used for HF_HUB_CACHE.";
-                };
-                hfHubEnableTransfer = mkOption {
-                  type = types.bool;
-                  default = true;
-                  description = "Whether HF_HUB_ENABLE_HF_TRANSFER is set to 1.";
-                };
-                ollamaKeepAlive = mkOption {
-                  type = types.str;
-                  default = "4h";
-                  description = "Value exported as OLLAMA_KEEP_ALIVE.";
-                };
-                ollamaModelsDir = mkOption {
-                  type = types.str;
-                  default = "${endoreg-service-user-home}/.ollama/models";
-                  description = "Directory exported as OLLAMA_MODELS.";
-                };
-                transformersCache = mkOption {
-                  type = types.str;
-                  default = "${endoreg-service-user-home}/.cache/huggingface/hub";
-                  description = "Location exported as TRANSFORMERS_CACHE.";
-                };
-              };
-            };
             default = {};
             description = "Runtime environment variables applied when launching lx-annotate.";
           };
@@ -507,25 +473,5 @@ in
       "d ${endoreg-service-user-home}/config 0755 ${endoreg-service-user-name} ${endoreg-service-user-name} - -"
     ];
     
-    systemd.services."lx-annotate-boot" = {
-      description = "Clone or pull lx-annotate and run prod-server";
-      wantedBy = [ "multi-user.target" ];
-      after = [ "postgres-endoreg-setup.service" "endoreg-django-setup.service" "systemd-tmpfiles-setup.service" ];
-      requires = [ "postgres-endoreg-setup.service" "systemd-tmpfiles-setup.service" ];
-      serviceConfig = {
-        Type = "exec";
-        User = endoreg-service-user-name;
-        Environment = [
-          "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:${pkgs.uv}/bin:/run/current-system/sw/bin"
-          "HOME_DIR=${endoreg-service-user-home}"
-        ];
-        ExecStart = "${runLocalLxAnnotateScript}/bin/${scriptName}";
-        Restart = "on-failure";
-        RestartSec = "10s";
-        # Resource limits
-        MemoryMax = limitsCfg.memoryMax;
-        CPUQuota = limitsCfg.cpuQuota;
-      };
-    };
   };
 }
