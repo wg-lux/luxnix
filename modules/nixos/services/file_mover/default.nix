@@ -6,8 +6,8 @@ with lib.luxnix; let
   # Define paths in variables so we don't typo them between the 3 sections
   sourceVideo = "/home/admin/Desktop/video_import/";
   sourceReport = "/home/admin/Desktop/report_import/";
-  destVideo = "/home/admin/dev/lx-annotate/data/import/video_import/";
-  destReport = "/home/admin/dev/lx-annotate/data/import/report_import/";
+  destVideo = "/var/endoreg-service-user/lx-annotate/data/import/video_import/";
+  destReport = "/var/endoreg-service-user/lx-annotate/data/import/report_import/";
 in {
   options.services.luxnix.fileMover = {
     enable = mkBoolOpt false "Enable the move-my-files path-triggered service.";
