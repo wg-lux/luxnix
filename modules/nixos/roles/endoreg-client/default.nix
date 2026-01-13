@@ -97,9 +97,9 @@ in
 
       corsAllowedOrigins = mkOption {
         type = types.listOf types.str;
-        default = [];
+        default = ["lx-annotate.endo-reg.net" "https://lx-annotate.endo-reg.net" "http://localhost:3000"];
         description = "CORS allowed origins for the API";
-        example = [ "lx-annotate.endo-reg.net" "http://localhost:3000" ];
+        example = [ "lx-annotate.endo-reg.net" "https://lx-annotate.endo-reg.net" "http://localhost:3000" ];
       };
 
       logLevel = mkOption {

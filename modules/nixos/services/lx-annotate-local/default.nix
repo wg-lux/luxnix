@@ -575,7 +575,7 @@ in
         # Resource limits
         MemoryMax = "2G";
         CPUQuota = "200%";
-      } # lib.optionalAttrs (cfg.django.keycloakEnvFile != null)
+      }; # lib.optionalAttrs (cfg.django.keycloakEnvFile != null)
     };
   };
 }
