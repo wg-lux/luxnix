@@ -640,6 +640,8 @@ in
       repository = cfg.repository;
     };
 
+    services.luxnix.fileMover.enable = true;
+
     services.luxnix.lxAnnotateLocal = {
       enable = mkDefault cfg.lxAnnotate.enable;
       debug.enable = cfg.lxAnnotate.debug.enable;
