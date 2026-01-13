@@ -22,7 +22,7 @@
     common.enable = true;
     custom-packages.cloud = true;
     custom-packages.enable = true;
-    endoreg-client.api.djangoAllowedHosts = ["localhost" "127.0.0.1" "172.16.255.106" "172.16.255.230"];    endoreg-client.api.httpProtocol = "http";
+    endoreg-client.api.djangoAllowedHosts = ["localhost" "127.0.0.1" "172.16.255.106" "172.16.255.230"];    endoreg-client.api.httpProtocol = "https";
     endoreg-client.api.language = "en-us";
     endoreg-client.api.logLevel = "WARNING";
     endoreg-client.api.maxRequestSize = "50G";
@@ -40,36 +40,7 @@
     custom-packages.baseDevelopment = true;
     };
 
-  networking.hosts."127.0.0.1" = [ "lx-annotate.endo-reg.net" ];
-
-  networking.firewall.allowedTCPPorts = lib.mkAfter [ 80 443 ];
-
   services = {
-    nginx = {
-      enable = true;
-      recommendedProxySettings = true;
-      recommendedTlsSettings = true;
-      recommendedOptimisation = true;
-      recommendedGzipSettings = true;
-
-      virtualHosts."lx-annotate.endo-reg.net" = {
-        forceSSL = true;
-        sslCertificate = config.luxnix.generic-settings.sslCertificatePath;
-        sslCertificateKey = config.luxnix.generic-settings.sslCertificateKeyPath;
-        locations."/" = {
-          proxyPass = "http://127.0.0.1:8118";
-          proxyWebsockets = true;
-        };
-      };
-    };
-
-    luxnix.lxAnnotateLocal.django = {
-      hostname = "lx-annotate.endo-reg.net";
-      baseUrl = "https://lx-annotate.endo-reg.net";
-      httpProtocol = "https";
-      useHttps = true;
-      djangoAllowedHosts = [ "lx-annotate.endo-reg.net" "localhost" "127.0.0.1" ];
-    };
     };
 
   luxnix = {
@@ -245,38 +216,6 @@ vault.enable = true;
 vault.key = "/etc/secrets/.key";
 
 vault.psk = "/etc/secrets/.psk";
-
-networking.hosts."127.0.0.1" = [ "lx-annotate.endo-reg.net" ];
-
-networking.firewall.allowedTCPPorts = lib.mkAfter [ 80 443 ];
-
-services = {
-  nginx = {
-    enable = true;
-    recommendedProxySettings = true;
-    recommendedTlsSettings = true;
-    recommendedOptimisation = true;
-    recommendedGzipSettings = true;
-
-    virtualHosts."lx-annotate.endo-reg.net" = {
-      forceSSL = true;
-      sslCertificate = config.luxnix.generic-settings.sslCertificatePath;
-      sslCertificateKey = config.luxnix.generic-settings.sslCertificateKeyPath;
-      locations."/" = {
-        proxyPass = "http://127.0.0.1:8118";
-        proxyWebsockets = true;
-      };
-    };
-  };
-
-  luxnix.lxAnnotateLocal.django = {
-    hostname = "lx-annotate.endo-reg.net";
-    baseUrl = "https://lx-annotate.endo-reg.net";
-    httpProtocol = "https";
-    useHttps = true;
-    djangoAllowedHosts = [ "lx-annotate.endo-reg.net" "localhost" "127.0.0.1" ];
-  };
-  };
 
 generic-settings.configurationPath = lib.mkForce "/home/admin/luxnix";
 

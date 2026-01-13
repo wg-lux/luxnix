@@ -13,7 +13,7 @@ group_roles:
   endoreg_client.api.maxRequestSize: '"50G"'
   endoreg_client.api.language: '"en-us"'
   endoreg_client.api.settingsProfile: '"prod"'
-  endoreg_client.api.httpProtocol: '"http"'
+  endoreg_client.api.httpProtocol: '"https"'
 
 group_services: {}
 group_luxnix:
