@@ -21,6 +21,7 @@ with lib.luxnix; let
   endoreg-service-user = config.users.users.${endoreg-service-user-name};
   endoreg-service-user-home = endoreg-service-user.home;
   repoDir = "${endoreg-service-user-home}/${repoDirName}";
+  staticRootPath = "${repoDir}/staticfiles";
 
   # Environment variable configuration from django submodule
   envDataDir = "${repoDir}/${cfg.django.dataDir}";
@@ -59,8 +60,6 @@ with lib.luxnix; let
     
     # Debug mode flag - controls verbose logging
     DEBUG_MODE=${if cfg.debug.enable then "true" else "false"}
-
-    nginx
 
     echo "Starting LxAnnotate service..."
     echo "Repository: ${gitURL}"
@@ -121,41 +120,24 @@ with lib.luxnix; let
       echo "User groups: $(groups)"
       echo "Checking for database password file: ${cfg.database.passwordFile}"
     fi
+
+    cd ${repoDir}
+    direnv allow
+    echo "Collecting static files..."
+    export DJANGO_STATIC_ROOT="${staticRootPath}"
+    mkdir -p "$DJANGO_STATIC_ROOT"
     
-    # Debug secret file access
-    SECRET_FILE="${cfg.database.passwordFile}"
-    if [ -f "$SECRET_FILE" ]; then
-      if [ "$DEBUG_MODE" = "true" ]; then
-        echo "Secret file exists: $SECRET_FILE"
-        ls -la "$SECRET_FILE" || echo "Cannot stat secret file"
-        echo "Testing read access..."
-      fi
-      if head -c 10 "$SECRET_FILE" >/dev/null 2>&1; then
-        if [ "$DEBUG_MODE" = "true" ]; then
-          echo "✓ Can read secret file"
-        fi
-      else
-        echo "✗ Cannot read secret file"
-        if [ "$DEBUG_MODE" = "true" ]; then
-          echo "File permissions:"
-          ls -la "$SECRET_FILE" 2>/dev/null || echo "Cannot access file"
-          echo "Directory permissions:"
-          ls -la "$(dirname "$SECRET_FILE")" 2>/dev/null || echo "Cannot access directory" 
-          echo "Parent directory permissions:"
-          ls -la "/etc/secrets" 2>/dev/null || echo "Cannot access /etc/secrets"
-        fi
-      fi
+    # Run collectstatic via devenv or python directly
+    if command -v devenv >/dev/null 2>&1; then
+       devenv shell -- python manage.py collectstatic --noinput --clear
     else
-      echo "Secret file does not exist: $SECRET_FILE"
-      if [ "$DEBUG_MODE" = "true" ]; then
-        echo "Directory contents:"
-        ls -la "$(dirname "$SECRET_FILE")" 2>/dev/null || echo "Cannot access $(dirname "$SECRET_FILE")"
-        ls -la "/etc/secrets" 2>/dev/null || echo "Cannot access /etc/secrets"
-      fi
+       source .venv/bin/activate 
+       python manage.py collectstatic --noinput --clear
     fi
+
     
-  # Ensure runtime directories exist (they might be ignored in git)
-  mkdir -p ${envConfDir} ${envDataDir} ${envStorageDir}
+    # Ensure runtime directories exist (they might be ignored in git)
+    mkdir -p ${envConfDir} ${envDataDir} ${envStorageDir}
     
     if [ -f "$SECRET_FILE" ] && head -c 1 "$SECRET_FILE" >/dev/null 2>&1; then
       cp "$SECRET_FILE" ${envConfDir}/db_pwd
@@ -206,6 +188,8 @@ with lib.luxnix; let
       export DJANGO_CSRF_TRUSTED_ORIGINS='${builtins.toJSON cfg.django.corsAllowedOrigins}'
       DJANGO_SECRET_KEY_VALUE="$(tr -d '\n' < ${cfg.django.djangoSecretKeyFile} 2>/dev/null || true)"
       export DJANGO_SECRET_KEY="$DJANGO_SECRET_KEY_VALUE"
+
+      export DJANGO_KEYCLOAK_CLIENT_SECRET_FILE="${cfg.django.keycloakSecretFile}"      
 
       
       # Ensure devenv is available and run the configuration script
@@ -261,88 +245,89 @@ with lib.luxnix; let
         export DESIRED_SETTINGS_MODULE="${envDjangoSettingsModule}"
         export DESIRED_ENVIRONMENT="${envDjangoEnv}"
         python - <<'PY'
-import os
-from pathlib import Path
+        import os
+        from pathlib import Path
 
-env_path = Path('.env')
-desired_module = os.environ['DESIRED_SETTINGS_MODULE']
-desired_env = os.environ['DESIRED_ENVIRONMENT']
+        env_path = Path('.env')
+        desired_module = os.environ['DESIRED_SETTINGS_MODULE']
+        desired_env = os.environ['DESIRED_ENVIRONMENT']
 
-if not env_path.exists():
-    raise SystemExit(0)
+        if not env_path.exists():
+            raise SystemExit(0)
 
-lines = env_path.read_text(encoding='utf-8').splitlines()
-updated = []
-have_module = False
-have_env = False
+        lines = env_path.read_text(encoding='utf-8').splitlines()
+        updated = []
+        have_module = False
+        have_env = False
 
-for line in lines:
-    if line.startswith('DJANGO_SETTINGS_MODULE='):
-        updated.append(f'DJANGO_SETTINGS_MODULE={desired_module}')
-        have_module = True
-    elif line.startswith('DJANGO_ENV='):
-        updated.append(f'DJANGO_ENV={desired_env}')
-        have_env = True
-    else:
-        updated.append(line)
+        for line in lines:
+            if line.startswith('DJANGO_SETTINGS_MODULE='):
+                updated.append(f'DJANGO_SETTINGS_MODULE={desired_module}')
+                have_module = True
+            elif line.startswith('DJANGO_ENV='):
+                updated.append(f'DJANGO_ENV={desired_env}')
+                have_env = True
+            else:
+                updated.append(line)
 
-if not have_module:
-    updated.append(f'DJANGO_SETTINGS_MODULE={desired_module}')
+        if not have_module:
+            updated.append(f'DJANGO_SETTINGS_MODULE={desired_module}')
 
-if not have_env:
-    updated.append(f'DJANGO_ENV={desired_env}')
+        if not have_env:
+            updated.append(f'DJANGO_ENV={desired_env}')
 
-env_path.write_text('\n'.join(updated) + '\n', encoding='utf-8')
-PY
-      else
-        echo "WARNING: .env not found after setup; production overrides skipped"
-      fi
-      
-    else
-      echo "ERROR: Database password not found in vault or not accessible. PostgreSQL setup may not be complete."
-      exit 1
-    fi
+        env_path.write_text('\n'.join(updated) + '\n', encoding='utf-8')
+        PY
+              else
+                echo "WARNING: .env not found after setup; production overrides skipped"
+              fi
+              
+            else
+              echo "ERROR: Database password not found in vault or not accessible. PostgreSQL setup may not be complete."
+              exit 1
+            fi
 
-    # Copy Django configuration
-    echo "Setting up Django configuration..."
-    echo "Service user home: ${endoreg-service-user-home}"
-    echo "Current user: $(whoami)"
-    echo "Current directory: $(pwd)"
-    
-    # Check if home directory exists and is accessible
-    if [ ! -d "${endoreg-service-user-home}" ]; then
-      echo "ERROR: Home directory ${endoreg-service-user-home} does not exist"
-      exit 1
-    fi
-    
-    # Ensure config directory exists with correct permissions
-    CONFIG_DIR="${endoreg-service-user-home}/config"
-    echo "Checking config directory: $CONFIG_DIR"
-    
-    if [ ! -d "$CONFIG_DIR" ]; then
-      echo "Creating config directory: $CONFIG_DIR"
-      mkdir -p "$CONFIG_DIR" || { echo "ERROR: Failed to create config directory $CONFIG_DIR"; ls -la "${endoreg-service-user-home}"; exit 1; }
-    else
-      echo "Config directory already exists"
-    fi
-    
-    # Check permissions
-    ls -la "${endoreg-service-user-home}/" || echo "Cannot list home directory contents"
+            # Copy Django configuration
+            echo "Setting up Django configuration..."
+            echo "Service user home: ${endoreg-service-user-home}"
+            echo "Current user: $(whoami)"
+            echo "Current directory: $(pwd)"
+            
+            # Check if home directory exists and is accessible
+            if [ ! -d "${endoreg-service-user-home}" ]; then
+              echo "ERROR: Home directory ${endoreg-service-user-home} does not exist"
+              exit 1
+            fi
+            
+            # Ensure config directory exists with correct permissions
+            CONFIG_DIR="${endoreg-service-user-home}/config"
+            echo "Checking config directory: $CONFIG_DIR"
+            
+            if [ ! -d "$CONFIG_DIR" ]; then
+              echo "Creating config directory: $CONFIG_DIR"
+              mkdir -p "$CONFIG_DIR" || { echo "ERROR: Failed to create config directory $CONFIG_DIR"; ls -la "${endoreg-service-user-home}"; exit 1; }
+            else
+              echo "Config directory already exists"
+            fi
+            
+            # Check permissions
+            ls -la "${endoreg-service-user-home}/" || echo "Cannot list home directory contents"
 
-    echo "Starting Django server..."
-    echo "Hostname: ${envDjangoHost}"
-    echo "Port: ${envDjangoPort}"
-    echo "Protocol: ${envHttpProtocol}"
-    
-    # Write essential environment variables to .env.systemd for devenv
-    cat > ${repoDir}/.env.systemd <<EOF
-HOME_DIR=${endoreg-service-user-home}
-DATA_DIR=${envDataDir}
-STORAGE_DIR=${envStorageDir}
-CONF_DIR=${envConfDir}
-CONF_TEMPLATE_DIR=${envConfTemplateDir}
-WORKING_DIR=${repoDir}
-EOF
+            echo "Starting Django server..."
+            echo "Hostname: ${envDjangoHost}"
+            echo "Port: ${envDjangoPort}"
+            echo "Protocol: ${envHttpProtocol}"
+            
+            # Write essential environment variables to .env.systemd for devenv
+            cat > ${repoDir}/.env.systemd <<EOF
+        HOME_DIR=${endoreg-service-user-home}
+        DATA_DIR=${envDataDir}
+        STORAGE_DIR=${envStorageDir}
+        CONF_DIR=${envConfDir}
+        CONF_TEMPLATE_DIR=${envConfTemplateDir}
+        WORKING_DIR=${repoDir}
+        DJANGO_STATIC_ROOT=${staticRootPath}
+        EOF
 
     # Start the Django application with devenv
     exec devenv shell -- run-server
@@ -405,11 +390,11 @@ in
           djangoAllowedHosts = mkOption { type = types.listOf types.str; default = ["localhost" "127.0.0.1"]; };
           djangoDebug = mkOption { type = types.bool; default = false; };
           djangoSecretKeyFile = mkOption { type = types.path; default = "/etc/secrets/vault/django_secret_key"; };
-#          keycloakEnvFile = mkOption {
-#            type = types.nullOr types.path;
-#            default = "/etc/secrets/vault/keycloak.env";
-#            description = "Environment file containing OIDC_RP_CLIENT_ID and OIDC_RP_CLIENT_SECRET.";
-#          };
+          keycloakEnvFile = mkOption {
+          type = types.nullOr types.path;
+          default = "/etc/secrets/vault/keycloak.env";
+          description = "Environment file containing OIDC_RP_CLIENT_ID and OIDC_RP_CLIENT_SECRET.";
+          };
           corsAllowedOrigins = mkOption { type = types.listOf types.str; default = []; };
           logLevel = mkOption { type = types.str; default = "INFO"; };
           maxRequestSize = mkOption { type = types.str; default = "100M"; };
@@ -527,27 +512,64 @@ in
       cfg.django.hostname
     ];
 
-    #sops.secrets = lib.mkIf (cfg.django.keycloakEnvFile != null) {
-    #  lx_annotate_keycloak_env = {
-    #    sopsFile = ../secrets_new.yaml;
-    #    format = "dotenv";
-    #    path = cfg.django.keycloakEnvFile;
-    #    owner = "root";
-    #    group = config.luxnix.generic-settings.sensitiveServiceGroupName;
-    #    mode = "0640";
-    #  };
-    #};
+    services.nginx = {
+      enable = true;
+      
+      # Tuning for AI Model Uploads (50GB) & Streaming
+      recommendedProxySettings = true;
+      recommendedTlsSettings = true;
+      
+      virtualHosts."${cfg.django.hostname}" = {
+        listen = [ { addr = "0.0.0.0"; port = 80; } ]; # Or 443 with enableACME
+        
+        # 1. Allow massive uploads for AI Models
+        extraConfig = ''
+          client_max_body_size 50G;
+          proxy_request_buffering off;
+        '';
+
+        locations."/static/" = {
+          # Must match STATIC_ROOT from Step 1
+          alias = "${staticRootPath}/";
+          extraConfig = "expires 30d; add_header Cache-Control 'public';";
+        };
+
+        locations."/media/" = {
+          # Must match MEDIA_ROOT env var
+          alias = "${endoreg-service-user-home}/${repoDirName}/${cfg.django.dataDir}/";
+          extraConfig = "sendfile on; tcp_nopush on;";
+        };
+
+        locations."/" = {
+          proxyPass = "http://127.0.0.1:${toString cfg.django.port}";
+          
+          # 2. Critical for Streaming/WebSockets
+          proxyWebsockets = true;
+          
+          # 3. Timeout tuning for long AI Inference
+          extraConfig = ''
+            proxy_read_timeout 600s;
+            proxy_send_timeout 600s;
+            proxy_buffering off;
+          '';
+        };
+      };
+    };
 
     luxnix.generic-settings.postgres = {
       enable = true;
     };
     
     # Ensure directory structure exists with correct permissions
+    users.users.nginx.extraGroups = [ "${endoreg-service-user-name}" ];
+
     systemd.tmpfiles.rules = [
-      # Create the service user home directory
-      "d ${endoreg-service-user-home} 0755 ${endoreg-service-user-name} ${endoreg-service-user-name} - -"
-      # Create the config subdirectory  
+      # Allow nginx to traverse the service user's home directory
+      "d ${endoreg-service-user-home} 0751 ${endoreg-service-user-name} ${endoreg-service-user-name} - -"
+      # Create the config subdirectory
       "d ${endoreg-service-user-home}/config 0755 ${endoreg-service-user-name} ${endoreg-service-user-name} - -"
+      # Ensure static dir exists for nginx alias
+      "d ${staticRootPath} 0755 ${endoreg-service-user-name} ${endoreg-service-user-name} - -"
     ];
     
     systemd.services."lx-annotate-boot" = {
@@ -563,8 +585,8 @@ in
         Restart = "on-failure";
         RestartSec = "10s";
         # Resource limits
-        MemoryMax = "2G";
-        CPUQuota = "200%";
+        MemoryMax = "8G";
+        CPUQuota = "800%";
       }; # lib.optionalAttrs (cfg.django.keycloakEnvFile != null)
     };
   };
