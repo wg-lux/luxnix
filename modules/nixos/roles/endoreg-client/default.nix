@@ -124,9 +124,9 @@ in
 
       corsAllowedOrigins = mkOption {
         type = types.listOf types.str;
-        default = [];
+        default = ["lx-annotate.endo-reg.net" "https://lx-annotate.endo-reg.net" "http://localhost:3000"];
         description = "CORS allowed origins for the API";
-        example = [ "lx-annotate.endo-reg.net" "http://localhost:3000" ];
+        example = [ "lx-annotate.endo-reg.net" "https://lx-annotate.endo-reg.net" "http://localhost:3000" ];
       };
 
       logLevel = mkOption {
@@ -212,7 +212,7 @@ in
 
       httpProtocol = mkOption {
         type = types.enum [ "http" "https" ];
-        default = "http";
+        default = "https";
         description = "Explicit HTTP protocol to advertise in BASE_URL.";
       };
 
@@ -422,7 +422,7 @@ in
 
             branch = mkOption {
               type = types.str;
-              default = "erc";
+              default = "main";
               description = "Git branch to checkout for lx-annotate.";
             };
 

@@ -47,13 +47,13 @@ with lib.luxnix; let
   settingsProfile = cfg.django.settingsProfile;
   envIsCentralNode = cfg.django.extraSettings.IS_CENTRAL_NODE or false;
   derivedSettingsModule =
-    if settingsProfile == "dev" then "config.settings.dev"
-    else if settingsProfile == "central" then "config.settings.central"
-    else if settingsProfile == "test" then "config.settings.test"
-    else "config.settings.prod";
+    if settingsProfile == "dev" then "lx_annotate.settings.settings_dev"
+    else if settingsProfile == "central" then "lx_annotate.settings.settings_central"
+    else if settingsProfile == "test" then "lx_annotate.settings.settings_test"
+    else "lx_annotate.settings.settings_prod";
   envDjangoSettingsModule =
     if cfg.django.settingsModule != null then cfg.django.settingsModule
-    else if envIsCentralNode && settingsProfile != "dev" && settingsProfile != "test" then "config.settings.central"
+    else if envIsCentralNode && settingsProfile != "dev" && settingsProfile != "test" then "lx_annotate.settings.settings_central"
     else derivedSettingsModule;
   envDjangoEnv =
     if cfg.django.djangoEnv != null then cfg.django.djangoEnv
@@ -185,9 +185,9 @@ with lib.luxnix; let
       export DB_PWD_FILE="${envConfDir}/db_pwd"
       export DJANGO_MODULE="${envDjangoModule}"
       export DJANGO_SETTINGS_MODULE="${envDjangoSettingsModule}"
-      export DJANGO_SETTINGS_MODULE_PRODUCTION="config.settings.prod"
-      export DJANGO_SETTINGS_MODULE_DEVELOPMENT="config.settings.dev"
-      export DJANGO_SETTINGS_MODULE_CENTRAL="config.settings.central"
+      export DJANGO_SETTINGS_MODULE_PRODUCTION="settings.settings_prod"
+      export DJANGO_SETTINGS_MODULE_DEVELOPMENT="settings.settings_dev"
+      export DJANGO_SETTINGS_MODULE_CENTRAL="settings.settings_central"
       export DJANGO_ENV="${envDjangoEnv}"
       export CENTRAL_NODE="${envCentralNodeFlag}"
       export HTTP_PROTOCOL="${envHttpProtocol}"
@@ -201,6 +201,7 @@ with lib.luxnix; let
       export RUN_VIDEO_TESTS="${envRunVideoTests}"
       export SKIP_EXPENSIVE_TESTS="${envSkipExpensiveTests}"
 
+
       DB_PASSWORD_VALUE="$(tr -d '\n' < ${envConfDir}/db_pwd 2>/dev/null || true)"
       export DB_ENGINE="django.db.backends.postgresql"
       export DB_NAME="${cfg.database.name}"
@@ -209,9 +210,10 @@ with lib.luxnix; let
       export DB_HOST="${cfg.database.host}"
       export DB_PORT="${toString cfg.database.port}"
       export DB_SSLMODE="${cfg.database.sslMode}"
-      export DJANGO_ALLOWED_HOSTS="${lib.concatStringsSep "," cfg.django.djangoAllowedHosts}"
-      export DJANGO_CORS_ALLOWED_ORIGINS="${lib.concatStringsSep "," cfg.django.corsAllowedOrigins}"
-      export DJANGO_CSRF_TRUSTED_ORIGINS="${lib.concatStringsSep "," cfg.django.corsAllowedOrigins}"
+      # We wrap the JSON in single quotes '...' to ensure shell handles special chars correctly
+      export DJANGO_ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
+      export DJANGO_CORS_ALLOWED_ORIGINS='${builtins.toJSON cfg.django.corsAllowedOrigins}'
+      export DJANGO_CSRF_TRUSTED_ORIGINS='${builtins.toJSON cfg.django.corsAllowedOrigins}'
       DJANGO_SECRET_KEY_VALUE="$(tr -d '\n' < ${cfg.django.djangoSecretKeyFile} 2>/dev/null || true)"
       export DJANGO_SECRET_KEY="$DJANGO_SECRET_KEY_VALUE"
 
@@ -413,11 +415,11 @@ in
           djangoAllowedHosts = mkOption { type = types.listOf types.str; default = ["localhost" "127.0.0.1"]; };
           djangoDebug = mkOption { type = types.bool; default = false; };
           djangoSecretKeyFile = mkOption { type = types.path; default = "/etc/secrets/vault/django_secret_key"; };
-          keycloakEnvFile = mkOption {
-            type = types.nullOr types.path;
-            default = "/etc/secrets/vault/keycloak.env";
-            description = "Environment file containing OIDC_RP_CLIENT_ID and OIDC_RP_CLIENT_SECRET.";
-          };
+#          keycloakEnvFile = mkOption {
+#            type = types.nullOr types.path;
+#            default = "/etc/secrets/vault/keycloak.env";
+#            description = "Environment file containing OIDC_RP_CLIENT_ID and OIDC_RP_CLIENT_SECRET.";
+#          };
           corsAllowedOrigins = mkOption { type = types.listOf types.str; default = []; };
           logLevel = mkOption { type = types.str; default = "INFO"; };
           maxRequestSize = mkOption { type = types.str; default = "100M"; };
@@ -573,9 +575,7 @@ in
         # Resource limits
         MemoryMax = "2G";
         CPUQuota = "200%";
-      } // lib.optionalAttrs (cfg.django.keycloakEnvFile != null) {
-        EnvironmentFile = cfg.django.keycloakEnvFile;
-      };
+      }; # lib.optionalAttrs (cfg.django.keycloakEnvFile != null)
     };
   };
 }
