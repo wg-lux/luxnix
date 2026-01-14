@@ -2,12 +2,20 @@
 with lib;
 with lib.luxnix; let
   cfg = config.services.luxnix.fileMover;
+  endoregPaths = config.roles.endoreg-client.paths;
+  annotateCfg = config.services.luxnix.lxAnnotateLocal;
+
+  endoregServiceUserName = config.user.endoreg-service-user.name;
+  endoregServiceUserHome = config.users.users.${endoregServiceUserName}.home;
+  repoDirName = "lx-annotate";
+  repoDir = "${endoregServiceUserHome}/${repoDirName}";
+  makeAbsolute = path: if lib.hasPrefix "/" path then path else "${repoDir}/${path}";
+  dataDir = makeAbsolute annotateCfg.django.dataDir;
   
-  # Define paths in variables so we don't typo them between the 3 sections
-  sourceVideo = "/home/admin/Desktop/video_import/";
-  sourceReport = "/home/admin/Desktop/report_import/";
-  destVideo = "/home/admin/dev/lx-annotate/data/import/video_import/";
-  destReport = "/home/admin/dev/lx-annotate/data/import/report_import/";
+  sourceVideo = "${endoregPaths.videoInputDir}/";
+  sourceReport = "${endoregPaths.pdfInputDir}/";
+  destVideo = "${dataDir}/import/video_import/";
+  destReport = "${dataDir}/import/report_import/";
 in {
   options.services.luxnix.fileMover = {
     enable = mkBoolOpt false "Enable the move-my-files path-triggered service.";
