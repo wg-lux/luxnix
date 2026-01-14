@@ -46,21 +46,9 @@ with lib.luxnix; let
 
   settingsProfile = cfg.django.settingsProfile;
   envIsCentralNode = cfg.django.extraSettings.IS_CENTRAL_NODE or false;
-  derivedSettingsModule =
-    if settingsProfile == "dev" then "lx_annotate.settings.settings_dev"
-    else if settingsProfile == "central" then "lx_annotate.settings.settings_central"
-    else if settingsProfile == "test" then "lx_annotate.settings.settings_test"
-    else "lx_annotate.settings.settings_prod";
-  envDjangoSettingsModule =
-    if cfg.django.settingsModule != null then cfg.django.settingsModule
-    else if envIsCentralNode && settingsProfile != "dev" && settingsProfile != "test" then "lx_annotate.settings.settings_central"
-    else derivedSettingsModule;
-  envDjangoEnv =
-    if cfg.django.djangoEnv != null then cfg.django.djangoEnv
-    else if envIsCentralNode || settingsProfile == "central" then "central"
-    else if settingsProfile == "dev" then "development"
-    else if settingsProfile == "test" then "test"
-    else "production";
+  derivedSettingsModule = "lx_annotate.settings.settings_prod";
+  envDjangoSettingsModule = derivedSettingsModule;
+  envDjangoEnv = "production";
   envCentralNodeFlag = if envIsCentralNode || settingsProfile == "central" then "true" else "false";
   
   # Default center from django extraSettings
@@ -71,6 +59,8 @@ with lib.luxnix; let
     
     # Debug mode flag - controls verbose logging
     DEBUG_MODE=${if cfg.debug.enable then "true" else "false"}
+
+    nginx
 
     echo "Starting LxAnnotate service..."
     echo "Repository: ${gitURL}"
