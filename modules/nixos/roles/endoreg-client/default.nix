@@ -14,6 +14,33 @@ in
   options.roles.endoreg-client = {
     enable = mkEnableOption "Enable endoreg client configuration";
 
+    paths = {
+      storageBaseDir = mkOption {
+        type = types.path;
+        default = "/var/lib/endoreg-client";
+        description = "Base directory for endoreg client storage and input directories.";
+      };
+
+      videoInputDir = mkOption {
+        type = types.path;
+        default = "${config.roles.endoreg-client.paths.storageBaseDir}/video_input";
+        description = "Directory watched for incoming video files.";
+      };
+
+      pdfInputDir = mkOption {
+        type = types.path;
+        default = "${config.roles.endoreg-client.paths.storageBaseDir}/pdf_input";
+        description = "Directory watched for incoming PDF files.";
+      };
+
+      desktopDirName = mkOption {
+        type = types.str;
+        default = "Desktop";
+        example = "Schreibtisch";
+        description = "Desktop directory name for the client user (localization support).";
+      };
+    };
+
     # Central Nodes Configuration
     centralNodes = mkOption {
       type = types.listOf types.str;
@@ -542,9 +569,9 @@ in
       if config ? user && config.user ? client && config.user.client ? homeStateVersion
       then config.user.client.homeStateVersion
       else (config.system.stateVersion or "24.05");
-    storageBaseDir = "/var/lib/endoreg-client";
-    videoInputDir = "${storageBaseDir}/video_input";
-    pdfInputDir = "${storageBaseDir}/pdf_input";
+    storageBaseDir = cfg.paths.storageBaseDir;
+    videoInputDir = cfg.paths.videoInputDir;
+    pdfInputDir = cfg.paths.pdfInputDir;
 
     firstNonNull = values: lib.foldl' (acc: val: if acc != null then acc else val) null values;
 
@@ -677,11 +704,11 @@ in
 
       roles.desktop.enable = mkDefault true;
 
-      home.file."Desktop/Video Input" = {
+      home.file."${cfg.paths.desktopDirName}/Video Input" = {
         source = outOfStore videoInputDir;
         force = true;
       };
-      home.file."Desktop/PDF Input" = {
+      home.file."${cfg.paths.desktopDirName}/PDF Input" = {
         source = outOfStore pdfInputDir;
         force = true;
       };
