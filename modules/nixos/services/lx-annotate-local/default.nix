@@ -388,12 +388,12 @@ in
     django = mkOption {
       type = types.submodule {
         options = {
-          hostname = mkOption { type = types.str; default = "localhost"; };
+          hostname = mkOption { type = types.str; default = "lx-annotate.net"; };
           port = mkOption { type = types.port; default = 8118; };
           useHttps = mkOption { type = types.bool; default = false; };
           sslCertificatePath = mkOption { type = types.nullOr types.path; default = null; };
           sslKeyPath = mkOption { type = types.nullOr types.path; default = null; };
-          djangoAllowedHosts = mkOption { type = types.listOf types.str; default = ["localhost" "127.0.0.1"]; };
+          djangoAllowedHosts = mkOption { type = types.listOf types.str; default = ["lx-annotate.net" "127.0.0.1"]; };
           djangoDebug = mkOption { type = types.bool; default = false; };
           djangoSecretKeyFile = mkOption { type = types.path; default = "/etc/secrets/vault/django_secret_key"; };
           
@@ -509,7 +509,7 @@ in
     database = mkOption {
       type = types.submodule {
         options = {
-          host = mkOption { type = types.str; default = "localhost"; };
+          host = mkOption { type = types.str; default = "lx-annotate.net"; };
           port = mkOption { type = types.port; default = 5433; };
           name = mkOption { type = types.str; default = "lxAnnotateLocal"; };
           user = mkOption { type = types.str; default = "lxAnnotateLocal"; };
