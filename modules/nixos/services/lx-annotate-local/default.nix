@@ -392,7 +392,7 @@ in
           djangoSecretKeyFile = mkOption { type = types.path; default = "/etc/secrets/vault/django_secret_key"; };
           keycloakEnvFile = mkOption {
           type = types.nullOr types.path;
-          default = "/etc/secrets/vault/keycloak.env";
+          keycloakSecretFile = "/etc/secrets/vault/keycloak.env";
           description = "Environment file containing OIDC_RP_CLIENT_ID and OIDC_RP_CLIENT_SECRET.";
           };
           corsAllowedOrigins = mkOption { type = types.listOf types.str; default = []; };
