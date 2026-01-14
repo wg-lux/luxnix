@@ -189,7 +189,13 @@ with lib.luxnix; let
       DJANGO_SECRET_KEY_VALUE="$(tr -d '\n' < ${cfg.django.djangoSecretKeyFile} 2>/dev/null || true)"
       export DJANGO_SECRET_KEY="$DJANGO_SECRET_KEY_VALUE"
 
-      export DJANGO_KEYCLOAK_CLIENT_SECRET_FILE="${cfg.django.keycloakSecretFile}"      
+      # --- KEYCLOAK EXPORTS ---
+      # 1. Export the Client ID (Value)
+      export OIDC_RP_CLIENT_ID="${cfg.django.keycloakClientId}"
+      
+      # 2. Export the Secret File Path (Django will read the content)
+      export OIDC_RP_CLIENT_SECRET="${cfg.django.keycloakSecretFile}"     
+      # ------------------------
 
       
       # Ensure devenv is available and run the configuration script
@@ -245,89 +251,89 @@ with lib.luxnix; let
         export DESIRED_SETTINGS_MODULE="${envDjangoSettingsModule}"
         export DESIRED_ENVIRONMENT="${envDjangoEnv}"
         python - <<'PY'
-        import os
-        from pathlib import Path
+import os
+from pathlib import Path
 
-        env_path = Path('.env')
-        desired_module = os.environ['DESIRED_SETTINGS_MODULE']
-        desired_env = os.environ['DESIRED_ENVIRONMENT']
+env_path = Path('.env')
+desired_module = os.environ['DESIRED_SETTINGS_MODULE']
+desired_env = os.environ['DESIRED_ENVIRONMENT']
 
-        if not env_path.exists():
-            raise SystemExit(0)
+if not env_path.exists():
+    raise SystemExit(0)
 
-        lines = env_path.read_text(encoding='utf-8').splitlines()
-        updated = []
-        have_module = False
-        have_env = False
+lines = env_path.read_text(encoding='utf-8').splitlines()
+updated = []
+have_module = False
+have_env = False
 
-        for line in lines:
-            if line.startswith('DJANGO_SETTINGS_MODULE='):
-                updated.append(f'DJANGO_SETTINGS_MODULE={desired_module}')
-                have_module = True
-            elif line.startswith('DJANGO_ENV='):
-                updated.append(f'DJANGO_ENV={desired_env}')
-                have_env = True
-            else:
-                updated.append(line)
+for line in lines:
+    if line.startswith('DJANGO_SETTINGS_MODULE='):
+        updated.append(f'DJANGO_SETTINGS_MODULE={desired_module}')
+        have_module = True
+    elif line.startswith('DJANGO_ENV='):
+        updated.append(f'DJANGO_ENV={desired_env}')
+        have_env = True
+    else:
+        updated.append(line)
 
-        if not have_module:
-            updated.append(f'DJANGO_SETTINGS_MODULE={desired_module}')
+if not have_module:
+    updated.append(f'DJANGO_SETTINGS_MODULE={desired_module}')
 
-        if not have_env:
-            updated.append(f'DJANGO_ENV={desired_env}')
+if not have_env:
+    updated.append(f'DJANGO_ENV={desired_env}')
 
-        env_path.write_text('\n'.join(updated) + '\n', encoding='utf-8')
-        PY
-              else
-                echo "WARNING: .env not found after setup; production overrides skipped"
-              fi
-              
-            else
-              echo "ERROR: Database password not found in vault or not accessible. PostgreSQL setup may not be complete."
-              exit 1
-            fi
+env_path.write_text('\n'.join(updated) + '\n', encoding='utf-8')
+PY
+      else
+        echo "WARNING: .env not found after setup; production overrides skipped"
+      fi
+      
+    else
+      echo "ERROR: Database password not found in vault or not accessible. PostgreSQL setup may not be complete."
+      exit 1
+    fi
 
-            # Copy Django configuration
-            echo "Setting up Django configuration..."
-            echo "Service user home: ${endoreg-service-user-home}"
-            echo "Current user: $(whoami)"
-            echo "Current directory: $(pwd)"
-            
-            # Check if home directory exists and is accessible
-            if [ ! -d "${endoreg-service-user-home}" ]; then
-              echo "ERROR: Home directory ${endoreg-service-user-home} does not exist"
-              exit 1
-            fi
-            
-            # Ensure config directory exists with correct permissions
-            CONFIG_DIR="${endoreg-service-user-home}/config"
-            echo "Checking config directory: $CONFIG_DIR"
-            
-            if [ ! -d "$CONFIG_DIR" ]; then
-              echo "Creating config directory: $CONFIG_DIR"
-              mkdir -p "$CONFIG_DIR" || { echo "ERROR: Failed to create config directory $CONFIG_DIR"; ls -la "${endoreg-service-user-home}"; exit 1; }
-            else
-              echo "Config directory already exists"
-            fi
-            
-            # Check permissions
-            ls -la "${endoreg-service-user-home}/" || echo "Cannot list home directory contents"
+    # Copy Django configuration
+    echo "Setting up Django configuration..."
+    echo "Service user home: ${endoreg-service-user-home}"
+    echo "Current user: $(whoami)"
+    echo "Current directory: $(pwd)"
+    
+    # Check if home directory exists and is accessible
+    if [ ! -d "${endoreg-service-user-home}" ]; then
+      echo "ERROR: Home directory ${endoreg-service-user-home} does not exist"
+      exit 1
+    fi
+    
+    # Ensure config directory exists with correct permissions
+    CONFIG_DIR="${endoreg-service-user-home}/config"
+    echo "Checking config directory: $CONFIG_DIR"
+    
+    if [ ! -d "$CONFIG_DIR" ]; then
+      echo "Creating config directory: $CONFIG_DIR"
+      mkdir -p "$CONFIG_DIR" || { echo "ERROR: Failed to create config directory $CONFIG_DIR"; ls -la "${endoreg-service-user-home}"; exit 1; }
+    else
+      echo "Config directory already exists"
+    fi
+    
+    # Check permissions
+    ls -la "${endoreg-service-user-home}/" || echo "Cannot list home directory contents"
 
-            echo "Starting Django server..."
-            echo "Hostname: ${envDjangoHost}"
-            echo "Port: ${envDjangoPort}"
-            echo "Protocol: ${envHttpProtocol}"
-            
-            # Write essential environment variables to .env.systemd for devenv
-            cat > ${repoDir}/.env.systemd <<EOF
-        HOME_DIR=${endoreg-service-user-home}
-        DATA_DIR=${envDataDir}
-        STORAGE_DIR=${envStorageDir}
-        CONF_DIR=${envConfDir}
-        CONF_TEMPLATE_DIR=${envConfTemplateDir}
-        WORKING_DIR=${repoDir}
-        DJANGO_STATIC_ROOT=${staticRootPath}
-        EOF
+    echo "Starting Django server..."
+    echo "Hostname: ${envDjangoHost}"
+    echo "Port: ${envDjangoPort}"
+    echo "Protocol: ${envHttpProtocol}"
+    
+    # Write essential environment variables to .env.systemd for devenv
+    cat > ${repoDir}/.env.systemd <<EOF
+HOME_DIR=${endoreg-service-user-home}
+DATA_DIR=${envDataDir}
+STORAGE_DIR=${envStorageDir}
+CONF_DIR=${envConfDir}
+CONF_TEMPLATE_DIR=${envConfTemplateDir}
+WORKING_DIR=${repoDir}
+DJANGO_STATIC_ROOT=${staticRootPath}
+EOF
 
     # Start the Django application with devenv
     exec devenv shell -- run-server
@@ -390,11 +396,20 @@ in
           djangoAllowedHosts = mkOption { type = types.listOf types.str; default = ["localhost" "127.0.0.1"]; };
           djangoDebug = mkOption { type = types.bool; default = false; };
           djangoSecretKeyFile = mkOption { type = types.path; default = "/etc/secrets/vault/django_secret_key"; };
-          keycloakEnvFile = mkOption {
-          type = types.nullOr types.path;
-          keycloakSecretFile = "/etc/secrets/vault/keycloak.env";
-          description = "Environment file containing OIDC_RP_CLIENT_ID and OIDC_RP_CLIENT_SECRET.";
+          
+          keycloakSecretFile = mkOption {
+            type = types.path;
+            default = "/etc/secrets/vault/keycloak.env";
+            description = "Path to file containing the Keycloak Client Secret.";
           };
+
+          keycloakClientId = mkOption {
+            type = types.str;
+            default = "EndoregDb-realm";
+            description = "Keycloak Client ID.";
+          };
+          # -------------------------------
+
           corsAllowedOrigins = mkOption { type = types.listOf types.str; default = []; };
           logLevel = mkOption { type = types.str; default = "INFO"; };
           maxRequestSize = mkOption { type = types.str; default = "100M"; };
