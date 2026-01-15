@@ -580,8 +580,17 @@ in
     systemd.tmpfiles.rules = [
       # Allow nginx to traverse the service user's home directory
       "d ${endoreg-service-user-home} 0751 ${endoreg-service-user-name} ${endoreg-service-user-name} - -"
+      
+      # Ensure the main repo directory exists (if not cloned yet, this sets the parent permissions)
+      "d ${repoDir} 0755 ${endoreg-service-user-name} ${endoreg-service-user-name} - -"
+      
+      # Explicitly create the data/storage directories so Python doesn't have to fight for permissions
+      "d ${envDataDir} 0755 ${endoreg-service-user-name} ${endoreg-service-user-name} - -"
+      "d ${envStorageDir} 0755 ${endoreg-service-user-name} ${endoreg-service-user-name} - -"
+      
       # Create the config subdirectory
       "d ${endoreg-service-user-home}/config 0755 ${endoreg-service-user-name} ${endoreg-service-user-name} - -"
+      
       # Ensure static dir exists for nginx alias
       "d ${staticRootPath} 0755 ${endoreg-service-user-name} ${endoreg-service-user-name} - -"
     ];
@@ -594,6 +603,7 @@ in
       serviceConfig = {
         Type = "exec";
         User = endoreg-service-user-name;
+        ExecStartPre = "+${pkgs.coreutils}/bin/chown -R ${endoreg-service-user-name}:${endoreg-service-user-name} ${repoDir}";
         Environment = [
         "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:${pkgs.direnv}/bin:/run/current-system/sw/bin"
         "NIX_PATH=nixpkgs=${pkgs.path}"
