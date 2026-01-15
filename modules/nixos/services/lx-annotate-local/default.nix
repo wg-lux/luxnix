@@ -595,7 +595,7 @@ in
         Type = "exec";
         User = endoreg-service-user-name;
         Environment = [
-        "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:/run/current-system/sw/bin"
+        "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:${pkgs.direnv}bin:/run/current-system/sw/bin"
         "NIX_PATH=nixpkgs=${pkgs.path}"
         ];
         ExecStart = "${runLocalLxAnnotateScript}/bin/${scriptName}";
