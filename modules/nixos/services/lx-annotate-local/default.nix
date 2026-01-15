@@ -47,8 +47,7 @@ with lib.luxnix; let
 
   settingsProfile = cfg.django.settingsProfile;
   envIsCentralNode = cfg.django.extraSettings.IS_CENTRAL_NODE or false;
-  derivedSettingsModule = "lx_annotate.settings.settings_prod";
-  envDjangoSettingsModule = derivedSettingsModule;
+  envDjangoSettingsModule = "lx_annotate.settings.settings_prod";
   envDjangoEnv = "production";
   envCentralNodeFlag = if envIsCentralNode || settingsProfile == "central" then "true" else "false";
   
@@ -595,14 +594,17 @@ in
       serviceConfig = {
         Type = "exec";
         User = endoreg-service-user-name;
-        Environment = "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:/run/current-system/sw/bin";
+        Environment = [
+        "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:/run/current-system/sw/bin"
+        "NIX_PATH=nixpkgs=${pkgs.path}"
+        ];
         ExecStart = "${runLocalLxAnnotateScript}/bin/${scriptName}";
         Restart = "on-failure";
         RestartSec = "10s";
         # Resource limits
         MemoryMax = "8G";
         CPUQuota = "800%";
-      }; # lib.optionalAttrs (cfg.django.keycloakEnvFile != null)
+      };
     };
   };
 }
