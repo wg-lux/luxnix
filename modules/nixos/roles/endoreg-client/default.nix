@@ -14,6 +14,24 @@ in
   options.roles.endoreg-client = {
     enable = mkEnableOption "Enable endoreg client configuration";
 
+    storageBaseDir = mkOption {
+      type = types.str;
+      default = "/var/lib/endoreg-client";
+      description = "Base directory for endoreg client storage";
+    };
+
+    videoInputDir = mkOption {
+      type = types.str;
+      description = "Directory for video input files; by default inside storageBaseDir";
+      default = "${cfg.storageBaseDir}/video_input";
+    };
+
+    pdfInputDir = mkOption {
+      type = types.str;
+      description = "Directory for PDF input files; by default inside storageBaseDir";
+      default = "${cfg.storageBaseDir}/pdf_input";
+    };
+
     # Central Nodes Configuration
     centralNodes = mkOption {
       type = types.listOf types.str;
@@ -32,6 +50,13 @@ in
       type = types.bool;
       default = false;
       description = "Enable endoAi service";
+    };
+
+    defaultCenter = mkOption {
+      type = types.str;
+      default = "university_hospital_wuerzburg";
+      description = "Default center value for endoreg client";
+      example = "university_hospital_wuerzburg";
     };
 
     # Django API Configuration Options
@@ -71,7 +96,7 @@ in
 
       djangoAllowedHosts = mkOption {
         type = types.listOf types.str;
-        default = [ "localhost" "127.0.0.1" ];
+        default = [ "localhost" "127.0.0.1"];
         description = "Django ALLOWED_HOSTS setting";
         example = [ "api.example.com" "localhost" "127.0.0.1" ];
       };
@@ -119,6 +144,103 @@ in
         default = "en-us";
         description = "Django language setting";
         example = "de-de";
+      };
+
+      settingsProfile = mkOption {
+        type = types.enum [ "dev" "prod" "central" "test" ];
+        default = "prod";
+        description = "Base settings profile to derive Django settings module.";
+      };
+
+      settingsModule = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Explicit Django settings module (overrides settingsProfile).";
+      };
+
+      djangoEnv = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Value for DJANGO_ENV; inferred from settingsProfile when null.";
+      };
+
+      #TODO unify data and storage dir
+      dataDir = mkOption {
+        type = types.str;
+        default = "data";
+        description = "Relative path to the data directory inside the repository.";
+      };
+
+      storageDir = mkOption {
+        type = types.str;
+        default = "data/storage";
+        description = "Relative or absolute path used for STORAGE_DIR.";
+      };
+
+      confDir = mkOption {
+        type = types.str;
+        default = "conf";
+        description = "Relative path to configuration directory inside the repository.";
+      };
+
+      confTemplateDir = mkOption {
+        type = types.str;
+        default = "conf_template";
+        description = "Relative path to configuration template directory.";
+      };
+
+      djangoModule = mkOption {
+        type = types.str;
+        default = "endo_api";
+        description = "Python module containing the Django project.";
+      };
+
+      assetDir = mkOption {
+        type = types.str;
+        default = "tests/assets";
+        description = "Relative or absolute path for ASSET_DIR.";
+      };
+
+      httpProtocol = mkOption {
+        type = types.enum [ "http" "https" ];
+        default = "http";
+        description = "Explicit HTTP protocol to advertise in BASE_URL.";
+      };
+
+      baseUrl = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Explicit BASE_URL; constructed from protocol/host/port when null.";
+      };
+
+      staticUrl = mkOption {
+        type = types.str;
+        default = "static/";
+        description = "STATIC_URL value exported to the application.";
+      };
+
+      mediaUrl = mkOption {
+        type = types.str;
+        default = "media/";
+        description = "MEDIA_URL value exported to the application.";
+      };
+
+      runVideoTests = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Whether to enable RUN_VIDEO_TESTS environment flag.";
+      };
+
+      skipExpensiveTests = mkOption {
+        type = types.bool;
+        default = true;
+        description = "Whether to enable SKIP_EXPENSIVE_TESTS environment flag.";
+      };
+
+      extraSettings = mkOption {
+        type = types.attrsOf types.anything;
+        default = {};
+        description = "Additional attributes exported into Django local settings.";
       };
     };
 
@@ -220,16 +342,256 @@ in
         description = "Whether to update the repository on service start";
       };
     };
+
+    environmentDefaults = {
+      hfHome = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Default HuggingFace home directory. When null, derived from the service user home.";
+      };
+
+      hfHubCache = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Default HuggingFace hub cache directory. When null, derived from the service user home.";
+      };
+
+      transformersCache = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Default transformers cache directory. When null, derived from the service user home.";
+      };
+
+      hfHubEnableTransfer = mkOption {
+        type = types.bool;
+        default = true;
+        description = "Whether to enable HF_HUB_ENABLE_HF_TRANSFER by default.";
+      };
+
+      ollamaModelsDir = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Default Ollama models directory. When null, derived from the service user home.";
+      };
+
+      ollamaKeepAlive = mkOption {
+        type = types.str;
+        default = "4h";
+        description = "Default keep-alive duration for Ollama.";
+      };
+    };
+
+    lxAnnotate = {
+      enable = mkOption {
+        type = types.bool;
+        default = true;
+        description = "Enable the lx-annotate-local service on endoreg clients.";
+      };
+
+      debug = mkOption {
+        type = types.submodule {
+          options = {
+            enable = mkOption {
+              type = types.bool;
+              default = false;
+              description = "Enable verbose debug output for the lx-annotate-local service.";
+            };
+          };
+        };
+        default = {};
+        description = "Debug configuration for lx-annotate-local.";
+      };
+
+      source = mkOption {
+        type = types.submodule {
+          options = {
+            url = mkOption {
+              type = types.str;
+              default = "https://github.com/wg-lux/lx-annotate";
+              description = "Git repository URL for the lx-annotate application.";
+            };
+
+            branch = mkOption {
+              type = types.str;
+              default = "main";
+              description = "Git branch to checkout for lx-annotate.";
+            };
+
+            updateOnBoot = mkOption {
+              type = types.bool;
+              default = true;
+              description = "Whether to update the lx-annotate repository on service start.";
+            };
+          };
+        };
+        default = {};
+        description = "Repository configuration for lx-annotate.";
+      };
+
+      runtime = mkOption {
+        type = types.submodule {
+          options = {
+            limits = mkOption {
+              type = types.submodule {
+                options = {
+                  memoryMax = mkOption {
+                    type = types.str;
+                    default = "8G";
+                    description = "MemoryMax limit applied to the lx-annotate-local service.";
+                  };
+
+                  cpuQuota = mkOption {
+                    type = types.str;
+                    default = "800%";
+                    description = "CPUQuota assigned to the lx-annotate-local service.";
+                  };
+                };
+              };
+              default = {};
+              description = "Resource limit configuration for lx-annotate-local.";
+            };
+
+            environment = mkOption {
+              type = types.submodule {
+                options = {
+                  hfHome = mkOption {
+                    type = types.nullOr types.str;
+                    default = null;
+                    description = "Override HuggingFace home directory for lx-annotate.";
+                  };
+
+                  hfHubCache = mkOption {
+                    type = types.nullOr types.str;
+                    default = null;
+                    description = "Override HuggingFace hub cache directory for lx-annotate.";
+                  };
+
+                  transformersCache = mkOption {
+                    type = types.nullOr types.str;
+                    default = null;
+                    description = "Override transformers cache directory for lx-annotate.";
+                  };
+
+                  hfHubEnableTransfer = mkOption {
+                    type = types.nullOr types.bool;
+                    default = null;
+                    description = "Override HF_HUB_ENABLE_HF_TRANSFER for lx-annotate.";
+                  };
+
+                  ollamaModelsDir = mkOption {
+                    type = types.nullOr types.str;
+                    default = null;
+                    description = "Override Ollama models directory for lx-annotate.";
+                  };
+
+                  ollamaKeepAlive = mkOption {
+                    type = types.nullOr types.str;
+                    default = null;
+                    description = "Override Ollama keep-alive duration for lx-annotate.";
+                  };
+                };
+              };
+              default = {};
+              description = "Environment variable overrides for lx-annotate-local.";
+            };
+          };
+        };
+        default = {};
+        description = "Runtime configuration for lx-annotate-local.";
+      };
+    };
+
+    ollama = {
+      enable = mkBoolOpt false "Enable Ollama service on endoreg client";
+      port = mkOption {
+        type = types.port;
+        default = 11434;
+        description = "Port for the Ollama service";
+      };
+    };
   };
 
-  config = mkIf cfg.enable {
+  config = mkIf cfg.enable (let
+    clientUserName =
+      if config ? user && config.user ? client && config.user.client ? name
+      then config.user.client.name
+      else "client-user";
+    clientUserHome =
+      let
+        maybeHome = if config ? user && config.user ? client && config.user.client ? home then config.user.client.home else null;
+      in
+        if maybeHome != null then maybeHome else "/home/${clientUserName}";
+    clientHomeStateVersion =
+      if config ? user && config.user ? client && config.user.client ? homeStateVersion
+      then config.user.client.homeStateVersion
+      else (config.system.stateVersion or "24.05");
+    storageBaseDir = cfg.storageBaseDir;
+    videoInputDir = cfg.videoInputDir;
+    pdfInputDir = cfg.pdfInputDir;
+
+    firstNonNull = values: lib.foldl' (acc: val: if acc != null then acc else val) null values;
+
+    endoregServiceUserName =
+      if config ? user && config.user ? endoreg-service-user && config.user.endoreg-service-user ? name
+      then config.user.endoreg-service-user.name
+      else "endoreg-service-user";
+    endoregServiceUserHome =
+      let
+        maybeHome = if config ? user && config.user ? endoreg-service-user && config.user.endoreg-service-user ? home
+          then config.user.endoreg-service-user.home
+          else null;
+      in
+      if maybeHome != null then maybeHome else "/var/${endoregServiceUserName}";
+
+    envDefaultsCfg = cfg.environmentDefaults;
+    envOverrides = cfg.lxAnnotate.runtime.environment;
+
+    defaultHfHome = "${endoregServiceUserHome}/.cache/huggingface";
+    defaultHfHubCache = "${endoregServiceUserHome}/.cache/huggingface/hub";
+    defaultTransformersCache = defaultHfHubCache;
+    defaultOllamaModelsDir = "${endoregServiceUserHome}/.ollama/models";
+
+    resolvedHfHome = firstNonNull [ envOverrides.hfHome envDefaultsCfg.hfHome defaultHfHome ];
+    resolvedHfHubCache = firstNonNull [ envOverrides.hfHubCache envDefaultsCfg.hfHubCache defaultHfHubCache ];
+    resolvedTransformersCache = firstNonNull [ envOverrides.transformersCache envDefaultsCfg.transformersCache defaultTransformersCache ];
+    resolvedOllamaModelsDir = firstNonNull [ envOverrides.ollamaModelsDir envDefaultsCfg.ollamaModelsDir defaultOllamaModelsDir ];
+    resolvedOllamaKeepAlive = firstNonNull [ envOverrides.ollamaKeepAlive envDefaultsCfg.ollamaKeepAlive ];
+    resolvedHfHubEnableTransfer =
+      let specific = envOverrides.hfHubEnableTransfer;
+      in if specific != null then specific else envDefaultsCfg.hfHubEnableTransfer;
+
+    annotateEnvironment = {
+      hfHome = resolvedHfHome;
+      hfHubCache = resolvedHfHubCache;
+      transformersCache = resolvedTransformersCache;
+      hfHubEnableTransfer = resolvedHfHubEnableTransfer;
+      ollamaModelsDir = resolvedOllamaModelsDir;
+      ollamaKeepAlive = resolvedOllamaKeepAlive;
+    };
+
+    annotateRuntimeLimits = cfg.lxAnnotate.runtime.limits;
+
+
+    annotateExtraSettings =
+      let
+        baseExtraSettings = cfg.api.extraSettings;
+      in
+      recursiveUpdate baseExtraSettings {
+        CENTRAL_NODES = cfg.centralNodes;
+        IS_CENTRAL_NODE = false;
+      };
+
+  in {
+    user.client.enable = mkDefault true;
     user.endoreg-service-user.enable = true;
     group.endoreg-service.enable = true;  # Ensure the group is created
+    group.endoreg-service.members = mkAfter [ clientUserName ];
 
     roles = {
       desktop.enable = true;
       custom-packages.cuda = true;
       aglnet.client.enable = true;
+      managed-secrets.enable = mkDefault true;
     };
 
     luxnix.nvidia-prime.enable = true;
@@ -240,7 +602,7 @@ in
       # Pass configuration options to the service
       api = cfg.api // {
         # Add central nodes information
-        extraSettings = {
+        extraSettings = recursiveUpdate cfg.api.extraSettings {
           CENTRAL_NODES = cfg.centralNodes;
           IS_CENTRAL_NODE = false;
         };
@@ -248,6 +610,15 @@ in
       database = cfg.database;
       service = cfg.service;
       repository = cfg.repository;
+    };
+
+    services.ollama.enable = cfg.ollama.enable;
+
+    services.luxnix.lxAnnotateLocal = {
+      enable = mkDefault cfg.lxAnnotate.enable;
+      debug.enable = cfg.lxAnnotate.debug.enable;
+      source = cfg.lxAnnotate.source;
+      database = cfg.database;
     };
 
     services.luxnix.endoAi = {
@@ -262,7 +633,30 @@ in
       "d /etc/endoreg-api 0755 root root -"
       # Service user config directory
       "d /var/endoreg-service-user/config 0755 endoreg-service-user endoreg-service -"
+    ] ++ [
+      "d ${storageBaseDir} 0770 root endoreg-service -"
+      "d ${videoInputDir} 0770 root endoreg-service -"
+      "d ${pdfInputDir} 0770 root endoreg-service -"
     ];
+
+    home-manager.users.${clientUserName} = { config, ... }: let
+      outOfStore = config.lib.file.mkOutOfStoreSymlink;
+    in {
+      home.username = mkDefault clientUserName;
+      home.homeDirectory = mkDefault clientUserHome;
+      home.stateVersion = mkDefault clientHomeStateVersion;
+
+      roles.desktop.enable = mkDefault true;
+
+      home.file."Desktop/Video Input" = {
+        source = outOfStore videoInputDir;
+        force = true;
+      };
+      home.file."Desktop/PDF Input" = {
+        source = outOfStore pdfInputDir;
+        force = true;
+      };
+    };
 
     # Generate Django secret key if it doesn't exist
     systemd.services.endoreg-django-setup = mkIf cfg.dbApiLocal {
@@ -293,5 +687,5 @@ in
         '';
       };
     };
-  };
+  });
 }

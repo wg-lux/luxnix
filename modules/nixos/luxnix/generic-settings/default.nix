@@ -10,14 +10,14 @@ with lib.luxnix; let
   hostname = config.networking.hostName;
   username = config.user.admin.name;
 
-
   sensitiveServiceGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
   adminUserName = config.user.admin.name;
   keycloakEnabled = config.roles.keycloakHost.enable;
   keycloakUserName = config.roles.keycloakHost.dbUsername;
 
-
 in {
+
+
   options.luxnix.generic-settings = {
     enable = mkEnableOption "Enable generic settings";
 
@@ -220,6 +220,55 @@ in {
         The root
       '';
     };
+
+    # GPU Configuration
+    gpu = {
+      autoDetect = mkBoolOpt true "Automatically detect and configure GPU";
+      
+      type = mkOption {
+        type = types.enum ["nvidia" "amd" "intel" "none" "auto"];
+        default = "auto";
+        description = "Type of primary GPU (auto-detected if set to 'auto')";
+      };
+      
+      nvidia = {
+        enable = mkBoolOpt false "Enable Nvidia GPU support";
+        driver = mkOption {
+          type = types.enum ["stable" "beta" "production"];
+          default = "beta";
+          description = "Nvidia driver version to use";
+        };
+        
+        prime = {
+          enable = mkBoolOpt false "Enable Nvidia PRIME (hybrid graphics)";
+          nvidiaBusId = mkOption {
+            type = types.str;
+            default = "PCI:01:00:0";
+            description = "Bus ID of the Nvidia GPU";
+          };
+          onboardBusId = mkOption {
+            type = types.str;
+            default = "PCI:00:02:0";
+            description = "Bus ID of the onboard GPU";
+          };
+          onboardType = mkOption {
+            type = types.enum ["intel" "amd"];
+            default = "intel";
+            description = "Type of onboard GPU";
+          };
+        };
+      };
+      
+      amd = {
+        enable = mkBoolOpt false "Enable AMD GPU support";
+        openSource = mkBoolOpt true "Use open source AMD drivers";
+      };
+      
+      intel = {
+        enable = mkBoolOpt false "Enable Intel GPU support";
+        vaapi = mkBoolOpt true "Enable VA-API support";
+      };
+    };
   };
 
   config = {
@@ -234,11 +283,11 @@ in {
         ] ++ ( if keycloakEnabled then [ keycloakUserName ] else [] );
       };
     };
+    
     # Set PostGres Authentication & IdentMap
     roles.postgres.default.enable = lib.mkDefault cfg.postgres.enable;
     services.luxnix.postgresql.extraAuthentication = lib.mkDefault cfg.postgres.extraAuthentication;
     services.luxnix.postgresql.extraIdentMap = lib.mkDefault cfg.postgres.extraIdentMap;
-    
     
     # TODO Add to System summary Log
     users.mutableUsers = lib.mkDefault cfg.mutableUsers;
@@ -250,6 +299,27 @@ in {
       cacert
     ];
 
+    # GPU Configuration warnings
+    warnings = 
+      (optional (cfg.gpu.autoDetect && cfg.gpu.type != "auto")
+        "GPU auto-detection is enabled but type is manually set - manual setting will take precedence")
+      ++ (optional (cfg.gpu.nvidia.prime.enable && !cfg.gpu.nvidia.enable)
+        "Nvidia PRIME is enabled but Nvidia GPU support is disabled");
+
+    # GPU Configuration - Nvidia PRIME
+    luxnix.nvidia-prime = mkIf (cfg.gpu.nvidia.enable && cfg.gpu.nvidia.prime.enable) {
+      enable = true;
+      nvidiaBusId = cfg.gpu.nvidia.prime.nvidiaBusId;
+      onboardBusId = cfg.gpu.nvidia.prime.onboardBusId;
+      onboardGpuType = cfg.gpu.nvidia.prime.onboardType;
+      nvidiaDriver = cfg.gpu.nvidia.driver;
+    };
+    
+    # GPU Configuration - Nvidia Default (non-PRIME)
+    luxnix.nvidia-default = mkIf (cfg.gpu.nvidia.enable && !cfg.gpu.nvidia.prime.enable) {
+      enable = true;
+      nvidiaDriver = cfg.gpu.nvidia.driver;
+    };
   };
 
 

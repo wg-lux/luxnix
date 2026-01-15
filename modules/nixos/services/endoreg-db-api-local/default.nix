@@ -35,6 +35,34 @@ with lib.luxnix; let
     then cfg.api.baseUrl 
     else "${envHttpProtocol}://${envDjangoHost}:${envDjangoPort}";
 
+  makeAbsolute = path: if lib.hasPrefix "/" path then path else "${repoDir}/${path}";
+
+  envStorageDir = makeAbsolute cfg.api.storageDir;
+  envAssetDir = makeAbsolute cfg.api.assetDir;
+  envStaticUrl = cfg.api.staticUrl;
+  envMediaUrl = cfg.api.mediaUrl;
+  envRunVideoTests = if cfg.api.runVideoTests then "true" else "false";
+  envSkipExpensiveTests = if cfg.api.skipExpensiveTests then "true" else "false";
+
+  settingsProfile = cfg.api.settingsProfile;
+  envIsCentralNode = cfg.api.extraSettings.IS_CENTRAL_NODE or false;
+  derivedSettingsModule =
+    if settingsProfile == "dev" then "config.settings.dev"
+    else if settingsProfile == "central" then "config.settings.central"
+    else if settingsProfile == "test" then "config.settings.test"
+    else "config.settings.prod";
+  envDjangoSettingsModule =
+    if cfg.api.settingsModule != null then cfg.api.settingsModule
+    else if envIsCentralNode && settingsProfile != "dev" && settingsProfile != "test" then "config.settings.central"
+    else derivedSettingsModule;
+  envDjangoEnv =
+    if cfg.api.djangoEnv != null then cfg.api.djangoEnv
+    else if envIsCentralNode || settingsProfile == "central" then "central"
+    else if settingsProfile == "dev" then "development"
+    else if settingsProfile == "test" then "test"
+    else "production";
+  envCentralNodeFlag = if envIsCentralNode || settingsProfile == "central" then "true" else "false";
+
   # Django configuration file
   djangoConfigFile = pkgs.writeText "django-local-settings.py" ''
     # Auto-generated Django configuration for endoreg-api
@@ -176,9 +204,13 @@ with lib.luxnix; let
 
     echo "Initializing submodules..."
     git submodule init || { echo "ERROR: Failed to initialize submodules"; exit 1; }
-    git submodule update --remote --recursive || { echo "ERROR: Failed to update submodules"; exit 1; }
-    git submodule init
-    git submodule update --remote --recursive
+    if ${if cfg.repository.updateOnBoot then "true" else "false"}; then
+      echo "Updating submodules from remote..."
+      git submodule update --init --remote --recursive || { echo "ERROR: Failed to update submodules from remote"; exit 1; }
+    else
+      echo "Updating submodules (no remote fetch)..."
+      git submodule update --init --recursive || { echo "ERROR: Failed to update submodules"; exit 1; }
+    fi
 
     # Copy database password from vault (managed by postgres-default role)
     echo "Setting up database configuration..."
@@ -221,8 +253,8 @@ with lib.luxnix; let
       fi
     fi
     
-    # Ensure conf directory exists (it might be in .gitignore)
-    mkdir -p ${envConfDir}
+  # Ensure runtime directories exist (they might be ignored in git)
+  mkdir -p ${envConfDir} ${envDataDir} ${envStorageDir}
     
     if [ -f "$SECRET_FILE" ] && head -c 1 "$SECRET_FILE" >/dev/null 2>&1; then
       cp "$SECRET_FILE" ${envConfDir}/db_pwd
@@ -234,13 +266,38 @@ with lib.luxnix; let
       
       # Set environment variables needed by the Django config scripts
       export DATA_DIR="${envDataDir}"
+      export STORAGE_DIR="${envStorageDir}"
       export CONF_DIR="${envConfDir}"
       export CONF_TEMPLATE_DIR="${envConfTemplateDir}"
+      export WORKING_DIR="${repoDir}"
+      export HOME_DIR="${endoreg-service-user-home}"
+      export DB_PWD_FILE="${envConfDir}/db_pwd"
       export DJANGO_MODULE="${envDjangoModule}"
+      export DJANGO_SETTINGS_MODULE="${envDjangoSettingsModule}"
+      export DJANGO_SETTINGS_MODULE_PRODUCTION="config.settings.prod"
+      export DJANGO_SETTINGS_MODULE_DEVELOPMENT="config.settings.dev"
+      export DJANGO_SETTINGS_MODULE_CENTRAL="config.settings.central"
+      export DJANGO_ENV="${envDjangoEnv}"
+      export CENTRAL_NODE="${envCentralNodeFlag}"
       export HTTP_PROTOCOL="${envHttpProtocol}"
       export DJANGO_HOST="${envDjangoHost}"
       export DJANGO_PORT="${envDjangoPort}"
       export BASE_URL="${envBaseUrl}"
+      export TIME_ZONE="${cfg.api.timeZone}"
+      export STATIC_URL="${envStaticUrl}"
+      export MEDIA_URL="${envMediaUrl}"
+      export ASSET_DIR="${envAssetDir}"
+      export RUN_VIDEO_TESTS="${envRunVideoTests}"
+      export SKIP_EXPENSIVE_TESTS="${envSkipExpensiveTests}"
+
+      DB_PASSWORD_VALUE="$(tr -d '\n' < ${envConfDir}/db_pwd 2>/dev/null || true)"
+      export DB_ENGINE="django.db.backends.postgresql"
+      export DB_NAME="${cfg.database.name}"
+      export DB_USER="${cfg.database.user}"
+      export DB_PASSWORD="$DB_PASSWORD_VALUE"
+      export DB_HOST="${cfg.database.host}"
+      export DB_PORT="${toString cfg.database.port}"
+      export DB_SSLMODE="${cfg.database.sslMode}"
       
       # Ensure devenv is available and run the configuration script
       if command -v devenv >/dev/null 2>&1; then
@@ -252,12 +309,27 @@ with lib.luxnix; let
             python scripts/make_conf.py || echo "WARNING: make_conf.py execution failed"
           fi
         }
+
+        echo "Building .env from template..."
+        if ! devenv shell env-build; then
+          echo "WARNING: devenv env-build failed, attempting direct execution"
+          if ! devenv shell -- uv run env_setup.py; then
+            if [ -f "env_setup.py" ]; then
+              python env_setup.py || echo "WARNING: env_setup.py execution failed"
+            fi
+          fi
+        fi
       else
         echo "devenv not available, trying direct script execution..."
         if [ -f "scripts/make_conf.py" ]; then
           python scripts/make_conf.py || echo "WARNING: make_conf.py execution failed"
         else
           echo "WARNING: scripts/make_conf.py not found"
+        fi
+
+        if [ -f "env_setup.py" ]; then
+          echo "Building .env from template via python env_setup.py"
+          python env_setup.py || echo "WARNING: env_setup.py execution failed"
         fi
       fi
       
@@ -268,6 +340,53 @@ with lib.luxnix; let
         echo "WARNING: Django configuration file ${envConfDir}/db.yaml was not created"
         echo "Contents of conf directory:"
         ls -la "${envConfDir}/" 2>/dev/null || echo "Cannot access conf directory"
+      fi
+
+      # Force production mode indicators for the devenv shell helpers
+      echo "Setting deployment mode markers..."
+      echo "${envDjangoEnv}" > .mode
+      chmod 600 .mode 2>/dev/null || true
+
+      if [ -f .env ]; then
+        echo "Aligning .env with production settings module"
+        export DESIRED_SETTINGS_MODULE="${envDjangoSettingsModule}"
+        export DESIRED_ENVIRONMENT="${envDjangoEnv}"
+        python - <<'PY'
+import os
+from pathlib import Path
+
+env_path = Path('.env')
+desired_module = os.environ['DESIRED_SETTINGS_MODULE']
+desired_env = os.environ['DESIRED_ENVIRONMENT']
+
+if not env_path.exists():
+    raise SystemExit(0)
+
+lines = env_path.read_text(encoding='utf-8').splitlines()
+updated = []
+have_module = False
+have_env = False
+
+for line in lines:
+    if line.startswith('DJANGO_SETTINGS_MODULE='):
+        updated.append(f'DJANGO_SETTINGS_MODULE={desired_module}')
+        have_module = True
+    elif line.startswith('DJANGO_ENV='):
+        updated.append(f'DJANGO_ENV={desired_env}')
+        have_env = True
+    else:
+        updated.append(line)
+
+if not have_module:
+    updated.append(f'DJANGO_SETTINGS_MODULE={desired_module}')
+
+if not have_env:
+    updated.append(f'DJANGO_ENV={desired_env}')
+
+env_path.write_text('\n'.join(updated) + '\n', encoding='utf-8')
+PY
+      else
+        echo "WARNING: .env not found after setup; production overrides skipped"
       fi
       
     else
@@ -394,7 +513,7 @@ with lib.luxnix; let
     echo "Protocol: ${envHttpProtocol}"
     
     # Start the Django application
-    exec devenv shell -- run-prod-server
+    exec devenv shell -- run-server
   '';
 
 in
@@ -417,14 +536,35 @@ in
           corsAllowedOrigins = mkOption { type = types.listOf types.str; default = []; };
           logLevel = mkOption { type = types.str; default = "INFO"; };
           maxRequestSize = mkOption { type = types.str; default = "100M"; };
-          timeZone = mkOption { type = types.str; default = "UTC"; };
+          timeZone = mkOption { type = types.str; default = "Europe/Berlin"; };
           language = mkOption { type = types.str; default = "en-us"; };
+
+          settingsProfile = mkOption {
+            type = types.enum [ "dev" "prod" "central" "test" ];
+            default = "prod";
+            description = "Base settings profile to use when selecting Django settings modules.";
+          };
+          settingsModule = mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = "Explicit Django settings module (overrides settingsProfile).";
+          };
+          djangoEnv = mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = "Value for DJANGO_ENV; inferred from settingsProfile when null.";
+          };
           
           # Environment variable configuration options
           dataDir = mkOption { 
             type = types.str; 
             default = "data"; 
             description = "Relative path to data directory within the repository";
+          };
+          storageDir = mkOption {
+            type = types.str;
+            default = "storage";
+            description = "Relative or absolute path used for STORAGE_DIR.";
           };
           confDir = mkOption { 
             type = types.str; 
@@ -441,6 +581,11 @@ in
             default = "endo_api"; 
             description = "Django module name for the application";
           };
+          assetDir = mkOption {
+            type = types.str;
+            default = "tests/assets";
+            description = "Relative or absolute path used as ASSET_DIR.";
+          };
           httpProtocol = mkOption { 
             type = types.str; 
             default = "http"; 
@@ -450,6 +595,26 @@ in
             type = types.nullOr types.str; 
             default = null; 
             description = "Base URL for the application. If null, will be constructed from protocol, host, and port";
+          };
+          staticUrl = mkOption {
+            type = types.str;
+            default = "/static/";
+            description = "STATIC_URL value exported to the application.";
+          };
+          mediaUrl = mkOption {
+            type = types.str;
+            default = "/media/";
+            description = "MEDIA_URL value exported to the application.";
+          };
+          runVideoTests = mkOption {
+            type = types.bool;
+            default = false;
+            description = "Whether RUN_VIDEO_TESTS should be enabled.";
+          };
+          skipExpensiveTests = mkOption {
+            type = types.bool;
+            default = true;
+            description = "Whether SKIP_EXPENSIVE_TESTS should be enabled.";
           };
           
           extraSettings = mkOption { 

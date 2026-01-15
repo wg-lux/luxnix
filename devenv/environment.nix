@@ -2,7 +2,7 @@
 
 let
   buildInputs = with pkgs; [
-    python311Full
+    # python313Full
     stdenv.cc.cc
     tesseract
     glib

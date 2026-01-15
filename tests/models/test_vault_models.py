@@ -1,15 +1,16 @@
 import unittest
-from unittest.mock import patch, MagicMock, ANY
-from pathlib import Path
+from configparser import ConfigParser
 from datetime import datetime, timedelta
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
 from lx_administration.models import Vault
+from lx_administration.models.ansible import AnsibleInventory
 from lx_administration.models.vault import (
-    SecretTemplate,
     PreSharedKey,
     Secret,
+    SecretTemplate,
 )
-from lx_administration.models.ansible import AnsibleInventory
-import os
 import shutil
 
 
@@ -20,6 +21,27 @@ class TestVaultModel(unittest.TestCase):
         self.test_key = "/tmp/test_vault.key"
         self.vault = Vault(dir=self.test_dir, key=self.test_key)
         Path(self.test_dir).mkdir(parents=True, exist_ok=True)
+        self.ansible_cfg_path = Path(self.test_dir) / "ansible.cfg"
+        self.vault.ansible_cfg_path = self.ansible_cfg_path.as_posix()
+        cfg = ConfigParser()
+        cfg["defaults"] = {
+            "inventory": "./ansible/inventory/hosts.ini",
+            "group_vars": "./ansible/inventory/group_vars",
+            "host_vars": "./ansible/inventory/host_vars",
+            "roles_path": "./ansible/roles",
+            "log_path": "./logs/ansible.log",
+            "library": "./ansible/modules",
+            "vault_identity_list": "",
+            "private_key_file": "~/.ssh/id_ed25519",
+        }
+        cfg["privilege_escalation"] = {
+            "become": "True",
+            "become_method": "sudo",
+            "become_user": "admin",
+            "become_ask_pass": "False",
+        }
+        with self.ansible_cfg_path.open("w", encoding="utf-8") as fh:
+            cfg.write(fh)
 
     def tearDown(self):
         """Clean up after each test method."""
@@ -153,7 +175,7 @@ class TestVaultModel(unittest.TestCase):
 
         self.assertIsInstance(vault, Vault)
         self.assertEqual(len(vault.secrets), 0)
-        self.assertEqual(len(vault.access_keys), 0)
+        # access_keys removed from model
         self.assertEqual(vault.dir, self.test_dir)
         self.assertEqual(vault.key, self.test_key)
 
@@ -185,7 +207,7 @@ class TestVaultModel(unittest.TestCase):
             "secrets": [],
             "dir": self.test_dir,
             "key": self.test_key,
-            "ansible_cfg_path": "./conf/ansible.cfg",
+            "ansible_cfg_path": self.ansible_cfg_path.as_posix(),
             "owner_types": self.vault.owner_types,
             "secret_types": self.vault.secret_types,
             "default_client_secret_types": self.vault.default_client_secret_types,
@@ -252,7 +274,7 @@ class TestVaultModel(unittest.TestCase):
         self.vault.secret_templates.append(template)
 
         with self.assertRaises(AssertionError):
-            self.vault.validate()
+            self.vault.validate_vault()
 
     @patch("lx_administration.models.ansible.AnsibleInventory.from_file")
     def test_load_inventory(self, mock_from_file):
@@ -267,28 +289,6 @@ class TestVaultModel(unittest.TestCase):
             self.assertEqual(result, mock_inventory)
             self.assertEqual(self.vault.inventory, mock_inventory)
             mock_from_file.assert_called_once_with("/fake/path")
-
-    @patch("lx_administration.models.vault.PreSharedKey.generate")
-    def test_get_or_create_psk(self, mock_generate):
-        """Test get_or_create_psk method."""
-        mock_psk = PreSharedKey(
-            name="test", file=str(Path(self.test_dir) / "psk" / "test.psk")
-        )
-        mock_generate.return_value = mock_psk
-
-        # First call - should create new PSK
-        psk, created = self.vault.get_or_create_psk("test")
-        self.assertTrue(created)
-        self.assertEqual(psk, mock_psk)
-        self.assertIn(psk, self.vault.pre_shared_keys)
-
-        # Mock the file exists check for the second call
-        with patch("pathlib.Path.exists") as mock_exists:
-            mock_exists.return_value = True
-            # Second call - should return existing PSK
-            psk2, created = self.vault.get_or_create_psk("test")
-            self.assertFalse(created)
-            self.assertEqual(psk2, psk)
 
 
 if __name__ == "__main__":

@@ -22,7 +22,15 @@
     common.enable = true;
     custom-packages.cloud = true;
     custom-packages.enable = true;
+    endoreg-client.api.djangoAllowedHosts = ["localhost" "127.0.0.1" "172.16.255.106" "172.16.255.230"];    endoreg-client.api.httpProtocol = "http";
+    endoreg-client.api.language = "en-us";
+    endoreg-client.api.logLevel = "WARNING";
+    endoreg-client.api.maxRequestSize = "50G";
+    endoreg-client.api.settingsProfile = "dev";
+    endoreg-client.centralNodes = ["s-04"];    endoreg-client.dbApiLocal = true;
     endoreg-client.enable = true;
+    endoreg-client.ollama.enable = true;
+    endoreg-client.repository.branch = "container";
     nextcloudClient.enable = true;
     ssh-access.dev-01.enable = true;
     ssh-access.dev-01.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK";
@@ -54,6 +62,14 @@ generic-settings.adminVpnIp = "172.16.255.106";
 generic-settings.configurationPathRelative = "luxnix";
 
 generic-settings.enable = true;
+
+generic-settings.gpu.autoDetect = true;
+
+generic-settings.gpu.nvidia.driver = "beta";
+
+generic-settings.gpu.nvidia.enable = true;
+
+generic-settings.gpu.nvidia.prime.enable = true;
 
 generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
 
@@ -174,21 +190,25 @@ generic-settings.traefikHostDomain = "traefik.endo-reg.net";
 
 generic-settings.traefikHostIp = "172.16.255.12";
 
+generic-settings.virtualization.enable = true;
+
+generic-settings.virtualization.kvm = {};
+
+generic-settings.virtualization.podman = {};
+
+generic-settings.virtualization.supportedArchitectures = [];
+generic-settings.virtualization.userGroups = [];
+generic-settings.virtualization.vfio = {};
+
 generic-settings.vpnSubnet = "172.16.255.0/24";
 
-gpu-eval.enable = true;
-
-maintenance.autoUpdates.dates = "09:00";
+maintenance.autoUpdates.dates = "17:00";
 
 maintenance.autoUpdates.enable = true;
 
-maintenance.autoUpdates.flake = "github:wg-lux/luxnix";
+maintenance.autoUpdates.flake = "github:wg-lux/luxnix/prototype";
 
 maintenance.autoUpdates.operation = "switch";
-
-nvidia-prime.enable = true;
-
-nvidia-prime.nvidiaDriver = "beta";
 
 vault.dir = "/etc/secrets/vault";
 
@@ -199,6 +219,12 @@ vault.key = "/etc/secrets/.key";
 vault.psk = "/etc/secrets/.psk";
 
 generic-settings.configurationPath = lib.mkForce "/home/admin/luxnix";
+
+generic-settings.gpu.nvidia.prime.nvidiaBusId = "PCI:1:0:0";
+
+generic-settings.gpu.nvidia.prime.onboardBusId = "PCI:0:2:0";
+
+generic-settings.gpu.nvidia.prime.onboardType = "intel";
 
 generic-settings.hostPlatform = "x86_64-linux";
 
@@ -214,12 +240,6 @@ generic-settings.linux.resumeDevice = "/dev/disk/by-label/nixos";
 
 generic-settings.linux.supportedFilesystems = ["btrfs"];
 generic-settings.systemStateVersion = "23.11";
-
-nvidia-prime.nvidiaBusId = "PCI:1:0:0";
-
-nvidia-prime.onboardBusId = "PCI:0:2:0";
-
-nvidia-prime.onboardGpuType = "intel";
 
 };
 }

@@ -1,7 +1,7 @@
 import yaml
 from pathlib import Path
 from typing import Dict, List, Optional
-from pydantic import BaseModel, RootModel
+from pydantic import BaseModel, RootModel, Field
 
 # Explicitly define the paths #automatic base path doesn't work
 HOST_CONFIGS_PATH = Path("../autoconf/host_configs_25-01-17.yml")
@@ -16,11 +16,11 @@ if not HOST_CONFIGS_PATH.exists():
 # Pydantic Models for Validation
 class HostConfig(BaseModel):
     hostname: Optional[str]
-    groups: List[str] = []
-    host_vars: Optional[Dict] = {}
-    role_configs: Optional[Dict] = {}
-    host_services: Optional[Dict] = {}
-    luxnix_configs: Optional[Dict] = {}
+    groups: List[str] = Field(default_factory=list)
+    host_vars: Optional[Dict] = None
+    role_configs: Optional[Dict] = None
+    host_services: Optional[Dict] = None
+    luxnix_configs: Optional[Dict] = None
     vpn_ip: Optional[str] = None
 
 class HostsData(RootModel[Dict[str, HostConfig]]):
@@ -28,12 +28,12 @@ class HostsData(RootModel[Dict[str, HostConfig]]):
         """
         Extracts and structures host data, including groups, roles, IPs, services, and settings.
         """
-        host_data = {}
+        host_data: Dict[str, Dict] = {}
         for host_name, config in self.root.items():
             hostname = config.hostname or host_name
             roles = list(config.role_configs.keys()) if config.role_configs else []
-            services = list(config.host_services.keys())
-            settings = list(config.luxnix_configs.keys())
+            services = list(config.host_services.keys()) if config.host_services else []
+            settings = list(config.luxnix_configs.keys()) if config.luxnix_configs else []
             ip = config.vpn_ip
 
             host_data[hostname] = {

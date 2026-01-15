@@ -17,7 +17,8 @@ with lib.luxnix; let
 
   sslCertFile = config.luxnix.generic-settings.sslCertificatePath;
   sslKeyFile = config.luxnix.generic-settings.sslCertificateKeyPath;
-  sslCertGroupName = config.users.groups.sslCert.name;
+  sensitiveServicesGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
+  sslCertGroupName = sensitiveServicesGroupName;
 
   nginx_cert_path = "/etc/nginx-host/ssl_cert";
   nginx_key_path = "/etc/nginx-host/ssl_key";
@@ -345,7 +346,7 @@ in
           objectstore.s3 = {
             enable = true;
             bucket = "nextcloud";
-            autocreate = true;
+            verify_bucket_exists = true;
             key = accessKey;
             secretFile = minioSecretFile;
             hostname = "localhost";

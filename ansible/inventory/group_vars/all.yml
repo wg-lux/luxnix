@@ -28,6 +28,10 @@ group_roles:
   common.enable: "true"
 group_services: {}
 group_luxnix:
+  maintenance.autoUpdates.operation: '"switch"'
+  maintenance.autoUpdates.flake: '"github:wg-lux/luxnix/prototype"'
+  maintenance.autoUpdates.dates: '"17:00"' # Change after Testing
+
   # gc-06
   generic_settings.network.hosts.gc_06.ip_local: '"172.31.179.8"'
   generic_settings.network.hosts.gc_06.ip_vpn: '"172.16.255.106"'
@@ -202,7 +206,7 @@ authentication:
     id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK
   dev_02: {} # Add gc-05 pubkey here
   dev_03:
-    id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos
+    id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAVt7FP3BCARMRyL791VauxIPd3t8nVm4A49VVpL9FUj
   agl_admin:
     id_ed25519_pub: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM7vvbgQtzi4GNeugHSuMyEke4MY0bSfoU7cBOnRYU8M
 

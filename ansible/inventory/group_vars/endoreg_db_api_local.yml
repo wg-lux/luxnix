@@ -3,7 +3,23 @@ group_roles:
   endoreg_client.dbApiLocal: "true"
   endoreg_client.centralNodes:
     - "s-04"
-  endoreg_client.repository.branch: '"main"'
+  endoreg_client.repository.branch: '"container"'
+  endoreg_client.api.djangoAllowedHosts:
+    - "localhost"
+    - "127.0.0.1"
+    - "172.16.255.106"
+    - "172.16.255.230"
+  endoreg_client.api.logLevel: '"WARNING"'
+  endoreg_client.api.maxRequestSize: '"50G"'
+  endoreg_client.api.language: '"en-us"'
+  endoreg_client.api.settingsProfile: '"prod"'
+  endoreg_client.api.httpProtocol: '"http"'
 
 group_services: {}
-group_luxnix: {}
+group_luxnix:
+  generic_settings.virtualization.enable: "true"
+  generic_settings.virtualization.podman: "{}"
+  generic_settings.virtualization.kvm: "{}"
+  generic_settings.virtualization.vfio: "{}"
+  generic_settings.virtualization.supportedArchitectures: '[]'
+  generic_settings.virtualization.userGroups: '[]'

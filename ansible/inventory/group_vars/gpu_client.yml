@@ -1,17 +1,18 @@
 group_roles:
   endoreg_client.enable: "true"
+  endoreg_client.ollama.enable: "true"
+  endoreg_client.api.settingsProfile: '"dev"'
   aglnet.client.enable: "true"
   nextcloudClient.enable: "true"
 group_services: {}
 group_luxnix:
   generic_settings.enable: "true"
-  nvidia_prime.nvidiaDriver: '"beta"'
-  nvidia_prime.enable: "true"
-  gpu_eval.enable: "true"
+  # GPU Configuration (New Unified System)
+  generic_settings.gpu.autoDetect: "true"
+  generic_settings.gpu.nvidia.enable: "true"
+  generic_settings.gpu.nvidia.prime.enable: "true"
+  generic_settings.gpu.nvidia.driver: '"beta"'
   boot_decryption_stick.enable: "true"
   generic_settings.configurationPathRelative: '"lx-production"'
 
   maintenance.autoUpdates.enable: "true"
-  maintenance.autoUpdates.operation: '"switch"'
-  maintenance.autoUpdates.flake: '"github:wg-lux/luxnix"'
-  maintenance.autoUpdates.dates: '"09:00"'

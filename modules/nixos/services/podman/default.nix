@@ -4,7 +4,10 @@ with lib;
 with lib.luxnix; let
   cfg = config.services.luxnix.podman;
   adminUser = config.user.admin.name;
-  cudaSupport = config.luxnix.nvidia-default.enable;
+  # Use comprehensive NVIDIA detection logic
+  cudaSupport = (config.luxnix.nvidia-default.enable or false) || 
+                (config.luxnix.nvidia-prime.enable or false) || 
+                (config.luxnix.generic-settings.gpu.nvidia.enable or false);
 in {
   options.services.luxnix.podman = {
     enable = mkBoolOpt false "Enable Podman";

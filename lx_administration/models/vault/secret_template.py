@@ -1,5 +1,6 @@
-from typing import Optional, List, Union
-from pydantic import BaseModel
+from typing import Optional, List, TYPE_CHECKING
+from pydantic import BaseModel, Field
+from pydantic import ConfigDict
 from pathlib import Path
 from datetime import datetime as dt
 from .config import OWNER_TYPES, SECRET_TYPES
@@ -10,29 +11,31 @@ from .manager_utils import (
 from .secret import Secret
 from lx_administration.logging import get_logger
 
+if TYPE_CHECKING:
+    from .manager import Vault
+
 
 class SecretTemplate(BaseModel):
     """
     Template for generating multiple secrets of the same type/owner.
     """
 
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     name: str
     owner_type: str
     secret_type: str = "password"
     directory: Optional[str] = None
-    secret_names: List[str] = []
-    generator: Optional[Union[PasswordGenerator]] = None
+    secret_names: List[str] = Field(default_factory=list)
+    generator: Optional[PasswordGenerator] = None
     local_vault_key: Optional[str] = "~/.lxv.key"
-
-    class Config:
-        arbitrary_types_allowed = True
 
     @classmethod
     def create_secret_template(
         cls,
         name: str,
         owner_type: str,
-        secret_type: Optional[str] = "password",
+        secret_type: str = "password",
         vault_dir: str = "~/.lxv/",
     ):
         template = cls(name=name, owner_type=owner_type, secret_type=secret_type)
@@ -45,7 +48,7 @@ class SecretTemplate(BaseModel):
 
         return template
 
-    def get_secret_generator(self):
+    def get_secret_generator(self) -> PasswordGenerator:
         """
         Retrieve a configured secret generator based on the secret_type.
 
@@ -56,11 +59,13 @@ class SecretTemplate(BaseModel):
             self.secret_type in SECRET_TYPES
         ), f"Invalid secret_type: {self.secret_type}"
         if self.secret_type == "password":
-            return PasswordGenerator(mode="passphrase", n_words=4)
+            return PasswordGenerator(mode="passphrase", num_words=4)
         if self.secret_type == "system_password":
             return PasswordGenerator(mode="password", key_length=32)
+        # Fallback (shouldn't happen due to assert above)
+        return PasswordGenerator(mode="password", key_length=32)
 
-    def validate(self):
+    def assert_valid(self) -> None:
         """
         Validate the template's owner_type, secret_type, and directory existence.
 
@@ -72,11 +77,12 @@ class SecretTemplate(BaseModel):
             self.secret_type in SECRET_TYPES
         ), f"Invalid secret_type: {self.secret_type}"
 
+        assert self.directory is not None, "directory must be set on SecretTemplate"
         assert Path(
             self.directory
         ).exists(), f"Directory {self.directory} does not exist!"
 
-    def get_secret_dir(self, vault_dir: Path):
+    def get_secret_dir(self, vault_dir: Path) -> Path:
         """
         Generate and return the secret directory path.
 
@@ -94,7 +100,7 @@ class SecretTemplate(BaseModel):
         )
         return secret_dir
 
-    def create_or_update_secrets(self, vault: "Vault", logger=None):  # noqa: F821
+    def create_or_update_secrets(self, vault: "Vault", logger=None) -> bool:
         """
         Create or update secrets within the specified vault using the stored generator.
 
@@ -112,10 +118,18 @@ class SecretTemplate(BaseModel):
         if not self.generator:
             raise ValueError(f"SecretTemplate.generator is not set for {self.name}")
 
+        if _vault.inventory is None:
+            raise ValueError("Vault.inventory is not loaded")
+
         hostnames = [host.hostname for host in _vault.inventory.all]
 
         results = self.generator.pipe()
-        secret_dir = Path(self.directory).expanduser().resolve()
+
+        # Resolve secret directory, computing if not set
+        if self.directory is None:
+            secret_dir = self.get_secret_dir(Path(_vault.dir)).expanduser().resolve()
+        else:
+            secret_dir = Path(self.directory).expanduser().resolve()
 
         self.secret_names = [f"{self.name}_{suffix}" for suffix, secret in results]
         _secrets = [secret for suffix, secret in results]
@@ -124,7 +138,7 @@ class SecretTemplate(BaseModel):
             _secret = _secrets[i]
             secret_file = secret_dir / secret_name
 
-            _exists = Secret.check_exists(secret_name, secret_file, _vault)
+            _exists = Secret.check_exists(secret_name, str(secret_file), _vault)
 
             if not _exists:
                 # Create the encrypted secret file

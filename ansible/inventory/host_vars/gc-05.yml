@@ -1,9 +1,13 @@
 # inventory/host_vars/gc-05.yml
 ---
+ansible_python_interpreter: "{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python"
+luxnix_dev_repo: "/home/admin/luxnix"
 template_name: "main"
 
 host_roles:
   custom_packages.baseDevelopment: "true"
+  endoreg_client.service.workers: "4"
+  endoreg_client.defaultCenter: '"rbk_stuttgart"'
 
 host_services: {}
 ansible_roles:
@@ -38,6 +42,10 @@ host_luxnix:
   generic_settings.linux.kernelParams: []
   generic_settings.linux.kernelModulesBlacklist: []
 
-  nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
-  nvidia_prime.onboardBusId: '"PCI:0:2:0"'
-  nvidia_prime.onboardGpuType: '"intel"'
+  # GPU Configuration (New Unified System)
+  generic_settings.gpu.nvidia.enable: "true"
+  generic_settings.gpu.nvidia.prime.enable: "true"
+  generic_settings.gpu.nvidia.prime.nvidiaBusId: '"PCI:1:0:0"'
+  generic_settings.gpu.nvidia.prime.onboardBusId: '"PCI:0:2:0"'
+  generic_settings.gpu.nvidia.prime.onboardType: '"intel"'
+  generic_settings.gpu.nvidia.driver: '"beta"'

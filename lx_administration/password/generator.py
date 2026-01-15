@@ -1,16 +1,12 @@
 import string
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC  # type: ignore
-from cryptography.hazmat.primitives import hashes  # type: ignore
-from cryptography.hazmat.backends import default_backend  # type: ignore
-import base64
 import os
 import secrets
 from faker import Faker
 from datetime import datetime
 import shutil
-from pydantic import BaseModel, field_validator, model_validator
-from typing import Union, Tuple, Optional, List, Literal
-from passlib.hash import sha512_crypt
+from pydantic import BaseModel, model_validator
+from typing import Union, Tuple, List, Literal, Callable
+from passlib.hash import sha512_crypt  # type: ignore[import-untyped]
 
 
 class PasswordGenerator(BaseModel):
@@ -48,19 +44,19 @@ class PasswordGenerator(BaseModel):
         password = [secrets.choice(characters) for _ in range(self.key_length)]
 
         # Ensure all required character types are included
-        requirements = []
+        requirements: List[Tuple[str, Callable[[List[str]], bool]]] = []
         if self.require_upper:
-            requirements.append((string.ascii_uppercase, any))
+            requirements.append((string.ascii_uppercase, lambda pw: any(c in string.ascii_uppercase for c in pw)))
         if self.require_lower:
-            requirements.append((string.ascii_lowercase, any))
+            requirements.append((string.ascii_lowercase, lambda pw: any(c in string.ascii_lowercase for c in pw)))
         if self.require_digits:
-            requirements.append((string.digits, any))
+            requirements.append((string.digits, lambda pw: any(c in string.digits for c in pw)))
         if self.require_special:
-            requirements.append((string.punctuation, any))
+            requirements.append((string.punctuation, lambda pw: any(c in string.punctuation for c in pw)))
 
         # Replace characters if requirements not met
         for char_set, check_func in requirements:
-            if not check_func(c in char_set for c in password):
+            if not check_func(password):
                 pos = secrets.randbelow(self.key_length)
                 password[pos] = secrets.choice(char_set)
 
@@ -71,7 +67,7 @@ class PasswordGenerator(BaseModel):
     def generate_random_passphrase(self) -> str:
         """Generate a random passphrase with improved word selection."""
         fake = Faker()
-        words = []
+        words: List[str] = []
         total_words = self.num_words
 
         # Reduce word count if we need to add digits/special chars

@@ -5,7 +5,6 @@ from pydantic import BaseModel
 from typing import List, Dict, Optional
 from pathlib import Path
 import json
-from datetime import datetime as dt
 from datetime import datetime
 
 TEST_FILE = Path("example.json")
@@ -54,7 +53,6 @@ class AnsibleDefaultIpV4(BaseModel):
     interface: str
     macaddress: str
     mtu: int
-    interface: str
     alias: str
 
 
@@ -116,7 +114,6 @@ class AnsibleFacts(BaseModel):
     ansible_date_time: AnsibleDateTime
     # ansible_cmdline: AnsibleCmdline
     ansible_distribution: str
-    ansible_board_name: str
     ansible_distribution_release: str
     ansible_distribution_version: str
     # ansible_env: AnsibleEnv

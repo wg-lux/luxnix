@@ -1,6 +1,3 @@
-from lx_administration.logging import get_logger
-from icecream import ic
-
 ## DEPRECEATED
 
 # def get_secrets_for_access_keys(access_keys, all_secrets, logger=None):

@@ -75,7 +75,7 @@ in
 
     services.xserver.videoDrivers = [ "nvidia" ];
     boot.initrd.kernelModules = [ "nvidia" ];
-
+    hardware.nvidia-container-toolkit.enable = lib.mkDefault true;
     hardware.nvidia = {
       prime = {
         sync.enable = true;
@@ -86,7 +86,7 @@ in
       modesetting.enable = true;
       powerManagement.enable = true;
       powerManagement.finegrained = false;
-      open = false;
+      open = lib.mkDefault true;
       nvidiaSettings = true;
 
       package = nvidiaDrivers."${cfg.nvidiaDriver}";

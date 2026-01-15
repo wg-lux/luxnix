@@ -24,7 +24,7 @@
     custom-packages.cloud = true;
     custom-packages.enable = true;
     endoreg-client.enable = true;
-    endoreg-client.repository.branch = "main";
+    endoreg-client.repository.branch = "container";
     endoreg-db-central-01.api.djangoAllowedHosts = ["s-04" "s-04.local" "172.16.255.14"];    endoreg-db-central-01.api.djangoDebug = false;
     endoreg-db-central-01.api.hostname = "0.0.0.0";
     endoreg-db-central-01.api.logLevel = "INFO";
@@ -40,7 +40,7 @@
     ssh-access.dev-01.enable = true;
     ssh-access.dev-01.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK";
     ssh-access.dev-03.enable = true;
-    ssh-access.dev-03.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos";
+    ssh-access.dev-03.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAVt7FP3BCARMRyL791VauxIPd3t8nVm4A49VVpL9FUj";
     ssh-access.dev-04.enable = true;
     ssh-access.dev-04.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICSpoZVcX+K6NdrfqcUVPTU8Ljqlp83YDzzEHjTHU2NO flippos@inexen9";
     };
@@ -188,11 +188,13 @@ generic-settings.traefikHostIp = "172.16.255.12";
 
 generic-settings.vpnSubnet = "172.16.255.0/24";
 
-maintenance.autoUpdates.dates = "04:00";
+maintenance.autoUpdates.dates = "17:00";
 
 maintenance.autoUpdates.enable = true;
 
-maintenance.autoUpdates.flake = "github:wg-lux/luxnix";
+maintenance.autoUpdates.flake = "github:wg-lux/luxnix/prototype";
+
+maintenance.autoUpdates.operation = "switch";
 
 nvidia-prime.enable = lib.mkForce false;
 

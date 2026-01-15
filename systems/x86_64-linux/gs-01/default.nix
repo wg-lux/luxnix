@@ -23,15 +23,20 @@
     common.enable = true;
     custom-packages.cloud = true;
     custom-packages.enable = true;
+    endoreg-client.api.djangoAllowedHosts = ["localhost" "127.0.0.1" "172.16.255.106" "172.16.255.230"];    endoreg-client.api.httpProtocol = "http";
+    endoreg-client.api.language = "en-us";
+    endoreg-client.api.logLevel = "WARNING";
+    endoreg-client.api.maxRequestSize = "50G";
+    endoreg-client.api.settingsProfile = "prod";
     endoreg-client.centralNodes = ["s-04"];    endoreg-client.dbApiLocal = true;
     endoreg-client.enable = true;
-    endoreg-client.repository.branch = "main";
+    endoreg-client.repository.branch = "container";
     gpu-server.enable = true;
     postgres.default.enable = true;
     ssh-access.dev-01.enable = true;
     ssh-access.dev-01.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK";
     ssh-access.dev-03.enable = true;
-    ssh-access.dev-03.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos";
+    ssh-access.dev-03.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAVt7FP3BCARMRyL791VauxIPd3t8nVm4A49VVpL9FUj";
     ssh-access.dev-04.enable = true;
     ssh-access.dev-04.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICSpoZVcX+K6NdrfqcUVPTU8Ljqlp83YDzzEHjTHU2NO flippos@inexen9";
     };
@@ -53,6 +58,10 @@ generic-settings.sslCertificatePath = "/etc/secrets/vault/ssl_cert";
 generic-settings.adminVpnIp = "172.16.255.106";
 
 generic-settings.enable = true;
+
+generic-settings.gpu.nvidia.driver = "stable";
+
+generic-settings.gpu.nvidia.enable = true;
 
 generic-settings.language = "english";
 
@@ -175,17 +184,25 @@ generic-settings.traefikHostDomain = "traefik.endo-reg.net";
 
 generic-settings.traefikHostIp = "172.16.255.12";
 
+generic-settings.virtualization.enable = true;
+
+generic-settings.virtualization.kvm = {};
+
+generic-settings.virtualization.podman = {};
+
+generic-settings.virtualization.supportedArchitectures = [];
+generic-settings.virtualization.userGroups = [];
+generic-settings.virtualization.vfio = {};
+
 generic-settings.vpnSubnet = "172.16.255.0/24";
 
-maintenance.autoUpdates.dates = "06:00";
+maintenance.autoUpdates.dates = "17:00";
 
 maintenance.autoUpdates.enable = true;
 
-maintenance.autoUpdates.flake = "github:wg-lux/luxnix";
+maintenance.autoUpdates.flake = "github:wg-lux/luxnix/prototype";
 
 maintenance.autoUpdates.operation = "switch";
-
-nvidia-default.enable = true;
 
 vault.dir = "/etc/secrets/vault";
 
