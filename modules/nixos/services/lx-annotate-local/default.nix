@@ -182,7 +182,8 @@ with lib.luxnix; let
           export ASSET_DIR="${envAssetDir}"
           export RUN_VIDEO_TESTS="${envRunVideoTests}"
           export SKIP_EXPENSIVE_TESTS="${envSkipExpensiveTests}"
-
+          export EXEMPT_URLS="^/accounts/login/$"
+          export LOGIN_URL="/accounts/login/"
 
           DB_PASSWORD_VALUE="$(tr -d '\n' < ${envConfDir}/db_pwd 2>/dev/null || true)"
           export DB_ENGINE="django.db.backends.postgresql"
@@ -207,7 +208,8 @@ with lib.luxnix; let
           export OIDC_RP_CLIENT_ID="${cfg.django.keycloakClientId}"
       
           # 2. Export the Secret File Path (Django will read the content)
-          export OIDC_RP_CLIENT_SECRET="${cfg.django.keycloakSecretFile}"     
+          OIDC_CLIENT_SECRET_VALUE="$(tr -d '\n' < ${cfg.django.keycloakSecretFile} 2>/dev/null || true)"
+          export OIDC_RP_CLIENT_SECRET="$OIDC_CLIENT_SECRET_VALUE"    
           # ------------------------
 
       
