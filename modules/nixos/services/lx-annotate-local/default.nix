@@ -63,7 +63,7 @@ with lib.luxnix; let
 
   settingsProfile = cfg.django.settingsProfile;
   envIsCentralNode = cfg.django.extraSettings.IS_CENTRAL_NODE or false;
-  envDjangoSettingsModule = "lx_annotate.settings.settings_prod";
+  envAnnotateDjangoSettingsModule = "lx_annotate.settings.settings_prod";
   envDjangoEnv = "production";
   envCentralNodeFlag = if envIsCentralNode || settingsProfile == "central" then "true" else "false";
 
@@ -167,9 +167,9 @@ with lib.luxnix; let
           export DJANGO_DB_PASSWORD_FILE="${envConfDir}/db_pwd"
 
           export DJANGO_MODULE="${envDjangoModule}"
-          export DJANGO_SETTINGS_MODULE="${envDjangoSettingsModule}"
-          export DJANGO_SETTINGS_MODULE_PRODUCTION="settings.settings_prod"
-          export DJANGO_SETTINGS_MODULE_DEVELOPMENT="settings.settings_dev"
+          export DJANGO_SETTINGS_MODULE="lx_annotate.settings.settings_prod"
+          export DJANGO_SETTINGS_MODULE_PRODUCTION="lx_annotate.settings.settings_prod"
+          export DJANGO_SETTINGS_MODULE_DEVELOPMENT="lx_annotate.settings.settings_dev"
           export DJANGO_ENV="${envDjangoEnv}"
           export CENTRAL_NODE="${envCentralNodeFlag}"
           export HTTP_PROTOCOL="${envHttpProtocol}"
@@ -190,6 +190,7 @@ with lib.luxnix; let
           export DB_NAME="${cfg.database.name}"
           export DB_USER="${cfg.database.user}"
           export DJANGO_DB_PASSWORD="$DB_PASSWORD_VALUE"
+          export DB_PASSWORD="$DB_PASSWORD_VALUE"
           export DB_HOST="${cfg.database.host}"
           export DB_PORT="${toString cfg.database.port}"
           export DB_SSLMODE="${cfg.database.sslMode}"
@@ -202,6 +203,7 @@ with lib.luxnix; let
           export DJANGO_CSRF_TRUSTED_ORIGINS='${builtins.toJSON cfg.django.corsAllowedOrigins}'
           DJANGO_SECRET_KEY_VALUE="$(tr -d '\n' < ${cfg.django.djangoSecretKeyFile} 2>/dev/null || true)"
           export DJANGO_SECRET_KEY="$DJANGO_SECRET_KEY_VALUE"
+
 
           # --- KEYCLOAK EXPORTS ---
           # 1. Export the Client ID (Value)
