@@ -8,7 +8,8 @@ with lib.luxnix; let
   sslDir = cfg.sslDir;
   sslKeyPath = cfg.keyPath;
   sslCertPath = cfg.certPath;
-in {
+in
+{
   options.services.luxnix.lxSsl = {
     enable = mkBoolOpt false "Enable self-signed SSL generation for lx-annotate.";
 
