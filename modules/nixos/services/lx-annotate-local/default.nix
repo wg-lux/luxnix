@@ -265,7 +265,7 @@ with lib.luxnix; let
 
           if [ -f .env ]; then
             echo "Aligning .env with production settings module"
-            export DESIRED_SETTINGS_MODULE="${envDjangoSettingsModule}"
+            export DESIRED_SETTINGS_MODULE="${envAnnotateDjangoSettingsModule}"
             export DESIRED_ENVIRONMENT="${envDjangoEnv}"
             python - <<'PY'
     import os
