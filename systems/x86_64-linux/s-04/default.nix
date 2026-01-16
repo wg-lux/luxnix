@@ -72,7 +72,7 @@ generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
 generic-settings.network.hosts.gc-01.domains = ["gc-01.intern"];
 generic-settings.network.hosts.gc-01.ip-vpn = "172.16.255.101";
 
-generic-settings.network.hosts.gc-02.domains = ["gc-02.intern"];
+generic-settings.network.hosts.gc-02.domains = ["gc-02.intern" "lx-annotate.local"];
 generic-settings.network.hosts.gc-02.ip-vpn = "172.16.255.102";
 
 generic-settings.network.hosts.gc-03.domains = ["gc-03.intern"];
@@ -94,7 +94,7 @@ generic-settings.network.hosts.gc-06.syncthing-id = "MJU2YAF-4IXFRSS-I3JHU2Z-6LU
 generic-settings.network.hosts.gc-07.domains = ["gc-07.intern"];
 generic-settings.network.hosts.gc-07.ip-vpn = "172.16.255.107";
 
-generic-settings.network.hosts.gc-08.domains = ["gc-08.intern"];
+generic-settings.network.hosts.gc-08.domains = ["gc-08.intern" "lx-annotate.local"];
 generic-settings.network.hosts.gc-08.ip-vpn = "172.16.255.108";
 
 generic-settings.network.hosts.gc-09.domains = ["gc-09.intern"];

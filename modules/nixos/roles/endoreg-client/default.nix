@@ -44,7 +44,7 @@ in
     # Central Nodes Configuration
     centralNodes = mkOption {
       type = types.listOf types.str;
-      default = [];
+      default = [ ];
       description = "List of hostnames that act as central nodes for the endoreg database API";
       example = [ "s-04.local" "backup-central.local" ];
     };
@@ -105,9 +105,9 @@ in
 
       djangoAllowedHosts = mkOption {
         type = types.listOf types.str;
-        default = [ "localhost" "127.0.0.1"];
+        default = [ "localhost" "127.0.0.1" ];
         description = "Django ALLOWED_HOSTS setting";
-        example = [ "lx-annotate.net" "localhost" "127.0.0.1" ];
+        example = [ "lx-annotate.local" "localhost" "127.0.0.1" ];
       };
 
       djangoDebug = mkOption {
@@ -124,9 +124,9 @@ in
 
       corsAllowedOrigins = mkOption {
         type = types.listOf types.str;
-        default = ["lx-annotate.net" "https://lx-annotate.net" "http://localhost:3000"];
+        default = [ "lx-annotate.local" "https://lx-annotate.local" "http://localhost:3000" ];
         description = "CORS allowed origins for the API";
-        example = [ "lx-annotate.net" "https://lx-annotate.net" "http://localhost:3000" ];
+        example = [ "lx-annotate.local" "https://lx-annotate.local" "http://localhost:3000" ];
       };
 
       logLevel = mkOption {
@@ -248,7 +248,7 @@ in
 
       extraSettings = mkOption {
         type = types.attrsOf types.anything;
-        default = {};
+        default = { };
         description = "Additional attributes exported into Django local settings.";
       };
     };
@@ -322,7 +322,7 @@ in
 
       extraEnvironment = mkOption {
         type = types.attrsOf types.str;
-        default = {};
+        default = { };
         description = "Additional environment variables for the service";
         example = {
           REDIS_URL = "redis://localhost:6379/0";
@@ -407,7 +407,7 @@ in
             };
           };
         };
-        default = {};
+        default = { };
         description = "Debug configuration for lx-annotate-local.";
       };
 
@@ -433,7 +433,7 @@ in
             };
           };
         };
-        default = {};
+        default = { };
         description = "Repository configuration for lx-annotate.";
       };
 
@@ -477,7 +477,7 @@ in
             };
           };
         };
-        default = {};
+        default = { };
         description = "Overrides for lx-annotate Django-specific paths.";
       };
 
@@ -500,7 +500,7 @@ in
                   };
                 };
               };
-              default = {};
+              default = { };
               description = "Resource limit configuration for lx-annotate-local.";
             };
 
@@ -544,204 +544,212 @@ in
                   };
                 };
               };
-              default = {};
+              default = { };
               description = "Environment variable overrides for lx-annotate-local.";
             };
           };
         };
-        default = {};
+        default = { };
         description = "Runtime configuration for lx-annotate-local.";
       };
     };
   };
 
-  config = mkIf cfg.enable (let
-    clientUserName =
-      if config ? user && config.user ? client && config.user.client ? name
-      then config.user.client.name
-      else "client-user";
-    clientUserHome =
-      let
-        maybeHome = if config ? user && config.user ? client && config.user.client ? home then config.user.client.home else null;
-      in
+  config = mkIf cfg.enable (
+    let
+      clientUserName =
+        if config ? user && config.user ? client && config.user.client ? name
+        then config.user.client.name
+        else "client-user";
+      clientUserHome =
+        let
+          maybeHome = if config ? user && config.user ? client && config.user.client ? home then config.user.client.home else null;
+        in
         if maybeHome != null then maybeHome else "/home/${clientUserName}";
-    clientHomeStateVersion =
-      if config ? user && config.user ? client && config.user.client ? homeStateVersion
-      then config.user.client.homeStateVersion
-      else (config.system.stateVersion or "24.05");
-    storageBaseDir = cfg.paths.storageBaseDir;
-    videoInputDir = cfg.paths.videoInputDir;
-    pdfInputDir = cfg.paths.pdfInputDir;
+      clientHomeStateVersion =
+        if config ? user && config.user ? client && config.user.client ? homeStateVersion
+        then config.user.client.homeStateVersion
+        else (config.system.stateVersion or "24.05");
+      storageBaseDir = cfg.paths.storageBaseDir;
+      videoInputDir = cfg.paths.videoInputDir;
+      pdfInputDir = cfg.paths.pdfInputDir;
 
-    firstNonNull = values: lib.foldl' (acc: val: if acc != null then acc else val) null values;
+      firstNonNull = values: lib.foldl' (acc: val: if acc != null then acc else val) null values;
 
-    endoregServiceUserName =
-      if config ? user && config.user ? endoreg-service-user && config.user.endoreg-service-user ? name
-      then config.user.endoreg-service-user.name
-      else "endoreg-service-user";
-    endoregServiceUserHome =
-      let
-        maybeHome = if config ? user && config.user ? endoreg-service-user && config.user.endoreg-service-user ? home
-          then config.user.endoreg-service-user.home
-          else null;
-      in
-      if maybeHome != null then maybeHome else "/var/${endoregServiceUserName}";
+      endoregServiceUserName =
+        if config ? user && config.user ? endoreg-service-user && config.user.endoreg-service-user ? name
+        then config.user.endoreg-service-user.name
+        else "endoreg-service-user";
+      endoregServiceUserHome =
+        let
+          maybeHome =
+            if config ? user && config.user ? endoreg-service-user && config.user.endoreg-service-user ? home
+            then config.user.endoreg-service-user.home
+            else null;
+        in
+        if maybeHome != null then maybeHome else "/var/${endoregServiceUserName}";
 
-    envDefaultsCfg = cfg.environmentDefaults;
-    envOverrides = cfg.lxAnnotate.runtime.environment;
+      envDefaultsCfg = cfg.environmentDefaults;
+      envOverrides = cfg.lxAnnotate.runtime.environment;
 
-    defaultHfHome = "${endoregServiceUserHome}/.cache/huggingface";
-    defaultHfHubCache = "${endoregServiceUserHome}/.cache/huggingface/hub";
-    defaultTransformersCache = defaultHfHubCache;
-    defaultOllamaModelsDir = "${endoregServiceUserHome}/.ollama/models";
+      defaultHfHome = "${endoregServiceUserHome}/.cache/huggingface";
+      defaultHfHubCache = "${endoregServiceUserHome}/.cache/huggingface/hub";
+      defaultTransformersCache = defaultHfHubCache;
+      defaultOllamaModelsDir = "${endoregServiceUserHome}/.ollama/models";
 
-    resolvedHfHome = firstNonNull [ envOverrides.hfHome envDefaultsCfg.hfHome defaultHfHome ];
-    resolvedHfHubCache = firstNonNull [ envOverrides.hfHubCache envDefaultsCfg.hfHubCache defaultHfHubCache ];
-    resolvedTransformersCache = firstNonNull [ envOverrides.transformersCache envDefaultsCfg.transformersCache defaultTransformersCache ];
-    resolvedOllamaModelsDir = firstNonNull [ envOverrides.ollamaModelsDir envDefaultsCfg.ollamaModelsDir defaultOllamaModelsDir ];
-    resolvedOllamaKeepAlive = firstNonNull [ envOverrides.ollamaKeepAlive envDefaultsCfg.ollamaKeepAlive ];
-    resolvedHfHubEnableTransfer =
-      let specific = envOverrides.hfHubEnableTransfer;
-      in if specific != null then specific else envDefaultsCfg.hfHubEnableTransfer;
+      resolvedHfHome = firstNonNull [ envOverrides.hfHome envDefaultsCfg.hfHome defaultHfHome ];
+      resolvedHfHubCache = firstNonNull [ envOverrides.hfHubCache envDefaultsCfg.hfHubCache defaultHfHubCache ];
+      resolvedTransformersCache = firstNonNull [ envOverrides.transformersCache envDefaultsCfg.transformersCache defaultTransformersCache ];
+      resolvedOllamaModelsDir = firstNonNull [ envOverrides.ollamaModelsDir envDefaultsCfg.ollamaModelsDir defaultOllamaModelsDir ];
+      resolvedOllamaKeepAlive = firstNonNull [ envOverrides.ollamaKeepAlive envDefaultsCfg.ollamaKeepAlive ];
+      resolvedHfHubEnableTransfer =
+        let specific = envOverrides.hfHubEnableTransfer;
+        in if specific != null then specific else envDefaultsCfg.hfHubEnableTransfer;
 
-    annotateEnvironment = {
-      hfHome = resolvedHfHome;
-      hfHubCache = resolvedHfHubCache;
-      transformersCache = resolvedTransformersCache;
-      hfHubEnableTransfer = resolvedHfHubEnableTransfer;
-      ollamaModelsDir = resolvedOllamaModelsDir;
-      ollamaKeepAlive = resolvedOllamaKeepAlive;
-    };
-
-    annotateRuntimeLimits = cfg.lxAnnotate.runtime.limits;
-
-    annotateDjangoOverrides = {
-      djangoModule = cfg.lxAnnotate.django.djangoModule;
-      dataDir = if cfg.lxAnnotate.django.dataDir != null then cfg.lxAnnotate.django.dataDir else cfg.api.dataDir;
-      storageDir = if cfg.lxAnnotate.django.storageDir != null then cfg.lxAnnotate.django.storageDir else cfg.api.storageDir;
-      confDir = if cfg.lxAnnotate.django.confDir != null then cfg.lxAnnotate.django.confDir else cfg.api.confDir;
-      confTemplateDir = if cfg.lxAnnotate.django.confTemplateDir != null then cfg.lxAnnotate.django.confTemplateDir else cfg.api.confTemplateDir;
-      assetDir = if cfg.lxAnnotate.django.assetDir != null then cfg.lxAnnotate.django.assetDir else cfg.api.assetDir;
-    };
-
-    annotateExtraSettings =
-      let
-        baseExtraSettings = cfg.api.extraSettings;
-      in
-      recursiveUpdate baseExtraSettings {
-        CENTRAL_NODES = cfg.centralNodes;
-        IS_CENTRAL_NODE = false;
+      annotateEnvironment = {
+        hfHome = resolvedHfHome;
+        hfHubCache = resolvedHfHubCache;
+        transformersCache = resolvedTransformersCache;
+        hfHubEnableTransfer = resolvedHfHubEnableTransfer;
+        ollamaModelsDir = resolvedOllamaModelsDir;
+        ollamaKeepAlive = resolvedOllamaKeepAlive;
       };
 
-    annotateDjango = recursiveUpdate cfg.api (annotateDjangoOverrides // {
-      extraSettings = annotateExtraSettings;
-    });
-  in {
-    user.client.enable = mkDefault true;
-    user.endoreg-service-user.enable = true;
-    group.endoreg-service.enable = true;  # Ensure the group is created
-    group.endoreg-service.members = mkAfter [ clientUserName ];
+      annotateRuntimeLimits = cfg.lxAnnotate.runtime.limits;
 
-    roles = {
-      desktop.enable = true;
-      custom-packages.cuda = true;
-      aglnet.client.enable = true;
-      managed-secrets.enable = mkDefault true;
-    };
+      annotateDjangoOverrides = {
+        djangoModule = cfg.lxAnnotate.django.djangoModule;
+        dataDir = if cfg.lxAnnotate.django.dataDir != null then cfg.lxAnnotate.django.dataDir else cfg.api.dataDir;
+        storageDir = if cfg.lxAnnotate.django.storageDir != null then cfg.lxAnnotate.django.storageDir else cfg.api.storageDir;
+        confDir = if cfg.lxAnnotate.django.confDir != null then cfg.lxAnnotate.django.confDir else cfg.api.confDir;
+        confTemplateDir = if cfg.lxAnnotate.django.confTemplateDir != null then cfg.lxAnnotate.django.confTemplateDir else cfg.api.confTemplateDir;
+        assetDir = if cfg.lxAnnotate.django.assetDir != null then cfg.lxAnnotate.django.assetDir else cfg.api.assetDir;
+        port = 8117;
+        djangoAllowedHosts = lib.unique (cfg.api.djangoAllowedHosts ++ [ "lx-annotate.local" ]);
+      };
 
-    luxnix.nvidia-prime.enable = true;
-
-    services.luxnix.endoregDbApiLocal = mkIf (!config.roles.endoreg-db-central-01.enable) {
-      enable = mkDefault cfg.dbApiLocal;
-      
-      # Pass configuration options to the service
-      api = cfg.api // {
-        # Add central nodes information
-        extraSettings = recursiveUpdate cfg.api.extraSettings {
+      annotateExtraSettings =
+        let
+          baseExtraSettings = cfg.api.extraSettings;
+        in
+        recursiveUpdate baseExtraSettings {
           CENTRAL_NODES = cfg.centralNodes;
           IS_CENTRAL_NODE = false;
         };
+
+      annotateDjango = recursiveUpdate cfg.api (annotateDjangoOverrides // {
+        extraSettings = annotateExtraSettings;
+      });
+    in
+    {
+      user.client.enable = mkDefault true;
+      user.endoreg-service-user.enable = true;
+      group.endoreg-service.enable = true; # Ensure the group is created
+      group.endoreg-service.members = mkAfter [ clientUserName ];
+
+      roles = {
+        desktop.enable = true;
+        custom-packages.cuda = true;
+        aglnet.client.enable = true;
+        managed-secrets.enable = mkDefault true;
       };
-      database = cfg.database;
-      service = cfg.service;
-      repository = cfg.repository;
-    };
 
-    services.luxnix.fileMover.enable = true;
+      luxnix.nvidia-prime.enable = true;
 
-    services.luxnix.lxAnnotateLocal = {
-      enable = mkDefault cfg.lxAnnotate.enable;
-      debug.enable = cfg.lxAnnotate.debug.enable;
-      source = cfg.lxAnnotate.source;
-      django = annotateDjango;
-      database = cfg.database;
-    };
+      services.luxnix.endoregDbApiLocal = mkIf (!config.roles.endoreg-db-central-01.enable) {
+        enable = mkDefault cfg.dbApiLocal;
 
-    services.luxnix.endoAi = {
-      enable = cfg.endoAi;
-    };
-
-    # Create additional systemd tmpfiles for configuration
-    systemd.tmpfiles.rules = [
-      # USB Encrypter
-      "d /mnt/endoreg-sensitive-data 0770 root ${sensitiveServiceGroupName} -"
-      # Django configuration directory
-      "d /etc/endoreg-api 0755 root root -"
-      # Service user config directory
-      "d /var/endoreg-service-user/config 0755 endoreg-service-user endoreg-service -"
-    ] ++ [
-      "d ${storageBaseDir} 0770 root endoreg-service -"
-      "d ${videoInputDir} 0770 root endoreg-service -"
-      "d ${pdfInputDir} 0770 root endoreg-service -"
-    ];
-
-    home-manager.users.${clientUserName} = { config, ... }: let
-      outOfStore = config.lib.file.mkOutOfStoreSymlink;
-    in {
-      home.username = mkDefault clientUserName;
-      home.homeDirectory = mkDefault clientUserHome;
-      home.stateVersion = mkDefault clientHomeStateVersion;
-
-      roles.desktop.enable = mkDefault true;
-
-      home.file."${cfg.paths.desktopDirName}/Video Input" = {
-        source = outOfStore videoInputDir;
-        force = true;
+        # Pass configuration options to the service
+        api = cfg.api // {
+          # Add central nodes information
+          extraSettings = recursiveUpdate cfg.api.extraSettings {
+            CENTRAL_NODES = cfg.centralNodes;
+            IS_CENTRAL_NODE = false;
+          };
+        };
+        database = cfg.database;
+        service = cfg.service;
+        repository = cfg.repository;
       };
-      home.file."${cfg.paths.desktopDirName}/PDF Input" = {
-        source = outOfStore pdfInputDir;
-        force = true;
-      };
-    };
 
-    # Generate Django secret key if it doesn't exist
-    systemd.services.endoreg-django-setup = mkIf cfg.dbApiLocal {
-      description = "Django configuration setup (handled by managed-secrets)";
-      wantedBy = [ "multi-user.target" ];
-      before = [ "endo-api-boot.service" ];
-      after = [ "managed-secrets-setup.service" ];
-      requires = [ "managed-secrets-setup.service" ];
-      serviceConfig = {
-        Type = "oneshot";
-        RemainAfterExit = true;
-        User = "root";
-        ExecStart = pkgs.writeShellScript "setup-django-config" ''
-          set -euo pipefail
+      services.luxnix.fileMover.enable = true;
+
+      services.luxnix.lxAnnotateLocal = {
+        enable = mkDefault cfg.lxAnnotate.enable;
+        debug.enable = cfg.lxAnnotate.debug.enable;
+        source = cfg.lxAnnotate.source;
+        django = annotateDjango;
+        database = cfg.database;
+      };
+
+      services.luxnix.endoAi = {
+        enable = cfg.endoAi;
+      };
+
+      # Create additional systemd tmpfiles for configuration
+      systemd.tmpfiles.rules = [
+        # USB Encrypter
+        "d /mnt/endoreg-sensitive-data 0770 root ${sensitiveServiceGroupName} -"
+        # Django configuration directory
+        "d /etc/endoreg-api 0755 root root -"
+        # Service user config directory
+        "d /var/endoreg-service-user/config 0755 endoreg-service-user endoreg-service -"
+      ] ++ [
+        "d ${storageBaseDir} 0770 root endoreg-service -"
+        "d ${videoInputDir} 0770 root endoreg-service -"
+        "d ${pdfInputDir} 0770 root endoreg-service -"
+      ];
+
+      home-manager.users.${clientUserName} = { config, ... }:
+        let
+          outOfStore = config.lib.file.mkOutOfStoreSymlink;
+        in
+        {
+          home.username = mkDefault clientUserName;
+          home.homeDirectory = mkDefault clientUserHome;
+          home.stateVersion = mkDefault clientHomeStateVersion;
+
+          roles.desktop.enable = mkDefault true;
+
+          home.file."${cfg.paths.desktopDirName}/Video Input" = {
+            source = outOfStore videoInputDir;
+            force = true;
+          };
+          home.file."${cfg.paths.desktopDirName}/PDF Input" = {
+            source = outOfStore pdfInputDir;
+            force = true;
+          };
+        };
+
+      # Generate Django secret key if it doesn't exist
+      systemd.services.endoreg-django-setup = mkIf cfg.dbApiLocal {
+        description = "Django configuration setup (handled by managed-secrets)";
+        wantedBy = [ "multi-user.target" ];
+        before = [ "endo-api-boot.service" ];
+        after = [ "managed-secrets-setup.service" ];
+        requires = [ "managed-secrets-setup.service" ];
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+          User = "root";
+          ExecStart = pkgs.writeShellScript "setup-django-config" ''
+            set -euo pipefail
           
-          # Verify that Django secret key exists (should be created by managed-secrets)
-          if [ ! -f ${cfg.api.djangoSecretKeyFile} ]; then
-            echo "ERROR: Django secret key not found at ${cfg.api.djangoSecretKeyFile}"
-            echo "This should have been created by managed-secrets-setup.service"
-            exit 1
-          fi
+            # Verify that Django secret key exists (should be created by managed-secrets)
+            if [ ! -f ${cfg.api.djangoSecretKeyFile} ]; then
+              echo "ERROR: Django secret key not found at ${cfg.api.djangoSecretKeyFile}"
+              echo "This should have been created by managed-secrets-setup.service"
+              exit 1
+            fi
           
-          # Ensure correct permissions (managed-secrets should handle this, but double-check)
-          chmod 640 ${cfg.api.djangoSecretKeyFile}
-          chown root:${sensitiveServiceGroupName} ${cfg.api.djangoSecretKeyFile}
+            # Ensure correct permissions (managed-secrets should handle this, but double-check)
+            chmod 640 ${cfg.api.djangoSecretKeyFile}
+            chown root:${sensitiveServiceGroupName} ${cfg.api.djangoSecretKeyFile}
           
-          echo "Django configuration verification completed"
-        '';
+            echo "Django configuration verification completed"
+          '';
+        };
       };
-    };
-  });
+    }
+  );
 }
