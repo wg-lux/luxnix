@@ -582,6 +582,11 @@ in
           user = mkOption { type = types.str; default = "endoregDbLocal"; };
           passwordFile = mkOption { type = types.path; default = "/etc/secrets/vault/SCRT_local_password_maintenance_password"; };
           sslMode = mkOption { type = types.str; default = "prefer"; };
+          endoregLocalUserPasswordFile = mkOption {
+            type = types.path;
+            default = "/var/lib/postgresql/endoregDbLocal.password";
+            description = "Path to file containing endoregDbLocal user password";
+          };
         };
       };
       default = {};

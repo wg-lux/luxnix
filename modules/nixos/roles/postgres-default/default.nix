@@ -7,8 +7,8 @@ with lib; let
   cfg = config.roles.postgres.default;
 
   # Password file paths
-  endoregDbLocalPasswordFile = "/var/lib/postgresql/endoregDbLocal.password";
-  maintenancePasswordFile = "/etc/secrets/vault/SCRT_local_password_maintenance_password";
+  endoregDbLocalPasswordFile = config.roles.endoreg-client.database.endoregLocalUserPasswordFile;
+  maintenancePasswordFile = config.roles.endoreg-client.database.passwordFile;
 
   # Utility function to create attributes for a user
   mkDefaultUser = user: {
