@@ -682,7 +682,7 @@ in
       services.luxnix.fileMover.enable = true;
 
       services.luxnix.lxAnnotateLocal = {
-        enable = mkDefault cfg.lxAnnotate.enable;
+        enable = cfg.lxAnnotate.enable;
         debug.enable = cfg.lxAnnotate.debug.enable;
         source = cfg.lxAnnotate.source;
         django = annotateDjango;
