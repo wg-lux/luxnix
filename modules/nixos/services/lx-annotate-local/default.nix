@@ -8,18 +8,17 @@ with lib.luxnix; let
   cfg = config.services.luxnix.lxAnnotateLocal;
   gs = config.luxnix.generic-settings;
   gsp = gs.postgres;
-  sslCfg = lib.attrByPath [ "services" "lxSsl" ]
+  sslCfg = lib.attrByPath [ "services" "luxnix" "lxSsl" ]
     {
       enable = false;
-      certPath = "/etc/ssl/certs/lx-annotate-selfsigned.crt";
-      keyPath = "/etc/ssl/private/lx-annotate-selfsigned.key";
+      sslDir = "/var/lib/lx-annotate/ssl";
+      certPath = "/var/lib/lx-annotate/ssl/lx-annotate-selfsigned.crt";
+      keyPath = "/var/lib/lx-annotate/ssl/lx-annotate-selfsigned.key";
     }
     config;
 
-  defaultSslCertificatePath =
-    if sslCfg.enable then sslCfg.certPath else "/etc/ssl/certs/lx-annotate-selfsigned.crt";
-  defaultSslKeyPath =
-    if sslCfg.enable then sslCfg.keyPath else "/etc/ssl/private/lx-annotate-selfsigned.key";
+  defaultSslCertificatePath = sslCfg.certPath;
+  defaultSslKeyPath = sslCfg.keyPath;
 
   adminName = config.user.admin.name;
   scriptName = "runLocalLxAnnotate";
@@ -48,9 +47,9 @@ with lib.luxnix; let
     if cfg.django.baseUrl != null
     then cfg.django.baseUrl
     else "${envHttpProtocol}://${envDjangoHost}:${envDjangoPort}";
-  sslDir = "/var/lib/lx-annotate/ssl";
-  sslKeyPath = "${sslDir}/lx-annotate-selfsigned.key";
-  sslCertPath = "${sslDir}/lx-annotate-selfsigned.crt";
+  sslDir = sslCfg.sslDir;
+  sslKeyPath = sslCfg.keyPath;
+  sslCertPath = sslCfg.certPath;
 
   makeAbsolute = path: if lib.hasPrefix "/" path then path else "${repoDir}/${path}";
 
@@ -70,312 +69,227 @@ with lib.luxnix; let
   # Default center from django extraSettings
   envDefaultCenter = cfg.django.extraSettings.DEFAULT_CENTER or "university_hospital_wuerzburg";
 
-  runLocalLxAnnotateScript = pkgs.writeShellScriptBin "${scriptName}" ''
-        set -euo pipefail
-    
-        # Debug mode flag - controls verbose logging
-        DEBUG_MODE=${if cfg.debug.enable then "true" else "false"}
+runLocalLxAnnotateScript = pkgs.writeShellScriptBin "${scriptName}" ''
+    set -euo pipefail
 
-        echo "Starting LxAnnotate service..."
-        echo "Repository: ${gitURL}"
-        echo "Branch: ${branchName}"
-        echo "Target Directory: ${repoDir}"
-    
-        # Clone or update repository
-        if [ -d "${repoDir}" ] && [ ! -d "${repoDir}/.git" ]; then
-          echo "WARNING: Target directory exists but is not a git repository. Removing it to perform fresh clone."
-          rm -rf "${repoDir}"
-        fi
-        if [ ! -d ${repoDir} ]; then
-          echo "Cloning repository..."
-          git clone ${gitURL} ${repoDir}
-          cd ${repoDir}
-          direnv allow
-        else
-          cd ${repoDir}
-          ${if cfg.source.updateOnBoot then ''
-            echo "Updating repository..."
-            git fetch origin || { echo "ERROR: Failed to fetch from origin"; exit 1; }
-          '' else ''
-            echo "Repository update disabled, using existing code"
-          ''}
-        fi
-    
-        # Checkout specified branch with proper remote tracking
-        echo "Checking out branch: ${branchName}"
-        if git show-ref --verify --quiet refs/heads/${branchName}; then
-          # Local branch exists, switch to it
-          echo "Local branch ${branchName} exists, switching to it"
-          git checkout ${branchName} || { echo "ERROR: Failed to checkout local branch ${branchName}"; exit 1; }
-        elif git show-ref --verify --quiet refs/remotes/origin/${branchName}; then
-          # Remote branch exists, create local tracking branch
-          echo "Remote branch origin/${branchName} exists, creating local tracking branch"
-          git checkout -b ${branchName} origin/${branchName} || { echo "ERROR: Failed to create tracking branch for ${branchName}"; exit 1; }
-        else
-          echo "ERROR: Branch ${branchName} does not exist locally or on remote"
-          echo "Available remote branches:"
-          git branch -r || echo "Could not list remote branches"
-          exit 1
-        fi
-    
-        ${if cfg.source.updateOnBoot then ''
-        # Update the current branch
-        echo "Updating branch ${branchName}..."
-        git pull origin ${branchName} || { 
-          echo "WARNING: Failed to pull latest changes for ${branchName}, trying to reset to remote"
-          git reset --hard origin/${branchName} || { 
-            echo "ERROR: Failed to update branch ${branchName}"
-            exit 1
-          }
-        }
-        '' else ""}
+    # Debug mode flag
+    DEBUG_MODE=${if cfg.debug.enable then "true" else "false"}
 
-        #################### DB SETUP ####################
-        # Copy database password from vault (managed by postgres-default role)
-        echo "Setting up database configuration..."
-    
-        if [ "$DEBUG_MODE" = "true" ]; then
-          echo "Current user: $(whoami)"
-          echo "User groups: $(groups)"
-          echo "Checking for database password file: ${cfg.database.endoregLocalUserPasswordFile}"
-        fi
+    echo "Starting LxAnnotate service..."
+    echo "Repository: ${gitURL}"
+    echo "Branch: ${branchName}"
 
-        cd ${repoDir}
-        direnv allow
+    # Clone or update repository
+    if [ -d "${repoDir}" ] && [ ! -d "${repoDir}/.git" ]; then
+      echo "WARNING: Target directory exists but is not a git repository. Removing it."
+      rm -rf "${repoDir}"
+    fi
+    if [ ! -d ${repoDir} ]; then
+      echo "Cloning repository..."
+      git clone -b ${branchName} ${gitURL} ${repoDir}
+      cd ${repoDir}
+      direnv allow
+    else
+      cd ${repoDir}
+      ${if cfg.source.updateOnBoot then ''
+        echo "Updating repository..."
+        git fetch origin ${branchName} || { echo "ERROR: Failed to fetch from origin"; exit 1; }
+      '' else ''
+        echo "Repository update disabled"
+      ''}
+    fi
 
-    
-    # Ensure runtime directories exist (they might be ignored in git)
+    # Checkout branch
+    echo "Checking out branch: ${branchName}"
+    if git show-ref --verify --quiet refs/heads/${branchName}; then
+      git checkout ${branchName} || { echo "ERROR: Checkout failed"; exit 1; }
+    elif git show-ref --verify --quiet refs/remotes/origin/${branchName}; then
+      git checkout -b ${branchName} origin/${branchName} || { echo "ERROR: Tracking branch failed"; exit 1; }
+    else
+      echo "ERROR: Branch ${branchName} does not exist"
+      exit 1
+    fi
+
+    ${if cfg.source.updateOnBoot then ''
+    # Update branch
+    git pull origin ${branchName} || { 
+      echo "WARNING: Failed to pull, trying reset"
+      git reset --hard origin/${branchName} || { echo "ERROR: Update failed"; exit 1; }
+    }
+    '' else ""}
+
+    # --- DB SETUP ---
+    cd ${repoDir}
+    direnv allow
+
     mkdir -p ${envConfDir} ${envDataDir} ${envStorageDir}
 
     SECRET_FILE="${cfg.database.endoregLocalUserPasswordFile}"
     if [ -f "$SECRET_FILE" ] && head -c 1 "$SECRET_FILE" >/dev/null 2>&1; then
       cp "$SECRET_FILE" ${envConfDir}/db_pwd
-      echo "Database password copied from vault to ${envConfDir}/db_pwd"
+    else
+      echo "Warning: Database password not found"
+    fi
+
+    # --- ENV SETUP ---
+    echo "Running Django application configuration setup..."
+    cd ${repoDir}
+    
+    export DJANGO_DB_PASSWORD_FILE="${cfg.database.endoregLocalUserPasswordFile}" 
+    export DJANGO_SECRET_KEY_FILE="${cfg.django.djangoSecretKeyFile}"
+    export OIDC_RP_CLIENT_SECRET_FILE="${cfg.django.keycloakSecretFile}"
+    
+    export DATA_DIR="${envDataDir}"
+    export STORAGE_DIR="${envStorageDir}"
+    export CONF_DIR="${envConfDir}"
+    export CONF_TEMPLATE_DIR="${envConfTemplateDir}"
+    export WORKING_DIR="${repoDir}"
+    export HOME_DIR="${endoreg-service-user-home}"
+    export DB_PWD_FILE="${envConfDir}/db_pwd"
+    export DJANGO_DB_PASSWORD_FILE="${envConfDir}/db_pwd"
+
+    export DJANGO_MODULE="${envDjangoModule}"
+    export DJANGO_SETTINGS_MODULE="lx_annotate.settings.settings_prod"
+    export DJANGO_SETTINGS_MODULE_PRODUCTION="lx_annotate.settings.settings_prod"
+    export DJANGO_SETTINGS_MODULE_DEVELOPMENT="lx_annotate.settings.settings_dev"
+    export DJANGO_ENV="${envDjangoEnv}"
+    export CENTRAL_NODE="${envCentralNodeFlag}"
+    export HTTP_PROTOCOL="${envHttpProtocol}"
+    export DJANGO_HOST="${envDjangoHost}"
+    export DJANGO_PORT="${envDjangoPort}"
+    export BASE_URL="${envBaseUrl}"
+    export TIME_ZONE="${cfg.django.timeZone}"
+    export STATIC_URL="${envStaticUrl}"
+    export MEDIA_URL="${envMediaUrl}"
+    export ASSET_DIR="${envAssetDir}"
+    export RUN_VIDEO_TESTS="${envRunVideoTests}"
+    export SKIP_EXPENSIVE_TESTS="${envSkipExpensiveTests}"
+    export EXEMPT_URLS="^/accounts/login/$"
+    export LOGIN_URL="/accounts/login/"
+
+    DJANGO_DB_PASSWORD_VALUE="$(tr -d '\n' < ${envConfDir}/db_pwd 2>/dev/null || true)"
+    export DJANGO_DB_ENGINE="django.db.backends.postgresql"
+    export DJANGO_DB_NAME="${cfg.database.name}"
+    export DJANGO_DB_USER="${cfg.database.user}"
+    export DJANGO_DJANGO_DB_PASSWORD="$DJANGO_DB_PASSWORD_VALUE"
+    export DJANGO_DB_PASSWORD="$DJANGO_DB_PASSWORD_VALUE"
+    export DJANGO_DB_HOST="${cfg.database.host}"
+    export DJANGO_DB_PORT="${toString cfg.database.port}"
+    export DJANGO_DB_SSLMODE="${cfg.database.sslMode}"
+    
+    export DJANGO_ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
+    export ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
+    export DJANGO_CORS_ALLOWED_ORIGINS='${builtins.toJSON cfg.django.corsAllowedOrigins}'
+    export DJANGO_CSRF_TRUSTED_ORIGINS='${builtins.toJSON cfg.django.corsAllowedOrigins}'
+    
+    DJANGO_SECRET_KEY_VALUE="$(tr -d '\n' < ${cfg.django.djangoSecretKeyFile} 2>/dev/null || true)"
+    export DJANGO_SECRET_KEY="$DJANGO_SECRET_KEY_VALUE"
+
+    export OIDC_RP_CLIENT_ID="${cfg.django.keycloakClientId}"
+    OIDC_CLIENT_SECRET_VALUE="$(tr -d '\n' < ${cfg.django.keycloakSecretFile} 2>/dev/null || true)"
+    export OIDC_RP_CLIENT_SECRET="$OIDC_CLIENT_SECRET_VALUE"    
+
+    # Deployment markers
+    echo "${envDjangoEnv}" > .mode
+    chmod 600 .mode 2>/dev/null || true
+
+    if [ -f .env ]; then
+      echo "Aligning .env with production settings module"
+      export DESIRED_SETTINGS_MODULE="${envAnnotateDjangoSettingsModule}"
+      export DESIRED_ENVIRONMENT="${envDjangoEnv}"
       
-          # Run Django application's configuration setup
-          echo "Running Django application configuration setup..."
-          cd ${repoDir}
-          # 1. Database
-          export DJANGO_DB_PASSWORD_FILE="${cfg.database.endoregLocalUserPasswordFile}" 
-          
-          # 2. Secret Key
-          export DJANGO_SECRET_KEY_FILE="${cfg.django.djangoSecretKeyFile}"
-          
-          # 3. Keycloak
-          export OIDC_RP_CLIENT_SECRET_FILE="${cfg.django.keycloakSecretFile}
-          # Set environment variables needed by the Django config scripts
-          export DATA_DIR="${envDataDir}"
-          export STORAGE_DIR="${envStorageDir}"
-          export CONF_DIR="${envConfDir}"
-          export CONF_TEMPLATE_DIR="${envConfTemplateDir}"
-          export WORKING_DIR="${repoDir}"
-          export HOME_DIR="${endoreg-service-user-home}"
-          export DB_PWD_FILE="${envConfDir}/db_pwd"
-          export DJANGO_DB_PASSWORD_FILE="${envConfDir}/db_pwd"
+      python - <<'PY'
+import os
+from pathlib import Path
 
-          export DJANGO_MODULE="${envDjangoModule}"
-          export DJANGO_SETTINGS_MODULE="lx_annotate.settings.settings_prod"
-          export DJANGO_SETTINGS_MODULE_PRODUCTION="lx_annotate.settings.settings_prod"
-          export DJANGO_SETTINGS_MODULE_DEVELOPMENT="lx_annotate.settings.settings_dev"
-          export DJANGO_ENV="${envDjangoEnv}"
-          export CENTRAL_NODE="${envCentralNodeFlag}"
-          export HTTP_PROTOCOL="${envHttpProtocol}"
-          export DJANGO_HOST="${envDjangoHost}"
-          export DJANGO_PORT="${envDjangoPort}"
-          export BASE_URL="${envBaseUrl}"
-          export TIME_ZONE="${cfg.django.timeZone}"
-          export STATIC_URL="${envStaticUrl}"
-          export MEDIA_URL="${envMediaUrl}"
-          export ASSET_DIR="${envAssetDir}"
-          export RUN_VIDEO_TESTS="${envRunVideoTests}"
-          export SKIP_EXPENSIVE_TESTS="${envSkipExpensiveTests}"
-          export EXEMPT_URLS="^/accounts/login/$"
-          export LOGIN_URL="/accounts/login/"
+env_path = Path('.env')
+desired_module = os.environ['DESIRED_SETTINGS_MODULE']
+desired_env = os.environ['DESIRED_ENVIRONMENT']
 
-          DJANGO_DB_PASSWORD_VALUE="$(tr -d '\n' < ${envConfDir}/db_pwd 2>/dev/null || true)"
-          export DJANGO_DB_ENGINE="django.db.backends.postgresql"
-          export DJANGO_DB_NAME="${cfg.database.name}"
-          export DJANGO_DB_USER="${cfg.database.user}"
-          export DJANGO_DJANGO_DB_PASSWORD="$DJANGO_DB_PASSWORD_VALUE"
-          export DJANGO_DB_PASSWORD="$DJANGO_DB_PASSWORD_VALUE"
-          export DJANGO_DB_HOST="${cfg.database.host}"
-          export DJANGO_DB_PORT="${toString cfg.database.port}"
-          export DJANGO_DB_SSLMODE="${cfg.database.sslMode}"
-          # We wrap the JSON in single quotes '...' to ensure shell handles special chars correctly
-          export DJANGO_ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
-          export ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
+if not env_path.exists():
+    raise SystemExit(0)
 
-          echo "Allowed Hosts: ${builtins.toJSON cfg.django.djangoAllowedHosts}"
-          export DJANGO_CORS_ALLOWED_ORIGINS='${builtins.toJSON cfg.django.corsAllowedOrigins}'
-          export DJANGO_CSRF_TRUSTED_ORIGINS='${builtins.toJSON cfg.django.corsAllowedOrigins}'
-          DJANGO_SECRET_KEY_VALUE="$(tr -d '\n' < ${cfg.django.djangoSecretKeyFile} 2>/dev/null || true)"
-          export DJANGO_SECRET_KEY="$DJANGO_SECRET_KEY_VALUE"
+lines = env_path.read_text(encoding='utf-8').splitlines()
+updated = []
+have_module = False
+have_env = False
 
-
-          # --- KEYCLOAK EXPORTS ---
-          # 1. Export the Client ID (Value)
-          export OIDC_RP_CLIENT_ID="${cfg.django.keycloakClientId}"
-      
-          # 2. Export the Secret File Path (Django will read the content)
-          OIDC_CLIENT_SECRET_VALUE="$(tr -d '\n' < ${cfg.django.keycloakSecretFile} 2>/dev/null || true)"
-          export OIDC_RP_CLIENT_SECRET="$OIDC_CLIENT_SECRET_VALUE"    
-          # ------------------------
-
-      
-          # Ensure devenv is available and run the configuration script
-          if command -v devenv >/dev/null 2>&1; then
-            echo "Running Django configuration setup via devenv..."
-            devenv shell env-init-conf || { 
-              echo "WARNING: devenv env-init-conf failed, trying direct script execution"
-              # Fallback to direct execution if devenv fails
-              if [ -f "scripts/make_conf.py" ]; then
-                python scripts/make_conf.py || echo "WARNING: make_conf.py execution failed"
-              fi
-            }
-
-            echo "Building .env from template..."
-            if ! devenv shell env-build; then
-              echo "WARNING: devenv env-build failed, attempting direct execution"
-              if ! devenv shell -- uv run env_setup.py; then
-                if [ -f "env_setup.py" ]; then
-                  python env_setup.py || echo "WARNING: env_setup.py execution failed"
-                fi
-              fi
-            fi
-          else
-            echo "devenv not available, trying direct script execution..."
-            if [ -f "scripts/make_conf.py" ]; then
-              python scripts/make_conf.py || echo "WARNING: make_conf.py execution failed"
-            else
-              echo "WARNING: scripts/make_conf.py not found"
-            fi
-
-            if [ -f "env_setup.py" ]; then
-              echo "Building .env from template via python env_setup.py"
-              python env_setup.py || echo "WARNING: env_setup.py execution failed"
-            fi
-          fi
-      
-          # Verify that the required db.yaml file was created
-          if [ -f "${envConfDir}/db.yaml" ]; then
-            echo "✓ Django configuration file created: ${envConfDir}/db.yaml"
-          else
-            echo "WARNING: Django configuration file ${envConfDir}/db.yaml was not created"
-            echo "Contents of conf directory:"
-            ls -la "${envConfDir}/" 2>/dev/null || echo "Cannot access conf directory"
-          fi
-
-          # Force production mode indicators for the devenv shell helpers
-          echo "Setting deployment mode markers..."
-          echo "${envDjangoEnv}" > .mode
-          chmod 600 .mode 2>/dev/null || true
-
-          if [ -f .env ]; then
-            echo "Aligning .env with production settings module"
-            export DESIRED_SETTINGS_MODULE="${envAnnotateDjangoSettingsModule}"
-            export DESIRED_ENVIRONMENT="${envDjangoEnv}"
-            python - <<'PY'
-    import os
-    from pathlib import Path
-
-    env_path = Path('.env')
-    desired_module = os.environ['DESIRED_SETTINGS_MODULE']
-    desired_env = os.environ['DESIRED_ENVIRONMENT']
-
-    if not env_path.exists():
-        raise SystemExit(0)
-
-    lines = env_path.read_text(encoding='utf-8').splitlines()
-    updated = []
-    have_module = False
-    have_env = False
-
-    for line in lines:
-        if line.startswith('DJANGO_SETTINGS_MODULE='):
-            updated.append(f'DJANGO_SETTINGS_MODULE={desired_module}')
-            have_module = True
-        elif line.startswith('DJANGO_ENV='):
-            updated.append(f'DJANGO_ENV={desired_env}')
-            have_env = True
-        else:
-            updated.append(line)
-
-    if not have_module:
+for line in lines:
+    if line.startswith('DJANGO_SETTINGS_MODULE='):
         updated.append(f'DJANGO_SETTINGS_MODULE={desired_module}')
-
-    if not have_env:
+        have_module = True
+    elif line.startswith('DJANGO_ENV='):
         updated.append(f'DJANGO_ENV={desired_env}')
+        have_env = True
+    else:
+        updated.append(line)
 
-    env_path.write_text('\n'.join(updated) + '\n', encoding='utf-8')
-    PY
-          else
-            echo "WARNING: .env not found after setup; production overrides skipped"
-          fi
-      
-        else
-          echo "ERROR: Database password not found in vault or not accessible. PostgreSQL setup may not be complete."
-          exit 1
-        fi
+if not have_module:
+    updated.append(f'DJANGO_SETTINGS_MODULE={desired_module}')
 
-        # Copy Django configuration
-        echo "Setting up Django configuration..."
-        echo "Service user home: ${endoreg-service-user-home}"
-        echo "Current user: $(whoami)"
-        echo "Current directory: $(pwd)"
-    
-        # Check if home directory exists and is accessible
-        if [ ! -d "${endoreg-service-user-home}" ]; then
-          echo "ERROR: Home directory ${endoreg-service-user-home} does not exist"
-          exit 1
-        fi
-    
-        # Ensure config directory exists with correct permissions
-        CONFIG_DIR="${endoreg-service-user-home}/config"
-        echo "Checking config directory: $CONFIG_DIR"
-    
-        if [ ! -d "$CONFIG_DIR" ]; then
-          echo "Creating config directory: $CONFIG_DIR"
-          mkdir -p "$CONFIG_DIR" || { echo "ERROR: Failed to create config directory $CONFIG_DIR"; ls -la "${endoreg-service-user-home}"; exit 1; }
-        else
-          echo "Config directory already exists"
-        fi
+if not have_env:
+    updated.append(f'DJANGO_ENV={desired_env}')
 
-    
-        # Check permissions
-        ls -la "${endoreg-service-user-home}/" || echo "Cannot list home directory contents"
+env_path.write_text('\n'.join(updated) + '\n', encoding='utf-8')
+PY
+    else
+      echo "WARNING: .env not found"
+    fi
 
-        echo "Collecting static files..."
-        export DJANGO_STATIC_ROOT="${staticRootPath}"
-        mkdir -p "$DJANGO_STATIC_ROOT"
-    
-        # Run collectstatic via devenv or python directly
-        if command -v devenv >/dev/null 2>&1; then
-           devenv shell -- python manage.py collectstatic --noinput --clear
-        else
-           source .venv/bin/activate 
-           python manage.py collectstatic --noinput --clear
-        fi
+    # --- CONFIG DIRS ---
+    CONFIG_DIR="${endoreg-service-user-home}/config"
+    if [ ! -d "$CONFIG_DIR" ]; then
+      mkdir -p "$CONFIG_DIR"
+    fi
 
-        echo "Starting Django server..."
-        echo "Hostname: ${envDjangoHost}"
-        echo "Port: ${envDjangoPort}"
-        echo "Protocol: ${envHttpProtocol}"
+    SECRETSPEC_CONFIG_DIR="${endoreg-service-user-home}/lx-annotate/.config/secretspec"
+    mkdir -p "$SECRETSPEC_CONFIG_DIR"
     
-        # Write essential environment variables to .env.systemd for devenv
-        cat > ${repoDir}/.env.systemd <<EOF
-    HOME_DIR=${endoreg-service-user-home}
-    DATA_DIR=${envDataDir}
-    STORAGE_DIR=${envStorageDir}
-    CONF_DIR=${envConfDir}
-    CONF_TEMPLATE_DIR=${envConfTemplateDir}
-    WORKING_DIR=${repoDir}
-    DJANGO_STATIC_ROOT=${staticRootPath}
-    EOF
-        # Start NGINX for logs
-        echo "Starting NGINX service..."
-        sudo systemctl start nginx || echo "WARNING: Failed to start NGINX service"
-        # Start the Django application with devenv
-        exec devenv shell -- run-server
+    echo "Generating secretspec configuration..."
+    cat > "$SECRETSPEC_CONFIG_DIR/config.toml" <<EOF
+[defaults]
+provider = "env"
+profile = "default"
+EOF
+
+    echo "Collecting static files..."
+    export DJANGO_STATIC_ROOT="${staticRootPath}"
+    mkdir -p "$DJANGO_STATIC_ROOT"
+
+    if command -v devenv >/dev/null 2>&1; then
+       devenv shell -- python manage.py collectstatic --noinput --clear
+    else
+       source .venv/bin/activate 
+       python manage.py collectstatic --noinput --clear
+    fi
+
+    echo "Starting Django server..."
+    
+    # Write essential environment variables to .env.systemd
+cat > ${repoDir}/.env.systemd <<EOF
+HOME_DIR=${endoreg-service-user-home}
+DATA_DIR=${envDataDir}
+STORAGE_DIR=${envStorageDir}
+CONF_DIR=${envConfDir}
+CONF_TEMPLATE_DIR=${envConfTemplateDir}
+WORKING_DIR=${repoDir}
+DJANGO_STATIC_ROOT=${staticRootPath}
+
+# --- Network & Host Configuration ---
+HTTP_PROTOCOL=${envHttpProtocol}
+DJANGO_HOST=${envDjangoHost}
+DJANGO_PORT=${envDjangoPort}
+BASE_URL=${envBaseUrl}
+DJANGO_ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
+ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
+DJANGO_CSRF_TRUSTED_ORIGINS='${builtins.toJSON cfg.django.corsAllowedOrigins}'
+EOF
+
+
+    echo "Starting NGINX service..."
+    sudo systemctl start nginx || echo "WARNING: Failed to start NGINX service"
+    
+    exec devenv shell -- run-server
   '';
 
 in
@@ -383,7 +297,7 @@ in
   options.services.luxnix.lxAnnotateLocal = {
     enable = mkBoolOpt false "Enable LxAnnotate Service";
 
-    # Debug configuration
+    # Debug configurationn
     debug = mkOption {
       type = types.submodule {
         options = {
@@ -409,7 +323,7 @@ in
           };
           branch = mkOption {
             type = types.str;
-            default = "main";
+            default = "erc";
             description = "Git branch to checkout for lx-annotate.";
           };
           updateOnBoot = mkOption {
@@ -572,47 +486,10 @@ in
     ];
     services.luxnix.lxAnnotateLocal.django.sslCertificatePath = mkDefault defaultSslCertificatePath;
     services.luxnix.lxAnnotateLocal.django.sslKeyPath = mkDefault defaultSslKeyPath;
-    systemd.services."generate-lx-ssl" = {
-      description = "Generate Self-Signed SSL for LxAnnotate if missing";
-      requiredBy = [ "nginx.service" ];
-      before = [ "nginx.service" ];
-      serviceConfig = {
-        Type = "oneshot";
-        RemainAfterExit = true;
-      };
-      script = ''
-        mkdir -p ${sslDir}
-          
-        chown nginx:nginx ${sslDir}
-        chmod 700 ${sslDir}
-          
-        if [ ! -f "${sslKeyPath}" ] || [ ! -f "${sslCertPath}" ]; then
-          echo "Generating fresh self-signed SSL certificate..."
-          ${pkgs.openssl}/bin/openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-            -keyout "${sslKeyPath}" \
-            -out "${sslCertPath}" \
-            -subj "/CN=${config.services.luxnix.lxAnnotateLocal.django.hostname}"
-            
-          chown nginx:nginx "${sslKeyPath}" "${sslCertPath}"
-            
-          chmod 600 "${sslKeyPath}"
-
-          chmod 644 "${sslCertPath}"
-            
-          echo "SSL generation complete."
-        else
-          echo "SSL certificate already exists. Ensuring permissions are correct..."
-          chown -R nginx:nginx ${sslDir}
-          chmod 600 "${sslKeyPath}"
-          chmod 644 "${sslCertPath}"
-
-        fi
-      '';
-    };
+    services.luxnix.lxSsl.enable = mkDefault true;
     services.nginx = {
       enable = true;
 
-      # Tuning for AI Model Uploads (50GB) & Streaming
       recommendedProxySettings = true;
       recommendedTlsSettings = true;
 
@@ -625,8 +502,10 @@ in
         extraConfig = ''
           client_max_body_size 50G;
           proxy_request_buffering off;
+        '' + optionalString sslCfg.enable ''
+          ssl_stapling off;
+          ssl_stapling_verify off;
         '';
-
         locations."/static/" = {
           # Must match STATIC_ROOT from Step 1
           alias = "${staticRootPath}/";
@@ -634,8 +513,8 @@ in
         };
 
         locations."/media/" = {
-          # Must match MEDIA_ROOT env var
-          alias = "${endoreg-service-user-home}/${repoDirName}/${cfg.django.dataDir}/";
+          # Must match MEDIA_URL env var
+          alias = "${envDataDir}/";
           extraConfig = "sendfile on; tcp_nopush on;";
         };
 
