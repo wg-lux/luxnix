@@ -287,6 +287,12 @@ in
         description = "Path to file containing database password";
       };
 
+      endoregLocalUserPasswordFile = mkOption {
+        type = types.path;
+        default = "/var/lib/postgresql/endoregDbLocal.password";
+        description = "Path to file containing endoregDbLocal user password";
+      };
+
       sslMode = mkOption {
         type = types.enum [ "disable" "allow" "prefer" "require" "verify-ca" "verify-full" ];
         default = "prefer";

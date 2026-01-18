@@ -137,7 +137,7 @@ with lib.luxnix; let
         if [ "$DEBUG_MODE" = "true" ]; then
           echo "Current user: $(whoami)"
           echo "User groups: $(groups)"
-          echo "Checking for database password file: ${cfg.database.passwordFile}"
+          echo "Checking for database password file: ${cfg.database.endoregLocalUserPasswordFile}"
         fi
 
         cd ${repoDir}
@@ -147,7 +147,7 @@ with lib.luxnix; let
     # Ensure runtime directories exist (they might be ignored in git)
     mkdir -p ${envConfDir} ${envDataDir} ${envStorageDir}
 
-    SECRET_FILE="${cfg.database.passwordFile}"
+    SECRET_FILE="${cfg.database.endoregLocalUserPasswordFile}"
     if [ -f "$SECRET_FILE" ] && head -c 1 "$SECRET_FILE" >/dev/null 2>&1; then
       cp "$SECRET_FILE" ${envConfDir}/db_pwd
       echo "Database password copied from vault to ${envConfDir}/db_pwd"
@@ -155,7 +155,14 @@ with lib.luxnix; let
           # Run Django application's configuration setup
           echo "Running Django application configuration setup..."
           cd ${repoDir}
-      
+          # 1. Database
+          export DJANGO_DB_PASSWORD_FILE="${cfg.database.endoregLocalUserPasswordFile}" 
+          
+          # 2. Secret Key
+          export DJANGO_SECRET_KEY_FILE="${cfg.django.djangoSecretKeyFile}"
+          
+          # 3. Keycloak
+          export OIDC_RP_CLIENT_SECRET_FILE="${cfg.django.keycloakSecretFile}
           # Set environment variables needed by the Django config scripts
           export DATA_DIR="${envDataDir}"
           export STORAGE_DIR="${envStorageDir}"
@@ -185,15 +192,15 @@ with lib.luxnix; let
           export EXEMPT_URLS="^/accounts/login/$"
           export LOGIN_URL="/accounts/login/"
 
-          DB_PASSWORD_VALUE="$(tr -d '\n' < ${envConfDir}/db_pwd 2>/dev/null || true)"
-          export DB_ENGINE="django.db.backends.postgresql"
-          export DB_NAME="${cfg.database.name}"
-          export DB_USER="${cfg.database.user}"
-          export DJANGO_DB_PASSWORD="$DB_PASSWORD_VALUE"
-          export DB_PASSWORD="$DB_PASSWORD_VALUE"
-          export DB_HOST="${cfg.database.host}"
-          export DB_PORT="${toString cfg.database.port}"
-          export DB_SSLMODE="${cfg.database.sslMode}"
+          DJANGO_DB_PASSWORD_VALUE="$(tr -d '\n' < ${envConfDir}/db_pwd 2>/dev/null || true)"
+          export DJANGO_DB_ENGINE="django.db.backends.postgresql"
+          export DJANGO_DB_NAME="${cfg.database.name}"
+          export DJANGO_DB_USER="${cfg.database.user}"
+          export DJANGO_DJANGO_DB_PASSWORD="$DJANGO_DB_PASSWORD_VALUE"
+          export DJANGO_DB_PASSWORD="$DJANGO_DB_PASSWORD_VALUE"
+          export DJANGO_DB_HOST="${cfg.database.host}"
+          export DJANGO_DB_PORT="${toString cfg.database.port}"
+          export DJANGO_DB_SSLMODE="${cfg.database.sslMode}"
           # We wrap the JSON in single quotes '...' to ensure shell handles special chars correctly
           export DJANGO_ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
           export ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
@@ -547,6 +554,11 @@ in
           user = mkOption { type = types.str; default = "lxAnnotateLocal"; };
           passwordFile = mkOption { type = types.path; default = "/etc/secrets/vault/SCRT_local_password_maintenance_password"; };
           sslMode = mkOption { type = types.str; default = "prefer"; };
+          endoregLocalUserPasswordFile = mkOption {
+            type = types.path;
+            default = "/var/lib/postgresql/endoregDbLocal.password";
+            description = "Path to file containing endoregDbLocal user password";
+          };
         };
       };
       default = { };
@@ -583,9 +595,8 @@ in
             
           chown nginx:nginx "${sslKeyPath}" "${sslCertPath}"
             
-          # Secure the private key (read/write only for owner nginx)
           chmod 600 "${sslKeyPath}"
-          # Public cert can be readable by others, but owner is fine too
+
           chmod 644 "${sslCertPath}"
             
           echo "SSL generation complete."
@@ -593,6 +604,8 @@ in
           echo "SSL certificate already exists. Ensuring permissions are correct..."
           chown -R nginx:nginx ${sslDir}
           chmod 600 "${sslKeyPath}"
+          chmod 644 "${sslCertPath}"
+
         fi
       '';
     };
