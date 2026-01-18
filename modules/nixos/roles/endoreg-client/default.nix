@@ -428,7 +428,7 @@ in
 
             branch = mkOption {
               type = types.str;
-              default = "main";
+              default = "erc";
               description = "Git branch to checkout for lx-annotate.";
             };
 

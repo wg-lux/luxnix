@@ -256,12 +256,22 @@ EOF
     export DJANGO_STATIC_ROOT="${staticRootPath}"
     mkdir -p "$DJANGO_STATIC_ROOT"
 
+
     if command -v devenv >/dev/null 2>&1; then
        devenv shell -- python manage.py collectstatic --noinput --clear
+       echo "Running Database Migrations..."
+       devenv shell -- python manage.py migrate --noinput
+       # ----------------------
     else
        source .venv/bin/activate 
        python manage.py collectstatic --noinput --clear
+       echo "Running Database Migrations..."
+       python manage.py migrate --noinput
+       # ----------------------
     fi
+
+    echo "Starting Django server..."
+
 
     echo "Starting Django server..."
     
@@ -346,7 +356,15 @@ in
           useHttps = mkOption { type = types.bool; default = false; };
           sslCertificatePath = mkOption { type = types.nullOr types.path; default = null; };
           sslKeyPath = mkOption { type = types.nullOr types.path; default = null; };
-          djangoAllowedHosts = mkOption { type = types.listOf types.str; default = [ "lx-annotate.local" "127.0.0.1" ]; };
+          djangoAllowedHosts = mkOption { 
+            type = types.listOf types.str; 
+            default = [ "lx-annotate.local" "127.0.0.1" ]; # NO http://
+          };
+
+          corsAllowedOrigins = mkOption { 
+            type = types.listOf types.str; 
+            default = [ "https://lx-annotate.local" "http://127.0.0.1" ]; 
+          };
           djangoDebug = mkOption { type = types.bool; default = false; };
           djangoSecretKeyFile = mkOption { type = types.path; default = "/etc/secrets/vault/django_secret_key"; };
 
@@ -363,7 +381,6 @@ in
           };
           # -------------------------------
 
-          corsAllowedOrigins = mkOption { type = types.listOf types.str; default = [ ]; };
           logLevel = mkOption { type = types.str; default = "INFO"; };
           maxRequestSize = mkOption { type = types.str; default = "100M"; };
           timeZone = mkOption { type = types.str; default = "Europe/Berlin"; };
@@ -562,6 +579,7 @@ in
     systemd.services."lx-annotate-boot" = {
       description = "Clone or pull lx-annotate and run prod-server";
       wantedBy = [ "multi-user.target" ];
+      wants = [ "nginx.service" "postgres-endoreg-setup.service" ];
       after = [ "postgres-endoreg-setup.service" "endoreg-django-setup.service" "systemd-tmpfiles-setup.service" ];
       requires = [ "postgres-endoreg-setup.service" "systemd-tmpfiles-setup.service" ];
       serviceConfig = {
