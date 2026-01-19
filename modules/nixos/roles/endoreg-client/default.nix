@@ -227,7 +227,7 @@ in
 
       staticUrl = mkOption {
         type = types.str;
-        default = "/static/";
+        default = "static";
         description = "STATIC_URL value exported to the application.";
       };
 
