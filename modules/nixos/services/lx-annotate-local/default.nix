@@ -33,7 +33,7 @@ with lib.luxnix; let
   endoreg-service-user-home = endoreg-service-user.home;
   endoreg-service-group-name = config.user.endoreg-service-user.group;
   repoDir = "${endoreg-service-user-home}/${repoDirName}";
-  staticRootPath = "${repoDir}/staticfiles";
+  staticRootPath = "${repoDir}/static";
 
   # Environment variable configuration from django submodule
   envDataDir = "${repoDir}/${cfg.django.dataDir}";
@@ -297,7 +297,6 @@ EOF
 
 
     echo "Starting NGINX service..."
-    sudo systemctl start nginx || echo "WARNING: Failed to start NGINX service"
     
     exec devenv shell -- run-server
   '';
