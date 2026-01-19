@@ -35,9 +35,12 @@ in
 
       desktopDirName = mkOption {
         type = types.str;
-        default = "Desktop";
+        default =
+          if config.luxnix.generic-settings.language == "english"
+          then "Desktop"
+          else "Schreibtisch";
         example = "Schreibtisch";
-        description = "Desktop directory name for the client user (localization support).";
+        description = "Desktop directory name for the client user (localization support; defaults from luxnix.generic-settings.language).";
       };
     };
 
@@ -579,6 +582,21 @@ in
       storageBaseDir = cfg.paths.storageBaseDir;
       videoInputDir = cfg.paths.videoInputDir;
       pdfInputDir = cfg.paths.pdfInputDir;
+      desktopDirName = cfg.paths.desktopDirName;
+
+      normalUsers =
+        lib.filterAttrs (_: user: (user.isNormalUser or false)) config.users.users;
+      normalUserNames = lib.attrNames normalUsers;
+      desktopLinkRules = lib.flatten (lib.mapAttrsToList (name: user:
+        let
+          userHome = if user ? home && user.home != null then user.home else "/home/${name}";
+          userGroup = if user ? group && user.group != null then user.group else "users";
+          desktopDir = "${userHome}/${desktopDirName}";
+        in [
+          "d ${desktopDir} 0755 ${name} ${userGroup} -"
+          "L+ ${desktopDir}/Video Input - - - - ${videoInputDir}"
+          "L+ ${desktopDir}/PDF Input - - - - ${pdfInputDir}"
+        ]) normalUsers);
 
       firstNonNull = values: lib.foldl' (acc: val: if acc != null then acc else val) null values;
 
@@ -652,7 +670,7 @@ in
       user.client.enable = mkDefault true;
       user.endoreg-service-user.enable = true;
       group.endoreg-service.enable = true; # Ensure the group is created
-      group.endoreg-service.members = mkAfter [ clientUserName ];
+      group.endoreg-service.members = mkAfter (lib.unique normalUserNames);
 
       roles = {
         desktop.enable = true;
@@ -705,7 +723,7 @@ in
         "d ${storageBaseDir} 0770 root endoreg-service -"
         "d ${videoInputDir} 0770 root endoreg-service -"
         "d ${pdfInputDir} 0770 root endoreg-service -"
-      ];
+      ] ++ desktopLinkRules;
 
       home-manager.users.${clientUserName} = { config, ... }:
         let
