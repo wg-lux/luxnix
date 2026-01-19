@@ -293,8 +293,9 @@ with lib.luxnix; let
     DJANGO_CSRF_TRUSTED_ORIGINS='${builtins.toJSON cfg.django.corsAllowedOrigins}'
     EOF
 
-
-        echo "Starting NGINX service..."
+        # build the environment and start the server
+        exec devenv shell -- vue-build
+        echo "Starting service..."
     
         exec devenv shell -- run-server
   '';

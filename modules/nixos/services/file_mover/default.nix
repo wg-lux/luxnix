@@ -5,6 +5,11 @@ with lib.luxnix; let
   endoregPaths = config.roles.endoreg-client.paths;
   annotateCfg = config.services.luxnix.lxAnnotateLocal;
 
+  clientUserName =
+    if config ? user && config.user ? client && config.user.client ? name
+    then config.user.client.name
+    else "client-user";
+
   endoregServiceUserName = config.user.endoreg-service-user.name;
   endoregServiceUserHome = config.users.users.${endoregServiceUserName}.home;
   repoDirName = "lx-annotate";
@@ -12,8 +17,10 @@ with lib.luxnix; let
   makeAbsolute = path: if lib.hasPrefix "/" path then path else "${repoDir}/${path}";
   dataDir = makeAbsolute annotateCfg.django.dataDir;
   
-  sourceVideo = "${endoregPaths.videoInputDir}/";
-  sourceReport = "${endoregPaths.pdfInputDir}/";
+  videoInputDir = endoregPaths.videoInputDir;
+  pdfInputDir = endoregPaths.pdfInputDir;
+  sourceVideo = "${videoInputDir}/";
+  sourceReport = "${pdfInputDir}/";
   destVideo = "${dataDir}/import/video_import/";
   destReport = "${dataDir}/import/report_import/";
 in {
@@ -31,6 +38,27 @@ in {
       "d ${destVideo} 0755 ${config.user.admin.name} users -"
       "d ${destReport} 0755 ${config.user.admin.name} users -"
     ];
+
+    home-manager.users = optionalAttrs (!config.roles.endoreg-client.enable) {
+      ${clientUserName} = { config, ... }:
+        let
+          outOfStore = config.lib.file.mkOutOfStoreSymlink;
+        in
+        {
+          xdg.userDirs = {
+            enable = true;
+            createDirectories = true;
+          };
+
+          home.file."${config.xdg.userDirs.desktop}/Video Input" = {
+            source = outOfStore videoInputDir;
+          };
+
+          home.file."${config.xdg.userDirs.desktop}/PDF Input" = {
+            source = outOfStore pdfInputDir;
+          };
+        };
+    };
 
     # 2. The Service (The worker)
     systemd.services.move-my-files = {
