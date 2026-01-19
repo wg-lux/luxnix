@@ -260,6 +260,7 @@ EOF
     if command -v devenv >/dev/null 2>&1; then
        devenv shell -- python manage.py collectstatic --noinput --clear
        echo "Running Database Migrations..."
+       devenv shell -- python manage.py makemigrations --noinput
        devenv shell -- python manage.py migrate --noinput
        devenv shell -- python manage.py load_base_db_data
        # ----------------------
@@ -267,6 +268,7 @@ EOF
        source .venv/bin/activate 
        python manage.py collectstatic --noinput --clear
        echo "Running Database Migrations..."
+       python manage.py makemigrations --noinput
        python manage.py migrate --noinput
        python manage.py load_base_db_data
        # ----------------------
