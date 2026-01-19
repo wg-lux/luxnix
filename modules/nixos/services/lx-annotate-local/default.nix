@@ -124,22 +124,6 @@ with lib.luxnix; let
 
         mkdir -p ${envConfDir} ${envDataDir} ${envStorageDir}
 
-        SECRET_FILE="${cfg.database.endoregLocalUserPasswordFile}"
-        DB_PWD_PATH="${envConfDir}/db_pwd"
-        if [ -d "$DB_PWD_PATH" ]; then
-          echo "Warning: ${envConfDir}/db_pwd is a directory; removing to fix path"
-          rm -rf "$DB_PWD_PATH"
-        fi
-        if [ -f "$SECRET_FILE" ] && head -c 1 "$SECRET_FILE" >/dev/null 2>&1; then
-          cp "$SECRET_FILE" "$DB_PWD_PATH"
-          chmod 600 "$DB_PWD_PATH" 2>/dev/null || true
-        else
-          echo "Warning: Database password not found at $SECRET_FILE"
-        fi
-        if [ ! -f "$DB_PWD_PATH" ]; then
-          echo "ERROR: Database password file missing at $DB_PWD_PATH"
-          exit 1
-        fi
 
         # --- ENV SETUP ---
         echo "Running Django application configuration setup..."
@@ -598,7 +582,34 @@ in
       serviceConfig = {
         Type = "exec";
         User = endoreg-service-user-name;
-        ExecStartPre = "+${pkgs.coreutils}/bin/chown -R ${endoreg-service-user-name}:${endoreg-service-group-name} ${repoDir}";
+        ExecStartPre = "+${pkgs.writeShellScript "lx-annotate-pre-start" ''
+            set -euo pipefail
+            
+            # 1. Fix Repo Permissions
+            ${pkgs.coreutils}/bin/chown -R ${endoreg-service-user-name}:${endoreg-service-group-name} ${repoDir}
+            
+            # 2. Handle the Password File securely
+            mkdir -p ${envConfDir}
+            
+            SOURCE_PWD="${cfg.database.endoregLocalUserPasswordFile}"
+            TARGET_PWD="${envConfDir}/db_pwd"
+            
+            if [ -f "$SOURCE_PWD" ]; then
+               echo "Copying database password..."
+               cp "$SOURCE_PWD" "$TARGET_PWD"
+               
+               # Give ownership to the service user
+               chown ${endoreg-service-user-name}:${endoreg-service-group-name} "$TARGET_PWD"
+               
+               # Secure it
+               chmod 600 "$TARGET_PWD"
+            else
+               echo "WARNING: Password file $SOURCE_PWD not found!"
+            fi
+            
+            # Ensure the service user owns the directory too
+            chown -R ${endoreg-service-user-name}:${endoreg-service-group-name} ${envConfDir}
+        ''}";
         Environment = [
           "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:${pkgs.direnv}/bin:/run/current-system/sw/bin"
           "NIX_PATH=nixpkgs=${pkgs.path}"
