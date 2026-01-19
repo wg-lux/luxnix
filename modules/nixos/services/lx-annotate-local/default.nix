@@ -268,7 +268,7 @@ EOF
        python manage.py collectstatic --noinput --clear
        echo "Running Database Migrations..."
        python manage.py migrate --noinput
-        python manage.py load_base_db_data
+       python manage.py load_base_db_data
        # ----------------------
     fi
 
