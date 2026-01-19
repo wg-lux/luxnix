@@ -33,7 +33,7 @@ with lib.luxnix; let
   endoreg-service-user-home = endoreg-service-user.home;
   endoreg-service-group-name = config.user.endoreg-service-user.group;
   repoDir = "${endoreg-service-user-home}/${repoDirName}";
-  staticRootPath = "${repoDir}/staticfiles";
+  staticRootPath = "${repoDir}/static";
 
   # Environment variable configuration from django submodule
   envDataDir = "${repoDir}/${cfg.django.dataDir}";
@@ -258,17 +258,13 @@ EOF
 
 
     if command -v devenv >/dev/null 2>&1; then
-       devenv shell -- python manage.py collectstatic --noinput --clear
        echo "Running Database Migrations..."
-       devenv shell -- python manage.py makemigrations --noinput
        devenv shell -- python manage.py migrate --noinput
        devenv shell -- python manage.py load_base_db_data
        # ----------------------
     else
        source .venv/bin/activate 
-       python manage.py collectstatic --noinput --clear
        echo "Running Database Migrations..."
-       python manage.py makemigrations --noinput
        python manage.py migrate --noinput
        python manage.py load_base_db_data
        # ----------------------
