@@ -495,7 +495,7 @@ in
     };
   };
 
-  config = mkIf cfg.enable {
+  config = {
     services.luxnix.lxAnnotateLocal.django.djangoAllowedHosts = mkAfter [
       cfg.django.hostname
     ];
