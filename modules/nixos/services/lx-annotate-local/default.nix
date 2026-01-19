@@ -125,12 +125,20 @@ with lib.luxnix; let
         mkdir -p ${envConfDir} ${envDataDir} ${envStorageDir}
 
         SECRET_FILE="${cfg.database.endoregLocalUserPasswordFile}"
+        DB_PWD_PATH="${envConfDir}/db_pwd"
+        if [ -d "$DB_PWD_PATH" ]; then
+          echo "Warning: ${envConfDir}/db_pwd is a directory; removing to fix path"
+          rm -rf "$DB_PWD_PATH"
+        fi
         if [ -f "$SECRET_FILE" ] && head -c 1 "$SECRET_FILE" >/dev/null 2>&1; then
-          mkdir -p "${envConfDir}/db_pwd"
-          cp "$SECRET_FILE" ${envConfDir}/db_pwd
-          chmod 600 ${envConfDir}/db_pwd 2>/dev/null || true
+          cp "$SECRET_FILE" "$DB_PWD_PATH"
+          chmod 600 "$DB_PWD_PATH" 2>/dev/null || true
         else
-          echo "Warning: Database password not found"
+          echo "Warning: Database password not found at $SECRET_FILE"
+        fi
+        if [ ! -f "$DB_PWD_PATH" ]; then
+          echo "ERROR: Database password file missing at $DB_PWD_PATH"
+          exit 1
         fi
 
         # --- ENV SETUP ---
