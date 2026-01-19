@@ -376,7 +376,7 @@ in
 
           keycloakClientId = mkOption {
             type = types.str;
-            default = "EndoregDb-realm";
+            default = "endoregdb-api";
             description = "Keycloak Client ID.";
           };
           # -------------------------------

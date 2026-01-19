@@ -632,7 +632,7 @@ in
         assetDir = if cfg.lxAnnotate.django.assetDir != null then cfg.lxAnnotate.django.assetDir else cfg.api.assetDir;
         port = 8117;
         djangoAllowedHosts = lib.unique (cfg.api.djangoAllowedHosts ++ [ "lx-annotate.local" ]);
-        keycloakClientId = "EndoregDb-realm";
+        keycloakClientId = "endoregdb-api";
       };
 
       annotateExtraSettings =

@@ -41,40 +41,17 @@ in {
       };
 
       script = ''
-        # Redundant mkdir is harmless, but tmpfiles handles it now.
-        # We assume variables are hardcoded or passed here, but for safety 
-        # let's redeclare them inside the script to match your previous style 
-        # or use the let block variables interpolated:
-        
-        SOURCEVIDEO="${sourceVideo}"
-        SOURCEREPORT="${sourceReport}"
-        DESTVIDEO="${destVideo}"
-        DESTREPORT="${destReport}"
-
         # We add a tiny sleep to ensure the file system settles if a file was JUST touched
         sleep 2
 
         # Run Rsync
-        ${pkgs.rsync}/bin/rsync -av --remove-source-files --chmod=F660,D770 "$SOURCEVIDEO" "$DESTVIDEO" || true
-        ${pkgs.rsync}/bin/rsync -av --remove-source-files --chmod=F660,D770 "$SOURCEREPORT" "$DESTREPORT" || true
+        ${pkgs.rsync}/bin/rsync -av --remove-source-files --chmod=F660,D770 "${sourceVideo}" "${destVideo}" || echo "Warning: rsync video failed with exit code $?"
+        ${pkgs.rsync}/bin/rsync -av --remove-source-files --chmod=F660,D770 "${sourceReport}" "${destReport}" || echo "Warning: rsync report failed with exit code $?"
 
         # Cleanup empty dirs
-        ${pkgs.findutils}/bin/find "$SOURCEVIDEO" -mindepth 1 -type d -empty -delete
-        ${pkgs.findutils}/bin/find "$SOURCEREPORT" -mindepth 1 -type d -empty -delete
+        ${pkgs.findutils}/bin/find "${sourceVideo}" -mindepth 1 -type d -empty -delete || true
+        ${pkgs.findutils}/bin/find "${sourceReport}" -mindepth 1 -type d -empty -delete || true
       '';
-    };
-
-    # 3. The Path Watcher (The trigger)
-    systemd.paths.move-my-files = {
-      wantedBy = [ "paths.target" ];
-      pathConfig = {
-        # PathChanged triggers when a file is closed after writing
-        PathChanged = [
-          sourceVideo
-          sourceReport
-        ];
-        Unit = "move-my-files.service";
-      };
     };
   };
 }
