@@ -294,10 +294,7 @@ with lib.luxnix; let
     EOF
 
         # build the environment and start the server
-        exec devenv shell -- vue-build
-        echo "Starting service..."
-    
-        exec devenv shell -- run-server
+        exec devenv shell -- bash -c "vue-build && run-server"
   '';
 
 in
@@ -305,7 +302,7 @@ in
   options.services.luxnix.lxAnnotateLocal = {
     enable = mkBoolOpt false "Enable LxAnnotate Service";
 
-    # Debug configurationn
+    # Debug configuration
     debug = mkOption {
       type = types.submodule {
         options = {
