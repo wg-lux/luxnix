@@ -53,5 +53,18 @@ in {
         ${pkgs.findutils}/bin/find "${sourceReport}" -mindepth 1 -type d -empty -delete || true
       '';
     };
+
+    # 3. The Path Unit (The trigger)
+    systemd.paths.move-my-files = {
+      description = "Trigger move-my-files when inputs change";
+      wantedBy = [ "multi-user.target" ];
+      pathConfig = {
+        PathChanged = [
+          sourceVideo
+          sourceReport
+        ];
+        Unit = "move-my-files.service";
+      };
+    };
   };
 }
