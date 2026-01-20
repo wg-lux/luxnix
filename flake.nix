@@ -9,10 +9,10 @@
     ];
   };
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-25.11";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-25.05";
     devenv.url = "github:cachix/devenv";
     home-manager = {
-      url = "github:nix-community/home-manager/release-25.11";
+      url = "github:nix-community/home-manager/release-25.05";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -71,7 +71,8 @@
     # You stick a , in front of a command to run it from whatever location it 
     # happens to occupy in nixpkgs without really thinking about it.
 
-    comma = { # https://github.com/nix-community/comma 
+    comma = {
+      # https://github.com/nix-community/comma 
       url = "github:nix-community/comma";
       inputs.nixpkgs.follows = "nixpkgs";
     };
@@ -92,11 +93,11 @@
     };
 
     nixvim = {
-    # url = "github:nix-community/nixvim";
-    # If you are not running an unstable channel of nixpkgs, select the corresponding branch of nixvim.
-    url = "github:nix-community/nixvim/nixos-25.11";
-    inputs.nixpkgs.follows = "nixpkgs";
-  };
+      # url = "github:nix-community/nixvim";
+      # If you are not running an unstable channel of nixpkgs, select the corresponding branch of nixvim.
+      url = "github:nix-community/nixvim/nixos-25.05";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
 
 
     # gx-nvim = {
@@ -115,31 +116,33 @@
     };
 
     # endoreg-usb-encrypter.url = "github:wg-lux/endoreg-usb-encrypter";
-	  # endoreg-usb-encrypter.inputs.nixpkgs.follows = "nixpkgs";
+    # endoreg-usb-encrypter.inputs.nixpkgs.follows = "nixpkgs";
 
 
   };
 
   # https://snowfall.org/guides/lib/quickstart/
   # https://snowfall.org/reference/lib/
-  outputs = inputs: let 
-    lib = inputs.snowfall-lib.mkLib {
-      inherit inputs;
-      src = ./.;
+  outputs = inputs:
+    let
+      lib = inputs.snowfall-lib.mkLib {
+        inherit inputs;
+        src = ./.;
 
-      snowfall = { #CHANGEME
-        metadata = "luxnix";
-        namespace = "luxnix";
-        meta = {
-          name = "luxnix";
-          title = "AG-Lux' Nix Flake";
+        snowfall = {
+          #CHANGEME
+          metadata = "luxnix";
+          namespace = "luxnix";
+          meta = {
+            name = "luxnix";
+            title = "AG-Lux' Nix Flake";
+          };
         };
       };
-    };
 
 
-    
-  in
+
+    in
     lib.mkFlake {
       channels-config = {
         allowUnfree = true;
@@ -162,7 +165,7 @@
         impermanence.nixosModules.impermanence
         sops-nix.nixosModules.sops
         nix-topology.nixosModules.default
-        
+
         # authentik-nix.nixosModules.default
       ];
 
@@ -180,25 +183,25 @@
         nix-topology.overlays.default
       ];
 
-      deploy = lib.mkDeploy {inherit (inputs) self;};
+      deploy = lib.mkDeploy { inherit (inputs) self; };
 
       checks =
         builtins.mapAttrs
-        (system: deploy-lib:
-          deploy-lib.deployChecks inputs.self.deploy)
-        inputs.deploy-rs.lib;
+          (system: deploy-lib:
+            deploy-lib.deployChecks inputs.self.deploy)
+          inputs.deploy-rs.lib;
 
       topology = with inputs; let
         host = self.nixosConfigurations.${builtins.head (builtins.attrNames self.nixosConfigurations)};
       in
-        import nix-topology {
-          inherit (host) pkgs; # Only this package set must include nix-topology.overlays.default
-          modules = [
-            (import ./topology {
-              inherit (host) config;
-            })
-            {inherit (self) nixosConfigurations;}
-          ];
-        };
+      import nix-topology {
+        inherit (host) pkgs; # Only this package set must include nix-topology.overlays.default
+        modules = [
+          (import ./topology {
+            inherit (host) config;
+          })
+          { inherit (self) nixosConfigurations; }
+        ];
+      };
     };
 }

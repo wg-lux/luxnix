@@ -45,4 +45,4 @@ host_luxnix:
   generic_settings.gpu.nvidia.prime.nvidiaBusId: '"PCI:1:0:0"'
   generic_settings.gpu.nvidia.prime.onboardBusId: '"PCI:0:2:0"'
   generic_settings.gpu.nvidia.prime.onboardType: '"intel"'
-  generic_settings.gpu.nvidia.driver: '"beta"'
+  generic_settings.gpu.nvidia.driver: '"stable"'

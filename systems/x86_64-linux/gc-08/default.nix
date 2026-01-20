@@ -62,7 +62,7 @@ generic-settings.enable = true;
 
 generic-settings.gpu.autoDetect = true;
 
-generic-settings.gpu.nvidia.driver = "beta";
+generic-settings.gpu.nvidia.driver = "stable";
 
 generic-settings.gpu.nvidia.enable = true;
 
