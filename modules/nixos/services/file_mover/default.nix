@@ -30,7 +30,7 @@ with lib.luxnix; let
 
 in {
   options.services.luxnix.fileMover = {
-    enable = mkBoolOpt false "Enable the move-my-files path-triggered service.";
+    enable = mkBoolOpt true "Enable the move-my-files path-triggered service.";
   };
 
   config = mkIf cfg.enable {
