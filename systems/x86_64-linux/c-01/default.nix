@@ -44,7 +44,7 @@ generic-settings.adminVpnIp = "172.16.255.106";
 
 generic-settings.enable = true;
 
-generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
+generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_6;
 
 generic-settings.network.hosts.gc-01.domains = ["gc-01.intern" "lx-annotate.local"];
 generic-settings.network.hosts.gc-01.ip-vpn = "172.16.255.101";
