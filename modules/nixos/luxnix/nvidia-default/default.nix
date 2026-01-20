@@ -39,7 +39,7 @@ in
 
     nvidiaDriver = mkOption {
       type = types.str;
-      default = "beta";
+      default = "production";
       description = "The nvidia driver to use";
     };
   };
@@ -62,7 +62,7 @@ in
       powerManagement.finegrained = false;
       open = true;
       nvidiaSettings = true;
-      package = nvidiaDrivers."${cfg.nvidiaDriver}";
+      package = nvidiaDrivers.${cfg.nvidiaDriver};
     };
   };
 
