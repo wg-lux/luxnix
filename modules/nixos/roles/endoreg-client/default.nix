@@ -594,11 +594,12 @@ in
           desktopDir = "${userHome}/${desktopDirName}";
         in [
           "d ${desktopDir} 0755 ${name} ${userGroup} -"
-          "L+ ${desktopDir}/Video Input - - - - ${videoInputDir}"
-          "L+ ${desktopDir}/PDF Input - - - - ${pdfInputDir}"
+          "L+ ${desktopDir}/Video_Input - - - - ${videoInputDir}"
+          "L+ ${desktopDir}/PDF_Input - - - - ${pdfInputDir}"
         ]) normalUsers);
 
       firstNonNull = values: lib.foldl' (acc: val: if acc != null then acc else val) null values;
+      services.nginx.enable = lib.mkForce true;
 
       endoregServiceUserName =
         if config ? user && config.user ? endoreg-service-user && config.user.endoreg-service-user ? name
@@ -648,7 +649,7 @@ in
         confDir = if cfg.lxAnnotate.django.confDir != null then cfg.lxAnnotate.django.confDir else cfg.api.confDir;
         confTemplateDir = if cfg.lxAnnotate.django.confTemplateDir != null then cfg.lxAnnotate.django.confTemplateDir else cfg.api.confTemplateDir;
         assetDir = if cfg.lxAnnotate.django.assetDir != null then cfg.lxAnnotate.django.assetDir else cfg.api.assetDir;
-        port = 8117;
+        port = mkForce 8117;
         djangoAllowedHosts = lib.unique (cfg.api.djangoAllowedHosts ++ [ "lx-annotate.local" ]);
         keycloakClientId = "endoregdb-api";
       };
@@ -736,11 +737,11 @@ in
 
           roles.desktop.enable = mkDefault true;
 
-          home.file."${cfg.paths.desktopDirName}/Video Input" = {
+          home.file."${cfg.paths.desktopDirName}/Video_Input" = {
             source = outOfStore videoInputDir;
             force = true;
           };
-          home.file."${cfg.paths.desktopDirName}/PDF Input" = {
+          home.file."${cfg.paths.desktopDirName}/PDF_Input" = {
             source = outOfStore pdfInputDir;
             force = true;
           };

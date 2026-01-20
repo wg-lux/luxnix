@@ -23,7 +23,7 @@ in {
     };
 
     pythonPackage = mkOption {
-      default = pkgs."python${cfg.pythonVersion}Full";
+      default = pkgs."python${cfg.pythonVersion}";
       type = types.package;
       description = "The python package to use";
     };

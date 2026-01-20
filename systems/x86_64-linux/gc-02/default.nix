@@ -70,19 +70,19 @@ generic-settings.language = "english";
 
 generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
 
-generic-settings.network.hosts.gc-01.domains = ["gc-01.intern"];
+generic-settings.network.hosts.gc-01.domains = ["gc-01.intern" "lx-annotate.local"];
 generic-settings.network.hosts.gc-01.ip-vpn = "172.16.255.101";
 
 generic-settings.network.hosts.gc-02.domains = ["gc-02.intern" "lx-annotate.local"];
 generic-settings.network.hosts.gc-02.ip-vpn = "172.16.255.102";
 
-generic-settings.network.hosts.gc-03.domains = ["gc-03.intern"];
+generic-settings.network.hosts.gc-03.domains = ["gc-03.intern" "lx-annotate.local"];
 generic-settings.network.hosts.gc-03.ip-vpn = "172.16.255.103";
 
-generic-settings.network.hosts.gc-04.domains = ["gc-04.intern"];
+generic-settings.network.hosts.gc-04.domains = ["gc-04.intern" "lx-annotate.local"];
 generic-settings.network.hosts.gc-04.ip-vpn = "172.16.255.104";
 
-generic-settings.network.hosts.gc-05.domains = ["gc-05.intern"];
+generic-settings.network.hosts.gc-05.domains = ["gc-05.intern" "lx-annotate.local"];
 generic-settings.network.hosts.gc-05.ip-vpn = "172.16.255.105";
 
 generic-settings.network.hosts.gc-06.domains = ["gc-06.intern"];
@@ -92,7 +92,7 @@ generic-settings.network.hosts.gc-06.ip-vpn = "172.16.255.106";
 
 generic-settings.network.hosts.gc-06.syncthing-id = "MJU2YAF-4IXFRSS-I3JHU2Z-6LUSSTN-L6BR5HS-PLS6ACJ-4E2X2UQ-5AVBUAQ";
 
-generic-settings.network.hosts.gc-07.domains = ["gc-07.intern"];
+generic-settings.network.hosts.gc-07.domains = ["gc-07.intern" "lx-annotate.local"];
 generic-settings.network.hosts.gc-07.ip-vpn = "172.16.255.107";
 
 generic-settings.network.hosts.gc-08.domains = ["gc-08.intern" "lx-annotate.local"];

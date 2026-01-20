@@ -52,6 +52,7 @@ in {
     home-manager = {
       useGlobalPkgs = false;
       useUserPackages = true;
+      backupFileExtension = "backup";
     };
   };
 }
