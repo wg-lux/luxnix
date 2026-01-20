@@ -296,6 +296,52 @@ with lib.luxnix; let
         # build the environment and start the server
         exec devenv shell -- bash -c "vue-build && run-server"
   '';
+  watcherScriptName = "runLocalFileWatcher";
+  runLocalFileWatcherScript = pkgs.writeShellScriptBin "${watcherScriptName}" ''
+    set -euo pipefail
+    
+    # 1. Go to the repo (Cloned by the main boot service)
+    cd ${repoDir}
+
+    # 2. Re-Export ALL necessary Environment Variables
+    # (Note: We skip git clone/pull because the boot service handles that)
+    
+    export DJANGO_DB_PASSWORD_FILE="${cfg.database.endoregLocalUserPasswordFile}" 
+    export DJANGO_SECRET_KEY_FILE="${cfg.django.djangoSecretKeyFile}"
+    export DATA_DIR="${envDataDir}"
+    export STORAGE_DIR="${envStorageDir}"
+    export CONF_DIR="${envConfDir}"
+    export DJANGO_MODULE="${envDjangoModule}"
+    export DJANGO_SETTINGS_MODULE="lx_annotate.settings.settings_prod"
+    export DJANGO_ENV="${envDjangoEnv}"
+    export CENTRAL_NODE="${envCentralNodeFlag}"
+    export HTTP_PROTOCOL="${envHttpProtocol}"
+    export DJANGO_HOST="${envDjangoHost}"
+    export DJANGO_PORT="${envDjangoPort}"
+    export BASE_URL="${envBaseUrl}"
+    export TIME_ZONE="${cfg.django.timeZone}"
+    export RUN_VIDEO_TESTS="${envRunVideoTests}"
+    export SKIP_EXPENSIVE_TESTS="${envSkipExpensiveTests}"
+
+    # 3. Read Secrets (Must match boot script logic)
+    DJANGO_DB_PASSWORD_VALUE="$(tr -d '\n' < ${envConfDir}/db_pwd 2>/dev/null || true)"
+    export DJANGO_DB_ENGINE="django.db.backends.postgresql"
+    export DJANGO_DB_NAME="${cfg.database.name}"
+    export DJANGO_DB_USER="${cfg.database.user}"
+    export DJANGO_DB_PASSWORD="$DJANGO_DB_PASSWORD_VALUE"
+    export DJANGO_DB_HOST="${cfg.database.host}"
+    export DJANGO_DB_PORT="${toString cfg.database.port}"
+    export DJANGO_DB_SSLMODE="${cfg.database.sslMode}"
+    
+    DJANGO_SECRET_KEY_VALUE="$(tr -d '\n' < ${cfg.django.djangoSecretKeyFile} 2>/dev/null || true)"
+    export DJANGO_SECRET_KEY="$DJANGO_SECRET_KEY_VALUE"
+
+    # 4. Start the Watcher inside the devenv shell
+    echo "📁 Starting File Watcher..."
+    
+    # Check if devenv is available in path (it is set in Service Config)
+    exec devenv shell -- python manage.py start_filewatcher
+  '';
 
 in
 {
@@ -607,10 +653,6 @@ in
             # Ensure the service user owns the directory too
             chown -R ${endoreg-service-user-name}:${endoreg-service-group-name} ${envConfDir}
         ''}";
-        Environment = [
-          "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:${pkgs.direnv}/bin:/run/current-system/sw/bin"
-          "NIX_PATH=nixpkgs=${pkgs.path}"
-        ];
         ExecStart = "${runLocalLxAnnotateScript}/bin/${scriptName}";
         Restart = "on-failure";
         RestartSec = "10s";
@@ -622,18 +664,18 @@ in
     systemd.services.lx-annotate-filewatcher = {
       description = "Django File Watcher Service";
       wantedBy = [ "multi-user.target" ];
-      after = [ "lx-annotate-boot" "postgresql.service" ]; # Adjust based on your DB
-      Environment = [
-          "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:${pkgs.direnv}/bin:/run/current-system/sw/bin"
-          "NIX_PATH=nixpkgs=${pkgs.path}"
-      ];
+      after = [ "postgresql.service" ]; # Adjust based on your DB
+
 
       serviceConfig = {
         User = config.user.endoreg-service-user.name; # Or whatever user runs the app
         WorkingDirectory = repoDir;
-        ExecStart = "secretspec ${config.roles.endoreg-client.paths.storageBaseDir}/venv/bin/python manage.py start_filewatcher";
-        Restart = "always";
+        ExecStart = "${runLocalFileWatcherScript}/bin/${watcherScriptName}";        Restart = "always";
         RestartSec = "10s";
+        Environment = [
+          "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:${pkgs.direnv}/bin:/run/current-system/sw/bin"
+          "NIX_PATH=nixpkgs=${pkgs.path}"
+        ];
       };
     };
   };
