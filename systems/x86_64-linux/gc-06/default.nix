@@ -61,7 +61,7 @@ generic-settings.enable = true;
 
 generic-settings.gpu.autoDetect = true;
 
-generic-settings.gpu.nvidia.driver = "stable";
+generic-settings.gpu.nvidia.driver = "production";
 
 generic-settings.gpu.nvidia.enable = true;
 
@@ -69,7 +69,7 @@ generic-settings.gpu.nvidia.prime.enable = true;
 
 generic-settings.language = "english";
 
-generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
+generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_6;
 
 generic-settings.network.hosts.gc-01.domains = ["gc-01.intern" "lx-annotate.local"];
 generic-settings.network.hosts.gc-01.ip-vpn = "172.16.255.101";

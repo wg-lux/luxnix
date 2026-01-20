@@ -67,8 +67,6 @@ in
 
     hardware.graphics = {
       enable = true;
-      extraPackages = with pkgs; [
-      ];
     };
 
     nixpkgs.config.cudaSupport = true;
@@ -76,20 +74,21 @@ in
     services.xserver.videoDrivers = [ "nvidia" ];
     boot.initrd.kernelModules = [ "nvidia" ];
     hardware.nvidia-container-toolkit.enable = lib.mkDefault true;
-    boot.kernelPackages = pkgs.linuxPackages_6_6;
     hardware.nvidia = {
+
       prime = {
         sync.enable = true;
         nvidiaBusId = cfg.nvidiaBusId;
         "${cfg.onboardGpuType}BusId" = cfg.onboardBusId;
       };
+      modesetting.enable = true;
+      nvidiaSettings = true;
 
       powerManagement.enable = true;
       powerManagement.finegrained = false;
       open = lib.mkForce false;
-      nvidiaSettings = true;
 
-      package = nvidiaDrivers."${cfg.nvidiaDriver}";
+      package = config.boot.kernelPackages.nvidiaPackages.production;
     };
   };
 

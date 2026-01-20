@@ -335,6 +335,22 @@ with lib.luxnix; let
     
     DJANGO_SECRET_KEY_VALUE="$(tr -d '\n' < ${cfg.django.djangoSecretKeyFile} 2>/dev/null || true)"
     export DJANGO_SECRET_KEY="$DJANGO_SECRET_KEY_VALUE"
+    HOME_DIR=${endoreg-service-user-home}
+    DATA_DIR=${envDataDir}
+    STORAGE_DIR=${envStorageDir}
+    CONF_DIR=${envConfDir}
+    CONF_TEMPLATE_DIR=${envConfTemplateDir}
+    WORKING_DIR=${repoDir}
+    DJANGO_STATIC_ROOT=${staticRootPath}
+
+    # --- Network & Host Configuration ---
+    HTTP_PROTOCOL=${envHttpProtocol}
+    DJANGO_HOST=${envDjangoHost}
+    DJANGO_PORT=${envDjangoPort}
+    BASE_URL=${envBaseUrl}
+    DJANGO_ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
+    ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
+    DJANGO_CSRF_TRUSTED_ORIGINS='${builtins.toJSON cfg.django.corsAllowedOrigins}'
 
     # 4. Start the Watcher inside the devenv shell
     echo "📁 Starting File Watcher..."
