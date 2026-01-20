@@ -38,8 +38,8 @@ in {
     # 1. ROBUSTNESS: Ensure directories exist via tmpfiles.
     # We define both source and destination here to keep the path unit reliable.
     systemd.tmpfiles.rules = [
-      "d \"${sourceVideoDir}\" 0770 root ${endoregServiceGroup} -"
-      "d \"${sourcePdfDir}\" 0770 root ${endoregServiceGroup} -"
+      "d \"${sourceVideoDir}\" 0777 root ${endoregServiceGroup} -"
+      "d \"${sourcePdfDir}\" 0777 root ${endoregServiceGroup} -"
       "d \"${destVideoDir}\" 0770 ${endoregServiceUserName} ${endoregServiceGroup} -"
       "d \"${destReportDir}\" 0770 ${endoregServiceUserName} ${endoregServiceGroup} -"
     ];
