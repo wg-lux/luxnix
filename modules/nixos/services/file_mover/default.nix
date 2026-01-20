@@ -3,7 +3,6 @@ with lib;
 with lib.luxnix; let
   cfg = config.services.luxnix.fileMover;
   endoregPaths = config.roles.endoreg-client.paths;
-  annotateCfg = config.services.luxnix.lxAnnotateLocal;
 
   clientUserName =
     if config ? user && config.user ? client && config.user.client ? name
@@ -18,15 +17,14 @@ with lib.luxnix; let
   repoDirName = "lx-annotate";
   repoDir = "${endoregServiceUserHome}/${repoDirName}";
   makeAbsolute = path: if lib.hasPrefix "/" path then path else "${repoDir}/${path}";
-  dataDir = makeAbsolute annotateCfg.django.dataDir;
   
   # Source paths (clean vars for tmpfiles and path unit)
   sourceVideoDir = endoregPaths.videoInputDir;
   sourcePdfDir = endoregPaths.pdfInputDir;
   
   # Destination paths (clean vars for tmpfiles and service)
-  destVideoDir = "${dataDir}/import/video_import";
-  destReportDir = "${dataDir}/import/report_import";
+  destVideoDir = "${repoDir}/import/video_import";
+  destReportDir = "${repoDir}/import/report_import";
 
 in {
   options.services.luxnix.fileMover = {
