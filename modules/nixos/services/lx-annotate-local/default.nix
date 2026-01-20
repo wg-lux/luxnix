@@ -340,7 +340,7 @@ with lib.luxnix; let
     echo "📁 Starting File Watcher..."
     
     # Check if devenv is available in path (it is set in Service Config)
-    exec devenv shell -- python manage.py start_filewatcher
+    exec devenv shell -- bash -c start-filewatcher 
   '';
 
 in
@@ -625,6 +625,10 @@ in
       serviceConfig = {
         Type = "exec";
         User = endoreg-service-user-name;
+        Environment = [
+          "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:${pkgs.direnv}/bin:/run/current-system/sw/bin"
+          "NIX_PATH=nixpkgs=${pkgs.path}"
+        ];
         ExecStartPre = "+${pkgs.writeShellScript "lx-annotate-pre-start" ''
             set -euo pipefail
             
