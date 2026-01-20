@@ -1,5 +1,7 @@
 host_home_cli:
+  cli.programs.git.userName: "Hamzaukw"
   cli.programs.git.email: "hamza.ukw@gmail.com"
+  cli.programs.git.allowedSigners: " SHA256:nN5Ha+k2duMh/XZnKqa3Bs7jkUorUpsKzF+aqhTMMGg "
 
 host_home_roles:
   social.enable: true
