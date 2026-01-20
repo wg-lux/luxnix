@@ -621,7 +621,6 @@ in
       wantedBy = [ "multi-user.target" ];
       wants = [ "nginx.service" "postgres-endoreg-setup.service" ];
       after = [ "postgres-endoreg-setup.service" "endoreg-django-setup.service" "systemd-tmpfiles-setup.service" ];
-      requires = [ "postgres-endoreg-setup.service" "systemd-tmpfiles-setup.service" ];
       serviceConfig = {
         Type = "exec";
         User = endoreg-service-user-name;
@@ -669,12 +668,14 @@ in
       description = "Django File Watcher Service";
       wantedBy = [ "multi-user.target" ];
       after = [ "postgresql.service" ]; # Adjust based on your DB
+      requires = [ "lx-annotate-boot.service" ];
 
 
       serviceConfig = {
         User = config.user.endoreg-service-user.name; # Or whatever user runs the app
         WorkingDirectory = repoDir;
-        ExecStart = "${runLocalFileWatcherScript}/bin/${watcherScriptName}";        Restart = "always";
+        ExecStart = "${runLocalFileWatcherScript}/bin/${watcherScriptName}";        
+        Restart = "on-failure";
         RestartSec = "10s";
         Environment = [
           "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:${pkgs.direnv}/bin:/run/current-system/sw/bin"
