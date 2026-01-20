@@ -9,10 +9,10 @@
     ];
   };
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-25.05";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-25.11";
     devenv.url = "github:cachix/devenv";
     home-manager = {
-      url = "github:nix-community/home-manager/release-25.05";
+      url = "github:nix-community/home-manager/release-25.11";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -94,7 +94,7 @@
     nixvim = {
     # url = "github:nix-community/nixvim";
     # If you are not running an unstable channel of nixpkgs, select the corresponding branch of nixvim.
-    url = "github:nix-community/nixvim/nixos-25.05";
+    url = "github:nix-community/nixvim/nixos-25.11";
     inputs.nixpkgs.follows = "nixpkgs";
   };
 
@@ -150,7 +150,7 @@
         # plasma-manager.homeModules.plasma-manager
         # nixvim.homeModules.nixvim
         plasma-manager.homeModules.plasma-manager
-        nixvim.homeManagerModules.nixvim
+        nixvim.homeModules.nixvim
       ];
 
       systems.modules.nixos = with inputs; [

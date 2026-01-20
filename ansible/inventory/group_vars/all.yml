@@ -94,6 +94,7 @@ group_luxnix:
   generic_settings.network.hosts.gc_01.ip_vpn: '"172.16.255.101"'
   generic_settings.network.hosts.gc_01.domains:
     - '"gc-01.intern"'
+    - '"lx-annotate.local"'
 
   # gc-02
   generic_settings.network.hosts.gc_02.ip_vpn: '"172.16.255.102"'
@@ -105,21 +106,25 @@ group_luxnix:
   generic_settings.network.hosts.gc_03.ip_vpn: '"172.16.255.103"'
   generic_settings.network.hosts.gc_03.domains:
     - '"gc-03.intern"'
+    - '"lx-annotate.local"'
 
   # gc-04
   generic_settings.network.hosts.gc_04.ip_vpn: '"172.16.255.104"'
   generic_settings.network.hosts.gc_04.domains:
     - "gc-04.intern"
+    - "lx-annotate.local"
 
   # gc-05
   generic_settings.network.hosts.gc_05.ip_vpn: '"172.16.255.105"'
   generic_settings.network.hosts.gc_05.domains:
     - "gc-05.intern"
+    - '"lx-annotate.local"'
 
   # gc-07
   generic_settings.network.hosts.gc_07.ip_vpn: '"172.16.255.107"'
   generic_settings.network.hosts.gc_07.domains:
     - "gc-07.intern"
+    - '"lx-annotate.local"'
 
   # gc-08
   generic_settings.network.hosts.gc_08.ip_vpn: '"172.16.255.108"'

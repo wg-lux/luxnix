@@ -20,6 +20,7 @@ with lib.luxnix; let
   endoreg-service-user-name = config.user.endoreg-service-user.name;
   endoreg-service-user = config.users.users.${endoreg-service-user-name};
   endoreg-service-user-home = endoreg-service-user.home;
+  endoreg-service-group-name = config.user.endoreg-service-user.group;
   repoDir = "${endoreg-service-user-home}/${repoDirName}";
 
   # Environment variable configuration
@@ -633,11 +634,9 @@ in
     };
     
     # Ensure directory structure exists with correct permissions
-    systemd.tmpfiles.rules = [
-      # Create the service user home directory
-      "d ${endoreg-service-user-home} 0755 ${endoreg-service-user-name} ${endoreg-service-user-name} - -"
-      # Create the config subdirectory  
-      "d ${endoreg-service-user-home}/config 0755 ${endoreg-service-user-name} ${endoreg-service-user-name} - -"
+    systemd.tmpfiles.rules = lib.optionals (!config.roles.endoreg-client.enable) [
+      # Create the config subdirectory (handled by endoreg-client role when enabled)
+      "d ${endoreg-service-user-home}/config 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
     ];
     
     systemd.services."endo-api-boot" = {

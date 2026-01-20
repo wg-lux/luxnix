@@ -11,18 +11,23 @@ with lib.luxnix; let
     else "client-user";
 
   endoregServiceUserName = config.user.endoreg-service-user.name;
+  # Use the service group for permissions so both admin and service user can access
+  endoregServiceGroup = "endoreg-service"; 
+  
   endoregServiceUserHome = config.users.users.${endoregServiceUserName}.home;
   repoDirName = "lx-annotate";
   repoDir = "${endoregServiceUserHome}/${repoDirName}";
   makeAbsolute = path: if lib.hasPrefix "/" path then path else "${repoDir}/${path}";
   dataDir = makeAbsolute annotateCfg.django.dataDir;
   
-  videoInputDir = endoregPaths.videoInputDir;
-  pdfInputDir = endoregPaths.pdfInputDir;
-  sourceVideo = "${videoInputDir}/";
-  sourceReport = "${pdfInputDir}/";
-  destVideo = "${dataDir}/import/video_import/";
-  destReport = "${dataDir}/import/report_import/";
+  # Source paths (clean vars for tmpfiles and path unit)
+  sourceVideoDir = endoregPaths.videoInputDir;
+  sourcePdfDir = endoregPaths.pdfInputDir;
+  
+  # Destination paths (clean vars for tmpfiles and service)
+  destVideoDir = "${dataDir}/import/video_import";
+  destReportDir = "${dataDir}/import/report_import";
+
 in {
   options.services.luxnix.fileMover = {
     enable = mkBoolOpt false "Enable the move-my-files path-triggered service.";
@@ -30,15 +35,17 @@ in {
 
   config = mkIf cfg.enable {
 
-    # 1. FIXED: Ensure directories exist BEFORE the Path Watcher starts
-    # Syntax: type path mode user group age argument
+    # 1. ROBUSTNESS: Ensure directories exist via tmpfiles.
+    # We define both source and destination here to keep the path unit reliable.
     systemd.tmpfiles.rules = [
-      "d ${sourceVideo} 0755 ${config.user.admin.name} users -"
-      "d ${sourceReport} 0755 ${config.user.admin.name} users -"
-      "d ${destVideo} 0755 ${config.user.admin.name} users -"
-      "d ${destReport} 0755 ${config.user.admin.name} users -"
+      "d \"${sourceVideoDir}\" 0770 root ${endoregServiceGroup} -"
+      "d \"${sourcePdfDir}\" 0770 root ${endoregServiceGroup} -"
+      "d \"${destVideoDir}\" 0770 ${endoregServiceUserName} ${endoregServiceGroup} -"
+      "d \"${destReportDir}\" 0770 ${endoregServiceUserName} ${endoregServiceGroup} -"
     ];
 
+    # Home Manager links are only created if the Client Role is DISABLED.
+    # If the Client Role is enabled, IT handles the desktop links.
     home-manager.users = optionalAttrs (!config.roles.endoreg-client.enable) {
       ${clientUserName} = { config, ... }:
         let
@@ -50,12 +57,12 @@ in {
             createDirectories = true;
           };
 
-          home.file."${config.xdg.userDirs.desktop}/Video Input" = {
-            source = outOfStore videoInputDir;
+          home.file."${config.xdg.userDirs.desktop}/Video_Input" = {
+            source = outOfStore sourceVideoDir;
           };
 
-          home.file."${config.xdg.userDirs.desktop}/PDF Input" = {
-            source = outOfStore pdfInputDir;
+          home.file."${config.xdg.userDirs.desktop}/PDF_Input" = {
+            source = outOfStore sourcePdfDir;
           };
         };
     };
@@ -65,20 +72,30 @@ in {
       description = "Move files from Source to Destination";
       serviceConfig = {
         Type = "oneshot";
+        # We run as the Admin user, but we must ensure Admin is in the 'endoreg-service' group
+        # so they can read the Source (0770 root:endoreg-service) and write to Dest.
         User = config.user.admin.name;
+        Group = endoregServiceGroup; 
       };
 
       script = ''
+        set -euo pipefail
+
+        # Eager creation in case a user manually deleted a folder while the PC was on.
+        ${pkgs.coreutils}/bin/mkdir -p "${sourceVideoDir}" "${destVideoDir}"
+        ${pkgs.coreutils}/bin/mkdir -p "${sourcePdfDir}" "${destReportDir}"
+
         # We add a tiny sleep to ensure the file system settles if a file was JUST touched
         sleep 2
 
         # Run Rsync
-        ${pkgs.rsync}/bin/rsync -av --remove-source-files --chmod=F660,D770 "${sourceVideo}" "${destVideo}" || echo "Warning: rsync video failed with exit code $?"
-        ${pkgs.rsync}/bin/rsync -av --remove-source-files --chmod=F660,D770 "${sourceReport}" "${destReport}" || echo "Warning: rsync report failed with exit code $?"
+        # We use quoted paths to handle spaces in directory names
+        ${pkgs.rsync}/bin/rsync -av --omit-dir-times --remove-source-files --chmod=F660,D770 "${sourceVideoDir}/" "${destVideoDir}/" || echo "Warning: rsync video failed with exit code $?"
+        ${pkgs.rsync}/bin/rsync -av --omit-dir-times --remove-source-files --chmod=F660,D770 "${sourcePdfDir}/" "${destReportDir}/" || echo "Warning: rsync report failed with exit code $?"
 
-        # Cleanup empty dirs
-        ${pkgs.findutils}/bin/find "${sourceVideo}" -mindepth 1 -type d -empty -delete || true
-        ${pkgs.findutils}/bin/find "${sourceReport}" -mindepth 1 -type d -empty -delete || true
+        # Cleanup empty dirs in Source
+        ${pkgs.findutils}/bin/find "${sourceVideoDir}" -mindepth 1 -type d -empty -delete || true
+        ${pkgs.findutils}/bin/find "${sourcePdfDir}" -mindepth 1 -type d -empty -delete || true
       '';
     };
 
@@ -86,10 +103,11 @@ in {
     systemd.paths.move-my-files = {
       description = "Trigger move-my-files when inputs change";
       wantedBy = [ "multi-user.target" ];
+      after = [ "systemd-tmpfiles-setup.service" ];
       pathConfig = {
         PathChanged = [
-          sourceVideo
-          sourceReport
+          sourceVideoDir
+          sourcePdfDir
         ];
         Unit = "move-my-files.service";
       };

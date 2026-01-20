@@ -553,23 +553,22 @@ in
     # Ensure directory structure exists with correct permissions
     users.users.nginx.extraGroups = [ "${endoreg-service-group-name}" ];
 
-    systemd.tmpfiles.rules = [
-      # Allow nginx to traverse the service user's home directory
-      "d ${endoreg-service-user-home} 0751 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+    systemd.tmpfiles.rules =
+      [
+        # Ensure the main repo directory exists (if not cloned yet, this sets the parent permissions)
+        "d ${repoDir} 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
 
-      # Ensure the main repo directory exists (if not cloned yet, this sets the parent permissions)
-      "d ${repoDir} 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+        # Explicitly create the data/storage directories so Python doesn't have to fight for permissions
+        "d ${envDataDir} 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+        "d ${envStorageDir} 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
 
-      # Explicitly create the data/storage directories so Python doesn't have to fight for permissions
-      "d ${envDataDir} 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-      "d ${envStorageDir} 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-
-      # Create the config subdirectory
-      "d ${endoreg-service-user-home}/config 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-
-      # Ensure static dir exists for nginx alias
-      "d ${staticRootPath} 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-    ];
+        # Ensure static dir exists for nginx alias
+        "d ${staticRootPath} 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+      ]
+      ++ lib.optionals (!config.roles.endoreg-client.enable) [
+        # Create the config subdirectory (handled by endoreg-client role when enabled)
+        "d ${endoreg-service-user-home}/config 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+      ];
 
     systemd.services."lx-annotate-boot" = {
       description = "Clone or pull lx-annotate and run prod-server";
@@ -618,6 +617,23 @@ in
         # Resource limits
         MemoryMax = "8G";
         CPUQuota = "800%";
+      };
+    };
+    systemd.services.lx-annotate-filewatcher = {
+      description = "Django File Watcher Service";
+      wantedBy = [ "multi-user.target" ];
+      after = [ "lx-annotate-boot" "postgresql.service" ]; # Adjust based on your DB
+      Environment = [
+          "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:${pkgs.direnv}/bin:/run/current-system/sw/bin"
+          "NIX_PATH=nixpkgs=${pkgs.path}"
+      ];
+
+      serviceConfig = {
+        User = config.user.endoreg-service-user.name; # Or whatever user runs the app
+        WorkingDirectory = repoDir;
+        ExecStart = "secretspec ${config.roles.endoreg-client.paths.storageBaseDir}/venv/bin/python manage.py start_filewatcher";
+        Restart = "always";
+        RestartSec = "10s";
       };
     };
   };
