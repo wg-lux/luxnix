@@ -617,6 +617,8 @@ in
 
     systemd.tmpfiles.rules =
       [
+        "d ${endoreg-service-user-home} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+
         # Ensure the main repo directory exists (if not cloned yet, this sets the parent permissions)
         "d ${repoDir} 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
 
@@ -626,6 +628,14 @@ in
 
         # Ensure static dir exists for nginx alias
         "d ${staticRootPath} 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+        # 1. The Parent Directory (Crucial Step!)
+        "d /var/lib/lx-annotate 0750 root nginx - -"
+        
+        # 2. The SSL Directory
+        "d /var/lib/lx-annotate/ssl 0750 root nginx - -"
+        
+        # 3. The Certificate Files
+        "Z /var/lib/lx-annotate/ssl 0640 root nginx - -"
       ]
       ++ lib.optionals (!config.roles.endoreg-client.enable) [
         # Create the config subdirectory (handled by endoreg-client role when enabled)
