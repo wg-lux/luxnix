@@ -9,13 +9,16 @@ with lib.luxnix; let
     then config.user.client.name
     else "client-user";
 
+  endoreg-service-user-name = config.user.endoreg-service-user.name;
+  endoreg-service-user = config.users.users.${endoreg-service-user-name};  
+
   endoregServiceUserName = config.user.endoreg-service-user.name;
   # Use the service group for permissions so both admin and service user can access
   endoregServiceGroup = "endoreg-service"; 
   
-  endoregServiceUserHome = config.users.users.${endoregServiceUserName}.home;
+  endoreg-service-user-home = endoreg-service-user.home;
   repoDirName = "lx-annotate";
-  repoDir = "${endoregServiceUserHome}/${repoDirName}";
+  repoDir = "${endoreg-service-user-home}/${repoDirName}";
   makeAbsolute = path: if lib.hasPrefix "/" path then path else "${repoDir}/${path}";
   
   # Source paths (clean vars for tmpfiles and path unit)
@@ -23,8 +26,8 @@ with lib.luxnix; let
   sourcePdfDir = endoregPaths.pdfInputDir;
   
   # Destination paths (clean vars for tmpfiles and service)
-  destVideoDir = "${repoDir}/import/video_import";
-  destReportDir = "${repoDir}/import/report_import";
+  destVideoDir = "${repoDir}/lx-annotate/data/import/video_import";
+  destReportDir = "${repoDir}/lx-annotate/data/import/report_import";
 
 in {
   options.services.luxnix.fileMover = {
