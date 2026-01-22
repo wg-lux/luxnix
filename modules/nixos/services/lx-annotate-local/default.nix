@@ -121,7 +121,7 @@ with lib.luxnix; let
         cd ${repoDir}
         direnv allow
 
-        mkdir -p ${envConfDir} ${envDataDir} ${envStorageDir}
+        mkdir -p ${envConfDir} ${envDataDir}
 
 
         # --- ENV SETUP ---
@@ -133,7 +133,6 @@ with lib.luxnix; let
         export OIDC_RP_CLIENT_SECRET_FILE="${cfg.django.keycloakSecretFile}"
     
         export DATA_DIR="${envDataDir}"
-        export STORAGE_DIR="${envStorageDir}"
         export CONF_DIR="${envConfDir}"
         export CONF_TEMPLATE_DIR="${envConfTemplateDir}"
         export WORKING_DIR="${repoDir}"
@@ -276,7 +275,6 @@ with lib.luxnix; let
     cat > ${repoDir}/.env.systemd <<EOF
     HOME_DIR=${endoreg-service-user-home}
     DATA_DIR=${envDataDir}
-    STORAGE_DIR=${envStorageDir}
     CONF_DIR=${envConfDir}
     CONF_TEMPLATE_DIR=${envConfTemplateDir}
     WORKING_DIR=${repoDir}
@@ -308,7 +306,6 @@ with lib.luxnix; let
     export DJANGO_DB_PASSWORD_FILE="${cfg.database.endoregLocalUserPasswordFile}" 
     export DJANGO_SECRET_KEY_FILE="${cfg.django.djangoSecretKeyFile}"
     export DATA_DIR="${envDataDir}"
-    export STORAGE_DIR="${envStorageDir}"
     export CONF_DIR="${envConfDir}"
     export DJANGO_MODULE="${envDjangoModule}"
     export DJANGO_SETTINGS_MODULE="lx_annotate.settings.settings_prod"
@@ -336,7 +333,6 @@ with lib.luxnix; let
     export DJANGO_SECRET_KEY="$DJANGO_SECRET_KEY_VALUE"
     HOME_DIR=${endoreg-service-user-home}
     DATA_DIR=${envDataDir}
-    STORAGE_DIR=${envStorageDir}
     CONF_DIR=${envConfDir}
     CONF_TEMPLATE_DIR=${envConfTemplateDir}
     WORKING_DIR=${repoDir}
@@ -629,7 +625,6 @@ in
 
         # Explicitly create the data/storage directories so Python doesn't have to fight for permissions
         "d ${envDataDir} 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "d ${envStorageDir} 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
 
         # Ensure static dir exists for nginx alias
         "d ${staticRootPath} 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"

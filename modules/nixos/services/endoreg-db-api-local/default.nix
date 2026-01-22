@@ -38,7 +38,6 @@ with lib.luxnix; let
 
   makeAbsolute = path: if lib.hasPrefix "/" path then path else "${repoDir}/${path}";
 
-  envStorageDir = makeAbsolute cfg.api.storageDir;
   envAssetDir = makeAbsolute cfg.api.assetDir;
   envStaticUrl = cfg.api.staticUrl;
   envMediaUrl = cfg.api.mediaUrl;
@@ -255,7 +254,7 @@ with lib.luxnix; let
     fi
     
   # Ensure runtime directories exist (they might be ignored in git)
-  mkdir -p ${envConfDir} ${envDataDir} ${envStorageDir}
+  mkdir -p ${envConfDir} ${envDataDir}
     
     if [ -f "$SECRET_FILE" ] && head -c 1 "$SECRET_FILE" >/dev/null 2>&1; then
       cp "$SECRET_FILE" ${envConfDir}/db_pwd
@@ -267,7 +266,6 @@ with lib.luxnix; let
       
       # Set environment variables needed by the Django config scripts
       export DATA_DIR="${envDataDir}"
-      export STORAGE_DIR="${envStorageDir}"
       export CONF_DIR="${envConfDir}"
       export CONF_TEMPLATE_DIR="${envConfTemplateDir}"
       export WORKING_DIR="${repoDir}"
@@ -555,6 +553,16 @@ in
             type = types.nullOr types.str;
             default = null;
             description = "Value for DJANGO_ENV; inferred from settingsProfile when null.";
+          };
+          dataDir = mkOption {
+            type = types.str;
+            default = "data";
+            description = "Relative path to the data directory inside the repository.";
+          };
+          storageDir = mkOption {
+            type = types.str;
+            default = "data/storage";
+            description = "Relative or absolute path used for STORAGE_DIR.";
           };
           confDir = mkOption { 
             type = types.str; 

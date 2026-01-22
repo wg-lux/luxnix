@@ -9,6 +9,11 @@ with lib.luxnix; let
     then config.user.client.name
     else "client-user";
 
+  adminUserName =
+    if config ? user && config.user ? admin && config.user.admin ? name
+    then config.user.admin.name
+    else "admin-user";
+
   endoregServiceUserName = config.user.endoreg-service-user.name;
   endoregServiceGroup = "endoreg-service"; 
   
@@ -44,8 +49,31 @@ in {
     ];
 
     # 2. Home Manager: Use the resolved variable for Desktop/Schreibtisch
-    home-manager.users = optionalAttrs {
+    home-manager.users = {
       ${clientUserName} = { config, ... }:
+        let
+          outOfStore = config.lib.file.mkOutOfStoreSymlink;
+        in
+        {
+          xdg.userDirs = {
+            enable = true;
+            createDirectories = true;
+            extraConfig = {
+              XDG_DESKTOP_DIR = "${config.home.homeDirectory}/${resolvedDesktopName}";
+            };
+          };
+
+          home.file."${resolvedDesktopName}/Video_Input" = {
+            source = outOfStore sourceVideoDir;
+          };
+
+          home.file."${resolvedDesktopName}/PDF_Input" = {
+            source = outOfStore sourcePdfDir;
+          };
+        };
+    };
+    home-manager.users = {
+      ${adminUserName} = { config, ... }:
         let
           outOfStore = config.lib.file.mkOutOfStoreSymlink;
         in
@@ -80,8 +108,11 @@ in {
       script = ''
         set -euo pipefail
 
+        
+
         # Safety check: Ensure destination exists (repository might have just finished cloning)
         mkdir -p "${destVideoDir}" "${destReportDir}"
+        
 
         # Settle time for large file copies
         sleep 2

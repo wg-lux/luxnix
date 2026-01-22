@@ -23,7 +23,7 @@ in
 
       dataDir = mkOption {
         type = types.string;
-        default = "data"
+        default = "data";
       };
 
       desktopDirName = mkOption {
@@ -57,8 +57,8 @@ in
 
       processingRepo = mkOption {
         type = types.string;
-        default = "lx-annotate"
-      }
+        default = "lx-annotate";
+      };
     };
 
     # Central Nodes Configuration
@@ -723,11 +723,11 @@ in
           roles.desktop.enable = mkDefault true;
 
           # Create symlinks in the resolved Desktop directory pointing to the system storage paths
-          home.file."${desktopName}/Video_Input" = {
+          home.file."${desktopDirName}/Video_Input" = {
               source = outOfStore videoInputDir;
           };
 
-          home.file."${desktopName}/PDF_Input" = {
+          home.file."${desktopDirName}/PDF_Input" = {
             source = outOfStore pdfInputDir;
           };
         };
