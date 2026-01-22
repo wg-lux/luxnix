@@ -563,6 +563,17 @@ in
     services.luxnix.lxSsl.enable = mkDefault true;
     services.nginx = {
       enable = true;
+      
+      # FIX: Force permissions on SSL certs before Nginx starts.
+      # This handles cases where certs were generated with 0600 root:root permissions.
+      preStart = mkAfter ''
+        if [ -d "/var/lib/lx-annotate/ssl" ]; then
+          echo "Fixing Nginx SSL permissions..."
+          chown -R root:nginx /var/lib/lx-annotate/ssl
+          chmod 0750 /var/lib/lx-annotate/ssl
+          chmod 0640 /var/lib/lx-annotate/ssl/* 2>/dev/null || true
+        fi
+      '';
 
       recommendedProxySettings = true;
       recommendedTlsSettings = true;
@@ -628,13 +639,16 @@ in
 
         # Ensure static dir exists for nginx alias
         "d ${staticRootPath} 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        # 1. The Parent Directory (Crucial Step!)
+        
+        # 1. The Parent Directory: Create (d) AND Enforce (z) permissions
         "d /var/lib/lx-annotate 0750 root nginx - -"
+        "z /var/lib/lx-annotate 0750 root nginx - -"
         
-        # 2. The SSL Directory
+        # 2. The SSL Directory: Create (d) AND Enforce (z) permissions
         "d /var/lib/lx-annotate/ssl 0750 root nginx - -"
+        "z /var/lib/lx-annotate/ssl 0750 root nginx - -"
         
-        # 3. The Certificate Files
+        # 3. The Certificate Files: Recursively fix perms
         "Z /var/lib/lx-annotate/ssl 0640 root nginx - -"
       ]
       ++ lib.optionals (!config.roles.endoreg-client.enable) [

@@ -7,7 +7,6 @@ with lib;
 with lib.luxnix; let
   cfg = config.roles.endoreg-client;
 
-
   sensitiveServiceGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
 in
 {
@@ -582,22 +581,16 @@ in
       storageBaseDir = cfg.paths.storageBaseDir;
       videoInputDir = cfg.paths.videoInputDir;
       pdfInputDir = cfg.paths.pdfInputDir;
-      desktopDirName = cfg.paths.desktopDirName;
+      
+      # Removed desktopDirName logic here as we rely on xdg.userDirs in home-manager now
 
       normalUsers =
         lib.filterAttrs (_: user: (user.isNormalUser or false)) config.users.users;
       normalUserNames = lib.attrNames normalUsers;
-      desktopLinkRules = lib.flatten (lib.mapAttrsToList (name: user:
-        let
-          userHome = if user ? home && user.home != null then user.home else "/home/${name}";
-          userGroup = if user ? group && user.group != null then user.group else "users";
-          desktopDir = "${userHome}/${desktopDirName}";
-        in [
-          "d ${desktopDir} 0755 ${name} ${userGroup} -"
-          "L+ ${desktopDir}/Video_Input - - - - ${videoInputDir}"
-          "L+ ${desktopDir}/PDF_Input - - - - ${pdfInputDir}"
-        ]) normalUsers);
-
+      
+      # REMOVED: desktopLinkRules were creating hardcoded symlinks in systemd tmpfiles
+      # We now handle symlinks via home-manager to support localization correctly.
+      
       firstNonNull = values: lib.foldl' (acc: val: if acc != null then acc else val) null values;
       services.nginx.enable = lib.mkForce true;
 
@@ -720,12 +713,13 @@ in
         "d /etc/endoreg-api 0755 root root -"
         # Service user config directory
         "d /var/endoreg-service-user/config 0755 endoreg-service-user endoreg-service -"
-      ] ++ [
+        # Storage directories (must exist for the symlinks to valid targets)
         "d ${storageBaseDir} 0770 root endoreg-service -"
         "d ${videoInputDir} 0770 root endoreg-service -"
         "d ${pdfInputDir} 0770 root endoreg-service -"
-      ] ++ desktopLinkRules;
+      ];
 
+      # Update Home Manager configuration to use XDG User Dirs and OutOfStore symlinks
       home-manager.users.${clientUserName} = { config, ... }:
         let
           outOfStore = config.lib.file.mkOutOfStoreSymlink;
@@ -737,13 +731,19 @@ in
 
           roles.desktop.enable = mkDefault true;
 
-          home.file."${cfg.paths.desktopDirName}/Video_Input" = {
-            source = outOfStore videoInputDir;
-            force = true;
+          # Enable XDG User Directories to correctly handle 'Schreibtisch' vs 'Desktop'
+          xdg.userDirs = {
+            enable = true;
+            createDirectories = true;
           };
-          home.file."${cfg.paths.desktopDirName}/PDF_Input" = {
+
+          # Create symlinks in the resolved Desktop directory pointing to the system storage paths
+          home.file."${config.xdg.userDirs.desktop}/Video_Input" = {
+            source = outOfStore videoInputDir;
+          };
+
+          home.file."${config.xdg.userDirs.desktop}/PDF_Input" = {
             source = outOfStore pdfInputDir;
-            force = true;
           };
         };
 
