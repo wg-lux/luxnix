@@ -45,7 +45,8 @@ in
       };
       script = ''
         mkdir -p ${sslDir}
-        chmod 700 ${sslDir}
+        chown root:nginx ${sslDir}
+        chmod 750 ${sslDir}
 
         if [ ! -f "${sslKeyPath}" ] || [ ! -f "${sslCertPath}" ]; then
           echo "Generating fresh self-signed SSL certificate..."
@@ -54,7 +55,9 @@ in
             -out "${sslCertPath}" \
             -subj "/CN=${annotateCfg.django.hostname}"
 
-          chmod 600 "${sslKeyPath}"
+          chown root:nginx "${sslKeyPath}" "${sslCertPath}"
+          chmod 640 "${sslKeyPath}"
+          chmod 644 "${sslCertPath}"
           echo "SSL generation complete."
         else
           echo "SSL certificate already exists. Skipping generation."
