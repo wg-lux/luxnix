@@ -53,7 +53,6 @@ with lib.luxnix; let
 
   makeAbsolute = path: if lib.hasPrefix "/" path then path else "${repoDir}/${path}";
 
-  envStorageDir = makeAbsolute cfg.django.storageDir;
   envAssetDir = makeAbsolute cfg.django.assetDir;
   envStaticUrl = cfg.django.staticUrl;
   envMediaUrl = cfg.django.mediaUrl;
@@ -465,11 +464,6 @@ in
             default = "data";
             description = "Relative path to data directory within the repository";
           };
-          storageDir = mkOption {
-            type = types.str;
-            default = "storage";
-            description = "Relative or absolute path used for STORAGE_DIR.";
-          };
           confDir = mkOption {
             type = types.str;
             default = "conf";
@@ -562,18 +556,18 @@ in
     services.luxnix.lxAnnotateLocal.django.sslKeyPath = mkDefault defaultSslKeyPath;
     services.luxnix.lxSsl.enable = mkDefault true;
     services.nginx = {
-      enable = true;
+    enable = true;
       
-      # FIX: Force permissions on SSL certs before Nginx starts.
-      # This handles cases where certs were generated with 0600 root:root permissions.
-      preStart = mkAfter ''
+    # This handles cases where certs were generated with 0600 root:root permissions.
+    preStart = lib.mkAfter
+      "+${pkgs.writeShellScript "fix-ssl-perms-root" ''
         if [ -d "/var/lib/lx-annotate/ssl" ]; then
-          echo "Fixing Nginx SSL permissions..."
-          chown -R root:nginx /var/lib/lx-annotate/ssl
-          chmod 0750 /var/lib/lx-annotate/ssl
-          chmod 0640 /var/lib/lx-annotate/ssl/* 2>/dev/null || true
+          echo "Fixing Nginx SSL permissions (running as root)..."
+          ${pkgs.coreutils}/bin/chown -R root:nginx /var/lib/lx-annotate/ssl
+          ${pkgs.coreutils}/bin/chmod 0750 /var/lib/lx-annotate/ssl
+          ${pkgs.coreutils}/bin/chmod 0640 /var/lib/lx-annotate/ssl/* 2>/dev/null || true
         fi
-      '';
+      ''}";
 
       recommendedProxySettings = true;
       recommendedTlsSettings = true;
