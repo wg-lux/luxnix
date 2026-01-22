@@ -555,8 +555,7 @@ in
     enable = true;
       
     # This handles cases where certs were generated with 0600 root:root permissions.
-    preStart = lib.mkAfter
-      "+${pkgs.writeShellScript "fix-ssl-perms-root" ''
+      preStart = lib.mkAfter "${pkgs.writeShellScript "fix-ssl-perms-root" ''
         if [ -d "/var/lib/lx-annotate/ssl" ]; then
           echo "Fixing Nginx SSL permissions (running as root)..."
           ${pkgs.coreutils}/bin/chown -R root:nginx /var/lib/lx-annotate/ssl
