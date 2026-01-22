@@ -9,25 +9,22 @@ with lib.luxnix; let
     then config.user.client.name
     else "client-user";
 
-  endoreg-service-user-name = config.user.endoreg-service-user.name;
-  endoreg-service-user = config.users.users.${endoreg-service-user-name};  
-
   endoregServiceUserName = config.user.endoreg-service-user.name;
-  # Use the service group for permissions so both admin and service user can access
   endoregServiceGroup = "endoreg-service"; 
   
-  endoreg-service-user-home = endoreg-service-user.home;
+  endoreg-service-user-home = config.users.users.${endoregServiceUserName}.home;
   repoDirName = "lx-annotate";
-  repoDir = "${endoreg-service-user-home}/${repoDirName}";
-  makeAbsolute = path: if lib.hasPrefix "/" path then path else "${repoDir}/${path}";
   
-  # Source paths (clean vars for tmpfiles and path unit)
+  # Source paths
   sourceVideoDir = endoregPaths.videoInputDir;
   sourcePdfDir = endoregPaths.pdfInputDir;
   
-  # Destination paths (clean vars for tmpfiles and service)
-  destVideoDir = "${repoDir}/lx-annotate/data/import/video_import";
-  destReportDir = "${repoDir}/lx-annotate/data/import/report_import";
+  # Destination paths (Deep inside the repo)
+  destVideoDir = "${endoreg-service-user-home}/${repoDirName}/data/import/video_import";
+  destReportDir = "${endoreg-service-user-home}/${repoDirName}/data/import/report_import";
+
+  # Resolve the correct desktop name (Schreibtisch vs Desktop)
+  resolvedDesktopName = config.roles.endoreg-client.paths.desktopDirName;
 
 in {
   options.services.luxnix.fileMover = {
@@ -36,18 +33,18 @@ in {
 
   config = mkIf cfg.enable {
 
-    # 1. ROBUSTNESS: Ensure directories exist via tmpfiles.
-    # We define both source and destination here to keep the path unit reliable.
+    # 1. Ensure directories exist (Source & Dest)
     systemd.tmpfiles.rules = [
       "d \"${sourceVideoDir}\" 0777 root ${endoregServiceGroup} -"
       "d \"${sourcePdfDir}\" 0777 root ${endoregServiceGroup} -"
+      # Create destination parents if they don't exist yet (Repo might be cloning)
+      "d \"${endoreg-service-user-home}/${repoDirName}/data/import\" 0770 ${endoregServiceUserName} ${endoregServiceGroup} -"
       "d \"${destVideoDir}\" 0770 ${endoregServiceUserName} ${endoregServiceGroup} -"
       "d \"${destReportDir}\" 0770 ${endoregServiceUserName} ${endoregServiceGroup} -"
     ];
 
-    # Home Manager links are only created if the Client Role is DISABLED.
-    # If the Client Role is enabled, IT handles the desktop links.
-    home-manager.users = optionalAttrs (!config.roles.endoreg-client.enable) {
+    # 2. Home Manager: Use the resolved variable for Desktop/Schreibtisch
+    home-manager.users = optionalAttrs {
       ${clientUserName} = { config, ... }:
         let
           outOfStore = config.lib.file.mkOutOfStoreSymlink;
@@ -56,25 +53,26 @@ in {
           xdg.userDirs = {
             enable = true;
             createDirectories = true;
+            extraConfig = {
+              XDG_DESKTOP_DIR = "${config.home.homeDirectory}/${resolvedDesktopName}";
+            };
           };
 
-          home.file."${config.xdg.userDirs.desktop}/Video_Input" = {
+          home.file."${resolvedDesktopName}/Video_Input" = {
             source = outOfStore sourceVideoDir;
           };
 
-          home.file."${config.xdg.userDirs.desktop}/PDF_Input" = {
+          home.file."${resolvedDesktopName}/PDF_Input" = {
             source = outOfStore sourcePdfDir;
           };
         };
     };
 
-    # 2. The Service (The worker)
+    # 3. The Worker Service
     systemd.services.move-my-files = {
       description = "Move files from Source to Destination";
       serviceConfig = {
         Type = "oneshot";
-        # We run as the Admin user, but we must ensure Admin is in the 'endoreg-service' group
-        # so they can read the Source (0770 root:endoreg-service) and write to Dest.
         User = config.user.admin.name;
         Group = endoregServiceGroup; 
       };
@@ -82,35 +80,52 @@ in {
       script = ''
         set -euo pipefail
 
-        # Eager creation in case a user manually deleted a folder while the PC was on.
-        ${pkgs.coreutils}/bin/mkdir -p "${sourceVideoDir}" "${destVideoDir}"
-        ${pkgs.coreutils}/bin/mkdir -p "${sourcePdfDir}" "${destReportDir}"
+        # Safety check: Ensure destination exists (repository might have just finished cloning)
+        mkdir -p "${destVideoDir}" "${destReportDir}"
 
-        # We add a tiny sleep to ensure the file system settles if a file was JUST touched
+        # Settle time for large file copies
         sleep 2
 
-        # Run Rsync
-        # We use quoted paths to handle spaces in directory names
-        ${pkgs.rsync}/bin/rsync -av --omit-dir-times --remove-source-files --chmod=F660,D770 "${sourceVideoDir}/" "${destVideoDir}/" || echo "Warning: rsync video failed with exit code $?"
-        ${pkgs.rsync}/bin/rsync -av --omit-dir-times --remove-source-files --chmod=F660,D770 "${sourcePdfDir}/" "${destReportDir}/" || echo "Warning: rsync report failed with exit code $?"
+        # Rsync with retry logic is not needed here because Systemd will re-trigger
+        # if files are left behind.
+        
+        # 1. Video Input
+        if [ -n "$(${pkgs.findutils}/bin/find "${sourceVideoDir}" -mindepth 1 -print -quit)" ]; then
+            echo "Processing Video Input..."
+            ${pkgs.rsync}/bin/rsync -av --omit-dir-times --remove-source-files --chmod=F660,D770 "${sourceVideoDir}/" "${destVideoDir}/" || {
+                echo "Warning: rsync video failed. Files remain and will trigger restart."
+                exit 1 
+            }
+        fi
 
-        # Cleanup empty dirs in Source
+        # 2. PDF Input
+        if [ -n "$(${pkgs.findutils}/bin/find "${sourcePdfDir}" -mindepth 1 -print -quit)" ]; then
+            echo "Processing PDF Input..."
+            ${pkgs.rsync}/bin/rsync -av --omit-dir-times --remove-source-files --chmod=F660,D770 "${sourcePdfDir}/" "${destReportDir}/" || {
+                 echo "Warning: rsync report failed. Files remain and will trigger restart."
+                 exit 1
+            }
+        fi
+
+        # Cleanup empty dirs in Source (ignore errors)
         ${pkgs.findutils}/bin/find "${sourceVideoDir}" -mindepth 1 -type d -empty -delete || true
         ${pkgs.findutils}/bin/find "${sourcePdfDir}" -mindepth 1 -type d -empty -delete || true
       '';
     };
 
-    # 3. The Path Unit (The trigger)
+    # 4. The Trigger: DirectoryNotEmpty
+    # This ensures that if rsync failed (files remain), or new files were added
+    # while rsync was running, the service triggers again immediately.
     systemd.paths.move-my-files = {
-      description = "Trigger move-my-files when inputs change";
+      description = "Trigger move-my-files when content exists";
       wantedBy = [ "multi-user.target" ];
-      after = [ "systemd-tmpfiles-setup.service" ];
       pathConfig = {
-        PathChanged = [
+        DirectoryNotEmpty = [
           sourceVideoDir
           sourcePdfDir
         ];
         Unit = "move-my-files.service";
+        MakeDirectory = true;
       };
     };
   };

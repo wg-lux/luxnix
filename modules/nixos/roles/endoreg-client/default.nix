@@ -20,27 +20,45 @@ in
         description = "Base directory for endoreg client storage and input directories.";
       };
 
-      videoInputDir = mkOption {
-        type = types.path;
-        default = "${config.roles.endoreg-client.paths.storageBaseDir}/video_input";
-        description = "Directory watched for incoming video files.";
-      };
 
-      pdfInputDir = mkOption {
-        type = types.path;
-        default = "${config.roles.endoreg-client.paths.storageBaseDir}/pdf_input";
-        description = "Directory watched for incoming PDF files.";
+      dataDir = mkOption {
+        type = types.string;
+        default = "data"
       };
 
       desktopDirName = mkOption {
-        type = types.str;
+        type = types.str; # Changed from types.path
         default =
           if config.luxnix.generic-settings.language == "english"
-          then "Desktop"
+          then "Desktop" # removed "home/admin/"
           else "Schreibtisch";
-        example = "Schreibtisch";
+      };
+      videoInputDir = mkOption {
+        type = types.path;
+        default = "${config.roles.endoreg-client.paths.storageBaseDir}/input_video";
+        description = "Physical directory where videos are dropped.";
+      };
+
+      # FIX 3: Anchor this to storageBaseDir (Absolute Path)
+      pdfInputDir = mkOption {
+        type = types.path;
+        default = "${config.roles.endoreg-client.paths.storageBaseDir}/input_pdf";
+        description = "Physical directory where PDFs are dropped.";
+      };
+
+      desktopPath = mkOption {
+        type = types.path;
+        default =
+          if config.luxnix.generic-settings.language == "english"
+          then "home/admin/Desktop"
+          else "home/admin/Schreibtisch";
         description = "Desktop directory name for the client user (localization support; defaults from luxnix.generic-settings.language).";
       };
+
+      processingRepo = mkOption {
+        type = types.string;
+        default = "lx-annotate"
+      }
     };
 
     # Central Nodes Configuration
@@ -175,17 +193,10 @@ in
         description = "Value for DJANGO_ENV; inferred from settingsProfile when null.";
       };
 
-      #TODO unify data and storage dir
       dataDir = mkOption {
         type = types.str;
         default = "data";
         description = "Relative path to the data directory inside the repository.";
-      };
-
-      storageDir = mkOption {
-        type = types.str;
-        default = "data/storage";
-        description = "Relative or absolute path used for STORAGE_DIR.";
       };
 
       confDir = mkOption {
@@ -255,7 +266,6 @@ in
       };
     };
 
-    # lxAnnotate = {};
 
     # Database Configuration Options
     database = {
@@ -454,18 +464,6 @@ in
               description = "Python module containing the lx-annotate Django project.";
             };
 
-            dataDir = mkOption {
-              type = types.nullOr types.str;
-              default = null;
-              description = "Override for the lx-annotate data directory. Uses the shared API value when null.";
-            };
-
-            storageDir = mkOption {
-              type = types.nullOr types.str;
-              default = null;
-              description = "Override for the lx-annotate storage directory. Uses the shared API value when null.";
-            };
-
             confDir = mkOption {
               type = types.nullOr types.str;
               default = null;
@@ -581,16 +579,13 @@ in
       storageBaseDir = cfg.paths.storageBaseDir;
       videoInputDir = cfg.paths.videoInputDir;
       pdfInputDir = cfg.paths.pdfInputDir;
-      
-      # Removed desktopDirName logic here as we rely on xdg.userDirs in home-manager now
+      desktopDirName = cfg.paths.desktopDirName;
+      processingRepo = cfg.paths.processingRepo;
 
       normalUsers =
         lib.filterAttrs (_: user: (user.isNormalUser or false)) config.users.users;
       normalUserNames = lib.attrNames normalUsers;
-      
-      # REMOVED: desktopLinkRules were creating hardcoded symlinks in systemd tmpfiles
-      # We now handle symlinks via home-manager to support localization correctly.
-      
+            
       firstNonNull = values: lib.foldl' (acc: val: if acc != null then acc else val) null values;
       services.nginx.enable = lib.mkForce true;
 
@@ -637,10 +632,6 @@ in
 
       annotateDjangoOverrides = {
         djangoModule = cfg.lxAnnotate.django.djangoModule;
-        dataDir = if cfg.lxAnnotate.django.dataDir != null then cfg.lxAnnotate.django.dataDir else cfg.api.dataDir;
-        storageDir = if cfg.lxAnnotate.django.storageDir != null then cfg.lxAnnotate.django.storageDir else cfg.api.storageDir;
-        confDir = if cfg.lxAnnotate.django.confDir != null then cfg.lxAnnotate.django.confDir else cfg.api.confDir;
-        confTemplateDir = if cfg.lxAnnotate.django.confTemplateDir != null then cfg.lxAnnotate.django.confTemplateDir else cfg.api.confTemplateDir;
         assetDir = if cfg.lxAnnotate.django.assetDir != null then cfg.lxAnnotate.django.assetDir else cfg.api.assetDir;
         port = mkForce 8117;
         djangoAllowedHosts = lib.unique (cfg.api.djangoAllowedHosts ++ [ "lx-annotate.local" ]);
@@ -723,26 +714,20 @@ in
       home-manager.users.${clientUserName} = { config, ... }:
         let
           outOfStore = config.lib.file.mkOutOfStoreSymlink;
+
         in
         {
           home.username = mkDefault clientUserName;
-          home.homeDirectory = mkDefault clientUserHome;
           home.stateVersion = mkDefault clientHomeStateVersion;
 
           roles.desktop.enable = mkDefault true;
 
-          # Enable XDG User Directories to correctly handle 'Schreibtisch' vs 'Desktop'
-          xdg.userDirs = {
-            enable = true;
-            createDirectories = true;
-          };
-
           # Create symlinks in the resolved Desktop directory pointing to the system storage paths
-          home.file."${config.xdg.userDirs.desktop}/Video_Input" = {
-            source = outOfStore videoInputDir;
+          home.file."${desktopName}/Video_Input" = {
+              source = outOfStore videoInputDir;
           };
 
-          home.file."${config.xdg.userDirs.desktop}/PDF_Input" = {
+          home.file."${desktopName}/PDF_Input" = {
             source = outOfStore pdfInputDir;
           };
         };

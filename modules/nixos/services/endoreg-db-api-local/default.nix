@@ -556,18 +556,6 @@ in
             default = null;
             description = "Value for DJANGO_ENV; inferred from settingsProfile when null.";
           };
-          
-          # Environment variable configuration options
-          dataDir = mkOption { 
-            type = types.str; 
-            default = "data"; 
-            description = "Relative path to data directory within the repository";
-          };
-          storageDir = mkOption {
-            type = types.str;
-            default = "storage";
-            description = "Relative or absolute path used for STORAGE_DIR.";
-          };
           confDir = mkOption { 
             type = types.str; 
             default = "conf"; 
