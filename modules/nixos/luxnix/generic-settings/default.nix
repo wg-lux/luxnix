@@ -21,6 +21,31 @@ in {
   options.luxnix.generic-settings = {
     enable = mkEnableOption "Enable generic settings";
 
+    nix = {
+      enableOptimizations = mkBoolOpt true "Enable Nix build/caching optimizations";
+
+      extraSubstituters = mkOption {
+        type = types.listOf types.str;
+        default = [      
+          "https://nix-community.cachix.org"
+          "https://cuda-maintainers.cachix.org"];
+        description = "Extra binary caches (substituters) to use in addition to cache.nixos.org.";
+      };
+
+      maxJobs = mkOption {
+        type = types.nullOr (types.either types.int types.str);
+        default = "auto";
+        description = "nix.settings.max-jobs (int or \"auto\").";
+      };
+
+      cores = mkOption {
+        type = types.int;
+        default = 0;
+        description = "nix.settings.cores (0 = all cores).";
+      };
+    };
+
+
     systemStateVersion = mkOption {
       type = types.str;
       description = ''
@@ -298,6 +323,13 @@ in {
     environment.systemPackages = with pkgs; [
       cacert
     ];
+
+    nix.settings.ssl-cert-file = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+
+    environment.variables = {
+      SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+      NIX_SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+    };
 
     # GPU Configuration warnings
     warnings = 
