@@ -133,6 +133,8 @@ with lib.luxnix; let
         export OIDC_RP_CLIENT_SECRET_FILE="${cfg.django.keycloakSecretFile}"
     
         export DATA_DIR="${envDataDir}"
+        export STORAGE_DIR="${envDataDir}"
+        export IO_DIR="${envDataDir}"
         export CONF_DIR="${envConfDir}"
         export CONF_TEMPLATE_DIR="${envConfTemplateDir}"
         export WORKING_DIR="${repoDir}"
@@ -156,6 +158,8 @@ with lib.luxnix; let
         export ASSET_DIR="${envAssetDir}"
         export RUN_VIDEO_TESTS="${envRunVideoTests}"
         export SKIP_EXPENSIVE_TESTS="${envSkipExpensiveTests}"
+        export SERVE_WITH_NGINX="true"
+        export NGINX_PROTECTED_MEDIA_URL="/protected_media/"
         export EXEMPT_URLS="^/accounts/login/$"
         export LOGIN_URL="/accounts/login/"
 
@@ -279,6 +283,10 @@ with lib.luxnix; let
     CONF_TEMPLATE_DIR=${envConfTemplateDir}
     WORKING_DIR=${repoDir}
     DJANGO_STATIC_ROOT=${staticRootPath}
+    STORAGE_DIR=${envDataDir}
+    IO_DIR=${envDataDir}
+    SERVE_WITH_NGINX=true
+    NGINX_PROTECTED_MEDIA_URL=/protected_media/
 
     # --- Network & Host Configuration ---
     HTTP_PROTOCOL=${envHttpProtocol}
@@ -328,17 +336,21 @@ with lib.luxnix; let
     export DJANGO_DB_HOST="${cfg.database.host}"
     export DJANGO_DB_PORT="${toString cfg.database.port}"
     export DJANGO_DB_SSLMODE="${cfg.database.sslMode}"
+    export STORAGE_DIR="${envDataDir}"
+    export IO_DIR="${envDataDir}"
     
     DJANGO_SECRET_KEY_VALUE="$(tr -d '\n' < ${cfg.django.djangoSecretKeyFile} 2>/dev/null || true)"
     export DJANGO_SECRET_KEY="$DJANGO_SECRET_KEY_VALUE"
-    HOME_DIR=${endoreg-service-user-home}
-    DATA_DIR=${envDataDir}
-    CONF_DIR=${envConfDir}
-    CONF_TEMPLATE_DIR=${envConfTemplateDir}
-    WORKING_DIR=${repoDir}
-    DJANGO_STATIC_ROOT=${staticRootPath}
+    export HOME_DIR=${endoreg-service-user-home}
+    export DATA_DIR=${envDataDir}
+    export CONF_DIR=${envConfDir}
+    export CONF_TEMPLATE_DIR=${envConfTemplateDir}
+    export WORKING_DIR=${repoDir}
+    export DJANGO_STATIC_ROOT=${staticRootPath}
 
     # --- Network & Host Configuration ---
+    export SERVE_WITH_NGINX="true"
+    export NGINX_PROTECTED_MEDIA_URL="/protected_media/"
     HTTP_PROTOCOL=${envHttpProtocol}
     DJANGO_HOST=${envDjangoHost}
     DJANGO_PORT=${envDjangoPort}
@@ -585,11 +597,36 @@ in
           alias = "${staticRootPath}/";
           extraConfig = "expires 30d; add_header Cache-Control 'public';";
         };
+        location."/protected_media/" {
+          extraConfig = ''
+            internal;
+          '';
+          alias = "${envDataDir}"; # Path to your media files on disk
+        };
 
         locations."/media/" = {
           # Must match MEDIA_URL env var
           alias = "${envDataDir}/";
           extraConfig = "sendfile on; tcp_nopush on;";
+        };
+
+        locations."/protected_media/" = {
+          internal = true;
+          alias = "${envDataDir}/";
+          extraConfig = "sendfile on; tcp_nopush on;";
+        };
+
+        locations."/api/media/videos/" = {
+          proxyPass = "http://127.0.0.1:${toString cfg.django.port}";
+          proxyWebsockets = true;
+          extraConfig = ''
+            proxy_set_header Range $http_range;
+            proxy_set_header If-Range $http_if_range;
+            proxy_buffering off;
+            proxy_request_buffering off;
+            proxy_read_timeout 3600s;
+            proxy_send_timeout 3600s;
+          '';
         };
 
         locations."/" = {
