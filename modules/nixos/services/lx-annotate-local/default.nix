@@ -704,7 +704,7 @@ in
         WorkingDirectory = repoDir;
         ExecStart = "${runLocalFileWatcherScript}/bin/${watcherScriptName}";        
         Restart = "always";
-        RestartSec = "30m";
+        RestartSec = "10m";
         Environment = [
           "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:${pkgs.direnv}/bin:/run/current-system/sw/bin"
           "NIX_PATH=nixpkgs=${pkgs.path}"
