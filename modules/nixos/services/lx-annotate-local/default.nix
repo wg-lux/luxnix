@@ -700,7 +700,7 @@ in
 
 
       serviceConfig = {
-        User = config.user.endoreg-service-user-name; # Or whatever user runs the app
+        User = endoreg-service-user-name; # Or whatever user runs the app
         WorkingDirectory = repoDir;
         ExecStart = "${runLocalFileWatcherScript}/bin/${watcherScriptName}";        
         Restart = "always";
