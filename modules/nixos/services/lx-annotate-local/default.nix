@@ -703,8 +703,8 @@ in
         User = config.user.endoreg-service-user.name; # Or whatever user runs the app
         WorkingDirectory = repoDir;
         ExecStart = "${runLocalFileWatcherScript}/bin/${watcherScriptName}";        
-        Restart = "on-failure";
-        RestartSec = "10s";
+        Restart = "always";
+        RestartSec = "30m";
         Environment = [
           "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:${pkgs.direnv}/bin:/run/current-system/sw/bin"
           "NIX_PATH=nixpkgs=${pkgs.path}"
