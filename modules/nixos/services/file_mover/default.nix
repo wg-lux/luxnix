@@ -123,7 +123,7 @@ in {
         # 1. Video Input
         if [ -n "$(${pkgs.findutils}/bin/find "${sourceVideoDir}" -mindepth 1 -print -quit)" ]; then
             echo "Processing Video Input..."
-            ${pkgs.rsync}/bin/rsync -av --omit-dir-times --remove-source-files --chmod=F660,D770 "${sourceVideoDir}/" "${destVideoDir}/" || {
+            ${pkgs.rsync}/bin/rsync -av --omit-dir-times --remove-source-files --chmod=F660,D770 --chown=${endoregServiceUserName}:${endoregServiceGroup} "${sourceVideoDir}/" "${destVideoDir}/" || {
                 echo "Warning: rsync video failed. Files remain and will trigger restart."
                 exit 1 
             }
@@ -132,7 +132,7 @@ in {
         # 2. PDF Input
         if [ -n "$(${pkgs.findutils}/bin/find "${sourcePdfDir}" -mindepth 1 -print -quit)" ]; then
             echo "Processing PDF Input..."
-            ${pkgs.rsync}/bin/rsync -av --omit-dir-times --remove-source-files --chmod=F660,D770 "${sourcePdfDir}/" "${destReportDir}/" || {
+            ${pkgs.rsync}/bin/rsync -av --omit-dir-times --remove-source-files --chmod=F660,D770 --chown=${endoregServiceUserName}:${endoregServiceGroup} "${sourcePdfDir}/" "${destReportDir}/" || {
                  echo "Warning: rsync report failed. Files remain and will trigger restart."
                  exit 1
             }
