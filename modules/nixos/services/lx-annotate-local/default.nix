@@ -597,12 +597,6 @@ in
           alias = "${staticRootPath}/";
           extraConfig = "expires 30d; add_header Cache-Control 'public';";
         };
-        locations."/protected_media/" = {
-          extraConfig = ''
-            internal;
-          '';
-          alias = "${envDataDir}"; # Path to your media files on disk
-        };
 
         locations."/media/" = {
           # Must match MEDIA_URL env var
@@ -611,9 +605,8 @@ in
         };
 
         locations."/protected_media/" = {
-          internal = true;
           alias = "${envDataDir}/";
-          extraConfig = "sendfile on; tcp_nopush on;";
+          extraConfig = "internal; sendfile on; tcp_nopush on;";
         };
 
         locations."/api/media/videos/" = {
