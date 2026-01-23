@@ -101,7 +101,7 @@ in {
       description = "Move files from Source to Destination";
       serviceConfig = {
         Type = "oneshot";
-        User = config.user.admin.name;
+        User = endoregServiceUserName;
         Group = endoregServiceGroup; 
       };
 
