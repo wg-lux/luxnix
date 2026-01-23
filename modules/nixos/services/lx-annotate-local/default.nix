@@ -597,7 +597,7 @@ in
           alias = "${staticRootPath}/";
           extraConfig = "expires 30d; add_header Cache-Control 'public';";
         };
-        location."/protected_media/" {
+        locations."/protected_media/" = {
           extraConfig = ''
             internal;
           '';
