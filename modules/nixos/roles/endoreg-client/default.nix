@@ -1,10 +1,12 @@
-{ lib
-, config
-, pkgs
-, ...
+{
+  lib,
+  config,
+  pkgs,
+  ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.roles.endoreg-client;
 
   sensitiveServiceGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
@@ -20,7 +22,6 @@ in
         description = "Base directory for endoreg client storage and input directories.";
       };
 
-
       dataDir = mkOption {
         type = types.string;
         default = "data";
@@ -29,9 +30,10 @@ in
       desktopDirName = mkOption {
         type = types.str; # Changed from types.path
         default =
-          if config.luxnix.generic-settings.language == "english"
-          then "Desktop" # removed "home/admin/"
-          else "Schreibtisch";
+          if config.luxnix.generic-settings.language == "english" then
+            "Desktop" # removed "home/admin/"
+          else
+            "Schreibtisch";
       };
       videoInputDir = mkOption {
         type = types.path;
@@ -49,9 +51,10 @@ in
       desktopPath = mkOption {
         type = types.path;
         default =
-          if config.luxnix.generic-settings.language == "english"
-          then "home/admin/Desktop"
-          else "home/admin/Schreibtisch";
+          if config.luxnix.generic-settings.language == "english" then
+            "home/admin/Desktop"
+          else
+            "home/admin/Schreibtisch";
         description = "Desktop directory name for the client user (localization support; defaults from luxnix.generic-settings.language).";
       };
 
@@ -66,7 +69,10 @@ in
       type = types.listOf types.str;
       default = [ ];
       description = "List of hostnames that act as central nodes for the endoreg database API";
-      example = [ "s-04.local" "backup-central.local" ];
+      example = [
+        "s-04.local"
+        "backup-central.local"
+      ];
     };
 
     dbApiLocal = mkOption {
@@ -125,9 +131,16 @@ in
 
       djangoAllowedHosts = mkOption {
         type = types.listOf types.str;
-        default = [ "localhost" "127.0.0.1" ];
+        default = [
+          "localhost"
+          "127.0.0.1"
+        ];
         description = "Django ALLOWED_HOSTS setting";
-        example = [ "lx-annotate.local" "localhost" "127.0.0.1" ];
+        example = [
+          "lx-annotate.local"
+          "localhost"
+          "127.0.0.1"
+        ];
       };
 
       djangoDebug = mkOption {
@@ -144,13 +157,27 @@ in
 
       corsAllowedOrigins = mkOption {
         type = types.listOf types.str;
-        default = [ "lx-annotate.local" "https://lx-annotate.local" "http://localhost:3000" ];
+        default = [
+          "lx-annotate.local"
+          "https://lx-annotate.local"
+          "http://localhost:3000"
+        ];
         description = "CORS allowed origins for the API";
-        example = [ "lx-annotate.local" "https://lx-annotate.local" "http://localhost:3000" ];
+        example = [
+          "lx-annotate.local"
+          "https://lx-annotate.local"
+          "http://localhost:3000"
+        ];
       };
 
       logLevel = mkOption {
-        type = types.enum [ "DEBUG" "INFO" "WARNING" "ERROR" "CRITICAL" ];
+        type = types.enum [
+          "DEBUG"
+          "INFO"
+          "WARNING"
+          "ERROR"
+          "CRITICAL"
+        ];
         default = "INFO";
         description = "Django logging level";
       };
@@ -176,7 +203,12 @@ in
       };
 
       settingsProfile = mkOption {
-        type = types.enum [ "dev" "prod" "central" "test" ];
+        type = types.enum [
+          "dev"
+          "prod"
+          "central"
+          "test"
+        ];
         default = "prod";
         description = "Base settings profile to derive Django settings module.";
       };
@@ -224,7 +256,10 @@ in
       };
 
       httpProtocol = mkOption {
-        type = types.enum [ "http" "https" ];
+        type = types.enum [
+          "http"
+          "https"
+        ];
         default = "https";
         description = "Explicit HTTP protocol to advertise in BASE_URL.";
       };
@@ -266,7 +301,6 @@ in
       };
     };
 
-
     # Database Configuration Options
     database = {
       host = mkOption {
@@ -306,7 +340,14 @@ in
       };
 
       sslMode = mkOption {
-        type = types.enum [ "disable" "allow" "prefer" "require" "verify-ca" "verify-full" ];
+        type = types.enum [
+          "disable"
+          "allow"
+          "prefer"
+          "require"
+          "verify-ca"
+          "verify-full"
+        ];
         default = "prefer";
         description = "PostgreSQL SSL mode";
       };
@@ -564,41 +605,52 @@ in
   config = mkIf cfg.enable (
     let
       clientUserName =
-        if config ? user && config.user ? client && config.user.client ? name
-        then config.user.client.name
-        else "client-user";
+        if config ? user && config.user ? client && config.user.client ? name then
+          config.user.client.name
+        else
+          "client-user";
       clientUserHome =
         let
-          maybeHome = if config ? user && config.user ? client && config.user.client ? home then config.user.client.home else null;
+          maybeHome =
+            if config ? user && config.user ? client && config.user.client ? home then
+              config.user.client.home
+            else
+              null;
         in
         if maybeHome != null then maybeHome else "/home/${clientUserName}";
       clientHomeStateVersion =
-        if config ? user && config.user ? client && config.user.client ? homeStateVersion
-        then config.user.client.homeStateVersion
-        else (config.system.stateVersion or "24.05");
+        if config ? user && config.user ? client && config.user.client ? homeStateVersion then
+          config.user.client.homeStateVersion
+        else
+          (config.system.stateVersion or "24.05");
       storageBaseDir = cfg.paths.storageBaseDir;
       videoInputDir = cfg.paths.videoInputDir;
       pdfInputDir = cfg.paths.pdfInputDir;
       desktopDirName = cfg.paths.desktopDirName;
       processingRepo = cfg.paths.processingRepo;
 
-      normalUsers =
-        lib.filterAttrs (_: user: (user.isNormalUser or false)) config.users.users;
+      normalUsers = lib.filterAttrs (_: user: (user.isNormalUser or false)) config.users.users;
       normalUserNames = lib.attrNames normalUsers;
-            
+
       firstNonNull = values: lib.foldl' (acc: val: if acc != null then acc else val) null values;
       services.nginx.enable = lib.mkForce true;
 
       endoregServiceUserName =
-        if config ? user && config.user ? endoreg-service-user && config.user.endoreg-service-user ? name
-        then config.user.endoreg-service-user.name
-        else "endoreg-service-user";
+        if
+          config ? user && config.user ? endoreg-service-user && config.user.endoreg-service-user ? name
+        then
+          config.user.endoreg-service-user.name
+        else
+          "endoreg-service-user";
       endoregServiceUserHome =
         let
           maybeHome =
-            if config ? user && config.user ? endoreg-service-user && config.user.endoreg-service-user ? home
-            then config.user.endoreg-service-user.home
-            else null;
+            if
+              config ? user && config.user ? endoreg-service-user && config.user.endoreg-service-user ? home
+            then
+              config.user.endoreg-service-user.home
+            else
+              null;
         in
         if maybeHome != null then maybeHome else "/var/${endoregServiceUserName}";
 
@@ -610,14 +662,35 @@ in
       defaultTransformersCache = defaultHfHubCache;
       defaultOllamaModelsDir = "${endoregServiceUserHome}/.ollama/models";
 
-      resolvedHfHome = firstNonNull [ envOverrides.hfHome envDefaultsCfg.hfHome defaultHfHome ];
-      resolvedHfHubCache = firstNonNull [ envOverrides.hfHubCache envDefaultsCfg.hfHubCache defaultHfHubCache ];
-      resolvedTransformersCache = firstNonNull [ envOverrides.transformersCache envDefaultsCfg.transformersCache defaultTransformersCache ];
-      resolvedOllamaModelsDir = firstNonNull [ envOverrides.ollamaModelsDir envDefaultsCfg.ollamaModelsDir defaultOllamaModelsDir ];
-      resolvedOllamaKeepAlive = firstNonNull [ envOverrides.ollamaKeepAlive envDefaultsCfg.ollamaKeepAlive ];
+      resolvedHfHome = firstNonNull [
+        envOverrides.hfHome
+        envDefaultsCfg.hfHome
+        defaultHfHome
+      ];
+      resolvedHfHubCache = firstNonNull [
+        envOverrides.hfHubCache
+        envDefaultsCfg.hfHubCache
+        defaultHfHubCache
+      ];
+      resolvedTransformersCache = firstNonNull [
+        envOverrides.transformersCache
+        envDefaultsCfg.transformersCache
+        defaultTransformersCache
+      ];
+      resolvedOllamaModelsDir = firstNonNull [
+        envOverrides.ollamaModelsDir
+        envDefaultsCfg.ollamaModelsDir
+        defaultOllamaModelsDir
+      ];
+      resolvedOllamaKeepAlive = firstNonNull [
+        envOverrides.ollamaKeepAlive
+        envDefaultsCfg.ollamaKeepAlive
+      ];
       resolvedHfHubEnableTransfer =
-        let specific = envOverrides.hfHubEnableTransfer;
-        in if specific != null then specific else envDefaultsCfg.hfHubEnableTransfer;
+        let
+          specific = envOverrides.hfHubEnableTransfer;
+        in
+        if specific != null then specific else envDefaultsCfg.hfHubEnableTransfer;
 
       annotateEnvironment = {
         hfHome = resolvedHfHome;
@@ -632,7 +705,8 @@ in
 
       annotateDjangoOverrides = {
         djangoModule = cfg.lxAnnotate.django.djangoModule;
-        assetDir = if cfg.lxAnnotate.django.assetDir != null then cfg.lxAnnotate.django.assetDir else cfg.api.assetDir;
+        assetDir =
+          if cfg.lxAnnotate.django.assetDir != null then cfg.lxAnnotate.django.assetDir else cfg.api.assetDir;
         port = mkForce 8117;
         djangoAllowedHosts = lib.unique (cfg.api.djangoAllowedHosts ++ [ "lx-annotate.local" ]);
         keycloakClientId = "endoregdb-api";
@@ -647,11 +721,17 @@ in
           IS_CENTRAL_NODE = false;
         };
 
-      annotateDjango = recursiveUpdate cfg.api (annotateDjangoOverrides // {
-        extraSettings = annotateExtraSettings;
-      });
+      annotateDjango = recursiveUpdate cfg.api (
+        annotateDjangoOverrides
+        // {
+          extraSettings = annotateExtraSettings;
+        }
+      );
     in
     {
+      # Storage settings
+      luxnix.storage.enable = mkDefault true;
+
       user.client.enable = mkDefault true;
       user.endoreg-service-user.enable = true;
       group.endoreg-service.enable = true; # Ensure the group is created
@@ -711,7 +791,8 @@ in
       ];
 
       # Update Home Manager configuration to use XDG User Dirs and OutOfStore symlinks
-      home-manager.users.${clientUserName} = { config, ... }:
+      home-manager.users.${clientUserName} =
+        { config, ... }:
         let
           outOfStore = config.lib.file.mkOutOfStoreSymlink;
 
@@ -724,7 +805,7 @@ in
 
           # Create symlinks in the resolved Desktop directory pointing to the system storage paths
           home.file."${desktopDirName}/Video_Input" = {
-              source = outOfStore videoInputDir;
+            source = outOfStore videoInputDir;
           };
 
           home.file."${desktopDirName}/PDF_Input" = {
@@ -745,18 +826,18 @@ in
           User = "root";
           ExecStart = pkgs.writeShellScript "setup-django-config" ''
             set -euo pipefail
-          
+
             # Verify that Django secret key exists (should be created by managed-secrets)
             if [ ! -f ${cfg.api.djangoSecretKeyFile} ]; then
               echo "ERROR: Django secret key not found at ${cfg.api.djangoSecretKeyFile}"
               echo "This should have been created by managed-secrets-setup.service"
               exit 1
             fi
-          
+
             # Ensure correct permissions (managed-secrets should handle this, but double-check)
             chmod 640 ${cfg.api.djangoSecretKeyFile}
             chown root:${sensitiveServiceGroupName} ${cfg.api.djangoSecretKeyFile}
-          
+
             echo "Django configuration verification completed"
           '';
         };
