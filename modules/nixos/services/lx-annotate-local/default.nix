@@ -822,8 +822,8 @@ in
           "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:${pkgs.direnv}/bin:/run/current-system/sw/bin"
           "NIX_PATH=nixpkgs=${pkgs.path}"
         ];
+        CPUQuota = "70%";
       };
-      CPUQuota = "70%";
     };
   };
 }
