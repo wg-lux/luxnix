@@ -248,6 +248,30 @@ with lib.luxnix; let
     profile = "default"
     EOF
 
+
+    
+        # Write essential environment variables to .env.systemd
+    cat > ${repoDir}/.env.systemd <<EOF
+    HOME_DIR=${endoreg-service-user-home}
+    DATA_DIR=${envDataDir}
+    CONF_DIR=${envConfDir}
+    CONF_TEMPLATE_DIR=${envConfTemplateDir}
+    WORKING_DIR=${repoDir}
+    DJANGO_STATIC_ROOT=${staticRootPath}
+    STORAGE_DIR=${envDataDir}
+    IO_DIR=${envDataDir}
+    SERVE_WITH_NGINX=true
+    NGINX_PROTECTED_MEDIA_URL=/protected_media/
+
+    # --- Network & Host Configuration ---
+    HTTP_PROTOCOL=${envHttpProtocol}
+    DJANGO_HOST=${envDjangoHost}
+    DJANGO_PORT=${envDjangoPort}
+    BASE_URL=${envBaseUrl}
+    DJANGO_ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
+    ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
+    DJANGO_CSRF_TRUSTED_ORIGINS='${builtins.toJSON cfg.django.corsAllowedOrigins}'
+    EOF
         echo "Collecting static files..."
     echo "Collecting static files..."
         export DJANGO_STATIC_ROOT="${staticRootPath}" # This points to .../staticfiles
@@ -274,30 +298,6 @@ with lib.luxnix; let
 
 
         echo "Starting Django server..."
-    
-        # Write essential environment variables to .env.systemd
-    cat > ${repoDir}/.env.systemd <<EOF
-    HOME_DIR=${endoreg-service-user-home}
-    DATA_DIR=${envDataDir}
-    CONF_DIR=${envConfDir}
-    CONF_TEMPLATE_DIR=${envConfTemplateDir}
-    WORKING_DIR=${repoDir}
-    DJANGO_STATIC_ROOT=${staticRootPath}
-    STORAGE_DIR=${envDataDir}
-    IO_DIR=${envDataDir}
-    SERVE_WITH_NGINX=true
-    NGINX_PROTECTED_MEDIA_URL=/protected_media/
-
-    # --- Network & Host Configuration ---
-    HTTP_PROTOCOL=${envHttpProtocol}
-    DJANGO_HOST=${envDjangoHost}
-    DJANGO_PORT=${envDjangoPort}
-    BASE_URL=${envBaseUrl}
-    DJANGO_ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
-    ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
-    DJANGO_CSRF_TRUSTED_ORIGINS='${builtins.toJSON cfg.django.corsAllowedOrigins}'
-    EOF
-
         # build the environment and start the server
         exec devenv shell -- bash -c "vue-build && run-server"
   '';
