@@ -803,7 +803,7 @@ in
         RestartSec = "10s";
         # Resource limits
         MemoryMax = "8G";
-        CPUQuota = "800%";
+        CPUQuota = "70%";
       };
     };
     systemd.services.lx-annotate-filewatcher = {
@@ -823,6 +823,7 @@ in
           "NIX_PATH=nixpkgs=${pkgs.path}"
         ];
       };
+      CPUQuota = "70%";
     };
   };
 }

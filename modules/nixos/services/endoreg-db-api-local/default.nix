@@ -31,9 +31,9 @@ with lib.luxnix; let
   envHttpProtocol = if cfg.api.httpProtocol != "http" then cfg.api.httpProtocol else (if cfg.api.useHttps then "https" else "http");
   envDjangoHost = cfg.api.hostname;
   envDjangoPort = toString cfg.api.port;
-  envBaseUrl = 
-    if cfg.api.baseUrl != null 
-    then cfg.api.baseUrl 
+  envBaseUrl =
+    if cfg.api.baseUrl != null
+    then cfg.api.baseUrl
     else "${envHttpProtocol}://${envDjangoHost}:${envDjangoPort}";
 
   makeAbsolute = path: if lib.hasPrefix "/" path then path else "${repoDir}/${path}";
@@ -130,268 +130,268 @@ with lib.luxnix; let
     ${lib.optionalString (cfg.api.extraSettings.CENTRAL_NODES or [] != []) ''
     CENTRAL_NODES = ${builtins.toJSON cfg.api.extraSettings.CENTRAL_NODES}
     ''}
-    
+
     # Node Type Configuration
     IS_CENTRAL_NODE = ${if (cfg.api.extraSettings.IS_CENTRAL_NODE or false) then "True" else "False"}
-    
+
     # Additional custom settings
-    ${lib.concatStringsSep "\n" 
-      (lib.mapAttrsToList 
-        (name: value: 
+    ${lib.concatStringsSep "\n"
+      (lib.mapAttrsToList
+        (name: value:
           if name != "CENTRAL_NODES" && name != "IS_CENTRAL_NODE" then
             "${name} = ${if builtins.isString value then "'${value}'" else builtins.toJSON value}"
           else ""
-        ) 
+        )
         (cfg.api.extraSettings)
       )
     }
   '';
 
   runLocalEndoApiScript = pkgs.writeShellScriptBin "${scriptName}" ''
-    set -euo pipefail
-    
-    # Debug mode flag - controls verbose logging
-    DEBUG_MODE=${if cfg.debugMode then "true" else "false"}
-    
-    echo "Starting EndoReg API service..."
-    echo "Repository: ${gitURL}"
-    echo "Branch: ${branchName}"
-    echo "Target Directory: ${repoDir}"
-    
-    # Clone or update repository
-    if [ ! -d ${repoDir} ]; then
-      echo "Cloning repository..."
-      git clone ${gitURL} ${repoDir}
-      cd ${repoDir}
-    else
-      cd ${repoDir}
-      ${if cfg.repository.updateOnBoot then ''
-        echo "Updating repository..."
-        git fetch origin || { echo "ERROR: Failed to fetch from origin"; exit 1; }
-      '' else ''
-        echo "Repository update disabled, using existing code"
-      ''}
-    fi
-    
-    # Checkout specified branch with proper remote tracking
-    echo "Checking out branch: ${branchName}"
-    if git show-ref --verify --quiet refs/heads/${branchName}; then
-      # Local branch exists, switch to it
-      echo "Local branch ${branchName} exists, switching to it"
-      git checkout ${branchName} || { echo "ERROR: Failed to checkout local branch ${branchName}"; exit 1; }
-    elif git show-ref --verify --quiet refs/remotes/origin/${branchName}; then
-      # Remote branch exists, create local tracking branch
-      echo "Remote branch origin/${branchName} exists, creating local tracking branch"
-      git checkout -b ${branchName} origin/${branchName} || { echo "ERROR: Failed to create tracking branch for ${branchName}"; exit 1; }
-    else
-      echo "ERROR: Branch ${branchName} does not exist locally or on remote"
-      echo "Available remote branches:"
-      git branch -r || echo "Could not list remote branches"
-      exit 1
-    fi
-    
-    ${if cfg.repository.updateOnBoot then ''
-    # Update the current branch
-    echo "Updating branch ${branchName}..."
-    git pull origin ${branchName} || { 
-      echo "WARNING: Failed to pull latest changes for ${branchName}, trying to reset to remote"
-      git reset --hard origin/${branchName} || { 
-        echo "ERROR: Failed to update branch ${branchName}"
-        exit 1
-      }
-    }
-    '' else ""}
+        set -euo pipefail
 
-    echo "Initializing submodules..."
-    git submodule init || { echo "ERROR: Failed to initialize submodules"; exit 1; }
-    if ${if cfg.repository.updateOnBoot then "true" else "false"}; then
-      echo "Updating submodules from remote..."
-      git submodule update --init --remote --recursive || { echo "ERROR: Failed to update submodules from remote"; exit 1; }
-    else
-      echo "Updating submodules (no remote fetch)..."
-      git submodule update --init --recursive || { echo "ERROR: Failed to update submodules"; exit 1; }
-    fi
+        # Debug mode flag - controls verbose logging
+        DEBUG_MODE=${if cfg.debugMode then "true" else "false"}
 
-    # Copy database password from vault (managed by postgres-default role)
-    echo "Setting up database configuration..."
-    
-    if [ "$DEBUG_MODE" = "true" ]; then
-      echo "Current user: $(whoami)"
-      echo "User groups: $(groups)"
-      echo "Checking for database password file: ${cfg.database.passwordFile}"
-    fi
-    
-    # Debug secret file access
-    SECRET_FILE="${cfg.database.passwordFile}"
-    if [ -f "$SECRET_FILE" ]; then
-      if [ "$DEBUG_MODE" = "true" ]; then
-        echo "Secret file exists: $SECRET_FILE"
-        ls -la "$SECRET_FILE" || echo "Cannot stat secret file"
-        echo "Testing read access..."
-      fi
-      if head -c 10 "$SECRET_FILE" >/dev/null 2>&1; then
-        if [ "$DEBUG_MODE" = "true" ]; then
-          echo "✓ Can read secret file"
+        echo "Starting EndoReg API service..."
+        echo "Repository: ${gitURL}"
+        echo "Branch: ${branchName}"
+        echo "Target Directory: ${repoDir}"
+
+        # Clone or update repository
+        if [ ! -d ${repoDir} ]; then
+          echo "Cloning repository..."
+          git clone ${gitURL} ${repoDir}
+          cd ${repoDir}
+        else
+          cd ${repoDir}
+          ${if cfg.repository.updateOnBoot then ''
+            echo "Updating repository..."
+            git fetch origin || { echo "ERROR: Failed to fetch from origin"; exit 1; }
+          '' else ''
+            echo "Repository update disabled, using existing code"
+          ''}
         fi
-      else
-        echo "✗ Cannot read secret file"
-        if [ "$DEBUG_MODE" = "true" ]; then
-          echo "File permissions:"
-          ls -la "$SECRET_FILE" 2>/dev/null || echo "Cannot access file"
-          echo "Directory permissions:"
-          ls -la "$(dirname "$SECRET_FILE")" 2>/dev/null || echo "Cannot access directory" 
-          echo "Parent directory permissions:"
-          ls -la "/etc/secrets" 2>/dev/null || echo "Cannot access /etc/secrets"
-        fi
-      fi
-    else
-      echo "Secret file does not exist: $SECRET_FILE"
-      if [ "$DEBUG_MODE" = "true" ]; then
-        echo "Directory contents:"
-        ls -la "$(dirname "$SECRET_FILE")" 2>/dev/null || echo "Cannot access $(dirname "$SECRET_FILE")"
-        ls -la "/etc/secrets" 2>/dev/null || echo "Cannot access /etc/secrets"
-      fi
-    fi
-    
-  # Ensure runtime directories exist (they might be ignored in git)
-  mkdir -p ${envConfDir} ${envDataDir}
-    
-    if [ -f "$SECRET_FILE" ] && head -c 1 "$SECRET_FILE" >/dev/null 2>&1; then
-      cp "$SECRET_FILE" ${envConfDir}/db_pwd
-      echo "Database password copied from vault to ${envConfDir}/db_pwd"
-      
-      # Run Django application's configuration setup
-      echo "Running Django application configuration setup..."
-      cd ${repoDir}
-      
-      # Set environment variables needed by the Django config scripts
-      export DATA_DIR="${envDataDir}"
-      export CONF_DIR="${envConfDir}"
-      export CONF_TEMPLATE_DIR="${envConfTemplateDir}"
-      export WORKING_DIR="${repoDir}"
-      export HOME_DIR="${endoreg-service-user-home}"
-      export DB_PWD_FILE="${envConfDir}/db_pwd"
-      export DJANGO_MODULE="${envDjangoModule}"
-      export DJANGO_SETTINGS_MODULE="${envDjangoSettingsModule}"
-      export DJANGO_SETTINGS_MODULE_PRODUCTION="config.settings.prod"
-      export DJANGO_SETTINGS_MODULE_DEVELOPMENT="config.settings.dev"
-      export DJANGO_SETTINGS_MODULE_CENTRAL="config.settings.central"
-      export DJANGO_ENV="${envDjangoEnv}"
-      export CENTRAL_NODE="${envCentralNodeFlag}"
-      export HTTP_PROTOCOL="${envHttpProtocol}"
-      export DJANGO_HOST="${envDjangoHost}"
-      export DJANGO_PORT="${envDjangoPort}"
-      export BASE_URL="${envBaseUrl}"
-      export TIME_ZONE="${cfg.api.timeZone}"
-      export STATIC_URL="${envStaticUrl}"
-      export MEDIA_URL="${envMediaUrl}"
-      export ASSET_DIR="${envAssetDir}"
-      export RUN_VIDEO_TESTS="${envRunVideoTests}"
-      export SKIP_EXPENSIVE_TESTS="${envSkipExpensiveTests}"
 
-      DB_PASSWORD_VALUE="$(tr -d '\n' < ${envConfDir}/db_pwd 2>/dev/null || true)"
-      export DB_ENGINE="django.db.backends.postgresql"
-      export DB_NAME="${cfg.database.name}"
-      export DB_USER="${cfg.database.user}"
-      export DB_PASSWORD="$DB_PASSWORD_VALUE"
-      export DB_HOST="${cfg.database.host}"
-      export DB_PORT="${toString cfg.database.port}"
-      export DB_SSLMODE="${cfg.database.sslMode}"
-      
-      # Ensure devenv is available and run the configuration script
-      if command -v devenv >/dev/null 2>&1; then
-        echo "Running Django configuration setup via devenv..."
-        devenv shell env-init-conf || { 
-          echo "WARNING: devenv env-init-conf failed, trying direct script execution"
-          # Fallback to direct execution if devenv fails
-          if [ -f "scripts/make_conf.py" ]; then
-            python scripts/make_conf.py || echo "WARNING: make_conf.py execution failed"
-          fi
+        # Checkout specified branch with proper remote tracking
+        echo "Checking out branch: ${branchName}"
+        if git show-ref --verify --quiet refs/heads/${branchName}; then
+          # Local branch exists, switch to it
+          echo "Local branch ${branchName} exists, switching to it"
+          git checkout ${branchName} || { echo "ERROR: Failed to checkout local branch ${branchName}"; exit 1; }
+        elif git show-ref --verify --quiet refs/remotes/origin/${branchName}; then
+          # Remote branch exists, create local tracking branch
+          echo "Remote branch origin/${branchName} exists, creating local tracking branch"
+          git checkout -b ${branchName} origin/${branchName} || { echo "ERROR: Failed to create tracking branch for ${branchName}"; exit 1; }
+        else
+          echo "ERROR: Branch ${branchName} does not exist locally or on remote"
+          echo "Available remote branches:"
+          git branch -r || echo "Could not list remote branches"
+          exit 1
+        fi
+
+        ${if cfg.repository.updateOnBoot then ''
+        # Update the current branch
+        echo "Updating branch ${branchName}..."
+        git pull origin ${branchName} || {
+          echo "WARNING: Failed to pull latest changes for ${branchName}, trying to reset to remote"
+          git reset --hard origin/${branchName} || {
+            echo "ERROR: Failed to update branch ${branchName}"
+            exit 1
+          }
         }
+        '' else ""}
 
-        echo "Building .env from template..."
-        if ! devenv shell env-build; then
-          echo "WARNING: devenv env-build failed, attempting direct execution"
-          if ! devenv shell -- uv run env_setup.py; then
+        echo "Initializing submodules..."
+        git submodule init || { echo "ERROR: Failed to initialize submodules"; exit 1; }
+        if ${if cfg.repository.updateOnBoot then "true" else "false"}; then
+          echo "Updating submodules from remote..."
+          git submodule update --init --remote --recursive || { echo "ERROR: Failed to update submodules from remote"; exit 1; }
+        else
+          echo "Updating submodules (no remote fetch)..."
+          git submodule update --init --recursive || { echo "ERROR: Failed to update submodules"; exit 1; }
+        fi
+
+        # Copy database password from vault (managed by postgres-default role)
+        echo "Setting up database configuration..."
+
+        if [ "$DEBUG_MODE" = "true" ]; then
+          echo "Current user: $(whoami)"
+          echo "User groups: $(groups)"
+          echo "Checking for database password file: ${cfg.database.passwordFile}"
+        fi
+
+        # Debug secret file access
+        SECRET_FILE="${cfg.database.passwordFile}"
+        if [ -f "$SECRET_FILE" ]; then
+          if [ "$DEBUG_MODE" = "true" ]; then
+            echo "Secret file exists: $SECRET_FILE"
+            ls -la "$SECRET_FILE" || echo "Cannot stat secret file"
+            echo "Testing read access..."
+          fi
+          if head -c 10 "$SECRET_FILE" >/dev/null 2>&1; then
+            if [ "$DEBUG_MODE" = "true" ]; then
+              echo "✓ Can read secret file"
+            fi
+          else
+            echo "✗ Cannot read secret file"
+            if [ "$DEBUG_MODE" = "true" ]; then
+              echo "File permissions:"
+              ls -la "$SECRET_FILE" 2>/dev/null || echo "Cannot access file"
+              echo "Directory permissions:"
+              ls -la "$(dirname "$SECRET_FILE")" 2>/dev/null || echo "Cannot access directory"
+              echo "Parent directory permissions:"
+              ls -la "/etc/secrets" 2>/dev/null || echo "Cannot access /etc/secrets"
+            fi
+          fi
+        else
+          echo "Secret file does not exist: $SECRET_FILE"
+          if [ "$DEBUG_MODE" = "true" ]; then
+            echo "Directory contents:"
+            ls -la "$(dirname "$SECRET_FILE")" 2>/dev/null || echo "Cannot access $(dirname "$SECRET_FILE")"
+            ls -la "/etc/secrets" 2>/dev/null || echo "Cannot access /etc/secrets"
+          fi
+        fi
+
+      # Ensure runtime directories exist (they might be ignored in git)
+      mkdir -p ${envConfDir} ${envDataDir}
+
+        if [ -f "$SECRET_FILE" ] && head -c 1 "$SECRET_FILE" >/dev/null 2>&1; then
+          cp "$SECRET_FILE" ${envConfDir}/db_pwd
+          echo "Database password copied from vault to ${envConfDir}/db_pwd"
+
+          # Run Django application's configuration setup
+          echo "Running Django application configuration setup..."
+          cd ${repoDir}
+
+          # Set environment variables needed by the Django config scripts
+          export DATA_DIR="${envDataDir}"
+          export CONF_DIR="${envConfDir}"
+          export CONF_TEMPLATE_DIR="${envConfTemplateDir}"
+          export WORKING_DIR="${repoDir}"
+          export HOME_DIR="${endoreg-service-user-home}"
+          export DB_PWD_FILE="${envConfDir}/db_pwd"
+          export DJANGO_MODULE="${envDjangoModule}"
+          export DJANGO_SETTINGS_MODULE="${envDjangoSettingsModule}"
+          export DJANGO_SETTINGS_MODULE_PRODUCTION="config.settings.prod"
+          export DJANGO_SETTINGS_MODULE_DEVELOPMENT="config.settings.dev"
+          export DJANGO_SETTINGS_MODULE_CENTRAL="config.settings.central"
+          export DJANGO_ENV="${envDjangoEnv}"
+          export CENTRAL_NODE="${envCentralNodeFlag}"
+          export HTTP_PROTOCOL="${envHttpProtocol}"
+          export DJANGO_HOST="${envDjangoHost}"
+          export DJANGO_PORT="${envDjangoPort}"
+          export BASE_URL="${envBaseUrl}"
+          export TIME_ZONE="${cfg.api.timeZone}"
+          export STATIC_URL="${envStaticUrl}"
+          export MEDIA_URL="${envMediaUrl}"
+          export ASSET_DIR="${envAssetDir}"
+          export RUN_VIDEO_TESTS="${envRunVideoTests}"
+          export SKIP_EXPENSIVE_TESTS="${envSkipExpensiveTests}"
+
+          DB_PASSWORD_VALUE="$(tr -d '\n' < ${envConfDir}/db_pwd 2>/dev/null || true)"
+          export DB_ENGINE="django.db.backends.postgresql"
+          export DB_NAME="${cfg.database.name}"
+          export DB_USER="${cfg.database.user}"
+          export DB_PASSWORD="$DB_PASSWORD_VALUE"
+          export DB_HOST="${cfg.database.host}"
+          export DB_PORT="${toString cfg.database.port}"
+          export DB_SSLMODE="${cfg.database.sslMode}"
+
+          # Ensure devenv is available and run the configuration script
+          if command -v devenv >/dev/null 2>&1; then
+            echo "Running Django configuration setup via devenv..."
+            devenv shell env-init-conf || {
+              echo "WARNING: devenv env-init-conf failed, trying direct script execution"
+              # Fallback to direct execution if devenv fails
+              if [ -f "scripts/make_conf.py" ]; then
+                python scripts/make_conf.py || echo "WARNING: make_conf.py execution failed"
+              fi
+            }
+
+            echo "Building .env from template..."
+            if ! devenv shell env-build; then
+              echo "WARNING: devenv env-build failed, attempting direct execution"
+              if ! devenv shell -- uv run env_setup.py; then
+                if [ -f "env_setup.py" ]; then
+                  python env_setup.py || echo "WARNING: env_setup.py execution failed"
+                fi
+              fi
+            fi
+          else
+            echo "devenv not available, trying direct script execution..."
+            if [ -f "scripts/make_conf.py" ]; then
+              python scripts/make_conf.py || echo "WARNING: make_conf.py execution failed"
+            else
+              echo "WARNING: scripts/make_conf.py not found"
+            fi
+
             if [ -f "env_setup.py" ]; then
+              echo "Building .env from template via python env_setup.py"
               python env_setup.py || echo "WARNING: env_setup.py execution failed"
             fi
           fi
-        fi
-      else
-        echo "devenv not available, trying direct script execution..."
-        if [ -f "scripts/make_conf.py" ]; then
-          python scripts/make_conf.py || echo "WARNING: make_conf.py execution failed"
-        else
-          echo "WARNING: scripts/make_conf.py not found"
-        fi
 
-        if [ -f "env_setup.py" ]; then
-          echo "Building .env from template via python env_setup.py"
-          python env_setup.py || echo "WARNING: env_setup.py execution failed"
-        fi
-      fi
-      
-      # Verify that the required db.yaml file was created
-      if [ -f "${envConfDir}/db.yaml" ]; then
-        echo "✓ Django configuration file created: ${envConfDir}/db.yaml"
-      else
-        echo "WARNING: Django configuration file ${envConfDir}/db.yaml was not created"
-        echo "Contents of conf directory:"
-        ls -la "${envConfDir}/" 2>/dev/null || echo "Cannot access conf directory"
-      fi
+          # Verify that the required db.yaml file was created
+          if [ -f "${envConfDir}/db.yaml" ]; then
+            echo "✓ Django configuration file created: ${envConfDir}/db.yaml"
+          else
+            echo "WARNING: Django configuration file ${envConfDir}/db.yaml was not created"
+            echo "Contents of conf directory:"
+            ls -la "${envConfDir}/" 2>/dev/null || echo "Cannot access conf directory"
+          fi
 
-      # Force production mode indicators for the devenv shell helpers
-      echo "Setting deployment mode markers..."
-      echo "${envDjangoEnv}" > .mode
-      chmod 600 .mode 2>/dev/null || true
+          # Force production mode indicators for the devenv shell helpers
+          echo "Setting deployment mode markers..."
+          echo "${envDjangoEnv}" > .mode
+          chmod 600 .mode 2>/dev/null || true
 
-      if [ -f .env ]; then
-        echo "Aligning .env with production settings module"
-        export DESIRED_SETTINGS_MODULE="${envDjangoSettingsModule}"
-        export DESIRED_ENVIRONMENT="${envDjangoEnv}"
-        python - <<'PY'
-import os
-from pathlib import Path
+          if [ -f .env ]; then
+            echo "Aligning .env with production settings module"
+            export DESIRED_SETTINGS_MODULE="${envDjangoSettingsModule}"
+            export DESIRED_ENVIRONMENT="${envDjangoEnv}"
+            python - <<'PY'
+    import os
+    from pathlib import Path
 
-env_path = Path('.env')
-desired_module = os.environ['DESIRED_SETTINGS_MODULE']
-desired_env = os.environ['DESIRED_ENVIRONMENT']
+    env_path = Path('.env')
+    desired_module = os.environ['DESIRED_SETTINGS_MODULE']
+    desired_env = os.environ['DESIRED_ENVIRONMENT']
 
-if not env_path.exists():
-    raise SystemExit(0)
+    if not env_path.exists():
+        raise SystemExit(0)
 
-lines = env_path.read_text(encoding='utf-8').splitlines()
-updated = []
-have_module = False
-have_env = False
+    lines = env_path.read_text(encoding='utf-8').splitlines()
+    updated = []
+    have_module = False
+    have_env = False
 
-for line in lines:
-    if line.startswith('DJANGO_SETTINGS_MODULE='):
+    for line in lines:
+        if line.startswith('DJANGO_SETTINGS_MODULE='):
+            updated.append(f'DJANGO_SETTINGS_MODULE={desired_module}')
+            have_module = True
+        elif line.startswith('DJANGO_ENV='):
+            updated.append(f'DJANGO_ENV={desired_env}')
+            have_env = True
+        else:
+            updated.append(line)
+
+    if not have_module:
         updated.append(f'DJANGO_SETTINGS_MODULE={desired_module}')
-        have_module = True
-    elif line.startswith('DJANGO_ENV='):
+
+    if not have_env:
         updated.append(f'DJANGO_ENV={desired_env}')
-        have_env = True
-    else:
-        updated.append(line)
 
-if not have_module:
-    updated.append(f'DJANGO_SETTINGS_MODULE={desired_module}')
+    env_path.write_text('\n'.join(updated) + '\n', encoding='utf-8')
+    PY
+          else
+            echo "WARNING: .env not found after setup; production overrides skipped"
+          fi
 
-if not have_env:
-    updated.append(f'DJANGO_ENV={desired_env}')
-
-env_path.write_text('\n'.join(updated) + '\n', encoding='utf-8')
-PY
-      else
-        echo "WARNING: .env not found after setup; production overrides skipped"
-      fi
-      
-    else
-      echo "ERROR: Database password not found in vault or not accessible. PostgreSQL setup may not be complete."
-      exit 1
-    fi
+        else
+          echo "ERROR: Database password not found in vault or not accessible. PostgreSQL setup may not be complete."
+          exit 1
+        fi
 
     # --- Populate .env BEFORE creating local_settings.py (deterministic) ---
     echo "Populating .env using env-pipe..."
@@ -453,67 +453,67 @@ PY
     echo "Service user home: ${endoreg-service-user-home}"
     echo "Current user: $(whoami)"
     echo "Current directory: $(pwd)"
-    
-    # Check if home directory exists and is accessible
-    if [ ! -d "${endoreg-service-user-home}" ]; then
-      echo "ERROR: Home directory ${endoreg-service-user-home} does not exist"
-      exit 1
-    fi
-    
-    # Ensure config directory exists with correct permissions
-    CONFIG_DIR="${endoreg-service-user-home}/config"
-    echo "Checking config directory: $CONFIG_DIR"
-    
-    if [ ! -d "$CONFIG_DIR" ]; then
-      echo "Creating config directory: $CONFIG_DIR"
-      mkdir -p "$CONFIG_DIR" || { echo "ERROR: Failed to create config directory $CONFIG_DIR"; ls -la "${endoreg-service-user-home}"; exit 1; }
-    else
-      echo "Config directory already exists"
-    fi
-    
-    # Check permissions
-    ls -la "${endoreg-service-user-home}/" || echo "Cannot list home directory contents"
-    
-    # Create a local copy outside the git repository to avoid conflicts
-    echo "Copying Django configuration file..."
-    # Remove existing file if it exists (it might be read-only)
-    if [ -f "$CONFIG_DIR/local_settings.py" ]; then
-      echo "Removing existing local_settings.py file"
-      rm -f "$CONFIG_DIR/local_settings.py" || { 
-        echo "Existing file is read-only, making it writable first"
-        chmod +w "$CONFIG_DIR/local_settings.py" 2>/dev/null || true
-        rm -f "$CONFIG_DIR/local_settings.py"
-      }
-    fi
-    cp ${djangoConfigFile} "$CONFIG_DIR/local_settings.py" || { 
-      echo "ERROR: Failed to copy Django configuration to $CONFIG_DIR/local_settings.py"
-      echo "Directory permissions:"
-      ls -la "$CONFIG_DIR" 2>/dev/null || echo "Cannot access $CONFIG_DIR"
-      ls -la "${endoreg-service-user-home}" 2>/dev/null || echo "Cannot access ${endoreg-service-user-home}"
-      exit 1
-    }
-    echo "Django configuration copied to $CONFIG_DIR/local_settings.py"
-    
-    # Create symlink in the repository (remove existing symlink first if it exists)
-    if [ -L ${repoDir}/local_settings.py ]; then
-      rm ${repoDir}/local_settings.py
-    fi
-    ln -sf "$CONFIG_DIR/local_settings.py" ${repoDir}/local_settings.py || { echo "ERROR: Failed to create symlink"; exit 1; }
-    echo "Created symlink: ${repoDir}/local_settings.py -> $CONFIG_DIR/local_settings.py"
 
-    ${lib.optionalString (cfg.service.extraEnvironment != {}) ''
-    # Set additional environment variables
-    ${lib.concatStringsSep "\n" (lib.mapAttrsToList (name: value: "export ${name}='${value}'") cfg.service.extraEnvironment)}
-    ''}
+        # Check if home directory exists and is accessible
+        if [ ! -d "${endoreg-service-user-home}" ]; then
+          echo "ERROR: Home directory ${endoreg-service-user-home} does not exist"
+          exit 1
+        fi
 
-    echo "Starting Django server..."
-    echo "Hostname: ${envDjangoHost}"
-    echo "Port: ${envDjangoPort}"
-    echo "Protocol: ${envHttpProtocol}"
-    
+        # Ensure config directory exists with correct permissions
+        CONFIG_DIR="${endoreg-service-user-home}/config"
+        echo "Checking config directory: $CONFIG_DIR"
 
-    # Start the Django application
-    exec devenv shell -- run-server
+        if [ ! -d "$CONFIG_DIR" ]; then
+          echo "Creating config directory: $CONFIG_DIR"
+          mkdir -p "$CONFIG_DIR" || { echo "ERROR: Failed to create config directory $CONFIG_DIR"; ls -la "${endoreg-service-user-home}"; exit 1; }
+        else
+          echo "Config directory already exists"
+        fi
+
+        # Check permissions
+        ls -la "${endoreg-service-user-home}/" || echo "Cannot list home directory contents"
+
+        # Create a local copy outside the git repository to avoid conflicts
+        echo "Copying Django configuration file..."
+        # Remove existing file if it exists (it might be read-only)
+        if [ -f "$CONFIG_DIR/local_settings.py" ]; then
+          echo "Removing existing local_settings.py file"
+          rm -f "$CONFIG_DIR/local_settings.py" || {
+            echo "Existing file is read-only, making it writable first"
+            chmod +w "$CONFIG_DIR/local_settings.py" 2>/dev/null || true
+            rm -f "$CONFIG_DIR/local_settings.py"
+          }
+        fi
+        cp ${djangoConfigFile} "$CONFIG_DIR/local_settings.py" || {
+          echo "ERROR: Failed to copy Django configuration to $CONFIG_DIR/local_settings.py"
+          echo "Directory permissions:"
+          ls -la "$CONFIG_DIR" 2>/dev/null || echo "Cannot access $CONFIG_DIR"
+          ls -la "${endoreg-service-user-home}" 2>/dev/null || echo "Cannot access ${endoreg-service-user-home}"
+          exit 1
+        }
+        echo "Django configuration copied to $CONFIG_DIR/local_settings.py"
+
+        # Create symlink in the repository (remove existing symlink first if it exists)
+        if [ -L ${repoDir}/local_settings.py ]; then
+          rm ${repoDir}/local_settings.py
+        fi
+        ln -sf "$CONFIG_DIR/local_settings.py" ${repoDir}/local_settings.py || { echo "ERROR: Failed to create symlink"; exit 1; }
+        echo "Created symlink: ${repoDir}/local_settings.py -> $CONFIG_DIR/local_settings.py"
+
+        ${lib.optionalString (cfg.service.extraEnvironment != {}) ''
+        # Set additional environment variables
+        ${lib.concatStringsSep "\n" (lib.mapAttrsToList (name: value: "export ${name}='${value}'") cfg.service.extraEnvironment)}
+        ''}
+
+        echo "Starting Django server..."
+        echo "Hostname: ${envDjangoHost}"
+        echo "Port: ${envDjangoPort}"
+        echo "Protocol: ${envHttpProtocol}"
+
+
+        # Start the Django application
+        exec devenv shell -- run-server
   '';
 
 in
@@ -530,10 +530,10 @@ in
           useHttps = mkOption { type = types.bool; default = false; };
           sslCertificatePath = mkOption { type = types.nullOr types.path; default = null; };
           sslKeyPath = mkOption { type = types.nullOr types.path; default = null; };
-          djangoAllowedHosts = mkOption { type = types.listOf types.str; default = ["localhost" "127.0.0.1"]; };
+          djangoAllowedHosts = mkOption { type = types.listOf types.str; default = [ "localhost" "127.0.0.1" ]; };
           djangoDebug = mkOption { type = types.bool; default = false; };
           djangoSecretKeyFile = mkOption { type = types.path; default = "/etc/secrets/vault/django_secret_key"; };
-          corsAllowedOrigins = mkOption { type = types.listOf types.str; default = []; };
+          corsAllowedOrigins = mkOption { type = types.listOf types.str; default = [ ]; };
           logLevel = mkOption { type = types.str; default = "INFO"; };
           maxRequestSize = mkOption { type = types.str; default = "100M"; };
           timeZone = mkOption { type = types.str; default = "Europe/Berlin"; };
@@ -564,19 +564,19 @@ in
             default = "data/storage";
             description = "Relative or absolute path used for STORAGE_DIR.";
           };
-          confDir = mkOption { 
-            type = types.str; 
-            default = "conf"; 
+          confDir = mkOption {
+            type = types.str;
+            default = "conf";
             description = "Relative path to configuration directory within the repository";
           };
-          confTemplateDir = mkOption { 
-            type = types.str; 
-            default = "conf_template"; 
+          confTemplateDir = mkOption {
+            type = types.str;
+            default = "conf_template";
             description = "Relative path to configuration template directory within the repository";
           };
-          djangoModule = mkOption { 
-            type = types.str; 
-            default = "endo_api"; 
+          djangoModule = mkOption {
+            type = types.str;
+            default = "endo_api";
             description = "Django module name for the application";
           };
           assetDir = mkOption {
@@ -584,14 +584,14 @@ in
             default = "tests/assets";
             description = "Relative or absolute path used as ASSET_DIR.";
           };
-          httpProtocol = mkOption { 
-            type = types.str; 
-            default = "http"; 
+          httpProtocol = mkOption {
+            type = types.str;
+            default = "http";
             description = "HTTP protocol to use (http or https)";
           };
-          baseUrl = mkOption { 
-            type = types.nullOr types.str; 
-            default = null; 
+          baseUrl = mkOption {
+            type = types.nullOr types.str;
+            default = null;
             description = "Base URL for the application. If null, will be constructed from protocol, host, and port";
           };
           staticUrl = mkOption {
@@ -614,15 +614,15 @@ in
             default = true;
             description = "Whether SKIP_EXPENSIVE_TESTS should be enabled.";
           };
-          
-          extraSettings = mkOption { 
-            type = types.attrsOf types.anything; 
-            default = {}; 
+
+          extraSettings = mkOption {
+            type = types.attrsOf types.anything;
+            default = { };
             description = "Additional settings to pass to Django configuration";
           };
         };
       };
-      default = {};
+      default = { };
       description = "API configuration options";
     };
 
@@ -642,7 +642,7 @@ in
           };
         };
       };
-      default = {};
+      default = { };
       description = "Database configuration options";
     };
 
@@ -653,10 +653,10 @@ in
           maxRequests = mkOption { type = types.int; default = 1000; };
           timeout = mkOption { type = types.int; default = 30; };
           keepAlive = mkOption { type = types.int; default = 60; };
-          extraEnvironment = mkOption { type = types.attrsOf types.str; default = {}; };
+          extraEnvironment = mkOption { type = types.attrsOf types.str; default = { }; };
         };
       };
-      default = {};
+      default = { };
       description = "Service configuration options";
     };
 
@@ -668,7 +668,7 @@ in
           updateOnBoot = mkOption { type = types.bool; default = true; };
         };
       };
-      default = {};
+      default = { };
       description = "Repository configuration options";
     };
 
@@ -683,13 +683,13 @@ in
     luxnix.generic-settings.postgres = {
       enable = true;
     };
-    
+
     # Ensure directory structure exists with correct permissions
     systemd.tmpfiles.rules = lib.optionals (!config.roles.endoreg-client.enable) [
       # Create the config subdirectory (handled by endoreg-client role when enabled)
       "d ${endoreg-service-user-home}/config 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
     ];
-    
+
     systemd.services."endo-api-boot" = {
       description = "Clone or pull endoreg-db-api and run prod-server";
       wantedBy = [ "multi-user.target" ];
@@ -705,7 +705,7 @@ in
         RestartSec = "10s";
         # Resource limits
         MemoryMax = "2G";
-        CPUQuota = "200%";
+        CPUQuota = "70%";
       };
     };
   };
