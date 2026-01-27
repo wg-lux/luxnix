@@ -20,8 +20,8 @@ postgres_host_test_password_filename: "SCRT_roles_system_password_postgres_host_
 admin_vpn_ip: "172.16.255.106"
 postgres_host_test_ip: "172.16.255.13"
 
-ansible_groups:
-  - "common"
+ansible_groups: []
+  # - "common"
 group_roles:
   custom_packages.enable: "true"
   custom_packages.cloud: "true"

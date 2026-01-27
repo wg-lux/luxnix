@@ -11,3 +11,6 @@ inputs:
   mk-shell-bin:
     url: github:rrbutani/nix-mk-shell-bin
 allowUnfree: true
+secretspec:
+  enable: true
+  provider: "dotenv"

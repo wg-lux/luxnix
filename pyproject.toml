@@ -1,47 +1,47 @@
 [project]
-name = "lx-administration"
-version = "0.1.0"
-description = "Utilities for Luxnix Administration"
-readme = "README.md"
-requires-python = ">=3.13"
 dependencies = [
-    "cryptography>=44.0.0",
-    "myst-parser[linkify]>=4.0.0",
-    "pyopenssl>=24.3.0",
-    "sphinx>=8.1.3",
-    "black>=23.7.0",
-    "ruff>=0.8.4",
-    "ansible>=11.1.0",
-    "ansible-core>=2.18.1",
-    "pexpect>=4.9.0",
-    "python-ffmpeg>=2.0.12",
-    "faker>=33.1.0",
-    "ansible-cmdb>=1.31",
-    "djlint>=1.36.4",
-    "pydantic>=2.10.4",
-    "jinja2>=3.1.5",
-    "pyyaml>=6.0.2",
-    "arsenal-cli>=1.2.7",
-    "ruamel-yaml>=0.18.10",
-    "icecream>=2.1.4",
-    "passlib>=1.7.4",
-    "psycopg[binary]>=3.2.4",
-    "obsidian>=1.2",
-    "mypy>=1.16.0",
-    "types-pyyaml>=6.0.12.20250516",
-    "pytest>=8.4.1",
+  "cryptography>=44.0.0",
+  "myst-parser[linkify]>=4.0.0",
+  "pyopenssl>=24.3.0",
+  "sphinx>=8.1.3",
+  "black>=23.7.0",
+  "ruff>=0.8.4",
+  "ansible>=11.1.0",
+  "ansible-core>=2.18.1",
+  "pexpect>=4.9.0",
+  "python-ffmpeg>=2.0.12",
+  "faker>=33.1.0",
+  "ansible-cmdb>=1.31",
+  "djlint>=1.36.4",
+  "pydantic>=2.10.4",
+  "jinja2>=3.1.5",
+  "pyyaml>=6.0.2",
+  "arsenal-cli>=1.2.7",
+  "ruamel-yaml>=0.18.10",
+  "icecream>=2.1.4",
+  "passlib>=1.7.4",
+  "psycopg[binary]>=3.2.4",
+  "obsidian>=1.2",
+  "mypy>=1.16.0",
+  "types-pyyaml>=6.0.12.20250516",
+  "pytest>=8.4.1",
 ]
+description = "Utilities for Luxnix Administration"
+name = "lx-administration"
+readme = "README.md"
+requires-python = ">=3.12"
+version = "0.1.0"
 
 [tool.setuptools]
 packages = ["lx_administration"]
 
 [build-system]
-requires = ["hatchling"]
 build-backend = "hatchling.build"
+requires = ["hatchling"]
 
 [tool.ruff]
-lint.select = ["E", "F", "W"]
 lint.ignore = []
+lint.select = ["E", "F", "W"]
 
 [tool.uv.sources]
-lx_administration = { workspace = true }
+lx_administration = {workspace = true}

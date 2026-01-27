@@ -13,4 +13,4 @@ group_luxnix:
   boot_decryption_stick.enable: "true"
   generic_settings.configurationPathRelative: '"lx-production"'
 
-  maintenance.autoUpdates.enable: "true"
+  maintenance.autoUpdates.enable: "false"
