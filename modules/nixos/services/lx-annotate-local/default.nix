@@ -289,7 +289,6 @@ let
     DJANGO_CSRF_TRUSTED_ORIGINS='${builtins.toJSON cfg.django.corsAllowedOrigins}'
     EOF
         echo "Collecting static files..."
-    echo "Collecting static files..."
         export DJANGO_STATIC_ROOT="${staticRootPath}" # This points to .../staticfiles
 
         if command -v devenv >/dev/null 2>&1; then
