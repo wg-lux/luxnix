@@ -108,6 +108,13 @@ in {
         The name of the sensitive service group.
       '';
     };
+    endoregServiceGroupName = mkOption {
+      type = types.str;
+      default = "endoreg-service";
+      description = ''
+        The name of the endoreg service group.
+      '';
+    };
 
     hostPlatform = mkOption {
       type = types.str;

@@ -1,13 +1,16 @@
-{ pkgs
-, config
-, lib
-, ...
+{
+  pkgs,
+  config,
+  lib,
+  ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.user.admin;
   # Only reference sslCert group if it exists
-  sslCertGroupName = if (config.users.groups ? sslCert) then config.users.groups.sslCert.name else null;
+  sslCertGroupName =
+    if (config.users.groups ? sslCert) then config.users.groups.sslCert.name else null;
   passwordFile = config.luxnix.vault.adminPasswordHashedFile;
   sensitiveServicesGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
 
@@ -16,13 +19,9 @@ in
 {
   options.user.admin = with types; {
     name = mkOpt str "admin" "The name of the user's account";
-    passwordFile =
-      mkOpt str passwordFile
-        "The hashed password file to use";
+    passwordFile = mkOpt str passwordFile "The hashed password file to use";
     extraGroups = mkOpt (listOf str) [ ] "Groups for the user to be assigned.";
-    extraOptions =
-      mkOpt attrs { }
-        "Extra options passed to users.users.<name>";
+    extraOptions = mkOpt attrs { } "Extra options passed to users.users.<name>";
   };
 
   config = {
@@ -41,36 +40,36 @@ in
         fi
       '';
     };
-    users.users.${cfg.name} =
-      {
-        shell = pkgs.zsh;
-        isNormalUser = true;
-        hashedPasswordFile = passwordFile;
-        home = "/home/${cfg.name}";
-        group = "users";
-        linger = true; # Makes sure user services start at boot not at login
+    users.users.${cfg.name} = {
+      shell = pkgs.zsh;
+      isNormalUser = true;
+      hashedPasswordFile = passwordFile;
+      home = "/home/${cfg.name}";
+      group = "users";
+      linger = true; # Makes sure user services start at boot not at login
 
-        # TODO: set in modules
-        extraGroups =
-          [
-            "wheel"
-            "audio"
-            "sound"
-            "video"
-            "networkmanager"
-            "input"
-            "tty"
-            "podman"
-            "kvm"
-            "libvirtd"
-          ]
-          ++ [
-            sensitiveServicesGroupName
-          ]
-          ++ (lib.optional (sslCertGroupName != null) sslCertGroupName)
-          ++ cfg.extraGroups;
-      }
-      // cfg.extraOptions;
+      # TODO: set in modules
+      extraGroups = [
+        "wheel"
+        "audio"
+        "sound"
+        "video"
+        "networkmanager"
+        "input"
+        "tty"
+        "podman"
+        "kvm"
+        "libvirtd"
+      ]
+      ++ [
+        sensitiveServicesGroupName
+      ]
+      ++ (lib.optional (sslCertGroupName != null) sslCertGroupName)
+      ++ cfg.extraGroups
+      ++ (lib.optional (config.roles.endoreg-client.adminIsServiceUser or false
+      ) config.user.endoreg-service-user.group);
+    }
+    // cfg.extraOptions;
 
     home-manager = {
       # modified due to this warning: evaluation warning: admin profile: You have set either `nixpkgs.config` or `nixpkgs.overlays` while using `home-manager.useGlobalPkgs`.

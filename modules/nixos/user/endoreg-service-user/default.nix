@@ -12,7 +12,7 @@ let
   cfg = config.user.endoreg-service-user;
   homeDir = "/var/${cfg.name}";
   endoreg-service-user-name = cfg.name;
-  endoreg-service-group-name = "endoreg-service";
+  endoreg-service-group-name = config.luxnix.generic-settings.endoregServiceGroupName;
   vaultDirAbsolute = "${homeDir}/${cfg.vaultDir}";
   maintenanceSecretFileSource = "${srcVaultDir}/${maintenanceSecretFileName}";
   maintenanceSecretFilePath = "${vaultDirAbsolute}/${maintenanceSecretFileName}";

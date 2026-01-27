@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Sequence
@@ -65,19 +67,34 @@ def mount_drive(
 
     mount_point.mkdir(parents=True, exist_ok=True)
 
-    cmd: list[str] = ["mount"]
+    mount_bin = Path(
+        shutil.which("mount") or "/run/current-system/sw/bin/mount"
+    ).resolve()
+
+    cmd: list[str] = [mount_bin.as_posix()]
     if filesystem:
         cmd.extend(["-t", filesystem])
     if options:
         cmd.extend(["-o", ",".join(options)])
 
     cmd.extend([device.as_posix(), mount_point.as_posix()])
+
+    if os.geteuid() != 0:
+        cmd = ["sudo"] + cmd
+
     return subprocess.run(cmd, check=True, capture_output=True, text=True)
 
 
 def unmount_drive(target: Path) -> subprocess.CompletedProcess[str]:
     """Unmount the filesystem mounted at target using the system umount command."""
 
-    return subprocess.run(
-        ["umount", target.as_posix()], check=True, capture_output=True, text=True
-    )
+    umount_bin = Path(
+        shutil.which("umount") or "/run/current-system/sw/bin/umount"
+    ).resolve()
+
+    cmd = [umount_bin.as_posix(), target.as_posix()]
+
+    if os.geteuid() != 0:
+        cmd = ["sudo"] + cmd
+
+    return subprocess.run(cmd, check=True, capture_output=True, text=True)

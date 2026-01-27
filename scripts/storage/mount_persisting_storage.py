@@ -16,12 +16,18 @@ if __name__ == "__main__":
             raise RuntimeError(
                 "Persisting storage drive with the configured serial is not available."
             )
-
-        mount_drive(
-            device,
-            sm.storage_persisting_mount_point,
-            filesystem="ext4",
-        )
+        try:
+            mount_drive(
+                device,
+                sm.storage_persisting_mount_point,
+                filesystem="ext4",
+            )
+        except Exception as exc:
+            # Surface the underlying mount error for troubleshooting
+            if hasattr(exc, "stdout") or hasattr(exc, "stderr"):
+                print("mount stdout:\n", getattr(exc, "stdout", ""))
+                print("mount stderr:\n", getattr(exc, "stderr", ""))
+            raise
     else:
         print("Persisting storage drive is already mounted or not required.")
     #
