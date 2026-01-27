@@ -1,21 +1,21 @@
-{ config
-, lib
-, pkgs
-, ...
+{
+  config,
+  lib,
+  pkgs,
+  ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.services.luxnix.lxAnnotateLocal;
   gs = config.luxnix.generic-settings;
   gsp = gs.postgres;
-  sslCfg = lib.attrByPath [ "services" "luxnix" "lxSsl" ]
-    {
-      enable = false;
-      sslDir = "/var/lib/lx-annotate/ssl";
-      certPath = "/var/lib/lx-annotate/ssl/lx-annotate-selfsigned.crt";
-      keyPath = "/var/lib/lx-annotate/ssl/lx-annotate-selfsigned.key";
-    }
-    config;
+  sslCfg = lib.attrByPath [ "services" "luxnix" "lxSsl" ] {
+    enable = false;
+    sslDir = "/var/lib/lx-annotate/ssl";
+    certPath = "/var/lib/lx-annotate/ssl/lx-annotate-selfsigned.crt";
+    keyPath = "/var/lib/lx-annotate/ssl/lx-annotate-selfsigned.key";
+  } config;
 
   defaultSslCertificatePath = sslCfg.certPath;
   defaultSslKeyPath = sslCfg.keyPath;
@@ -40,13 +40,18 @@ with lib.luxnix; let
   envConfDir = "${repoDir}/${cfg.django.confDir}";
   envConfTemplateDir = "${repoDir}/${cfg.django.confTemplateDir}";
   envDjangoModule = cfg.django.djangoModule;
-  envHttpProtocol = if cfg.django.httpProtocol != "http" then cfg.django.httpProtocol else (if cfg.django.useHttps then "https" else "http");
+  envHttpProtocol =
+    if cfg.django.httpProtocol != "http" then
+      cfg.django.httpProtocol
+    else
+      (if cfg.django.useHttps then "https" else "http");
   envDjangoHost = cfg.django.hostname;
   envDjangoPort = toString cfg.django.port;
   envBaseUrl =
-    if cfg.django.baseUrl != null
-    then cfg.django.baseUrl
-    else "${envHttpProtocol}://${envDjangoHost}:${envDjangoPort}";
+    if cfg.django.baseUrl != null then
+      cfg.django.baseUrl
+    else
+      "${envHttpProtocol}://${envDjangoHost}:${envDjangoPort}";
   sslDir = sslCfg.sslDir;
   sslKeyPath = sslCfg.keyPath;
   sslCertPath = sslCfg.certPath;
@@ -90,12 +95,17 @@ with lib.luxnix; let
           direnv allow
         else
           cd ${repoDir}
-          ${if cfg.source.updateOnBoot then ''
-            echo "Updating repository..."
-            git fetch origin ${branchName} || { echo "ERROR: Failed to fetch from origin"; exit 1; }
-          '' else ''
-            echo "Repository update disabled"
-          ''}
+          ${
+            if cfg.source.updateOnBoot then
+              ''
+                echo "Updating repository..."
+                git fetch origin ${branchName} || { echo "ERROR: Failed to fetch from origin"; exit 1; }
+              ''
+            else
+              ''
+                echo "Repository update disabled"
+              ''
+          }
         fi
 
         # Checkout branch
@@ -109,13 +119,18 @@ with lib.luxnix; let
           exit 1
         fi
 
-        ${if cfg.source.updateOnBoot then ''
-        # Update branch
-        git pull origin ${branchName} || { 
-          echo "WARNING: Failed to pull, trying reset"
-          git reset --hard origin/${branchName} || { echo "ERROR: Update failed"; exit 1; }
+        ${
+          if cfg.source.updateOnBoot then
+            ''
+              # Update branch
+              git pull origin ${branchName} || { 
+                echo "WARNING: Failed to pull, trying reset"
+                git reset --hard origin/${branchName} || { echo "ERROR: Update failed"; exit 1; }
+              }
+            ''
+          else
+            ""
         }
-        '' else ""}
 
         # --- DB SETUP ---
         cd ${repoDir}
@@ -127,11 +142,11 @@ with lib.luxnix; let
         # --- ENV SETUP ---
         echo "Running Django application configuration setup..."
         cd ${repoDir}
-    
+
         export DJANGO_DB_PASSWORD_FILE="${cfg.database.endoregLocalUserPasswordFile}" 
         export DJANGO_SECRET_KEY_FILE="${cfg.django.djangoSecretKeyFile}"
         export OIDC_RP_CLIENT_SECRET_FILE="${cfg.django.keycloakSecretFile}"
-    
+
         export DATA_DIR="${envDataDir}"
         export STORAGE_DIR="${envDataDir}"
         export IO_DIR="${envDataDir}"
@@ -172,17 +187,18 @@ with lib.luxnix; let
         export DJANGO_DB_HOST="${cfg.database.host}"
         export DJANGO_DB_PORT="${toString cfg.database.port}"
         export DJANGO_DB_SSLMODE="${cfg.database.sslMode}"
-    
+
         export DJANGO_ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
         export ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
         export DJANGO_CORS_ALLOWED_ORIGINS='${builtins.toJSON cfg.django.corsAllowedOrigins}'
         export DJANGO_CSRF_TRUSTED_ORIGINS='${builtins.toJSON cfg.django.corsAllowedOrigins}'
-    
+
         DJANGO_SECRET_KEY_VALUE="$(tr -d '\n' < ${cfg.django.djangoSecretKeyFile} 2>/dev/null || true)"
         export DJANGO_SECRET_KEY="$DJANGO_SECRET_KEY_VALUE"
 
         export OIDC_RP_CLIENT_ID="${cfg.django.keycloakClientId}"
         OIDC_CLIENT_SECRET_VALUE="$(tr -d '\n' < ${cfg.django.keycloakSecretFile} 2>/dev/null || true)"
+        export STORAGE_PERSISTED = "/TEST/PATH"
         export OIDC_RP_CLIENT_SECRET="$OIDC_CLIENT_SECRET_VALUE"    
 
         # Deployment markers
@@ -240,7 +256,7 @@ with lib.luxnix; let
 
         SECRETSPEC_CONFIG_DIR="${endoreg-service-user-home}/lx-annotate/.config/secretspec"
         mkdir -p "$SECRETSPEC_CONFIG_DIR"
-    
+
         echo "Generating secretspec configuration..."
         cat > "$SECRETSPEC_CONFIG_DIR/config.toml" <<EOF
     [defaults]
@@ -249,7 +265,7 @@ with lib.luxnix; let
     EOF
 
 
-    
+
         # Write essential environment variables to .env.systemd
     cat > ${repoDir}/.env.systemd <<EOF
     HOME_DIR=${endoreg-service-user-home}
@@ -304,13 +320,13 @@ with lib.luxnix; let
   watcherScriptName = "runLocalFileWatcher";
   runLocalFileWatcherScript = pkgs.writeShellScriptBin "${watcherScriptName}" ''
     set -euo pipefail
-    
+
     # 1. Go to the repo (Cloned by the main boot service)
     cd ${repoDir}
 
     # 2. Re-Export ALL necessary Environment Variables
     # (Note: We skip git clone/pull because the boot service handles that)
-    
+
     export DJANGO_DB_PASSWORD_FILE="${cfg.database.endoregLocalUserPasswordFile}" 
     export DJANGO_SECRET_KEY_FILE="${cfg.django.djangoSecretKeyFile}"
     export DATA_DIR="${envDataDir}"
@@ -338,7 +354,7 @@ with lib.luxnix; let
     export DJANGO_DB_SSLMODE="${cfg.database.sslMode}"
     export STORAGE_DIR="${envDataDir}"
     export IO_DIR="${envDataDir}"
-    
+
     DJANGO_SECRET_KEY_VALUE="$(tr -d '\n' < ${cfg.django.djangoSecretKeyFile} 2>/dev/null || true)"
     export DJANGO_SECRET_KEY="$DJANGO_SECRET_KEY_VALUE"
     export HOME_DIR=${endoreg-service-user-home}
@@ -361,7 +377,7 @@ with lib.luxnix; let
 
     # 4. Start the Watcher inside the devenv shell
     echo "📁 Starting File Watcher..."
-    
+
     # Check if devenv is available in path (it is set in Service Config)
     exec devenv shell -- bash -c start-filewatcher 
   '';
@@ -415,22 +431,49 @@ in
     django = mkOption {
       type = types.submodule {
         options = {
-          hostname = mkOption { type = types.str; default = "lx-annotate.local"; };
-          port = mkOption { type = types.port; default = 8117; };
-          useHttps = mkOption { type = types.bool; default = false; };
-          sslCertificatePath = mkOption { type = types.nullOr types.path; default = null; };
-          sslKeyPath = mkOption { type = types.nullOr types.path; default = null; };
+          hostname = mkOption {
+            type = types.str;
+            default = "lx-annotate.local";
+          };
+          port = mkOption {
+            type = types.port;
+            default = 8117;
+          };
+          useHttps = mkOption {
+            type = types.bool;
+            default = false;
+          };
+          sslCertificatePath = mkOption {
+            type = types.nullOr types.path;
+            default = null;
+          };
+          sslKeyPath = mkOption {
+            type = types.nullOr types.path;
+            default = null;
+          };
           djangoAllowedHosts = mkOption {
             type = types.listOf types.str;
-            default = [ "lx-annotate.local" "127.0.0.1" ]; # NO http://
+            default = [
+              "lx-annotate.local"
+              "127.0.0.1"
+            ]; # NO http://
           };
 
           corsAllowedOrigins = mkOption {
             type = types.listOf types.str;
-            default = [ "https://lx-annotate.local" "http://127.0.0.1" ];
+            default = [
+              "https://lx-annotate.local"
+              "http://127.0.0.1"
+            ];
           };
-          djangoDebug = mkOption { type = types.bool; default = false; };
-          djangoSecretKeyFile = mkOption { type = types.path; default = "/etc/secrets/vault/django_secret_key"; };
+          djangoDebug = mkOption {
+            type = types.bool;
+            default = false;
+          };
+          djangoSecretKeyFile = mkOption {
+            type = types.path;
+            default = "/etc/secrets/vault/django_secret_key";
+          };
 
           keycloakSecretFile = mkOption {
             type = types.path;
@@ -445,13 +488,30 @@ in
           };
           # -------------------------------
 
-          logLevel = mkOption { type = types.str; default = "INFO"; };
-          maxRequestSize = mkOption { type = types.str; default = "100M"; };
-          timeZone = mkOption { type = types.str; default = "Europe/Berlin"; };
-          language = mkOption { type = types.str; default = "en-us"; };
+          logLevel = mkOption {
+            type = types.str;
+            default = "INFO";
+          };
+          maxRequestSize = mkOption {
+            type = types.str;
+            default = "100M";
+          };
+          timeZone = mkOption {
+            type = types.str;
+            default = "Europe/Berlin";
+          };
+          language = mkOption {
+            type = types.str;
+            default = "en-us";
+          };
 
           settingsProfile = mkOption {
-            type = types.enum [ "dev" "prod" "central" "test" ];
+            type = types.enum [
+              "dev"
+              "prod"
+              "central"
+              "test"
+            ];
             default = "prod";
             description = "Base settings profile to use when selecting Django settings modules.";
           };
@@ -538,12 +598,30 @@ in
     database = mkOption {
       type = types.submodule {
         options = {
-          host = mkOption { type = types.str; default = "lx-annotate.local"; };
-          port = mkOption { type = types.port; default = 5433; };
-          name = mkOption { type = types.str; default = "lxAnnotateLocal"; };
-          user = mkOption { type = types.str; default = "lxAnnotateLocal"; };
-          passwordFile = mkOption { type = types.path; default = "/etc/secrets/vault/SCRT_local_password_maintenance_password"; };
-          sslMode = mkOption { type = types.str; default = "prefer"; };
+          host = mkOption {
+            type = types.str;
+            default = "lx-annotate.local";
+          };
+          port = mkOption {
+            type = types.port;
+            default = 5433;
+          };
+          name = mkOption {
+            type = types.str;
+            default = "lxAnnotateLocal";
+          };
+          user = mkOption {
+            type = types.str;
+            default = "lxAnnotateLocal";
+          };
+          passwordFile = mkOption {
+            type = types.path;
+            default = "/etc/secrets/vault/SCRT_local_password_maintenance_password";
+          };
+          sslMode = mkOption {
+            type = types.str;
+            default = "prefer";
+          };
           endoregLocalUserPasswordFile = mkOption {
             type = types.path;
             default = "/var/lib/postgresql/endoregDbLocal.password";
@@ -556,7 +634,7 @@ in
     };
   };
 
-  config = {
+  config = mkIf cfg.enable {
     services.luxnix.lxAnnotateLocal.django.djangoAllowedHosts = mkAfter [
       cfg.django.hostname
     ];
@@ -564,9 +642,9 @@ in
     services.luxnix.lxAnnotateLocal.django.sslKeyPath = mkDefault defaultSslKeyPath;
     services.luxnix.lxSsl.enable = mkDefault true;
     services.nginx = {
-    enable = true;
-      
-    # This handles cases where certs were generated with 0600 root:root permissions.
+      enable = true;
+
+      # This handles cases where certs were generated with 0600 root:root permissions.
       preStart = lib.mkAfter "${pkgs.writeShellScript "fix-ssl-perms-root" ''
         if [ -d "/var/lib/lx-annotate/ssl" ]; then
           echo "Fixing Nginx SSL permissions (running as root)..."
@@ -588,7 +666,8 @@ in
         extraConfig = ''
           client_max_body_size 50G;
           proxy_request_buffering off;
-        '' + optionalString sslCfg.enable ''
+        ''
+        + optionalString sslCfg.enable ''
           ssl_stapling off;
           ssl_stapling_verify off;
         '';
@@ -645,40 +724,46 @@ in
     # Ensure directory structure exists with correct permissions
     users.users.nginx.extraGroups = [ "${endoreg-service-group-name}" ];
 
-    systemd.tmpfiles.rules =
-      [
-        "d ${endoreg-service-user-home} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+    systemd.tmpfiles.rules = [
+      "d ${endoreg-service-user-home} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
 
-        # Ensure the main repo directory exists (if not cloned yet, this sets the parent permissions)
-        "d ${repoDir} 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+      # Ensure the main repo directory exists (if not cloned yet, this sets the parent permissions)
+      "d ${repoDir} 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
 
-        # Explicitly create the data/storage directories so Python doesn't have to fight for permissions
-        "d ${envDataDir} 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+      # Explicitly create the data/storage directories so Python doesn't have to fight for permissions
+      "d ${envDataDir} 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
 
-        # Ensure static dir exists for nginx alias
-        "d ${staticRootPath} 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        
-        # 1. The Parent Directory: Create (d) AND Enforce (z) permissions
-        "d /var/lib/lx-annotate 0750 root nginx - -"
-        "z /var/lib/lx-annotate 0750 root nginx - -"
-        
-        # 2. The SSL Directory: Create (d) AND Enforce (z) permissions
-        "d /var/lib/lx-annotate/ssl 0750 root nginx - -"
-        "z /var/lib/lx-annotate/ssl 0750 root nginx - -"
-        
-        # 3. The Certificate Files: Recursively fix perms
-        "Z /var/lib/lx-annotate/ssl 0640 root nginx - -"
-      ]
-      ++ lib.optionals (!config.roles.endoreg-client.enable) [
-        # Create the config subdirectory (handled by endoreg-client role when enabled)
-        "d ${endoreg-service-user-home}/config 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-      ];
+      # Ensure static dir exists for nginx alias
+      "d ${staticRootPath} 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+
+      # 1. The Parent Directory: Create (d) AND Enforce (z) permissions
+      "d /var/lib/lx-annotate 0750 root nginx - -"
+      "z /var/lib/lx-annotate 0750 root nginx - -"
+
+      # 2. The SSL Directory: Create (d) AND Enforce (z) permissions
+      "d /var/lib/lx-annotate/ssl 0750 root nginx - -"
+      "z /var/lib/lx-annotate/ssl 0750 root nginx - -"
+
+      # 3. The Certificate Files: Recursively fix perms
+      "Z /var/lib/lx-annotate/ssl 0640 root nginx - -"
+    ]
+    ++ lib.optionals (!config.roles.endoreg-client.enable) [
+      # Create the config subdirectory (handled by endoreg-client role when enabled)
+      "d ${endoreg-service-user-home}/config 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+    ];
 
     systemd.services."lx-annotate-boot" = {
       description = "Clone or pull lx-annotate and run prod-server";
       wantedBy = [ "multi-user.target" ];
-      wants = [ "nginx.service" "postgres-endoreg-setup.service" ];
-      after = [ "postgres-endoreg-setup.service" "endoreg-django-setup.service" "systemd-tmpfiles-setup.service" ];
+      wants = [
+        "nginx.service"
+        "postgres-endoreg-setup.service"
+      ];
+      after = [
+        "postgres-endoreg-setup.service"
+        "endoreg-django-setup.service"
+        "systemd-tmpfiles-setup.service"
+      ];
       serviceConfig = {
         Type = "exec";
         User = endoreg-service-user-name;
@@ -687,32 +772,32 @@ in
           "NIX_PATH=nixpkgs=${pkgs.path}"
         ];
         ExecStartPre = "+${pkgs.writeShellScript "lx-annotate-pre-start" ''
-            set -euo pipefail
-            
-            # 1. Fix Repo Permissions
-            ${pkgs.coreutils}/bin/chown -R ${endoreg-service-user-name}:${endoreg-service-group-name} ${repoDir}
-            
-            # 2. Handle the Password File securely
-            mkdir -p ${envConfDir}
-            
-            SOURCE_PWD="${cfg.database.endoregLocalUserPasswordFile}"
-            TARGET_PWD="${envConfDir}/db_pwd"
-            
-            if [ -f "$SOURCE_PWD" ]; then
-               echo "Copying database password..."
-               cp "$SOURCE_PWD" "$TARGET_PWD"
-               
-               # Give ownership to the service user
-               chown ${endoreg-service-user-name}:${endoreg-service-group-name} "$TARGET_PWD"
-               
-               # Secure it
-               chmod 600 "$TARGET_PWD"
-            else
-               echo "WARNING: Password file $SOURCE_PWD not found!"
-            fi
-            
-            # Ensure the service user owns the directory too
-            chown -R ${endoreg-service-user-name}:${endoreg-service-group-name} ${envConfDir}
+          set -euo pipefail
+
+          # 1. Fix Repo Permissions
+          ${pkgs.coreutils}/bin/chown -R ${endoreg-service-user-name}:${endoreg-service-group-name} ${repoDir}
+
+          # 2. Handle the Password File securely
+          mkdir -p ${envConfDir}
+
+          SOURCE_PWD="${cfg.database.endoregLocalUserPasswordFile}"
+          TARGET_PWD="${envConfDir}/db_pwd"
+
+          if [ -f "$SOURCE_PWD" ]; then
+             echo "Copying database password..."
+             cp "$SOURCE_PWD" "$TARGET_PWD"
+             
+             # Give ownership to the service user
+             chown ${endoreg-service-user-name}:${endoreg-service-group-name} "$TARGET_PWD"
+             
+             # Secure it
+             chmod 600 "$TARGET_PWD"
+          else
+             echo "WARNING: Password file $SOURCE_PWD not found!"
+          fi
+
+          # Ensure the service user owns the directory too
+          chown -R ${endoreg-service-user-name}:${endoreg-service-group-name} ${envConfDir}
         ''}";
         ExecStart = "${runLocalLxAnnotateScript}/bin/${scriptName}";
         Restart = "on-failure";
@@ -728,11 +813,10 @@ in
       after = [ "postgresql.service" ]; # Adjust based on your DB
       requires = [ "lx-annotate-boot.service" ];
 
-
       serviceConfig = {
         User = endoreg-service-user-name; # Or whatever user runs the app
         WorkingDirectory = repoDir;
-        ExecStart = "${runLocalFileWatcherScript}/bin/${watcherScriptName}";        
+        ExecStart = "${runLocalFileWatcherScript}/bin/${watcherScriptName}";
         Restart = "always";
         RestartSec = "10m";
         Environment = [

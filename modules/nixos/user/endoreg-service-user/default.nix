@@ -1,10 +1,12 @@
-{ pkgs
-, config
-, lib
-, ...
+{
+  pkgs,
+  config,
+  lib,
+  ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   srcVaultDir = "/etc/secrets/vault";
   maintenanceSecretFileName = "SCRT_local_password_maintenance_password";
   cfg = config.user.endoreg-service-user;
@@ -33,9 +35,7 @@ in
       description = "The directory where the secret files are stored";
     };
     extraGroups = mkOpt (listOf str) [ ] "Groups for the user to be assigned.";
-    extraOptions =
-      mkOpt attrs { }
-        "Extra options passed to users.users.<name>";
+    extraOptions = mkOpt attrs { } "Extra options passed to users.users.<name>";
   };
 
   config = mkIf cfg.enable {
@@ -44,24 +44,22 @@ in
       "d /var/${cfg.name}/secrets 0750 ${cfg.name} ${cfg.group} -"
       "d ${vaultDirAbsolute} 0750 ${cfg.name} ${cfg.group} -"
     ];
-    users.users.${cfg.name} =
-      {
-        shell = pkgs.zsh;
-        isSystemUser = true;
-        createHome = true;
-        home = "${homeDir}";
-        group = "${cfg.group}";
-        homeMode = "0750";
-        uid = 400;
+    users.users.${cfg.name} = {
+      shell = pkgs.zsh;
+      isSystemUser = true;
+      createHome = true;
+      home = "${homeDir}";
+      group = "${cfg.group}";
+      homeMode = "0750";
+      uid = 400;
 
-        # TODO: set in modules
-        extraGroups =
-          [
-            config.luxnix.generic-settings.sensitiveServiceGroupName
-          ]
-          ++ cfg.extraGroups;
-      }
-      // cfg.extraOptions;
+      # TODO: set in modules
+      extraGroups = [
+        config.luxnix.generic-settings.sensitiveServiceGroupName
+      ]
+      ++ cfg.extraGroups;
+    }
+    // cfg.extraOptions;
 
     # service to deploy secretfile
     systemd.services."endoreg-service-user-deploy-secretfile-postgres" = {

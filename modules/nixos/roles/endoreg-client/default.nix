@@ -12,595 +12,67 @@ let
   sensitiveServiceGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
 in
 {
-  options.roles.endoreg-client = {
-    enable = mkEnableOption "Enable endoreg client configuration";
+  options.roles.endoreg-client =
+    let
+      pathOptions = import ./paths.nix { inherit lib config; };
+      apiOptions = import ./api.nix { inherit lib; };
+      databaseOptions = import ./database.nix { inherit lib; };
+      serviceOptions = import ./service.nix { inherit lib; };
+      repositoryOptions = import ./repository.nix { inherit lib; };
+      environmentDefaultsOptions = import ./environment-details.nix { inherit lib; };
+      lxAnnotateOptions = import ./lx-annotate.nix { inherit lib; };
+    in
+    {
+      enable = mkEnableOption "Enable endoreg client configuration";
 
-    paths = {
-      storageBaseDir = mkOption {
-        type = types.path;
-        default = "/var/lib/endoreg-client";
-        description = "Base directory for endoreg client storage and input directories.";
-      };
+      paths = pathOptions;
 
-      dataDir = mkOption {
-        type = types.string;
-        default = "data";
-      };
-
-      desktopDirName = mkOption {
-        type = types.str; # Changed from types.path
-        default =
-          if config.luxnix.generic-settings.language == "english" then
-            "Desktop" # removed "home/admin/"
-          else
-            "Schreibtisch";
-      };
-      videoInputDir = mkOption {
-        type = types.path;
-        default = "${config.roles.endoreg-client.paths.storageBaseDir}/input_video";
-        description = "Physical directory where videos are dropped.";
-      };
-
-      # FIX 3: Anchor this to storageBaseDir (Absolute Path)
-      pdfInputDir = mkOption {
-        type = types.path;
-        default = "${config.roles.endoreg-client.paths.storageBaseDir}/input_pdf";
-        description = "Physical directory where PDFs are dropped.";
-      };
-
-      desktopPath = mkOption {
-        type = types.path;
-        default =
-          if config.luxnix.generic-settings.language == "english" then
-            "home/admin/Desktop"
-          else
-            "home/admin/Schreibtisch";
-        description = "Desktop directory name for the client user (localization support; defaults from luxnix.generic-settings.language).";
-      };
-
-      processingRepo = mkOption {
-        type = types.string;
-        default = "lx-annotate";
-      };
-    };
-
-    # Central Nodes Configuration
-    centralNodes = mkOption {
-      type = types.listOf types.str;
-      default = [ ];
-      description = "List of hostnames that act as central nodes for the endoreg database API";
-      example = [
-        "s-04.local"
-        "backup-central.local"
-      ];
-    };
-
-    dbApiLocal = mkOption {
-      type = types.bool;
-      default = false;
-      description = "Enable local endoreg-db-api service";
-    };
-
-    endoAi = mkOption {
-      type = types.bool;
-      default = false;
-      description = "Enable endoAi service";
-    };
-
-    defaultCenter = mkOption {
-      type = types.str;
-      default = "university_hospital_wuerzburg";
-      description = "Default center value for endoreg client";
-      example = "university_hospital_wuerzburg";
-    };
-
-    # Django API Configuration Options
-    api = {
-      hostname = mkOption {
-        type = types.str;
-        default = "localhost";
-        description = "Hostname for the Django API service";
-        example = "api.example.com";
-      };
-
-      port = mkOption {
-        type = types.port;
-        default = 8118;
-        description = "Port for the Django API service";
-      };
-
-      useHttps = mkOption {
-        type = types.bool;
-        default = false;
-        description = "Whether to use HTTPS for the API service";
-      };
-
-      sslCertificatePath = mkOption {
-        type = types.nullOr types.path;
-        default = null;
-        description = "Path to SSL certificate file (required if useHttps is true)";
-        example = "/etc/secrets/ssl/api.crt";
-      };
-
-      sslKeyPath = mkOption {
-        type = types.nullOr types.path;
-        default = null;
-        description = "Path to SSL private key file (required if useHttps is true)";
-        example = "/etc/secrets/ssl/api.key";
-      };
-
-      djangoAllowedHosts = mkOption {
+      # Central Nodes Configuration
+      centralNodes = mkOption {
         type = types.listOf types.str;
-        default = [
-          "localhost"
-          "127.0.0.1"
-        ];
-        description = "Django ALLOWED_HOSTS setting";
+        default = [ ];
+        description = "List of hostnames that act as central nodes for the endoreg database API";
         example = [
-          "lx-annotate.local"
-          "localhost"
-          "127.0.0.1"
+          "s-04.local"
+          "backup-central.local"
         ];
       };
 
-      djangoDebug = mkOption {
+      dbApiLocal = mkOption {
         type = types.bool;
         default = false;
-        description = "Enable Django DEBUG mode (should be false in production)";
+        description = "Enable local endoreg-db-api service";
       };
 
-      djangoSecretKeyFile = mkOption {
-        type = types.path;
-        default = "/etc/secrets/vault/django_secret_key";
-        description = "Path to file containing Django SECRET_KEY";
-      };
-
-      corsAllowedOrigins = mkOption {
-        type = types.listOf types.str;
-        default = [
-          "lx-annotate.local"
-          "https://lx-annotate.local"
-          "http://localhost:3000"
-        ];
-        description = "CORS allowed origins for the API";
-        example = [
-          "lx-annotate.local"
-          "https://lx-annotate.local"
-          "http://localhost:3000"
-        ];
-      };
-
-      logLevel = mkOption {
-        type = types.enum [
-          "DEBUG"
-          "INFO"
-          "WARNING"
-          "ERROR"
-          "CRITICAL"
-        ];
-        default = "INFO";
-        description = "Django logging level";
-      };
-
-      maxRequestSize = mkOption {
-        type = types.str;
-        default = "100M";
-        description = "Maximum request size for file uploads";
-      };
-
-      timeZone = mkOption {
-        type = types.str;
-        default = "UTC";
-        description = "Django timezone setting";
-        example = "Europe/Berlin";
-      };
-
-      language = mkOption {
-        type = types.str;
-        default = "en-us";
-        description = "Django language setting";
-        example = "de-de";
-      };
-
-      settingsProfile = mkOption {
-        type = types.enum [
-          "dev"
-          "prod"
-          "central"
-          "test"
-        ];
-        default = "prod";
-        description = "Base settings profile to derive Django settings module.";
-      };
-
-      settingsModule = mkOption {
-        type = types.nullOr types.str;
-        default = null;
-        description = "Explicit Django settings module (overrides settingsProfile).";
-      };
-
-      djangoEnv = mkOption {
-        type = types.nullOr types.str;
-        default = null;
-        description = "Value for DJANGO_ENV; inferred from settingsProfile when null.";
-      };
-
-      dataDir = mkOption {
-        type = types.str;
-        default = "data";
-        description = "Relative path to the data directory inside the repository.";
-      };
-
-      confDir = mkOption {
-        type = types.str;
-        default = "conf";
-        description = "Relative path to configuration directory inside the repository.";
-      };
-
-      confTemplateDir = mkOption {
-        type = types.str;
-        default = "conf_template";
-        description = "Relative path to configuration template directory.";
-      };
-
-      djangoModule = mkOption {
-        type = types.str;
-        default = "endo_api";
-        description = "Python module containing the Django project.";
-      };
-
-      assetDir = mkOption {
-        type = types.str;
-        default = "tests/assets";
-        description = "Relative or absolute path for ASSET_DIR.";
-      };
-
-      httpProtocol = mkOption {
-        type = types.enum [
-          "http"
-          "https"
-        ];
-        default = "https";
-        description = "Explicit HTTP protocol to advertise in BASE_URL.";
-      };
-
-      baseUrl = mkOption {
-        type = types.nullOr types.str;
-        default = null;
-        description = "Explicit BASE_URL; constructed from protocol/host/port when null.";
-      };
-
-      staticUrl = mkOption {
-        type = types.str;
-        default = "static";
-        description = "STATIC_URL value exported to the application.";
-      };
-
-      mediaUrl = mkOption {
-        type = types.str;
-        default = "/media/";
-        description = "MEDIA_URL value exported to the application.";
-      };
-
-      runVideoTests = mkOption {
+      endoAi = mkOption {
         type = types.bool;
         default = false;
-        description = "Whether to enable RUN_VIDEO_TESTS environment flag.";
+        description = "Enable endoAi service";
       };
 
-      skipExpensiveTests = mkOption {
-        type = types.bool;
-        default = true;
-        description = "Whether to enable SKIP_EXPENSIVE_TESTS environment flag.";
-      };
-
-      extraSettings = mkOption {
-        type = types.attrsOf types.anything;
-        default = { };
-        description = "Additional attributes exported into Django local settings.";
-      };
-    };
-
-    # Database Configuration Options
-    database = {
-      host = mkOption {
+      defaultCenter = mkOption {
         type = types.str;
-        default = "localhost";
-        description = "PostgreSQL database host";
+        default = "university_hospital_wuerzburg";
+        description = "Default center value for endoreg client";
+        example = "university_hospital_wuerzburg";
       };
 
-      port = mkOption {
-        type = types.port;
-        default = 5432;
-        description = "PostgreSQL database port";
-      };
+      # Django API Configuration Options
+      api = apiOptions;
 
-      name = mkOption {
-        type = types.str;
-        default = "endoregDbLocal";
-        description = "PostgreSQL database name";
-      };
+      # Database Configuration Options
+      database = databaseOptions;
 
-      user = mkOption {
-        type = types.str;
-        default = "endoregDbLocal";
-        description = "PostgreSQL database user";
-      };
+      # Service Configuration Options
+      service = serviceOptions;
 
-      passwordFile = mkOption {
-        type = types.path;
-        default = "/etc/secrets/vault/SCRT_local_password_maintenance_password";
-        description = "Path to file containing database password";
-      };
+      # Git Repository Options
+      repository = repositoryOptions;
 
-      endoregLocalUserPasswordFile = mkOption {
-        type = types.path;
-        default = "/var/lib/postgresql/endoregDbLocal.password";
-        description = "Path to file containing endoregDbLocal user password";
-      };
+      environmentDefaults = environmentDefaultsOptions;
 
-      sslMode = mkOption {
-        type = types.enum [
-          "disable"
-          "allow"
-          "prefer"
-          "require"
-          "verify-ca"
-          "verify-full"
-        ];
-        default = "prefer";
-        description = "PostgreSQL SSL mode";
-      };
+      lxAnnotate = lxAnnotateOptions;
     };
-
-    # Service Configuration Options
-    service = {
-      workers = mkOption {
-        type = types.int;
-        default = 1;
-        description = "Number of worker processes for the API service";
-      };
-
-      maxRequests = mkOption {
-        type = types.int;
-        default = 1000;
-        description = "Maximum requests per worker before restart";
-      };
-
-      timeout = mkOption {
-        type = types.int;
-        default = 30;
-        description = "Request timeout in seconds";
-      };
-
-      keepAlive = mkOption {
-        type = types.int;
-        default = 60;
-        description = "Keep-alive timeout in seconds";
-      };
-
-      extraEnvironment = mkOption {
-        type = types.attrsOf types.str;
-        default = { };
-        description = "Additional environment variables for the service";
-        example = {
-          REDIS_URL = "redis://localhost:6379/0";
-          CELERY_BROKER_URL = "redis://localhost:6379/1";
-        };
-      };
-    };
-
-    # Git Repository Options
-    repository = {
-      url = mkOption {
-        type = types.str;
-        default = "https://github.com/wg-lux/endo-api";
-        description = "Git repository URL for the Django API";
-      };
-
-      branch = mkOption {
-        type = types.str;
-        default = "main";
-        description = "Git branch to checkout";
-      };
-
-      updateOnBoot = mkOption {
-        type = types.bool;
-        default = true;
-        description = "Whether to update the repository on service start";
-      };
-    };
-
-    environmentDefaults = {
-      hfHome = mkOption {
-        type = types.nullOr types.str;
-        default = null;
-        description = "Default HuggingFace home directory. When null, derived from the service user home.";
-      };
-
-      hfHubCache = mkOption {
-        type = types.nullOr types.str;
-        default = null;
-        description = "Default HuggingFace hub cache directory. When null, derived from the service user home.";
-      };
-
-      transformersCache = mkOption {
-        type = types.nullOr types.str;
-        default = null;
-        description = "Default transformers cache directory. When null, derived from the service user home.";
-      };
-
-      hfHubEnableTransfer = mkOption {
-        type = types.bool;
-        default = true;
-        description = "Whether to enable HF_HUB_ENABLE_HF_TRANSFER by default.";
-      };
-
-      ollamaModelsDir = mkOption {
-        type = types.nullOr types.str;
-        default = null;
-        description = "Default Ollama models directory. When null, derived from the service user home.";
-      };
-
-      ollamaKeepAlive = mkOption {
-        type = types.str;
-        default = "4h";
-        description = "Default keep-alive duration for Ollama.";
-      };
-    };
-
-    lxAnnotate = {
-      enable = mkOption {
-        type = types.bool;
-        default = true;
-        description = "Enable the lx-annotate-local service on endoreg clients.";
-      };
-
-      debug = mkOption {
-        type = types.submodule {
-          options = {
-            enable = mkOption {
-              type = types.bool;
-              default = false;
-              description = "Enable verbose debug output for the lx-annotate-local service.";
-            };
-          };
-        };
-        default = { };
-        description = "Debug configuration for lx-annotate-local.";
-      };
-
-      source = mkOption {
-        type = types.submodule {
-          options = {
-            url = mkOption {
-              type = types.str;
-              default = "https://github.com/wg-lux/lx-annotate";
-              description = "Git repository URL for the lx-annotate application.";
-            };
-
-            branch = mkOption {
-              type = types.str;
-              default = "erc";
-              description = "Git branch to checkout for lx-annotate.";
-            };
-
-            updateOnBoot = mkOption {
-              type = types.bool;
-              default = true;
-              description = "Whether to update the lx-annotate repository on service start.";
-            };
-          };
-        };
-        default = { };
-        description = "Repository configuration for lx-annotate.";
-      };
-
-      django = mkOption {
-        type = types.submodule {
-          options = {
-            djangoModule = mkOption {
-              type = types.str;
-              default = "lx_annotate";
-              description = "Python module containing the lx-annotate Django project.";
-            };
-
-            confDir = mkOption {
-              type = types.nullOr types.str;
-              default = null;
-              description = "Override for the lx-annotate configuration directory. Uses the shared API value when null.";
-            };
-
-            confTemplateDir = mkOption {
-              type = types.nullOr types.str;
-              default = null;
-              description = "Override for the lx-annotate configuration template directory. Uses the shared API value when null.";
-            };
-
-            assetDir = mkOption {
-              type = types.nullOr types.str;
-              default = null;
-              description = "Override for the lx-annotate asset directory. Uses the shared API value when null.";
-            };
-          };
-        };
-        default = { };
-        description = "Overrides for lx-annotate Django-specific paths.";
-      };
-
-      runtime = mkOption {
-        type = types.submodule {
-          options = {
-            limits = mkOption {
-              type = types.submodule {
-                options = {
-                  memoryMax = mkOption {
-                    type = types.str;
-                    default = "8G";
-                    description = "MemoryMax limit applied to the lx-annotate-local service.";
-                  };
-
-                  cpuQuota = mkOption {
-                    type = types.str;
-                    default = "800%";
-                    description = "CPUQuota assigned to the lx-annotate-local service.";
-                  };
-                };
-              };
-              default = { };
-              description = "Resource limit configuration for lx-annotate-local.";
-            };
-
-            environment = mkOption {
-              type = types.submodule {
-                options = {
-                  hfHome = mkOption {
-                    type = types.nullOr types.str;
-                    default = null;
-                    description = "Override HuggingFace home directory for lx-annotate.";
-                  };
-
-                  hfHubCache = mkOption {
-                    type = types.nullOr types.str;
-                    default = null;
-                    description = "Override HuggingFace hub cache directory for lx-annotate.";
-                  };
-
-                  transformersCache = mkOption {
-                    type = types.nullOr types.str;
-                    default = null;
-                    description = "Override transformers cache directory for lx-annotate.";
-                  };
-
-                  hfHubEnableTransfer = mkOption {
-                    type = types.nullOr types.bool;
-                    default = null;
-                    description = "Override HF_HUB_ENABLE_HF_TRANSFER for lx-annotate.";
-                  };
-
-                  ollamaModelsDir = mkOption {
-                    type = types.nullOr types.str;
-                    default = null;
-                    description = "Override Ollama models directory for lx-annotate.";
-                  };
-
-                  ollamaKeepAlive = mkOption {
-                    type = types.nullOr types.str;
-                    default = null;
-                    description = "Override Ollama keep-alive duration for lx-annotate.";
-                  };
-                };
-              };
-              default = { };
-              description = "Environment variable overrides for lx-annotate-local.";
-            };
-          };
-        };
-        default = { };
-        description = "Runtime configuration for lx-annotate-local.";
-      };
-    };
-  };
 
   config = mkIf cfg.enable (
     let
@@ -731,6 +203,7 @@ in
     {
       # Storage settings
       luxnix.storage.enable = mkDefault true;
+      services.luxnix.fileMover.enable = true;
 
       user.client.enable = mkDefault true;
       user.endoreg-service-user.enable = true;
@@ -761,8 +234,6 @@ in
         service = cfg.service;
         repository = cfg.repository;
       };
-
-      services.luxnix.fileMover.enable = true;
 
       services.luxnix.lxAnnotateLocal = {
         enable = cfg.lxAnnotate.enable;

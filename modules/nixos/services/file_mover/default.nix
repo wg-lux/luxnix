@@ -1,29 +1,37 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.services.luxnix.fileMover;
   endoregPaths = config.roles.endoreg-client.paths;
 
   clientUserName =
-    if config ? user && config.user ? client && config.user.client ? name
-    then config.user.client.name
-    else "client-user";
+    if config ? user && config.user ? client && config.user.client ? name then
+      config.user.client.name
+    else
+      "client-user";
 
   adminUserName =
-    if config ? user && config.user ? admin && config.user.admin ? name
-    then config.user.admin.name
-    else "admin-user";
+    if config ? user && config.user ? admin && config.user.admin ? name then
+      config.user.admin.name
+    else
+      "admin-user";
 
   endoregServiceUserName = config.user.endoreg-service-user.name;
-  endoregServiceGroup = "endoreg-service"; 
-  
+  endoregServiceGroup = "endoreg-service";
+
   endoreg-service-user-home = config.users.users.${endoregServiceUserName}.home;
   repoDirName = "lx-annotate";
-  
+
   # Source paths
   sourceVideoDir = endoregPaths.videoInputDir;
   sourcePdfDir = endoregPaths.pdfInputDir;
-  
+
   # Destination paths (Deep inside the repo)
   destVideoDir = "${endoreg-service-user-home}/${repoDirName}/data/import/video_import";
   destReportDir = "${endoreg-service-user-home}/${repoDirName}/data/import/report_import";
@@ -31,9 +39,10 @@ with lib.luxnix; let
   # Resolve the correct desktop name (Schreibtisch vs Desktop)
   resolvedDesktopName = config.roles.endoreg-client.paths.desktopDirName;
 
-in {
+in
+{
   options.services.luxnix.fileMover = {
-    enable = mkBoolOpt true "Enable the move-my-files path-triggered service.";
+    enable = mkBoolOpt false "Enable the move-my-files path-triggered service.";
   };
 
   config = mkIf cfg.enable {
@@ -50,7 +59,8 @@ in {
 
     # 2. Home Manager: Use the resolved variable for Desktop/Schreibtisch
     home-manager.users = {
-      ${clientUserName} = { config, ... }:
+      ${clientUserName} =
+        { config, ... }:
         let
           outOfStore = config.lib.file.mkOutOfStoreSymlink;
         in
@@ -73,7 +83,8 @@ in {
         };
     };
     home-manager.users = {
-      ${adminUserName} = { config, ... }:
+      ${adminUserName} =
+        { config, ... }:
         let
           outOfStore = config.lib.file.mkOutOfStoreSymlink;
         in
@@ -102,24 +113,24 @@ in {
       serviceConfig = {
         Type = "oneshot";
         User = endoregServiceUserName;
-        Group = endoregServiceGroup; 
+        Group = endoregServiceGroup;
       };
 
       script = ''
         set -euo pipefail
 
-        
+
 
         # Safety check: Ensure destination exists (repository might have just finished cloning)
         mkdir -p "${destVideoDir}" "${destReportDir}"
-        
+
 
         # Settle time for large file copies
         sleep 2
 
         # Rsync with retry logic is not needed here because Systemd will re-trigger
         # if files are left behind.
-        
+
         # 1. Video Input
         if [ -n "$(${pkgs.findutils}/bin/find "${sourceVideoDir}" -mindepth 1 -print -quit)" ]; then
             echo "Processing Video Input..."

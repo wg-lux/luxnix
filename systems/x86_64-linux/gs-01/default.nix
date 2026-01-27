@@ -95,10 +95,10 @@ generic-settings.network.hosts.gc-07.ip-vpn = "172.16.255.107";
 generic-settings.network.hosts.gc-08.domains = ["gc-08.intern" "lx-annotate.local"];
 generic-settings.network.hosts.gc-08.ip-vpn = "172.16.255.108";
 
-generic-settings.network.hosts.gc-09.domains = ["gc-09.intern"];
+generic-settings.network.hosts.gc-09.domains = ["gc-09.intern" "lx-annotate.local"];
 generic-settings.network.hosts.gc-09.ip-vpn = "172.16.255.109";
 
-generic-settings.network.hosts.gc-10.domains = ["gc-10.intern"];
+generic-settings.network.hosts.gc-10.domains = ["gc-10.intern" "lx-annotate.local"];
 generic-settings.network.hosts.gc-10.ip-vpn = "172.16.255.110";
 
 generic-settings.network.hosts.gs-01.domains = ["gs-01.intern"];
