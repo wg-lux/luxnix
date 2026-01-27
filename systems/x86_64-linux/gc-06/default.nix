@@ -29,6 +29,9 @@
     endoreg-client.api.settingsProfile = "prod";
     endoreg-client.centralNodes = ["s-04"];
     endoreg-client.enable = true;
+    endoreg-client.paths.storagePersistingEnable = true;
+    endoreg-client.paths.storagePersistingIsExternalDrive = true;
+    endoreg-client.paths.storagePersistingMountPoint = "/mnt/endoreg-client-storage";
     endoreg-client.repository.branch = "container";
     nextcloudClient.enable = true;
     postgres.default.enable = true;

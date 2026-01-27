@@ -10,6 +10,7 @@ let
   cfg = config.roles.endoreg-client;
 
   sensitiveServiceGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
+  endoregServiceGroupName = config.luxnix.generic-settings.endoregServiceGroupName;
 in
 {
   options.roles.endoreg-client =
@@ -24,7 +25,7 @@ in
     in
     {
       enable = mkEnableOption "Enable endoreg client configuration";
-
+      adminIsServiceUser = mkBoolOpt true "Whether the admin user is also the endoreg service user.";
       paths = pathOptions;
 
       # Central Nodes Configuration
@@ -76,6 +77,21 @@ in
 
   config = mkIf cfg.enable (
     let
+      adminUserName =
+        if config ? user && config.user ? admin && config.user.admin ? name then
+          config.user.admin.name
+        else
+          "admin";
+      adminUid = config.users.users.${adminUserName}.uid or 1000;
+      configurationPath =
+        if
+          config ? luxnix
+          && config.luxnix ? "generic-settings"
+          && config.luxnix."generic-settings" ? configurationPath
+        then
+          config.luxnix."generic-settings".configurationPath
+        else
+          "/home/${adminUserName}/luxnix";
       clientUserName =
         if config ? user && config.user ? client && config.user.client ? name then
           config.user.client.name
@@ -100,6 +116,7 @@ in
       pdfInputDir = cfg.paths.pdfInputDir;
       desktopDirName = cfg.paths.desktopDirName;
       processingRepo = cfg.paths.processingRepo;
+      storagePersistingMountPoint = cfg.paths.storagePersistingMountPoint;
 
       normalUsers = lib.filterAttrs (_: user: (user.isNormalUser or false)) config.users.users;
       normalUserNames = lib.attrNames normalUsers;
@@ -254,12 +271,101 @@ in
         # Django configuration directory
         "d /etc/endoreg-api 0755 root root -"
         # Service user config directory
-        "d /var/endoreg-service-user/config 0755 endoreg-service-user endoreg-service -"
+        "d /var/endoreg-service-user/config 0755 endoreg-service-user ${endoregServiceGroupName} -"
         # Storage directories (must exist for the symlinks to valid targets)
-        "d ${storageBaseDir} 0770 root endoreg-service -"
-        "d ${videoInputDir} 0770 root endoreg-service -"
-        "d ${pdfInputDir} 0770 root endoreg-service -"
+        "d ${storageBaseDir} 0770 root ${endoregServiceGroupName} -"
+        "d ${videoInputDir} 0770 root ${endoregServiceGroupName} -"
+        "d ${pdfInputDir} 0770 root ${endoregServiceGroupName} -"
+      ]
+      ++ lib.optionals cfg.paths.storagePersistingEnable [
+        # Persistent storage mount point
+        "d ${storagePersistingMountPoint} 0770 root ${endoregServiceGroupName} -"
       ];
+
+      security.sudo.extraRules = [
+        {
+          users = [ adminUserName ];
+          commands = [
+            {
+              command = "${pkgs.util-linux}/bin/mount";
+              options = [ "NOPASSWD" ];
+            }
+            {
+              command = "${pkgs.util-linux}/bin/umount";
+              options = [ "NOPASSWD" ];
+            }
+          ];
+        }
+      ];
+
+      # Periodically ensure the external persisting drive is mounted
+      systemd.services.endoreg-mount-persisting-storage =
+        mkIf (cfg.paths.storagePersistingEnable && cfg.paths.storagePersistingIsExternalDrive)
+          {
+            description = "Mount endoreg persisting storage via devenv";
+            serviceConfig = {
+              Type = "oneshot";
+              User = "root";
+              Environment = [
+                "ENV_FILE=${configurationPath}/.env"
+              ];
+              WorkingDirectory = configurationPath;
+              ExecStartPre = [ ];
+              ExecStart = pkgs.writeShellScript "mount-persisting-storage-service" ''
+                set -euo pipefail
+                # Read from .env file 
+                # STORAGE_PERSISTING_HDD_ID: str, 
+                # STORAGE_PERSISTING_EXTERNAL_DRIVE: bool
+                # STORAGE_PERSISTING_MOUNT_POINT: str
+                source "${configurationPath}/.env"
+
+                # if STORAGE_PERSISTING_EXTERNAL_DRIVE is not true, exit
+                if [ "$STORAGE_PERSISTING_EXTERNAL_DRIVE" != "true" ]; then
+                  echo "STORAGE_PERSISTING_EXTERNAL_DRIVE is not true; skipping mount"
+                  exit 0
+
+                fi
+
+                # Check if already mounted
+                if mountpoint -q "$STORAGE_PERSISTING_MOUNT_POINT"; then
+                  echo "Persisting storage already mounted at $STORAGE_PERSISTING_MOUNT_POINT"
+                  exit 0
+
+                fi
+
+                # attempt to mount drive by ID; prefer first partition if present
+                DEV_BASE="/dev/disk/by-id/$STORAGE_PERSISTING_HDD_ID"
+                DEV_PATH="$DEV_BASE-$STORAGE_PERSISTING_HDD_PART"
+  
+
+                echo "Mounting persisting storage drive $DEV_PATH to $STORAGE_PERSISTING_MOUNT_POINT"
+                if [ ! -e "$DEV_PATH" ]; then
+                  echo "ERROR: Device path $DEV_PATH does not exist"
+                  exit 1
+                fi
+
+                mount "$DEV_PATH" "$STORAGE_PERSISTING_MOUNT_POINT"
+                echo "Mounted persisting storage successfully" 
+
+              '';
+            };
+            path = [
+              pkgs.coreutils
+              pkgs.util-linux
+            ];
+          };
+
+      systemd.timers.endoreg-mount-persisting-storage =
+        mkIf (cfg.paths.storagePersistingEnable && cfg.paths.storagePersistingIsExternalDrive)
+          {
+            description = "Periodic mount check for endoreg persisting storage";
+            wantedBy = [ "timers.target" ];
+            timerConfig = {
+              OnBootSec = "1m";
+              OnUnitActiveSec = "5m";
+              Unit = "endoreg-mount-persisting-storage.service";
+            };
+          };
 
       # Update Home Manager configuration to use XDG User Dirs and OutOfStore symlinks
       home-manager.users.${clientUserName} =
@@ -313,6 +419,7 @@ in
           '';
         };
       };
+
     }
   );
 }

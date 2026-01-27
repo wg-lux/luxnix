@@ -1,6 +1,22 @@
 { lib, config }:
 with lib;
 {
+  storagePersistingEnable = mkOption {
+    type = types.bool;
+    default = false;
+    description = "Whether to enable persistent storage for endoreg client.";
+  };
+  storagePersistingIsExternalDrive = mkOption {
+    type = types.bool;
+    default = false;
+    description = "Whether the persistent storage is on an external drive.";
+  };
+  storagePersistingMountPoint = mkOption {
+    type = types.path;
+    default = "/mnt/endoreg-client-storage";
+    description = "Mount point for persistent storage volume for endoreg client.";
+  };
+
   storageBaseDir = mkOption {
     type = types.path;
     default = "/var/lib/endoreg-client";
