@@ -120,6 +120,8 @@ Please visit the following link:
  [https://keycloak.endo-reg.net/](https://keycloak.endo-reg.net/)  
 Use the provided credentials to log in.
 
+To use the integrated application lx-annotate, the application needs the keyccloak secret stored at your preferred secret location.
+
 ## Step 2: Complete Required Actions
 
 After logging in, you will be automatically guided through the following steps:

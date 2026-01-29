@@ -22,6 +22,7 @@ let
 
   adminName = config.user.admin.name;
   scriptName = "runLocalLxAnnotate";
+  exportFramesScriptName = "runLocalExportFrames";
 
   # Use configuration options from new structure
   gitURL = cfg.source.url;
@@ -72,6 +73,7 @@ let
 
   # Default center from django extraSettings
   envDefaultCenter = cfg.django.extraSettings.DEFAULT_CENTER or "university_hospital_wuerzburg";
+  exportFramesStorageRootDefault = config.roles.endoreg-client.paths.storagePersistingMountPoint;
 
   runLocalLxAnnotateScript = pkgs.writeShellScriptBin "${scriptName}" ''
         set -euo pipefail
@@ -379,6 +381,65 @@ let
 
     # Check if devenv is available in path (it is set in Service Config)
     exec devenv shell -- bash -c start-filewatcher 
+  '';
+  runLocalExportFramesScript = pkgs.writeShellScriptBin "${exportFramesScriptName}" ''
+    set -euo pipefail
+
+    # 1. Go to the repo (Cloned by the main boot service)
+    cd ${repoDir}
+
+    # 2. Re-Export ALL necessary Environment Variables
+    export DJANGO_DB_PASSWORD_FILE="${cfg.database.endoregLocalUserPasswordFile}"
+    export DJANGO_SECRET_KEY_FILE="${cfg.django.djangoSecretKeyFile}"
+    exportFramesStorageRoot="${exportFramesStorageRootDefault}"
+    if [ ! -d "$exportFramesStorageRoot" ] || [ ! -w "$exportFramesStorageRoot" ]; then
+      exportFramesStorageRoot="${envDataDir}"
+    fi
+
+    export DATA_DIR="$exportFramesStorageRoot"
+    export STORAGE_DIR="$exportFramesStorageRoot"
+    export IO_DIR="$exportFramesStorageRoot"
+    export CONF_DIR="${envConfDir}"
+    export CONF_TEMPLATE_DIR="${envConfTemplateDir}"
+    export WORKING_DIR="${repoDir}"
+    export HOME_DIR="${endoreg-service-user-home}"
+    export DJANGO_MODULE="${envDjangoModule}"
+    export DJANGO_SETTINGS_MODULE="lx_annotate.settings.settings_prod"
+    export DJANGO_ENV="${envDjangoEnv}"
+    export CENTRAL_NODE="${envCentralNodeFlag}"
+    export HTTP_PROTOCOL="${envHttpProtocol}"
+    export DJANGO_HOST="${envDjangoHost}"
+    export DJANGO_PORT="${envDjangoPort}"
+    export BASE_URL="${envBaseUrl}"
+    export TIME_ZONE="${cfg.django.timeZone}"
+    export RUN_VIDEO_TESTS="${envRunVideoTests}"
+    export SKIP_EXPENSIVE_TESTS="${envSkipExpensiveTests}"
+
+    # 3. Read Secrets (Must match boot script logic)
+    DJANGO_DB_PASSWORD_VALUE="$(tr -d '\n' < ${envConfDir}/db_pwd 2>/dev/null || true)"
+    export DJANGO_DB_ENGINE="django.db.backends.postgresql"
+    export DJANGO_DB_NAME="${cfg.database.name}"
+    export DJANGO_DB_USER="${cfg.database.user}"
+    export DJANGO_DB_PASSWORD="$DJANGO_DB_PASSWORD_VALUE"
+    export DJANGO_DB_HOST="${cfg.database.host}"
+    export DJANGO_DB_PORT="${toString cfg.database.port}"
+    export DJANGO_DB_SSLMODE="${cfg.database.sslMode}"
+
+    DJANGO_SECRET_KEY_VALUE="$(tr -d '\n' < ${cfg.django.djangoSecretKeyFile} 2>/dev/null || true)"
+    export DJANGO_SECRET_KEY="$DJANGO_SECRET_KEY_VALUE"
+
+    export SERVE_WITH_NGINX="true"
+    export NGINX_PROTECTED_MEDIA_URL="/protected_media/"
+    export DJANGO_ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
+    export ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
+    export DJANGO_CSRF_TRUSTED_ORIGINS='${builtins.toJSON cfg.django.corsAllowedOrigins}'
+
+    # 4. Ensure target directory exists
+    exportFramesDir="$exportFramesStorageRoot/export/frames"
+    mkdir -p "$exportFramesDir"
+
+    # 5. Run export inside devenv shell
+    exec devenv shell -- bash -c "STORAGE_DIR='$exportFramesStorageRoot' IO_DIR='$exportFramesStorageRoot' DATA_DIR='$exportFramesStorageRoot' export-frames"
   '';
 
 in
@@ -823,6 +884,23 @@ in
           "NIX_PATH=nixpkgs=${pkgs.path}"
         ];
         CPUQuota = "70%";
+      };
+    };
+
+    systemd.services.lx-annotate-export-frames = {
+      description = "Export annotated frames for lx-annotate";
+      after = [ "lx-annotate-boot.service" ];
+      requires = [ "lx-annotate-boot.service" ];
+
+      serviceConfig = {
+        Type = "oneshot";
+        User = endoreg-service-user-name;
+        WorkingDirectory = repoDir;
+        ExecStart = "${runLocalExportFramesScript}/bin/${exportFramesScriptName}";
+        Environment = [
+          "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:${pkgs.direnv}/bin:/run/current-system/sw/bin"
+          "NIX_PATH=nixpkgs=${pkgs.path}"
+        ];
       };
     };
   };
