@@ -200,7 +200,7 @@ let
 
         export OIDC_RP_CLIENT_ID="${cfg.django.keycloakClientId}"
         OIDC_CLIENT_SECRET_VALUE="$(tr -d '\n' < ${cfg.django.keycloakSecretFile} 2>/dev/null || true)"
-        export STORAGE_PERSISTED = "$/TEST/PATH"
+        export STORAGE_PERSISTED = '$/TEST/PATH'
         export OIDC_RP_CLIENT_SECRET="$OIDC_CLIENT_SECRET_VALUE"    
 
         # Deployment markers
