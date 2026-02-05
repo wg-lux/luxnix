@@ -19,8 +19,9 @@ with lib.luxnix; let
   psqlMainConfig = networkConfig.psqlMain;
   psqlTestConfig = networkConfig.psqlTest;
 
-  nginx_cert_path = "/etc/nginx-host/ssl_cert";
-  nginx_key_path = "/etc/nginx-host/ssl_key";
+  nginxStateDir = "/etc/nginx-host";
+  nginx_cert_path = "${nginxStateDir}/ssl_cert";
+  nginx_key_path = "${nginxStateDir}/ssl_key";
 
   all-extraConfig = ''
     proxy_headers_hash_bucket_size ${toString cfg.settings.proxyHeadersHashBucketSize};
@@ -44,13 +45,35 @@ with lib.luxnix; let
     add_header Strict-Transport-Security "max-age=15552000; includeSubDomains; preload";
   '';
 
-  nginxPrepareScript = pkgs.writeScript "nginx-prepare-files.sh" ''
+  nginxSyncScript = pkgs.writeScript "nginx-sync-certificates.sh" ''
     #!/bin/sh
-    set -e
-    cp ${cfg.sslCertPath} ${nginx_cert_path}
-    cp ${cfg.sslKeyPath} ${nginx_key_path}
-    chown nginx:nginx ${nginx_cert_path} ${nginx_key_path}
-    chmod 600 ${nginx_cert_path} ${nginx_key_path}
+    set -eu
+
+    install -d -m 700 -o nginx -g nginx "${nginxStateDir}"
+
+    NEEDS_RELOAD=0
+
+    sync_file() {
+      src="$1"
+      dst="$2"
+
+      if [ ! -e "$src" ]; then
+        echo "Source certificate $src not found" >&2
+        exit 1
+      fi
+
+      if [ ! -e "$dst" ] || ! cmp -s "$src" "$dst"; then
+        install -m 600 -o nginx -g nginx "$src" "$dst"
+        NEEDS_RELOAD=1
+      fi
+    }
+
+    sync_file "${cfg.sslCertPath}" "${nginx_cert_path}"
+    sync_file "${cfg.sslKeyPath}" "${nginx_key_path}"
+
+    if [ "$NEEDS_RELOAD" -eq 1 ] && systemctl is-active --quiet nginx.service; then
+      systemctl reload nginx.service
+    fi
   '';
 in
 {
@@ -130,7 +153,7 @@ in
 
     # systemd.tmpfile.rule to make sure /etc/nginx-host exists
     systemd.tmpfiles.rules = [
-      "d /etc/nginx-host 0700 nginx nginx -"
+      "d ${nginxStateDir} 0700 nginx nginx -"
     ];
 
     systemd.services.nginx-prepare-files = {
@@ -140,7 +163,39 @@ in
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
-        ExecStart = nginxPrepareScript;
+        ExecStart = nginxSyncScript;
+      };
+    };
+
+    systemd.services.nginx-sync-certificates = {
+      description = "Synchronize SSL material for NGINX";
+      after = [ "nginx-prepare-files.service" ];
+      wantedBy = [ "multi-user.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = nginxSyncScript;
+      };
+    };
+
+    systemd.paths.nginx-sync-certificates = {
+      description = "Watch for SSL material changes";
+      wantedBy = [ "multi-user.target" ];
+      pathConfig = {
+        PathChanged = [
+          "${cfg.sslCertPath}"
+          "${cfg.sslKeyPath}"
+        ];
+        Unit = "nginx-sync-certificates.service";
+      };
+    };
+
+    systemd.timers.nginx-sync-certificates = {
+      description = "Periodic SSL material synchronization";
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnBootSec = "10m";
+        OnUnitActiveSec = "6h";
+        Unit = "nginx-sync-certificates.service";
       };
     };
 

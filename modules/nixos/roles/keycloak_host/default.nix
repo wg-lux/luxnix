@@ -20,16 +20,47 @@ with lib.luxnix; let
   sslCertFile = config.luxnix.generic-settings.sslCertificatePath;
   sslKeyFile = config.luxnix.generic-settings.sslCertificateKeyPath;
 
-  keycloakPrepareScript = pkgs.writeScript "keycloak-prepare-files.sh" ''
+  keycloakSyncScript = pkgs.writeScript "keycloak-sync-materials.sh" ''
     #!/bin/sh
-    set -e
-    cp /etc/secrets/vault/${cfg.dbPasswordfile} ${cfg.homeDir}/db-password
-    chown keycloak:keycloak ${cfg.homeDir}/db-password
-    chmod 0600 ${cfg.homeDir}/db-password
-    cp ${sslCertFile} ${cfg.homeDir}/tls.crt
-    cp ${sslKeyFile} ${cfg.homeDir}/tls.key
-    chown keycloak:keycloak ${cfg.homeDir}/tls.crt ${cfg.homeDir}/tls.key
-    chmod 600 ${cfg.homeDir}/tls.crt ${cfg.homeDir}/tls.key
+    set -eu
+
+    umask 077
+
+    db_source="/etc/secrets/vault/${cfg.dbPasswordfile}"
+    cert_source="${sslCertFile}"
+    key_source="${sslKeyFile}"
+
+    db_target="${cfg.homeDir}/db-password"
+    cert_target="${cfg.homeDir}/tls.crt"
+    key_target="${cfg.homeDir}/tls.key"
+
+    install -d -m 770 -o keycloak -g ${sensitiveServicesGroupName} "${cfg.homeDir}"
+
+    changed=0
+
+    sync_file() {
+      src="$1"
+      dst="$2"
+      mode="$3"
+
+      if [ ! -e "$src" ]; then
+        echo "Required file $src is missing" >&2
+        exit 1
+      fi
+
+      if [ ! -e "$dst" ] || ! cmp -s "$src" "$dst"; then
+        install -m "$mode" -o keycloak -g keycloak "$src" "$dst"
+        changed=1
+      fi
+    }
+
+    sync_file "$db_source" "$db_target" 600
+    sync_file "$cert_source" "$cert_target" 600
+    sync_file "$key_source" "$key_target" 600
+
+    if [ "$changed" -eq 1 ] && systemctl is-active --quiet keycloak.service; then
+      systemctl restart keycloak.service
+    fi
   '';
 
   # Script to set up keycloak database user password
@@ -193,7 +224,41 @@ with lib.luxnix; let
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
-        ExecStart = "${keycloakPrepareScript}";
+        ExecStart = "${keycloakSyncScript}";
+      };
+    };
+
+    systemd.services.keycloak-sync-materials = {
+      description = "Synchronize Keycloak secrets and TLS material";
+      after = [ "managed-secrets-setup.service" ];
+      wants = [ "managed-secrets-setup.service" ];
+      wantedBy = [ "multi-user.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = keycloakSyncScript;
+      };
+    };
+
+    systemd.paths.keycloak-sync-materials = {
+      description = "Watch for changes to Keycloak credential sources";
+      wantedBy = [ "multi-user.target" ];
+      pathConfig = {
+        PathChanged = [
+          "/etc/secrets/vault/${cfg.dbPasswordfile}"
+          "${sslCertFile}"
+          "${sslKeyFile}"
+        ];
+        Unit = "keycloak-sync-materials.service";
+      };
+    };
+
+    systemd.timers.keycloak-sync-materials = {
+      description = "Periodic Keycloak credential sync";
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnBootSec = "15m";
+        OnUnitActiveSec = "6h";
+        Unit = "keycloak-sync-materials.service";
       };
     };
 
