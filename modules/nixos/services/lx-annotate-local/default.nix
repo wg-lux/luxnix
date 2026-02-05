@@ -923,5 +923,17 @@ in
         ];
       };
     };
+    systemd.services.nginx.serviceConfig = {
+      # -5 gives Nginx slightly higher priority than standard processes
+      Nice = -5;
+
+      # Give Nginx "Best Effort" disk access, with the highest priority (0)
+      # This ensures video chunks are read from disk before anything else
+      IOSchedulingClass = "best-effort";
+      IOSchedulingPriority = 0;
+      
+      # Protect Nginx from being killed if RAM runs out
+      OOMScoreAdjust = -500;
+    };
   };
 }
