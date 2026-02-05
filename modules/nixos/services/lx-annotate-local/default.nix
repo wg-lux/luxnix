@@ -864,6 +864,16 @@ in
         # Resource limits
         MemoryMax = "8G";
         CPUQuota = "70%";
+        Nice = -5;
+        
+        # 2. Disk I/O: Best Effort (Default), but with higher weight
+        # We don't need "realtime" (dangerous), but we want to be "best-effort" priority 0 (highest in class)
+        IOSchedulingClass = "best-effort";
+        IOSchedulingPriority = 0;
+
+        # 3. Memory Protection
+        # If Linux runs out of RAM, please kill the filewatcher, not the web server.
+        OOMScoreAdjust = -500; # Lower score means "Don't kill me"
       };
     };
     systemd.services.lx-annotate-filewatcher = {
@@ -883,6 +893,17 @@ in
           "NIX_PATH=nixpkgs=${pkgs.path}"
         ];
         CPUQuota = "70%";
+
+        # 1. CPU Priority: Lower priority (Higher "Nice" value = nicer to others)
+        Nice = 19; 
+
+        # 2. Disk I/O Class: "idle"
+        # This process will only get disk time when no other process needs it.
+        # This solves the streaming stutter immediately.
+        IOSchedulingClass = "idle";
+        
+        # 3. OOM Score: If RAM runs out, kill this service first, never the web server.
+        OOMScoreAdjust = 1000;
       };
     };
 
