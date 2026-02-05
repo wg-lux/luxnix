@@ -379,7 +379,7 @@ let
     echo "📁 Starting File Watcher..."
 
     # Check if devenv is available in path (it is set in Service Config)
-    exec devenv shell -- bash -c scripts/start-filewatcher.sh
+    exec devenv shell run-filewatcher
   '';
   runLocalExportFramesScript = pkgs.writeShellScriptBin "${exportFramesScriptName}" ''
     set -euo pipefail
