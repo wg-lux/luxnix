@@ -262,12 +262,11 @@ let
         cat > "$SECRETSPEC_CONFIG_DIR/config.toml" <<EOF
     [defaults]
     provider = "env"
-    profile = "default"
+    profile = "production"
     EOF
 
 
 
-        # Write essential environment variables to .env.systemd
     cat > ${repoDir}/.env.systemd <<EOF
     HOME_DIR=${endoreg-service-user-home}
     DATA_DIR=${envDataDir}
@@ -279,6 +278,8 @@ let
     IO_DIR=${envDataDir}
     SERVE_WITH_NGINX=true
     NGINX_PROTECTED_MEDIA_URL=/protected_media/
+    DEBUG=False
+    DJANGO_DEBUG=False
 
     # --- Network & Host Configuration ---
     HTTP_PROTOCOL=${envHttpProtocol}
