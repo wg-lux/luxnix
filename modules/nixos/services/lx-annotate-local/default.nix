@@ -312,9 +312,6 @@ let
         fi
 
         echo "Starting Django server..."
-
-
-        echo "Starting Django server..."
         # build the environment and start the server
         exec devenv shell -- bash -c "vue-build && run-server"
   '';
@@ -368,13 +365,13 @@ let
     # --- Network & Host Configuration ---
     export SERVE_WITH_NGINX="true"
     export NGINX_PROTECTED_MEDIA_URL="/protected_media/"
-    HTTP_PROTOCOL=${envHttpProtocol}
-    DJANGO_HOST=${envDjangoHost}
-    DJANGO_PORT=${envDjangoPort}
-    BASE_URL=${envBaseUrl}
-    DJANGO_ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
-    ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
-    DJANGO_CSRF_TRUSTED_ORIGINS='${builtins.toJSON cfg.django.corsAllowedOrigins}'
+    export HTTP_PROTOCOL="${envHttpProtocol}"
+    export DJANGO_HOST="${envDjangoHost}"
+    export DJANGO_PORT="${envDjangoPort}"
+    export BASE_URL="${envBaseUrl}"
+    export DJANGO_ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
+    export ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
+    export DJANGO_CSRF_TRUSTED_ORIGINS='${builtins.toJSON cfg.django.corsAllowedOrigins}'
 
     # 4. Start the Watcher inside the devenv shell
     echo "📁 Starting File Watcher..."
@@ -804,8 +801,8 @@ in
       "d /var/lib/lx-annotate/ssl 0750 root nginx - -"
       "z /var/lib/lx-annotate/ssl 0750 root nginx - -"
 
-      # 3. The Certificate Files: Recursively fix perms
-      "Z /var/lib/lx-annotate/ssl 0640 root nginx - -"
+      # File mode normalization is handled by nginx preStart to avoid
+      # recursive 0640 on directories.
     ]
     ++ lib.optionals (!config.roles.endoreg-client.enable) [
       # Create the config subdirectory (handled by endoreg-client role when enabled)
