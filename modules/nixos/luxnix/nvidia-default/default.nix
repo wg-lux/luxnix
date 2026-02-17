@@ -1,4 +1,6 @@
 { config
+, inputs
+, pkgs
 , lib
 , ...
 }:
@@ -12,18 +14,31 @@ with lib.luxnix; let
     "beta" = config.boot.kernelPackages.nvidiaPackages.beta;
     "production" = config.boot.kernelPackages.nvidiaPackages.production;
 
+
+    # Custom imports
+    "555_58" = {
+      version = "555.58";
+      sha256_64bit = "sha256-bXvcXkg2kQZuCNKRZM5QoTaTjF4l2TtrsKUvyicj5ew=";
+      sha256_aarch64 = pkgs.lib.fakeSha256;
+      openSha256 = pkgs.lib.fakeSha256;
+      settingsSha256 = "sha256-vWnrXlBCb3K5uVkDFmJDVq51wrCoqgPF03lSjZOuU8M=";
+      persistencedSha256 = pkgs.lib.fakeSha256;
+    };
   };
+
+  # we need to find out what system we are working on (eg linux, darwin, ...)
+  system = config.system.build.host.system;
 
 in
 {
   options.luxnix.nvidia-default = with types; {
     enable = mkBoolOpt false "Enable or disable the Nvidia GPU Support";
 
-    enableCudaSupport = mkBoolOpt false "Enable CUDA support for nixpkgs package variants";
-    enableOpenKernelModule = mkBoolOpt true "Enable Nvidia open kernel module (requires supported GPU)";
+    # Other bool options are: enable cuda support for nix packages, add xserver driver, add initrd-kernel-module, addd autoadddriverrunpath
+    # enable prime sync, enable modesetting, 
 
     nvidiaDriver = mkOption {
-      type = types.enum [ "stable" "beta" "production" ];
+      type = types.str;
       default = "production";
       description = "The nvidia driver to use";
     };
@@ -33,9 +48,11 @@ in
 
     hardware.graphics = {
       enable = true;
+      extraPackages = with pkgs; [
+      ];
     };
 
-    nixpkgs.config.cudaSupport = cfg.enableCudaSupport;
+    nixpkgs.config.cudaSupport = true;
 
     services.xserver.videoDrivers = [ "nvidia" ];
     boot.initrd.kernelModules = [ "nvidia" ];
@@ -43,7 +60,7 @@ in
       modesetting.enable = true;
       powerManagement.enable = true;
       powerManagement.finegrained = false;
-      open = cfg.enableOpenKernelModule;
+      open = true;
       nvidiaSettings = true;
       package = nvidiaDrivers.${cfg.nvidiaDriver};
     };

@@ -358,7 +358,6 @@ in {
     luxnix.nvidia-default = mkIf (cfg.gpu.nvidia.enable && !cfg.gpu.nvidia.prime.enable) {
       enable = true;
       nvidiaDriver = cfg.gpu.nvidia.driver;
-      enableCudaSupport = true;
     };
   };
 
