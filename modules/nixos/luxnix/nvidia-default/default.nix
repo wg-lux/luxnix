@@ -49,6 +49,8 @@ in
     hardware.graphics = {
       enable = true;
       extraPackages = with pkgs; [
+        triton-llvm
+        nvidia-x11
       ];
     };
 
