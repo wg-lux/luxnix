@@ -186,6 +186,7 @@ in {
     systemd.tmpfiles.rules = [
       # USB Encrypter
       "d ${cfg.sensitiveDirectory} 0770 admin endoreg-service -"
+      "d ${sensitiveLogsDirectory} 0770 admin endoreg-service -"
       "d ${cfg.keyFileDirectory} 0700 admin endoreg-service -"
     ];
 
@@ -224,4 +225,3 @@ in {
 
   };
 }
-
