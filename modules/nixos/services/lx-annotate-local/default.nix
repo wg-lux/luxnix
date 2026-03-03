@@ -74,6 +74,80 @@ let
   # Default center from django extraSettings
   envDefaultCenter = cfg.django.extraSettings.DEFAULT_CENTER or "university_hospital_wuerzburg";
   exportFramesStorageRootDefault = config.roles.endoreg-client.paths.storagePersistingMountPoint;
+  mkDjangoOptions = import ../../lib/django-options.nix { inherit lib; };
+  makeBin = "${pkgs.gnumake}/bin/make";
+  lxAnnotateEnvHelpers = pkgs.writeShellScript "lx-annotate-env-helpers.sh" ''
+    lx_annotate_export_base_env() {
+      export DJANGO_SECRET_KEY_FILE="${cfg.django.djangoSecretKeyFile}"
+      export OIDC_RP_CLIENT_SECRET_FILE="${cfg.django.keycloakSecretFile}"
+
+      export CONF_DIR="${envConfDir}"
+      export CONF_TEMPLATE_DIR="${envConfTemplateDir}"
+      export WORKING_DIR="${repoDir}"
+      export HOME_DIR="${endoreg-service-user-home}"
+      export DB_PWD_FILE="${envConfDir}/db_pwd"
+      export DJANGO_DB_PASSWORD_FILE="${envConfDir}/db_pwd"
+
+      export DJANGO_MODULE="${envDjangoModule}"
+      export DJANGO_SETTINGS_MODULE="lx_annotate.settings.settings_prod"
+      export DJANGO_SETTINGS_MODULE_PRODUCTION="lx_annotate.settings.settings_prod"
+      export DJANGO_SETTINGS_MODULE_DEVELOPMENT="lx_annotate.settings.settings_dev"
+      export DJANGO_ENV="${envDjangoEnv}"
+      export CENTRAL_NODE="${envCentralNodeFlag}"
+      export HTTP_PROTOCOL="${envHttpProtocol}"
+      export DJANGO_HOST="${envDjangoHost}"
+      export DJANGO_PORT="${envDjangoPort}"
+      export BASE_URL="${envBaseUrl}"
+      export TIME_ZONE="${cfg.django.timeZone}"
+      export RUN_VIDEO_TESTS="${envRunVideoTests}"
+      export SKIP_EXPENSIVE_TESTS="${envSkipExpensiveTests}"
+      export SERVE_WITH_NGINX="true"
+      export NGINX_PROTECTED_MEDIA_URL="/protected_media/"
+
+      export DJANGO_ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
+      export ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
+      export DJANGO_CORS_ALLOWED_ORIGINS='${builtins.toJSON cfg.django.corsAllowedOrigins}'
+      export DJANGO_CSRF_TRUSTED_ORIGINS='${builtins.toJSON cfg.django.corsAllowedOrigins}'
+    }
+
+    lx_annotate_export_storage_env() {
+      local data_root="$1"
+      export DATA_DIR="$data_root"
+      export STORAGE_DIR="$data_root"
+      export IO_DIR="$data_root"
+    }
+
+    lx_annotate_export_django_paths_env() {
+      export STATIC_URL="${envStaticUrl}"
+      export MEDIA_URL="${envMediaUrl}"
+      export ASSET_DIR="${envAssetDir}"
+    }
+
+    lx_annotate_export_db_env() {
+      local db_pwd
+      db_pwd="$(tr -d '\n' < ${envConfDir}/db_pwd 2>/dev/null || true)"
+      export DJANGO_DB_ENGINE="django.db.backends.postgresql"
+      export DJANGO_DB_NAME="${cfg.database.name}"
+      export DJANGO_DB_USER="${cfg.database.user}"
+      export DJANGO_DB_PASSWORD="$db_pwd"
+      export DJANGO_DB_HOST="${cfg.database.host}"
+      export DJANGO_DB_PORT="${toString cfg.database.port}"
+      export DJANGO_DB_SSLMODE="${cfg.database.sslMode}"
+    }
+
+    lx_annotate_export_secret_key_env() {
+      local django_secret_key
+      django_secret_key="$(tr -d '\n' < ${cfg.django.djangoSecretKeyFile} 2>/dev/null || true)"
+      export DJANGO_SECRET_KEY="$django_secret_key"
+    }
+
+    lx_annotate_export_oidc_env() {
+      local oidc_client_secret
+      export OIDC_RP_CLIENT_ID="${cfg.django.keycloakClientId}"
+      oidc_client_secret="$(tr -d '\n' < ${cfg.django.keycloakSecretFile} 2>/dev/null || true)"
+      export OIDC_RP_CLIENT_SECRET="$oidc_client_secret"
+    }
+  '';
 
   runLocalLxAnnotateScript = pkgs.writeShellScriptBin "${scriptName}" ''
         set -euo pipefail
@@ -93,10 +167,25 @@ let
         if [ ! -d ${repoDir} ]; then
           echo "Cloning repository..."
           git clone -b ${branchName} ${gitURL} ${repoDir}
-          cd ${repoDir}
-          direnv allow
+        fi
+
+        cd ${repoDir}
+        direnv allow
+
+        if [ -f Makefile ]; then
+          echo "Using Makefile repository sync targets..."
+          ${
+            if cfg.source.updateOnBoot then
+              ''
+                ${makeBin} REPO_DIR="${repoDir}" BRANCH="${branchName}" GIT_URL="${gitURL}" REMOTE="origin" update
+              ''
+            else
+              ''
+                ${makeBin} REPO_DIR="${repoDir}" BRANCH="${branchName}" GIT_URL="${gitURL}" REMOTE="origin" setup
+              ''
+          }
         else
-          cd ${repoDir}
+          echo "Makefile not found, using legacy git workflow."
           ${
             if cfg.source.updateOnBoot then
               ''
@@ -108,31 +197,29 @@ let
                 echo "Repository update disabled"
               ''
           }
-        fi
 
-        # Checkout branch
-        echo "Checking out branch: ${branchName}"
-        if git show-ref --verify --quiet refs/heads/${branchName}; then
-          git checkout ${branchName} || { echo "ERROR: Checkout failed"; exit 1; }
-        elif git show-ref --verify --quiet refs/remotes/origin/${branchName}; then
-          git checkout -b ${branchName} origin/${branchName} || { echo "ERROR: Tracking branch failed"; exit 1; }
-        else
-          echo "ERROR: Branch ${branchName} does not exist"
-          exit 1
-        fi
-
-        ${
-          if cfg.source.updateOnBoot then
-            ''
-              # Update branch
-              git pull origin ${branchName} || { 
-                echo "WARNING: Failed to pull, trying reset"
-                git reset --hard origin/${branchName} || { echo "ERROR: Update failed"; exit 1; }
-              }
-            ''
+          echo "Checking out branch: ${branchName}"
+          if git show-ref --verify --quiet refs/heads/${branchName}; then
+            git checkout ${branchName} || { echo "ERROR: Checkout failed"; exit 1; }
+          elif git show-ref --verify --quiet refs/remotes/origin/${branchName}; then
+            git checkout -b ${branchName} origin/${branchName} || { echo "ERROR: Tracking branch failed"; exit 1; }
           else
-            ""
-        }
+            echo "ERROR: Branch ${branchName} does not exist"
+            exit 1
+          fi
+
+          ${
+            if cfg.source.updateOnBoot then
+              ''
+                git pull origin ${branchName} || { 
+                  echo "WARNING: Failed to pull, trying reset"
+                  git reset --hard origin/${branchName} || { echo "ERROR: Update failed"; exit 1; }
+                }
+              ''
+            else
+              ""
+          }
+        fi
 
         # --- DB SETUP ---
         cd ${repoDir}
@@ -145,62 +232,16 @@ let
         echo "Running Django application configuration setup..."
         cd ${repoDir}
 
-        export DJANGO_DB_PASSWORD_FILE="${cfg.database.endoregLocalUserPasswordFile}" 
-        export DJANGO_SECRET_KEY_FILE="${cfg.django.djangoSecretKeyFile}"
-        export OIDC_RP_CLIENT_SECRET_FILE="${cfg.django.keycloakSecretFile}"
-
-        export DATA_DIR="${envDataDir}"
-        export STORAGE_DIR="${envDataDir}"
-        export IO_DIR="${envDataDir}"
-        export CONF_DIR="${envConfDir}"
-        export CONF_TEMPLATE_DIR="${envConfTemplateDir}"
-        export WORKING_DIR="${repoDir}"
-        export HOME_DIR="${endoreg-service-user-home}"
-        export DB_PWD_FILE="${envConfDir}/db_pwd"
-        export DJANGO_DB_PASSWORD_FILE="${envConfDir}/db_pwd"
-
-        export DJANGO_MODULE="${envDjangoModule}"
-        export DJANGO_SETTINGS_MODULE="lx_annotate.settings.settings_prod"
-        export DJANGO_SETTINGS_MODULE_PRODUCTION="lx_annotate.settings.settings_prod"
-        export DJANGO_SETTINGS_MODULE_DEVELOPMENT="lx_annotate.settings.settings_dev"
-        export DJANGO_ENV="${envDjangoEnv}"
-        export CENTRAL_NODE="${envCentralNodeFlag}"
-        export HTTP_PROTOCOL="${envHttpProtocol}"
-        export DJANGO_HOST="${envDjangoHost}"
-        export DJANGO_PORT="${envDjangoPort}"
-        export BASE_URL="${envBaseUrl}"
-        export TIME_ZONE="${cfg.django.timeZone}"
-        export STATIC_URL="${envStaticUrl}"
-        export MEDIA_URL="${envMediaUrl}"
-        export ASSET_DIR="${envAssetDir}"
-        export RUN_VIDEO_TESTS="${envRunVideoTests}"
-        export SKIP_EXPENSIVE_TESTS="${envSkipExpensiveTests}"
-        export SERVE_WITH_NGINX="true"
-        export NGINX_PROTECTED_MEDIA_URL="/protected_media/"
+        source ${lxAnnotateEnvHelpers}
+        lx_annotate_export_base_env
+        lx_annotate_export_storage_env "${envDataDir}"
+        lx_annotate_export_django_paths_env
+        lx_annotate_export_db_env
+        export DJANGO_DJANGO_DB_PASSWORD="$DJANGO_DB_PASSWORD"
+        lx_annotate_export_secret_key_env
+        lx_annotate_export_oidc_env
         export EXEMPT_URLS="^/accounts/login/$"
         export LOGIN_URL="/accounts/login/"
-
-        DJANGO_DB_PASSWORD_VALUE="$(tr -d '\n' < ${envConfDir}/db_pwd 2>/dev/null || true)"
-        export DJANGO_DB_ENGINE="django.db.backends.postgresql"
-        export DJANGO_DB_NAME="${cfg.database.name}"
-        export DJANGO_DB_USER="${cfg.database.user}"
-        export DJANGO_DJANGO_DB_PASSWORD="$DJANGO_DB_PASSWORD_VALUE"
-        export DJANGO_DB_PASSWORD="$DJANGO_DB_PASSWORD_VALUE"
-        export DJANGO_DB_HOST="${cfg.database.host}"
-        export DJANGO_DB_PORT="${toString cfg.database.port}"
-        export DJANGO_DB_SSLMODE="${cfg.database.sslMode}"
-
-        export DJANGO_ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
-        export ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
-        export DJANGO_CORS_ALLOWED_ORIGINS='${builtins.toJSON cfg.django.corsAllowedOrigins}'
-        export DJANGO_CSRF_TRUSTED_ORIGINS='${builtins.toJSON cfg.django.corsAllowedOrigins}'
-
-        DJANGO_SECRET_KEY_VALUE="$(tr -d '\n' < ${cfg.django.djangoSecretKeyFile} 2>/dev/null || true)"
-        export DJANGO_SECRET_KEY="$DJANGO_SECRET_KEY_VALUE"
-
-        export OIDC_RP_CLIENT_ID="${cfg.django.keycloakClientId}"
-        OIDC_CLIENT_SECRET_VALUE="$(tr -d '\n' < ${cfg.django.keycloakSecretFile} 2>/dev/null || true)"
-        export OIDC_RP_CLIENT_SECRET="$OIDC_CLIENT_SECRET_VALUE"    
 
         # Deployment markers
         echo "${envDjangoEnv}" > .mode
@@ -293,8 +334,15 @@ let
         echo "Collecting static files..."
         export DJANGO_STATIC_ROOT="${staticRootPath}" # This points to .../staticfiles
 
+        if [ -f Makefile ] && command -v devenv >/dev/null 2>&1; then
+           echo "Using Makefile targets for deploy tasks..."
+           ${makeBin} REPO_DIR="${repoDir}" static migrate load-base-data
+
+           echo "Starting Django server..."
+           exec ${makeBin} REPO_DIR="${repoDir}" start-app
+        fi
+
         if command -v devenv >/dev/null 2>&1; then
-           # 1. Add this command here
            devenv shell -- python manage.py collectstatic --noinput --clear
        
            echo "Running Database Migrations..."
@@ -303,7 +351,6 @@ let
         else
            source .venv/bin/activate 
        
-           # 2. And add it here for non-devenv setups
            python manage.py collectstatic --noinput --clear
 
            echo "Running Database Migrations..."
@@ -325,58 +372,20 @@ let
     # 2. Re-Export ALL necessary Environment Variables
     # (Note: We skip git clone/pull because the boot service handles that)
 
-    export DJANGO_DB_PASSWORD_FILE="${cfg.database.endoregLocalUserPasswordFile}" 
-    export DJANGO_SECRET_KEY_FILE="${cfg.django.djangoSecretKeyFile}"
-    export DATA_DIR="${envDataDir}"
-    export CONF_DIR="${envConfDir}"
-    export DJANGO_MODULE="${envDjangoModule}"
-    export DJANGO_SETTINGS_MODULE="lx_annotate.settings.settings_prod"
-    export DJANGO_ENV="${envDjangoEnv}"
-    export CENTRAL_NODE="${envCentralNodeFlag}"
-    export HTTP_PROTOCOL="${envHttpProtocol}"
-    export DJANGO_HOST="${envDjangoHost}"
-    export DJANGO_PORT="${envDjangoPort}"
-    export BASE_URL="${envBaseUrl}"
-    export TIME_ZONE="${cfg.django.timeZone}"
-    export RUN_VIDEO_TESTS="${envRunVideoTests}"
-    export SKIP_EXPENSIVE_TESTS="${envSkipExpensiveTests}"
-
-    # 3. Read Secrets (Must match boot script logic)
-    DJANGO_DB_PASSWORD_VALUE="$(tr -d '\n' < ${envConfDir}/db_pwd 2>/dev/null || true)"
-    export DJANGO_DB_ENGINE="django.db.backends.postgresql"
-    export DJANGO_DB_NAME="${cfg.database.name}"
-    export DJANGO_DB_USER="${cfg.database.user}"
-    export DJANGO_DB_PASSWORD="$DJANGO_DB_PASSWORD_VALUE"
-    export DJANGO_DB_HOST="${cfg.database.host}"
-    export DJANGO_DB_PORT="${toString cfg.database.port}"
-    export DJANGO_DB_SSLMODE="${cfg.database.sslMode}"
-    export STORAGE_DIR="${envDataDir}"
-    export IO_DIR="${envDataDir}"
-
-    DJANGO_SECRET_KEY_VALUE="$(tr -d '\n' < ${cfg.django.djangoSecretKeyFile} 2>/dev/null || true)"
-    export DJANGO_SECRET_KEY="$DJANGO_SECRET_KEY_VALUE"
-    export HOME_DIR=${endoreg-service-user-home}
-    export DATA_DIR=${envDataDir}
-    export CONF_DIR=${envConfDir}
-    export CONF_TEMPLATE_DIR=${envConfTemplateDir}
-    export WORKING_DIR=${repoDir}
+    source ${lxAnnotateEnvHelpers}
+    lx_annotate_export_base_env
+    lx_annotate_export_storage_env "${envDataDir}"
+    lx_annotate_export_db_env
+    lx_annotate_export_secret_key_env
     export DJANGO_STATIC_ROOT=${staticRootPath}
-
-    # --- Network & Host Configuration ---
-    export SERVE_WITH_NGINX="true"
-    export NGINX_PROTECTED_MEDIA_URL="/protected_media/"
-    export HTTP_PROTOCOL="${envHttpProtocol}"
-    export DJANGO_HOST="${envDjangoHost}"
-    export DJANGO_PORT="${envDjangoPort}"
-    export BASE_URL="${envBaseUrl}"
-    export DJANGO_ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
-    export ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
-    export DJANGO_CSRF_TRUSTED_ORIGINS='${builtins.toJSON cfg.django.corsAllowedOrigins}'
 
     # 4. Start the Watcher inside the devenv shell
     echo "📁 Starting File Watcher..."
 
-    # Check if devenv is available in path (it is set in Service Config)
+    if [ -f Makefile ] && command -v devenv >/dev/null 2>&1; then
+      exec ${makeBin} REPO_DIR="${repoDir}" start-watcher
+    fi
+
     exec devenv shell run-filewatcher
   '';
   runLocalExportFramesScript = pkgs.writeShellScriptBin "${exportFramesScriptName}" ''
@@ -386,56 +395,29 @@ let
     cd ${repoDir}
 
     # 2. Re-Export ALL necessary Environment Variables
-    export DJANGO_DB_PASSWORD_FILE="${cfg.database.endoregLocalUserPasswordFile}"
-    export DJANGO_SECRET_KEY_FILE="${cfg.django.djangoSecretKeyFile}"
+    source ${lxAnnotateEnvHelpers}
     exportFramesStorageRoot="${exportFramesStorageRootDefault}"
     if [ ! -d "$exportFramesStorageRoot" ] || [ ! -w "$exportFramesStorageRoot" ]; then
       exportFramesStorageRoot="${envDataDir}"
     fi
 
-    export DATA_DIR="$exportFramesStorageRoot"
-    export STORAGE_DIR="$exportFramesStorageRoot"
-    export IO_DIR="$exportFramesStorageRoot"
-    export CONF_DIR="${envConfDir}"
-    export CONF_TEMPLATE_DIR="${envConfTemplateDir}"
-    export WORKING_DIR="${repoDir}"
-    export HOME_DIR="${endoreg-service-user-home}"
-    export DJANGO_MODULE="${envDjangoModule}"
-    export DJANGO_SETTINGS_MODULE="lx_annotate.settings.settings_prod"
-    export DJANGO_ENV="${envDjangoEnv}"
-    export CENTRAL_NODE="${envCentralNodeFlag}"
-    export HTTP_PROTOCOL="${envHttpProtocol}"
-    export DJANGO_HOST="${envDjangoHost}"
-    export DJANGO_PORT="${envDjangoPort}"
-    export BASE_URL="${envBaseUrl}"
-    export TIME_ZONE="${cfg.django.timeZone}"
-    export RUN_VIDEO_TESTS="${envRunVideoTests}"
-    export SKIP_EXPENSIVE_TESTS="${envSkipExpensiveTests}"
-
-    # 3. Read Secrets (Must match boot script logic)
-    DJANGO_DB_PASSWORD_VALUE="$(tr -d '\n' < ${envConfDir}/db_pwd 2>/dev/null || true)"
-    export DJANGO_DB_ENGINE="django.db.backends.postgresql"
-    export DJANGO_DB_NAME="${cfg.database.name}"
-    export DJANGO_DB_USER="${cfg.database.user}"
-    export DJANGO_DB_PASSWORD="$DJANGO_DB_PASSWORD_VALUE"
-    export DJANGO_DB_HOST="${cfg.database.host}"
-    export DJANGO_DB_PORT="${toString cfg.database.port}"
-    export DJANGO_DB_SSLMODE="${cfg.database.sslMode}"
-
-    DJANGO_SECRET_KEY_VALUE="$(tr -d '\n' < ${cfg.django.djangoSecretKeyFile} 2>/dev/null || true)"
-    export DJANGO_SECRET_KEY="$DJANGO_SECRET_KEY_VALUE"
-
-    export SERVE_WITH_NGINX="true"
-    export NGINX_PROTECTED_MEDIA_URL="/protected_media/"
-    export DJANGO_ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
-    export ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
-    export DJANGO_CSRF_TRUSTED_ORIGINS='${builtins.toJSON cfg.django.corsAllowedOrigins}'
+    lx_annotate_export_base_env
+    lx_annotate_export_storage_env "$exportFramesStorageRoot"
+    lx_annotate_export_db_env
+    lx_annotate_export_secret_key_env
 
     # 4. Ensure target directory exists
     exportFramesDir="$exportFramesStorageRoot/export/frames"
     mkdir -p "$exportFramesDir"
 
     # 5. Run export inside devenv shell
+    if [ -f Makefile ] && command -v devenv >/dev/null 2>&1; then
+      export STORAGE_DIR="$exportFramesStorageRoot"
+      export IO_DIR="$exportFramesStorageRoot"
+      export DATA_DIR="$exportFramesStorageRoot"
+      exec ${makeBin} REPO_DIR="${repoDir}" start-export
+    fi
+
     exec devenv shell -- bash -c "STORAGE_DIR='$exportFramesStorageRoot' IO_DIR='$exportFramesStorageRoot' DATA_DIR='$exportFramesStorageRoot' export-frames"
   '';
 
@@ -487,164 +469,48 @@ in
     # Django configuration (passed from endoreg-client role)
     django = mkOption {
       type = types.submodule {
-        options = {
-          hostname = mkOption {
-            type = types.str;
-            default = "lx-annotate.local";
-          };
-          port = mkOption {
-            type = types.port;
-            default = 8117;
-          };
-          useHttps = mkOption {
-            type = types.bool;
-            default = false;
-          };
-          sslCertificatePath = mkOption {
-            type = types.nullOr types.path;
-            default = null;
-          };
-          sslKeyPath = mkOption {
-            type = types.nullOr types.path;
-            default = null;
-          };
-          djangoAllowedHosts = mkOption {
-            type = types.listOf types.str;
-            default = [
+        options = mkDjangoOptions {
+          defaults = {
+            hostname = "lx-annotate.local";
+            port = 8117;
+            useHttps = false;
+            sslCertificatePath = null;
+            sslKeyPath = null;
+            djangoAllowedHosts = [
               "lx-annotate.local"
               "127.0.0.1"
-            ]; # NO http://
-          };
-
-          corsAllowedOrigins = mkOption {
-            type = types.listOf types.str;
-            default = [
+            ];
+            corsAllowedOrigins = [
               "https://lx-annotate.local"
               "http://127.0.0.1"
             ];
+            djangoDebug = false;
+            djangoSecretKeyFile = "/etc/secrets/vault/django_secret_key";
+            keycloakSecretFile = "/etc/secrets/vault/keycloak.env";
+            keycloakClientId = "endoregdb-api";
+            logLevel = "INFO";
+            maxRequestSize = "100M";
+            timeZone = "Europe/Berlin";
+            language = "en-us";
+            settingsProfile = "prod";
+            settingsModule = null;
+            djangoEnv = null;
+            dataDir = "data";
+            confDir = "conf";
+            confTemplateDir = "conf_template";
+            djangoModule = "lx_annotate";
+            assetDir = "tests/assets";
+            httpProtocol = "http";
+            baseUrl = null;
+            staticUrl = "/static/";
+            mediaUrl = "/media/";
+            runVideoTests = false;
+            skipExpensiveTests = true;
+            extraSettings = { };
           };
-          djangoDebug = mkOption {
-            type = types.bool;
-            default = false;
-          };
-          djangoSecretKeyFile = mkOption {
-            type = types.path;
-            default = "/etc/secrets/vault/django_secret_key";
-          };
-
-          keycloakSecretFile = mkOption {
-            type = types.path;
-            default = "/etc/secrets/vault/keycloak.env";
-            description = "Path to file containing the Keycloak Client Secret.";
-          };
-
-          keycloakClientId = mkOption {
-            type = types.str;
-            default = "endoregdb-api";
-            description = "Keycloak Client ID.";
-          };
-          # -------------------------------
-
-          logLevel = mkOption {
-            type = types.str;
-            default = "INFO";
-          };
-          maxRequestSize = mkOption {
-            type = types.str;
-            default = "100M";
-          };
-          timeZone = mkOption {
-            type = types.str;
-            default = "Europe/Berlin";
-          };
-          language = mkOption {
-            type = types.str;
-            default = "en-us";
-          };
-
-          settingsProfile = mkOption {
-            type = types.enum [
-              "dev"
-              "prod"
-              "central"
-              "test"
-            ];
-            default = "prod";
-            description = "Base settings profile to use when selecting Django settings modules.";
-          };
-          settingsModule = mkOption {
-            type = types.nullOr types.str;
-            default = null;
-            description = "Explicit Django settings module (overrides settingsProfile).";
-          };
-          djangoEnv = mkOption {
-            type = types.nullOr types.str;
-            default = null;
-            description = "Value for DJANGO_ENV; inferred from settingsProfile when null.";
-          };
-
-          # Environment variable configuration options
-          dataDir = mkOption {
-            type = types.str;
-            default = "data";
-            description = "Relative path to data directory within the repository";
-          };
-          confDir = mkOption {
-            type = types.str;
-            default = "conf";
-            description = "Relative path to configuration directory within the repository";
-          };
-          confTemplateDir = mkOption {
-            type = types.str;
-            default = "conf_template";
-            description = "Relative path to configuration template directory within the repository";
-          };
-          djangoModule = mkOption {
-            type = types.str;
-            default = "lx_annotate";
-            description = "Django module name for the application";
-          };
-          assetDir = mkOption {
-            type = types.str;
-            default = "tests/assets";
-            description = "Relative or absolute path used as ASSET_DIR.";
-          };
-          httpProtocol = mkOption {
-            type = types.str;
-            default = "http";
-            description = "HTTP protocol to use (http or https)";
-          };
-          baseUrl = mkOption {
-            type = types.nullOr types.str;
-            default = null;
-            description = "Base URL for the application. If null, will be constructed from protocol, host, and port";
-          };
-          staticUrl = mkOption {
-            type = types.str;
-            default = "/static/";
-            description = "STATIC_URL value exported to the application.";
-          };
-          mediaUrl = mkOption {
-            type = types.str;
-            default = "/media/";
-            description = "MEDIA_URL value exported to the application.";
-          };
-          runVideoTests = mkOption {
-            type = types.bool;
-            default = false;
-            description = "Whether RUN_VIDEO_TESTS should be enabled.";
-          };
-          skipExpensiveTests = mkOption {
-            type = types.bool;
-            default = true;
-            description = "Whether SKIP_EXPENSIVE_TESTS should be enabled.";
-          };
-
-          extraSettings = mkOption {
-            type = types.attrsOf types.anything;
-            default = { };
-            description = "Additional settings to pass to Django configuration";
-          };
+          includeKeycloak = true;
+          logLevelType = types.str;
+          httpProtocolType = types.str;
         };
       };
       default = { };
@@ -783,15 +649,10 @@ in
 
     systemd.tmpfiles.rules = [
       "d ${endoreg-service-user-home} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-
-      # Ensure the main repo directory exists (if not cloned yet, this sets the parent permissions)
-      "d ${repoDir} 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-
-      # Explicitly create the data/storage directories so Python doesn't have to fight for permissions
-      "d ${envDataDir} 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-
-      # Ensure static dir exists for nginx alias
-      "d ${staticRootPath} 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+      # Important for make-based bootstrap:
+      # do not pre-create ${repoDir} or repo-internal paths here. The seed clone
+      # expects the checkout target to be absent (or at least empty), and creating
+      # ${envDataDir}/${staticRootPath} makes it non-empty before git runs.
 
       # 1. The Parent Directory: Create (d) AND Enforce (z) permissions
       "d /var/lib/lx-annotate 0750 root nginx - -"
@@ -832,7 +693,9 @@ in
           set -euo pipefail
 
           # 1. Fix Repo Permissions
-          ${pkgs.coreutils}/bin/chown -R ${endoreg-service-user-name}:${endoreg-service-group-name} ${repoDir}
+          if [ -e ${repoDir} ]; then
+            ${pkgs.coreutils}/bin/chown -R ${endoreg-service-user-name}:${endoreg-service-group-name} ${repoDir}
+          fi
 
           # 2. Handle the Password File securely
           mkdir -p ${envConfDir}

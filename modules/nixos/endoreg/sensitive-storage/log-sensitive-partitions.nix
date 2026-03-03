@@ -28,6 +28,12 @@ let
   scriptPath = pkgs.writeShellScriptBin "${scriptName}" ''
     #!/bin/sh
 
+    # Ensure the log target exists even if timers fire before tmpfiles setup.
+    if ! ${pkgs.coreutils}/bin/mkdir -p "${logDir}"; then
+      echo "Failed to create log directory: ${logDir}" >&2
+      exit 1
+    fi
+
     # Set timestamp
     timestamp=$(date +%Y-%m-%d_%H-%M-%S)
     outputFile="${logDir}/${hostname}-$timestamp-sensitive-${label}.json"

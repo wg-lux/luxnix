@@ -31,6 +31,9 @@ let
   # Source paths
   sourceVideoDir = endoregPaths.videoInputDir;
   sourcePdfDir = endoregPaths.pdfInputDir;
+  failedInputBaseDir = "${endoregPaths.storageBaseDir}/failed_input";
+  failedVideoDir = "${failedInputBaseDir}/video";
+  failedPdfDir = "${failedInputBaseDir}/pdf";
 
   # Destination paths (Deep inside the repo)
   destVideoDir = "${endoreg-service-user-home}/${repoDirName}/data/import/video_import";
@@ -49,8 +52,10 @@ in
 
     # 1. Ensure directories exist (Source & Dest)
     systemd.tmpfiles.rules = [
-      "d \"${sourceVideoDir}\" 0777 root ${endoregServiceGroup} -"
-      "d \"${sourcePdfDir}\" 0777 root ${endoregServiceGroup} -"
+      "d \"${sourceVideoDir}\" 0770 root ${endoregServiceGroup} -"
+      "d \"${sourcePdfDir}\" 0770 root ${endoregServiceGroup} -"
+      "d \"${failedVideoDir}\" 0770 root ${endoregServiceGroup} -"
+      "d \"${failedPdfDir}\" 0770 root ${endoregServiceGroup} -"
       # Create destination parents if they don't exist yet (Repo might be cloning)
       "d \"${endoreg-service-user-home}/${repoDirName}/data/import\" 0770 ${endoregServiceUserName} ${endoregServiceGroup} -"
       "d \"${destVideoDir}\" 0770 ${endoregServiceUserName} ${endoregServiceGroup} -"
@@ -114,44 +119,90 @@ in
         Type = "oneshot";
         User = endoregServiceUserName;
         Group = endoregServiceGroup;
+        # ExecStartPre runs as root and normalizes source permissions before rsync.
+        PermissionsStartOnly = true;
+        ExecStartPre = "${pkgs.writeShellScript "move-my-files-prepare-inputs" ''
+          set -euo pipefail
+
+          for dir in "${sourceVideoDir}" "${sourcePdfDir}" "${failedVideoDir}" "${failedPdfDir}"; do
+            ${pkgs.coreutils}/bin/install -d -m 2770 -o root -g ${endoregServiceGroup} "$dir"
+          done
+
+          normalize_tree_permissions() {
+            local source_dir="$1"
+            ${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -exec ${pkgs.coreutils}/bin/chgrp ${endoregServiceGroup} {} + || true
+            ${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -type d -exec ${pkgs.coreutils}/bin/chmod g+rws,o-rwx {} + || true
+            ${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -type f -exec ${pkgs.coreutils}/bin/chmod g+rw,o-rwx {} + || true
+          }
+
+          normalize_tree_permissions "${sourceVideoDir}"
+          normalize_tree_permissions "${sourcePdfDir}"
+        ''}";
       };
 
       script = ''
         set -euo pipefail
 
-
-
         # Safety check: Ensure destination exists (repository might have just finished cloning)
-        mkdir -p "${destVideoDir}" "${destReportDir}"
-
+        mkdir -p "${destVideoDir}" "${destReportDir}" "${failedVideoDir}" "${failedPdfDir}"
 
         # Settle time for large file copies
         sleep 2
 
+        overall_status=0
+
+        quarantine_unreadable_files() {
+          local source_dir="$1"
+          local quarantine_dir="$2"
+          local label="$3"
+
+          while IFS= read -r -d "" unreadable_file; do
+            base_name="$(${pkgs.coreutils}/bin/basename "$unreadable_file")"
+            timestamp="$(${pkgs.coreutils}/bin/date +%Y%m%d-%H%M%S)"
+            quarantine_target="''${quarantine_dir}/''${timestamp}-''${base_name}"
+            echo "Warning: ''${label} file unreadable by ${endoregServiceUserName}. Quarantining: $unreadable_file"
+
+            if ! ${pkgs.coreutils}/bin/mv -f "$unreadable_file" "$quarantine_target"; then
+              echo "Warning: Failed to quarantine unreadable file: $unreadable_file"
+              overall_status=1
+            fi
+          done < <(${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -type f ! -readable -print0)
+        }
+
+        process_input_dir() {
+          local source_dir="$1"
+          local dest_dir="$2"
+          local quarantine_dir="$3"
+          local label="$4"
+
+          if [ -z "$(${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -print -quit)" ]; then
+            return 0
+          fi
+
+          echo "Processing ''${label} Input..."
+          quarantine_unreadable_files "$source_dir" "$quarantine_dir" "$label"
+
+          # If everything was quarantined, there's nothing left to sync.
+          if [ -z "$(${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -print -quit)" ]; then
+            return 0
+          fi
+
+          if ! ${pkgs.rsync}/bin/rsync -av --omit-dir-times --remove-source-files --chmod=F660,D770 --chown=${endoregServiceUserName}:${endoregServiceGroup} "''${source_dir}/" "''${dest_dir}/"; then
+            echo "Warning: rsync ''${label} failed. Files remain and will trigger restart."
+            overall_status=1
+          fi
+        }
+
         # Rsync with retry logic is not needed here because Systemd will re-trigger
         # if files are left behind.
-
-        # 1. Video Input
-        if [ -n "$(${pkgs.findutils}/bin/find "${sourceVideoDir}" -mindepth 1 -print -quit)" ]; then
-            echo "Processing Video Input..."
-            ${pkgs.rsync}/bin/rsync -av --omit-dir-times --remove-source-files --chmod=F660,D770 --chown=${endoregServiceUserName}:${endoregServiceGroup} "${sourceVideoDir}/" "${destVideoDir}/" || {
-                echo "Warning: rsync video failed. Files remain and will trigger restart."
-                exit 1 
-            }
-        fi
-
-        # 2. PDF Input
-        if [ -n "$(${pkgs.findutils}/bin/find "${sourcePdfDir}" -mindepth 1 -print -quit)" ]; then
-            echo "Processing PDF Input..."
-            ${pkgs.rsync}/bin/rsync -av --omit-dir-times --remove-source-files --chmod=F660,D770 --chown=${endoregServiceUserName}:${endoregServiceGroup} "${sourcePdfDir}/" "${destReportDir}/" || {
-                 echo "Warning: rsync report failed. Files remain and will trigger restart."
-                 exit 1
-            }
-        fi
+        process_input_dir "${sourceVideoDir}" "${destVideoDir}" "${failedVideoDir}" "Video"
+        process_input_dir "${sourcePdfDir}" "${destReportDir}" "${failedPdfDir}" "PDF"
 
         # Cleanup empty dirs in Source (ignore errors)
         ${pkgs.findutils}/bin/find "${sourceVideoDir}" -mindepth 1 -type d -empty -delete || true
         ${pkgs.findutils}/bin/find "${sourcePdfDir}" -mindepth 1 -type d -empty -delete || true
+
+        exit "$overall_status"
       '';
     };
 

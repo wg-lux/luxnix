@@ -6,6 +6,7 @@
 with lib;
 with lib.luxnix; let
   cfg = config.roles.endoreg-db-central-01;
+  mkDjangoOptions = import ../../lib/django-options.nix { inherit lib; };
 
   sensitiveServiceGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
 in
@@ -30,91 +31,43 @@ in
     };
 
     # API Configuration for Central Node
-    api = {
-      hostname = mkOption {
-        type = types.str;
-        default = "0.0.0.0";  # Listen on all interfaces for central node
-        description = "Hostname for the central Django API service";
-        example = "0.0.0.0";
+    api = mkDjangoOptions {
+      defaults = {
+        hostname = "0.0.0.0"; # Listen on all interfaces for central node
+        port = 8118;
+        useHttps = true; # Central nodes should use HTTPS
+        sslCertificatePath = null;
+        sslKeyPath = null;
+        djangoAllowedHosts = [ "localhost" "127.0.0.1" ];
+        djangoDebug = false; # Production setting for central node
+        djangoSecretKeyFile = "/etc/secrets/vault/django_central_secret_key";
+        corsAllowedOrigins = [ ];
+        logLevel = "INFO";
+        maxRequestSize = "500M"; # Larger for central node
+        timeZone = "UTC";
+        language = "en-us";
+
+        # Keep compatibility with current service defaults for fields
+        # that were previously not exposed in this role.
+        settingsProfile = "prod";
+        settingsModule = null;
+        djangoEnv = null;
+        dataDir = "data";
+        confDir = "conf";
+        confTemplateDir = "conf_template";
+        djangoModule = "endo_api";
+        assetDir = "tests/assets";
+        httpProtocol = "http";
+        baseUrl = null;
+        staticUrl = "/static/";
+        mediaUrl = "/media/";
+        runVideoTests = false;
+        skipExpensiveTests = true;
+        extraSettings = { };
       };
 
-      port = mkOption {
-        type = types.port;
-        default = 8118;
-        description = "Port for the central Django API service";
-      };
-
-      useHttps = mkOption {
-        type = types.bool;
-        default = true;  # Central nodes should use HTTPS
-        description = "Whether to use HTTPS for the central API service";
-      };
-
-      sslCertificatePath = mkOption { #ALREADY CENTRALLY AVAILABLE SOMEWHERE, Refactor to use available implementation here
-        type = types.nullOr types.path;
-        default = null;
-        description = "Path to SSL certificate file (required if useHttps is true)";
-        example = "/etc/secrets/ssl/central-api.crt";
-      };
-
-      sslKeyPath = mkOption {
-        type = types.nullOr types.path;
-        default = null;
-        description = "Path to SSL private key file (required if useHttps is true)";
-        example = "/etc/secrets/ssl/central-api.key";
-      };
-
-      djangoAllowedHosts = mkOption {
-        type = types.listOf types.str;
-        default = [ "localhost" "127.0.0.1" ];
-        description = "Django ALLOWED_HOSTS setting - will be automatically extended with local nodes";
-        example = [ "s-04.local" "central-api.example.com" ];
-      };
-
-      djangoDebug = mkOption {
-        type = types.bool;
-        default = false;  # Production setting for central node
-        description = "Enable Django DEBUG mode (should be false in production)";
-      };
-
-      djangoSecretKeyFile = mkOption {
-        type = types.path;
-        default = "/etc/secrets/vault/django_central_secret_key";
-        description = "Path to file containing Django SECRET_KEY for central node";
-      };
-
-      corsAllowedOrigins = mkOption {
-        type = types.listOf types.str;
-        default = [];
-        description = "CORS allowed origins for the central API";
-        example = [ "https://frontend.example.com" "http://localhost:3000" ];
-      };
-
-      logLevel = mkOption {
-        type = types.enum [ "DEBUG" "INFO" "WARNING" "ERROR" "CRITICAL" ];
-        default = "INFO";
-        description = "Django logging level for central node";
-      };
-
-      maxRequestSize = mkOption {
-        type = types.str;
-        default = "500M";  # Larger for central node
-        description = "Maximum request size for file uploads";
-      };
-
-      timeZone = mkOption {
-        type = types.str;
-        default = "UTC";
-        description = "Django timezone setting";
-        example = "Europe/Berlin";
-      };
-
-      language = mkOption {
-        type = types.str;
-        default = "en-us";
-        description = "Django language setting";
-        example = "de-de";
-      };
+      logLevelType = types.enum [ "DEBUG" "INFO" "WARNING" "ERROR" "CRITICAL" ];
+      httpProtocolType = types.str;
     };
 
     # Database Configuration for Central Node
