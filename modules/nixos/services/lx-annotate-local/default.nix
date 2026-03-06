@@ -894,10 +894,12 @@ in
       serviceConfig = {
         Type = "exec";
         User = endoreg-service-user-name;
+        WorkingDirectory = endoreg-service-user-home;
         Environment = [
           "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:${pkgs.direnv}/bin:/run/current-system/sw/bin"
           "NIX_PATH=nixpkgs=${pkgs.path}"
         ];
+        TimeoutStartSec = "10s";
         ExecStartPre = "+${pkgs.writeShellScript "lx-annotate-pre-start" ''
           set -euo pipefail
 
@@ -930,7 +932,17 @@ in
         ''}";
         ExecStart = "${runLocalLxAnnotateScript}/bin/${scriptName}";
         Restart = "on-failure";
-        RestartSec = "10s";
+        RestartSec = "5s";
+        ProtectSystem = "full";
+        PrivateTmp = true;
+        NoNewPrivileges = true;
+        ReadWritePaths = [
+          endoreg-service-user-home
+          envDataDir
+          envConfDir
+          staticRootPath
+          "/var/lib/lx-annotate"
+        ];
         # Resource limits
         MemoryHigh = "4G";
         MemoryMax = "6G";
