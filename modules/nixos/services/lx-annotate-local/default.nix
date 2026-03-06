@@ -39,6 +39,7 @@ let
   # Environment variable configuration from django submodule
   envDataDir = "${repoDir}/${cfg.django.dataDir}";
   envConfDir = "${repoDir}/${cfg.django.confDir}";
+  makeCacheDir = "${envConfDir}/make-cache";
   envConfTemplateDir = "${repoDir}/${cfg.django.confTemplateDir}";
   envDjangoModule = cfg.django.djangoModule;
   envHttpProtocol =
@@ -149,6 +150,18 @@ let
     }
   '';
 
+  # Compat exports for lx-annotate/devenv.nix shellHook, which expects these vars.
+  devenvSyncCompatExports = ''
+    export SYNC_CMD="uv sync --extra dev --extra docs"
+    export SYNC_STAMP=".devenv/state/.uv-sync.stamp"
+    mkdir -p "$(dirname "$SYNC_STAMP")"
+    if [ -f "uv.lock" ] && [ -f "pyproject.toml" ]; then
+      export LOCK_HASH="$(${pkgs.coreutils}/bin/sha256sum uv.lock pyproject.toml 2>/dev/null | ${pkgs.coreutils}/bin/sha256sum | ${pkgs.coreutils}/bin/cut -d\" \" -f1)"
+    else
+      export LOCK_HASH=""
+    fi
+  '';
+
   runLocalLxAnnotateScript = pkgs.writeShellScriptBin "${scriptName}" ''
         set -euo pipefail
 
@@ -171,17 +184,75 @@ let
 
         cd ${repoDir}
         direnv allow
+        mkdir -p ${envConfDir} ${makeCacheDir}
+
+        ensure_clean_latest_checkout() {
+          local branch="${branchName}"
+          local remote="origin"
+          local remote_head=""
+          local local_head=""
+
+          echo "Ensuring checkout matches $remote/$branch..."
+          git fetch "$remote" "$branch" || {
+            echo "ERROR: Failed to fetch $remote/$branch."
+            return 1
+          }
+
+          if ! git show-ref --verify --quiet "refs/remotes/$remote/$branch"; then
+            echo "ERROR: Remote branch $remote/$branch not found."
+            return 1
+          fi
+
+          if git show-ref --verify --quiet "refs/heads/$branch"; then
+            git checkout "$branch" || return 1
+          else
+            git checkout -B "$branch" "$remote/$branch" || return 1
+          fi
+
+          remote_head="$(git rev-parse --verify "$remote/$branch" 2>/dev/null || true)"
+          local_head="$(git rev-parse --verify HEAD 2>/dev/null || true)"
+          if [ -z "$remote_head" ] || [ -z "$local_head" ]; then
+            echo "ERROR: Unable to resolve git revision for checkout verification."
+            return 1
+          fi
+
+          if [ "$local_head" != "$remote_head" ]; then
+            echo "Local checkout is not at $remote/$branch; forcing hard reset to $remote_head."
+            git reset --hard "$remote_head" || return 1
+          fi
+
+          if [ -d .make-cache ]; then
+            git clean -fd -- .make-cache >/dev/null 2>&1 || true
+          fi
+
+          local_head="$(git rev-parse --verify HEAD 2>/dev/null || true)"
+          if [ "$local_head" != "$remote_head" ]; then
+            echo "ERROR: Checkout still differs from $remote/$branch after sync."
+            return 1
+          fi
+
+          echo "Repository synced to commit $local_head on branch $branch."
+        }
 
         if [ -f Makefile ]; then
           echo "Using Makefile repository sync targets..."
+          if git ls-files --error-unmatch .make-cache/migrations.sha256 >/dev/null 2>&1; then
+            if ! git diff --quiet -- .make-cache/migrations.sha256; then
+              echo "Resetting tracked cache file .make-cache/migrations.sha256 before repository sync."
+              git show HEAD:.make-cache/migrations.sha256 > .make-cache/migrations.sha256 || true
+            fi
+          fi
           ${
             if cfg.source.updateOnBoot then
               ''
-                ${makeBin} REPO_DIR="${repoDir}" BRANCH="${branchName}" GIT_URL="${gitURL}" REMOTE="origin" update
+                ${makeBin} REPO_DIR="${repoDir}" CACHE_DIR="${makeCacheDir}" BRANCH="${branchName}" GIT_URL="${gitURL}" REMOTE="origin" update || {
+                  echo "WARNING: Repository update failed; continuing with current checkout."
+                }
+                ensure_clean_latest_checkout || { echo "ERROR: Could not sync to latest origin/${branchName}."; exit 1; }
               ''
             else
               ''
-                ${makeBin} REPO_DIR="${repoDir}" BRANCH="${branchName}" GIT_URL="${gitURL}" REMOTE="origin" setup
+                ${makeBin} REPO_DIR="${repoDir}" CACHE_DIR="${makeCacheDir}" BRANCH="${branchName}" GIT_URL="${gitURL}" REMOTE="origin" setup
               ''
           }
         else
@@ -215,6 +286,7 @@ let
                   echo "WARNING: Failed to pull, trying reset"
                   git reset --hard origin/${branchName} || { echo "ERROR: Update failed"; exit 1; }
                 }
+                ensure_clean_latest_checkout || { echo "ERROR: Could not sync to latest origin/${branchName}."; exit 1; }
               ''
             else
               ""
@@ -308,7 +380,7 @@ let
 
 
 
-    cat > ${repoDir}/.env.systemd <<EOF
+        cat > ${repoDir}/.env.systemd <<EOF
     HOME_DIR=${endoreg-service-user-home}
     DATA_DIR=${envDataDir}
     CONF_DIR=${envConfDir}
@@ -331,36 +403,171 @@ let
     ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
     DJANGO_CSRF_TRUSTED_ORIGINS='${builtins.toJSON cfg.django.corsAllowedOrigins}'
     EOF
+        currentRevision="$(git rev-parse --verify HEAD 2>/dev/null || echo unknown)"
+        bootstrapStampFile="${envConfDir}/.bootstrap-revision"
+        lastBootstrapRevision="$(cat "$bootstrapStampFile" 2>/dev/null || true)"
+        runHeavyBootstrap="false"
+        preferredViteManifestSourcePath="${repoDir}/lx_annotate/static/.vite/manifest.json"
+        fallbackViteManifestSourcePath="${repoDir}/static/.vite/manifest.json"
+        viteManifestPath="${staticRootPath}/.vite/manifest.json"
+
+        resolve_vite_manifest_source() {
+          if [ -f "$preferredViteManifestSourcePath" ]; then
+            printf '%s\n' "$preferredViteManifestSourcePath"
+            return 0
+          fi
+          if [ -f "$fallbackViteManifestSourcePath" ]; then
+            printf '%s\n' "$fallbackViteManifestSourcePath"
+            return 0
+          fi
+          return 1
+        }
+
+        sync_vite_manifest() {
+          local source_path
+          source_path="$(resolve_vite_manifest_source 2>/dev/null || true)"
+          if [ -z "$source_path" ]; then
+            return 0
+          fi
+          mkdir -p "$(dirname "$viteManifestPath")"
+          cp "$source_path" "$viteManifestPath"
+        }
+
+        vite_main_entry_file() {
+          local manifest_path="$1"
+          ${pkgs.gawk}/bin/awk '
+            /^  "src\/main\.ts": \{/ {
+              in_block = 1
+              next
+            }
+            in_block && /"file":/ {
+              if (match($0, /"file": "([^"]+)"/, m)) {
+                print m[1]
+                exit 0
+              }
+            }
+            in_block && /^  },?$/ {
+              in_block = 0
+            }
+          ' "$manifest_path"
+        }
+
+        vite_manifest_points_to_existing_asset() {
+          local manifest_path="$1"
+          local main_entry_file=""
+          if [ ! -f "$manifest_path" ]; then
+            return 1
+          fi
+          main_entry_file="$(vite_main_entry_file "$manifest_path" 2>/dev/null || true)"
+          if [ -z "$main_entry_file" ]; then
+            return 1
+          fi
+          [ -f "${staticRootPath}/$main_entry_file" ]
+        }
+
+        if [ ! -f "$bootstrapStampFile" ]; then
+          echo "No bootstrap stamp found; running full bootstrap tasks."
+          runHeavyBootstrap="true"
+        elif [ "$currentRevision" != "$lastBootstrapRevision" ]; then
+          echo "Revision changed ($lastBootstrapRevision -> $currentRevision); running full bootstrap tasks."
+          runHeavyBootstrap="true"
+        else
+          echo "Revision unchanged ($currentRevision); using lightweight startup path."
+        fi
+
         echo "Collecting static files..."
-        export DJANGO_STATIC_ROOT="${staticRootPath}" # This points to .../staticfiles
+        export DJANGO_STATIC_ROOT="${staticRootPath}" # This points to .../static
+        ${devenvSyncCompatExports}
 
         if [ -f Makefile ] && command -v devenv >/dev/null 2>&1; then
            echo "Using Makefile targets for deploy tasks..."
-           ${makeBin} REPO_DIR="${repoDir}" static migrate load-base-data
+           if [ "$runHeavyBootstrap" = "true" ]; then
+             echo "Skipping routine frontend build on startup; relying on committed static artifacts."
+             ${makeBin} REPO_DIR="${repoDir}" CACHE_DIR="${makeCacheDir}" static migrate load-base-data
+             printf '%s\n' "$currentRevision" > "$bootstrapStampFile"
+             chmod 600 "$bootstrapStampFile" 2>/dev/null || true
+           else
+             echo "Skipping static and base data targets on unchanged revision."
+             ${makeBin} REPO_DIR="${repoDir}" CACHE_DIR="${makeCacheDir}" migrate
+           fi
+
+           sync_vite_manifest
+           if ! vite_manifest_points_to_existing_asset "$viteManifestPath"; then
+             echo "Vite manifest missing/invalid at $viteManifestPath; running recovery build + static collect."
+             ${makeBin} REPO_DIR="${repoDir}" CACHE_DIR="${makeCacheDir}" frontend-build-force static
+             sync_vite_manifest
+           fi
+
+           if ! vite_manifest_points_to_existing_asset "$viteManifestPath"; then
+             echo "ERROR: Vite manifest still missing/invalid after recovery: $viteManifestPath"
+             exit 1
+           fi
 
            echo "Starting Django server..."
-           exec ${makeBin} REPO_DIR="${repoDir}" start-app
+           exec ${makeBin} REPO_DIR="${repoDir}" CACHE_DIR="${makeCacheDir}" backend-server
         fi
 
         if command -v devenv >/dev/null 2>&1; then
-           devenv shell -- python manage.py collectstatic --noinput --clear
-       
+           if [ "$runHeavyBootstrap" = "true" ]; then
+             echo "Skipping routine vue-build on startup; collecting static + migrations only."
+             devenv shell -- python manage.py collectstatic --noinput --clear
+           else
+             echo "Skipping collectstatic on unchanged revision."
+           fi
+
            echo "Running Database Migrations..."
            devenv shell -- python manage.py migrate --noinput
-           devenv shell -- python manage.py load_base_db_data
+           if [ "$runHeavyBootstrap" = "true" ]; then
+             devenv shell -- python manage.py load_base_db_data
+             printf '%s\n' "$currentRevision" > "$bootstrapStampFile"
+             chmod 600 "$bootstrapStampFile" 2>/dev/null || true
+           else
+             echo "Skipping base data load on unchanged revision."
+           fi
+
+           sync_vite_manifest
+           if ! vite_manifest_points_to_existing_asset "$viteManifestPath"; then
+             echo "Vite manifest missing/invalid at $viteManifestPath; running recovery build + static collect."
+             devenv shell -- vue-build
+             devenv shell -- python manage.py collectstatic --noinput
+             sync_vite_manifest
+           fi
         else
            source .venv/bin/activate 
-       
-           python manage.py collectstatic --noinput --clear
+
+           if [ "$runHeavyBootstrap" = "true" ]; then
+             echo "Skipping routine vue-build on startup; collecting static + migrations only."
+             python manage.py collectstatic --noinput --clear
+           else
+             echo "Skipping collectstatic on unchanged revision."
+           fi
 
            echo "Running Database Migrations..."
            python manage.py migrate --noinput
-           python manage.py load_base_db_data
+           if [ "$runHeavyBootstrap" = "true" ]; then
+             python manage.py load_base_db_data
+             printf '%s\n' "$currentRevision" > "$bootstrapStampFile"
+             chmod 600 "$bootstrapStampFile" 2>/dev/null || true
+           else
+             echo "Skipping base data load on unchanged revision."
+           fi
+
+           sync_vite_manifest
+           if ! vite_manifest_points_to_existing_asset "$viteManifestPath"; then
+             echo "Vite manifest missing/invalid at $viteManifestPath; running recovery build + static collect."
+             vue-build
+             python manage.py collectstatic --noinput
+             sync_vite_manifest
+           fi
+        fi
+
+        if ! vite_manifest_points_to_existing_asset "$viteManifestPath"; then
+          echo "ERROR: Vite manifest is missing/invalid after startup preparation: $viteManifestPath"
+          exit 1
         fi
 
         echo "Starting Django server..."
-        # build the environment and start the server
-        exec devenv shell -- bash -c "vue-build && run-server"
+        exec devenv shell -- bash -c "run-server"
   '';
   watcherScriptName = "runLocalFileWatcher";
   runLocalFileWatcherScript = pkgs.writeShellScriptBin "${watcherScriptName}" ''
@@ -378,12 +585,13 @@ let
     lx_annotate_export_db_env
     lx_annotate_export_secret_key_env
     export DJANGO_STATIC_ROOT=${staticRootPath}
+    ${devenvSyncCompatExports}
 
     # 4. Start the Watcher inside the devenv shell
     echo "📁 Starting File Watcher..."
 
     if [ -f Makefile ] && command -v devenv >/dev/null 2>&1; then
-      exec ${makeBin} REPO_DIR="${repoDir}" start-watcher
+      exec ${makeBin} REPO_DIR="${repoDir}" CACHE_DIR="${makeCacheDir}" start-watcher
     fi
 
     exec devenv shell run-filewatcher
@@ -405,6 +613,7 @@ let
     lx_annotate_export_storage_env "$exportFramesStorageRoot"
     lx_annotate_export_db_env
     lx_annotate_export_secret_key_env
+    ${devenvSyncCompatExports}
 
     # 4. Ensure target directory exists
     exportFramesDir="$exportFramesStorageRoot/export/frames"
@@ -415,7 +624,7 @@ let
       export STORAGE_DIR="$exportFramesStorageRoot"
       export IO_DIR="$exportFramesStorageRoot"
       export DATA_DIR="$exportFramesStorageRoot"
-      exec ${makeBin} REPO_DIR="${repoDir}" start-export
+      exec ${makeBin} REPO_DIR="${repoDir}" CACHE_DIR="${makeCacheDir}" start-export
     fi
 
     exec devenv shell -- bash -c "STORAGE_DIR='$exportFramesStorageRoot' IO_DIR='$exportFramesStorageRoot' DATA_DIR='$exportFramesStorageRoot' export-frames"
@@ -723,18 +932,18 @@ in
         Restart = "on-failure";
         RestartSec = "10s";
         # Resource limits
-        MemoryMax = "8G";
-        CPUQuota = "70%";
-        Nice = -5;
+        MemoryHigh = "4G";
+        MemoryMax = "6G";
+        CPUQuota = "50%";
+        Nice = 10;
         
-        # 2. Disk I/O: Best Effort (Default), but with higher weight
-        # We don't need "realtime" (dangerous), but we want to be "best-effort" priority 0 (highest in class)
+        # 2. Disk I/O: leave headroom for the rest of the system during startup
         IOSchedulingClass = "best-effort";
-        IOSchedulingPriority = 0;
+        IOSchedulingPriority = 6;
 
         # 3. Memory Protection
-        # If Linux runs out of RAM, please kill the filewatcher, not the web server.
-        OOMScoreAdjust = -500; # Lower score means "Don't kill me"
+        # Prefer killing/restarting this service over killing core host processes.
+        OOMScoreAdjust = 250;
       };
     };
     systemd.services.lx-annotate-filewatcher = {
@@ -753,7 +962,9 @@ in
           "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:${pkgs.direnv}/bin:/run/current-system/sw/bin"
           "NIX_PATH=nixpkgs=${pkgs.path}"
         ];
-        CPUQuota = "70%";
+        MemoryHigh = "1G";
+        MemoryMax = "2G";
+        CPUQuota = "35%";
 
         # 1. CPU Priority: Lower priority (Higher "Nice" value = nicer to others)
         Nice = 19; 
