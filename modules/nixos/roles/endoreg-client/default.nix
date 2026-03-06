@@ -258,6 +258,7 @@ in
         source = cfg.lxAnnotate.source;
         django = annotateDjango;
         database = cfg.database;
+        
       };
 
       services.luxnix.endoAi = {
