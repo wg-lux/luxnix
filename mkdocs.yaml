@@ -1,11 +1,11 @@
 ---
-site_name: Haseeb Majid | Home Cluster
-site_description: My home lab configuration
-site_author: Haseeb Majid
-site_url: https://second-brain.haseebmajid.dev
+site_name: LuxNix Documentation
+site_description: LuxNix NixOS deployment and operations documentation
+site_author: LuxNix Contributors
+site_url: https://github.com/wg-lux/luxnix
 
-repo_name: hmajid2301/second-brain
-repo_url: https://github.com/hmajid2301/second-brain
+repo_name: wg-lux/luxnix
+repo_url: https://github.com/wg-lux/luxnix
 edit_uri: "edit/main/"
 
 theme:
@@ -55,3 +55,10 @@ markdown_extensions:
 
 nav:
   - Introduction: index.md
+  - Getting Started: getting-started.md
+  - Deployment Guide: deployment-guide.md
+  - Vault Setup: vault-setup.md
+  - Hardware Setup: hardware-setup.md
+  - Security: security.md
+  - Service Architecture: service-architecture.md
+  - User Management: user-management.md

@@ -1,101 +1,73 @@
-# Common Errors And Their Solutions
+# Common Errors
 
-## Permission denied on nho run
+## `nho` / `nh os switch` permission denied
 
-```
-bash
-nix-os-rebuild switch --flake .
-```
+Cause:
+- You are not running with required privileges.
 
-If this command returns a permission error,
-run:
+Fix:
 
 ```bash
-sudo nix-os-rebuild switch --flake .
+sudo nh os switch
+# fallback
+sudo nixos-rebuild switch --flake .#<host>
 ```
 
-If nho returns an error with permission denied, you dont have admin privileges.
+## Host missing expected packages or services
 
-## Wrong Group In Ansible Inventory
+Cause:
+- Roles/group assignments are incorrect.
 
-The ansible inventory assigns groups to all users.
+Check:
+- `systems/x86_64-linux/<host>/default.nix`
+- `ansible/inventory/hosts.ini`
+- `ansible/inventory/group_vars/`
 
-gpu-client is a study laptop
-gpu_server is a server
-
-If any part of the operating system doesnt work, please check if the current macchine is listed in the correct group at 
-
-ansible/inventory/hosts.ini
-
-For group definitions, check back with the definitions inside of ansible/inventory/group_vars
-
-## My Laptop Doesnt Have Certain Apps Installed
-
-Quick fix:
-
-Install the missing apps using nix-shell. This is also great when testing out a package. Availability check at: https://search.nixos.org/packages
+Then regenerate configs:
 
 ```bash
-nix-shell -p firefox
+devenv tasks run autoconf:finished
 ```
 
-Thorough fix:
+## `nhh` fails with “No home defined”
 
-Check if the correct roles are added to your laptop or server. This is edited at:
+Cause:
+- No matching home configuration exists for `<user>@<host>`.
 
-/home/admin/luxnix/systems/x86_64-linux/gc-02/default.nix
+Fix:
+- Add `homes/x86_64-linux/admin@<host>/default.nix`
+- Ensure matching host exists under `systems/x86_64-linux/<host>/`
 
-Default role setup:
+Validate:
 
-```Nix
-  roles = { 
-    aglnet.client.enable = true;
-    common.enable = true;
-    desktop.enable = true;
-    endoreg-client.enable = true;
-    custom-packages.baseDevelopment = true;
-    custom-packages.videoEditing = false;
-    custom-packages.visuals = false;
-    };
-```
-
-## I See The Error Message: "Directory Not Empty" on a Directory Not Tracked In The LuxNix Github Repository
-
-Try out:
 ```bash
-
-cleanup
-nho
+nix eval ".#homeConfigurations.\"admin@<host>\".activationPackage.drvPath"
 ```
 
-Then:
+## Connectivity/deploy steps fail before build
+
+Cause:
+- SSH or inventory mismatch.
+
+Fix:
+
 ```bash
-
-git fetch
-git merge
-rm -rf directory
-nho
+./scripts/check-connectivity.sh <host>
 ```
 
+Then run preflight build:
 
-Then:
-Raise issue on github
-
-## No Home Defined
 ```bash
-nhh 
+nix build ".#nixosConfigurations.<host>.config.system.build.toplevel" --no-link
 ```
-error: [json.exception.parse_error.101] parse error at line 1, column 1: syntax error while parsing value - invalid literal; last read: 'h'
-Error: 
-   0: Failed to parse nix-eval output: 
 
-If the above error, or an error telling you that no home for this machine is defined arises, add your host machine to:
+## Cleaning old generations
 
-/home/admin/luxnix/systems/x86_64-linux
+Use canonical commands:
 
-Remember to set correct roles and groups!
+```bash
+nix-collect-garbage -d
+sudo rm /nix/var/nix/gcroots/auto/*
+```
 
-
-
-
-
+If cleanup issues persist, inspect current gcroots before deleting additional paths.

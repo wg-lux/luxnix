@@ -21,6 +21,20 @@ options.luxnix.generic-settings = {
 };
 ```
 
+## Installing Packages
+
+Use this workflow when adding command-line tools for Endoreg client machines.
+
+1. For tools that should exist on all Endoreg clients, add them in:
+   - `modules/nixos/roles/custom-packages/default.nix`
+2. Prefer placing general utilities in the `baseDevelopment` package list.
+3. Keep service modules focused on service runtime dependencies only.
+4. For one host only, place packages in:
+   - `systems/x86_64-linux/<host>/default.nix`
+5. Apply and test:
+   - `sudo nixos-rebuild switch --flake .#<host>`
+   - `which rg && which duf && which dysk`
+
 ## Git
 
 Setting up git configuration for your profile at luxnix/homes/x86_64-linux/admin@gc-02/default.nix:

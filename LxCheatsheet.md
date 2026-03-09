@@ -1,133 +1,86 @@
-# New generation of LuxNix
+# LuxNix Cheatsheet
 
-These shortcuts (and more) are defined at:
-luxnix/modules/home/cli/shells/shared/default.nix
+## System switch
 
-## Shortcut
-```bash
-nho
-```
-
-## Fallback
+Canonical:
 
 ```bash
 nh os switch
 ```
 
-## Fallback
+Alias:
 
 ```bash
-sudo nixos-rebuild switch --flake .
+nho
 ```
 
-# Deleting old nix Generations
+Fallback:
 
 ```bash
-`sudo rm /nix/var/nix/gcroots/auto/*`
+sudo nixos-rebuild switch --flake .#<host>
 ```
 
-# Changes to User Environment (Home)
+## Home switch
 
-## Update home generation
-
-### Shortcut
-
-```bash
-nhh
-```
-
-### Fallback
+Canonical:
 
 ```bash
 nh home switch
 ```
 
-# Nix garbage collection:
+Alias:
 
-## Shortcut
+```bash
+nhh
+```
+
+## Garbage collection
+
+Canonical:
+
+```bash
+nix-collect-garbage -d
+sudo nix-store --gc
+sudo nix-store --verify --check-contents --repair
+```
+
+Aliases:
+
 ```bash
 cleanup
 cleanup-roots
 ```
 
-## Fallback
-
-```bash
-Nix-collect-garbage -d
-Nix-store --gc
-```
-
-### After garbage cleaning:
-
-```bash
-Nix-store --verify --check-contents --repair
-```
-
-# VPN Client
-
-The VPN client is defined at
-luxnix/modules/nixos/roles/aglnet
-
-## Service restart
+## VPN client service
 
 ```bash
 sudo systemctl restart openvpn-aglnet.service
+sudo systemctl status openvpn-aglnet.service
 ```
 
-## Service status
+## Autoconf / generated configs
 
-```bash
-sudo systemctl restart openvpn-aglnet.service
-```
-
-# Devenv Tasks
-
-Devenv tasks and scripts are generally defined at 
-/devenv/scripts.nix
-/devenv/tasks.nix
-
-## Database
-
-### Initialize
-
-```bash
-devenv tasks run endoreg-db:init
-```
-
-### Migrate
-
-```bash
-devenv tasks run endoreg-db:migrate
-```
-
-### Full set up (init & migrate)
-
-```bash
-devenv tasks run initialize-environment:endoreg-db
-```
-
-## Autoconf
-
-Autoconf populates the groups and hosts in /autoconf from the yml files in ansible/inventory for user management.
-
--> Builds nix system configs
-
-### Run the AutoConf pipeline:
+Canonical:
 
 ```bash
 devenv tasks run autoconf:finished
 ```
 
-### Shortcut (after direnv allow)
+Alias:
 
 ```bash
 bnsc
 ```
 
-## Automatic Documentation
-
-### Generate automatic table of contents
+## Vault helpers
 
 ```bash
-devenv tasks run docs:toc-generator
+devenv run vault-bootstrap -- --inventory ./autoconf/inventory.yml --export
+devenv run validate-admin-passwords -- --vault-dir ~/.lxv --vault-key ~/.lxv.key --admin-passwords ansible/secrets/admin-passwords.yml
+```
+
+## Connectivity check
+
+```bash
+./scripts/check-connectivity.sh <host-or-group>
 ```
