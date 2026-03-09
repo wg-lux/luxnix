@@ -22,8 +22,8 @@ fresh password store on a new control host.
   plus an encrypted file on disk. They can be exported per host, generating
   deployable artefacts under `~/.lxv/deploy/<hostname>/`.
 - **Ansible configuration** – `ansible.cfg` must reference the correct
-  inventory, roles, libraries, private SSH key (`~/.ssh/id_ed25519` on
-  `gc-06`), and the PSK list so Ansible can transparently decrypt files.
+  inventory, roles, libraries, private SSH key (`~/.ssh/id_ed25519`), and the
+  PSK list so Ansible can transparently decrypt files.
 
 All helper scripts ultimately use `lx_administration.models.vault.Vault`, which
 handles inventory discovery, template generation, PSK creation, and secret
@@ -31,11 +31,11 @@ serialization.
 
 ## Bootstrap prerequisites
 
-1. Ensure password-less SSH access from the current host (`gc-06`) to each
-   managed node using the existing `id_ed25519` identity.
+1. Ensure password-less SSH access from the current control host to each
+   managed node using `~/.ssh/id_ed25519`.
 2. Collect the admin user passwords for every host defined in
    `systems/<arch>/*/default.nix`. Use
-   `ansible/secrets/admin-passwords.example.yml` as a template and save the
+   `ansible/admin-passwords.example.yml` as a template and save the
    populated file as `ansible/secrets/admin-passwords.yml` (keep it
    untracked).
 3. Verify that `ansible/inventory/hosts.ini` is up to date – the bootstrap
@@ -52,7 +52,7 @@ devenv run vault-bootstrap -- \
   --vault-dir ~/.lxv \
   --vault-key ~/.lxv.key \
   --inventory ./autoconf/inventory.yml \
-  --local-hostname gc-06 \
+  --local-hostname <control-hostname> \
   --admin-passwords ansible/secrets/admin-passwords.yml \
   --export
 ```
@@ -64,7 +64,7 @@ python scripts/bootstrap-lx-vault.py \
   --vault-dir ~/.lxv \
   --vault-key ~/.lxv.key \
   --inventory ./autoconf/inventory.yml \
-  --local-hostname gc-06 \
+  --local-hostname <control-hostname> \
   --admin-passwords ansible/secrets/admin-passwords.yml \
   --export
 ```
@@ -75,7 +75,7 @@ What the script does:
    passphrase.
 2. Copies `conf/TEMPLATE_ansible.cfg` to `conf/ansible.cfg`, updates the log
    location to `./logs/ansible.log`, and pins the SSH private key to
-   `~/.ssh/id_ed25519` (the working identity on `gc-06`).
+   `~/.ssh/id_ed25519`.
 3. Loads or creates `~/.lxv/vault.yml`.
 4. Syncs the inventory to generate/update secret templates and PSKs. Each PSK
    entry is wired into `ansible.cfg` automatically.
@@ -123,7 +123,7 @@ Common helper wrappers available via `devenv run`:
 
 With these steps you can rebuild the Luxnix vault on a fresh workstation,
 import existing admin credentials, and keep Ansible configured to use the
-trusted `gc-06` SSH identity.
+trusted control-host SSH identity.
 
 ## Validating stored admin passwords
 
@@ -131,11 +131,11 @@ After bootstrapping (or whenever passwords change) you can validate that the
 vault contents match the source file:
 
 ```bash
-validate-admin-passwords -- \
+devenv run validate-admin-passwords -- \
   --vault-dir ~/.lxv \
   --vault-key ~/.lxv.key \
   --admin-passwords ansible/secrets/admin-passwords.yml \
-  --vault-id gc-06
+  --vault-id <control-hostname>
 ```
 
 The command verifies both the plaintext password and the stored hash for every

@@ -42,6 +42,10 @@ with lib.luxnix; let
     vlc
     bind
     nixd
+    fd
+    duf
+    dust
+    dysk
     ncdu
   ];
 

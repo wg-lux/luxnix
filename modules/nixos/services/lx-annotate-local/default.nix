@@ -430,6 +430,9 @@ let
             return 0
           fi
           mkdir -p "$(dirname "$viteManifestPath")"
+          if [ "$source_path" = "$viteManifestPath" ]; then
+            return 0
+          fi
           cp "$source_path" "$viteManifestPath"
         }
 
