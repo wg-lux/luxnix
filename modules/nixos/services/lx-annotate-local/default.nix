@@ -146,6 +146,7 @@ let
     }
 
     lx_annotate_export_oidc_env() {
+      
       local oidc_client_secret
       export OIDC_RP_CLIENT_ID="${cfg.django.keycloakClientId}"
       oidc_client_secret="$(tr -d '\n' < ${cfg.django.keycloakSecretFile} 2>/dev/null || true)"
@@ -730,8 +731,8 @@ in
               "http://127.0.0.1"
             ];
             djangoDebug = false;
-            djangoSecretKeyFile = "/etc/secrets/vault/django_secret_key";
-            keycloakSecretFile = "/etc/secrets/vault/keycloak.env";
+            djangoSecretKeyFile = "~/secrets/vault/django_secret_key";
+            keycloakSecretFile = "~/secrets/vault/keycloak.env";
             keycloakClientId = "endoregdb-api";
             logLevel = "INFO";
             maxRequestSize = "100M";
