@@ -34,7 +34,8 @@ let
   endoreg-service-user-home = endoreg-service-user.home;
   endoreg-service-group-name = config.user.endoreg-service-user.group;
   repoDir = "${endoreg-service-user-home}/${repoDirName}";
-  staticRootPath = "${repoDir}/static";
+  staticRootPath = "${repoDir}/staticfiles";
+  viteSourcePath = "${repoDir}/static";
 
   # Environment variable configuration from django submodule
   envDataDir = "${repoDir}/${cfg.django.dataDir}";
@@ -65,6 +66,7 @@ let
   envMediaUrl = cfg.django.mediaUrl;
   envRunVideoTests = if cfg.django.runVideoTests then "true" else "false";
   envSkipExpensiveTests = if cfg.django.skipExpensiveTests then "true" else "false";
+  envViteEnableDebug = if cfg.debug.enable then "true" else "false";
 
   settingsProfile = cfg.django.settingsProfile;
   envIsCentralNode = cfg.django.extraSettings.IS_CENTRAL_NODE or false;
@@ -102,6 +104,7 @@ let
       export TIME_ZONE="${cfg.django.timeZone}"
       export RUN_VIDEO_TESTS="${envRunVideoTests}"
       export SKIP_EXPENSIVE_TESTS="${envSkipExpensiveTests}"
+      export VITE_ENABLE_DEBUG="${envViteEnableDebug}"
       export SERVE_WITH_NGINX="true"
       export NGINX_PROTECTED_MEDIA_URL="/protected_media/"
 
@@ -156,7 +159,7 @@ let
     export SYNC_STAMP=".devenv/state/.uv-sync.stamp"
     mkdir -p "$(dirname "$SYNC_STAMP")"
     if [ -f "uv.lock" ] && [ -f "pyproject.toml" ]; then
-      export LOCK_HASH="$(${pkgs.coreutils}/bin/sha256sum uv.lock pyproject.toml 2>/dev/null | ${pkgs.coreutils}/bin/sha256sum | ${pkgs.coreutils}/bin/cut -d\" \" -f1)"
+      export LOCK_HASH="$(${pkgs.coreutils}/bin/sha256sum uv.lock pyproject.toml 2>/dev/null | ${pkgs.coreutils}/bin/sha256sum | ${pkgs.coreutils}/bin/cut -d ' ' -f1)"
     else
       export LOCK_HASH=""
     fi
@@ -357,7 +360,7 @@ let
         updated.append(f'DJANGO_ENV={desired_env}')
 
     env_path.write_text('\n'.join(updated) + '\n', encoding='utf-8')
-    PY
+PY
         else
           echo "WARNING: .env not found"
         fi
@@ -376,7 +379,7 @@ let
     [defaults]
     provider = "env"
     profile = "production"
-    EOF
+EOF
 
 
 
@@ -393,6 +396,7 @@ let
     NGINX_PROTECTED_MEDIA_URL=/protected_media/
     DEBUG=False
     DJANGO_DEBUG=False
+    VITE_ENABLE_DEBUG=${envViteEnableDebug}
 
     # --- Network & Host Configuration ---
     HTTP_PROTOCOL=${envHttpProtocol}
@@ -402,16 +406,21 @@ let
     DJANGO_ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
     ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
     DJANGO_CSRF_TRUSTED_ORIGINS='${builtins.toJSON cfg.django.corsAllowedOrigins}'
-    EOF
-        currentRevision="$(git rev-parse --verify HEAD 2>/dev/null || echo unknown)"
+EOF
+    currentRevision="$(git rev-parse --verify HEAD 2>/dev/null || echo unknown)"
         bootstrapStampFile="${envConfDir}/.bootstrap-revision"
         lastBootstrapRevision="$(cat "$bootstrapStampFile" 2>/dev/null || true)"
         runHeavyBootstrap="false"
+        runtimeViteManifestSourcePath="${staticRootPath}/manifest.json"
         preferredViteManifestSourcePath="${repoDir}/lx_annotate/static/.vite/manifest.json"
         fallbackViteManifestSourcePath="${repoDir}/static/.vite/manifest.json"
         viteManifestPath="${staticRootPath}/.vite/manifest.json"
 
         resolve_vite_manifest_source() {
+          if [ -f "$runtimeViteManifestSourcePath" ]; then
+            printf '%s\n' "$runtimeViteManifestSourcePath"
+            return 0
+          fi
           if [ -f "$preferredViteManifestSourcePath" ]; then
             printf '%s\n' "$preferredViteManifestSourcePath"
             return 0
@@ -425,34 +434,50 @@ let
 
         sync_vite_manifest() {
           local source_path
+          local repo_static_dest
           source_path="$(resolve_vite_manifest_source 2>/dev/null || true)"
-          if [ -z "$source_path" ]; then
-            return 0
+
+          if [ -n "$source_path" ] && [ -f "$source_path" ]; then
+            echo "Syncing Vite manifest from $source_path to $viteManifestPath"
+            mkdir -p "$(dirname "$viteManifestPath")"
+            cp -f "$source_path" "$viteManifestPath"
+
+            # Ensure it is in the Django static source so collectstatic sees it next time
+            repo_static_dest="${repoDir}/static/.vite/manifest.json"
+            if [ "$source_path" != "$repo_static_dest" ] && [ "$source_path" != "$runtimeViteManifestSourcePath" ]; then
+              mkdir -p "$(dirname "$repo_static_dest")"
+              cp -f "$source_path" "$repo_static_dest"
+            fi
           fi
-          mkdir -p "$(dirname "$viteManifestPath")"
-          if [ "$source_path" = "$viteManifestPath" ]; then
-            return 0
-          fi
-          cp "$source_path" "$viteManifestPath"
         }
 
         vite_main_entry_file() {
           local manifest_path="$1"
-          ${pkgs.gawk}/bin/awk '
-            /^  "src\/main\.ts": \{/ {
-              in_block = 1
-              next
-            }
-            in_block && /"file":/ {
-              if (match($0, /"file": "([^"]+)"/, m)) {
-                print m[1]
-                exit 0
-              }
-            }
-            in_block && /^  },?$/ {
-              in_block = 0
-            }
-          ' "$manifest_path"
+          ${pkgs.python3}/bin/python3 - "$manifest_path" <<'PY'
+import json
+import sys
+
+manifest_path = sys.argv[1]
+try:
+    with open(manifest_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+except Exception:
+    raise SystemExit(1)
+
+entry = data.get("src/main.ts", {}).get("file")
+if entry:
+    print(entry)
+    raise SystemExit(0)
+
+for value in data.values():
+    if isinstance(value, dict):
+        file_value = value.get("file")
+        if file_value:
+            print(file_value)
+            raise SystemExit(0)
+
+raise SystemExit(1)
+PY
         }
 
         vite_manifest_points_to_existing_asset() {
@@ -479,89 +504,97 @@ let
         fi
 
         echo "Collecting static files..."
-        export DJANGO_STATIC_ROOT="${staticRootPath}" # This points to .../static
+        export DJANGO_STATIC_ROOT="${staticRootPath}"
+        if [ "''${DJANGO_STATIC_ROOT%/}" = "${viteSourcePath}" ]; then
+          echo "ERROR: DJANGO_STATIC_ROOT points to Vite source assets (${viteSourcePath})."
+          echo "Use ${staticRootPath} as STATIC_ROOT to keep collectstatic isolated from frontend build output."
+          exit 1
+        fi
         ${devenvSyncCompatExports}
 
-        if [ -f Makefile ] && command -v devenv >/dev/null 2>&1; then
-           echo "Using Makefile targets for deploy tasks..."
-           if [ "$runHeavyBootstrap" = "true" ]; then
-             echo "Skipping routine frontend build on startup; relying on committed static artifacts."
-             ${makeBin} REPO_DIR="${repoDir}" CACHE_DIR="${makeCacheDir}" static migrate load-base-data
-             printf '%s\n' "$currentRevision" > "$bootstrapStampFile"
-             chmod 600 "$bootstrapStampFile" 2>/dev/null || true
-           else
-             echo "Skipping static and base data targets on unchanged revision."
-             ${makeBin} REPO_DIR="${repoDir}" CACHE_DIR="${makeCacheDir}" migrate
-           fi
 
-           sync_vite_manifest
-           if ! vite_manifest_points_to_existing_asset "$viteManifestPath"; then
-             echo "Vite manifest missing/invalid at $viteManifestPath; running recovery build + static collect."
-             ${makeBin} REPO_DIR="${repoDir}" CACHE_DIR="${makeCacheDir}" frontend-build-force static
-             sync_vite_manifest
-           fi
 
-           if ! vite_manifest_points_to_existing_asset "$viteManifestPath"; then
-             echo "ERROR: Vite manifest still missing/invalid after recovery: $viteManifestPath"
-             exit 1
-           fi
-
-           echo "Starting Django server..."
-           exec ${makeBin} REPO_DIR="${repoDir}" CACHE_DIR="${makeCacheDir}" backend-server
+        if [ -d ".devenv/profile/bin" ]; then
+          export PATH="${repoDir}/.devenv/profile/bin:$PATH"
         fi
 
-        if command -v devenv >/dev/null 2>&1; then
-           if [ "$runHeavyBootstrap" = "true" ]; then
-             echo "Skipping routine vue-build on startup; collecting static + migrations only."
-             devenv shell -- python manage.py collectstatic --noinput --clear
-           else
-             echo "Skipping collectstatic on unchanged revision."
-           fi
+        if [ -f ".devenv/state/venv/bin/activate" ]; then
+          source .devenv/state/venv/bin/activate
+        elif [ -f ".venv/bin/activate" ]; then
+          source .venv/bin/activate
+        fi
 
-           echo "Running Database Migrations..."
-           devenv shell -- python manage.py migrate --noinput
-           if [ "$runHeavyBootstrap" = "true" ]; then
-             devenv shell -- python manage.py load_base_db_data
-             printf '%s\n' "$currentRevision" > "$bootstrapStampFile"
-             chmod 600 "$bootstrapStampFile" 2>/dev/null || true
-           else
-             echo "Skipping base data load on unchanged revision."
-           fi
+        if [ -n "$LOCK_HASH" ] && command -v uv >/dev/null 2>&1; then
+          previousLockHash="$(cat "$SYNC_STAMP" 2>/dev/null || true)"
+          if [ ! -x ".devenv/state/venv/bin/python" ] || [ "$LOCK_HASH" != "$previousLockHash" ]; then
+            echo "uv deps changed or venv missing -> syncing..."
+            eval "$SYNC_CMD" || echo "WARNING: uv sync failed; continuing with existing environment."
+            printf '%s\n' "$LOCK_HASH" > "$SYNC_STAMP"
+          else
+            echo "uv deps unchanged -> skipping sync."
+          fi
+        fi
 
-           sync_vite_manifest
-           if ! vite_manifest_points_to_existing_asset "$viteManifestPath"; then
-             echo "Vite manifest missing/invalid at $viteManifestPath; running recovery build + static collect."
-             devenv shell -- vue-build
-             devenv shell -- python manage.py collectstatic --noinput
-             sync_vite_manifest
-           fi
+        run_collectstatic() {
+          python manage.py collectstatic "$@"
+        }
+
+        run_migrate() {
+          python manage.py migrate --noinput
+        }
+
+        run_load_base_data() {
+          python manage.py load_base_db_data
+        }
+
+        run_vue_build() {
+          if command -v vue-build >/dev/null 2>&1; then
+            vue-build
+          elif command -v npm >/dev/null 2>&1; then
+            (
+              cd frontend
+              npm install
+              npm run build
+            )
+          else
+            echo "ERROR: vue-build command not found in current environment."
+            return 1
+          fi
+        }
+
+        run_server() {
+          if command -v devenv >/dev/null 2>&1; then
+            exec devenv shell -- bash -c "run-server"
+          else
+            echo "ERROR: run-server command not found in current environment."
+            return 1
+          fi
+        }
+
+        if [ "$runHeavyBootstrap" = "true" ]; then
+          echo "Skipping routine vue-build on startup; collecting static + migrations only."
+          run_collectstatic --noinput --clear
+          sync_vite_manifest
         else
-           source .venv/bin/activate 
+          echo "Skipping collectstatic on unchanged revision."
+        fi
 
-           if [ "$runHeavyBootstrap" = "true" ]; then
-             echo "Skipping routine vue-build on startup; collecting static + migrations only."
-             python manage.py collectstatic --noinput --clear
-           else
-             echo "Skipping collectstatic on unchanged revision."
-           fi
+        echo "Running Database Migrations..."
+        run_migrate
+        if [ "$runHeavyBootstrap" = "true" ]; then
+          run_load_base_data
+          printf '%s\n' "$currentRevision" > "$bootstrapStampFile"
+          chmod 600 "$bootstrapStampFile" 2>/dev/null || true
+        else
+          echo "Skipping base data load on unchanged revision."
+        fi
 
-           echo "Running Database Migrations..."
-           python manage.py migrate --noinput
-           if [ "$runHeavyBootstrap" = "true" ]; then
-             python manage.py load_base_db_data
-             printf '%s\n' "$currentRevision" > "$bootstrapStampFile"
-             chmod 600 "$bootstrapStampFile" 2>/dev/null || true
-           else
-             echo "Skipping base data load on unchanged revision."
-           fi
-
-           sync_vite_manifest
-           if ! vite_manifest_points_to_existing_asset "$viteManifestPath"; then
-             echo "Vite manifest missing/invalid at $viteManifestPath; running recovery build + static collect."
-             vue-build
-             python manage.py collectstatic --noinput
-             sync_vite_manifest
-           fi
+        sync_vite_manifest
+        if ! vite_manifest_points_to_existing_asset "$viteManifestPath"; then
+          echo "Vite manifest missing/invalid at $viteManifestPath; running recovery build + static collect."
+          run_vue_build
+          run_collectstatic --noinput
+          sync_vite_manifest
         fi
 
         if ! vite_manifest_points_to_existing_asset "$viteManifestPath"; then
@@ -570,7 +603,7 @@ let
         fi
 
         echo "Starting Django server..."
-        exec devenv shell -- bash -c "run-server"
+        run_server
   '';
   watcherScriptName = "runLocalFileWatcher";
   runLocalFileWatcherScript = pkgs.writeShellScriptBin "${watcherScriptName}" ''
