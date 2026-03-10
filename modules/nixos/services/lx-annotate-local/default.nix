@@ -412,7 +412,7 @@ EOF
         bootstrapStampFile="${envConfDir}/.bootstrap-revision"
         lastBootstrapRevision="$(cat "$bootstrapStampFile" 2>/dev/null || true)"
         runHeavyBootstrap="false"
-        runtimeViteManifestSourcePath="${staticRootPath}/manifest.json"
+        runtimeViteManifestSourcePath="${staticRootPath}/.vite/manifest.json"
         preferredViteManifestSourcePath="${repoDir}/lx_annotate/static/.vite/manifest.json"
         fallbackViteManifestSourcePath="${repoDir}/static/.vite/manifest.json"
         viteManifestPath="${staticRootPath}/.vite/manifest.json"
@@ -522,6 +522,21 @@ PY
           python manage.py collectstatic "$@"
         }
 
+        run_frontend_build() {
+          if command -v devenv >/dev/null 2>&1; then
+            devenv shell exec vue-build
+          elif command -v npm >/dev/null 2>&1; then
+            (
+              cd frontend
+              npm install
+              npm run build
+            )
+          else
+            echo "ERROR: frontend build tooling not available."
+            return 1
+          fi
+        }
+
         run_migrate() {
           python manage.py migrate --noinput
         }
@@ -541,10 +556,15 @@ PY
         }
 
         if [ "$runHeavyBootstrap" = "true" ]; then
-          echo "Skipping routine vue-build on startup; collecting static + migrations only."
+          echo "Refreshing Django static files before frontend build."
           run_collectstatic --noinput --clear
         else
           echo "Skipping collectstatic on unchanged revision."
+        fi
+
+        echo "Building frontend assets into ${staticRootPath}..."
+        if ! run_frontend_build; then
+          echo "WARNING: Frontend build failed; continuing only if an existing Vite manifest is still valid."
         fi
 
         echo "Running Database Migrations..."
