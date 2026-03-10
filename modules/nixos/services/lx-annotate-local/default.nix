@@ -733,7 +733,7 @@ in
             djangoDebug = false;
             djangoSecretKeyFile = "/etc/secrets/vault/django_secret_key";
             keycloakSecretFile = "/etc/secrets/vault/keycloak.env";
-            keycloakClientId = "EndoregDb-realm";
+            keycloakClientId = "lxannotate-spa";
             logLevel = "INFO";
             maxRequestSize = "100M";
             timeZone = "Europe/Berlin";
