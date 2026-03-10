@@ -731,8 +731,8 @@ in
               "http://127.0.0.1"
             ];
             djangoDebug = false;
-            djangoSecretKeyFile = "~/secrets/vault/django_secret_key";
-            keycloakSecretFile = "~/secrets/vault/keycloak.env";
+            djangoSecretKeyFile = "/~/secrets/vault/django_secret_key";
+            keycloakSecretFile = "/~/secrets/vault/keycloak.env";
             keycloakClientId = "endoregdb-api";
             logLevel = "INFO";
             maxRequestSize = "100M";
