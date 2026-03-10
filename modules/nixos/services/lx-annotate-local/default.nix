@@ -82,8 +82,8 @@ let
   lxAnnotateEnvHelpers = pkgs.writeShellScript "lx-annotate-env-helpers.sh" ''
     lx_annotate_export_base_env() {
       export DJANGO_SECRET_KEY_FILE="${cfg.django.djangoSecretKeyFile}"
-      export OIDC_RP_CLIENT_SECRET_FILE="${cfg.django.keycloakSecretFile}"
-
+      export OIDC_RP_CLIENT_SECRET="${cfg.django.keycloakSecretFile}"
+      export DJANGO_KEYCLOAK_CLIENT_SECRET_FILE="${cfg.django.keycloakSecretFile}"
       export CONF_DIR="${envConfDir}"
       export CONF_TEMPLATE_DIR="${envConfTemplateDir}"
       export WORKING_DIR="${repoDir}"
