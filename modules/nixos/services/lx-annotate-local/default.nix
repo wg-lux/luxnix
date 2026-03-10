@@ -412,10 +412,10 @@ EOF
         bootstrapStampFile="${envConfDir}/.bootstrap-revision"
         lastBootstrapRevision="$(cat "$bootstrapStampFile" 2>/dev/null || true)"
         runHeavyBootstrap="false"
-        viteManifestPath="${staticRootPath}/.vite/manifest.json"
-        runtimeViteManifestSourcePath="$viteManifestPath"
+        runtimeViteManifestSourcePath="${staticRootPath}/manifest.json"
         preferredViteManifestSourcePath="${repoDir}/lx_annotate/static/.vite/manifest.json"
         fallbackViteManifestSourcePath="${repoDir}/static/.vite/manifest.json"
+        viteManifestPath="${staticRootPath}/.vite/manifest.json"
 
         resolve_vite_manifest_source() {
           if [ -f "$runtimeViteManifestSourcePath" ]; then
@@ -431,44 +431,6 @@ EOF
             return 0
           fi
           return 1
-        }
-
-        sync_vite_manifest() {
-          local source_path
-          local repo_static_dest
-          source_path="$(resolve_vite_manifest_source 2>/dev/null || true)"
-
-          # Overlay Vite build outputs onto STATIC_ROOT so collectstatic conflicts
-          # do not leave the manifest pointing at missing frontend assets.
-          if [ -d "${viteSourcePath}" ]; then
-            ${pkgs.python3}/bin/python3 - "${viteSourcePath}" "${staticRootPath}" <<'PY'
-import shutil
-import sys
-from pathlib import Path
-
-source_root = Path(sys.argv[1])
-static_root = Path(sys.argv[2])
-
-for source_file in source_root.rglob("*"):
-    if not source_file.is_file():
-        continue
-    relative_path = source_file.relative_to(source_root)
-    target_file = static_root / relative_path
-    target_file.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(source_file, target_file)
-PY
-          fi
-
-          if [ -n "$source_path" ] && [ -f "$source_path" ]; then
-            echo "Syncing Vite manifest from $source_path to $viteManifestPath"
-            mkdir -p "$(dirname "$viteManifestPath")"
-            cp -f "$source_path" "$viteManifestPath"
-
-            # Ensure it is in the Django static source so collectstatic sees it next time
-            repo_static_dest="${repoDir}/static/.vite/manifest.json"
-            if [ "$source_path" != "$repo_static_dest" ] && [ "$source_path" != "$runtimeViteManifestSourcePath" ]; then
-              mkdir -p "$(dirname "$repo_static_dest")"            fi
-          fi
         }
 
         vite_main_entry_file() {
