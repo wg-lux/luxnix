@@ -162,7 +162,7 @@ in
 
   staticUrl = mkOption {
     type = types.str;
-    default = defaults.staticUrl or "/static/";
+    default = "/";
     description = "STATIC_URL value exported to the application.";
   };
 
