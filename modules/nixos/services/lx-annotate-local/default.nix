@@ -484,24 +484,6 @@ PY
         else
           echo "Revision unchanged ($currentRevision); using lightweight startup path."
         fi
-
-        run_vue_build() {
-          if command -v devenv >/dev/null 2>&1; then
-            devenv tasks run vue:build
-          elif command -v npm >/dev/null 2>&1; then
-            (
-              cd frontend
-              npm install
-              npm run build
-            )
-          else
-            echo "ERROR: vue-build command not found in current environment."
-            return 1
-          fi
-        }
-
-        echo "Running vue build command"
-        run_vue_build
         
 
         echo "Collecting static files..."
