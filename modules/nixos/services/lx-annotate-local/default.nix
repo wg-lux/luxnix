@@ -485,6 +485,25 @@ PY
           echo "Revision unchanged ($currentRevision); using lightweight startup path."
         fi
 
+        run_vue_build() {
+          if command -v devenv >/dev/null 2>&1; then
+            devenv tasks run vue:build
+          elif command -v npm >/dev/null 2>&1; then
+            (
+              cd frontend
+              npm install
+              npm run build
+            )
+          else
+            echo "ERROR: vue-build command not found in current environment."
+            return 1
+          fi
+        }
+
+        echo "Running vue build command"
+        run_vue_build
+        
+
         echo "Collecting static files..."
         export DJANGO_STATIC_ROOT="${staticRootPath}"
         if [ "''${DJANGO_STATIC_ROOT%/}" = "${viteSourcePath}" ]; then
@@ -529,20 +548,6 @@ PY
           python manage.py load_base_db_data
         }
 
-        run_vue_build() {
-          if command -v vue-build >/dev/null 2>&1; then
-            vue-build
-          elif command -v npm >/dev/null 2>&1; then
-            (
-              cd frontend
-              npm install
-              npm run build
-            )
-          else
-            echo "ERROR: vue-build command not found in current environment."
-            return 1
-          fi
-        }
 
         run_server() {
           if command -v devenv >/dev/null 2>&1; then
@@ -556,7 +561,6 @@ PY
         if [ "$runHeavyBootstrap" = "true" ]; then
           echo "Skipping routine vue-build on startup; collecting static + migrations only."
           run_collectstatic --noinput --clear
-          sync_vite_manifest
         else
           echo "Skipping collectstatic on unchanged revision."
         fi
@@ -571,13 +575,6 @@ PY
           echo "Skipping base data load on unchanged revision."
         fi
 
-        sync_vite_manifest
-        if ! vite_manifest_points_to_existing_asset "$viteManifestPath"; then
-          echo "Vite manifest missing/invalid at $viteManifestPath; running recovery build + static collect."
-          run_vue_build
-          run_collectstatic --noinput
-          sync_vite_manifest
-        fi
 
         if ! vite_manifest_points_to_existing_asset "$viteManifestPath"; then
           echo "ERROR: Vite manifest is missing/invalid after startup preparation: $viteManifestPath"
