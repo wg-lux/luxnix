@@ -945,6 +945,9 @@ in
              echo "WARNING: Password file $SOURCE_PWD not found!"
           fi
 
+          [ -f "${cfg.django.keycloakSecretFile}" ] && chown root:${endoreg-service-group-name} "${cfg.django.keycloakSecretFile}"
+          [ -f "${cfg.django.keycloakSecretFile}" ] && chmod 640 "${cfg.django.keycloakSecretFile}"
+
           # Ensure the service user owns the directory too
           chown -R ${endoreg-service-user-name}:${endoreg-service-group-name} ${envConfDir}
         ''}";
