@@ -525,7 +525,7 @@ PY
 
         run_frontend_build() {
           if command -v devenv >/dev/null 2>&1; then
-            devenv shell exec vue-build
+            devenv shell -- vue-build
           elif command -v npm >/dev/null 2>&1; then
             (
               cd frontend
@@ -982,7 +982,7 @@ in
     systemd.services.lx-annotate-filewatcher = {
       description = "Django File Watcher Service";
       wantedBy = [ "multi-user.target" ];
-      after = [ "postgresql.service" ]; # Adjust based on your DB
+      after = [ "postgresql.service" "lx-annotate-boot.service" ]; # Adjust based on your DB
       requires = [ "lx-annotate-boot.service" ];
 
       serviceConfig = {
