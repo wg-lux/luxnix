@@ -981,9 +981,9 @@ in
     };
     systemd.services.lx-annotate-filewatcher = {
       description = "Django File Watcher Service";
-      wantedBy = [ "multi-user.target" ];
       after = [ "postgresql.service" "lx-annotate-boot.service" ]; # Adjust based on your DB
-      requires = [ "lx-annotate-boot.service" ];
+      wantedBy = [ "lx-annotate-boot.service" ];
+      partOf = [ "lx-annotate-boot.service" ];
 
       serviceConfig = {
         User = endoreg-service-user-name; # Or whatever user runs the app
