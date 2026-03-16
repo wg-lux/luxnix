@@ -67,6 +67,8 @@ let
   envRunVideoTests = if cfg.django.runVideoTests then "true" else "false";
   envSkipExpensiveTests = if cfg.django.skipExpensiveTests then "true" else "false";
   envViteEnableDebug = if cfg.debug.enable then "true" else "false";
+  envAllowedHosts = lib.concatStringsSep "," cfg.django.djangoAllowedHosts;
+  envCorsAllowedOrigins = lib.concatStringsSep "," cfg.django.corsAllowedOrigins;
 
   settingsProfile = cfg.django.settingsProfile;
   envIsCentralNode = cfg.django.extraSettings.IS_CENTRAL_NODE or false;
@@ -109,10 +111,10 @@ let
       export SERVE_WITH_NGINX="true"
       export NGINX_PROTECTED_MEDIA_URL="/protected_media/"
 
-      export DJANGO_ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
-      export ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
-      export DJANGO_CORS_ALLOWED_ORIGINS='${builtins.toJSON cfg.django.corsAllowedOrigins}'
-      export DJANGO_CSRF_TRUSTED_ORIGINS='${builtins.toJSON cfg.django.corsAllowedOrigins}'
+      export DJANGO_ALLOWED_HOSTS="${envAllowedHosts}"
+      export ALLOWED_HOSTS="${envAllowedHosts}"
+      export DJANGO_CORS_ALLOWED_ORIGINS="${envCorsAllowedOrigins}"
+      export DJANGO_CSRF_TRUSTED_ORIGINS="${envCorsAllowedOrigins}"
     }
 
     lx_annotate_export_storage_env() {
@@ -405,9 +407,10 @@ EOF
     DJANGO_HOST=${envDjangoHost}
     DJANGO_PORT=${envDjangoPort}
     BASE_URL=${envBaseUrl}
-    DJANGO_ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
-    ALLOWED_HOSTS='${builtins.toJSON cfg.django.djangoAllowedHosts}'
-    DJANGO_CSRF_TRUSTED_ORIGINS='${builtins.toJSON cfg.django.corsAllowedOrigins}'
+    DJANGO_ALLOWED_HOSTS=${envAllowedHosts}
+    ALLOWED_HOSTS=${envAllowedHosts}
+    DJANGO_CORS_ALLOWED_ORIGINS=${envCorsAllowedOrigins}
+    DJANGO_CSRF_TRUSTED_ORIGINS=${envCorsAllowedOrigins}
 EOF
     currentRevision="$(git rev-parse --verify HEAD 2>/dev/null || echo unknown)"
         bootstrapStampFile="${envConfDir}/.bootstrap-revision"
