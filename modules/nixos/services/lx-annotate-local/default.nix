@@ -159,7 +159,7 @@ let
 
   # Compat exports for lx-annotate/devenv.nix shellHook, which expects these vars.
   devenvSyncCompatExports = ''
-    export SYNC_CMD="uv sync --extra dev --extra docs"
+    export SYNC_CMD="uv sync --active --extra dev --extra docs"
     export SYNC_STAMP=".devenv/state/.uv-sync.stamp"
     mkdir -p "$(dirname "$SYNC_STAMP")"
     if [ -f "uv.lock" ] && [ -f "pyproject.toml" ]; then
