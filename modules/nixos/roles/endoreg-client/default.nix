@@ -4,6 +4,8 @@
   pkgs,
   ...
 }:
+
+
 with lib;
 with lib.luxnix;
 let
@@ -11,6 +13,8 @@ let
 
   sensitiveServiceGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
   endoregServiceGroupName = config.luxnix.generic-settings.endoregServiceGroupName;
+
+
 in
 {
   options.roles.endoreg-client =
@@ -49,6 +53,12 @@ in
         type = types.bool;
         default = false;
         description = "Enable endoAi service";
+      };
+
+      lxAi = mkOption {
+        type = types.bool;
+        default = true;# false this service will not automatically run on each client, for this turn to true
+        description = "Enable lx-ai training service";
       };
 
       defaultCenter = mkOption {
@@ -259,6 +269,14 @@ in
         django = annotateDjango;
         database = cfg.database;
         
+      };
+
+      services.luxnix.lxAiLocal = {
+        enable = cfg.lxAi;
+        database = cfg.database;
+        # optional future improvements
+        # source = cfg.repository (if needed)
+        # debug.enable = false
       };
 
       services.luxnix.endoAi = {
