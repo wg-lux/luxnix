@@ -362,12 +362,12 @@ EOF
       timestamp="$(${pkgs.coreutils}/bin/date +%Y%m%dT%H%M%S)"
 
       if ! git diff --quiet --ignore-submodules=all; then
-        git diff --binary > "$backup_root/${timestamp}-tracked.patch" || true
+        git diff --binary > "$backup_root/''${timestamp}-tracked.patch" || true
       fi
 
       if [ -n "$(git ls-files --others --exclude-standard)" ]; then
         git ls-files --others --exclude-standard -z \
-          | ${pkgs.findutils}/bin/xargs -0 -r ${pkgs.gnutar}/bin/tar -czf "$backup_root/${timestamp}-untracked.tgz" --
+          | ${pkgs.findutils}/bin/xargs -0 -r ${pkgs.gnutar}/bin/tar -czf "$backup_root/''${timestamp}-untracked.tgz" --
       fi
 
       warn "Backed up local git state into $backup_root before destructive sync."
