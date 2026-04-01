@@ -213,12 +213,12 @@ let
       if [ -d "${repoDir}/.devenv/profile/bin" ]; then
         export PATH="${repoDir}/.devenv/profile/bin:$PATH"
       fi
-      if [ -f "${repoDir}/.devenv/state/venv/bin/activate" ]; then
+      if [ -f ".devenv/state/venv/bin/activate" ]; then
         # shellcheck disable=SC1091
-        source "${repoDir}/.devenv/state/venv/bin/activate"
-      elif [ -f "${repoDir}/.venv/bin/activate" ]; then
+        source .devenv/state/venv/bin/activate
+      elif [ -f ".venv/bin/activate" ]; then
         # shellcheck disable=SC1091
-        source "${repoDir}/.venv/bin/activate"
+        source .venv/bin/activate
       fi
       if [ -n "''${LOCK_HASH:-}" ] && command -v uv >/dev/null 2>&1; then
         previousLockHash="$(cat "$SYNC_STAMP" 2>/dev/null || true)"
@@ -238,7 +238,7 @@ let
       chown -R "${endoreg-service-user-name}:${endoreg-service-group-name}" "${staticRootPath}"
 
       if [ -L "${repoStaticRootPath}" ]; then
-        ln -sfn "${staticRootPath}" "${repoStaticRootPath}"
+        ln -sfn ${staticRootPath} "${repoStaticRootPath}"
         return 0
       fi
 
@@ -251,7 +251,7 @@ let
         rm -f "${repoStaticRootPath}"
       fi
 
-      ln -sfn "${staticRootPath}" "${repoStaticRootPath}"
+      ln -sfn ${staticRootPath} "${repoStaticRootPath}"
     }
 
     normalize_runtime_static_root_permissions() {
@@ -778,7 +778,7 @@ PY
     if [ -e "${djangoStaticRootPath}" ] && [ ! -L "${djangoStaticRootPath}" ]; then
       rm -rf "${djangoStaticRootPath}"
     fi
-    ln -sfn "${runtimeStaticRootPath}" "${djangoStaticRootPath}"
+    ln -sfn ${runtimeStaticRootPath} "${djangoStaticRootPath}"
     ${pkgs.coreutils}/bin/chown -R "${endoreg-service-user-name}:${endoreg-service-group-name}" "${runtimeStaticRootPath}"
     ${pkgs.findutils}/bin/find "${runtimeStaticRootPath}" -type d -exec ${pkgs.coreutils}/bin/chmod 0755 {} +
     ${pkgs.findutils}/bin/find "${runtimeStaticRootPath}" -type f -exec ${pkgs.coreutils}/bin/chmod 0644 {} +
@@ -1069,7 +1069,6 @@ PY
         --ignore-existing \
         --omit-dir-times \
         --chmod=F640,D750 \
-        --chown=${endoreg-service-user-name}:${endoreg-service-group-name} \
         "$source_root/" "$target_dir/"
     }
 
@@ -1102,11 +1101,9 @@ PY
       printf 'UPDATED_AT=%s\n' "$(${pkgs.coreutils}/bin/date --iso-8601=seconds)"
     } > "$state_file.tmp"
     ${pkgs.coreutils}/bin/mv "$state_file.tmp" "$state_file"
-    chown "${endoreg-service-user-name}:${endoreg-service-group-name}" "$state_file"
     chmod 0640 "$state_file"
 
     printf 'completed_at=%s\n' "$(${pkgs.coreutils}/bin/date --iso-8601=seconds)" > "$marker_file"
-    chown "${endoreg-service-user-name}:${endoreg-service-group-name}" "$marker_file"
     chmod 0640 "$marker_file"
     echo "Data recovery marker written to $marker_file"
   '';
@@ -1195,7 +1192,6 @@ PY
       printf 'skipped_count=%s\n' "$skipped_count"
     } > "$marker_file"
 
-    chown "${endoreg-service-user-name}:${endoreg-service-group-name}" "$marker_file"
     chmod 0640 "$marker_file"
 
     echo "Cleanup completed. moved=$moved_count skipped=$skipped_count archive=$archive_root"
