@@ -1,8 +1,7 @@
-{
-  config,
-  lib,
-  pkgs,
-  ...
+{ config
+, lib
+, pkgs
+, ...
 }:
 with lib;
 with lib.luxnix;
@@ -34,10 +33,13 @@ let
   failedInputBaseDir = "${endoregPaths.storageBaseDir}/failed_input";
   failedVideoDir = "${failedInputBaseDir}/video";
   failedPdfDir = "${failedInputBaseDir}/pdf";
+  runtimeDataDir = config.services.luxnix.lxAnnotateLocal.runtime.encryptedDataDir;
+  preanonymizedDir = "${runtimeDataDir}/import/preanonymized_import";
+  sapImportDir = "${runtimeDataDir}/import/sap_import";
 
-  # Destination paths (Deep inside the repo)
-  destVideoDir = "${endoreg-service-user-home}/${repoDirName}/data/import/video_import";
-  destReportDir = "${endoreg-service-user-home}/${repoDirName}/data/import/report_import";
+  # Destination paths
+  destVideoDir = "${runtimeDataDir}/import/video_import";
+  destReportDir = "${runtimeDataDir}/import/report_import";
 
   # Resolve the correct desktop name (Schreibtisch vs Desktop)
   resolvedDesktopName = config.roles.endoreg-client.paths.desktopDirName;
@@ -56,10 +58,12 @@ in
       "d \"${sourcePdfDir}\" 0770 root ${endoregServiceGroup} -"
       "d \"${failedVideoDir}\" 0770 root ${endoregServiceGroup} -"
       "d \"${failedPdfDir}\" 0770 root ${endoregServiceGroup} -"
-      # Create destination parents if they don't exist yet (Repo might be cloning)
-      "d \"${endoreg-service-user-home}/${repoDirName}/data/import\" 0770 ${endoregServiceUserName} ${endoregServiceGroup} -"
+      # Create runtime intake directories.
+      "d \"${runtimeDataDir}/import\" 0770 ${endoregServiceUserName} ${endoregServiceGroup} -"
       "d \"${destVideoDir}\" 0770 ${endoregServiceUserName} ${endoregServiceGroup} -"
       "d \"${destReportDir}\" 0770 ${endoregServiceUserName} ${endoregServiceGroup} -"
+      "d \"${preanonymizedDir}\" 0770 ${endoregServiceUserName} ${endoregServiceGroup} -"
+      "d \"${sapImportDir}\" 0770 ${endoregServiceUserName} ${endoregServiceGroup} -"
     ];
 
     # 2. Home Manager: Use the resolved variable for Desktop/Schreibtisch
@@ -85,6 +89,14 @@ in
           home.file."${resolvedDesktopName}/PDF_Input" = {
             source = outOfStore sourcePdfDir;
           };
+
+          home.file."${resolvedDesktopName}/preanonymized_import" = {
+            source = outOfStore preanonymizedDir;
+          };
+
+          home.file."${resolvedDesktopName}/sap_import" = {
+            source = outOfStore sapImportDir;
+          };
         };
     };
     home-manager.users = {
@@ -108,6 +120,14 @@ in
 
           home.file."${resolvedDesktopName}/PDF_Input" = {
             source = outOfStore sourcePdfDir;
+          };
+
+          home.file."${resolvedDesktopName}/preanonymized_import" = {
+            source = outOfStore preanonymizedDir;
+          };
+
+          home.file."${resolvedDesktopName}/sap_import" = {
+            source = outOfStore sapImportDir;
           };
         };
     };

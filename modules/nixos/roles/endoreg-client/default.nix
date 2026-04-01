@@ -1,8 +1,7 @@
-{
-  lib,
-  config,
-  pkgs,
-  ...
+{ lib
+, config
+, pkgs
+, ...
 }:
 with lib;
 with lib.luxnix;
@@ -190,8 +189,6 @@ in
         ollamaKeepAlive = resolvedOllamaKeepAlive;
       };
 
-      annotateRuntimeLimits = cfg.lxAnnotate.runtime.limits;
-
       annotateDjangoOverrides = {
         djangoModule = cfg.lxAnnotate.django.djangoModule;
         assetDir =
@@ -258,7 +255,6 @@ in
         source = cfg.lxAnnotate.source;
         django = annotateDjango;
         database = cfg.database;
-        
       };
 
       services.luxnix.endoAi = {
@@ -370,25 +366,12 @@ in
 
       # Update Home Manager configuration to use XDG User Dirs and OutOfStore symlinks
       home-manager.users.${clientUserName} =
-        { config, ... }:
-        let
-          outOfStore = config.lib.file.mkOutOfStoreSymlink;
-
-        in
+        { ... }:
         {
           home.username = mkDefault clientUserName;
           home.stateVersion = mkDefault clientHomeStateVersion;
 
           roles.desktop.enable = mkDefault true;
-
-          # Create symlinks in the resolved Desktop directory pointing to the system storage paths
-          home.file."${desktopDirName}/Video_Input" = {
-            source = outOfStore videoInputDir;
-          };
-
-          home.file."${desktopDirName}/PDF_Input" = {
-            source = outOfStore pdfInputDir;
-          };
         };
 
       # Generate Django secret key if it doesn't exist

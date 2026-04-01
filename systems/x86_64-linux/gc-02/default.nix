@@ -42,7 +42,15 @@
     };
 
   services = {
+    luxnix.vllm = {
+      enable = true;
+      host = "127.0.0.1";
+      port = 8000;
+      model = "Qwen/Qwen2.5-1.5B-Instruct";
+      maxModelLen = 8192;
+      gpuMemoryUtilization = 0.85;
     };
+  };
 
   luxnix = {
     boot-decryption-stick.enable = true;
