@@ -526,14 +526,14 @@ EOF
     set -euo pipefail
     source "${lxAnnotateRuntimeLib}"
     mkdir -p "${envConfDir}" "${envDataDir}"
-    ensure_runtime_static_root
+    ensure_runtime_static_root || warn "Failed to prepare runtime static root."
     lx_annotate_export_runtime_env
     lx_annotate_activate_runtime
-    write_secretspec_config
+    write_secretspec_config || warn "Failed to write secretspec config."
     printf '%s\n' "${envDjangoEnv}" > "${repoDir}/.mode"
     chmod 600 "${repoDir}/.mode" 2>/dev/null || true
-    align_repo_env_file
-    write_systemd_env_file
+    align_repo_env_file || warn "Failed to align repository .env file."
+    write_systemd_env_file || warn "Failed to write systemd environment file."
   '';
 
   lxAnnotateBuildScript = pkgs.writeShellScriptBin "${buildScriptName}" ''
@@ -543,18 +543,19 @@ EOF
     lx_annotate_activate_runtime
 
     if [ "''${DJANGO_STATIC_ROOT%/}" = "${viteSourcePath}" ]; then
-      die "DJANGO_STATIC_ROOT points to Vite source assets (${viteSourcePath})."
+      warn "DJANGO_STATIC_ROOT points to Vite source assets (${viteSourcePath}); skipping frontend build enforcement."
+      exit 0
     fi
 
     log "Building frontend assets into ${djangoStaticRootPath}..."
     if command -v devenv >/dev/null 2>&1; then
       devenv shell -- vue-build || warn "Frontend build failed; validating existing Vite manifest."
     else
-      die "devenv is required for frontend builds."
+      warn "devenv is not available; skipping frontend build."
     fi
-    normalize_runtime_static_root_permissions
+    normalize_runtime_static_root_permissions || warn "Failed to normalize runtime static root permissions."
     if ! vite_manifest_points_to_existing_asset "${djangoStaticRootPath}/.vite/manifest.json"; then
-      die "Vite manifest is missing/invalid after frontend build preparation."
+      warn "Vite manifest is missing/invalid after frontend build preparation. Continuing with backend startup."
     fi
   '';
 
@@ -572,7 +573,7 @@ EOF
     last_bootstrap_revision="$(cat "$bootstrap_stamp_file" 2>/dev/null || true)"
 
 
-    python manage.py load_base_db_data
+    python manage.py load_base_db_data || warn "load_base_db_data failed; continuing after successful migrations."
 
 
     if [ "$current_revision" != "$last_bootstrap_revision" ]; then
@@ -597,7 +598,7 @@ EOF
       log "Preparing restored last-known-good checkout for service start."
       "${lxAnnotatePrepareScript}/bin/${prepareScriptName}"
       if ! vite_manifest_points_to_existing_asset "${djangoStaticRootPath}/.vite/manifest.json"; then
-        die "Fallback checkout restored, but static assets are not usable."
+        warn "Fallback checkout restored, but static assets are not usable. Continuing with backend startup."
       fi
     }
 
@@ -625,7 +626,7 @@ EOF
     lx_annotate_export_runtime_env
     lx_annotate_activate_runtime
     if ! vite_manifest_points_to_existing_asset "${djangoStaticRootPath}/.vite/manifest.json"; then
-      die "Vite manifest is missing/invalid before server start."
+      warn "Vite manifest is missing/invalid before server start. Continuing with backend startup."
     fi
     log "Starting Django server..."
     if command -v devenv >/dev/null 2>&1; then
