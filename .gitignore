@@ -24,7 +24,7 @@ test_wd/
 .pre-commit-config.yaml
 
 untracked-notes.md
-
+node_modules/
 .vscode
 result/
 secrets/

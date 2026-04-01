@@ -32,7 +32,7 @@ with lib;
 
         branch = mkOption {
           type = types.str;
-          default = "erc";
+          default = "test";
           description = "Git branch to checkout for lx-annotate.";
         };
 
