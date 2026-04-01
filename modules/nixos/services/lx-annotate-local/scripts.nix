@@ -163,31 +163,7 @@ let
     raise SystemExit(1)
   '';
 
-  baseDataCheckScript = pkgs.writeText "lx-annotate-base-data-check.py" ''
-    import os
-    import sys
-
-    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "lx_annotate.settings.settings_prod")
-
-    import django
-
-    django.setup()
-
-    from django.apps import apps
-
-    default_center = os.environ.get("LX_ANNOTATE_DEFAULT_CENTER", "").strip()
-    if not default_center:
-        print("missing-default-center-name")
-        raise SystemExit(1)
-
-    Center = apps.get_model("endoreg_db", "Center")
-    if Center.objects.filter(name=default_center).exists():
-        print("present")
-        raise SystemExit(0)
-
-    print("missing")
-    raise SystemExit(1)
-  '';
+  baseDataCheckScript
 
   syncScriptName = "lx-annotate-sync";
   prepareScriptName = "lx-annotate-prepare";
@@ -607,13 +583,9 @@ EOF
     current_revision="$(git rev-parse --verify HEAD 2>/dev/null || echo unknown)"
     last_bootstrap_revision="$(cat "$bootstrap_stamp_file" 2>/dev/null || true)"
 
-    if "${pkgs.python3}/bin/python3" "${baseDataCheckScript}" >/dev/null 2>&1; then
-      log "Base data already present; skipping load_base_db_data."
-    else
-      log "Base data marker missing; running load_base_db_data once."
-      python manage.py load_base_db_data
-      "${pkgs.python3}/bin/python3" "${baseDataCheckScript}" >/dev/null 2>&1 || die "Base data load completed but verification still failed."
-    fi
+
+    python manage.py load_base_db_data
+
 
     if [ "$current_revision" != "$last_bootstrap_revision" ]; then
       printf '%s\n' "$current_revision" > "$bootstrap_stamp_file"
