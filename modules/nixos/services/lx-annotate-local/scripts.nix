@@ -360,7 +360,7 @@ EOF
       local current_revision=""
       current_revision="$(current_revision_or_unknown)"
       if [ "$current_revision" = "unknown" ]; then
-        die "Cannot mark checkout healthy because HEAD is unresolved."
+        "Cannot mark checkout healthy because HEAD is unresolved."
       fi
       install -d -m 0750 "${runtimeRootPath}"
       printf '%s\n' "$current_revision" > "$(last_known_good_revision_file)"
