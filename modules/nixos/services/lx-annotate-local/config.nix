@@ -396,7 +396,6 @@ with args;
           runtimeRootPath
           runtimeWheelRootPath
           runtimeWheelVenvPath
-          "/var/endoreg-service-user/lx-annotate"
         ];
         # Resource limits
         MemoryHigh = "4G";
@@ -431,7 +430,6 @@ with args;
           endoreg-service-user-home
           envDataDir
           "/var/lib/lx-annotate"
-          "/var/endoreg-service-user/lx-annotate"
         ];
       };
     };
