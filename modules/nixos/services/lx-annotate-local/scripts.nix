@@ -163,7 +163,6 @@ let
     raise SystemExit(1)
   '';
 
-  baseDataCheckScript
 
   syncScriptName = "lx-annotate-sync";
   prepareScriptName = "lx-annotate-prepare";
