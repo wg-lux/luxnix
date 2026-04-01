@@ -356,17 +356,6 @@ EOF
       git rev-parse --verify HEAD 2>/dev/null || echo unknown
     }
 
-    mark_current_checkout_good() {
-      local current_revision=""
-      current_revision="$(current_revision_or_unknown)"
-      if [ "$current_revision" = "unknown" ]; then
-        print "Cannot mark checkout healthy because HEAD is unresolved."
-      fi
-      install -d -m 0750 "${runtimeRootPath}"
-      printf '%s\n' "$current_revision" > "$(last_known_good_revision_file)"
-      chmod 0640 "$(last_known_good_revision_file)" 2>/dev/null || true
-      log "Marked checkout as last-known-good: $current_revision"
-    }
 
     restore_last_known_good_checkout() {
       local revision_file=""
@@ -617,9 +606,7 @@ EOF
       run_stage "prepare" "${lxAnnotatePrepareScript}/bin/${prepareScriptName}" && \
       run_stage "build" "${lxAnnotateBuildScript}/bin/${buildScriptName}" && \
       run_stage "migrate" "${lxAnnotateMigrateScript}/bin/${migrateScriptName}"
-    then
-      mark_current_checkout_good
-      exit 0
+
     fi
 
     warn "Bootstrap pipeline failed; attempting fallback to last-known-good checkout."
