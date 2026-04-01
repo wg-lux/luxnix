@@ -605,8 +605,8 @@ EOF
       run_stage "sync" "${lxAnnotateSyncScript}/bin/${syncScriptName}" && \
       run_stage "prepare" "${lxAnnotatePrepareScript}/bin/${prepareScriptName}" && \
       run_stage "build" "${lxAnnotateBuildScript}/bin/${buildScriptName}" && \
-      run_stage "migrate" "${lxAnnotateMigrateScript}/bin/${migrateScriptName}"
-
+      run_stage "migrate" "${lxAnnotateMigrateScript}/bin/${migrateScriptName}"; then
+      exit 0
     fi
 
     warn "Bootstrap pipeline failed; attempting fallback to last-known-good checkout."
