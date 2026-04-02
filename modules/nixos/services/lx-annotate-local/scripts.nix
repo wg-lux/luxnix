@@ -1083,13 +1083,26 @@ PY
       echo "No previous effective data dir recorded in $state_file"
     fi
 
-    if [ -x "${repoDir}/.devenv/state/venv/bin/python" ] && [ -f "${repoDir}/scripts/migrate_data_dir.py" ]; then
+    migration_helper_python=""
+    if [ -f "${repoDir}/scripts/migrate_data_dir.py" ]; then
+      if [ "${if useWheelRuntime then "true" else "false"}" = "true" ] && [ -x "${runtimeWheelVenvPath}/bin/python" ]; then
+        migration_helper_python="${runtimeWheelVenvPath}/bin/python"
+      elif [ -x "${repoDir}/.devenv/state/venv/bin/python" ]; then
+        migration_helper_python="${repoDir}/.devenv/state/venv/bin/python"
+      fi
+    fi
+
+    if [ -n "$migration_helper_python" ]; then
       echo "Running lx-annotate repo migration helper into $target_dir"
       cd "${repoDir}"
-      "${repoDir}/.devenv/state/venv/bin/python" "${repoDir}/scripts/migrate_data_dir.py" \
+      if ! "$migration_helper_python" "${repoDir}/scripts/migrate_data_dir.py" \
         --repo-root "${repoDir}" \
         --target "$target_dir" \
-        --allow-merge
+        --allow-merge; then
+        echo "Migration helper failed; falling back to compatibility rsync."
+        sync_source_dir "${cfg.dataRecovery.legacyDataDir}" "legacy repo data"
+        sync_source_dir "${cfg.dataRecovery.legacyMediaDir}" "legacy media"
+      fi
     else
       echo "Migration helper unavailable; falling back to compatibility rsync."
       sync_source_dir "${cfg.dataRecovery.legacyDataDir}" "legacy repo data"

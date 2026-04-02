@@ -337,7 +337,7 @@ with args;
           "NIX_PATH=nixpkgs=${pkgs.path}"
           "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:${pkgs.direnv}/bin:/run/current-system/sw/bin"
           # This provides the missing libstdc++.so.6 and libGL.so.1
-          "LD_LIBRARY_PATH=${lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib pkgs.libglvnd pkgs.zlib pkgs.glib ]}"
+          "LD_LIBRARY_PATH=${lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib pkgs.libglvnd pkgs.zlib pkgs.glib pkgs.libxcb ]}"
         ];
 
         TimeoutStartSec = "5min";
