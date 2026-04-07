@@ -36,6 +36,15 @@ let
   repoDir = "${endoreg-service-user-home}/${repoDirName}";
   repoStaticRootPath = "${repoDir}/staticfiles";
   runtimeDataRootPath = cfg.runtime.encryptedDataDir;
+  # Canonical protected runtime layout:
+  # - runtimeDataRootPath is the single protected root
+  # - runtimeStorageRootPath is the managed storage subtree under that root
+  # - runtimeIoImportRootPath is the intake/workflow subtree under that root
+  #
+  # Anything under the service-user home is only an access path or symlink and
+  # must not be treated as an independent runtime root.
+  runtimeStorageRootPath = "${runtimeDataRootPath}/storage";
+  runtimeIoImportRootPath = "${runtimeDataRootPath}/import";
   runtimeStaticRootPath = "/var/lib/lx-annotate/staticfiles";
   runtimeWheelRootPath = "${endoreg-service-user-home}/lx-annotate-wheel";
   runtimeWheelVenvPath = "${runtimeWheelRootPath}/.venv";
@@ -159,6 +168,8 @@ let
       repoDir
       repoStaticRootPath
       runtimeDataRootPath
+      runtimeStorageRootPath
+      runtimeIoImportRootPath
       runtimeStaticRootPath
       runtimeWheelRootPath
       runtimeWheelVenvPath
