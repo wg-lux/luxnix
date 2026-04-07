@@ -34,12 +34,19 @@ let
   failedVideoDir = "${failedInputBaseDir}/video";
   failedPdfDir = "${failedInputBaseDir}/pdf";
   runtimeDataDir = config.services.luxnix.lxAnnotateLocal.runtime.encryptedDataDir;
-  preanonymizedDir = "${runtimeDataDir}/import/preanonymized_import";
-  sapImportDir = "${runtimeDataDir}/import/sap_import";
+  # Intake destinations stay inside the canonical protected runtime root.
+  # The service-user path below is only a symlinked access path for desktop and
+  # operator workflows; it must not be treated as a separate IO root.
+  runtimeIoDir = "${runtimeDataDir}/import";
+  runtimePreanonymizedDir = "${runtimeIoDir}/preanonymized_import";
+  runtimeSapImportDir = "${runtimeIoDir}/sap_import";
+  serviceUserIoAccessLink = "${endoreg-service-user-home}/lx-annotate-io";
+  desktopPreanonymizedLinkTarget = "${serviceUserIoAccessLink}/preanonymized_import";
+  desktopSapImportLinkTarget = "${serviceUserIoAccessLink}/sap_import";
 
   # Destination paths
-  destVideoDir = "${runtimeDataDir}/import/video_import";
-  destReportDir = "${runtimeDataDir}/import/report_import";
+  destVideoDir = "${runtimeIoDir}/video_import";
+  destReportDir = "${runtimeIoDir}/report_import";
 
   # Resolve the correct desktop name (Schreibtisch vs Desktop)
   resolvedDesktopName = config.roles.endoreg-client.paths.desktopDirName;
@@ -62,8 +69,8 @@ in
       "d \"${runtimeDataDir}/import\" 0770 ${endoregServiceUserName} ${endoregServiceGroup} -"
       "d \"${destVideoDir}\" 0770 ${endoregServiceUserName} ${endoregServiceGroup} -"
       "d \"${destReportDir}\" 0770 ${endoregServiceUserName} ${endoregServiceGroup} -"
-      "d \"${preanonymizedDir}\" 0770 ${endoregServiceUserName} ${endoregServiceGroup} -"
-      "d \"${sapImportDir}\" 0770 ${endoregServiceUserName} ${endoregServiceGroup} -"
+      "d \"${runtimePreanonymizedDir}\" 0770 ${endoregServiceUserName} ${endoregServiceGroup} -"
+      "d \"${runtimeSapImportDir}\" 0770 ${endoregServiceUserName} ${endoregServiceGroup} -"
     ];
 
     # 2. Home Manager: Use the resolved variable for Desktop/Schreibtisch
@@ -91,15 +98,14 @@ in
           };
 
           home.file."${resolvedDesktopName}/preanonymized_import" = {
-            source = outOfStore preanonymizedDir;
+            source = outOfStore desktopPreanonymizedLinkTarget;
           };
 
           home.file."${resolvedDesktopName}/sap_import" = {
-            source = outOfStore sapImportDir;
+            source = outOfStore desktopSapImportLinkTarget;
           };
         };
-    };
-    home-manager.users = {
+
       ${adminUserName} =
         { config, ... }:
         let
@@ -123,11 +129,11 @@ in
           };
 
           home.file."${resolvedDesktopName}/preanonymized_import" = {
-            source = outOfStore preanonymizedDir;
+            source = outOfStore desktopPreanonymizedLinkTarget;
           };
 
           home.file."${resolvedDesktopName}/sap_import" = {
-            source = outOfStore sapImportDir;
+            source = outOfStore desktopSapImportLinkTarget;
           };
         };
     };
@@ -225,7 +231,6 @@ in
         exit "$overall_status"
       '';
     };
-
     # 4. The Trigger: DirectoryNotEmpty
     # This ensures that if rsync failed (files remain), or new files were added
     # while rsync was running, the service triggers again immediately.

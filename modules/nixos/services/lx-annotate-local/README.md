@@ -34,6 +34,25 @@ The encrypted-data unit then:
 3. opens the LUKS device with `cryptsetup`
 4. mounts it at `runtime.encryptedDataDir`
 
+## Runtime Path Contract
+
+For this module there is exactly one canonical protected runtime root:
+
+- `runtime.encryptedDataDir`
+
+Everything else is derived from that root:
+
+- managed storage: `runtime.encryptedDataDir/storage`
+- intake/workflow tree: `runtime.encryptedDataDir/import`
+
+When changing LuxNix or lx-annotate integration code, keep these rules:
+
+1. `LX_ANNOTATE_ENCRYPTED_DATA_DIR` is the single protected root.
+2. `STORAGE_DIR` is derived as `${LX_ANNOTATE_ENCRYPTED_DATA_DIR}/storage`.
+3. `IO_DIR` remains inside the protected root.
+4. Any path under the service-user home is an access path only unless the
+   contract is explicitly redesigned.
+
 ## Hub Groundwork
 
 This module can also mark a host as the first central hub node:

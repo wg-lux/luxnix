@@ -304,23 +304,25 @@ in
               Type = "oneshot";
               User = "root";
               Environment = [
-                "ENV_FILE=${configurationPath}/.env"
+                "STORAGE_PERSISTING_EXTERNAL_DRIVE=${if cfg.paths.storagePersistingIsExternalDrive then "true" else "false"}"
+                "STORAGE_PERSISTING_MOUNT_POINT=${toString storagePersistingMountPoint}"
+                "STORAGE_PERSISTING_HDD_ID=${lib.attrByPath [ "secretspec" "secrets" "STORAGE_PERSISTING_HDD_ID" ] "" config}"
+                "STORAGE_PERSISTING_HDD_PART=${lib.attrByPath [ "secretspec" "secrets" "STORAGE_PERSISTING_HDD_PART" ] "part1" config}"
               ];
-              WorkingDirectory = configurationPath;
               ExecStartPre = [ ];
               ExecStart = pkgs.writeShellScript "mount-persisting-storage-service" ''
                 set -euo pipefail
-                # Read from .env file 
-                # STORAGE_PERSISTING_HDD_ID: str, 
-                # STORAGE_PERSISTING_EXTERNAL_DRIVE: bool
-                # STORAGE_PERSISTING_MOUNT_POINT: str
-                source "${configurationPath}/.env"
 
                 # if STORAGE_PERSISTING_EXTERNAL_DRIVE is not true, exit
                 if [ "$STORAGE_PERSISTING_EXTERNAL_DRIVE" != "true" ]; then
                   echo "STORAGE_PERSISTING_EXTERNAL_DRIVE is not true; skipping mount"
                   exit 0
 
+                fi
+
+                if [ -z "''${STORAGE_PERSISTING_HDD_ID:-}" ]; then
+                  echo "ERROR: STORAGE_PERSISTING_HDD_ID is not set"
+                  exit 1
                 fi
 
                 # Check if already mounted
