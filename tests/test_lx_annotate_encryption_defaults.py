@@ -8,8 +8,14 @@ SCRIPTS_NIX = Path(
 )
 
 
-def test_lx_annotate_scripts_export_encrypted_storage_by_default():
+def test_lx_annotate_scripts_export_protected_storage_contract():
     source = SCRIPTS_NIX.read_text(encoding="utf-8")
 
-    assert 'export LX_ANNOTATE_USE_ENCRYPTED_STORAGE="1"' in source
-    assert "LX_ANNOTATE_USE_ENCRYPTED_STORAGE=1" in source
+    assert 'export NGINX_PROTECTED_MEDIA_URL="${envNginxProtectedMediaUrl}"' in source
+    assert 'export PROTECTED_MEDIA_ROOT="${envProtectedMediaRoot}"' in source
+    assert 'export LX_ANNOTATE_STREAMABLE_VIDEO_ROOT="${envStreamableVideoRoot}"' in source
+    assert 'export LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT="${envStreamableVideoRawRoot}"' in source
+    assert (
+        'export LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT="${envStreamableVideoProcessedRoot}"'
+        in source
+    )

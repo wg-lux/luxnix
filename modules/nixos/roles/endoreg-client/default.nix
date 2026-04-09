@@ -52,9 +52,9 @@ in
 
       defaultCenter = mkOption {
         type = types.str;
-        default = "university_hospital_wuerzburg";
-        description = "Default center value for endoreg client";
-        example = "university_hospital_wuerzburg";
+        default = "University Hospital Wuerzburg";
+        description = "Default center label for endoreg client. LuxNix normalizes this to a stable center_key for lx-annotate services unless an explicit DEFAULT_CENTER_KEY is provided.";
+        example = "University Hospital Wuerzburg";
       };
 
       # Django API Configuration Options
@@ -255,6 +255,7 @@ in
         source = cfg.lxAnnotate.source;
         django = annotateDjango;
         database = cfg.database;
+        runtime.commands = cfg.lxAnnotate.runtime.commands;
       };
 
       services.luxnix.endoAi = {

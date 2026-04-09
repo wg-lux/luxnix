@@ -58,8 +58,8 @@ with args;
           wheelPath = mkOption {
             type = types.nullOr types.path;
             default = pkgs.fetchurl {
-              url = "https://files.pythonhosted.org/packages/f1/94/f0aa3b1fe886038fd6284aa0a160bc2bf7ef7aecbc57db26eb1628ef920c/lx_annotate-0.0.6-py3-none-any.whl";
-              hash = "sha256-mpYaqv2NX7B5nZTJUPgQ0YpHYJ76YhyPAPUiSqzx2js=";
+              url = "https://files.pythonhosted.org/packages/64/0c/236cb2446924d337bef9f2cb514f7bd129f8d1e3ce40ef5dd73843afc19e/lx_annotate-0.0.9-py3-none-any.whl";
+              hash = "sha256-h7OlaCk8EdIZ5lrTdfWVdyWeZSTuUAFF0CmbQO/UrT4=";
             };
             description = "Path to the lx-annotate wheel artifact used in wheel mode.";
           };
@@ -448,8 +448,46 @@ with args;
           options = {
             enable = mkOption {
               type = types.bool;
-              default = false;
+              default = config.networking.hostName == "gs-02";
               description = "Mark this host as the central lx-annotate hub node and enable central-node groundwork defaults.";
+            };
+            transferApi = mkOption {
+              type = types.submodule {
+                options = {
+                  enable = mkOption {
+                    type = types.bool;
+                    default = false;
+                    description = "Enable the authenticated node-to-node hub transfer API. Disabled by default even on hub nodes.";
+                  };
+                  requireSecureTransport = mkOption {
+                    type = types.bool;
+                    default = true;
+                    description = "Require HTTPS-equivalent secure transport for hub transfer requests.";
+                  };
+                  requireMtls = mkOption {
+                    type = types.bool;
+                    default = false;
+                    description = "Require proxy-verified mutual TLS for node-authenticated hub transfer requests.";
+                  };
+                  mtlsMetaKey = mkOption {
+                    type = types.str;
+                    default = "HTTP_X_CLIENT_CERT_VERIFIED";
+                    description = "Django request META key used to verify proxy-attested mTLS client authentication.";
+                  };
+                  mtlsMetaValue = mkOption {
+                    type = types.str;
+                    default = "SUCCESS";
+                    description = "Expected proxy-attested mTLS verification value forwarded to Django.";
+                  };
+                  clientCaFile = mkOption {
+                    type = types.nullOr types.path;
+                    default = null;
+                    description = "PEM bundle used by Nginx to verify client certificates for hub transfer requests.";
+                  };
+                };
+              };
+              default = { };
+              description = "Transfer API settings for lx-annotate hub deployments.";
             };
             backup = mkOption {
               type = types.submodule {
