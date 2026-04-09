@@ -196,3 +196,43 @@ def test_ensure_wheel_runtime_installed_skips_venv_creation_when_python_exists(
     assert calls_log.read_text(encoding="utf-8").splitlines() == [
         f"pip:install --upgrade --force-reinstall {runtime_root / 'lx_annotate-0.0.3-py3-none-any.whl'}",
     ]
+
+
+def test_ensure_runtime_vite_manifest_repairs_empty_manifest(tmp_path: Path):
+    static_root = tmp_path / "static"
+    manifest_path = static_root / ".vite" / "manifest.json"
+    static_root.mkdir()
+    manifest_path.parent.mkdir()
+    manifest_path.write_text("", encoding="utf-8")
+    (static_root / "main.js").write_text("console.log('ok')\n", encoding="utf-8")
+    (static_root / "main.css").write_text("body{}\n", encoding="utf-8")
+
+    script = textwrap.dedent(
+        f"""\
+        set -euo pipefail
+        {_extract_function("ensure_runtime_vite_manifest")}
+        ensure_runtime_vite_manifest "{manifest_path}" "{static_root}"
+        """
+    )
+
+    result = subprocess.run(
+        ["bash", "-c", script],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert manifest_path.read_text(encoding="utf-8") == textwrap.dedent(
+        """\
+        {
+          "src/main.ts": {
+            "file": "main.js",
+            "isEntry": true,
+            "css": [
+              "main.css"
+            ]
+          }
+        }
+        """
+    )

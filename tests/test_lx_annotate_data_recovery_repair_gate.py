@@ -22,6 +22,7 @@ def _extract_function(function_name: str) -> str:
     )
     assert match is not None, f"Could not locate {function_name} in scripts.nix"
     body = textwrap.dedent(match.group(1))
+    body = body.replace("''${", "${")
     body = re.sub(r"\$\{pkgs\.[^}]+\}/bin/([A-Za-z0-9_.+-]+)", r"\1", body)
     return f"{function_name}() {{\n{body}\n}}"
 
@@ -29,8 +30,7 @@ def _extract_function(function_name: str) -> str:
 def _run_repair_gate(
     tmp_path: Path,
     *,
-    use_encrypted_storage: str = "",
-    master_key_file: str = "",
+    master_key_file: str | None = None,
 ):
     helper_python = tmp_path / "python"
     helper_python.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
@@ -45,6 +45,9 @@ def _run_repair_gate(
         repair_marker_file="{marker_file}"
         target_dir="{tmp_path / 'data'}"
         repoDir="{tmp_path / 'repo'}"
+        unset LX_ANNOTATE_MASTER_KEY
+        unset LX_ANNOTATE_MASTER_KEY_FILE
+        {"export LX_ANNOTATE_MASTER_KEY_FILE=\"" + master_key_file + "\"" if master_key_file else ""}
 
         write_repair_failure() {{
           printf 'failure:%s\\n' "$1" >> "{calls_file}"
@@ -62,14 +65,7 @@ def _run_repair_gate(
     )
 
     env = os.environ.copy()
-    if use_encrypted_storage:
-        env["LX_ANNOTATE_USE_ENCRYPTED_STORAGE"] = use_encrypted_storage
-    else:
-        env.pop("LX_ANNOTATE_USE_ENCRYPTED_STORAGE", None)
-    if master_key_file:
-        env["LX_ANNOTATE_MASTER_KEY_FILE"] = master_key_file
-    else:
-        env.pop("LX_ANNOTATE_MASTER_KEY_FILE", None)
+    env.pop("LX_ANNOTATE_MASTER_KEY_FILE", None)
     env.pop("LX_ANNOTATE_MASTER_KEY", None)
 
     result = subprocess.run(
@@ -82,32 +78,16 @@ def _run_repair_gate(
     return result, marker_file, calls_file
 
 
-def test_repair_managed_runtime_payloads_skips_when_encryption_is_not_configured(
+def test_repair_managed_runtime_payloads_skips_when_master_key_is_not_configured(
     tmp_path: Path,
 ):
     result, marker_file, calls_file = _run_repair_gate(tmp_path)
 
     assert result.returncode == 0, result.stderr
     assert marker_file.read_text(encoding="utf-8").strip() == (
-        "Skipping managed payload repair; encrypted storage is not configured for this runtime."
+        "Skipping managed payload repair; LX_ANNOTATE_MASTER_KEY or LX_ANNOTATE_MASTER_KEY_FILE is not configured for this runtime."
     )
     assert not calls_file.exists()
-
-
-def test_repair_managed_runtime_payloads_runs_when_encryption_is_enabled(
-    tmp_path: Path,
-):
-    result, marker_file, calls_file = _run_repair_gate(
-        tmp_path,
-        use_encrypted_storage="1",
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert "completed_at=" in marker_file.read_text(encoding="utf-8")
-    assert "repair-ok" in marker_file.read_text(encoding="utf-8")
-    assert calls_file.read_text(encoding="utf-8").splitlines() == [
-        f"django:{tmp_path / 'python'} repair_managed_payloads",
-    ]
 
 
 def test_repair_managed_runtime_payloads_runs_when_master_key_is_configured(
@@ -121,5 +101,5 @@ def test_repair_managed_runtime_payloads_runs_when_master_key_is_configured(
     assert result.returncode == 0, result.stderr
     assert "repair-ok" in marker_file.read_text(encoding="utf-8")
     assert calls_file.read_text(encoding="utf-8").splitlines() == [
-        f"django:{tmp_path / 'python'} repair_managed_payloads",
+        f"django:{tmp_path / 'python'} repair_managed_payloads --path-prefix storage",
     ]

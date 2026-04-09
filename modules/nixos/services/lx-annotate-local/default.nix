@@ -45,6 +45,14 @@ let
   # must not be treated as an independent runtime root.
   runtimeStorageRootPath = "${runtimeDataRootPath}/storage";
   runtimeIoImportRootPath = "${runtimeDataRootPath}/import";
+  runtimeStreamableVideoRootPath = "${runtimeStorageRootPath}/streamable_videos";
+  runtimeStreamableVideoRawRootPath = "${runtimeStreamableVideoRootPath}/raw";
+  runtimeStreamableVideoProcessedRootPath = "${runtimeStreamableVideoRootPath}/processed";
+  envProtectedMediaRoot = runtimeStorageRootPath;
+  envNginxProtectedMediaUrl = "/protected_media/";
+  envStreamableVideoRoot = runtimeStreamableVideoRootPath;
+  envStreamableVideoRawRoot = runtimeStreamableVideoRawRootPath;
+  envStreamableVideoProcessedRoot = runtimeStreamableVideoProcessedRootPath;
   runtimeStaticRootPath = "/var/lib/lx-annotate/staticfiles";
   runtimeWheelRootPath = "${endoreg-service-user-home}/lx-annotate-wheel";
   runtimeWheelVenvPath = "${runtimeWheelRootPath}/.venv";
@@ -120,8 +128,82 @@ let
   envCentralNodeFlag =
     if envIsCentralNode || settingsProfile == "central" then "true" else "false";
 
+  normalizeCenterKey =
+    raw:
+    let
+      normalized =
+        lib.strings.toLower
+          (lib.replaceStrings
+            [
+              "Ä"
+              "Ö"
+              "Ü"
+              "ä"
+              "ö"
+              "ü"
+              "ß"
+              " "
+              "_"
+              "/"
+              "\\"
+              "."
+              ","
+              ":"
+              ";"
+              "("
+              ")"
+              "["
+              "]"
+              "{"
+              "}"
+              "'"
+              "\""
+            ]
+            [
+              "ae"
+              "oe"
+              "ue"
+              "ae"
+              "oe"
+              "ue"
+              "ss"
+              "-"
+              "-"
+              "-"
+              "-"
+              "-"
+              "-"
+              "-"
+              "-"
+              ""
+              ""
+              ""
+              ""
+              ""
+              ""
+              ""
+              ""
+            ]
+            (lib.strings.trim (toString raw)));
+      collapsed =
+        lib.replaceStrings
+          [ "---" "--" ]
+          [ "-" "-" ]
+          normalized;
+      trimmed =
+        lib.strings.removeSuffix "-"
+          (lib.strings.removePrefix "-" collapsed);
+    in
+    if trimmed == "" then "university-hospital-wuerzburg" else trimmed;
+
   envDefaultCenter =
-    cfg.django.extraSettings.DEFAULT_CENTER or "university_hospital_wuerzburg";
+    cfg.django.extraSettings.DEFAULT_CENTER_KEY or (
+      normalizeCenterKey (
+        cfg.django.extraSettings.DEFAULT_CENTER or
+        config.roles.endoreg-client.defaultCenter or
+        "University Hospital Wuerzburg"
+      )
+    );
   exportFramesStorageRootDefault =
     config.roles.endoreg-client.paths.storagePersistingMountPoint;
   externalCleanupArchiveRootDefault =
@@ -170,6 +252,9 @@ let
       runtimeDataRootPath
       runtimeStorageRootPath
       runtimeIoImportRootPath
+      runtimeStreamableVideoRootPath
+      runtimeStreamableVideoRawRootPath
+      runtimeStreamableVideoProcessedRootPath
       runtimeStaticRootPath
       runtimeWheelRootPath
       runtimeWheelVenvPath
@@ -179,6 +264,11 @@ let
       djangoStaticRootPath
       viteSourcePath
       envDataDir
+      envProtectedMediaRoot
+      envNginxProtectedMediaUrl
+      envStreamableVideoRoot
+      envStreamableVideoRawRoot
+      envStreamableVideoProcessedRoot
       envConfDir
       makeCacheDir
       envConfTemplateDir

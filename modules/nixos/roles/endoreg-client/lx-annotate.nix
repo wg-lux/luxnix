@@ -82,6 +82,26 @@ with lib;
   runtime = mkOption {
     type = types.submodule {
       options = {
+        commands = mkOption {
+          type = types.submodule {
+            options = {
+              fileWatcher = mkOption {
+                type = types.nullOr types.str;
+                default = "python manage.py start_filewatcher";
+                description = "Wheel-mode command used to run the lx-annotate file watcher.";
+              };
+
+              exportFrames = mkOption {
+                type = types.nullOr types.str;
+                default = "export-frames";
+                description = "Wheel-mode command used to export annotated frames.";
+              };
+            };
+          };
+          default = { };
+          description = "Wheel-mode auxiliary service commands for lx-annotate-local.";
+        };
+
         limits = mkOption {
           type = types.submodule {
             options = {

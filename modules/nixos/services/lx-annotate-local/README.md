@@ -44,14 +44,38 @@ Everything else is derived from that root:
 
 - managed storage: `runtime.encryptedDataDir/storage`
 - intake/workflow tree: `runtime.encryptedDataDir/import`
+- streamable video tree: `runtime.encryptedDataDir/storage/streamable_videos`
+- raw streamable videos: `runtime.encryptedDataDir/storage/streamable_videos/raw`
+- processed streamable videos: `runtime.encryptedDataDir/storage/streamable_videos/processed`
 
 When changing LuxNix or lx-annotate integration code, keep these rules:
 
 1. `LX_ANNOTATE_ENCRYPTED_DATA_DIR` is the single protected root.
 2. `STORAGE_DIR` is derived as `${LX_ANNOTATE_ENCRYPTED_DATA_DIR}/storage`.
 3. `IO_DIR` remains inside the protected root.
-4. Any path under the service-user home is an access path only unless the
+4. `storage/streamable_videos/` is the dedicated Nginx-served subtree for authorized
+   video handoff via `X-Accel-Redirect`.
+5. Any path under the service-user home is an access path only unless the
    contract is explicitly redesigned.
+
+## Streamable Video Migration
+
+The module now exposes a dedicated manual migration unit for backfilling all
+existing videos into the streamable protected subtree:
+
+- `systemctl start lx-annotate-video-streamable-migration`
+
+The module also exposes a dedicated manual post-deploy acceptance unit:
+
+- `systemctl start lx-annotate-acceptance`
+
+That unit runs the deployed Django system checks with the real LuxNix
+environment, verifies encrypted storage round-trips without plaintext on disk,
+and fetches the Vite manifest through the local Nginx TLS vhost.
+
+That unit runs Django's `migrate_video_streamable_storage` command with the same
+production environment as the main application service. It is intentionally not
+timer-driven by default so operators can control rollout pace and observe I/O.
 
 ## Hub Groundwork
 
@@ -98,6 +122,62 @@ The backup service is intentionally narrow:
 This is groundwork only. It is safe for a central node because backup data stays
 separate from active ingest paths. It does not yet implement remote transport,
 remote authentication, replication policy, or restore orchestration.
+
+### Secure Hub Transfer
+
+The module now has an explicit Phase 1 secure-transfer contract for the
+optional node-to-node hub transfer API.
+
+Enable transfer intake with:
+
+- `hub.transferApi.enable = true`
+
+When that is enabled, LuxNix now fails closed unless all of the following are
+true:
+
+- `hub.enable = true`
+- `hub.transferApi.requireSecureTransport = true`
+- `hub.transferApi.requireMtls = true`
+- `hub.transferApi.clientCaFile` is set
+- `hub.transferApi.mtlsMetaKey` is non-empty
+- `hub.transferApi.mtlsMetaValue` is non-empty
+
+This is intentional. `endoreg_db` now treats secure hub transfer as a
+hostile-network workflow, so transfer enablement is no longer allowed to imply
+"best effort" transport security.
+
+The module exports the corresponding runtime environment for Django:
+
+- `ENDOREG_ENABLE_HUB_TRANSFERS`
+- `ENDOREG_HUB_TRANSFER_REQUIRE_SECURE_TRANSPORT`
+- `ENDOREG_HUB_TRANSFER_REQUIRE_MTLS`
+- `ENDOREG_HUB_TRANSFER_MTLS_META_KEY`
+- `ENDOREG_HUB_TRANSFER_MTLS_META_VALUE`
+
+Nginx is also configured to enforce and attest client-certificate validation
+for transfer-capable hub nodes:
+
+- `ssl_verify_client on`
+- `ssl_client_certificate <client CA bundle>`
+- `proxy_set_header X-Client-Cert-Verified $ssl_client_verify`
+
+That header is then checked by Django using the configured
+`ENDOREG_HUB_TRANSFER_MTLS_META_*` contract. The header is not a substitute for
+Nginx verification; it is the downstream attestation of Nginx's verification
+result.
+
+Current scope:
+
+- this protects `/api/media/hub/transfers/` at the transport layer
+- it does not introduce payload-level envelope encryption yet
+- it does not replace the separate shared-secret request authentication used by
+  `NetworkNode`
+
+In other words:
+
+- TLS and mTLS protect the channel and node identity
+- `NetworkNode.shared_secret` still authenticates the request
+- payload encryption beyond TLS is a later phase, not part of this module yet
 
 ## Current Security Posture
 
@@ -156,6 +236,10 @@ services.luxnix.lxAnnotateLocal = {
     mode = "wheel";
     wheelPath = /path/to/dist/lx_annotate-0.0.2-py3-none-any.whl;
     wheelhousePath = /path/to/wheelhouse;
+    commands = {
+      fileWatcher = "python manage.py start_filewatcher";
+      exportFrames = "export-frames";
+    };
     encryptedDataDir = "/var/lib/lx-annotate/secure_data";
 
     managedEncryptedData = {

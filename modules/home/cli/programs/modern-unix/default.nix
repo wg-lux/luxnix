@@ -41,7 +41,7 @@ in {
       # trash-cli
       # tailspin
       # gtrash
-      # ripgrep
+      ripgrep
       # sd
       # xcp
       # yq-go

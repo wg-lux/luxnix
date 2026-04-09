@@ -32,7 +32,21 @@ let
       export SKIP_EXPENSIVE_TESTS="${envSkipExpensiveTests}"
       export VITE_ENABLE_DEBUG="${envViteEnableDebug}"
       export SERVE_WITH_NGINX="true"
-      export NGINX_PROTECTED_MEDIA_URL="/protected_media/"
+      export NGINX_PROTECTED_MEDIA_URL="${envNginxProtectedMediaUrl}"
+      export ENDOREG_HUB_MODE="${
+        if cfg.hub.enable then "true" else "false"
+      }"
+      export ENDOREG_ENABLE_HUB_TRANSFERS="${
+        if cfg.hub.transferApi.enable then "true" else "false"
+      }"
+      export ENDOREG_HUB_TRANSFER_REQUIRE_SECURE_TRANSPORT="${
+        if cfg.hub.transferApi.requireSecureTransport then "true" else "false"
+      }"
+      export ENDOREG_HUB_TRANSFER_REQUIRE_MTLS="${
+        if cfg.hub.transferApi.requireMtls then "true" else "false"
+      }"
+      export ENDOREG_HUB_TRANSFER_MTLS_META_KEY="${cfg.hub.transferApi.mtlsMetaKey}"
+      export ENDOREG_HUB_TRANSFER_MTLS_META_VALUE="${cfg.hub.transferApi.mtlsMetaValue}"
 
       export DJANGO_ALLOWED_HOSTS="${envAllowedHosts}"
       export ALLOWED_HOSTS="${envAllowedHosts}"
@@ -43,14 +57,17 @@ let
     lx_annotate_export_storage_env() {
       local data_root="$1"
       export DATA_DIR="$data_root"
+      export LX_ANNOTATE_DATA_DIR="$data_root"
       export LX_ANNOTATE_ENCRYPTED_DATA_DIR="$data_root"
-      export LX_ANNOTATE
+      export PROTECTED_MEDIA_ROOT="${envProtectedMediaRoot}"
       export STORAGE_DIR="$data_root/storage"
+      export LX_ANNOTATE_STREAMABLE_VIDEO_ROOT="${envStreamableVideoRoot}"
+      export LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT="${envStreamableVideoRawRoot}"
+      export LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT="${envStreamableVideoProcessedRoot}"
       export IO_DIR="$data_root"
     }
 
     lx_annotate_export_encryption_env() {
-      export LX_ANNOTATE_USE_ENCRYPTED_STORAGE="TRUE"
       ${
         optionalString (cfg.runtime.masterKeyFile != null) ''
           export LX_ANNOTATE_MASTER_KEY_FILE="${toString cfg.runtime.masterKeyFile}"
@@ -170,8 +187,10 @@ let
   prepareScriptName = "lx-annotate-prepare";
   buildScriptName = "lx-annotate-build";
   migrateScriptName = "lx-annotate-migrate";
+  migrateVideoStreamableStorageScriptName = "lx-annotate-migrate-video-streamable-storage";
   startScriptName = "lx-annotate-start";
   bootstrapScriptName = "lx-annotate-bootstrap";
+  acceptanceScriptName = "runLocalAcceptance";
 
   lxAnnotateRuntimeLib = pkgs.writeShellScript "lx-annotate-runtime-lib.sh" ''
     set -euo pipefail
@@ -332,15 +351,24 @@ HOME_DIR=${endoreg-service-user-home}
 DATA_DIR=${envDataDir}
 LX_ANNOTATE_ENCRYPTED_DATA_DIR=${envDataDir}
 LX_ANNOTATE_DATA_DIR=${envDataDir}
-LX_ANNOTATE_USE_ENCRYPTED_STORAGE=1
+PROTECTED_MEDIA_ROOT=${envProtectedMediaRoot}
 CONF_DIR=${envConfDir}
 CONF_TEMPLATE_DIR=${envConfTemplateDir}
 WORKING_DIR=${repoDir}
 DJANGO_STATIC_ROOT=${djangoStaticRootPath}
 STORAGE_DIR=${envDataDir}/storage
+LX_ANNOTATE_STREAMABLE_VIDEO_ROOT=${envStreamableVideoRoot}
+LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT=${envStreamableVideoRawRoot}
+LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT=${envStreamableVideoProcessedRoot}
 IO_DIR=${envDataDir}
 SERVE_WITH_NGINX=true
-NGINX_PROTECTED_MEDIA_URL=/protected_media/
+NGINX_PROTECTED_MEDIA_URL=${envNginxProtectedMediaUrl}
+ENDOREG_HUB_MODE=${if cfg.hub.enable then "true" else "false"}
+ENDOREG_ENABLE_HUB_TRANSFERS=${if cfg.hub.transferApi.enable then "true" else "false"}
+ENDOREG_HUB_TRANSFER_REQUIRE_SECURE_TRANSPORT=${if cfg.hub.transferApi.requireSecureTransport then "true" else "false"}
+ENDOREG_HUB_TRANSFER_REQUIRE_MTLS=${if cfg.hub.transferApi.requireMtls then "true" else "false"}
+ENDOREG_HUB_TRANSFER_MTLS_META_KEY=${cfg.hub.transferApi.mtlsMetaKey}
+ENDOREG_HUB_TRANSFER_MTLS_META_VALUE=${cfg.hub.transferApi.mtlsMetaValue}
 DEBUG=False
 DJANGO_DEBUG=False
 VITE_ENABLE_DEBUG=${envViteEnableDebug}
@@ -389,6 +417,56 @@ EOF
         return 1
       fi
       [ -f "${djangoStaticRootPath}/$main_entry_file" ]
+    }
+
+    ensure_runtime_vite_manifest() {
+      local manifest_path="$1"
+      local static_root="$2"
+      local main_js="$static_root/main.js"
+      local main_css="$static_root/main.css"
+
+      if [ ! -f "$main_js" ]; then
+        return 0
+      fi
+
+      if [ -s "$manifest_path" ] && "${pkgs.python3}/bin/python3" - "$manifest_path" >/dev/null 2>&1 <<'PY'
+import json
+import pathlib
+import sys
+
+manifest_path = pathlib.Path(sys.argv[1])
+data = json.loads(manifest_path.read_text(encoding="utf-8"))
+entry = data.get("src/main.ts")
+if isinstance(entry, dict) and entry.get("file"):
+    raise SystemExit(0)
+raise SystemExit(1)
+PY
+      then
+        return 0
+      fi
+
+      install -d -m 0775 "$(${pkgs.coreutils}/bin/dirname "$manifest_path")"
+      "${pkgs.python3}/bin/python3" - "$manifest_path" "$main_js" "$main_css" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+manifest_path = Path(sys.argv[1])
+main_js = Path(sys.argv[2])
+main_css = Path(sys.argv[3])
+
+entry = {
+    "file": main_js.name,
+    "isEntry": True,
+}
+if main_css.exists():
+    entry["css"] = [main_css.name]
+
+manifest_path.write_text(
+    json.dumps({"src/main.ts": entry}, indent=2) + "\n",
+    encoding="utf-8",
+)
+PY
     }
 
     backup_git_state() {
@@ -644,6 +722,16 @@ EOF
     fi
   '';
 
+  lxAnnotateMigrateVideoStreamableStorageScript = pkgs.writeShellScriptBin "${migrateVideoStreamableStorageScriptName}" ''
+    set -euo pipefail
+    source "${lxAnnotateRuntimeLib}"
+    lx_annotate_export_runtime_env
+    lx_annotate_activate_runtime
+
+    log "Migrating video assets into streamable protected storage..."
+    python manage.py migrate_video_streamable_storage "$@"
+  '';
+
   lxAnnotateBootstrapScript = pkgs.writeShellScriptBin "${bootstrapScriptName}" ''
     set -euo pipefail
 
@@ -736,15 +824,24 @@ EOF
 HOME_DIR=${endoreg-service-user-home}
 DATA_DIR=${envDataDir}
 LX_ANNOTATE_ENCRYPTED_DATA_DIR=${envDataDir}
-LX_ANNOTATE_USE_ENCRYPTED_STORAGE=1
+PROTECTED_MEDIA_ROOT=${envProtectedMediaRoot}
 CONF_DIR=${envConfDir}
 CONF_TEMPLATE_DIR=${envConfTemplateDir}
 WORKING_DIR=${runtimeWorkingDir}
 DJANGO_STATIC_ROOT=${djangoStaticRootPath}
 STORAGE_DIR=${envDataDir}/storage
+LX_ANNOTATE_STREAMABLE_VIDEO_ROOT=${envStreamableVideoRoot}
+LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT=${envStreamableVideoRawRoot}
+LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT=${envStreamableVideoProcessedRoot}
 IO_DIR=${envDataDir}
 SERVE_WITH_NGINX=true
-NGINX_PROTECTED_MEDIA_URL=/protected_media/
+NGINX_PROTECTED_MEDIA_URL=${envNginxProtectedMediaUrl}
+ENDOREG_HUB_MODE=${if cfg.hub.enable then "true" else "false"}
+ENDOREG_ENABLE_HUB_TRANSFERS=${if cfg.hub.transferApi.enable then "true" else "false"}
+ENDOREG_HUB_TRANSFER_REQUIRE_SECURE_TRANSPORT=${if cfg.hub.transferApi.requireSecureTransport then "true" else "false"}
+ENDOREG_HUB_TRANSFER_REQUIRE_MTLS=${if cfg.hub.transferApi.requireMtls then "true" else "false"}
+ENDOREG_HUB_TRANSFER_MTLS_META_KEY=${cfg.hub.transferApi.mtlsMetaKey}
+ENDOREG_HUB_TRANSFER_MTLS_META_VALUE=${cfg.hub.transferApi.mtlsMetaValue}
 DEBUG=False
 DJANGO_DEBUG=False
 VITE_ENABLE_DEBUG=${envViteEnableDebug}
@@ -784,6 +881,11 @@ PY
     fi
 
     ${pkgs.rsync}/bin/rsync -a --delete "$package_static_dir"/ "${runtimeStaticRootPath}/"
+    ensure_runtime_vite_manifest "${runtimeStaticRootPath}/.vite/manifest.json" "${runtimeStaticRootPath}"
+    if ! vite_manifest_points_to_existing_asset "${runtimeStaticRootPath}/.vite/manifest.json"; then
+      echo "ERROR: Installed wheel does not provide a usable Vite manifest for src/main.ts."
+      exit 1
+    fi
     if [ -e "${djangoStaticRootPath}" ] && [ ! -L "${djangoStaticRootPath}" ]; then
       rm -rf "${djangoStaticRootPath}"
     fi
@@ -797,6 +899,25 @@ PY
 
 
     exec "${runtimeWheelVenvPath}/bin/daphne" -b "${envDjangoHost}" -p "${envDjangoPort}" lx_annotate.asgi:application
+  '';
+  runLocalAcceptanceScript = pkgs.writeShellScriptBin "${acceptanceScriptName}" ''
+    set -euo pipefail
+
+    source "${lxAnnotateRuntimeLib}"
+    lx_annotate_export_runtime_env
+    lx_annotate_activate_runtime
+
+    cd "${repoDir}"
+    export MEDIA_URL="${envNginxProtectedMediaUrl}"
+    mkdir -p "${envProtectedMediaRoot}" "${envStreamableVideoRoot}" "${envStreamableVideoRawRoot}" "${envStreamableVideoProcessedRoot}"
+
+    python manage.py check --fail-level CRITICAL
+    python manage.py verify_encrypted_storage
+    ${pkgs.curl}/bin/curl --fail --silent --show-error --insecure \
+      --resolve "${cfg.django.hostname}:443:127.0.0.1" \
+      "https://${cfg.django.hostname}/static/.vite/manifest.json" >/dev/null
+
+    log "lx-annotate acceptance checks passed."
   '';
   watcherScriptName = "runLocalFileWatcher";
   runLocalFileWatcherScript = pkgs.writeShellScriptBin "${watcherScriptName}" ''
@@ -838,6 +959,7 @@ PY
     source "${lxAnnotateEnvHelpers}"
     lx_annotate_export_base_env
     lx_annotate_export_storage_env "${envDataDir}"
+    lx_annotate_export_encryption_env
     lx_annotate_export_db_env
     lx_annotate_export_secret_key_env
     export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
@@ -859,6 +981,41 @@ PY
     export LX_ANNOTATE_WHEEL_VENV="${runtimeWheelVenvPath}"
     export LX_ANNOTATE_WHEEL_APP_ROOT="${runtimeWheelRootPath}"
     exec "${pkgs.bash}/bin/bash" -lc ${lib.escapeShellArg (cfg.runtime.commands.fileWatcher or "")}
+  '';
+  runLocalAcceptanceWheelScript = pkgs.writeShellScriptBin "${acceptanceScriptName}" ''
+    set -euo pipefail
+
+    source "${lxAnnotateEnvHelpers}"
+    lx_annotate_export_base_env
+    lx_annotate_export_storage_env "${envDataDir}"
+    lx_annotate_export_encryption_env
+    lx_annotate_export_django_paths_env
+    lx_annotate_export_db_env
+    export DJANGO_DJANGO_DB_PASSWORD="$DJANGO_DB_PASSWORD"
+    lx_annotate_export_secret_key_env
+    lx_annotate_export_oidc_env
+    export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
+    export WORKING_DIR="${runtimeWorkingDir}"
+    export HOME_DIR="${endoreg-service-user-home}"
+    export XDG_DATA_HOME="${runtimeRootPath}"
+    export LX_ANNOTATE_ENCRYPTED_DATA_DIR="${envDataDir}"
+    export LX_ANNOTATE_DATA_DIR="${envDataDir}"
+    export LX_ANNOTATE_DEFAULT_CENTER="${envDefaultCenter}"
+    export TESSDATA_PREFIX="${cfg.runtime.tessdataPrefix}"
+    export PYTORCH_ALLOC_CONF="${cfg.runtime.pytorchAllocConf}"
+    export MEDIA_URL="${envNginxProtectedMediaUrl}"
+
+    source "${lxAnnotateRuntimeLib}"
+    ensure_wheel_runtime_installed
+    mkdir -p "${envProtectedMediaRoot}" "${envStreamableVideoRoot}" "${envStreamableVideoRawRoot}" "${envStreamableVideoProcessedRoot}"
+
+    "${runtimeWheelVenvPath}/bin/python" "${runtimeWheelRootPath}/manage.py" check --fail-level CRITICAL
+    "${runtimeWheelVenvPath}/bin/python" "${runtimeWheelRootPath}/manage.py" verify_encrypted_storage
+    ${pkgs.curl}/bin/curl --fail --silent --show-error --insecure \
+      --resolve "${cfg.django.hostname}:443:127.0.0.1" \
+      "https://${cfg.django.hostname}/static/.vite/manifest.json" >/dev/null
+
+    log "lx-annotate acceptance checks passed."
   '';
   sapImportScriptName = "runLocalSapImport";
   sapImportScriptBody = ''
@@ -1138,7 +1295,6 @@ ${sapImportScriptBody}
     repair_managed_runtime_payloads() {
       local helper_python="$1"
       local repair_output=""
-      local use_encrypted_storage="''${LX_ANNOTATE_USE_ENCRYPTED_STORAGE:-}"
       local has_master_key="false"
 
       if [ -z "$helper_python" ] || [ ! -x "$helper_python" ]; then
@@ -1150,21 +1306,22 @@ ${sapImportScriptBody}
         has_master_key="true"
       fi
 
-      if [ "$use_encrypted_storage" != "1" ] && [ "$use_encrypted_storage" != "true" ] && [ "$use_encrypted_storage" != "yes" ] && [ "$has_master_key" != "true" ]; then
-        echo "Skipping managed payload repair; encrypted storage is not configured for this runtime." | ${pkgs.coreutils}/bin/tee "$repair_marker_file"
+      if [ "$has_master_key" != "true" ]; then
+        echo "Skipping managed payload repair; LX_ANNOTATE_MASTER_KEY or LX_ANNOTATE_MASTER_KEY_FILE is not configured for this runtime." | ${pkgs.coreutils}/bin/tee "$repair_marker_file"
         return 0
       fi
 
+      echo "Repair preflight: HAS_MASTER_KEY=$has_master_key"
       echo "Repairing managed runtime payloads that may have been copied in plaintext by the legacy migration helper."
       if [ "$use_wheel_runtime" = "true" ]; then
-        repair_output="$(run_installed_django_command "$helper_python" repair_managed_payloads 2>&1)" || {
+        repair_output="$(run_installed_django_command "$helper_python" repair_managed_payloads --path-prefix storage 2>&1)" || {
           write_repair_failure "$repair_output"
           return 1
         }
       else
         repair_output="$({
           cd "${repoDir}"
-          "$helper_python" "${repoDir}/manage.py" repair_managed_payloads
+          "$helper_python" "${repoDir}/manage.py" repair_managed_payloads --path-prefix storage
         } 2>&1)" || {
           write_repair_failure "$repair_output"
           return 1
@@ -1500,10 +1657,15 @@ in {
     lxAnnotatePrepareScript
     lxAnnotateBuildScript
     lxAnnotateMigrateScript
+    migrateVideoStreamableStorageScriptName
+    lxAnnotateMigrateVideoStreamableStorageScript
     lxAnnotateBootstrapScript
     runLocalLxAnnotateStartScript
     runLocalLxAnnotateScript
     runLocalLxAnnotateWheelScript
+    acceptanceScriptName
+    runLocalAcceptanceScript
+    runLocalAcceptanceWheelScript
     watcherScriptName
     runLocalFileWatcherScript
     runLocalFileWatcherWheelScript
