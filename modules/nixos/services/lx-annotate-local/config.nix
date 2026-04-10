@@ -2,6 +2,65 @@ args@{ lib, ... }:
 with lib;
 with lib.luxnix;
 with args;
+let
+  runtime = lxAnnotateRuntime;
+  inherit (runtime.identities)
+    endoreg-service-user-name
+    endoreg-service-user-home
+    endoreg-service-group-name;
+  inherit (runtime.names) scriptName exportFramesScriptName;
+  inherit (runtime.paths)
+    runtimeRootPath
+    repoDir
+    repoStaticRootPath
+    runtimeDataRootPath
+    runtimeStorageRootPath
+    runtimeIoImportRootPath
+    runtimeStreamableVideoRootPath
+    runtimeStreamableVideoRawRootPath
+    runtimeStreamableVideoProcessedRootPath
+    runtimeStaticRootPath
+    runtimeWheelRootPath
+    runtimeWheelVenvPath
+    runtimeWorkingDir
+    staticRootPath
+    djangoStaticRootPath
+    envDataDir
+    envConfDir
+    sslKeyPath
+    sslCertPath
+    hubRootPath;
+  inherit (runtime.runtime)
+    useWheelRuntime
+    managedEncryptedDataServiceName
+    encryptionServiceUnits;
+  inherit (runtime.defaults)
+    defaultSslCertificatePath
+    defaultSslKeyPath;
+  inherit (runtime.scripts.scriptNames)
+    acceptanceScriptName
+    migrateVideoStreamableStorageScriptName
+    watcherScriptName
+    sapImportScriptName;
+  inherit (runtime.scripts.packages)
+    lxAnnotateBootstrapScript
+    lxAnnotateEncryptedDataMountScript
+    lxAnnotateEncryptedDataUmountScript
+    lxAnnotateMigrateVideoStreamableStorageScript
+    runLocalAcceptanceScript
+    runLocalAcceptanceWheelScript
+    runLocalDataCleanupScript
+    runLocalDataRecoveryScript
+    runLocalExportFramesScript
+    runLocalExportFramesWheelScript
+    runLocalFileWatcherScript
+    runLocalFileWatcherWheelScript
+    runLocalHubBackupScript
+    runLocalLxAnnotateStartScript
+    runLocalLxAnnotateWheelScript
+    runLocalSapImportScript
+    runLocalSapImportWheelScript;
+in
 {
   config = mkIf cfg.enable {
     services.luxnix.lxAnnotateLocal.hub.enable =
@@ -261,7 +320,7 @@ with args;
         };
 
         locations."/protected_media/" = {
-          alias = "${envProtectedMediaRoot}/";
+          alias = "${runtimeStorageRootPath}/";
           extraConfig = "internal; sendfile on; tcp_nopush on;";
         };
 

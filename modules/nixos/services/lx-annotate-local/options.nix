@@ -2,6 +2,28 @@ args@{ lib, ... }:
 with lib;
 with lib.luxnix;
 with args;
+let
+  runtime = lxAnnotateRuntime;
+  inherit (runtime.identities)
+    endoreg-service-user-name
+    endoreg-service-group-name;
+  inherit (runtime.helpers) mkDjangoOptions;
+  inherit (runtime.defaults) externalCleanupArchiveRootDefault;
+  inherit (runtime.paths)
+    runtimeDataRootPath
+    dataRecoveryStateFile
+    hubBackupIncomingPath
+    hubBackupSnapshotPath
+    hubBackupManifestPath
+    legacyRepoDataRootPath
+    legacyRepoMediaRootPath
+    legacyDataProcessedReportDir
+    legacyDataProcessedVideoDir
+    legacyMediaProcessedReportDir
+    legacyMediaProcessedVideoDir
+    runtimeProcessedReportDir
+    runtimeProcessedVideoDir;
+in
 {
   options.services.luxnix.lxAnnotateLocal = {
     enable = mkBoolOpt false "Enable LxAnnotate Service";
@@ -58,8 +80,8 @@ with args;
           wheelPath = mkOption {
             type = types.nullOr types.path;
             default = pkgs.fetchurl {
-              url = "https://files.pythonhosted.org/packages/64/0c/236cb2446924d337bef9f2cb514f7bd129f8d1e3ce40ef5dd73843afc19e/lx_annotate-0.0.9-py3-none-any.whl";
-              hash = "sha256-h7OlaCk8EdIZ5lrTdfWVdyWeZSTuUAFF0CmbQO/UrT4=";
+              url = "https://files.pythonhosted.org/packages/2b/f4/80dd4c3f3ed28a09e24aef758c9f9e650202b555b3fd5e907549400541c9/lx_annotate-0.1.2-py3-none-any.whl";
+              hash = "sha256-VC3IPAUe2ZZFvUPnuqd1RIsmTN5NqQuV4UkUEXnboqc=";
             };
             description = "Path to the lx-annotate wheel artifact used in wheel mode.";
           };
