@@ -1386,6 +1386,10 @@ ${sapImportScriptBody}
           echo "Migration helper failed; falling back to compatibility rsync."
           sync_source_dir "${cfg.dataRecovery.legacyDataDir}" "legacy repo data"
           sync_source_dir "${cfg.dataRecovery.legacyMediaDir}" "legacy media"
+        else
+          # Keep a compatibility overlay for media-only legacy payloads that the
+          # Django helper may not move in wheel deployments.
+          sync_source_dir "${cfg.dataRecovery.legacyMediaDir}" "legacy media compatibility overlay"
         fi
       else
         echo "Running lx-annotate repo migration helper into $target_dir"
