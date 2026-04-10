@@ -108,6 +108,10 @@ def test_repair_managed_runtime_payloads_runs_when_master_key_is_configured(
 def test_wheel_data_recovery_keeps_legacy_media_overlay_after_helper_success():
     source = SCRIPTS_NIX.read_text(encoding="utf-8")
     assert (
+        'sync_source_dir "${cfg.dataRecovery.legacyDataDir}" "legacy data compatibility overlay"'
+        in source
+    )
+    assert (
         'sync_source_dir "${cfg.dataRecovery.legacyMediaDir}" "legacy media compatibility overlay"'
         in source
     )

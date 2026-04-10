@@ -551,9 +551,9 @@ in
       description = "Recover legacy lx-annotate data into runtime storage";
       wantedBy = [ "multi-user.target" ];
       before = [ "lx-annotate-boot.service" ];
-      wants = encryptionServiceUnits;
+      wants = [ "postgresql.service" ] ++ encryptionServiceUnits;
+      after = [ "systemd-tmpfiles-setup.service" "postgresql.service" ] ++ encryptionServiceUnits;
       requires = encryptionServiceUnits;
-      after = [ "systemd-tmpfiles-setup.service" ] ++ encryptionServiceUnits;
       unitConfig = {
         RequiresMountsFor = [ envDataDir ];
       };
@@ -562,6 +562,22 @@ in
         User = endoreg-service-user-name;
         Group = endoreg-service-group-name;
         WorkingDirectory = endoreg-service-user-home;
+        ExecStartPre = [
+          "+${pkgs.writeShellScript "lx-annotate-data-recovery-pre-start" ''
+            set -euo pipefail
+            SOURCE_PWD="${cfg.database.endoregLocalUserPasswordFile}"
+            TARGET_PWD="${envConfDir}/db_pwd"
+
+            ${pkgs.coreutils}/bin/install -d -m 0755 -o ${endoreg-service-user-name} -g ${endoreg-service-group-name} ${envConfDir}
+            if [ -f "$SOURCE_PWD" ]; then
+              cp "$SOURCE_PWD" "$TARGET_PWD"
+              chown ${endoreg-service-user-name}:${endoreg-service-group-name} "$TARGET_PWD"
+              chmod 600 "$TARGET_PWD"
+            else
+              echo "WARNING: data-recovery password file $SOURCE_PWD not found"
+            fi
+          ''}"
+        ];
         ExecStart = "${runLocalDataRecoveryScript}/bin/runLxAnnotateDataRecovery";
         Environment = [
           "LD_LIBRARY_PATH=${lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib pkgs.libglvnd pkgs.zlib pkgs.glib pkgs.libxcb ]}"
