@@ -101,5 +101,5 @@ def test_repair_managed_runtime_payloads_runs_when_master_key_is_configured(
     assert result.returncode == 0, result.stderr
     assert "repair-ok" in marker_file.read_text(encoding="utf-8")
     assert calls_file.read_text(encoding="utf-8").splitlines() == [
-        f"django:{tmp_path / 'python'} repair_managed_payloads --path-prefix storage",
+        f"django:{tmp_path / 'python'} repair_managed_payloads",
     ]

@@ -3,6 +3,80 @@ with lib;
 with lib.luxnix;
 with args;
 let
+  runtime = lxAnnotateRuntime;
+  inherit (runtime.identities)
+    adminName
+    endoreg-service-user-name
+    endoreg-service-user-home
+    endoreg-service-group-name;
+  inherit (runtime.names) scriptName exportFramesScriptName;
+  inherit (runtime.source) gitURL repoDirName branchName;
+  inherit (runtime.paths)
+    runtimeRootPath
+    repoDir
+    repoStaticRootPath
+    runtimeDataRootPath
+    runtimeStorageRootPath
+    runtimeStreamableVideoRootPath
+    runtimeStreamableVideoRawRootPath
+    runtimeStreamableVideoProcessedRootPath
+    runtimeProcessedReportDir
+    runtimeProcessedVideoDir
+    runtimeStaticRootPath
+    runtimeWheelRootPath
+    runtimeWheelVenvPath
+    runtimeWorkingDir
+    staticRootPath
+    djangoStaticRootPath
+    envDataDir
+    envConfDir
+    makeCacheDir
+    envConfTemplateDir
+    envSystemdFilePath
+    envAssetDir
+    hubRootPath
+    hubBackupRootPath
+    hubBackupIncomingPath
+    hubBackupSnapshotPath
+    hubBackupManifestPath
+    dataRecoveryStateDir
+    dataRecoveryStateFile
+    legacyRepoDataRootPath
+    legacyRepoMediaRootPath
+    legacyDataProcessedReportDir
+    legacyDataProcessedVideoDir
+    legacyMediaProcessedReportDir
+    legacyMediaProcessedVideoDir
+    sslDir
+    sslKeyPath
+    sslCertPath;
+  inherit (runtime.env)
+    envAllowedHosts
+    envAnnotateDjangoSettingsModule
+    envBaseUrl
+    envCentralNodeFlag
+    envCorsAllowedOrigins
+    envDefaultCenter
+    envDjangoEnv
+    envDjangoHost
+    envDjangoModule
+    envDjangoPort
+    envHttpProtocol
+    envMediaUrl
+    envNginxProtectedMediaUrl
+    envRunVideoTests
+    envSkipExpensiveTests
+    envStaticUrl
+    envViteEnableDebug;
+  inherit (runtime.runtime)
+    useWheelRuntime
+    pythonInterpreter
+    wheelFilePath
+    encryptedDataMountOptions;
+  inherit (runtime.defaults)
+    exportFramesStorageRootDefault
+    processedReportDirName
+    processedVideoDirName;
   makeBin = "${pkgs.gnumake}/bin/make";
   lxAnnotateEnvHelpers = pkgs.writeShellScript "lx-annotate-env-helpers.sh" ''
     lx_annotate_export_base_env() {
@@ -59,11 +133,11 @@ let
       export DATA_DIR="$data_root"
       export LX_ANNOTATE_DATA_DIR="$data_root"
       export LX_ANNOTATE_ENCRYPTED_DATA_DIR="$data_root"
-      export PROTECTED_MEDIA_ROOT="${envProtectedMediaRoot}"
+      export PROTECTED_MEDIA_ROOT="${runtimeStorageRootPath}"
       export STORAGE_DIR="$data_root/storage"
-      export LX_ANNOTATE_STREAMABLE_VIDEO_ROOT="${envStreamableVideoRoot}"
-      export LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT="${envStreamableVideoRawRoot}"
-      export LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT="${envStreamableVideoProcessedRoot}"
+      export LX_ANNOTATE_STREAMABLE_VIDEO_ROOT="${runtimeStreamableVideoRootPath}"
+      export LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT="${runtimeStreamableVideoRawRootPath}"
+      export LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT="${runtimeStreamableVideoProcessedRootPath}"
       export IO_DIR="$data_root"
     }
 
@@ -106,6 +180,29 @@ let
       export OIDC_RP_CLIENT_ID="${cfg.django.keycloakClientId}"
       oidc_client_secret="$(tr -d '\n' < "${cfg.django.keycloakSecretFile}" 2>/dev/null || true)"
       export OIDC_RP_CLIENT_SECRET="$oidc_client_secret"
+    }
+
+    lx_annotate_export_wheel_service_env() {
+      local data_root="$1"
+      lx_annotate_export_base_env
+      lx_annotate_export_storage_env "$data_root"
+      lx_annotate_export_encryption_env
+      lx_annotate_export_django_paths_env
+      lx_annotate_export_db_env
+      export DJANGO_DJANGO_DB_PASSWORD="$DJANGO_DB_PASSWORD"
+      lx_annotate_export_secret_key_env
+      lx_annotate_export_oidc_env
+      export EXEMPT_URLS="^/accounts/login/$"
+      export LOGIN_URL="/accounts/login/"
+      export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
+      export WORKING_DIR="${runtimeWorkingDir}"
+      export HOME_DIR="${endoreg-service-user-home}"
+      export XDG_DATA_HOME="${runtimeRootPath}"
+      export LX_ANNOTATE_ENCRYPTED_DATA_DIR="$data_root"
+      export LX_ANNOTATE_DATA_DIR="$data_root"
+      export LX_ANNOTATE_DEFAULT_CENTER="${envDefaultCenter}"
+      export TESSDATA_PREFIX="${cfg.runtime.tessdataPrefix}"
+      export PYTORCH_ALLOC_CONF="${cfg.runtime.pytorchAllocConf}"
     }
   '';
 
@@ -191,6 +288,8 @@ let
   startScriptName = "lx-annotate-start";
   bootstrapScriptName = "lx-annotate-bootstrap";
   acceptanceScriptName = "runLocalAcceptance";
+  wheelFileWatcherCommand = cfg.runtime.commands.fileWatcher or "";
+  wheelExportFramesCommand = cfg.runtime.commands.exportFrames or "";
 
   lxAnnotateRuntimeLib = pkgs.writeShellScript "lx-annotate-runtime-lib.sh" ''
     set -euo pipefail
@@ -312,6 +411,12 @@ let
       export WHEEL_INSTALL_HASH="$install_hash"
     }
 
+    run_installed_django_command() {
+      local python_bin="$1"
+      shift
+      "$python_bin" -m django "$@" --settings=lx_annotate.settings.settings_prod
+    }
+
     ensure_runtime_static_root() {
       install -d -m 0775 "${staticRootPath}"
       install -d -m 0775 "${staticRootPath}/.vite"
@@ -344,22 +449,21 @@ let
       find "${staticRootPath}" -type f -exec chmod 0644 {} +
     }
 
-    write_systemd_env_file() {
-      install -d -m 0750 "${runtimeRootPath}"
-      cat > "${envSystemdFilePath}" <<EOF
+    emit_common_systemd_env() {
+      cat <<EOF
 HOME_DIR=${endoreg-service-user-home}
 DATA_DIR=${envDataDir}
 LX_ANNOTATE_ENCRYPTED_DATA_DIR=${envDataDir}
 LX_ANNOTATE_DATA_DIR=${envDataDir}
-PROTECTED_MEDIA_ROOT=${envProtectedMediaRoot}
+PROTECTED_MEDIA_ROOT=${runtimeStorageRootPath}
 CONF_DIR=${envConfDir}
 CONF_TEMPLATE_DIR=${envConfTemplateDir}
 WORKING_DIR=${repoDir}
 DJANGO_STATIC_ROOT=${djangoStaticRootPath}
 STORAGE_DIR=${envDataDir}/storage
-LX_ANNOTATE_STREAMABLE_VIDEO_ROOT=${envStreamableVideoRoot}
-LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT=${envStreamableVideoRawRoot}
-LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT=${envStreamableVideoProcessedRoot}
+LX_ANNOTATE_STREAMABLE_VIDEO_ROOT=${runtimeStreamableVideoRootPath}
+LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT=${runtimeStreamableVideoRawRootPath}
+LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT=${runtimeStreamableVideoProcessedRootPath}
 IO_DIR=${envDataDir}
 SERVE_WITH_NGINX=true
 NGINX_PROTECTED_MEDIA_URL=${envNginxProtectedMediaUrl}
@@ -380,6 +484,24 @@ DJANGO_ALLOWED_HOSTS=${envAllowedHosts}
 ALLOWED_HOSTS=${envAllowedHosts}
 DJANGO_CORS_ALLOWED_ORIGINS=${envCorsAllowedOrigins}
 DJANGO_CSRF_TRUSTED_ORIGINS=${envCorsAllowedOrigins}
+EOF
+    }
+
+    write_systemd_env_file() {
+      install -d -m 0750 "${runtimeRootPath}"
+      emit_common_systemd_env > "${envSystemdFilePath}"
+    }
+
+    write_wheel_systemd_env_file() {
+      write_systemd_env_file
+      cat >> "${envSystemdFilePath}" <<EOF
+DJANGO_SETTINGS_MODULE=lx_annotate.settings.settings_prod
+DJANGO_SETTINGS_MODULE_PRODUCTION=lx_annotate.settings.settings_prod
+DJANGO_ENV=production
+XDG_DATA_HOME=${runtimeRootPath}
+TESSDATA_PREFIX=${cfg.runtime.tessdataPrefix}
+PYTORCH_ALLOC_CONF=${cfg.runtime.pytorchAllocConf}
+${optionalString (cfg.runtime.masterKeyFile != null) "LX_ANNOTATE_MASTER_KEY_FILE=${toString cfg.runtime.masterKeyFile}"}
 EOF
     }
 
@@ -798,70 +920,11 @@ PY
 
     source "${lxAnnotateRuntimeLib}"
     source "${lxAnnotateEnvHelpers}"
-    lx_annotate_export_base_env
-    lx_annotate_export_storage_env "${envDataDir}"
-    lx_annotate_export_encryption_env
-    lx_annotate_export_django_paths_env
-    lx_annotate_export_db_env
-    export DJANGO_DJANGO_DB_PASSWORD="$DJANGO_DB_PASSWORD"
-    lx_annotate_export_secret_key_env
-    lx_annotate_export_oidc_env
-    export EXEMPT_URLS="^/accounts/login/$"
-    export LOGIN_URL="/accounts/login/"
-    export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
-    export WORKING_DIR="${runtimeWorkingDir}"
-    export HOME_DIR="${endoreg-service-user-home}"
-    export XDG_DATA_HOME="${runtimeRootPath}"
-    export LX_ANNOTATE_ENCRYPTED_DATA_DIR="${envDataDir}"
-    export LX_ANNOTATE_DATA_DIR="${envDataDir}"
-    export LX_ANNOTATE_DEFAULT_CENTER="${envDefaultCenter}"
-    export TESSDATA_PREFIX="${cfg.runtime.tessdataPrefix}"
-    export PYTORCH_ALLOC_CONF="${cfg.runtime.pytorchAllocConf}"
+    lx_annotate_export_wheel_service_env "${envDataDir}"
     ensure_wheel_runtime_installed
     install_hash="$WHEEL_INSTALL_HASH"
 
-    cat > "${envSystemdFilePath}" <<EOF
-HOME_DIR=${endoreg-service-user-home}
-DATA_DIR=${envDataDir}
-LX_ANNOTATE_ENCRYPTED_DATA_DIR=${envDataDir}
-PROTECTED_MEDIA_ROOT=${envProtectedMediaRoot}
-CONF_DIR=${envConfDir}
-CONF_TEMPLATE_DIR=${envConfTemplateDir}
-WORKING_DIR=${runtimeWorkingDir}
-DJANGO_STATIC_ROOT=${djangoStaticRootPath}
-STORAGE_DIR=${envDataDir}/storage
-LX_ANNOTATE_STREAMABLE_VIDEO_ROOT=${envStreamableVideoRoot}
-LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT=${envStreamableVideoRawRoot}
-LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT=${envStreamableVideoProcessedRoot}
-IO_DIR=${envDataDir}
-SERVE_WITH_NGINX=true
-NGINX_PROTECTED_MEDIA_URL=${envNginxProtectedMediaUrl}
-ENDOREG_HUB_MODE=${if cfg.hub.enable then "true" else "false"}
-ENDOREG_ENABLE_HUB_TRANSFERS=${if cfg.hub.transferApi.enable then "true" else "false"}
-ENDOREG_HUB_TRANSFER_REQUIRE_SECURE_TRANSPORT=${if cfg.hub.transferApi.requireSecureTransport then "true" else "false"}
-ENDOREG_HUB_TRANSFER_REQUIRE_MTLS=${if cfg.hub.transferApi.requireMtls then "true" else "false"}
-ENDOREG_HUB_TRANSFER_MTLS_META_KEY=${cfg.hub.transferApi.mtlsMetaKey}
-ENDOREG_HUB_TRANSFER_MTLS_META_VALUE=${cfg.hub.transferApi.mtlsMetaValue}
-DEBUG=False
-DJANGO_DEBUG=False
-VITE_ENABLE_DEBUG=${envViteEnableDebug}
-HTTP_PROTOCOL=${envHttpProtocol}
-DJANGO_HOST=${envDjangoHost}
-DJANGO_PORT=${envDjangoPort}
-BASE_URL=${envBaseUrl}
-DJANGO_ALLOWED_HOSTS=${envAllowedHosts}
-ALLOWED_HOSTS=${envAllowedHosts}
-DJANGO_CORS_ALLOWED_ORIGINS=${envCorsAllowedOrigins}
-DJANGO_CSRF_TRUSTED_ORIGINS=${envCorsAllowedOrigins}
-DJANGO_SETTINGS_MODULE=lx_annotate.settings.settings_prod
-DJANGO_SETTINGS_MODULE_PRODUCTION=lx_annotate.settings.settings_prod
-DJANGO_ENV=production
-XDG_DATA_HOME=${runtimeRootPath}
-LX_ANNOTATE_DATA_DIR=${envDataDir}
-TESSDATA_PREFIX=${cfg.runtime.tessdataPrefix}
-PYTORCH_ALLOC_CONF=${cfg.runtime.pytorchAllocConf}
-${optionalString (cfg.runtime.masterKeyFile != null) "LX_ANNOTATE_MASTER_KEY_FILE=${toString cfg.runtime.masterKeyFile}"}
-EOF
+    write_wheel_systemd_env_file
 
     package_static_dir="$("${runtimeWheelVenvPath}/bin/python" - <<'PY'
 from pathlib import Path
@@ -897,6 +960,15 @@ PY
     bootstrap_stamp_file="${envConfDir}/.bootstrap-wheel"
     last_bootstrap_hash="$(${pkgs.coreutils}/bin/cat "$bootstrap_stamp_file" 2>/dev/null || true)"
 
+    if [ "$install_hash" != "$last_bootstrap_hash" ]; then
+      log "Wheel runtime changed; applying Django migrations."
+      run_installed_django_command "${runtimeWheelVenvPath}/bin/python" migrate --noinput
+      run_installed_django_command "${runtimeWheelVenvPath}/bin/python" load_base_db_data || warn "load_base_db_data failed; continuing after successful migrations."
+      printf '%s\n' "$install_hash" > "$bootstrap_stamp_file"
+      chmod 600 "$bootstrap_stamp_file" 2>/dev/null || true
+    else
+      log "Wheel runtime unchanged; skipping Django migrations."
+    fi
 
     exec "${runtimeWheelVenvPath}/bin/daphne" -b "${envDjangoHost}" -p "${envDjangoPort}" lx_annotate.asgi:application
   '';
@@ -909,7 +981,7 @@ PY
 
     cd "${repoDir}"
     export MEDIA_URL="${envNginxProtectedMediaUrl}"
-    mkdir -p "${envProtectedMediaRoot}" "${envStreamableVideoRoot}" "${envStreamableVideoRawRoot}" "${envStreamableVideoProcessedRoot}"
+    mkdir -p "${runtimeStorageRootPath}" "${runtimeStreamableVideoRootPath}" "${runtimeStreamableVideoRawRootPath}" "${runtimeStreamableVideoProcessedRootPath}"
 
     python manage.py check --fail-level CRITICAL
     python manage.py verify_encrypted_storage
@@ -951,26 +1023,14 @@ PY
   runLocalFileWatcherWheelScript = pkgs.writeShellScriptBin "${watcherScriptName}" ''
     set -euo pipefail
 
-    if [ -z "${cfg.runtime.commands.fileWatcher or ""}" ]; then
+    if [ -z ${lib.escapeShellArg wheelFileWatcherCommand} ]; then
       echo "ERROR: runtime.commands.fileWatcher must be set when wheel mode enables the watcher service."
       exit 1
     fi
 
     source "${lxAnnotateEnvHelpers}"
-    lx_annotate_export_base_env
-    lx_annotate_export_storage_env "${envDataDir}"
-    lx_annotate_export_encryption_env
-    lx_annotate_export_db_env
-    lx_annotate_export_secret_key_env
-    export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
-    export WORKING_DIR="${runtimeWorkingDir}"
-    export HOME_DIR="${endoreg-service-user-home}"
-    export XDG_DATA_HOME="${runtimeRootPath}"
-    export LX_ANNOTATE_ENCRYPTED_DATA_DIR="${envDataDir}"
-    export LX_ANNOTATE_DATA_DIR="${envDataDir}"
+    lx_annotate_export_wheel_service_env "${envDataDir}"
     export WATCHER_PREANONYMIZED_DIR="${envDataDir}/import/preanonymized_import"
-    export TESSDATA_PREFIX="${cfg.runtime.tessdataPrefix}"
-    export PYTORCH_ALLOC_CONF="${cfg.runtime.pytorchAllocConf}"
     export PATH="${runtimeWheelVenvPath}/bin:$PATH"
 
     if [ ! -x "${runtimeWheelVenvPath}/bin/python" ]; then
@@ -980,37 +1040,21 @@ PY
 
     export LX_ANNOTATE_WHEEL_VENV="${runtimeWheelVenvPath}"
     export LX_ANNOTATE_WHEEL_APP_ROOT="${runtimeWheelRootPath}"
-    exec "${pkgs.bash}/bin/bash" -lc ${lib.escapeShellArg (cfg.runtime.commands.fileWatcher or "")}
+    exec "${pkgs.bash}/bin/bash" -lc ${lib.escapeShellArg wheelFileWatcherCommand}
   '';
   runLocalAcceptanceWheelScript = pkgs.writeShellScriptBin "${acceptanceScriptName}" ''
     set -euo pipefail
 
     source "${lxAnnotateEnvHelpers}"
-    lx_annotate_export_base_env
-    lx_annotate_export_storage_env "${envDataDir}"
-    lx_annotate_export_encryption_env
-    lx_annotate_export_django_paths_env
-    lx_annotate_export_db_env
-    export DJANGO_DJANGO_DB_PASSWORD="$DJANGO_DB_PASSWORD"
-    lx_annotate_export_secret_key_env
-    lx_annotate_export_oidc_env
-    export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
-    export WORKING_DIR="${runtimeWorkingDir}"
-    export HOME_DIR="${endoreg-service-user-home}"
-    export XDG_DATA_HOME="${runtimeRootPath}"
-    export LX_ANNOTATE_ENCRYPTED_DATA_DIR="${envDataDir}"
-    export LX_ANNOTATE_DATA_DIR="${envDataDir}"
-    export LX_ANNOTATE_DEFAULT_CENTER="${envDefaultCenter}"
-    export TESSDATA_PREFIX="${cfg.runtime.tessdataPrefix}"
-    export PYTORCH_ALLOC_CONF="${cfg.runtime.pytorchAllocConf}"
+    lx_annotate_export_wheel_service_env "${envDataDir}"
     export MEDIA_URL="${envNginxProtectedMediaUrl}"
 
     source "${lxAnnotateRuntimeLib}"
     ensure_wheel_runtime_installed
-    mkdir -p "${envProtectedMediaRoot}" "${envStreamableVideoRoot}" "${envStreamableVideoRawRoot}" "${envStreamableVideoProcessedRoot}"
+    mkdir -p "${runtimeStorageRootPath}" "${runtimeStreamableVideoRootPath}" "${runtimeStreamableVideoRawRootPath}" "${runtimeStreamableVideoProcessedRootPath}"
 
-    "${runtimeWheelVenvPath}/bin/python" "${runtimeWheelRootPath}/manage.py" check --fail-level CRITICAL
-    "${runtimeWheelVenvPath}/bin/python" "${runtimeWheelRootPath}/manage.py" verify_encrypted_storage
+    run_installed_django_command "${runtimeWheelVenvPath}/bin/python" check --fail-level CRITICAL
+    run_installed_django_command "${runtimeWheelVenvPath}/bin/python" verify_encrypted_storage
     ${pkgs.curl}/bin/curl --fail --silent --show-error --insecure \
       --resolve "${cfg.django.hostname}:443:127.0.0.1" \
       "https://${cfg.django.hostname}/static/.vite/manifest.json" >/dev/null
@@ -1100,20 +1144,8 @@ ${sapImportScriptBody}
   runLocalSapImportWheelScript = pkgs.writeShellScriptBin "${sapImportScriptName}" ''
     source "${lxAnnotateRuntimeLib}"
     source "${lxAnnotateEnvHelpers}"
-    lx_annotate_export_base_env
-    lx_annotate_export_storage_env "${envDataDir}"
-    lx_annotate_export_encryption_env
-    lx_annotate_export_db_env
-    lx_annotate_export_secret_key_env
-    export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
-    export WORKING_DIR="${runtimeWorkingDir}"
-    export HOME_DIR="${endoreg-service-user-home}"
-    export XDG_DATA_HOME="${runtimeRootPath}"
-    export LX_ANNOTATE_ENCRYPTED_DATA_DIR="${envDataDir}"
-    export LX_ANNOTATE_DATA_DIR="${envDataDir}"
+    lx_annotate_export_wheel_service_env "${envDataDir}"
     export WATCHER_PREANONYMIZED_DIR="${envDataDir}/import/preanonymized_import"
-    export TESSDATA_PREFIX="${cfg.runtime.tessdataPrefix}"
-    export PYTORCH_ALLOC_CONF="${cfg.runtime.pytorchAllocConf}"
     ensure_wheel_runtime_installed
 
     sap_import_one() {
@@ -1159,7 +1191,7 @@ ${sapImportScriptBody}
   runLocalExportFramesWheelScript = pkgs.writeShellScriptBin "${exportFramesScriptName}" ''
     set -euo pipefail
 
-    if [ -z "${cfg.runtime.commands.exportFrames or ""}" ]; then
+    if [ -z ${lib.escapeShellArg wheelExportFramesCommand} ]; then
       echo "ERROR: runtime.commands.exportFrames must be set when wheel mode enables the export service."
       exit 1
     fi
@@ -1170,18 +1202,7 @@ ${sapImportScriptBody}
       exportFramesStorageRoot="${envDataDir}"
     fi
 
-    lx_annotate_export_base_env
-    lx_annotate_export_storage_env "$exportFramesStorageRoot"
-    lx_annotate_export_encryption_env
-    lx_annotate_export_db_env
-    lx_annotate_export_secret_key_env
-    export WORKING_DIR="${runtimeWorkingDir}"
-    export HOME_DIR="${endoreg-service-user-home}"
-    export XDG_DATA_HOME="${runtimeRootPath}"
-    export LX_ANNOTATE_ENCRYPTED_DATA_DIR="$exportFramesStorageRoot"
-    export LX_ANNOTATE_DATA_DIR="$exportFramesStorageRoot"
-    export TESSDATA_PREFIX="${cfg.runtime.tessdataPrefix}"
-    export PYTORCH_ALLOC_CONF="${cfg.runtime.pytorchAllocConf}"
+    lx_annotate_export_wheel_service_env "$exportFramesStorageRoot"
     export PATH="${runtimeWheelVenvPath}/bin:$PATH"
     export STORAGE_DIR="$exportFramesStorageRoot/storage"
     export IO_DIR="$exportFramesStorageRoot"
@@ -1196,7 +1217,7 @@ ${sapImportScriptBody}
 
     export LX_ANNOTATE_WHEEL_VENV="${runtimeWheelVenvPath}"
     export LX_ANNOTATE_WHEEL_APP_ROOT="${runtimeWheelRootPath}"
-    exec "${pkgs.bash}/bin/bash" -lc ${lib.escapeShellArg (cfg.runtime.commands.exportFrames or "")}
+    exec "${pkgs.bash}/bin/bash" -lc ${lib.escapeShellArg wheelExportFramesCommand}
   '';
 
   runLocalDataRecoveryScript = pkgs.writeShellScriptBin "runLxAnnotateDataRecovery" ''
@@ -1314,14 +1335,14 @@ ${sapImportScriptBody}
       echo "Repair preflight: HAS_MASTER_KEY=$has_master_key"
       echo "Repairing managed runtime payloads that may have been copied in plaintext by the legacy migration helper."
       if [ "$use_wheel_runtime" = "true" ]; then
-        repair_output="$(run_installed_django_command "$helper_python" repair_managed_payloads --path-prefix storage 2>&1)" || {
+        repair_output="$(run_installed_django_command "$helper_python" repair_managed_payloads 2>&1)" || {
           write_repair_failure "$repair_output"
           return 1
         }
       else
         repair_output="$({
           cd "${repoDir}"
-          "$helper_python" "${repoDir}/manage.py" repair_managed_payloads --path-prefix storage
+          "$helper_python" "${repoDir}/manage.py" repair_managed_payloads
         } 2>&1)" || {
           write_repair_failure "$repair_output"
           return 1
@@ -1650,33 +1671,41 @@ ${sapImportScriptBody}
   '';
 
 in {
-  inherit
-    makeBin
-    lxAnnotateEnvHelpers
-    lxAnnotateSyncScript
-    lxAnnotatePrepareScript
-    lxAnnotateBuildScript
-    lxAnnotateMigrateScript
-    migrateVideoStreamableStorageScriptName
-    lxAnnotateMigrateVideoStreamableStorageScript
-    lxAnnotateBootstrapScript
-    runLocalLxAnnotateStartScript
-    runLocalLxAnnotateScript
-    runLocalLxAnnotateWheelScript
-    acceptanceScriptName
-    runLocalAcceptanceScript
-    runLocalAcceptanceWheelScript
-    watcherScriptName
-    runLocalFileWatcherScript
-    runLocalFileWatcherWheelScript
-    sapImportScriptName
-    runLocalSapImportScript
-    runLocalSapImportWheelScript
-    runLocalExportFramesScript
-    runLocalExportFramesWheelScript
-    runLocalDataRecoveryScript
-    runLocalDataCleanupScript
-    runLocalHubBackupScript
-    lxAnnotateEncryptedDataMountScript
-    lxAnnotateEncryptedDataUmountScript;
+  helpers = {
+    inherit makeBin lxAnnotateEnvHelpers;
+  };
+
+  scriptNames = {
+    inherit
+      acceptanceScriptName
+      watcherScriptName
+      sapImportScriptName
+      migrateVideoStreamableStorageScriptName;
+  };
+
+  packages = {
+    inherit
+      lxAnnotateSyncScript
+      lxAnnotatePrepareScript
+      lxAnnotateBuildScript
+      lxAnnotateMigrateScript
+      lxAnnotateMigrateVideoStreamableStorageScript
+      lxAnnotateBootstrapScript
+      runLocalLxAnnotateStartScript
+      runLocalLxAnnotateScript
+      runLocalLxAnnotateWheelScript
+      runLocalAcceptanceScript
+      runLocalAcceptanceWheelScript
+      runLocalFileWatcherScript
+      runLocalFileWatcherWheelScript
+      runLocalSapImportScript
+      runLocalSapImportWheelScript
+      runLocalExportFramesScript
+      runLocalExportFramesWheelScript
+      runLocalDataRecoveryScript
+      runLocalDataCleanupScript
+      runLocalHubBackupScript
+      lxAnnotateEncryptedDataMountScript
+      lxAnnotateEncryptedDataUmountScript;
+  };
 }

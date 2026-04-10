@@ -30,10 +30,9 @@ def _extract_wheel_filewatcher_script_body() -> str:
 def test_wheel_filewatcher_exports_encryption_env_before_start():
     script_body = _extract_wheel_filewatcher_script_body()
 
-    assert "lx_annotate_export_storage_env" in script_body
-    assert "lx_annotate_export_encryption_env" in script_body
+    assert 'lx_annotate_export_wheel_service_env "${envDataDir}"' in script_body
     assert (
-        script_body.index("lx_annotate_export_encryption_env")
+        script_body.index("lx_annotate_export_wheel_service_env")
         < script_body.index('exec "${pkgs.bash}/bin/bash" -lc')
     )
 
@@ -48,8 +47,21 @@ def test_wheel_filewatcher_passes_master_key_file_to_child_process(tmp_path: Pat
             lx_annotate_export_encryption_env() {
               export LX_ANNOTATE_MASTER_KEY_FILE="${MASTER_KEY_FILE_PATH}"
             }
+            lx_annotate_export_django_paths_env() { :; }
             lx_annotate_export_db_env() { :; }
             lx_annotate_export_secret_key_env() { :; }
+            lx_annotate_export_oidc_env() { :; }
+            lx_annotate_export_wheel_service_env() {
+              local data_root="$1"
+              lx_annotate_export_base_env
+              lx_annotate_export_storage_env "$data_root"
+              lx_annotate_export_encryption_env
+              lx_annotate_export_django_paths_env
+              lx_annotate_export_db_env
+              export DJANGO_DJANGO_DB_PASSWORD="${DJANGO_DB_PASSWORD:-}"
+              lx_annotate_export_secret_key_env
+              lx_annotate_export_oidc_env
+            }
             """
         ),
         encoding="utf-8",
@@ -83,16 +95,13 @@ def test_wheel_filewatcher_passes_master_key_file_to_child_process(tmp_path: Pat
         '${runtimeWheelVenvPath}': str(runtime_venv),
         '${runtimeWheelRootPath}': str(runtime_wheel_root),
         '${cfg.runtime.commands.fileWatcher or ""}': filewatcher_command,
+        '${lib.escapeShellArg wheelFileWatcherCommand}': f'"{filewatcher_command}"',
     }
     for old, new in replacements.items():
         wheel_script = wheel_script.replace(old, new)
     wheel_script = wheel_script.replace(
         '${pkgs.bash}/bin/bash',
         "bash",
-    )
-    wheel_script = wheel_script.replace(
-        '${lib.escapeShellArg (cfg.runtime.commands.fileWatcher or "")}',
-        f'"{filewatcher_command}"',
     )
 
     script = textwrap.dedent(

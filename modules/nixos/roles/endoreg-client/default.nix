@@ -53,8 +53,15 @@ in
       defaultCenter = mkOption {
         type = types.str;
         default = "University Hospital Wuerzburg";
-        description = "Default center label for endoreg client. LuxNix normalizes this to a stable center_key for lx-annotate services unless an explicit DEFAULT_CENTER_KEY is provided.";
+        description = "Default center reference for endoreg client. lx-annotate resolves this first as center_key, then as center name.";
         example = "University Hospital Wuerzburg";
+      };
+
+      defaultCenterKey = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Optional explicit center_key exported to lx-annotate as DEFAULT_CENTER_KEY. Set this to avoid center-name ambiguity.";
+        example = "university_hospital_wuerzburg";
       };
 
       # Django API Configuration Options
@@ -202,10 +209,16 @@ in
         let
           baseExtraSettings = cfg.api.extraSettings;
         in
-        recursiveUpdate baseExtraSettings {
-          CENTRAL_NODES = cfg.centralNodes;
-          IS_CENTRAL_NODE = false;
-        };
+        recursiveUpdate baseExtraSettings (
+          {
+            CENTRAL_NODES = cfg.centralNodes;
+            IS_CENTRAL_NODE = false;
+            DEFAULT_CENTER = cfg.defaultCenter;
+          }
+          // lib.optionalAttrs (cfg.defaultCenterKey != null) {
+            DEFAULT_CENTER_KEY = cfg.defaultCenterKey;
+          }
+        );
 
       annotateDjango = recursiveUpdate cfg.api (
         annotateDjangoOverrides

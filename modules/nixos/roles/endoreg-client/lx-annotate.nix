@@ -87,7 +87,7 @@ with lib;
             options = {
               fileWatcher = mkOption {
                 type = types.nullOr types.str;
-                default = "python manage.py start_filewatcher";
+                default = "$LX_ANNOTATE_WHEEL_VENV/bin/python -m django start_filewatcher --settings=lx_annotate.settings.settings_prod";
                 description = "Wheel-mode command used to run the lx-annotate file watcher.";
               };
 

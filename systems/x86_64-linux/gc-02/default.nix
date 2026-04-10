@@ -33,6 +33,7 @@
     endoreg-client.paths.storagePersistingIsExternalDrive = true;
     endoreg-client.paths.storagePersistingMountPoint = "/mnt/endoreg-client-storage";
     endoreg-client.repository.branch = "container";
+    endoreg-client.defaultCenterKey = "university_hospital_wuerzburg";
     nextcloudClient.enable = true;
     postgres.default.enable = true;
     custom-packages.baseDevelopment = true;
@@ -43,7 +44,7 @@
 
   services = {
     luxnix.vllm = {
-      enable = true;
+      enable = false;
       host = "127.0.0.1";
       port = 8000;
       model = "Qwen/Qwen2.5-1.5B-Instruct";

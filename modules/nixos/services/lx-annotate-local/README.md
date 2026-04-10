@@ -4,7 +4,8 @@ This module manages the local `lx-annotate` deployment on LuxNix hosts.
 
 ## Structure
 
-- [`default.nix`](/home/admin/luxnix/modules/nixos/services/lx-annotate-local/default.nix): thin wrapper that computes shared values and imports the split submodules.
+- [`default.nix`](/home/admin/luxnix/modules/nixos/services/lx-annotate-local/default.nix): thin wrapper that assembles the runtime context, script exports, and split submodules.
+- [`runtime-context.nix`](/home/admin/luxnix/modules/nixos/services/lx-annotate-local/runtime-context.nix): canonical derived runtime paths, environment values, defaults, and helper functions shared by the module.
 - [`options.nix`](/home/admin/luxnix/modules/nixos/services/lx-annotate-local/options.nix): public option surface.
 - [`config.nix`](/home/admin/luxnix/modules/nixos/services/lx-annotate-local/config.nix): systemd, nginx, tmpfiles, assertions, and secret wiring.
 - [`scripts.nix`](/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts.nix): shell-script derivations used by the service units.
@@ -69,13 +70,15 @@ The module also exposes a dedicated manual post-deploy acceptance unit:
 
 - `systemctl start lx-annotate-acceptance`
 
-That unit runs the deployed Django system checks with the real LuxNix
-environment, verifies encrypted storage round-trips without plaintext on disk,
-and fetches the Vite manifest through the local Nginx TLS vhost.
+`lx-annotate-video-streamable-migration.service` runs Django's
+`migrate_video_streamable_storage` command with the same production environment
+as the main application service. It is intentionally not timer-driven by
+default so operators can control rollout pace and observe I/O.
 
-That unit runs Django's `migrate_video_streamable_storage` command with the same
-production environment as the main application service. It is intentionally not
-timer-driven by default so operators can control rollout pace and observe I/O.
+`lx-annotate-acceptance.service` runs the deployed Django system checks with the
+real LuxNix environment, verifies encrypted storage round-trips without
+plaintext on disk, and fetches the Vite manifest through the local Nginx TLS
+vhost.
 
 ## Hub Groundwork
 
@@ -168,7 +171,7 @@ result.
 
 Current scope:
 
-- this protects `/api/media/hub/transfers/` at the transport layer
+- this protects the transfer API at the transport layer when `hub.transferApi.enable = true`
 - it does not introduce payload-level envelope encryption yet
 - it does not replace the separate shared-secret request authentication used by
   `NetworkNode`
@@ -237,7 +240,7 @@ services.luxnix.lxAnnotateLocal = {
     wheelPath = /path/to/dist/lx_annotate-0.0.2-py3-none-any.whl;
     wheelhousePath = /path/to/wheelhouse;
     commands = {
-      fileWatcher = "python manage.py start_filewatcher";
+      fileWatcher = "$LX_ANNOTATE_WHEEL_VENV/bin/python -m django start_filewatcher --settings=lx_annotate.settings.settings_prod";
       exportFrames = "export-frames";
     };
     encryptedDataDir = "/var/lib/lx-annotate/secure_data";
@@ -269,6 +272,14 @@ luxnix.vault = {
   };
 };
 ```
+
+Notes:
+
+- In wheel mode, `runtime.commands.fileWatcher` and `runtime.commands.exportFrames`
+  are wheel-entrypoint commands, not repo-local `manage.py` invocations.
+- `runtime.encryptedDataDir` remains the canonical protected root. Paths under
+  the service-user home are access paths only unless the runtime contract is
+  intentionally redesigned.
 
 ## Wheel Install Behavior
 
