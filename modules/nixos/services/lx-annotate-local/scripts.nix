@@ -1387,8 +1387,9 @@ ${sapImportScriptBody}
           sync_source_dir "${cfg.dataRecovery.legacyDataDir}" "legacy repo data"
           sync_source_dir "${cfg.dataRecovery.legacyMediaDir}" "legacy media"
         else
-          # Keep a compatibility overlay for media-only legacy payloads that the
-          # Django helper may not move in wheel deployments.
+          # Keep compatibility overlays for payload classes the Django helper may
+          # not move in wheel deployments.
+          sync_source_dir "${cfg.dataRecovery.legacyDataDir}" "legacy data compatibility overlay"
           sync_source_dir "${cfg.dataRecovery.legacyMediaDir}" "legacy media compatibility overlay"
         fi
       else
