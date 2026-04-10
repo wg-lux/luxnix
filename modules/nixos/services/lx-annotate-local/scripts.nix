@@ -1255,6 +1255,10 @@ ${sapImportScriptBody}
 
     if [ "$use_wheel_runtime" = "true" ]; then
       ensure_wheel_runtime_installed
+      if [ -x "${runtimeWheelVenvPath}/bin/python" ]; then
+        echo "Applying Django migrations before data recovery helper commands."
+        run_installed_django_command "${runtimeWheelVenvPath}/bin/python" migrate --noinput
+      fi
     fi
 
     if [ -f "$state_file" ]; then
