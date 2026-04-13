@@ -853,11 +853,18 @@ PY
   lxAnnotateMigrateVideoStreamableStorageScript = pkgs.writeShellScriptBin "${migrateVideoStreamableStorageScriptName}" ''
     set -euo pipefail
     source "${lxAnnotateRuntimeLib}"
-    lx_annotate_export_runtime_env
-    lx_annotate_activate_runtime
 
     log "Migrating video assets into streamable protected storage..."
-    python manage.py migrate_video_streamable_storage "$@"
+    if [ "${if useWheelRuntime then "true" else "false"}" = "true" ]; then
+      source "${lxAnnotateEnvHelpers}"
+      lx_annotate_export_wheel_service_env "${envDataDir}"
+      ensure_wheel_runtime_installed
+      run_installed_django_command "${runtimeWheelVenvPath}/bin/python" migrate_video_streamable_storage "$@"
+    else
+      lx_annotate_export_runtime_env
+      lx_annotate_activate_runtime
+      python manage.py migrate_video_streamable_storage "$@"
+    fi
   '';
 
   lxAnnotateBootstrapScript = pkgs.writeShellScriptBin "${bootstrapScriptName}" ''
