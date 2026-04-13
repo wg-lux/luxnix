@@ -38,8 +38,11 @@ with lib.luxnix; let
              then hostConfig.ip-local
              else hostConfig.ip-vpn;
              
-        # Default to empty list if domains is null
-        domains = hostConfig.domains or ["localhost"];
+        # Keep selected aliases local-only (e.g. lx-annotate.local should resolve to the current node only)
+        domainsRaw = hostConfig.domains or ["localhost"];
+        domains = builtins.filter (
+          domain: !(builtins.elem domain cfg.localOnlyDomains) || hostName == hostname
+        ) domainsRaw;
       in { 
         "${ip}" = [ hostName ] ++ domains;
       }
@@ -118,6 +121,15 @@ in {
         - domains
         - syncthing_id
         - network_cluster
+      '';
+    };
+
+    localOnlyDomains = mkOption {
+      type = types.listOf types.str;
+      default = [ "lx-annotate.local" ];
+      description = ''
+        Domain aliases that must only map to the current host in /etc/hosts.
+        This prevents multi-IP alias collisions that can cause client timeouts.
       '';
     };
     

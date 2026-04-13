@@ -488,8 +488,12 @@ EOF
     }
 
     write_systemd_env_file() {
-      install -d -m 0750 "${runtimeRootPath}"
+      install -d -m 0750 "${runtimeRootPath}" "${envDataDir}"
       emit_common_systemd_env > "${envSystemdFilePath}"
+      # Legacy compatibility: older app builds read .env.systemd from the data root.
+      # Keep both paths aligned to avoid startup failures on stale/corrupted legacy files.
+      emit_common_systemd_env > "${envDataDir}/.env.systemd"
+      chmod 0640 "${envSystemdFilePath}" "${envDataDir}/.env.systemd"
     }
 
     write_wheel_systemd_env_file() {
@@ -503,6 +507,8 @@ TESSDATA_PREFIX=${cfg.runtime.tessdataPrefix}
 PYTORCH_ALLOC_CONF=${cfg.runtime.pytorchAllocConf}
 ${optionalString (cfg.runtime.masterKeyFile != null) "LX_ANNOTATE_MASTER_KEY_FILE=${toString cfg.runtime.masterKeyFile}"}
 EOF
+      cp -f "${envSystemdFilePath}" "${envDataDir}/.env.systemd"
+      chmod 0640 "${envSystemdFilePath}" "${envDataDir}/.env.systemd"
     }
 
     write_secretspec_config() {

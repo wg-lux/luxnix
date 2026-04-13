@@ -164,6 +164,22 @@ def test_lx_annotate_streamable_migration_service_config_evaluates() -> None:
     assert "/var/lib/lx-annotate/data" in service_config["ReadWritePaths"]
 
 
+def test_lx_annotate_streamable_migration_unit_runs_after_boot_by_default() -> None:
+    after = _nix_eval_json(
+        "config.systemd.services.lx-annotate-video-streamable-migration.after"
+    )
+    wanted_by = _nix_eval_json(
+        "config.systemd.services.lx-annotate-video-streamable-migration.wantedBy"
+    )
+    requires = _nix_eval_json(
+        "config.systemd.services.lx-annotate-video-streamable-migration.requires"
+    )
+
+    assert "lx-annotate-boot.service" in after
+    assert "lx-annotate-boot.service" in requires
+    assert "multi-user.target" in wanted_by
+
+
 def test_hub_transfer_api_extend_modules_enables_nginx_and_backup_surfaces() -> None:
     evaluated = _nix_eval_expr_json(
         """
