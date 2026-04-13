@@ -43,6 +43,7 @@
     };
 
   services = {
+    luxnix.endoregDbApiLocal.enable = lib.mkForce false;
     luxnix.lxAnnotateLocal.runtime.mode = "wheel";
 
     luxnix.vllm = {

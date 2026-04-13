@@ -41,7 +41,7 @@ in
       dbApiLocal = mkOption {
         type = types.bool;
         default = false;
-        description = "Enable local endoreg-db-api service";
+        description = "Deprecated no-op. The endoreg-client role no longer manages a local endo-api service.";
       };
 
       endoAi = mkOption {
@@ -246,21 +246,7 @@ in
 
       luxnix.nvidia-prime.enable = true;
 
-      services.luxnix.endoregDbApiLocal = mkIf (!config.roles.endoreg-db-central-01.enable) {
-        enable = mkDefault cfg.dbApiLocal;
-
-        # Pass configuration options to the service
-        api = cfg.api // {
-          # Add central nodes information
-          extraSettings = recursiveUpdate cfg.api.extraSettings {
-            CENTRAL_NODES = cfg.centralNodes;
-            IS_CENTRAL_NODE = false;
-          };
-        };
-        database = cfg.database;
-        service = cfg.service;
-        repository = cfg.repository;
-      };
+      services.luxnix.endoregDbApiLocal.enable = mkIf (!config.roles.endoreg-db-central-01.enable) (mkForce false);
 
       services.luxnix.lxAnnotateLocal = {
         enable = cfg.lxAnnotate.enable;
@@ -279,8 +265,6 @@ in
       systemd.tmpfiles.rules = [
         # USB Encrypter
         "d /mnt/endoreg-sensitive-data 0770 root ${sensitiveServiceGroupName} -"
-        # Django configuration directory
-        "d /etc/endoreg-api 0755 root root -"
         # Service user config directory
         "d /var/endoreg-service-user/config 0755 endoreg-service-user ${endoregServiceGroupName} -"
         # Storage directories (must exist for the symlinks to valid targets)
@@ -389,37 +373,6 @@ in
 
           roles.desktop.enable = mkDefault true;
         };
-
-      # Generate Django secret key if it doesn't exist
-      systemd.services.endoreg-django-setup = mkIf cfg.dbApiLocal {
-        description = "Django configuration setup (handled by managed-secrets)";
-        wantedBy = [ "multi-user.target" ];
-        before = [ "endo-api-boot.service" ];
-        after = [ "managed-secrets-setup.service" ];
-        requires = [ "managed-secrets-setup.service" ];
-        serviceConfig = {
-          Type = "oneshot";
-          RemainAfterExit = true;
-          User = "root";
-          ExecStart = pkgs.writeShellScript "setup-django-config" ''
-            set -euo pipefail
-
-            # Verify that Django secret key exists (should be created by managed-secrets)
-            if [ ! -f ${cfg.api.djangoSecretKeyFile} ]; then
-              echo "ERROR: Django secret key not found at ${cfg.api.djangoSecretKeyFile}"
-              echo "This should have been created by managed-secrets-setup.service"
-              exit 1
-            fi
-
-            # Ensure correct permissions (managed-secrets should handle this, but double-check)
-            chmod 640 ${cfg.api.djangoSecretKeyFile}
-            chown root:${sensitiveServiceGroupName} ${cfg.api.djangoSecretKeyFile}
-
-            echo "Django configuration verification completed"
-          '';
-        };
-      };
-
     }
   );
 }
