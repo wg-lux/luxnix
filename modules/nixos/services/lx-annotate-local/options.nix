@@ -80,8 +80,8 @@ in
           wheelPath = mkOption {
             type = types.nullOr types.path;
             default = pkgs.fetchurl {
-              url = "https://files.pythonhosted.org/packages/ed/27/062770a35d9f410a1cc23474f12e47472a9eba4cd7fcca26146a43f8a30d/lx_annotate-0.1.4-py3-none-any.whl";
-              hash = "sha256-ozB18HcAS3lsNGc36QzfUNJzq8NlJ41c4VcdmHxJ0DY=";
+              url = "https://files.pythonhosted.org/packages/5e/0f/333bed4ccfe762085b50d8445cf5106914c8cf2f953b7c8017f9153ecd91/lx_annotate-0.1.5-py3-none-any.whl";
+              hash = "sha256-cpsbE3aF6YRV3bCq8H8R63pJR09LaJc3s/TcswoLfdQ=";
             };
             description = "Path to the lx-annotate wheel artifact used in wheel mode.";
           };
@@ -270,6 +270,11 @@ in
                   type = types.nullOr types.str;
                   default = null;
                   description = "Shell command executed for export-frames in wheel mode. Runs with LX_ANNOTATE_WHEEL_VENV and LX_ANNOTATE_WHEEL_APP_ROOT exported.";
+                };
+                celeryWorker = mkOption {
+                  type = types.nullOr types.str;
+                  default = null;
+                  description = "Shell command executed for the Celery worker in wheel mode. Runs with LX_ANNOTATE_WHEEL_VENV and LX_ANNOTATE_WHEEL_APP_ROOT exported.";
                 };
               };
             };

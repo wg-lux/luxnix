@@ -78,6 +78,10 @@ let
     processedReportDirName
     processedVideoDirName;
   makeBin = "${pkgs.gnumake}/bin/make";
+  celeryBrokerUrl = lib.attrByPath
+    [ "roles" "endoreg-client" "service" "extraEnvironment" "CELERY_BROKER_URL" ]
+    "redis://localhost:6379/1"
+    config;
   lxAnnotateEnvHelpers = pkgs.writeShellScript "lx-annotate-env-helpers.sh" ''
     lx_annotate_export_base_env() {
       export DJANGO_SECRET_KEY_FILE="${cfg.django.djangoSecretKeyFile}"
@@ -121,6 +125,7 @@ let
       }"
       export ENDOREG_HUB_TRANSFER_MTLS_META_KEY="${cfg.hub.transferApi.mtlsMetaKey}"
       export ENDOREG_HUB_TRANSFER_MTLS_META_VALUE="${cfg.hub.transferApi.mtlsMetaValue}"
+      export CELERY_BROKER_URL="${celeryBrokerUrl}"
 
       export DJANGO_ALLOWED_HOSTS="${envAllowedHosts}"
       export ALLOWED_HOSTS="${envAllowedHosts}"
@@ -290,6 +295,7 @@ let
   acceptanceScriptName = "runLocalAcceptance";
   wheelFileWatcherCommand = cfg.runtime.commands.fileWatcher or "";
   wheelExportFramesCommand = cfg.runtime.commands.exportFrames or "";
+  wheelCeleryWorkerCommand = cfg.runtime.commands.celeryWorker or "";
 
   lxAnnotateRuntimeLib = pkgs.writeShellScript "lx-annotate-runtime-lib.sh" ''
     set -euo pipefail
@@ -473,6 +479,7 @@ ENDOREG_HUB_TRANSFER_REQUIRE_SECURE_TRANSPORT=${if cfg.hub.transferApi.requireSe
 ENDOREG_HUB_TRANSFER_REQUIRE_MTLS=${if cfg.hub.transferApi.requireMtls then "true" else "false"}
 ENDOREG_HUB_TRANSFER_MTLS_META_KEY=${cfg.hub.transferApi.mtlsMetaKey}
 ENDOREG_HUB_TRANSFER_MTLS_META_VALUE=${cfg.hub.transferApi.mtlsMetaValue}
+CELERY_BROKER_URL=${celeryBrokerUrl}
 DEBUG=False
 DJANGO_DEBUG=False
 VITE_ENABLE_DEBUG=${envViteEnableDebug}
@@ -1054,6 +1061,46 @@ PY
     export LX_ANNOTATE_WHEEL_VENV="${runtimeWheelVenvPath}"
     export LX_ANNOTATE_WHEEL_APP_ROOT="${runtimeWheelRootPath}"
     exec "${pkgs.bash}/bin/bash" -lc ${lib.escapeShellArg wheelFileWatcherCommand}
+  '';
+  celeryWorkerScriptName = "runLocalCeleryWorker";
+  runLocalCeleryWorkerScript = pkgs.writeShellScriptBin "${celeryWorkerScriptName}" ''
+    set -euo pipefail
+
+    cd "${repoDir}"
+
+    source "${lxAnnotateEnvHelpers}"
+    lx_annotate_export_base_env
+    lx_annotate_export_storage_env "${envDataDir}"
+    lx_annotate_export_encryption_env
+    lx_annotate_export_db_env
+    lx_annotate_export_secret_key_env
+    export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
+    export VIDEO_POST_VALIDATION_JOB_MODE="celery"
+    ${devenvSyncCompatExports}
+
+    exec devenv shell -- celery -A lx_annotate.celery:app worker --loglevel=INFO
+  '';
+  runLocalCeleryWorkerWheelScript = pkgs.writeShellScriptBin "${celeryWorkerScriptName}" ''
+    set -euo pipefail
+
+    if [ -z ${lib.escapeShellArg wheelCeleryWorkerCommand} ]; then
+      echo "ERROR: runtime.commands.celeryWorker must be set when wheel mode enables the Celery worker service."
+      exit 1
+    fi
+
+    source "${lxAnnotateEnvHelpers}"
+    lx_annotate_export_wheel_service_env "${envDataDir}"
+    export VIDEO_POST_VALIDATION_JOB_MODE="celery"
+    export PATH="${runtimeWheelVenvPath}/bin:$PATH"
+
+    if [ ! -x "${runtimeWheelVenvPath}/bin/python" ]; then
+      echo "ERROR: Wheel virtualenv missing at ${runtimeWheelVenvPath}."
+      exit 1
+    fi
+
+    export LX_ANNOTATE_WHEEL_VENV="${runtimeWheelVenvPath}"
+    export LX_ANNOTATE_WHEEL_APP_ROOT="${runtimeWheelRootPath}"
+    exec "${pkgs.bash}/bin/bash" -lc ${lib.escapeShellArg wheelCeleryWorkerCommand}
   '';
   runLocalAcceptanceWheelScript = pkgs.writeShellScriptBin "${acceptanceScriptName}" ''
     set -euo pipefail
@@ -1700,6 +1747,7 @@ in {
   scriptNames = {
     inherit
       acceptanceScriptName
+      celeryWorkerScriptName
       watcherScriptName
       sapImportScriptName
       migrateVideoStreamableStorageScriptName;
@@ -1718,6 +1766,8 @@ in {
       runLocalLxAnnotateWheelScript
       runLocalAcceptanceScript
       runLocalAcceptanceWheelScript
+      runLocalCeleryWorkerScript
+      runLocalCeleryWorkerWheelScript
       runLocalFileWatcherScript
       runLocalFileWatcherWheelScript
       runLocalSapImportScript
