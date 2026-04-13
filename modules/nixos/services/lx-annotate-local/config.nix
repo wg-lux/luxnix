@@ -750,9 +750,10 @@ in
     };
     systemd.services.lx-annotate-video-streamable-migration = {
       description = "Migrate lx-annotate videos into streamable protected storage";
+      wantedBy = [ "multi-user.target" ];
       after = [ "lx-annotate-boot.service" ] ++ encryptionServiceUnits;
       wants = [ "lx-annotate-boot.service" ] ++ encryptionServiceUnits;
-      requires = encryptionServiceUnits;
+      requires = [ "lx-annotate-boot.service" ] ++ encryptionServiceUnits;
       unitConfig = {
         RequiresMountsFor = [ envDataDir ];
       };

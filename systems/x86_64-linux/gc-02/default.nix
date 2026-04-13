@@ -43,6 +43,8 @@
     };
 
   services = {
+    luxnix.lxAnnotateLocal.runtime.mode = "wheel";
+
     luxnix.vllm = {
       enable = false;
       host = "127.0.0.1";
