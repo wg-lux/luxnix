@@ -272,7 +272,7 @@ in
       };
 
       services.luxnix.endoAi = {
-        enable = cfg.endoAi;
+        enable = false;
       };
 
       # Create additional systemd tmpfiles for configuration
