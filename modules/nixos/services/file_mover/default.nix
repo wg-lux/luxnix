@@ -8,6 +8,7 @@ with lib.luxnix;
 let
   cfg = config.services.luxnix.fileMover;
   endoregPaths = config.roles.endoreg-client.paths;
+  lxAnnotateCfg = config.services.luxnix.lxAnnotateLocal;
 
   clientUserName =
     if config ? user && config.user ? client && config.user.client ? name then
@@ -33,10 +34,12 @@ let
   failedInputBaseDir = "${endoregPaths.storageBaseDir}/failed_input";
   failedVideoDir = "${failedInputBaseDir}/video";
   failedPdfDir = "${failedInputBaseDir}/pdf";
-  runtimeDataDir = config.services.luxnix.lxAnnotateLocal.runtime.encryptedDataDir;
-  # Intake destinations stay inside the canonical protected runtime root.
-  # The service-user path below is only a symlinked access path for desktop and
-  # operator workflows; it must not be treated as a separate IO root.
+  runtimeDataDir = lxAnnotateCfg.runtime.encryptedDataDir;
+  # Intake destinations must stay aligned with the lx-annotate runtime contract:
+  # <encryptedDataDir>/import/{video_import,report_import,...}
+  # This is the same subtree the wheel-based watcher resolves via IO_DIR /
+  # LX_ANNOTATE_DATA_DIR. The service-user path below is only an access symlink
+  # for operator workflows and must not become an independent intake root.
   runtimeIoDir = "${runtimeDataDir}/import";
   runtimePreanonymizedDir = "${runtimeIoDir}/preanonymized_import";
   runtimeSapImportDir = "${runtimeIoDir}/sap_import";
@@ -44,7 +47,7 @@ let
   desktopPreanonymizedLinkTarget = "${serviceUserIoAccessLink}/preanonymized_import";
   desktopSapImportLinkTarget = "${serviceUserIoAccessLink}/sap_import";
 
-  # Destination paths
+  # Destination watcher intake paths for both repo and wheel deployments.
   destVideoDir = "${runtimeIoDir}/video_import";
   destReportDir = "${runtimeIoDir}/report_import";
 
