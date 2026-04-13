@@ -27,7 +27,7 @@
     endoreg-client.api.logLevel = "WARNING";
     endoreg-client.api.maxRequestSize = "50G";
     endoreg-client.api.settingsProfile = "prod";
-    endoreg-client.centralNodes = ["s-04"];    endoreg-client.dbApiLocal = true;
+    endoreg-client.centralNodes = ["s-04"];
     endoreg-client.enable = true;
     endoreg-client.paths.storagePersistingEnable = true;
     endoreg-client.paths.storagePersistingIsExternalDrive = true;
@@ -43,6 +43,7 @@
     };
 
   services = {
+    luxnix.endoregDbApiLocal.enable = lib.mkForce false;
     luxnix.lxAnnotateLocal.runtime.mode = "wheel";
 
     luxnix.vllm = {
