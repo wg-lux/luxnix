@@ -1028,6 +1028,8 @@ PY
     lx_annotate_export_db_env
     lx_annotate_export_secret_key_env
     export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
+    export WATCHER_VIDEO_DIR="${envDataDir}/import/video_import"
+    export WATCHER_REPORT_DIR="${envDataDir}/import/report_import"
     export WATCHER_PREANONYMIZED_DIR="${envDataDir}/import/preanonymized_import"
     ${devenvSyncCompatExports}
 
@@ -1050,6 +1052,8 @@ PY
 
     source "${lxAnnotateEnvHelpers}"
     lx_annotate_export_wheel_service_env "${envDataDir}"
+    export WATCHER_VIDEO_DIR="${envDataDir}/import/video_import"
+    export WATCHER_REPORT_DIR="${envDataDir}/import/report_import"
     export WATCHER_PREANONYMIZED_DIR="${envDataDir}/import/preanonymized_import"
     export PATH="${runtimeWheelVenvPath}/bin:$PATH"
 
