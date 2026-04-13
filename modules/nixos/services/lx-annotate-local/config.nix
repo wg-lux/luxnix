@@ -39,6 +39,7 @@ let
     defaultSslKeyPath;
   inherit (runtime.scripts.scriptNames)
     acceptanceScriptName
+    celeryWorkerScriptName
     migrateVideoStreamableStorageScriptName
     watcherScriptName
     sapImportScriptName;
@@ -49,6 +50,8 @@ let
     lxAnnotateMigrateVideoStreamableStorageScript
     runLocalAcceptanceScript
     runLocalAcceptanceWheelScript
+    runLocalCeleryWorkerScript
+    runLocalCeleryWorkerWheelScript
     runLocalDataCleanupScript
     runLocalDataRecoveryScript
     runLocalExportFramesScript
@@ -276,16 +279,6 @@ in
     services.nginx = {
       enable = true;
 
-      # This handles cases where certs were generated with 0600 root:root permissions.
-      preStart = lib.mkAfter "${pkgs.writeShellScript "fix-ssl-perms-root" ''
-        if [ -d "/var/lib/lx-annotate/ssl" ]; then
-          echo "Fixing Nginx SSL permissions (running as root)..."
-          ${pkgs.coreutils}/bin/chown -R root:nginx /var/lib/lx-annotate/ssl
-          ${pkgs.coreutils}/bin/chmod 0750 /var/lib/lx-annotate/ssl
-          ${pkgs.coreutils}/bin/chmod 0640 /var/lib/lx-annotate/ssl/* 2>/dev/null || true
-        fi
-      ''}";
-
       recommendedProxySettings = true;
       recommendedTlsSettings = true;
 
@@ -373,7 +366,9 @@ in
       "d /var/lib/lx-annotate 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
       "z /var/lib/lx-annotate 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
 
-      # 2. The SSL Directory: Create (d) AND Enforce (z) permissions
+      # 2. The SSL Directory: keep the directory permissions stable. Do not
+      # mutate TLS material from nginx preStart because that path inherits the
+      # nginx service sandbox and may trip seccomp or read-only mounts.
       "d /var/lib/lx-annotate/ssl 0750 root nginx - -"
       "z /var/lib/lx-annotate/ssl 0750 root nginx - -"
 
@@ -413,8 +408,8 @@ in
       "d ${cfg.hub.backup.manifestDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
       "z ${cfg.hub.backup.manifestDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
 
-      # File mode normalization is handled by nginx preStart to avoid
-      # recursive 0640 on directories.
+      # TLS material normalization is handled by dedicated pre-nginx services
+      # such as generate-lx-ssl, not by nginx preStart.
     ]
     ++ lib.optionals (!config.roles.endoreg-client.enable) [
       # Create the config subdirectory (handled by endoreg-client role when enabled)
@@ -705,6 +700,47 @@ in
         
         # 3. OOM Score: If RAM runs out, kill this service first, never the web server.
         OOMScoreAdjust = 1000;
+        ReadWritePaths = [
+          endoreg-service-user-home
+          envDataDir
+          envConfDir
+          staticRootPath
+          runtimeRootPath
+          runtimeWheelRootPath
+          runtimeWheelVenvPath
+          "/var/endoreg-service-user/lx-annotate"
+        ];
+      };
+    };
+    systemd.services.lx-annotate-celery-worker = mkIf (!useWheelRuntime || cfg.runtime.commands.celeryWorker != null) {
+      description = "Celery worker for asynchronous lx-annotate and endoreg-db jobs";
+      after = [ "postgresql.service" "lx-annotate-boot.service" ] ++ encryptionServiceUnits;
+      wants = encryptionServiceUnits;
+      requires = encryptionServiceUnits;
+      wantedBy = [ "lx-annotate-boot.service" ];
+      partOf = [ "lx-annotate-boot.service" ];
+      unitConfig = {
+        RequiresMountsFor = [ envDataDir ];
+      };
+
+      serviceConfig = {
+        User = endoreg-service-user-name;
+        Group = endoreg-service-group-name;
+        WorkingDirectory = runtimeWorkingDir;
+        ExecStart = if useWheelRuntime then "${runLocalCeleryWorkerWheelScript}/bin/${celeryWorkerScriptName}" else "${runLocalCeleryWorkerScript}/bin/${celeryWorkerScriptName}";
+        Restart = "always";
+        RestartSec = "15s";
+        Environment = [
+          "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:${pkgs.direnv}/bin:/run/current-system/sw/bin"
+          "NIX_PATH=nixpkgs=${pkgs.path}"
+          "LD_LIBRARY_PATH=${lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib pkgs.libglvnd pkgs.zlib pkgs.glib pkgs.libxcb ]}"
+        ];
+        MemoryHigh = "1G";
+        MemoryMax = "2G";
+        CPUQuota = "35%";
+        Nice = 15;
+        IOSchedulingClass = "idle";
+        OOMScoreAdjust = 750;
         ReadWritePaths = [
           endoreg-service-user-home
           envDataDir

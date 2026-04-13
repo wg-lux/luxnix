@@ -242,6 +242,7 @@ services.luxnix.lxAnnotateLocal = {
     commands = {
       fileWatcher = "$LX_ANNOTATE_WHEEL_VENV/bin/python -m django start_filewatcher --settings=lx_annotate.settings.settings_prod";
       exportFrames = "export-frames";
+      celeryWorker = "$LX_ANNOTATE_WHEEL_VENV/bin/celery -A lx_annotate.celery:app worker --loglevel=INFO";
     };
     encryptedDataDir = "/var/lib/lx-annotate/secure_data";
 
@@ -275,8 +276,9 @@ luxnix.vault = {
 
 Notes:
 
-- In wheel mode, `runtime.commands.fileWatcher` and `runtime.commands.exportFrames`
-  are wheel-entrypoint commands, not repo-local `manage.py` invocations.
+- In wheel mode, `runtime.commands.fileWatcher`, `runtime.commands.exportFrames`,
+  and `runtime.commands.celeryWorker` are wheel-entrypoint commands, not
+  repo-local `manage.py` invocations.
 - `runtime.encryptedDataDir` remains the canonical protected root. Paths under
   the service-user home are access paths only unless the runtime contract is
   intentionally redesigned.
