@@ -144,17 +144,37 @@ ssh root@178.104.136.182 systemctl status openvpn-aglnet.service
 
 s-01 still runs the VPN server. All clients remain connected to s-01.
 
-### Step 2 — Test h-01 VPN from a machine with non-VPN access
+### Step 2 — Test h-01 VPN
+
+The NixOS OpenVPN config lives in the Nix store, not at `/etc/openvpn/aglnet.conf`.
+The active path is shown by `systemctl cat openvpn-aglnet.service`.
+
+First verify h-01's VPN port is open (no VPN disruption needed):
+```bash
+nc -zv 178.104.136.182 1194   # should say: succeeded
+```
+
+Full handshake test — this machine's existing VPN uses the same `172.16.255.0/24`
+subnet, so stop it first to avoid a routing conflict:
 
 ```bash
-# On a machine reachable without VPN (local workstation or laptop):
-sudo openvpn --config /etc/openvpn/aglnet.conf \
+# Get the Nix store config path
+VPN_CONF=$(systemctl cat openvpn-aglnet.service | grep -oP '(?<=--config ).*')
+
+# Stop s-01 VPN, test h-01, then restore
+sudo systemctl stop openvpn-aglnet.service
+
+sudo openvpn --config "$VPN_CONF" \
   --remote 178.104.136.182 1194 \
+  --dev tun-test \
   --daemon test-h01
 
-ping 172.16.255.1
-curl -sk https://172.16.255.1:8443/realms/master | jq .realm
-sudo killall openvpn
+sleep 5
+ping -c3 172.16.255.1
+curl -sk https://172.16.255.1:8443/realms/master | python3 -c "import sys,json; print(json.load(sys.stdin).get('realm'))"
+
+sudo kill $(pgrep -a openvpn | grep test-h01 | awk '{print $1}')
+sudo systemctl start openvpn-aglnet.service
 ```
 
 Do not proceed to Step 3 unless this succeeds cleanly.
@@ -203,14 +223,24 @@ All required secrets are staged. Verify before running:
 ls ~/.lxv/deploy/h-01/ | grep -E "ssl_cert|ssl_key|keycloak|admin_password"
 ```
 
-### ⚠️ Set Keycloak initial admin password before first deploy
+### ✅ Keycloak initial admin password — already handled
 
-`keycloakHost.adminInitialPassword` defaults to `"admin"`. Override it in
-`ansible/inventory/host_vars/h-01.yml` before the first deploy:
+The bootstrap admin password is managed via the secrets stick and vault pipeline
+(not `adminInitialPassword` in host_vars, which would land in the Nix store).
 
-```yaml
-host_roles:
-  keycloakHost.adminInitialPassword: "{{ vault_keycloak_admin_password }}"
+Already completed:
+1. `devenv tasks run secrets:stage-keycloak-admin` — generated password on stick,
+   staged `SCRT_roles_system_password_keycloak_host_admin_initial_password` for h-01
+2. `ansible-playbook ansible/playbooks/deploy_secrets.yml --limit h-01` — deployed it
+3. On boot, `keycloak-prepare-admin-env.service` reads the vault file and writes
+   `/run/keycloak-admin-env` — password never enters the Nix store
+
+No action needed here. If the bootstrap admin needs to be re-staged:
+```bash
+devenv tasks run secrets:stage-keycloak-admin
+ansible-playbook ansible/playbooks/deploy_secrets.yml --limit h-01
+ssh -i ~/.ssh/ssh-hetzner-main_openssh admin@h-01 \
+  'sudo systemctl restart keycloak-prepare-admin-env keycloak'
 ```
 
 ### Deploy + data migration (automated)

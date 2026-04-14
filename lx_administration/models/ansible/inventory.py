@@ -43,7 +43,6 @@ class AnsibleInventoryHost(BaseModel):
     extra_user_names: List[str] = [
         "dev"
     ]  # ["dev", "maintenance", "root", "center-user"]
-    subnet: Optional[str] = "172.16.255."
     vars: Dict[str, Union[str, Dict, List[str]]] = {}
     files: List[str] = []
     facts: Optional[AnsibleFactsModel] = None
@@ -72,20 +71,16 @@ class AnsibleInventoryHost(BaseModel):
         if not self.ansible_host:
             raise ValueError("ansible_host is required")
 
-        if not self.subnet:
-            raise ValueError("subnet is required")
-
         self.extra_user_names = self.get_extra_user_names()
 
         # make sure "all" is in ansible_group_names and is at first index, if not add it
         if "all" not in self.ansible_group_names:
             self.ansible_group_names.insert(0, "all")
 
-        # check if ansible_host is in subnet
-        if not self.ansible_host.startswith(self.subnet):
-            raise ValueError(
-                f"ansible_host {self.ansible_host} is not in subnet {self.subnet}"
-            )
+        # Note: ansible_host is the SSH-reachability address and does not have to
+        # match the VPN subnet.  Hetzner hosts (and any future cloud hosts) use
+        # public IPs.  The NixOS-config VPN IP comes from generic-settings.vpnIp
+        # in host_vars, not from ansible_host.
 
         extra_secret_names_val: Any = self.vars.get("extra_secret_names", [])
         if isinstance(extra_secret_names_val, list) and all(
@@ -209,12 +204,12 @@ class AnsibleInventory(BaseModel):
     # Create Class Method to load inventory from file
     @classmethod
     def load_from_hosts_ini(cls, file: Path, subnet: str = "172.16.255."):
+        # subnet param kept for backwards-compatibility but is no longer used for
+        # validation — ansible_host is the SSH address and may be a public IP.
         logger = get_logger("AnsibleInventory-load_from_file", reset=True)
         file = file.resolve()
         ansible_inventory_dir = file.parent
         ansible_root_dir = ansible_inventory_dir.parent
-        # assert subnet is ip address with missing last octet
-        assert subnet.endswith(".") and len(subnet.split(".")) == 4
         # Initialize temporary dict to read inventory
         inventory = cls(file=file.as_posix())
         inventory.load_host_vars(ansible_inventory_dir=ansible_inventory_dir)
