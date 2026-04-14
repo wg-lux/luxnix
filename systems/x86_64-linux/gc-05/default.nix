@@ -33,6 +33,7 @@
     endoreg-client.paths.storagePersistingIsExternalDrive = true;
     endoreg-client.paths.storagePersistingMountPoint = "/mnt/endoreg-client-storage";
     endoreg-client.repository.branch = "container";
+    endoreg-client.defaultCenterKey = "rbk_stuttgart";
     nextcloudClient.enable = true;
     postgres.default.enable = true;
     ssh-access.dev-01.enable = true;
