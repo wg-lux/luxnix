@@ -39,6 +39,12 @@
     description = "Updating the documentation overview in TABLE OF CONTENTS";
     exec =  "${pkgs.uv}/bin/uv run python lib/toc-generator/generate-toc.py";
   };
+
+  "docs:systems" = {
+    description = "Regenerate docs/systems.md from autoconf/merged_vars and systems/ configs";
+    exec = "${pkgs.uv}/bin/uv run python scripts/generate-systems-doc.py";
+    after = [ "autoconf:build-nix-system-configs" ];
+  };
   "endoreg-db:init" = {
     description = "Initializing endoreg-db module";
     exec = "./lib/endoreg-db/init.sh";

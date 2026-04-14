@@ -1,3 +1,4 @@
+---
 keycloak_host_password_filename: "SCRT_roles_system_password_keycloak_host_password"
 keycloak_host_pw_src: "{{ lx_vault_dir_src }}/deploy/{{ inventory_hostname }}/{{ keycloak_host_password_filename }}"
 

@@ -1,3 +1,4 @@
+---
 - name: Read admin password
   ansible.builtin.slurp:
     src: "{{ lx_vault_dir }}/{{ admin_password_filename }}"

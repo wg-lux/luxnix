@@ -60,13 +60,20 @@ sudo systemctl status openvpn-aglnet.service
 
 ## Autoconf / generated configs
 
+> **Note:** `bnsc` and other custom commands are defined inside the devenv environment.
+> You must either be in an active devenv shell (`devenv shell`) or prefix with `devenv shell --`:
+> ```bash
+> devenv shell -- bnsc
+> ```
+> If the devenv shell is already active (e.g. via direnv), run commands directly.
+
 Canonical:
 
 ```bash
 devenv tasks run autoconf:finished
 ```
 
-Alias:
+Alias (must be run inside devenv shell):
 
 ```bash
 bnsc

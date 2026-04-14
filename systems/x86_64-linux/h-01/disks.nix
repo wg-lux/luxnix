@@ -1,6 +1,6 @@
 let
   # --- User-configurable Disk Identifiers ---
-  systemDiskId = "/dev/sda1";
+  systemDiskId = "/dev/sda";
   swapSize = "2G"; # Adjusted swap size
 in
 {

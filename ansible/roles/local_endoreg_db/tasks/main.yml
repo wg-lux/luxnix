@@ -1,3 +1,4 @@
+---
 - name: Clone or update the wg-lux/endoreg-db-api repository
   ansible.builtin.git:
     repo: "{{ endoreg_db_api_repo }}"

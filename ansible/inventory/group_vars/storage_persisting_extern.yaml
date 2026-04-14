@@ -1,3 +1,4 @@
+---
 group_roles:
   endoreg_client.paths.storagePersistingEnable: "true"
   endoreg_client.paths.storagePersistingMountPoint: '"/mnt/endoreg-client-storage"'

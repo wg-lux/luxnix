@@ -1,3 +1,4 @@
+---
 nginx_host_password_filename: "SCRT_roles_system_password_nginx_host_password"
 nginx_host_ssl_cert_src: "/home/admin/dev/luxnix/secrets/ssl/ssl_cert"
 nginx_host_ssl_key_src: "/home/admin/dev/luxnix/secrets/ssl/ssl_key"

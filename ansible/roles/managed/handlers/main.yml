@@ -1,3 +1,4 @@
+---
 - name: Run nho
   ansible.builtin.expect:
     command: "nh os switch"

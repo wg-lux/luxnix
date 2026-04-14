@@ -3,7 +3,6 @@
   lib,
   ...
 }:
-#CHANGEME 
 with lib;
 with lib.luxnix; let
   cfg = config.services.ssh;
@@ -29,3 +28,40 @@ in {
     };
   };
 }
+
+
+
+# matchBlocks = {
+#         enableDefaultConfig = false;
+#         # 178.104.136.182
+#         "hetzner_init" = {
+#           hostname = "178.104.136.182";
+#           user = "root";
+#           identityFile = "~/.ssh/ssh-hetzner-main_openssh";
+#           identitiesOnly = true;
+#           checkHostIP = false;
+#           extraOptions = {
+#             "StrictHostKeyChecking" = "no";
+#             "UserKnownHostsFile" = "/dev/null";
+#           };
+#         };
+#         "hetzner-admin" = {
+#           hostname = "178.104.136.182";
+#           user = "admin";
+#           identityFile = "~/.ssh/ssh-hetzner-main_openssh";
+#           identitiesOnly = true;
+#         };
+#         "*" = {
+#           enable = true;
+#           forwardAgent = false;
+#           userKnownHostsFile = "~/.ssh/known_hosts";
+#           addKeysToAgent = "yes";
+#           compression = false;
+#           serverAliveInterval = 0;
+#           serverAliveCountMax = 3;
+#           hashKnownHosts = false;
+#           controlMaster = "no";
+#           controlPath = "~/.ssh/master-%r@%n:%p";
+#           controlPersist = "no";
+#         };
+#       }

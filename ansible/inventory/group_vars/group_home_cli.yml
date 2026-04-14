@@ -1,3 +1,4 @@
+---
 group_home_cli:
   cli.programs.git.enable: true
   cli.programs.git.allowedSigners: ""

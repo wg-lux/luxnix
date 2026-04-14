@@ -12,7 +12,7 @@ let
     nixfmt
     libglvnd
     glib
-    xorg.libxcb
+    libxcb
     zlib
   ];
 

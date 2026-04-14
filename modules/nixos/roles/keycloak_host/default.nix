@@ -4,7 +4,7 @@
   pkgs,
   ...
 }:
-with lib; 
+with lib;
 with lib.luxnix; let
 
   sensitiveServicesGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
@@ -12,9 +12,9 @@ with lib.luxnix; let
     if config.users.groups ? sslCert
     then config.users.groups.sslCert.name
     else sensitiveServicesGroupName;
-  
-  # Use the host's VPN IP since keycloak.vpnIp is not defined
-  vpnIp = config.luxnix.generic-settings.network.hosts.s-02.ip-vpn or "127.0.0.1";
+
+  # Use the host's own VPN IP so keycloak can run on any host, not just s-02
+  vpnIp = config.luxnix.generic-settings.vpnIp;
   cfg = config.roles.keycloakHost;
   conf = config.luxnix.generic-settings.network.keycloak;
   sslCertFile = config.luxnix.generic-settings.sslCertificatePath;
@@ -66,7 +66,7 @@ with lib.luxnix; let
   # Script to set up keycloak database user password
   setupKeycloakDbUser = pkgs.writeShellScript "setup-keycloak-db-user" ''
     set -euo pipefail
-    
+
     # Wait for PostgreSQL to be ready
     echo "Waiting for PostgreSQL to be ready..."
     for i in {1..30}; do
@@ -81,23 +81,23 @@ with lib.luxnix; let
       echo "Attempt $i: PostgreSQL not ready, waiting 2 seconds..."
       sleep 2
     done
-    
+
     # Ensure the password file exists (managed-secrets should have created it)
     if [ ! -f /etc/secrets/vault/${cfg.dbPasswordfile} ]; then
       echo "ERROR: Password file /etc/secrets/vault/${cfg.dbPasswordfile} not found"
       echo "Make sure managed-secrets service has run successfully"
       exit 1
     fi
-    
+
     # Set the password in PostgreSQL safely using dollar-quoted strings
     echo "Setting password for user ${cfg.dbUsername}..."
-    
+
     PASSWORD=$(cat /etc/secrets/vault/${cfg.dbPasswordfile})
-    
+
     # Use dollar-quoted strings to safely handle any special characters
     ${config.services.postgresql.package}/bin/psql -U postgres -d postgres -c \
       "ALTER USER \"${cfg.dbUsername}\" WITH PASSWORD \$securepass\$''${PASSWORD}\$securepass\$;"
-      
+
     echo "Keycloak database user password configured successfully"
   '';
 
@@ -147,19 +147,19 @@ with lib.luxnix; let
       type = types.int;
       default = 600;
     };
-    
+
   };
-  
+
   config = mkIf cfg.enable {
     group.endoreg-service.enable = true; # enable endoreg-service group
     roles.managed-secrets.enable = true; # ensure managed secrets are enabled
     users.users = {
       keycloak = {
         group = "keycloak";
-        extraGroups = [ 
-          sslCertGroupName 
+        extraGroups = [
+          sslCertGroupName
           sensitiveServicesGroupName
-          "networkmanager"  
+          "networkmanager"
         ];
         uid = cfg.uid;
       };
@@ -176,7 +176,7 @@ with lib.luxnix; let
       {
         name = cfg.dbUsername;
         ensureDBOwnership = true;
-      }  
+      }
     ];
     services.postgresql.ensureDatabases = [ cfg.dbUsername ];
 
@@ -184,11 +184,11 @@ with lib.luxnix; let
     systemd.services.keycloak.serviceConfig = {
       User = "keycloak"; # hardcoded in keycloak nix package
       Group = "keycloak"; # hardcoded in keycloak nix package
-      SupplementaryGroups = [ 
+      SupplementaryGroups = [
         sensitiveServicesGroupName
         # Network Management
         "${sslCertGroupName}"
-        "networkmanager"  
+        "networkmanager"
       ];
     };
 
@@ -270,7 +270,7 @@ with lib.luxnix; let
       initialAdminPassword = cfg.adminInitialPassword;
       database = {
         createLocally = false;
-        username = cfg.dbUsername; 
+        username = cfg.dbUsername;
         # useSSL = false; #FIXME harden
         passwordFile = "${cfg.homeDir}/db-password";
         type = "postgresql";
@@ -281,16 +281,16 @@ with lib.luxnix; let
       };
       settings = {
         http-relative-path = "/";
-        http-host = vpnIp;  
+        http-host = vpnIp;
         http-port = 8080;
         https-port = conf.port;
         https-certificate-file = "${cfg.homeDir}/tls.crt";
         https-certificate-key-file = "${cfg.homeDir}/tls.key";
         hostname = "https://${conf.domain}";
         # hostname-admin = "https://${conf.adminDomain}"; #FIXME
-        hostname-port = conf.port;   
+        hostname-port = conf.port;
         # hostname-admin-port = conf.port; #FIXME
-        http-enabled = false;          
+        http-enabled = false;
         proxy-headers = "xforwarded";
         hostname-strict = false;
         hostname-strict-https = false;
@@ -305,7 +305,7 @@ with lib.luxnix; let
     networking.firewall.allowedTCPPorts = [ conf.port ];
     # allow port on tun0 #TODO
     # networking.firewall.interfaces.tun0.allowedTCPPorts = [ cfg.httpPort ]; #FIXME #TODO tun0 should be automatically inferred from defined vpn
-  
+
   };
 
 }

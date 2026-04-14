@@ -1,3 +1,4 @@
+---
 group_home_networking:
   networking.usePredictableInterfaceNames: false
   systemd.network.enable: true

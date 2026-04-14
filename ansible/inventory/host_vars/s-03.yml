@@ -3,9 +3,7 @@
 template_name: "main"
 
 host_roles: {}
-
 host_services: {}
-
 ansible_roles:
   - "ssl_cert"
   - "nextcloud_host"

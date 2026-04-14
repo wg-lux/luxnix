@@ -1,3 +1,4 @@
+---
 group_home_luxnix:
   luxnix.generic-settings.configurationPath: "dev/luxnix"
   luxnix.generic-settings.language: "english"

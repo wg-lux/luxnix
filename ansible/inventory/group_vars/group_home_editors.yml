@@ -1,2 +1,3 @@
+---
 group_home_editors:
   programs.nixvim.enable: true

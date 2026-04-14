@@ -31,6 +31,9 @@ in
       generateRegistryFromInputs = true;
       generateNixPathFromInputs = true;
       linkInputs = true;
+      extraOptions = ''
+        !include /etc/nix/access-tokens.conf
+      '';
     };
   };
 }

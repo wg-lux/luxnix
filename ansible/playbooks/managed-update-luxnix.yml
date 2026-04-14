@@ -1,3 +1,4 @@
+---
 - name: Update Nix
   hosts: managed
   become: true

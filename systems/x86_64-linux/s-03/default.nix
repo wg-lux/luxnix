@@ -17,7 +17,7 @@
     settings.mutable = false;
   };
 
-  roles = { 
+  roles = {
     aglnet.client.enable = true;
     base-server.enable = true;
     common.enable = true;
@@ -27,7 +27,7 @@
     nextcloudHost.enable = true;
     nextcloudHost.maxUploadSize = "10G";
     nextcloudHost.minioCredentialsFilePath = "/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_minio_credentials";
-    nextcloudHost.package = pkgs.nextcloud31;
+    nextcloudHost.package = pkgs.nextcloud33;
     nextcloudHost.passwordFilePath = "/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_password";
     postgres.default.enable = false;
     };
@@ -108,6 +108,11 @@ generic-settings.network.hosts.gs-02.network-cluster = "L2";
 
 generic-settings.network.hosts.gs-02.syncthing-id = "XSAKTSB-36K6OY4-NEPJ2K4-WHGZF2D-EMDOMFQ-Q5DEVO6-2BYD2MS-JWPFVQ4";
 
+generic-settings.network.hosts.h-01.domains = ["h-01.intern"];
+generic-settings.network.hosts.h-01.ip-vpn = "172.16.255.1";
+
+generic-settings.network.hosts.h-01.network-cluster = "hetzner";
+
 generic-settings.network.hosts.s-01.domains = ["s-01.intern"];
 generic-settings.network.hosts.s-01.ip-local = "192.168.179.1";
 
@@ -152,11 +157,11 @@ generic-settings.network.psqlMain.port = 5432;
 
 generic-settings.network.psqlTest.domain = "psql-test.endo-reg.net";
 
-generic-settings.network.serviceHosts.keycloak = "s-02";
+generic-settings.network.serviceHosts.keycloak = "h-01";
 
 generic-settings.network.serviceHosts.nextcloud = "s-03";
 
-generic-settings.network.serviceHosts.nginx = "s-02";
+generic-settings.network.serviceHosts.nginx = "h-01";
 
 generic-settings.network.serviceHosts.psqlMain = "gs-02";
 

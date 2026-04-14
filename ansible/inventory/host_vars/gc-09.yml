@@ -8,9 +8,7 @@ host_roles:
   custom_packages.baseDevelopment: "true"
 
 host_services: {}
-
 extra_secret_names: []
-
 host_luxnix:
   generic_settings.configurationPathRelative: '"luxnix"'
   generic_settings.configurationPath: 'lib.mkForce "/home/admin/luxnix"'
@@ -36,7 +34,6 @@ host_luxnix:
   generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
   generic_settings.linux.kernelParams: []
   generic_settings.linux.kernelModulesBlacklist: []
-
   # GPU Configuration (New Unified System)
   generic_settings.gpu.nvidia.enable: "true"
   generic_settings.gpu.nvidia.prime.enable: "true"

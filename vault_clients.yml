@@ -1,49 +1,50 @@
+---
 client_keys:
   file: ./client_keys.yml
   keys:
     group_base_server:
-      file: null
+      file:
       name: group_base_server
-      raw: null
+      raw:
     group_managed:
-      file: null
+      file:
       name: group_managed
-      raw: null
+      raw:
     group_test_group:
-      file: null
+      file:
       name: group_test_group
-      raw: null
+      raw:
     host_s-03:
-      file: null
+      file:
       name: host_s-03
-      raw: null
+      raw:
 clients:
   group_base_server:
     key:
-      file: null
+      file:
       name: group_base_server
-      raw: null
+      raw:
     name: group_base_server
-    vault_group: null
+    vault_group:
   group_managed:
     key:
-      file: null
+      file:
       name: group_managed
-      raw: null
+      raw:
     name: group_managed
-    vault_group: null
+    vault_group:
   group_test_group:
     key:
-      file: null
+      file:
       name: group_test_group
-      raw: null
+      raw:
     name: group_test_group
-    vault_group: null
+    vault_group:
   host_s-03:
     key:
-      file: null
+      file:
       name: host_s-03
-      raw: null
+      raw:
     name: host_s-03
-    vault_group: null
+    vault_group:
 file: ./vault_clients.yml

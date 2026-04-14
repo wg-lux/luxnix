@@ -13,16 +13,17 @@
   ];
 
   packages = with pkgs; [
-    cudaPackages.cuda_nvcc
-    # python313Full
+    # cudaPackages.cuda_nvcc  # moved to host configs - too heavy for dev shell
     jq
     age
     openssh
+    git
     stdenv.cc.cc
     tesseract
     sops
     openssl
     black
     nixpkgs-fmt
+    pre-commit
   ];
 }

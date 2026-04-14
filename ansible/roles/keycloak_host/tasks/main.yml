@@ -1,3 +1,4 @@
+---
 - name: Deploy keycloak role password
   ansible.builtin.copy:
     src: "{{ keycloak_host_pw_src }}"

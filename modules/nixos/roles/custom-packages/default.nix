@@ -7,7 +7,7 @@ with lib;
 with lib.luxnix; let
   cfg = config.roles.custom-packages;
 
-  # Check if both podman and nvidia are enabled  
+  # Check if both podman and nvidia are enabled
   podmanEnabled = config.services.luxnix.podman.enable or config.services.virtualisation.podman.enable or config.luxnix.generic-settings.virtualization.enable or false;
   nvidiaEnabled = (config.luxnix.nvidia-default.enable or false) || (config.luxnix.nvidia-prime.enable or false) || (config.luxnix.generic-settings.gpu.nvidia.enable or false);
 
@@ -133,6 +133,7 @@ with lib.luxnix; let
     pkgs.iftop
     pkgs.bmon
     pkgs.nload
+    pkgs.gh
   ]
   ++ (if cfg.kdePlasma then kdePlasma else [ ])
   ++ (if cfg.baseDevelopment then baseDevelopment else [ ])

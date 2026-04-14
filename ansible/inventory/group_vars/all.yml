@@ -21,7 +21,7 @@ admin_vpn_ip: "172.16.255.106"
 postgres_host_test_ip: "172.16.255.13"
 
 ansible_groups: []
-  # - "common"
+# - "common"
 group_roles:
   custom_packages.enable: "true"
   custom_packages.cloud: "true"
@@ -39,6 +39,12 @@ group_luxnix:
     - "gc-06.intern"
   generic_settings.network.hosts.gc_06.syncthing_id: '"MJU2YAF-4IXFRSS-I3JHU2Z-6LUSSTN-L6BR5HS-PLS6ACJ-4E2X2UQ-5AVBUAQ"'
   # generic_settings.network.hosts.gc_06.network_cluster: '"gc-06"'
+
+  # h-01 (Hetzner — VPN server, takes tun0=172.16.255.1 as OpenVPN server)
+  generic_settings.network.hosts.h_01.ip_vpn: '"172.16.255.1"'
+  generic_settings.network.hosts.h_01.domains:
+    - "h-01.intern"
+  generic_settings.network.hosts.h_01.network_cluster: '"hetzner"'
 
   # s-01
   generic_settings.network.hosts.s_01.ip_local: '"192.168.179.1"'
@@ -138,7 +144,6 @@ group_luxnix:
     - "gc-09.intern"
     - "lx-annotate.local"
 
-
   # gc-10
   generic_settings.network.hosts.gc_10.ip_vpn: '"172.16.255.110"'
   generic_settings.network.hosts.gc_10.domains:
@@ -148,13 +153,12 @@ group_luxnix:
   # generic_settings.linux.kernelParams: ["mem_sleep_default=deep"]
   generic_settings.network.syncthing.enable: "true"
   generic_settings.network.syncthing.extraFlags: []
-
   # Service Hosts
-  generic_settings.network.serviceHosts.keycloak: '"s-02"'
+  generic_settings.network.serviceHosts.keycloak: '"h-01"'
   generic_settings.network.serviceHosts.nextcloud: '"s-03"'
   generic_settings.network.serviceHosts.psqlMain: '"gs-02"'
   generic_settings.network.serviceHosts.psqlTest: '"s-04"'
-  generic_settings.network.serviceHosts.nginx: '"s-02"'
+  generic_settings.network.serviceHosts.nginx: '"h-01"'
 
   # TODO Remove REferences to this in rest od the code in favour of above stuff
   # generic_settings.network.nginx.vpnIp: '"172.16.255.12"'
@@ -210,7 +214,6 @@ ansible_user: admin
 ansible_become_user: admin
 ansible_ssh_private_key_file: ~/.ssh/id_ed25519
 ansible_python_interpreter: "{{ luxnix_dest }}/.devenv/state/venv/bin/python"
-
 
 authentication:
   dev_01:

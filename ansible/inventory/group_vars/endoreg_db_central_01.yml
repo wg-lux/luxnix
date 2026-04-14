@@ -1,3 +1,4 @@
+---
 group_roles:
   endoreg_db_central_01.enable: "true"
   endoreg_db_central_01.centralNodes:

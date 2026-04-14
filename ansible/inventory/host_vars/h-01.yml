@@ -1,0 +1,42 @@
+# inventory/host_vars/h-01.yml
+---
+template_name: "main"
+
+host_roles:
+  aglnet.client.enable: "lib.mkForce false"
+  aglnet.host.enable: "true"
+  keycloakHost.enable: "true"
+  nginxHost.enable: "true"
+  nginxHost.keycloak.enable: "true"
+  postgres.main.enable: "true"
+
+host_services: {}
+host_luxnix:
+  generic_settings.hostPlatform: '"x86_64-linux"'
+  generic_settings.systemStateVersion: '"23.11"'
+  generic_settings.linux.cpuMicrocode: '"amd"'
+  generic_settings.linux.kernelModules:
+    - "kvm-amd"
+  generic_settings.linux.initrd.supportedFilesystems:
+    - "nfs"
+  generic_settings.linux.initrd.kernelModules:
+    - "nfs"
+  generic_settings.linux.initrd.availableKernelModules:
+    - "virtio_pci"
+    - "virtio_scsi"
+    - "xhci_pci"
+    - "uas"
+    - "ahci"
+    - "usbhid"
+    - "nvme"
+    - "usb_storage"
+    - "sd_mod"
+    - "sr_mod"
+    - "ext4"
+  generic_settings.linux.supportedFilesystems:
+    - "btrfs"
+  generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+  generic_settings.linux.kernelParams: []
+  generic_settings.linux.kernelModulesBlacklist: []
+  # h-01 is the OpenVPN server; tun0 gets 172.16.255.1 (standard subnet topology)
+  generic_settings.vpnIp: '"172.16.255.1"'

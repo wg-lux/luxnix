@@ -1,3 +1,4 @@
+---
 - name: Set role managed for managed hosts
   hosts: managed
   become: true

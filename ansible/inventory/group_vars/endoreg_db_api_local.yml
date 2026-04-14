@@ -1,3 +1,4 @@
+---
 group_roles:
   endoreg_client.enable: "true"
   endoreg_client.dbApiLocal: "true"
@@ -21,5 +22,5 @@ group_luxnix:
   generic_settings.virtualization.podman: "{}"
   generic_settings.virtualization.kvm: "{}"
   generic_settings.virtualization.vfio: "{}"
-  generic_settings.virtualization.supportedArchitectures: '[]'
-  generic_settings.virtualization.userGroups: '[]'
+  generic_settings.virtualization.supportedArchitectures: "[]"
+  generic_settings.virtualization.userGroups: "[]"

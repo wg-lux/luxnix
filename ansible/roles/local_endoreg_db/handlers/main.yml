@@ -1,3 +1,4 @@
+---
 - name: Initialize endoreg-db api
   ansible.builtin.shell: |
     direnv allow

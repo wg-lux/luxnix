@@ -1,3 +1,4 @@
+---
 traefik_host_roles:
   traefikHost.enable: "true"
   traefikHost.dashboard: "true"

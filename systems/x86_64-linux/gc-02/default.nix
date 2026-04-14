@@ -17,7 +17,7 @@
     settings.mutable = false;
   };
 
-  roles = { 
+  roles = {
     aglnet.client.enable = true;
     common.enable = true;
     custom-packages.cloud = true;
@@ -127,6 +127,11 @@ generic-settings.network.hosts.gs-02.network-cluster = "L2";
 
 generic-settings.network.hosts.gs-02.syncthing-id = "XSAKTSB-36K6OY4-NEPJ2K4-WHGZF2D-EMDOMFQ-Q5DEVO6-2BYD2MS-JWPFVQ4";
 
+generic-settings.network.hosts.h-01.domains = ["h-01.intern"];
+generic-settings.network.hosts.h-01.ip-vpn = "172.16.255.1";
+
+generic-settings.network.hosts.h-01.network-cluster = "hetzner";
+
 generic-settings.network.hosts.s-01.domains = ["s-01.intern"];
 generic-settings.network.hosts.s-01.ip-local = "192.168.179.1";
 
@@ -171,11 +176,11 @@ generic-settings.network.psqlMain.port = 5432;
 
 generic-settings.network.psqlTest.domain = "psql-test.endo-reg.net";
 
-generic-settings.network.serviceHosts.keycloak = "s-02";
+generic-settings.network.serviceHosts.keycloak = "h-01";
 
 generic-settings.network.serviceHosts.nextcloud = "s-03";
 
-generic-settings.network.serviceHosts.nginx = "s-02";
+generic-settings.network.serviceHosts.nginx = "h-01";
 
 generic-settings.network.serviceHosts.psqlMain = "gs-02";
 
