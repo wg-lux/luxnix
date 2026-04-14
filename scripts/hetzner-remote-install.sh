@@ -34,7 +34,7 @@ Examples:
 	./scripts/hetzner-remote-install.sh --refresh-host-key
 	./scripts/hetzner-remote-install.sh root@178.104.136.182 ~/.ssh/ssh-hetzner-main_openssh --refresh-host-key
 	REFRESH_HOST_KEY=true ./scripts/hetzner-remote-install.sh
-	HOST_PROFILE=h-01 TARGET_HOST=root@1.2.3.4 KEY_FILE=~/.ssh/ssh-hetzner-main_openssh ./scripts/hetzner-remote-install.sh
+	HOST_PROFILE=h-01 TARGET_HOST=root@1.2.3.4 KEY_FILE=~/.ssh/ssh-hetzner-main_openssh REFRESH_HOST_KEY=true ./scripts/hetzner-remote-install.sh
 EOF
 }
 

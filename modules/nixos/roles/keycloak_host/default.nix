@@ -111,9 +111,31 @@ with lib.luxnix; let
     };
 
     adminInitialPassword = mkOption {
-      type = types.str;
-      default = "admin";
-      description = "Admin initial password for keycloak";
+      type = types.nullOr types.str;
+      default = null;
+      description = ''
+        Deprecated: hardcodes the password in the Nix store (world-readable).
+        Use adminInitialPasswordFile instead.
+        Set to a string only for testing; leave null in production.
+      '';
+    };
+
+    adminInitialPasswordFile = mkOption {
+      type = types.nullOr types.str;
+      default = "/etc/secrets/vault/SCRT_roles_system_password_keycloak_host_admin_initial_password";
+      description = ''
+        Path to a file containing the raw initial admin password for Keycloak.
+        The file is read at runtime by keycloak-prepare-admin-env.service and
+        written to /run/keycloak-admin-env (mode 0600, root-owned).
+        Keycloak picks it up via EnvironmentFile — the value never touches the
+        Nix store.  Stage the file with:
+          lx-secrets vault stage-keycloak-admin --hostname h-01
+        then deploy with:
+          ansible-playbook ansible/playbooks/deploy_secrets.yml --limit h-01
+        Only used for the very first Keycloak bootstrap; afterwards Keycloak
+        manages admin credentials in its own database and the env file is
+        simply absent on reboot.
+      '';
     };
 
     homeDir = mkOption {
@@ -262,11 +284,49 @@ with lib.luxnix; let
       };
     };
 
+    # Prepare KC_BOOTSTRAP_ADMIN_PASSWORD from vault at runtime — password never
+    # enters the Nix store.  The service runs as root to read the vault file
+    # (owner admin, mode 0600) and writes an EnvironmentFile readable only by root.
+    # systemd reads EnvironmentFile as root before dropping to the service user.
+    # On subsequent boots the vault file is still present and the env file is
+    # recreated, but Keycloak ignores KC_BOOTSTRAP_ADMIN_* after first run.
+    systemd.services.keycloak-prepare-admin-env = lib.mkIf (cfg.adminInitialPasswordFile != null) {
+      description = "Write Keycloak bootstrap admin credentials from vault";
+      before = [ "keycloak.service" ];
+      requiredBy = [ "keycloak.service" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+      };
+      script = ''
+        vault_file="${cfg.adminInitialPasswordFile}"
+        env_file="/run/keycloak-admin-env"
+        if [ -f "$vault_file" ]; then
+          password="$(cat "$vault_file" | tr -d '\n')"
+          printf 'KC_BOOTSTRAP_ADMIN_USERNAME=%s\nKC_BOOTSTRAP_ADMIN_PASSWORD=%s\n' \
+            "${cfg.adminUsername}" "$password" > "$env_file"
+          chmod 0600 "$env_file"
+        else
+          echo "[keycloak-prepare-admin-env] vault file not found: $vault_file" >&2
+          echo "  Stage it with: devenv tasks run secrets:stage-keycloak-admin" >&2
+          echo "  Then deploy:   ansible-playbook ansible/playbooks/deploy_secrets.yml --limit h-01" >&2
+          exit 1
+        fi
+      '';
+    };
+
     systemd.services.keycloak.wants = [ "openvpn-aglnet.service" "keycloak-db-setup.service" "keycloak-prepare-files.service" ];
     systemd.services.keycloak.after = [ "openvpn-aglnet.service" "keycloak-db-setup.service" "keycloak-prepare-files.service" ];
 
+    # Load admin env from runtime file (- prefix = optional, silently skipped if absent)
+    systemd.services.keycloak.serviceConfig.EnvironmentFile = lib.mkIf (cfg.adminInitialPasswordFile != null)
+      [ "-/run/keycloak-admin-env" ];
+
     services.keycloak = {
       enable = true;
+      # Keep null so upstream module does NOT embed KC_BOOTSTRAP_ADMIN_PASSWORD
+      # in the unit environment (which would land in the Nix store).
+      # The password is injected via keycloak-prepare-admin-env.service instead.
       initialAdminPassword = cfg.adminInitialPassword;
       database = {
         createLocally = false;

@@ -61,6 +61,15 @@
     exec = "${pkgs.uv}/bin/uv run python scripts/lx-secrets.py vault stage-ssl-group endo-reg.net ssl_cert";
   };
 
+  "secrets:stage-keycloak-admin" = {
+    description = "Generate keycloak_admin password on stick and stage it for h-01 (vault-encrypted)";
+    exec = ''
+      set -euo pipefail
+      ${pkgs.uv}/bin/uv run python scripts/lx-secrets.py user set-password --username keycloak_admin --generate
+      ${pkgs.uv}/bin/uv run python scripts/lx-secrets.py vault stage-keycloak-admin --hostname h-01
+    '';
+  };
+
   "docs:toc-generator" = {
     description = "Updating the documentation overview in TABLE OF CONTENTS";
     exec =  "${pkgs.uv}/bin/uv run python lib/toc-generator/generate-toc.py";

@@ -1,4 +1,8 @@
 ---
+# Hetzner servers are reachable via static public IP (pre-VPN and as fallback).
+# Use the dedicated Hetzner RSA key for SSH — not the VPN ed25519 admin key.
+ansible_ssh_private_key_file: ~/.ssh/ssh-hetzner-main_openssh
+
 group_roles:
   hetzner.enable: "true"
 group_services: {}

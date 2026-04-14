@@ -13,16 +13,18 @@ Two stick modes:
            Syncs only public/hashed data to the inventory (no plaintext).
 
 Usage:
-    uv run python scripts/lx-secrets.py <command> <subcommand> [options]
+    lx-secrets <command> <subcommand> [options]
 
 Commands:
     stick check / init / backup
 
     identity list
-    identity gen-user NAME  Generate a user SSH key-pair on the stick
-    identity gen-host NAME  Generate a host SSH key-pair on the stick
-    identity sync-inventory Write pubkeys + password hashes to stick_pubkeys.yml
-                            (safe to commit; no plaintext passwords)
+    identity gen-user NAME       Generate a user SSH key-pair on the stick
+    identity gen-host NAME       Generate a host SSH key-pair on the stick
+    identity import-keypair      Import an existing user key pair (synced to inventory)
+    identity import-infra-key    Import an infra key (e.g. Hetzner bootstrap; NOT synced)
+    identity sync-inventory      Write pubkeys + password hashes to stick_pubkeys.yml
+                                 (safe to commit; no plaintext passwords)
 
     user set-password       Set or generate a password for a user
     user show-hash          Print the stored password hash (safe)
@@ -38,10 +40,11 @@ Commands:
 
     cert list / import-ssl / import-openvpn / deploy-ssl / deploy-openvpn
 
-    vault stage-ssl         Stage SSL cert into ~/.lxv/deploy/<hostname>/
-    vault stage-ssl-group   Stage SSL cert for all hosts in an inventory group
-    vault stage-passwords   Write admin-passwords.yml from stick for vault bootstrap
-    vault status            Show staged files per hostname
+    vault stage-ssl              Stage SSL cert into ~/.lxv/deploy/<hostname>/
+    vault stage-ssl-group        Stage SSL cert for all hosts in an inventory group
+    vault stage-keycloak-admin   Stage keycloak_admin bootstrap password for a host
+    vault stage-passwords        Write admin-passwords.yml from stick for vault bootstrap
+    vault status                 Show staged files per hostname
 
 Stick directory layout (admin mode):
     <stick>/
@@ -53,6 +56,9 @@ Stick directory layout (admin mode):
     │   │       └── secrets/
     │   │           ├── password        # plaintext  (mode 0600, NEVER sync)
     │   │           └── password.hash   # sha512crypt (mode 0644, safe to sync)
+    │   ├── infra/
+    │   │   └── <name>/
+    │   │       └── id_<type>[.pub]     # Infra key (e.g. Hetzner bootstrap; NOT synced)
     │   └── hosts/
     │       └── <hostname>/ssh_host_ed25519_key[.pub]
     ├── certificates/
@@ -349,15 +355,15 @@ def cmd_stick_init(args) -> None:
     if mode == "user":
         print(f"Next steps:")
         print(f"  export {ENV_VAR}={stick}")
-        print(f"  uv run python scripts/lx-secrets.py identity gen-user {owner}")
-        print(f"  uv run python scripts/lx-secrets.py user set-password --generate")
-        print(f"  uv run python scripts/lx-secrets.py user sync --output my-pubkey-{owner}.yml")
+        print(f"  lx-secrets identity gen-user {owner}")
+        print(f"  lx-secrets user set-password --username {owner} --generate")
+        print(f"  lx-secrets user sync --output my-pubkey-{owner}.yml")
         print(f"  # Submit my-pubkey-{owner}.yml as a PR for the admin to import")
     else:
         print(f"Next steps:")
         print(f"  export {ENV_VAR}={stick}")
-        print(f"  uv run python scripts/lx-secrets.py identity gen-user admin")
-        print(f"  uv run python scripts/lx-secrets.py cert import-openvpn /etc/openvpn")
+        print(f"  lx-secrets identity gen-user admin")
+        print(f"  lx-secrets cert import-openvpn /etc/openvpn")
 
 
 def cmd_stick_backup(args) -> None:
@@ -605,6 +611,100 @@ def cmd_identity_import_keypair(args) -> None:
     print(f"  devenv tasks run autoconf:finished")
 
 
+def cmd_identity_import_infra_key(args) -> None:
+    """
+    Import an infrastructure SSH key (e.g. Hetzner bootstrap key) into the vault.
+
+    Stored under <stick>/identities/infra/<name>/id_<type>[.pub].
+    This path is intentionally separate from identities/users/ so that
+    sync-inventory does NOT push this key to stick_pubkeys.yml or any
+    machine's authorized_keys.
+
+    Use --deploy-path to install the private key at a custom local path
+    (e.g. ~/.ssh/ssh-hetzner-main_openssh) rather than ~/.ssh/id_<type>.
+    """
+    stick = require_stick(args)
+
+    name: str = args.name
+    priv_src = Path(args.private_key).expanduser()
+    pub_src_arg: Optional[str] = getattr(args, "public_key", None)
+    pub_src = Path(pub_src_arg).expanduser() if pub_src_arg else None
+    deploy_path_arg: Optional[str] = getattr(args, "deploy_path", None)
+
+    if not priv_src.exists():
+        print(f"[error] Private key not found: {priv_src}", file=sys.stderr)
+        sys.exit(1)
+
+    # Auto-detect public key if not given
+    if pub_src is None:
+        candidate = Path(str(priv_src) + ".pub")
+        if candidate.exists():
+            pub_src = candidate
+        else:
+            print(
+                f"[error] Public key not found. Pass --public <path> or place "
+                f"<private>.pub alongside the private key.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+    if not pub_src.exists():
+        print(f"[error] Public key not found: {pub_src}", file=sys.stderr)
+        sys.exit(1)
+
+    # Validate public key format
+    pubkey_text = pub_src.read_text().strip()
+    parts = pubkey_text.split()
+    if len(parts) < 2 or not parts[0].startswith("ssh-"):
+        print(f"[error] Invalid public key format in {pub_src}", file=sys.stderr)
+        sys.exit(1)
+    key_type = parts[0].replace("ssh-", "")  # ed25519, rsa, etc.
+
+    infra_dir = stick / "identities" / "infra" / name
+    priv_dest = infra_dir / f"id_{key_type}"
+    pub_dest = infra_dir / f"id_{key_type}.pub"
+
+    if priv_dest.exists() and not args.force:
+        print(
+            f"[error] Key already exists at {priv_dest}.\n"
+            f"  Use --force to overwrite.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    infra_dir.mkdir(parents=True, exist_ok=True)
+
+    _secure_copy(priv_src, priv_dest, stat.S_IRUSR | stat.S_IWUSR)
+    _secure_copy(
+        pub_src, pub_dest,
+        stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH,
+    )
+
+    print(f"[ok] Imported {key_type} infra key '{name}'")
+    print(f"     Private : {priv_dest}")
+    print(f"     Public  : {pub_dest}")
+    print(f"     Pubkey  : {pubkey_text[:80]}{'...' if len(pubkey_text) > 80 else ''}")
+
+    if deploy_path_arg:
+        local_priv = Path(deploy_path_arg).expanduser()
+        if local_priv.exists() and not args.force:
+            print(
+                f"[warn] {local_priv} already exists — skipping local deploy.\n"
+                f"  Use --force to overwrite."
+            )
+        else:
+            local_priv.parent.mkdir(parents=True, exist_ok=True)
+            _secure_copy(priv_dest, local_priv, stat.S_IRUSR | stat.S_IWUSR)
+            print(f"[ok] Deployed private key to {local_priv}")
+    else:
+        print(f"\nTo deploy the private key locally:")
+        print(f"  cp {priv_dest} ~/.ssh/id_{key_type}")
+        print(f"  chmod 600 ~/.ssh/id_{key_type}")
+
+    print(f"\nNote: this key is stored under identities/infra/ and is NOT synced")
+    print(f"to stick_pubkeys.yml or any machine's authorized_keys.")
+
+
 def cmd_identity_sync_inventory(args) -> None:
     """
     Write public keys AND password hashes from the stick to
@@ -651,7 +751,7 @@ def cmd_identity_sync_inventory(args) -> None:
         return
 
     output = (
-        "# AUTO-GENERATED by: uv run python scripts/lx-secrets.py identity sync-inventory\n"
+        "# AUTO-GENERATED by: lx-secrets identity sync-inventory\n"
         "# DO NOT EDIT — regenerate with: devenv tasks run secrets:sync-inventory\n"
         "---\n"
     )
@@ -740,7 +840,7 @@ def cmd_user_set_password(args) -> None:
     print(f"[ok] Password stored for '{username}'")
     print(f"     Hash (first 20 chars): {hash_val[:20]}…")
     print(f"\nSync to inventory:")
-    print(f"  uv run python scripts/lx-secrets.py identity sync-inventory")
+    print(f"  lx-secrets identity sync-inventory")
 
 
 def cmd_user_show_hash(args) -> None:
@@ -1252,6 +1352,84 @@ def cmd_vault_stage_passwords(args) -> None:
     print(f"  shred -u {out_file}")
 
 
+def cmd_vault_stage_keycloak_admin(args) -> None:
+    """
+    Read the 'keycloak_admin' password from the stick and stage it as a
+    vault-encrypted secret for the target host.
+
+    The staged file is:
+      ~/.lxv/deploy/<hostname>/SCRT_roles_system_password_keycloak_host_admin_initial_password
+
+    It is encrypted with ansible-vault using the host's PSK so it can be
+    deployed via deploy_secrets.yml just like any other vault secret.
+
+    The NixOS keycloakHost module reads this file at runtime via
+    keycloak-prepare-admin-env.service — the plaintext never enters the Nix
+    store.
+
+    Prerequisites:
+      1.  The 'keycloak_admin' user entry must exist on the stick:
+            lx-secrets user set-password keycloak_admin --generate
+      2.  The target host's PSK must exist at:
+            ~/.lxv/psk/<hostname>.psk
+    """
+    stick = require_stick(args)
+    _require_admin_stick(stick)
+    hostname: str = args.hostname
+    vault_dir = Path(args.vault_dir).expanduser()
+
+    psk_file = vault_dir / "psk" / f"{hostname}.psk"
+    if not psk_file.exists():
+        print(
+            f"[error] PSK not found for host '{hostname}': {psk_file}\n"
+            f"  Run the vault bootstrap to generate PSKs first.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    password = _get_user_password(stick, "keycloak_admin")
+    if not password:
+        print(
+            "[error] No 'keycloak_admin' password found on stick.\n"
+            "  Create one with:\n"
+            "    lx-secrets user set-password --username keycloak_admin --generate",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    secret_name = "SCRT_roles_system_password_keycloak_host_admin_initial_password"
+    deploy_dir = vault_dir / "deploy" / hostname
+    deploy_dir.mkdir(parents=True, exist_ok=True)
+    out_file = deploy_dir / secret_name
+
+    # Write plaintext, then encrypt in-place with the host's vault-id label.
+    # The label is already registered in ansible.cfg's vault_identity_list with
+    # its PSK file, so ansible-vault resolves the password from there.
+    out_file.write_text(password)
+    os.chmod(out_file, stat.S_IRUSR | stat.S_IWUSR)
+
+    # ansible.cfg has vault_identity_list = h-01@/path/h-01.psk, ...
+    # --encrypt-vault-id matches against configured labels only (no @file suffix).
+    # Passing the label alone lets ansible-vault look up its PSK from the config.
+    result = subprocess.run(
+        [
+            "ansible-vault", "encrypt",
+            f"--encrypt-vault-id={hostname}",
+            str(out_file),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        out_file.unlink(missing_ok=True)
+        print(f"[error] ansible-vault encrypt failed:\n{result.stderr}", file=sys.stderr)
+        sys.exit(result.returncode)
+
+    print(f"[ok] Staged {secret_name} for {hostname} (vault-encrypted with PSK)")
+    print(f"     Deploy with:")
+    print(f"       ansible-playbook ansible/playbooks/deploy_secrets.yml --limit {hostname}")
+
+
 def cmd_vault_status(args) -> None:
     vault_dir = Path(args.vault_dir).expanduser()
     deploy_dir = vault_dir / "deploy"
@@ -1366,6 +1544,28 @@ def build_parser() -> argparse.ArgumentParser:
     imp_kp.add_argument(
         "--deploy-local", action="store_true",
         help="Also install the private key to ~/.ssh/id_<type> on this machine",
+    )
+
+    imp_infra = id_sub.add_parser(
+        "import-infra-key",
+        help="Import an infrastructure SSH key (stored under identities/infra/, NOT synced to inventory)",
+    )
+    imp_infra.add_argument("name", help="Identifier for the key (e.g. hetzner-main)")
+    imp_infra.add_argument(
+        "--private", dest="private_key", required=True, metavar="FILE",
+        help="Path to the private key file",
+    )
+    imp_infra.add_argument(
+        "--public", dest="public_key", default=None, metavar="FILE",
+        help="Path to the public key file (default: <private>.pub)",
+    )
+    imp_infra.add_argument(
+        "--force", action="store_true",
+        help="Overwrite existing key in vault and local deploy target",
+    )
+    imp_infra.add_argument(
+        "--deploy-path", dest="deploy_path", default=None, metavar="PATH",
+        help="Install the private key at this local path (e.g. ~/.ssh/ssh-hetzner-main_openssh)",
     )
 
     sync_p = id_sub.add_parser(
@@ -1501,6 +1701,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Limit to a single user",
     )
 
+    stage_kc = vault_sub.add_parser(
+        "stage-keycloak-admin",
+        help="Stage the keycloak_admin password for a host (vault-encrypted, never in Nix store)",
+    )
+    stage_kc.add_argument("--hostname", required=True, help="Target hostname (e.g. h-01)")
+    stage_kc.add_argument("--vault-dir", **_vault_dir_arg)
+
     vault_status = vault_sub.add_parser("status", help="Show staged secrets per hostname")
     vault_status.add_argument("hostname", nargs="?", default=None)
     vault_status.add_argument("--vault-dir", **_vault_dir_arg)
@@ -1520,6 +1727,7 @@ DISPATCH = {
     ("identity", "gen-user"):         cmd_identity_gen_user,
     ("identity", "gen-host"):         cmd_identity_gen_host,
     ("identity", "import-keypair"):   cmd_identity_import_keypair,
+    ("identity", "import-infra-key"): cmd_identity_import_infra_key,
     ("identity", "sync-inventory"):   cmd_identity_sync_inventory,
     ("user",     "set-password"):     cmd_user_set_password,
     ("user",     "show-hash"):        cmd_user_show_hash,
@@ -1533,10 +1741,11 @@ DISPATCH = {
     ("cert",     "import-openvpn"):   cmd_cert_import_openvpn,
     ("cert",     "deploy-ssl"):       cmd_cert_deploy_ssl,
     ("cert",     "deploy-openvpn"):   cmd_cert_deploy_openvpn,
-    ("vault",    "stage-ssl"):        cmd_vault_stage_ssl,
-    ("vault",    "stage-ssl-group"):  cmd_vault_stage_ssl_group,
-    ("vault",    "stage-passwords"):  cmd_vault_stage_passwords,
-    ("vault",    "status"):           cmd_vault_status,
+    ("vault",    "stage-ssl"):              cmd_vault_stage_ssl,
+    ("vault",    "stage-ssl-group"):        cmd_vault_stage_ssl_group,
+    ("vault",    "stage-passwords"):        cmd_vault_stage_passwords,
+    ("vault",    "stage-keycloak-admin"):   cmd_vault_stage_keycloak_admin,
+    ("vault",    "status"):                 cmd_vault_status,
 }
 
 

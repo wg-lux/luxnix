@@ -1,5 +1,17 @@
 # inventory/host_vars/h-01.yml
 ---
+# Pre-VPN: reach h-01 via static public IP using the Hetzner RSA bootstrap key.
+# The ansible_ssh_private_key_file below inherits from group_vars/hetzner_server.yml.
+#
+# After Phase 1 (VPN up), switch to:
+#   ansible_host: 172.16.255.1
+#   ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+ansible_host: 178.104.136.182
+ansible_user: admin
+# h-01 is a Hetzner cloud VM — the repo is not cloned there, so the global devenv
+# python interpreter path doesn't exist. Use the system Python instead.
+ansible_python_interpreter: /run/current-system/sw/bin/python3
+
 template_name: "main"
 
 host_roles:

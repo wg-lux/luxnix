@@ -100,15 +100,15 @@ and vault secret staging.
 ### 1 — Initialise the admin stick
 
 ```bash
-uv run python scripts/lx-secrets.py --stick /run/media/admin/my-stick stick init
+lx-secrets --stick /run/media/admin/my-stick stick init
 export LX_SECRETS_STICK=/run/media/admin/my-stick
 ```
 
 ### 2 — Generate the admin SSH identity
 
 ```bash
-uv run python scripts/lx-secrets.py identity gen-user admin
-uv run python scripts/lx-secrets.py user set-password --generate
+lx-secrets identity gen-user admin
+lx-secrets user set-password --username admin --generate
 
 # Copy the private key to ~/.ssh/ on this machine:
 cp "$LX_SECRETS_STICK/identities/users/admin/id_ed25519" ~/.ssh/id_ed25519
@@ -126,7 +126,7 @@ scp admin@s-01:/tmp/openvpn-material.tar.gz /tmp/
 mkdir /tmp/openvpn-material
 tar xzf /tmp/openvpn-material.tar.gz -C /tmp/openvpn-material
 
-uv run python scripts/lx-secrets.py cert import-openvpn /tmp/openvpn-material
+lx-secrets cert import-openvpn /tmp/openvpn-material
 rm -rf /tmp/openvpn-material /tmp/openvpn-material.tar.gz
 ```
 
@@ -136,7 +136,7 @@ rm -rf /tmp/openvpn-material /tmp/openvpn-material.tar.gz
 scp admin@s-02:/etc/letsencrypt/live/endo-reg.net/fullchain.pem /tmp/
 scp admin@s-02:/etc/letsencrypt/live/endo-reg.net/privkey.pem /tmp/
 
-uv run python scripts/lx-secrets.py cert import-ssl endo-reg.net \
+lx-secrets cert import-ssl endo-reg.net \
     /tmp/fullchain.pem /tmp/privkey.pem
 
 rm /tmp/fullchain.pem /tmp/privkey.pem
@@ -147,11 +147,11 @@ rm /tmp/fullchain.pem /tmp/privkey.pem
 ```bash
 # For each developer, either:
 # (a) Generate on the admin stick directly:
-uv run python scripts/lx-secrets.py identity gen-user dev_01
-uv run python scripts/lx-secrets.py user set-password --username dev_01 --generate
+lx-secrets identity gen-user dev_01
+lx-secrets user set-password --username dev_01 --generate
 
 # (b) Or import from their personal stick submission (see User Guide):
-uv run python scripts/lx-secrets.py admin import-snippet dev_01-submission.yml
+lx-secrets admin import-snippet dev_01-submission.yml
 ```
 
 ### 6 — Sync public keys + hashes to inventory
@@ -159,7 +159,7 @@ uv run python scripts/lx-secrets.py admin import-snippet dev_01-submission.yml
 ```bash
 devenv tasks run secrets:sync-inventory
 # or:
-uv run python scripts/lx-secrets.py identity sync-inventory
+lx-secrets identity sync-inventory
 ```
 
 Commit `ansible/inventory/group_vars/stick_pubkeys.yml` to git.
@@ -178,7 +178,7 @@ devenv tasks run autoconf:finished
 uv run python scripts/bootstrap-lx-vault.py --export
 
 # If you have admin passwords to import (including user passwords from stick):
-uv run python scripts/lx-secrets.py vault stage-passwords \
+lx-secrets vault stage-passwords \
     --output /tmp/lx-admin-passwords.yml
 uv run python scripts/bootstrap-lx-vault.py \
     --admin-passwords /tmp/lx-admin-passwords.yml --export
@@ -191,13 +191,31 @@ shred -u /tmp/lx-admin-passwords.yml
 # Stage for all hosts in the [ssl_cert] group (gc-06, s-02, s-03, h-01):
 devenv tasks run secrets:stage-ssl
 # or:
-uv run python scripts/lx-secrets.py vault stage-ssl-group endo-reg.net ssl_cert
+lx-secrets vault stage-ssl-group endo-reg.net ssl_cert
 
 # Verify:
 devenv tasks run secrets:vault-status
 ```
 
-### 9 — Deploy all secrets via Ansible
+### 9 — Stage Keycloak admin bootstrap password
+
+This stages the `keycloak_admin` password from the stick as a vault-encrypted
+secret for h-01.  The NixOS keycloakHost module reads it at runtime via
+`keycloak-prepare-admin-env.service` — the plaintext never enters the Nix store.
+
+```bash
+# One-shot (generates password on stick + stages for h-01):
+devenv tasks run secrets:stage-keycloak-admin
+
+# Or manually:
+lx-secrets user set-password --username keycloak_admin --generate
+lx-secrets vault stage-keycloak-admin --hostname h-01
+
+# Verify the file is staged:
+devenv tasks run secrets:vault-status
+```
+
+### 10 — Deploy all secrets via Ansible
 
 ```bash
 ansible-playbook ansible/playbooks/deploy_secrets.yml
@@ -206,12 +224,24 @@ ansible-playbook ansible/playbooks/deploy_secrets.yml
 ansible-playbook ansible/playbooks/deploy_secrets.yml --limit h-01
 ```
 
-### 10 — Deploy OpenVPN certs to the VPN server
+### 11 — Deploy OpenVPN certs to the VPN server
 
 ```bash
-uv run python scripts/lx-secrets.py cert deploy-openvpn --dest /tmp/vpn-stage
-rsync -av /tmp/vpn-stage/ admin@h-01:/tmp/vpn-stage/
-ssh admin@h-01 'sudo cp /tmp/vpn-stage/* /etc/openvpn/ && sudo chmod 600 /etc/openvpn/*'
+lx-secrets cert deploy-openvpn --dest /tmp/vpn-stage
+
+# Copy server certs and the full ccd directory (per-client static routes):
+rsync -av -e "ssh -i ~/.ssh/ssh-hetzner-main_openssh" \
+    /tmp/vpn-stage/ admin@h-01:/tmp/vpn-stage/
+rsync -av -e "ssh -i ~/.ssh/ssh-hetzner-main_openssh" \
+    /etc/openvpn/ccd/ admin@h-01:/tmp/vpn-ccd/
+
+ssh -i ~/.ssh/ssh-hetzner-main_openssh admin@h-01 '
+    sudo cp /tmp/vpn-stage/* /etc/openvpn/
+    sudo chmod 600 /etc/openvpn/*.key /etc/openvpn/*.pem
+    sudo mkdir -p /etc/openvpn/ccd
+    sudo cp -r /tmp/vpn-ccd/. /etc/openvpn/ccd/
+    sudo chmod 644 /etc/openvpn/ccd/*
+'
 rm -rf /tmp/vpn-stage
 ```
 
@@ -234,7 +264,7 @@ devenv tasks run secrets:backup-stick
 ### List all users and their data status
 
 ```bash
-uv run python scripts/lx-secrets.py admin list-users
+lx-secrets admin list-users
 ```
 
 ### Import a developer's personal stick submission
@@ -243,7 +273,7 @@ Developers run `user sync` on their personal stick and submit the YAML file
 (e.g. via PR or secure channel).  The admin imports it:
 
 ```bash
-uv run python scripts/lx-secrets.py admin import-snippet dev_01-submission.yml
+lx-secrets admin import-snippet dev_01-submission.yml
 # Re-sync inventory and rebuild:
 devenv tasks run secrets:sync-inventory
 devenv tasks run autoconf:finished
@@ -255,7 +285,7 @@ snippet are silently rejected.
 ### Import a single pubkey
 
 ```bash
-uv run python scripts/lx-secrets.py admin import-pubkey dev_01 \
+lx-secrets admin import-pubkey dev_01 \
     "ssh-ed25519 AAAA..."
 devenv tasks run secrets:sync-inventory
 ```
@@ -271,8 +301,8 @@ through `admin import-snippet`, never by direct PR merges to
 ### Rotate a compromised key
 
 ```bash
-uv run python scripts/lx-secrets.py identity gen-user dev_01 --force
-uv run python scripts/lx-secrets.py user set-password --username dev_01 --generate
+lx-secrets identity gen-user dev_01 --force
+lx-secrets user set-password --username dev_01 --generate
 devenv tasks run secrets:sync-inventory
 devenv tasks run autoconf:finished
 # Rebuild and deploy NixOS config on affected hosts
@@ -281,7 +311,7 @@ devenv tasks run autoconf:finished
 ### Rotate an SSL certificate (Let's Encrypt renewal)
 
 ```bash
-uv run python scripts/lx-secrets.py cert import-ssl endo-reg.net \
+lx-secrets cert import-ssl endo-reg.net \
     /etc/letsencrypt/live/endo-reg.net/fullchain.pem \
     /etc/letsencrypt/live/endo-reg.net/privkey.pem
 
@@ -294,7 +324,7 @@ ansible-playbook ansible/playbooks/deploy_secrets.yml --limit ssl_cert
 ```bash
 devenv tasks run secrets:vault-status
 # or for a specific host:
-uv run python scripts/lx-secrets.py vault status h-01
+lx-secrets vault status h-01
 ```
 
 ---
@@ -309,7 +339,7 @@ and password.  You do not need access to the admin stick or the full vault.
 ### 1 — Initialise a personal stick
 
 ```bash
-uv run python scripts/lx-secrets.py --stick /run/media/dev_01/my-stick \
+lx-secrets --stick /run/media/dev_01/my-stick \
     stick init --mode user --owner dev_01
 export LX_SECRETS_STICK=/run/media/dev_01/my-stick
 ```
@@ -317,7 +347,7 @@ export LX_SECRETS_STICK=/run/media/dev_01/my-stick
 ### 2 — Generate your SSH key
 
 ```bash
-uv run python scripts/lx-secrets.py identity gen-user dev_01
+lx-secrets identity gen-user dev_01
 # Install your private key locally:
 cp "$LX_SECRETS_STICK/identities/users/dev_01/id_ed25519" ~/.ssh/id_ed25519
 chmod 600 ~/.ssh/id_ed25519
@@ -327,10 +357,10 @@ chmod 600 ~/.ssh/id_ed25519
 
 ```bash
 # Prompted entry:
-uv run python scripts/lx-secrets.py user set-password
+lx-secrets user set-password
 
 # Or generate a random password:
-uv run python scripts/lx-secrets.py user set-password --generate
+lx-secrets user set-password --generate
 ```
 
 Your plaintext password is stored on the stick at mode 0600.  Your
@@ -340,16 +370,16 @@ sha512crypt hash is stored at mode 0644.  Only the hash is ever shared.
 
 ```bash
 # Safe — show the hash only:
-uv run python scripts/lx-secrets.py user show-hash
+lx-secrets user show-hash
 
 # Show the plaintext (personal stick only, no --confirm needed):
-uv run python scripts/lx-secrets.py user show-password
+lx-secrets user show-password
 ```
 
 ### 5 — Create a submission for the admin
 
 ```bash
-uv run python scripts/lx-secrets.py user sync \
+lx-secrets user sync \
     --output dev_01-submission.yml
 ```
 
@@ -361,7 +391,7 @@ regenerates `stick_pubkeys.yml`.
 ### 6 — Backup your stick
 
 ```bash
-uv run python scripts/lx-secrets.py stick backup
+lx-secrets stick backup
 ```
 
 ---
@@ -413,4 +443,5 @@ reads cert files, then drops privileges.
 | `secrets:backup-stick` | Create a timestamped backup on the stick |
 | `secrets:sync-inventory` | Regenerate `stick_pubkeys.yml` from all users on stick |
 | `secrets:stage-ssl` | Stage `endo-reg.net` SSL cert for all `[ssl_cert]` hosts |
+| `secrets:stage-keycloak-admin` | Generate keycloak_admin password on stick and stage it for h-01 |
 | `secrets:vault-status` | Show what is staged in `~/.lxv/deploy/` |

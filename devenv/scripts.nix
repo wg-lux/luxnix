@@ -36,6 +36,11 @@
 
   bnsc.exec = "${pkgs.uv}/bin/uv run python scripts/autoconf-pipeline.py";
   blxv.exec = ''${pkgs.uv}/bin/uv run python scripts/bootstrap-lx-vault.py "$@"'';
+
+  # lx-secrets: the secrets-stick CLI, available as `lx-secrets <command>` inside devenv shell
+  lx-secrets.package = pkgs.zsh;
+  lx-secrets.exec = ''${pkgs.uv}/bin/uv run python scripts/lx-secrets.py "$@"'';
+
   vault-bootstrap.package = pkgs.zsh;
   vault-bootstrap.exec = ''${pkgs.uv}/bin/uv run python scripts/bootstrap-lx-vault.py "$@"'';
   validate-admin-passwords.package = pkgs.zsh;

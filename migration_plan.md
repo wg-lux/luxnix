@@ -87,18 +87,52 @@ and postgres locked to tun0; nginx and keycloak colocated on h-01.
 > VPN is broken when DNS switches, all remote-only machines (gs-*, gc-*, s-03, s-04) become
 > unreachable simultaneously. Follow the sequence below to avoid this.
 
+### Step 0 — One-time: stage the Keycloak admin password
+
+> **Do this once before the first deploy.** The password is stored on the
+> master-vault stick and deployed as an ansible-vault encrypted secret file.
+> It is never written to the Nix store or any world-readable path.
+
+```bash
+# Option A — single task (inside devenv shell):
+devenv tasks run secrets:stage-keycloak-admin
+# (prints the generated password once — save it in your password manager)
+
+# Option B — step by step (inside devenv shell):
+lx-secrets --stick /home/admin/master-vault user set-password --username keycloak_admin --generate
+lx-secrets --stick /home/admin/master-vault vault stage-keycloak-admin --hostname h-01
+
+# Verify it's present and vault-encrypted:
+lx-secrets vault status h-01
+# → SCRT_roles_system_password_keycloak_host_admin_initial_password  [vault-encrypted]
+```
+
+At runtime `keycloak-prepare-admin-env.service` reads
+`/etc/secrets/vault/SCRT_roles_system_password_keycloak_host_admin_initial_password`
+and writes it as `KC_BOOTSTRAP_ADMIN_PASSWORD` into `/run/keycloak-admin-env`
+(mode 0600, root-owned). Keycloak picks it up via `EnvironmentFile` on first start,
+then ignores it on subsequent boots (it's stored in Keycloak's own DB after that).
+
 ### Step 1 — Deploy secrets and NixOS config to h-01
 
 ```bash
-# Deploy vault secrets (passwords + SSL cert)
+# Deploy all vault secrets (passwords + SSL cert + keycloak admin password)
 ansible-playbook ansible/playbooks/deploy_secrets.yml --limit h-01
 
-# Copy OpenVPN certs (not managed by vault — copied directly)
-python3 scripts/lx-secrets.py --stick /home/admin/master-vault cert deploy-openvpn --dest /tmp/vpn-stage
-rsync -av /tmp/vpn-stage/ admin@h-01:/tmp/vpn-stage/
-ssh admin@h-01 'sudo cp /tmp/vpn-stage/* /etc/openvpn/ && \
-                sudo chmod 600 /etc/openvpn/*.pem /etc/openvpn/*.crt /etc/openvpn/*.key && \
-                sudo chown root:root /etc/openvpn/*.pem /etc/openvpn/*.crt /etc/openvpn/*.key'
+# Stage OpenVPN certs locally from the master-vault stick (inside devenv shell)
+lx-secrets --stick /home/admin/master-vault cert deploy-openvpn --dest /tmp/vpn-stage
+
+# Copy OpenVPN certs to h-01 (not managed by vault — deployed directly)
+rsync -av -e "ssh -i ~/.ssh/ssh-hetzner-main_openssh" \
+    /tmp/vpn-stage/ admin@178.104.136.182:/tmp/vpn-stage/
+ssh -i ~/.ssh/ssh-hetzner-main_openssh admin@178.104.136.182 \
+    'sudo cp /tmp/vpn-stage/*.pem /tmp/vpn-stage/*.crt /tmp/vpn-stage/*.key /etc/openvpn/ && \
+     sudo chmod 600 /etc/openvpn/*.pem /etc/openvpn/*.crt /etc/openvpn/*.key && \
+     sudo chown root:root /etc/openvpn/*.pem /etc/openvpn/*.crt /etc/openvpn/*.key && \
+     sudo mkdir -p /etc/openvpn/ccd && \
+     sudo cp -r /tmp/vpn-stage/ccd/* /etc/openvpn/ccd/ && \
+     sudo chmod 644 /etc/openvpn/ccd/* && \
+     rm -rf /tmp/vpn-stage'
 rm -rf /tmp/vpn-stage
 
 # Deploy NixOS config — do NOT change DNS yet
@@ -365,6 +399,22 @@ python3 scripts/lx-secrets.py --stick /home/admin/master-vault identity sync-inv
 # Update group_luxnix.generic-settings.rootIdED25519 in all.yml if rotating admin key
 python3 scripts/autoconf-pipeline.py
 ```
+
+---
+
+## Remote Install h-01 (initial bootstrap only)
+
+After a fresh nixos-anywhere install the host reboots into the full NixOS config.
+The `hetzner` role now enables `systemd-resolved` + sets NetworkManager to use it,
+which fixes DNS on Hetzner cloud VMs. Before this fix, DNS resolved nothing after
+first boot (`Could not resolve host: github.com`).
+
+```bash
+HOST_PROFILE=h-01 TARGET_HOST=root@178.104.136.182 KEY_FILE=~/.ssh/ssh-hetzner-main_openssh \
+  REFRESH_HOST_KEY=true ./scripts/hetzner-remote-install.sh
+```
+
+After install completes: run Step 0 and Step 1 above before doing `nixos-rebuild switch`.
 
 ---
 
