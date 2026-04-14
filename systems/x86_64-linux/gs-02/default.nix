@@ -33,10 +33,10 @@
     endoreg-client.repository.branch = "container";
     gpu-server.enable = true;
     postgres.default.enable = true;
-    ssh-access.dev-01.enable = true;
     ssh-access.dev-01.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK";
-    ssh-access.dev-03.enable = true;
     ssh-access.dev-03.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos";
+    ssh-access.dev-01.enable = true;
+    ssh-access.dev-03.enable = true;
     ssh-access.dev-04.enable = true;
     ssh-access.dev-04.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICSpoZVcX+K6NdrfqcUVPTU8Ljqlp83YDzzEHjTHU2NO flippos@inexen9";
     };
@@ -46,6 +46,8 @@
 
   luxnix = {
     dns.enable = true;
+
+generic-settings.rootIdED25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM7vvbgQtzi4GNeugHSuMyEke4MY0bSfoU7cBOnRYU8M";
 
 generic-settings.smtpPwdFilePath = "/etc/secrets/vault/smtp_pwd";
 

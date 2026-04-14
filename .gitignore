@@ -17,6 +17,7 @@ conf/hostinfo.json
 logs/
 **.env
 test_wd/
+temp_pwd.md
 
 *.key
 

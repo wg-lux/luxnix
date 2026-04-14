@@ -292,16 +292,16 @@ in
           proto ${cfg.protocolLc}
           dev ${cfg.dev}
           server ${cfg.subnet} ${cfg.subnetIntern}
-        
+
           ${if cfg.persistKey then "persist-key" else ""}
           ${if cfg.persistTun then "persist-tun" else ""}
 
           keepalive ${cfg.keepalive}
           cipher ${cfg.cipher}
-          push "route ${cfg.subnet} ${cfg.subnetIntern}"        
+          push "route ${cfg.subnet} ${cfg.subnetIntern}"
           verb ${cfg.verbosity}
 
-          ca ${cfg.caPath}  
+          ca ${cfg.caPath}
           tls-auth ${cfg.tlsAuthPath} 0
           cert ${cfg.serverCertPath}
           key ${cfg.serverKeyPath}
@@ -315,12 +315,11 @@ in
           # DNS and routing configuration
           push "route 172.16.255.0 255.255.255.0"  # Route all VPN subnet traffic
           push "route 172.16.255.1 255.255.255.255"  # Ensure DNS server is reachable
-          push "route 172.16.255.12 255.255.255.255" # Nginx, keycloak
           push "dhcp-option DNS 172.16.255.1"
           push "dhcp-option DOMAIN ${cfg.localDomain}"
           push "dhcp-option DOMAIN-ROUTE ${cfg.localDomain}"
           push "dhcp-option DOMAIN-SEARCH ${cfg.localDomain}"  # Add search domain
-        
+
         '';
 
       in

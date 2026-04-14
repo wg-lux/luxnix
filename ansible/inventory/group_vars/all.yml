@@ -26,6 +26,11 @@ group_roles:
   custom_packages.enable: "true"
   custom_packages.cloud: "true"
   common.enable: "true"
+  # Developer SSH access keys — sourced from master-vault via stick_pubkeys.yml
+  # PLACEHOLDER: ensure each developer copies their private key from master-vault to ~/.ssh/id_ed25519
+  #              before rebuilding hosts that have ssh-access.dev-0X.enable = true
+  ssh-access.dev-01.idEd25519: '"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMz6afkjO9Y5cEebfeGl6qMH/q/YnYl7XNuY66fo/Bs3 dev_01@lx-secrets"'
+  ssh-access.dev-03.idEd25519: '"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDmbrNEa3Ez0LrIeg5dY+/OrFQxG2k7/2skc5Extz/eK dev_03@lx-secrets"'
 group_services: {}
 group_luxnix:
   maintenance.autoUpdates.operation: '"switch"'
@@ -178,6 +183,9 @@ group_luxnix:
   generic-settings.sslCertificateKeyPath: '"/etc/secrets/vault/ssl_key"'
   generic-settings.smtpUserFilePath: '"/etc/secrets/vault/smtp_user"'
   generic-settings.smtpPwdFilePath: '"/etc/secrets/vault/smtp_pwd"'
+  # Admin SSH key — sourced from master-vault admin identity (see stick_pubkeys.yml authentication.admin.id_ed25519_pub)
+  # Update this value whenever the admin key is rotated in the vault, then re-run: devenv tasks run autoconf:finished
+  generic-settings.rootIdED25519: '"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM7vvbgQtzi4GNeugHSuMyEke4MY0bSfoU7cBOnRYU8M"'
 
   generic_settings.vpnSubnet: '"172.16.255.0/24"'
   generic_settings.sensitiveServiceGroupName: '"sensitiveServices"'

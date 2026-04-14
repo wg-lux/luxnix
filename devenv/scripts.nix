@@ -74,9 +74,29 @@
   mount-persisting-storage.exec = ''
     secretspec run --provider dotenv \
       uv run python scripts/storage/mount_persisting_storage.py
-    
+
   '';
 
+  # ── Migration scripts ────────────────────────────────────────────────────────
+  # Phase 1: copy VPN cert material from s-01 to h-01
+  # Usage: devenv run migrate-vpn-certs [s01-host] [h01-host]
+  migrate-vpn-certs.package = pkgs.zsh;
+  migrate-vpn-certs.exec = ''./scripts/migration/vpn-certs-copy.sh "$@"'';
 
+  # Phase 1: cut over gc-* GPU clients to h-01 VPN, one at a time
+  # Run AFTER vpn.endo-reg.net DNS has been updated to h-01
+  # Usage: devenv run vpn-client-rollout
+  vpn-client-rollout.package = pkgs.zsh;
+  vpn-client-rollout.exec = ''./scripts/migration/vpn-client-rollout.sh "$@"'';
+
+  # Phase 2: full Keycloak + postgres data migration from s-02 to h-01
+  # Usage: devenv run migrate-keycloak [--skip-deploy]
+  migrate-keycloak.package = pkgs.zsh;
+  migrate-keycloak.exec = ''./scripts/migration/keycloak-migrate.sh "$@"'';
+
+  # Phase 5 (future): Nextcloud migration from s-03 to a new host
+  # Usage: devenv run migrate-nextcloud <new-host-ip> [--skip-deploy]
+  migrate-nextcloud.package = pkgs.zsh;
+  migrate-nextcloud.exec = ''./scripts/migration/nextcloud-migrate.sh "$@"'';
 
 }

@@ -35,6 +35,32 @@
     after = [ "autoconf:build-nix-system-configs"];
   };
 
+  # --- secrets stick ---
+  "secrets:check-stick" = {
+    description = "Verify the secrets stick is mounted and its layout is complete";
+    exec = "${pkgs.uv}/bin/uv run python scripts/lx-secrets.py stick check";
+  };
+
+  "secrets:backup-stick" = {
+    description = "Create a timestamped backup archive on the secrets stick";
+    exec = "${pkgs.uv}/bin/uv run python scripts/lx-secrets.py stick backup";
+  };
+
+  "secrets:sync-inventory" = {
+    description = "Sync public keys from stick to ansible/inventory/group_vars/stick_pubkeys.yml";
+    exec = "${pkgs.uv}/bin/uv run python scripts/lx-secrets.py identity sync-inventory";
+  };
+
+  "secrets:vault-status" = {
+    description = "Show what is staged in ~/.lxv/deploy/ per hostname";
+    exec = "${pkgs.uv}/bin/uv run python scripts/lx-secrets.py vault status";
+  };
+
+  "secrets:stage-ssl" = {
+    description = "Stage SSL cert (endo-reg.net) from stick for all [ssl_cert] hosts";
+    exec = "${pkgs.uv}/bin/uv run python scripts/lx-secrets.py vault stage-ssl-group endo-reg.net ssl_cert";
+  };
+
   "docs:toc-generator" = {
     description = "Updating the documentation overview in TABLE OF CONTENTS";
     exec =  "${pkgs.uv}/bin/uv run python lib/toc-generator/generate-toc.py";

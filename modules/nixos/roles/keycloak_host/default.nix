@@ -262,8 +262,8 @@ with lib.luxnix; let
       };
     };
 
-    systemd.services.keycloak.wants = [ "openvpn-aglNet.service" "keycloak-db-setup.service" "keycloak-prepare-files.service" ];
-    systemd.services.keycloak.after = [ "openvpn-aglNet.service" "keycloak-db-setup.service" "keycloak-prepare-files.service" ];
+    systemd.services.keycloak.wants = [ "openvpn-aglnet.service" "keycloak-db-setup.service" "keycloak-prepare-files.service" ];
+    systemd.services.keycloak.after = [ "openvpn-aglnet.service" "keycloak-db-setup.service" "keycloak-prepare-files.service" ];
 
     services.keycloak = {
       enable = true;
@@ -302,9 +302,9 @@ with lib.luxnix; let
       CREDENTIALS_DIRECTORY = "${cfg.homeDir}/";
     };
 
-    networking.firewall.allowedTCPPorts = [ conf.port ];
-    # allow port on tun0 #TODO
-    # networking.firewall.interfaces.tun0.allowedTCPPorts = [ cfg.httpPort ]; #FIXME #TODO tun0 should be automatically inferred from defined vpn
+    # Restrict keycloak port to VPN interface only — on a public-IP host (Hetzner),
+    # keycloak must never be reachable from eth0. nginx proxies to it via tun0.
+    networking.firewall.interfaces.tun0.allowedTCPPorts = [ conf.port ];
 
   };
 

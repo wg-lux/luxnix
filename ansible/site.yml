@@ -4,6 +4,7 @@
   become: true
   roles:
     - managed
+
 - name: Set role postgres_host_main for host "s-02"
   hosts: s-02
   become: true
@@ -15,20 +16,6 @@
   become: true
   roles:
     - dev_access
-
-# - name: Set role ssl_cert for ssl_cert
-#   gather_facts: false
-#   hosts: ssl_cert
-#   become: true
-#   roles:
-#     - ssl_cert
-
-# - name: Set role smtp_cred for smtp_cred
-#   gather_facts: false
-#   hosts: smtp_cred
-#   become: true
-#   roles:
-#     - smtp_cred
 
 - name: Set role nginx_host for nginx_host
   gather_facts: false
@@ -50,79 +37,3 @@
   become: true
   roles:
     - nextcloud_host
-####### PRODUCTION END #########
-
-# - name: Set role openvpn_host for openvpn_host
-#   hosts: openvpn_host
-#   become: true
-#   roles:
-#     - common
-#     - openvpn_host
-
-# - name: Set role common for active_clients
-#   hosts: active_clients
-#   become: true
-#   roles:
-#     - common
-
-# - name: Set role postgres_host_test for host "s-03"
-#   hosts: s-03
-#   become: true
-#   roles:
-#     - postgres_host_test
-
-# - name: Set Dev-Access Roles
-#   hosts: gc-02, gc-08, gc-06
-#   # hosts: gc-06, gc-08
-#   become: true
-#   roles:
-#     - dev_access
-
-# - name: Set role local_endoreg_db
-#   gather_facts: false
-#   hosts: managed # , gc-06, gc-02, gc-08
-#   become: true
-#   roles:
-#     - local_endoreg_db
-
-# - name: Set base_server group's roles
-#   hosts: base_server
-#   become: true
-#   roles:
-#     - common
-
-# - name: Set gpu_server group's roles
-#   hosts: base_server
-#   become: true
-
-# - name: Set gpu_client group's roles
-#   hosts: gpu_server
-#   become: true
-
-# - name: Set gpu_client_dev group's roles
-#   hosts: gpu_client
-#   become: true
-#   # roles:
-#   #   - nvidia_prime
-
-# - name: Set s-02 host roles
-#   hosts: s-02
-#   become: true
-#   roles:
-#     - keycloak_host
-#     - postgres_host_main
-
-# - name: Set s-03 host roles
-#   hosts: s-03
-#   become: true
-#   roles:
-#     - postgres_host_test
-
-# - name: Set gs-01 host roles
-#   hosts: gs-01
-#   become: true
-#   # roles:
-#   #   - gpu_server
-
-# - name: Update-managed-luxnix playbook
-#   ansible.builtin.import_playbook: "playbooks/managed-update-luxnix.yml"

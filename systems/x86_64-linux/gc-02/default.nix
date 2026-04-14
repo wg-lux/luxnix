@@ -35,6 +35,8 @@
     endoreg-client.repository.branch = "container";
     nextcloudClient.enable = true;
     postgres.default.enable = true;
+    ssh-access.dev-01.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMz6afkjO9Y5cEebfeGl6qMH/q/YnYl7XNuY66fo/Bs3 dev_01@lx-secrets";
+    ssh-access.dev-03.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDmbrNEa3Ez0LrIeg5dY+/OrFQxG2k7/2skc5Extz/eK dev_03@lx-secrets";
     custom-packages.baseDevelopment = true;
     custom-packages.hardwareAcceleration = true;
     custom-packages.videoEditing = true;
@@ -48,6 +50,8 @@
     boot-decryption-stick.enable = true;
 
 dns.enable = true;
+
+generic-settings.rootIdED25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM7vvbgQtzi4GNeugHSuMyEke4MY0bSfoU7cBOnRYU8M";
 
 generic-settings.smtpPwdFilePath = "/etc/secrets/vault/smtp_pwd";
 

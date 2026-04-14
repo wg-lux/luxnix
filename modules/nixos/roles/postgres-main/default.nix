@@ -32,7 +32,9 @@ in {
 
 
   config = mkIf cfg.enable {
-    networking.firewall.allowedTCPPorts = [ postgresqlPort ];
+    # Restrict postgres to VPN interface only — it listens on localhost+vpnIp,
+    # and must never be reachable from a public eth0.
+    networking.firewall.interfaces.tun0.allowedTCPPorts = [ postgresqlPort ];
     services.luxnix.postgresql.listen_addresses = cfg.listen_addresses;
 
     # Allow SSH Access for postgres user
@@ -41,6 +43,6 @@ in {
         openssh.authorizedKeys.keys = allAuthKeys;
       };
     };
-  
+
   };
 }

@@ -26,7 +26,7 @@ in {
 
       extraSubstituters = mkOption {
         type = types.listOf types.str;
-        default = [      
+        default = [
           "https://nix-community.cachix.org"
           "https://cuda-maintainers.cachix.org"];
         description = "Extra binary caches (substituters) to use in addition to cache.nixos.org.";
@@ -190,7 +190,7 @@ in {
       };
 
     };
-  
+
     sslCertificateKeyPath = mkOption {
       type = types.path;
       default = "/home/${config.user.admin.name}/.ssl/endo-reg-net.key";
@@ -247,22 +247,25 @@ in {
 
     rootIdED25519 = mkOption {
       type = types.str;
+      # Vault-sourced key (master-vault/identities/users/admin/id_ed25519.pub)
+      # Overridden fleet-wide via group_luxnix.generic-settings.rootIdED25519 in all.yml
       default = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM7vvbgQtzi4GNeugHSuMyEke4MY0bSfoU7cBOnRYU8M";
       description = ''
-        The root
+        The SSH public key for the infrastructure admin user.
+        Used by common, base-server, and gpu-client-dev roles to grant admin SSH access.
       '';
     };
 
     # GPU Configuration
     gpu = {
       autoDetect = mkBoolOpt true "Automatically detect and configure GPU";
-      
+
       type = mkOption {
         type = types.enum ["nvidia" "amd" "intel" "none" "auto"];
         default = "auto";
         description = "Type of primary GPU (auto-detected if set to 'auto')";
       };
-      
+
       nvidia = {
         enable = mkBoolOpt false "Enable Nvidia GPU support";
         driver = mkOption {
@@ -270,7 +273,7 @@ in {
           default = "beta";
           description = "Nvidia driver version to use";
         };
-        
+
         prime = {
           enable = mkBoolOpt false "Enable Nvidia PRIME (hybrid graphics)";
           nvidiaBusId = mkOption {
@@ -290,12 +293,12 @@ in {
           };
         };
       };
-      
+
       amd = {
         enable = mkBoolOpt false "Enable AMD GPU support";
         openSource = mkBoolOpt true "Use open source AMD drivers";
       };
-      
+
       intel = {
         enable = mkBoolOpt false "Enable Intel GPU support";
         vaapi = mkBoolOpt true "Enable VA-API support";
@@ -310,17 +313,17 @@ in {
       "${cfg.sensitiveServiceGroupName}" = {
         gid = cfg.sensitiveServiceGID;
         name = sensitiveServiceGroupName;
-        members = [ 
+        members = [
           adminUserName
         ] ++ ( if keycloakEnabled then [ keycloakUserName ] else [] );
       };
     };
-    
+
     # Set PostGres Authentication & IdentMap
     roles.postgres.default.enable = lib.mkDefault cfg.postgres.enable;
     services.luxnix.postgresql.extraAuthentication = lib.mkDefault cfg.postgres.extraAuthentication;
     services.luxnix.postgresql.extraIdentMap = lib.mkDefault cfg.postgres.extraIdentMap;
-    
+
     # TODO Add to System summary Log
     users.mutableUsers = lib.mkDefault cfg.mutableUsers;
     system.stateVersion = cfg.systemStateVersion;
@@ -339,7 +342,7 @@ in {
     };
 
     # GPU Configuration warnings
-    warnings = 
+    warnings =
       (optional (cfg.gpu.autoDetect && cfg.gpu.type != "auto")
         "GPU auto-detection is enabled but type is manually set - manual setting will take precedence")
       ++ (optional (cfg.gpu.nvidia.prime.enable && !cfg.gpu.nvidia.enable)
@@ -353,7 +356,7 @@ in {
       onboardGpuType = cfg.gpu.nvidia.prime.onboardType;
       nvidiaDriver = cfg.gpu.nvidia.driver;
     };
-    
+
     # GPU Configuration - Nvidia Default (non-PRIME)
     luxnix.nvidia-default = mkIf (cfg.gpu.nvidia.enable && !cfg.gpu.nvidia.prime.enable) {
       enable = true;
