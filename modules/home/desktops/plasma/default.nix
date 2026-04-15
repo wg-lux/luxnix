@@ -115,6 +115,8 @@ in
                   "org.kde.plasma.battery"
                   "org.kde.plasma.networkmanagement"
                   "org.kde.plasma.volume"
+                  "org.kde.plasma.clipboard"
+                  "org.kde.plasma.devicenotifier"
                 ];
                 # And explicitly hide
                 hidden = [
@@ -187,15 +189,7 @@ in
             };
             window-types = [ "normal" ];
           };
-          apply = {
-            noborder = {
-              value = true;
-              apply = "force";
-            };
-            # `apply` defaults to "apply-initially"
-            maximizehoriz = true;
-            maximizevert = true;
-          };
+
         }
       ];
 
@@ -232,7 +226,6 @@ in
         cornerBarrier = true; # When enabled, prevents the cursor from crossing at screen-corners.
 
         scripts.polonium.enable = true;
-        borderlessMaximizedWindows = true;
 
         nightLight = {
           mode = "location";
@@ -242,6 +235,10 @@ in
           temperature = {
             night = 3750;
           };
+        };
+        titlebarButtons = {
+          left = [ "window-list" "app-menu" ];
+          right = [ "minimize" "maximize" "close" ];
         };
 
       };
@@ -291,7 +288,6 @@ in
       #
       configFile = {
         baloofilerc."Basic Settings"."Indexing-Enabled" = false;
-        kwinrc."org.kde.kdecoration2".ButtonsOnLeft = "SF";
         kwinrc.Desktops.Number = {
           value = 8;
           # Forces kde to not change this value (even through the settings app).

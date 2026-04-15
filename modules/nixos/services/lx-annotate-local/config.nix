@@ -296,7 +296,7 @@ in
           ssl_stapling off;
           ssl_stapling_verify off;
           ${optionalString cfg.hub.transferApi.enable ''
-            ssl_verify_client on;
+            ssl_verify_client optional;
             ssl_client_certificate ${toString cfg.hub.transferApi.clientCaFile};
           ''}
         '';
