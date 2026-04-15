@@ -225,7 +225,6 @@ in
         edgeBarrier = 0; # Disables the edge-barriers introduced in plasma 6.1
         cornerBarrier = true; # When enabled, prevents the cursor from crossing at screen-corners.
 
-        scripts.polonium.enable = true;
 
         nightLight = {
           mode = "location";
