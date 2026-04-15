@@ -212,7 +212,7 @@ def test_hub_transfer_api_extend_modules_enables_nginx_and_backup_surfaces() -> 
     )
 
     assert evaluated["hubEnable"] is True
-    assert "ssl_verify_client on;" in evaluated["hostExtraConfig"]
+    assert "ssl_verify_client otional;" in evaluated["hostExtraConfig"]
     assert "ssl_client_certificate /tmp/client-ca.pem;" in evaluated["hostExtraConfig"]
     assert "proxy_set_header X-Client-Cert-Verified $ssl_client_verify;" in evaluated["rootLocationExtraConfig"]
     assert any("/var/lib/lx-annotate/data/hub " in rule for rule in evaluated["tmpfiles"])

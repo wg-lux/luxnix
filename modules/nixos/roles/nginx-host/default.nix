@@ -43,6 +43,9 @@ with lib.luxnix; let
   
     proxy_set_header X-NginX-Proxy true;
     add_header Strict-Transport-Security "max-age=15552000; includeSubDomains; preload";
+
+    proxy_set_header X-SSL-Client-Verify $ssl_client_verify;
+    proxy_set_header X-SSL-Client-S-DN   $ssl_client_s_dn;
   '';
 
   nginxSyncScript = pkgs.writeScript "nginx-sync-certificates.sh" ''
@@ -74,7 +77,10 @@ with lib.luxnix; let
     if [ "$NEEDS_RELOAD" -eq 1 ] && systemctl is-active --quiet nginx.service; then
       systemctl reload nginx.service
     fi
+
+    sync_file "${cfg.transferCaPath}" "${nginxStateDir}/transfer_ca.crt"
   '';
+
 in
 {
   #TODO MIGRATE DOMAIN SETTINGS TO GENERIC SETTINGS SO THAT THEY ARE AVAILABLE ON ALL MACHINES
@@ -94,6 +100,9 @@ in
     psqlTest = {
       enable = mkBoolOpt false "Enable PostgreSQL test routing";
     };
+
+    # mTLS Transfer Certificate
+    transferCaPath = mkOpt types.path config.luxnix.generic-settings.transferCaPath "Path to Transfer CA for mTLS";
 
     settings = {
 
@@ -300,6 +309,7 @@ in
               extraConfig = all-extraConfig + intern-endoreg-net-extraConfig;
             };
           };
+
 
         })
       ];

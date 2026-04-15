@@ -160,7 +160,7 @@ The module exports the corresponding runtime environment for Django:
 Nginx is also configured to enforce and attest client-certificate validation
 for transfer-capable hub nodes:
 
-- `ssl_verify_client on`
+- `ssl_verify_client optional`
 - `ssl_client_certificate <client CA bundle>`
 - `proxy_set_header X-Client-Cert-Verified $ssl_client_verify`
 
