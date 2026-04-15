@@ -236,7 +236,7 @@ in
           };
         };
         titlebarButtons = {
-          left = [ "window-list" "app-menu" ];
+          left = [ "help" "application-menu" ];
           right = [ "minimize" "maximize" "close" ];
         };
 
@@ -245,11 +245,11 @@ in
       kscreenlocker = {
         appearance = {
           alwaysShowClock = true;
-          wallpaperPictureOfTheDay = {
+          #wallpaperPictureOfTheDay = {
             # null or one of “apod”, “bing”, “flickr”, “natgeo”, “noaa”, “wcpotd”, “epod”, “simonstalenhag”
-            provider = "bing";
-          };
-          # wallpaper = "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Kay/contents/images/1080x1920.png";
+          #  provider = "bing";
+          #};
+          wallpaper = "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Kay/contents/images/1080x1920.png";
 
         };
         lockOnResume = true;
