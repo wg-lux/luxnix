@@ -37,7 +37,7 @@ let
   runtimeDataDir = lxAnnotateCfg.runtime.encryptedDataDir;
   # Intake destinations must stay aligned with the lx-annotate runtime contract:
   # <encryptedDataDir>/import/{video_import,report_import,...}
-  # This is the same subtree the wheel-based watcher resolves via IO_DIR /
+  # This is the same subtree the wheel-based watcher resolves via
   # LX_ANNOTATE_DATA_DIR. The service-user path below is only an access symlink
   # for operator workflows and must not become an independent intake root.
   runtimeIoDir = "${runtimeDataDir}/import";
@@ -216,9 +216,37 @@ in
             return 0
           fi
 
-          if ! ${pkgs.rsync}/bin/rsync -av --omit-dir-times --remove-source-files --chmod=F660,D770 --chown=${endoregServiceUserName}:${endoregServiceGroup} "''${source_dir}/" "''${dest_dir}/"; then
-            echo "Warning: rsync ''${label} failed. Files remain and will trigger restart."
+          staging_dir="${runtimeIoDir}/.move-my-files-staging/''${label}"
+          manifest_file="${runtimeIoDir}/.move-my-files-staging/''${label}.files"
+          publish_status=0
+          ${pkgs.coreutils}/bin/rm -rf "$staging_dir"
+          ${pkgs.coreutils}/bin/rm -f "$manifest_file"
+          ${pkgs.coreutils}/bin/install -d -m 0770 -o ${endoregServiceUserName} -g ${endoregServiceGroup} "$staging_dir" "$dest_dir"
+
+          if ! ${pkgs.rsync}/bin/rsync -av --omit-dir-times --chmod=F660,D770 --chown=${endoregServiceUserName}:${endoregServiceGroup} "''${source_dir}/" "''${staging_dir}/"; then
+            echo "Warning: rsync ''${label} into staging failed. Files remain and will trigger restart."
             overall_status=1
+            return 0
+          fi
+
+          ${pkgs.findutils}/bin/find "$staging_dir" -mindepth 1 -type d -exec ${pkgs.coreutils}/bin/chmod 0770 {} +
+          ${pkgs.findutils}/bin/find "$staging_dir" -mindepth 1 -type f -exec ${pkgs.coreutils}/bin/chmod 0660 {} +
+          ${pkgs.findutils}/bin/find "$staging_dir" -type f -printf '%P\0' > "$manifest_file"
+
+          while IFS= read -r -d "" staged_entry; do
+            entry_name="$(${pkgs.coreutils}/bin/basename "$staged_entry")"
+            if ! ${pkgs.coreutils}/bin/mv -f "$staged_entry" "''${dest_dir}/''${entry_name}"; then
+              echo "Warning: failed to publish staged ''${label} entry: $staged_entry"
+              publish_status=1
+              overall_status=1
+            fi
+          done < <(${pkgs.findutils}/bin/find "$staging_dir" -mindepth 1 -maxdepth 1 -print0)
+
+          if [ "$publish_status" -eq 0 ]; then
+            while IFS= read -r -d "" source_relative_path; do
+              ${pkgs.coreutils}/bin/rm -f "''${source_dir}/''${source_relative_path}" || true
+            done < "$manifest_file"
+            ${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -type d -empty -delete || true
           fi
         }
 

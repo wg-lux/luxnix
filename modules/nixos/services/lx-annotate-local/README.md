@@ -53,10 +53,9 @@ When changing LuxNix or lx-annotate integration code, keep these rules:
 
 1. `LX_ANNOTATE_ENCRYPTED_DATA_DIR` is the single protected root.
 2. `STORAGE_DIR` is derived as `${LX_ANNOTATE_ENCRYPTED_DATA_DIR}/storage`.
-3. `IO_DIR` remains inside the protected root.
-4. `storage/streamable_videos/` is the dedicated Nginx-served subtree for authorized
+3. `storage/streamable_videos/` is the dedicated Nginx-served subtree for authorized
    video handoff via `X-Accel-Redirect`.
-5. Any path under the service-user home is an access path only unless the
+4. Any path under the service-user home is an access path only unless the
    contract is explicitly redesigned.
 
 ## Streamable Video Migration

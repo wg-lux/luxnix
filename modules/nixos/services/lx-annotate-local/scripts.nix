@@ -143,7 +143,6 @@ let
       export LX_ANNOTATE_STREAMABLE_VIDEO_ROOT="${runtimeStreamableVideoRootPath}"
       export LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT="${runtimeStreamableVideoRawRootPath}"
       export LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT="${runtimeStreamableVideoProcessedRootPath}"
-      export IO_DIR="$data_root"
     }
 
     lx_annotate_export_encryption_env() {
@@ -470,7 +469,6 @@ STORAGE_DIR=${envDataDir}/storage
 LX_ANNOTATE_STREAMABLE_VIDEO_ROOT=${runtimeStreamableVideoRootPath}
 LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT=${runtimeStreamableVideoRawRootPath}
 LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT=${runtimeStreamableVideoProcessedRootPath}
-IO_DIR=${envDataDir}
 SERVE_WITH_NGINX=true
 NGINX_PROTECTED_MEDIA_URL=${envNginxProtectedMediaUrl}
 ENDOREG_HUB_MODE=${if cfg.hub.enable then "true" else "false"}
@@ -980,14 +978,16 @@ PY
     bootstrap_stamp_file="${envConfDir}/.bootstrap-wheel"
     last_bootstrap_hash="$(${pkgs.coreutils}/bin/cat "$bootstrap_stamp_file" 2>/dev/null || true)"
 
+    log "Applying Django migrations before starting wheel runtime."
+    run_installed_django_command "${runtimeWheelVenvPath}/bin/python" migrate --noinput
+
     if [ "$install_hash" != "$last_bootstrap_hash" ]; then
-      log "Wheel runtime changed; applying Django migrations."
-      run_installed_django_command "${runtimeWheelVenvPath}/bin/python" migrate --noinput
+      log "Wheel runtime changed; loading base data."
       run_installed_django_command "${runtimeWheelVenvPath}/bin/python" load_base_db_data || warn "load_base_db_data failed; continuing after successful migrations."
       printf '%s\n' "$install_hash" > "$bootstrap_stamp_file"
       chmod 600 "$bootstrap_stamp_file" 2>/dev/null || true
     else
-      log "Wheel runtime unchanged; skipping Django migrations."
+      log "Wheel runtime unchanged; skipping base data load."
     fi
 
     exec "${runtimeWheelVenvPath}/bin/daphne" -b "${envDjangoHost}" -p "${envDjangoPort}" lx_annotate.asgi:application
@@ -1028,8 +1028,10 @@ PY
     lx_annotate_export_db_env
     lx_annotate_export_secret_key_env
     export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
-    export WATCHER_VIDEO_DIR="${envDataDir}/import/video_import"
-    export WATCHER_REPORT_DIR="${envDataDir}/import/report_import"
+    # The watcher resolves video/report intake from LX_ANNOTATE_DATA_DIR /
+    # LX_ANNOTATE_ENCRYPTED_DATA_DIR via endoreg_db.utils.paths. Keep only the
+    # preanonymized override here because that is the one intake env var the app
+    # actually reads directly.
     export WATCHER_PREANONYMIZED_DIR="${envDataDir}/import/preanonymized_import"
     ${devenvSyncCompatExports}
 
@@ -1052,8 +1054,10 @@ PY
 
     source "${lxAnnotateEnvHelpers}"
     lx_annotate_export_wheel_service_env "${envDataDir}"
-    export WATCHER_VIDEO_DIR="${envDataDir}/import/video_import"
-    export WATCHER_REPORT_DIR="${envDataDir}/import/report_import"
+    # The watcher resolves video/report intake from LX_ANNOTATE_DATA_DIR /
+    # LX_ANNOTATE_ENCRYPTED_DATA_DIR via endoreg_db.utils.paths. Keep only the
+    # preanonymized override here because that is the one intake env var the app
+    # actually reads directly.
     export WATCHER_PREANONYMIZED_DIR="${envDataDir}/import/preanonymized_import"
     export PATH="${runtimeWheelVenvPath}/bin:$PATH"
 
@@ -1245,12 +1249,11 @@ ${sapImportScriptBody}
     # 5. Run export inside devenv shell
     if [ -f Makefile ] && command -v devenv >/dev/null 2>&1; then
       export STORAGE_DIR="$exportFramesStorageRoot/storage"
-      export IO_DIR="$exportFramesStorageRoot"
       export DATA_DIR="$exportFramesStorageRoot"
       exec "${makeBin}" REPO_DIR="${repoDir}" CACHE_DIR="${makeCacheDir}" start-export
     fi
 
-    exec devenv shell -- bash -c "STORAGE_DIR='$exportFramesStorageRoot/storage' IO_DIR='$exportFramesStorageRoot' DATA_DIR='$exportFramesStorageRoot' export-frames"
+    exec devenv shell -- bash -c "STORAGE_DIR='$exportFramesStorageRoot/storage' DATA_DIR='$exportFramesStorageRoot' export-frames"
   '';
   runLocalExportFramesWheelScript = pkgs.writeShellScriptBin "${exportFramesScriptName}" ''
     set -euo pipefail
@@ -1269,7 +1272,6 @@ ${sapImportScriptBody}
     lx_annotate_export_wheel_service_env "$exportFramesStorageRoot"
     export PATH="${runtimeWheelVenvPath}/bin:$PATH"
     export STORAGE_DIR="$exportFramesStorageRoot/storage"
-    export IO_DIR="$exportFramesStorageRoot"
     export DATA_DIR="$exportFramesStorageRoot"
 
     mkdir -p "$exportFramesStorageRoot/export/frames"
@@ -1286,7 +1288,6 @@ ${sapImportScriptBody}
 
   runLocalDataRecoveryScript = pkgs.writeShellScriptBin "runLxAnnotateDataRecovery" ''
     set -euo pipefail
-
     target_dir="${envDataDir}"
     resolved_target_dir="$(${pkgs.coreutils}/bin/realpath -m "$target_dir")"
     marker_dir="$target_dir/logs"
@@ -1307,6 +1308,7 @@ ${sapImportScriptBody}
     lx_annotate_export_db_env
     lx_annotate_export_secret_key_env
     lx_annotate_export_oidc_env
+
     export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
     export WORKING_DIR="${runtimeWorkingDir}"
     export HOME_DIR="${endoreg-service-user-home}"
@@ -1362,6 +1364,8 @@ ${sapImportScriptBody}
         --chmod=F640,D750 \
         "$source_root/" "$target_dir/"
     }
+
+
 
     run_installed_django_command() {
       local helper_python="$1"
@@ -1478,6 +1482,18 @@ ${sapImportScriptBody}
     fi
 
     repair_managed_runtime_payloads "$migration_helper_python"
+
+    if [ -n "$migration_helper_python" ]; then
+      echo "Reaping upload job source files after data recovery."
+      if [ "$use_wheel_runtime" = "true" ]; then
+        run_installed_django_command "$migration_helper_python" reap_upload_job_sources
+      else
+        cd "${repoDir}"
+        "$migration_helper_python" "${repoDir}/manage.py" reap_upload_job_sources
+      fi
+    else
+      echo "Skipping upload job source reaping; Django helper python unavailable."
+    fi
 
     {
       printf 'LAST_EFFECTIVE_DATA_DIR=%s\n' "$resolved_target_dir"

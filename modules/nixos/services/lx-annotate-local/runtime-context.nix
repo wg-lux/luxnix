@@ -155,8 +155,9 @@ let
   legacyDataProcessedVideoDir = "${legacyRepoDataRootPath}/${processedVideoDirName}";
   legacyMediaProcessedReportDir = "${legacyRepoMediaRootPath}/${processedReportDirName}";
   legacyMediaProcessedVideoDir = "${legacyRepoMediaRootPath}/${processedVideoDirName}";
-  runtimeProcessedReportDir = "${runtimeDataRootPath}/${processedReportDirName}";
-  runtimeProcessedVideoDir = "${runtimeDataRootPath}/${processedVideoDirName}";
+  runtimeProcessedReportDir = "${runtimeStorageRootPath}/${processedReportDirName}";
+  runtimeProcessedVideoDir = "${runtimeStorageRootPath}/${processedVideoDirName}";
+
   hubRootPath = "${runtimeDataRootPath}/hub";
   hubBackupRootPath = "${hubRootPath}/backup";
   hubBackupIncomingPath = "${hubBackupRootPath}/incoming";
