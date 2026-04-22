@@ -683,8 +683,12 @@ in
         RestartSec = "10m";
         Environment = [
           "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:${pkgs.direnv}/bin:/run/current-system/sw/bin"
+          "LX_ANNOTATE_ENCRYPTED_DATA_DIR=${runtimeDataRootPath}"
+          "WATCHER_VIDEO_DIR=${runtimeDataRootPath}/videos"
+          "WATCHER_REPORT_DIR=${runtimeDataRootPath}/report"
           "NIX_PATH=nixpkgs=${pkgs.path}"
-          "LD_LIBRARY_PATH=${lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib pkgs.libglvnd pkgs.zlib pkgs.glib pkgs.libxcb ]}"
+          "LD_LIBRARY_PATH=${lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib pkgs.libglvnd pkgs.zlib pkgs.glib pkgs.libxcb pkgs.ffmpeg ]}"
+          "DJANGO_DATA_DIR=${runtimeDataRootPath}/storage" # Fixes the storage check
         ];
         MemoryHigh = "1G";
         MemoryMax = "2G";
