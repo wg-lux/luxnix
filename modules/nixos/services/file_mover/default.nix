@@ -146,8 +146,8 @@ in
       description = "Move files from Source to Destination";
       serviceConfig = {
         Type = "oneshot";
-        User = adminUserName;
-        Group = adminUserName;
+        User = endoregServiceUserName;
+        Group = endoregServiceGroup;
         # ExecStartPre runs as root and normalizes source permissions before rsync.
         PermissionsStartOnly = true;
         ExecStartPre = "${pkgs.writeShellScript "move-my-files-prepare-inputs" ''
