@@ -131,6 +131,7 @@ let
       export ALLOWED_HOSTS="${envAllowedHosts}"
       export DJANGO_CORS_ALLOWED_ORIGINS="${envCorsAllowedOrigins}"
       export DJANGO_CSRF_TRUSTED_ORIGINS="${envCorsAllowedOrigins}"
+      export FFMPEG_TRANSCODE_TIMEOUT_SECONDS="${ffmpegTranscodeTimeoutSeconds}"
     }
 
     lx_annotate_export_storage_env() {
@@ -295,6 +296,7 @@ let
   wheelFileWatcherCommand = cfg.runtime.commands.fileWatcher or "";
   wheelExportFramesCommand = cfg.runtime.commands.exportFrames or "";
   wheelCeleryWorkerCommand = cfg.runtime.commands.celeryWorker or "";
+  ffmpegTranscodeTimeoutSeconds = "86400";
 
   lxAnnotateRuntimeLib = pkgs.writeShellScript "lx-annotate-runtime-lib.sh" ''
     set -euo pipefail
@@ -489,7 +491,7 @@ DJANGO_ALLOWED_HOSTS=${envAllowedHosts}
 ALLOWED_HOSTS=${envAllowedHosts}
 DJANGO_CORS_ALLOWED_ORIGINS=${envCorsAllowedOrigins}
 DJANGO_CSRF_TRUSTED_ORIGINS=${envCorsAllowedOrigins}
-FFMPEG_TRANSCODE_TIMEOUT_SECONDS=1000000
+FFMPEG_TRANSCODE_TIMEOUT_SECONDS=${ffmpegTranscodeTimeoutSeconds}
 
 
 EOF

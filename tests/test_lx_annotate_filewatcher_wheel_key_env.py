@@ -6,8 +6,14 @@ import textwrap
 from pathlib import Path
 
 
-SCRIPTS_NIX = Path(
-    "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts.nix"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS_NIX = (
+    REPO_ROOT
+    / "modules"
+    / "nixos"
+    / "services"
+    / "lx-annotate-local"
+    / "scripts.nix"
 )
 
 
@@ -35,6 +41,18 @@ def test_wheel_filewatcher_exports_encryption_env_before_start():
         script_body.index("lx_annotate_export_wheel_service_env")
         < script_body.index('exec "${pkgs.bash}/bin/bash" -lc')
     )
+
+
+def test_runtime_exports_ffmpeg_transcode_timeout_to_wheel_services():
+    source = SCRIPTS_NIX.read_text(encoding="utf-8")
+
+    assert 'ffmpegTranscodeTimeoutSeconds = "86400";' in source
+    assert (
+        'export FFMPEG_TRANSCODE_TIMEOUT_SECONDS="${ffmpegTranscodeTimeoutSeconds}"'
+        in source
+    )
+    assert "FFMPEG_TRANSCODE_TIMEOUT_SECONDS=${ffmpegTranscodeTimeoutSeconds}" in source
+    assert "FFMPEG_TRANSCODE_TIMEOUT_SECONDS=1000000" not in source
 
 
 def test_wheel_filewatcher_passes_master_key_file_to_child_process(tmp_path: Path):
