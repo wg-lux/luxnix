@@ -24,6 +24,14 @@ let
   envDataDir = "${repoDir}/${cfg.runtime.dataDir}";
   envConfDir = "${repoDir}/${cfg.runtime.confDir}";
   envFrameDir = "${envDataDir}/frames";
+  envTrainingRoot = "${envDataDir}/model_training";
+  envCheckpointsDir = "${envTrainingRoot}/checkpoints";
+  envRunsDir = "${envTrainingRoot}/runs";
+  envBucketSnapshotDir = "${envTrainingRoot}/buckets";
+  envBackboneCheckpoint = "${envCheckpointsDir}/RN50_GastroNet-1M_DINOv1.pth";
+  envCsvDir = "${envDataDir}/import/csv";
+  envLegacyImageDir = "${envDataDir}/legacy_images/images";
+  envLegacyJsonlPath = "${envDataDir}/legacy_images/legacy_img_dicts.jsonl";
 
   runLxAiTraining = pkgs.writeShellScriptBin "${scriptName}" ''
     set -euo pipefail
@@ -80,13 +88,71 @@ let
       echo "Repository update disabled"
     fi
 
-    mkdir -p "${envConfDir}" "${envDataDir}" "${envFrameDir}" "${repoDir}/.config/secretspec"
+    echo "Ensuring lx-data-models dependency..."
+
+    LX_MODELS_DIR="${repoDir}/libs/lx-data-models"
+
+    mkdir -p "${repoDir}/libs"
+
+    if [ ! -d "''${LX_MODELS_DIR}" ] || [ ! -f "''${LX_MODELS_DIR}/pyproject.toml" ]; then
+      echo "lx-data-models missing or broken so re-cloning..."      
+      
+      rm -rf "''${LX_MODELS_DIR}"
+
+      git clone --branch report_template --single-branch \
+        https://github.com/wg-lux/lx-data-models \
+        "''${LX_MODELS_DIR}" || {
+          echo "ERROR: Failed to clone lx-data-models"
+          exit 1
+      }
+
+
+      echo "lx-data-models cloned successfully"
+      echo "Installing lx-data-models in editable mode..."
+      uv pip install -e "''${LX_MODELS_DIR}" || {
+        echo "ERROR: Failed to install lx-data-models"
+        exit 1
+      }
+    else
+      echo "lx-data-models already present"
+    fi
+
+    mkdir -p \
+      "${envConfDir}" \
+      "${envDataDir}" \
+      "${envFrameDir}" \
+      "${envTrainingRoot}" \
+      "${envCheckpointsDir}" \
+      "${envRunsDir}" \
+      "${envBucketSnapshotDir}" \
+      "${envCsvDir}" \
+      "${repoDir}/.config/secretspec"
+
 
     export HOME_DIR="${endoreg-service-user-home}"
     export WORKING_DIR="${repoDir}"
     export DATA_DIR="${envDataDir}"
     export CONF_DIR="${envConfDir}"
     export FRAME_DIR="${envFrameDir}"
+
+    export TRAINING_CONFIG_PATH="${repoDir}/lx_ai/ai_model_config/train_sandbox_postgres.yaml"
+
+    export TRAINING_ROOT="${envTrainingRoot}"
+    export CHECKPOINTS_DIR="${envCheckpointsDir}"
+    export RUNS_DIR="${envRunsDir}"
+    export BUCKET_SNAPSHOT_DIR="${envBucketSnapshotDir}"
+    
+    export BACKBONE_CHECKPOINT="${envBackboneCheckpoint}"
+    
+    export SQLITE_DB_PATH="${repoDir}/dev_db.sqlite"
+    
+    export LEGACY_IMAGE_DIR="${envLegacyImageDir}"
+    export LEGACY_JSONL_PATH="${envLegacyJsonlPath}"
+    
+    export CSV_DIR="${envCsvDir}"
+    
+    export FRAME_PATH_REMAP_SOURCE=""
+    export FRAME_PATH_REMAP_TARGET=""
 
     export DB_PWD_FILE="${envConfDir}/db_pwd"
     export DJANGO_DB_PASSWORD_FILE="${envConfDir}/db_pwd"
@@ -121,6 +187,24 @@ WORKING_DIR=${repoDir}
 DATA_DIR=${envDataDir}
 CONF_DIR=${envConfDir}
 FRAME_DIR=${envFrameDir}
+TRAINING_CONFIG_PATH=${repoDir}/lx_ai/ai_model_config/train_sandbox_postgres.yaml
+
+TRAINING_ROOT=${envTrainingRoot}
+CHECKPOINTS_DIR=${envCheckpointsDir}
+RUNS_DIR=${envRunsDir}
+BUCKET_SNAPSHOT_DIR=${envBucketSnapshotDir}
+
+BACKBONE_CHECKPOINT=${envBackboneCheckpoint}
+
+SQLITE_DB_PATH=${repoDir}/dev_db.sqlite
+
+LEGACY_IMAGE_DIR=${envLegacyImageDir}
+LEGACY_JSONL_PATH=${envLegacyJsonlPath}
+
+CSV_DIR=${envCsvDir}
+
+FRAME_PATH_REMAP_SOURCE=
+FRAME_PATH_REMAP_TARGET=
 DB_PWD_FILE=${envConfDir}/db_pwd
 DJANGO_DB_PASSWORD_FILE=${envConfDir}/db_pwd
 
@@ -173,7 +257,7 @@ in
 
           branch = mkOption {
             type = types.str;
-            default = "prototype";
+            default = "main";
             description = "Git branch to checkout for lx-ai.";
           };
 
