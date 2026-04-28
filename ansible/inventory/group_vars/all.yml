@@ -29,7 +29,7 @@ group_roles:
 group_services: {}
 group_luxnix:
   maintenance.autoUpdates.operation: '"switch"'
-  maintenance.autoUpdates.flake: '"github:wg-lux/luxnix/prototype"'
+  maintenance.autoUpdates.flake: '"github:wg-lux/luxnix"'
   maintenance.autoUpdates.dates: '"17:00"' # Change after Testing
 
   # gc-06
@@ -195,17 +195,13 @@ ansible_key_source_dir: "{{ luxnix_dev_repo }}/secrets/ansible-vault-keys-source
 
 luxnix_dev_repo: "/home/admin/dev/luxnix"
 luxnix_repo: "https://github.com/wg-lux/luxnix.git"
-luxnix_dest: "/home/admin/lx-production"
+luxnix_dest: "/home/admin/dev/luxnix"
 luxnix_branch: "main"
 # luxnix_secrets: []
 
 endoreg_db_repo: "https://github.com/wg-lux/endoreg-db.git"
 endoreg_db_dest: "/home/admin/endoreg-db-production"
 endoreg_db_branch: "main"
-
-endoreg_db_api_repo: "https://github.com/wg-lux/endoreg-db-api.git"
-endoreg_db_api_dest: "/home/admin/endoreg-db-api-production"
-endoreg_db_api_branch: "main"
 
 ansible_user: admin
 ansible_become_user: admin

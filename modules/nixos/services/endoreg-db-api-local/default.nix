@@ -690,8 +690,8 @@ in
       "d ${endoreg-service-user-home}/config 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
     ];
 
-    systemd.services."endo-api-boot" = {
-      description = "Clone or pull endoreg-db-api and run prod-server";
+    systemd.services."endoreg-db-api-local" = {
+      description = "Clone or pull endoreg DB API and run prod-server";
       wantedBy = [ "multi-user.target" ];
       after = [ "postgres-endoreg-setup.service" "endoreg-django-setup.service" "systemd-tmpfiles-setup.service" ];
       #wants = [ "network-online.target" ]; #his prevents git fetch/pull from racing the network on boot.

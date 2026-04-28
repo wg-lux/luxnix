@@ -28,7 +28,7 @@
     endoreg-client.api.logLevel = "WARNING";
     endoreg-client.api.maxRequestSize = "50G";
     endoreg-client.api.settingsProfile = "prod";
-    endoreg-client.centralNodes = ["s-04"];    endoreg-client.dbApiLocal = true;
+    endoreg-client.centralNodes = ["s-04"];
     endoreg-client.enable = true;
     endoreg-client.repository.branch = "container";
     gpu-server.enable = true;
@@ -200,7 +200,7 @@ maintenance.autoUpdates.dates = "17:00";
 
 maintenance.autoUpdates.enable = true;
 
-maintenance.autoUpdates.flake = "github:wg-lux/luxnix/prototype";
+maintenance.autoUpdates.flake = "github:wg-lux/luxnix";
 
 maintenance.autoUpdates.operation = "switch";
 

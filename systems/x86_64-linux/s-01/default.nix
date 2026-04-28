@@ -174,7 +174,7 @@ maintenance.autoUpdates.dates = "17:00";
 
 maintenance.autoUpdates.enable = false;
 
-maintenance.autoUpdates.flake = "github:wg-lux/luxnix/prototype";
+maintenance.autoUpdates.flake = "github:wg-lux/luxnix";
 
 maintenance.autoUpdates.operation = "switch";
 

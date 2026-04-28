@@ -180,7 +180,7 @@ systemctl list-dependencies managed-secrets-setup.service
 
 # Restart dependent services
 sudo systemctl restart postgres-endoreg-setup.service
-sudo systemctl restart endo-api-boot.service
+sudo systemctl restart endoreg-db-api-local.service
 ```
 
 If the failing secret is Vault-backed, inspect the chain in order:
@@ -211,5 +211,5 @@ The managed-secrets role ensures these files exist before dependent services sta
 
 ## Related Docs
 
-- [lx-annotate Encrypted Data](/home/admin/luxnix/docs/lx-annotate-encrypted-data.md)
-- [Nixtest Safety Suite](/home/admin/luxnix/docs/testing-nixtests.md)
+- [lx-annotate Encrypted Data](/home/admin/dev/luxnix/docs/lx-annotate-encrypted-data.md)
+- [Nixtest Safety Suite](/home/admin/dev/luxnix/docs/testing-nixtests.md)

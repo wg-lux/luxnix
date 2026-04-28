@@ -341,7 +341,7 @@ in
 
     runBefore = mkOption {
       type = types.listOf types.str;
-      default = [ "postgresql.service" "nextcloud-setup.service" "endo-api-boot.service" ];
+      default = [ "postgresql.service" "nextcloud-setup.service" "endoreg-db-api-local.service" ];
       description = "Services that should wait for secret generation";
     };
   };

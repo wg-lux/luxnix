@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 SCRIPTS_NIX = Path(
-    "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts.nix"
+    "/home/admin/dev/luxnix/modules/nixos/services/lx-annotate-local/scripts.nix"
 )
 
 
@@ -22,7 +22,9 @@ def _extract_wheel_filewatcher_script_body() -> str:
     body_start += 3
 
     end = source.find("\n  '';", body_start)
-    assert end != -1, "Could not determine end of wheel filewatcher script in scripts.nix"
+    assert end != -1, (
+        "Could not determine end of wheel filewatcher script in scripts.nix"
+    )
 
     return source[body_start:end]
 
@@ -31,10 +33,9 @@ def test_wheel_filewatcher_exports_encryption_env_before_start():
     script_body = _extract_wheel_filewatcher_script_body()
 
     assert 'lx_annotate_export_wheel_service_env "${envDataDir}"' in script_body
-    assert (
-        script_body.index("lx_annotate_export_wheel_service_env")
-        < script_body.index('exec "${pkgs.bash}/bin/bash" -lc')
-    )
+    assert script_body.index(
+        "lx_annotate_export_wheel_service_env"
+    ) < script_body.index('exec "${pkgs.bash}/bin/bash" -lc')
 
 
 def test_wheel_filewatcher_passes_master_key_file_to_child_process(tmp_path: Path):
@@ -70,7 +71,9 @@ def test_wheel_filewatcher_passes_master_key_file_to_child_process(tmp_path: Pat
     runtime_venv = tmp_path / "wheel-venv"
     runtime_venv_bin = runtime_venv / "bin"
     runtime_venv_bin.mkdir(parents=True, exist_ok=True)
-    (runtime_venv_bin / "python").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    (runtime_venv_bin / "python").write_text(
+        "#!/usr/bin/env bash\nexit 0\n", encoding="utf-8"
+    )
     (runtime_venv_bin / "python").chmod(0o755)
 
     child_output = tmp_path / "child-env.txt"
@@ -81,26 +84,28 @@ def test_wheel_filewatcher_passes_master_key_file_to_child_process(tmp_path: Pat
     env_data_dir = tmp_path / "data"
     runtime_wheel_root = tmp_path / "wheel-app"
     master_key_file = tmp_path / "master.key"
-    filewatcher_command = f'env | grep "^LX_ANNOTATE_MASTER_KEY_FILE=" > "{child_output}"'
+    filewatcher_command = (
+        f'env | grep "^LX_ANNOTATE_MASTER_KEY_FILE=" > "{child_output}"'
+    )
     wheel_script = _extract_wheel_filewatcher_script_body()
     replacements = {
-        '${lxAnnotateEnvHelpers}': str(helper_script),
-        '${djangoStaticRootPath}': str(django_static_root),
-        '${runtimeWorkingDir}': str(runtime_working_dir),
-        '${endoreg-service-user-home}': str(service_home),
-        '${runtimeRootPath}': str(runtime_root),
-        '${envDataDir}': str(env_data_dir),
-        '${cfg.runtime.tessdataPrefix}': "",
-        '${cfg.runtime.pytorchAllocConf}': "",
-        '${runtimeWheelVenvPath}': str(runtime_venv),
-        '${runtimeWheelRootPath}': str(runtime_wheel_root),
+        "${lxAnnotateEnvHelpers}": str(helper_script),
+        "${djangoStaticRootPath}": str(django_static_root),
+        "${runtimeWorkingDir}": str(runtime_working_dir),
+        "${endoreg-service-user-home}": str(service_home),
+        "${runtimeRootPath}": str(runtime_root),
+        "${envDataDir}": str(env_data_dir),
+        "${cfg.runtime.tessdataPrefix}": "",
+        "${cfg.runtime.pytorchAllocConf}": "",
+        "${runtimeWheelVenvPath}": str(runtime_venv),
+        "${runtimeWheelRootPath}": str(runtime_wheel_root),
         '${cfg.runtime.commands.fileWatcher or ""}': filewatcher_command,
-        '${lib.escapeShellArg wheelFileWatcherCommand}': f'"{filewatcher_command}"',
+        "${lib.escapeShellArg wheelFileWatcherCommand}": f'"{filewatcher_command}"',
     }
     for old, new in replacements.items():
         wheel_script = wheel_script.replace(old, new)
     wheel_script = wheel_script.replace(
-        '${pkgs.bash}/bin/bash',
+        "${pkgs.bash}/bin/bash",
         "bash",
     )
 

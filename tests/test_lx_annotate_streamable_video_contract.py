@@ -4,24 +4,30 @@ from pathlib import Path
 
 
 RUNTIME_CONTEXT_NIX = Path(
-    "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/runtime-context.nix"
+    "/home/admin/dev/luxnix/modules/nixos/services/lx-annotate-local/runtime-context.nix"
 )
 CONFIG_NIX = Path(
-    "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/config.nix"
+    "/home/admin/dev/luxnix/modules/nixos/services/lx-annotate-local/config.nix"
 )
 SCRIPTS_NIX = Path(
-    "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts.nix"
+    "/home/admin/dev/luxnix/modules/nixos/services/lx-annotate-local/scripts.nix"
 )
 README_MD = Path(
-    "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/README.md"
+    "/home/admin/dev/luxnix/modules/nixos/services/lx-annotate-local/README.md"
 )
 
 
 def test_streamable_video_paths_are_first_class_runtime_derivations():
     source = RUNTIME_CONTEXT_NIX.read_text(encoding="utf-8")
 
-    assert 'runtimeStreamableVideoRootPath = "${runtimeStorageRootPath}/streamable_videos";' in source
-    assert 'runtimeStreamableVideoRawRootPath = "${runtimeStreamableVideoRootPath}/raw";' in source
+    assert (
+        'runtimeStreamableVideoRootPath = "${runtimeStorageRootPath}/streamable_videos";'
+        in source
+    )
+    assert (
+        'runtimeStreamableVideoRawRootPath = "${runtimeStreamableVideoRootPath}/raw";'
+        in source
+    )
     assert (
         'runtimeStreamableVideoProcessedRootPath = "${runtimeStreamableVideoRootPath}/processed";'
         in source

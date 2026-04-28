@@ -9,6 +9,8 @@ Use this as the entry point for setup and operations.
 - [Vault Setup](./vault-setup.md): secret bootstrap and lifecycle.
 - [lx-annotate Encrypted Data](./lx-annotate-encrypted-data.md): hostname-scoped Vault delivery and LUKS mount flow for lx-annotate.
 - [Deploying Services `lx-annotate`-Style](./deploying-services-lx-annotate-style.md): reusable pattern for Vault-backed service deployment using `vault-auth-setup`, `managed-secrets`, and a service-owned runtime gate.
+- [Database Ownership and Legacy Names](./database-ownership.md): current `endoregDbLocal` ownership and the deprecated `local_endoreg_db` naming.
+- [Network Resolution](./network-resolution.md): generated `/etc/hosts`, public DNS domains, and why `ping` can disagree with `dig`.
 - [Nixtest Safety Suite](./testing-nixtests.md): how to run the LuxNix safety and reachability regression tests.
 
 ## Core references

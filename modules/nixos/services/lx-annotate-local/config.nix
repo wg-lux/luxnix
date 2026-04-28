@@ -70,6 +70,14 @@ in
       mkDefault (config.networking.hostName == "gs-02");
     assertions = [
       {
+        assertion = cfg.runtime.mode != "repo" || cfg.runtime.allowRepoMode;
+        message = "services.luxnix.lxAnnotateLocal.runtime.mode = \"repo\" is disabled by default. Set services.luxnix.lxAnnotateLocal.runtime.allowRepoMode = true in the host config for explicit development use.";
+      }
+      {
+        assertion = !cfg.dataRecovery.enable || cfg.dataRecovery.allowExecution;
+        message = "services.luxnix.lxAnnotateLocal.dataRecovery.enable requires services.luxnix.lxAnnotateLocal.dataRecovery.allowExecution = true in the host config. Disable dataRecovery.enable or explicitly acknowledge recovery execution for this host.";
+      }
+      {
         assertion = cfg.runtime.mode != "wheel" || cfg.runtime.wheelPath != null;
         message = "services.luxnix.lxAnnotateLocal.runtime.wheelPath must be set when runtime.mode = \"wheel\".";
       }

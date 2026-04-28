@@ -39,9 +39,13 @@ with lib.luxnix; let
              else hostConfig.ip-vpn;
              
         # Keep selected aliases local-only (e.g. lx-annotate.local should resolve to the current node only)
+        # and never place public DNS names into /etc/hosts. Tools using NSS
+        # such as ping prefer /etc/hosts over DNS, while dig/nslookup do not.
         domainsRaw = hostConfig.domains or ["localhost"];
         domains = builtins.filter (
-          domain: !(builtins.elem domain cfg.localOnlyDomains) || hostName == hostname
+          domain:
+            (!(builtins.elem domain cfg.publicDnsDomains))
+            && (!(builtins.elem domain cfg.localOnlyDomains) || hostName == hostname)
         ) domainsRaw;
       in { 
         "${ip}" = [ hostName ] ++ domains;
@@ -130,6 +134,26 @@ in {
       description = ''
         Domain aliases that must only map to the current host in /etc/hosts.
         This prevents multi-IP alias collisions that can cause client timeouts.
+      '';
+    };
+
+    publicDnsDomains = mkOption {
+      type = types.listOf types.str;
+      default = [
+        "adminKeycloak.endo-reg.net"
+        "cloud.endo-reg.net"
+        "keycloak-admin.endo-reg.net"
+        "keycloak.endo-reg.net"
+        "nginx.endo-reg.net"
+      ];
+      description = ''
+        Public DNS names that must not be generated into /etc/hosts.
+
+        If these names are inserted into /etc/hosts, NSS-based clients such as
+        ping, curl, browsers, and many application runtimes can resolve them to
+        a VPN/private address while dig/nslookup still show the public DNS
+        answer. Keep public service domains here unless a host explicitly needs
+        a local override in its own service module.
       '';
     };
     

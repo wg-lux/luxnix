@@ -17,7 +17,6 @@ Gateway = fe80::1
 # Address =  144.x.x.x/26
 # Gateway = 144.x.x.1
 ";
-luxnix.generic-settings.configurationPath = "dev/luxnix";
 luxnix.generic-settings.language = "english";
 luxnix.generic-settings.hostPlatform = "x86_64-linux";
 roles.development.enable = true;

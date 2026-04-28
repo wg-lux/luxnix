@@ -77,6 +77,11 @@ in
             default = "wheel";
             description = "How lx-annotate is started. 'repo' keeps the dev git/devenv flow; 'wheel' installs a configured Python wheel into a runtime virtualenv.";
           };
+          allowRepoMode = mkOption {
+            type = types.bool;
+            default = false;
+            description = "Development-only escape hatch. Must be set explicitly in a host config before runtime.mode may be set to 'repo'.";
+          };
           wheelPath = mkOption {
             type = types.nullOr types.path;
             default = pkgs.fetchurl {
@@ -382,8 +387,13 @@ in
           options = {
             enable = mkOption {
               type = types.bool;
-              default = true;
+              default = false;
               description = "Recover legacy lx-annotate data and media trees into the runtime STORAGE_DIR before boot.";
+            };
+            allowExecution = mkOption {
+              type = types.bool;
+              default = false;
+              description = "Explicit host-local safety acknowledgement required before lx-annotate-data-recovery.service may be generated and run.";
             };
             legacyDataDir = mkOption {
               type = types.str;

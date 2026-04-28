@@ -220,8 +220,6 @@ vault.key = "/etc/secrets/.key";
 
 vault.psk = "/etc/secrets/.psk";
 
-generic-settings.configurationPath = lib.mkForce "/home/admin/dev/luxnix";
-
 generic-settings.gpu.nvidia.prime.nvidiaBusId = "PCI:1:0:0";
 
 generic-settings.gpu.nvidia.prime.onboardBusId = "PCI:0:2:0";

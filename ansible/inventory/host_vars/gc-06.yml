@@ -4,7 +4,7 @@ template_name: "main"
 ansible_python_interpreter: "{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python"
 luxnix_dev_repo: "/home/admin/dev/luxnix"
 luxnix_repo: "https://github.com/wg-lux/luxnix.git"
-luxnix_dest: "/home/admin/luxnix-production"
+luxnix_dest: "/home/admin/dev/luxnix-production"
 luxnix_branch: "main"
 
 ansible_roles: []
@@ -30,7 +30,6 @@ host_luxnix:
   # Custom packages
 
   ##### Override Config Path #####
-  generic_settings.configurationPath: 'lib.mkForce "/home/admin/dev/luxnix"'
 
   generic_settings.hostPlatform: '"x86_64-linux"'
   generic_settings.systemStateVersion: '"23.11"'

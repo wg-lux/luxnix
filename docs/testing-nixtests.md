@@ -48,7 +48,7 @@ These tests are intended to prevent two classes of outage:
 
 Tests live in:
 
-- [tests/nixtest](/home/admin/luxnix/tests/nixtest)
+- [tests/nixtest](/home/admin/dev/luxnix/tests/nixtest)
 
 Rules of thumb:
 

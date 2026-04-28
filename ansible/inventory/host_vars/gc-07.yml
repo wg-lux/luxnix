@@ -1,7 +1,7 @@
 # inventory/host_vars/gc-07.yml
 ---
 ansible_python_interpreter: "{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python"
-luxnix_dev_repo: "/home/admin/luxnix"
+luxnix_dev_repo: "/home/admin/dev/luxnix"
 template_name: "main"
 host_roles:
   custom_packages.cuda: "true"

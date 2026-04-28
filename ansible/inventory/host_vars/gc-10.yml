@@ -1,7 +1,7 @@
 # inventory/host_vars/gc-10.yml
 ---
 ansible_python_interpreter: "{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python"
-luxnix_dev_repo: "/home/admin/luxnix"
+luxnix_dev_repo: "/home/admin/dev/luxnix"
 template_name: "main"
 
 host_roles:
@@ -12,8 +12,6 @@ host_services: {}
 extra_secret_names: []
 
 host_luxnix:
-  generic_settings.configurationPathRelative: '"luxnix"'
-  generic_settings.configurationPath: 'lib.mkForce "/home/admin/luxnix"'
 
   generic_settings.hostPlatform: '"x86_64-linux"'
   generic_settings.systemStateVersion: '"23.11"'

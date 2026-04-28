@@ -282,6 +282,30 @@ Notes:
   the service-user home are access paths only unless the runtime contract is
   intentionally redesigned.
 
+## Runtime Safety Gates
+
+`runtime.mode = "wheel"` is the production default. Repo mode is intentionally blocked unless a host opts in explicitly:
+
+```nix
+services.luxnix.lxAnnotateLocal.runtime = {
+  mode = "repo";
+  allowRepoMode = true;
+};
+```
+
+Use repo mode only for host-local development. It keeps the git/devenv checkout flow and is not appropriate for normal central LuxNix deployments.
+
+Data recovery is also opt-in. The recovery unit can copy or migrate legacy repo-local data into the protected runtime tree, so enabling it requires an explicit execution acknowledgement:
+
+```nix
+services.luxnix.lxAnnotateLocal.dataRecovery = {
+  enable = true;
+  allowExecution = true;
+};
+```
+
+Leave `dataRecovery.enable = false` for normal hosts after migration has completed.
+
 ## Wheel Install Behavior
 
 Wheel mode now reuses the existing virtualenv and only reinstalls when one of these changes:
@@ -305,7 +329,7 @@ Without `wheelhousePath`, the first install of a new wheel version can still be 
 After setting the host options, apply the system with:
 
 ```bash
-nh os switch . -- --accept-flake-config
+nh os switch . --accept-flake-config
 ```
 
 The expected startup order is:
