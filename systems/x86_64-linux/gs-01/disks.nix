@@ -7,7 +7,7 @@ let
   dataDisk1Id = "/dev/disk/by-id/scsi-2000000000000000100a075223a1adb0f";
 
   # Second 3.5TB data disk
-  dataDisk2Id = "/dev/disk/by-id/scsi-2000000000000000100a075223a1adb3d";
+  dataDisk2Id = "/dev/disk/by-id/scsi-Y";
 
   swapSize = "64G";
 in
