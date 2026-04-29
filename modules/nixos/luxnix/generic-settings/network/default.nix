@@ -8,6 +8,8 @@ with lib;
 with lib.luxnix; let
   cfg = config.luxnix.generic-settings.network;
   hostname = config.networking.hostName;
+  isPublicDomain = domain:
+    builtins.any (suffix: lib.hasSuffix suffix domain) cfg.publicDomainSuffixes;
   
   # Add proper null handling for host config lookup
   ownNetConfig = cfg.hosts.${hostname} or {};
@@ -41,7 +43,12 @@ with lib.luxnix; let
         # Keep selected aliases local-only (e.g. lx-annotate.local should resolve to the current node only)
         domainsRaw = hostConfig.domains or ["localhost"];
         domains = builtins.filter (
-          domain: !(builtins.elem domain cfg.localOnlyDomains) || hostName == hostname
+          domain:
+            !(isPublicDomain domain)
+            && (
+              !(builtins.elem domain cfg.localOnlyDomains)
+              || hostName == hostname
+            )
         ) domainsRaw;
       in { 
         "${ip}" = [ hostName ] ++ domains;
@@ -130,6 +137,16 @@ in {
       description = ''
         Domain aliases that must only map to the current host in /etc/hosts.
         This prevents multi-IP alias collisions that can cause client timeouts.
+      '';
+    };
+
+    publicDomainSuffixes = mkOption {
+      type = types.listOf types.str;
+      default = [ ".endo-reg.net" ];
+      description = ''
+        Public DNS suffixes that must never be written into /etc/hosts.
+        Browser-facing domains under these suffixes should resolve via normal DNS,
+        not via host-local overrides.
       '';
     };
     

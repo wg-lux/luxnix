@@ -121,5 +121,8 @@ def test_wheel_data_recovery_keeps_legacy_media_overlay_after_helper_success():
     )
     assert 'migration_mark_eligible --apply' in source
     assert source.index('migration_mark_eligible --apply') < source.index(
+        'updated_failed_upload_jobs='
+    )
+    assert source.index('updated_failed_upload_jobs=') < source.index(
         'reap_upload_job_sources'
     )

@@ -1497,6 +1497,70 @@ ${sapImportScriptBody}
         "$migration_helper_python" "${repoDir}/manage.py" migration_mark_eligible --apply
       fi
 
+      echo "Backfilling cleanup eligibility for failed/quarantined delete-after-success upload jobs."
+      if [ "$use_wheel_runtime" = "true" ]; then
+        run_installed_django_command "$migration_helper_python" shell -c '
+from django.utils import timezone
+from endoreg_db.models.hub.upload_job import UploadJob
+
+updated = 0
+now = timezone.now()
+qs = UploadJob.objects.filter(
+    retention_policy=UploadJob.RetentionPolicy.DELETE_AFTER_SUCCESS,
+    source_file_persisted=True,
+    cleanup_status=UploadJob.CleanupStatus.PENDING,
+    status__in=[UploadJob.Status.ERROR, UploadJob.Status.LOST],
+).order_by("created_at")
+
+for upload_job in qs.iterator():
+    provenance = getattr(upload_job, "processing_provenance", None) or {}
+    quarantined_path = str(provenance.get("quarantined_path", "") or "").strip()
+    quarantined_sidecar_path = str(provenance.get("quarantined_sidecar_path", "") or "").strip()
+    if not quarantined_path and not quarantined_sidecar_path:
+        continue
+    update_fields = ["cleanup_status", "updated_at"]
+    if upload_job.source_file_delete_eligible_at is None:
+        upload_job.source_file_delete_eligible_at = now
+        update_fields.append("source_file_delete_eligible_at")
+    upload_job.cleanup_status = UploadJob.CleanupStatus.ELIGIBLE
+    upload_job.save(update_fields=update_fields)
+    updated += 1
+
+print(f"updated_failed_upload_jobs={updated}")
+'
+      else
+        cd "${repoDir}"
+        "$migration_helper_python" "${repoDir}/manage.py" shell -c '
+from django.utils import timezone
+from endoreg_db.models.hub.upload_job import UploadJob
+
+updated = 0
+now = timezone.now()
+qs = UploadJob.objects.filter(
+    retention_policy=UploadJob.RetentionPolicy.DELETE_AFTER_SUCCESS,
+    source_file_persisted=True,
+    cleanup_status=UploadJob.CleanupStatus.PENDING,
+    status__in=[UploadJob.Status.ERROR, UploadJob.Status.LOST],
+).order_by("created_at")
+
+for upload_job in qs.iterator():
+    provenance = getattr(upload_job, "processing_provenance", None) or {}
+    quarantined_path = str(provenance.get("quarantined_path", "") or "").strip()
+    quarantined_sidecar_path = str(provenance.get("quarantined_sidecar_path", "") or "").strip()
+    if not quarantined_path and not quarantined_sidecar_path:
+        continue
+    update_fields = ["cleanup_status", "updated_at"]
+    if upload_job.source_file_delete_eligible_at is None:
+        upload_job.source_file_delete_eligible_at = now
+        update_fields.append("source_file_delete_eligible_at")
+    upload_job.cleanup_status = UploadJob.CleanupStatus.ELIGIBLE
+    upload_job.save(update_fields=update_fields)
+    updated += 1
+
+print(f"updated_failed_upload_jobs={updated}")
+'
+      fi
+
       echo "Reaping upload job source files after data recovery."
       if [ "$use_wheel_runtime" = "true" ]; then
         run_installed_django_command "$migration_helper_python" reap_upload_job_sources
