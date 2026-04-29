@@ -119,3 +119,7 @@ def test_wheel_data_recovery_keeps_legacy_media_overlay_after_helper_success():
         'sync_source_dir "${cfg.dataRecovery.legacyMediaDir}" "legacy media compatibility overlay"'
         in source
     )
+    assert 'migration_mark_eligible --apply' in source
+    assert source.index('migration_mark_eligible --apply') < source.index(
+        'reap_upload_job_sources'
+    )

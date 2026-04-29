@@ -1489,6 +1489,14 @@ ${sapImportScriptBody}
     repair_managed_runtime_payloads "$migration_helper_python"
 
     if [ -n "$migration_helper_python" ]; then
+      echo "Marking migration-created upload job source files as cleanup-eligible after data recovery."
+      if [ "$use_wheel_runtime" = "true" ]; then
+        run_installed_django_command "$migration_helper_python" migration_mark_eligible --apply
+      else
+        cd "${repoDir}"
+        "$migration_helper_python" "${repoDir}/manage.py" migration_mark_eligible --apply
+      fi
+
       echo "Reaping upload job source files after data recovery."
       if [ "$use_wheel_runtime" = "true" ]; then
         run_installed_django_command "$migration_helper_python" reap_upload_job_sources
