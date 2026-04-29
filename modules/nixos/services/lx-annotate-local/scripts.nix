@@ -126,6 +126,8 @@ let
       export ENDOREG_HUB_TRANSFER_MTLS_META_KEY="${cfg.hub.transferApi.mtlsMetaKey}"
       export ENDOREG_HUB_TRANSFER_MTLS_META_VALUE="${cfg.hub.transferApi.mtlsMetaValue}"
       export CELERY_BROKER_URL="${celeryBrokerUrl}"
+      export SSL_CERT_FILE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+      export REQUESTS_CA_BUNDLE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
 
       export DJANGO_ALLOWED_HOSTS="${envAllowedHosts}"
       export ALLOWED_HOSTS="${envAllowedHosts}"
@@ -480,6 +482,8 @@ ENDOREG_HUB_TRANSFER_REQUIRE_MTLS=${if cfg.hub.transferApi.requireMtls then "tru
 ENDOREG_HUB_TRANSFER_MTLS_META_KEY=${cfg.hub.transferApi.mtlsMetaKey}
 ENDOREG_HUB_TRANSFER_MTLS_META_VALUE=${cfg.hub.transferApi.mtlsMetaValue}
 CELERY_BROKER_URL=${celeryBrokerUrl}
+SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
+REQUESTS_CA_BUNDLE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
 DEBUG=False
 DJANGO_DEBUG=False
 VITE_ENABLE_DEBUG=${envViteEnableDebug}
@@ -864,16 +868,29 @@ PY
     set -euo pipefail
     source "${lxAnnotateRuntimeLib}"
 
-    log "Migrating video assets into streamable protected storage..."
+    media_storage_args=("$@")
+    if [ "$#" -eq 0 ]; then
+      media_storage_args=(
+        --apply
+        --repeat-until-empty
+        --include-raw
+        --include-processed
+        --include-reports
+        --include-streamable
+        --json
+      )
+    fi
+
+    log "Migrating canonical media into encrypted storage and syncing streamable artifacts..."
     if [ "${if useWheelRuntime then "true" else "false"}" = "true" ]; then
       source "${lxAnnotateEnvHelpers}"
       lx_annotate_export_wheel_service_env "${envDataDir}"
       ensure_wheel_runtime_installed
-      run_installed_django_command "${runtimeWheelVenvPath}/bin/python" migrate_video_streamable_storage "$@"
+      run_installed_django_command "${runtimeWheelVenvPath}/bin/python" migrate_media_storage "''${media_storage_args[@]}"
     else
       lx_annotate_export_runtime_env
       lx_annotate_activate_runtime
-      python manage.py migrate_video_streamable_storage "$@"
+      python manage.py migrate_media_storage "''${media_storage_args[@]}"
     fi
   '';
 
