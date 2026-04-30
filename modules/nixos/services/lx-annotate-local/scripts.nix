@@ -1310,6 +1310,33 @@ ${sapImportScriptBody}
     use_wheel_runtime="${if useWheelRuntime then "true" else "false"}"
     mkdir -p "$target_dir" "$marker_dir" "$state_dir"
 
+    if [ -f "$state_file" ]; then
+      previous_effective_dir="$(${pkgs.gnugrep}/bin/grep '^LAST_EFFECTIVE_DATA_DIR=' "$state_file" | ${pkgs.coreutils}/bin/tail -n 1 | ${pkgs.coreutils}/bin/cut -d= -f2- || true)"
+    fi
+
+    if [ -n "$previous_effective_dir" ]; then
+      resolved_previous_effective_dir="$(${pkgs.coreutils}/bin/realpath -m "$previous_effective_dir")"
+    else
+      resolved_previous_effective_dir=""
+    fi
+
+    recovery_already_current=false
+    # Heavy data recovery is a one-time operation for a data root.  A successful
+    # repair marker is required before skipping, so interrupted/corrupt repair
+    # runs still fail closed and retry before the app starts.
+    if [ "$resolved_previous_effective_dir" = "$resolved_target_dir" ] \
+      && [ -f "$marker_file" ] \
+      && ${pkgs.gnugrep}/bin/grep -q '^completed_at=' "$marker_file" \
+      && [ -f "$repair_marker_file" ] \
+      && ${pkgs.gnugrep}/bin/grep -q '^completed_at=' "$repair_marker_file"; then
+      recovery_already_current=true
+    fi
+
+    if [ "$recovery_already_current" = "true" ] && [ "''${LX_ANNOTATE_FORCE_DATA_RECOVERY:-false}" != "true" ]; then
+      echo "Data recovery already completed for $resolved_target_dir; skipping heavy recovery and managed payload repair."
+      exit 0
+    fi
+
     source "${lxAnnotateRuntimeLib}"
     source "${lxAnnotateEnvHelpers}"
     lx_annotate_export_base_env
@@ -1336,10 +1363,6 @@ ${sapImportScriptBody}
         echo "Applying Django migrations before data recovery helper commands."
         run_installed_django_command "${runtimeWheelVenvPath}/bin/python" migrate --noinput
       fi
-    fi
-
-    if [ -f "$state_file" ]; then
-      previous_effective_dir="$(${pkgs.gnugrep}/bin/grep '^LAST_EFFECTIVE_DATA_DIR=' "$state_file" | ${pkgs.coreutils}/bin/tail -n 1 | ${pkgs.coreutils}/bin/cut -d= -f2- || true)"
     fi
 
     sync_source_dir() {
@@ -1443,7 +1466,6 @@ ${sapImportScriptBody}
     }
 
     if [ -n "$previous_effective_dir" ]; then
-      resolved_previous_effective_dir="$(${pkgs.coreutils}/bin/realpath -m "$previous_effective_dir")"
       if [ "$resolved_previous_effective_dir" != "$resolved_target_dir" ]; then
         sync_source_dir "$previous_effective_dir" "previous effective data dir"
       else
