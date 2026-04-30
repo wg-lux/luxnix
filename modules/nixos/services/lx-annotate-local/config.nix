@@ -63,6 +63,35 @@ let
     runLocalLxAnnotateWheelScript
     runLocalSapImportScript
     runLocalSapImportWheelScript;
+  servicePathEnv = "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:${pkgs.direnv}/bin:/run/current-system/sw/bin";
+  nixPathEnv = "NIX_PATH=nixpkgs=${pkgs.path}";
+  runtimeLibraryPackages = [
+    pkgs.stdenv.cc.cc.lib
+    pkgs.libglvnd
+    pkgs.zlib
+    pkgs.glib
+    pkgs.libxcb
+  ];
+  runtimeLdLibraryPathEnv = "LD_LIBRARY_PATH=${lib.makeLibraryPath runtimeLibraryPackages}";
+  runtimeFfmpegLdLibraryPathEnv = "LD_LIBRARY_PATH=${lib.makeLibraryPath (runtimeLibraryPackages ++ [ pkgs.ffmpeg ])}";
+  appServiceEnvironment = [
+    servicePathEnv
+    nixPathEnv
+    runtimeLdLibraryPathEnv
+  ];
+  encryptedDataMountUnitConfig = {
+    RequiresMountsFor = [ envDataDir ];
+  };
+  appReadWritePaths = [
+    endoreg-service-user-home
+    envDataDir
+    envConfDir
+    staticRootPath
+    runtimeRootPath
+    runtimeWheelRootPath
+    runtimeWheelVenvPath
+    "/var/endoreg-service-user/lx-annotate"
+  ];
 in
 {
   config = mkIf cfg.enable {
@@ -452,28 +481,23 @@ in
         "endoreg-django-setup.service"
         "systemd-tmpfiles-setup.service"
       ] ++ lib.optionals cfg.dataRecovery.enable [ "lx-annotate-data-recovery.service" ] ++ encryptionServiceUnits;
-      unitConfig = {
-        RequiresMountsFor = [ envDataDir ];
-      };
+      unitConfig = encryptedDataMountUnitConfig;
       serviceConfig = {
         Type = "exec";
         User = endoreg-service-user-name;
         WorkingDirectory = if useWheelRuntime then runtimeWorkingDir else endoreg-service-user-home;
         StateDirectory = "lx-annotate";
         StateDirectoryMode = "0750";
-        Environment = [
-          # To avoid devenv, we are passing the packages as path.
-          "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:${pkgs.direnv}/bin:/run/current-system/sw/bin"
-          "NIX_PATH=nixpkgs=${pkgs.path}"
-          "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:${pkgs.direnv}/bin:/run/current-system/sw/bin"
-          # This provides the missing libstdc++.so.6 and libGL.so.1
-          "LD_LIBRARY_PATH=${lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib pkgs.libglvnd pkgs.zlib pkgs.glib pkgs.libxcb ]}"
-        ];
+        Environment = appServiceEnvironment;
 
         TimeoutStartSec = "5min";
         ExecStartPre = [
           "+${pkgs.writeShellScript "lx-annotate-pre-start" ''
             set -euo pipefail
+
+            # Prefer frontend/streaming availability over intake processing if
+            # the app is being started or restarted during a maintenance drain.
+            ${pkgs.systemd}/bin/systemctl stop lx-annotate-filewatcher.service >/dev/null 2>&1 || true
 
             # 0. Ensure key writable directories exist with the expected owner.
             ${pkgs.coreutils}/bin/install -d -m 0750 -o ${endoreg-service-user-name} -g ${endoreg-service-group-name} ${endoreg-service-user-home}
@@ -549,9 +573,7 @@ in
       wants = [ "postgresql.service" ] ++ encryptionServiceUnits;
       after = [ "systemd-tmpfiles-setup.service" "postgresql.service" ] ++ encryptionServiceUnits;
       requires = encryptionServiceUnits;
-      unitConfig = {
-        RequiresMountsFor = [ envDataDir ];
-      };
+      unitConfig = encryptedDataMountUnitConfig;
       serviceConfig = {
         Type = "oneshot";
         User = endoreg-service-user-name;
@@ -574,9 +596,7 @@ in
           ''}"
         ];
         ExecStart = "${runLocalDataRecoveryScript}/bin/runLxAnnotateDataRecovery";
-        Environment = [
-          "LD_LIBRARY_PATH=${lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib pkgs.libglvnd pkgs.zlib pkgs.glib pkgs.libxcb ]}"
-        ];
+        Environment = [ runtimeLdLibraryPathEnv ];
         ReadWritePaths = [
           endoreg-service-user-home
           envDataDir
@@ -592,18 +612,14 @@ in
       ] ++ encryptionServiceUnits;
       wants = encryptionServiceUnits;
       requires = encryptionServiceUnits;
-      unitConfig = {
-        RequiresMountsFor = [ envDataDir ];
-      };
+      unitConfig = encryptedDataMountUnitConfig;
       serviceConfig = {
         Type = "oneshot";
         User = endoreg-service-user-name;
         Group = endoreg-service-group-name;
         WorkingDirectory = endoreg-service-user-home;
         ExecStart = "${runLocalDataCleanupScript}/bin/runLxAnnotateDataCleanup";
-        Environment = [
-          "LD_LIBRARY_PATH=${lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib pkgs.libglvnd pkgs.zlib pkgs.glib pkgs.libxcb ]}"
-        ];
+        Environment = [ runtimeLdLibraryPathEnv ];
         ReadWritePaths = [
           endoreg-service-user-home
           envDataDir
@@ -628,18 +644,14 @@ in
       after = [ "lx-annotate-boot.service" ] ++ encryptionServiceUnits;
       wants = [ "lx-annotate-boot.service" ] ++ encryptionServiceUnits;
       requires = encryptionServiceUnits;
-      unitConfig = {
-        RequiresMountsFor = [ envDataDir ];
-      };
+      unitConfig = encryptedDataMountUnitConfig;
       serviceConfig = {
         Type = "oneshot";
         User = endoreg-service-user-name;
         Group = endoreg-service-group-name;
         WorkingDirectory = runtimeWorkingDir;
         ExecStart = "${runLocalHubBackupScript}/bin/runLxAnnotateHubBackup";
-        Environment = [
-          "LD_LIBRARY_PATH=${lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib pkgs.libglvnd pkgs.zlib pkgs.glib pkgs.libxcb ]}"
-        ];
+        Environment = [ runtimeLdLibraryPathEnv ];
         ReadWritePaths = [
           envDataDir
           cfg.hub.backup.incomingDir
@@ -665,34 +677,32 @@ in
       };
     };
     systemd.services.lx-annotate-filewatcher = mkIf (!useWheelRuntime || cfg.runtime.commands.fileWatcher != null) {
-      description = "Django File Watcher Service";
-      after = [ "postgresql.service" "lx-annotate-boot.service" ] ++ encryptionServiceUnits; # Adjust based on your DB
+      description = "Drain lx-annotate watcher intake files";
+      after = [ "postgresql.service" ] ++ encryptionServiceUnits;
       wants = encryptionServiceUnits;
       requires = encryptionServiceUnits;
-      wantedBy = [ "lx-annotate-boot.service" ];
-      partOf = [ "lx-annotate-boot.service" ];
-      unitConfig = {
-        RequiresMountsFor = [ envDataDir ];
-      };
+      unitConfig = encryptedDataMountUnitConfig;
 
       serviceConfig = {
+        Type = "oneshot";
         User = endoreg-service-user-name; # Or whatever user runs the app
+        Group = endoreg-service-group-name;
         WorkingDirectory = runtimeWorkingDir;
         ExecStart = if useWheelRuntime then "${runLocalFileWatcherWheelScript}/bin/${watcherScriptName}" else "${runLocalFileWatcherScript}/bin/${watcherScriptName}";
-        Restart = "always";
-        RestartSec = "10m";
         Environment = [
-          "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:${pkgs.direnv}/bin:/run/current-system/sw/bin"
+          servicePathEnv
           "LX_ANNOTATE_ENCRYPTED_DATA_DIR=${runtimeDataRootPath}"
           "WATCHER_VIDEO_DIR=${runtimeDataRootPath}/videos"
           "WATCHER_REPORT_DIR=${runtimeDataRootPath}/report"
-          "NIX_PATH=nixpkgs=${pkgs.path}"
-          "LD_LIBRARY_PATH=${lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib pkgs.libglvnd pkgs.zlib pkgs.glib pkgs.libxcb pkgs.ffmpeg ]}"
+          nixPathEnv
+          runtimeFfmpegLdLibraryPathEnv
           "DJANGO_DATA_DIR=${runtimeDataRootPath}/storage" # Fixes the storage check
         ];
         MemoryHigh = "1G";
         MemoryMax = "2G";
         CPUQuota = "35%";
+        KillSignal = "SIGINT";
+        TimeoutStopSec = "30min";
 
         # 1. CPU Priority: Lower priority (Higher "Nice" value = nicer to others)
         Nice = 19; 
@@ -704,16 +714,18 @@ in
         
         # 3. OOM Score: If RAM runs out, kill this service first, never the web server.
         OOMScoreAdjust = 1000;
-        ReadWritePaths = [
-          endoreg-service-user-home
-          envDataDir
-          envConfDir
-          staticRootPath
-          runtimeRootPath
-          runtimeWheelRootPath
-          runtimeWheelVenvPath
-          "/var/endoreg-service-user/lx-annotate"
-        ];
+        ReadWritePaths = appReadWritePaths;
+      };
+    };
+    systemd.timers.lx-annotate-filewatcher = mkIf (!useWheelRuntime || cfg.runtime.commands.fileWatcher != null) {
+      description = "Manual lx-annotate watcher intake drain timer";
+      # Intentionally not enabled by default: intake processing is heavy I/O and
+      # should be started from an explicit maintenance/app-control path.
+      timerConfig = {
+        OnBootSec = "20m";
+        OnUnitInactiveSec = "30m";
+        Persistent = true;
+        Unit = "lx-annotate-filewatcher.service";
       };
     };
     systemd.services.lx-annotate-celery-worker = mkIf (!useWheelRuntime || cfg.runtime.commands.celeryWorker != null) {
@@ -723,9 +735,7 @@ in
       requires = encryptionServiceUnits;
       wantedBy = [ "lx-annotate-boot.service" ];
       partOf = [ "lx-annotate-boot.service" ];
-      unitConfig = {
-        RequiresMountsFor = [ envDataDir ];
-      };
+      unitConfig = encryptedDataMountUnitConfig;
 
       serviceConfig = {
         User = endoreg-service-user-name;
@@ -734,27 +744,14 @@ in
         ExecStart = if useWheelRuntime then "${runLocalCeleryWorkerWheelScript}/bin/${celeryWorkerScriptName}" else "${runLocalCeleryWorkerScript}/bin/${celeryWorkerScriptName}";
         Restart = "always";
         RestartSec = "15s";
-        Environment = [
-          "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:${pkgs.direnv}/bin:/run/current-system/sw/bin"
-          "NIX_PATH=nixpkgs=${pkgs.path}"
-          "LD_LIBRARY_PATH=${lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib pkgs.libglvnd pkgs.zlib pkgs.glib pkgs.libxcb ]}"
-        ];
+        Environment = appServiceEnvironment;
         MemoryHigh = "1G";
         MemoryMax = "2G";
         CPUQuota = "35%";
         Nice = 15;
         IOSchedulingClass = "idle";
         OOMScoreAdjust = 750;
-        ReadWritePaths = [
-          endoreg-service-user-home
-          envDataDir
-          envConfDir
-          staticRootPath
-          runtimeRootPath
-          runtimeWheelRootPath
-          runtimeWheelVenvPath
-          "/var/endoreg-service-user/lx-annotate"
-        ];
+        ReadWritePaths = appReadWritePaths;
       };
     };
     systemd.services.lx-annotate-acceptance = {
@@ -762,30 +759,15 @@ in
       after = [ "lx-annotate-boot.service" "nginx.service" ] ++ encryptionServiceUnits;
       wants = [ "lx-annotate-boot.service" "nginx.service" ] ++ encryptionServiceUnits;
       requires = encryptionServiceUnits;
-      unitConfig = {
-        RequiresMountsFor = [ envDataDir ];
-      };
+      unitConfig = encryptedDataMountUnitConfig;
       serviceConfig = {
         Type = "oneshot";
         User = endoreg-service-user-name;
         Group = endoreg-service-group-name;
         WorkingDirectory = runtimeWorkingDir;
         ExecStart = if useWheelRuntime then "${runLocalAcceptanceWheelScript}/bin/${acceptanceScriptName}" else "${runLocalAcceptanceScript}/bin/${acceptanceScriptName}";
-        Environment = [
-          "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:${pkgs.direnv}/bin:/run/current-system/sw/bin"
-          "NIX_PATH=nixpkgs=${pkgs.path}"
-          "LD_LIBRARY_PATH=${lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib pkgs.libglvnd pkgs.zlib pkgs.glib pkgs.libxcb ]}"
-        ];
-        ReadWritePaths = [
-          endoreg-service-user-home
-          envDataDir
-          envConfDir
-          staticRootPath
-          runtimeRootPath
-          runtimeWheelRootPath
-          runtimeWheelVenvPath
-          "/var/endoreg-service-user/lx-annotate"
-        ];
+        Environment = appServiceEnvironment;
+        ReadWritePaths = appReadWritePaths;
       };
     };
     systemd.services.lx-annotate-video-streamable-migration = {
@@ -794,20 +776,14 @@ in
       after = [ "lx-annotate-boot.service" ] ++ encryptionServiceUnits;
       wants = [ "lx-annotate-boot.service" ] ++ encryptionServiceUnits;
       requires = [ "lx-annotate-boot.service" ] ++ encryptionServiceUnits;
-      unitConfig = {
-        RequiresMountsFor = [ envDataDir ];
-      };
+      unitConfig = encryptedDataMountUnitConfig;
       serviceConfig = {
         Type = "oneshot";
         User = endoreg-service-user-name;
         Group = endoreg-service-group-name;
         WorkingDirectory = runtimeWorkingDir;
         ExecStart = "${lxAnnotateMigrateVideoStreamableStorageScript}/bin/${migrateVideoStreamableStorageScriptName}";
-        Environment = [
-          "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:${pkgs.direnv}/bin:/run/current-system/sw/bin"
-          "NIX_PATH=nixpkgs=${pkgs.path}"
-          "LD_LIBRARY_PATH=${lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib pkgs.libglvnd pkgs.zlib pkgs.glib pkgs.libxcb ]}"
-        ];
+        Environment = appServiceEnvironment;
         ReadWritePaths = [
           endoreg-service-user-home
           envDataDir
@@ -824,20 +800,14 @@ in
       after = [ "lx-annotate-boot.service" ] ++ encryptionServiceUnits;
       wants = encryptionServiceUnits;
       requires = [ "lx-annotate-boot.service" ] ++ encryptionServiceUnits;
-      unitConfig = {
-        RequiresMountsFor = [ envDataDir ];
-      };
+      unitConfig = encryptedDataMountUnitConfig;
       serviceConfig = {
         Type = "oneshot";
         User = endoreg-service-user-name;
         Group = endoreg-service-group-name;
         WorkingDirectory = runtimeWorkingDir;
         ExecStart = if useWheelRuntime then "${runLocalSapImportWheelScript}/bin/${sapImportScriptName}" else "${runLocalSapImportScript}/bin/${sapImportScriptName}";
-        Environment = [
-          "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:${pkgs.direnv}/bin:/run/current-system/sw/bin"
-          "NIX_PATH=nixpkgs=${pkgs.path}"
-          "LD_LIBRARY_PATH=${lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib pkgs.libglvnd pkgs.zlib pkgs.glib pkgs.libxcb ]}"
-        ];
+        Environment = appServiceEnvironment;
         ReadWritePaths = [
           endoreg-service-user-home
           envDataDir
@@ -863,30 +833,15 @@ in
       after = [ "lx-annotate-boot.service" ] ++ encryptionServiceUnits;
       wants = encryptionServiceUnits;
       requires = [ "lx-annotate-boot.service" ] ++ encryptionServiceUnits;
-      unitConfig = {
-        RequiresMountsFor = [ envDataDir ];
-      };
+      unitConfig = encryptedDataMountUnitConfig;
 
       serviceConfig = {
         Type = "oneshot";
         User = endoreg-service-user-name;
         WorkingDirectory = runtimeWorkingDir;
         ExecStart = if useWheelRuntime then "${runLocalExportFramesWheelScript}/bin/${exportFramesScriptName}" else "${runLocalExportFramesScript}/bin/${exportFramesScriptName}";
-        Environment = [
-          "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:${pkgs.direnv}/bin:/run/current-system/sw/bin"
-          "NIX_PATH=nixpkgs=${pkgs.path}"
-          "LD_LIBRARY_PATH=${lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib pkgs.libglvnd pkgs.zlib pkgs.glib pkgs.libxcb ]}"
-        ];
-        ReadWritePaths = [
-          endoreg-service-user-home
-          envDataDir
-          envConfDir
-          staticRootPath
-          runtimeRootPath
-          runtimeWheelRootPath
-          runtimeWheelVenvPath
-          "/var/endoreg-service-user/lx-annotate"
-        ];
+        Environment = appServiceEnvironment;
+        ReadWritePaths = appReadWritePaths;
       };
     };
     systemd.services.nginx.serviceConfig = {

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, model_validator
-from typing import Dict, List, Optional, Union, Any, cast
+from typing import Dict, List, Optional, Union, Any
 from pathlib import Path
 from lx_administration.logging import log_heading, get_logger
 from .facts import AnsibleFactsModel
@@ -21,7 +21,7 @@ def _is_extra_user_name_attribute(attribute_name: str) -> bool:
         return attribute_name.endswith("name")
 
 
-def _get_extra_user_names(vars: Dict[str, Union[str, Dict, List[str]]]) -> List[str]:
+def _get_extra_user_names(vars: Dict[str, Any]) -> List[str]:
     extra_user_names = []
     for key in vars.keys():
         if _is_extra_user_name_attribute(key):
@@ -44,7 +44,7 @@ class AnsibleInventoryHost(BaseModel):
         "dev"
     ]  # ["dev", "maintenance", "root", "center-user"]
     subnet: Optional[str] = "172.16.255."
-    vars: Dict[str, Union[str, Dict, List[str]]] = {}
+    vars: Dict[str, Any] = {}
     files: List[str] = []
     facts: Optional[AnsibleFactsModel] = None
 
@@ -111,7 +111,7 @@ class AnsibleInventoryHost(BaseModel):
 
 class AnsibleInventoryGroup(BaseModel):
     name: str
-    vars: Dict[str, Union[str, Dict, List[str]]] = Field(default_factory=dict)
+    vars: Dict[str, Any] = Field(default_factory=dict)
     files: List[str] = Field(default_factory=list)
     extra_user_names: List[str] = Field(default_factory=list)
 
@@ -147,7 +147,7 @@ class AnsibleInventoryGroup(BaseModel):
 
 class AnsibleInventoryRole(BaseModel):
     name: str
-    vars: Optional[Dict[str, Union[str, Dict, List[str]]]] = None
+    vars: Optional[Dict[str, Any]] = None
     files: List[str] = Field(default_factory=list)
     extra_user_names: List[str] = Field(default_factory=list)
 
@@ -484,9 +484,8 @@ class AnsibleInventory(BaseModel):
                 files_list = []
                 vars_dict = {}
             files_as_str = [str(p) for p in files_list]
-            safe_vars = cast(Dict[str, Union[str, Dict, List[str]]], vars_dict)
             roles.append(
-                AnsibleInventoryRole(name=role, files=files_as_str, vars=safe_vars)
+                AnsibleInventoryRole(name=role, files=files_as_str, vars=vars_dict)
             )
 
         self.roles = roles
@@ -545,12 +544,18 @@ class AnsibleInventory(BaseModel):
             group_luxnix=merged_data.get("group_luxnix", {}),
             group_roles=merged_data.get("group_roles", {}),
             group_services=merged_data.get("group_services", {}),
+            group_nixos=merged_data.get("group_nixos", {}),
+            group_imports=merged_data.get("group_imports", []),
             role_luxnix=merged_data.get("role_luxnix", {}),
             role_roles=merged_data.get("role_roles", {}),
             role_services=merged_data.get("role_services", {}),
+            role_nixos=merged_data.get("role_nixos", {}),
+            role_imports=merged_data.get("role_imports", []),
             host_luxnix=merged_data.get("host_luxnix", {}),
             host_roles=merged_data.get("host_roles", {}),
             host_services=merged_data.get("host_services", {}),
+            host_nixos=merged_data.get("host_nixos", {}),
+            host_imports=merged_data.get("host_imports", []),
         )
 
 

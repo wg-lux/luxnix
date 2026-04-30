@@ -1,17 +1,53 @@
 from pydantic import BaseModel
-from typing import Dict, List, Union, Optional, Any
+from typing import Dict, List, Optional, Any
 import yaml
 from lx_administration.autoconf.imports.utils import deep_update
 
 
 # Local helper that accepts an optional logger and does not create its own
 # Replaces underscores with dashes in top-level keys
+def _replace_unquoted_underscores(value: str) -> str:
+    result: List[str] = []
+    in_double_quotes = False
+    in_single_quotes = False
+    escaped = False
+
+    for char in value:
+        if escaped:
+            result.append(char)
+            escaped = False
+            continue
+
+        if char == "\\":
+            result.append(char)
+            escaped = True
+            continue
+
+        if char == '"' and not in_single_quotes:
+            in_double_quotes = not in_double_quotes
+            result.append(char)
+            continue
+
+        if char == "'" and not in_double_quotes:
+            in_single_quotes = not in_single_quotes
+            result.append(char)
+            continue
+
+        if char == "_" and not in_double_quotes and not in_single_quotes:
+            result.append("-")
+            continue
+
+        result.append(char)
+
+    return "".join(result)
+
+
 def _dictkey_replace_underscore_keys(
-    config_data: Dict[str, Union[List[str], str]], logger=None
-) -> Dict[str, Union[List[str], str]]:
-    transformed_config_data: Dict[str, Union[List[str], str]] = {}
+    config_data: Dict[str, Any], logger=None
+) -> Dict[str, Any]:
+    transformed_config_data: Dict[str, Any] = {}
     for nix_key, value in config_data.items():
-        transformed_key = nix_key.replace("_", "-")
+        transformed_key = _replace_unquoted_underscores(nix_key)
         if nix_key != transformed_key:
             if logger:
                 logger.info(f"Transforming key {nix_key} to {transformed_key}")
@@ -50,15 +86,21 @@ def strip_common_prefix(flat_dict):
 
 
 class MergedHostVars(BaseModel):
-    group_luxnix: Optional[Dict[str, Union[List[str], str]]] = {}
-    group_roles: Optional[Dict[str, Union[List[str], str]]] = {}
-    group_services: Optional[Dict[str, Union[List[str], str]]] = {}
-    role_luxnix: Optional[Dict[str, Union[List[str], str]]] = {}
-    role_roles: Optional[Dict[str, Union[List[str], str]]] = {}
-    role_services: Optional[Dict[str, Union[List[str], str]]] = {}
-    host_luxnix: Optional[Dict[str, Union[List[str], str]]] = {}
-    host_roles: Optional[Dict[str, Union[List[str], str]]] = {}
-    host_services: Optional[Dict[str, Union[List[str], str]]] = {}
+    group_luxnix: Optional[Dict[str, Any]] = {}
+    group_roles: Optional[Dict[str, Any]] = {}
+    group_services: Optional[Dict[str, Any]] = {}
+    group_nixos: Optional[Dict[str, Any]] = {}
+    group_imports: Optional[List[str]] = []
+    role_luxnix: Optional[Dict[str, Any]] = {}
+    role_roles: Optional[Dict[str, Any]] = {}
+    role_services: Optional[Dict[str, Any]] = {}
+    role_nixos: Optional[Dict[str, Any]] = {}
+    role_imports: Optional[List[str]] = []
+    host_luxnix: Optional[Dict[str, Any]] = {}
+    host_roles: Optional[Dict[str, Any]] = {}
+    host_services: Optional[Dict[str, Any]] = {}
+    host_nixos: Optional[Dict[str, Any]] = {}
+    host_imports: Optional[List[str]] = []
     template_name: Optional[str] = "main"
     system_users: Optional[List[str]] = ["admin"]
 
@@ -99,24 +141,36 @@ class MergedHostVars(BaseModel):
         group_luxnix = data.get("group_luxnix", {})
         group_roles = data.get("group_roles", {})
         group_services = data.get("group_services", {})
+        group_nixos = data.get("group_nixos", {})
+        group_imports = data.get("group_imports", [])
         role_luxnix = data.get("role_luxnix", {})
         role_roles = data.get("role_roles", {})
         role_services = data.get("role_services", {})
+        role_nixos = data.get("role_nixos", {})
+        role_imports = data.get("role_imports", [])
         host_luxnix = data.get("host_luxnix", {})
         host_roles = data.get("host_roles", {})
         host_services = data.get("host_services", {})
+        host_nixos = data.get("host_nixos", {})
+        host_imports = data.get("host_imports", [])
         template_name = data.get("template_name", "main")
 
         mergerd_vars = cls(
             group_luxnix=group_luxnix,
             group_roles=group_roles,
             group_services=group_services,
+            group_nixos=group_nixos,
+            group_imports=group_imports,
             role_luxnix=role_luxnix,
             role_roles=role_roles,
             role_services=role_services,
+            role_nixos=role_nixos,
+            role_imports=role_imports,
             host_luxnix=host_luxnix,
             host_roles=host_roles,
             host_services=host_services,
+            host_nixos=host_nixos,
+            host_imports=host_imports,
             template_name=template_name,
         )
 
@@ -191,15 +245,43 @@ class MergedHostVars(BaseModel):
         luxnix_configs = _dictkey_replace_underscore_keys(luxnix_configs, logger=logger)
         return luxnix_configs
 
+    def prepare_nixos(self, logger=None):
+        nixos_configs: Dict[str, Any] = {}
+        nixos_configs = deep_update(nixos_configs, self.group_nixos)
+        nixos_configs = deep_update(nixos_configs, self.role_nixos)
+        nixos_configs = deep_update(nixos_configs, self.host_nixos)
+        nixos_configs = _dictkey_replace_underscore_keys(nixos_configs, logger=logger)
+        return nixos_configs
+
+    def prepare_imports(self):
+        imports: List[str] = []
+        seen: set[str] = set()
+
+        for import_expr in (
+            (self.group_imports or [])
+            + (self.role_imports or [])
+            + (self.host_imports or [])
+        ):
+            if import_expr in seen:
+                continue
+            seen.add(import_expr)
+            imports.append(import_expr)
+
+        return imports
+
     def export_host_config(self, logger=None):
         roles = self.prepare_roles(logger=logger)
         services = self.prepare_services(logger=logger)
         luxnix = self.prepare_luxnix(logger=logger)
+        nixos = self.prepare_nixos(logger=logger)
+        imports = self.prepare_imports()
 
         host_config = {
             "role_configs": roles,
             "service_configs": services,
             "luxnix_configs": luxnix,
+            "nixos_configs": nixos,
+            "import_configs": imports,
         }
 
         if logger:
@@ -247,6 +329,8 @@ class MergedHostVars(BaseModel):
             host_home_desktops=data.get("host_home_desktops", {}),
             group_home_desktops=data.get("group_home_desktops", {}),
             host_luxnix=data.get("host_luxnix", {}),
+            host_nixos=data.get("host_nixos", {}),
+            host_imports=data.get("host_imports", []),
             system_users=data.get("system_users", []),  # use sub user settings
             home_configs=data.get("home_configs", {}),
             group_home_editors=data.get("group_home_editors", {}),

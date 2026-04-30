@@ -5,7 +5,6 @@ with args;
 let
   runtime = lxAnnotateRuntime;
   inherit (runtime.identities)
-    adminName
     endoreg-service-user-name
     endoreg-service-user-home
     endoreg-service-group-name;
@@ -15,13 +14,10 @@ let
     runtimeRootPath
     repoDir
     repoStaticRootPath
-    runtimeDataRootPath
     runtimeStorageRootPath
     runtimeStreamableVideoRootPath
     runtimeStreamableVideoRawRootPath
     runtimeStreamableVideoProcessedRootPath
-    runtimeProcessedReportDir
-    runtimeProcessedVideoDir
     runtimeStaticRootPath
     runtimeWheelRootPath
     runtimeWheelVenvPath
@@ -40,16 +36,7 @@ let
     hubBackupSnapshotPath
     hubBackupManifestPath
     dataRecoveryStateDir
-    dataRecoveryStateFile
-    legacyRepoDataRootPath
-    legacyRepoMediaRootPath
-    legacyDataProcessedReportDir
-    legacyDataProcessedVideoDir
-    legacyMediaProcessedReportDir
-    legacyMediaProcessedVideoDir
-    sslDir
-    sslKeyPath
-    sslCertPath;
+    dataRecoveryStateFile;
   inherit (runtime.env)
     envAllowedHosts
     envAnnotateDjangoSettingsModule
@@ -1055,6 +1042,7 @@ PY
     # preanonymized override here because that is the one intake env var the app
     # actually reads directly.
     export WATCHER_PREANONYMIZED_DIR="${envDataDir}/import/preanonymized_import"
+    export LX_ANNOTATE_FILEWATCHER_ARGS="--process-existing-once"
     ${devenvSyncCompatExports}
 
     # 4. Start the Watcher inside the devenv shell
@@ -1081,6 +1069,7 @@ PY
     # preanonymized override here because that is the one intake env var the app
     # actually reads directly.
     export WATCHER_PREANONYMIZED_DIR="${envDataDir}/import/preanonymized_import"
+    export LX_ANNOTATE_FILEWATCHER_ARGS="--process-existing-once"
     export PATH="${runtimeWheelVenvPath}/bin:$PATH"
 
     if [ ! -x "${runtimeWheelVenvPath}/bin/python" ]; then

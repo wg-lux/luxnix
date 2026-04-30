@@ -7,6 +7,9 @@
     (modulesPath + "/installer/scan/not-detected.nix")
     ./boot-decryption-config.nix
     ./disks.nix
+{% for import_expr in import_configs %}
+    {{ import_expr }}
+{% endfor %}
   ];
 
   user = {
@@ -17,34 +20,41 @@
     settings.mutable = false;
   };
 
-  roles = { 
-    {% for role_str, role_value in role_configs.items() -%}{% if role_value is string and '\n' in role_value -%}
+  roles = {
+{% for role_str, role_value in role_configs.items() %}{% if role_value is string and '\n' in role_value %}
 {{ role_str }} = ''
 {{ role_value | trim }}
 '';
-  {% else -%}
-{{ role_str }} = {{ role_value }};
-    {% endif -%}{% endfor -%}
+{% else %}
+{{ role_str }} = {{ role_value | nix }};
+{% endif %}{% endfor %}
 };
 
   services = {
-    {% for service_str, service_value in service_configs.items() -%} {% if service_value is string and '\n' in service_value -%}
+{% for service_str, service_value in service_configs.items() %}{% if service_value is string and '\n' in service_value %}
       {{ service_str }} = ''
 {{ service_value | trim }}
-''; 
-{% else -%}{{ service_str }} = {{ service_value }};
-    {% endif -%}{% endfor -%}
+'';
+{% else %}{{ service_str }} = {{ service_value | nix }};
+{% endif %}{% endfor %}
   };
 
   luxnix = {
-    {% for luxnix_str, luxnix_value in luxnix_configs.items() -%} {% if luxnix_value is string and '\n' in luxnix_value -%}
+{% for luxnix_str, luxnix_value in luxnix_configs.items() %}{% if luxnix_value is string and '\n' in luxnix_value %}
 {{ luxnix_str }} = ''
 {{ luxnix_value | trim }}
-''; 
-  {% else -%}
-    {{ luxnix_str }} = {{ luxnix_value }};
+'';
+{% else %}
+    {{ luxnix_str }} = {{ luxnix_value | nix }};
 
-{% endif -%}{% endfor -%}
+{% endif %}{% endfor %}
 
   };
+{% for nixos_str, nixos_value in nixos_configs.items() %}{% if nixos_value is string and '\n' in nixos_value %}
+  {{ nixos_str }} = ''
+{{ nixos_value | trim }}
+'';
+{% else %}
+  {{ nixos_str }} = {{ nixos_value | nix }};
+{% endif %}{% endfor %}
 }
