@@ -985,6 +985,23 @@
         "type": "github"
       }
     },
+    "nixtest": {
+      "locked": {
+        "dir": "lib",
+        "lastModified": 1774703191,
+        "narHash": "sha256-tLOD0UXAY7wZp7TPODtl/py14sXHDs8/wAgrn591rnE=",
+        "owner": "TECHNOFAB",
+        "repo": "nixtest",
+        "rev": "0404f642181f9f14318e73c2a82e700a0bbeb71c",
+        "type": "gitlab"
+      },
+      "original": {
+        "dir": "lib",
+        "owner": "TECHNOFAB",
+        "repo": "nixtest",
+        "type": "gitlab"
+      }
+    },
     "nixvim": {
       "inputs": {
         "flake-parts": "flake-parts_4",
@@ -1091,6 +1108,7 @@
         "nixos-generators": "nixos-generators",
         "nixos-hardware": "nixos-hardware",
         "nixpkgs": "nixpkgs_6",
+        "nixtest": "nixtest",
         "nixvim": "nixvim",
         "nur": "nur",
         "plasma-manager": "plasma-manager",

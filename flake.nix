@@ -62,6 +62,10 @@
       inputs.disko.follows = "disko";
     };
 
+    nixtest = {
+      url = "gitlab:TECHNOFAB/nixtest?dir=lib";
+    };
+
     nixos-generators = {
       url = "github:nix-community/nixos-generators";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -139,67 +143,81 @@
         };
       };
 
-    in
-    lib.mkFlake {
-      channels-config = {
-        allowUnfree = true;
+      base = lib.mkFlake {
+        channels-config = {
+          allowUnfree = true;
+        };
+
+        # Add modules to all homes
+        homes.modules = with inputs; [
+          plasma-manager.homeModules.plasma-manager
+          nixvim.homeModules.nixvim
+        ];
+
+        systems.modules.nixos = with inputs; [
+          home-manager.nixosModules.home-manager
+          disko.nixosModules.disko
+          impermanence.nixosModules.impermanence
+          sops-nix.nixosModules.sops
+          nix-topology.nixosModules.default
+        ];
+
+        overlays = with inputs; [
+          nixgl.overlay
+          nur.overlays.default
+          nix-topology.overlays.default
+        ];
+
+        deploy = lib.mkDeploy { inherit (inputs) self; };
+
+        checks = builtins.mapAttrs (
+          system: deploy-lib: deploy-lib.deployChecks inputs.self.deploy
+        ) inputs.deploy-rs.lib;
+
+        topology =
+          with inputs;
+          let
+            host = self.nixosConfigurations.${builtins.head (builtins.attrNames self.nixosConfigurations)};
+          in
+          import nix-topology {
+            inherit (host) pkgs;
+            modules = [
+              (import ./topology {
+                inherit (host) config;
+              })
+              { inherit (self) nixosConfigurations; }
+            ];
+          };
       };
 
-      # Add modules to all homes
-      homes.modules = with inputs; [
-        # plasma-manager.homeModules.plasma-manager
-        # nixvim.homeModules.nixvim
-        plasma-manager.homeModules.plasma-manager
-        nixvim.homeModules.nixvim
-      ];
-
-      # stdenv."x86_64-linux".system.modules.nixos = with inputs; [
-        systems.modules.nixos = with inputs; [
-        # nix-ld.nixosModules.nix-ld
-        # stylix.nixosModules.stylix
-        home-manager.nixosModules.home-manager
-        disko.nixosModules.disko
-        # lanzaboote.nixosModules.lanzaboote
-        impermanence.nixosModules.impermanence
-        sops-nix.nixosModules.sops
-        nix-topology.nixosModules.default
-
-        # authentik-nix.nixosModules.default
-      ];
-
-      # systems.hosts.framework.modules = with inputs; [
-      #   nixos-hardware.nixosModules.framework-13-7040-amd
-      # ];
-
-      # homes.modules = with inputs; [
-      #   impermanence.nixosModules.home-manager.impermanence
-      # ];
-
-      overlays = with inputs; [
-        nixgl.overlay
-        nur.overlays.default
-        nix-topology.overlays.default
-      ];
-
-      deploy = lib.mkDeploy { inherit (inputs) self; };
-
-      checks = builtins.mapAttrs (
-        system: deploy-lib: deploy-lib.deployChecks inputs.self.deploy
-      ) inputs.deploy-rs.lib;
-
-      topology =
-        with inputs;
-        let
-          host = self.nixosConfigurations.${builtins.head (builtins.attrNames self.nixosConfigurations)};
-        in
-        import nix-topology {
-          inherit (host) pkgs; # Only this package set must include nix-topology.overlays.default
-          modules = [
-            (import ./topology {
-              inherit (host) config;
+      nixtestPackages =
+        builtins.mapAttrs
+          (system: _:
+            let
+              pkgs = import inputs.nixpkgs {
+                inherit system;
+                config.allowUnfree = true;
+              };
+              ntlib = inputs.nixtest.lib { inherit pkgs; };
+            in
+            {
+              nixtests = ntlib.mkNixtest {
+                modules = ntlib.autodiscover {
+                  dir = ./tests/nixtest;
+                };
+                args = {
+                  inherit pkgs ntlib;
+                  repoRoot = ./.;
+                };
+              };
             })
-            { inherit (self) nixosConfigurations; }
-          ];
-        };
+          base.packages;
+
+      nixtestChecks = builtins.mapAttrs (_: packages: { inherit (packages) nixtests; }) nixtestPackages;
+
+    in
+    inputs.nixpkgs.lib.recursiveUpdate base {
+      packages = nixtestPackages;
+      checks = nixtestChecks;
     };
 }

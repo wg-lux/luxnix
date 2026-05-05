@@ -12,7 +12,7 @@ In the LuxNix system, there's an important distinction between roles and users. 
 ```nix
 user.admin = {
     name = "admin";
-    initialPassword = "1";
+    passwordFile = "/etc/secrets/vault/SCRT_local_password_admin_password_hash";
 };
 ```
 
@@ -102,9 +102,53 @@ homes/
 ## Security Considerations
 
 ### Password Management
-- Initial passwords must be changed on first login
-- Password policies enforced
-- Optional SOPS integration for secret management
+- Passwords are configured as password hashes, not plaintext Nix values.
+- GPU client (`gc-*`) machines enable `security.luxnix.local-users` by default.
+- GC machines use the vault hash file as the primary admin password source and
+  install a known local fallback hash if that file is missing. The fallback is
+  deliberately static and precomputed so activation never generates an unknown
+  password that could lock the machine.
+- Optional SOPS integration can provide the admin password hash with
+  `neededForUsers = true`.
+- LuxNix intentionally refuses to manage BIOS/UEFI firmware passwords. Keep
+  firmware passwords in an out-of-band recovery record; do not generate them at
+  activation time.
+
+### GC Admin Password Safety Defaults
+
+The default policy on hosts whose `networking.hostName` starts with `gc-` is:
+
+```nix
+security.luxnix.local-users = {
+  enable = true;
+  adminPassword = {
+    source = "vault-file";
+    hashedFile = "/etc/secrets/vault/SCRT_local_password_admin_password_hash";
+    fallback.enable = true;
+  };
+  firmwarePassword.manage = false;
+};
+```
+
+To use SOPS for the admin password hash on a GC host, store only the hashed
+password in the SOPS file and disable the local fallback for that source:
+
+```nix
+security.luxnix.local-users.adminPassword = {
+  source = "sops";
+  fallback.enable = false;
+  sops = {
+    sopsFile = ./secrets.yaml;
+    secretName = "admin-password-hash";
+  };
+};
+```
+
+Generate the hash outside Nix, then encrypt the hash:
+
+```bash
+mkpasswd -m sha-512
+```
 
 ### Access Control
 - Role-based file permissions

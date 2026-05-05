@@ -27,12 +27,13 @@
     endoreg-client.api.logLevel = "WARNING";
     endoreg-client.api.maxRequestSize = "50G";
     endoreg-client.api.settingsProfile = "prod";
-    endoreg-client.centralNodes = ["s-04"];    endoreg-client.dbApiLocal = true;
+    endoreg-client.centralNodes = ["s-04"];
     endoreg-client.enable = true;
     endoreg-client.paths.storagePersistingEnable = true;
     endoreg-client.paths.storagePersistingIsExternalDrive = true;
     endoreg-client.paths.storagePersistingMountPoint = "/mnt/endoreg-client-storage";
     endoreg-client.repository.branch = "container";
+    endoreg-client.defaultCenterKey = "university_hospital_wuerzburg";
     nextcloudClient.enable = true;
     postgres.default.enable = true;
     custom-packages.baseDevelopment = true;
@@ -42,7 +43,18 @@
     };
 
   services = {
+    luxnix.endoregDbApiLocal.enable = lib.mkForce false;
+    luxnix.lxAnnotateLocal.runtime.mode = "wheel";
+
+    luxnix.vllm = {
+      enable = false;
+      host = "127.0.0.1";
+      port = 8000;
+      model = "Qwen/Qwen2.5-1.5B-Instruct";
+      maxModelLen = 8192;
+      gpuMemoryUtilization = 0.85;
     };
+  };
 
   luxnix = {
     boot-decryption-stick.enable = true;

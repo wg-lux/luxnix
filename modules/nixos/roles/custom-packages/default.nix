@@ -127,39 +127,39 @@ with lib.luxnix; let
     nvidia-container-toolkit
   ];
 
-  customPackages = [
-    pkgs.bash
-    pkgs.bashInteractive
-    pkgs.iftop
-    pkgs.bmon
-    pkgs.nload
+  customPackages = with pkgs; [
+    bash
+    bashInteractive
+    iftop
+    bmon
+    nload
   ]
-  ++ (if cfg.kdePlasma then kdePlasma else [ ])
-  ++ (if cfg.baseDevelopment then baseDevelopment else [ ])
-  ++ (if cfg.office then office else [ ])
-  ++ (if cfg.visuals then visuals else [ ])
-  ++ (if cfg.dev01 then dev01 else [ ])
-  ++ (if cfg.dev02 then dev02 else [ ])
-  ++ (if cfg.dev03 then dev03 else [ ])
-  ++ (if cfg.cloud then cloud else [ ])
-  ++ (if cfg.protonmail then [
-    pkgs.protonmail-bridge-gui
-    pkgs.protonmail-desktop
-    pkgs.proton-pass
-    pkgs.planify
-  ] else [ ])
-  ++ (if cfg.hardwareAcceleration then [
-    pkgs.pciutils
-    pkgs.libva
+  ++ optionals cfg.kdePlasma kdePlasma
+  ++ optionals cfg.baseDevelopment baseDevelopment
+  ++ optionals cfg.office office
+  ++ optionals cfg.visuals visuals
+  ++ optionals cfg.dev01 dev01
+  ++ optionals cfg.dev02 dev02
+  ++ optionals cfg.dev03 dev03
+  ++ optionals cfg.cloud cloud
+  ++ optionals cfg.protonmail [
+    protonmail-bridge-gui
+    protonmail-desktop
+    proton-pass
+    planify
+  ]
+  ++ optionals cfg.hardwareAcceleration [
+    pciutils
+    libva
 
-    pkgs.vdpauinfo # sudo vainfo
-    pkgs.libva-utils # sudo vainfo
-  ] else [ ])
-  ++ (if (podmanEnabled && nvidiaEnabled) then podmanNvidia else [ ])
+    vdpauinfo # sudo vainfo
+    libva-utils # sudo vainfo
+  ]
+  ++ optionals (podmanEnabled && nvidiaEnabled) podmanNvidia
   ;
 
   ldPackages = lib.mkIf cfg.ld.enable (
-    ldBase ++ (if cfg.cuda then ldCuda else [ ])
+    ldBase ++ optionals cfg.cuda ldCuda
   );
 in
 {
@@ -197,9 +197,9 @@ in
 
     hardware.graphics = {
       enable = lib.mkDefault cfg.hardwareAcceleration;
-      extraPackages = with pkgs; (if cfg.hardwareAcceleration then [
-        intel-media-driver
-      ] else [ ]);
+      extraPackages = optionals cfg.hardwareAcceleration [
+        pkgs.intel-media-driver
+      ];
     };
 
     environment.variables = { };

@@ -32,7 +32,7 @@ with lib;
 
         branch = mkOption {
           type = types.str;
-          default = "erc";
+          default = "test";
           description = "Git branch to checkout for lx-annotate.";
         };
 
@@ -82,6 +82,26 @@ with lib;
   runtime = mkOption {
     type = types.submodule {
       options = {
+        commands = mkOption {
+          type = types.submodule {
+            options = {
+              fileWatcher = mkOption {
+                type = types.nullOr types.str;
+                default = "$LX_ANNOTATE_WHEEL_VENV/bin/python -m django run_filewatcher --settings=lx_annotate.settings.settings_prod \${LX_ANNOTATE_FILEWATCHER_ARGS:-}";
+                description = "Wheel-mode command used to run the lx-annotate file watcher.";
+              };
+
+              exportFrames = mkOption {
+                type = types.nullOr types.str;
+                default = "export-frames";
+                description = "Wheel-mode command used to export annotated frames.";
+              };
+            };
+          };
+          default = { };
+          description = "Wheel-mode auxiliary service commands for lx-annotate-local.";
+        };
+
         limits = mkOption {
           type = types.submodule {
             options = {

@@ -16,13 +16,13 @@ in {
   services.open-webui.enable = true;
   services.open-webui.port = 8085;
 
-  systemd.services."ollama-pull-deepseek" = {
-    description = "Pull deepseek-r1 Ollama model";
+  systemd.services."ollama-pull-lx-anonymizer-default-model" = {
+    description = "Pull lx-anonymizer default Ollama model";
     after = [ "ollama.service" ];
     requires = [ "ollama.service" ];
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = "${config.services.ollama.package}/bin/ollama pull deepseek-r1";
+      ExecStart = "${config.services.ollama.package}/bin/ollama pull qwen2.5:7b-instruct";
       User = "ollama";
     };
     wantedBy = [ "multi-user.target" ];

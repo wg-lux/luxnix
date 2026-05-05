@@ -22,7 +22,7 @@ let
       isDev
       ;
   };
-  processes = import ./processes.nix {
+  customProcesses = import ./processes.nix {
     inherit
       pkgs
       lib
@@ -117,5 +117,5 @@ in
 
   };
 
-  processes = processes;
+  processes = customProcesses;
 }

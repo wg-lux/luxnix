@@ -1,8 +1,7 @@
-{
-  lib,
-  config,
-  pkgs,
-  ...
+{ lib
+, config
+, pkgs
+, ...
 }:
 
 
@@ -46,7 +45,7 @@ in
       dbApiLocal = mkOption {
         type = types.bool;
         default = false;
-        description = "Enable local endoreg-db-api service";
+        description = "Deprecated no-op. The endoreg-client role no longer manages a local endo-api service.";
       };
 
       endoAi = mkOption {
@@ -57,14 +56,21 @@ in
 
       lxAi = mkOption {
         type = types.bool;
-        default = true;# false this service will not automatically run on each client, for this turn to true
-        description = "Enable lx-ai training service";
+        default = false;
+        description = "Enable the lx-ai training service unit.";
       };
 
       defaultCenter = mkOption {
         type = types.str;
-        default = "university_hospital_wuerzburg";
-        description = "Default center value for endoreg client";
+        default = "University Hospital Wuerzburg";
+        description = "Default center reference for endoreg client. lx-annotate resolves this first as center_key, then as center name.";
+        example = "University Hospital Wuerzburg";
+      };
+
+      defaultCenterKey = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Optional explicit center_key exported to lx-annotate as DEFAULT_CENTER_KEY. Set this to avoid center-name ambiguity.";
         example = "university_hospital_wuerzburg";
       };
 
@@ -200,8 +206,6 @@ in
         ollamaKeepAlive = resolvedOllamaKeepAlive;
       };
 
-      annotateRuntimeLimits = cfg.lxAnnotate.runtime.limits;
-
       annotateDjangoOverrides = {
         djangoModule = cfg.lxAnnotate.django.djangoModule;
         assetDir =
@@ -215,10 +219,16 @@ in
         let
           baseExtraSettings = cfg.api.extraSettings;
         in
-        recursiveUpdate baseExtraSettings {
-          CENTRAL_NODES = cfg.centralNodes;
-          IS_CENTRAL_NODE = false;
-        };
+        recursiveUpdate baseExtraSettings (
+          {
+            CENTRAL_NODES = cfg.centralNodes;
+            IS_CENTRAL_NODE = false;
+            DEFAULT_CENTER = cfg.defaultCenter;
+          }
+          // lib.optionalAttrs (cfg.defaultCenterKey != null) {
+            DEFAULT_CENTER_KEY = cfg.defaultCenterKey;
+          }
+        );
 
       annotateDjango = recursiveUpdate cfg.api (
         annotateDjangoOverrides
@@ -246,21 +256,7 @@ in
 
       luxnix.nvidia-prime.enable = true;
 
-      services.luxnix.endoregDbApiLocal = mkIf (!config.roles.endoreg-db-central-01.enable) {
-        enable = mkDefault cfg.dbApiLocal;
-
-        # Pass configuration options to the service
-        api = cfg.api // {
-          # Add central nodes information
-          extraSettings = recursiveUpdate cfg.api.extraSettings {
-            CENTRAL_NODES = cfg.centralNodes;
-            IS_CENTRAL_NODE = false;
-          };
-        };
-        database = cfg.database;
-        service = cfg.service;
-        repository = cfg.repository;
-      };
+      services.luxnix.endoregDbApiLocal.enable = mkIf (!config.roles.endoreg-db-central-01.enable) (mkForce false);
 
       services.luxnix.lxAnnotateLocal = {
         enable = cfg.lxAnnotate.enable;
@@ -268,7 +264,7 @@ in
         source = cfg.lxAnnotate.source;
         django = annotateDjango;
         database = cfg.database;
-        
+        runtime.commands = cfg.lxAnnotate.runtime.commands;
       };
 
       services.luxnix.lxAiLocal = {
@@ -282,15 +278,13 @@ in
       };
 
       services.luxnix.endoAi = {
-        enable = cfg.endoAi;
+        enable = false;
       };
 
       # Create additional systemd tmpfiles for configuration
       systemd.tmpfiles.rules = [
         # USB Encrypter
         "d /mnt/endoreg-sensitive-data 0770 root ${sensitiveServiceGroupName} -"
-        # Django configuration directory
-        "d /etc/endoreg-api 0755 root root -"
         # Service user config directory
         "d /var/endoreg-service-user/config 0755 endoreg-service-user ${endoregServiceGroupName} -"
         # Storage directories (must exist for the symlinks to valid targets)
@@ -328,23 +322,25 @@ in
               Type = "oneshot";
               User = "root";
               Environment = [
-                "ENV_FILE=${configurationPath}/.env"
+                "STORAGE_PERSISTING_EXTERNAL_DRIVE=${if cfg.paths.storagePersistingIsExternalDrive then "true" else "false"}"
+                "STORAGE_PERSISTING_MOUNT_POINT=${toString storagePersistingMountPoint}"
+                "STORAGE_PERSISTING_HDD_ID=${lib.attrByPath [ "secretspec" "secrets" "STORAGE_PERSISTING_HDD_ID" ] "" config}"
+                "STORAGE_PERSISTING_HDD_PART=${lib.attrByPath [ "secretspec" "secrets" "STORAGE_PERSISTING_HDD_PART" ] "part1" config}"
               ];
-              WorkingDirectory = configurationPath;
               ExecStartPre = [ ];
               ExecStart = pkgs.writeShellScript "mount-persisting-storage-service" ''
                 set -euo pipefail
-                # Read from .env file 
-                # STORAGE_PERSISTING_HDD_ID: str, 
-                # STORAGE_PERSISTING_EXTERNAL_DRIVE: bool
-                # STORAGE_PERSISTING_MOUNT_POINT: str
-                source "${configurationPath}/.env"
 
                 # if STORAGE_PERSISTING_EXTERNAL_DRIVE is not true, exit
                 if [ "$STORAGE_PERSISTING_EXTERNAL_DRIVE" != "true" ]; then
                   echo "STORAGE_PERSISTING_EXTERNAL_DRIVE is not true; skipping mount"
                   exit 0
 
+                fi
+
+                if [ -z "''${STORAGE_PERSISTING_HDD_ID:-}" ]; then
+                  echo "ERROR: STORAGE_PERSISTING_HDD_ID is not set"
+                  exit 1
                 fi
 
                 # Check if already mounted
@@ -390,57 +386,13 @@ in
 
       # Update Home Manager configuration to use XDG User Dirs and OutOfStore symlinks
       home-manager.users.${clientUserName} =
-        { config, ... }:
-        let
-          outOfStore = config.lib.file.mkOutOfStoreSymlink;
-
-        in
+        { ... }:
         {
           home.username = mkDefault clientUserName;
           home.stateVersion = mkDefault clientHomeStateVersion;
 
           roles.desktop.enable = mkDefault true;
-
-          # Create symlinks in the resolved Desktop directory pointing to the system storage paths
-          home.file."${desktopDirName}/Video_Input" = {
-            source = outOfStore videoInputDir;
-          };
-
-          home.file."${desktopDirName}/PDF_Input" = {
-            source = outOfStore pdfInputDir;
-          };
         };
-
-      # Generate Django secret key if it doesn't exist
-      systemd.services.endoreg-django-setup = mkIf cfg.dbApiLocal {
-        description = "Django configuration setup (handled by managed-secrets)";
-        wantedBy = [ "multi-user.target" ];
-        before = [ "endo-api-boot.service" ];
-        after = [ "managed-secrets-setup.service" ];
-        requires = [ "managed-secrets-setup.service" ];
-        serviceConfig = {
-          Type = "oneshot";
-          RemainAfterExit = true;
-          User = "root";
-          ExecStart = pkgs.writeShellScript "setup-django-config" ''
-            set -euo pipefail
-
-            # Verify that Django secret key exists (should be created by managed-secrets)
-            if [ ! -f ${cfg.api.djangoSecretKeyFile} ]; then
-              echo "ERROR: Django secret key not found at ${cfg.api.djangoSecretKeyFile}"
-              echo "This should have been created by managed-secrets-setup.service"
-              exit 1
-            fi
-
-            # Ensure correct permissions (managed-secrets should handle this, but double-check)
-            chmod 640 ${cfg.api.djangoSecretKeyFile}
-            chown root:${sensitiveServiceGroupName} ${cfg.api.djangoSecretKeyFile}
-
-            echo "Django configuration verification completed"
-          '';
-        };
-      };
-
     }
   );
 }

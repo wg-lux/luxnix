@@ -115,6 +115,8 @@ in
                   "org.kde.plasma.battery"
                   "org.kde.plasma.networkmanagement"
                   "org.kde.plasma.volume"
+                  "org.kde.plasma.clipboard"
+                  "org.kde.plasma.devicenotifier"
                 ];
                 # And explicitly hide
                 hidden = [
@@ -187,15 +189,7 @@ in
             };
             window-types = [ "normal" ];
           };
-          apply = {
-            noborder = {
-              value = true;
-              apply = "force";
-            };
-            # `apply` defaults to "apply-initially"
-            maximizehoriz = true;
-            maximizevert = true;
-          };
+
         }
       ];
 
@@ -231,8 +225,6 @@ in
         edgeBarrier = 0; # Disables the edge-barriers introduced in plasma 6.1
         cornerBarrier = true; # When enabled, prevents the cursor from crossing at screen-corners.
 
-        scripts.polonium.enable = true;
-        borderlessMaximizedWindows = true;
 
         nightLight = {
           mode = "location";
@@ -243,17 +235,21 @@ in
             night = 3750;
           };
         };
+        titlebarButtons = {
+          left = [ "help" "application-menu" ];
+          right = [ "minimize" "maximize" "close" ];
+        };
 
       };
 
       kscreenlocker = {
         appearance = {
           alwaysShowClock = true;
-          wallpaperPictureOfTheDay = {
+          #wallpaperPictureOfTheDay = {
             # null or one of “apod”, “bing”, “flickr”, “natgeo”, “noaa”, “wcpotd”, “epod”, “simonstalenhag”
-            provider = "bing";
-          };
-          # wallpaper = "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Kay/contents/images/1080x1920.png";
+          #  provider = "bing";
+          #};
+          wallpaper = "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Kay/contents/images/1080x1920.png";
 
         };
         lockOnResume = true;
@@ -291,7 +287,6 @@ in
       #
       configFile = {
         baloofilerc."Basic Settings"."Indexing-Enabled" = false;
-        kwinrc."org.kde.kdecoration2".ButtonsOnLeft = "SF";
         kwinrc.Desktops.Number = {
           value = 8;
           # Forces kde to not change this value (even through the settings app).

@@ -5,9 +5,29 @@ The `managed-secrets` role automatically generates and manages commonly used sec
 ## Features
 
 - **Automatic Generation**: Creates missing secret files on system boot
+- **Atomic Writes**: Refreshes secrets through same-directory temp files and atomic replacement
 - **Proper Permissions**: Sets correct ownership and permissions (root:sensitive-service-group 640)
-- **Idempotent**: Only generates secrets that don't already exist
+- **Refresh Support**: Can refresh selected secrets on every run
+- **Vault-Aware Runtime Integration**: Can consume Vault credentials from a dedicated systemd runtime environment
 - **Management Tools**: Provides CLI tools for secret management
+
+## Important Semantics
+
+`managed-secrets` now supports three behaviors:
+
+- create-if-missing
+- force regeneration
+- refresh-on-boot
+
+That means:
+
+- if a target file does not exist, it is generated or materialized
+- if `refreshOnBoot = true`, the file is regenerated or re-fetched on every service run
+- if `forceRegenerate = true`, the file is also regenerated even if it already exists
+
+This is especially important for externally sourced secrets, including Vault-backed custom secrets.
+
+`customSecrets` now participate in the same generation loop as the built-in secrets. They get the same create-if-missing, refresh, force-regenerate, permission, and atomic-write handling.
 
 ## Managed Secrets
 
@@ -51,8 +71,26 @@ roles.managed-secrets.customSecrets.my-app-key = {
   path = "/etc/secrets/vault/my_app_secret";
   generator = "openssl rand -hex 32";
   description = "My application secret key";
+  refreshOnBoot = true;
 };
 ```
+
+For Vault-backed custom secrets, the common pattern is:
+
+```nix
+roles.managed-secrets.customSecrets.my-vault-secret = {
+  path = "/etc/secrets/vault/my_vault_secret";
+  owner = "root";
+  group = "root";
+  mode = "0400";
+  refreshOnBoot = true;
+  generator = ''
+    ${pkgs.vault}/bin/vault kv get -field=my_field secret/data/nodes/${config.networking.hostName}/my-app
+  '';
+};
+```
+
+If the host uses `luxnix.vault.client`, `managed-secrets-setup.service` can consume the runtime Vault environment prepared by `vault-auth-setup.service`, so Vault-backed generators do not depend on root's interactive shell environment.
 
 ## Management Commands
 
@@ -85,9 +123,16 @@ sudo systemctl start managed-secrets-setup.service
 sudo systemctl status managed-secrets-setup.service
 ```
 
+If Vault-backed generation is enabled on the host, also inspect:
+
+```bash
+sudo systemctl status vault-auth-setup.service
+```
+
 ## Security
 
 - All secrets are generated using cryptographically secure methods (`openssl rand`)
+- Refreshed secrets are written atomically to reduce partial-write risk
 - Files are created with restrictive permissions (640)
 - Owner: `root`, Group: `sensitive-service-group`
 - Directory structure uses proper permissions (700 for `/etc/secrets`, 750 for `/etc/secrets/vault`)
@@ -97,6 +142,7 @@ sudo systemctl status managed-secrets-setup.service
 - Runs early in boot process before services that need secrets
 - Other services depend on `managed-secrets-setup.service`
 - Requires `sensitive-service-group` to exist (created by generic-settings)
+- When `luxnix.vault.client` is enabled, `managed-secrets-setup.service` can be ordered after `vault-auth-setup.service` and consume `/run/luxnix/vault/vault.env`
 
 ## Troubleshooting
 
@@ -137,6 +183,15 @@ sudo systemctl restart postgres-endoreg-setup.service
 sudo systemctl restart endo-api-boot.service
 ```
 
+If the failing secret is Vault-backed, inspect the chain in order:
+
+```bash
+sudo systemctl status vault-auth-setup.service
+sudo systemctl status managed-secrets-setup.service
+sudo journalctl -u vault-auth-setup.service -b
+sudo journalctl -u managed-secrets-setup.service -b
+```
+
 ## Integration
 
 Services that depend on managed secrets should:
@@ -153,3 +208,8 @@ Services that depend on managed secrets should:
    ```
 
 The managed-secrets role ensures these files exist before dependent services start.
+
+## Related Docs
+
+- [lx-annotate Encrypted Data](/home/admin/luxnix/docs/lx-annotate-encrypted-data.md)
+- [Nixtest Safety Suite](/home/admin/luxnix/docs/testing-nixtests.md)

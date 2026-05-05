@@ -17,14 +17,14 @@ conf/hostinfo.json
 logs/
 **.env
 test_wd/
-
+.codex
 *.key
 
 # pre-commit
 .pre-commit-config.yaml
 
 untracked-notes.md
-
+node_modules/
 .vscode
 result/
 secrets/

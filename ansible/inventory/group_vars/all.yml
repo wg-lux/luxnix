@@ -175,6 +175,7 @@ group_luxnix:
   generic-settings.smtpUserFilePath: '"/etc/secrets/vault/smtp_user"'
   generic-settings.smtpPwdFilePath: '"/etc/secrets/vault/smtp_pwd"'
 
+  generic_settings.transferCaPath: '"/var/lib/lx-annotate/ssl/transfer_ca.crt"'
   generic_settings.vpnSubnet: '"172.16.255.0/24"'
   generic_settings.sensitiveServiceGroupName: '"sensitiveServices"'
   generic_settings.postgres.enable: "true"
