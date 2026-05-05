@@ -261,7 +261,7 @@ in
           max_wal_senders = lib.mkDefault 5;
           wal_keep_size = lib.mkDefault "512MB";
           password_encryption = "scram-sha-256";
-          max_connections = "400";
+          max_connections = "200";
           # hot_standby = true;
           # log_connections = true;
           # log_statement = "all";
