@@ -20,30 +20,48 @@ in
   options.user.admin = with types; {
     name = mkOpt str "admin" "The name of the user's account";
     passwordFile = mkOpt str passwordFile "The hashed password file to use";
+    passwordFallback = {
+      enable = mkBoolOpt true "Create a known fallback hashed password file when passwordFile is missing.";
+      hashedPassword = mkOption {
+        type = str;
+        default = "$6$yC9hyVoZEYLlzjbZ$pILBYLOZBlplgoYL9L.dyIKPGPrcW2ifd1I3ffRAYIwsv8B.pA76Eo6OUq71gJJKl8kGyBsmlbKwnGcKQEpoa.";
+        description = ''
+          SHA-512 crypt hash used only as an explicit local recovery fallback.
+          This must be a precomputed, known value and must never be randomly
+          generated during activation.
+        '';
+      };
+    };
     extraGroups = mkOpt (listOf str) [ ] "Groups for the user to be assigned.";
     extraOptions = mkOpt attrs { } "Extra options passed to users.users.<name>";
   };
 
   config = {
-    system.activationScripts.createDefaultHashedPasswordAdmin = {
-      text = ''
-        set -e
-        if [ ! -f ${passwordFile} ]; then
-          echo "Creating default hashed password file for user ${cfg.name}"
-          mkdir -p /etc/secrets/vault
-          # Default hashed password (as requested)
-          # This is a SHA-512 crypt hash that you trust and know beforehand.
-          # theater-chief
-          echo "\$6\$yC9hyVoZEYLlzjbZ\$pILBYLOZBlplgoYL9L.dyIKPGPrcW2ifd1I3ffRAYIwsv8B.pA76Eo6OUq71gJJKl8kGyBsmlbKwnGcKQEpoa." > ${passwordFile}
-          chmod 600 ${passwordFile}
+    assertions = [
+      {
+        assertion = !cfg.passwordFallback.enable || cfg.passwordFallback.hashedPassword != "";
+        message = "user.admin.passwordFallback.hashedPassword must be set when admin password fallback is enabled.";
+      }
+    ];
 
+    system.activationScripts.createDefaultHashedPasswordAdmin = mkIf cfg.passwordFallback.enable {
+      deps = [ "etc" ];
+      text = ''
+        set -euo pipefail
+        password_file=${lib.escapeShellArg cfg.passwordFile}
+        if [ ! -s "$password_file" ]; then
+          echo "Creating known fallback hashed password file for user ${cfg.name} at $password_file" >&2
+          install -d -m 0700 -o root -g root "$(dirname "$password_file")"
+          umask 077
+          printf '%s\n' ${lib.escapeShellArg cfg.passwordFallback.hashedPassword} > "$password_file"
+          chmod 0600 "$password_file"
         fi
       '';
     };
     users.users.${cfg.name} = {
       shell = pkgs.zsh;
       isNormalUser = true;
-      hashedPasswordFile = passwordFile;
+      hashedPasswordFile = cfg.passwordFile;
       home = "/home/${cfg.name}";
       group = "users";
       linger = true; # Makes sure user services start at boot not at login

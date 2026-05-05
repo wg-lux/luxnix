@@ -770,9 +770,8 @@ in
         ReadWritePaths = appReadWritePaths;
       };
     };
-    systemd.services.lx-annotate-video-streamable-migration = {
+    systemd.services.lx-annotate-video-streamable-migration = mkIf cfg.streamableMigration.enable {
       description = "Migrate lx-annotate videos into streamable protected storage";
-      wantedBy = [ "multi-user.target" ];
       after = [ "lx-annotate-boot.service" ] ++ encryptionServiceUnits;
       wants = [ "lx-annotate-boot.service" ] ++ encryptionServiceUnits;
       requires = [ "lx-annotate-boot.service" ] ++ encryptionServiceUnits;
@@ -784,6 +783,7 @@ in
         WorkingDirectory = runtimeWorkingDir;
         ExecStart = "${lxAnnotateMigrateVideoStreamableStorageScript}/bin/${migrateVideoStreamableStorageScriptName}";
         Environment = appServiceEnvironment;
+        TimeoutStartSec = "infinity";
         ReadWritePaths = [
           endoreg-service-user-home
           envDataDir

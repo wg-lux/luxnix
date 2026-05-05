@@ -56,8 +56,8 @@ in
 
       lxAi = mkOption {
         type = types.bool;
-        default = true;# false this service will not automatically run on each client, for this turn to true
-        description = "Enable lx-ai training service";
+        default = false;
+        description = "Enable the lx-ai training service unit.";
       };
 
       defaultCenter = mkOption {

@@ -60,19 +60,22 @@ When changing LuxNix or lx-annotate integration code, keep these rules:
 
 ## Streamable Video Migration
 
-The module now exposes a dedicated manual migration unit for backfilling all
-existing videos into the streamable protected subtree:
+The module exposes an opt-in manual migration unit for backfilling existing
+videos into the streamable protected subtree:
 
-- `systemctl start lx-annotate-video-streamable-migration`
+- set `services.luxnix.lxAnnotateLocal.streamableMigration.enable = true`
+- rebuild
+- run `systemctl start lx-annotate-video-streamable-migration`
 
 The module also exposes a dedicated manual post-deploy acceptance unit:
 
 - `systemctl start lx-annotate-acceptance`
 
-`lx-annotate-video-streamable-migration.service` runs Django's
-`migrate_video_streamable_storage` command with the same production environment
-as the main application service. It is intentionally not timer-driven by
-default so operators can control rollout pace and observe I/O.
+`lx-annotate-video-streamable-migration.service` runs the lx-annotate media
+migration wrapper with streamable artifact synchronization enabled and the same
+production environment as the main application service. It is intentionally not
+enabled by default, timer-driven, or wanted by a boot target so operators can
+control rollout pace and observe I/O.
 
 `lx-annotate-acceptance.service` runs the deployed Django system checks with the
 real LuxNix environment, verifies encrypted storage round-trips without

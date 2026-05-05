@@ -406,6 +406,20 @@ in
         description = "Recovery settings for migrating legacy lx-annotate media into the runtime storage root.";
       };
 
+      streamableMigration = mkOption {
+        type = types.submodule {
+          options = {
+            enable = mkOption {
+              type = types.bool;
+              default = false;
+              description = "Expose the manual lx-annotate video streamable backfill systemd unit. The unit is not started by any target.";
+            };
+          };
+        };
+        default = { };
+        description = "Settings for the manual streamable video backfill migration unit.";
+      };
+
       dataCleanup = mkOption {
         type = types.submodule {
           options = {

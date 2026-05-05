@@ -230,7 +230,7 @@ EOF
 in
 {
   options.services.luxnix.lxAiLocal = {
-    enable = mkBoolOpt false "Enable LxAI service";
+    enable = mkBoolOpt false "Enable the LxAI training service unit.";
 
     debug = mkOption {
       type = types.submodule {
@@ -347,13 +347,12 @@ in
 
     systemd.services."lx-ai-boot" = {
       description = "Clone lx-ai repository and run training pipeline";
-      wantedBy = [ "multi-user.target" ];
       wants = [ "postgres-endoreg-setup.service" ];
       after = [ "postgres-endoreg-setup.service" "systemd-tmpfiles-setup.service" ];
       requires = [ "postgres-endoreg-setup.service" "systemd-tmpfiles-setup.service" ];
 
       serviceConfig = {
-        Type = "exec";
+        Type = "oneshot";
         User = endoreg-service-user-name;
         WorkingDirectory = endoreg-service-user-home;
 
@@ -387,8 +386,7 @@ in
         ''}";
 
         ExecStart = "${runLxAiTraining}/bin/${scriptName}";
-        Restart = "on-failure";
-        RestartSec = "10s";
+        TimeoutStartSec = "infinity";
 
         ProtectSystem = "full";
         PrivateTmp = true;
