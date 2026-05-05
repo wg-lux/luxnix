@@ -10,6 +10,7 @@ host_roles:
   custom_packages.cuda: "true"
   custom_packages.office: "true"
   custom_packages.baseDevelopment: "true"
+  endoreg-client.lxAi: "true"
 
 host_services: {}
 

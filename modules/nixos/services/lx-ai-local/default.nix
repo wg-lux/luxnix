@@ -354,6 +354,7 @@ in
 
     systemd.services."lx-ai-boot" = {
       description = "Clone lx-ai repository and run training pipeline";
+      wantedBy = [ "multi-user.target" ];
       wants = [ "postgres-endoreg-setup.service" ];
       after = [ "postgres-endoreg-setup.service" "systemd-tmpfiles-setup.service" ];
       requires = [ "postgres-endoreg-setup.service" "systemd-tmpfiles-setup.service" ];
