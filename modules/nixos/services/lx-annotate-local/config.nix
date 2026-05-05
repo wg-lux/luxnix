@@ -40,6 +40,7 @@ let
   inherit (runtime.scripts.scriptNames)
     acceptanceScriptName
     celeryWorkerScriptName
+    emergencyStorageReliefScriptName
     migrateVideoStreamableStorageScriptName
     watcherScriptName
     sapImportScriptName;
@@ -54,6 +55,7 @@ let
     runLocalCeleryWorkerWheelScript
     runLocalDataCleanupScript
     runLocalDataRecoveryScript
+    runLocalEmergencyStorageReliefScript
     runLocalExportFramesScript
     runLocalExportFramesWheelScript
     runLocalFileWatcherScript
@@ -204,6 +206,35 @@ in
           !cfg.hub.backup.enable
           || lib.hasPrefix "${cfg.runtime.encryptedDataDir}/" cfg.hub.backup.manifestDir;
         message = "services.luxnix.lxAnnotateLocal.hub.backup.manifestDir must stay inside runtime.encryptedDataDir.";
+      }
+      {
+        assertion =
+          !cfg.storageRelief.enable
+          || !cfg.storageRelief.requireExternalMount
+          || cfg.storageRelief.expectedDeviceId != null
+          || cfg.storageRelief.expectedFsUuid != null;
+        message = "services.luxnix.lxAnnotateLocal.storageRelief requires expectedDeviceId or expectedFsUuid when requireExternalMount = true.";
+      }
+      {
+        assertion =
+          !cfg.storageRelief.enable
+          || cfg.storageRelief.archiveDir == cfg.storageRelief.externalMountPoint
+          || lib.hasPrefix "${cfg.storageRelief.externalMountPoint}/" cfg.storageRelief.archiveDir;
+        message = "services.luxnix.lxAnnotateLocal.storageRelief.archiveDir must stay inside storageRelief.externalMountPoint.";
+      }
+      {
+        assertion =
+          !cfg.storageRelief.enable
+          || cfg.storageRelief.manifestDir == cfg.storageRelief.archiveDir
+          || lib.hasPrefix "${cfg.storageRelief.archiveDir}/" cfg.storageRelief.manifestDir;
+        message = "services.luxnix.lxAnnotateLocal.storageRelief.manifestDir must stay inside storageRelief.archiveDir.";
+      }
+      {
+        assertion =
+          !cfg.storageRelief.enable
+          || cfg.storageRelief.stagingDir == cfg.storageRelief.archiveDir
+          || lib.hasPrefix "${cfg.storageRelief.archiveDir}/" cfg.storageRelief.stagingDir;
+        message = "services.luxnix.lxAnnotateLocal.storageRelief.stagingDir must stay inside storageRelief.archiveDir.";
       }
     ];
     services.luxnix.lxAnnotateLocal.django.extraSettings.IS_CENTRAL_NODE =
@@ -639,6 +670,91 @@ in
         Unit = "lx-annotate-data-cleanup.service";
       };
     };
+    systemd.services.lx-annotate-emergency-storage-relief = mkIf cfg.storageRelief.enable {
+      description = "Emergency lx-annotate storage relief to verified external archive";
+      after = [
+        "systemd-tmpfiles-setup.service"
+        "postgresql.service"
+        "postgres-endoreg-setup.service"
+      ]
+      ++ lib.optionals cfg.storageRelief.requireExternalMount [
+        "endoreg-mount-persisting-storage.service"
+      ]
+      ++ encryptionServiceUnits;
+      wants =
+        lib.optionals cfg.storageRelief.requireExternalMount [
+          "endoreg-mount-persisting-storage.service"
+        ]
+        ++ encryptionServiceUnits;
+      requires =
+        lib.optionals cfg.storageRelief.requireExternalMount [
+          "endoreg-mount-persisting-storage.service"
+        ]
+        ++ encryptionServiceUnits;
+      unitConfig = {
+        RequiresMountsFor =
+          [ envDataDir ]
+          ++ lib.optionals cfg.storageRelief.requireExternalMount [
+            cfg.storageRelief.externalMountPoint
+          ];
+      };
+      serviceConfig = {
+        Type = "oneshot";
+        User = endoreg-service-user-name;
+        Group = endoreg-service-group-name;
+        WorkingDirectory = runtimeWorkingDir;
+        ExecStartPre = [
+          "+${pkgs.writeShellScript "lx-annotate-emergency-storage-relief-pre-start" ''
+            set -euo pipefail
+            SOURCE_PWD="${cfg.database.endoregLocalUserPasswordFile}"
+            TARGET_PWD="${envConfDir}/db_pwd"
+
+            ${pkgs.coreutils}/bin/install -d -m 0755 -o ${endoreg-service-user-name} -g ${endoreg-service-group-name} ${envConfDir}
+            if [ -f "$SOURCE_PWD" ]; then
+              cp "$SOURCE_PWD" "$TARGET_PWD"
+              chown ${endoreg-service-user-name}:${endoreg-service-group-name} "$TARGET_PWD"
+              chmod 600 "$TARGET_PWD"
+            else
+              echo "WARNING: emergency-storage-relief password file $SOURCE_PWD not found"
+            fi
+          ''}"
+        ];
+        ExecStart = "${runLocalEmergencyStorageReliefScript}/bin/${emergencyStorageReliefScriptName}";
+        Environment = appServiceEnvironment;
+        TimeoutStartSec = "infinity";
+        Nice = 19;
+        IOSchedulingClass = "idle";
+        OOMScoreAdjust = 900;
+        ProtectSystem = "full";
+        PrivateTmp = true;
+        NoNewPrivileges = true;
+        ReadWritePaths = [
+          endoreg-service-user-home
+          envDataDir
+          envConfDir
+          runtimeRootPath
+          runtimeWheelRootPath
+          runtimeWheelVenvPath
+          cfg.storageRelief.externalMountPoint
+        ];
+      };
+      path = [
+        pkgs.coreutils
+        pkgs.findutils
+        pkgs.util-linux
+      ];
+    };
+    systemd.timers.lx-annotate-emergency-storage-relief =
+      mkIf (cfg.storageRelief.enable && cfg.storageRelief.timer.enable)
+        {
+          description = "Periodic emergency lx-annotate storage relief";
+          wantedBy = [ "timers.target" ];
+          timerConfig = {
+            OnBootSec = "20m";
+            OnCalendar = cfg.storageRelief.timer.onCalendar;
+            Unit = "lx-annotate-emergency-storage-relief.service";
+          };
+        };
     systemd.services.lx-annotate-hub-backup = mkIf cfg.hub.backup.enable {
       description = "Create protected lx-annotate hub runtime snapshots";
       after = [ "lx-annotate-boot.service" ] ++ encryptionServiceUnits;

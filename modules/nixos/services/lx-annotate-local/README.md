@@ -82,6 +82,33 @@ real LuxNix environment, verifies encrypted storage round-trips without
 plaintext on disk, and fetches the Vite manifest through the local Nginx TLS
 vhost.
 
+## Emergency Storage Relief
+
+The module exposes a separate opt-in relief unit for storage pressure events:
+
+- set `services.luxnix.lxAnnotateLocal.storageRelief.enable = true`
+- set either `storageRelief.expectedDeviceId` or `storageRelief.expectedFsUuid`
+- rebuild
+- run `systemctl start lx-annotate-emergency-storage-relief`
+
+The unit fails closed unless the external mount is active and matches the
+configured device id or filesystem UUID. It writes to
+`storageRelief.stagingDir` first, moves verified files into
+`storageRelief.archiveDir`, emits JSON journal events, and writes a JSON
+manifest under `storageRelief.manifestDir`.
+
+The relief helper only archives:
+
+1. legacy processed report/video duplicates whose matching database object is in
+   an anonymized processed state and whose content hash matches the managed
+   payload
+2. export bundles that contain `.lx-annotate-export-validated.json` with
+   `validated=true` and resource references whose database states are validated
+
+Local files are deleted only after the external archive copy has been hashed and
+verified. The service is manual by default; `storageRelief.timer.enable` can be
+set for a scheduled emergency workflow.
+
 ## Hub Groundwork
 
 This module can also mark a host as the first central hub node:
@@ -325,6 +352,7 @@ systemctl status vault-auth-setup.service
 systemctl status managed-secrets-setup.service
 systemctl status lx-annotate-encrypted-data.service
 systemctl status lx-annotate-boot.service
+systemctl status lx-annotate-emergency-storage-relief.service
 systemctl status lx-annotate-hub-backup.service
 systemctl status lx-annotate-hub-backup.timer
 ls -l /etc/secrets/vault/lx_annotate_luks.key /etc/secrets/vault/lx_annotate_luks.uuid /etc/secrets/vault/lx_annotate_master_key

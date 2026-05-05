@@ -180,6 +180,75 @@ def test_lx_annotate_streamable_migration_unit_runs_after_boot_by_default() -> N
     assert "multi-user.target" in wanted_by
 
 
+def test_emergency_storage_relief_service_is_opt_in_and_mount_gated() -> None:
+    enabled = _nix_eval_expr_json(
+        """
+        let
+          flake = builtins.getFlake "/home/admin/luxnix";
+          cfg = (flake.nixosConfigurations.gc-02.extendModules {
+            modules = [
+              ({ ... }: {
+                services.luxnix.lxAnnotateLocal.storageRelief.enable = true;
+                services.luxnix.lxAnnotateLocal.storageRelief.expectedFsUuid = "test-relief-fs-uuid";
+              })
+            ];
+          }).config;
+        in {
+          serviceConfig = cfg.systemd.services."lx-annotate-emergency-storage-relief".serviceConfig;
+          after = cfg.systemd.services."lx-annotate-emergency-storage-relief".after;
+          wants = cfg.systemd.services."lx-annotate-emergency-storage-relief".wants;
+          requires = cfg.systemd.services."lx-annotate-emergency-storage-relief".requires;
+          requiresMountsFor = cfg.systemd.services."lx-annotate-emergency-storage-relief".unitConfig.RequiresMountsFor;
+          timerExists = builtins.hasAttr "lx-annotate-emergency-storage-relief" cfg.systemd.timers;
+        }
+        """
+    )
+    disabled_has_service = _nix_eval_expr_json(
+        """
+        let
+          flake = builtins.getFlake "/home/admin/luxnix";
+          cfg = flake.nixosConfigurations.gc-02.config;
+        in builtins.hasAttr "lx-annotate-emergency-storage-relief" cfg.systemd.services
+        """
+    )
+
+    assert disabled_has_service is False
+    assert enabled["serviceConfig"]["Type"] == "oneshot"
+    assert enabled["serviceConfig"]["ExecStart"].endswith(
+        "/bin/runLxAnnotateEmergencyStorageRelief"
+    )
+    assert enabled["serviceConfig"]["ProtectSystem"] == "full"
+    assert "/mnt/endoreg-client-storage" in enabled["requiresMountsFor"]
+    assert "endoreg-mount-persisting-storage.service" in enabled["after"]
+    assert "endoreg-mount-persisting-storage.service" in enabled["wants"]
+    assert "endoreg-mount-persisting-storage.service" in enabled["requires"]
+    assert enabled["timerExists"] is False
+
+
+def test_emergency_storage_relief_helper_uses_verified_archive_contract() -> None:
+    source = open(
+        "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts.nix",
+        encoding="utf-8",
+    ).read()
+
+    assert "mountpoint\" -q \"$external_mount_point\"" in source
+    assert "findmnt\" -n -o SOURCE --target \"$external_mount_point\"" in source
+    assert "expectedDeviceId or expectedFsUuid" in source
+    assert "atomic_copy_file" in source
+    assert "atomic_move_file" in source
+    assert "safe_unlink_file" in source
+    assert "sha256_file" in source
+    assert "staging_destination" in source
+    assert "ReliefResourceKind" in source
+    options_source = open(
+        "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/options.nix",
+        encoding="utf-8",
+    ).read()
+    assert "validatedExportMarkerNames" in source
+    assert ".lx-annotate-export-validated.json" in options_source
+    assert "lx_annotate_storage_relief_complete" in source
+
+
 def test_hub_transfer_api_extend_modules_enables_nginx_and_backup_surfaces() -> None:
     evaluated = _nix_eval_expr_json(
         """

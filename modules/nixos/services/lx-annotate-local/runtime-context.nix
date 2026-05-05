@@ -143,6 +143,14 @@ let
     config.roles.endoreg-client.paths.storagePersistingMountPoint;
   externalCleanupArchiveRootDefault =
     "${config.roles.endoreg-client.paths.storagePersistingMountPoint}/lx-annotate-archive";
+  emergencyReliefArchiveRootDefault =
+    "${config.roles.endoreg-client.paths.storagePersistingMountPoint}/lx-annotate-emergency-relief";
+  emergencyReliefManifestDirDefault =
+    "${emergencyReliefArchiveRootDefault}/manifests";
+  emergencyReliefStagingDirDefault =
+    "${emergencyReliefArchiveRootDefault}/.staging";
+  emergencyReliefValidatedExportDirsDefault =
+    [ "${runtimeDataRootPath}/export/frames" ];
   mkDjangoOptions = import ../../lib/django-options.nix { inherit lib; };
   dataRecoveryStateDir = "${runtimeRootPath}/state";
   dataRecoveryStateFile = "${dataRecoveryStateDir}/effective-data-dir.env";
@@ -259,6 +267,10 @@ let
         defaultSslKeyPath
         exportFramesStorageRootDefault
         externalCleanupArchiveRootDefault
+        emergencyReliefArchiveRootDefault
+        emergencyReliefManifestDirDefault
+        emergencyReliefStagingDirDefault
+        emergencyReliefValidatedExportDirsDefault
         processedReportDirName
         processedVideoDirName;
     };
