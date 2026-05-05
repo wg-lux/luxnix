@@ -29,6 +29,7 @@ let
   envRunsDir = "${envTrainingRoot}/runs";
   envBucketSnapshotDir = "${envTrainingRoot}/buckets";
   envBackboneCheckpoint = "${envCheckpointsDir}/RN50_GastroNet-1M_DINOv1.pth";
+  envBackboneCheckpointUrl = cfg.runtime.backboneCheckpointUrl;
   envCsvDir = "${envDataDir}/import/csv";
   envLegacyImageDir = "${envDataDir}/legacy_images/images";
   envLegacyJsonlPath = "${envDataDir}/legacy_images/legacy_img_dicts.jsonl";
@@ -143,6 +144,7 @@ let
     export BUCKET_SNAPSHOT_DIR="${envBucketSnapshotDir}"
     
     export BACKBONE_CHECKPOINT="${envBackboneCheckpoint}"
+    export BACKBONE_CHECKPOINT_URL="${envBackboneCheckpointUrl}"
     
     export SQLITE_DB_PATH="${repoDir}/dev_db.sqlite"
     
@@ -195,6 +197,7 @@ RUNS_DIR=${envRunsDir}
 BUCKET_SNAPSHOT_DIR=${envBucketSnapshotDir}
 
 BACKBONE_CHECKPOINT=${envBackboneCheckpoint}
+BACKBONE_CHECKPOINT_URL=${envBackboneCheckpointUrl}
 
 SQLITE_DB_PATH=${repoDir}/dev_db.sqlite
 
@@ -230,8 +233,7 @@ EOF
 in
 {
   options.services.luxnix.lxAiLocal = {
-    enable = mkBoolOpt false "Enable the LxAI training service unit.";
-
+    enable = mkBoolOpt false "Enable LxAI service";
     debug = mkOption {
       type = types.submodule {
         options = {
@@ -257,7 +259,7 @@ in
 
           branch = mkOption {
             type = types.str;
-            default = "main";
+            default = "prototype";
             description = "Git branch to checkout for lx-ai.";
           };
 
@@ -285,6 +287,11 @@ in
             type = types.str;
             default = "conf";
             description = "Relative path to lx-ai config directory inside the repository.";
+          };
+          backboneCheckpointUrl = mkOption {
+            type = types.str;
+            default = "";
+            description = "URL for downloading the backbone checkpoint if not present locally.";
           };
         };
       };
