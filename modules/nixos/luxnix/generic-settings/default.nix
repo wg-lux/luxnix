@@ -206,6 +206,12 @@ in {
       '';
     };
 
+    transferCaPath = mkOption {
+      type = types.path;
+      default = "/var/lib/lx-annotate/ssl/transfer_ca.crt";
+      description = "Path to Transfer CA certificate used for mTLS/client certificate verification.";
+    };
+
     smtpUserFilePath = mkOption {
       type = types.path;
       default = "/etc/secrets/vault/smtp_user";

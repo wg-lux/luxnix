@@ -273,6 +273,7 @@ in
         # optional future improvements
         # source = cfg.repository (if needed)
         # debug.enable = false
+        source.branch = "prototype";
         runtime.backboneCheckpointUrl =
          "https://drive.google.com/uc?export=download&id=1TvliEJ5JTQddIE3kNiGMQzWIe9Cq_7mx";
       };
