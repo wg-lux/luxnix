@@ -110,7 +110,7 @@ let
 
       echo "lx-data-models cloned successfully"
       echo "Installing lx-data-models in editable mode..."
-      uv pip install -e "''${LX_MODELS_DIR}" || {
+      ${pkgs.uv}/bin/uv pip install -e "''${LX_MODELS_DIR}" || {
         echo "ERROR: Failed to install lx-data-models"
         exit 1
       }
