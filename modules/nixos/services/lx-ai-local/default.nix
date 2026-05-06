@@ -132,7 +132,9 @@ let
 
     export HOME_DIR="${endoreg-service-user-home}"
     export WORKING_DIR="${repoDir}"
+    export LX_ANNOTATE_ENCRYPTED_DATA_DIR="${envDataDir}"
     export DATA_DIR="${envDataDir}"
+    export STORAGE_DIR="${envDataDir}"
     export CONF_DIR="${envConfDir}"
     export FRAME_DIR="${envFrameDir}"
 
@@ -183,10 +185,12 @@ provider = "env"
 profile = "production"
 EOF
 
-    cat > "${repoDir}/.env.systemd" <<EOF
+cat > "${repoDir}/.env.systemd" <<EOF
 HOME_DIR=${endoreg-service-user-home}
 WORKING_DIR=${repoDir}
+LX_ANNOTATE_ENCRYPTED_DATA_DIR=${envDataDir}
 DATA_DIR=${envDataDir}
+STORAGE_DIR=${envDataDir}
 CONF_DIR=${envConfDir}
 FRAME_DIR=${envFrameDir}
 TRAINING_CONFIG_PATH=${repoDir}/lx_ai/ai_model_config/train_sandbox_postgres.yaml
@@ -377,6 +381,7 @@ in
           fi
 
           mkdir -p ${envConfDir}
+          
 
           SOURCE_PWD="${cfg.database.endoregLocalUserPasswordFile}"
           TARGET_PWD="${envConfDir}/db_pwd"
