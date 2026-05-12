@@ -264,7 +264,24 @@ in
         source = cfg.lxAnnotate.source;
         django = annotateDjango;
         database = cfg.database;
-        runtime.commands = cfg.lxAnnotate.runtime.commands;
+        runtime = {
+          commands = mkDefault cfg.lxAnnotate.runtime.commands;
+          limits = mkDefault cfg.lxAnnotate.runtime.limits;
+          workerLimits = mkDefault cfg.lxAnnotate.runtime.workerLimits;
+          workerPools = mkDefault cfg.lxAnnotate.runtime.workerPools;
+          frameExtractionWorker = mkDefault cfg.lxAnnotate.runtime.frameExtractionWorker;
+          inferenceWorker = mkDefault cfg.lxAnnotate.runtime.inferenceWorker;
+          trainingWorker = mkDefault cfg.lxAnnotate.runtime.trainingWorker;
+          modelTrainingStagingRoot = mkDefault cfg.lxAnnotate.runtime.modelTrainingStagingRoot;
+          externalServices = mkDefault cfg.lxAnnotate.runtime.externalServices;
+          celeryBroker = {
+            requireSecureTransport =
+              mkIf cfg.lxAnnotate.runtime.celeryBroker.requireSecureTransport (mkDefault true);
+            secureTransportConfirmed =
+              mkIf cfg.lxAnnotate.runtime.celeryBroker.secureTransportConfirmed (mkDefault true);
+          };
+          clustered = mkDefault cfg.lxAnnotate.runtime.clustered;
+        };
       };
 
       services.luxnix.lxAiLocal = {

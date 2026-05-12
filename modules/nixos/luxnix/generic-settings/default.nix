@@ -208,7 +208,7 @@ in {
 
     transferCaPath = mkOption {
       type = types.path;
-      default = "/var/lib/lx-annotate/ssl/transfer_ca.crt";
+      default = "/var/lib/lx-annotate-ssl/transfer_ca.crt";
       description = "Path to Transfer CA certificate used for mTLS/client certificate verification.";
     };
 

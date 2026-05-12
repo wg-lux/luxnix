@@ -35,24 +35,63 @@ let
   failedVideoDir = "${failedInputBaseDir}/video";
   failedPdfDir = "${failedInputBaseDir}/pdf";
   runtimeDataDir = lxAnnotateCfg.runtime.encryptedDataDir;
+  intakeDirs = lxAnnotateCfg.runtime.intakeDirs;
+  resolveRuntimeDataPath = path:
+    let
+      pathString = toString path;
+    in
+    if lib.hasPrefix "/" pathString then
+      pathString
+    else if pathString == "data" then
+      runtimeDataDir
+    else if lib.hasPrefix "data/" pathString then
+      "${runtimeDataDir}/${lib.removePrefix "data/" pathString}"
+    else
+      "${runtimeDataDir}/${pathString}";
   # Intake destinations must stay aligned with the lx-annotate runtime contract:
-  # <encryptedDataDir>/import/{video_import,report_import,...}
-  # This is the same subtree the wheel-based watcher resolves via
-  # LX_ANNOTATE_DATA_DIR. The service-user path below is only an access symlink
-  # for operator workflows and must not become an independent intake root.
-  runtimeIoDir = "${runtimeDataDir}/import";
-  runtimePreanonymizedDir = "${runtimeIoDir}/preanonymized_import";
-  runtimeSapImportDir = "${runtimeIoDir}/sap_import";
+  # services.luxnix.lxAnnotateLocal.runtime.intakeDirs, which mirrors the
+  # watcher path names exported by lx-annotate secretspec.toml.
+  runtimeIoDir = resolveRuntimeDataPath intakeDirs.importRoot;
+  runtimePreanonymizedDir = resolveRuntimeDataPath intakeDirs.preanonymized;
+  runtimeSapImportDir = resolveRuntimeDataPath intakeDirs.sap;
+  runtimeMoverStagingDir = resolveRuntimeDataPath intakeDirs.moverStaging;
   serviceUserIoAccessLink = "${endoreg-service-user-home}/lx-annotate-io";
   desktopPreanonymizedLinkTarget = "${serviceUserIoAccessLink}/preanonymized_import";
   desktopSapImportLinkTarget = "${serviceUserIoAccessLink}/sap_import";
 
   # Destination watcher intake paths for both repo and wheel deployments.
-  destVideoDir = "${runtimeIoDir}/video_import";
-  destReportDir = "${runtimeIoDir}/report_import";
+  destVideoDir = resolveRuntimeDataPath intakeDirs.video;
+  destReportDir = resolveRuntimeDataPath intakeDirs.report;
 
   # Resolve the correct desktop name (Schreibtisch vs Desktop)
   resolvedDesktopName = config.roles.endoreg-client.paths.desktopDirName;
+  desktopLinkNames = [
+    "Video_Input"
+    "PDF_Input"
+    "preanonymized_import"
+    "sap_import"
+  ];
+  prepareDesktopLinksActivation = ''
+    desktop_dir="$HOME/${resolvedDesktopName}"
+
+    for link_name in ${lib.concatMapStringsSep " " lib.escapeShellArg desktopLinkNames}; do
+      target_path="$desktop_dir/$link_name"
+
+      if [ -e "$target_path" ] && [ ! -L "$target_path" ]; then
+        timestamp="$(${pkgs.coreutils}/bin/date +%Y%m%d-%H%M%S)"
+        backup_path="$target_path.luxnix-backup-$timestamp"
+        counter=1
+
+        while [ -e "$backup_path" ]; do
+          backup_path="$target_path.luxnix-backup-$timestamp-$counter"
+          counter=$((counter + 1))
+        done
+
+        echo "Preserving unmanaged file mover desktop path: $target_path -> $backup_path"
+        ${pkgs.coreutils}/bin/mv -- "$target_path" "$backup_path"
+      fi
+    done
+  '';
 
 in
 {
@@ -69,7 +108,7 @@ in
       "d \"${failedVideoDir}\" 0770 root ${endoregServiceGroup} -"
       "d \"${failedPdfDir}\" 0770 root ${endoregServiceGroup} -"
       # Create runtime intake directories.
-      "d \"${runtimeDataDir}/import\" 0770 ${endoregServiceUserName} ${endoregServiceGroup} -"
+      "d \"${runtimeIoDir}\" 0770 ${endoregServiceUserName} ${endoregServiceGroup} -"
       "d \"${destVideoDir}\" 0770 ${endoregServiceUserName} ${endoregServiceGroup} -"
       "d \"${destReportDir}\" 0770 ${endoregServiceUserName} ${endoregServiceGroup} -"
       "d \"${runtimePreanonymizedDir}\" 0770 ${endoregServiceUserName} ${endoregServiceGroup} -"
@@ -79,7 +118,7 @@ in
     # 2. Home Manager: Use the resolved variable for Desktop/Schreibtisch
     home-manager.users = {
       ${clientUserName} =
-        { config, ... }:
+        { config, lib, ... }:
         let
           outOfStore = config.lib.file.mkOutOfStoreSymlink;
         in
@@ -107,10 +146,13 @@ in
           home.file."${resolvedDesktopName}/sap_import" = {
             source = outOfStore desktopSapImportLinkTarget;
           };
+
+          home.activation.prepareFileMoverDesktopLinks =
+            lib.hm.dag.entryBefore [ "checkLinkTargets" ] prepareDesktopLinksActivation;
         };
 
       ${adminUserName} =
-        { config, ... }:
+        { config, lib, ... }:
         let
           outOfStore = config.lib.file.mkOutOfStoreSymlink;
         in
@@ -138,6 +180,9 @@ in
           home.file."${resolvedDesktopName}/sap_import" = {
             source = outOfStore desktopSapImportLinkTarget;
           };
+
+          home.activation.prepareFileMoverDesktopLinks =
+            lib.hm.dag.entryBefore [ "checkLinkTargets" ] prepareDesktopLinksActivation;
         };
     };
 
@@ -216,8 +261,8 @@ in
             return 0
           fi
 
-          staging_dir="${runtimeIoDir}/.move-my-files-staging/''${label}"
-          manifest_file="${runtimeIoDir}/.move-my-files-staging/''${label}.files"
+          staging_dir="${runtimeMoverStagingDir}/''${label}"
+          manifest_file="${runtimeMoverStagingDir}/''${label}.files"
           publish_status=0
           ${pkgs.coreutils}/bin/rm -rf "$staging_dir"
           ${pkgs.coreutils}/bin/rm -f "$manifest_file"

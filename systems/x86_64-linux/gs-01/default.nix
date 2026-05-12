@@ -42,6 +42,14 @@
     };
 
   services = {
+    luxnix.lxAnnotateLocal.runtime = {
+      externalServices.redisUrl = "redis://172.16.255.14:6380/1";
+      externalServices.postgresHost = "172.16.255.22";
+      externalServices.postgresPort = 5432;
+      celeryBroker.secureTransportConfirmed = true;
+      trainingWorker.mode = "manual";
+      trainingWorker.cudaVisibleDevices = "0";
+    };
     };
 
   luxnix = {

@@ -28,6 +28,184 @@ let
     legacyMediaProcessedVideoDir
     runtimeProcessedReportDir
     runtimeProcessedVideoDir;
+  inferWheelPackageVersion = wheelPath:
+    if wheelPath == null then
+      ""
+    else
+      let
+        wheelFileName = builtins.baseNameOf (toString wheelPath);
+        versionMatch = builtins.match ".*lx_annotate-([^-]+)-.*[.]whl" wheelFileName;
+      in
+      if versionMatch == null then "" else elemAt versionMatch 0;
+  workerPoolType = types.submodule {
+    options = {
+      concurrency = mkOption {
+        type = types.ints.positive;
+        default = 1;
+        description = "Celery worker concurrency for this workload pool.";
+      };
+      maxTasksPerChild = mkOption {
+        type = types.ints.positive;
+        default = 1;
+        description = "Maximum Celery tasks each child process handles before recycling.";
+      };
+      memoryHigh = mkOption {
+        type = types.str;
+        default = "1G";
+        description = "MemoryHigh limit applied to this Celery workload pool.";
+      };
+      memoryMax = mkOption {
+        type = types.str;
+        default = "2G";
+        description = "MemoryMax limit applied to this Celery workload pool.";
+      };
+      cpuQuota = mkOption {
+        type = types.str;
+        default = "35%";
+        description = "CPUQuota assigned to this Celery workload pool.";
+      };
+      nice = mkOption {
+        type = types.int;
+        default = 15;
+        description = "Systemd Nice value for this Celery workload pool.";
+      };
+      oomScoreAdjust = mkOption {
+        type = types.int;
+        default = 750;
+        description = "OOMScoreAdjust value for this Celery workload pool.";
+      };
+    };
+  };
+  frameExtractionWorkerType = types.submodule {
+    options = {
+      mode = mkOption {
+        type = types.enum [
+          "maintenance-window"
+          "always"
+          "manual"
+        ];
+        default = "always";
+        description = "Scheduling mode for the dedicated FFmpeg frame extraction Celery worker.";
+      };
+      onCalendar = mkOption {
+        type = types.str;
+        default = "*-*-* 22:00:00";
+        description = "systemd OnCalendar schedule used when frame extraction runs in maintenance-window mode.";
+      };
+      runtimeMaxSec = mkOption {
+        type = types.str;
+        default = "7h";
+        description = "Maximum runtime for one maintenance-window frame extraction worker activation.";
+      };
+      timeoutStopSec = mkOption {
+        type = types.str;
+        default = "45min";
+        description = "Grace period for stopping the frame extraction worker before systemd sends a final kill signal.";
+      };
+      randomizedDelaySec = mkOption {
+        type = types.str;
+        default = "5m";
+        description = "Randomized delay applied to the maintenance-window timer.";
+      };
+      persistentTimer = mkOption {
+        type = types.bool;
+        default = true;
+        description = "Whether missed maintenance-window timer activations should run after boot.";
+      };
+    };
+  };
+  inferenceWorkerType = types.submodule {
+    options = {
+      mode = mkOption {
+        type = types.enum [
+          "always"
+          "manual"
+        ];
+        default = "always";
+        description = "Scheduling mode for the dedicated AI temporal inference Celery worker.";
+      };
+      cudaVisibleDevices = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Optional CUDA_VISIBLE_DEVICES value exported to the inference worker.";
+      };
+    };
+  };
+  trainingWorkerType = types.submodule {
+    options = {
+      mode = mkOption {
+        type = types.enum [
+          "always"
+          "manual"
+        ];
+        default = "manual";
+        description = "Scheduling mode for the dedicated GPU model-training Celery worker.";
+      };
+      cudaVisibleDevices = mkOption {
+        type = types.str;
+        default = "0";
+        description = "CUDA_VISIBLE_DEVICES value exported to the model-training worker.";
+      };
+    };
+  };
+  celeryBrokerType = types.submodule {
+    options = {
+      requireSecureTransport = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Require TLS-equivalent secure transport for Celery broker connections.";
+      };
+      secureTransportConfirmed = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Operator acknowledgement that the configured broker transport is protected outside the URL scheme.";
+      };
+    };
+  };
+  runtimeIntakeDirsType = types.submodule {
+    options = {
+      importRoot = mkOption {
+        type = types.str;
+        default = "data/import";
+        description = "Runtime intake root. Relative values are resolved below runtime.encryptedDataDir; secretspec-style data/... values are resolved by replacing the leading data segment.";
+      };
+      video = mkOption {
+        type = types.str;
+        default = "data/import/video_import";
+        description = "Video intake directory exported as WATCHER_VIDEO_DIR.";
+      };
+      report = mkOption {
+        type = types.str;
+        default = "data/import/report_import";
+        description = "Report intake directory exported as WATCHER_REPORT_DIR.";
+      };
+      preanonymized = mkOption {
+        type = types.str;
+        default = "data/import/preanonymized_import";
+        description = "Preanonymized intake directory exported as WATCHER_PREANONYMIZED_DIR.";
+      };
+      sap = mkOption {
+        type = types.str;
+        default = "data/import/sap_import";
+        description = "SAP IS-H ZIP drop directory.";
+      };
+      sapProcessed = mkOption {
+        type = types.str;
+        default = "data/import/sap_import_processed";
+        description = "Directory where successfully converted SAP IS-H ZIP drops are moved.";
+      };
+      sapFailed = mkOption {
+        type = types.str;
+        default = "data/import/sap_import_failed";
+        description = "Directory where failed SAP IS-H ZIP drops are moved.";
+      };
+      moverStaging = mkOption {
+        type = types.str;
+        default = "data/import/.move-my-files-staging";
+        description = "Staging directory used by move-my-files before publishing drops into watcher intake directories.";
+      };
+    };
+  };
 in
 {
   options.services.luxnix.lxAnnotateLocal = {
@@ -82,13 +260,33 @@ in
             default = "wheel";
             description = "How lx-annotate is started. 'repo' keeps the dev git/devenv flow; 'wheel' installs a configured Python wheel into a runtime virtualenv.";
           };
+          deploymentRole = mkOption {
+            type = types.enum [
+              "central_hub"
+              "site_node"
+              "standalone"
+            ];
+            default = "site_node";
+            description = ''
+              Explicit endoreg_db deployment role exported as ENDOREG_DEPLOYMENT_ROLE.
+              LuxNix central server nodes map to central_hub. LuxNix laptop
+              center nodes map to the lx-annotate/endoreg_db site_node value.
+              Use standalone only for isolated, non-networked test deployments.
+            '';
+          };
           wheelPath = mkOption {
             type = types.nullOr types.path;
             default = pkgs.fetchurl {
-              url = "https://files.pythonhosted.org/packages/b9/96/dc8b224033f44e08388504c2985d3cc407dfcfcc9b1b2432765d99757040/lx_annotate-0.4.6-py3-none-any.whl";
-              hash = "sha256-yCRNskU1TeXlagJHCBcNGtJnt/Ekh3hbo6ucZUuoK5E=";
+              url = "https://files.pythonhosted.org/packages/4a/b8/18631cefc25a16dc860a21eea9c9ee6684238964e7f129da259cf086677d/lx_annotate-0.5.3-py3-none-any.whl";
+              hash = "sha256-+2as2WL0XstJ7CsD4CbCyMPPh9Pm7L+lvDeZG45Q2tY=";
             };
             description = "Path to the lx-annotate wheel artifact used in wheel mode.";
+          };
+          packageVersion = mkOption {
+            type = types.str;
+            default = inferWheelPackageVersion cfg.runtime.wheelPath;
+            defaultText = literalExpression "version parsed from runtime.wheelPath";
+            description = "lx-annotate Python package version exported as LX_ANNOTATE_PACKAGE_VERSION.";
           };
           wheelhousePath = mkOption {
             type = types.nullOr types.path;
@@ -100,6 +298,11 @@ in
             type = types.str;
             default = "/var/lib/lx-annotate/data";
             description = "External encrypted runtime data directory. Must stay outside the repo/app path.";
+          };
+          intakeDirs = mkOption {
+            type = runtimeIntakeDirsType;
+            default = { };
+            description = "Canonical lx-annotate intake directories. Defaults mirror lx-annotate secretspec.toml watcher path defaults.";
           };
           encryptionService = mkOption {
             type = types.nullOr types.str;
@@ -263,13 +466,227 @@ in
             default = "expandable_segments:True";
             description = "PYTORCH_ALLOC_CONF exported to wheel-based services.";
           };
+          modelTrainingStagingRoot = mkOption {
+            type = types.str;
+            default = "/mnt/fast-nvme-cache/endoreg-training";
+            description = "Ephemeral local staging root used by model-training jobs.";
+          };
+          limits = mkOption {
+            type = types.submodule {
+              options = {
+                memoryHigh = mkOption {
+                  type = types.str;
+                  default = "4G";
+                  description = "MemoryHigh limit applied to the primary lx-annotate-local service.";
+                };
+                memoryMax = mkOption {
+                  type = types.str;
+                  default = "6G";
+                  description = "MemoryMax limit applied to the primary lx-annotate-local service.";
+                };
+                cpuQuota = mkOption {
+                  type = types.str;
+                  default = "50%";
+                  description = "CPUQuota assigned to the primary lx-annotate-local service.";
+                };
+              };
+            };
+            default = { };
+            description = "Systemd resource limits for the primary lx-annotate-local service.";
+          };
+          workerLimits = mkOption {
+            type = types.submodule {
+              options = {
+                memoryHigh = mkOption {
+                  type = types.str;
+                  default = "1G";
+                  description = "MemoryHigh limit applied to the lx-annotate Celery worker.";
+                };
+                memoryMax = mkOption {
+                  type = types.str;
+                  default = "2G";
+                  description = "MemoryMax limit applied to the lx-annotate Celery worker.";
+                };
+                cpuQuota = mkOption {
+                  type = types.str;
+                  default = "35%";
+                  description = "CPUQuota assigned to the lx-annotate Celery worker.";
+                };
+              };
+            };
+            default = { };
+            description = "Systemd resource limits for the lx-annotate Celery worker.";
+          };
+          workerPools = mkOption {
+            type = types.submodule {
+              options = {
+                pipeline = mkOption {
+                  type = workerPoolType;
+                  default = {
+                    concurrency = 1;
+                    maxTasksPerChild = 1;
+                    memoryHigh = "2G";
+                    memoryMax = "4G";
+                    cpuQuota = "45%";
+                    nice = 16;
+                    oomScoreAdjust = 800;
+                  };
+                  description = "Celery pool for upload/import/anonymization pipeline work.";
+                };
+                frameExtraction = mkOption {
+                  type = workerPoolType;
+                  default = {
+                    concurrency = 1;
+                    maxTasksPerChild = 1;
+                    memoryHigh = "3G";
+                    memoryMax = "5G";
+                    cpuQuota = "55%";
+                    nice = 18;
+                    oomScoreAdjust = 850;
+                  };
+                  description = "Celery pool for FFmpeg frame extraction and post-validation rebuilds.";
+                };
+                inference = mkOption {
+                  type = workerPoolType;
+                  default = {
+                    concurrency = 1;
+                    maxTasksPerChild = 1;
+                    memoryHigh = "12G";
+                    memoryMax = "16G";
+                    cpuQuota = "250%";
+                    nice = 10;
+                    oomScoreAdjust = 350;
+                  };
+                  description = "Celery pool for AI temporal inference jobs.";
+                };
+                training = mkOption {
+                  type = workerPoolType;
+                  default = {
+                    concurrency = 1;
+                    maxTasksPerChild = 1;
+                    memoryHigh = "24G";
+                    memoryMax = "32G";
+                    cpuQuota = "400%";
+                    nice = 5;
+                    oomScoreAdjust = 200;
+                  };
+                  description = "Celery pool for single-GPU model training jobs.";
+                };
+                maintenance = mkOption {
+                  type = workerPoolType;
+                  default = {
+                    concurrency = 1;
+                    maxTasksPerChild = 100;
+                    memoryHigh = "1G";
+                    memoryMax = "2G";
+                    cpuQuota = "25%";
+                    nice = 12;
+                    oomScoreAdjust = 700;
+                  };
+                  description = "Celery pool for default and maintenance queues.";
+                };
+              };
+            };
+            default = { };
+            description = "Queue-specific Celery worker pools for load-balancing heavy media jobs.";
+          };
+          frameExtractionWorker = mkOption {
+            type = frameExtractionWorkerType;
+            default = { };
+            description = "Scheduling policy for the dedicated FFmpeg frame extraction Celery worker.";
+          };
+          inferenceWorker = mkOption {
+            type = inferenceWorkerType;
+            default = { };
+            description = "Scheduling policy for the dedicated AI temporal inference Celery worker.";
+          };
+          trainingWorker = mkOption {
+            type = trainingWorkerType;
+            default = { };
+            description = "Scheduling policy for the dedicated GPU model-training Celery worker.";
+          };
+          externalServices = mkOption {
+            type = types.submodule {
+              options = {
+                redisUrl = mkOption {
+                  type = types.nullOr types.str;
+                  default = null;
+                  example = "rediss://redis.lx-annotate.svc.cluster.local:6379/1";
+                  description = "Optional external Redis/Celery broker URL. Defaults to the local endoreg-client CELERY_BROKER_URL contract when unset.";
+                };
+                postgresHost = mkOption {
+                  type = types.nullOr types.str;
+                  default = null;
+                  example = "postgres.lx-annotate.svc.cluster.local";
+                  description = "Optional external PostgreSQL host used for clustered lx-annotate deployments.";
+                };
+                postgresPort = mkOption {
+                  type = types.nullOr types.port;
+                  default = null;
+                  example = 5432;
+                  description = "Optional external PostgreSQL port used with runtime.externalServices.postgresHost.";
+                };
+              };
+            };
+            default = { };
+            description = "Explicit external service endpoints for cluster-oriented lx-annotate deployments.";
+          };
+          celeryBroker = mkOption {
+            type = celeryBrokerType;
+            default = { };
+            description = "Celery broker transport security controls.";
+          };
+          clustered = mkOption {
+            type = types.submodule {
+              options = {
+                enable = mkOption {
+                  type = types.bool;
+                  default = false;
+                  description = "Enable fail-closed checks for cluster-oriented lx-annotate deployment contracts.";
+                };
+                sharedStorage = mkOption {
+                  type = types.bool;
+                  default = false;
+                  description = "Operator acknowledgement that runtime.encryptedDataDir is backed by shared cluster storage.";
+                };
+                sharedMasterKeyFile = mkOption {
+                  type = types.nullOr types.path;
+                  default = null;
+                  example = "/run/secrets/lx-annotate/master-key";
+                  description = "Shared workload master key file for clustered lx-annotate pods/workers.";
+                };
+              };
+            };
+            default = { };
+            description = "Cluster-readiness guardrails for lx-annotate.";
+          };
           commands = mkOption {
             type = types.submodule {
               options = {
+                web = mkOption {
+                  type = types.nullOr types.str;
+                  default = "$LX_ANNOTATE_WHEEL_VENV/bin/daphne -b \"$DJANGO_HOST\" -p \"$DJANGO_PORT\" lx_annotate.asgi:application";
+                  description = "Shell command executed for the wheel-mode web server.";
+                };
+                migrate = mkOption {
+                  type = types.nullOr types.str;
+                  default = "$LX_ANNOTATE_WHEEL_VENV/bin/python -m django migrate --noinput --settings=lx_annotate.settings.settings_prod";
+                  description = "Shell command executed for wheel-mode database migrations.";
+                };
+                loadBaseData = mkOption {
+                  type = types.nullOr types.str;
+                  default = "$LX_ANNOTATE_WHEEL_VENV/bin/python -m django load_base_db_data --settings=lx_annotate.settings.settings_prod";
+                  description = "Shell command executed for wheel-mode base-data loading.";
+                };
                 fileWatcher = mkOption {
                   type = types.nullOr types.str;
                   default = null;
                   description = "Shell command executed for the file watcher in wheel mode. Runs with LX_ANNOTATE_WHEEL_VENV and LX_ANNOTATE_WHEEL_APP_ROOT exported.";
+                };
+                fileWatcherOnce = mkOption {
+                  type = types.nullOr types.str;
+                  default = null;
+                  description = "Optional wheel-mode one-shot file watcher command. Defaults to runtime.commands.fileWatcher when unset.";
                 };
                 exportFrames = mkOption {
                   type = types.nullOr types.str;
@@ -280,6 +697,16 @@ in
                   type = types.nullOr types.str;
                   default = null;
                   description = "Shell command executed for the Celery worker in wheel mode. Runs with LX_ANNOTATE_WHEEL_VENV and LX_ANNOTATE_WHEEL_APP_ROOT exported.";
+                };
+                sapImport = mkOption {
+                  type = types.nullOr types.str;
+                  default = "$LX_ANNOTATE_WHEEL_VENV/bin/python -m django import_sap_ish_zip --settings=lx_annotate.settings.settings_prod";
+                  description = "Base command for wheel-mode SAP import. The wrapper appends the source ZIP and output directory.";
+                };
+                mediaMigration = mkOption {
+                  type = types.nullOr types.str;
+                  default = "$LX_ANNOTATE_WHEEL_VENV/bin/python -m django migrate_media_storage --settings=lx_annotate.settings.settings_prod";
+                  description = "Base command for wheel-mode media and streamable storage migration.";
                 };
               };
             };
@@ -632,7 +1059,7 @@ in
                     description = "Expected proxy-attested mTLS verification value forwarded to Django.";
                   };
                   clientCaFile = mkOption {
-                    type = types.nullOr types.path;
+                    type = types.nullOr (types.either types.path types.str);
                     default = null;
                     description = "PEM bundle used by Nginx to verify client certificates for hub transfer requests.";
                   };

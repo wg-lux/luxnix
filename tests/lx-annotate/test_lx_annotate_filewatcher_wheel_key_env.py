@@ -6,7 +6,7 @@ import textwrap
 from pathlib import Path
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS_NIX = (
     REPO_ROOT
     / "modules"
@@ -113,7 +113,7 @@ def test_wheel_filewatcher_passes_master_key_file_to_child_process(tmp_path: Pat
         '${runtimeWheelVenvPath}': str(runtime_venv),
         '${runtimeWheelRootPath}': str(runtime_wheel_root),
         '${cfg.runtime.commands.fileWatcher or ""}': filewatcher_command,
-        '${lib.escapeShellArg wheelFileWatcherCommand}': f'"{filewatcher_command}"',
+        '${lib.escapeShellArg wheelFileWatcherOnceCommand}': f'"{filewatcher_command}"',
     }
     for old, new in replacements.items():
         wheel_script = wheel_script.replace(old, new)

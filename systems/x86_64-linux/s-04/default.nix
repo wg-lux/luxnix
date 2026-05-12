@@ -46,6 +46,21 @@
     };
 
   services = {
+    luxnix.redis.enable = true;
+    redis.servers.main.bind = lib.mkForce "172.16.255.14";
+    luxnix.lxAnnotateLocal.runtime = {
+      externalServices.redisUrl = "redis://172.16.255.14:6380/1";
+      externalServices.postgresHost = "172.16.255.22";
+      externalServices.postgresPort = 5432;
+      celeryBroker.secureTransportConfirmed = true;
+      trainingWorker.mode = "manual";
+    };
+    luxnix.lxAnnotateLocal.hub.transferApi = {
+      enable = true;
+      requireSecureTransport = true;
+      requireMtls = true;
+      clientCaFile = "/etc/secrets/vault/lx_annotate_hub_transfer_client_ca.pem";
+    };
     };
 
   luxnix = {

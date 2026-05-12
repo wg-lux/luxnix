@@ -29,6 +29,7 @@ def _extract_function(function_name: str) -> str:
         'local wheelhouse_path="${optionalString (cfg.runtime.wheelhousePath != null) (toString cfg.runtime.wheelhousePath)}"',
         'local wheelhouse_path="${WHEELHOUSE_PATH:-}"',
     )
+    body = body.replace("''${", "${")
     return f"{function_name}() {{\n{body}\n}}"
 
 
