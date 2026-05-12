@@ -24,6 +24,7 @@ let
   envDataDir = "${repoDir}/${cfg.runtime.dataDir}";
   envConfDir = "${repoDir}/${cfg.runtime.confDir}";
   envFrameDir = "${envDataDir}/frames";
+  envFrameMaterializationOutputRoot = "${envFrameDir}/generated";
   envTrainingRoot = "${envDataDir}/model_training";
   envCheckpointsDir = "${envTrainingRoot}/checkpoints";
   envRunsDir = "${envTrainingRoot}/runs";
@@ -122,6 +123,7 @@ let
       "${envConfDir}" \
       "${envDataDir}" \
       "${envFrameDir}" \
+      "${envFrameMaterializationOutputRoot}" \
       "${envTrainingRoot}" \
       "${envCheckpointsDir}" \
       "${envRunsDir}" \
@@ -137,6 +139,7 @@ let
     export STORAGE_DIR="${envDataDir}"
     export CONF_DIR="${envConfDir}"
     export FRAME_DIR="${envFrameDir}"
+    export FRAME_MATERIALIZATION_OUTPUT_ROOT="${envFrameMaterializationOutputRoot}"
 
     export TRAINING_CONFIG_PATH="${repoDir}/lx_ai/ai_model_config/train_sandbox_postgres.yaml"
 
@@ -193,6 +196,7 @@ DATA_DIR=${envDataDir}
 STORAGE_DIR=${envDataDir}
 CONF_DIR=${envConfDir}
 FRAME_DIR=${envFrameDir}
+FRAME_MATERIALIZATION_OUTPUT_ROOT=${envFrameMaterializationOutputRoot}
 TRAINING_CONFIG_PATH=${repoDir}/lx_ai/ai_model_config/train_sandbox_postgres.yaml
 
 TRAINING_ROOT=${envTrainingRoot}
@@ -409,6 +413,7 @@ in
           envDataDir
           envConfDir
           envFrameDir
+          envFrameMaterializationOutputRoot
         ];
 
         MemoryMax = "8G";
