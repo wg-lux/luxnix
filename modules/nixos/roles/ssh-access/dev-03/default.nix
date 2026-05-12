@@ -15,7 +15,7 @@ in
 
     idEd25519 = mkOption {
       type = types.str;
-      default = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos";
+      default = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAVt7FP3BCARMRyL791VauxIPd3t8nVm4A49VVpL9FUj";
       description = ''
         Access key for user HZ
       '';

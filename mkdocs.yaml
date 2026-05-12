@@ -58,6 +58,7 @@ nav:
   - Getting Started: getting-started.md
   - Deployment Guide: deployment-guide.md
   - Vault Setup: vault-setup.md
+  - SSH Host Identity: ssh-host-identity.md
   - Hardware Setup: hardware-setup.md
   - Security: security.md
   - Service Architecture: service-architecture.md
