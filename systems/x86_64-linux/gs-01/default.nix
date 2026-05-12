@@ -63,6 +63,8 @@ generic-settings.gpu.nvidia.driver = "production";
 
 generic-settings.gpu.nvidia.enable = true;
 
+nvidia-prime.enable = lib.mkForce false;
+
 generic-settings.language = "english";
 
 generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_6;
