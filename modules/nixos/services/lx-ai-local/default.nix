@@ -35,6 +35,9 @@ let
   envLegacyImageDir = "${envDataDir}/legacy_images/images";
   envLegacyJsonlPath = "${envDataDir}/legacy_images/legacy_img_dicts.jsonl";
 
+  envStorageDir = "${envDataDir}/storage";
+  envProcessedVideoDir = "${envStorageDir}/processed_videos_final";
+
   runLxAiTraining = pkgs.writeShellScriptBin "${scriptName}" ''
     set -euo pipefail
 
@@ -129,14 +132,20 @@ let
       "${envRunsDir}" \
       "${envBucketSnapshotDir}" \
       "${envCsvDir}" \
-      "${repoDir}/.config/secretspec"
+      "${repoDir}/.config/secretspec" \
+      "${envStorageDir}" \
+      "${envProcessedVideoDir}" \
 
 
     export HOME_DIR="${endoreg-service-user-home}"
     export WORKING_DIR="${repoDir}"
-    export LX_ANNOTATE_ENCRYPTED_DATA_DIR="${envDataDir}"
+
     export DATA_DIR="${envDataDir}"
-    export STORAGE_DIR="${envDataDir}"
+    export LX_ANNOTATE_ENCRYPTED_DATA_DIR="${envDataDir}"
+    export DJANGO_DATA_DIR="${envDataDir}"
+    export STORAGE_DIR="${envDataDir}/storage"
+    export PROTECTED_MEDIA_ROOT="${envDataDir}/storage"
+    
     export CONF_DIR="${envConfDir}"
     export FRAME_DIR="${envFrameDir}"
     export FRAME_MATERIALIZATION_OUTPUT_ROOT="${envFrameMaterializationOutputRoot}"
@@ -176,6 +185,7 @@ let
     export DJANGO_DB_HOST="${cfg.database.host}"
     export DJANGO_DB_PORT="${toString cfg.database.port}"
     export DJANGO_DB_SSLMODE="${cfg.database.sslMode}"
+    export DB_BACKEND="postgres"
 
     export LOG_LEVEL="INFO"
 
@@ -193,7 +203,9 @@ HOME_DIR=${endoreg-service-user-home}
 WORKING_DIR=${repoDir}
 LX_ANNOTATE_ENCRYPTED_DATA_DIR=${envDataDir}
 DATA_DIR=${envDataDir}
-STORAGE_DIR=${envDataDir}
+STORAGE_DIR=${envStorageDir}
+PROTECTED_MEDIA_ROOT=${envStorageDir}
+DJANGO_DATA_DIR=${envDataDir}
 CONF_DIR=${envConfDir}
 FRAME_DIR=${envFrameDir}
 FRAME_MATERIALIZATION_OUTPUT_ROOT=${envFrameMaterializationOutputRoot}
@@ -206,8 +218,6 @@ BUCKET_SNAPSHOT_DIR=${envBucketSnapshotDir}
 
 BACKBONE_CHECKPOINT=${envBackboneCheckpoint}
 BACKBONE_CHECKPOINT_URL=${envBackboneCheckpointUrl}
-
-SQLITE_DB_PATH=${repoDir}/dev_db.sqlite
 
 LEGACY_IMAGE_DIR=${envLegacyImageDir}
 LEGACY_JSONL_PATH=${envLegacyJsonlPath}
@@ -411,6 +421,8 @@ in
         ReadWritePaths = [
           endoreg-service-user-home
           envDataDir
+          envStorageDir
+          envProcessedVideoDir
           envConfDir
           envFrameDir
           envFrameMaterializationOutputRoot
