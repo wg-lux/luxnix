@@ -60,6 +60,8 @@ in {
           assert_file_contains ${lxAnnotateConfig} 'networking\.hostName to be set' "vault mode must require hostname"
           assert_file_contains ${lxAnnotateConfig} 'requires luxnix\.vault client configuration' "vault mode must require explicit vault client config"
           assert_file_contains ${lxAnnotateConfig} 'setupService' "lx-annotate must order after managed secrets setup"
+          assert_file_contains ${lxAnnotateConfig} 'lx-annotate-master-key-check' "lx-annotate must validate the application master key before boot"
+          assert_file_contains ${lxAnnotateConfig} 'masterKeyCheckUnits' "lx-annotate boot must require the master key guard"
         '';
       }
     ];

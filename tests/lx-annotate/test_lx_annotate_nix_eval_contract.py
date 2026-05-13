@@ -78,6 +78,13 @@ def _gc_02_contract() -> dict[str, Any]:
             bootRequires = cfg.systemd.services."lx-annotate-boot".requires;
             migrateAfter = cfg.systemd.services."lx-annotate-migrate".after;
           };
+          masterKeyCheck = {
+            serviceConfig = cfg.systemd.services."lx-annotate-master-key-check".serviceConfig;
+            after = cfg.systemd.services."lx-annotate-master-key-check".after;
+            requires = cfg.systemd.services."lx-annotate-master-key-check".requires;
+            bootAfter = cfg.systemd.services."lx-annotate-boot".after;
+            bootRequires = cfg.systemd.services."lx-annotate-boot".requires;
+          };
           workerOrganization = {
             workerLimits = lxCfg.runtime.workerLimits;
             workerPools = lxCfg.runtime.workerPools;
@@ -505,6 +512,30 @@ def test_lx_annotate_generated_master_key_is_recoverable_runtime_contract() -> N
         in runtime_script
     )
     assert "repair_managed_payloads" in runtime_script
+
+
+def test_lx_annotate_master_key_check_blocks_boot() -> None:
+    evaluated = _gc_02_contract()["masterKeyCheck"]
+    service_config = evaluated["serviceConfig"]
+
+    assert service_config["Type"] == "oneshot"
+    assert service_config["RemainAfterExit"] is True
+    assert service_config["WorkingDirectory"] == "/var/endoreg-service-user/lx-annotate-wheel"
+    assert service_config["ExecStart"].endswith("/bin/runLocalMasterKeyCheck")
+    assert "/var/lib/lx-annotate/data" in service_config["ReadWritePaths"]
+    assert "lx-annotate-load-base-data.service" in evaluated["after"]
+    assert "lx-annotate-load-base-data.service" in evaluated["requires"]
+    assert "lx-annotate-master-key-check.service" in evaluated["bootAfter"]
+    assert "lx-annotate-master-key-check.service" in evaluated["bootRequires"]
+
+    runtime_script = Path(
+        "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts.nix"
+    ).read_text(encoding="utf-8")
+    assert 'pkgs.writeShellScriptBin "${masterKeyCheckScriptName}"' in runtime_script
+    assert (
+        'run_installed_django_command "${runtimeWheelVenvPath}/bin/python" verify_encrypted_storage'
+        in runtime_script
+    )
 
 
 def test_lx_annotate_dedicated_celery_workers_follow_pool_contract() -> None:

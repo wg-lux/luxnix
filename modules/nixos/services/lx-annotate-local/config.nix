@@ -53,6 +53,7 @@ let
     celeryWorkerScriptName
     emergencyStorageReliefScriptName
     loadBaseDataWheelScriptName
+    masterKeyCheckScriptName
     migrateWheelScriptName
     migrateVideoStreamableStorageScriptName
     watcherScriptName
@@ -85,6 +86,7 @@ let
     runLocalLoadBaseDataWheelScript
     runLocalLxAnnotateStartScript
     runLocalLxAnnotateWheelScript
+    runLocalMasterKeyCheckWheelScript
     runLocalMigrateWheelScript
     runLocalSapImportScript
     runLocalSapImportWheelScript;
@@ -115,6 +117,9 @@ let
   wheelBootstrapUnits = lib.optionals useWheelRuntime [
     "lx-annotate-migrate.service"
     "lx-annotate-load-base-data.service"
+  ];
+  masterKeyCheckUnits = lib.optionals useWheelRuntime [
+    "lx-annotate-master-key-check.service"
   ];
   isLocalPostgresHost = host:
     host == "localhost"
@@ -610,6 +615,15 @@ in
           ${pkgs.vault}/bin/vault kv get -format=json "$VAULT_PATH" \
             | ${pkgs.jq}/bin/jq -er '.data.data.${cfg.runtime.vaultManagedEncryptedData.vaultMasterKeyField}' \
             | tr -d '\n' > "$TARGET_FILE"
+          if [ ! -s "$TARGET_FILE" ]; then
+            echo "ERROR: Vault returned an empty lx-annotate application master key from $VAULT_PATH."
+            exit 1
+          fi
+          if [ -f "$SECRET_FILE" ] && ! ${pkgs.diffutils}/bin/cmp -s "$SECRET_FILE" "$TARGET_FILE"; then
+            echo "ERROR: Vault lx-annotate application master key differs from the existing local key at $SECRET_FILE."
+            echo "Refusing to replace it during managed-secrets refresh because that would break decryption of existing app-layer encrypted data."
+            exit 1
+          fi
         '';
       };
 
@@ -867,14 +881,14 @@ in
       wantedBy = [ "multi-user.target" ];
       wants = [
         "nginx.service"
-      ] ++ localRedisServiceUnits ++ localPostgresSetupUnits ++ wheelBootstrapUnits ++ encryptionServiceUnits;
-      requires = lib.optionals cfg.dataRecovery.enable [ "lx-annotate-data-recovery.service" ] ++ wheelBootstrapUnits ++ encryptionServiceUnits;
+      ] ++ localRedisServiceUnits ++ localPostgresSetupUnits ++ wheelBootstrapUnits ++ masterKeyCheckUnits ++ encryptionServiceUnits;
+      requires = lib.optionals cfg.dataRecovery.enable [ "lx-annotate-data-recovery.service" ] ++ wheelBootstrapUnits ++ masterKeyCheckUnits ++ encryptionServiceUnits;
       after = [
         "endoreg-django-setup.service"
         "systemd-tmpfiles-setup.service"
       ] ++ localRedisServiceUnits ++ localPostgresSetupUnits ++ lib.optionals cfg.dataRecovery.enable [
         "lx-annotate-data-recovery.service"
-      ] ++ wheelBootstrapUnits ++ encryptionServiceUnits;
+      ] ++ wheelBootstrapUnits ++ masterKeyCheckUnits ++ encryptionServiceUnits;
       unitConfig = encryptedDataMountUnitConfig;
       serviceConfig = {
         Type = "exec";
@@ -996,6 +1010,33 @@ in
           envDataDir
           "/var/lib/lx-annotate"
         ];
+      };
+    };
+    systemd.services.lx-annotate-master-key-check = mkIf useWheelRuntime {
+      description = "Validate lx-annotate application master key against encrypted storage";
+      wantedBy = [ "multi-user.target" ];
+      before = [ "lx-annotate-boot.service" ];
+      after = [
+        "systemd-tmpfiles-setup.service"
+      ] ++ localPostgresServiceUnits ++ localPostgresSetupUnits ++ wheelBootstrapUnits ++ encryptionServiceUnits;
+      wants = localPostgresServiceUnits ++ encryptionServiceUnits;
+      requires = wheelBootstrapUnits ++ encryptionServiceUnits;
+      restartTriggers = [ runLocalMasterKeyCheckWheelScript ];
+      unitConfig = encryptedDataMountUnitConfig;
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        User = endoreg-service-user-name;
+        Group = endoreg-service-group-name;
+        WorkingDirectory = runtimeWorkingDir;
+        ExecStartPre = [ wheelRuntimePreStart ];
+        ExecStart = "${runLocalMasterKeyCheckWheelScript}/bin/${masterKeyCheckScriptName}";
+        Environment = appServiceEnvironment;
+        TimeoutStartSec = "10min";
+        ProtectSystem = "full";
+        PrivateTmp = true;
+        NoNewPrivileges = true;
+        ReadWritePaths = appReadWritePaths;
       };
     };
     systemd.services.lx-annotate-data-cleanup = mkIf cfg.dataCleanup.enable {

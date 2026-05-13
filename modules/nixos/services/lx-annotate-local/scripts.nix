@@ -143,6 +143,7 @@ let
       export MODEL_TRAINING_STAGING_ROOT="${cfg.runtime.modelTrainingStagingRoot}"
       export VIDEO_POST_VALIDATION_JOB_MODE="celery"
       export VIDEO_TEMPORAL_INFERENCE_JOB_MODE="celery"
+      export VIDEO_TEMPORAL_INFERENCE_FRAME_SOURCE_MODE="stream"
       export SSL_CERT_FILE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
       export REQUESTS_CA_BUNDLE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
 
@@ -315,6 +316,7 @@ let
   emergencyStorageReliefScriptName = "runLxAnnotateEmergencyStorageRelief";
   startScriptName = "lx-annotate-start";
   bootstrapScriptName = "lx-annotate-bootstrap";
+  masterKeyCheckScriptName = "runLocalMasterKeyCheck";
   acceptanceScriptName = "runLocalAcceptance";
   migrateWheelScriptName = "runLocalMigrate";
   loadBaseDataWheelScriptName = "runLocalLoadBaseData";
@@ -1173,6 +1175,7 @@ let
     MODEL_TRAINING_STAGING_ROOT=${cfg.runtime.modelTrainingStagingRoot}
     VIDEO_POST_VALIDATION_JOB_MODE=celery
     VIDEO_TEMPORAL_INFERENCE_JOB_MODE=celery
+    VIDEO_TEMPORAL_INFERENCE_FRAME_SOURCE_MODE=stream
     SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
     REQUESTS_CA_BUNDLE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
     DEBUG=False
@@ -2060,6 +2063,7 @@ let
     lx_annotate_export_secret_key_env
     export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
     export VIDEO_TEMPORAL_INFERENCE_JOB_MODE="celery"
+    export VIDEO_TEMPORAL_INFERENCE_FRAME_SOURCE_MODE="stream"
     ${optionalString (cfg.runtime.inferenceWorker.cudaVisibleDevices != null) ''
       export CUDA_VISIBLE_DEVICES="${cfg.runtime.inferenceWorker.cudaVisibleDevices}"
     ''}
@@ -2096,6 +2100,7 @@ let
     lx_annotate_export_wheel_service_env "${envDataDir}"
     ensure_wheel_runtime_installed
     export VIDEO_TEMPORAL_INFERENCE_JOB_MODE="celery"
+    export VIDEO_TEMPORAL_INFERENCE_FRAME_SOURCE_MODE="stream"
     ${optionalString (cfg.runtime.inferenceWorker.cudaVisibleDevices != null) ''
       export CUDA_VISIBLE_DEVICES="${cfg.runtime.inferenceWorker.cudaVisibleDevices}"
     ''}
@@ -2217,6 +2222,26 @@ let
       "https://${cfg.django.hostname}/static/.vite/manifest.json" >/dev/null
 
     log "lx-annotate acceptance checks passed."
+  '';
+  runLocalMasterKeyCheckWheelScript = pkgs.writeShellScriptBin "${masterKeyCheckScriptName}" ''
+    set -euo pipefail
+
+    source "${lxAnnotateEnvHelpers}"
+    lx_annotate_export_wheel_service_env "${envDataDir}"
+    export MEDIA_URL="${envNginxProtectedMediaUrl}"
+
+    if [ -z "''${LX_ANNOTATE_MASTER_KEY_FILE:-}" ] || [ ! -r "$LX_ANNOTATE_MASTER_KEY_FILE" ] || [ ! -s "$LX_ANNOTATE_MASTER_KEY_FILE" ]; then
+      echo "ERROR: LX_ANNOTATE_MASTER_KEY_FILE is not configured, readable, and non-empty; refusing to boot without validating encrypted storage."
+      exit 1
+    fi
+
+    source "${lxAnnotateRuntimeLib}"
+    ensure_wheel_runtime_installed
+    mkdir -p "${runtimeStorageRootPath}" "${runtimeStreamableVideoRootPath}" "${runtimeStreamableVideoRawRootPath}" "${runtimeStreamableVideoProcessedRootPath}"
+
+    run_installed_django_command "${runtimeWheelVenvPath}/bin/python" verify_encrypted_storage
+
+    log "lx-annotate application master key check passed."
   '';
   sapImportScriptName = "runLocalSapImport";
   sapImportScriptBody = ''
@@ -3043,6 +3068,7 @@ in
   scriptNames = {
     inherit
       acceptanceScriptName
+      masterKeyCheckScriptName
       celeryFrameExtractionWorkerScriptName
       celeryInferenceWorkerScriptName
       celeryPipelineWorkerScriptName
@@ -3071,6 +3097,7 @@ in
       runLocalLxAnnotateWheelScript
       runLocalAcceptanceScript
       runLocalAcceptanceWheelScript
+      runLocalMasterKeyCheckWheelScript
       runLocalCeleryFrameExtractionWorkerScript
       runLocalCeleryFrameExtractionWorkerWheelScript
       runLocalCeleryInferenceWorkerScript
