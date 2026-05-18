@@ -999,10 +999,13 @@ let
           local wheelhouse_hash="no-wheelhouse"
           local pip_install_args=""
           local wheel_install_stamp_file="${runtimeRootPath}/.wheel-install.sha256"
+          local wheel_install_lock_file="${runtimeRootPath}/.wheel-install.lock"
           local installed_hash=""
           local canonical_wheel_name=""
           local staged_wheel_path=""
           local install_hash=""
+          local wheel_installer_revision="stop-workers-before-wheel-install-v1"
+          local venv_created="false"
 
           if [ -z "${wheelFilePath}" ]; then
             die "services.luxnix.lxAnnotateLocal.runtime.wheelPath must be set in wheel mode."
@@ -1011,12 +1014,7 @@ let
           install -d -m 0750 "${runtimeRootPath}" "${runtimeWheelRootPath}" "${runtimeWheelVenvPath}" "${envConfDir}" "${envDataDir}"
           install -d -m 0775 "${runtimeStaticRootPath}" "${runtimeStaticRootPath}/.vite"
 
-          if [ ! -x "${runtimeWheelVenvPath}/bin/python" ]; then
-            "${pythonInterpreter}" -m venv "${runtimeWheelVenvPath}"
-          fi
-
           wheel_hash="$(${pkgs.coreutils}/bin/sha256sum "${wheelFilePath}" | ${pkgs.coreutils}/bin/cut -d ' ' -f1)"
-          installed_hash="$(${pkgs.coreutils}/bin/cat "$wheel_install_stamp_file" 2>/dev/null || true)"
           canonical_wheel_name="$(${pkgs.coreutils}/bin/basename "${wheelFilePath}" | ${pkgs.gnused}/bin/sed -E 's/^[a-z0-9]{32}-//')"
           staged_wheel_path="${runtimeRootPath}/$canonical_wheel_name"
 
@@ -1034,10 +1032,21 @@ let
             printf '%s
     %s
     %s
-    '           "$wheel_hash"           "$wheelhouse_hash"           "${pythonInterpreter}"         | ${pkgs.coreutils}/bin/sha256sum         | ${pkgs.coreutils}/bin/cut -d ' ' -f1
+    %s
+    '           "$wheel_hash"           "$wheelhouse_hash"           "${pythonInterpreter}"           "$wheel_installer_revision"         | ${pkgs.coreutils}/bin/sha256sum         | ${pkgs.coreutils}/bin/cut -d ' ' -f1
           )"
 
-          if [ "$install_hash" != "$installed_hash" ]; then
+          exec 9>"$wheel_install_lock_file"
+          ${pkgs.util-linux}/bin/flock 9
+
+          if [ ! -x "${runtimeWheelVenvPath}/bin/python" ]; then
+            "${pythonInterpreter}" -m venv "${runtimeWheelVenvPath}"
+            venv_created="true"
+          fi
+
+          installed_hash="$(${pkgs.coreutils}/bin/cat "$wheel_install_stamp_file" 2>/dev/null || true)"
+
+          if [ "$venv_created" = "true" ] || [ "$install_hash" != "$installed_hash" ]; then
             ${pkgs.coreutils}/bin/install -m 0640 "${wheelFilePath}" "$staged_wheel_path"
             # shellcheck disable=SC2086
             "${runtimeWheelVenvPath}/bin/pip" install --upgrade --force-reinstall $pip_install_args "$staged_wheel_path"
@@ -1045,6 +1054,9 @@ let
     ' "$install_hash" > "$wheel_install_stamp_file"
             chmod 0640 "$wheel_install_stamp_file" 2>/dev/null || true
           fi
+
+          ${pkgs.util-linux}/bin/flock -u 9
+          exec 9>&-
 
           export PATH="${runtimeWheelVenvPath}/bin:$PATH"
           export LX_ANNOTATE_WHEEL_VENV="${runtimeWheelVenvPath}"
@@ -1881,7 +1893,6 @@ let
     source "${lxAnnotateRuntimeLib}"
     source "${lxAnnotateEnvHelpers}"
     lx_annotate_export_wheel_service_env "${envDataDir}"
-    ensure_wheel_runtime_installed
     export VIDEO_POST_VALIDATION_JOB_MODE="celery"
     export OMP_NUM_THREADS="1"
     export OPENBLAS_NUM_THREADS="1"
@@ -1952,7 +1963,6 @@ let
     source "${lxAnnotateRuntimeLib}"
     source "${lxAnnotateEnvHelpers}"
     lx_annotate_export_wheel_service_env "${envDataDir}"
-    ensure_wheel_runtime_installed
     export VIDEO_POST_VALIDATION_JOB_MODE="celery"
     export OMP_NUM_THREADS="1"
     export OPENBLAS_NUM_THREADS="1"
@@ -2023,7 +2033,6 @@ let
     source "${lxAnnotateRuntimeLib}"
     source "${lxAnnotateEnvHelpers}"
     lx_annotate_export_wheel_service_env "${envDataDir}"
-    ensure_wheel_runtime_installed
     export VIDEO_POST_VALIDATION_JOB_MODE="celery"
     export OMP_NUM_THREADS="1"
     export OPENBLAS_NUM_THREADS="1"
@@ -2098,7 +2107,6 @@ let
     source "${lxAnnotateRuntimeLib}"
     source "${lxAnnotateEnvHelpers}"
     lx_annotate_export_wheel_service_env "${envDataDir}"
-    ensure_wheel_runtime_installed
     export VIDEO_TEMPORAL_INFERENCE_JOB_MODE="celery"
     export VIDEO_TEMPORAL_INFERENCE_FRAME_SOURCE_MODE="stream"
     ${optionalString (cfg.runtime.inferenceWorker.cudaVisibleDevices != null) ''
@@ -2175,7 +2183,6 @@ let
     source "${lxAnnotateRuntimeLib}"
     source "${lxAnnotateEnvHelpers}"
     lx_annotate_export_wheel_service_env "${envDataDir}"
-    ensure_wheel_runtime_installed
     export MODEL_TRAINING_JOB_MODE="celery"
     export MODEL_TRAINING_STAGING_ROOT="${cfg.runtime.modelTrainingStagingRoot}"
     export CUDA_VISIBLE_DEVICES="${cfg.runtime.trainingWorker.cudaVisibleDevices}"

@@ -39,6 +39,7 @@ def _gc_02_contract() -> dict[str, Any]:
         """
         let
           flake = builtins.getFlake "git+file:///home/admin/luxnix";
+          lib = flake.inputs.nixpkgs.lib;
           cfg = flake.nixosConfigurations.gc-02.config;
           lxCfg = cfg.services.luxnix.lxAnnotateLocal;
           masterKeySecret = cfg.roles.managed-secrets.customSecrets.lx_annotate_master_key_local or null;
@@ -128,6 +129,42 @@ def _gc_02_contract() -> dict[str, Any]:
           fileWatcherPath = {
             wantedBy = cfg.systemd.paths.lx-annotate-filewatcher.wantedBy;
             pathConfig = cfg.systemd.paths.lx-annotate-filewatcher.pathConfig;
+          };
+          fileMover = let
+            runtimeDataDir = lxCfg.runtime.encryptedDataDir;
+            resolveRuntimeDataPath = path:
+              let
+                pathString = toString path;
+              in
+              if lib.hasPrefix "/" pathString then
+                pathString
+              else if pathString == "data" then
+                runtimeDataDir
+              else if lib.hasPrefix "data/" pathString then
+                "${runtimeDataDir}/${lib.removePrefix "data/" pathString}"
+              else
+                "${runtimeDataDir}/${pathString}";
+          in {
+            enable = cfg.services.luxnix.fileMover.enable;
+            sourcePaths = {
+              video = cfg.roles.endoreg-client.paths.videoInputDir;
+              report = cfg.roles.endoreg-client.paths.pdfInputDir;
+            };
+            serviceConfig = cfg.systemd.services.move-my-files.serviceConfig;
+            path = {
+              wantedBy = cfg.systemd.paths.move-my-files.wantedBy;
+              pathConfig = cfg.systemd.paths.move-my-files.pathConfig;
+            };
+            resolvedIntakeDirs = {
+              importRoot = resolveRuntimeDataPath lxCfg.runtime.intakeDirs.importRoot;
+              video = resolveRuntimeDataPath lxCfg.runtime.intakeDirs.video;
+              report = resolveRuntimeDataPath lxCfg.runtime.intakeDirs.report;
+              preanonymized =
+                resolveRuntimeDataPath lxCfg.runtime.intakeDirs.preanonymized;
+              sap = resolveRuntimeDataPath lxCfg.runtime.intakeDirs.sap;
+              moverStaging =
+                resolveRuntimeDataPath lxCfg.runtime.intakeDirs.moverStaging;
+            };
           };
           intakeDirs = lxCfg.runtime.intakeDirs;
           acceptanceServiceConfig = cfg.systemd.services."lx-annotate-acceptance".serviceConfig;
@@ -746,6 +783,14 @@ def test_wheel_migrate_and_load_base_data_services_run_before_web() -> None:
     assert "lx-annotate-load-base-data.service" in evaluated["bootAfter"]
     assert "lx-annotate-migrate.service" in evaluated["bootRequires"]
     assert "lx-annotate-load-base-data.service" in evaluated["bootRequires"]
+    assert any(
+        "lx-annotate-stop-wheel-celery-workers" in item
+        for item in evaluated["migrate"]["ExecStartPre"]
+    )
+    assert any(
+        "lx-annotate-stop-wheel-celery-workers" in item
+        for item in evaluated["loadBaseData"]["ExecStartPre"]
+    )
 
 
 def test_wheel_migrate_repairs_known_videostate_schema_drift() -> None:
@@ -824,10 +869,9 @@ def test_lx_annotate_wheel_celery_worker_exports_shared_runtime_env() -> None:
 
     assert 'lx_annotate_export_wheel_service_env "${envDataDir}"' in body
     assert 'source "${lxAnnotateRuntimeLib}"' in body
-    assert "ensure_wheel_runtime_installed" in body
-    assert body.index("ensure_wheel_runtime_installed") < body.index(
-        'exec "${pkgs.bash}/bin/bash" -lc'
-    )
+    assert "ensure_wheel_runtime_installed" not in body
+    assert '"${runtimeWheelVenvPath}/bin/pip" install' not in body
+    assert 'if [ ! -x "${runtimeWheelVenvPath}/bin/python" ]; then' in body
     assert 'export LX_ANNOTATE_WHEEL_VENV="${runtimeWheelVenvPath}"' in body
     assert "wheelCeleryWorkerCommand" in body
     assert 'export LX_ANNOTATE_DEFAULT_CENTER="${envDefaultCenter}"' in source
@@ -844,6 +888,9 @@ def test_lx_annotate_celery_worker_service_config_evaluates() -> None:
 
     assert service_config["WorkingDirectory"] == "/var/endoreg-service-user/lx-annotate-wheel"
     assert service_config["ExecStart"].endswith("/bin/runLocalCeleryWorker")
+    assert "lx-annotate-boot.service" in _gc_02_contract()["localRedis"]["workerRequires"]
+    assert "lx-annotate-migrate.service" in _gc_02_contract()["localRedis"]["workerAfter"]
+    assert "lx-annotate-load-base-data.service" in _gc_02_contract()["localRedis"]["workerAfter"]
     assert pipeline_config["ExecStart"].endswith("/bin/runLocalCeleryPipelineWorker")
     assert frame_extraction_config["ExecStart"].endswith(
         "/bin/runLocalCeleryFrameExtractionWorker"
@@ -874,7 +921,7 @@ def test_lx_annotate_frame_extraction_worker_defaults_to_always_on() -> None:
     assert evaluated["mode"] == "always"
     assert evaluated["serviceWantedBy"] == ["lx-annotate-boot.service"]
     assert "lx-annotate-boot.service" in evaluated["servicePartOf"]
-    assert "lx-annotate-boot.service" not in evaluated["serviceRequires"]
+    assert "lx-annotate-boot.service" in evaluated["serviceRequires"]
     assert evaluated["restart"] == "always"
     assert evaluated["runtimeMaxSec"] is None
     assert evaluated["timeoutStopSec"] is None
@@ -887,7 +934,7 @@ def test_lx_annotate_frame_extraction_worker_always_mode_preserves_boot_start() 
     assert evaluated["timerExists"] is False
     assert evaluated["wantedBy"] == ["lx-annotate-boot.service"]
     assert evaluated["partOf"] == ["lx-annotate-boot.service"]
-    assert "lx-annotate-boot.service" not in evaluated["requires"]
+    assert "lx-annotate-boot.service" in evaluated["requires"]
     assert evaluated["restart"] == "always"
     assert evaluated["runtimeMaxSec"] is None
     assert evaluated["timeoutStopSec"] is None

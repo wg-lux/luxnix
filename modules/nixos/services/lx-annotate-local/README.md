@@ -105,6 +105,32 @@ mirror lx-annotate `secretspec.toml` names such as `data/import/video_import`
 and `data/import/report_import`; Nix resolves `data/...` against
 `runtime.encryptedDataDir`.
 
+## File Mover Handoff Contract
+
+`move-my-files` and `lx-annotate-filewatcher` are coupled through the
+`runtime.intakeDirs` contract. Do not give either service a parallel hardcoded
+intake path.
+
+| Operator path | Mover behavior | Watcher contract |
+| --- | --- | --- |
+| `Video_Input` desktop link | path-triggered source, copied into mover staging, then published to `runtime.intakeDirs.video` | `lx-annotate-filewatcher.path` watches the resolved video dir and the service exports `WATCHER_VIDEO_DIR` |
+| `PDF_Input` desktop link | path-triggered source, copied into mover staging, then published to `runtime.intakeDirs.report` | `lx-annotate-filewatcher.path` watches the resolved report dir and the service exports `WATCHER_REPORT_DIR` |
+| `preanonymized_import` desktop link | direct service-user access path, not moved by `move-my-files` | `lx-annotate-filewatcher.path` watches the resolved preanonymized dir and exports `WATCHER_PREANONYMIZED_DIR` |
+| `sap_import` desktop link | direct service-user access path for SAP intake | handled by SAP import services, not by the file watcher path unit |
+
+The mover staging directory is `runtime.intakeDirs.moverStaging`. It is
+intentionally not watched. `move-my-files` first copies operator input into that
+staging tree, fixes ownership and permissions, then moves top-level staged
+entries into the watched video/report intake directories. Source files are
+deleted only after the publish step succeeds; unreadable files are moved under
+the `failed_input` quarantine tree.
+
+The watcher service runs as the same service user and group as the mover. Wheel
+and repo runtime scripts both set `LX_ANNOTATE_FILEWATCHER_ARGS` to
+`--process-existing-once`, so a path-triggered activation drains files that
+already exist in the watched intake directories instead of requiring a
+long-running watcher process.
+
 The web command should stay a pure ASGI server command. It must not run
 migrations or `load_base_db_data`; those are explicit services on NixOS and
 explicit Jobs in Kubernetes-shaped deployments.

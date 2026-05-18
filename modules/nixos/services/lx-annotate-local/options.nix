@@ -277,8 +277,8 @@ in
           wheelPath = mkOption {
             type = types.nullOr types.path;
             default = pkgs.fetchurl {
-              url = "https://files.pythonhosted.org/packages/4a/b8/18631cefc25a16dc860a21eea9c9ee6684238964e7f129da259cf086677d/lx_annotate-0.5.3-py3-none-any.whl";
-              hash = "sha256-+2as2WL0XstJ7CsD4CbCyMPPh9Pm7L+lvDeZG45Q2tY=";
+              url = "https://files.pythonhosted.org/packages/9b/94/1060a0077a21b3a1f2ff02f1117796f63b2beed33122fd3d3128dd8a21e1/lx_annotate-0.5.7-py3-none-any.whl";
+              hash = "sha256-I0BfSkwCGSE89hUjJnU4e2ygOrIj57w1es7pndYMCjI=";
             };
             description = "Path to the lx-annotate wheel artifact used in wheel mode.";
           };
@@ -671,7 +671,7 @@ in
                 migrate = mkOption {
                   type = types.nullOr types.str;
                   default = "$LX_ANNOTATE_WHEEL_VENV/bin/python -m django migrate --noinput --settings=lx_annotate.settings.settings_prod";
-                  description = "Shell command executed for wheel-mode database migrations.";
+                  description = "Shell command executed for wheel-mode database migrations. The default includes --fake-initial so pre-existing initial-schema tables do not break startup after runtime transitions.";
                 };
                 loadBaseData = mkOption {
                   type = types.nullOr types.str;

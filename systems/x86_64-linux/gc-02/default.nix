@@ -45,6 +45,7 @@
   services = {
     luxnix.endoregDbApiLocal.enable = lib.mkForce false;
     luxnix.lxAnnotateLocal.runtime.mode = "wheel";
+    luxnix.ollama.enable = true;
 
     luxnix.vllm = {
       enable = false;
@@ -55,6 +56,13 @@
       gpuMemoryUtilization = 0.85;
     };
   };
+
+  nix.settings = {
+    max-jobs = 1;
+    cores = 4;
+  };
+
+  nixpkgs.config.cudaCapabilities = [ "8.6" ];
 
   luxnix = {
     boot-decryption-stick.enable = true;

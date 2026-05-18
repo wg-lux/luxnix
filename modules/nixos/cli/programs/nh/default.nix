@@ -19,5 +19,13 @@ in {
       clean.extraArgs = "--keep-since 4d --keep 3"; # nh clean all --help
       flake = config.luxnix.generic-settings.configurationPath;
     };
+
+    systemd.services.nh-clean.serviceConfig = {
+      Nice = 19;
+      IOSchedulingClass = "idle";
+      CPUWeight = 10;
+      IOWeight = 10;
+      OOMScoreAdjust = 900;
+    };
   };
 }

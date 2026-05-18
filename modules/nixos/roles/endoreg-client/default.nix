@@ -349,37 +349,47 @@ in
               ExecStart = pkgs.writeShellScript "mount-persisting-storage-service" ''
                 set -euo pipefail
 
+                storage_persisting_external_drive="''${STORAGE_PERSISTING_EXTERNAL_DRIVE:-false}"
+                storage_persisting_mount_point="''${STORAGE_PERSISTING_MOUNT_POINT:-}"
+                storage_persisting_hdd_id="''${STORAGE_PERSISTING_HDD_ID:-}"
+                storage_persisting_hdd_part="''${STORAGE_PERSISTING_HDD_PART:-part1}"
+
                 # if STORAGE_PERSISTING_EXTERNAL_DRIVE is not true, exit
-                if [ "$STORAGE_PERSISTING_EXTERNAL_DRIVE" != "true" ]; then
+                if [ "$storage_persisting_external_drive" != "true" ]; then
                   echo "STORAGE_PERSISTING_EXTERNAL_DRIVE is not true; skipping mount"
                   exit 0
 
                 fi
 
-                if [ -z "''${STORAGE_PERSISTING_HDD_ID:-}" ]; then
+                if [ -z "$storage_persisting_mount_point" ]; then
+                  echo "ERROR: STORAGE_PERSISTING_MOUNT_POINT is not set"
+                  exit 1
+                fi
+
+                if [ -z "$storage_persisting_hdd_id" ]; then
                   echo "ERROR: STORAGE_PERSISTING_HDD_ID is not set"
                   exit 1
                 fi
 
                 # Check if already mounted
-                if mountpoint -q "$STORAGE_PERSISTING_MOUNT_POINT"; then
-                  echo "Persisting storage already mounted at $STORAGE_PERSISTING_MOUNT_POINT"
+                if mountpoint -q "$storage_persisting_mount_point"; then
+                  echo "Persisting storage already mounted at $storage_persisting_mount_point"
                   exit 0
 
                 fi
 
                 # attempt to mount drive by ID; prefer first partition if present
-                DEV_BASE="/dev/disk/by-id/$STORAGE_PERSISTING_HDD_ID"
-                DEV_PATH="$DEV_BASE-$STORAGE_PERSISTING_HDD_PART"
+                DEV_BASE="/dev/disk/by-id/$storage_persisting_hdd_id"
+                DEV_PATH="$DEV_BASE-$storage_persisting_hdd_part"
   
 
-                echo "Mounting persisting storage drive $DEV_PATH to $STORAGE_PERSISTING_MOUNT_POINT"
+                echo "Mounting persisting storage drive $DEV_PATH to $storage_persisting_mount_point"
                 if [ ! -e "$DEV_PATH" ]; then
                   echo "ERROR: Device path $DEV_PATH does not exist"
                   exit 1
                 fi
 
-                mount "$DEV_PATH" "$STORAGE_PERSISTING_MOUNT_POINT"
+                mount "$DEV_PATH" "$storage_persisting_mount_point"
                 echo "Mounted persisting storage successfully" 
 
               '';

@@ -16,12 +16,22 @@ SCRIPTS_NIX = (
 def _extract_function(function_name: str) -> str:
     source = SCRIPTS_NIX.read_text(encoding="utf-8")
     match = re.search(
-        rf"{function_name}\(\) \{{\n(.*?)\n    \}}",
+        rf"^(?P<indent>[ \t]*){function_name}\(\) \{{\n",
         source,
-        flags=re.DOTALL,
+        flags=re.MULTILINE,
     )
     assert match is not None, f"Could not locate {function_name} in scripts.nix"
-    body = textwrap.dedent(match.group(1))
+    indent = match.group("indent")
+    lines = source[match.end() :].splitlines()
+    body_lines: list[str] = []
+    for line in lines:
+        if line.rstrip() == f"{indent}}}":
+            break
+        body_lines.append(line)
+    else:
+        raise AssertionError(f"Could not locate end of {function_name} in scripts.nix")
+
+    body = textwrap.dedent("\n".join(body_lines))
     body = body.replace("''${", "${")
     body = re.sub(r"\$\{pkgs\.[^}]+\}/bin/([A-Za-z0-9_.+-]+)", r"\1", body)
     return f"{function_name}() {{\n{body}\n}}"

@@ -114,6 +114,13 @@ let
   localPostgresSetupUnits = lib.optionals (!externalPostgresConfigured) [ "postgres-endoreg-setup.service" ];
   localPostgresServiceUnits = lib.optionals (!externalPostgresConfigured) [ "postgresql.service" ];
   localRedisServiceUnits = lib.optionals (!externalRedisConfigured) [ "redis-lx-annotate.service" ];
+  celeryWorkerServiceUnits = [
+    "lx-annotate-celery-worker.service"
+    "lx-annotate-celery-pipeline-worker.service"
+    "lx-annotate-celery-frame-extraction-worker.service"
+    "lx-annotate-celery-inference-worker.service"
+    "lx-annotate-celery-training-worker.service"
+  ];
   wheelBootstrapUnits = lib.optionals useWheelRuntime [
     "lx-annotate-migrate.service"
     "lx-annotate-load-base-data.service"
@@ -163,6 +170,13 @@ let
 
     [ -f "${cfg.django.keycloakSecretFile}" ] && chown root:${endoreg-service-group-name} "${cfg.django.keycloakSecretFile}"
     [ -f "${cfg.django.keycloakSecretFile}" ] && chmod 640 "${cfg.django.keycloakSecretFile}"
+  ''}";
+  stopWheelCeleryWorkersPreStart = "+${pkgs.writeShellScript "lx-annotate-stop-wheel-celery-workers" ''
+    set -euo pipefail
+
+    for unit in ${lib.concatStringsSep " " celeryWorkerServiceUnits}; do
+      ${pkgs.systemd}/bin/systemctl stop "$unit" >/dev/null 2>&1 || true
+    done
   ''}";
   runtimeLibraryPackages = [
     pkgs.stdenv.cc.cc.lib
@@ -247,9 +261,18 @@ let
     }:
     {
       inherit description wantedBy partOf;
-      after = localRedisServiceUnits ++ localPostgresServiceUnits ++ [ "lx-annotate-boot.service" ] ++ encryptionServiceUnits;
+      after =
+        localRedisServiceUnits
+        ++ localPostgresServiceUnits
+        ++ [ "lx-annotate-boot.service" ]
+        ++ wheelBootstrapUnits
+        ++ encryptionServiceUnits;
       wants = localRedisServiceUnits ++ encryptionServiceUnits ++ wants;
-      requires = localRedisServiceUnits ++ encryptionServiceUnits ++ requires;
+      requires =
+        localRedisServiceUnits
+        ++ lib.optionals useWheelRuntime [ "lx-annotate-boot.service" ]
+        ++ encryptionServiceUnits
+        ++ requires;
       unitConfig = encryptedDataMountUnitConfig;
 
       serviceConfig = {
@@ -842,7 +865,10 @@ in
         User = endoreg-service-user-name;
         Group = endoreg-service-group-name;
         WorkingDirectory = runtimeWorkingDir;
-        ExecStartPre = [ wheelRuntimePreStart ];
+        ExecStartPre = [
+          stopWheelCeleryWorkersPreStart
+          wheelRuntimePreStart
+        ];
         ExecStart = "${runLocalMigrateWheelScript}/bin/${migrateWheelScriptName}";
         Environment = appServiceEnvironment;
         TimeoutStartSec = "10min";
@@ -865,7 +891,10 @@ in
         User = endoreg-service-user-name;
         Group = endoreg-service-group-name;
         WorkingDirectory = runtimeWorkingDir;
-        ExecStartPre = [ wheelRuntimePreStart ];
+        ExecStartPre = [
+          stopWheelCeleryWorkersPreStart
+          wheelRuntimePreStart
+        ];
         ExecStart = "${runLocalLoadBaseDataWheelScript}/bin/${loadBaseDataWheelScriptName}";
         Environment = appServiceEnvironment;
         TimeoutStartSec = "10min";
@@ -899,7 +928,9 @@ in
         Environment = appServiceEnvironment;
 
         TimeoutStartSec = "5min";
-        ExecStartPre = [
+        ExecStartPre = lib.optionals useWheelRuntime [
+          stopWheelCeleryWorkersPreStart
+        ] ++ [
           "+${pkgs.writeShellScript "lx-annotate-pre-start" ''
             set -euo pipefail
 
@@ -1250,6 +1281,8 @@ in
       description = "Trigger lx-annotate watcher when intake files are dropped";
       wantedBy = [ "multi-user.target" ];
       pathConfig = {
+        # These paths are also the publish destinations for move-my-files.
+        # Keep both sides derived from runtime.intakeDirs.
         PathChanged = [
           runtimeWatcherVideoDirPath
           runtimeWatcherReportDirPath

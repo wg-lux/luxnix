@@ -44,6 +44,11 @@
   services = {
     };
 
+  nix.settings = {
+    max-jobs = 1;
+    cores = 4;
+  };
+
   luxnix = {
     boot-decryption-stick.enable = true;
 
