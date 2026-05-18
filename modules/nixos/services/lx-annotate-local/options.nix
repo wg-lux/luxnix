@@ -670,7 +670,7 @@ in
                 };
                 migrate = mkOption {
                   type = types.nullOr types.str;
-                  default = "$LX_ANNOTATE_WHEEL_VENV/bin/python -m django migrate --noinput --settings=lx_annotate.settings.settings_prod";
+                  default = "$LX_ANNOTATE_WHEEL_VENV/bin/python -m django migrate --noinput --fake-initial --settings=lx_annotate.settings.settings_prod";
                   description = "Shell command executed for wheel-mode database migrations. The default includes --fake-initial so pre-existing initial-schema tables do not break startup after runtime transitions.";
                 };
                 loadBaseData = mkOption {
