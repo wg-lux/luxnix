@@ -6,14 +6,16 @@ let
   runtime = lxAnnotateRuntime;
   inherit (runtime.identities)
     endoreg-service-user-name
-    endoreg-service-group-name;
+    endoreg-service-group-name
+    ;
   inherit (runtime.helpers) mkDjangoOptions;
   inherit (runtime.defaults)
     externalCleanupArchiveRootDefault
     emergencyReliefArchiveRootDefault
     emergencyReliefManifestDirDefault
     emergencyReliefStagingDirDefault
-    emergencyReliefValidatedExportDirsDefault;
+    emergencyReliefValidatedExportDirsDefault
+    ;
   inherit (runtime.paths)
     runtimeDataRootPath
     dataRecoveryStateFile
@@ -27,8 +29,10 @@ let
     legacyMediaProcessedReportDir
     legacyMediaProcessedVideoDir
     runtimeProcessedReportDir
-    runtimeProcessedVideoDir;
-  inferWheelPackageVersion = wheelPath:
+    runtimeProcessedVideoDir
+    ;
+  inferWheelPackageVersion =
+    wheelPath:
     if wheelPath == null then
       ""
     else
@@ -256,7 +260,10 @@ in
       type = types.submodule {
         options = {
           mode = mkOption {
-            type = types.enum [ "repo" "wheel" ];
+            type = types.enum [
+              "repo"
+              "wheel"
+            ];
             default = "wheel";
             description = "How lx-annotate is started. 'repo' keeps the dev git/devenv flow; 'wheel' installs a configured Python wheel into a runtime virtualenv.";
           };
@@ -277,8 +284,8 @@ in
           wheelPath = mkOption {
             type = types.nullOr types.path;
             default = pkgs.fetchurl {
-              url = "https://files.pythonhosted.org/packages/9b/94/1060a0077a21b3a1f2ff02f1117796f63b2beed33122fd3d3128dd8a21e1/lx_annotate-0.5.7-py3-none-any.whl";
-              hash = "sha256-I0BfSkwCGSE89hUjJnU4e2ygOrIj57w1es7pndYMCjI=";
+              url = "https://files.pythonhosted.org/packages/e8/5e/ea5c2f8c5a95fef0bb24e5b96a85edc0e8882b6bec48cf66042c5e2d3c75/lx_annotate-0.5.8-py3-none-any.whl";
+              hash = "sha256-Xcl0BKicM0hjqnulC6KqhevsX79vm82d2sqxsa//PT8=";
             };
             description = "Path to the lx-annotate wheel artifact used in wheel mode.";
           };
@@ -708,6 +715,11 @@ in
                   default = "$LX_ANNOTATE_WHEEL_VENV/bin/python -m django migrate_media_storage --settings=lx_annotate.settings.settings_prod";
                   description = "Base command for wheel-mode media and streamable storage migration.";
                 };
+                transcodeVideo = mkOption {
+                  type = types.nullOr types.str;
+                  default = "$LX_ANNOTATE_WHEEL_VENV/bin/python -m django transcode_video --settings=lx_annotate.settings.settings_prod";
+                  description = "Base command for wheel-mode video standardization used by move-my-files fallback. The file mover appends the selected input file and output directory arguments.";
+                };
               };
             };
             default = { };
@@ -771,7 +783,7 @@ in
     };
 
     # Database configuration
-	    database = mkOption {
+    database = mkOption {
       type = types.submodule {
         options = {
           host = mkOption {
@@ -805,329 +817,329 @@ in
           };
         };
       };
-	      default = { };
-	      description = "Database configuration options";
-	    };
+      default = { };
+      description = "Database configuration options";
+    };
 
-      dataRecovery = mkOption {
-        type = types.submodule {
-          options = {
-            enable = mkOption {
-              type = types.bool;
-              default = true;
-              description = "Recover legacy lx-annotate data and media trees into the runtime STORAGE_DIR before boot.";
-            };
-            legacyDataDir = mkOption {
-              type = types.str;
-              default = legacyRepoDataRootPath;
-              description = "Legacy repo-local data directory to sync from.";
-            };
-            legacyMediaDir = mkOption {
-              type = types.str;
-              default = legacyRepoMediaRootPath;
-              description = "Legacy media directory to sync from.";
-            };
-            stateFile = mkOption {
-              type = types.str;
-              default = dataRecoveryStateFile;
-              description = "Stable state file that records the last effective lx-annotate data directory used for migration drift detection.";
-            };
+    dataRecovery = mkOption {
+      type = types.submodule {
+        options = {
+          enable = mkOption {
+            type = types.bool;
+            default = true;
+            description = "Recover legacy lx-annotate data and media trees into the runtime STORAGE_DIR before boot.";
+          };
+          legacyDataDir = mkOption {
+            type = types.str;
+            default = legacyRepoDataRootPath;
+            description = "Legacy repo-local data directory to sync from.";
+          };
+          legacyMediaDir = mkOption {
+            type = types.str;
+            default = legacyRepoMediaRootPath;
+            description = "Legacy media directory to sync from.";
+          };
+          stateFile = mkOption {
+            type = types.str;
+            default = dataRecoveryStateFile;
+            description = "Stable state file that records the last effective lx-annotate data directory used for migration drift detection.";
           };
         };
-        default = { };
-        description = "Recovery settings for migrating legacy lx-annotate media into the runtime storage root.";
       };
+      default = { };
+      description = "Recovery settings for migrating legacy lx-annotate media into the runtime storage root.";
+    };
 
-      streamableMigration = mkOption {
-        type = types.submodule {
-          options = {
-            enable = mkOption {
-              type = types.bool;
-              default = false;
-              description = "Expose the manual lx-annotate video streamable backfill systemd unit. The unit is not started by any target.";
-            };
+    streamableMigration = mkOption {
+      type = types.submodule {
+        options = {
+          enable = mkOption {
+            type = types.bool;
+            default = false;
+            description = "Expose the manual lx-annotate video streamable backfill systemd unit. The unit is not started by any target.";
           };
         };
-        default = { };
-        description = "Settings for the manual streamable video backfill migration unit.";
       };
+      default = { };
+      description = "Settings for the manual streamable video backfill migration unit.";
+    };
 
-      dataCleanup = mkOption {
-        type = types.submodule {
-          options = {
-            enable = mkOption {
-              type = types.bool;
-              default = config.roles.endoreg-client.paths.storagePersistingEnable;
-              description = "Regularly move duplicate anonymized lx-annotate payload into external archive storage.";
-            };
-            legacyDataDir = mkOption {
-              type = types.str;
-              default = legacyRepoDataRootPath;
-              description = "Legacy repo-local data directory to clean up.";
-            };
-            legacyMediaDir = mkOption {
-              type = types.str;
-              default = legacyRepoMediaRootPath;
-              description = "Legacy media directory to clean up.";
-            };
-            legacyProcessedReportDir = mkOption {
-              type = types.str;
-              default = legacyDataProcessedReportDir;
-              description = "Legacy processed report directory derived from the lx-annotate service paths.";
-            };
-            legacyProcessedVideoDir = mkOption {
-              type = types.str;
-              default = legacyDataProcessedVideoDir;
-              description = "Legacy processed video directory derived from the lx-annotate service paths.";
-            };
-            legacyMediaProcessedReportDir = mkOption {
-              type = types.str;
-              default = legacyMediaProcessedReportDir;
-              description = "Legacy processed report directory under the service media root.";
-            };
-            legacyMediaProcessedVideoDir = mkOption {
-              type = types.str;
-              default = legacyMediaProcessedVideoDir;
-              description = "Legacy processed video directory under the service media root.";
-            };
-            archiveDir = mkOption {
-              type = types.str;
-              default = externalCleanupArchiveRootDefault;
-              description = "External archive directory where duplicate files are moved.";
-            };
-            runtimeProcessedReportDir = mkOption {
-              type = types.str;
-              default = runtimeProcessedReportDir;
-              description = "Runtime processed report directory derived from the lx-annotate service.";
-            };
-            runtimeProcessedVideoDir = mkOption {
-              type = types.str;
-              default = runtimeProcessedVideoDir;
-              description = "Runtime processed video directory derived from the lx-annotate service.";
-            };
-            onCalendar = mkOption {
-              type = types.str;
-              default = "daily";
-              description = "systemd timer schedule for duplicate cleanup.";
-            };
+    dataCleanup = mkOption {
+      type = types.submodule {
+        options = {
+          enable = mkOption {
+            type = types.bool;
+            default = config.roles.endoreg-client.paths.storagePersistingEnable;
+            description = "Regularly move duplicate anonymized lx-annotate payload into external archive storage.";
+          };
+          legacyDataDir = mkOption {
+            type = types.str;
+            default = legacyRepoDataRootPath;
+            description = "Legacy repo-local data directory to clean up.";
+          };
+          legacyMediaDir = mkOption {
+            type = types.str;
+            default = legacyRepoMediaRootPath;
+            description = "Legacy media directory to clean up.";
+          };
+          legacyProcessedReportDir = mkOption {
+            type = types.str;
+            default = legacyDataProcessedReportDir;
+            description = "Legacy processed report directory derived from the lx-annotate service paths.";
+          };
+          legacyProcessedVideoDir = mkOption {
+            type = types.str;
+            default = legacyDataProcessedVideoDir;
+            description = "Legacy processed video directory derived from the lx-annotate service paths.";
+          };
+          legacyMediaProcessedReportDir = mkOption {
+            type = types.str;
+            default = legacyMediaProcessedReportDir;
+            description = "Legacy processed report directory under the service media root.";
+          };
+          legacyMediaProcessedVideoDir = mkOption {
+            type = types.str;
+            default = legacyMediaProcessedVideoDir;
+            description = "Legacy processed video directory under the service media root.";
+          };
+          archiveDir = mkOption {
+            type = types.str;
+            default = externalCleanupArchiveRootDefault;
+            description = "External archive directory where duplicate files are moved.";
+          };
+          runtimeProcessedReportDir = mkOption {
+            type = types.str;
+            default = runtimeProcessedReportDir;
+            description = "Runtime processed report directory derived from the lx-annotate service.";
+          };
+          runtimeProcessedVideoDir = mkOption {
+            type = types.str;
+            default = runtimeProcessedVideoDir;
+            description = "Runtime processed video directory derived from the lx-annotate service.";
+          };
+          onCalendar = mkOption {
+            type = types.str;
+            default = "daily";
+            description = "systemd timer schedule for duplicate cleanup.";
           };
         };
-        default = { };
-        description = "Duplicate cleanup settings for anonymized lx-annotate legacy storage.";
       };
+      default = { };
+      description = "Duplicate cleanup settings for anonymized lx-annotate legacy storage.";
+    };
 
-      storageRelief = mkOption {
-        type = types.submodule {
-          options = {
-            enable = mkOption {
-              type = types.bool;
-              default = false;
-              description = "Expose the manual emergency storage relief service. The service only archives verified anonymized duplicate payloads and explicitly validated export bundles.";
-            };
-            dryRun = mkOption {
-              type = types.bool;
-              default = false;
-              description = "Report what emergency storage relief would archive without copying or deleting files.";
-            };
-            deleteAfterVerify = mkOption {
-              type = types.bool;
-              default = true;
-              description = "Delete local source files only after the external archive copy has been hash-verified.";
-            };
-            requireExternalMount = mkOption {
-              type = types.bool;
-              default = true;
-              description = "Fail closed unless the external persisting storage mount is active and matches the configured device id or filesystem UUID.";
-            };
-            externalMountPoint = mkOption {
-              type = types.str;
-              default = toString config.roles.endoreg-client.paths.storagePersistingMountPoint;
-              description = "External mount point used for emergency relief archives.";
-            };
-            expectedDeviceId = mkOption {
-              type = types.nullOr types.str;
-              default =
-                let
-                  value = lib.attrByPath [ "secretspec" "secrets" "STORAGE_PERSISTING_HDD_ID" ] "" config;
-                in
-                if value == "" then null else value;
-              description = "Expected /dev/disk/by-id basename for the external relief volume. Required when expectedFsUuid is unset.";
-            };
-            expectedDevicePart = mkOption {
-              type = types.str;
-              default = lib.attrByPath [ "secretspec" "secrets" "STORAGE_PERSISTING_HDD_PART" ] "part1" config;
-              description = "Partition suffix appended to expectedDeviceId when checking the mounted device.";
-            };
-            expectedFsUuid = mkOption {
-              type = types.nullOr types.str;
-              default = null;
-              description = "Optional filesystem UUID accepted for the external relief volume. Use this when the mounted source is a mapper device rather than a plain by-id partition.";
-            };
-            archiveDir = mkOption {
-              type = types.str;
-              default = emergencyReliefArchiveRootDefault;
-              description = "External archive root for emergency storage relief output.";
-            };
-            manifestDir = mkOption {
-              type = types.str;
-              default = emergencyReliefManifestDirDefault;
-              description = "External directory where emergency relief JSON manifests are written.";
-            };
-            stagingDir = mkOption {
-              type = types.str;
-              default = emergencyReliefStagingDirDefault;
-              description = "External staging directory used while emergency relief copies are being verified.";
-            };
-            includeLegacyProcessedDuplicates = mkOption {
-              type = types.bool;
-              default = true;
-              description = "Archive legacy processed report/video duplicates only when the matching database object is anonymization-export eligible and content hashes match.";
-            };
-            includeValidatedExportBundles = mkOption {
-              type = types.bool;
-              default = true;
-              description = "Archive export bundles only when they contain a validation marker referencing eligible database resources.";
-            };
-            validatedExportDirs = mkOption {
-              type = types.listOf types.str;
-              default = emergencyReliefValidatedExportDirsDefault;
-              description = "Directories scanned for validated export bundle marker files.";
-            };
-            validatedExportMarkerNames = mkOption {
-              type = types.listOf types.str;
-              default = [ ".lx-annotate-export-validated.json" ];
-              description = "Marker filenames that make an export bundle eligible for emergency relief. Marker files must contain JSON with validated=true and eligible resource references.";
-            };
-            timer = mkOption {
-              type = types.submodule {
-                options = {
-                  enable = mkOption {
-                    type = types.bool;
-                    default = false;
-                    description = "Run emergency storage relief on a timer. Disabled by default; manual starts are preferred for emergency use.";
-                  };
-                  onCalendar = mkOption {
-                    type = types.str;
-                    default = "hourly";
-                    description = "systemd OnCalendar schedule for the emergency relief timer when enabled.";
-                  };
+    storageRelief = mkOption {
+      type = types.submodule {
+        options = {
+          enable = mkOption {
+            type = types.bool;
+            default = false;
+            description = "Expose the manual emergency storage relief service. The service only archives verified anonymized duplicate payloads and explicitly validated export bundles.";
+          };
+          dryRun = mkOption {
+            type = types.bool;
+            default = false;
+            description = "Report what emergency storage relief would archive without copying or deleting files.";
+          };
+          deleteAfterVerify = mkOption {
+            type = types.bool;
+            default = true;
+            description = "Delete local source files only after the external archive copy has been hash-verified.";
+          };
+          requireExternalMount = mkOption {
+            type = types.bool;
+            default = true;
+            description = "Fail closed unless the external persisting storage mount is active and matches the configured device id or filesystem UUID.";
+          };
+          externalMountPoint = mkOption {
+            type = types.str;
+            default = toString config.roles.endoreg-client.paths.storagePersistingMountPoint;
+            description = "External mount point used for emergency relief archives.";
+          };
+          expectedDeviceId = mkOption {
+            type = types.nullOr types.str;
+            default =
+              let
+                value = lib.attrByPath [ "secretspec" "secrets" "STORAGE_PERSISTING_HDD_ID" ] "" config;
+              in
+              if value == "" then null else value;
+            description = "Expected /dev/disk/by-id basename for the external relief volume. Required when expectedFsUuid is unset.";
+          };
+          expectedDevicePart = mkOption {
+            type = types.str;
+            default = lib.attrByPath [ "secretspec" "secrets" "STORAGE_PERSISTING_HDD_PART" ] "part1" config;
+            description = "Partition suffix appended to expectedDeviceId when checking the mounted device.";
+          };
+          expectedFsUuid = mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = "Optional filesystem UUID accepted for the external relief volume. Use this when the mounted source is a mapper device rather than a plain by-id partition.";
+          };
+          archiveDir = mkOption {
+            type = types.str;
+            default = emergencyReliefArchiveRootDefault;
+            description = "External archive root for emergency storage relief output.";
+          };
+          manifestDir = mkOption {
+            type = types.str;
+            default = emergencyReliefManifestDirDefault;
+            description = "External directory where emergency relief JSON manifests are written.";
+          };
+          stagingDir = mkOption {
+            type = types.str;
+            default = emergencyReliefStagingDirDefault;
+            description = "External staging directory used while emergency relief copies are being verified.";
+          };
+          includeLegacyProcessedDuplicates = mkOption {
+            type = types.bool;
+            default = true;
+            description = "Archive legacy processed report/video duplicates only when the matching database object is anonymization-export eligible and content hashes match.";
+          };
+          includeValidatedExportBundles = mkOption {
+            type = types.bool;
+            default = true;
+            description = "Archive export bundles only when they contain a validation marker referencing eligible database resources.";
+          };
+          validatedExportDirs = mkOption {
+            type = types.listOf types.str;
+            default = emergencyReliefValidatedExportDirsDefault;
+            description = "Directories scanned for validated export bundle marker files.";
+          };
+          validatedExportMarkerNames = mkOption {
+            type = types.listOf types.str;
+            default = [ ".lx-annotate-export-validated.json" ];
+            description = "Marker filenames that make an export bundle eligible for emergency relief. Marker files must contain JSON with validated=true and eligible resource references.";
+          };
+          timer = mkOption {
+            type = types.submodule {
+              options = {
+                enable = mkOption {
+                  type = types.bool;
+                  default = false;
+                  description = "Run emergency storage relief on a timer. Disabled by default; manual starts are preferred for emergency use.";
+                };
+                onCalendar = mkOption {
+                  type = types.str;
+                  default = "hourly";
+                  description = "systemd OnCalendar schedule for the emergency relief timer when enabled.";
                 };
               };
-              default = { };
-              description = "Optional timer for emergency storage relief.";
             };
+            default = { };
+            description = "Optional timer for emergency storage relief.";
           };
         };
-        default = { };
-        description = "Emergency storage pressure relief settings for lx-annotate.";
       };
+      default = { };
+      description = "Emergency storage pressure relief settings for lx-annotate.";
+    };
 
-      hub = mkOption {
-        type = types.submodule {
-          options = {
-            enable = mkOption {
-              type = types.bool;
-              default = config.networking.hostName == "gs-02";
-              description = "Mark this host as the central lx-annotate hub node and enable central-node groundwork defaults.";
-            };
-            transferApi = mkOption {
-              type = types.submodule {
-                options = {
-                  enable = mkOption {
-                    type = types.bool;
-                    default = false;
-                    description = "Enable the authenticated node-to-node hub transfer API. Disabled by default even on hub nodes.";
-                  };
-                  requireSecureTransport = mkOption {
-                    type = types.bool;
-                    default = true;
-                    description = "Require HTTPS-equivalent secure transport for hub transfer requests.";
-                  };
-                  requireMtls = mkOption {
-                    type = types.bool;
-                    default = false;
-                    description = "Require proxy-verified mutual TLS for node-authenticated hub transfer requests.";
-                  };
-                  mtlsMetaKey = mkOption {
-                    type = types.str;
-                    default = "HTTP_X_CLIENT_CERT_VERIFIED";
-                    description = "Django request META key used to verify proxy-attested mTLS client authentication.";
-                  };
-                  mtlsMetaValue = mkOption {
-                    type = types.str;
-                    default = "SUCCESS";
-                    description = "Expected proxy-attested mTLS verification value forwarded to Django.";
-                  };
-                  clientCaFile = mkOption {
-                    type = types.nullOr (types.either types.path types.str);
-                    default = null;
-                    description = "PEM bundle used by Nginx to verify client certificates for hub transfer requests.";
-                  };
+    hub = mkOption {
+      type = types.submodule {
+        options = {
+          enable = mkOption {
+            type = types.bool;
+            default = config.networking.hostName == "gs-02";
+            description = "Mark this host as the central lx-annotate hub node and enable central-node groundwork defaults.";
+          };
+          transferApi = mkOption {
+            type = types.submodule {
+              options = {
+                enable = mkOption {
+                  type = types.bool;
+                  default = false;
+                  description = "Enable the authenticated node-to-node hub transfer API. Disabled by default even on hub nodes.";
+                };
+                requireSecureTransport = mkOption {
+                  type = types.bool;
+                  default = true;
+                  description = "Require HTTPS-equivalent secure transport for hub transfer requests.";
+                };
+                requireMtls = mkOption {
+                  type = types.bool;
+                  default = false;
+                  description = "Require proxy-verified mutual TLS for node-authenticated hub transfer requests.";
+                };
+                mtlsMetaKey = mkOption {
+                  type = types.str;
+                  default = "HTTP_X_CLIENT_CERT_VERIFIED";
+                  description = "Django request META key used to verify proxy-attested mTLS client authentication.";
+                };
+                mtlsMetaValue = mkOption {
+                  type = types.str;
+                  default = "SUCCESS";
+                  description = "Expected proxy-attested mTLS verification value forwarded to Django.";
+                };
+                clientCaFile = mkOption {
+                  type = types.nullOr (types.either types.path types.str);
+                  default = null;
+                  description = "PEM bundle used by Nginx to verify client certificates for hub transfer requests.";
                 };
               };
-              default = { };
-              description = "Transfer API settings for lx-annotate hub deployments.";
             };
-            backup = mkOption {
-              type = types.submodule {
-                options = {
-                  enable = mkOption {
-                    type = types.bool;
-                    default = false;
-                    description = "Enable protected backup groundwork on the hub node. This provisions a landing area for inbound backups and periodic local runtime snapshots.";
-                  };
-                  incomingDir = mkOption {
-                    type = types.str;
-                    default = hubBackupIncomingPath;
-                    description = "Protected landing directory for inbound backups staged on the hub node.";
-                  };
-                  snapshotDir = mkOption {
-                    type = types.str;
-                    default = hubBackupSnapshotPath;
-                    description = "Protected directory where the hub node stores timestamped runtime snapshots.";
-                  };
-                  manifestDir = mkOption {
-                    type = types.str;
-                    default = hubBackupManifestPath;
-                    description = "Protected directory for JSON manifests describing generated hub snapshots.";
-                  };
-                  sourceRuntimeDir = mkOption {
-                    type = types.str;
-                    default = runtimeDataRootPath;
-                    description = "Runtime tree snapshotted by the hub backup service. This should remain the encrypted lx-annotate data root.";
-                  };
-                  onCalendar = mkOption {
-                    type = types.str;
-                    default = "hourly";
-                    description = "systemd timer schedule for hub runtime snapshots.";
-                  };
-                  retainCount = mkOption {
-                    type = types.int;
-                    default = 48;
-                    description = "How many completed snapshots the hub node keeps before pruning older ones.";
-                  };
-                  exclude = mkOption {
-                    type = types.listOf types.str;
-                    default = [
-                      ".lx-annotate-rsync-partial"
-                      "temp"
-                      "frames"
-                      "raw_frames"
-                      "hub/backup/incoming"
-                      "hub/backup/snapshots"
-                      "hub/backup/manifests"
-                    ];
-                    description = "Paths excluded from hub runtime snapshots. Defaults omit disposable frame/temp output and the backup directories themselves.";
-                  };
+            default = { };
+            description = "Transfer API settings for lx-annotate hub deployments.";
+          };
+          backup = mkOption {
+            type = types.submodule {
+              options = {
+                enable = mkOption {
+                  type = types.bool;
+                  default = false;
+                  description = "Enable protected backup groundwork on the hub node. This provisions a landing area for inbound backups and periodic local runtime snapshots.";
+                };
+                incomingDir = mkOption {
+                  type = types.str;
+                  default = hubBackupIncomingPath;
+                  description = "Protected landing directory for inbound backups staged on the hub node.";
+                };
+                snapshotDir = mkOption {
+                  type = types.str;
+                  default = hubBackupSnapshotPath;
+                  description = "Protected directory where the hub node stores timestamped runtime snapshots.";
+                };
+                manifestDir = mkOption {
+                  type = types.str;
+                  default = hubBackupManifestPath;
+                  description = "Protected directory for JSON manifests describing generated hub snapshots.";
+                };
+                sourceRuntimeDir = mkOption {
+                  type = types.str;
+                  default = runtimeDataRootPath;
+                  description = "Runtime tree snapshotted by the hub backup service. This should remain the encrypted lx-annotate data root.";
+                };
+                onCalendar = mkOption {
+                  type = types.str;
+                  default = "hourly";
+                  description = "systemd timer schedule for hub runtime snapshots.";
+                };
+                retainCount = mkOption {
+                  type = types.int;
+                  default = 48;
+                  description = "How many completed snapshots the hub node keeps before pruning older ones.";
+                };
+                exclude = mkOption {
+                  type = types.listOf types.str;
+                  default = [
+                    ".lx-annotate-rsync-partial"
+                    "temp"
+                    "frames"
+                    "raw_frames"
+                    "hub/backup/incoming"
+                    "hub/backup/snapshots"
+                    "hub/backup/manifests"
+                  ];
+                  description = "Paths excluded from hub runtime snapshots. Defaults omit disposable frame/temp output and the backup directories themselves.";
                 };
               };
-              default = { };
-              description = "Central hub backup groundwork settings.";
             };
+            default = { };
+            description = "Central hub backup groundwork settings.";
           };
         };
-        default = { };
-        description = "Central hub groundwork settings for lx-annotate.";
       };
-	  };
+      default = { };
+      description = "Central hub groundwork settings for lx-annotate.";
+    };
+  };
 }

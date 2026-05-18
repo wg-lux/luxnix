@@ -1,7 +1,8 @@
-{ config
-, lib
-, pkgs
-, ...
+{
+  config,
+  lib,
+  pkgs,
+  ...
 }:
 with lib;
 with lib.luxnix;
@@ -27,6 +28,31 @@ let
 
   endoreg-service-user-home = config.users.users.${endoregServiceUserName}.home;
   repoDirName = "lx-annotate";
+  repoDir = "${endoreg-service-user-home}/${repoDirName}";
+  lxAnnotateUseWheelRuntime = lxAnnotateCfg.runtime.mode == "wheel";
+  lxAnnotateWheelRootPath = "${endoreg-service-user-home}/lx-annotate-wheel";
+  lxAnnotateWheelVenvPath = "${lxAnnotateWheelRootPath}/.venv";
+  lxAnnotateRuntimeWorkingDir =
+    if lxAnnotateUseWheelRuntime then lxAnnotateWheelRootPath else repoDir;
+  lxAnnotateConfDir =
+    if lxAnnotateUseWheelRuntime then
+      "${lxAnnotateWheelRootPath}/${lxAnnotateCfg.django.confDir}"
+    else
+      "${repoDir}/${lxAnnotateCfg.django.confDir}";
+  lxAnnotateTranscodeVideoCommand =
+    if lxAnnotateUseWheelRuntime then
+      lxAnnotateCfg.runtime.commands.transcodeVideo or ""
+    else
+      "python manage.py transcode_video";
+  lxAnnotateTranscodeVideoCommandWithArgs = "${lxAnnotateTranscodeVideoCommand} --input-dir \"$1\" --filename \"$2\" --output-dir \"$3\" --overwrite --json";
+  fileMoverRuntimePath = lib.makeBinPath [
+    pkgs.coreutils
+    pkgs.findutils
+    pkgs.ffmpeg
+    pkgs.gnugrep
+    pkgs.gnused
+  ];
+  ffmpegTranscodeTimeoutSeconds = "86400";
 
   # Source paths
   sourceVideoDir = endoregPaths.videoInputDir;
@@ -36,7 +62,8 @@ let
   failedPdfDir = "${failedInputBaseDir}/pdf";
   runtimeDataDir = lxAnnotateCfg.runtime.encryptedDataDir;
   intakeDirs = lxAnnotateCfg.runtime.intakeDirs;
-  resolveRuntimeDataPath = path:
+  resolveRuntimeDataPath =
+    path:
     let
       pathString = toString path;
     in
@@ -147,8 +174,9 @@ in
             source = outOfStore desktopSapImportLinkTarget;
           };
 
-          home.activation.prepareFileMoverDesktopLinks =
-            lib.hm.dag.entryBefore [ "checkLinkTargets" ] prepareDesktopLinksActivation;
+          home.activation.prepareFileMoverDesktopLinks = lib.hm.dag.entryBefore [
+            "checkLinkTargets"
+          ] prepareDesktopLinksActivation;
         };
 
       ${adminUserName} =
@@ -181,8 +209,9 @@ in
             source = outOfStore desktopSapImportLinkTarget;
           };
 
-          home.activation.prepareFileMoverDesktopLinks =
-            lib.hm.dag.entryBefore [ "checkLinkTargets" ] prepareDesktopLinksActivation;
+          home.activation.prepareFileMoverDesktopLinks = lib.hm.dag.entryBefore [
+            "checkLinkTargets"
+          ] prepareDesktopLinksActivation;
         };
     };
 
@@ -194,6 +223,16 @@ in
         User = endoregServiceUserName;
         Group = endoregServiceGroup;
         TimeoutStartSec = "2h";
+        # Files moved into the source dirs while the service is already running
+        # can keep operator ownership/modes; the wait loop repairs that in place.
+        CapabilityBoundingSet = [
+          "CAP_CHOWN"
+          "CAP_FOWNER"
+        ];
+        AmbientCapabilities = [
+          "CAP_CHOWN"
+          "CAP_FOWNER"
+        ];
         # ExecStartPre runs as root and normalizes source permissions before rsync.
         PermissionsStartOnly = true;
         ExecStartPre = "${pkgs.writeShellScript "move-my-files-prepare-inputs" ''
@@ -205,9 +244,9 @@ in
 
           normalize_tree_permissions() {
             local source_dir="$1"
-            ${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -exec ${pkgs.coreutils}/bin/chgrp ${endoregServiceGroup} {} + || true
-            ${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -type d -exec ${pkgs.coreutils}/bin/chmod g+rws,o-rwx {} + || true
-            ${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -type f -exec ${pkgs.coreutils}/bin/chmod g+rw,o-rwx {} + || true
+            ${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 ! -group ${endoregServiceGroup} -exec ${pkgs.coreutils}/bin/chgrp ${endoregServiceGroup} {} + || true
+            ${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -type d \( ! -perm -2070 -o -perm /0007 \) -exec ${pkgs.coreutils}/bin/chmod g+rws,o-rwx {} + || true
+            ${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -type f \( ! -perm -0060 -o -perm /0007 \) -exec ${pkgs.coreutils}/bin/chmod g+rw,o-rwx {} + || true
           }
 
           normalize_tree_permissions "${sourceVideoDir}"
@@ -226,6 +265,22 @@ in
         source_has_files() {
           local source_dir="$1"
           [ -n "$(${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -type f -print -quit)" ]
+        }
+
+        is_video_filename() {
+          local file_name="''${1,,}"
+          case "$file_name" in
+            *.avi|*.m4v|*.mkv|*.mov|*.mp4|*.mpeg|*.mpg|*.webm) return 0 ;;
+            *) return 1 ;;
+          esac
+        }
+
+        normalize_source_permissions() {
+          local source_dir="$1"
+
+          ${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 ! -group ${endoregServiceGroup} -exec ${pkgs.coreutils}/bin/chgrp ${endoregServiceGroup} {} + || true
+          ${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -type d \( ! -perm -2070 -o -perm /0007 \) -exec ${pkgs.coreutils}/bin/chmod g+rws,o-rwx {} + || true
+          ${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -type f \( ! -perm -0060 -o -perm /0007 \) -exec ${pkgs.coreutils}/bin/chmod g+rw,o-rwx {} + || true
         }
 
         newest_source_ctime_epoch() {
@@ -247,16 +302,111 @@ in
 
         validate_video_sources() {
           local source_dir="$1"
-          local invalid=0
+          local validation_status=0
+          local ffprobe_error=""
+          local ffprobe_error_summary=""
 
           while IFS= read -r -d "" video_file; do
-            if ! ${pkgs.ffmpeg}/bin/ffprobe -v error -show_entries format=format_name,duration -of default=noprint_wrappers=1 "$video_file" >/dev/null 2>&1; then
-              echo "Waiting: video input is not ffprobe-readable yet: $video_file"
-              invalid=1
+            if [ ! -r "$video_file" ]; then
+              echo "Waiting: video input is not readable by ${endoregServiceUserName} after permission normalization: $video_file"
+              validation_status=2
+              continue
+            fi
+
+            if ! ffprobe_error="$(${pkgs.ffmpeg}/bin/ffprobe -v error -show_entries format=format_name,duration -of default=noprint_wrappers=1 "$video_file" 2>&1 >/dev/null)"; then
+              ffprobe_error_summary="$(${pkgs.coreutils}/bin/printf '%s\n' "$ffprobe_error" | ${pkgs.coreutils}/bin/head -n 1)"
+              if [ -n "$ffprobe_error_summary" ]; then
+                echo "Waiting: video input is readable but ffprobe rejected it: $video_file ($ffprobe_error_summary)"
+              else
+                echo "Waiting: video input is readable but ffprobe rejected it without details: $video_file"
+              fi
+              if [ "$validation_status" -eq 0 ]; then
+                validation_status=1
+              fi
             fi
           done < <(${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -type f \( -iname '*.avi' -o -iname '*.m4v' -o -iname '*.mkv' -o -iname '*.mov' -o -iname '*.mp4' -o -iname '*.webm' \) -print0)
 
-          return "$invalid"
+          return "$validation_status"
+        }
+
+        export_lx_annotate_transcode_env() {
+          local db_pwd=""
+          local django_secret_key=""
+          local oidc_client_secret=""
+
+          export PATH="${fileMoverRuntimePath}:''${PATH:-}"
+          export LX_ANNOTATE_WHEEL_VENV="${lxAnnotateWheelVenvPath}"
+          export LX_ANNOTATE_WHEEL_APP_ROOT="${lxAnnotateWheelRootPath}"
+          export DJANGO_SETTINGS_MODULE="lx_annotate.settings.settings_prod"
+          export DJANGO_SETTINGS_MODULE_PRODUCTION="lx_annotate.settings.settings_prod"
+          export DJANGO_ENV="production"
+          export DATA_DIR="${runtimeDataDir}"
+          export LX_ANNOTATE_DATA_DIR="${runtimeDataDir}"
+          export LX_ANNOTATE_ENCRYPTED_DATA_DIR="${runtimeDataDir}"
+          export PROTECTED_MEDIA_ROOT="${runtimeDataDir}/storage"
+          export STORAGE_DIR="${runtimeDataDir}/storage"
+          export WATCHER_VIDEO_DIR="${destVideoDir}"
+          export WATCHER_REPORT_DIR="${destReportDir}"
+          export WATCHER_PREANONYMIZED_DIR="${runtimePreanonymizedDir}"
+          export FFMPEG_TRANSCODE_TIMEOUT_SECONDS="${ffmpegTranscodeTimeoutSeconds}"
+          export SSL_CERT_FILE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+          export REQUESTS_CA_BUNDLE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+
+          export DJANGO_SECRET_KEY_FILE="${toString lxAnnotateCfg.django.djangoSecretKeyFile}"
+          django_secret_key="$(${pkgs.coreutils}/bin/tr -d '\n' < "${toString lxAnnotateCfg.django.djangoSecretKeyFile}" 2>/dev/null || true)"
+          export DJANGO_SECRET_KEY="$django_secret_key"
+
+          export CONF_DIR="${lxAnnotateConfDir}"
+          export DB_PWD_FILE="${lxAnnotateConfDir}/db_pwd"
+          export DJANGO_DB_PASSWORD_FILE="${lxAnnotateConfDir}/db_pwd"
+          db_pwd="$(${pkgs.coreutils}/bin/tr -d '\n' < "${lxAnnotateConfDir}/db_pwd" 2>/dev/null || true)"
+          export DJANGO_DB_ENGINE="django.db.backends.postgresql"
+          export DJANGO_DB_NAME="${lxAnnotateCfg.database.name}"
+          export DJANGO_DB_USER="${lxAnnotateCfg.database.user}"
+          export DJANGO_DB_PASSWORD="$db_pwd"
+          export DJANGO_DB_HOST="${lxAnnotateCfg.database.host}"
+          export DJANGO_DB_PORT="${toString lxAnnotateCfg.database.port}"
+          export DJANGO_DB_SSLMODE="${lxAnnotateCfg.database.sslMode}"
+
+          export DJANGO_ALLOWED_HOSTS="${lib.concatStringsSep "," lxAnnotateCfg.django.djangoAllowedHosts}"
+          export ALLOWED_HOSTS="${lib.concatStringsSep "," lxAnnotateCfg.django.djangoAllowedHosts}"
+          export DJANGO_CORS_ALLOWED_ORIGINS="${lib.concatStringsSep "," lxAnnotateCfg.django.corsAllowedOrigins}"
+          export DJANGO_CSRF_TRUSTED_ORIGINS="${lib.concatStringsSep "," lxAnnotateCfg.django.corsAllowedOrigins}"
+          export OIDC_RP_CLIENT_ID="${lxAnnotateCfg.django.keycloakClientId}"
+          oidc_client_secret="$(${pkgs.coreutils}/bin/tr -d '\n' < "${toString lxAnnotateCfg.django.keycloakSecretFile}" 2>/dev/null || true)"
+          export OIDC_RP_CLIENT_SECRET="$oidc_client_secret"
+        }
+
+        transcode_video_entry() {
+          local input_file="$1"
+          local dest_dir="$2"
+          local entry_name="$3"
+          local input_dir=""
+          local output_name=""
+
+          if ! is_video_filename "$entry_name"; then
+            return 1
+          fi
+
+          if [ -z ${lib.escapeShellArg lxAnnotateTranscodeVideoCommand} ]; then
+            echo "Warning: Video publish failed, but no lx-annotate transcode command is configured."
+            return 1
+          fi
+
+          input_dir="$(${pkgs.coreutils}/bin/dirname "$input_file")"
+          output_name="''${entry_name%.*}.mp4"
+          export_lx_annotate_transcode_env
+
+          echo "Warning: Direct video publish failed; trying transcode fallback to system standard: $input_file -> ''${dest_dir}/''${output_name}"
+          (
+            cd "${lxAnnotateRuntimeWorkingDir}"
+            "${pkgs.bash}/bin/bash" -lc ${lib.escapeShellArg lxAnnotateTranscodeVideoCommandWithArgs} lx-annotate-transcode "$input_dir" "$entry_name" "$dest_dir"
+          )
+
+          ${pkgs.coreutils}/bin/chgrp ${endoregServiceGroup} "''${dest_dir}/''${output_name}" || true
+          ${pkgs.coreutils}/bin/chmod 0660 "''${dest_dir}/''${output_name}" || true
+          ${pkgs.coreutils}/bin/rm -f "$input_file" || true
+          echo "Published transcoded Video entry: ''${dest_dir}/''${output_name}"
         }
 
         wait_for_input_ready() {
@@ -273,8 +423,11 @@ in
           local newest_ctime=""
           local newest_age=0
           local now_epoch=0
+          local video_validation_status=0
 
           while [ "$elapsed_seconds" -le "$max_wait_seconds" ]; do
+            normalize_source_permissions "$source_dir"
+
             if ! source_has_files "$source_dir"; then
               return 0
             fi
@@ -297,8 +450,18 @@ in
             fi
 
             if [ "$stable_checks" -ge "$required_stable_checks" ]; then
-              if [ "$label" != "Video" ] || validate_video_sources "$source_dir"; then
+              if [ "$label" != "Video" ]; then
                 return 0
+              fi
+
+              if validate_video_sources "$source_dir"; then
+                return 0
+              else
+                video_validation_status="$?"
+                if [ "$video_validation_status" -eq 2 ]; then
+                  echo "Warning: Video input is stable but still unreadable after permission normalization. Leaving files in place for a later retry."
+                  return 1
+                fi
               fi
             fi
 
@@ -341,6 +504,7 @@ in
           fi
 
           echo "Processing ''${label} Input..."
+          normalize_source_permissions "$source_dir"
           quarantine_unreadable_files "$source_dir" "$quarantine_dir" "$label"
 
           # If everything was quarantined, there's nothing left to sync.
@@ -372,6 +536,16 @@ in
 
           while IFS= read -r -d "" staged_entry; do
             entry_name="$(${pkgs.coreutils}/bin/basename "$staged_entry")"
+            if [ "$label" = "Video" ] && is_video_filename "$entry_name"; then
+              if transcode_video_entry "$staged_entry" "$dest_dir" "$entry_name"; then
+                continue
+              fi
+              echo "Warning: failed to transcode staged Video entry: $staged_entry"
+              publish_status=1
+              overall_status=1
+              continue
+            fi
+
             if ! ${pkgs.coreutils}/bin/mv -f "$staged_entry" "''${dest_dir}/''${entry_name}"; then
               echo "Warning: failed to publish staged ''${label} entry: $staged_entry"
               publish_status=1

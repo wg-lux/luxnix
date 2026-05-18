@@ -279,6 +279,12 @@ in
                 default = "$LX_ANNOTATE_WHEEL_VENV/bin/python -m django migrate_media_storage --settings=lx_annotate.settings.settings_prod";
                 description = "Base wheel-mode command for media and streamable storage migration.";
               };
+
+              transcodeVideo = mkOption {
+                type = types.nullOr types.str;
+                default = "$LX_ANNOTATE_WHEEL_VENV/bin/python -m django transcode_video --settings=lx_annotate.settings.settings_prod";
+                description = "Base wheel-mode command for move-my-files video transcode fallback.";
+              };
             };
           };
           default = { };

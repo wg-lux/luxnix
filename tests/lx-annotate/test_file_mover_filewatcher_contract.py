@@ -72,6 +72,8 @@ def _file_mover_host_matrix() -> dict[str, Any]:
                   cfg.systemd.services.move-my-files.serviceConfig;
                 fileMoverPathConfig =
                   cfg.systemd.paths.move-my-files.pathConfig;
+                transcodeVideoCommand =
+                  lxCfg.runtime.commands.transcodeVideo or null;
                 inherit hasWatcherService hasWatcherPath;
                 fileWatcherServiceConfig =
                   if hasWatcherService then
@@ -138,9 +140,12 @@ def test_all_file_mover_hosts_publish_into_filewatcher_intake_contract() -> None
         source_paths = contract["sourcePaths"]
         mover_config = contract["fileMoverServiceConfig"]
         mover_path = contract["fileMoverPathConfig"]
+        transcode_command = contract["transcodeVideoCommand"]
 
         assert contract["hasWatcherService"], host_name
         assert contract["hasWatcherPath"], host_name
+        assert transcode_command is not None, host_name
+        assert "transcode_video" in transcode_command, host_name
 
         watcher_config = contract["fileWatcherServiceConfig"]
         watcher_path = contract["fileWatcherPathConfig"]
@@ -208,6 +213,30 @@ def test_file_mover_and_filewatcher_use_same_service_identity() -> None:
     assert mover_config["PermissionsStartOnly"] is True
 
 
+def test_file_mover_can_repair_late_arriving_source_permissions() -> None:
+    contract = _gc_02_contract()
+    mover_config = contract["fileMover"]["serviceConfig"]
+    source = FILE_MOVER_SOURCE.read_text(encoding="utf-8")
+    wait_body = source[
+        source.index("        wait_for_input_ready() {") :
+        source.index("        quarantine_unreadable_files() {")
+    ]
+    process_body = source[
+        source.index("        process_input_dir() {") :
+        source.index("        # Rsync with retry logic is not needed here")
+    ]
+
+    assert mover_config["CapabilityBoundingSet"] == ["CAP_CHOWN", "CAP_FOWNER"]
+    assert mover_config["AmbientCapabilities"] == ["CAP_CHOWN", "CAP_FOWNER"]
+    assert "normalize_source_permissions()" in source
+    assert (
+        wait_body.index('normalize_source_permissions "$source_dir"')
+        < wait_body.index('source_has_files "$source_dir"')
+    )
+    assert 'normalize_source_permissions "$source_dir"' in process_body
+    assert "still unreadable after permission normalization" in wait_body
+
+
 def test_tmpfiles_create_file_mover_handoff_dirs_with_service_ownership() -> None:
     contract = _gc_02_contract()
     file_mover = contract["fileMover"]
@@ -263,6 +292,58 @@ def test_file_mover_quarantines_unreadable_inputs_in_failed_input_dirs() -> None
     assert 'quarantine_target="\'\'${quarantine_dir}/' in source
     assert '/bin/mv -f "$unreadable_file" "$quarantine_target"' in source
     assert quarantine_call in source
+
+
+def test_file_mover_video_validation_reports_permission_and_ffprobe_failures() -> None:
+    source = FILE_MOVER_SOURCE.read_text(encoding="utf-8")
+    validation_body = source[
+        source.index("        validate_video_sources() {") :
+        source.index("        export_lx_annotate_transcode_env() {")
+    ]
+
+    assert '[ ! -r "$video_file" ]' in validation_body
+    assert "not readable by ${endoregServiceUserName}" in validation_body
+    assert "ffprobe rejected it" in validation_body
+    assert "ffprobe_error_summary" in validation_body
+    assert "2>&1 >/dev/null" in validation_body
+    assert ">/dev/null 2>&1" not in validation_body
+    assert 'return "$validation_status"' in validation_body
+
+
+def test_file_mover_transcodes_video_before_publish() -> None:
+    contract = _gc_02_contract()
+    source = FILE_MOVER_SOURCE.read_text(encoding="utf-8")
+    process_body = source[
+        source.index("        process_input_dir() {") :
+        source.index("        # Rsync with retry logic is not needed here")
+    ]
+    transcode_body = source[
+        source.index("        transcode_video_entry() {") :
+        source.index("        wait_for_input_ready() {")
+    ]
+
+    assert "transcode_video" in contract["commands"]["transcodeVideo"]
+    assert "--settings=lx_annotate.settings.settings_prod" in contract["commands"][
+        "transcodeVideo"
+    ]
+    assert "export_lx_annotate_transcode_env()" in source
+    assert "LX_ANNOTATE_WHEEL_VENV" in source
+    assert "WATCHER_VIDEO_DIR" in source
+    assert "FFMPEG_TRANSCODE_TIMEOUT_SECONDS" in source
+    assert "--input-dir" in source
+    assert "--filename" in source
+    assert "--output-dir" in source
+    assert '"$input_dir" "$entry_name" "$dest_dir"' in source
+    assert "--overwrite --json" in source
+    assert (
+        process_body.index('is_video_filename "$entry_name"')
+        < process_body.index('transcode_video_entry "$staged_entry"')
+        < process_body.index('/bin/mv -f "$staged_entry"')
+    )
+    assert "failed to transcode staged Video entry" in process_body
+    assert "Published transcoded Video entry" in transcode_body
+    assert "-pix_fmt" not in transcode_body
+    assert "-color_range" not in transcode_body
 
 
 def test_wheel_and_repo_filewatchers_process_existing_once() -> None:
