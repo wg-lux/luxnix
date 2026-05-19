@@ -6,6 +6,7 @@
 }: let
   vaultModule = "${repoRoot}/modules/nixos/luxnix/vault/default.nix";
   managedSecretsModule = "${repoRoot}/modules/nixos/roles/managed-secrets/default.nix";
+  localUsersModule = "${repoRoot}/modules/nixos/security/local-users/default.nix";
   lxAnnotateConfig = "${repoRoot}/modules/nixos/services/lx-annotate-local/config.nix";
   lxAnnotateScripts = "${repoRoot}/modules/nixos/services/lx-annotate-local/scripts.nix";
 in {
@@ -37,6 +38,18 @@ in {
           assert_file_contains ${managedSecretsModule} 'EnvironmentFile = managedSecretsVaultEnvironmentFiles' "managed-secrets service must load Vault env files"
           assert_file_contains ${managedSecretsModule} 'UMask = "0077"' "managed-secrets service must keep a restrictive umask"
           assert_file_contains ${managedSecretsModule} 'vault-auth-setup.service' "managed-secrets must integrate with vault auth bootstrap"
+        '';
+      }
+      {
+        name = "local-users-supports-sops-backed-client-password-hash";
+        type = "script";
+        script = ''
+          ${ntlib.helpers.path [pkgs.gnugrep]}
+          ${ntlib.helpers.scriptHelpers}
+          assert_file_contains ${localUsersModule} 'clientPassword = with types' "local user policy must expose client password source"
+          assert_file_contains ${localUsersModule} 'client-user-password-hash' "client password SOPS secret name must be explicit"
+          assert_file_contains ${localUsersModule} 'sops.secrets.\$\{clientPassword.sops.secretName\}' "client password hash must be declared as a SOPS secret"
+          assert_file_contains ${localUsersModule} 'neededForUsers = true' "SOPS-backed login hashes must be available before user creation"
         '';
       }
       {
