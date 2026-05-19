@@ -88,8 +88,8 @@ let
           "always"
           "manual"
         ];
-        default = "always";
-        description = "Scheduling mode for the dedicated FFmpeg frame extraction Celery worker.";
+        default = "manual";
+        description = "Scheduling mode for export-stage frame extraction. Manual keeps this worker stopped until export workflows or operators start it.";
       };
       onCalendar = mkOption {
         type = types.str;
@@ -115,6 +115,18 @@ let
         type = types.bool;
         default = true;
         description = "Whether missed maintenance-window timer activations should run after boot.";
+      };
+    };
+  };
+  ffmpegWorkerType = types.submodule {
+    options = {
+      mode = mkOption {
+        type = types.enum [
+          "always"
+          "manual"
+        ];
+        default = "always";
+        description = "Scheduling mode for the low-priority FFmpeg media Celery worker.";
       };
     };
   };
@@ -284,8 +296,8 @@ in
           wheelPath = mkOption {
             type = types.nullOr types.path;
             default = pkgs.fetchurl {
-              url = "https://files.pythonhosted.org/packages/e8/5e/ea5c2f8c5a95fef0bb24e5b96a85edc0e8882b6bec48cf66042c5e2d3c75/lx_annotate-0.5.8-py3-none-any.whl";
-              hash = "sha256-Xcl0BKicM0hjqnulC6KqhevsX79vm82d2sqxsa//PT8=";
+              url = "https://files.pythonhosted.org/packages/41/8f/9738d0171b41bd30dcd2a4da4929f96639ab6aca4395c62a697051f499dc/lx_annotate-0.5.9-py3-none-any.whl";
+              hash = "sha256-b7PnAKsd6Vl7HTfipUZNZafRiH9o3wly2JOrUFVeUs0=";
             };
             description = "Path to the lx-annotate wheel artifact used in wheel mode.";
           };
@@ -524,6 +536,11 @@ in
             default = { };
             description = "Systemd resource limits for the lx-annotate Celery worker.";
           };
+          workerStartupDelaySec = mkOption {
+            type = types.str;
+            default = "90s";
+            description = "Delay applied before always-on Celery workers start after lx-annotate boot.";
+          };
           workerPools = mkOption {
             type = types.submodule {
               options = {
@@ -539,6 +556,19 @@ in
                     oomScoreAdjust = 800;
                   };
                   description = "Celery pool for upload/import/anonymization pipeline work.";
+                };
+                ffmpeg = mkOption {
+                  type = workerPoolType;
+                  default = {
+                    concurrency = 1;
+                    maxTasksPerChild = 1;
+                    memoryHigh = "3G";
+                    memoryMax = "5G";
+                    cpuQuota = "35%";
+                    nice = 18;
+                    oomScoreAdjust = 850;
+                  };
+                  description = "Celery pool for delayed low-priority FFmpeg media reprocessing.";
                 };
                 frameExtraction = mkOption {
                   type = workerPoolType;
@@ -601,6 +631,11 @@ in
             type = frameExtractionWorkerType;
             default = { };
             description = "Scheduling policy for the dedicated FFmpeg frame extraction Celery worker.";
+          };
+          ffmpegWorker = mkOption {
+            type = ffmpegWorkerType;
+            default = { };
+            description = "Scheduling policy for the dedicated low-priority FFmpeg media Celery worker.";
           };
           inferenceWorker = mkOption {
             type = inferenceWorkerType;

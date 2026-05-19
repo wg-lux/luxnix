@@ -47,6 +47,7 @@ let
   inherit (runtime.scripts.scriptNames)
     acceptanceScriptName
     celeryFrameExtractionWorkerScriptName
+    celeryFfmpegWorkerScriptName
     celeryInferenceWorkerScriptName
     celeryPipelineWorkerScriptName
     celeryTrainingWorkerScriptName
@@ -67,6 +68,8 @@ let
     runLocalAcceptanceWheelScript
     runLocalCeleryFrameExtractionWorkerScript
     runLocalCeleryFrameExtractionWorkerWheelScript
+    runLocalCeleryFfmpegWorkerScript
+    runLocalCeleryFfmpegWorkerWheelScript
     runLocalCeleryInferenceWorkerScript
     runLocalCeleryInferenceWorkerWheelScript
     runLocalCeleryPipelineWorkerScript
@@ -117,6 +120,7 @@ let
   celeryWorkerServiceUnits = [
     "lx-annotate-celery-worker.service"
     "lx-annotate-celery-pipeline-worker.service"
+    "lx-annotate-celery-ffmpeg-worker.service"
     "lx-annotate-celery-frame-extraction-worker.service"
     "lx-annotate-celery-inference-worker.service"
     "lx-annotate-celery-training-worker.service"
@@ -227,6 +231,13 @@ let
   frameExtractionWorkerBootWantedBy = lib.optionals (frameExtractionWorkerMode == "always") [
     "lx-annotate-boot.service"
   ];
+  ffmpegWorkerMode = cfg.runtime.ffmpegWorker.mode;
+  ffmpegWorkerBootWantedBy = lib.optionals (ffmpegWorkerMode == "always") [
+    "lx-annotate-boot.service"
+  ];
+  ffmpegWorkerBootRequires = lib.optionals (ffmpegWorkerMode != "always") [
+    "lx-annotate-boot.service"
+  ];
   inferenceWorkerMode = cfg.runtime.inferenceWorker.mode;
   inferenceWorkerBootWantedBy = lib.optionals (inferenceWorkerMode == "always") [
     "lx-annotate-boot.service"
@@ -255,6 +266,7 @@ let
       wants ? [ ],
       requires ? [ ],
       restart ? "always",
+      startupDelaySec ? null,
       runtimeMaxSec ? null,
       timeoutStopSec ? null,
       extraServiceConfig ? { },
@@ -290,6 +302,9 @@ let
         IOSchedulingClass = "idle";
         OOMScoreAdjust = oomScoreAdjust;
         ReadWritePaths = appReadWritePaths;
+      }
+      // optionalAttrs (startupDelaySec != null) {
+        ExecStartPre = [ "${pkgs.coreutils}/bin/sleep ${startupDelaySec}" ];
       }
       // optionalAttrs (runtimeMaxSec != null) {
         RuntimeMaxSec = runtimeMaxSec;
@@ -928,9 +943,7 @@ in
         Environment = appServiceEnvironment;
 
         TimeoutStartSec = "5min";
-        ExecStartPre = lib.optionals useWheelRuntime [
-          stopWheelCeleryWorkersPreStart
-        ] ++ [
+        ExecStartPre = [
           "+${pkgs.writeShellScript "lx-annotate-pre-start" ''
             set -euo pipefail
 
@@ -1320,6 +1333,22 @@ in
       cpuQuota = cfg.runtime.workerPools.pipeline.cpuQuota;
       nice = cfg.runtime.workerPools.pipeline.nice;
       oomScoreAdjust = cfg.runtime.workerPools.pipeline.oomScoreAdjust;
+      startupDelaySec = cfg.runtime.workerStartupDelaySec;
+    });
+    systemd.services.lx-annotate-celery-ffmpeg-worker = mkIf celeryWorkerEnabled (mkCeleryWorkerService {
+      description = "Celery worker for lx-annotate low-priority FFmpeg media jobs";
+      execStart = if useWheelRuntime then "${runLocalCeleryFfmpegWorkerWheelScript}/bin/${celeryFfmpegWorkerScriptName}" else "${runLocalCeleryFfmpegWorkerScript}/bin/${celeryFfmpegWorkerScriptName}";
+      memoryHigh = cfg.runtime.workerPools.ffmpeg.memoryHigh;
+      memoryMax = cfg.runtime.workerPools.ffmpeg.memoryMax;
+      cpuQuota = cfg.runtime.workerPools.ffmpeg.cpuQuota;
+      nice = cfg.runtime.workerPools.ffmpeg.nice;
+      oomScoreAdjust = cfg.runtime.workerPools.ffmpeg.oomScoreAdjust;
+      wantedBy = ffmpegWorkerBootWantedBy;
+      partOf = [ "lx-annotate-boot.service" ];
+      wants = ffmpegWorkerBootRequires;
+      requires = ffmpegWorkerBootRequires;
+      restart = if ffmpegWorkerMode == "always" then "always" else "no";
+      startupDelaySec = if ffmpegWorkerMode == "always" then cfg.runtime.workerStartupDelaySec else null;
     });
     systemd.services.lx-annotate-celery-frame-extraction-worker = mkIf celeryWorkerEnabled (mkCeleryWorkerService {
       description = "Celery worker for lx-annotate FFmpeg frame extraction jobs";

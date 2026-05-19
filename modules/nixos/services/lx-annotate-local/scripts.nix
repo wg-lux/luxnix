@@ -130,10 +130,14 @@ let
       export CELERY_DEFAULT_QUEUE="${celeryDefaultQueueName}"
       export CELERY_PIPELINE_QUEUE="${celeryPipelineQueueName}"
       export CELERY_FRAME_EXTRACTION_QUEUE="${celeryFrameExtractionQueueName}"
+      export CELERY_FFMPEG_MEDIA_QUEUE="${celeryFfmpegMediaQueueName}"
       export CELERY_INFERENCE_QUEUE="${celeryInferenceQueueName}"
       export CELERY_TRAINING_QUEUE="${celeryTrainingQueueName}"
       export CELERY_MAINTENANCE_QUEUE="${celeryMaintenanceQueueName}"
       export CELERY_FRAME_EXTRACTION_REQUIRE_SECURE_TRANSPORT="${
+        if cfg.runtime.celeryBroker.requireSecureTransport then "true" else "false"
+      }"
+      export CELERY_FFMPEG_MEDIA_REQUIRE_SECURE_TRANSPORT="${
         if cfg.runtime.celeryBroker.requireSecureTransport then "true" else "false"
       }"
       export CELERY_BROKER_SECURE_TRANSPORT_CONFIRMED="${
@@ -336,6 +340,7 @@ let
   celeryDefaultQueueName = "default";
   celeryPipelineQueueName = "pipeline";
   celeryFrameExtractionQueueName = "frame_extraction";
+  celeryFfmpegMediaQueueName = "ffmpeg_media";
   celeryInferenceQueueName = "inference";
   celeryTrainingQueueName = "model_training";
   celeryMaintenanceQueueName = "maintenance";
@@ -1178,10 +1183,12 @@ let
     CELERY_DEFAULT_QUEUE=${celeryDefaultQueueName}
     CELERY_PIPELINE_QUEUE=${celeryPipelineQueueName}
     CELERY_FRAME_EXTRACTION_QUEUE=${celeryFrameExtractionQueueName}
+    CELERY_FFMPEG_MEDIA_QUEUE=${celeryFfmpegMediaQueueName}
     CELERY_INFERENCE_QUEUE=${celeryInferenceQueueName}
     CELERY_TRAINING_QUEUE=${celeryTrainingQueueName}
     CELERY_MAINTENANCE_QUEUE=${celeryMaintenanceQueueName}
     CELERY_FRAME_EXTRACTION_REQUIRE_SECURE_TRANSPORT=${if cfg.runtime.celeryBroker.requireSecureTransport then "true" else "false"}
+    CELERY_FFMPEG_MEDIA_REQUIRE_SECURE_TRANSPORT=${if cfg.runtime.celeryBroker.requireSecureTransport then "true" else "false"}
     CELERY_BROKER_SECURE_TRANSPORT_CONFIRMED=${if cfg.runtime.celeryBroker.secureTransportConfirmed then "true" else "false"}
     MODEL_TRAINING_JOB_MODE=celery
     MODEL_TRAINING_STAGING_ROOT=${cfg.runtime.modelTrainingStagingRoot}
@@ -1847,6 +1854,7 @@ let
   celeryWorkerScriptName = "runLocalCeleryWorker";
   celeryPipelineWorkerScriptName = "runLocalCeleryPipelineWorker";
   celeryFrameExtractionWorkerScriptName = "runLocalCeleryFrameExtractionWorker";
+  celeryFfmpegWorkerScriptName = "runLocalCeleryFfmpegWorker";
   celeryInferenceWorkerScriptName = "runLocalCeleryInferenceWorker";
   celeryTrainingWorkerScriptName = "runLocalCeleryTrainingWorker";
   runLocalCeleryWorkerScript = pkgs.writeShellScriptBin "${celeryWorkerScriptName}" ''
@@ -2055,6 +2063,76 @@ let
       --concurrency="${toString cfg.runtime.workerPools.frameExtraction.concurrency}"
       --prefetch-multiplier=1
       --max-tasks-per-child="${toString cfg.runtime.workerPools.frameExtraction.maxTasksPerChild}"
+    )
+    printf -v celery_worker_args_shell '%q ' "''${celery_worker_args[@]}"
+    exec "${pkgs.bash}/bin/bash" -lc "$wheel_celery_command $celery_worker_args_shell"
+  '';
+  runLocalCeleryFfmpegWorkerScript = pkgs.writeShellScriptBin "${celeryFfmpegWorkerScriptName}" ''
+    set -euo pipefail
+
+    cd "${repoDir}"
+
+    source "${lxAnnotateEnvHelpers}"
+    lx_annotate_export_base_env
+    lx_annotate_export_storage_env "${envDataDir}"
+    lx_annotate_export_encryption_env
+    lx_annotate_export_db_env
+    lx_annotate_export_secret_key_env
+    export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
+    export VIDEO_POST_VALIDATION_JOB_MODE="celery"
+    export OMP_NUM_THREADS="1"
+    export OPENBLAS_NUM_THREADS="1"
+    export MKL_NUM_THREADS="1"
+    export NUMEXPR_NUM_THREADS="1"
+    export MALLOC_ARENA_MAX="2"
+    ${devenvSyncCompatExports}
+
+    celery_worker_args=(
+      -A lx_annotate.celery:app
+      worker
+      --loglevel=INFO
+      --hostname="ffmpeg-media@%h"
+      --queues="${celeryFfmpegMediaQueueName}"
+      --concurrency="${toString cfg.runtime.workerPools.ffmpeg.concurrency}"
+      --prefetch-multiplier=1
+      --max-tasks-per-child="${toString cfg.runtime.workerPools.ffmpeg.maxTasksPerChild}"
+    )
+
+    exec devenv shell -- celery "''${celery_worker_args[@]}"
+  '';
+  runLocalCeleryFfmpegWorkerWheelScript = pkgs.writeShellScriptBin "${celeryFfmpegWorkerScriptName}" ''
+    set -euo pipefail
+
+    if [ -z ${lib.escapeShellArg wheelCeleryWorkerCommand} ]; then
+      echo "ERROR: runtime.commands.celeryWorker must be set when wheel mode enables the Celery worker service."
+      exit 1
+    fi
+
+    source "${lxAnnotateRuntimeLib}"
+    source "${lxAnnotateEnvHelpers}"
+    lx_annotate_export_wheel_service_env "${envDataDir}"
+    export VIDEO_POST_VALIDATION_JOB_MODE="celery"
+    export OMP_NUM_THREADS="1"
+    export OPENBLAS_NUM_THREADS="1"
+    export MKL_NUM_THREADS="1"
+    export NUMEXPR_NUM_THREADS="1"
+    export MALLOC_ARENA_MAX="2"
+    export PATH="${runtimeWheelVenvPath}/bin:$PATH"
+
+    if [ ! -x "${runtimeWheelVenvPath}/bin/python" ]; then
+      echo "ERROR: Wheel virtualenv missing at ${runtimeWheelVenvPath}."
+      exit 1
+    fi
+
+    export LX_ANNOTATE_WHEEL_VENV="${runtimeWheelVenvPath}"
+    export LX_ANNOTATE_WHEEL_APP_ROOT="${runtimeWheelRootPath}"
+    wheel_celery_command=${lib.escapeShellArg wheelCeleryWorkerCommand}
+    celery_worker_args=(
+      --hostname="ffmpeg-media@%h"
+      --queues="${celeryFfmpegMediaQueueName}"
+      --concurrency="${toString cfg.runtime.workerPools.ffmpeg.concurrency}"
+      --prefetch-multiplier=1
+      --max-tasks-per-child="${toString cfg.runtime.workerPools.ffmpeg.maxTasksPerChild}"
     )
     printf -v celery_worker_args_shell '%q ' "''${celery_worker_args[@]}"
     exec "${pkgs.bash}/bin/bash" -lc "$wheel_celery_command $celery_worker_args_shell"
@@ -3077,6 +3155,7 @@ in
       acceptanceScriptName
       masterKeyCheckScriptName
       celeryFrameExtractionWorkerScriptName
+      celeryFfmpegWorkerScriptName
       celeryInferenceWorkerScriptName
       celeryPipelineWorkerScriptName
       celeryTrainingWorkerScriptName
@@ -3107,6 +3186,8 @@ in
       runLocalMasterKeyCheckWheelScript
       runLocalCeleryFrameExtractionWorkerScript
       runLocalCeleryFrameExtractionWorkerWheelScript
+      runLocalCeleryFfmpegWorkerScript
+      runLocalCeleryFfmpegWorkerWheelScript
       runLocalCeleryInferenceWorkerScript
       runLocalCeleryInferenceWorkerWheelScript
       runLocalCeleryPipelineWorkerScript
