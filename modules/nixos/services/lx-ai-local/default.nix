@@ -135,9 +135,9 @@ let
       "${repoDir}/.config/secretspec" \
       "${envStorageDir}" \
       "${envProcessedVideoDir}" \
-      "${envDataDir}/temp/plaintext_media"
-      "${envStorageDir}/streamable_videos"
-      "${envStorageDir}/streamable_videos/raw"
+      "${envDataDir}/temp/plaintext_media" \
+      "${envStorageDir}/streamable_videos" \
+      "${envStorageDir}/streamable_videos/raw" \
       "${envStorageDir}/streamable_videos/processed"
 
 
