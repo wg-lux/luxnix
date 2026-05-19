@@ -135,6 +135,10 @@ let
       "${repoDir}/.config/secretspec" \
       "${envStorageDir}" \
       "${envProcessedVideoDir}" \
+      "${envDataDir}/temp/plaintext_media"
+      "${envStorageDir}/streamable_videos"
+      "${envStorageDir}/streamable_videos/raw"
+      "${envStorageDir}/streamable_videos/processed"
 
 
     export HOME_DIR="${endoreg-service-user-home}"
@@ -142,7 +146,6 @@ let
 
     export DATA_DIR="${envDataDir}"
     export LX_ANNOTATE_ENCRYPTED_DATA_DIR="${envDataDir}"
-    export DJANGO_DATA_DIR="${envDataDir}"
     export STORAGE_DIR="${envDataDir}/storage"
     export PROTECTED_MEDIA_ROOT="${envDataDir}/storage"
     
@@ -187,6 +190,16 @@ let
     export DJANGO_DB_SSLMODE="${cfg.database.sslMode}"
     export DB_BACKEND="postgres"
 
+    export LX_ANNOTATE_MASTER_KEY_FILE="${toString cfg.runtime.masterKeyFile}"
+    export LX_ANNOTATE_DATA_DIR="${envDataDir}"
+    export LX_ANNOTATE_ENCRYPTED_DATA_DIR="${envDataDir}"
+    export DJANGO_DATA_DIR="${envDataDir}"
+    export PROTECTED_MEDIA_ROOT="${envStorageDir}"
+    export ENDOREG_DB_PLAINTEXT_TMP_DIR="${envDataDir}/temp/plaintext_media"
+    export LX_ANNOTATE_STREAMABLE_VIDEO_ROOT="${envStorageDir}/streamable_videos"
+    export LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT="${envStorageDir}/streamable_videos/raw"
+    export LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT="${envStorageDir}/streamable_videos/processed"
+
     export LOG_LEVEL="INFO"
 
     DJANGO_DB_PASSWORD_VALUE="$(tr -d '\n' < "${envConfDir}/db_pwd" 2>/dev/null || true)"
@@ -223,6 +236,12 @@ LEGACY_IMAGE_DIR=${envLegacyImageDir}
 LEGACY_JSONL_PATH=${envLegacyJsonlPath}
 
 CSV_DIR=${envCsvDir}
+LX_ANNOTATE_MASTER_KEY_FILE=${toString cfg.runtime.masterKeyFile}
+LX_ANNOTATE_DATA_DIR=${envDataDir}
+
+DJANGO_DATA_DIR=${envDataDir}
+STORAGE_DIR=${envStorageDir}
+PROTECTED_MEDIA_ROOT=${envStorageDir}
 
 FRAME_PATH_REMAP_SOURCE=
 FRAME_PATH_REMAP_TARGET=
@@ -241,6 +260,12 @@ DJANGO_DB_USER=${cfg.database.user}
 DJANGO_DB_HOST=${cfg.database.host}
 DJANGO_DB_PORT=${toString cfg.database.port}
 DJANGO_DB_SSLMODE=${cfg.database.sslMode}
+
+ENDOREG_DB_PLAINTEXT_TMP_DIR=${envDataDir}/temp/plaintext_media
+LX_ANNOTATE_STREAMABLE_VIDEO_ROOT=${envStorageDir}/streamable_videos
+LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT=${envStorageDir}/streamable_videos/raw
+LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT=${envStorageDir}/streamable_videos/processed
+DB_BACKEND=postgres
 
 LOG_LEVEL=INFO
 EOF
@@ -310,6 +335,11 @@ in
             type = types.str;
             default = "";
             description = "URL for downloading the backbone checkpoint if not present locally.";
+          };
+          masterKeyFile = mkOption {
+            type = types.path;
+            default = "/etc/secrets/vault/lx_annotate_master_key";
+            description = "Application master key file used by endoreg-db encrypted storage.";
           };
         };
       };
@@ -410,6 +440,12 @@ in
           fi
 
           chown -R ${endoreg-service-user-name}:${endoreg-service-group-name} ${envConfDir}
+          if [ -f "${toString cfg.runtime.masterKeyFile}" ]; then
+            chown root:${endoreg-service-group-name} "${toString cfg.runtime.masterKeyFile}" || true
+            chmod 640 "${toString cfg.runtime.masterKeyFile}" || true
+          else
+            echo "WARNING: LX-AI encryption master key file missing: ${toString cfg.runtime.masterKeyFile}"
+          fi
         ''}";
 
         ExecStart = "${runLxAiTraining}/bin/${scriptName}";
