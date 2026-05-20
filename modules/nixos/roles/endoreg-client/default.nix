@@ -1,9 +1,9 @@
-{ lib
-, config
-, pkgs
-, ...
+{
+  lib,
+  config,
+  pkgs,
+  ...
 }:
-
 
 with lib;
 with lib.luxnix;
@@ -12,7 +12,6 @@ let
 
   sensitiveServiceGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
   endoregServiceGroupName = config.luxnix.generic-settings.endoregServiceGroupName;
-
 
 in
 {
@@ -240,7 +239,7 @@ in
     {
       # Storage settings
       luxnix.storage.enable = mkDefault true;
-      services.luxnix.fileMover.enable = true;
+      services.luxnix.fileMover.enable = mkDefault cfg.lxAnnotate.enable;
 
       user.client.enable = mkDefault true;
       user.endoreg-service-user.enable = true;
@@ -256,7 +255,9 @@ in
 
       luxnix.nvidia-prime.enable = true;
 
-      services.luxnix.endoregDbApiLocal.enable = mkIf (!config.roles.endoreg-db-central-01.enable) (mkForce false);
+      services.luxnix.endoregDbApiLocal.enable = mkIf (!config.roles.endoreg-db-central-01.enable) (
+        mkForce false
+      );
 
       services.luxnix.lxAnnotateLocal = {
         enable = cfg.lxAnnotate.enable;
@@ -275,10 +276,12 @@ in
           modelTrainingStagingRoot = mkDefault cfg.lxAnnotate.runtime.modelTrainingStagingRoot;
           externalServices = mkDefault cfg.lxAnnotate.runtime.externalServices;
           celeryBroker = {
-            requireSecureTransport =
-              mkIf cfg.lxAnnotate.runtime.celeryBroker.requireSecureTransport (mkDefault true);
-            secureTransportConfirmed =
-              mkIf cfg.lxAnnotate.runtime.celeryBroker.secureTransportConfirmed (mkDefault true);
+            requireSecureTransport = mkIf cfg.lxAnnotate.runtime.celeryBroker.requireSecureTransport (
+              mkDefault true
+            );
+            secureTransportConfirmed = mkIf cfg.lxAnnotate.runtime.celeryBroker.secureTransportConfirmed (
+              mkDefault true
+            );
           };
           clustered = mkDefault cfg.lxAnnotate.runtime.clustered;
         };
@@ -291,8 +294,7 @@ in
         # source = cfg.repository (if needed)
         # debug.enable = false
         source.branch = "prototype";
-        runtime.backboneCheckpointUrl =
-         "https://drive.google.com/uc?export=download&id=1TvliEJ5JTQddIE3kNiGMQzWIe9Cq_7mx";
+        runtime.backboneCheckpointUrl = "https://drive.google.com/uc?export=download&id=1TvliEJ5JTQddIE3kNiGMQzWIe9Cq_7mx";
       };
 
       services.luxnix.endoAi = {
@@ -340,10 +342,16 @@ in
               Type = "oneshot";
               User = "root";
               Environment = [
-                "STORAGE_PERSISTING_EXTERNAL_DRIVE=${if cfg.paths.storagePersistingIsExternalDrive then "true" else "false"}"
+                "STORAGE_PERSISTING_EXTERNAL_DRIVE=${
+                  if cfg.paths.storagePersistingIsExternalDrive then "true" else "false"
+                }"
                 "STORAGE_PERSISTING_MOUNT_POINT=${toString storagePersistingMountPoint}"
-                "STORAGE_PERSISTING_HDD_ID=${lib.attrByPath [ "secretspec" "secrets" "STORAGE_PERSISTING_HDD_ID" ] "" config}"
-                "STORAGE_PERSISTING_HDD_PART=${lib.attrByPath [ "secretspec" "secrets" "STORAGE_PERSISTING_HDD_PART" ] "part1" config}"
+                "STORAGE_PERSISTING_HDD_ID=${
+                  lib.attrByPath [ "secretspec" "secrets" "STORAGE_PERSISTING_HDD_ID" ] "" config
+                }"
+                "STORAGE_PERSISTING_HDD_PART=${
+                  lib.attrByPath [ "secretspec" "secrets" "STORAGE_PERSISTING_HDD_PART" ] "part1" config
+                }"
               ];
               ExecStartPre = [ ];
               ExecStart = pkgs.writeShellScript "mount-persisting-storage-service" ''
@@ -381,7 +389,7 @@ in
                 # attempt to mount drive by ID; prefer first partition if present
                 DEV_BASE="/dev/disk/by-id/$storage_persisting_hdd_id"
                 DEV_PATH="$DEV_BASE-$storage_persisting_hdd_part"
-  
+
 
                 echo "Mounting persisting storage drive $DEV_PATH to $storage_persisting_mount_point"
                 if [ ! -e "$DEV_PATH" ]; then
