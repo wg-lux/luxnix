@@ -30,7 +30,8 @@ let
 
   endoreg-service-user-name = config.user.endoreg-service-user.name;
   endoreg-service-user = config.users.users.${endoreg-service-user-name};
-  endoreg-service-user-home = endoreg-service-user.home;
+  endoreg-service-user-home =
+    config.user.endoreg-service-user.extraOptions.home or "/var/${endoreg-service-user-name}";
   endoreg-service-group-name = config.user.endoreg-service-user.group;
   runtimeRootPath = "/var/lib/lx-annotate";
   repoDir = "${endoreg-service-user-home}/${repoDirName}";

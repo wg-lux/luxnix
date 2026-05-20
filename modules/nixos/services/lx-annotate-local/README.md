@@ -400,14 +400,6 @@ services.luxnix.lxAnnotateLocal = {
     mode = "wheel";
     wheelPath = /path/to/dist/lx_annotate-0.0.2-py3-none-any.whl;
     wheelhousePath = /path/to/wheelhouse;
-    commands = {
-      web = "$LX_ANNOTATE_WHEEL_VENV/bin/daphne -b \"$DJANGO_HOST\" -p \"$DJANGO_PORT\" lx_annotate.asgi:application";
-      migrate = "$LX_ANNOTATE_WHEEL_VENV/bin/python -m django migrate --noinput --settings=lx_annotate.settings.settings_prod";
-      loadBaseData = "$LX_ANNOTATE_WHEEL_VENV/bin/python -m django load_base_db_data --settings=lx_annotate.settings.settings_prod";
-      fileWatcher = "$LX_ANNOTATE_WHEEL_VENV/bin/python -m django run_filewatcher --settings=lx_annotate.settings.settings_prod";
-      exportFrames = "export-frames";
-      celeryWorker = "$LX_ANNOTATE_WHEEL_VENV/bin/celery -A lx_annotate.celery:app worker --loglevel=INFO";
-    };
     encryptedDataDir = "/var/lib/lx-annotate/secure_data";
 
     managedEncryptedData = {
@@ -440,11 +432,16 @@ luxnix.vault = {
 
 Notes:
 
-- In wheel mode, `runtime.commands.fileWatcher`, `runtime.commands.exportFrames`,
-  `runtime.commands.celeryWorker`, `runtime.commands.migrate`,
-  `runtime.commands.loadBaseData`, and `runtime.commands.web` are
-  wheel-entrypoint commands, not
-  repo-local `manage.py` invocations.
+- In wheel mode, LuxNix installs `runtime.wheelPath` into a host-local
+  virtualenv and exposes the wheel console scripts as a package-shaped runtime.
+  The web service consumes that package through `services.lx-annotate`; LuxNix
+  helper units call the same package's console scripts directly. The required
+  wheel scripts are `lx-annotate-web`, `lx-annotate-manage`,
+  `lx-annotate-migrate`, `lx-annotate-load-base-data`,
+  `lx-annotate-worker`, `lx-annotate-watch`,
+  `lx-annotate-export-frames`, and `lx-annotate-import-sap`.
+- `runtime.commands.*` is retained only for legacy helper scripts and is not
+  needed for the active wheel console-script runtime.
 - `runtime.encryptedDataDir` remains the canonical protected root. Paths under
   the service-user home are access paths only unless the runtime contract is
   intentionally redesigned.

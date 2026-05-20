@@ -68,6 +68,11 @@
       url = "gitlab:TECHNOFAB/nixtest?dir=lib";
     };
 
+    lx-annotate = {
+      url = "github:wg-lux/lx-annotate";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     nixos-generators = {
       url = "github:nix-community/nixos-generators";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -162,12 +167,16 @@
           impermanence.nixosModules.impermanence
           sops-nix.nixosModules.sops
           nix-topology.nixosModules.default
+          inputs.lx-annotate.nixosModules.default
         ];
 
         overlays = with inputs; [
           nixgl.overlay
           nur.overlays.default
           nix-topology.overlays.default
+          (final: _prev: {
+            lx-annotate = inputs.lx-annotate.packages.${final.system}.default;
+          })
         ];
 
         deploy = lib.mkDeploy { inherit (inputs) self; };
@@ -192,28 +201,27 @@
           };
       };
 
-      nixtestPackages =
-        builtins.mapAttrs
-          (system: _:
-            let
-              pkgs = import inputs.nixpkgs {
-                inherit system;
-                config.allowUnfree = true;
-              };
-              ntlib = inputs.nixtest.lib { inherit pkgs; };
-            in
-            {
-              nixtests = ntlib.mkNixtest {
-                modules = ntlib.autodiscover {
-                  dir = ./tests/nixtest;
-                };
-                args = {
-                  inherit pkgs ntlib;
-                  repoRoot = ./.;
-                };
-              };
-            })
-          base.packages;
+      nixtestPackages = builtins.mapAttrs (
+        system: _:
+        let
+          pkgs = import inputs.nixpkgs {
+            inherit system;
+            config.allowUnfree = true;
+          };
+          ntlib = inputs.nixtest.lib { inherit pkgs; };
+        in
+        {
+          nixtests = ntlib.mkNixtest {
+            modules = ntlib.autodiscover {
+              dir = ./tests/nixtest;
+            };
+            args = {
+              inherit pkgs ntlib;
+              repoRoot = ./.;
+            };
+          };
+        }
+      ) base.packages;
 
       nixtestChecks = builtins.mapAttrs (_: packages: { inherit (packages) nixtests; }) nixtestPackages;
 

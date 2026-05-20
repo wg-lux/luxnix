@@ -10,13 +10,9 @@ let
   inherit (runtime.paths)
     runtimeRootPath
     repoDir
-    runtimeStorageRootPath
     runtimeWatcherVideoDirPath
     runtimeWatcherReportDirPath
     runtimeWatcherPreanonymizedDirPath
-    runtimeStreamableVideoRootPath
-    runtimeStreamableVideoRawRootPath
-    runtimeStreamableVideoProcessedRootPath
     runtimeWorkingDir
     djangoStaticRootPath
     envDataDir
@@ -31,16 +27,12 @@ let
     envCorsAllowedOrigins
     envDefaultCenter
     envDeploymentRole
-    envDjangoEnv
     envDjangoHost
     envDjangoModule
     envDjangoPort
     envHttpProtocol
-    envMediaUrl
-    envNginxProtectedMediaUrl
     envRunVideoTests
     envSkipExpensiveTests
-    envStaticUrl
     envViteEnableDebug
     ;
   inherit (runtime.runtime) packageVersion;
@@ -81,10 +73,7 @@ rec {
       export DJANGO_DB_PASSWORD_FILE="${envConfDir}/db_pwd"
 
       export DJANGO_MODULE="${envDjangoModule}"
-      export DJANGO_SETTINGS_MODULE="lx_annotate.settings.settings_prod"
-      export DJANGO_SETTINGS_MODULE_PRODUCTION="lx_annotate.settings.settings_prod"
       export DJANGO_SETTINGS_MODULE_DEVELOPMENT="lx_annotate.settings.settings_dev"
-      export DJANGO_ENV="${envDjangoEnv}"
       export CENTRAL_NODE="${envCentralNodeFlag}"
       export HTTP_PROTOCOL="${envHttpProtocol}"
       export DJANGO_HOST="${envDjangoHost}"
@@ -94,8 +83,6 @@ rec {
       export RUN_VIDEO_TESTS="${envRunVideoTests}"
       export SKIP_EXPENSIVE_TESTS="${envSkipExpensiveTests}"
       export VITE_ENABLE_DEBUG="${envViteEnableDebug}"
-      export SERVE_WITH_NGINX="true"
-      export NGINX_PROTECTED_MEDIA_URL="${envNginxProtectedMediaUrl}"
       export LX_ANNOTATE_PACKAGE_VERSION="${packageVersion}"
       export ENDOREG_DEPLOYMENT_ROLE="${envDeploymentRole}"
       export ENDOREG_HUB_MODE="${if cfg.hub.enable then "true" else "false"}"
@@ -142,17 +129,10 @@ rec {
 
     lx_annotate_export_storage_env() {
       local data_root="$1"
-      export DATA_DIR="$data_root"
-      export LX_ANNOTATE_DATA_DIR="$data_root"
       export LX_ANNOTATE_ENCRYPTED_DATA_DIR="$data_root"
-      export PROTECTED_MEDIA_ROOT="${runtimeStorageRootPath}"
-      export STORAGE_DIR="$data_root/storage"
       export WATCHER_VIDEO_DIR="${runtimeWatcherVideoDirPath}"
       export WATCHER_REPORT_DIR="${runtimeWatcherReportDirPath}"
       export WATCHER_PREANONYMIZED_DIR="${runtimeWatcherPreanonymizedDirPath}"
-      export LX_ANNOTATE_STREAMABLE_VIDEO_ROOT="${runtimeStreamableVideoRootPath}"
-      export LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT="${runtimeStreamableVideoRawRootPath}"
-      export LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT="${runtimeStreamableVideoProcessedRootPath}"
     }
 
     lx_annotate_export_encryption_env() {
@@ -163,8 +143,6 @@ rec {
     }
 
     lx_annotate_export_django_paths_env() {
-      export STATIC_URL="${envStaticUrl}"
-      export MEDIA_URL="${envMediaUrl}"
       export ASSET_DIR="${envAssetDir}"
     }
 
@@ -209,8 +187,6 @@ rec {
       export WORKING_DIR="${runtimeWorkingDir}"
       export HOME_DIR="${endoreg-service-user-home}"
       export XDG_DATA_HOME="${runtimeRootPath}"
-      export LX_ANNOTATE_ENCRYPTED_DATA_DIR="$data_root"
-      export LX_ANNOTATE_DATA_DIR="$data_root"
       export LX_ANNOTATE_DEFAULT_CENTER="${envDefaultCenter}"
       export TESSDATA_PREFIX="${cfg.runtime.tessdataPrefix}"
       export PYTORCH_ALLOC_CONF="${cfg.runtime.pytorchAllocConf}"

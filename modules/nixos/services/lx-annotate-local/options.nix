@@ -277,7 +277,18 @@ in
               "wheel"
             ];
             default = "wheel";
-            description = "How lx-annotate is started. 'repo' keeps the dev git/devenv flow; 'wheel' installs a configured Python wheel into a runtime virtualenv.";
+            description = ''
+              Runtime artifact mode. wheel installs runtime.wheelPath into a
+              host-local virtualenv and exposes the wheel console scripts as the
+              effective runtime package used by services.lx-annotate and the
+              LuxNix helper units. repo uses runtime.package directly.
+            '';
+          };
+          package = mkOption {
+            type = types.package;
+            default = pkgs.lx-annotate;
+            defaultText = literalExpression "pkgs.lx-annotate";
+            description = "Packaged lx-annotate derivation used when runtime.mode = \"repo\".";
           };
           deploymentRole = mkOption {
             type = types.enum [
@@ -707,53 +718,53 @@ in
               options = {
                 web = mkOption {
                   type = types.nullOr types.str;
-                  default = "$LX_ANNOTATE_WHEEL_VENV/bin/daphne -b \"$DJANGO_HOST\" -p \"$DJANGO_PORT\" lx_annotate.asgi:application";
-                  description = "Shell command executed for the wheel-mode web server.";
+                  default = null;
+                  description = "Legacy helper override. Wheel mode normally uses the lx-annotate-web console script.";
                 };
                 migrate = mkOption {
                   type = types.nullOr types.str;
-                  default = "$LX_ANNOTATE_WHEEL_VENV/bin/python -m django migrate --noinput --settings=lx_annotate.settings.settings_prod";
-                  description = "Shell command executed for wheel-mode database migrations.";
+                  default = null;
+                  description = "Legacy helper override. Wheel mode normally uses the lx-annotate-migrate console script.";
                 };
                 loadBaseData = mkOption {
                   type = types.nullOr types.str;
-                  default = "$LX_ANNOTATE_WHEEL_VENV/bin/python -m django load_base_db_data --settings=lx_annotate.settings.settings_prod";
-                  description = "Shell command executed for wheel-mode base-data loading.";
+                  default = null;
+                  description = "Legacy helper override. Wheel mode normally uses the lx-annotate-load-base-data console script.";
                 };
                 fileWatcher = mkOption {
                   type = types.nullOr types.str;
                   default = null;
-                  description = "Shell command executed for the file watcher in wheel mode. Runs with LX_ANNOTATE_WHEEL_VENV and LX_ANNOTATE_WHEEL_APP_ROOT exported.";
+                  description = "Legacy helper override. Wheel mode normally uses the lx-annotate-watch console script.";
                 };
                 fileWatcherOnce = mkOption {
                   type = types.nullOr types.str;
                   default = null;
-                  description = "Optional wheel-mode one-shot file watcher command. Defaults to runtime.commands.fileWatcher when unset.";
+                  description = "Legacy helper override for one-shot watcher runs.";
                 };
                 exportFrames = mkOption {
                   type = types.nullOr types.str;
                   default = null;
-                  description = "Shell command executed for export-frames in wheel mode. Runs with LX_ANNOTATE_WHEEL_VENV and LX_ANNOTATE_WHEEL_APP_ROOT exported.";
+                  description = "Legacy helper override. Wheel mode normally uses the lx-annotate-export-frames console script.";
                 };
                 celeryWorker = mkOption {
                   type = types.nullOr types.str;
                   default = null;
-                  description = "Shell command executed for the Celery worker in wheel mode. Runs with LX_ANNOTATE_WHEEL_VENV and LX_ANNOTATE_WHEEL_APP_ROOT exported.";
+                  description = "Legacy helper override. Wheel mode normally uses the lx-annotate-worker console script.";
                 };
                 sapImport = mkOption {
                   type = types.nullOr types.str;
-                  default = "$LX_ANNOTATE_WHEEL_VENV/bin/python -m django import_sap_ish_zip --settings=lx_annotate.settings.settings_prod";
-                  description = "Base command for wheel-mode SAP import. The wrapper appends the source ZIP and output directory.";
+                  default = null;
+                  description = "Legacy helper override. Wheel mode normally uses the lx-annotate-import-sap console script.";
                 };
                 mediaMigration = mkOption {
                   type = types.nullOr types.str;
-                  default = "$LX_ANNOTATE_WHEEL_VENV/bin/python -m django migrate_media_storage --settings=lx_annotate.settings.settings_prod";
-                  description = "Base command for wheel-mode media and streamable storage migration.";
+                  default = null;
+                  description = "Legacy helper override for media migration helper scripts.";
                 };
                 transcodeVideo = mkOption {
                   type = types.nullOr types.str;
-                  default = "$LX_ANNOTATE_WHEEL_VENV/bin/python -m django transcode_video --settings=lx_annotate.settings.settings_prod";
-                  description = "Base command for wheel-mode video standardization used by move-my-files fallback. The file mover appends the selected input file and output directory arguments.";
+                  default = null;
+                  description = "Legacy helper override. The active file mover adapter uses lx-annotate-manage directly.";
                 };
               };
             };

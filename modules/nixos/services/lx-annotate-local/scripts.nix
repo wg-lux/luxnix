@@ -51,11 +51,8 @@ let
     envDjangoModule
     envDjangoPort
     envHttpProtocol
-    envMediaUrl
-    envNginxProtectedMediaUrl
     envRunVideoTests
     envSkipExpensiveTests
-    envStaticUrl
     envViteEnableDebug;
   inherit (runtime.runtime)
     useWheelRuntime
@@ -347,23 +344,29 @@ let
         }
 
         emit_common_systemd_env() {
+          # Host-owned values only. lx-annotate derives DATA_DIR, STORAGE_DIR,
+          # PROTECTED_MEDIA_ROOT, and streamable video roots from this contract.
           cat <<EOF
     HOME_DIR=${endoreg-service-user-home}
-    DATA_DIR=${envDataDir}
     LX_ANNOTATE_ENCRYPTED_DATA_DIR=${envDataDir}
-    LX_ANNOTATE_DATA_DIR=${envDataDir}
-    PROTECTED_MEDIA_ROOT=${runtimeStorageRootPath}
     CONF_DIR=${envConfDir}
     CONF_TEMPLATE_DIR=${envConfTemplateDir}
     WORKING_DIR=${repoDir}
     DJANGO_STATIC_ROOT=${djangoStaticRootPath}
-    STORAGE_DIR=${envDataDir}/storage
-    LX_ANNOTATE_STREAMABLE_VIDEO_ROOT=${runtimeStreamableVideoRootPath}
-    LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT=${runtimeStreamableVideoRawRootPath}
-    LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT=${runtimeStreamableVideoProcessedRootPath}
-    SERVE_WITH_NGINX=true
-    NGINX_PROTECTED_MEDIA_URL=${envNginxProtectedMediaUrl}
+    ASSET_DIR=${envAssetDir}
+    XDG_DATA_HOME=${runtimeRootPath}
     LX_ANNOTATE_PACKAGE_VERSION=${packageVersion}
+    ${optionalString (cfg.runtime.masterKeyFile != null) "LX_ANNOTATE_MASTER_KEY_FILE=${toString cfg.runtime.masterKeyFile}"}
+    DJANGO_SECRET_KEY_FILE=${toString cfg.django.djangoSecretKeyFile}
+    DJANGO_DB_ENGINE=django.db.backends.postgresql
+    DJANGO_DB_NAME=${cfg.database.name}
+    DJANGO_DB_USER=${cfg.database.user}
+    DJANGO_DB_PASSWORD_FILE=${envConfDir}/db_pwd
+    DJANGO_DB_HOST=${cfg.database.host}
+    DJANGO_DB_PORT=${toString cfg.database.port}
+    DJANGO_DB_SSLMODE=${cfg.database.sslMode}
+    DJANGO_KEYCLOAK_CLIENT_SECRET_FILE=${toString cfg.django.keycloakSecretFile}
+    OIDC_RP_CLIENT_ID=${cfg.django.keycloakClientId}
     ENDOREG_DEPLOYMENT_ROLE=${envDeploymentRole}
     ENDOREG_HUB_MODE=${if cfg.hub.enable then "true" else "false"}
     ENDOREG_ENABLE_HUB_TRANSFERS=${if cfg.hub.transferApi.enable then "true" else "false"}
@@ -389,8 +392,6 @@ let
     VIDEO_TEMPORAL_INFERENCE_FRAME_SOURCE_MODE=stream
     SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
     REQUESTS_CA_BUNDLE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
-    DEBUG=False
-    DJANGO_DEBUG=False
     VITE_ENABLE_DEBUG=${envViteEnableDebug}
     HTTP_PROTOCOL=${envHttpProtocol}
     DJANGO_HOST=${envDjangoHost}
@@ -400,6 +401,12 @@ let
     ALLOWED_HOSTS=${envAllowedHosts}
     DJANGO_CORS_ALLOWED_ORIGINS=${envCorsAllowedOrigins}
     DJANGO_CSRF_TRUSTED_ORIGINS=${envCorsAllowedOrigins}
+    TIME_ZONE=${cfg.django.timeZone}
+    RUN_VIDEO_TESTS=${envRunVideoTests}
+    SKIP_EXPENSIVE_TESTS=${envSkipExpensiveTests}
+    WATCHER_VIDEO_DIR=${runtimeWatcherVideoDirPath}
+    WATCHER_REPORT_DIR=${runtimeWatcherReportDirPath}
+    WATCHER_PREANONYMIZED_DIR=${runtimeWatcherPreanonymizedDirPath}
     FFMPEG_TRANSCODE_TIMEOUT_SECONDS=${ffmpegTranscodeTimeoutSeconds}
 
 
@@ -418,13 +425,8 @@ let
         write_wheel_systemd_env_file() {
           write_systemd_env_file
           cat >> "${envSystemdFilePath}" <<EOF
-    DJANGO_SETTINGS_MODULE=lx_annotate.settings.settings_prod
-    DJANGO_SETTINGS_MODULE_PRODUCTION=lx_annotate.settings.settings_prod
-    DJANGO_ENV=production
-    XDG_DATA_HOME=${runtimeRootPath}
     TESSDATA_PREFIX=${cfg.runtime.tessdataPrefix}
     PYTORCH_ALLOC_CONF=${cfg.runtime.pytorchAllocConf}
-    ${optionalString (cfg.runtime.masterKeyFile != null) "LX_ANNOTATE_MASTER_KEY_FILE=${toString cfg.runtime.masterKeyFile}"}
     EOF
           cp -f "${envSystemdFilePath}" "${envDataDir}/.env.systemd"
           chmod 0640 "${envSystemdFilePath}" "${envDataDir}/.env.systemd"
@@ -981,7 +983,6 @@ let
     lx_annotate_activate_runtime
 
     cd "${repoDir}"
-    export MEDIA_URL="${envNginxProtectedMediaUrl}"
     mkdir -p "${runtimeStorageRootPath}" "${runtimeStreamableVideoRootPath}" "${runtimeStreamableVideoRawRootPath}" "${runtimeStreamableVideoProcessedRootPath}"
 
     python manage.py check --fail-level CRITICAL
@@ -1049,444 +1050,195 @@ let
   celeryFfmpegWorkerScriptName = "runLocalCeleryFfmpegWorker";
   celeryInferenceWorkerScriptName = "runLocalCeleryInferenceWorker";
   celeryTrainingWorkerScriptName = "runLocalCeleryTrainingWorker";
-  runLocalCeleryWorkerScript = pkgs.writeShellScriptBin "${celeryWorkerScriptName}" ''
-    set -euo pipefail
-
-    cd "${repoDir}"
-
-    source "${lxAnnotateEnvHelpers}"
-    lx_annotate_export_base_env
-    lx_annotate_export_storage_env "${envDataDir}"
-    lx_annotate_export_encryption_env
-    lx_annotate_export_db_env
-    lx_annotate_export_secret_key_env
-    export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
-    export VIDEO_POST_VALIDATION_JOB_MODE="celery"
+  celeryWorkerResourceEnv = ''
     export OMP_NUM_THREADS="1"
     export OPENBLAS_NUM_THREADS="1"
     export MKL_NUM_THREADS="1"
     export NUMEXPR_NUM_THREADS="1"
     export MALLOC_ARENA_MAX="2"
-    ${devenvSyncCompatExports}
-
-    celery_worker_args=(
-      -A lx_annotate.celery:app
-      worker
-      --loglevel=INFO
-      --hostname="maintenance@%h"
-      --queues="${celeryMaintenanceQueueName},${celeryDefaultQueueName}"
-      --concurrency="${toString cfg.runtime.workerPools.maintenance.concurrency}"
-      --prefetch-multiplier=1
-      --max-tasks-per-child="${toString cfg.runtime.workerPools.maintenance.maxTasksPerChild}"
-    )
-
-    exec devenv shell -- celery "''${celery_worker_args[@]}"
   '';
-  runLocalCeleryWorkerWheelScript = pkgs.writeShellScriptBin "${celeryWorkerScriptName}" ''
-    set -euo pipefail
-
-    if [ -z ${lib.escapeShellArg wheelCeleryWorkerCommand} ]; then
-      echo "ERROR: runtime.commands.celeryWorker must be set when wheel mode enables the Celery worker service."
-      exit 1
-    fi
-
-    source "${lxAnnotateRuntimeLib}"
-    source "${lxAnnotateEnvHelpers}"
-    lx_annotate_export_wheel_service_env "${envDataDir}"
+  celeryPostValidationEnv = ''
     export VIDEO_POST_VALIDATION_JOB_MODE="celery"
-    export OMP_NUM_THREADS="1"
-    export OPENBLAS_NUM_THREADS="1"
-    export MKL_NUM_THREADS="1"
-    export NUMEXPR_NUM_THREADS="1"
-    export MALLOC_ARENA_MAX="2"
-    export PATH="${runtimeWheelVenvPath}/bin:$PATH"
-
-    if [ ! -x "${runtimeWheelVenvPath}/bin/python" ]; then
-      echo "ERROR: Wheel virtualenv missing at ${runtimeWheelVenvPath}."
-      exit 1
-    fi
-
-    export LX_ANNOTATE_WHEEL_VENV="${runtimeWheelVenvPath}"
-    export LX_ANNOTATE_WHEEL_APP_ROOT="${runtimeWheelRootPath}"
-    wheel_celery_command=${lib.escapeShellArg wheelCeleryWorkerCommand}
-    celery_worker_args=(
-      --hostname="maintenance@%h"
-      --queues="${celeryMaintenanceQueueName},${celeryDefaultQueueName}"
-      --concurrency="${toString cfg.runtime.workerPools.maintenance.concurrency}"
-      --prefetch-multiplier=1
-      --max-tasks-per-child="${toString cfg.runtime.workerPools.maintenance.maxTasksPerChild}"
-    )
-    printf -v celery_worker_args_shell '%q ' "''${celery_worker_args[@]}"
-    exec "${pkgs.bash}/bin/bash" -lc "$wheel_celery_command $celery_worker_args_shell"
   '';
-  runLocalCeleryPipelineWorkerScript = pkgs.writeShellScriptBin "${celeryPipelineWorkerScriptName}" ''
-    set -euo pipefail
-
-    cd "${repoDir}"
-
-    source "${lxAnnotateEnvHelpers}"
-    lx_annotate_export_base_env
-    lx_annotate_export_storage_env "${envDataDir}"
-    lx_annotate_export_encryption_env
-    lx_annotate_export_db_env
-    lx_annotate_export_secret_key_env
-    export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
-    export VIDEO_POST_VALIDATION_JOB_MODE="celery"
-    export OMP_NUM_THREADS="1"
-    export OPENBLAS_NUM_THREADS="1"
-    export MKL_NUM_THREADS="1"
-    export NUMEXPR_NUM_THREADS="1"
-    export MALLOC_ARENA_MAX="2"
-    ${devenvSyncCompatExports}
-
-    celery_worker_args=(
-      -A lx_annotate.celery:app
-      worker
-      --loglevel=INFO
-      --hostname="pipeline@%h"
-      --queues="${celeryPipelineQueueName}"
-      --concurrency="${toString cfg.runtime.workerPools.pipeline.concurrency}"
-      --prefetch-multiplier=1
-      --max-tasks-per-child="${toString cfg.runtime.workerPools.pipeline.maxTasksPerChild}"
-    )
-
-    exec devenv shell -- celery "''${celery_worker_args[@]}"
-  '';
-  runLocalCeleryPipelineWorkerWheelScript = pkgs.writeShellScriptBin "${celeryPipelineWorkerScriptName}" ''
-    set -euo pipefail
-
-    if [ -z ${lib.escapeShellArg wheelCeleryWorkerCommand} ]; then
-      echo "ERROR: runtime.commands.celeryWorker must be set when wheel mode enables the Celery worker service."
-      exit 1
-    fi
-
-    source "${lxAnnotateRuntimeLib}"
-    source "${lxAnnotateEnvHelpers}"
-    lx_annotate_export_wheel_service_env "${envDataDir}"
-    export VIDEO_POST_VALIDATION_JOB_MODE="celery"
-    export OMP_NUM_THREADS="1"
-    export OPENBLAS_NUM_THREADS="1"
-    export MKL_NUM_THREADS="1"
-    export NUMEXPR_NUM_THREADS="1"
-    export MALLOC_ARENA_MAX="2"
-    export PATH="${runtimeWheelVenvPath}/bin:$PATH"
-
-    if [ ! -x "${runtimeWheelVenvPath}/bin/python" ]; then
-      echo "ERROR: Wheel virtualenv missing at ${runtimeWheelVenvPath}."
-      exit 1
-    fi
-
-    export LX_ANNOTATE_WHEEL_VENV="${runtimeWheelVenvPath}"
-    export LX_ANNOTATE_WHEEL_APP_ROOT="${runtimeWheelRootPath}"
-    wheel_celery_command=${lib.escapeShellArg wheelCeleryWorkerCommand}
-    celery_worker_args=(
-      --hostname="pipeline@%h"
-      --queues="${celeryPipelineQueueName}"
-      --concurrency="${toString cfg.runtime.workerPools.pipeline.concurrency}"
-      --prefetch-multiplier=1
-      --max-tasks-per-child="${toString cfg.runtime.workerPools.pipeline.maxTasksPerChild}"
-    )
-    printf -v celery_worker_args_shell '%q ' "''${celery_worker_args[@]}"
-    exec "${pkgs.bash}/bin/bash" -lc "$wheel_celery_command $celery_worker_args_shell"
-  '';
-  runLocalCeleryFrameExtractionWorkerScript = pkgs.writeShellScriptBin "${celeryFrameExtractionWorkerScriptName}" ''
-    set -euo pipefail
-
-    cd "${repoDir}"
-
-    source "${lxAnnotateEnvHelpers}"
-    lx_annotate_export_base_env
-    lx_annotate_export_storage_env "${envDataDir}"
-    lx_annotate_export_encryption_env
-    lx_annotate_export_db_env
-    lx_annotate_export_secret_key_env
-    export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
-    export VIDEO_POST_VALIDATION_JOB_MODE="celery"
-    export OMP_NUM_THREADS="1"
-    export OPENBLAS_NUM_THREADS="1"
-    export MKL_NUM_THREADS="1"
-    export NUMEXPR_NUM_THREADS="1"
-    export MALLOC_ARENA_MAX="2"
-    ${devenvSyncCompatExports}
-
-    celery_worker_args=(
-      -A lx_annotate.celery:app
-      worker
-      --loglevel=INFO
-      --hostname="frame-extraction@%h"
-      --queues="${celeryFrameExtractionQueueName}"
-      --concurrency="${toString cfg.runtime.workerPools.frameExtraction.concurrency}"
-      --prefetch-multiplier=1
-      --max-tasks-per-child="${toString cfg.runtime.workerPools.frameExtraction.maxTasksPerChild}"
-    )
-
-    exec devenv shell -- celery "''${celery_worker_args[@]}"
-  '';
-  runLocalCeleryFrameExtractionWorkerWheelScript = pkgs.writeShellScriptBin "${celeryFrameExtractionWorkerScriptName}" ''
-    set -euo pipefail
-
-    if [ -z ${lib.escapeShellArg wheelCeleryWorkerCommand} ]; then
-      echo "ERROR: runtime.commands.celeryWorker must be set when wheel mode enables the Celery worker service."
-      exit 1
-    fi
-
-    source "${lxAnnotateRuntimeLib}"
-    source "${lxAnnotateEnvHelpers}"
-    lx_annotate_export_wheel_service_env "${envDataDir}"
-    export VIDEO_POST_VALIDATION_JOB_MODE="celery"
-    export OMP_NUM_THREADS="1"
-    export OPENBLAS_NUM_THREADS="1"
-    export MKL_NUM_THREADS="1"
-    export NUMEXPR_NUM_THREADS="1"
-    export MALLOC_ARENA_MAX="2"
-    export PATH="${runtimeWheelVenvPath}/bin:$PATH"
-
-    if [ ! -x "${runtimeWheelVenvPath}/bin/python" ]; then
-      echo "ERROR: Wheel virtualenv missing at ${runtimeWheelVenvPath}."
-      exit 1
-    fi
-
-    export LX_ANNOTATE_WHEEL_VENV="${runtimeWheelVenvPath}"
-    export LX_ANNOTATE_WHEEL_APP_ROOT="${runtimeWheelRootPath}"
-    wheel_celery_command=${lib.escapeShellArg wheelCeleryWorkerCommand}
-    celery_worker_args=(
-      --hostname="frame-extraction@%h"
-      --queues="${celeryFrameExtractionQueueName}"
-      --concurrency="${toString cfg.runtime.workerPools.frameExtraction.concurrency}"
-      --prefetch-multiplier=1
-      --max-tasks-per-child="${toString cfg.runtime.workerPools.frameExtraction.maxTasksPerChild}"
-    )
-    printf -v celery_worker_args_shell '%q ' "''${celery_worker_args[@]}"
-    exec "${pkgs.bash}/bin/bash" -lc "$wheel_celery_command $celery_worker_args_shell"
-  '';
-  runLocalCeleryFfmpegWorkerScript = pkgs.writeShellScriptBin "${celeryFfmpegWorkerScriptName}" ''
-    set -euo pipefail
-
-    cd "${repoDir}"
-
-    source "${lxAnnotateEnvHelpers}"
-    lx_annotate_export_base_env
-    lx_annotate_export_storage_env "${envDataDir}"
-    lx_annotate_export_encryption_env
-    lx_annotate_export_db_env
-    lx_annotate_export_secret_key_env
-    export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
-    export VIDEO_POST_VALIDATION_JOB_MODE="celery"
-    export OMP_NUM_THREADS="1"
-    export OPENBLAS_NUM_THREADS="1"
-    export MKL_NUM_THREADS="1"
-    export NUMEXPR_NUM_THREADS="1"
-    export MALLOC_ARENA_MAX="2"
-    ${devenvSyncCompatExports}
-
-    celery_worker_args=(
-      -A lx_annotate.celery:app
-      worker
-      --loglevel=INFO
-      --hostname="ffmpeg-media@%h"
-      --queues="${celeryFfmpegMediaQueueName}"
-      --concurrency="${toString cfg.runtime.workerPools.ffmpeg.concurrency}"
-      --prefetch-multiplier=1
-      --max-tasks-per-child="${toString cfg.runtime.workerPools.ffmpeg.maxTasksPerChild}"
-    )
-
-    exec devenv shell -- celery "''${celery_worker_args[@]}"
-  '';
-  runLocalCeleryFfmpegWorkerWheelScript = pkgs.writeShellScriptBin "${celeryFfmpegWorkerScriptName}" ''
-    set -euo pipefail
-
-    if [ -z ${lib.escapeShellArg wheelCeleryWorkerCommand} ]; then
-      echo "ERROR: runtime.commands.celeryWorker must be set when wheel mode enables the Celery worker service."
-      exit 1
-    fi
-
-    source "${lxAnnotateRuntimeLib}"
-    source "${lxAnnotateEnvHelpers}"
-    lx_annotate_export_wheel_service_env "${envDataDir}"
-    export VIDEO_POST_VALIDATION_JOB_MODE="celery"
-    export OMP_NUM_THREADS="1"
-    export OPENBLAS_NUM_THREADS="1"
-    export MKL_NUM_THREADS="1"
-    export NUMEXPR_NUM_THREADS="1"
-    export MALLOC_ARENA_MAX="2"
-    export PATH="${runtimeWheelVenvPath}/bin:$PATH"
-
-    if [ ! -x "${runtimeWheelVenvPath}/bin/python" ]; then
-      echo "ERROR: Wheel virtualenv missing at ${runtimeWheelVenvPath}."
-      exit 1
-    fi
-
-    export LX_ANNOTATE_WHEEL_VENV="${runtimeWheelVenvPath}"
-    export LX_ANNOTATE_WHEEL_APP_ROOT="${runtimeWheelRootPath}"
-    wheel_celery_command=${lib.escapeShellArg wheelCeleryWorkerCommand}
-    celery_worker_args=(
-      --hostname="ffmpeg-media@%h"
-      --queues="${celeryFfmpegMediaQueueName}"
-      --concurrency="${toString cfg.runtime.workerPools.ffmpeg.concurrency}"
-      --prefetch-multiplier=1
-      --max-tasks-per-child="${toString cfg.runtime.workerPools.ffmpeg.maxTasksPerChild}"
-    )
-    printf -v celery_worker_args_shell '%q ' "''${celery_worker_args[@]}"
-    exec "${pkgs.bash}/bin/bash" -lc "$wheel_celery_command $celery_worker_args_shell"
-  '';
-  runLocalCeleryInferenceWorkerScript = pkgs.writeShellScriptBin "${celeryInferenceWorkerScriptName}" ''
-    set -euo pipefail
-
-    cd "${repoDir}"
-
-    source "${lxAnnotateEnvHelpers}"
-    lx_annotate_export_base_env
-    lx_annotate_export_storage_env "${envDataDir}"
-    lx_annotate_export_encryption_env
-    lx_annotate_export_db_env
-    lx_annotate_export_secret_key_env
-    export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
+  celeryInferenceEnv = ''
     export VIDEO_TEMPORAL_INFERENCE_JOB_MODE="celery"
     export VIDEO_TEMPORAL_INFERENCE_FRAME_SOURCE_MODE="stream"
     ${optionalString (cfg.runtime.inferenceWorker.cudaVisibleDevices != null) ''
       export CUDA_VISIBLE_DEVICES="${cfg.runtime.inferenceWorker.cudaVisibleDevices}"
     ''}
-    export OMP_NUM_THREADS="1"
-    export OPENBLAS_NUM_THREADS="1"
-    export MKL_NUM_THREADS="1"
-    export NUMEXPR_NUM_THREADS="1"
-    export MALLOC_ARENA_MAX="2"
-    ${devenvSyncCompatExports}
-
-    celery_worker_args=(
-      -A lx_annotate.celery:app
-      worker
-      --loglevel=INFO
-      --hostname="inference@%h"
-      --queues="${celeryInferenceQueueName}"
-      --concurrency="${toString cfg.runtime.workerPools.inference.concurrency}"
-      --prefetch-multiplier=1
-      --max-tasks-per-child="${toString cfg.runtime.workerPools.inference.maxTasksPerChild}"
-    )
-
-    exec devenv shell -- celery "''${celery_worker_args[@]}"
   '';
-  runLocalCeleryInferenceWorkerWheelScript = pkgs.writeShellScriptBin "${celeryInferenceWorkerScriptName}" ''
-    set -euo pipefail
-
-    if [ -z ${lib.escapeShellArg wheelCeleryWorkerCommand} ]; then
-      echo "ERROR: runtime.commands.celeryWorker must be set when wheel mode enables the Celery worker service."
-      exit 1
-    fi
-
-    source "${lxAnnotateRuntimeLib}"
-    source "${lxAnnotateEnvHelpers}"
-    lx_annotate_export_wheel_service_env "${envDataDir}"
-    export VIDEO_TEMPORAL_INFERENCE_JOB_MODE="celery"
-    export VIDEO_TEMPORAL_INFERENCE_FRAME_SOURCE_MODE="stream"
-    ${optionalString (cfg.runtime.inferenceWorker.cudaVisibleDevices != null) ''
-      export CUDA_VISIBLE_DEVICES="${cfg.runtime.inferenceWorker.cudaVisibleDevices}"
-    ''}
-    export OMP_NUM_THREADS="1"
-    export OPENBLAS_NUM_THREADS="1"
-    export MKL_NUM_THREADS="1"
-    export NUMEXPR_NUM_THREADS="1"
-    export MALLOC_ARENA_MAX="2"
-    export PATH="${runtimeWheelVenvPath}/bin:$PATH"
-
-    if [ ! -x "${runtimeWheelVenvPath}/bin/python" ]; then
-      echo "ERROR: Wheel virtualenv missing at ${runtimeWheelVenvPath}."
-      exit 1
-    fi
-
-    export LX_ANNOTATE_WHEEL_VENV="${runtimeWheelVenvPath}"
-    export LX_ANNOTATE_WHEEL_APP_ROOT="${runtimeWheelRootPath}"
-    wheel_celery_command=${lib.escapeShellArg wheelCeleryWorkerCommand}
-    celery_worker_args=(
-      --hostname="inference@%h"
-      --queues="${celeryInferenceQueueName}"
-      --concurrency="${toString cfg.runtime.workerPools.inference.concurrency}"
-      --prefetch-multiplier=1
-      --max-tasks-per-child="${toString cfg.runtime.workerPools.inference.maxTasksPerChild}"
-    )
-    printf -v celery_worker_args_shell '%q ' "''${celery_worker_args[@]}"
-    exec "${pkgs.bash}/bin/bash" -lc "$wheel_celery_command $celery_worker_args_shell"
-  '';
-  runLocalCeleryTrainingWorkerScript = pkgs.writeShellScriptBin "${celeryTrainingWorkerScriptName}" ''
-    set -euo pipefail
-
-    cd "${repoDir}"
-
-    source "${lxAnnotateEnvHelpers}"
-    lx_annotate_export_base_env
-    lx_annotate_export_storage_env "${envDataDir}"
-    lx_annotate_export_encryption_env
-    lx_annotate_export_db_env
-    lx_annotate_export_secret_key_env
-    export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
+  celeryTrainingEnv = ''
     export MODEL_TRAINING_JOB_MODE="celery"
     export MODEL_TRAINING_STAGING_ROOT="${cfg.runtime.modelTrainingStagingRoot}"
     export CUDA_VISIBLE_DEVICES="${cfg.runtime.trainingWorker.cudaVisibleDevices}"
-    export OMP_NUM_THREADS="1"
-    export OPENBLAS_NUM_THREADS="1"
-    export MKL_NUM_THREADS="1"
-    export NUMEXPR_NUM_THREADS="1"
-    export MALLOC_ARENA_MAX="2"
-    ${devenvSyncCompatExports}
-
-    celery_worker_args=(
-      -A lx_annotate.celery:app
-      worker
-      --loglevel=INFO
-      --hostname="model-training@%h"
-      --queues="${celeryTrainingQueueName}"
-      --concurrency="${toString cfg.runtime.workerPools.training.concurrency}"
-      --prefetch-multiplier=1
-      --max-tasks-per-child="${toString cfg.runtime.workerPools.training.maxTasksPerChild}"
-    )
-
-    exec devenv shell -- celery "''${celery_worker_args[@]}"
   '';
-  runLocalCeleryTrainingWorkerWheelScript = pkgs.writeShellScriptBin "${celeryTrainingWorkerScriptName}" ''
-    set -euo pipefail
+  mkRepoCeleryWorkerScript =
+    {
+      scriptName,
+      hostname,
+      queues,
+      pool,
+      extraEnv ? "",
+    }:
+    pkgs.writeShellScriptBin "${scriptName}" ''
+      set -euo pipefail
 
-    if [ -z ${lib.escapeShellArg wheelCeleryWorkerCommand} ]; then
-      echo "ERROR: runtime.commands.celeryWorker must be set when wheel mode enables the Celery worker service."
-      exit 1
-    fi
+      cd "${repoDir}"
 
-    source "${lxAnnotateRuntimeLib}"
-    source "${lxAnnotateEnvHelpers}"
-    lx_annotate_export_wheel_service_env "${envDataDir}"
-    export MODEL_TRAINING_JOB_MODE="celery"
-    export MODEL_TRAINING_STAGING_ROOT="${cfg.runtime.modelTrainingStagingRoot}"
-    export CUDA_VISIBLE_DEVICES="${cfg.runtime.trainingWorker.cudaVisibleDevices}"
-    export OMP_NUM_THREADS="1"
-    export OPENBLAS_NUM_THREADS="1"
-    export MKL_NUM_THREADS="1"
-    export NUMEXPR_NUM_THREADS="1"
-    export MALLOC_ARENA_MAX="2"
-    export PATH="${runtimeWheelVenvPath}/bin:$PATH"
+      source "${lxAnnotateEnvHelpers}"
+      lx_annotate_export_base_env
+      lx_annotate_export_storage_env "${envDataDir}"
+      lx_annotate_export_encryption_env
+      lx_annotate_export_db_env
+      lx_annotate_export_secret_key_env
+      export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
+      ${extraEnv}
+      ${celeryWorkerResourceEnv}
+      ${devenvSyncCompatExports}
 
-    if [ ! -x "${runtimeWheelVenvPath}/bin/python" ]; then
-      echo "ERROR: Wheel virtualenv missing at ${runtimeWheelVenvPath}."
-      exit 1
-    fi
+      celery_worker_args=(
+        -A lx_annotate.celery:app
+        worker
+        --loglevel=INFO
+        --hostname="${hostname}@%h"
+        --queues="${queues}"
+        --concurrency="${toString pool.concurrency}"
+        --prefetch-multiplier=1
+        --max-tasks-per-child="${toString pool.maxTasksPerChild}"
+      )
 
-    export LX_ANNOTATE_WHEEL_VENV="${runtimeWheelVenvPath}"
-    export LX_ANNOTATE_WHEEL_APP_ROOT="${runtimeWheelRootPath}"
-    wheel_celery_command=${lib.escapeShellArg wheelCeleryWorkerCommand}
-    celery_worker_args=(
-      --hostname="model-training@%h"
-      --queues="${celeryTrainingQueueName}"
-      --concurrency="${toString cfg.runtime.workerPools.training.concurrency}"
-      --prefetch-multiplier=1
-      --max-tasks-per-child="${toString cfg.runtime.workerPools.training.maxTasksPerChild}"
-    )
-    printf -v celery_worker_args_shell '%q ' "''${celery_worker_args[@]}"
-    exec "${pkgs.bash}/bin/bash" -lc "$wheel_celery_command $celery_worker_args_shell"
-  '';
+      exec devenv shell -- celery "''${celery_worker_args[@]}"
+    '';
+  mkWheelCeleryWorkerScript =
+    {
+      scriptName,
+      hostname,
+      queues,
+      pool,
+      extraEnv ? "",
+    }:
+    pkgs.writeShellScriptBin "${scriptName}" ''
+      set -euo pipefail
+
+      if [ -z ${lib.escapeShellArg wheelCeleryWorkerCommand} ]; then
+        echo "ERROR: runtime.commands.celeryWorker must be set when wheel mode enables the Celery worker service."
+        exit 1
+      fi
+
+      source "${lxAnnotateRuntimeLib}"
+      source "${lxAnnotateEnvHelpers}"
+      lx_annotate_export_wheel_service_env "${envDataDir}"
+      ${extraEnv}
+      ${celeryWorkerResourceEnv}
+      export PATH="${runtimeWheelVenvPath}/bin:$PATH"
+
+      if [ ! -x "${runtimeWheelVenvPath}/bin/python" ]; then
+        echo "ERROR: Wheel virtualenv missing at ${runtimeWheelVenvPath}."
+        exit 1
+      fi
+
+      export LX_ANNOTATE_WHEEL_VENV="${runtimeWheelVenvPath}"
+      export LX_ANNOTATE_WHEEL_APP_ROOT="${runtimeWheelRootPath}"
+      wheel_celery_command=${lib.escapeShellArg wheelCeleryWorkerCommand}
+      celery_worker_args=(
+        --hostname="${hostname}@%h"
+        --queues="${queues}"
+        --concurrency="${toString pool.concurrency}"
+        --prefetch-multiplier=1
+        --max-tasks-per-child="${toString pool.maxTasksPerChild}"
+      )
+      printf -v celery_worker_args_shell '%q ' "''${celery_worker_args[@]}"
+      exec "${pkgs.bash}/bin/bash" -lc "$wheel_celery_command $celery_worker_args_shell"
+    '';
+  runLocalCeleryWorkerScript = mkRepoCeleryWorkerScript {
+    scriptName = celeryWorkerScriptName;
+    hostname = "maintenance";
+    queues = "${celeryMaintenanceQueueName},${celeryDefaultQueueName}";
+    pool = cfg.runtime.workerPools.maintenance;
+    extraEnv = celeryPostValidationEnv;
+  };
+  runLocalCeleryWorkerWheelScript = mkWheelCeleryWorkerScript {
+    scriptName = celeryWorkerScriptName;
+    hostname = "maintenance";
+    queues = "${celeryMaintenanceQueueName},${celeryDefaultQueueName}";
+    pool = cfg.runtime.workerPools.maintenance;
+    extraEnv = celeryPostValidationEnv;
+  };
+  runLocalCeleryPipelineWorkerScript = mkRepoCeleryWorkerScript {
+    scriptName = celeryPipelineWorkerScriptName;
+    hostname = "pipeline";
+    queues = celeryPipelineQueueName;
+    pool = cfg.runtime.workerPools.pipeline;
+    extraEnv = celeryPostValidationEnv;
+  };
+  runLocalCeleryPipelineWorkerWheelScript = mkWheelCeleryWorkerScript {
+    scriptName = celeryPipelineWorkerScriptName;
+    hostname = "pipeline";
+    queues = celeryPipelineQueueName;
+    pool = cfg.runtime.workerPools.pipeline;
+    extraEnv = celeryPostValidationEnv;
+  };
+  runLocalCeleryFrameExtractionWorkerScript = mkRepoCeleryWorkerScript {
+    scriptName = celeryFrameExtractionWorkerScriptName;
+    hostname = "frame-extraction";
+    queues = celeryFrameExtractionQueueName;
+    pool = cfg.runtime.workerPools.frameExtraction;
+    extraEnv = celeryPostValidationEnv;
+  };
+  runLocalCeleryFrameExtractionWorkerWheelScript = mkWheelCeleryWorkerScript {
+    scriptName = celeryFrameExtractionWorkerScriptName;
+    hostname = "frame-extraction";
+    queues = celeryFrameExtractionQueueName;
+    pool = cfg.runtime.workerPools.frameExtraction;
+    extraEnv = celeryPostValidationEnv;
+  };
+  runLocalCeleryFfmpegWorkerScript = mkRepoCeleryWorkerScript {
+    scriptName = celeryFfmpegWorkerScriptName;
+    hostname = "ffmpeg-media";
+    queues = celeryFfmpegMediaQueueName;
+    pool = cfg.runtime.workerPools.ffmpeg;
+    extraEnv = celeryPostValidationEnv;
+  };
+  runLocalCeleryFfmpegWorkerWheelScript = mkWheelCeleryWorkerScript {
+    scriptName = celeryFfmpegWorkerScriptName;
+    hostname = "ffmpeg-media";
+    queues = celeryFfmpegMediaQueueName;
+    pool = cfg.runtime.workerPools.ffmpeg;
+    extraEnv = celeryPostValidationEnv;
+  };
+  runLocalCeleryInferenceWorkerScript = mkRepoCeleryWorkerScript {
+    scriptName = celeryInferenceWorkerScriptName;
+    hostname = "inference";
+    queues = celeryInferenceQueueName;
+    pool = cfg.runtime.workerPools.inference;
+    extraEnv = celeryInferenceEnv;
+  };
+  runLocalCeleryInferenceWorkerWheelScript = mkWheelCeleryWorkerScript {
+    scriptName = celeryInferenceWorkerScriptName;
+    hostname = "inference";
+    queues = celeryInferenceQueueName;
+    pool = cfg.runtime.workerPools.inference;
+    extraEnv = celeryInferenceEnv;
+  };
+  runLocalCeleryTrainingWorkerScript = mkRepoCeleryWorkerScript {
+    scriptName = celeryTrainingWorkerScriptName;
+    hostname = "model-training";
+    queues = celeryTrainingQueueName;
+    pool = cfg.runtime.workerPools.training;
+    extraEnv = celeryTrainingEnv;
+  };
+  runLocalCeleryTrainingWorkerWheelScript = mkWheelCeleryWorkerScript {
+    scriptName = celeryTrainingWorkerScriptName;
+    hostname = "model-training";
+    queues = celeryTrainingQueueName;
+    pool = cfg.runtime.workerPools.training;
+    extraEnv = celeryTrainingEnv;
+  };
   runLocalAcceptanceWheelScript = pkgs.writeShellScriptBin "${acceptanceScriptName}" ''
     set -euo pipefail
 
     source "${lxAnnotateEnvHelpers}"
     lx_annotate_export_wheel_service_env "${envDataDir}"
-    export MEDIA_URL="${envNginxProtectedMediaUrl}"
 
     source "${lxAnnotateRuntimeLib}"
     ensure_wheel_runtime_installed
@@ -1505,7 +1257,6 @@ let
 
     source "${lxAnnotateEnvHelpers}"
     lx_annotate_export_wheel_service_env "${envDataDir}"
-    export MEDIA_URL="${envNginxProtectedMediaUrl}"
 
     if [ -z "''${LX_ANNOTATE_MASTER_KEY_FILE:-}" ] || [ ! -r "$LX_ANNOTATE_MASTER_KEY_FILE" ] || [ ! -s "$LX_ANNOTATE_MASTER_KEY_FILE" ]; then
       echo "ERROR: LX_ANNOTATE_MASTER_KEY_FILE is not configured, readable, and non-empty; refusing to boot without validating encrypted storage."
@@ -1740,7 +1491,6 @@ let
         export HOME_DIR="${endoreg-service-user-home}"
         export XDG_DATA_HOME="${runtimeRootPath}"
         export LX_ANNOTATE_ENCRYPTED_DATA_DIR="${envDataDir}"
-        export LX_ANNOTATE_DATA_DIR="${envDataDir}"
         export LX_ANNOTATE_DEFAULT_CENTER="${envDefaultCenter}"
         export TESSDATA_PREFIX="${cfg.runtime.tessdataPrefix}"
         export PYTORCH_ALLOC_CONF="${cfg.runtime.pytorchAllocConf}"

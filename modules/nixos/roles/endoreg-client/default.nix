@@ -266,7 +266,6 @@ in
         django = annotateDjango;
         database = cfg.database;
         runtime = {
-          commands = mkDefault cfg.lxAnnotate.runtime.commands;
           limits = mkDefault cfg.lxAnnotate.runtime.limits;
           workerLimits = mkDefault cfg.lxAnnotate.runtime.workerLimits;
           workerPools = mkDefault cfg.lxAnnotate.runtime.workerPools;
@@ -286,6 +285,21 @@ in
           clustered = mkDefault cfg.lxAnnotate.runtime.clustered;
         };
       };
+
+      services.lx-annotate.extraEnv = mkIf cfg.lxAnnotate.enable (
+        mkDefault (
+          {
+            HF_HOME = annotateEnvironment.hfHome;
+            HF_HUB_CACHE = annotateEnvironment.hfHubCache;
+            TRANSFORMERS_CACHE = annotateEnvironment.transformersCache;
+            OLLAMA_MODELS = annotateEnvironment.ollamaModelsDir;
+            HF_HUB_ENABLE_HF_TRANSFER = if annotateEnvironment.hfHubEnableTransfer then "1" else "0";
+          }
+          // lib.optionalAttrs (annotateEnvironment.ollamaKeepAlive != null) {
+            OLLAMA_KEEP_ALIVE = annotateEnvironment.ollamaKeepAlive;
+          }
+        )
+      );
 
       services.luxnix.lxAiLocal = {
         enable = cfg.lxAi;
