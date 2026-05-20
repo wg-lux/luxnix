@@ -21,22 +21,78 @@ let
   endoreg-service-group-name = config.user.endoreg-service-user.group;
 
   repoDir = "${endoreg-service-user-home}/${repoDirName}";
-  envDataDir = "${repoDir}/${cfg.runtime.dataDir}";
-  envConfDir = "${repoDir}/${cfg.runtime.confDir}";
+
+  makeRuntimePath = path:
+    if lib.hasPrefix "/" path then path else "${repoDir}/${path}";
+
+  # lx-ai owned runtime/output root.
+  #
+  # Current default behavior remains unchanged:
+  #   cfg.runtime.dataDir = "data"
+  #   envDataDir          = /var/endoreg-service-user/lx-ai/data
+  #
+  # Later this can safely become:
+  #   cfg.runtime.dataDir = "/var/lib/lx-ai/data"
+  # without changing Python code.
+  envDataDir = makeRuntimePath cfg.runtime.dataDir;
+
+  # Protected media root used by endoreg-db path resolution.
+  #
+  # Default:
+  #   envProtectedDataDir = envDataDir
+  #
+  # Future lx-annotate shared-media mode:
+  #   cfg.runtime.protectedDataDir = "/var/lib/lx-annotate/data"
+  #
+  # Then lx-ai writes frames to envDataDir, but reads protected videos from
+  # envProtectedDataDir/storage through endoreg-db.
+  envProtectedDataDir =
+    if cfg.runtime.protectedDataDir != null
+    then makeRuntimePath cfg.runtime.protectedDataDir
+    else envDataDir;
+
+  envConfDir = makeRuntimePath cfg.runtime.confDir;
+
   envFrameDir = "${envDataDir}/frames";
   envFrameMaterializationOutputRoot = "${envFrameDir}/generated";
+
   envTrainingRoot = "${envDataDir}/model_training";
   envCheckpointsDir = "${envTrainingRoot}/checkpoints";
   envRunsDir = "${envTrainingRoot}/runs";
   envBucketSnapshotDir = "${envTrainingRoot}/buckets";
   envBackboneCheckpoint = "${envCheckpointsDir}/RN50_GastroNet-1M_DINOv1.pth";
   envBackboneCheckpointUrl = cfg.runtime.backboneCheckpointUrl;
+
   envCsvDir = "${envDataDir}/import/csv";
   envLegacyImageDir = "${envDataDir}/legacy_images/images";
   envLegacyJsonlPath = "${envDataDir}/legacy_images/legacy_img_dicts.jsonl";
 
-  envStorageDir = "${envDataDir}/storage";
+  # Canonical protected-media layout matching endoreg_db.utils.paths:
+  #
+  # LX_ANNOTATE_ENCRYPTED_DATA_DIR = envProtectedDataDir
+  # STORAGE_DIR                    = envProtectedDataDir/storage
+  # PROTECTED_MEDIA_ROOT           = envProtectedDataDir/storage
+  #
+  # VideoFile.processed_file values like:
+  #   processed_videos_final/<hash>.mp4
+  #
+  # resolve under:
+  #   ${envStorageDir}/processed_videos_final/<hash>.mp4
+  envStorageDir = "${envProtectedDataDir}/storage";
   envProcessedVideoDir = "${envStorageDir}/processed_videos_final";
+
+  envPlaintextTmpDir = "${envDataDir}/temp/plaintext_media";
+
+  envStreamableVideoRoot = "${envStorageDir}/streamable_videos";
+  envStreamableVideoRawRoot = "${envStreamableVideoRoot}/raw";
+  envStreamableVideoProcessedRoot = "${envStreamableVideoRoot}/processed";
+
+  envSystemdFilePath = "${repoDir}/.env.systemd";
+
+  encryptionServiceUnits =
+    lib.optionals (cfg.runtime.encryptionService != null) [
+      cfg.runtime.encryptionService
+    ];
 
   runLxAiTraining = pkgs.writeShellScriptBin "${scriptName}" ''
     set -euo pipefail
@@ -100,8 +156,8 @@ let
     mkdir -p "${repoDir}/libs"
 
     if [ ! -d "''${LX_MODELS_DIR}" ] || [ ! -f "''${LX_MODELS_DIR}/pyproject.toml" ]; then
-      echo "lx-data-models missing or broken so re-cloning..."      
-      
+      echo "lx-data-models missing or broken so re-cloning..."
+
       rm -rf "''${LX_MODELS_DIR}"
 
       git clone --branch report_template --single-branch \
@@ -111,13 +167,7 @@ let
           exit 1
       }
 
-
       echo "lx-data-models cloned successfully"
-      echo "Installing lx-data-models in editable mode..."
-      ${pkgs.uv}/bin/uv pip install -e "''${LX_MODELS_DIR}" || {
-        echo "ERROR: Failed to install lx-data-models"
-        exit 1
-      }
     else
       echo "lx-data-models already present"
     fi
@@ -141,19 +191,11 @@ let
       }
 
       echo "endoreg-db cloned successfully"
-      echo "Installing endoreg-db in editable mode..."
-      ${pkgs.uv}/bin/uv pip install -e "''${ENDOREG_DB_DIR}" || {
-        echo "ERROR: Failed to install endoreg-db"
-        exit 1
-      }
     else
       echo "endoreg-db already present"
-      echo "Installing/updating endoreg-db in editable mode..."
-      ${pkgs.uv}/bin/uv pip install -e "''${ENDOREG_DB_DIR}" || {
-        echo "ERROR: Failed to install endoreg-db"
-        exit 1
-      }
     fi
+
+    echo "endoreg-db dependency is present for uv workspace sync"
 
     mkdir -p \
       "${envConfDir}" \
@@ -166,22 +208,36 @@ let
       "${envBucketSnapshotDir}" \
       "${envCsvDir}" \
       "${repoDir}/.config/secretspec" \
-      "${envStorageDir}" \
-      "${envProcessedVideoDir}" \
-      "${envDataDir}/temp/plaintext_media" \
-      "${envStorageDir}/streamable_videos" \
-      "${envStorageDir}/streamable_videos/raw" \
-      "${envStorageDir}/streamable_videos/processed"
+      "${envPlaintextTmpDir}"
 
+    if [ "${envProtectedDataDir}" = "${envDataDir}" ]; then
+      mkdir -p \
+        "${envProtectedDataDir}" \
+        "${envStorageDir}" \
+        "${envProcessedVideoDir}" \
+        "${envStreamableVideoRoot}" \
+        "${envStreamableVideoRawRoot}" \
+        "${envStreamableVideoProcessedRoot}"
+    else
+      echo "Using external protected media root: ${envProtectedDataDir}"
+      if [ ! -d "${envStorageDir}" ]; then
+        echo "ERROR: External protected storage root does not exist: ${envStorageDir}" >&2
+        echo "Set services.luxnix.lxAiLocal.runtime.protectedDataDir correctly or start the owning media service first." >&2
+        exit 1
+      fi
+    fi
 
     export HOME_DIR="${endoreg-service-user-home}"
     export WORKING_DIR="${repoDir}"
 
     export DATA_DIR="${envDataDir}"
-    export LX_ANNOTATE_ENCRYPTED_DATA_DIR="${envDataDir}"
-    export STORAGE_DIR="${envDataDir}/storage"
-    export PROTECTED_MEDIA_ROOT="${envDataDir}/storage"
-    
+    export DJANGO_DATA_DIR="${envDataDir}"
+    export LX_ANNOTATE_DATA_DIR="${envDataDir}"
+
+    export LX_ANNOTATE_ENCRYPTED_DATA_DIR="${envProtectedDataDir}"
+    export STORAGE_DIR="${envStorageDir}"
+    export PROTECTED_MEDIA_ROOT="${envStorageDir}"
+
     export CONF_DIR="${envConfDir}"
     export FRAME_DIR="${envFrameDir}"
     export FRAME_MATERIALIZATION_OUTPUT_ROOT="${envFrameMaterializationOutputRoot}"
@@ -192,17 +248,17 @@ let
     export CHECKPOINTS_DIR="${envCheckpointsDir}"
     export RUNS_DIR="${envRunsDir}"
     export BUCKET_SNAPSHOT_DIR="${envBucketSnapshotDir}"
-    
+
     export BACKBONE_CHECKPOINT="${envBackboneCheckpoint}"
     export BACKBONE_CHECKPOINT_URL="${envBackboneCheckpointUrl}"
-    
+
     export SQLITE_DB_PATH="${repoDir}/dev_db.sqlite"
-    
+
     export LEGACY_IMAGE_DIR="${envLegacyImageDir}"
     export LEGACY_JSONL_PATH="${envLegacyJsonlPath}"
-    
+
     export CSV_DIR="${envCsvDir}"
-    
+
     export FRAME_PATH_REMAP_SOURCE=""
     export FRAME_PATH_REMAP_TARGET=""
 
@@ -224,14 +280,12 @@ let
     export DB_BACKEND="postgres"
 
     export LX_ANNOTATE_MASTER_KEY_FILE="${toString cfg.runtime.masterKeyFile}"
-    export LX_ANNOTATE_DATA_DIR="${envDataDir}"
-    export LX_ANNOTATE_ENCRYPTED_DATA_DIR="${envDataDir}"
-    export DJANGO_DATA_DIR="${envDataDir}"
-    export PROTECTED_MEDIA_ROOT="${envStorageDir}"
-    export ENDOREG_DB_PLAINTEXT_TMP_DIR="${envDataDir}/temp/plaintext_media"
-    export LX_ANNOTATE_STREAMABLE_VIDEO_ROOT="${envStorageDir}/streamable_videos"
-    export LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT="${envStorageDir}/streamable_videos/raw"
-    export LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT="${envStorageDir}/streamable_videos/processed"
+
+    export ENDOREG_DB_PLAINTEXT_TMP_DIR="${envPlaintextTmpDir}"
+
+    export LX_ANNOTATE_STREAMABLE_VIDEO_ROOT="${envStreamableVideoRoot}"
+    export LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT="${envStreamableVideoRawRoot}"
+    export LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT="${envStreamableVideoProcessedRoot}"
 
     export LOG_LEVEL="INFO"
 
@@ -244,14 +298,18 @@ provider = "env"
 profile = "production"
 EOF
 
-cat > "${repoDir}/.env.systemd" <<EOF
+    cat > "${envSystemdFilePath}" <<EOF
 HOME_DIR=${endoreg-service-user-home}
 WORKING_DIR=${repoDir}
-LX_ANNOTATE_ENCRYPTED_DATA_DIR=${envDataDir}
+
 DATA_DIR=${envDataDir}
+DJANGO_DATA_DIR=${envDataDir}
+LX_ANNOTATE_DATA_DIR=${envDataDir}
+
+LX_ANNOTATE_ENCRYPTED_DATA_DIR=${envProtectedDataDir}
 STORAGE_DIR=${envStorageDir}
 PROTECTED_MEDIA_ROOT=${envStorageDir}
-DJANGO_DATA_DIR=${envDataDir}
+
 CONF_DIR=${envConfDir}
 FRAME_DIR=${envFrameDir}
 FRAME_MATERIALIZATION_OUTPUT_ROOT=${envFrameMaterializationOutputRoot}
@@ -265,19 +323,16 @@ BUCKET_SNAPSHOT_DIR=${envBucketSnapshotDir}
 BACKBONE_CHECKPOINT=${envBackboneCheckpoint}
 BACKBONE_CHECKPOINT_URL=${envBackboneCheckpointUrl}
 
+SQLITE_DB_PATH=${repoDir}/dev_db.sqlite
+
 LEGACY_IMAGE_DIR=${envLegacyImageDir}
 LEGACY_JSONL_PATH=${envLegacyJsonlPath}
 
 CSV_DIR=${envCsvDir}
-LX_ANNOTATE_MASTER_KEY_FILE=${toString cfg.runtime.masterKeyFile}
-LX_ANNOTATE_DATA_DIR=${envDataDir}
-
-DJANGO_DATA_DIR=${envDataDir}
-STORAGE_DIR=${envStorageDir}
-PROTECTED_MEDIA_ROOT=${envStorageDir}
 
 FRAME_PATH_REMAP_SOURCE=
 FRAME_PATH_REMAP_TARGET=
+
 DB_PWD_FILE=${envConfDir}/db_pwd
 DJANGO_DB_PASSWORD_FILE=${envConfDir}/db_pwd
 
@@ -293,23 +348,43 @@ DJANGO_DB_USER=${cfg.database.user}
 DJANGO_DB_HOST=${cfg.database.host}
 DJANGO_DB_PORT=${toString cfg.database.port}
 DJANGO_DB_SSLMODE=${cfg.database.sslMode}
-
-ENDOREG_DB_PLAINTEXT_TMP_DIR=${envDataDir}/temp/plaintext_media
-LX_ANNOTATE_STREAMABLE_VIDEO_ROOT=${envStorageDir}/streamable_videos
-LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT=${envStorageDir}/streamable_videos/raw
-LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT=${envStorageDir}/streamable_videos/processed
 DB_BACKEND=postgres
+
+LX_ANNOTATE_MASTER_KEY_FILE=${toString cfg.runtime.masterKeyFile}
+
+ENDOREG_DB_PLAINTEXT_TMP_DIR=${envPlaintextTmpDir}
+
+LX_ANNOTATE_STREAMABLE_VIDEO_ROOT=${envStreamableVideoRoot}
+LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT=${envStreamableVideoRawRoot}
+LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT=${envStreamableVideoProcessedRoot}
 
 LOG_LEVEL=INFO
 EOF
 
     echo "Starting LX-AI training pipeline..."
-    exec devenv shell -- bash -c "lxai_training"
+    exec devenv shell -- bash -c '
+      set -euo pipefail
+
+      echo "Installing lx-data-models in editable mode inside devenv..."
+      ${pkgs.uv}/bin/uv pip install -e libs/lx-data-models || {
+        echo "ERROR: Failed to install lx-data-models"
+        exit 1
+      }
+
+      echo "Installing endoreg-db in editable mode inside devenv..."
+      ${pkgs.uv}/bin/uv pip install -e libs/endoreg-db || {
+        echo "ERROR: Failed to install endoreg-db"
+        exit 1
+      }
+
+      lxai_training
+    '
   '';
 in
 {
   options.services.luxnix.lxAiLocal = {
     enable = mkBoolOpt false "Enable LxAI service";
+
     debug = mkOption {
       type = types.submodule {
         options = {
@@ -356,23 +431,63 @@ in
           dataDir = mkOption {
             type = types.str;
             default = "data";
-            description = "Relative path to lx-ai data directory inside the repository.";
+            description = ''
+              lx-ai runtime data directory.
+
+              Relative values are resolved inside the lx-ai repository.
+              Absolute values are used as-is.
+
+              This controls lx-ai outputs such as:
+              - generated training frames
+              - model training outputs
+              - checkpoints
+              - bucket snapshots
+              - temporary plaintext materialization
+            '';
+          };
+
+          protectedDataDir = mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            example = "/var/lib/lx-annotate/data";
+            description = ''
+              Protected data root used by endoreg-db for encrypted/protected media.
+
+              When null, lx-ai uses runtime.dataDir as the protected media root.
+              Set this to the lx-annotate protected data root when lx-ai should
+              read videos produced by lx-annotate.
+
+              endoreg-db resolves protected videos from:
+                protectedDataDir/storage/processed_videos_final/<video>.mp4
+            '';
           };
 
           confDir = mkOption {
             type = types.str;
             default = "conf";
-            description = "Relative path to lx-ai config directory inside the repository.";
+            description = "lx-ai config directory. Relative values are resolved inside the lx-ai repository.";
           };
+
           backboneCheckpointUrl = mkOption {
             type = types.str;
             default = "";
             description = "URL for downloading the backbone checkpoint if not present locally.";
           };
+
           masterKeyFile = mkOption {
             type = types.path;
             default = "/etc/secrets/vault/lx_annotate_master_key";
             description = "Application master key file used by endoreg-db encrypted storage.";
+          };
+
+          encryptionService = mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            example = "lx-annotate-encrypted-data.service";
+            description = ''
+              Optional systemd unit that must be started before lx-ai when
+              protectedDataDir points to an encrypted/mounted media root.
+            '';
           };
         };
       };
@@ -436,9 +551,20 @@ in
     systemd.services."lx-ai-boot" = {
       description = "Clone lx-ai repository and run training pipeline";
       wantedBy = [ "multi-user.target" ];
-      wants = [ "postgres-endoreg-setup.service" ];
-      after = [ "postgres-endoreg-setup.service" "systemd-tmpfiles-setup.service" ];
-      requires = [ "postgres-endoreg-setup.service" "systemd-tmpfiles-setup.service" ];
+
+      wants = [
+        "postgres-endoreg-setup.service"
+      ] ++ encryptionServiceUnits;
+
+      after = [
+        "postgres-endoreg-setup.service"
+        "systemd-tmpfiles-setup.service"
+      ] ++ encryptionServiceUnits;
+
+      requires = [
+        "postgres-endoreg-setup.service"
+        "systemd-tmpfiles-setup.service"
+      ] ++ encryptionServiceUnits;
 
       serviceConfig = {
         Type = "oneshot";
@@ -446,7 +572,7 @@ in
         WorkingDirectory = endoreg-service-user-home;
 
         Environment = [
-          "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:${pkgs.direnv}/bin:/run/current-system/sw/bin"
+          "PATH=${pkgs.git}/bin:${pkgs.devenv}/bin:${pkgs.direnv}/bin:${pkgs.uv}/bin:/run/current-system/sw/bin"
           "NIX_PATH=nixpkgs=${pkgs.path}"
         ];
 
@@ -458,7 +584,6 @@ in
           fi
 
           mkdir -p ${envConfDir}
-          
 
           SOURCE_PWD="${cfg.database.endoregLocalUserPasswordFile}"
           TARGET_PWD="${envConfDir}/db_pwd"
@@ -473,6 +598,7 @@ in
           fi
 
           chown -R ${endoreg-service-user-name}:${endoreg-service-group-name} ${envConfDir}
+
           if [ -f "${toString cfg.runtime.masterKeyFile}" ]; then
             chown root:${endoreg-service-group-name} "${toString cfg.runtime.masterKeyFile}" || true
             chmod 640 "${toString cfg.runtime.masterKeyFile}" || true
@@ -489,14 +615,27 @@ in
         ProtectSystem = "full";
         PrivateTmp = true;
         NoNewPrivileges = true;
-        ReadWritePaths = [
+
+        ReadWritePaths = lib.unique [
           endoreg-service-user-home
-          envDataDir
-          envStorageDir
-          envProcessedVideoDir
+
           envConfDir
+
+          envDataDir
           envFrameDir
           envFrameMaterializationOutputRoot
+          envTrainingRoot
+          envCheckpointsDir
+          envRunsDir
+          envBucketSnapshotDir
+          envPlaintextTmpDir
+
+          envProtectedDataDir
+          envStorageDir
+          envProcessedVideoDir
+          envStreamableVideoRoot
+          envStreamableVideoRawRoot
+          envStreamableVideoProcessedRoot
         ];
 
         MemoryMax = "8G";
