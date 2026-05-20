@@ -122,6 +122,39 @@ let
       echo "lx-data-models already present"
     fi
 
+    echo "Ensuring endoreg-db dependency..."
+
+    ENDOREG_DB_DIR="${repoDir}/libs/endoreg-db"
+
+    mkdir -p "${repoDir}/libs"
+
+    if [ ! -d "''${ENDOREG_DB_DIR}" ] || [ ! -f "''${ENDOREG_DB_DIR}/pyproject.toml" ]; then
+      echo "endoreg-db missing or broken so re-cloning..."
+
+      rm -rf "''${ENDOREG_DB_DIR}"
+
+      git clone --branch lx-ai-service --single-branch \
+        https://github.com/wg-lux/endoreg-db \
+        "''${ENDOREG_DB_DIR}" || {
+          echo "ERROR: Failed to clone endoreg-db"
+          exit 1
+      }
+
+      echo "endoreg-db cloned successfully"
+      echo "Installing endoreg-db in editable mode..."
+      ${pkgs.uv}/bin/uv pip install -e "''${ENDOREG_DB_DIR}" || {
+        echo "ERROR: Failed to install endoreg-db"
+        exit 1
+      }
+    else
+      echo "endoreg-db already present"
+      echo "Installing/updating endoreg-db in editable mode..."
+      ${pkgs.uv}/bin/uv pip install -e "''${ENDOREG_DB_DIR}" || {
+        echo "ERROR: Failed to install endoreg-db"
+        exit 1
+      }
+    fi
+
     mkdir -p \
       "${envConfDir}" \
       "${envDataDir}" \
@@ -444,7 +477,9 @@ in
             chown root:${endoreg-service-group-name} "${toString cfg.runtime.masterKeyFile}" || true
             chmod 640 "${toString cfg.runtime.masterKeyFile}" || true
           else
-            echo "WARNING: LX-AI encryption master key file missing: ${toString cfg.runtime.masterKeyFile}"
+            echo "ERROR: LX-AI production requires the application master key file: ${toString cfg.runtime.masterKeyFile}" >&2
+            echo "This must be the same LX_ANNOTATE_MASTER_KEY_FILE used by lx-annotate/endoreg-db for encrypted media." >&2
+            exit 1
           fi
         ''}";
 
