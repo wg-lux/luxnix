@@ -17,26 +17,17 @@
     settings.mutable = false;
   };
 
+  profiles = {
+    endoregClient.enable = true;
+    endoregGpuClient.enable = true;
+  };
+
   roles = { 
-    aglnet.client.enable = true;
-    common.enable = true;
-    custom-packages.cloud = true;
-    custom-packages.enable = true;
-    endoreg-client.api.djangoAllowedHosts = ["localhost" "127.0.0.1" "172.16.255.106" "172.16.255.230"];    endoreg-client.api.httpProtocol = "https";
-    endoreg-client.api.language = "en-us";
-    endoreg-client.api.logLevel = "WARNING";
-    endoreg-client.api.maxRequestSize = "50G";
-    endoreg-client.api.settingsProfile = "prod";
-    endoreg-client.centralNodes = ["s-04"];
-    endoreg-client.enable = true;
+    endoreg-client.dbApiLocal = false;
     endoreg-client.paths.storagePersistingEnable = true;
     endoreg-client.paths.storagePersistingIsExternalDrive = true;
     endoreg-client.paths.storagePersistingMountPoint = "/mnt/endoreg-client-storage";
-    endoreg-client.repository.branch = "container";
     endoreg-client.defaultCenterKey = "university_hospital_wuerzburg";
-    nextcloudClient.enable = true;
-    postgres.default.enable = true;
-    custom-packages.baseDevelopment = true;
     custom-packages.hardwareAcceleration = true;
     custom-packages.videoEditing = true;
     custom-packages.visuals = true;
@@ -82,14 +73,6 @@ generic-settings.adminVpnIp = "172.16.255.106";
 generic-settings.configurationPathRelative = "dev/luxnix";
 
 generic-settings.enable = true;
-
-generic-settings.gpu.autoDetect = true;
-
-generic-settings.gpu.nvidia.driver = "production";
-
-generic-settings.gpu.nvidia.enable = true;
-
-generic-settings.gpu.nvidia.prime.enable = true;
 
 generic-settings.language = "english";
 
@@ -245,8 +228,6 @@ generic-settings.configurationPath = lib.mkForce "/home/admin/dev/luxnix";
 generic-settings.gpu.nvidia.prime.nvidiaBusId = "PCI:1:0:0";
 
 generic-settings.gpu.nvidia.prime.onboardBusId = "PCI:0:2:0";
-
-generic-settings.gpu.nvidia.prime.onboardType = "intel";
 
 generic-settings.hostPlatform = "x86_64-linux";
 

@@ -6,6 +6,7 @@
 }: let
   vaultModule = "${repoRoot}/modules/nixos/luxnix/vault/default.nix";
   managedSecretsModule = "${repoRoot}/modules/nixos/roles/managed-secrets/default.nix";
+  clientUserModule = "${repoRoot}/modules/nixos/user/client/default.nix";
   lxAnnotateConfig = "${repoRoot}/modules/nixos/services/lx-annotate-local/config.nix";
 in {
   suites."lx-annotate vault contracts" = {
@@ -36,6 +37,20 @@ in {
           assert_file_contains ${managedSecretsModule} 'mktemp "\$SECRET_DIR/\..*\.tmp\.' "secret refresh must use temp files"
           assert_file_contains ${managedSecretsModule} 'mv -f "\$TARGET_FILE" "\$SECRET_FILE"' "secret writes must be atomic"
           assert_file_contains ${managedSecretsModule} 'vault-auth-setup\.service' "managed-secrets must wait for vault auth bootstrap"
+        '';
+      }
+      {
+        name = "managed-secrets-does-not-own-human-facing-passwords";
+        type = "script";
+        script = ''
+          ${ntlib.helpers.path [pkgs.gnugrep]}
+          ${ntlib.helpers.scriptHelpers}
+          assert_file_contains ${managedSecretsModule} 'humanFacingSecretNames' "managed-secrets must classify human-facing password built-ins"
+          assert_file_contains ${managedSecretsModule} 'humanFacing = mkOption' "custom secrets must be able to declare human-facing credentials"
+          assert_file_contains ${managedSecretsModule} 'allowGeneratedHumanSecrets' "human-facing generated secrets must require an explicit migration override"
+          assert_file_contains ${managedSecretsModule} 'client_user_password_hash' "client user password hash must be treated as human-facing"
+          assert_file_contains ${managedSecretsModule} 'managedSecretsSopsPathConflicts' "managed-secrets must refuse SOPS path ownership conflicts"
+          assert_file_contains ${clientUserModule} 'luxnixValidateClientPasswordFile' "client user password hash files must be validated before activation"
         '';
       }
       {

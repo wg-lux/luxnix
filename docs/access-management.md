@@ -110,6 +110,12 @@ homes/
   password that could lock the machine.
 - Optional SOPS integration can provide the admin password hash with
   `neededForUsers = true`.
+- The client-user login hash can also come from SOPS. Generated client-user
+  passwords are disabled in `roles.managed-secrets` by default because they are
+  human-facing credentials.
+- `roles.managed-secrets` refuses to share an output path with `sops.secrets`.
+  When SOPS owns a deployed password file, disable the corresponding generated
+  managed secret.
 - LuxNix intentionally refuses to manage BIOS/UEFI firmware passwords. Keep
   firmware passwords in an out-of-band recovery record; do not generate them at
   activation time.
@@ -142,6 +148,21 @@ security.luxnix.local-users.adminPassword = {
     secretName = "admin-password-hash";
   };
 };
+```
+
+To use SOPS for the client-user password hash on a GC host:
+
+```nix
+security.luxnix.local-users.clientPassword = {
+  source = "sops";
+  sops = {
+    sopsFile = ./secrets.yaml;
+    secretName = "client-user-password-hash";
+  };
+};
+
+roles.managed-secrets.secrets.client_user_password.enable = false;
+roles.managed-secrets.secrets.client_user_password_hash.enable = false;
 ```
 
 Generate the hash outside Nix, then encrypt the hash:

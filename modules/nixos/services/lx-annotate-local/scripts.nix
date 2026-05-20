@@ -36,11 +36,6 @@ let
     envConfTemplateDir
     envSystemdFilePath
     envAssetDir
-    hubRootPath
-    hubBackupRootPath
-    hubBackupIncomingPath
-    hubBackupSnapshotPath
-    hubBackupManifestPath
     dataRecoveryStateDir
     dataRecoveryStateFile;
   inherit (runtime.env)
@@ -56,187 +51,31 @@ let
     envDjangoModule
     envDjangoPort
     envHttpProtocol
-    envMediaUrl
-    envNginxProtectedMediaUrl
     envRunVideoTests
     envSkipExpensiveTests
-    envStaticUrl
     envViteEnableDebug;
   inherit (runtime.runtime)
     useWheelRuntime
     pythonInterpreter
     wheelFilePath
-    packageVersion
-    encryptedDataMountOptions;
+    packageVersion;
   inherit (runtime.defaults)
     exportFramesStorageRootDefault
     processedReportDirName
     processedVideoDirName;
   makeBin = "${pkgs.gnumake}/bin/make";
-  celeryBrokerUrl =
-    if cfg.runtime.externalServices.redisUrl != null then
-      cfg.runtime.externalServices.redisUrl
-    else
-      lib.attrByPath
-        [ "roles" "endoreg-client" "service" "extraEnvironment" "CELERY_BROKER_URL" ]
-        "redis://localhost:6379/1"
-        config;
-  lxAnnotateEnvHelpers = pkgs.writeShellScript "lx-annotate-env-helpers.sh" ''
-    lx_annotate_export_base_env() {
-      export DJANGO_SECRET_KEY_FILE="${cfg.django.djangoSecretKeyFile}"
-      export OIDC_RP_CLIENT_ID="${cfg.django.keycloakClientId}"
-      OIDC_CLIENT_SECRET_VALUE="$(tr -d '\n' < "${cfg.django.keycloakSecretFile}" 2>/dev/null || true)"
-      export OIDC_RP_CLIENT_SECRET="$OIDC_CLIENT_SECRET_VALUE"   
-      export CONF_DIR="${envConfDir}"
-      export CONF_TEMPLATE_DIR="${envConfTemplateDir}"
-      export WORKING_DIR="${repoDir}"
-      export HOME_DIR="${endoreg-service-user-home}"
-      export DB_PWD_FILE="${envConfDir}/db_pwd"
-      export DJANGO_DB_PASSWORD_FILE="${envConfDir}/db_pwd"
-
-      export DJANGO_MODULE="${envDjangoModule}"
-      export DJANGO_SETTINGS_MODULE="lx_annotate.settings.settings_prod"
-      export DJANGO_SETTINGS_MODULE_PRODUCTION="lx_annotate.settings.settings_prod"
-      export DJANGO_SETTINGS_MODULE_DEVELOPMENT="lx_annotate.settings.settings_dev"
-      export DJANGO_ENV="${envDjangoEnv}"
-      export CENTRAL_NODE="${envCentralNodeFlag}"
-      export HTTP_PROTOCOL="${envHttpProtocol}"
-      export DJANGO_HOST="${envDjangoHost}"
-      export DJANGO_PORT="${envDjangoPort}"
-      export BASE_URL="${envBaseUrl}"
-      export TIME_ZONE="${cfg.django.timeZone}"
-      export RUN_VIDEO_TESTS="${envRunVideoTests}"
-      export SKIP_EXPENSIVE_TESTS="${envSkipExpensiveTests}"
-      export VITE_ENABLE_DEBUG="${envViteEnableDebug}"
-      export SERVE_WITH_NGINX="true"
-      export NGINX_PROTECTED_MEDIA_URL="${envNginxProtectedMediaUrl}"
-      export LX_ANNOTATE_PACKAGE_VERSION="${packageVersion}"
-      export ENDOREG_DEPLOYMENT_ROLE="${envDeploymentRole}"
-      export ENDOREG_HUB_MODE="${
-        if cfg.hub.enable then "true" else "false"
-      }"
-      export ENDOREG_ENABLE_HUB_TRANSFERS="${
-        if cfg.hub.transferApi.enable then "true" else "false"
-      }"
-      export ENDOREG_HUB_TRANSFER_REQUIRE_SECURE_TRANSPORT="${
-        if cfg.hub.transferApi.requireSecureTransport then "true" else "false"
-      }"
-      export ENDOREG_HUB_TRANSFER_REQUIRE_MTLS="${
-        if cfg.hub.transferApi.requireMtls then "true" else "false"
-      }"
-      export ENDOREG_HUB_TRANSFER_MTLS_META_KEY="${cfg.hub.transferApi.mtlsMetaKey}"
-      export ENDOREG_HUB_TRANSFER_MTLS_META_VALUE="${cfg.hub.transferApi.mtlsMetaValue}"
-      export CELERY_BROKER_URL="${celeryBrokerUrl}"
-      export CELERY_DEFAULT_QUEUE="${celeryDefaultQueueName}"
-      export CELERY_PIPELINE_QUEUE="${celeryPipelineQueueName}"
-      export CELERY_FRAME_EXTRACTION_QUEUE="${celeryFrameExtractionQueueName}"
-      export CELERY_FFMPEG_MEDIA_QUEUE="${celeryFfmpegMediaQueueName}"
-      export CELERY_INFERENCE_QUEUE="${celeryInferenceQueueName}"
-      export CELERY_TRAINING_QUEUE="${celeryTrainingQueueName}"
-      export CELERY_MAINTENANCE_QUEUE="${celeryMaintenanceQueueName}"
-      export CELERY_FRAME_EXTRACTION_REQUIRE_SECURE_TRANSPORT="${
-        if cfg.runtime.celeryBroker.requireSecureTransport then "true" else "false"
-      }"
-      export CELERY_FFMPEG_MEDIA_REQUIRE_SECURE_TRANSPORT="${
-        if cfg.runtime.celeryBroker.requireSecureTransport then "true" else "false"
-      }"
-      export CELERY_BROKER_SECURE_TRANSPORT_CONFIRMED="${
-        if cfg.runtime.celeryBroker.secureTransportConfirmed then "true" else "false"
-      }"
-      export MODEL_TRAINING_JOB_MODE="celery"
-      export MODEL_TRAINING_STAGING_ROOT="${cfg.runtime.modelTrainingStagingRoot}"
-      export VIDEO_POST_VALIDATION_JOB_MODE="celery"
-      export VIDEO_TEMPORAL_INFERENCE_JOB_MODE="celery"
-      export VIDEO_TEMPORAL_INFERENCE_FRAME_SOURCE_MODE="stream"
-      export SSL_CERT_FILE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
-      export REQUESTS_CA_BUNDLE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
-
-      export DJANGO_ALLOWED_HOSTS="${envAllowedHosts}"
-      export ALLOWED_HOSTS="${envAllowedHosts}"
-      export DJANGO_CORS_ALLOWED_ORIGINS="${envCorsAllowedOrigins}"
-      export DJANGO_CSRF_TRUSTED_ORIGINS="${envCorsAllowedOrigins}"
-      export FFMPEG_TRANSCODE_TIMEOUT_SECONDS="${ffmpegTranscodeTimeoutSeconds}"
-    }
-
-    lx_annotate_export_storage_env() {
-      local data_root="$1"
-      export DATA_DIR="$data_root"
-      export LX_ANNOTATE_DATA_DIR="$data_root"
-      export LX_ANNOTATE_ENCRYPTED_DATA_DIR="$data_root"
-      export PROTECTED_MEDIA_ROOT="${runtimeStorageRootPath}"
-      export STORAGE_DIR="$data_root/storage"
-      export WATCHER_VIDEO_DIR="${runtimeWatcherVideoDirPath}"
-      export WATCHER_REPORT_DIR="${runtimeWatcherReportDirPath}"
-      export WATCHER_PREANONYMIZED_DIR="${runtimeWatcherPreanonymizedDirPath}"
-      export LX_ANNOTATE_STREAMABLE_VIDEO_ROOT="${runtimeStreamableVideoRootPath}"
-      export LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT="${runtimeStreamableVideoRawRootPath}"
-      export LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT="${runtimeStreamableVideoProcessedRootPath}"
-    }
-
-    lx_annotate_export_encryption_env() {
-      ${
-        optionalString (cfg.runtime.masterKeyFile != null) ''
-          export LX_ANNOTATE_MASTER_KEY_FILE="${toString cfg.runtime.masterKeyFile}"
-        ''
-      }
-      :
-    }
-
-    lx_annotate_export_django_paths_env() {
-      export STATIC_URL="${envStaticUrl}"
-      export MEDIA_URL="${envMediaUrl}"
-      export ASSET_DIR="${envAssetDir}"
-    }
-
-    lx_annotate_export_db_env() {
-      local db_pwd
-      db_pwd="$(tr -d '\n' < "${envConfDir}/db_pwd" 2>/dev/null || true)"
-      export DJANGO_DB_ENGINE="django.db.backends.postgresql"
-      export DJANGO_DB_NAME="${cfg.database.name}"
-      export DJANGO_DB_USER="${cfg.database.user}"
-      export DJANGO_DB_PASSWORD="$db_pwd"
-      export DJANGO_DB_HOST="${cfg.database.host}"
-      export DJANGO_DB_PORT="${toString cfg.database.port}"
-      export DJANGO_DB_SSLMODE="${cfg.database.sslMode}"
-    }
-
-    lx_annotate_export_secret_key_env() {
-      local django_secret_key
-      django_secret_key="$(tr -d '\n' < "${cfg.django.djangoSecretKeyFile}" 2>/dev/null || true)"
-      export DJANGO_SECRET_KEY="$django_secret_key"
-    }
-
-    lx_annotate_export_oidc_env() {
-      
-      local oidc_client_secret
-      export OIDC_RP_CLIENT_ID="${cfg.django.keycloakClientId}"
-      oidc_client_secret="$(tr -d '\n' < "${cfg.django.keycloakSecretFile}" 2>/dev/null || true)"
-      export OIDC_RP_CLIENT_SECRET="$oidc_client_secret"
-    }
-
-    lx_annotate_export_wheel_service_env() {
-      local data_root="$1"
-      lx_annotate_export_base_env
-      lx_annotate_export_storage_env "$data_root"
-      lx_annotate_export_encryption_env
-      lx_annotate_export_django_paths_env
-      lx_annotate_export_db_env
-      export DJANGO_DJANGO_DB_PASSWORD="$DJANGO_DB_PASSWORD"
-      lx_annotate_export_secret_key_env
-      lx_annotate_export_oidc_env
-      export EXEMPT_URLS="^/accounts/login/$"
-      export LOGIN_URL="/accounts/login/"
-      export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
-      export WORKING_DIR="${runtimeWorkingDir}"
-      export HOME_DIR="${endoreg-service-user-home}"
-      export XDG_DATA_HOME="${runtimeRootPath}"
-      export LX_ANNOTATE_ENCRYPTED_DATA_DIR="$data_root"
-      export LX_ANNOTATE_DATA_DIR="$data_root"
-      export LX_ANNOTATE_DEFAULT_CENTER="${envDefaultCenter}"
-      export TESSDATA_PREFIX="${cfg.runtime.tessdataPrefix}"
-      export PYTORCH_ALLOC_CONF="${cfg.runtime.pytorchAllocConf}"
-    }
-  '';
+  envScripts = import ./scripts/env.nix args;
+  inherit (envScripts)
+    celeryBrokerUrl
+    celeryDefaultQueueName
+    celeryPipelineQueueName
+    celeryFrameExtractionQueueName
+    celeryFfmpegMediaQueueName
+    celeryInferenceQueueName
+    celeryTrainingQueueName
+    celeryMaintenanceQueueName
+    ffmpegTranscodeTimeoutSeconds
+    lxAnnotateEnvHelpers;
 
   # Compat exports for lx-annotate/devenv.nix shellHook, which expects these vars.
   devenvSyncCompatExports = ''
@@ -250,66 +89,10 @@ let
     fi
   '';
 
-  alignEnvFileScript = pkgs.writeText "lx-annotate-align-env.py" ''
-    import os
-    from pathlib import Path
-
-    env_path = Path(os.environ["LX_ANNOTATE_ENV_FILE"])
-    desired_module = os.environ["DESIRED_SETTINGS_MODULE"]
-    desired_env = os.environ["DESIRED_ENVIRONMENT"]
-
-    if not env_path.exists():
-        raise SystemExit(0)
-
-    lines = env_path.read_text(encoding="utf-8").splitlines()
-    updated = []
-    have_module = False
-    have_env = False
-
-    for line in lines:
-        if line.startswith("DJANGO_SETTINGS_MODULE="):
-            updated.append(f"DJANGO_SETTINGS_MODULE={desired_module}")
-            have_module = True
-        elif line.startswith("DJANGO_ENV="):
-            updated.append(f"DJANGO_ENV={desired_env}")
-            have_env = True
-        else:
-            updated.append(line)
-
-    if not have_module:
-        updated.append(f"DJANGO_SETTINGS_MODULE={desired_module}")
-
-    if not have_env:
-        updated.append(f"DJANGO_ENV={desired_env}")
-
-    env_path.write_text("\n".join(updated) + "\n", encoding="utf-8")
-  '';
-
-  viteManifestEntryScript = pkgs.writeText "lx-annotate-vite-manifest-entry.py" ''
-    import json
-    import sys
-
-    manifest_path = sys.argv[1]
-    try:
-        with open(manifest_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception:
-        raise SystemExit(1)
-
-    entry = data.get("src/main.ts", {}).get("file")
-    if entry:
-        print(entry)
-        raise SystemExit(0)
-
-    for value in data.values():
-        if isinstance(value, dict):
-            file_value = value.get("file")
-            if file_value:
-                print(file_value)
-                raise SystemExit(0)
-
-    raise SystemExit(1)
-  '';
+  frontendAssetScripts = import ./scripts/frontend-assets.nix args;
+  inherit (frontendAssetScripts)
+    alignEnvFileScript
+    viteManifestEntryScript;
 
 
   syncScriptName = "lx-annotate-sync";
@@ -337,605 +120,11 @@ let
   wheelCeleryWorkerCommand = cfg.runtime.commands.celeryWorker or "";
   wheelSapImportCommand = cfg.runtime.commands.sapImport or "";
   wheelMediaMigrationCommand = cfg.runtime.commands.mediaMigration or "";
-  celeryDefaultQueueName = "default";
-  celeryPipelineQueueName = "pipeline";
-  celeryFrameExtractionQueueName = "frame_extraction";
-  celeryFfmpegMediaQueueName = "ffmpeg_media";
-  celeryInferenceQueueName = "inference";
-  celeryTrainingQueueName = "model_training";
-  celeryMaintenanceQueueName = "maintenance";
-  ffmpegTranscodeTimeoutSeconds = "86400";
-  emergencyStorageReliefConfig = pkgs.writeText "lx-annotate-emergency-storage-relief-config.json" (
-    builtins.toJSON {
-      archive_root = cfg.storageRelief.archiveDir;
-      manifest_dir = cfg.storageRelief.manifestDir;
-      staging_dir = cfg.storageRelief.stagingDir;
-      external_mount_point = cfg.storageRelief.externalMountPoint;
-      runtime_root = envDataDir;
-      dry_run = cfg.storageRelief.dryRun;
-      delete_after_verify = cfg.storageRelief.deleteAfterVerify;
-      include_legacy_processed_duplicates = cfg.storageRelief.includeLegacyProcessedDuplicates;
-      include_validated_export_bundles = cfg.storageRelief.includeValidatedExportBundles;
-      validated_export_dirs = cfg.storageRelief.validatedExportDirs;
-      validated_export_marker_names = cfg.storageRelief.validatedExportMarkerNames;
-      legacy_duplicate_sources = [
-        {
-          kind = "report";
-          source_root = cfg.dataCleanup.legacyProcessedReportDir;
-          label = "legacy-data/${processedReportDirName}";
-        }
-        {
-          kind = "video";
-          source_root = cfg.dataCleanup.legacyProcessedVideoDir;
-          label = "legacy-data/${processedVideoDirName}";
-        }
-        {
-          kind = "report";
-          source_root = cfg.dataCleanup.legacyMediaProcessedReportDir;
-          label = "legacy-media/${processedReportDirName}";
-        }
-        {
-          kind = "video";
-          source_root = cfg.dataCleanup.legacyMediaProcessedVideoDir;
-          label = "legacy-media/${processedVideoDirName}";
-        }
-      ];
-    }
-  );
-  emergencyStorageReliefHelper = pkgs.writeText "lx-annotate-emergency-storage-relief.py" ''
-    from __future__ import annotations
+  storageReliefScripts = import ./scripts/storage-relief.nix args;
+  inherit (storageReliefScripts)
+    emergencyStorageReliefConfig
+    emergencyStorageReliefHelper;
 
-    import argparse
-    import json
-    import os
-    import sys
-    from datetime import datetime, timezone
-    from enum import Enum
-    from pathlib import Path
-    from typing import Any
-
-
-    class ReliefResourceKind(str, Enum):
-        VIDEO = "video"
-        REPORT = "report"
-
-
-    def parse_resource_kind(value: object) -> ReliefResourceKind | None:
-        try:
-            return ReliefResourceKind(str(value).lower())
-        except ValueError:
-            return None
-
-
-    def emit(event: str, **payload: object) -> None:
-        record = {"event": event, **payload}
-        print(json.dumps(record, sort_keys=True), flush=True)
-
-
-    def load_config(path: Path) -> dict[str, Any]:
-        with path.open("r", encoding="utf-8") as handle:
-            data = json.load(handle)
-        if not isinstance(data, dict):
-            raise ValueError("storage relief config must be a JSON object")
-        return data
-
-
-    def setup_django() -> None:
-        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "lx_annotate.settings.settings_prod")
-        import django
-
-        django.setup()
-
-
-    def state_is_processed_anonymized(state: object | None) -> bool:
-        if state is None:
-            return False
-        return bool(
-            getattr(state, "anonymization_validated", False)
-            or getattr(state, "sensitive_meta_processed", False)
-            or getattr(state, "anonymized", False)
-        )
-
-
-    def state_is_validated(state: object | None) -> bool:
-        return bool(state is not None and getattr(state, "anonymization_validated", False))
-
-
-    def field_name_keys(field_name: str) -> set[str]:
-        normalized = field_name.strip("/")
-        keys = {normalized, Path(normalized).name}
-        parts = normalized.split("/", 1)
-        if len(parts) == 2:
-            keys.add(parts[1])
-        return {key for key in keys if key}
-
-
-    def archive_destination(root: Path, category: str, label: str, rel_path: Path, content_hash: str) -> Path:
-        destination = root / category / label / rel_path
-        if not destination.exists():
-            return destination
-        return destination.with_name(f"{destination.name}.{content_hash[:16]}")
-
-
-    def staging_destination(staging_root: Path, archive_root: Path, destination: Path, content_hash: str) -> Path:
-        final_rel_path = destination.resolve().relative_to(archive_root.resolve())
-        staged = staging_root / final_rel_path
-        return staged.with_name(f"{staged.name}.{os.getpid()}.{content_hash[:16]}.staging")
-
-
-    def ensure_archive_path(path: Path, archive_root: Path) -> None:
-        resolved_path = path.resolve()
-        resolved_archive = archive_root.resolve()
-        if resolved_path == resolved_archive or resolved_archive in resolved_path.parents:
-            return
-        raise ValueError(f"refusing to write outside archive root: {path}")
-
-
-    def resource_identifier(kind: ReliefResourceKind, obj: object) -> str:
-        return f'{kind.value}:{getattr(obj, "pk", "")}'
-
-
-    def build_eligible_resources() -> dict[str, dict[str, dict[str, Any]]]:
-        from endoreg_db.models import RawPdfFile, VideoFile
-
-        resources: dict[str, dict[str, dict[str, Any]]] = {
-            kind.value: {} for kind in ReliefResourceKind
-        }
-
-        videos = (
-            VideoFile.objects.select_related("state")
-            .exclude(processed_file="")
-            .exclude(processed_file__isnull=True)
-            .order_by("pk")
-        )
-        for video in videos.iterator():
-            field = getattr(video, "processed_file", None)
-            field_name = str(getattr(field, "name", "") or "")
-            if not field_name or not state_is_processed_anonymized(getattr(video, "state", None)):
-                continue
-            record = {
-                "kind": ReliefResourceKind.VIDEO.value,
-                "object": video,
-                "field_file": field,
-                "content_hash": getattr(video, "processed_video_hash", None) or None,
-                "validated": state_is_validated(getattr(video, "state", None)),
-                "identifier": resource_identifier(ReliefResourceKind.VIDEO, video),
-            }
-            for key in field_name_keys(field_name):
-                resources[ReliefResourceKind.VIDEO.value][key] = record
-
-        reports = (
-            RawPdfFile.objects.select_related("state")
-            .exclude(processed_file="")
-            .exclude(processed_file__isnull=True)
-            .order_by("pk")
-        )
-        for report in reports.iterator():
-            field = getattr(report, "processed_file", None)
-            field_name = str(getattr(field, "name", "") or "")
-            if not field_name or not state_is_processed_anonymized(getattr(report, "state", None)):
-                continue
-            record = {
-                "kind": ReliefResourceKind.REPORT.value,
-                "object": report,
-                "field_file": field,
-                "content_hash": None,
-                "validated": state_is_validated(getattr(report, "state", None)),
-                "identifier": resource_identifier(ReliefResourceKind.REPORT, report),
-            }
-            for key in field_name_keys(field_name):
-                resources[ReliefResourceKind.REPORT.value][key] = record
-
-        return resources
-
-
-    def get_record_hash(record: dict[str, Any]) -> str:
-        cached = record.get("content_hash")
-        if cached:
-            return str(cached)
-        from endoreg_db.utils.file_operations import sha256_file
-
-        digest = sha256_file(record["field_file"])
-        record["content_hash"] = digest
-        return digest
-
-
-    def copy_verify_delete(
-        *,
-        source: Path,
-        destination: Path,
-        archive_root: Path,
-        staging_root: Path,
-        dry_run: bool,
-        delete_after_verify: bool,
-        expected_hash: str | None,
-    ) -> dict[str, Any]:
-        from endoreg_db.utils.file_operations import (
-            atomic_copy_file,
-            atomic_move_file,
-            safe_unlink_file,
-            sha256_file,
-        )
-
-        ensure_archive_path(destination, archive_root)
-        ensure_archive_path(staging_root, archive_root)
-        size_bytes = source.stat().st_size
-        source_hash = sha256_file(source)
-        if expected_hash is not None and source_hash != expected_hash:
-            return {
-                "status": "skipped",
-                "reason": "source hash does not match eligible database payload",
-                "source": str(source),
-                "source_hash": source_hash,
-                "expected_hash": expected_hash,
-            }
-
-        if dry_run:
-            return {
-                "status": "planned",
-                "source": str(source),
-                "destination": str(destination),
-                "source_hash": source_hash,
-                "bytes": size_bytes,
-            }
-
-        staged = staging_destination(staging_root, archive_root, destination, source_hash)
-        ensure_archive_path(staged, archive_root)
-        try:
-            atomic_copy_file(
-                source=source,
-                destination=staged,
-                preserve_metadata=True,
-                file_mode=0o640,
-                dir_mode=0o750,
-            )
-            staged_hash = sha256_file(staged)
-            if staged_hash != source_hash:
-                raise RuntimeError(
-                    f"staging hash verification failed for {source}: {staged_hash} != {source_hash}"
-                )
-            atomic_move_file(
-                source=staged,
-                destination=destination,
-                file_mode=0o640,
-                dir_mode=0o750,
-            )
-        except Exception:
-            if staged.exists():
-                safe_unlink_file(staged, missing_ok=True)
-            raise
-
-        destination_hash = sha256_file(destination)
-        if destination_hash != source_hash:
-            raise RuntimeError(
-                f"archive hash verification failed for {source}: {destination_hash} != {source_hash}"
-            )
-
-        deleted = False
-        if delete_after_verify:
-            safe_unlink_file(source, missing_ok=False)
-            deleted = True
-
-        return {
-            "status": "archived",
-            "source": str(source),
-            "destination": str(destination),
-            "staging": str(staged),
-            "source_hash": source_hash,
-            "bytes": size_bytes,
-            "deleted": deleted,
-        }
-
-
-    def archive_legacy_duplicates(
-        *,
-        config: dict[str, Any],
-        resources: dict[str, dict[str, dict[str, Any]]],
-        archive_root: Path,
-        staging_root: Path,
-        dry_run: bool,
-        delete_after_verify: bool,
-        ) -> list[dict[str, Any]]:
-        items: list[dict[str, Any]] = []
-        for source_config in config.get("legacy_duplicate_sources", []):
-            kind = parse_resource_kind(source_config["kind"])
-            if kind is None:
-                emit(
-                    "lx_annotate_storage_relief_skip",
-                    reason="unknown legacy duplicate source kind",
-                    kind=str(source_config["kind"]),
-                )
-                continue
-            source_root = Path(str(source_config["source_root"]))
-            label = str(source_config["label"]).strip("/")
-            if not source_root.is_dir():
-                emit(
-                    "lx_annotate_storage_relief_skip",
-                    reason="legacy source missing",
-                    source_root=str(source_root),
-                    kind=kind.value,
-                )
-                continue
-
-            for source in sorted(path for path in source_root.rglob("*") if path.is_file()):
-                rel_path = source.relative_to(source_root)
-                keys = {rel_path.as_posix(), source.name}
-                record = next(
-                    (
-                        resources.get(kind.value, {}).get(key)
-                        for key in keys
-                        if resources.get(kind.value, {}).get(key)
-                    ),
-                    None,
-                )
-                if record is None:
-                    items.append(
-                        {
-                            "status": "skipped",
-                            "reason": "no eligible database payload",
-                            "kind": kind.value,
-                            "source": str(source),
-                        }
-                    )
-                    continue
-
-                expected_hash = get_record_hash(record)
-                source_hash = None
-                destination = archive_destination(
-                    archive_root,
-                    "duplicates",
-                    label,
-                    rel_path,
-                    expected_hash,
-                )
-                result = copy_verify_delete(
-                    source=source,
-                    destination=destination,
-                    archive_root=archive_root,
-                    staging_root=staging_root,
-                    dry_run=dry_run,
-                    delete_after_verify=delete_after_verify,
-                    expected_hash=expected_hash,
-                )
-                result.update(
-                    {
-                        "kind": kind.value,
-                        "category": "legacy_processed_duplicate",
-                        "resource": record["identifier"],
-                        "label": label,
-                    }
-                )
-                if result.get("source_hash"):
-                    source_hash = result["source_hash"]
-                emit("lx_annotate_storage_relief_item", **result)
-                items.append(result)
-                if source_hash and result["status"] == "skipped":
-                    continue
-        return items
-
-
-    def marker_payload(marker: Path) -> dict[str, Any] | None:
-        try:
-            payload = json.loads(marker.read_text(encoding="utf-8"))
-        except Exception as exc:
-            emit(
-                "lx_annotate_storage_relief_skip",
-                reason="invalid export marker json",
-                marker=str(marker),
-                detail=str(exc),
-            )
-            return None
-        if not isinstance(payload, dict) or payload.get("validated") is not True:
-            return None
-        return payload
-
-
-    def marker_resources(payload: dict[str, Any]) -> list[dict[str, Any]]:
-        raw_resources = payload.get("resources")
-        if raw_resources is None:
-            raw_resources = [
-                {
-                    "kind": payload.get("resource_kind"),
-                    "id": payload.get("resource_id"),
-                }
-            ]
-        if not isinstance(raw_resources, list):
-            return []
-        return [item for item in raw_resources if isinstance(item, dict)]
-
-
-    def resource_is_validated(resource: dict[str, Any]) -> bool:
-        from endoreg_db.models import RawPdfFile, VideoFile
-
-        kind = parse_resource_kind(resource.get("kind") or resource.get("resource_kind"))
-        pk = resource.get("id", resource.get("pk", resource.get("resource_id")))
-        if kind is None or pk in {None, ""}:
-            return False
-        if kind is ReliefResourceKind.VIDEO:
-            model = VideoFile
-        elif kind is ReliefResourceKind.REPORT:
-            model = RawPdfFile
-        else:
-            raise ValueError(f"unhandled relief resource kind: {kind.value}")
-        obj = model.objects.select_related("state").filter(pk=pk).first()
-        return bool(obj is not None and state_is_validated(getattr(obj, "state", None)))
-
-
-    def find_validated_bundle_roots(export_dir: Path, marker_names: list[str]) -> list[tuple[Path, Path]]:
-        bundles: list[tuple[Path, Path]] = []
-        if not export_dir.is_dir():
-            return bundles
-        for root, dirs, files in os.walk(export_dir):
-            root_path = Path(root)
-            marker_name = next((name for name in marker_names if name in files), None)
-            if marker_name is None:
-                continue
-            bundles.append((root_path, root_path / marker_name))
-            dirs[:] = []
-        return bundles
-
-
-    def archive_validated_export_bundles(
-        *,
-        config: dict[str, Any],
-        archive_root: Path,
-        staging_root: Path,
-        dry_run: bool,
-        delete_after_verify: bool,
-    ) -> list[dict[str, Any]]:
-        items: list[dict[str, Any]] = []
-        marker_names = [str(name) for name in config.get("validated_export_marker_names", [])]
-        for export_dir_value in config.get("validated_export_dirs", []):
-            export_dir = Path(str(export_dir_value))
-            for bundle_root, marker in find_validated_bundle_roots(export_dir, marker_names):
-                payload = marker_payload(marker)
-                if payload is None:
-                    continue
-                resources = marker_resources(payload)
-                if not resources or not all(resource_is_validated(resource) for resource in resources):
-                    emit(
-                        "lx_annotate_storage_relief_skip",
-                        reason="export bundle resources are not validated",
-                        bundle_root=str(bundle_root),
-                        marker=str(marker),
-                    )
-                    continue
-
-                bundle_label = bundle_root.relative_to(export_dir).as_posix()
-                if bundle_label == ".":
-                    bundle_label = export_dir.name
-                for source in sorted(path for path in bundle_root.rglob("*") if path.is_file()):
-                    rel_path = source.relative_to(bundle_root)
-                    destination = archive_destination(
-                        archive_root,
-                        "validated-export-bundles",
-                        bundle_label,
-                        rel_path,
-                        datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S"),
-                    )
-                    result = copy_verify_delete(
-                        source=source,
-                        destination=destination,
-                        archive_root=archive_root,
-                        staging_root=staging_root,
-                        dry_run=dry_run,
-                        delete_after_verify=delete_after_verify,
-                        expected_hash=None,
-                    )
-                    result.update(
-                        {
-                            "category": "validated_export_bundle",
-                            "bundle_root": str(bundle_root),
-                            "marker": str(marker),
-                        }
-                    )
-                    emit("lx_annotate_storage_relief_item", **result)
-                    items.append(result)
-        return items
-
-
-    def write_manifest(
-        manifest_dir: Path,
-        archive_root: Path,
-        staging_root: Path,
-        dry_run: bool,
-        items: list[dict[str, Any]],
-    ) -> Path:
-        from endoreg_db.utils.file_operations import atomic_write_file, ensure_directory
-
-        ensure_directory(manifest_dir, dir_mode=0o750)
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        manifest = {
-            "schema": "lx_annotate_emergency_storage_relief.v1",
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "archive_root": str(archive_root),
-            "staging_root": str(staging_root),
-            "dry_run": dry_run,
-            "items": items,
-            "archived_count": sum(1 for item in items if item.get("status") == "archived"),
-            "planned_count": sum(1 for item in items if item.get("status") == "planned"),
-            "skipped_count": sum(1 for item in items if item.get("status") == "skipped"),
-            "freed_bytes": sum(int(item.get("bytes", 0)) for item in items if item.get("deleted") is True),
-        }
-        payload = json.dumps(manifest, indent=2, sort_keys=True).encode("utf-8")
-        destination = manifest_dir / f"{timestamp}.json"
-        atomic_write_file(
-            destination=destination,
-            content=[payload],
-            required_bytes=len(payload),
-            file_mode=0o640,
-            dir_mode=0o750,
-        )
-        return destination
-
-
-    def main() -> int:
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--config", required=True)
-        args = parser.parse_args()
-
-        config = load_config(Path(args.config))
-        archive_root = Path(str(config["archive_root"]))
-        manifest_dir = Path(str(config["manifest_dir"]))
-        staging_root = Path(str(config["staging_dir"]))
-        dry_run = bool(config.get("dry_run", False))
-        delete_after_verify = bool(config.get("delete_after_verify", True))
-
-        setup_django()
-        items: list[dict[str, Any]] = []
-        resources = build_eligible_resources()
-
-        emit(
-            "lx_annotate_storage_relief_start",
-            archive_root=str(archive_root),
-            staging_root=str(staging_root),
-            dry_run=dry_run,
-            eligible_videos=len(resources["video"]),
-            eligible_reports=len(resources["report"]),
-        )
-
-        if config.get("include_legacy_processed_duplicates", True):
-            items.extend(
-                archive_legacy_duplicates(
-                    config=config,
-                    resources=resources,
-                    archive_root=archive_root,
-                    staging_root=staging_root,
-                    dry_run=dry_run,
-                    delete_after_verify=delete_after_verify,
-                )
-            )
-
-        if config.get("include_validated_export_bundles", True):
-            items.extend(
-                archive_validated_export_bundles(
-                    config=config,
-                    archive_root=archive_root,
-                    staging_root=staging_root,
-                    dry_run=dry_run,
-                    delete_after_verify=delete_after_verify,
-                )
-            )
-
-        manifest_path = write_manifest(manifest_dir, archive_root, staging_root, dry_run, items)
-        emit(
-            "lx_annotate_storage_relief_complete",
-            manifest=str(manifest_path),
-            archived_count=sum(1 for item in items if item.get("status") == "archived"),
-            planned_count=sum(1 for item in items if item.get("status") == "planned"),
-            skipped_count=sum(1 for item in items if item.get("status") == "skipped"),
-            freed_bytes=sum(int(item.get("bytes", 0)) for item in items if item.get("deleted") is True),
-        )
-        return 0
-
-
-    if __name__ == "__main__":
-        try:
-            raise SystemExit(main())
-        except Exception as exc:
-            emit("lx_annotate_storage_relief_error", detail=str(exc))
-            raise
-  '';
 
   lxAnnotateRuntimeLib = pkgs.writeShellScript "lx-annotate-runtime-lib.sh" ''
         set -euo pipefail
@@ -1155,23 +344,29 @@ let
         }
 
         emit_common_systemd_env() {
+          # Host-owned values only. lx-annotate derives DATA_DIR, STORAGE_DIR,
+          # PROTECTED_MEDIA_ROOT, and streamable video roots from this contract.
           cat <<EOF
     HOME_DIR=${endoreg-service-user-home}
-    DATA_DIR=${envDataDir}
     LX_ANNOTATE_ENCRYPTED_DATA_DIR=${envDataDir}
-    LX_ANNOTATE_DATA_DIR=${envDataDir}
-    PROTECTED_MEDIA_ROOT=${runtimeStorageRootPath}
     CONF_DIR=${envConfDir}
     CONF_TEMPLATE_DIR=${envConfTemplateDir}
     WORKING_DIR=${repoDir}
     DJANGO_STATIC_ROOT=${djangoStaticRootPath}
-    STORAGE_DIR=${envDataDir}/storage
-    LX_ANNOTATE_STREAMABLE_VIDEO_ROOT=${runtimeStreamableVideoRootPath}
-    LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT=${runtimeStreamableVideoRawRootPath}
-    LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT=${runtimeStreamableVideoProcessedRootPath}
-    SERVE_WITH_NGINX=true
-    NGINX_PROTECTED_MEDIA_URL=${envNginxProtectedMediaUrl}
+    ASSET_DIR=${envAssetDir}
+    XDG_DATA_HOME=${runtimeRootPath}
     LX_ANNOTATE_PACKAGE_VERSION=${packageVersion}
+    ${optionalString (cfg.runtime.masterKeyFile != null) "LX_ANNOTATE_MASTER_KEY_FILE=${toString cfg.runtime.masterKeyFile}"}
+    DJANGO_SECRET_KEY_FILE=${toString cfg.django.djangoSecretKeyFile}
+    DJANGO_DB_ENGINE=django.db.backends.postgresql
+    DJANGO_DB_NAME=${cfg.database.name}
+    DJANGO_DB_USER=${cfg.database.user}
+    DJANGO_DB_PASSWORD_FILE=${envConfDir}/db_pwd
+    DJANGO_DB_HOST=${cfg.database.host}
+    DJANGO_DB_PORT=${toString cfg.database.port}
+    DJANGO_DB_SSLMODE=${cfg.database.sslMode}
+    DJANGO_KEYCLOAK_CLIENT_SECRET_FILE=${toString cfg.django.keycloakSecretFile}
+    OIDC_RP_CLIENT_ID=${cfg.django.keycloakClientId}
     ENDOREG_DEPLOYMENT_ROLE=${envDeploymentRole}
     ENDOREG_HUB_MODE=${if cfg.hub.enable then "true" else "false"}
     ENDOREG_ENABLE_HUB_TRANSFERS=${if cfg.hub.transferApi.enable then "true" else "false"}
@@ -1197,8 +392,6 @@ let
     VIDEO_TEMPORAL_INFERENCE_FRAME_SOURCE_MODE=stream
     SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
     REQUESTS_CA_BUNDLE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
-    DEBUG=False
-    DJANGO_DEBUG=False
     VITE_ENABLE_DEBUG=${envViteEnableDebug}
     HTTP_PROTOCOL=${envHttpProtocol}
     DJANGO_HOST=${envDjangoHost}
@@ -1208,6 +401,12 @@ let
     ALLOWED_HOSTS=${envAllowedHosts}
     DJANGO_CORS_ALLOWED_ORIGINS=${envCorsAllowedOrigins}
     DJANGO_CSRF_TRUSTED_ORIGINS=${envCorsAllowedOrigins}
+    TIME_ZONE=${cfg.django.timeZone}
+    RUN_VIDEO_TESTS=${envRunVideoTests}
+    SKIP_EXPENSIVE_TESTS=${envSkipExpensiveTests}
+    WATCHER_VIDEO_DIR=${runtimeWatcherVideoDirPath}
+    WATCHER_REPORT_DIR=${runtimeWatcherReportDirPath}
+    WATCHER_PREANONYMIZED_DIR=${runtimeWatcherPreanonymizedDirPath}
     FFMPEG_TRANSCODE_TIMEOUT_SECONDS=${ffmpegTranscodeTimeoutSeconds}
 
 
@@ -1226,13 +425,8 @@ let
         write_wheel_systemd_env_file() {
           write_systemd_env_file
           cat >> "${envSystemdFilePath}" <<EOF
-    DJANGO_SETTINGS_MODULE=lx_annotate.settings.settings_prod
-    DJANGO_SETTINGS_MODULE_PRODUCTION=lx_annotate.settings.settings_prod
-    DJANGO_ENV=production
-    XDG_DATA_HOME=${runtimeRootPath}
     TESSDATA_PREFIX=${cfg.runtime.tessdataPrefix}
     PYTORCH_ALLOC_CONF=${cfg.runtime.pytorchAllocConf}
-    ${optionalString (cfg.runtime.masterKeyFile != null) "LX_ANNOTATE_MASTER_KEY_FILE=${toString cfg.runtime.masterKeyFile}"}
     EOF
           cp -f "${envSystemdFilePath}" "${envDataDir}/.env.systemd"
           chmod 0640 "${envSystemdFilePath}" "${envDataDir}/.env.systemd"
@@ -1789,7 +983,6 @@ let
     lx_annotate_activate_runtime
 
     cd "${repoDir}"
-    export MEDIA_URL="${envNginxProtectedMediaUrl}"
     mkdir -p "${runtimeStorageRootPath}" "${runtimeStreamableVideoRootPath}" "${runtimeStreamableVideoRawRootPath}" "${runtimeStreamableVideoProcessedRootPath}"
 
     python manage.py check --fail-level CRITICAL
@@ -1857,444 +1050,195 @@ let
   celeryFfmpegWorkerScriptName = "runLocalCeleryFfmpegWorker";
   celeryInferenceWorkerScriptName = "runLocalCeleryInferenceWorker";
   celeryTrainingWorkerScriptName = "runLocalCeleryTrainingWorker";
-  runLocalCeleryWorkerScript = pkgs.writeShellScriptBin "${celeryWorkerScriptName}" ''
-    set -euo pipefail
-
-    cd "${repoDir}"
-
-    source "${lxAnnotateEnvHelpers}"
-    lx_annotate_export_base_env
-    lx_annotate_export_storage_env "${envDataDir}"
-    lx_annotate_export_encryption_env
-    lx_annotate_export_db_env
-    lx_annotate_export_secret_key_env
-    export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
-    export VIDEO_POST_VALIDATION_JOB_MODE="celery"
+  celeryWorkerResourceEnv = ''
     export OMP_NUM_THREADS="1"
     export OPENBLAS_NUM_THREADS="1"
     export MKL_NUM_THREADS="1"
     export NUMEXPR_NUM_THREADS="1"
     export MALLOC_ARENA_MAX="2"
-    ${devenvSyncCompatExports}
-
-    celery_worker_args=(
-      -A lx_annotate.celery:app
-      worker
-      --loglevel=INFO
-      --hostname="maintenance@%h"
-      --queues="${celeryMaintenanceQueueName},${celeryDefaultQueueName}"
-      --concurrency="${toString cfg.runtime.workerPools.maintenance.concurrency}"
-      --prefetch-multiplier=1
-      --max-tasks-per-child="${toString cfg.runtime.workerPools.maintenance.maxTasksPerChild}"
-    )
-
-    exec devenv shell -- celery "''${celery_worker_args[@]}"
   '';
-  runLocalCeleryWorkerWheelScript = pkgs.writeShellScriptBin "${celeryWorkerScriptName}" ''
-    set -euo pipefail
-
-    if [ -z ${lib.escapeShellArg wheelCeleryWorkerCommand} ]; then
-      echo "ERROR: runtime.commands.celeryWorker must be set when wheel mode enables the Celery worker service."
-      exit 1
-    fi
-
-    source "${lxAnnotateRuntimeLib}"
-    source "${lxAnnotateEnvHelpers}"
-    lx_annotate_export_wheel_service_env "${envDataDir}"
+  celeryPostValidationEnv = ''
     export VIDEO_POST_VALIDATION_JOB_MODE="celery"
-    export OMP_NUM_THREADS="1"
-    export OPENBLAS_NUM_THREADS="1"
-    export MKL_NUM_THREADS="1"
-    export NUMEXPR_NUM_THREADS="1"
-    export MALLOC_ARENA_MAX="2"
-    export PATH="${runtimeWheelVenvPath}/bin:$PATH"
-
-    if [ ! -x "${runtimeWheelVenvPath}/bin/python" ]; then
-      echo "ERROR: Wheel virtualenv missing at ${runtimeWheelVenvPath}."
-      exit 1
-    fi
-
-    export LX_ANNOTATE_WHEEL_VENV="${runtimeWheelVenvPath}"
-    export LX_ANNOTATE_WHEEL_APP_ROOT="${runtimeWheelRootPath}"
-    wheel_celery_command=${lib.escapeShellArg wheelCeleryWorkerCommand}
-    celery_worker_args=(
-      --hostname="maintenance@%h"
-      --queues="${celeryMaintenanceQueueName},${celeryDefaultQueueName}"
-      --concurrency="${toString cfg.runtime.workerPools.maintenance.concurrency}"
-      --prefetch-multiplier=1
-      --max-tasks-per-child="${toString cfg.runtime.workerPools.maintenance.maxTasksPerChild}"
-    )
-    printf -v celery_worker_args_shell '%q ' "''${celery_worker_args[@]}"
-    exec "${pkgs.bash}/bin/bash" -lc "$wheel_celery_command $celery_worker_args_shell"
   '';
-  runLocalCeleryPipelineWorkerScript = pkgs.writeShellScriptBin "${celeryPipelineWorkerScriptName}" ''
-    set -euo pipefail
-
-    cd "${repoDir}"
-
-    source "${lxAnnotateEnvHelpers}"
-    lx_annotate_export_base_env
-    lx_annotate_export_storage_env "${envDataDir}"
-    lx_annotate_export_encryption_env
-    lx_annotate_export_db_env
-    lx_annotate_export_secret_key_env
-    export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
-    export VIDEO_POST_VALIDATION_JOB_MODE="celery"
-    export OMP_NUM_THREADS="1"
-    export OPENBLAS_NUM_THREADS="1"
-    export MKL_NUM_THREADS="1"
-    export NUMEXPR_NUM_THREADS="1"
-    export MALLOC_ARENA_MAX="2"
-    ${devenvSyncCompatExports}
-
-    celery_worker_args=(
-      -A lx_annotate.celery:app
-      worker
-      --loglevel=INFO
-      --hostname="pipeline@%h"
-      --queues="${celeryPipelineQueueName}"
-      --concurrency="${toString cfg.runtime.workerPools.pipeline.concurrency}"
-      --prefetch-multiplier=1
-      --max-tasks-per-child="${toString cfg.runtime.workerPools.pipeline.maxTasksPerChild}"
-    )
-
-    exec devenv shell -- celery "''${celery_worker_args[@]}"
-  '';
-  runLocalCeleryPipelineWorkerWheelScript = pkgs.writeShellScriptBin "${celeryPipelineWorkerScriptName}" ''
-    set -euo pipefail
-
-    if [ -z ${lib.escapeShellArg wheelCeleryWorkerCommand} ]; then
-      echo "ERROR: runtime.commands.celeryWorker must be set when wheel mode enables the Celery worker service."
-      exit 1
-    fi
-
-    source "${lxAnnotateRuntimeLib}"
-    source "${lxAnnotateEnvHelpers}"
-    lx_annotate_export_wheel_service_env "${envDataDir}"
-    export VIDEO_POST_VALIDATION_JOB_MODE="celery"
-    export OMP_NUM_THREADS="1"
-    export OPENBLAS_NUM_THREADS="1"
-    export MKL_NUM_THREADS="1"
-    export NUMEXPR_NUM_THREADS="1"
-    export MALLOC_ARENA_MAX="2"
-    export PATH="${runtimeWheelVenvPath}/bin:$PATH"
-
-    if [ ! -x "${runtimeWheelVenvPath}/bin/python" ]; then
-      echo "ERROR: Wheel virtualenv missing at ${runtimeWheelVenvPath}."
-      exit 1
-    fi
-
-    export LX_ANNOTATE_WHEEL_VENV="${runtimeWheelVenvPath}"
-    export LX_ANNOTATE_WHEEL_APP_ROOT="${runtimeWheelRootPath}"
-    wheel_celery_command=${lib.escapeShellArg wheelCeleryWorkerCommand}
-    celery_worker_args=(
-      --hostname="pipeline@%h"
-      --queues="${celeryPipelineQueueName}"
-      --concurrency="${toString cfg.runtime.workerPools.pipeline.concurrency}"
-      --prefetch-multiplier=1
-      --max-tasks-per-child="${toString cfg.runtime.workerPools.pipeline.maxTasksPerChild}"
-    )
-    printf -v celery_worker_args_shell '%q ' "''${celery_worker_args[@]}"
-    exec "${pkgs.bash}/bin/bash" -lc "$wheel_celery_command $celery_worker_args_shell"
-  '';
-  runLocalCeleryFrameExtractionWorkerScript = pkgs.writeShellScriptBin "${celeryFrameExtractionWorkerScriptName}" ''
-    set -euo pipefail
-
-    cd "${repoDir}"
-
-    source "${lxAnnotateEnvHelpers}"
-    lx_annotate_export_base_env
-    lx_annotate_export_storage_env "${envDataDir}"
-    lx_annotate_export_encryption_env
-    lx_annotate_export_db_env
-    lx_annotate_export_secret_key_env
-    export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
-    export VIDEO_POST_VALIDATION_JOB_MODE="celery"
-    export OMP_NUM_THREADS="1"
-    export OPENBLAS_NUM_THREADS="1"
-    export MKL_NUM_THREADS="1"
-    export NUMEXPR_NUM_THREADS="1"
-    export MALLOC_ARENA_MAX="2"
-    ${devenvSyncCompatExports}
-
-    celery_worker_args=(
-      -A lx_annotate.celery:app
-      worker
-      --loglevel=INFO
-      --hostname="frame-extraction@%h"
-      --queues="${celeryFrameExtractionQueueName}"
-      --concurrency="${toString cfg.runtime.workerPools.frameExtraction.concurrency}"
-      --prefetch-multiplier=1
-      --max-tasks-per-child="${toString cfg.runtime.workerPools.frameExtraction.maxTasksPerChild}"
-    )
-
-    exec devenv shell -- celery "''${celery_worker_args[@]}"
-  '';
-  runLocalCeleryFrameExtractionWorkerWheelScript = pkgs.writeShellScriptBin "${celeryFrameExtractionWorkerScriptName}" ''
-    set -euo pipefail
-
-    if [ -z ${lib.escapeShellArg wheelCeleryWorkerCommand} ]; then
-      echo "ERROR: runtime.commands.celeryWorker must be set when wheel mode enables the Celery worker service."
-      exit 1
-    fi
-
-    source "${lxAnnotateRuntimeLib}"
-    source "${lxAnnotateEnvHelpers}"
-    lx_annotate_export_wheel_service_env "${envDataDir}"
-    export VIDEO_POST_VALIDATION_JOB_MODE="celery"
-    export OMP_NUM_THREADS="1"
-    export OPENBLAS_NUM_THREADS="1"
-    export MKL_NUM_THREADS="1"
-    export NUMEXPR_NUM_THREADS="1"
-    export MALLOC_ARENA_MAX="2"
-    export PATH="${runtimeWheelVenvPath}/bin:$PATH"
-
-    if [ ! -x "${runtimeWheelVenvPath}/bin/python" ]; then
-      echo "ERROR: Wheel virtualenv missing at ${runtimeWheelVenvPath}."
-      exit 1
-    fi
-
-    export LX_ANNOTATE_WHEEL_VENV="${runtimeWheelVenvPath}"
-    export LX_ANNOTATE_WHEEL_APP_ROOT="${runtimeWheelRootPath}"
-    wheel_celery_command=${lib.escapeShellArg wheelCeleryWorkerCommand}
-    celery_worker_args=(
-      --hostname="frame-extraction@%h"
-      --queues="${celeryFrameExtractionQueueName}"
-      --concurrency="${toString cfg.runtime.workerPools.frameExtraction.concurrency}"
-      --prefetch-multiplier=1
-      --max-tasks-per-child="${toString cfg.runtime.workerPools.frameExtraction.maxTasksPerChild}"
-    )
-    printf -v celery_worker_args_shell '%q ' "''${celery_worker_args[@]}"
-    exec "${pkgs.bash}/bin/bash" -lc "$wheel_celery_command $celery_worker_args_shell"
-  '';
-  runLocalCeleryFfmpegWorkerScript = pkgs.writeShellScriptBin "${celeryFfmpegWorkerScriptName}" ''
-    set -euo pipefail
-
-    cd "${repoDir}"
-
-    source "${lxAnnotateEnvHelpers}"
-    lx_annotate_export_base_env
-    lx_annotate_export_storage_env "${envDataDir}"
-    lx_annotate_export_encryption_env
-    lx_annotate_export_db_env
-    lx_annotate_export_secret_key_env
-    export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
-    export VIDEO_POST_VALIDATION_JOB_MODE="celery"
-    export OMP_NUM_THREADS="1"
-    export OPENBLAS_NUM_THREADS="1"
-    export MKL_NUM_THREADS="1"
-    export NUMEXPR_NUM_THREADS="1"
-    export MALLOC_ARENA_MAX="2"
-    ${devenvSyncCompatExports}
-
-    celery_worker_args=(
-      -A lx_annotate.celery:app
-      worker
-      --loglevel=INFO
-      --hostname="ffmpeg-media@%h"
-      --queues="${celeryFfmpegMediaQueueName}"
-      --concurrency="${toString cfg.runtime.workerPools.ffmpeg.concurrency}"
-      --prefetch-multiplier=1
-      --max-tasks-per-child="${toString cfg.runtime.workerPools.ffmpeg.maxTasksPerChild}"
-    )
-
-    exec devenv shell -- celery "''${celery_worker_args[@]}"
-  '';
-  runLocalCeleryFfmpegWorkerWheelScript = pkgs.writeShellScriptBin "${celeryFfmpegWorkerScriptName}" ''
-    set -euo pipefail
-
-    if [ -z ${lib.escapeShellArg wheelCeleryWorkerCommand} ]; then
-      echo "ERROR: runtime.commands.celeryWorker must be set when wheel mode enables the Celery worker service."
-      exit 1
-    fi
-
-    source "${lxAnnotateRuntimeLib}"
-    source "${lxAnnotateEnvHelpers}"
-    lx_annotate_export_wheel_service_env "${envDataDir}"
-    export VIDEO_POST_VALIDATION_JOB_MODE="celery"
-    export OMP_NUM_THREADS="1"
-    export OPENBLAS_NUM_THREADS="1"
-    export MKL_NUM_THREADS="1"
-    export NUMEXPR_NUM_THREADS="1"
-    export MALLOC_ARENA_MAX="2"
-    export PATH="${runtimeWheelVenvPath}/bin:$PATH"
-
-    if [ ! -x "${runtimeWheelVenvPath}/bin/python" ]; then
-      echo "ERROR: Wheel virtualenv missing at ${runtimeWheelVenvPath}."
-      exit 1
-    fi
-
-    export LX_ANNOTATE_WHEEL_VENV="${runtimeWheelVenvPath}"
-    export LX_ANNOTATE_WHEEL_APP_ROOT="${runtimeWheelRootPath}"
-    wheel_celery_command=${lib.escapeShellArg wheelCeleryWorkerCommand}
-    celery_worker_args=(
-      --hostname="ffmpeg-media@%h"
-      --queues="${celeryFfmpegMediaQueueName}"
-      --concurrency="${toString cfg.runtime.workerPools.ffmpeg.concurrency}"
-      --prefetch-multiplier=1
-      --max-tasks-per-child="${toString cfg.runtime.workerPools.ffmpeg.maxTasksPerChild}"
-    )
-    printf -v celery_worker_args_shell '%q ' "''${celery_worker_args[@]}"
-    exec "${pkgs.bash}/bin/bash" -lc "$wheel_celery_command $celery_worker_args_shell"
-  '';
-  runLocalCeleryInferenceWorkerScript = pkgs.writeShellScriptBin "${celeryInferenceWorkerScriptName}" ''
-    set -euo pipefail
-
-    cd "${repoDir}"
-
-    source "${lxAnnotateEnvHelpers}"
-    lx_annotate_export_base_env
-    lx_annotate_export_storage_env "${envDataDir}"
-    lx_annotate_export_encryption_env
-    lx_annotate_export_db_env
-    lx_annotate_export_secret_key_env
-    export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
+  celeryInferenceEnv = ''
     export VIDEO_TEMPORAL_INFERENCE_JOB_MODE="celery"
     export VIDEO_TEMPORAL_INFERENCE_FRAME_SOURCE_MODE="stream"
     ${optionalString (cfg.runtime.inferenceWorker.cudaVisibleDevices != null) ''
       export CUDA_VISIBLE_DEVICES="${cfg.runtime.inferenceWorker.cudaVisibleDevices}"
     ''}
-    export OMP_NUM_THREADS="1"
-    export OPENBLAS_NUM_THREADS="1"
-    export MKL_NUM_THREADS="1"
-    export NUMEXPR_NUM_THREADS="1"
-    export MALLOC_ARENA_MAX="2"
-    ${devenvSyncCompatExports}
-
-    celery_worker_args=(
-      -A lx_annotate.celery:app
-      worker
-      --loglevel=INFO
-      --hostname="inference@%h"
-      --queues="${celeryInferenceQueueName}"
-      --concurrency="${toString cfg.runtime.workerPools.inference.concurrency}"
-      --prefetch-multiplier=1
-      --max-tasks-per-child="${toString cfg.runtime.workerPools.inference.maxTasksPerChild}"
-    )
-
-    exec devenv shell -- celery "''${celery_worker_args[@]}"
   '';
-  runLocalCeleryInferenceWorkerWheelScript = pkgs.writeShellScriptBin "${celeryInferenceWorkerScriptName}" ''
-    set -euo pipefail
-
-    if [ -z ${lib.escapeShellArg wheelCeleryWorkerCommand} ]; then
-      echo "ERROR: runtime.commands.celeryWorker must be set when wheel mode enables the Celery worker service."
-      exit 1
-    fi
-
-    source "${lxAnnotateRuntimeLib}"
-    source "${lxAnnotateEnvHelpers}"
-    lx_annotate_export_wheel_service_env "${envDataDir}"
-    export VIDEO_TEMPORAL_INFERENCE_JOB_MODE="celery"
-    export VIDEO_TEMPORAL_INFERENCE_FRAME_SOURCE_MODE="stream"
-    ${optionalString (cfg.runtime.inferenceWorker.cudaVisibleDevices != null) ''
-      export CUDA_VISIBLE_DEVICES="${cfg.runtime.inferenceWorker.cudaVisibleDevices}"
-    ''}
-    export OMP_NUM_THREADS="1"
-    export OPENBLAS_NUM_THREADS="1"
-    export MKL_NUM_THREADS="1"
-    export NUMEXPR_NUM_THREADS="1"
-    export MALLOC_ARENA_MAX="2"
-    export PATH="${runtimeWheelVenvPath}/bin:$PATH"
-
-    if [ ! -x "${runtimeWheelVenvPath}/bin/python" ]; then
-      echo "ERROR: Wheel virtualenv missing at ${runtimeWheelVenvPath}."
-      exit 1
-    fi
-
-    export LX_ANNOTATE_WHEEL_VENV="${runtimeWheelVenvPath}"
-    export LX_ANNOTATE_WHEEL_APP_ROOT="${runtimeWheelRootPath}"
-    wheel_celery_command=${lib.escapeShellArg wheelCeleryWorkerCommand}
-    celery_worker_args=(
-      --hostname="inference@%h"
-      --queues="${celeryInferenceQueueName}"
-      --concurrency="${toString cfg.runtime.workerPools.inference.concurrency}"
-      --prefetch-multiplier=1
-      --max-tasks-per-child="${toString cfg.runtime.workerPools.inference.maxTasksPerChild}"
-    )
-    printf -v celery_worker_args_shell '%q ' "''${celery_worker_args[@]}"
-    exec "${pkgs.bash}/bin/bash" -lc "$wheel_celery_command $celery_worker_args_shell"
-  '';
-  runLocalCeleryTrainingWorkerScript = pkgs.writeShellScriptBin "${celeryTrainingWorkerScriptName}" ''
-    set -euo pipefail
-
-    cd "${repoDir}"
-
-    source "${lxAnnotateEnvHelpers}"
-    lx_annotate_export_base_env
-    lx_annotate_export_storage_env "${envDataDir}"
-    lx_annotate_export_encryption_env
-    lx_annotate_export_db_env
-    lx_annotate_export_secret_key_env
-    export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
+  celeryTrainingEnv = ''
     export MODEL_TRAINING_JOB_MODE="celery"
     export MODEL_TRAINING_STAGING_ROOT="${cfg.runtime.modelTrainingStagingRoot}"
     export CUDA_VISIBLE_DEVICES="${cfg.runtime.trainingWorker.cudaVisibleDevices}"
-    export OMP_NUM_THREADS="1"
-    export OPENBLAS_NUM_THREADS="1"
-    export MKL_NUM_THREADS="1"
-    export NUMEXPR_NUM_THREADS="1"
-    export MALLOC_ARENA_MAX="2"
-    ${devenvSyncCompatExports}
-
-    celery_worker_args=(
-      -A lx_annotate.celery:app
-      worker
-      --loglevel=INFO
-      --hostname="model-training@%h"
-      --queues="${celeryTrainingQueueName}"
-      --concurrency="${toString cfg.runtime.workerPools.training.concurrency}"
-      --prefetch-multiplier=1
-      --max-tasks-per-child="${toString cfg.runtime.workerPools.training.maxTasksPerChild}"
-    )
-
-    exec devenv shell -- celery "''${celery_worker_args[@]}"
   '';
-  runLocalCeleryTrainingWorkerWheelScript = pkgs.writeShellScriptBin "${celeryTrainingWorkerScriptName}" ''
-    set -euo pipefail
+  mkRepoCeleryWorkerScript =
+    {
+      scriptName,
+      hostname,
+      queues,
+      pool,
+      extraEnv ? "",
+    }:
+    pkgs.writeShellScriptBin "${scriptName}" ''
+      set -euo pipefail
 
-    if [ -z ${lib.escapeShellArg wheelCeleryWorkerCommand} ]; then
-      echo "ERROR: runtime.commands.celeryWorker must be set when wheel mode enables the Celery worker service."
-      exit 1
-    fi
+      cd "${repoDir}"
 
-    source "${lxAnnotateRuntimeLib}"
-    source "${lxAnnotateEnvHelpers}"
-    lx_annotate_export_wheel_service_env "${envDataDir}"
-    export MODEL_TRAINING_JOB_MODE="celery"
-    export MODEL_TRAINING_STAGING_ROOT="${cfg.runtime.modelTrainingStagingRoot}"
-    export CUDA_VISIBLE_DEVICES="${cfg.runtime.trainingWorker.cudaVisibleDevices}"
-    export OMP_NUM_THREADS="1"
-    export OPENBLAS_NUM_THREADS="1"
-    export MKL_NUM_THREADS="1"
-    export NUMEXPR_NUM_THREADS="1"
-    export MALLOC_ARENA_MAX="2"
-    export PATH="${runtimeWheelVenvPath}/bin:$PATH"
+      source "${lxAnnotateEnvHelpers}"
+      lx_annotate_export_base_env
+      lx_annotate_export_storage_env "${envDataDir}"
+      lx_annotate_export_encryption_env
+      lx_annotate_export_db_env
+      lx_annotate_export_secret_key_env
+      export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
+      ${extraEnv}
+      ${celeryWorkerResourceEnv}
+      ${devenvSyncCompatExports}
 
-    if [ ! -x "${runtimeWheelVenvPath}/bin/python" ]; then
-      echo "ERROR: Wheel virtualenv missing at ${runtimeWheelVenvPath}."
-      exit 1
-    fi
+      celery_worker_args=(
+        -A lx_annotate.celery:app
+        worker
+        --loglevel=INFO
+        --hostname="${hostname}@%h"
+        --queues="${queues}"
+        --concurrency="${toString pool.concurrency}"
+        --prefetch-multiplier=1
+        --max-tasks-per-child="${toString pool.maxTasksPerChild}"
+      )
 
-    export LX_ANNOTATE_WHEEL_VENV="${runtimeWheelVenvPath}"
-    export LX_ANNOTATE_WHEEL_APP_ROOT="${runtimeWheelRootPath}"
-    wheel_celery_command=${lib.escapeShellArg wheelCeleryWorkerCommand}
-    celery_worker_args=(
-      --hostname="model-training@%h"
-      --queues="${celeryTrainingQueueName}"
-      --concurrency="${toString cfg.runtime.workerPools.training.concurrency}"
-      --prefetch-multiplier=1
-      --max-tasks-per-child="${toString cfg.runtime.workerPools.training.maxTasksPerChild}"
-    )
-    printf -v celery_worker_args_shell '%q ' "''${celery_worker_args[@]}"
-    exec "${pkgs.bash}/bin/bash" -lc "$wheel_celery_command $celery_worker_args_shell"
-  '';
+      exec devenv shell -- celery "''${celery_worker_args[@]}"
+    '';
+  mkWheelCeleryWorkerScript =
+    {
+      scriptName,
+      hostname,
+      queues,
+      pool,
+      extraEnv ? "",
+    }:
+    pkgs.writeShellScriptBin "${scriptName}" ''
+      set -euo pipefail
+
+      if [ -z ${lib.escapeShellArg wheelCeleryWorkerCommand} ]; then
+        echo "ERROR: runtime.commands.celeryWorker must be set when wheel mode enables the Celery worker service."
+        exit 1
+      fi
+
+      source "${lxAnnotateRuntimeLib}"
+      source "${lxAnnotateEnvHelpers}"
+      lx_annotate_export_wheel_service_env "${envDataDir}"
+      ${extraEnv}
+      ${celeryWorkerResourceEnv}
+      export PATH="${runtimeWheelVenvPath}/bin:$PATH"
+
+      if [ ! -x "${runtimeWheelVenvPath}/bin/python" ]; then
+        echo "ERROR: Wheel virtualenv missing at ${runtimeWheelVenvPath}."
+        exit 1
+      fi
+
+      export LX_ANNOTATE_WHEEL_VENV="${runtimeWheelVenvPath}"
+      export LX_ANNOTATE_WHEEL_APP_ROOT="${runtimeWheelRootPath}"
+      wheel_celery_command=${lib.escapeShellArg wheelCeleryWorkerCommand}
+      celery_worker_args=(
+        --hostname="${hostname}@%h"
+        --queues="${queues}"
+        --concurrency="${toString pool.concurrency}"
+        --prefetch-multiplier=1
+        --max-tasks-per-child="${toString pool.maxTasksPerChild}"
+      )
+      printf -v celery_worker_args_shell '%q ' "''${celery_worker_args[@]}"
+      exec "${pkgs.bash}/bin/bash" -lc "$wheel_celery_command $celery_worker_args_shell"
+    '';
+  runLocalCeleryWorkerScript = mkRepoCeleryWorkerScript {
+    scriptName = celeryWorkerScriptName;
+    hostname = "maintenance";
+    queues = "${celeryMaintenanceQueueName},${celeryDefaultQueueName}";
+    pool = cfg.runtime.workerPools.maintenance;
+    extraEnv = celeryPostValidationEnv;
+  };
+  runLocalCeleryWorkerWheelScript = mkWheelCeleryWorkerScript {
+    scriptName = celeryWorkerScriptName;
+    hostname = "maintenance";
+    queues = "${celeryMaintenanceQueueName},${celeryDefaultQueueName}";
+    pool = cfg.runtime.workerPools.maintenance;
+    extraEnv = celeryPostValidationEnv;
+  };
+  runLocalCeleryPipelineWorkerScript = mkRepoCeleryWorkerScript {
+    scriptName = celeryPipelineWorkerScriptName;
+    hostname = "pipeline";
+    queues = celeryPipelineQueueName;
+    pool = cfg.runtime.workerPools.pipeline;
+    extraEnv = celeryPostValidationEnv;
+  };
+  runLocalCeleryPipelineWorkerWheelScript = mkWheelCeleryWorkerScript {
+    scriptName = celeryPipelineWorkerScriptName;
+    hostname = "pipeline";
+    queues = celeryPipelineQueueName;
+    pool = cfg.runtime.workerPools.pipeline;
+    extraEnv = celeryPostValidationEnv;
+  };
+  runLocalCeleryFrameExtractionWorkerScript = mkRepoCeleryWorkerScript {
+    scriptName = celeryFrameExtractionWorkerScriptName;
+    hostname = "frame-extraction";
+    queues = celeryFrameExtractionQueueName;
+    pool = cfg.runtime.workerPools.frameExtraction;
+    extraEnv = celeryPostValidationEnv;
+  };
+  runLocalCeleryFrameExtractionWorkerWheelScript = mkWheelCeleryWorkerScript {
+    scriptName = celeryFrameExtractionWorkerScriptName;
+    hostname = "frame-extraction";
+    queues = celeryFrameExtractionQueueName;
+    pool = cfg.runtime.workerPools.frameExtraction;
+    extraEnv = celeryPostValidationEnv;
+  };
+  runLocalCeleryFfmpegWorkerScript = mkRepoCeleryWorkerScript {
+    scriptName = celeryFfmpegWorkerScriptName;
+    hostname = "ffmpeg-media";
+    queues = celeryFfmpegMediaQueueName;
+    pool = cfg.runtime.workerPools.ffmpeg;
+    extraEnv = celeryPostValidationEnv;
+  };
+  runLocalCeleryFfmpegWorkerWheelScript = mkWheelCeleryWorkerScript {
+    scriptName = celeryFfmpegWorkerScriptName;
+    hostname = "ffmpeg-media";
+    queues = celeryFfmpegMediaQueueName;
+    pool = cfg.runtime.workerPools.ffmpeg;
+    extraEnv = celeryPostValidationEnv;
+  };
+  runLocalCeleryInferenceWorkerScript = mkRepoCeleryWorkerScript {
+    scriptName = celeryInferenceWorkerScriptName;
+    hostname = "inference";
+    queues = celeryInferenceQueueName;
+    pool = cfg.runtime.workerPools.inference;
+    extraEnv = celeryInferenceEnv;
+  };
+  runLocalCeleryInferenceWorkerWheelScript = mkWheelCeleryWorkerScript {
+    scriptName = celeryInferenceWorkerScriptName;
+    hostname = "inference";
+    queues = celeryInferenceQueueName;
+    pool = cfg.runtime.workerPools.inference;
+    extraEnv = celeryInferenceEnv;
+  };
+  runLocalCeleryTrainingWorkerScript = mkRepoCeleryWorkerScript {
+    scriptName = celeryTrainingWorkerScriptName;
+    hostname = "model-training";
+    queues = celeryTrainingQueueName;
+    pool = cfg.runtime.workerPools.training;
+    extraEnv = celeryTrainingEnv;
+  };
+  runLocalCeleryTrainingWorkerWheelScript = mkWheelCeleryWorkerScript {
+    scriptName = celeryTrainingWorkerScriptName;
+    hostname = "model-training";
+    queues = celeryTrainingQueueName;
+    pool = cfg.runtime.workerPools.training;
+    extraEnv = celeryTrainingEnv;
+  };
   runLocalAcceptanceWheelScript = pkgs.writeShellScriptBin "${acceptanceScriptName}" ''
     set -euo pipefail
 
     source "${lxAnnotateEnvHelpers}"
     lx_annotate_export_wheel_service_env "${envDataDir}"
-    export MEDIA_URL="${envNginxProtectedMediaUrl}"
 
     source "${lxAnnotateRuntimeLib}"
     ensure_wheel_runtime_installed
@@ -2313,7 +1257,6 @@ let
 
     source "${lxAnnotateEnvHelpers}"
     lx_annotate_export_wheel_service_env "${envDataDir}"
-    export MEDIA_URL="${envNginxProtectedMediaUrl}"
 
     if [ -z "''${LX_ANNOTATE_MASTER_KEY_FILE:-}" ] || [ ! -r "$LX_ANNOTATE_MASTER_KEY_FILE" ] || [ ! -s "$LX_ANNOTATE_MASTER_KEY_FILE" ]; then
       echo "ERROR: LX_ANNOTATE_MASTER_KEY_FILE is not configured, readable, and non-empty; refusing to boot without validating encrypted storage."
@@ -2548,7 +1491,6 @@ let
         export HOME_DIR="${endoreg-service-user-home}"
         export XDG_DATA_HOME="${runtimeRootPath}"
         export LX_ANNOTATE_ENCRYPTED_DATA_DIR="${envDataDir}"
-        export LX_ANNOTATE_DATA_DIR="${envDataDir}"
         export LX_ANNOTATE_DEFAULT_CENTER="${envDefaultCenter}"
         export TESSDATA_PREFIX="${cfg.runtime.tessdataPrefix}"
         export PYTORCH_ALLOC_CONF="${cfg.runtime.pytorchAllocConf}"
@@ -2981,168 +1923,13 @@ let
         exec "$helper_python" "${emergencyStorageReliefHelper}" --config "${emergencyStorageReliefConfig}"
       '';
 
-  runLocalHubBackupScript = pkgs.writeShellScriptBin "runLxAnnotateHubBackup" ''
-        set -euo pipefail
+  hubBackupScripts = import ./scripts/hub-backup.nix args;
+  inherit (hubBackupScripts) runLocalHubBackupScript;
 
-        runtime_root="${cfg.hub.backup.sourceRuntimeDir}"
-        incoming_root="${cfg.hub.backup.incomingDir}"
-        snapshot_root="${cfg.hub.backup.snapshotDir}"
-        manifest_root="${cfg.hub.backup.manifestDir}"
-        latest_link="$snapshot_root/latest"
-        retain_count="${toString cfg.hub.backup.retainCount}"
-        host_name="${config.networking.hostName}"
-        timestamp="$(${pkgs.coreutils}/bin/date -u +%Y%m%dT%H%M%SZ)"
-        pending_snapshot="$snapshot_root/.pending-$timestamp"
-        completed_snapshot="$snapshot_root/$timestamp"
-        manifest_file="$manifest_root/$timestamp.json"
-        previous_snapshot=""
-
-        if [ ! -d "$runtime_root" ]; then
-          echo "Skipping hub backup; runtime root missing: $runtime_root"
-          exit 0
-        fi
-
-        install -d -m 0750 "$incoming_root" "$snapshot_root" "$manifest_root"
-        rm -rf "$pending_snapshot"
-        install -d -m 0750 "$pending_snapshot"
-
-        if [ -L "$latest_link" ]; then
-          previous_snapshot="$(${pkgs.coreutils}/bin/readlink -f "$latest_link" 2>/dev/null || true)"
-        fi
-
-        rsync_cmd=(
-          ${pkgs.rsync}/bin/rsync
-          -a
-          --delete
-          --numeric-ids
-          --chmod=F640,D750
-        )
-
-        if [ -n "$previous_snapshot" ] && [ -d "$previous_snapshot" ]; then
-          rsync_cmd+=(--link-dest "$previous_snapshot")
-        fi
-
-        ${lib.concatStringsSep "\n" (map (pattern: "rsync_cmd+=(--exclude ${lib.escapeShellArg pattern})") cfg.hub.backup.exclude)}
-
-        rsync_cmd+=("$runtime_root/" "$pending_snapshot/")
-        "''${rsync_cmd[@]}"
-
-        ${pkgs.coreutils}/bin/mv "$pending_snapshot" "$completed_snapshot"
-        ln -sfn "$completed_snapshot" "$latest_link"
-
-        file_count="$(${pkgs.findutils}/bin/find "$completed_snapshot" -type f | ${pkgs.coreutils}/bin/wc -l | ${pkgs.gawk}/bin/awk '{print $1}')"
-        size_bytes="$(${pkgs.findutils}/bin/find "$completed_snapshot" -type f -printf '%s\n' | ${pkgs.gawk}/bin/awk '{sum += $1} END {print sum + 0}')"
-
-        ${pkgs.jq}/bin/jq -n \
-          --arg generated_at "$(${pkgs.coreutils}/bin/date -u --iso-8601=seconds)" \
-          --arg hostname "$host_name" \
-          --arg runtime_root "$runtime_root" \
-          --arg incoming_root "$incoming_root" \
-          --arg snapshot_dir "$completed_snapshot" \
-          --arg latest_snapshot "$(${pkgs.coreutils}/bin/readlink -f "$latest_link")" \
-          --argjson retain_count "$retain_count" \
-          --argjson file_count "$file_count" \
-          --argjson size_bytes "$size_bytes" \
-          --argjson exclude '${builtins.toJSON cfg.hub.backup.exclude}' \
-          '{
-            generated_at: $generated_at,
-            hostname: $hostname,
-            runtime_root: $runtime_root,
-            incoming_root: $incoming_root,
-            snapshot_dir: $snapshot_dir,
-            latest_snapshot: $latest_snapshot,
-            retain_count: $retain_count,
-            file_count: $file_count,
-            size_bytes: $size_bytes,
-            exclude: $exclude
-          }' > "$manifest_file"
-
-        if [ "$retain_count" -gt 0 ]; then
-          mapfile -t snapshots_to_prune < <(
-            ${pkgs.findutils}/bin/find "$snapshot_root" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' \
-              | ${pkgs.coreutils}/bin/sort -r \
-              | ${pkgs.coreutils}/bin/tail -n +$((retain_count + 1))
-          )
-
-          for snapshot_name in "''${snapshots_to_prune[@]}"; do
-            [ -n "$snapshot_name" ] || continue
-            ${pkgs.coreutils}/bin/rm -rf "$snapshot_root/$snapshot_name"
-          done
-        fi
-
-        echo "Hub backup completed. snapshot=$completed_snapshot manifest=$manifest_file files=$file_count size_bytes=$size_bytes"
-  '';
-
-  lxAnnotateEncryptedDataMountScript = pkgs.writeShellScriptBin "lx-annotate-encrypted-data-mount" ''
-    set -euo pipefail
-
-    mount_point="${envDataDir}"
-    mapper_name="${cfg.runtime.managedEncryptedData.mapperName}"
-    mapper_path="/dev/mapper/$mapper_name"
-    luks_uuid="${if cfg.runtime.managedEncryptedData.luksUuid == null then "" else cfg.runtime.managedEncryptedData.luksUuid}"
-    luks_uuid_file="${if cfg.runtime.managedEncryptedData.luksUuidFile == null then "" else toString cfg.runtime.managedEncryptedData.luksUuidFile}"
-    key_file="${if cfg.runtime.managedEncryptedData.keyFile == null then "" else toString cfg.runtime.managedEncryptedData.keyFile}"
-
-    if [ -z "$luks_uuid" ] && [ -n "$luks_uuid_file" ] && [ -f "$luks_uuid_file" ]; then
-      luks_uuid="$(tr -d '\n' < "$luks_uuid_file")"
-    fi
-
-    if [ -z "$luks_uuid" ]; then
-      echo "ERROR: runtime.managedEncryptedData.luksUuid is not set and no luksUuidFile was readable."
-      exit 1
-    fi
-
-    if [ -z "$key_file" ] || [ ! -f "$key_file" ]; then
-      echo "ERROR: encrypted data key file is missing: $key_file"
-      exit 1
-    fi
-
-    install -d -m 0750 "$mount_point"
-
-    if mountpoint -q "$mount_point"; then
-      echo "Encrypted data already mounted at $mount_point"
-      exit 0
-    fi
-
-    if ! cryptsetup status "$mapper_name" >/dev/null 2>&1; then
-      cryptsetup open "UUID=$luks_uuid" "$mapper_name" --key-file "$key_file"
-    fi
-
-    if [ ! -b "$mapper_path" ]; then
-      echo "ERROR: mapper device not available after unlock: $mapper_path"
-      exit 1
-    fi
-
-    mount_cmd=(${pkgs.util-linux}/bin/mount)
-    if [ -n "${cfg.runtime.managedEncryptedData.fsType}" ]; then
-      mount_cmd+=(-t "${cfg.runtime.managedEncryptedData.fsType}")
-    fi
-    ${
-      optionalString (encryptedDataMountOptions != "") ''
-        mount_cmd+=(-o "${encryptedDataMountOptions}")
-      ''
-    }
-    mount_cmd+=("$mapper_path" "$mount_point")
-    "''${mount_cmd[@]}"
-
-    chown "${cfg.runtime.managedEncryptedData.owner}:${cfg.runtime.managedEncryptedData.group}" "$mount_point"
-    chmod "${cfg.runtime.managedEncryptedData.dirMode}" "$mount_point"
-  '';
-
-  lxAnnotateEncryptedDataUmountScript = pkgs.writeShellScriptBin "lx-annotate-encrypted-data-umount" ''
-    set -euo pipefail
-
-    mount_point="${envDataDir}"
-    mapper_name="${cfg.runtime.managedEncryptedData.mapperName}"
-
-    if mountpoint -q "$mount_point"; then
-      ${pkgs.util-linux}/bin/umount "$mount_point"
-    fi
-
-    if cryptsetup status "$mapper_name" >/dev/null 2>&1; then
-      cryptsetup close "$mapper_name"
-    fi
-  '';
+  encryptedDataScripts = import ./scripts/encrypted-data.nix args;
+  inherit (encryptedDataScripts)
+    lxAnnotateEncryptedDataMountScript
+    lxAnnotateEncryptedDataUmountScript;
 
 in
 {

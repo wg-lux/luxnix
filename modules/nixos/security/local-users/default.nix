@@ -10,12 +10,18 @@ let
   hostname = config.networking.hostName;
   isGcHost = hasPrefix "gc-" hostname;
   adminPassword = cfg.adminPassword;
+  clientPassword = cfg.clientPassword;
   fallbackHash = "$6$yC9hyVoZEYLlzjbZ$pILBYLOZBlplgoYL9L.dyIKPGPrcW2ifd1I3ffRAYIwsv8B.pA76Eo6OUq71gJJKl8kGyBsmlbKwnGcKQEpoa.";
   adminPasswordFile =
     if adminPassword.source == "sops" then
       config.sops.secrets.${adminPassword.sops.secretName}.path
     else
       adminPassword.hashedFile;
+  clientPasswordFile =
+    if clientPassword.source == "sops" then
+      config.sops.secrets.${clientPassword.sops.secretName}.path
+    else
+      clientPassword.hashedFile;
   fallbackCanInstall = adminPassword.source == "vault-file" && adminPassword.fallback.enable;
 in
 {
@@ -80,6 +86,49 @@ in
       };
     };
 
+    clientPassword = with types; {
+      source = mkOption {
+        type = enum [
+          "vault-file"
+          "sops"
+        ];
+        default = "vault-file";
+        description = ''
+          Source for the client user password hash. "vault-file" points at an
+          existing runtime file, while "sops" declares a sops-nix secret whose
+          content is the hashed password.
+        '';
+      };
+
+      hashedFile = mkOption {
+        type = str;
+        default = "${config.luxnix.vault.dir}/SCRT_client_user_password_hash";
+        description = "Runtime path containing the client user's hashed password.";
+      };
+
+      requireUsableFile = mkBoolOpt true "Refuse activation when the client user's password hash file is missing or empty.";
+
+      sops = {
+        secretName = mkOption {
+          type = str;
+          default = "client-user-password-hash";
+          description = "sops-nix secret name containing the client user password hash.";
+        };
+
+        key = mkOption {
+          type = nullOr str;
+          default = null;
+          description = "Optional key inside the SOPS file. Defaults to secretName.";
+        };
+
+        sopsFile = mkOption {
+          type = nullOr path;
+          default = null;
+          description = "SOPS file containing the client user password hash secret.";
+        };
+      };
+    };
+
     firmwarePassword = {
       manage = mkBoolOpt false "Allow LuxNix to manage BIOS/UEFI firmware passwords. This is intentionally refused.";
       allowGenerated = mkBoolOpt false "Permit generated BIOS/UEFI passwords. This is intentionally refused.";
@@ -102,6 +151,10 @@ in
           message = "Admin password fallback writes only to vault-file sources. Disable fallback when source = \"sops\".";
         }
         {
+          assertion = clientPassword.source != "sops" || clientPassword.sops.sopsFile != null;
+          message = "security.luxnix.local-users.clientPassword.sops.sopsFile must be set when source = \"sops\".";
+        }
+        {
           assertion = !cfg.firmwarePassword.manage;
           message = "LuxNix intentionally does not manage BIOS/UEFI passwords; keep firmware passwords in an out-of-band recovery record.";
         }
@@ -119,6 +172,15 @@ in
           enable = fallbackCanInstall;
           hashedPassword = adminPassword.fallback.hashedPassword;
         };
+      };
+
+      user.client = mkIf config.user.client.enable {
+        hashedPasswordFile =
+          if clientPassword.source == "sops" then
+            mkForce clientPasswordFile
+          else
+            mkDefault clientPasswordFile;
+        requireUsablePasswordFile = clientPassword.requireUsableFile;
       };
 
       system.activationScripts.luxnixValidateAdminPasswordFile =
@@ -147,6 +209,18 @@ in
       }
       // optionalAttrs (adminPassword.sops.key != null) {
         key = adminPassword.sops.key;
+      };
+    })
+
+    (mkIf (clientPassword.source == "sops") {
+      sops.secrets.${clientPassword.sops.secretName} = {
+        neededForUsers = true;
+      }
+      // optionalAttrs (clientPassword.sops.sopsFile != null) {
+        sopsFile = clientPassword.sops.sopsFile;
+      }
+      // optionalAttrs (clientPassword.sops.key != null) {
+        key = clientPassword.sops.key;
       };
     })
   ]);
