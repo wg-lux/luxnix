@@ -1670,7 +1670,7 @@ in
       serviceConfig = {
         TimeoutStartSec = "5min";
         Restart = "on-failure";
-        RestartSec = "5s";
+        RestartSec = mkDefault 5;
         MemoryHigh = cfg.runtime.limits.memoryHigh;
         MemoryMax = cfg.runtime.limits.memoryMax;
         CPUQuota = cfg.runtime.limits.cpuQuota;
