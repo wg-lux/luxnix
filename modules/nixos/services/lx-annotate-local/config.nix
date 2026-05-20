@@ -653,6 +653,7 @@ let
       ++ lib.optionals (workerCfg.maxTasksPerChild != null) [
         "--max-tasks-per-child=${toString workerCfg.maxTasksPerChild}"
       ];
+      cudaVisibleDevices = workerCfg.cudaVisibleDevices or null;
       workerEnvironment =
         workerCfg.environment
         // {
@@ -663,8 +664,8 @@ let
           NUMEXPR_NUM_THREADS = "1";
           MALLOC_ARENA_MAX = "2";
         }
-        // lib.optionalAttrs (workerCfg.cudaVisibleDevices != null) {
-          CUDA_VISIBLE_DEVICES = workerCfg.cudaVisibleDevices;
+        // lib.optionalAttrs (cudaVisibleDevices != null) {
+          CUDA_VISIBLE_DEVICES = cudaVisibleDevices;
         };
       runtimeMaxSec = workerCfg.runtimeMaxSec or null;
       timeoutStopSec = workerCfg.timeoutStopSec or "45min";
