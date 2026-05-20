@@ -36,11 +36,6 @@ let
     envConfTemplateDir
     envSystemdFilePath
     envAssetDir
-    hubRootPath
-    hubBackupRootPath
-    hubBackupIncomingPath
-    hubBackupSnapshotPath
-    hubBackupManifestPath
     dataRecoveryStateDir
     dataRecoveryStateFile;
   inherit (runtime.env)
@@ -66,177 +61,24 @@ let
     useWheelRuntime
     pythonInterpreter
     wheelFilePath
-    packageVersion
-    encryptedDataMountOptions;
+    packageVersion;
   inherit (runtime.defaults)
     exportFramesStorageRootDefault
     processedReportDirName
     processedVideoDirName;
   makeBin = "${pkgs.gnumake}/bin/make";
-  celeryBrokerUrl =
-    if cfg.runtime.externalServices.redisUrl != null then
-      cfg.runtime.externalServices.redisUrl
-    else
-      lib.attrByPath
-        [ "roles" "endoreg-client" "service" "extraEnvironment" "CELERY_BROKER_URL" ]
-        "redis://localhost:6379/1"
-        config;
-  lxAnnotateEnvHelpers = pkgs.writeShellScript "lx-annotate-env-helpers.sh" ''
-    lx_annotate_export_base_env() {
-      export DJANGO_SECRET_KEY_FILE="${cfg.django.djangoSecretKeyFile}"
-      export OIDC_RP_CLIENT_ID="${cfg.django.keycloakClientId}"
-      OIDC_CLIENT_SECRET_VALUE="$(tr -d '\n' < "${cfg.django.keycloakSecretFile}" 2>/dev/null || true)"
-      export OIDC_RP_CLIENT_SECRET="$OIDC_CLIENT_SECRET_VALUE"   
-      export CONF_DIR="${envConfDir}"
-      export CONF_TEMPLATE_DIR="${envConfTemplateDir}"
-      export WORKING_DIR="${repoDir}"
-      export HOME_DIR="${endoreg-service-user-home}"
-      export DB_PWD_FILE="${envConfDir}/db_pwd"
-      export DJANGO_DB_PASSWORD_FILE="${envConfDir}/db_pwd"
-
-      export DJANGO_MODULE="${envDjangoModule}"
-      export DJANGO_SETTINGS_MODULE="lx_annotate.settings.settings_prod"
-      export DJANGO_SETTINGS_MODULE_PRODUCTION="lx_annotate.settings.settings_prod"
-      export DJANGO_SETTINGS_MODULE_DEVELOPMENT="lx_annotate.settings.settings_dev"
-      export DJANGO_ENV="${envDjangoEnv}"
-      export CENTRAL_NODE="${envCentralNodeFlag}"
-      export HTTP_PROTOCOL="${envHttpProtocol}"
-      export DJANGO_HOST="${envDjangoHost}"
-      export DJANGO_PORT="${envDjangoPort}"
-      export BASE_URL="${envBaseUrl}"
-      export TIME_ZONE="${cfg.django.timeZone}"
-      export RUN_VIDEO_TESTS="${envRunVideoTests}"
-      export SKIP_EXPENSIVE_TESTS="${envSkipExpensiveTests}"
-      export VITE_ENABLE_DEBUG="${envViteEnableDebug}"
-      export SERVE_WITH_NGINX="true"
-      export NGINX_PROTECTED_MEDIA_URL="${envNginxProtectedMediaUrl}"
-      export LX_ANNOTATE_PACKAGE_VERSION="${packageVersion}"
-      export ENDOREG_DEPLOYMENT_ROLE="${envDeploymentRole}"
-      export ENDOREG_HUB_MODE="${
-        if cfg.hub.enable then "true" else "false"
-      }"
-      export ENDOREG_ENABLE_HUB_TRANSFERS="${
-        if cfg.hub.transferApi.enable then "true" else "false"
-      }"
-      export ENDOREG_HUB_TRANSFER_REQUIRE_SECURE_TRANSPORT="${
-        if cfg.hub.transferApi.requireSecureTransport then "true" else "false"
-      }"
-      export ENDOREG_HUB_TRANSFER_REQUIRE_MTLS="${
-        if cfg.hub.transferApi.requireMtls then "true" else "false"
-      }"
-      export ENDOREG_HUB_TRANSFER_MTLS_META_KEY="${cfg.hub.transferApi.mtlsMetaKey}"
-      export ENDOREG_HUB_TRANSFER_MTLS_META_VALUE="${cfg.hub.transferApi.mtlsMetaValue}"
-      export CELERY_BROKER_URL="${celeryBrokerUrl}"
-      export CELERY_DEFAULT_QUEUE="${celeryDefaultQueueName}"
-      export CELERY_PIPELINE_QUEUE="${celeryPipelineQueueName}"
-      export CELERY_FRAME_EXTRACTION_QUEUE="${celeryFrameExtractionQueueName}"
-      export CELERY_FFMPEG_MEDIA_QUEUE="${celeryFfmpegMediaQueueName}"
-      export CELERY_INFERENCE_QUEUE="${celeryInferenceQueueName}"
-      export CELERY_TRAINING_QUEUE="${celeryTrainingQueueName}"
-      export CELERY_MAINTENANCE_QUEUE="${celeryMaintenanceQueueName}"
-      export CELERY_FRAME_EXTRACTION_REQUIRE_SECURE_TRANSPORT="${
-        if cfg.runtime.celeryBroker.requireSecureTransport then "true" else "false"
-      }"
-      export CELERY_FFMPEG_MEDIA_REQUIRE_SECURE_TRANSPORT="${
-        if cfg.runtime.celeryBroker.requireSecureTransport then "true" else "false"
-      }"
-      export CELERY_BROKER_SECURE_TRANSPORT_CONFIRMED="${
-        if cfg.runtime.celeryBroker.secureTransportConfirmed then "true" else "false"
-      }"
-      export MODEL_TRAINING_JOB_MODE="celery"
-      export MODEL_TRAINING_STAGING_ROOT="${cfg.runtime.modelTrainingStagingRoot}"
-      export VIDEO_POST_VALIDATION_JOB_MODE="celery"
-      export VIDEO_TEMPORAL_INFERENCE_JOB_MODE="celery"
-      export VIDEO_TEMPORAL_INFERENCE_FRAME_SOURCE_MODE="stream"
-      export SSL_CERT_FILE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
-      export REQUESTS_CA_BUNDLE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
-
-      export DJANGO_ALLOWED_HOSTS="${envAllowedHosts}"
-      export ALLOWED_HOSTS="${envAllowedHosts}"
-      export DJANGO_CORS_ALLOWED_ORIGINS="${envCorsAllowedOrigins}"
-      export DJANGO_CSRF_TRUSTED_ORIGINS="${envCorsAllowedOrigins}"
-      export FFMPEG_TRANSCODE_TIMEOUT_SECONDS="${ffmpegTranscodeTimeoutSeconds}"
-    }
-
-    lx_annotate_export_storage_env() {
-      local data_root="$1"
-      export DATA_DIR="$data_root"
-      export LX_ANNOTATE_DATA_DIR="$data_root"
-      export LX_ANNOTATE_ENCRYPTED_DATA_DIR="$data_root"
-      export PROTECTED_MEDIA_ROOT="${runtimeStorageRootPath}"
-      export STORAGE_DIR="$data_root/storage"
-      export WATCHER_VIDEO_DIR="${runtimeWatcherVideoDirPath}"
-      export WATCHER_REPORT_DIR="${runtimeWatcherReportDirPath}"
-      export WATCHER_PREANONYMIZED_DIR="${runtimeWatcherPreanonymizedDirPath}"
-      export LX_ANNOTATE_STREAMABLE_VIDEO_ROOT="${runtimeStreamableVideoRootPath}"
-      export LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT="${runtimeStreamableVideoRawRootPath}"
-      export LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT="${runtimeStreamableVideoProcessedRootPath}"
-    }
-
-    lx_annotate_export_encryption_env() {
-      ${
-        optionalString (cfg.runtime.masterKeyFile != null) ''
-          export LX_ANNOTATE_MASTER_KEY_FILE="${toString cfg.runtime.masterKeyFile}"
-        ''
-      }
-      :
-    }
-
-    lx_annotate_export_django_paths_env() {
-      export STATIC_URL="${envStaticUrl}"
-      export MEDIA_URL="${envMediaUrl}"
-      export ASSET_DIR="${envAssetDir}"
-    }
-
-    lx_annotate_export_db_env() {
-      local db_pwd
-      db_pwd="$(tr -d '\n' < "${envConfDir}/db_pwd" 2>/dev/null || true)"
-      export DJANGO_DB_ENGINE="django.db.backends.postgresql"
-      export DJANGO_DB_NAME="${cfg.database.name}"
-      export DJANGO_DB_USER="${cfg.database.user}"
-      export DJANGO_DB_PASSWORD="$db_pwd"
-      export DJANGO_DB_HOST="${cfg.database.host}"
-      export DJANGO_DB_PORT="${toString cfg.database.port}"
-      export DJANGO_DB_SSLMODE="${cfg.database.sslMode}"
-    }
-
-    lx_annotate_export_secret_key_env() {
-      local django_secret_key
-      django_secret_key="$(tr -d '\n' < "${cfg.django.djangoSecretKeyFile}" 2>/dev/null || true)"
-      export DJANGO_SECRET_KEY="$django_secret_key"
-    }
-
-    lx_annotate_export_oidc_env() {
-      
-      local oidc_client_secret
-      export OIDC_RP_CLIENT_ID="${cfg.django.keycloakClientId}"
-      oidc_client_secret="$(tr -d '\n' < "${cfg.django.keycloakSecretFile}" 2>/dev/null || true)"
-      export OIDC_RP_CLIENT_SECRET="$oidc_client_secret"
-    }
-
-    lx_annotate_export_wheel_service_env() {
-      local data_root="$1"
-      lx_annotate_export_base_env
-      lx_annotate_export_storage_env "$data_root"
-      lx_annotate_export_encryption_env
-      lx_annotate_export_django_paths_env
-      lx_annotate_export_db_env
-      export DJANGO_DJANGO_DB_PASSWORD="$DJANGO_DB_PASSWORD"
-      lx_annotate_export_secret_key_env
-      lx_annotate_export_oidc_env
-      export EXEMPT_URLS="^/accounts/login/$"
-      export LOGIN_URL="/accounts/login/"
-      export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
-      export WORKING_DIR="${runtimeWorkingDir}"
-      export HOME_DIR="${endoreg-service-user-home}"
-      export XDG_DATA_HOME="${runtimeRootPath}"
-      export LX_ANNOTATE_ENCRYPTED_DATA_DIR="$data_root"
-      export LX_ANNOTATE_DATA_DIR="$data_root"
-      export LX_ANNOTATE_DEFAULT_CENTER="${envDefaultCenter}"
-      export TESSDATA_PREFIX="${cfg.runtime.tessdataPrefix}"
-      export PYTORCH_ALLOC_CONF="${cfg.runtime.pytorchAllocConf}"
-    }
-  '';
+  envScripts = import ./scripts/env.nix args;
+  inherit (envScripts)
+    celeryBrokerUrl
+    celeryDefaultQueueName
+    celeryPipelineQueueName
+    celeryFrameExtractionQueueName
+    celeryFfmpegMediaQueueName
+    celeryInferenceQueueName
+    celeryTrainingQueueName
+    celeryMaintenanceQueueName
+    ffmpegTranscodeTimeoutSeconds
+    lxAnnotateEnvHelpers;
 
   # Compat exports for lx-annotate/devenv.nix shellHook, which expects these vars.
   devenvSyncCompatExports = ''
@@ -250,66 +92,10 @@ let
     fi
   '';
 
-  alignEnvFileScript = pkgs.writeText "lx-annotate-align-env.py" ''
-    import os
-    from pathlib import Path
-
-    env_path = Path(os.environ["LX_ANNOTATE_ENV_FILE"])
-    desired_module = os.environ["DESIRED_SETTINGS_MODULE"]
-    desired_env = os.environ["DESIRED_ENVIRONMENT"]
-
-    if not env_path.exists():
-        raise SystemExit(0)
-
-    lines = env_path.read_text(encoding="utf-8").splitlines()
-    updated = []
-    have_module = False
-    have_env = False
-
-    for line in lines:
-        if line.startswith("DJANGO_SETTINGS_MODULE="):
-            updated.append(f"DJANGO_SETTINGS_MODULE={desired_module}")
-            have_module = True
-        elif line.startswith("DJANGO_ENV="):
-            updated.append(f"DJANGO_ENV={desired_env}")
-            have_env = True
-        else:
-            updated.append(line)
-
-    if not have_module:
-        updated.append(f"DJANGO_SETTINGS_MODULE={desired_module}")
-
-    if not have_env:
-        updated.append(f"DJANGO_ENV={desired_env}")
-
-    env_path.write_text("\n".join(updated) + "\n", encoding="utf-8")
-  '';
-
-  viteManifestEntryScript = pkgs.writeText "lx-annotate-vite-manifest-entry.py" ''
-    import json
-    import sys
-
-    manifest_path = sys.argv[1]
-    try:
-        with open(manifest_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception:
-        raise SystemExit(1)
-
-    entry = data.get("src/main.ts", {}).get("file")
-    if entry:
-        print(entry)
-        raise SystemExit(0)
-
-    for value in data.values():
-        if isinstance(value, dict):
-            file_value = value.get("file")
-            if file_value:
-                print(file_value)
-                raise SystemExit(0)
-
-    raise SystemExit(1)
-  '';
+  frontendAssetScripts = import ./scripts/frontend-assets.nix args;
+  inherit (frontendAssetScripts)
+    alignEnvFileScript
+    viteManifestEntryScript;
 
 
   syncScriptName = "lx-annotate-sync";
@@ -337,14 +123,6 @@ let
   wheelCeleryWorkerCommand = cfg.runtime.commands.celeryWorker or "";
   wheelSapImportCommand = cfg.runtime.commands.sapImport or "";
   wheelMediaMigrationCommand = cfg.runtime.commands.mediaMigration or "";
-  celeryDefaultQueueName = "default";
-  celeryPipelineQueueName = "pipeline";
-  celeryFrameExtractionQueueName = "frame_extraction";
-  celeryFfmpegMediaQueueName = "ffmpeg_media";
-  celeryInferenceQueueName = "inference";
-  celeryTrainingQueueName = "model_training";
-  celeryMaintenanceQueueName = "maintenance";
-  ffmpegTranscodeTimeoutSeconds = "86400";
   storageReliefScripts = import ./scripts/storage-relief.nix args;
   inherit (storageReliefScripts)
     emergencyStorageReliefConfig
@@ -2395,168 +2173,13 @@ let
         exec "$helper_python" "${emergencyStorageReliefHelper}" --config "${emergencyStorageReliefConfig}"
       '';
 
-  runLocalHubBackupScript = pkgs.writeShellScriptBin "runLxAnnotateHubBackup" ''
-        set -euo pipefail
+  hubBackupScripts = import ./scripts/hub-backup.nix args;
+  inherit (hubBackupScripts) runLocalHubBackupScript;
 
-        runtime_root="${cfg.hub.backup.sourceRuntimeDir}"
-        incoming_root="${cfg.hub.backup.incomingDir}"
-        snapshot_root="${cfg.hub.backup.snapshotDir}"
-        manifest_root="${cfg.hub.backup.manifestDir}"
-        latest_link="$snapshot_root/latest"
-        retain_count="${toString cfg.hub.backup.retainCount}"
-        host_name="${config.networking.hostName}"
-        timestamp="$(${pkgs.coreutils}/bin/date -u +%Y%m%dT%H%M%SZ)"
-        pending_snapshot="$snapshot_root/.pending-$timestamp"
-        completed_snapshot="$snapshot_root/$timestamp"
-        manifest_file="$manifest_root/$timestamp.json"
-        previous_snapshot=""
-
-        if [ ! -d "$runtime_root" ]; then
-          echo "Skipping hub backup; runtime root missing: $runtime_root"
-          exit 0
-        fi
-
-        install -d -m 0750 "$incoming_root" "$snapshot_root" "$manifest_root"
-        rm -rf "$pending_snapshot"
-        install -d -m 0750 "$pending_snapshot"
-
-        if [ -L "$latest_link" ]; then
-          previous_snapshot="$(${pkgs.coreutils}/bin/readlink -f "$latest_link" 2>/dev/null || true)"
-        fi
-
-        rsync_cmd=(
-          ${pkgs.rsync}/bin/rsync
-          -a
-          --delete
-          --numeric-ids
-          --chmod=F640,D750
-        )
-
-        if [ -n "$previous_snapshot" ] && [ -d "$previous_snapshot" ]; then
-          rsync_cmd+=(--link-dest "$previous_snapshot")
-        fi
-
-        ${lib.concatStringsSep "\n" (map (pattern: "rsync_cmd+=(--exclude ${lib.escapeShellArg pattern})") cfg.hub.backup.exclude)}
-
-        rsync_cmd+=("$runtime_root/" "$pending_snapshot/")
-        "''${rsync_cmd[@]}"
-
-        ${pkgs.coreutils}/bin/mv "$pending_snapshot" "$completed_snapshot"
-        ln -sfn "$completed_snapshot" "$latest_link"
-
-        file_count="$(${pkgs.findutils}/bin/find "$completed_snapshot" -type f | ${pkgs.coreutils}/bin/wc -l | ${pkgs.gawk}/bin/awk '{print $1}')"
-        size_bytes="$(${pkgs.findutils}/bin/find "$completed_snapshot" -type f -printf '%s\n' | ${pkgs.gawk}/bin/awk '{sum += $1} END {print sum + 0}')"
-
-        ${pkgs.jq}/bin/jq -n \
-          --arg generated_at "$(${pkgs.coreutils}/bin/date -u --iso-8601=seconds)" \
-          --arg hostname "$host_name" \
-          --arg runtime_root "$runtime_root" \
-          --arg incoming_root "$incoming_root" \
-          --arg snapshot_dir "$completed_snapshot" \
-          --arg latest_snapshot "$(${pkgs.coreutils}/bin/readlink -f "$latest_link")" \
-          --argjson retain_count "$retain_count" \
-          --argjson file_count "$file_count" \
-          --argjson size_bytes "$size_bytes" \
-          --argjson exclude '${builtins.toJSON cfg.hub.backup.exclude}' \
-          '{
-            generated_at: $generated_at,
-            hostname: $hostname,
-            runtime_root: $runtime_root,
-            incoming_root: $incoming_root,
-            snapshot_dir: $snapshot_dir,
-            latest_snapshot: $latest_snapshot,
-            retain_count: $retain_count,
-            file_count: $file_count,
-            size_bytes: $size_bytes,
-            exclude: $exclude
-          }' > "$manifest_file"
-
-        if [ "$retain_count" -gt 0 ]; then
-          mapfile -t snapshots_to_prune < <(
-            ${pkgs.findutils}/bin/find "$snapshot_root" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' \
-              | ${pkgs.coreutils}/bin/sort -r \
-              | ${pkgs.coreutils}/bin/tail -n +$((retain_count + 1))
-          )
-
-          for snapshot_name in "''${snapshots_to_prune[@]}"; do
-            [ -n "$snapshot_name" ] || continue
-            ${pkgs.coreutils}/bin/rm -rf "$snapshot_root/$snapshot_name"
-          done
-        fi
-
-        echo "Hub backup completed. snapshot=$completed_snapshot manifest=$manifest_file files=$file_count size_bytes=$size_bytes"
-  '';
-
-  lxAnnotateEncryptedDataMountScript = pkgs.writeShellScriptBin "lx-annotate-encrypted-data-mount" ''
-    set -euo pipefail
-
-    mount_point="${envDataDir}"
-    mapper_name="${cfg.runtime.managedEncryptedData.mapperName}"
-    mapper_path="/dev/mapper/$mapper_name"
-    luks_uuid="${if cfg.runtime.managedEncryptedData.luksUuid == null then "" else cfg.runtime.managedEncryptedData.luksUuid}"
-    luks_uuid_file="${if cfg.runtime.managedEncryptedData.luksUuidFile == null then "" else toString cfg.runtime.managedEncryptedData.luksUuidFile}"
-    key_file="${if cfg.runtime.managedEncryptedData.keyFile == null then "" else toString cfg.runtime.managedEncryptedData.keyFile}"
-
-    if [ -z "$luks_uuid" ] && [ -n "$luks_uuid_file" ] && [ -f "$luks_uuid_file" ]; then
-      luks_uuid="$(tr -d '\n' < "$luks_uuid_file")"
-    fi
-
-    if [ -z "$luks_uuid" ]; then
-      echo "ERROR: runtime.managedEncryptedData.luksUuid is not set and no luksUuidFile was readable."
-      exit 1
-    fi
-
-    if [ -z "$key_file" ] || [ ! -f "$key_file" ]; then
-      echo "ERROR: encrypted data key file is missing: $key_file"
-      exit 1
-    fi
-
-    install -d -m 0750 "$mount_point"
-
-    if mountpoint -q "$mount_point"; then
-      echo "Encrypted data already mounted at $mount_point"
-      exit 0
-    fi
-
-    if ! cryptsetup status "$mapper_name" >/dev/null 2>&1; then
-      cryptsetup open "UUID=$luks_uuid" "$mapper_name" --key-file "$key_file"
-    fi
-
-    if [ ! -b "$mapper_path" ]; then
-      echo "ERROR: mapper device not available after unlock: $mapper_path"
-      exit 1
-    fi
-
-    mount_cmd=(${pkgs.util-linux}/bin/mount)
-    if [ -n "${cfg.runtime.managedEncryptedData.fsType}" ]; then
-      mount_cmd+=(-t "${cfg.runtime.managedEncryptedData.fsType}")
-    fi
-    ${
-      optionalString (encryptedDataMountOptions != "") ''
-        mount_cmd+=(-o "${encryptedDataMountOptions}")
-      ''
-    }
-    mount_cmd+=("$mapper_path" "$mount_point")
-    "''${mount_cmd[@]}"
-
-    chown "${cfg.runtime.managedEncryptedData.owner}:${cfg.runtime.managedEncryptedData.group}" "$mount_point"
-    chmod "${cfg.runtime.managedEncryptedData.dirMode}" "$mount_point"
-  '';
-
-  lxAnnotateEncryptedDataUmountScript = pkgs.writeShellScriptBin "lx-annotate-encrypted-data-umount" ''
-    set -euo pipefail
-
-    mount_point="${envDataDir}"
-    mapper_name="${cfg.runtime.managedEncryptedData.mapperName}"
-
-    if mountpoint -q "$mount_point"; then
-      ${pkgs.util-linux}/bin/umount "$mount_point"
-    fi
-
-    if cryptsetup status "$mapper_name" >/dev/null 2>&1; then
-      cryptsetup close "$mapper_name"
-    fi
-  '';
+  encryptedDataScripts = import ./scripts/encrypted-data.nix args;
+  inherit (encryptedDataScripts)
+    lxAnnotateEncryptedDataMountScript
+    lxAnnotateEncryptedDataUmountScript;
 
 in
 {
