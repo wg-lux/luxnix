@@ -17,22 +17,11 @@
     settings.mutable = false;
   };
 
+  profiles.endoregClient.enable = true;
+
   roles = { 
-    aglnet.client.enable = true;
     base-server.enable = true;
-    common.enable = true;
-    custom-packages.cloud = true;
-    custom-packages.enable = true;
-    endoreg-client.api.djangoAllowedHosts = ["localhost" "127.0.0.1" "172.16.255.106" "172.16.255.230"];    endoreg-client.api.httpProtocol = "https";
-    endoreg-client.api.language = "en-us";
-    endoreg-client.api.logLevel = "WARNING";
-    endoreg-client.api.maxRequestSize = "50G";
-    endoreg-client.api.settingsProfile = "prod";
-    endoreg-client.centralNodes = ["s-04"];    endoreg-client.dbApiLocal = true;
-    endoreg-client.enable = true;
-    endoreg-client.repository.branch = "container";
     gpu-server.enable = true;
-    postgres.default.enable = true;
     ssh-access.dev-01.enable = true;
     ssh-access.dev-01.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK";
     ssh-access.dev-03.enable = true;
