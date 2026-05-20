@@ -17,16 +17,9 @@
     settings.mutable = false;
   };
 
+  profiles.endoregGpuClient.enable = true;
+
   roles = { 
-    aglnet.client.enable = true;
-    common.enable = true;
-    custom-packages.cloud = true;
-    custom-packages.enable = true;
-    endoreg-client.enable = true;
-    nextcloudClient.enable = true;
-    postgres.default.enable = true;
-    custom-packages.baseDevelopment = true;
-    custom-packages.cuda = true;
     custom-packages.office = true;
     };
 
@@ -185,7 +178,7 @@ maintenance.autoUpdates.dates = "17:00";
 
 maintenance.autoUpdates.enable = false;
 
-maintenance.autoUpdates.flake = "github:wg-lux/luxnix";
+maintenance.autoUpdates.flake = "github:wg-lux/luxnix/prototype";
 
 maintenance.autoUpdates.operation = "switch";
 
@@ -200,8 +193,6 @@ vault.psk = "/etc/secrets/.psk";
 generic-settings.gpu.nvidia.prime.nvidiaBusId = "PCI:1:0:0";
 
 generic-settings.gpu.nvidia.prime.onboardBusId = "PCI:0:2:0";
-
-generic-settings.gpu.nvidia.prime.onboardType = "intel";
 
 generic-settings.hostPlatform = "x86_64-linux";
 

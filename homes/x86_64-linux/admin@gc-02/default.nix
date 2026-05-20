@@ -6,6 +6,7 @@ cli.programs.git.enable = true;
 cli.programs.git.email = "maxhild10@gmail.com";
 cli.programs.git.userName = "maxhild";
 desktops.plasma.enable = true;
+luxnix.generic-settings.configurationPath = "dev/luxnix";
 luxnix.generic-settings.language = "german";
 luxnix.generic-settings.enable = true;
 luxnix.generic-settings.hostPlatform = "x86_64-linux";

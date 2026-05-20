@@ -20,7 +20,7 @@ in
 
     sslDir = mkOption {
       type = types.path;
-      default = "/var/lib/lx-annotate/ssl";
+      default = "/var/lib/lx-annotate-ssl";
       description = "Directory where lx-annotate SSL assets are stored.";
     };
 

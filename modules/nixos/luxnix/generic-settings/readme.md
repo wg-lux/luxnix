@@ -82,9 +82,9 @@ luxnix.generic-settings = {
 
 ```nix
 luxnix.generic-settings = {
-  configurationPathRelative = "luxnix";            # Relative config path
-  configurationPath = "/home/admin/dev/luxnix";        # Full config path
-  systemConfigurationPath = "/home/admin/dev/luxnix/systems/x86_64-linux/hostname";
+  configurationPathRelative = "lx-production";     # Relative config path
+  configurationPath = "/home/admin/lx-production/"; # Full config path
+  systemConfigurationPath = "/home/admin/lx-production/systems/x86_64-linux/hostname";
   
   rootIdED25519 = "ssh-ed25519 AAAA...";          # Root SSH key
 };
@@ -246,7 +246,7 @@ warnings = [
       remote.admin.enable = true;
     };
     
-    configurationPathRelative = "luxnix";
+    configurationPathRelative = "dev/luxnix";
   };
 }
 ```

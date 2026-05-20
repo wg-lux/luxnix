@@ -22,6 +22,10 @@ in {
       default = "/etc/secrets/vault/SCRT_client_user_password_hash";
       description = "Path to a hashed password file for the client user";
     };
+    requireUsablePasswordFile = mkBoolOpt true ''
+      Refuse activation when the configured hashed password file is missing or empty.
+      Disable only for intentionally passwordless client-user deployments.
+    '';
     extraGroups = mkOpt (listOf str) [] "Additional groups for the client user";
     homeStateVersion = mkOption {
       type = str;
@@ -32,6 +36,27 @@ in {
   };
 
   config = mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = config.users.mutableUsers || cfg.hashedPasswordFile != null;
+        message = "user.client.hashedPasswordFile must be set when users.mutableUsers = false.";
+      }
+    ];
+
+    system.activationScripts.luxnixValidateClientPasswordFile =
+      mkIf (cfg.requireUsablePasswordFile && cfg.hashedPasswordFile != null) {
+        deps = [ "etc" ];
+        text = ''
+          set -euo pipefail
+          client_password_file=${lib.escapeShellArg cfg.hashedPasswordFile}
+          if [ ! -s "$client_password_file" ]; then
+            echo "ERROR: client user password hash file is missing or empty: $client_password_file" >&2
+            echo "Refusing activation to avoid switching into a generation with an unusable client password." >&2
+            exit 1
+          fi
+        '';
+      };
+
     users.users.${cfg.name} =
       {
         isNormalUser = true;

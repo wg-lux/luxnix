@@ -50,7 +50,7 @@ in
       enable = true;
       extraPackages = with pkgs; [
         triton-llvm
-        nvidia-x11
+        nvidia-vaapi-driver
       ];
     };
 
@@ -65,6 +65,7 @@ in
       open = true;
       nvidiaSettings = true;
       package = nvidiaDrivers.${cfg.nvidiaDriver};
+      nvidiaPersistenced = true;
     };
   };
 

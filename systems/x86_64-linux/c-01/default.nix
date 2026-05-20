@@ -167,7 +167,7 @@ generic-settings.vpnSubnet = "172.16.255.0/24";
 
 maintenance.autoUpdates.dates = "17:00";
 
-maintenance.autoUpdates.flake = "github:wg-lux/luxnix";
+maintenance.autoUpdates.flake = "github:wg-lux/luxnix/prototype";
 
 maintenance.autoUpdates.operation = "switch";
 

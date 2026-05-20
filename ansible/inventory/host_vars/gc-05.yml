@@ -1,13 +1,18 @@
 # inventory/host_vars/gc-05.yml
 ---
 ansible_python_interpreter: "{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python"
-luxnix_dev_repo: "/home/admin/dev/luxnix"
+luxnix_dev_repo: "/home/admin/luxnix"
 template_name: "main"
 
 host_roles:
   custom_packages.baseDevelopment: "true"
 
 host_services: {}
+
+host_nixos:
+  nix.settings.max_jobs: 1
+  nix.settings.cores: 2
+
 ansible_roles:
   - "dev_access"
 

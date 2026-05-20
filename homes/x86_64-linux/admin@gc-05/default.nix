@@ -3,6 +3,7 @@
 
 cli.programs.git.allowedSigners = "";
 cli.programs.git.enable = true;
+cli.programs.ssh.keychain.keys = [];
 desktops.plasma.enable = true;
 luxnix.generic-settings.language = "english";
 luxnix.generic-settings.enable = true;

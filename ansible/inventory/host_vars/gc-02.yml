@@ -10,7 +10,12 @@ host_roles:
   custom_packages.visuals: "true"
   custom_packages.hardwareAcceleration: "true"
 
-host_services: {}
+host_services:
+  luxnix.ollama.enable: "true"
+
+host_nixos:
+  nix.settings.max_jobs: 1
+  nix.settings.cores: 2
 
 extra_secret_names:
   - "SCRT_roles_system_password_postgres_host_test_password"

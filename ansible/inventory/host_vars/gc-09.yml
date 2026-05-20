@@ -1,7 +1,7 @@
 # inventory/host_vars/gc-09.yml
 ---
 ansible_python_interpreter: "{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python"
-luxnix_dev_repo: "/home/admin/dev/luxnix"
+luxnix_dev_repo: "/home/admin/luxnix"
 template_name: "main"
 
 host_roles:
@@ -9,9 +9,15 @@ host_roles:
 
 host_services: {}
 
+host_nixos:
+  nix.settings.max_jobs: 1
+  nix.settings.cores: 2
+
 extra_secret_names: []
 
 host_luxnix:
+  generic_settings.configurationPathRelative: '"lx-production"'
+  generic_settings.configurationPath: 'lib.mkForce "/home/admin/lx-production"'
 
   generic_settings.hostPlatform: '"x86_64-linux"'
   generic_settings.systemStateVersion: '"23.11"'

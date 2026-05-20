@@ -17,35 +17,36 @@
     settings.mutable = false;
   };
 
+  profiles.endoregCentralHub.enable = true;
+
   roles = { 
-    aglnet.client.enable = true;
-    base-server.enable = true;
-    common.enable = true;
-    custom-packages.cloud = true;
-    custom-packages.enable = true;
-    endoreg-client.enable = true;
-    endoreg-client.repository.branch = "container";
-    endoreg-db-central-01.api.djangoAllowedHosts = ["s-04" "s-04.local" "172.16.255.14"];    endoreg-db-central-01.api.djangoDebug = false;
-    endoreg-db-central-01.api.hostname = "0.0.0.0";
-    endoreg-db-central-01.api.logLevel = "INFO";
-    endoreg-db-central-01.api.port = 8118;
-    endoreg-db-central-01.api.useHttps = false;
-    endoreg-db-central-01.centralNodes = ["s-04"];    endoreg-db-central-01.database.name = "endoregDbCentral";
-    endoreg-db-central-01.database.sslMode = "allow";
-    endoreg-db-central-01.database.user = "endoregDbCentral";
-    endoreg-db-central-01.enable = true;
-    endoreg-db-central-01.localNodes = ["s-04" "gs-01" "gs-02" "gc-05" "gc-06" "gc-10"];    endoreg-db-central-01.service.maxRequests = 5000;
-    endoreg-db-central-01.service.workers = 4;
-    postgres.default.enable = true;
+    endoreg-db-central-01.api.djangoAllowedHosts = ["s-04" "s-04.local" "172.16.255.14"];
+    endoreg-db-central-01.centralNodes = ["s-04"];
+    endoreg-db-central-01.localNodes = ["s-04" "gs-01" "gs-02" "gc-05" "gc-06" "gc-10"];
     ssh-access.dev-01.enable = true;
     ssh-access.dev-01.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK";
     ssh-access.dev-03.enable = true;
-    ssh-access.dev-03.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos";
+    ssh-access.dev-03.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAVt7FP3BCARMRyL791VauxIPd3t8nVm4A49VVpL9FUj";
     ssh-access.dev-04.enable = true;
     ssh-access.dev-04.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICSpoZVcX+K6NdrfqcUVPTU8Ljqlp83YDzzEHjTHU2NO flippos@inexen9";
     };
 
   services = {
+    luxnix.redis.enable = true;
+    redis.servers.main.bind = lib.mkForce "172.16.255.14";
+    luxnix.lxAnnotateLocal.runtime = {
+      externalServices.redisUrl = "redis://172.16.255.14:6380/1";
+      externalServices.postgresHost = "172.16.255.22";
+      externalServices.postgresPort = 5432;
+      celeryBroker.secureTransportConfirmed = true;
+      trainingWorker.mode = "manual";
+    };
+    luxnix.lxAnnotateLocal.hub.transferApi = {
+      enable = true;
+      requireSecureTransport = true;
+      requireMtls = true;
+      clientCaFile = "/etc/secrets/vault/lx_annotate_hub_transfer_client_ca.pem";
+    };
     };
 
   luxnix = {
@@ -192,7 +193,9 @@ maintenance.autoUpdates.dates = "17:00";
 
 maintenance.autoUpdates.enable = false;
 
-maintenance.autoUpdates.flake = "github:wg-lux/luxnix";
+maintenance.autoUpdates.flake = "github:wg-lux/luxnix/prototype";
+
+maintenance.autoUpdates.operation = "switch";
 
 maintenance.autoUpdates.operation = "switch";
 

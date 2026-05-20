@@ -17,32 +17,22 @@
     settings.mutable = false;
   };
 
+  profiles = {
+    endoregClient.enable = true;
+    endoregGpuClient.enable = true;
+  };
+
   roles = { 
-    aglnet.client.enable = true;
-    common.enable = true;
-    custom-packages.cloud = true;
-    custom-packages.enable = true;
-    endoreg-client.api.djangoAllowedHosts = ["localhost" "127.0.0.1" "172.16.255.106" "172.16.255.230"];    endoreg-client.api.httpProtocol = "https";
-    endoreg-client.api.language = "en-us";
-    endoreg-client.api.logLevel = "WARNING";
-    endoreg-client.api.maxRequestSize = "50G";
-    endoreg-client.api.settingsProfile = "prod";
-    endoreg-client.centralNodes = ["s-04"];
-    endoreg-client.enable = true;
     endoreg-client.paths.storagePersistingEnable = true;
     endoreg-client.paths.storagePersistingIsExternalDrive = true;
     endoreg-client.paths.storagePersistingMountPoint = "/mnt/endoreg-client-storage";
-    endoreg-client.repository.branch = "container";
     endoreg-client.defaultCenterKey = "university_hospital_wuerzburg";
-    nextcloudClient.enable = true;
-    postgres.default.enable = true;
     ssh-access.dev-01.enable = true;
     ssh-access.dev-01.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK";
     ssh-access.dev-03.enable = true;
-    ssh-access.dev-03.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos";
+    ssh-access.dev-03.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAVt7FP3BCARMRyL791VauxIPd3t8nVm4A49VVpL9FUj";
     ssh-access.dev-04.enable = true;
     ssh-access.dev-04.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICSpoZVcX+K6NdrfqcUVPTU8Ljqlp83YDzzEHjTHU2NO flippos@inexen9";
-    custom-packages.baseDevelopment = true;
     };
 
   services = {
@@ -210,7 +200,7 @@ maintenance.autoUpdates.dates = "17:00";
 
 maintenance.autoUpdates.enable = false;
 
-maintenance.autoUpdates.flake = "github:wg-lux/luxnix";
+maintenance.autoUpdates.flake = "github:wg-lux/luxnix/prototype";
 
 maintenance.autoUpdates.operation = "switch";
 
