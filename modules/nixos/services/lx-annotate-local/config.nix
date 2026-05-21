@@ -164,6 +164,20 @@ let
       fi
     }
 
+    lx_annotate_wheel_apply_runtime_patches() {
+      local checks_file=""
+
+      for checks_file in ${lib.escapeShellArg "${runtimeWheelVenvPath}/lib"}/python*/site-packages/lx_annotate/checks.py; do
+        [ -f "$checks_file" ] || continue
+
+        # lx-annotate 0.6.2 checks a legacy RawPdf table name, while the
+        # bundled endoreg_db migrations create RawPdfFile as endoreg_db_rawpdffile.
+        if grep -q '"endoreg_db_rawpdf"' "$checks_file"; then
+          sed -i 's/"endoreg_db_rawpdf"/"endoreg_db_rawpdffile"/g' "$checks_file"
+        fi
+      done
+    }
+
     lx_annotate_wheel_ensure() {
       local wheel_path=${lib.escapeShellArg wheelFilePath}
       local wheelhouse_path=${lib.escapeShellArg wheelhousePath}
@@ -177,7 +191,7 @@ let
       local canonical_wheel_name=""
       local staged_wheel_path=""
       local install_hash=""
-      local wheel_installer_revision="wheel-console-contract-v2-incremental-pip-cache"
+      local wheel_installer_revision="wheel-console-contract-v3-rawpdffile-check-patch"
       local venv_created="false"
       local pip_cache_dir=${lib.escapeShellArg "${runtimeRootPath}/pip-cache"}
 
@@ -248,6 +262,7 @@ let
       export LX_ANNOTATE_WHEEL_VENV=${lib.escapeShellArg runtimeWheelVenvPath}
       export LX_ANNOTATE_WHEEL_APP_ROOT=${lib.escapeShellArg runtimeWheelRootPath}
       export WHEEL_INSTALL_HASH="$install_hash"
+      lx_annotate_wheel_apply_runtime_patches
     }
 
     lx_annotate_wheel_sync_static() {
@@ -1773,6 +1788,7 @@ in
         ProtectSystem = "full";
         PrivateTmp = true;
         NoNewPrivileges = true;
+        SupplementaryGroups = [ config.luxnix.generic-settings.sensitiveServiceGroupName ];
         ReadWritePaths = appReadWritePaths;
       };
     };
@@ -1810,6 +1826,7 @@ in
         RemainAfterExit = true;
         User = endoreg-service-user-name;
         Group = endoreg-service-group-name;
+        SupplementaryGroups = [ config.luxnix.generic-settings.sensitiveServiceGroupName ];
         WorkingDirectory = runtimeDataRootPath;
         ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-manage verify_encrypted_storage";
         EnvironmentFile = envSystemdFilePath;
