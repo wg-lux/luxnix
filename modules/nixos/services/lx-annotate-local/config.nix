@@ -78,6 +78,92 @@ let
       pkgs.util-linux
     ]}:''${PATH:-}"
 
+    lx_annotate_wheel_read_required_secret() {
+      local path="$1"
+      local label="$2"
+      local value=""
+
+      if [ -z "$path" ]; then
+        echo "ERROR: $label file path is empty." >&2
+        exit 1
+      fi
+      if [ ! -r "$path" ]; then
+        echo "ERROR: Unable to read $label from $path." >&2
+        exit 1
+      fi
+
+      value="$(tr -d '\r\n' < "$path")"
+      if [ -z "$value" ]; then
+        echo "ERROR: $label file is empty: $path" >&2
+        exit 1
+      fi
+
+      printf '%s' "$value"
+    }
+
+    lx_annotate_wheel_read_keycloak_secret() {
+      local path="$1"
+      local line=""
+      local value=""
+
+      if [ -z "$path" ]; then
+        return 0
+      fi
+      if [ ! -r "$path" ]; then
+        echo "ERROR: Unable to read OIDC_RP_CLIENT_SECRET from $path." >&2
+        exit 1
+      fi
+
+      while IFS= read -r line || [ -n "$line" ]; do
+        line="$(printf '%s' "$line" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+        [ -z "$line" ] && continue
+        case "$line" in
+          \#*) continue ;;
+          export\ *) line="$(printf '%s' "$line" | sed -E 's/^export[[:space:]]+//')" ;;
+        esac
+        case "$line" in
+          DJANGO_KEYCLOAK_CLIENT_SECRET=*|KEYCLOAK_CLIENT_SECRET=*|OIDC_RP_CLIENT_SECRET=*)
+            value="''${line#*=}"
+            value="$(printf '%s' "$value" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; s/^"//; s/"$//')"
+            break
+            ;;
+        esac
+      done < "$path"
+
+      if [ -z "$value" ]; then
+        value="$(tr -d '\r\n' < "$path")"
+      fi
+
+      printf '%s' "$value"
+    }
+
+    lx_annotate_wheel_export_secret_env() {
+      local secret_key_file="''${DJANGO_SECRET_KEY_FILE:-}"
+      local db_password_file="''${DJANGO_DB_PASSWORD_FILE:-}"
+      local keycloak_secret_file="''${DJANGO_KEYCLOAK_CLIENT_SECRET_FILE:-}"
+
+      if [ -z "''${DJANGO_SECRET_KEY:-}" ] && [ -n "$secret_key_file" ]; then
+        export DJANGO_SECRET_KEY
+        DJANGO_SECRET_KEY="$(lx_annotate_wheel_read_required_secret "$secret_key_file" "DJANGO_SECRET_KEY")"
+      fi
+
+      if [ -z "''${DJANGO_DB_PASSWORD:-}" ] && [ -n "$db_password_file" ]; then
+        export DJANGO_DB_PASSWORD
+        DJANGO_DB_PASSWORD="$(lx_annotate_wheel_read_required_secret "$db_password_file" "DJANGO_DB_PASSWORD")"
+      fi
+      if [ -n "''${DJANGO_DB_PASSWORD:-}" ]; then
+        export DJANGO_DJANGO_DB_PASSWORD="$DJANGO_DB_PASSWORD"
+      fi
+
+      if [ -z "''${OIDC_RP_CLIENT_SECRET:-}" ] && [ -n "$keycloak_secret_file" ]; then
+        export OIDC_RP_CLIENT_SECRET
+        OIDC_RP_CLIENT_SECRET="$(lx_annotate_wheel_read_keycloak_secret "$keycloak_secret_file")"
+      fi
+      if [ -n "''${OIDC_RP_CLIENT_SECRET:-}" ]; then
+        export DJANGO_KEYCLOAK_CLIENT_SECRET="$OIDC_RP_CLIENT_SECRET"
+      fi
+    }
+
     lx_annotate_wheel_ensure() {
       local wheel_path=${lib.escapeShellArg wheelFilePath}
       local wheelhouse_path=${lib.escapeShellArg wheelhousePath}
@@ -91,8 +177,9 @@ let
       local canonical_wheel_name=""
       local staged_wheel_path=""
       local install_hash=""
-      local wheel_installer_revision="wheel-console-contract-v1"
+      local wheel_installer_revision="wheel-console-contract-v2-incremental-pip-cache"
       local venv_created="false"
+      local pip_cache_dir=${lib.escapeShellArg "${runtimeRootPath}/pip-cache"}
 
       if [ -z "$wheel_path" ]; then
         echo "ERROR: services.luxnix.lxAnnotateLocal.runtime.wheelPath must be set in wheel mode." >&2
@@ -103,6 +190,7 @@ let
         ${lib.escapeShellArg runtimeRootPath} \
         ${lib.escapeShellArg runtimeWheelRootPath} \
         ${lib.escapeShellArg runtimeWheelVenvPath} \
+        "$pip_cache_dir" \
         ${lib.escapeShellArg envConfDir} \
         ${lib.escapeShellArg envDataDir}
       install -d -m 0775 ${lib.escapeShellArg runtimeStaticRootPath} ${lib.escapeShellArg "${runtimeStaticRootPath}/.vite"}
@@ -145,8 +233,10 @@ let
       installed_hash="$(cat "$wheel_install_stamp_file" 2>/dev/null || true)"
       if [ "$venv_created" = "true" ] || [ "$install_hash" != "$installed_hash" ]; then
         install -m 0640 "$wheel_path" "$staged_wheel_path"
+        export PIP_CACHE_DIR="$pip_cache_dir"
+        export PIP_DISABLE_PIP_VERSION_CHECK=1
         # shellcheck disable=SC2086
-        ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/pip"} install --no-cache-dir --upgrade --force-reinstall $pip_install_args "$staged_wheel_path"
+        ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/pip"} install --upgrade $pip_install_args "$staged_wheel_path"
         printf '%s\n' "$install_hash" > "$wheel_install_stamp_file"
         chmod 0640 "$wheel_install_stamp_file" 2>/dev/null || true
       fi
@@ -199,6 +289,7 @@ let
     set -euo pipefail
     source "$out/libexec/lx-annotate-wheel-runtime-lib"
     lx_annotate_wheel_ensure
+    lx_annotate_wheel_export_secret_env
     if [ "$sync_static" = "1" ]; then
       lx_annotate_wheel_sync_static
     fi
@@ -508,6 +599,7 @@ let
         {
           User = endoreg-service-user-name;
           Group = endoreg-service-group-name;
+          SupplementaryGroups = [ config.luxnix.generic-settings.sensitiveServiceGroupName ];
           WorkingDirectory = runtimeDataRootPath;
           EnvironmentFile = envSystemdFilePath;
           ProtectSystem = "full";
@@ -1509,8 +1601,8 @@ in
       ];
       serviceConfig = {
         Type = "oneshot";
-        ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-migrate";
-        TimeoutStartSec = "10min";
+        ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-manage migrate --noinput";
+        TimeoutStartSec = "2h";
       };
     };
 
@@ -1576,10 +1668,10 @@ in
       description = "Trigger LX-Annotate file watcher when import files arrive";
       wantedBy = [ "multi-user.target" ];
       pathConfig = {
-        PathExistsGlob = [
-          "${runtimeWatcherVideoDirPath}/*"
-          "${runtimeWatcherReportDirPath}/*"
-          "${runtimeWatcherPreanonymizedDirPath}/*"
+        PathChanged = [
+          runtimeWatcherVideoDirPath
+          runtimeWatcherReportDirPath
+          runtimeWatcherPreanonymizedDirPath
         ];
         Unit = "lx-annotate-filewatcher.service";
         MakeDirectory = true;

@@ -16,7 +16,7 @@ WHEEL_FILENAME = (
     "0123456789abcdef0123456789abcdef-lx_annotate-0.0.3-py3-none-any.whl"
 )
 CANONICAL_WHEEL_FILENAME = "lx_annotate-0.0.3-py3-none-any.whl"
-PIP_INSTALL_PREFIX = "pip:install --upgrade --force-reinstall"
+PIP_INSTALL_PREFIX = "pip:install --upgrade"
 
 
 def _extract_function(function_name: str) -> str:
@@ -140,6 +140,7 @@ def test_ensure_wheel_runtime_installed_mocks_venv_creation(tmp_path: Path):
     assert result.returncode == 0, result.stderr
     assert runtime_venv.joinpath("bin", "python").exists()
     assert runtime_venv.joinpath("bin", "pip").exists()
+    assert runtime_root.joinpath("pip-cache").is_dir()
     assert calls_log.read_text(encoding="utf-8").splitlines() == [
         f"python:-m venv {runtime_venv}",
         f"{PIP_INSTALL_PREFIX} {runtime_root / CANONICAL_WHEEL_FILENAME}",

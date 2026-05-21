@@ -198,14 +198,15 @@ let
           local canonical_wheel_name=""
           local staged_wheel_path=""
           local install_hash=""
-          local wheel_installer_revision="stop-workers-before-wheel-install-v1"
+          local wheel_installer_revision="stop-workers-before-wheel-install-v2-incremental-pip-cache"
           local venv_created="false"
+          local pip_cache_dir="${runtimeRootPath}/pip-cache"
 
           if [ -z "${wheelFilePath}" ]; then
             die "services.luxnix.lxAnnotateLocal.runtime.wheelPath must be set in wheel mode."
           fi
 
-          install -d -m 0750 "${runtimeRootPath}" "${runtimeWheelRootPath}" "${runtimeWheelVenvPath}" "${envConfDir}" "${envDataDir}"
+          install -d -m 0750 "${runtimeRootPath}" "${runtimeWheelRootPath}" "${runtimeWheelVenvPath}" "$pip_cache_dir" "${envConfDir}" "${envDataDir}"
           install -d -m 0775 "${runtimeStaticRootPath}" "${runtimeStaticRootPath}/.vite"
 
           wheel_hash="$(${pkgs.coreutils}/bin/sha256sum "${wheelFilePath}" | ${pkgs.coreutils}/bin/cut -d ' ' -f1)"
@@ -242,8 +243,10 @@ let
 
           if [ "$venv_created" = "true" ] || [ "$install_hash" != "$installed_hash" ]; then
             ${pkgs.coreutils}/bin/install -m 0640 "${wheelFilePath}" "$staged_wheel_path"
+            export PIP_CACHE_DIR="$pip_cache_dir"
+            export PIP_DISABLE_PIP_VERSION_CHECK=1
             # shellcheck disable=SC2086
-            "${runtimeWheelVenvPath}/bin/pip" install --upgrade --force-reinstall $pip_install_args "$staged_wheel_path"
+            "${runtimeWheelVenvPath}/bin/pip" install --upgrade $pip_install_args "$staged_wheel_path"
             printf '%s
     ' "$install_hash" > "$wheel_install_stamp_file"
             chmod 0640 "$wheel_install_stamp_file" 2>/dev/null || true

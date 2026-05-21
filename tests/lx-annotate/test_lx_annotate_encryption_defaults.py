@@ -28,11 +28,21 @@ def test_lx_annotate_scripts_export_protected_storage_contract():
     assert "wheelRuntimePackage = pkgs.runCommand" in config_source
     assert "lx_annotate_wheel_ensure" in config_source
     assert "lx_annotate_wheel_sync_static" in config_source
+    assert "lx_annotate_wheel_export_secret_env" in config_source
+    assert "DJANGO_SECRET_KEY=\"$(lx_annotate_wheel_read_required_secret" in config_source
+    assert "DJANGO_DJANGO_DB_PASSWORD=\"$DJANGO_DB_PASSWORD\"" in config_source
+    assert "PIP_CACHE_DIR" in config_source
+    assert "pip-cache" in config_source
+    assert "install --upgrade $pip_install_args" in config_source
+    assert "--force-reinstall" not in config_source
+    assert "--no-cache-dir" not in config_source
     assert "package = effectiveRuntimePackage;" in config_source
     assert "make_entrypoint lx-annotate-web lx-annotate-web 1" in config_source
     assert "make_entrypoint lx-annotate-migrate lx-annotate-migrate 0" in config_source
     assert "systemd.services.lx-annotate-migrate = mkLxAnnotateAppService" in config_source
-    assert 'ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-migrate";' in config_source
+    assert "SupplementaryGroups = [ config.luxnix.generic-settings.sensitiveServiceGroupName ];" in config_source
+    assert 'ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-manage migrate --noinput";' in config_source
+    assert 'TimeoutStartSec = "2h";' in config_source
     assert 'ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-watch --once";' in config_source
     assert 'ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-export-frames";' in config_source
     assert "LX_ANNOTATE_ENCRYPTED_DATA_DIR = envDataDir;" in config_source

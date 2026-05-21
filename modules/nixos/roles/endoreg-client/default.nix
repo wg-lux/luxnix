@@ -407,11 +407,14 @@ in
 
                 echo "Mounting persisting storage drive $DEV_PATH to $storage_persisting_mount_point"
                 if [ ! -e "$DEV_PATH" ]; then
-                  echo "ERROR: Device path $DEV_PATH does not exist"
-                  exit 1
+                  echo "WARNING: Device path $DEV_PATH does not exist; leaving persisting storage unmounted"
+                  exit 0
                 fi
 
-                mount "$DEV_PATH" "$storage_persisting_mount_point"
+                if ! mount "$DEV_PATH" "$storage_persisting_mount_point"; then
+                  echo "WARNING: Failed to mount persisting storage drive $DEV_PATH; leaving it unmounted"
+                  exit 0
+                fi
                 echo "Mounted persisting storage successfully" 
 
               '';
