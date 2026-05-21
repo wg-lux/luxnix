@@ -22,72 +22,41 @@ let
 
   repoDir = "${endoreg-service-user-home}/${repoDirName}";
 
-  makeRuntimePath = path:
-    if lib.hasPrefix "/" path then path else "${repoDir}/${path}";
+  runtimePaths = import ./runtime-paths.nix {
+    inherit lib cfg repoDir;
+  };
 
-  # lx-ai owned runtime/output root.
-  #
-  # Current default behavior remains unchanged:
-  #   cfg.runtime.dataDir = "data"
-  #   envDataDir          = /var/endoreg-service-user/lx-ai/data
-  #
-  # Later this can safely become:
-  #   cfg.runtime.dataDir = "/var/lib/lx-ai/data"
-  # without changing Python code.
-  envDataDir = makeRuntimePath cfg.runtime.dataDir;
+  runtimeDefaults = runtimePaths.defaults;
 
-  # Protected media root used by endoreg-db path resolution.
-  #
-  # Default:
-  #   envProtectedDataDir = envDataDir
-  #
-  # Future lx-annotate shared-media mode:
-  #   cfg.runtime.protectedDataDir = "/var/lib/lx-annotate/data"
-  #
-  # Then lx-ai writes frames to envDataDir, but reads protected videos from
-  # envProtectedDataDir/storage through endoreg-db.
-  envProtectedDataDir =
-    if cfg.runtime.protectedDataDir != null
-    then makeRuntimePath cfg.runtime.protectedDataDir
-    else envDataDir;
+  inherit (runtimePaths)
+    envDataDir
+    envProtectedDataDir
+    envConfDir
 
-  envConfDir = makeRuntimePath cfg.runtime.confDir;
+    envFrameDir
+    envFrameMaterializationOutputRoot
 
-  envFrameDir = "${envDataDir}/frames";
-  envFrameMaterializationOutputRoot = "${envFrameDir}/generated";
+    envTrainingRoot
+    envCheckpointsDir
+    envRunsDir
+    envBucketSnapshotDir
+    envBackboneCheckpoint
+    envBackboneCheckpointUrl
 
-  envTrainingRoot = "${envDataDir}/model_training";
-  envCheckpointsDir = "${envTrainingRoot}/checkpoints";
-  envRunsDir = "${envTrainingRoot}/runs";
-  envBucketSnapshotDir = "${envTrainingRoot}/buckets";
-  envBackboneCheckpoint = "${envCheckpointsDir}/RN50_GastroNet-1M_DINOv1.pth";
-  envBackboneCheckpointUrl = cfg.runtime.backboneCheckpointUrl;
+    envCsvDir
+    envLegacyImageDir
+    envLegacyJsonlPath
 
-  envCsvDir = "${envDataDir}/import/csv";
-  envLegacyImageDir = "${envDataDir}/legacy_images/images";
-  envLegacyJsonlPath = "${envDataDir}/legacy_images/legacy_img_dicts.jsonl";
+    envStorageDir
+    envProcessedVideoDir
 
-  # Canonical protected-media layout matching endoreg_db.utils.paths:
-  #
-  # LX_ANNOTATE_ENCRYPTED_DATA_DIR = envProtectedDataDir
-  # STORAGE_DIR                    = envProtectedDataDir/storage
-  # PROTECTED_MEDIA_ROOT           = envProtectedDataDir/storage
-  #
-  # VideoFile.processed_file values like:
-  #   processed_videos_final/<hash>.mp4
-  #
-  # resolve under:
-  #   ${envStorageDir}/processed_videos_final/<hash>.mp4
-  envStorageDir = "${envProtectedDataDir}/storage";
-  envProcessedVideoDir = "${envStorageDir}/processed_videos_final";
+    envPlaintextTmpDir
 
-  envPlaintextTmpDir = "${envDataDir}/temp/plaintext_media";
+    envStreamableVideoRoot
+    envStreamableVideoRawRoot
+    envStreamableVideoProcessedRoot
 
-  envStreamableVideoRoot = "${envStorageDir}/streamable_videos";
-  envStreamableVideoRawRoot = "${envStreamableVideoRoot}/raw";
-  envStreamableVideoProcessedRoot = "${envStreamableVideoRoot}/processed";
-
-  envSystemdFilePath = "${repoDir}/.env.systemd";
+    envSystemdFilePath;
 
   encryptionServiceUnits =
     lib.optionals (cfg.runtime.encryptionService != null) [
@@ -220,10 +189,23 @@ let
         "${envStreamableVideoProcessedRoot}"
     else
       echo "Using external protected media root: ${envProtectedDataDir}"
-      if [ ! -d "${envStorageDir}" ]; then
-        echo "ERROR: External protected storage root does not exist: ${envStorageDir}" >&2
+
+      if [ ! -d "${envProtectedDataDir}" ]; then
+        echo "ERROR: External protected data root does not exist: ${envProtectedDataDir}" >&2
         echo "Set services.luxnix.lxAiLocal.runtime.protectedDataDir correctly or start the owning media service first." >&2
         exit 1
+      fi
+
+      if [ ! -d "${envStorageDir}" ]; then
+        echo "ERROR: External protected storage root does not exist: ${envStorageDir}" >&2
+        echo "Expected protected storage root: ${envStorageDir}" >&2
+        echo "For lx-annotate-owned videos this should normally be: /var/lib/lx-annotate/data/storage" >&2
+        exit 1
+      fi
+
+      if [ ! -d "${envProcessedVideoDir}" ]; then
+        echo "WARNING: Processed video directory does not exist yet: ${envProcessedVideoDir}" >&2
+        echo "lx-ai can start, but training will fail unless VideoFile.processed_file artifacts exist there." >&2
       fi
     fi
 
@@ -430,7 +412,7 @@ in
         options = {
           dataDir = mkOption {
             type = types.str;
-            default = "data";
+            default = runtimeDefaults.dataDir;
             description = ''
               lx-ai runtime data directory.
 
@@ -448,7 +430,7 @@ in
 
           protectedDataDir = mkOption {
             type = types.nullOr types.str;
-            default = null;
+            default = runtimeDefaults.protectedDataDir;
             example = "/var/lib/lx-annotate/data";
             description = ''
               Protected data root used by endoreg-db for encrypted/protected media.
@@ -464,7 +446,7 @@ in
 
           confDir = mkOption {
             type = types.str;
-            default = "conf";
+            default = runtimeDefaults.confDir;
             description = "lx-ai config directory. Relative values are resolved inside the lx-ai repository.";
           };
 
@@ -482,7 +464,7 @@ in
 
           encryptionService = mkOption {
             type = types.nullOr types.str;
-            default = null;
+            default = runtimeDefaults.encryptionService;
             example = "lx-annotate-encrypted-data.service";
             description = ''
               Optional systemd unit that must be started before lx-ai when
