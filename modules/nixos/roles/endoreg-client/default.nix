@@ -263,7 +263,7 @@ in
         enable = cfg.lxAnnotate.enable;
         debug.enable = cfg.lxAnnotate.debug.enable;
         source = cfg.lxAnnotate.source;
-        django = annotateDjango;
+        django = mkDefault annotateDjango;
         database = cfg.database;
         runtime = {
           limits = mkDefault cfg.lxAnnotate.runtime.limits;

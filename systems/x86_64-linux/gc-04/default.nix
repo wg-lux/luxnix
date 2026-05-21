@@ -42,16 +42,6 @@
       recommendedTlsSettings = true;
       recommendedOptimisation = true;
       recommendedGzipSettings = true;
-
-      virtualHosts."lx-annotate.endo-reg.net" = {
-        forceSSL = true;
-        sslCertificate = config.luxnix.generic-settings.sslCertificatePath;
-        sslCertificateKey = config.luxnix.generic-settings.sslCertificateKeyPath;
-        locations."/" = {
-          proxyPass = "http://127.0.0.1:8118";
-          proxyWebsockets = true;
-        };
-      };
     };
 
     luxnix.lxAnnotateLocal.django = {
