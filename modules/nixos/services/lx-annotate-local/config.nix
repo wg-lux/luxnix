@@ -275,7 +275,8 @@ let
         echo "ERROR: Installed lx-annotate wheel does not provide .vite/manifest.json." >&2
         exit 1
       fi
-      chmod -R u+rwX,go-rwx ${lib.escapeShellArg runtimeStaticRootPath} 2>/dev/null || true
+      find ${lib.escapeShellArg runtimeStaticRootPath} -type d -exec chmod 0750 {} +
+      find ${lib.escapeShellArg runtimeStaticRootPath} -type f -exec chmod 0640 {} +
     }
     EOF
     chmod +x "$out/libexec/lx-annotate-wheel-runtime-lib"

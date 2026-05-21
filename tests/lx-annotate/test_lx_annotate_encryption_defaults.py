@@ -38,6 +38,15 @@ def test_lx_annotate_scripts_export_protected_storage_contract():
     assert "--no-cache-dir" not in config_source
     assert "package = effectiveRuntimePackage;" in config_source
     assert "make_entrypoint lx-annotate-web lx-annotate-web 1" in config_source
+    assert (
+        "find ${lib.escapeShellArg runtimeStaticRootPath} -type d -exec chmod 0750 {} +"
+        in config_source
+    )
+    assert (
+        "find ${lib.escapeShellArg runtimeStaticRootPath} -type f -exec chmod 0640 {} +"
+        in config_source
+    )
+    assert "chmod -R u+rwX,go-rwx ${lib.escapeShellArg runtimeStaticRootPath}" not in config_source
     assert "make_entrypoint lx-annotate-migrate lx-annotate-migrate 0" in config_source
     assert "systemd.services.lx-annotate-migrate = mkLxAnnotateAppService" in config_source
     assert "SupplementaryGroups = [ config.luxnix.generic-settings.sensitiveServiceGroupName ];" in config_source
