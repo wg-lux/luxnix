@@ -320,7 +320,8 @@ in
 
             normalize_tree_permissions() {
               local source_dir="$1"
-              ${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 ! -group ${serviceGroup} -exec ${pkgs.coreutils}/bin/chgrp ${serviceGroup} {} + || true
+              ${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -type l -exec ${pkgs.coreutils}/bin/chgrp -h ${serviceGroup} {} + || true
+              ${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 ! -type l ! -group ${serviceGroup} -exec ${pkgs.coreutils}/bin/chgrp ${serviceGroup} {} + || true
               ${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -type d \( ! -perm -2070 -o -perm /0007 \) -exec ${pkgs.coreutils}/bin/chmod g+rws,o-rwx {} + || true
               ${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -type f \( ! -perm -0060 -o -perm /0007 \) -exec ${pkgs.coreutils}/bin/chmod g+rw,o-rwx {} + || true
             }
@@ -354,7 +355,8 @@ in
           normalize_source_permissions() {
             local source_dir="$1"
 
-            ${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 ! -group ${serviceGroup} -exec ${pkgs.coreutils}/bin/chgrp ${serviceGroup} {} + || true
+            ${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -type l -exec ${pkgs.coreutils}/bin/chgrp -h ${serviceGroup} {} + || true
+            ${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 ! -type l ! -group ${serviceGroup} -exec ${pkgs.coreutils}/bin/chgrp ${serviceGroup} {} + || true
             ${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -type d \( ! -perm -2070 -o -perm /0007 \) -exec ${pkgs.coreutils}/bin/chmod g+rws,o-rwx {} + || true
             ${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -type f \( ! -perm -0060 -o -perm /0007 \) -exec ${pkgs.coreutils}/bin/chmod g+rw,o-rwx {} + || true
           }
@@ -416,6 +418,7 @@ in
             local dest_dir="$2"
             local entry_name="$3"
             local input_dir=""
+            local output_file=""
             local output_name=""
 
             if ! is_video_filename "$entry_name"; then
@@ -429,18 +432,39 @@ in
 
             input_dir="$(${pkgs.coreutils}/bin/dirname "$input_file")"
             output_name="''${entry_name%.*}.mp4"
+            output_file="''${dest_dir}/''${output_name}"
             export_video_transcode_fallback_env
 
-            echo "Warning: Direct video publish failed; trying transcode fallback to system standard: $input_file -> ''${dest_dir}/''${output_name}"
-            (
+            echo "Warning: Direct video publish failed; trying transcode fallback to system standard: $input_file -> $output_file"
+            if ! (
               cd "${videoTranscodeWorkingDir}"
               "${pkgs.bash}/bin/bash" -lc ${lib.escapeShellArg videoTranscodeCommand} file-mover-transcode "$input_dir" "$entry_name" "$dest_dir"
-            )
+            ); then
+              ${pkgs.coreutils}/bin/rm -f "$output_file" || true
+              echo "Warning: video transcode fallback command failed for $input_file"
+              return 1
+            fi
 
-            ${pkgs.coreutils}/bin/chgrp ${serviceGroup} "''${dest_dir}/''${output_name}" || true
-            ${pkgs.coreutils}/bin/chmod 0660 "''${dest_dir}/''${output_name}" || true
+            if [ ! -s "$output_file" ]; then
+              ${pkgs.coreutils}/bin/rm -f "$output_file" || true
+              echo "Warning: video transcode fallback did not create a non-empty output file: $output_file"
+              return 1
+            fi
+
+            if ! ${pkgs.coreutils}/bin/chgrp ${serviceGroup} "$output_file"; then
+              ${pkgs.coreutils}/bin/rm -f "$output_file" || true
+              echo "Warning: failed to set group on transcoded Video entry: $output_file"
+              return 1
+            fi
+
+            if ! ${pkgs.coreutils}/bin/chmod 0660 "$output_file"; then
+              ${pkgs.coreutils}/bin/rm -f "$output_file" || true
+              echo "Warning: failed to set mode on transcoded Video entry: $output_file"
+              return 1
+            fi
+
             ${pkgs.coreutils}/bin/rm -f "$input_file" || true
-            echo "Published transcoded Video entry: ''${dest_dir}/''${output_name}"
+            echo "Published transcoded Video entry: $output_file"
           }
 
           wait_for_input_ready() {
@@ -527,6 +551,24 @@ in
             done < <(${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -type f ! -readable -print0)
           }
 
+          quarantine_symlink_entries() {
+            local source_dir="$1"
+            local quarantine_dir="$2"
+            local label="$3"
+
+            while IFS= read -r -d "" symlink_entry; do
+              base_name="$(${pkgs.coreutils}/bin/basename "$symlink_entry")"
+              timestamp="$(${pkgs.coreutils}/bin/date +%Y%m%d-%H%M%S)"
+              quarantine_target="''${quarantine_dir}/''${timestamp}-''${base_name}"
+              echo "Warning: ''${label} input is a symlink. Quarantining instead of dereferencing: $symlink_entry"
+
+              if ! ${pkgs.coreutils}/bin/mv -f "$symlink_entry" "$quarantine_target"; then
+                echo "Warning: Failed to quarantine symlink input: $symlink_entry"
+                overall_status=1
+              fi
+            done < <(${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -type l -print0)
+          }
+
           process_input_dir() {
             local source_dir="$1"
             local dest_dir="$2"
@@ -539,6 +581,7 @@ in
 
             echo "Processing ''${label} Input..."
             normalize_source_permissions "$source_dir"
+            quarantine_symlink_entries "$source_dir" "$quarantine_dir" "$label"
             quarantine_unreadable_files "$source_dir" "$quarantine_dir" "$label"
 
             # If everything was quarantined, there's nothing left to sync.

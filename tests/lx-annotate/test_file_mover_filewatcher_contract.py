@@ -294,6 +294,27 @@ def test_file_mover_quarantines_unreadable_inputs_in_failed_input_dirs() -> None
     assert quarantine_call in source
 
 
+def test_file_mover_quarantines_symlink_inputs_without_dereferencing() -> None:
+    source = FILE_MOVER_SOURCE.read_text(encoding="utf-8")
+    process_body = source[
+        source.index("        process_input_dir() {") :
+        source.index("        # Rsync with retry logic is not needed here")
+    ]
+    symlink_call = (
+        'quarantine_symlink_entries "$source_dir" "$quarantine_dir" "$label"'
+    )
+    unreadable_call = (
+        'quarantine_unreadable_files "$source_dir" "$quarantine_dir" "$label"'
+    )
+
+    assert "quarantine_symlink_entries()" in source
+    assert "-type l -exec ${pkgs.coreutils}/bin/chgrp -h" in source
+    assert 'find "$source_dir" -mindepth 1 ! -type l ! -group' in source
+    assert "Quarantining instead of dereferencing" in source
+    assert "/bin/mv -f \"$symlink_entry\" \"$quarantine_target\"" in source
+    assert process_body.index(symlink_call) < process_body.index(unreadable_call)
+
+
 def test_file_mover_video_validation_reports_permission_and_ffprobe_failures() -> None:
     source = FILE_MOVER_SOURCE.read_text(encoding="utf-8")
     validation_body = source[
@@ -344,6 +365,30 @@ def test_file_mover_transcodes_video_before_publish() -> None:
     assert "Published transcoded Video entry" in transcode_body
     assert "-pix_fmt" not in transcode_body
     assert "-color_range" not in transcode_body
+
+
+def test_file_mover_transcode_fallback_fails_closed_before_publish() -> None:
+    source = FILE_MOVER_SOURCE.read_text(encoding="utf-8")
+    transcode_body = source[
+        source.index("        transcode_video_entry() {") :
+        source.index("        wait_for_input_ready() {")
+    ]
+
+    assert "video transcode fallback command failed" in transcode_body
+    assert (
+        "video transcode fallback did not create a non-empty output file"
+        in transcode_body
+    )
+    assert '[ ! -s "$output_file" ]' in transcode_body
+    assert 'chgrp ${serviceGroup} "$output_file" || true' not in transcode_body
+    assert 'chmod 0660 "$output_file" || true' not in transcode_body
+    assert (
+        transcode_body.index("if ! (")
+        < transcode_body.index('[ ! -s "$output_file" ]')
+        < transcode_body.index("chgrp ${serviceGroup}")
+        < transcode_body.index("chmod 0660")
+        < transcode_body.index("Published transcoded Video entry")
+    )
 
 
 def test_wheel_and_repo_filewatchers_process_existing_once() -> None:
