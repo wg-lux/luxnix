@@ -6,6 +6,7 @@ template_name: "main"
 
 host_roles:
   custom_packages.baseDevelopment: "true"
+  endoreg_client.defaultCenterKey: '"university_hospital_wuerzburg"'
 
 host_services: {}
 

@@ -463,6 +463,7 @@ let
     CELERY_FFMPEG_MEDIA_QUEUE = "ffmpeg_media";
     CELERY_INFERENCE_QUEUE = "inference";
     CELERY_TRAINING_QUEUE = "model_training";
+    CELERY_LLM_INFERENCE_QUEUE = "llm_inference";
     CELERY_MAINTENANCE_QUEUE = "maintenance";
     CELERY_FRAME_EXTRACTION_REQUIRE_SECURE_TRANSPORT = boolString cfg.runtime.celeryBroker.requireSecureTransport;
     CELERY_FFMPEG_MEDIA_REQUIRE_SECURE_TRANSPORT = boolString cfg.runtime.celeryBroker.requireSecureTransport;
@@ -497,6 +498,9 @@ let
       persistentTimer ? null,
       runtimeMaxSec ? null,
       timeoutStopSec ? null,
+      after ? [ ],
+      wants ? [ ],
+      requires ? [ ],
     }:
     {
       inherit
@@ -504,6 +508,9 @@ let
         hostname
         mode
         environment
+        after
+        wants
+        requires
         ;
       concurrency = pool.concurrency;
       maxTasksPerChild = pool.maxTasksPerChild;
@@ -547,6 +554,14 @@ let
   trainingWorkerEnv = {
     MODEL_TRAINING_JOB_MODE = "celery";
     MODEL_TRAINING_STAGING_ROOT = cfg.runtime.modelTrainingStagingRoot;
+  };
+  llmInferenceWorkerEnv = {
+    REPORT_LLM_JOB_MODE = "celery";
+    LLM_ENABLED = "true";
+    LLM_PROVIDER = "ollama";
+    LLM_MODEL = "lx-gemma4-e2b-json";
+    LLM_BASE_URL = "http://127.0.0.1:11434";
+    LLM_TIMEOUT = "120";
   };
   appServiceBaseAfter = [
     "network.target"
@@ -732,13 +747,24 @@ let
       environment = trainingWorkerEnv;
       cudaVisibleDevices = cfg.runtime.trainingWorker.cudaVisibleDevices;
     };
+    llm-inference = mkWorker {
+      unitName = "lx-annotate-celery-llm-inference-worker";
+      hostname = "llm-inference";
+      queues = [ "llm_inference" ];
+      pool = cfg.runtime.workerPools.llmInference;
+      mode = cfg.runtime.llmInferenceWorker.mode;
+      environment = llmInferenceWorkerEnv;
+      after = [ "ollama.service" ];
+      wants = [ "ollama.service" ];
+      requires = [ "ollama.service" ];
+    };
   };
   mkWorkerService =
     name: workerCfg:
     let
       queueArg = lib.concatStringsSep "," workerCfg.queues;
       workerArgs = [
-        "--hostname=${workerCfg.hostname}@%h"
+        "--hostname=${workerCfg.hostname}@%%h"
         "--queues=${queueArg}"
         "--concurrency=${toString workerCfg.concurrency}"
         "--prefetch-multiplier=1"
@@ -770,12 +796,14 @@ let
         after = [
           "lx-annotate-load-base-data.service"
           "lx-annotate-master-key-check.service"
-        ];
-        wants = [ "lx-annotate-load-base-data.service" ];
+        ]
+        ++ workerCfg.after;
+        wants = [ "lx-annotate-load-base-data.service" ] ++ workerCfg.wants;
         requires = [
           "lx-annotate-load-base-data.service"
           "lx-annotate-master-key-check.service"
-        ];
+        ]
+        ++ workerCfg.requires;
         environment = workerEnvironment;
         serviceConfig =
           {
@@ -1071,6 +1099,10 @@ in
       {
         assertion = !cfg.runtime.clustered.enable || cfg.runtime.externalServices.redisUrl != null;
         message = "services.luxnix.lxAnnotateLocal.runtime.clustered.enable requires runtime.externalServices.redisUrl.";
+      }
+      {
+        assertion = cfg.runtime.llmInferenceWorker.mode != "always" || config.services.luxnix.ollama.enable;
+        message = "services.luxnix.lxAnnotateLocal.runtime.llmInferenceWorker.mode = \"always\" requires services.luxnix.ollama.enable = true.";
       }
       {
         assertion =

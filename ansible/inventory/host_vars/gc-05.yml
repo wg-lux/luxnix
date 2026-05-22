@@ -6,12 +6,13 @@ template_name: "main"
 
 host_roles:
   custom_packages.baseDevelopment: "true"
+  endoreg_client.defaultCenterKey: '"rbk_stuttgart"'
 
 host_services: {}
 
 host_nixos:
   nix.settings.max_jobs: 1
-  nix.settings.cores: 2
+  nix.settings.cores: 4
 
 ansible_roles:
   - "dev_access"

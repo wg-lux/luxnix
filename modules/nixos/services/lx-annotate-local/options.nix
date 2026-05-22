@@ -88,8 +88,8 @@ let
           "always"
           "manual"
         ];
-        default = "manual";
-        description = "Scheduling mode for export-stage frame extraction. Manual keeps this worker stopped until export workflows or operators start it.";
+        default = "maintenance-window";
+        description = "Scheduling mode for export-stage frame extraction. Maintenance-window keeps bounded frame materialization out of foreground hours by default.";
       };
       onCalendar = mkOption {
         type = types.str;
@@ -161,6 +161,18 @@ let
         type = types.str;
         default = "0";
         description = "CUDA_VISIBLE_DEVICES value exported to the model-training worker.";
+      };
+    };
+  };
+  llmInferenceWorkerType = types.submodule {
+    options = {
+      mode = mkOption {
+        type = types.enum [
+          "always"
+          "manual"
+        ];
+        default = "always";
+        description = "Scheduling mode for the dedicated Ollama-backed LLM inference Celery worker.";
       };
     };
   };
@@ -620,6 +632,19 @@ in
                   };
                   description = "Celery pool for single-GPU model training jobs.";
                 };
+                llmInference = mkOption {
+                  type = workerPoolType;
+                  default = {
+                    concurrency = 1;
+                    maxTasksPerChild = 1;
+                    memoryHigh = "4G";
+                    memoryMax = "8G";
+                    cpuQuota = "150%";
+                    nice = 12;
+                    oomScoreAdjust = 350;
+                  };
+                  description = "Celery pool for Ollama-backed report and metadata LLM inference jobs.";
+                };
                 maintenance = mkOption {
                   type = workerPoolType;
                   default = {
@@ -657,6 +682,11 @@ in
             type = trainingWorkerType;
             default = { };
             description = "Scheduling policy for the dedicated GPU model-training Celery worker.";
+          };
+          llmInferenceWorker = mkOption {
+            type = llmInferenceWorkerType;
+            default = { };
+            description = "Scheduling policy for the dedicated Ollama-backed LLM inference Celery worker.";
           };
           externalServices = mkOption {
             type = types.submodule {
