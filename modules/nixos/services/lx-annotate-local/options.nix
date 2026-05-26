@@ -585,8 +585,8 @@ in
                   default = {
                     concurrency = 1;
                     maxTasksPerChild = 1;
-                    memoryHigh = "3G";
-                    memoryMax = "5G";
+                    memoryHigh = "6G";
+                    memoryMax = "8G";
                     cpuQuota = "35%";
                     nice = 18;
                     oomScoreAdjust = 850;
