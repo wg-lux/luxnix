@@ -68,6 +68,16 @@ let
         default = "35%";
         description = "CPUQuota assigned to this Celery workload pool.";
       };
+      cpuWeight = mkOption {
+        type = types.ints.between 1 10000;
+        default = 100;
+        description = "CPUWeight assigned to this Celery workload pool.";
+      };
+      ioWeight = mkOption {
+        type = types.ints.between 1 10000;
+        default = 100;
+        description = "IOWeight assigned to this Celery workload pool.";
+      };
       nice = mkOption {
         type = types.int;
         default = 15;
@@ -127,6 +137,41 @@ let
         ];
         default = "always";
         description = "Scheduling mode for the low-priority FFmpeg media Celery worker.";
+      };
+    };
+  };
+  ffmpegStreamThrottleProfileType = types.submodule {
+    options = {
+      cpuQuota = mkOption {
+        type = types.str;
+        description = "Runtime CPUQuota applied to the FFmpeg worker in this stream-throttle profile.";
+      };
+      cpuWeight = mkOption {
+        type = types.ints.between 1 10000;
+        description = "Runtime CPUWeight applied to the FFmpeg worker in this stream-throttle profile.";
+      };
+      ioWeight = mkOption {
+        type = types.ints.between 1 10000;
+        description = "Runtime IOWeight applied to the FFmpeg worker in this stream-throttle profile.";
+      };
+    };
+  };
+  ffmpegStreamThrottleNormalProfileType = types.submodule {
+    options = {
+      cpuQuota = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Runtime CPUQuota applied when no user stream is active. Null follows runtime.workerPools.ffmpeg.cpuQuota.";
+      };
+      cpuWeight = mkOption {
+        type = types.nullOr (types.ints.between 1 10000);
+        default = null;
+        description = "Runtime CPUWeight applied when no user stream is active. Null follows runtime.workerPools.ffmpeg.cpuWeight.";
+      };
+      ioWeight = mkOption {
+        type = types.ints.between 1 10000;
+        default = 100;
+        description = "Runtime IOWeight applied when no user stream is active.";
       };
     };
   };
@@ -319,8 +364,8 @@ in
           wheelPath = mkOption {
             type = types.nullOr types.path;
             default = pkgs.fetchurl {
-              url = "https://files.pythonhosted.org/packages/e1/43/a8a8df9b1ec7996d25c4a6a7c622bef3774db0ab3667cab641dfae23beed/lx_annotate-0.6.4-py3-none-any.whl";
-              hash = "sha256-3UJs+dD2ubcj652ZwR+lWgvquhB7lbl2DvEHb6oGvgQ=";
+              url = "https://files.pythonhosted.org/packages/c7/71/7b599730c7c372e9b37a38d5f396ffea5817348585919042339bb4f10a61/lx_annotate-0.6.6-py3-none-any.whl";
+              hash = "sha256-H9VCxfDIe3PPt3rh25zdlhsUSLgtRGgRW6XiN3jUZaE=";
             };
             description = "Path to the lx-annotate wheel artifact used in wheel mode.";
           };
@@ -585,13 +630,15 @@ in
                   default = {
                     concurrency = 1;
                     maxTasksPerChild = 1;
-                    memoryHigh = "6G";
-                    memoryMax = "8G";
-                    cpuQuota = "35%";
-                    nice = 18;
+                    memoryHigh = "10G";
+                    memoryMax = "12G";
+                    cpuQuota = "200%";
+                    cpuWeight = 100;
+                    ioWeight = 100;
+                    nice = 0;
                     oomScoreAdjust = 850;
                   };
-                  description = "Celery pool for delayed low-priority FFmpeg media reprocessing.";
+                  description = "Celery pool for bounded FFmpeg media reprocessing.";
                 };
                 frameExtraction = mkOption {
                   type = workerPoolType;
@@ -672,6 +719,38 @@ in
             type = ffmpegWorkerType;
             default = { };
             description = "Scheduling policy for the dedicated low-priority FFmpeg media Celery worker.";
+          };
+          ffmpegStreamThrottle = mkOption {
+            type = types.submodule {
+              options = {
+                enable = mkOption {
+                  type = types.bool;
+                  default = true;
+                  description = "Enable runtime stream-aware throttling for the FFmpeg worker cgroup.";
+                };
+                interval = mkOption {
+                  type = types.str;
+                  default = "10s";
+                  description = "Systemd timer interval for reconciling stream-aware FFmpeg throttling.";
+                };
+                streaming = mkOption {
+                  type = ffmpegStreamThrottleProfileType;
+                  default = {
+                    cpuQuota = "50%";
+                    cpuWeight = 10;
+                    ioWeight = 10;
+                  };
+                  description = "Runtime cgroup profile applied while user stream leases are active.";
+                };
+                normal = mkOption {
+                  type = ffmpegStreamThrottleNormalProfileType;
+                  default = { };
+                  description = "Runtime cgroup profile applied after active stream leases expire.";
+                };
+              };
+            };
+            default = { };
+            description = "Stream-aware runtime throttling for the dedicated FFmpeg worker.";
           };
           inferenceWorker = mkOption {
             type = inferenceWorkerType;

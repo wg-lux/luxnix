@@ -73,7 +73,9 @@ def _file_mover_host_matrix() -> dict[str, Any]:
                 fileMoverPathConfig =
                   cfg.systemd.paths.move-my-files.pathConfig;
                 transcodeVideoCommand =
-                  lxCfg.runtime.commands.transcodeVideo or null;
+                  cfg.services.luxnix.fileMover.videoTranscodeFallback.command;
+                transcodeEnvironmentScript =
+                  cfg.services.luxnix.fileMover.videoTranscodeFallback.environmentScript;
                 inherit hasWatcherService hasWatcherPath;
                 fileWatcherServiceConfig =
                   if hasWatcherService then
@@ -146,6 +148,7 @@ def test_all_file_mover_hosts_publish_into_filewatcher_intake_contract() -> None
         assert contract["hasWatcherPath"], host_name
         assert transcode_command is not None, host_name
         assert "transcode_video" in transcode_command, host_name
+        assert "LD_LIBRARY_PATH=" in contract["transcodeEnvironmentScript"], host_name
 
         watcher_config = contract["fileWatcherServiceConfig"]
         watcher_path = contract["fileWatcherPathConfig"]
@@ -257,6 +260,22 @@ def test_tmpfiles_create_file_mover_handoff_dirs_with_service_ownership() -> Non
         resolved["sap"],
     ):
         assert f'd "{path}" 0770 {user} {group} -' in tmpfiles
+
+
+def test_gc10_file_mover_transcode_fallback_exports_runtime_library_path() -> None:
+    env_script = _nix_eval_expr_json(
+        """
+        let
+          flake = builtins.getFlake "git+file:///home/admin/luxnix";
+          cfg = flake.nixosConfigurations.gc-10.config;
+        in
+          cfg.services.luxnix.fileMover.videoTranscodeFallback.environmentScript
+        """
+    )
+
+    assert "LD_LIBRARY_PATH=" in env_script
+    assert "-gcc-" in env_script
+    assert "-lib/lib" in env_script
 
 
 def test_file_mover_stages_before_publishing_and_deletes_only_after_success() -> None:
