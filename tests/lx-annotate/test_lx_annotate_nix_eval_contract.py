@@ -358,7 +358,6 @@ def _gc_02_extended_contracts() -> dict[str, Any]:
           defaultCenterCfg = (gc02.extendModules {
             modules = [
               ({ ... }: {
-                roles.endoreg-client.defaultCenter = "University Hospital Wuerzburg";
                 roles.endoreg-client.defaultCenterKey = "university_hospital_wuerzburg";
               })
             ];
@@ -469,7 +468,6 @@ def _gc_02_extended_contracts() -> dict[str, Any]:
             hubBackupExecStart = hubTransferCfg.systemd.services.lx-annotate-hub-backup.serviceConfig.ExecStart;
           };
           defaultCenter = {
-            djangoDefaultCenter = defaultCenterCfg.services.luxnix.lxAnnotateLocal.django.extraSettings.DEFAULT_CENTER;
             djangoDefaultCenterKey = defaultCenterCfg.services.luxnix.lxAnnotateLocal.django.extraSettings.DEFAULT_CENTER_KEY;
             fileWatcherEnvironment = defaultCenterCfg.systemd.services.lx-annotate-filewatcher.serviceConfig.Environment;
           };
@@ -1163,9 +1161,7 @@ def test_hub_transfer_api_extend_modules_enables_nginx_and_backup_surfaces() -> 
 
 
 def test_endoreg_client_default_center_key_flows_to_lx_annotate_runtime_env() -> None:
-    evaluated = _gc_02_extended_contracts()["defaultCenter"]
 
-    assert evaluated["djangoDefaultCenter"] == "University Hospital Wuerzburg"
     assert evaluated["djangoDefaultCenterKey"] == "university_hospital_wuerzburg"
     assert (
         "LX_ANNOTATE_DEFAULT_CENTER=university_hospital_wuerzburg"

@@ -150,10 +150,7 @@ let
     let
       explicitDefaultCenterKey = cfg.django.extraSettings.DEFAULT_CENTER_KEY or null;
       defaultCenterReference = lib.strings.trim (toString (
-        cfg.django.extraSettings.DEFAULT_CENTER or
-        config.roles.endoreg-client.defaultCenter or
-        "University Hospital Wuerzburg"
-      ));
+        cfg.django.extraSettings.DEFAULT_CENTER
     in
     if explicitDefaultCenterKey != null then
       explicitDefaultCenterKey

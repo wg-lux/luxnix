@@ -59,12 +59,6 @@ in
         description = "Enable the lx-ai training service unit.";
       };
 
-      defaultCenter = mkOption {
-        type = types.str;
-        default = "University Hospital Wuerzburg";
-        description = "Default center reference for endoreg client. lx-annotate resolves this first as center_key, then as center name.";
-        example = "University Hospital Wuerzburg";
-      };
 
       defaultCenterKey = mkOption {
         type = types.nullOr types.str;
@@ -222,10 +216,9 @@ in
           {
             CENTRAL_NODES = cfg.centralNodes;
             IS_CENTRAL_NODE = false;
-            DEFAULT_CENTER = cfg.defaultCenter;
           }
           // lib.optionalAttrs (cfg.defaultCenterKey != null) {
-            DEFAULT_CENTER_KEY = cfg.defaultCenterKey;
+            DEFAULT_CENTER = cfg.defaultCenterKey;
           }
         );
 
