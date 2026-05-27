@@ -884,7 +884,24 @@ let
       exit 0
     fi
 
-    mode="$(${effectiveRuntimePackage}/bin/lx-annotate-manage ffmpeg_stream_throttle_state --mode-only)"
+    mode_output="$(${effectiveRuntimePackage}/bin/lx-annotate-manage ffmpeg_stream_throttle_state --mode-only)"
+    mode=""
+    while IFS= read -r mode_line; do
+      case "$mode_line" in
+        streaming|normal)
+          mode="$mode_line"
+          ;;
+      esac
+    done <<EOF
+    $mode_output
+    EOF
+
+    if [ -z "$mode" ]; then
+      echo "ERROR: ffmpeg stream throttle did not report a valid mode. Raw output follows:" >&2
+      printf '%s\n' "$mode_output" >&2
+      exit 1
+    fi
+
     case "$mode" in
       streaming)
         cpu_quota=${lib.escapeShellArg cfg.runtime.ffmpegStreamThrottle.streaming.cpuQuota}

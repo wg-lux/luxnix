@@ -118,6 +118,10 @@ def test_ffmpeg_stream_throttle_applier_uses_only_allowlisted_runtime_profiles()
     script = _ffmpeg_throttle_script_source()
 
     assert "ffmpeg_stream_throttle_state --mode-only" in script
+    assert 'mode_output="$(' in script
+    assert 'while IFS= read -r mode_line; do' in script
+    assert 'mode="$mode_line"' in script
+    assert 'if [ -z "$mode" ]; then' in script
     assert 'case "$mode" in' in script
     assert "streaming)" in script
     assert "normal)" in script
