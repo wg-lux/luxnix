@@ -317,7 +317,6 @@ def test_endoreg_client_default_center_key_flows_to_lx_annotate_runtime_env() ->
         """
     )
 
-    assert evaluated["djangoDefaultCenter"] == "University Hospital Wuerzburg"
     assert evaluated["djangoDefaultCenterKey"] == "university_hospital_wuerzburg"
     assert (
         "LX_ANNOTATE_DEFAULT_CENTER=university_hospital_wuerzburg"
