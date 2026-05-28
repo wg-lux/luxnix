@@ -1,6 +1,9 @@
-args@{ lib, ... }:
-with lib;
-with args;
+{
+  pkgs,
+  cfg,
+  lxAnnotateRuntime,
+  ...
+}:
 let
   runtime = lxAnnotateRuntime;
   inherit (runtime.paths) envDataDir;

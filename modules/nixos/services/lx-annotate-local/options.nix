@@ -1,8 +1,16 @@
-args@{ lib, ... }:
-with lib;
-with lib.luxnix;
-with args;
+{
+  config,
+  lib,
+  pkgs,
+  cfg,
+  lxAnnotateRuntime,
+  ...
+}:
 let
+  inherit (builtins) elemAt;
+  inherit (lib) literalExpression mkOption types;
+  inherit (lib.luxnix) mkBoolOpt;
+
   runtime = lxAnnotateRuntime;
   inherit (runtime.identities)
     endoreg-service-user-name
@@ -216,7 +224,7 @@ let
           "always"
           "manual"
         ];
-        default = "always";
+        default = "manual";
         description = "Scheduling mode for the dedicated Ollama-backed LLM inference Celery worker.";
       };
     };

@@ -370,6 +370,8 @@ in {
     environment.variables = {
       SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
       NIX_SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+      LUXNIX_FLAKE = toString cfg.configurationPath;
+      LUXNIX_HOST = hostname;
     };
 
     # GPU Configuration warnings

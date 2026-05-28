@@ -1,11 +1,8 @@
 {
   config,
   lib,
-  pkgs,
   ...
 }:
-with lib;
-with lib.luxnix;
 let
   cfg = config.services.luxnix.lxAnnotateLocal;
   gs = config.luxnix.generic-settings;

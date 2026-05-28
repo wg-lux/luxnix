@@ -5,6 +5,7 @@ Use this as the entry point for setup and operations.
 ## Start here
 
 - [Getting Started](./getting-started.md): canonical Day-0 onboarding path.
+- [Architecture](./architecture.md): repository layout, profile/role rules, and introspection workflow.
 - [Deployment Guide](./deployment-guide.md): deployment details and host setup reference.
 - [Vault Setup](./vault-setup.md): secret bootstrap and lifecycle.
 - [SSH Host Identity](./ssh-host-identity.md): host-key registry, rotation, and recovery workflow.

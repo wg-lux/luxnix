@@ -1,6 +1,10 @@
-args@{ lib, ... }:
-with lib;
-with args;
+{
+  config,
+  lib,
+  pkgs,
+  cfg,
+  ...
+}:
 {
   runLocalHubBackupScript = pkgs.writeShellScriptBin "runLxAnnotateHubBackup" ''
         set -euo pipefail

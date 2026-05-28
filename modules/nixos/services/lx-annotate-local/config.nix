@@ -1,8 +1,24 @@
-args@{ lib, ... }:
-with lib;
-with lib.luxnix;
-with args;
+args@{
+  config,
+  lib,
+  pkgs,
+  cfg,
+  sslCfg,
+  lxAnnotateRuntime,
+  ...
+}:
 let
+  inherit (lib)
+    mkAfter
+    mkBefore
+    mkDefault
+    mkForce
+    mkIf
+    mkMerge
+    optionalAttrs
+    optionalString
+    ;
+
   runtime = lxAnnotateRuntime;
   inherit (runtime.identities)
     endoreg-service-user-name
@@ -1174,6 +1190,9 @@ in
       services.luxnix.lxAnnotateLocal.hub.transferApi.requireMtls = mkIf (
         cfg.runtime.deploymentRole == "central_hub"
       ) (mkDefault true);
+      services.luxnix.ollama.enable = mkIf (cfg.runtime.llmInferenceWorker.mode == "always") (
+        mkDefault true
+      );
 
       services.luxnix.fileMover = {
         paths = {

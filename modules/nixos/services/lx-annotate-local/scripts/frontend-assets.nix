@@ -1,5 +1,4 @@
-args@{ ... }:
-with args;
+{ pkgs, ... }:
 {
   alignEnvFileScript = pkgs.writeText "lx-annotate-align-env.py" ''
     import os

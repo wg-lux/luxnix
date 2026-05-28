@@ -71,7 +71,6 @@ endoreg-client.defaultCenterKey = "university_hospital_wuerzburg";
   services = {
 luxnix.endoregDbApiLocal.enable = lib.mkForce false;
 luxnix.lxAnnotateLocal.runtime.mode = "wheel";
-luxnix.ollama.enable = true;
 luxnix.vllm.enable = false;
 luxnix.vllm.gpuMemoryUtilization = 0.85;
 luxnix.vllm.host = "127.0.0.1";

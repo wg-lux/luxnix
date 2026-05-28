@@ -36,6 +36,7 @@ in {
   config = mkIf cfg.enable {
     home.sessionVariables = {
       FLAKE = "/home/${config.luxnix.user.admin.name}/${cfg.configurationPath}";
+      LUXNIX_FLAKE = "/home/${config.luxnix.user.admin.name}/${cfg.configurationPath}";
     };
   };
 }

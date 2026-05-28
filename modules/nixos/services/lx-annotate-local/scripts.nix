@@ -1,8 +1,14 @@
-args@{ lib, ... }:
-with lib;
-with lib.luxnix;
-with args;
+args@{
+  config,
+  lib,
+  pkgs,
+  cfg,
+  lxAnnotateRuntime,
+  ...
+}:
 let
+  inherit (lib) optionalString;
+
   runtime = lxAnnotateRuntime;
   inherit (runtime.identities)
     endoreg-service-user-name
@@ -30,6 +36,7 @@ let
     runtimeWorkingDir
     staticRootPath
     djangoStaticRootPath
+    viteSourcePath
     envDataDir
     envConfDir
     makeCacheDir
