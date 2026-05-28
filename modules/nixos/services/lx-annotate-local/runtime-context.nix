@@ -156,8 +156,6 @@ let
     in
     if explicitDefaultCenterKey != null then
       explicitDefaultCenterKey
-    else if defaultCenterReference == "" then
-      "University Hospital Wuerzburg"
     else
       defaultCenterReference;
   exportFramesStorageRootDefault =
