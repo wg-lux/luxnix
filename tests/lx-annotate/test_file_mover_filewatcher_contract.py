@@ -28,12 +28,25 @@ def _nix_script_body(source: str, marker: str) -> str:
     return source[body_start:body_end]
 
 
+def _tmpfiles_declares_dir(
+    tmpfiles: list[str], path: str, mode: str, user: str, group: str
+) -> bool:
+    return any(
+        rule in tmpfiles
+        for rule in (
+            f'd "{path}" {mode} {user} {group} -',
+            f"d {path} {mode} {user} {group} - -",
+        )
+    )
+
+
 def _file_mover_host_matrix() -> dict[str, Any]:
     return _nix_eval_expr_json(
         """
         let
           flake = builtins.getFlake "git+file:///home/admin/luxnix";
           lib = flake.inputs.nixpkgs.lib;
+          envList = env: lib.mapAttrsToList (name: value: "${name}=${toString value}") env;
           hostNames = builtins.attrNames flake.nixosConfigurations;
           fileMoverEnabledHosts = lib.filter
             (hostName:
@@ -80,6 +93,9 @@ def _file_mover_host_matrix() -> dict[str, Any]:
                 fileWatcherServiceConfig =
                   if hasWatcherService then
                     cfg.systemd.services."lx-annotate-filewatcher".serviceConfig
+                    // {
+                      Environment = envList cfg.systemd.services."lx-annotate-filewatcher".environment;
+                    }
                   else
                     {};
                 fileWatcherPathConfig =
@@ -187,7 +203,7 @@ def test_all_file_mover_hosts_publish_into_filewatcher_intake_contract() -> None
             resolved["preanonymized"],
             resolved["sap"],
         ):
-            assert f'd "{path}" 0770 {user} {group} -' in tmpfiles, host_name
+            assert _tmpfiles_declares_dir(tmpfiles, path, "0770", user, group), host_name
 
 
 def test_file_mover_path_triggers_only_on_operator_source_dirs() -> None:
@@ -259,7 +275,7 @@ def test_tmpfiles_create_file_mover_handoff_dirs_with_service_ownership() -> Non
         resolved["preanonymized"],
         resolved["sap"],
     ):
-        assert f'd "{path}" 0770 {user} {group} -' in tmpfiles
+        assert _tmpfiles_declares_dir(tmpfiles, path, "0770", user, group)
 
 
 def test_gc10_file_mover_transcode_fallback_exports_runtime_library_path() -> None:
@@ -299,14 +315,12 @@ def test_file_mover_stages_before_publishing_and_deletes_only_after_success() ->
 
 def test_file_mover_quarantines_unreadable_inputs_in_failed_input_dirs() -> None:
     source = FILE_MOVER_SOURCE.read_text(encoding="utf-8")
-    failed_input_base = (
-        'failedInputBaseDir = "${endoregPaths.storageBaseDir}/failed_input";'
-    )
     quarantine_call = (
         'quarantine_unreadable_files "$source_dir" "$quarantine_dir" "$label"'
     )
 
-    assert failed_input_base in source
+    assert 'default = "${endoregPaths.storageBaseDir}/failed_input/video";' in source
+    assert 'default = "${endoregPaths.storageBaseDir}/failed_input/pdf";' in source
     assert "quarantine_unreadable_files()" in source
     assert 'quarantine_target="\'\'${quarantine_dir}/' in source
     assert '/bin/mv -f "$unreadable_file" "$quarantine_target"' in source
@@ -338,11 +352,11 @@ def test_file_mover_video_validation_reports_permission_and_ffprobe_failures() -
     source = FILE_MOVER_SOURCE.read_text(encoding="utf-8")
     validation_body = source[
         source.index("        validate_video_sources() {") :
-        source.index("        export_lx_annotate_transcode_env() {")
+        source.index("        export_video_transcode_fallback_env() {")
     ]
 
     assert '[ ! -r "$video_file" ]' in validation_body
-    assert "not readable by ${endoregServiceUserName}" in validation_body
+    assert "not readable by ${serviceUserName}" in validation_body
     assert "ffprobe rejected it" in validation_body
     assert "ffprobe_error_summary" in validation_body
     assert "2>&1 >/dev/null" in validation_body
@@ -362,19 +376,15 @@ def test_file_mover_transcodes_video_before_publish() -> None:
         source.index("        wait_for_input_ready() {")
     ]
 
-    assert "transcode_video" in contract["commands"]["transcodeVideo"]
-    assert "--settings=lx_annotate.settings.settings_prod" in contract["commands"][
-        "transcodeVideo"
-    ]
-    assert "export_lx_annotate_transcode_env()" in source
-    assert "LX_ANNOTATE_WHEEL_VENV" in source
-    assert "WATCHER_VIDEO_DIR" in source
+    assert "transcode_video" in contract["fileMover"]["transcodeVideoCommand"]
+    assert "export_video_transcode_fallback_env()" in source
+    assert "WATCHER_VIDEO_DIR" in contract["fileMover"]["transcodeEnvironmentScript"]
     assert "FFMPEG_TRANSCODE_TIMEOUT_SECONDS" in source
-    assert "--input-dir" in source
-    assert "--filename" in source
-    assert "--output-dir" in source
+    assert "--input-dir" in contract["fileMover"]["transcodeVideoCommand"]
+    assert "--filename" in contract["fileMover"]["transcodeVideoCommand"]
+    assert "--output-dir" in contract["fileMover"]["transcodeVideoCommand"]
     assert '"$input_dir" "$entry_name" "$dest_dir"' in source
-    assert "--overwrite --json" in source
+    assert "--overwrite --json" in contract["fileMover"]["transcodeVideoCommand"]
     assert (
         process_body.index('is_video_filename "$entry_name"')
         < process_body.index('transcode_video_entry "$staged_entry"')

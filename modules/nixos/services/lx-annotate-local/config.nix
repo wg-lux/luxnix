@@ -380,6 +380,9 @@ let
   ];
   localPostgresServiceUnits = lib.optionals (!externalPostgresConfigured) [ "postgresql.service" ];
   localRedisServiceUnits = lib.optionals (!externalRedisConfigured) [ "redis-lx-annotate.service" ];
+  dataRecoveryServiceUnits = lib.optionals cfg.dataRecovery.enable [
+    "lx-annotate-data-recovery.service"
+  ];
   managedSecretsSetupUnits =
     lib.optionals (lib.attrByPath [ "roles" "managed-secrets" "enable" ] false config)
       [
@@ -730,6 +733,9 @@ let
       fi
     done
   '';
+  maintenanceWorkerPool = cfg.runtime.workerPools.maintenance // {
+    inherit (cfg.runtime.workerLimits) memoryHigh memoryMax cpuQuota;
+  };
   workerConfigs = {
     maintenance = mkWorker {
       unitName = "lx-annotate-celery-worker";
@@ -738,7 +744,7 @@ let
         "maintenance"
         "default"
       ];
-      pool = cfg.runtime.workerPools.maintenance;
+      pool = maintenanceWorkerPool;
       environment = postValidationWorkerEnv;
     };
     pipeline = mkWorker {
@@ -1094,6 +1100,8 @@ let
     emergencyStorageReliefConfig
     emergencyStorageReliefHelper
     ;
+  lxAnnotateScripts = import ./scripts.nix args;
+  inherit (lxAnnotateScripts.packages) runLocalDataRecoveryScript;
   emergencyStorageReliefPython = ''
     import runpy
     import sys
@@ -1742,8 +1750,27 @@ in
         };
       };
 
+      systemd.services.lx-annotate-data-recovery = mkIf cfg.dataRecovery.enable (mkLxAnnotateAppService {
+        description = "Recover legacy LX-Annotate data into the runtime storage root";
+        wantedBy = [ ];
+        before = [
+          "lx-annotate-migrate.service"
+          "lx-annotate-load-base-data.service"
+          "lx-annotate-master-key-check.service"
+          "lx-annotate.service"
+        ];
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = "${runLocalDataRecoveryScript}/bin/runLxAnnotateDataRecovery";
+          TimeoutStartSec = "2h";
+        };
+      });
+
       systemd.services.lx-annotate-migrate = mkLxAnnotateAppService {
         description = "Run LX-Annotate database migrations";
+        after = dataRecoveryServiceUnits;
+        wants = dataRecoveryServiceUnits;
+        requires = dataRecoveryServiceUnits;
         before = [
           "lx-annotate-load-base-data.service"
           "lx-annotate-master-key-check.service"
@@ -1884,6 +1911,7 @@ in
           "lx-annotate-runtime-env.service"
           "lx-annotate-load-base-data.service"
         ]
+        ++ dataRecoveryServiceUnits
         ++ localRedisServiceUnits
         ++ localPostgresServiceUnits
         ++ localPostgresSetupUnits
@@ -1894,6 +1922,7 @@ in
           "lx-annotate-load-base-data.service"
           "lx-annotate-master-key-check.service"
         ]
+        ++ dataRecoveryServiceUnits
         ++ managedSecretsSetupUnits
         ++ encryptionServiceUnits;
         after = [
@@ -1903,6 +1932,7 @@ in
           "endoreg-django-setup.service"
           "systemd-tmpfiles-setup.service"
         ]
+        ++ dataRecoveryServiceUnits
         ++ localRedisServiceUnits
         ++ localPostgresServiceUnits
         ++ localPostgresSetupUnits
