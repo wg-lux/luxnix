@@ -363,10 +363,10 @@ custom-packages.baseDevelopment = true;
     vault.psk = "/etc/secrets/.psk";
 
 
-    generic-settings.configurationPath = lib.mkForce "/home/admin/lx-production";
+    generic-settings.configurationPath = lib.mkForce "/home/admin/luxnix";
 
 
-    generic-settings.configurationPathRelative = "lx-production";
+    generic-settings.configurationPathRelative = "luxnix";
 
 
     generic-settings.gpu.nvidia.prime.nvidiaBusId = "PCI:1:0:0";
