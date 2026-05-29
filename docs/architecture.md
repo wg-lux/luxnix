@@ -21,7 +21,7 @@ Host files should be thin. A good host file enables existing options and sets va
 ```nix
 {
   profiles.endoregClient.enable = true;
-  roles.endoreg-client.defaultCenterKey = "university_hospital_wuerzburg";
+  endoreg-client.defaultCenterKey = "university_hospital_wuerzburg";
   luxnix.generic-settings.adminVpnIp = "172.16.255.106";
 }
 ```

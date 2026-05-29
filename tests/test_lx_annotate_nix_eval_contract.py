@@ -311,7 +311,7 @@ def test_endoreg_client_default_center_key_flows_to_lx_annotate_runtime_env() ->
           cfg = (flake.nixosConfigurations.gc-02.extendModules {
             modules = [
               ({ ... }: {
-                roles.endoreg-client.defaultCenterKey = "university_hospital_wuerzburg";
+                endoreg-client.defaultCenterKey = "university_hospital_wuerzburg";
               })
             ];
           }).config;

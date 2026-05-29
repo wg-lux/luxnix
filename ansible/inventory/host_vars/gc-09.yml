@@ -6,7 +6,7 @@ template_name: "main"
 
 host_roles:
   custom_packages.baseDevelopment: "true"
-  roles.endoreg-client.defaultCenterKey: "university_hospital_wuerzburg"
+  endoreg-client.defaultCenterKey: "university_hospital_wuerzburg"
 
 host_services: {}
 

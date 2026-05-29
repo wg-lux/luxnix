@@ -64,7 +64,7 @@ ssh-access.dev-04.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICSpoZVcX+K6N
 
 custom-packages.baseDevelopment = true;
 
-roles.endoreg-client.defaultCenterKey = "university_hospital_wuerzburg";
+endoreg-client.defaultCenterKey = "university_hospital_wuerzburg";
 
 };
 
