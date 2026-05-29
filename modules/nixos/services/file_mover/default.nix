@@ -276,6 +276,7 @@ in
                 XDG_DESKTOP_DIR = "${config.home.homeDirectory}/${cfg.desktop.dirName}";
               };
             };
+            xdg.configFile."user-dirs.dirs".force = true;
 
             home.file = lib.mapAttrs' (
               linkName: targetPath:
