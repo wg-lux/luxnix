@@ -434,6 +434,7 @@ let
     TIME_ZONE=${cfg.django.timeZone}
     RUN_VIDEO_TESTS=${envRunVideoTests}
     SKIP_EXPENSIVE_TESTS=${envSkipExpensiveTests}
+    LX_ANNOTATE_DEFAULT_CENTER=${envDefaultCenter}
     WATCHER_VIDEO_DIR=${runtimeWatcherVideoDirPath}
     WATCHER_REPORT_DIR=${runtimeWatcherReportDirPath}
     WATCHER_PREANONYMIZED_DIR=${runtimeWatcherPreanonymizedDirPath}

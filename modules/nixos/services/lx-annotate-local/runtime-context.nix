@@ -145,16 +145,16 @@ let
 
   envDefaultCenter =
     let
-      explicitDefaultCenterKey = cfg.django.extraSettings.DEFAULT_CENTER_KEY or null;
-      defaultCenterReference = lib.strings.trim (toString (
-        cfg.django.extraSettings.DEFAULT_CENTER or
-        config.roles.endoreg-client.defaultCenterKey
-      ));
+      trimToString = value: lib.strings.trim (toString value);
+      explicitDefaultCenterKey = trimToString (
+        cfg.django.extraSettings.DEFAULT_CENTER_KEY or ""
+      );
+      hostDefaultCenterKey = trimToString config.roles.endoreg-client.defaultCenterKey;
     in
-    if explicitDefaultCenterKey != null then
+    if explicitDefaultCenterKey != "" then
       explicitDefaultCenterKey
     else
-      defaultCenterReference;
+      hostDefaultCenterKey;
   exportFramesStorageRootDefault =
     config.roles.endoreg-client.paths.storagePersistingMountPoint;
   externalCleanupArchiveRootDefault =
