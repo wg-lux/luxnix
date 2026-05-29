@@ -57,7 +57,7 @@ in
 
     programs.nixvim = {
       extraPackages = [
-        pkgs.nixfmt-rfc-style
+        pkgs.nixfmt
       ];
 
       lsp.servers.nixd = {

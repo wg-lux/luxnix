@@ -51,9 +51,9 @@ let
     zlib
     git
     secretspec
-    xorg.libxcb
+    libxcb
     nixd
-    nixfmt-rfc-style
+    nixfmt
   ];
   _module.args.buildInputs = baseBuildInputs;
   SYNC_CMD = "uv sync";
