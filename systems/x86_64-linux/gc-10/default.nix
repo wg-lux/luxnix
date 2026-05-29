@@ -75,6 +75,7 @@ endoreg-client.defaultCenterKey = "university_hospital_wuerzburg";
 };
 
   services = {
+luxnix.lxAiLocal.runtime.protectedDataDir = "/var/lib/lx-annotate/data";
 
   };
 

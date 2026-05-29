@@ -64,6 +64,8 @@ ssh-access.dev-04.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICSpoZVcX+K6N
 
 custom-packages.baseDevelopment = true;
 
+roles.endoreg-client.defaultCenterKey = "university_hospital_wuerzburg";
+
 };
 
   services = {
@@ -363,10 +365,10 @@ custom-packages.baseDevelopment = true;
     vault.psk = "/etc/secrets/.psk";
 
 
-    generic-settings.configurationPath = lib.mkForce "/home/admin/luxnix";
+    generic-settings.configurationPath = lib.mkForce "/home/admin/lx-production";
 
 
-    generic-settings.configurationPathRelative = "luxnix";
+    generic-settings.configurationPathRelative = "lx-production";
 
 
     generic-settings.gpu.nvidia.prime.nvidiaBusId = "PCI:1:0:0";
