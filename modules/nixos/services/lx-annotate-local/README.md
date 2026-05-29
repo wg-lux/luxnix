@@ -125,12 +125,12 @@ entries into the watched video/report intake directories. Source files are
 deleted only after the publish step succeeds; unreadable files are moved under
 the `failed_input` quarantine tree.
 
-If direct video publish from mover staging into the watched intake directory
-fails, `move-my-files` invokes the lx-annotate/endoreg-db `transcode_video`
-management command as a fallback. That command uses the existing
-`ffmpeg_wrapper` encoder selection and writes the standard watcher format
-(H.264, `yuv420p`, full color range) into `runtime.intakeDirs.video`. The
-fallback does not delete the source until the transcode command succeeds.
+For video entries, `move-my-files` invokes the lx-annotate/endoreg-db
+`transcode_video` management command before publishing into the watched intake
+directory. That command uses the existing `ffmpeg_wrapper` encoder selection and
+writes the standard watcher format (H.264, `yuv420p`, full color range) into
+`runtime.intakeDirs.video`. The mover does not delete the source until the
+transcode command succeeds.
 
 The watcher service runs as the same service user and group as the mover. Wheel
 and repo runtime scripts both set `LX_ANNOTATE_FILEWATCHER_ARGS` to

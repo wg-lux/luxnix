@@ -105,7 +105,7 @@ in
         pkgs.gnugrep
         pkgs.gnused
       ];
-      description = "Packages added to PATH for the mover and optional video fallback hook.";
+      description = "Packages added to PATH for the mover and optional video processing hook.";
     };
 
     paths = mkOption {
@@ -199,30 +199,30 @@ in
           command = mkOption {
             type = types.nullOr types.str;
             default = null;
-            description = "Optional shell command for video fallback processing. It is invoked with input directory, input filename, and output directory as positional arguments.";
+            description = "Optional shell command for video processing. It is invoked with input directory, input filename, and output directory as positional arguments.";
           };
 
           workingDir = mkOption {
             type = types.str;
             default = "/";
-            description = "Working directory used when running the video fallback command.";
+            description = "Working directory used when running the video processing command.";
           };
 
           environmentScript = mkOption {
             type = types.lines;
             default = "";
-            description = "Shell snippet that exports environment required by the video fallback command.";
+            description = "Shell snippet that exports environment required by the video processing command.";
           };
 
           timeoutSeconds = mkOption {
             type = types.str;
             default = "86400";
-            description = "FFmpeg timeout value exported for fallback video processing.";
+            description = "FFmpeg timeout value exported for video processing.";
           };
         };
       };
       default = { };
-      description = "Optional video processing fallback used when direct video publishing is not enough.";
+      description = "Optional video processing command used before publishing video entries.";
     };
 
     serviceDependencies = mkOption {
@@ -456,7 +456,7 @@ in
             fi
 
             if [ -z ${lib.escapeShellArg videoTranscodeCommand} ]; then
-              echo "Warning: Video publish failed, but no video transcode fallback command is configured."
+              echo "Warning: Video entry requires transcode processing, but no video transcode command is configured."
               return 1
             fi
 
@@ -465,19 +465,20 @@ in
             output_file="''${dest_dir}/''${output_name}"
             export_video_transcode_fallback_env
 
-            echo "Warning: Direct video publish failed; trying transcode fallback to system standard: $input_file -> $output_file"
+            echo "Transcoding Video entry to system standard: $input_file -> $output_file"
+            # Do not let the fallback command consume bytes from the find -print0 loop.
             if ! (
               cd "${videoTranscodeWorkingDir}"
               "${pkgs.bash}/bin/bash" -lc ${lib.escapeShellArg videoTranscodeCommand} file-mover-transcode "$input_dir" "$entry_name" "$dest_dir"
-            ); then
+            ) < /dev/null; then
               ${pkgs.coreutils}/bin/rm -f "$output_file" || true
-              echo "Warning: video transcode fallback command failed for $input_file"
+              echo "Warning: video transcode command failed for $input_file"
               return 1
             fi
 
             if [ ! -s "$output_file" ]; then
               ${pkgs.coreutils}/bin/rm -f "$output_file" || true
-              echo "Warning: video transcode fallback did not create a non-empty output file: $output_file"
+              echo "Warning: video transcode command did not create a non-empty output file: $output_file"
               return 1
             fi
 

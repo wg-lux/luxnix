@@ -392,6 +392,7 @@ def test_file_mover_transcodes_video_before_publish() -> None:
     )
     assert "failed to transcode staged Video entry" in process_body
     assert "Published transcoded Video entry" in transcode_body
+    assert ") < /dev/null; then" in transcode_body
     assert "-pix_fmt" not in transcode_body
     assert "-color_range" not in transcode_body
 
@@ -403,9 +404,9 @@ def test_file_mover_transcode_fallback_fails_closed_before_publish() -> None:
         source.index("        wait_for_input_ready() {")
     ]
 
-    assert "video transcode fallback command failed" in transcode_body
+    assert "video transcode command failed" in transcode_body
     assert (
-        "video transcode fallback did not create a non-empty output file"
+        "video transcode command did not create a non-empty output file"
         in transcode_body
     )
     assert '[ ! -s "$output_file" ]' in transcode_body
