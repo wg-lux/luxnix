@@ -13,7 +13,8 @@ let
   inherit (runtime.identities)
     endoreg-service-user-name
     endoreg-service-user-home
-    endoreg-service-group-name;
+    endoreg-service-group-name
+    ;
   inherit (runtime.names) scriptName exportFramesScriptName;
   inherit (runtime.source) gitURL repoDirName branchName;
   inherit (runtime.paths)
@@ -44,7 +45,8 @@ let
     envSystemdFilePath
     envAssetDir
     dataRecoveryStateDir
-    dataRecoveryStateFile;
+    dataRecoveryStateFile
+    ;
   inherit (runtime.env)
     envAllowedHosts
     envAnnotateDjangoSettingsModule
@@ -60,16 +62,19 @@ let
     envHttpProtocol
     envRunVideoTests
     envSkipExpensiveTests
-    envViteEnableDebug;
+    envViteEnableDebug
+    ;
   inherit (runtime.runtime)
     useWheelRuntime
     pythonInterpreter
     wheelFilePath
-    packageVersion;
+    packageVersion
+    ;
   inherit (runtime.defaults)
     exportFramesStorageRootDefault
     processedReportDirName
-    processedVideoDirName;
+    processedVideoDirName
+    ;
   makeBin = "${pkgs.gnumake}/bin/make";
   envScripts = import ./scripts/env.nix args;
   inherit (envScripts)
@@ -82,7 +87,8 @@ let
     celeryTrainingQueueName
     celeryMaintenanceQueueName
     ffmpegTranscodeTimeoutSeconds
-    lxAnnotateEnvHelpers;
+    lxAnnotateEnvHelpers
+    ;
 
   # Compat exports for lx-annotate/devenv.nix shellHook, which expects these vars.
   devenvSyncCompatExports = ''
@@ -99,14 +105,16 @@ let
   frontendAssetScripts = import ./scripts/frontend-assets.nix args;
   inherit (frontendAssetScripts)
     alignEnvFileScript
-    viteManifestEntryScript;
-
+    viteManifestEntryScript
+    ;
 
   syncScriptName = "lx-annotate-sync";
   prepareScriptName = "lx-annotate-prepare";
   buildScriptName = "lx-annotate-build";
   migrateScriptName = "lx-annotate-migrate";
   migrateVideoStreamableStorageScriptName = "lx-annotate-migrate-video-streamable-storage";
+  loadBaseDataServiceName = "lx-annotate-load-base-data.service";
+  masterKeyCheckServiceName = "lx-annotate-master-key-check.service";
   emergencyStorageReliefScriptName = "runLxAnnotateEmergencyStorageRelief";
   startScriptName = "lx-annotate-start";
   bootstrapScriptName = "lx-annotate-bootstrap";
@@ -130,8 +138,8 @@ let
   storageReliefScripts = import ./scripts/storage-relief.nix args;
   inherit (storageReliefScripts)
     emergencyStorageReliefConfig
-    emergencyStorageReliefHelper;
-
+    emergencyStorageReliefHelper
+    ;
 
   lxAnnotateRuntimeLib = pkgs.writeShellScript "lx-annotate-runtime-lib.sh" ''
         set -euo pipefail
@@ -196,7 +204,9 @@ let
 
         ensure_wheel_runtime_installed() {
           local wheel_hash=""
-          local wheelhouse_path="${optionalString (cfg.runtime.wheelhousePath != null) (toString cfg.runtime.wheelhousePath)}"
+          local wheelhouse_path="${
+            optionalString (cfg.runtime.wheelhousePath != null) (toString cfg.runtime.wheelhousePath)
+          }"
           local wheelhouse_hash="no-wheelhouse"
           local pip_install_args=""
           local wheel_install_stamp_file="${runtimeRootPath}/.wheel-install.sha256"
@@ -366,7 +376,9 @@ let
     ASSET_DIR=${envAssetDir}
     XDG_DATA_HOME=${runtimeRootPath}
     LX_ANNOTATE_PACKAGE_VERSION=${packageVersion}
-    ${optionalString (cfg.runtime.masterKeyFile != null) "LX_ANNOTATE_MASTER_KEY_FILE=${toString cfg.runtime.masterKeyFile}"}
+    ${optionalString (
+      cfg.runtime.masterKeyFile != null
+    ) "LX_ANNOTATE_MASTER_KEY_FILE=${toString cfg.runtime.masterKeyFile}"}
     DJANGO_SECRET_KEY_FILE=${toString cfg.django.djangoSecretKeyFile}
     DJANGO_DB_ENGINE=django.db.backends.postgresql
     DJANGO_DB_NAME=${cfg.database.name}
@@ -380,7 +392,9 @@ let
     ENDOREG_DEPLOYMENT_ROLE=${envDeploymentRole}
     ENDOREG_HUB_MODE=${if cfg.hub.enable then "true" else "false"}
     ENDOREG_ENABLE_HUB_TRANSFERS=${if cfg.hub.transferApi.enable then "true" else "false"}
-    ENDOREG_HUB_TRANSFER_REQUIRE_SECURE_TRANSPORT=${if cfg.hub.transferApi.requireSecureTransport then "true" else "false"}
+    ENDOREG_HUB_TRANSFER_REQUIRE_SECURE_TRANSPORT=${
+      if cfg.hub.transferApi.requireSecureTransport then "true" else "false"
+    }
     ENDOREG_HUB_TRANSFER_REQUIRE_MTLS=${if cfg.hub.transferApi.requireMtls then "true" else "false"}
     ENDOREG_HUB_TRANSFER_MTLS_META_KEY=${cfg.hub.transferApi.mtlsMetaKey}
     ENDOREG_HUB_TRANSFER_MTLS_META_VALUE=${cfg.hub.transferApi.mtlsMetaValue}
@@ -392,9 +406,15 @@ let
     CELERY_INFERENCE_QUEUE=${celeryInferenceQueueName}
     CELERY_TRAINING_QUEUE=${celeryTrainingQueueName}
     CELERY_MAINTENANCE_QUEUE=${celeryMaintenanceQueueName}
-    CELERY_FRAME_EXTRACTION_REQUIRE_SECURE_TRANSPORT=${if cfg.runtime.celeryBroker.requireSecureTransport then "true" else "false"}
-    CELERY_FFMPEG_MEDIA_REQUIRE_SECURE_TRANSPORT=${if cfg.runtime.celeryBroker.requireSecureTransport then "true" else "false"}
-    CELERY_BROKER_SECURE_TRANSPORT_CONFIRMED=${if cfg.runtime.celeryBroker.secureTransportConfirmed then "true" else "false"}
+    CELERY_FRAME_EXTRACTION_REQUIRE_SECURE_TRANSPORT=${
+      if cfg.runtime.celeryBroker.requireSecureTransport then "true" else "false"
+    }
+    CELERY_FFMPEG_MEDIA_REQUIRE_SECURE_TRANSPORT=${
+      if cfg.runtime.celeryBroker.requireSecureTransport then "true" else "false"
+    }
+    CELERY_BROKER_SECURE_TRANSPORT_CONFIRMED=${
+      if cfg.runtime.celeryBroker.secureTransportConfirmed then "true" else "false"
+    }
     MODEL_TRAINING_JOB_MODE=celery
     MODEL_TRAINING_STAGING_ROOT=${cfg.runtime.modelTrainingStagingRoot}
     VIDEO_POST_VALIDATION_JOB_MODE=celery
@@ -587,7 +607,9 @@ let
 
         guarded_hard_reset() {
           local target_ref="$1"
-          : "''${LX_ANNOTATE_ALLOW_DESTRUCTIVE_GIT_RESET:=${if cfg.source.updateOnBoot then "true" else "false"}}"
+          : "''${LX_ANNOTATE_ALLOW_DESTRUCTIVE_GIT_RESET:=${
+            if cfg.source.updateOnBoot then "true" else "false"
+          }}"
           warn "Destructive git reset requested to $target_ref."
           backup_git_state
           if [ "$LX_ANNOTATE_ALLOW_DESTRUCTIVE_GIT_RESET" != "true" ]; then
@@ -785,7 +807,9 @@ let
     set -euo pipefail
     source "${lxAnnotateRuntimeLib}"
 
-    if [ "${if useWheelRuntime then "true" else "false"}" = "true" ] && [ -z ${lib.escapeShellArg wheelMediaMigrationCommand} ]; then
+    if [ "${
+      if useWheelRuntime then "true" else "false"
+    }" = "true" ] && [ -z ${lib.escapeShellArg wheelMediaMigrationCommand} ]; then
       echo "ERROR: runtime.commands.mediaMigration must be set when wheel mode enables media migration."
       exit 1
     fi
@@ -872,68 +896,68 @@ let
   '';
 
   runLocalLxAnnotateScript = pkgs.writeShellScriptBin "${scriptName}" ''
-        set -euo pipefail
-        "${lxAnnotateSyncScript}/bin/${syncScriptName}"
-        "${lxAnnotatePrepareScript}/bin/${prepareScriptName}"
-        "${lxAnnotateBuildScript}/bin/${buildScriptName}"
-        "${lxAnnotateMigrateScript}/bin/${migrateScriptName}"
-        exec "${runLocalLxAnnotateStartScript}/bin/${startScriptName}"
-      '';
+    set -euo pipefail
+    "${lxAnnotateSyncScript}/bin/${syncScriptName}"
+    "${lxAnnotatePrepareScript}/bin/${prepareScriptName}"
+    "${lxAnnotateBuildScript}/bin/${buildScriptName}"
+    "${lxAnnotateMigrateScript}/bin/${migrateScriptName}"
+    exec "${runLocalLxAnnotateStartScript}/bin/${startScriptName}"
+  '';
   runLocalMigrateWheelScript = pkgs.writeShellScriptBin "${migrateWheelScriptName}" ''
-        set -euo pipefail
+    set -euo pipefail
 
-        if [ -z ${lib.escapeShellArg wheelMigrateCommand} ]; then
-          echo "ERROR: runtime.commands.migrate must be set when wheel mode uses the migration service."
-          exit 1
-        fi
+    if [ -z ${lib.escapeShellArg wheelMigrateCommand} ]; then
+      echo "ERROR: runtime.commands.migrate must be set when wheel mode uses the migration service."
+      exit 1
+    fi
 
-        source "${lxAnnotateRuntimeLib}"
-        source "${lxAnnotateEnvHelpers}"
-        lx_annotate_export_wheel_service_env "${envDataDir}"
-        ensure_wheel_runtime_installed
-        write_wheel_systemd_env_file
-        export PATH="${runtimeWheelVenvPath}/bin:$PATH"
-        export LX_ANNOTATE_WHEEL_VENV="${runtimeWheelVenvPath}"
-        export LX_ANNOTATE_WHEEL_APP_ROOT="${runtimeWheelRootPath}"
+    source "${lxAnnotateRuntimeLib}"
+    source "${lxAnnotateEnvHelpers}"
+    lx_annotate_export_wheel_service_env "${envDataDir}"
+    ensure_wheel_runtime_installed
+    write_wheel_systemd_env_file
+    export PATH="${runtimeWheelVenvPath}/bin:$PATH"
+    export LX_ANNOTATE_WHEEL_VENV="${runtimeWheelVenvPath}"
+    export LX_ANNOTATE_WHEEL_APP_ROOT="${runtimeWheelRootPath}"
 
-        log "Applying Django migrations for wheel runtime."
-        "${pkgs.bash}/bin/bash" -lc ${lib.escapeShellArg wheelMigrateCommand}
-        repair_known_wheel_schema_drift
-      '';
+    log "Applying Django migrations for wheel runtime."
+    "${pkgs.bash}/bin/bash" -lc ${lib.escapeShellArg wheelMigrateCommand}
+    repair_known_wheel_schema_drift
+  '';
   runLocalLoadBaseDataWheelScript = pkgs.writeShellScriptBin "${loadBaseDataWheelScriptName}" ''
-        set -euo pipefail
+    set -euo pipefail
 
-        if [ -z ${lib.escapeShellArg wheelLoadBaseDataCommand} ]; then
-          echo "ERROR: runtime.commands.loadBaseData must be set when wheel mode uses the base-data service."
-          exit 1
-        fi
+    if [ -z ${lib.escapeShellArg wheelLoadBaseDataCommand} ]; then
+      echo "ERROR: runtime.commands.loadBaseData must be set when wheel mode uses the base-data service."
+      exit 1
+    fi
 
-        source "${lxAnnotateRuntimeLib}"
-        source "${lxAnnotateEnvHelpers}"
-        lx_annotate_export_wheel_service_env "${envDataDir}"
-        ensure_wheel_runtime_installed
-        install_hash="$WHEEL_INSTALL_HASH"
-        write_wheel_systemd_env_file
-        export PATH="${runtimeWheelVenvPath}/bin:$PATH"
-        export LX_ANNOTATE_WHEEL_VENV="${runtimeWheelVenvPath}"
-        export LX_ANNOTATE_WHEEL_APP_ROOT="${runtimeWheelRootPath}"
+    source "${lxAnnotateRuntimeLib}"
+    source "${lxAnnotateEnvHelpers}"
+    lx_annotate_export_wheel_service_env "${envDataDir}"
+    ensure_wheel_runtime_installed
+    install_hash="$WHEEL_INSTALL_HASH"
+    write_wheel_systemd_env_file
+    export PATH="${runtimeWheelVenvPath}/bin:$PATH"
+    export LX_ANNOTATE_WHEEL_VENV="${runtimeWheelVenvPath}"
+    export LX_ANNOTATE_WHEEL_APP_ROOT="${runtimeWheelRootPath}"
 
-        bootstrap_stamp_file="${envConfDir}/.bootstrap-wheel"
-        last_bootstrap_hash="$(${pkgs.coreutils}/bin/cat "$bootstrap_stamp_file" 2>/dev/null || true)"
+    bootstrap_stamp_file="${envConfDir}/.bootstrap-wheel"
+    last_bootstrap_hash="$(${pkgs.coreutils}/bin/cat "$bootstrap_stamp_file" 2>/dev/null || true)"
 
-        if [ "$install_hash" = "$last_bootstrap_hash" ]; then
-          log "Wheel runtime unchanged; skipping base data load."
-          exit 0
-        fi
+    if [ "$install_hash" = "$last_bootstrap_hash" ]; then
+      log "Wheel runtime unchanged; skipping base data load."
+      exit 0
+    fi
 
-        log "Wheel runtime changed; loading base data."
-        if "${pkgs.bash}/bin/bash" -lc ${lib.escapeShellArg wheelLoadBaseDataCommand}; then
-          printf '%s\n' "$install_hash" > "$bootstrap_stamp_file"
-          chmod 600 "$bootstrap_stamp_file" 2>/dev/null || true
-        else
-          warn "load_base_db_data failed; continuing after successful migrations."
-        fi
-      '';
+    log "Wheel runtime changed; loading base data."
+    if "${pkgs.bash}/bin/bash" -lc ${lib.escapeShellArg wheelLoadBaseDataCommand}; then
+      printf '%s\n' "$install_hash" > "$bootstrap_stamp_file"
+      chmod 600 "$bootstrap_stamp_file" 2>/dev/null || true
+    else
+      warn "load_base_db_data failed; continuing after successful migrations."
+    fi
+  '';
   runLocalLxAnnotateWheelScript = pkgs.writeShellScriptBin "${scriptName}" ''
         set -euo pipefail
 
@@ -1761,93 +1785,93 @@ let
   '';
 
   runLocalDataCleanupScript = pkgs.writeShellScriptBin "runLxAnnotateDataCleanup" ''
-        set -euo pipefail
+    set -euo pipefail
 
-        runtime_root="${envDataDir}"
-        archive_root="${cfg.dataCleanup.archiveDir}"
-        marker_dir="$runtime_root/logs"
-        marker_file="$marker_dir/data_cleanup_latest.log"
+    runtime_root="${envDataDir}"
+    archive_root="${cfg.dataCleanup.archiveDir}"
+    marker_dir="$runtime_root/logs"
+    marker_file="$marker_dir/data_cleanup_latest.log"
 
-        mkdir -p "$marker_dir"
+    mkdir -p "$marker_dir"
 
-        if [ ! -d "$runtime_root" ]; then
-          echo "Skipping cleanup; runtime root missing: $runtime_root"
-          exit 0
+    if [ ! -d "$runtime_root" ]; then
+      echo "Skipping cleanup; runtime root missing: $runtime_root"
+      exit 0
+    fi
+
+    if [ ! -d "${config.roles.endoreg-client.paths.storagePersistingMountPoint}" ]; then
+      echo "Skipping cleanup; persisting storage mount missing: ${config.roles.endoreg-client.paths.storagePersistingMountPoint}"
+      exit 0
+    fi
+
+    mkdir -p "$archive_root"
+
+    moved_count=0
+    skipped_count=0
+
+    move_duplicate_tree() {
+      local source_root="$1"
+      local runtime_target_root="$2"
+      local label="$3"
+
+      if [ ! -d "$source_root" ]; then
+        echo "Skipping $label source; directory not present: $source_root"
+        return 0
+      fi
+
+      while IFS= read -r -d "" source_file; do
+        local rel_path runtime_file archive_file archive_dir
+
+        rel_path="''${source_file#"$source_root"/}"
+        runtime_file="$runtime_target_root/$rel_path"
+        if [ ! -f "$runtime_file" ]; then
+          skipped_count=$((skipped_count + 1))
+          continue
         fi
 
-        if [ ! -d "${config.roles.endoreg-client.paths.storagePersistingMountPoint}" ]; then
-          echo "Skipping cleanup; persisting storage mount missing: ${config.roles.endoreg-client.paths.storagePersistingMountPoint}"
-          exit 0
+        if ! ${pkgs.diffutils}/bin/cmp -s "$source_file" "$runtime_file"; then
+          skipped_count=$((skipped_count + 1))
+          continue
         fi
 
-        mkdir -p "$archive_root"
+        archive_file="$archive_root/$label/$rel_path"
+        archive_dir="$(${pkgs.coreutils}/bin/dirname "$archive_file")"
+        ${pkgs.coreutils}/bin/mkdir -p "$archive_dir"
 
-        moved_count=0
-        skipped_count=0
-
-        move_duplicate_tree() {
-          local source_root="$1"
-          local runtime_target_root="$2"
-          local label="$3"
-
-          if [ ! -d "$source_root" ]; then
-            echo "Skipping $label source; directory not present: $source_root"
-            return 0
+        if [ -e "$archive_file" ]; then
+          if ${pkgs.diffutils}/bin/cmp -s "$source_file" "$archive_file"; then
+            ${pkgs.coreutils}/bin/rm -f "$source_file"
+          else
+            archive_file="$archive_file.$(${pkgs.coreutils}/bin/date +%s)"
+            ${pkgs.coreutils}/bin/mv "$source_file" "$archive_file"
           fi
+        else
+          ${pkgs.coreutils}/bin/mv "$source_file" "$archive_file"
+        fi
 
-          while IFS= read -r -d "" source_file; do
-            local rel_path runtime_file archive_file archive_dir
+        moved_count=$((moved_count + 1))
+      done < <(${pkgs.findutils}/bin/find "$source_root" -type f -print0)
 
-            rel_path="''${source_file#"$source_root"/}"
-            runtime_file="$runtime_target_root/$rel_path"
-            if [ ! -f "$runtime_file" ]; then
-              skipped_count=$((skipped_count + 1))
-              continue
-            fi
+      ${pkgs.findutils}/bin/find "$source_root" -depth -type d -empty -delete || true
+    }
 
-            if ! ${pkgs.diffutils}/bin/cmp -s "$source_file" "$runtime_file"; then
-              skipped_count=$((skipped_count + 1))
-              continue
-            fi
+    move_duplicate_tree "${cfg.dataCleanup.legacyProcessedReportDir}" "${cfg.dataCleanup.runtimeProcessedReportDir}" "legacy-data/${processedReportDirName}"
+    move_duplicate_tree "${cfg.dataCleanup.legacyProcessedVideoDir}" "${cfg.dataCleanup.runtimeProcessedVideoDir}" "legacy-data/${processedVideoDirName}"
+    move_duplicate_tree "${cfg.dataCleanup.legacyMediaProcessedReportDir}" "${cfg.dataCleanup.runtimeProcessedReportDir}" "legacy-media/${processedReportDirName}"
+    move_duplicate_tree "${cfg.dataCleanup.legacyMediaProcessedVideoDir}" "${cfg.dataCleanup.runtimeProcessedVideoDir}" "legacy-media/${processedVideoDirName}"
 
-            archive_file="$archive_root/$label/$rel_path"
-            archive_dir="$(${pkgs.coreutils}/bin/dirname "$archive_file")"
-            ${pkgs.coreutils}/bin/mkdir -p "$archive_dir"
+    {
+      printf 'completed_at=%s\n' "$(${pkgs.coreutils}/bin/date --iso-8601=seconds)"
+      printf 'runtime_root=%s\n' "$runtime_root"
+      printf 'archive_root=%s\n' "$archive_root"
+      printf 'moved_count=%s\n' "$moved_count"
+      printf 'skipped_count=%s\n' "$skipped_count"
+    } > "$marker_file"
 
-            if [ -e "$archive_file" ]; then
-              if ${pkgs.diffutils}/bin/cmp -s "$source_file" "$archive_file"; then
-                ${pkgs.coreutils}/bin/rm -f "$source_file"
-              else
-                archive_file="$archive_file.$(${pkgs.coreutils}/bin/date +%s)"
-                ${pkgs.coreutils}/bin/mv "$source_file" "$archive_file"
-              fi
-            else
-              ${pkgs.coreutils}/bin/mv "$source_file" "$archive_file"
-            fi
+    chmod 0640 "$marker_file"
 
-            moved_count=$((moved_count + 1))
-          done < <(${pkgs.findutils}/bin/find "$source_root" -type f -print0)
-
-          ${pkgs.findutils}/bin/find "$source_root" -depth -type d -empty -delete || true
-        }
-
-        move_duplicate_tree "${cfg.dataCleanup.legacyProcessedReportDir}" "${cfg.dataCleanup.runtimeProcessedReportDir}" "legacy-data/${processedReportDirName}"
-        move_duplicate_tree "${cfg.dataCleanup.legacyProcessedVideoDir}" "${cfg.dataCleanup.runtimeProcessedVideoDir}" "legacy-data/${processedVideoDirName}"
-        move_duplicate_tree "${cfg.dataCleanup.legacyMediaProcessedReportDir}" "${cfg.dataCleanup.runtimeProcessedReportDir}" "legacy-media/${processedReportDirName}"
-        move_duplicate_tree "${cfg.dataCleanup.legacyMediaProcessedVideoDir}" "${cfg.dataCleanup.runtimeProcessedVideoDir}" "legacy-media/${processedVideoDirName}"
-
-        {
-          printf 'completed_at=%s\n' "$(${pkgs.coreutils}/bin/date --iso-8601=seconds)"
-          printf 'runtime_root=%s\n' "$runtime_root"
-          printf 'archive_root=%s\n' "$archive_root"
-          printf 'moved_count=%s\n' "$moved_count"
-          printf 'skipped_count=%s\n' "$skipped_count"
-        } > "$marker_file"
-
-        chmod 0640 "$marker_file"
-
-        echo "Cleanup completed. moved=$moved_count skipped=$skipped_count archive=$archive_root"
-      '';
+    echo "Cleanup completed. moved=$moved_count skipped=$skipped_count archive=$archive_root"
+  '';
 
   runLocalEmergencyStorageReliefScript = pkgs.writeShellScriptBin "${emergencyStorageReliefScriptName}" ''
         set -euo pipefail
@@ -1865,9 +1889,17 @@ let
         }
 
         external_mount_point=${lib.escapeShellArg cfg.storageRelief.externalMountPoint}
-        expected_device_id=${lib.escapeShellArg (if cfg.storageRelief.expectedDeviceId == null then "" else cfg.storageRelief.expectedDeviceId)}
+        expected_device_id=${
+          lib.escapeShellArg (
+            if cfg.storageRelief.expectedDeviceId == null then "" else cfg.storageRelief.expectedDeviceId
+          )
+        }
         expected_device_part=${lib.escapeShellArg cfg.storageRelief.expectedDevicePart}
-        expected_fs_uuid=${lib.escapeShellArg (if cfg.storageRelief.expectedFsUuid == null then "" else cfg.storageRelief.expectedFsUuid)}
+        expected_fs_uuid=${
+          lib.escapeShellArg (
+            if cfg.storageRelief.expectedFsUuid == null then "" else cfg.storageRelief.expectedFsUuid
+          )
+        }
 
         if [ "${if cfg.storageRelief.requireExternalMount then "true" else "false"}" = "true" ]; then
           if [ -z "$expected_device_id" ] && [ -z "$expected_fs_uuid" ]; then
@@ -1931,7 +1963,7 @@ let
         fi
 
         exec "$helper_python" "${emergencyStorageReliefHelper}" --config "${emergencyStorageReliefConfig}"
-      '';
+  '';
 
   hubBackupScripts = import ./scripts/hub-backup.nix args;
   inherit (hubBackupScripts) runLocalHubBackupScript;
@@ -1939,7 +1971,8 @@ let
   encryptedDataScripts = import ./scripts/encrypted-data.nix args;
   inherit (encryptedDataScripts)
     lxAnnotateEncryptedDataMountScript
-    lxAnnotateEncryptedDataUmountScript;
+    lxAnnotateEncryptedDataUmountScript
+    ;
 
 in
 {
@@ -1962,7 +1995,20 @@ in
       migrateWheelScriptName
       watcherScriptName
       sapImportScriptName
-      migrateVideoStreamableStorageScriptName;
+      migrateVideoStreamableStorageScriptName
+      ;
+  };
+
+  serviceOrdering = {
+    fileMoverAfter = [
+      loadBaseDataServiceName
+      masterKeyCheckServiceName
+    ];
+    fileMoverWants = [ loadBaseDataServiceName ];
+    fileMoverRequires = [
+      loadBaseDataServiceName
+      masterKeyCheckServiceName
+    ];
   };
 
   packages = {
@@ -2004,6 +2050,7 @@ in
       runLocalEmergencyStorageReliefScript
       runLocalHubBackupScript
       lxAnnotateEncryptedDataMountScript
-      lxAnnotateEncryptedDataUmountScript;
+      lxAnnotateEncryptedDataUmountScript
+      ;
   };
 }

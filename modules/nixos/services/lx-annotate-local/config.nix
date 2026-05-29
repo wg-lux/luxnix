@@ -1102,6 +1102,11 @@ let
     ;
   lxAnnotateScripts = import ./scripts.nix args;
   inherit (lxAnnotateScripts.packages) runLocalDataRecoveryScript;
+  inherit (lxAnnotateScripts.serviceOrdering)
+    fileMoverAfter
+    fileMoverRequires
+    fileMoverWants
+    ;
   emergencyStorageReliefPython = ''
     import runpy
     import sys
@@ -1203,6 +1208,11 @@ in
       );
 
       services.luxnix.fileMover = {
+        serviceDependencies = {
+          after = mkAfter fileMoverAfter;
+          wants = mkAfter fileMoverWants;
+          requires = mkAfter fileMoverRequires;
+        };
         paths = {
           destinationVideoDir = mkDefault runtimeWatcherVideoDirPath;
           destinationReportDir = mkDefault runtimeWatcherReportDirPath;

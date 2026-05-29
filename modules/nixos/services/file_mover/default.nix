@@ -224,6 +224,32 @@ in
       default = { };
       description = "Optional video processing fallback used when direct video publishing is not enough.";
     };
+
+    serviceDependencies = mkOption {
+      type = types.submodule {
+        options = {
+          after = mkOption {
+            type = types.listOf types.str;
+            default = [ ];
+            description = "Additional systemd units that move-my-files.service must start after.";
+          };
+
+          wants = mkOption {
+            type = types.listOf types.str;
+            default = [ ];
+            description = "Additional systemd units that move-my-files.service should pull in.";
+          };
+
+          requires = mkOption {
+            type = types.listOf types.str;
+            default = [ ];
+            description = "Additional systemd units required before move-my-files.service may run.";
+          };
+        };
+      };
+      default = { };
+      description = "Systemd dependency hooks for deployments that publish into another service's runtime tree.";
+    };
   };
 
   config = mkIf cfg.enable (mkMerge [
@@ -295,6 +321,9 @@ in
       # 3. The Worker Service
       systemd.services.move-my-files = {
         description = "Move files from Source to Destination";
+        after = cfg.serviceDependencies.after;
+        wants = cfg.serviceDependencies.wants;
+        requires = cfg.serviceDependencies.requires;
         serviceConfig = {
           Type = "oneshot";
           User = serviceUserName;
