@@ -33,7 +33,7 @@ data:
   STORAGE_DIR: /var/lib/lx-annotate/data/storage
   PROTECTED_MEDIA_ROOT: /var/lib/lx-annotate/data/storage
   LX_ANNOTATE_MASTER_KEY_FILE: /run/secrets/lx-annotate/master-key
-  LX_ANNOTATE_DEFAULT_CENTER: default_center
+  DEFAULT_CENTER_KEY: default_center
   STATIC_URL: /static/
   MEDIA_URL: /media/
   NGINX_PROTECTED_MEDIA_URL: /protected_media/
