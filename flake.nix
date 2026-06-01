@@ -3,9 +3,11 @@
   nixConfig = {
     extra-substituters = [
       "https://nix-community.cachix.org"
+      "https://cuda-maintainers.cachix.org"
     ];
     extra-trusted-public-keys = [
       "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
+      "cuda-maintainers.cachix.org-1:0dq3bujKpuEPMCX6U4WylrUDZ9JyUG0VpVZa7CNfq5E="
     ];
   };
   inputs = {
@@ -64,6 +66,11 @@
 
     nixtest = {
       url = "gitlab:TECHNOFAB/nixtest?dir=lib";
+    };
+
+    lx-annotate = {
+      url = "github:wg-lux/lx-annotate";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
 
     nixos-generators = {
@@ -160,12 +167,27 @@
           impermanence.nixosModules.impermanence
           sops-nix.nixosModules.sops
           nix-topology.nixosModules.default
+          inputs.lx-annotate.nixosModules.default
         ];
 
         overlays = with inputs; [
-          nixgl.overlay
+          (final: _prev:
+            let
+              isIntelX86Platform = final.stdenv.hostPlatform.system == "x86_64-linux";
+            in
+            {
+              nixgl = import (nixgl.outPath + "/default.nix") {
+                pkgs = final;
+                enable32bits = isIntelX86Platform;
+                enableIntelX86Extensions = isIntelX86Platform;
+              };
+            }
+          )
           nur.overlays.default
           nix-topology.overlays.default
+          (final: _prev: {
+            lx-annotate = inputs.lx-annotate.packages.${final.stdenv.hostPlatform.system}.default;
+          })
         ];
 
         deploy = lib.mkDeploy { inherit (inputs) self; };
@@ -190,28 +212,27 @@
           };
       };
 
-      nixtestPackages =
-        builtins.mapAttrs
-          (system: _:
-            let
-              pkgs = import inputs.nixpkgs {
-                inherit system;
-                config.allowUnfree = true;
-              };
-              ntlib = inputs.nixtest.lib { inherit pkgs; };
-            in
-            {
-              nixtests = ntlib.mkNixtest {
-                modules = ntlib.autodiscover {
-                  dir = ./tests/nixtest;
-                };
-                args = {
-                  inherit pkgs ntlib;
-                  repoRoot = ./.;
-                };
-              };
-            })
-          base.packages;
+      nixtestPackages = builtins.mapAttrs (
+        system: _:
+        let
+          pkgs = import inputs.nixpkgs {
+            inherit system;
+            config.allowUnfree = true;
+          };
+          ntlib = inputs.nixtest.lib { inherit pkgs; };
+        in
+        {
+          nixtests = ntlib.mkNixtest {
+            modules = ntlib.autodiscover {
+              dir = ./tests/nixtest;
+            };
+            args = {
+              inherit pkgs ntlib;
+              repoRoot = ./.;
+            };
+          };
+        }
+      ) base.packages;
 
       nixtestChecks = builtins.mapAttrs (_: packages: { inherit (packages) nixtests; }) nixtestPackages;
 

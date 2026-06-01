@@ -1,9 +1,9 @@
-{ lib
-, config
-, pkgs
-, ...
+{
+  lib,
+  config,
+  pkgs,
+  ...
 }:
-
 
 with lib;
 with lib.luxnix;
@@ -12,7 +12,12 @@ let
 
   sensitiveServiceGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
   endoregServiceGroupName = config.luxnix.generic-settings.endoregServiceGroupName;
-
+  fileMoverDefinition = import ./file-mover.nix { inherit lib; };
+  endoregDbApiLocalDefinition = import ./endoreg-db-api-local.nix { inherit lib; };
+  lxAiDefinition = import ./lx-ai.nix { };
+  endoAiDefinition = import ./endo-ai.nix { };
+  persistingStorageDefinition = import ./persisting-storage.nix { inherit lib; };
+  lxAnnotateDefinition = import ./lx-annotate.nix { inherit lib; };
 
 in
 {
@@ -24,7 +29,6 @@ in
       serviceOptions = import ./service.nix { inherit lib; };
       repositoryOptions = import ./repository.nix { inherit lib; };
       environmentDefaultsOptions = import ./environment-details.nix { inherit lib; };
-      lxAnnotateOptions = import ./lx-annotate.nix { inherit lib; };
     in
     {
       enable = mkEnableOption "Enable endoreg client configuration";
@@ -60,13 +64,6 @@ in
         description = "Enable the lx-ai training service unit.";
       };
 
-      defaultCenter = mkOption {
-        type = types.str;
-        default = "University Hospital Wuerzburg";
-        description = "Default center reference for endoreg client. lx-annotate resolves this first as center_key, then as center name.";
-        example = "University Hospital Wuerzburg";
-      };
-
       defaultCenterKey = mkOption {
         type = types.nullOr types.str;
         default = null;
@@ -88,7 +85,7 @@ in
 
       environmentDefaults = environmentDefaultsOptions;
 
-      lxAnnotate = lxAnnotateOptions;
+      lxAnnotate = lxAnnotateDefinition.options;
     };
 
   config = mkIf cfg.enable (
@@ -159,241 +156,85 @@ in
         in
         if maybeHome != null then maybeHome else "/var/${endoregServiceUserName}";
 
-      envDefaultsCfg = cfg.environmentDefaults;
-      envOverrides = cfg.lxAnnotate.runtime.environment;
-
-      defaultHfHome = "${endoregServiceUserHome}/.cache/huggingface";
-      defaultHfHubCache = "${endoregServiceUserHome}/.cache/huggingface/hub";
-      defaultTransformersCache = defaultHfHubCache;
-      defaultOllamaModelsDir = "${endoregServiceUserHome}/.ollama/models";
-
-      resolvedHfHome = firstNonNull [
-        envOverrides.hfHome
-        envDefaultsCfg.hfHome
-        defaultHfHome
-      ];
-      resolvedHfHubCache = firstNonNull [
-        envOverrides.hfHubCache
-        envDefaultsCfg.hfHubCache
-        defaultHfHubCache
-      ];
-      resolvedTransformersCache = firstNonNull [
-        envOverrides.transformersCache
-        envDefaultsCfg.transformersCache
-        defaultTransformersCache
-      ];
-      resolvedOllamaModelsDir = firstNonNull [
-        envOverrides.ollamaModelsDir
-        envDefaultsCfg.ollamaModelsDir
-        defaultOllamaModelsDir
-      ];
-      resolvedOllamaKeepAlive = firstNonNull [
-        envOverrides.ollamaKeepAlive
-        envDefaultsCfg.ollamaKeepAlive
-      ];
-      resolvedHfHubEnableTransfer =
-        let
-          specific = envOverrides.hfHubEnableTransfer;
-        in
-        if specific != null then specific else envDefaultsCfg.hfHubEnableTransfer;
-
-      annotateEnvironment = {
-        hfHome = resolvedHfHome;
-        hfHubCache = resolvedHfHubCache;
-        transformersCache = resolvedTransformersCache;
-        hfHubEnableTransfer = resolvedHfHubEnableTransfer;
-        ollamaModelsDir = resolvedOllamaModelsDir;
-        ollamaKeepAlive = resolvedOllamaKeepAlive;
+      lxAnnotateRole = lxAnnotateDefinition.entrypoint {
+        inherit cfg endoregServiceUserHome firstNonNull;
       };
-
-      annotateDjangoOverrides = {
-        djangoModule = cfg.lxAnnotate.django.djangoModule;
-        assetDir =
-          if cfg.lxAnnotate.django.assetDir != null then cfg.lxAnnotate.django.assetDir else cfg.api.assetDir;
-        port = mkForce 8117;
-        djangoAllowedHosts = lib.unique (cfg.api.djangoAllowedHosts ++ [ "lx-annotate.local" ]);
-        keycloakClientId = "endoregdb-api";
+      fileMoverRole = fileMoverDefinition.entrypoint {
+        inherit lxAnnotateRole;
       };
+      endoregDbApiLocalRole = endoregDbApiLocalDefinition.entrypoint {
+        inherit config;
+      };
+      lxAiRole = lxAiDefinition.entrypoint {
+        inherit cfg;
+      };
+      endoAiRole = endoAiDefinition.entrypoint { };
+      persistingStorageRole = persistingStorageDefinition.entrypoint {
+        inherit
+          cfg
+          config
+          pkgs
+          adminUserName
+          storagePersistingMountPoint
+          ;
+      };
+    in
+    mkMerge [
+      {
+        # Storage settings
+        luxnix.storage.enable = mkDefault true;
 
-      annotateExtraSettings =
-        let
-          baseExtraSettings = cfg.api.extraSettings;
-        in
-        recursiveUpdate baseExtraSettings (
-          {
-            CENTRAL_NODES = cfg.centralNodes;
-            IS_CENTRAL_NODE = false;
-            DEFAULT_CENTER = cfg.defaultCenter;
-          }
-          // lib.optionalAttrs (cfg.defaultCenterKey != null) {
-            DEFAULT_CENTER_KEY = cfg.defaultCenterKey;
-          }
+        user.client.enable = mkDefault true;
+        user.endoreg-service-user.enable = true;
+        group.endoreg-service.enable = true; # Ensure the group is created
+        group.endoreg-service.members = mkAfter (lib.unique normalUserNames);
+
+        roles = {
+          desktop.enable = true;
+          custom-packages.cuda = true;
+          aglnet.client.enable = true;
+          managed-secrets.enable = mkDefault true;
+        };
+
+        luxnix.nvidia-prime.enable = true;
+
+        services.luxnix.lxAnnotateLocal = lxAnnotateRole.service;
+
+        services.lx-annotate.extraEnv = mkIf lxAnnotateRole.enable (
+          mkDefault lxAnnotateRole.environment.extraEnv
         );
 
-      annotateDjango = recursiveUpdate cfg.api (
-        annotateDjangoOverrides
-        // {
-          extraSettings = annotateExtraSettings;
-        }
-      );
-    in
-    {
-      # Storage settings
-      luxnix.storage.enable = mkDefault true;
-      services.luxnix.fileMover.enable = true;
+        # Create additional systemd tmpfiles for configuration
+        systemd.tmpfiles.rules = [
+          # USB Encrypter
+          "d /mnt/endoreg-sensitive-data 0770 root ${sensitiveServiceGroupName} -"
+          # Service user config directory
+          "d /var/endoreg-service-user/config 0755 endoreg-service-user ${endoregServiceGroupName} -"
+          # Storage directories (must exist for the symlinks to valid targets)
+          "d ${storageBaseDir} 0770 root ${endoregServiceGroupName} -"
+          "d ${videoInputDir} 0770 root ${endoregServiceGroupName} -"
+          "d ${pdfInputDir} 0770 root ${endoregServiceGroupName} -"
+        ]
+        ++ lib.optionals cfg.paths.storagePersistingEnable [
+          # Persistent storage mount point
+          "d ${storagePersistingMountPoint} 0770 root ${endoregServiceGroupName} -"
+        ];
 
-      user.client.enable = mkDefault true;
-      user.endoreg-service-user.enable = true;
-      group.endoreg-service.enable = true; # Ensure the group is created
-      group.endoreg-service.members = mkAfter (lib.unique normalUserNames);
-
-      roles = {
-        desktop.enable = true;
-        custom-packages.cuda = true;
-        aglnet.client.enable = true;
-        managed-secrets.enable = mkDefault true;
-      };
-
-      luxnix.nvidia-prime.enable = true;
-
-      services.luxnix.endoregDbApiLocal.enable = mkIf (!config.roles.endoreg-db-central-01.enable) (mkForce false);
-
-      services.luxnix.lxAnnotateLocal = {
-        enable = cfg.lxAnnotate.enable;
-        debug.enable = cfg.lxAnnotate.debug.enable;
-        source = cfg.lxAnnotate.source;
-        django = annotateDjango;
-        database = cfg.database;
-        runtime.commands = cfg.lxAnnotate.runtime.commands;
-      };
-
-      services.luxnix.lxAiLocal = {
-        enable = cfg.lxAi;
-        database = cfg.database;
-        # optional future improvements
-        # source = cfg.repository (if needed)
-        # debug.enable = false
-        source.branch = "prototype";
-        runtime.backboneCheckpointUrl =
-         "https://drive.google.com/uc?export=download&id=1TvliEJ5JTQddIE3kNiGMQzWIe9Cq_7mx";
-      };
-
-      services.luxnix.endoAi = {
-        enable = false;
-      };
-
-      # Create additional systemd tmpfiles for configuration
-      systemd.tmpfiles.rules = [
-        # USB Encrypter
-        "d /mnt/endoreg-sensitive-data 0770 root ${sensitiveServiceGroupName} -"
-        # Service user config directory
-        "d /var/endoreg-service-user/config 0755 endoreg-service-user ${endoregServiceGroupName} -"
-        # Storage directories (must exist for the symlinks to valid targets)
-        "d ${storageBaseDir} 0770 root ${endoregServiceGroupName} -"
-        "d ${videoInputDir} 0770 root ${endoregServiceGroupName} -"
-        "d ${pdfInputDir} 0770 root ${endoregServiceGroupName} -"
-      ]
-      ++ lib.optionals cfg.paths.storagePersistingEnable [
-        # Persistent storage mount point
-        "d ${storagePersistingMountPoint} 0770 root ${endoregServiceGroupName} -"
-      ];
-
-      security.sudo.extraRules = [
-        {
-          users = [ adminUserName ];
-          commands = [
-            {
-              command = "${pkgs.util-linux}/bin/mount";
-              options = [ "NOPASSWD" ];
-            }
-            {
-              command = "${pkgs.util-linux}/bin/umount";
-              options = [ "NOPASSWD" ];
-            }
-          ];
-        }
-      ];
-
-      # Periodically ensure the external persisting drive is mounted
-      systemd.services.endoreg-mount-persisting-storage =
-        mkIf (cfg.paths.storagePersistingEnable && cfg.paths.storagePersistingIsExternalDrive)
+        # Update Home Manager configuration to use XDG User Dirs and OutOfStore symlinks
+        home-manager.users.${clientUserName} =
+          { ... }:
           {
-            description = "Mount endoreg persisting storage via devenv";
-            serviceConfig = {
-              Type = "oneshot";
-              User = "root";
-              Environment = [
-                "STORAGE_PERSISTING_EXTERNAL_DRIVE=${if cfg.paths.storagePersistingIsExternalDrive then "true" else "false"}"
-                "STORAGE_PERSISTING_MOUNT_POINT=${toString storagePersistingMountPoint}"
-                "STORAGE_PERSISTING_HDD_ID=${lib.attrByPath [ "secretspec" "secrets" "STORAGE_PERSISTING_HDD_ID" ] "" config}"
-                "STORAGE_PERSISTING_HDD_PART=${lib.attrByPath [ "secretspec" "secrets" "STORAGE_PERSISTING_HDD_PART" ] "part1" config}"
-              ];
-              ExecStartPre = [ ];
-              ExecStart = pkgs.writeShellScript "mount-persisting-storage-service" ''
-                set -euo pipefail
+            home.username = mkDefault clientUserName;
+            home.stateVersion = mkDefault clientHomeStateVersion;
 
-                # if STORAGE_PERSISTING_EXTERNAL_DRIVE is not true, exit
-                if [ "$STORAGE_PERSISTING_EXTERNAL_DRIVE" != "true" ]; then
-                  echo "STORAGE_PERSISTING_EXTERNAL_DRIVE is not true; skipping mount"
-                  exit 0
-
-                fi
-
-                if [ -z "''${STORAGE_PERSISTING_HDD_ID:-}" ]; then
-                  echo "ERROR: STORAGE_PERSISTING_HDD_ID is not set"
-                  exit 1
-                fi
-
-                # Check if already mounted
-                if mountpoint -q "$STORAGE_PERSISTING_MOUNT_POINT"; then
-                  echo "Persisting storage already mounted at $STORAGE_PERSISTING_MOUNT_POINT"
-                  exit 0
-
-                fi
-
-                # attempt to mount drive by ID; prefer first partition if present
-                DEV_BASE="/dev/disk/by-id/$STORAGE_PERSISTING_HDD_ID"
-                DEV_PATH="$DEV_BASE-$STORAGE_PERSISTING_HDD_PART"
-  
-
-                echo "Mounting persisting storage drive $DEV_PATH to $STORAGE_PERSISTING_MOUNT_POINT"
-                if [ ! -e "$DEV_PATH" ]; then
-                  echo "ERROR: Device path $DEV_PATH does not exist"
-                  exit 1
-                fi
-
-                mount "$DEV_PATH" "$STORAGE_PERSISTING_MOUNT_POINT"
-                echo "Mounted persisting storage successfully" 
-
-              '';
-            };
-            path = [
-              pkgs.coreutils
-              pkgs.util-linux
-            ];
+            roles.desktop.enable = mkDefault true;
           };
-
-      systemd.timers.endoreg-mount-persisting-storage =
-        mkIf (cfg.paths.storagePersistingEnable && cfg.paths.storagePersistingIsExternalDrive)
-          {
-            description = "Periodic mount check for endoreg persisting storage";
-            wantedBy = [ "timers.target" ];
-            timerConfig = {
-              OnBootSec = "1m";
-              OnUnitActiveSec = "5m";
-              Unit = "endoreg-mount-persisting-storage.service";
-            };
-          };
-
-      # Update Home Manager configuration to use XDG User Dirs and OutOfStore symlinks
-      home-manager.users.${clientUserName} =
-        { ... }:
-        {
-          home.username = mkDefault clientUserName;
-          home.stateVersion = mkDefault clientHomeStateVersion;
-
-          roles.desktop.enable = mkDefault true;
-        };
-    }
+      }
+      fileMoverRole.config
+      endoregDbApiLocalRole.config
+      lxAiRole.config
+      endoAiRole.config
+      persistingStorageRole.config
+    ]
   );
 }

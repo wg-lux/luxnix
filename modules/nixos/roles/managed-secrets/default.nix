@@ -16,6 +16,12 @@ with lib; let
     ++ lib.optionals vaultAuthEnabled [
       vaultCfg.client.runtimeEnvironmentFile
     ];
+  humanFacingSecretNames = [
+    "client_user_password"
+    "client_user_password_hash"
+    "nextcloud_admin_password"
+  ];
+  isHumanFacingSecret = name: builtins.elem name humanFacingSecretNames;
 
   # Generator for human-readable two-word passwords
   twoWordPasswordGenerator = pkgs.writeShellScript "generate-two-word-password" ''
@@ -147,6 +153,41 @@ PY
   activeBuiltinSecrets = lib.filterAttrs (_: secret: secret.enable) builtinSecrets;
   activeCustomSecrets = cfg.customSecrets;
   allManagedSecrets = activeBuiltinSecrets // activeCustomSecrets;
+  activeHumanFacingBuiltinSecretNames =
+    lib.filter isHumanFacingSecret (lib.attrNames activeBuiltinSecrets);
+  activeHumanFacingCustomSecretNames =
+    lib.attrNames (lib.filterAttrs (_: secret: secret.humanFacing or false) activeCustomSecrets);
+  activeHumanFacingSecretNames =
+    activeHumanFacingBuiltinSecretNames ++ activeHumanFacingCustomSecretNames;
+  sopsSecretPaths =
+    lib.mapAttrsToList
+      (name: secret: {
+        inherit name;
+        path = toString (secret.path or "");
+      })
+      (config.sops.secrets or {});
+  nonEmptySopsSecretPaths = lib.filter (secret: secret.path != "") sopsSecretPaths;
+  managedSecretPaths =
+    lib.mapAttrsToList
+      (name: secret: {
+        inherit name;
+        path = toString secret.path;
+      })
+      allManagedSecrets;
+  managedSecretsSopsPathConflicts =
+    lib.filter
+      (managedSecret:
+        lib.any
+          (sopsSecret: sopsSecret.path == managedSecret.path)
+          nonEmptySopsSecretPaths)
+      managedSecretPaths;
+  formatManagedSopsConflict = managedSecret:
+    let
+      matchingSopsSecrets =
+        lib.filter (sopsSecret: sopsSecret.path == managedSecret.path) nonEmptySopsSecretPaths;
+      matchingNames = lib.concatStringsSep ", " (map (secret: secret.name) matchingSopsSecrets);
+    in
+      "${managedSecret.name} -> ${managedSecret.path} also owned by SOPS secret(s): ${matchingNames}";
   secretNames = lib.attrNames allManagedSecrets;
   secretNamesString = lib.concatStringsSep " " secretNames;
   secretPathAssignments = lib.concatStringsSep "\n" (lib.mapAttrsToList (name: secret: ''SECRET_PATHS["${name}"]="${secret.path}"'') allManagedSecrets);
@@ -242,6 +283,16 @@ in
       description = "Enable automatic management of common secret files";
     };
 
+    allowGeneratedHumanSecrets = mkOption {
+      type = types.bool;
+      default = false;
+      description = ''
+        Permit managed-secrets to generate human-facing passwords. This is only
+        intended as a temporary migration escape hatch; login and human admin
+        passwords should normally come from SOPS or an existing hash file.
+      '';
+    };
+
     secrets = mkOption {
       type = types.attrsOf (types.submodule {
         options = {
@@ -264,11 +315,17 @@ in
           };
         };
       });
-      default = lib.mapAttrs (_: _: {
-        enable = true;
-        forceRegenerate = false;
-        refreshOnBoot = false;
-      }) secretFiles;
+      default =
+        lib.mapAttrs (_: _: {
+          enable = true;
+          forceRegenerate = false;
+          refreshOnBoot = false;
+        }) secretFiles
+        // lib.genAttrs humanFacingSecretNames (_: {
+          enable = false;
+          forceRegenerate = false;
+          refreshOnBoot = false;
+        });
       description = "Configuration for individual secrets";
     };
 
@@ -309,6 +366,12 @@ in
             type = types.str;
             description = "Description of the secret";
           };
+
+          humanFacing = mkOption {
+            type = types.bool;
+            default = false;
+            description = "Whether this secret is a password a person must know or type interactively.";
+          };
           
           customScript = mkOption {
             type = types.bool;
@@ -341,12 +404,36 @@ in
 
     runBefore = mkOption {
       type = types.listOf types.str;
-      default = [ "postgresql.service" "nextcloud-setup.service" "endo-api-boot.service" ];
+      default = [ "postgresql.service" "nextcloud-setup.service" "endoreg-db-api-local.service" ];
       description = "Services that should wait for secret generation";
     };
   };
 
   config = mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = cfg.allowGeneratedHumanSecrets || activeHumanFacingSecretNames == [];
+        message = ''
+          roles.managed-secrets refuses to generate human-facing passwords by default:
+          ${lib.concatStringsSep ", " activeHumanFacingSecretNames}
+
+          Move these passwords to SOPS or a pre-existing hashed file. If this is
+          an intentional short-lived migration, set
+          roles.managed-secrets.allowGeneratedHumanSecrets = true.
+        '';
+      }
+      {
+        assertion = managedSecretsSopsPathConflicts == [];
+        message = ''
+          A secret path is owned by both roles.managed-secrets and sops.secrets:
+          ${lib.concatStringsSep "\n" (map formatManagedSopsConflict managedSecretsSopsPathConflicts)}
+
+          Disable the corresponding roles.managed-secrets entry when SOPS owns
+          the same deployed file path.
+        '';
+      }
+    ];
+
     # Ensure the sensitive service group exists
     users.groups.${sensitiveServiceGroupName} = {};
 

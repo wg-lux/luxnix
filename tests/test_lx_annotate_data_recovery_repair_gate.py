@@ -7,7 +7,7 @@ import textwrap
 from pathlib import Path
 
 
-REPO_ROOT = Path("/home/admin/luxnix")
+REPO_ROOT = Path("/home/admin/dev/luxnix")
 SCRIPTS_NIX = (
     REPO_ROOT / "modules" / "nixos" / "services" / "lx-annotate-local" / "scripts.nix"
 )
@@ -43,11 +43,11 @@ def _run_repair_gate(
         set -euo pipefail
         use_wheel_runtime="true"
         repair_marker_file="{marker_file}"
-        target_dir="{tmp_path / 'data'}"
-        repoDir="{tmp_path / 'repo'}"
+        target_dir="{tmp_path / "data"}"
+        repoDir="{tmp_path / "repo"}"
         unset LX_ANNOTATE_MASTER_KEY
         unset LX_ANNOTATE_MASTER_KEY_FILE
-        {"export LX_ANNOTATE_MASTER_KEY_FILE=\"" + master_key_file + "\"" if master_key_file else ""}
+        {'export LX_ANNOTATE_MASTER_KEY_FILE="' + master_key_file + '"' if master_key_file else ""}
 
         write_repair_failure() {{
           printf 'failure:%s\\n' "$1" >> "{calls_file}"
@@ -118,11 +118,4 @@ def test_wheel_data_recovery_keeps_legacy_media_overlay_after_helper_success():
     assert (
         'sync_source_dir "${cfg.dataRecovery.legacyMediaDir}" "legacy media compatibility overlay"'
         in source
-    )
-    assert 'migration_mark_eligible --apply' in source
-    assert source.index('migration_mark_eligible --apply') < source.index(
-        'updated_failed_upload_jobs='
-    )
-    assert source.index('updated_failed_upload_jobs=') < source.index(
-        'reap_upload_job_sources'
     )

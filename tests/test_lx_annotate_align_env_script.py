@@ -8,20 +8,26 @@ import textwrap
 from pathlib import Path
 
 
-REPO_ROOT = Path("/home/admin/luxnix")
-SCRIPTS_NIX = (
-    REPO_ROOT / "modules" / "nixos" / "services" / "lx-annotate-local" / "scripts.nix"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+FRONTEND_ASSETS_NIX = (
+    REPO_ROOT
+    / "modules"
+    / "nixos"
+    / "services"
+    / "lx-annotate-local"
+    / "scripts"
+    / "frontend-assets.nix"
 )
 
 
 def _extract_align_env_script() -> str:
-    source = SCRIPTS_NIX.read_text(encoding="utf-8")
+    source = FRONTEND_ASSETS_NIX.read_text(encoding="utf-8")
     match = re.search(
         r'alignEnvFileScript = pkgs\.writeText "lx-annotate-align-env\.py" \'\'\n(.*?)\n\s*\'\';',
         source,
         flags=re.DOTALL,
     )
-    assert match is not None, "Could not locate alignEnvFileScript in scripts.nix"
+    assert match is not None, "Could not locate alignEnvFileScript in frontend-assets.nix"
     return textwrap.dedent(match.group(1))
 
 

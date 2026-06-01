@@ -162,6 +162,7 @@ with lib; let
     echo "endoregDbLocal user password configured successfully"
   '';
 
+
 in
 {
   options.roles.postgres.default = {
@@ -317,6 +318,7 @@ in
           (mkDefaultUser cfg.lxClientUser)
           (mkDefaultUser cfg.stagingUser)
           (mkDefaultUser cfg.productionUser)
+
         ];
 
       };

@@ -56,8 +56,10 @@ markdown_extensions:
 nav:
   - Introduction: index.md
   - Getting Started: getting-started.md
+  - Architecture: architecture.md
   - Deployment Guide: deployment-guide.md
   - Vault Setup: vault-setup.md
+  - SSH Host Identity: ssh-host-identity.md
   - Hardware Setup: hardware-setup.md
   - Security: security.md
   - Service Architecture: service-architecture.md

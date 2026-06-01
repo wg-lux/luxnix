@@ -28,7 +28,7 @@ in {
 
     configurationPath = mkOption {
       type = types.str;
-      default = "lx-production";
+      default = "luxnix";
       description = "The directory where the luxnix repository is located";
     };
   };
@@ -36,6 +36,7 @@ in {
   config = mkIf cfg.enable {
     home.sessionVariables = {
       FLAKE = "/home/${config.luxnix.user.admin.name}/${cfg.configurationPath}";
+      LUXNIX_FLAKE = "/home/${config.luxnix.user.admin.name}/${cfg.configurationPath}";
     };
   };
 }

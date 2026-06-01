@@ -82,6 +82,156 @@ real LuxNix environment, verifies encrypted storage round-trips without
 plaintext on disk, and fetches the Vite manifest through the local Nginx TLS
 vhost.
 
+## Wheel Runtime Roles
+
+Wheel mode separates bootstrap jobs from the long-running web process:
+
+- `lx-annotate-migrate.service` runs `runtime.commands.migrate`
+- `lx-annotate-load-base-data.service` runs `runtime.commands.loadBaseData`
+- `lx-annotate-boot.service` installs/prepares the wheel runtime and starts only
+  `runtime.commands.web`
+- `lx-annotate-celery-worker.service` runs `runtime.commands.celeryWorker`
+- `lx-annotate-celery-pipeline-worker.service` runs the upload/anonymization
+  queue
+- `lx-annotate-celery-frame-extraction-worker.service` runs only the
+  `frame_extraction` queue
+- `lx-annotate-filewatcher.service` runs `runtime.commands.fileWatcherOnce` when
+  set, otherwise `runtime.commands.fileWatcher`
+- `lx-annotate-filewatcher.path` starts the watcher service when files are
+  dropped into the runtime video, report, or preanonymized intake directories
+
+The intake directory contract is centralized under `runtime.intakeDirs`. Defaults
+mirror lx-annotate `secretspec.toml` names such as `data/import/video_import`
+and `data/import/report_import`; Nix resolves `data/...` against
+`runtime.encryptedDataDir`.
+
+## File Mover Handoff Contract
+
+`move-my-files` and `lx-annotate-filewatcher` are coupled through the
+`runtime.intakeDirs` contract. Do not give either service a parallel hardcoded
+intake path.
+
+| Operator path | Mover behavior | Watcher contract |
+| --- | --- | --- |
+| `Video_Input` desktop link | path-triggered source, copied into mover staging, then published to `runtime.intakeDirs.video` | `lx-annotate-filewatcher.path` watches the resolved video dir and the service exports `WATCHER_VIDEO_DIR` |
+| `PDF_Input` desktop link | path-triggered source, copied into mover staging, then published to `runtime.intakeDirs.report` | `lx-annotate-filewatcher.path` watches the resolved report dir and the service exports `WATCHER_REPORT_DIR` |
+| `preanonymized_import` desktop link | direct service-user access path, not moved by `move-my-files` | `lx-annotate-filewatcher.path` watches the resolved preanonymized dir and exports `WATCHER_PREANONYMIZED_DIR` |
+| `sap_import` desktop link | direct service-user access path for SAP intake | handled by SAP import services, not by the file watcher path unit |
+
+The mover staging directory is `runtime.intakeDirs.moverStaging`. It is
+intentionally not watched. `move-my-files` first copies operator input into that
+staging tree, fixes ownership and permissions, then moves top-level staged
+entries into the watched video/report intake directories. Source files are
+deleted only after the publish step succeeds; unreadable files are moved under
+the `failed_input` quarantine tree.
+
+For video entries, `move-my-files` invokes the lx-annotate/endoreg-db
+`transcode_video` management command before publishing into the watched intake
+directory. That command uses the existing `ffmpeg_wrapper` encoder selection and
+writes the standard watcher format (H.264, `yuv420p`, full color range) into
+`runtime.intakeDirs.video`. The mover does not delete the source until the
+transcode command succeeds.
+
+The watcher service runs as the same service user and group as the mover. Wheel
+and repo runtime scripts both set `LX_ANNOTATE_FILEWATCHER_ARGS` to
+`--process-existing-once`, so a path-triggered activation drains files that
+already exist in the watched intake directories instead of requiring a
+long-running watcher process.
+
+The web command should stay a pure ASGI server command. It must not run
+migrations or `load_base_db_data`; those are explicit services on NixOS and
+explicit Jobs in Kubernetes-shaped deployments.
+
+`runtime.limits` applies to the web service. `runtime.workerLimits` applies to
+the Celery worker, so worker sizing can be changed without changing web service
+limits.
+
+## Frame Extraction Maintenance Windows
+
+FFmpeg frame extraction and post-validation rebuilds are isolated on the
+`frame_extraction` Celery queue. By default,
+`runtime.frameExtractionWorker.mode = "maintenance-window"` keeps queued frame
+jobs in Redis during normal service hours and starts
+`lx-annotate-celery-frame-extraction-worker.service` from a systemd timer at
+22:00 local time. The service is capped by `runtimeMaxSec = "7h"` so the window
+ends before the morning workload.
+
+Useful controls:
+
+```bash
+systemctl status lx-annotate-celery-frame-extraction-worker.timer
+systemctl list-timers | grep frame-extraction
+systemctl start lx-annotate-celery-frame-extraction-worker.service
+systemctl stop lx-annotate-celery-frame-extraction-worker.service
+```
+
+Set `runtime.frameExtractionWorker.mode = "always"` to restore the previous
+boot-started continuous worker, or `"manual"` to disable both timer and boot
+autostart. The local Redis broker uses append-only persistence so queued
+frame-extraction tasks survive ordinary Redis or host restarts. Production
+deployments must use an lx-annotate/endoreg_db build with Celery late-ack,
+worker-lost redelivery, and frame rollback support before enabling deferred
+frame extraction.
+
+## Cluster-Oriented Mode
+
+The current NixOS default remains single-host friendly: local Redis/Postgres are
+still supported, and the protected runtime root is a host path.
+
+For cluster-oriented validation, set:
+
+- `runtime.clustered.enable = true`
+- `runtime.externalServices.redisUrl`
+- `runtime.externalServices.postgresHost`
+- `runtime.externalServices.postgresPort`
+- `runtime.clustered.sharedStorage = true`
+- `runtime.clustered.sharedMasterKeyFile = /run/secrets/lx-annotate/master-key`
+- `runtime.autoGenerateMasterKey = false`
+
+Clustered mode fails evaluation if Redis or Postgres point at localhost, if
+shared storage is not acknowledged, or if per-host managed encrypted-data /
+hostname-scoped Vault state is enabled. Clustered deployments must use shared
+storage plus a shared workload master key for the data they share across web and
+worker replicas.
+
+The first Kubernetes package lives at:
+
+- [`kubernetes/lx-annotate`](/home/admin/luxnix/kubernetes/lx-annotate)
+
+It contains plain Kustomize-managed YAML for web, worker, Service, Ingress,
+ConfigMap, Secret references, a shared PVC, and singleton CronJobs with
+`concurrencyPolicy: Forbid`. Run `kubernetes/lx-annotate/bootstrap-job.yaml`
+explicitly with `kubectl create -f` for each release; it uses
+`metadata.generateName`, applies migrations, loads base data, and writes the
+release marker that web, worker, and batch pods wait for.
+
+## Emergency Storage Relief
+
+The module exposes a separate opt-in relief unit for storage pressure events:
+
+- set `services.luxnix.lxAnnotateLocal.storageRelief.enable = true`
+- set either `storageRelief.expectedDeviceId` or `storageRelief.expectedFsUuid`
+- rebuild
+- run `systemctl start lx-annotate-emergency-storage-relief`
+
+The unit fails closed unless the external mount is active and matches the
+configured device id or filesystem UUID. It writes to
+`storageRelief.stagingDir` first, moves verified files into
+`storageRelief.archiveDir`, emits JSON journal events, and writes a JSON
+manifest under `storageRelief.manifestDir`.
+
+The relief helper only archives:
+
+1. legacy processed report/video duplicates whose matching database object is in
+   an anonymized processed state and whose content hash matches the managed
+   payload
+2. export bundles that contain `.lx-annotate-export-validated.json` with
+   `validated=true` and resource references whose database states are validated
+
+Local files are deleted only after the external archive copy has been hashed and
+verified. The service is manual by default; `storageRelief.timer.enable` can be
+set for a scheduled emergency workflow.
+
 ## Hub Groundwork
 
 This module can also mark a host as the first central hub node:
@@ -153,11 +303,19 @@ hostile-network workflow, so transfer enablement is no longer allowed to imply
 
 The module exports the corresponding runtime environment for Django:
 
+- `ENDOREG_DEPLOYMENT_ROLE`
 - `ENDOREG_ENABLE_HUB_TRANSFERS`
 - `ENDOREG_HUB_TRANSFER_REQUIRE_SECURE_TRANSPORT`
 - `ENDOREG_HUB_TRANSFER_REQUIRE_MTLS`
 - `ENDOREG_HUB_TRANSFER_MTLS_META_KEY`
 - `ENDOREG_HUB_TRANSFER_MTLS_META_VALUE`
+
+`ENDOREG_DEPLOYMENT_ROLE` is the explicit bridge to the
+`lx-annotate`/`endoreg_db` deployment enum:
+
+- LuxNix server or central-node deployments export `central_hub`
+- LuxNix laptop center-node deployments export `site_node`
+- `standalone` is reserved for isolated, non-networked test deployments
 
 Nginx is also configured to enforce and attest client-certificate validation
 for transfer-capable hub nodes:
@@ -213,6 +371,7 @@ vault-auth-setup.service
     -> lx-annotate-encrypted-data.service
       -> lx-annotate-boot.service
       -> lx-annotate-filewatcher.service
+      -> lx-annotate-filewatcher.path
       -> lx-annotate-export-frames.service
 ```
 
@@ -241,11 +400,6 @@ services.luxnix.lxAnnotateLocal = {
     mode = "wheel";
     wheelPath = /path/to/dist/lx_annotate-0.0.2-py3-none-any.whl;
     wheelhousePath = /path/to/wheelhouse;
-    commands = {
-      fileWatcher = "$LX_ANNOTATE_WHEEL_VENV/bin/python -m django start_filewatcher --settings=lx_annotate.settings.settings_prod";
-      exportFrames = "export-frames";
-      celeryWorker = "$LX_ANNOTATE_WHEEL_VENV/bin/celery -A lx_annotate.celery:app worker --loglevel=INFO";
-    };
     encryptedDataDir = "/var/lib/lx-annotate/secure_data";
 
     managedEncryptedData = {
@@ -278,9 +432,16 @@ luxnix.vault = {
 
 Notes:
 
-- In wheel mode, `runtime.commands.fileWatcher`, `runtime.commands.exportFrames`,
-  and `runtime.commands.celeryWorker` are wheel-entrypoint commands, not
-  repo-local `manage.py` invocations.
+- In wheel mode, LuxNix installs `runtime.wheelPath` into a host-local
+  virtualenv and exposes the wheel console scripts as a package-shaped runtime.
+  The web service consumes that package through `services.lx-annotate`; LuxNix
+  helper units call the same package's console scripts directly. The required
+  wheel scripts are `lx-annotate-web`, `lx-annotate-manage`,
+  `lx-annotate-migrate`, `lx-annotate-load-base-data`,
+  `lx-annotate-worker`, `lx-annotate-watch`,
+  `lx-annotate-export-frames`, and `lx-annotate-import-sap`.
+- `runtime.commands.*` is retained only for legacy helper scripts and is not
+  needed for the active wheel console-script runtime.
 - `runtime.encryptedDataDir` remains the canonical protected root. Paths under
   the service-user home are access paths only unless the runtime contract is
   intentionally redesigned.
@@ -316,7 +477,12 @@ The expected startup order is:
 1. `vault-auth-setup.service`
 2. `managed-secrets-setup.service`
 3. `lx-annotate-encrypted-data.service`
-4. `lx-annotate-boot.service`
+4. `lx-annotate-migrate.service`
+5. `lx-annotate-load-base-data.service`
+6. `lx-annotate-boot.service`
+7. `lx-annotate-celery-worker.service`
+8. `lx-annotate-celery-pipeline-worker.service`
+9. `lx-annotate-celery-frame-extraction-worker.timer`
 
 Useful verification commands:
 
@@ -324,7 +490,14 @@ Useful verification commands:
 systemctl status vault-auth-setup.service
 systemctl status managed-secrets-setup.service
 systemctl status lx-annotate-encrypted-data.service
+systemctl status lx-annotate-migrate.service
+systemctl status lx-annotate-load-base-data.service
 systemctl status lx-annotate-boot.service
+systemctl status lx-annotate-celery-worker.service
+systemctl status lx-annotate-celery-pipeline-worker.service
+systemctl status lx-annotate-celery-frame-extraction-worker.timer
+systemctl status lx-annotate-celery-frame-extraction-worker.service
+systemctl status lx-annotate-emergency-storage-relief.service
 systemctl status lx-annotate-hub-backup.service
 systemctl status lx-annotate-hub-backup.timer
 ls -l /etc/secrets/vault/lx_annotate_luks.key /etc/secrets/vault/lx_annotate_luks.uuid /etc/secrets/vault/lx_annotate_master_key

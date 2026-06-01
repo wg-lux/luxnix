@@ -7,7 +7,7 @@ This document describes the network architecture of the LuxNix system, detailing
 
 The OpenVPN Service is used for accessing the devices in the Network through SSH.
 
-The command for running the OpenVPN service is 
+The command for running the OpenVPN service is
 
 ```
 bash

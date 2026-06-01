@@ -6,15 +6,22 @@
 }@args:
 let
   runtimeContext = import ./runtime-context.nix { inherit config lib pkgs; };
-  inherit (runtimeContext) cfg gs gsp sslCfg lxAnnotateRuntime;
-
-  scriptExports = import ./scripts.nix (args // {
-    inherit cfg gs gsp sslCfg lxAnnotateRuntime;
-  });
+  inherit (runtimeContext)
+    cfg
+    gs
+    gsp
+    sslCfg
+    lxAnnotateRuntime
+    ;
 
   moduleArgs = args // {
-    inherit cfg gs gsp sslCfg;
-    lxAnnotateRuntime = lxAnnotateRuntime // { scripts = scriptExports; };
+    inherit
+      cfg
+      gs
+      gsp
+      sslCfg
+      ;
+    inherit lxAnnotateRuntime;
   };
 in
 {

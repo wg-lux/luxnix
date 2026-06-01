@@ -9,7 +9,7 @@ import textwrap
 from pathlib import Path
 
 
-REPO_ROOT = Path("/home/admin/luxnix")
+REPO_ROOT = Path("/home/admin/dev/luxnix")
 SCRIPTS_NIX = (
     REPO_ROOT / "modules" / "nixos" / "services" / "lx-annotate-local" / "scripts.nix"
 )
@@ -44,7 +44,9 @@ def test_ensure_wheel_runtime_installed_mocks_venv_creation(tmp_path: Path):
     env_conf_dir = tmp_path / "conf"
     env_data_dir = tmp_path / "data"
     runtime_static_root = tmp_path / "static"
-    wheel_file = tmp_path / "0123456789abcdef0123456789abcdef-lx_annotate-0.0.3-py3-none-any.whl"
+    wheel_file = (
+        tmp_path / "0123456789abcdef0123456789abcdef-lx_annotate-0.0.3-py3-none-any.whl"
+    )
     wheel_file.write_bytes(b"fake-wheel")
     calls_log = tmp_path / "calls.log"
     fake_python = tmp_path / "fake-python"
@@ -138,7 +140,9 @@ def test_ensure_wheel_runtime_installed_skips_venv_creation_when_python_exists(
     env_conf_dir = tmp_path / "conf"
     env_data_dir = tmp_path / "data"
     runtime_static_root = tmp_path / "static"
-    wheel_file = tmp_path / "0123456789abcdef0123456789abcdef-lx_annotate-0.0.3-py3-none-any.whl"
+    wheel_file = (
+        tmp_path / "0123456789abcdef0123456789abcdef-lx_annotate-0.0.3-py3-none-any.whl"
+    )
     wheel_file.write_bytes(b"fake-wheel")
     calls_log = tmp_path / "calls.log"
     fake_python = tmp_path / "fake-python"
@@ -148,11 +152,11 @@ def test_ensure_wheel_runtime_installed_skips_venv_creation_when_python_exists(
     _make_executable(existing_python, "#!/usr/bin/env bash\nexit 0\n")
     _make_executable(
         existing_pip,
-        f"#!/usr/bin/env bash\nprintf 'pip:%s\\n' \"$*\" >> \"{calls_log}\"\nexit 0\n",
+        f'#!/usr/bin/env bash\nprintf \'pip:%s\\n\' "$*" >> "{calls_log}"\nexit 0\n',
     )
     _make_executable(
         fake_python,
-        f"#!/usr/bin/env bash\nprintf 'python:%s\\n' \"$*\" >> \"{calls_log}\"\nexit 1\n",
+        f'#!/usr/bin/env bash\nprintf \'python:%s\\n\' "$*" >> "{calls_log}"\nexit 1\n',
     )
 
     script = textwrap.dedent(

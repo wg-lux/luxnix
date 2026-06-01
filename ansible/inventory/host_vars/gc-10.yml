@@ -8,6 +8,8 @@ host_roles:
   aglnet.client.enable: "true"
   custom_packages.baseDevelopment: "true"
   endoreg-client.lxAi: "true"
+  endoreg_client.defaultCenterKey: '"university_hospital_wuerzburg"'
+
 
 host_services:
   luxnix.lxAiLocal.runtime.protectedDataDir: '"/var/lib/lx-annotate/data"'
@@ -15,8 +17,6 @@ host_services:
 extra_secret_names: []
 
 host_luxnix:
-  generic_settings.configurationPathRelative: '"luxnix"'
-  generic_settings.configurationPath: 'lib.mkForce "/home/admin/luxnix"'
 
   generic_settings.hostPlatform: '"x86_64-linux"'
   generic_settings.systemStateVersion: '"23.11"'

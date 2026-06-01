@@ -179,7 +179,7 @@ in
 
   ####### POLKIT RULES #########
   security.polkit.extraConfig = ''
-    ####### POLKIT RULES MOUNT SERVICE #########
+    // POLKIT RULES MOUNT SERVICE
     polkit.addRule(function(action, subject) {
       if (action.id == "org.freedesktop.systemd1.manage-units" &&
           subject.isInGroup("${group}") &&
@@ -189,7 +189,7 @@ in
       }
     });
 
-    ####### POLKIT RULES UMOUNT SERVICE #########
+    // POLKIT RULES UMOUNT SERVICE
     polkit.addRule(function(action, subject) {
       if (action.id == "org.freedesktop.systemd1.manage-units" &&
           subject.isInGroup("${group}") &&

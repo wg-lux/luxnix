@@ -29,7 +29,8 @@ with lib.luxnix; let
 
   baseDevelopment = with pkgs; [
     # vscode-fhs
-    nixfmt-rfc-style
+    nixfmt
+    ripgrep
     cacert
     openssl
     vscode
@@ -47,6 +48,9 @@ with lib.luxnix; let
     dust
     dysk
     ncdu
+    nix-tree
+    nixos-shell
+    nix-output-monitor
   ];
 
   visuals = with pkgs; [

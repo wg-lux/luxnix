@@ -24,5 +24,16 @@ group_roles:
   endoreg_db_central_01.service.workers: "4"
   endoreg_db_central_01.service.maxRequests: "5000"
   endoreg_client.repository.branch: '"container"'
-group_services: {}
+group_services:
+  luxnix.redis.enable: "true"
+  redis.servers.main.bind: 'lib.mkForce "172.16.255.14"'
+  luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl: '"redis://172.16.255.14:6380/1"'
+  luxnix.lxAnnotateLocal.runtime.externalServices.postgresHost: '"172.16.255.22"'
+  luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort: 5432
+  luxnix.lxAnnotateLocal.runtime.celeryBroker.secureTransportConfirmed: "true"
+  luxnix.lxAnnotateLocal.runtime.trainingWorker.mode: '"manual"'
+  luxnix.lxAnnotateLocal.hub.transferApi.enable: "true"
+  luxnix.lxAnnotateLocal.hub.transferApi.requireSecureTransport: "true"
+  luxnix.lxAnnotateLocal.hub.transferApi.requireMtls: "true"
+  luxnix.lxAnnotateLocal.hub.transferApi.clientCaFile: '"/etc/secrets/vault/lx_annotate_hub_transfer_client_ca.pem"'
 group_luxnix: {}

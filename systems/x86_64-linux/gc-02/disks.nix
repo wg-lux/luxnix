@@ -74,4 +74,10 @@
 
   fileSystems."/persist".neededForBoot = true;
   fileSystems."/var/log".neededForBoot = true;
+
+  zramSwap = {
+    enable = true;
+    memoryPercent = 20;
+    priority = 100;
+  };
 }

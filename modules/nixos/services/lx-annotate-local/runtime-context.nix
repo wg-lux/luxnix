@@ -1,20 +1,17 @@
 {
   config,
   lib,
-  pkgs,
   ...
 }:
-with lib;
-with lib.luxnix;
 let
   cfg = config.services.luxnix.lxAnnotateLocal;
   gs = config.luxnix.generic-settings;
   gsp = gs.postgres;
   sslCfg = lib.attrByPath [ "services" "luxnix" "lxSsl" ] {
     enable = false;
-    sslDir = "/var/lib/lx-annotate/ssl";
-    certPath = "/var/lib/lx-annotate/ssl/lx-annotate-selfsigned.crt";
-    keyPath = "/var/lib/lx-annotate/ssl/lx-annotate-selfsigned.key";
+    sslDir = "/var/lib/lx-annotate-ssl";
+    certPath = "/var/lib/lx-annotate-ssl/lx-annotate-selfsigned.crt";
+    keyPath = "/var/lib/lx-annotate-ssl/lx-annotate-selfsigned.key";
   } config;
 
   defaultSslCertificatePath = sslCfg.certPath;
@@ -30,12 +27,25 @@ let
 
   endoreg-service-user-name = config.user.endoreg-service-user.name;
   endoreg-service-user = config.users.users.${endoreg-service-user-name};
-  endoreg-service-user-home = endoreg-service-user.home;
+  endoreg-service-user-home =
+    config.user.endoreg-service-user.extraOptions.home or "/var/${endoreg-service-user-name}";
   endoreg-service-group-name = config.user.endoreg-service-user.group;
   runtimeRootPath = "/var/lib/lx-annotate";
   repoDir = "${endoreg-service-user-home}/${repoDirName}";
   repoStaticRootPath = "${repoDir}/staticfiles";
   runtimeDataRootPath = cfg.runtime.encryptedDataDir;
+  resolveRuntimeDataPath = path:
+    let
+      pathString = toString path;
+    in
+    if lib.hasPrefix "/" pathString then
+      pathString
+    else if pathString == "data" then
+      runtimeDataRootPath
+    else if lib.hasPrefix "data/" pathString then
+      "${runtimeDataRootPath}/${lib.removePrefix "data/" pathString}"
+    else
+      "${runtimeDataRootPath}/${pathString}";
   # Canonical protected runtime layout:
   # - runtimeDataRootPath is the single protected root
   # - runtimeStorageRootPath is the managed storage subtree under that root
@@ -44,7 +54,14 @@ let
   # Anything under the service-user home is only an access path or symlink and
   # must not be treated as an independent runtime root.
   runtimeStorageRootPath = "${runtimeDataRootPath}/storage";
-  runtimeIoImportRootPath = "${runtimeDataRootPath}/import";
+  runtimeIoImportRootPath = resolveRuntimeDataPath cfg.runtime.intakeDirs.importRoot;
+  runtimeWatcherVideoDirPath = resolveRuntimeDataPath cfg.runtime.intakeDirs.video;
+  runtimeWatcherReportDirPath = resolveRuntimeDataPath cfg.runtime.intakeDirs.report;
+  runtimeWatcherPreanonymizedDirPath = resolveRuntimeDataPath cfg.runtime.intakeDirs.preanonymized;
+  runtimeSapImportDirPath = resolveRuntimeDataPath cfg.runtime.intakeDirs.sap;
+  runtimeSapImportProcessedDirPath = resolveRuntimeDataPath cfg.runtime.intakeDirs.sapProcessed;
+  runtimeSapImportFailedDirPath = resolveRuntimeDataPath cfg.runtime.intakeDirs.sapFailed;
+  runtimeMoverStagingDirPath = resolveRuntimeDataPath cfg.runtime.intakeDirs.moverStaging;
   runtimeStreamableVideoRootPath = "${runtimeStorageRootPath}/streamable_videos";
   runtimeStreamableVideoRawRootPath = "${runtimeStreamableVideoRootPath}/raw";
   runtimeStreamableVideoProcessedRootPath = "${runtimeStreamableVideoRootPath}/processed";
@@ -96,6 +113,7 @@ let
   envSystemdFilePath = "${runtimeRootPath}/.env.systemd";
   pythonInterpreter = "${cfg.runtime.pythonPackage}/bin/python3";
   wheelFilePath = if cfg.runtime.wheelPath == null then "" else toString cfg.runtime.wheelPath;
+  packageVersion = cfg.runtime.packageVersion;
   managedEncryptedDataServiceName = "lx-annotate-encrypted-data.service";
   encryptionServiceUnits =
     if cfg.runtime.managedEncryptedData.enable then
@@ -123,26 +141,32 @@ let
   envDjangoEnv = "production";
   envCentralNodeFlag =
     if envIsCentralNode || settingsProfile == "central" then "true" else "false";
+  envDeploymentRole = cfg.runtime.deploymentRole;
 
   envDefaultCenter =
     let
-      explicitDefaultCenterKey = cfg.django.extraSettings.DEFAULT_CENTER_KEY or null;
-      defaultCenterReference = lib.strings.trim (toString (
-        cfg.django.extraSettings.DEFAULT_CENTER or
-        config.roles.endoreg-client.defaultCenter or
-        "University Hospital Wuerzburg"
-      ));
+      trimToString = value: lib.strings.trim (toString value);
+      explicitDefaultCenterKey = trimToString (
+        cfg.django.extraSettings.DEFAULT_CENTER_KEY or ""
+      );
+      hostDefaultCenterKey = trimToString config.roles.endoreg-client.defaultCenterKey;
     in
-    if explicitDefaultCenterKey != null then
+    if explicitDefaultCenterKey != "" then
       explicitDefaultCenterKey
-    else if defaultCenterReference == "" then
-      "University Hospital Wuerzburg"
     else
-      defaultCenterReference;
+      hostDefaultCenterKey;
   exportFramesStorageRootDefault =
     config.roles.endoreg-client.paths.storagePersistingMountPoint;
   externalCleanupArchiveRootDefault =
     "${config.roles.endoreg-client.paths.storagePersistingMountPoint}/lx-annotate-archive";
+  emergencyReliefArchiveRootDefault =
+    "${config.roles.endoreg-client.paths.storagePersistingMountPoint}/lx-annotate-emergency-relief";
+  emergencyReliefManifestDirDefault =
+    "${emergencyReliefArchiveRootDefault}/manifests";
+  emergencyReliefStagingDirDefault =
+    "${emergencyReliefArchiveRootDefault}/.staging";
+  emergencyReliefValidatedExportDirsDefault =
+    [ "${runtimeDataRootPath}/export/frames" ];
   mkDjangoOptions = import ../../lib/django-options.nix { inherit lib; };
   dataRecoveryStateDir = "${runtimeRootPath}/state";
   dataRecoveryStateFile = "${dataRecoveryStateDir}/effective-data-dir.env";
@@ -187,6 +211,13 @@ let
         runtimeDataRootPath
         runtimeStorageRootPath
         runtimeIoImportRootPath
+        runtimeWatcherVideoDirPath
+        runtimeWatcherReportDirPath
+        runtimeWatcherPreanonymizedDirPath
+        runtimeSapImportDirPath
+        runtimeSapImportProcessedDirPath
+        runtimeSapImportFailedDirPath
+        runtimeMoverStagingDirPath
         runtimeStreamableVideoRootPath
         runtimeStreamableVideoRawRootPath
         runtimeStreamableVideoProcessedRootPath
@@ -240,6 +271,7 @@ let
         envAnnotateDjangoSettingsModule
         envDjangoEnv
         envCentralNodeFlag
+        envDeploymentRole
         envDefaultCenter
         envIsCentralNode
         settingsProfile;
@@ -249,6 +281,7 @@ let
         useWheelRuntime
         pythonInterpreter
         wheelFilePath
+        packageVersion
         managedEncryptedDataServiceName
         encryptionServiceUnits
         encryptedDataMountOptions;
@@ -259,6 +292,10 @@ let
         defaultSslKeyPath
         exportFramesStorageRootDefault
         externalCleanupArchiveRootDefault
+        emergencyReliefArchiveRootDefault
+        emergencyReliefManifestDirDefault
+        emergencyReliefStagingDirDefault
+        emergencyReliefValidatedExportDirsDefault
         processedReportDirName
         processedVideoDirName;
     };

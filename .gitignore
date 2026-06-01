@@ -2,6 +2,7 @@
 .ansible/.lock
 conf/ansible.cfg
 result
+result/
 autoconf/
 # direnv
 .direnv

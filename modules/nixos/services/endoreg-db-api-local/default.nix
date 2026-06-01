@@ -130,18 +130,18 @@ with lib.luxnix; let
     ${lib.optionalString (cfg.api.extraSettings.CENTRAL_NODES or [] != []) ''
     CENTRAL_NODES = ${builtins.toJSON cfg.api.extraSettings.CENTRAL_NODES}
     ''}
-    
+
     # Node Type Configuration
     IS_CENTRAL_NODE = ${if (cfg.api.extraSettings.IS_CENTRAL_NODE or false) then "True" else "False"}
-    
+
     # Additional custom settings
-    ${lib.concatStringsSep "\n" 
-      (lib.mapAttrsToList 
-        (name: value: 
+    ${lib.concatStringsSep "\n"
+      (lib.mapAttrsToList
+        (name: value:
           if name != "CENTRAL_NODES" && name != "IS_CENTRAL_NODE" then
             "${name} = ${if builtins.isString value then "'${value}'" else builtins.toJSON value}"
           else ""
-        ) 
+        )
         (cfg.api.extraSettings)
       )
     }
@@ -149,15 +149,15 @@ with lib.luxnix; let
 
   runLocalEndoApiScript = pkgs.writeShellScriptBin "${scriptName}" ''
         set -euo pipefail
-    
+
         # Debug mode flag - controls verbose logging
         DEBUG_MODE=${if cfg.debugMode then "true" else "false"}
-    
+
         echo "Starting EndoReg API service..."
         echo "Repository: ${gitURL}"
         echo "Branch: ${branchName}"
         echo "Target Directory: ${repoDir}"
-    
+
         # Clone or update repository
         if [ ! -d ${repoDir} ]; then
           echo "Cloning repository..."
@@ -172,7 +172,7 @@ with lib.luxnix; let
             echo "Repository update disabled, using existing code"
           ''}
         fi
-    
+
         # Checkout specified branch with proper remote tracking
         echo "Checking out branch: ${branchName}"
         if git show-ref --verify --quiet refs/heads/${branchName}; then
@@ -189,13 +189,13 @@ with lib.luxnix; let
           git branch -r || echo "Could not list remote branches"
           exit 1
         fi
-    
+
         ${if cfg.repository.updateOnBoot then ''
         # Update the current branch
         echo "Updating branch ${branchName}..."
-        git pull origin ${branchName} || { 
+        git pull origin ${branchName} || {
           echo "WARNING: Failed to pull latest changes for ${branchName}, trying to reset to remote"
-          git reset --hard origin/${branchName} || { 
+          git reset --hard origin/${branchName} || {
             echo "ERROR: Failed to update branch ${branchName}"
             exit 1
           }
@@ -214,13 +214,13 @@ with lib.luxnix; let
 
         # Copy database password from vault (managed by postgres-default role)
         echo "Setting up database configuration..."
-    
+
         if [ "$DEBUG_MODE" = "true" ]; then
           echo "Current user: $(whoami)"
           echo "User groups: $(groups)"
           echo "Checking for database password file: ${cfg.database.passwordFile}"
         fi
-    
+
         # Debug secret file access
         SECRET_FILE="${cfg.database.passwordFile}"
         if [ -f "$SECRET_FILE" ]; then
@@ -239,7 +239,7 @@ with lib.luxnix; let
               echo "File permissions:"
               ls -la "$SECRET_FILE" 2>/dev/null || echo "Cannot access file"
               echo "Directory permissions:"
-              ls -la "$(dirname "$SECRET_FILE")" 2>/dev/null || echo "Cannot access directory" 
+              ls -la "$(dirname "$SECRET_FILE")" 2>/dev/null || echo "Cannot access directory"
               echo "Parent directory permissions:"
               ls -la "/etc/secrets" 2>/dev/null || echo "Cannot access /etc/secrets"
             fi
@@ -252,18 +252,18 @@ with lib.luxnix; let
             ls -la "/etc/secrets" 2>/dev/null || echo "Cannot access /etc/secrets"
           fi
         fi
-    
+
       # Ensure runtime directories exist (they might be ignored in git)
       mkdir -p ${envConfDir} ${envDataDir}
-    
+
         if [ -f "$SECRET_FILE" ] && head -c 1 "$SECRET_FILE" >/dev/null 2>&1; then
           cp "$SECRET_FILE" ${envConfDir}/db_pwd
           echo "Database password copied from vault to ${envConfDir}/db_pwd"
-      
+
           # Run Django application's configuration setup
           echo "Running Django application configuration setup..."
           cd ${repoDir}
-      
+
           # Set environment variables needed by the Django config scripts
           export DATA_DIR="${envDataDir}"
           export CONF_DIR="${envConfDir}"
@@ -297,11 +297,11 @@ with lib.luxnix; let
           export DB_HOST="${cfg.database.host}"
           export DB_PORT="${toString cfg.database.port}"
           export DB_SSLMODE="${cfg.database.sslMode}"
-      
+
           # Ensure devenv is available and run the configuration script
           if command -v devenv >/dev/null 2>&1; then
             echo "Running Django configuration setup via devenv..."
-            devenv shell env-init-conf || { 
+            devenv shell env-init-conf || {
               echo "WARNING: devenv env-init-conf failed, trying direct script execution"
               # Fallback to direct execution if devenv fails
               if [ -f "scripts/make_conf.py" ]; then
@@ -331,7 +331,7 @@ with lib.luxnix; let
               python env_setup.py || echo "WARNING: env_setup.py execution failed"
             fi
           fi
-      
+
           # Verify that the required db.yaml file was created
           if [ -f "${envConfDir}/db.yaml" ]; then
             echo "✓ Django configuration file created: ${envConfDir}/db.yaml"
@@ -387,7 +387,7 @@ with lib.luxnix; let
           else
             echo "WARNING: .env not found after setup; production overrides skipped"
           fi
-      
+
         else
           echo "ERROR: Database password not found in vault or not accessible. PostgreSQL setup may not be complete."
           exit 1
@@ -398,39 +398,39 @@ with lib.luxnix; let
         echo "Service user home: ${endoreg-service-user-home}"
         echo "Current user: $(whoami)"
         echo "Current directory: $(pwd)"
-    
+
         # Check if home directory exists and is accessible
         if [ ! -d "${endoreg-service-user-home}" ]; then
           echo "ERROR: Home directory ${endoreg-service-user-home} does not exist"
           exit 1
         fi
-    
+
         # Ensure config directory exists with correct permissions
         CONFIG_DIR="${endoreg-service-user-home}/config"
         echo "Checking config directory: $CONFIG_DIR"
-    
+
         if [ ! -d "$CONFIG_DIR" ]; then
           echo "Creating config directory: $CONFIG_DIR"
           mkdir -p "$CONFIG_DIR" || { echo "ERROR: Failed to create config directory $CONFIG_DIR"; ls -la "${endoreg-service-user-home}"; exit 1; }
         else
           echo "Config directory already exists"
         fi
-    
+
         # Check permissions
         ls -la "${endoreg-service-user-home}/" || echo "Cannot list home directory contents"
-    
+
         # Create a local copy outside the git repository to avoid conflicts
         echo "Copying Django configuration file..."
         # Remove existing file if it exists (it might be read-only)
         if [ -f "$CONFIG_DIR/local_settings.py" ]; then
           echo "Removing existing local_settings.py file"
-          rm -f "$CONFIG_DIR/local_settings.py" || { 
+          rm -f "$CONFIG_DIR/local_settings.py" || {
             echo "Existing file is read-only, making it writable first"
             chmod +w "$CONFIG_DIR/local_settings.py" 2>/dev/null || true
             rm -f "$CONFIG_DIR/local_settings.py"
           }
         fi
-        cp ${djangoConfigFile} "$CONFIG_DIR/local_settings.py" || { 
+        cp ${djangoConfigFile} "$CONFIG_DIR/local_settings.py" || {
           echo "ERROR: Failed to copy Django configuration to $CONFIG_DIR/local_settings.py"
           echo "Directory permissions:"
           ls -la "$CONFIG_DIR" 2>/dev/null || echo "Cannot access $CONFIG_DIR"
@@ -438,7 +438,7 @@ with lib.luxnix; let
           exit 1
         }
         echo "Django configuration copied to $CONFIG_DIR/local_settings.py"
-    
+
         # Create symlink in the repository (remove existing symlink first if it exists)
         if [ -L ${repoDir}/local_settings.py ]; then
           rm ${repoDir}/local_settings.py
@@ -455,7 +455,7 @@ with lib.luxnix; let
         echo "Hostname: ${envDjangoHost}"
         echo "Port: ${envDjangoPort}"
         echo "Protocol: ${envHttpProtocol}"
-    
+
 
         # Start the Django application
         exec devenv shell -- run-server
@@ -639,6 +639,7 @@ in
       description = "Clone or pull endoreg-db-api and run prod-server";
       wantedBy = [ "multi-user.target" ];
       after = [ "postgres-endoreg-setup.service" "endoreg-django-setup.service" "systemd-tmpfiles-setup.service" ];
+      #wants = [ "network-online.target" ]; #his prevents git fetch/pull from racing the network on boot.
       requires = [ "postgres-endoreg-setup.service" "systemd-tmpfiles-setup.service" ];
       serviceConfig = {
         Type = "exec";

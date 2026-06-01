@@ -29,6 +29,33 @@ This is especially important for externally sourced secrets, including Vault-bac
 
 `customSecrets` now participate in the same generation loop as the built-in secrets. They get the same create-if-missing, refresh, force-regenerate, permission, and atomic-write handling.
 
+## Human-Facing Password Policy
+
+`managed-secrets` is only for machine-generated service secrets by default. It
+does not generate passwords that people must know or type interactively.
+
+These built-ins are disabled by default and should be supplied by SOPS or an
+existing hash file instead:
+
+- `client_user_password`
+- `client_user_password_hash`
+- `nextcloud_admin_password`
+
+If a SOPS secret writes to the same deployed `path` as a managed secret,
+evaluation fails until the corresponding `roles.managed-secrets` entry is
+disabled. This prevents two secret systems from racing over the same file.
+
+Custom secrets can opt into the same guard with `humanFacing = true`.
+
+For a short migration only, generated human-facing built-ins can be enabled
+with:
+
+```nix
+roles.managed-secrets.allowGeneratedHumanSecrets = true;
+```
+
+Do not leave that enabled for steady-state deployments.
+
 ## Managed Secrets
 
 The following secrets are automatically managed:
@@ -43,9 +70,13 @@ The following secrets are automatically managed:
   - Used by: endoreg-client role, endoreg-db-central-01 role
 
 ### Nextcloud Secrets
-- **`/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_password`**: Nextcloud admin password
 - **`/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_minio_credentials`**: MinIO credentials for Nextcloud
   - Used by: nextcloud-host role
+
+The Nextcloud admin password path is still available as the
+`nextcloud_admin_password` built-in, but it is human-facing and therefore
+disabled by default. Prefer a SOPS secret that writes to
+`/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_password`.
 
 ## Configuration
 
@@ -61,6 +92,20 @@ You can disable specific secrets:
 
 ```nix
 roles.managed-secrets.secrets.django_secret_key.enable = false;
+```
+
+When SOPS owns the same target path, disable the generated secret:
+
+```nix
+roles.managed-secrets.secrets.nextcloud_admin_password.enable = false;
+
+sops.secrets."nextcloud-admin-password" = {
+  sopsFile = ./secrets.yaml;
+  path = "/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_password";
+  owner = "root";
+  group = config.luxnix.generic-settings.sensitiveServiceGroupName;
+  mode = "0640";
+};
 ```
 
 ### Custom Secrets
@@ -82,7 +127,7 @@ roles.managed-secrets.customSecrets.my-vault-secret = {
   path = "/etc/secrets/vault/my_vault_secret";
   owner = "root";
   group = "root";
-  mode = "0400";
+  permissions = "0400";
   refreshOnBoot = true;
   generator = ''
     ${pkgs.vault}/bin/vault kv get -field=my_field secret/data/nodes/${config.networking.hostName}/my-app
@@ -180,7 +225,16 @@ systemctl list-dependencies managed-secrets-setup.service
 
 # Restart dependent services
 sudo systemctl restart postgres-endoreg-setup.service
-sudo systemctl restart endo-api-boot.service
+sudo systemctl restart endoreg-db-api-local.service
+```
+
+If the failing secret is Vault-backed, inspect the chain in order:
+
+```bash
+sudo systemctl status vault-auth-setup.service
+sudo systemctl status managed-secrets-setup.service
+sudo journalctl -u vault-auth-setup.service -b
+sudo journalctl -u managed-secrets-setup.service -b
 ```
 
 If the failing secret is Vault-backed, inspect the chain in order:

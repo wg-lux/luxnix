@@ -6,6 +6,7 @@
 }: let
   vaultModule = "${repoRoot}/modules/nixos/luxnix/vault/default.nix";
   managedSecretsModule = "${repoRoot}/modules/nixos/roles/managed-secrets/default.nix";
+  clientUserModule = "${repoRoot}/modules/nixos/user/client/default.nix";
   lxAnnotateConfig = "${repoRoot}/modules/nixos/services/lx-annotate-local/config.nix";
 in {
   suites."lx-annotate vault contracts" = {
@@ -39,6 +40,20 @@ in {
         '';
       }
       {
+        name = "managed-secrets-does-not-own-human-facing-passwords";
+        type = "script";
+        script = ''
+          ${ntlib.helpers.path [pkgs.gnugrep]}
+          ${ntlib.helpers.scriptHelpers}
+          assert_file_contains ${managedSecretsModule} 'humanFacingSecretNames' "managed-secrets must classify human-facing password built-ins"
+          assert_file_contains ${managedSecretsModule} 'humanFacing = mkOption' "custom secrets must be able to declare human-facing credentials"
+          assert_file_contains ${managedSecretsModule} 'allowGeneratedHumanSecrets' "human-facing generated secrets must require an explicit migration override"
+          assert_file_contains ${managedSecretsModule} 'client_user_password_hash' "client user password hash must be treated as human-facing"
+          assert_file_contains ${managedSecretsModule} 'managedSecretsSopsPathConflicts' "managed-secrets must refuse SOPS path ownership conflicts"
+          assert_file_contains ${clientUserModule} 'luxnixValidateClientPasswordFile' "client user password hash files must be validated before activation"
+        '';
+      }
+      {
         name = "lx-annotate-vault-secrets-are-root-only-and-refreshed";
         type = "script";
         script = ''
@@ -60,6 +75,8 @@ in {
           assert_file_contains ${lxAnnotateConfig} 'networking\.hostName to be set' "vault mode must require hostname"
           assert_file_contains ${lxAnnotateConfig} 'requires luxnix\.vault client configuration' "vault mode must require explicit vault client config"
           assert_file_contains ${lxAnnotateConfig} 'setupService' "lx-annotate must order after managed secrets setup"
+          assert_file_contains ${lxAnnotateConfig} 'lx-annotate-master-key-check' "lx-annotate must validate the application master key before boot"
+          assert_file_contains ${lxAnnotateConfig} 'lx-annotate-master-key-check.service' "lx-annotate boot must require the master key guard"
         '';
       }
     ];

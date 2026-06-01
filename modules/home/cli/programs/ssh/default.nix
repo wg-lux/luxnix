@@ -11,6 +11,10 @@ in
 {
   options.cli.programs.ssh = with types; {
     enable = mkBoolOpt false "Whether or not to enable ssh";
+    keychain = {
+      enable = mkBoolOpt true "Whether to enable keychain for SSH keys.";
+      keys = mkOpt (listOf str) [ "id_ed25519" ] "SSH private key names for keychain to load.";
+    };
 
     extraHosts = lib.mkOption {
       type = lib.types.attrsOf (
@@ -41,11 +45,11 @@ in
   };
 
   config = mkIf cfg.enable {
-    programs.keychain = {
+    programs.keychain = mkIf (cfg.keychain.enable && cfg.keychain.keys != [ ]) {
       enable = true;
       enableXsessionIntegration = true;
       enableZshIntegration = true;
-      keys = [ "id_ed25519" ];
+      keys = cfg.keychain.keys;
       # agents = [ "ssh" ];
     };
 

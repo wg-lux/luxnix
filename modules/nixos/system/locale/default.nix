@@ -1,49 +1,34 @@
 {
-  options,
   config,
   lib,
   ...
 }:
-with lib;
-with lib.luxnix; let
+let
+  inherit (lib) mkDefault mkIf;
+  inherit (lib.luxnix) mkBoolOpt;
+
   cfg = config.system.locale;
-in {
-  options.system.locale = with types; {
+  genericSettings = config.luxnix.generic-settings;
+  selectedLocale = if genericSettings.language == "english" then "en_US.UTF-8" else "de_DE.UTF-8";
+in
+{
+  options.system.locale = {
     enable = mkBoolOpt false "Whether or not to manage locale settings.";
   };
 
   config = mkIf cfg.enable {
-
     environment.variables = {
       # LANG is used by most applications to decide on the language.
-      LANG = (
-        if config.luxnix.generic-settings.language == "english" 
-        then "en_US.UTF-8" 
-        else "de_DE.UTF-8"
-      );
+      LANG = selectedLocale;
       # LC_ALL forces all locale categories; use with caution since it overrides
       # more granular settings.
-      LC_ALL = (
-        if config.luxnix.generic-settings.language == "english" 
-        then "en_US.UTF-8" 
-        else "de_DE.UTF-8"
-      );
+      LC_ALL = selectedLocale;
     };
 
-
-
     i18n = {
-      defaultLocale = lib.mkDefault (
-        if config.luxnix.generic-settings.language == "english" 
-        then "en_US.UTF-8" 
-        else "de_DE.UTF-8"
-      );
+      defaultLocale = mkDefault selectedLocale;
       extraLocaleSettings = {
-        LC_ADDRESS = (
-          if config.luxnix.generic-settings.language == "english" 
-          then "en_US.UTF-8" 
-          else "de_DE.UTF-8"
-        );
+        LC_ADDRESS = selectedLocale;
         LC_IDENTIFICATION = "de_DE.UTF-8";
         LC_MEASUREMENT = "de_DE.UTF-8";
         LC_MONETARY = "de_DE.UTF-8";

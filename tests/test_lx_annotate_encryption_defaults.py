@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 SCRIPTS_NIX = Path(
-    "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts.nix"
+    "/home/admin/dev/luxnix/modules/nixos/services/lx-annotate-local/scripts.nix"
 )
 
 
@@ -13,8 +13,14 @@ def test_lx_annotate_scripts_export_protected_storage_contract():
 
     assert 'export NGINX_PROTECTED_MEDIA_URL="${envNginxProtectedMediaUrl}"' in source
     assert 'export PROTECTED_MEDIA_ROOT="${runtimeStorageRootPath}"' in source
-    assert 'export LX_ANNOTATE_STREAMABLE_VIDEO_ROOT="${runtimeStreamableVideoRootPath}"' in source
-    assert 'export LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT="${runtimeStreamableVideoRawRootPath}"' in source
+    assert (
+        'export LX_ANNOTATE_STREAMABLE_VIDEO_ROOT="${runtimeStreamableVideoRootPath}"'
+        in source
+    )
+    assert (
+        'export LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT="${runtimeStreamableVideoRawRootPath}"'
+        in source
+    )
     assert (
         'export LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT="${runtimeStreamableVideoProcessedRootPath}"'
         in source
