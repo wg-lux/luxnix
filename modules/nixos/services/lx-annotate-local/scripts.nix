@@ -208,6 +208,8 @@ let
             optionalString (cfg.runtime.wheelhousePath != null) (toString cfg.runtime.wheelhousePath)
           }"
           local wheelhouse_hash="no-wheelhouse"
+          local wheel_dependency_overrides=${lib.escapeShellArg (lib.concatStringsSep " " cfg.runtime.wheelDependencyOverrides)}
+          local wheel_dependency_overrides_hash=${lib.escapeShellArg (builtins.hashString "sha256" (lib.concatStringsSep "\n" cfg.runtime.wheelDependencyOverrides))}
           local pip_install_args=""
           local wheel_install_stamp_file="${runtimeRootPath}/.wheel-install.sha256"
           local wheel_install_lock_file="${runtimeRootPath}/.wheel-install.lock"
@@ -215,7 +217,7 @@ let
           local canonical_wheel_name=""
           local staged_wheel_path=""
           local install_hash=""
-          local wheel_installer_revision="stop-workers-before-wheel-install-v2-incremental-pip-cache"
+          local wheel_installer_revision="stop-workers-before-wheel-install-v3-endoreg-db-storage-stream-patch"
           local venv_created="false"
           local pip_cache_dir="${runtimeRootPath}/pip-cache"
 
@@ -241,11 +243,14 @@ let
           fi
 
           install_hash="$(
-            printf '%s
-    %s
-    %s
-    %s
-    '           "$wheel_hash"           "$wheelhouse_hash"           "${pythonInterpreter}"           "$wheel_installer_revision"         | ${pkgs.coreutils}/bin/sha256sum         | ${pkgs.coreutils}/bin/cut -d ' ' -f1
+            printf '%s\n%s\n%s\n%s\n%s\n' \
+              "$wheel_hash" \
+              "$wheelhouse_hash" \
+              "$wheel_dependency_overrides_hash" \
+              "${pythonInterpreter}" \
+              "$wheel_installer_revision" \
+              | ${pkgs.coreutils}/bin/sha256sum \
+              | ${pkgs.coreutils}/bin/cut -d ' ' -f1
           )"
 
           exec 9>"$wheel_install_lock_file"
@@ -264,6 +269,10 @@ let
             export PIP_DISABLE_PIP_VERSION_CHECK=1
             # shellcheck disable=SC2086
             "${runtimeWheelVenvPath}/bin/pip" install --upgrade $pip_install_args "$staged_wheel_path"
+            if [ -n "$wheel_dependency_overrides" ]; then
+              # shellcheck disable=SC2086
+              "${runtimeWheelVenvPath}/bin/pip" install --upgrade --no-deps $pip_install_args $wheel_dependency_overrides
+            fi
             printf '%s
     ' "$install_hash" > "$wheel_install_stamp_file"
             chmod 0640 "$wheel_install_stamp_file" 2>/dev/null || true

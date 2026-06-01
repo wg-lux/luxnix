@@ -10,6 +10,9 @@ SCRIPTS_NIX = Path(
 CONFIG_NIX = Path(
     "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/config.nix"
 )
+OPTIONS_NIX = Path(
+    "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/options.nix"
+)
 SCRIPTS_ENV_NIX = Path(
     "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts/env.nix"
 )
@@ -22,6 +25,7 @@ def _has_assignment(source: str, name: str) -> bool:
 def test_lx_annotate_scripts_export_protected_storage_contract():
     source = SCRIPTS_NIX.read_text(encoding="utf-8")
     config_source = CONFIG_NIX.read_text(encoding="utf-8")
+    options_source = OPTIONS_NIX.read_text(encoding="utf-8")
     helper_source = SCRIPTS_ENV_NIX.read_text(encoding="utf-8")
 
     assert "Host-owned values only." in source
@@ -34,6 +38,8 @@ def test_lx_annotate_scripts_export_protected_storage_contract():
     assert "PIP_CACHE_DIR" in config_source
     assert "pip-cache" in config_source
     assert "install --upgrade $pip_install_args" in config_source
+    assert "endoreg-db==1.0.1.8" in options_source
+    assert "install --upgrade --no-deps $pip_install_args $wheel_dependency_overrides" in config_source
     assert "--force-reinstall" not in config_source
     assert "--no-cache-dir" not in config_source
     assert "package = effectiveRuntimePackage;" in config_source

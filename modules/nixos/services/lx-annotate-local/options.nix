@@ -372,8 +372,8 @@ in
           wheelPath = mkOption {
             type = types.nullOr types.path;
             default = pkgs.fetchurl {
-              url = "https://files.pythonhosted.org/packages/57/6d/f430b270a5ea7eeb4de284e6af817fdad4285f7ee91bfa8dfa3d51392127/lx_annotate-0.8.0-py3-none-any.whl";
-              hash = "sha256-7zDdhk5e/wAR8/8Cx8pKGZN57E4tHkbvn+PkQ2OTBQ8=";
+              url = "https://files.pythonhosted.org/packages/76/82/f002ecdfe4653c8160b28d80e6f84f4dccc6baf4fa44181dbf3eb544fb2e/lx_annotate-0.8.1-py3-none-any.whl";
+              hash = "sha256-CXa3HJAIwk7zLrn9fYi0r9Gf/OSIYWSctNSbRR7rNp4=";
             };
             description = "Path to the lx-annotate wheel artifact used in wheel mode.";
           };
@@ -388,6 +388,17 @@ in
             default = null;
             example = "/var/lib/lx-annotate/artifacts/wheelhouse";
             description = "Optional directory containing prebuilt dependency wheels. When set, wheel installs run with --no-index --find-links so the service does not resolve/download dependencies from the network during startup.";
+          };
+          wheelDependencyOverrides = mkOption {
+            type = types.listOf types.str;
+            default = [ "endoreg-db==1.0.1.8" ];
+            description = ''
+              Python packages force-upgraded with --no-deps after installing
+              the lx-annotate wheel. This carries targeted runtime fixes while
+              the upstream lx-annotate wheel still pins an older transitive
+              dependency. If runtime.wheelhousePath is set, matching wheels must
+              be present in that wheelhouse.
+            '';
           };
           encryptedDataDir = mkOption {
             type = types.str;

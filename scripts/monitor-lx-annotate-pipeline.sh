@@ -51,6 +51,23 @@ follow=0
 if [[ $# -gt 0 && "${1}" != --* && "${1}" != "." && "${1}" != "local" ]]; then
   host="${1}"
   shift
+  current_hosts=(
+    localhost
+    127.0.0.1
+    "$(hostname 2>/dev/null || true)"
+    "$(hostname -s 2>/dev/null || true)"
+    "$(hostname -f 2>/dev/null || true)"
+  )
+  for current_host in "${current_hosts[@]}"; do
+    if [[ -n "${current_host}" && "${host}" == "${current_host}" ]]; then
+      set -- --local "$@"
+      host=""
+      break
+    fi
+  done
+fi
+
+if [[ -n "${host:-}" ]]; then
   remote_command="bash -s --"
   remote_args=(--local "$@")
   for arg in "${remote_args[@]}"; do
