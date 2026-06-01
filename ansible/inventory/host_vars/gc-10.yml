@@ -7,7 +7,6 @@ template_name: "main"
 host_roles:
   aglnet.client.enable: "true"
   custom_packages.baseDevelopment: "true"
-  custom_packages.cuda: "true"
   endoreg-client.lxAi: "true"
 
 host_services:
