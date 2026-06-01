@@ -5,7 +5,6 @@ luxnix_dev_repo: "/home/admin/luxnix"
 template_name: "main"
 
 host_roles:
-  aglnet.client.enable: "true"
   custom_packages.baseDevelopment: "true"
   endoreg-client.lxAi: "true"
 
