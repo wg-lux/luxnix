@@ -7,7 +7,9 @@ template_name: "main"
 host_roles:
   aglnet.client.enable: "true"
   custom_packages.baseDevelopment: "true"
+  endoreg-client.lxAi: "true"
   endoreg_client.defaultCenterKey: '"university_hospital_wuerzburg"'
+
 
 host_services:
   luxnix.lxAiLocal.runtime.protectedDataDir: '"/var/lib/lx-annotate/data"'
