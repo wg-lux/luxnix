@@ -391,7 +391,7 @@ in
           };
           wheelDependencyOverrides = mkOption {
             type = types.listOf types.str;
-            default = [ "endoreg-db==1.0.1.8" ];
+            default = [];
             description = ''
               Python packages force-upgraded with --no-deps after installing
               the lx-annotate wheel. This carries targeted runtime fixes while
