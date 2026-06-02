@@ -66,6 +66,10 @@ in
         nd = "nix develop";
         nfu = "nix flake update";
 
+        # monitoring
+
+        lx-monitor =  "scripts/monitor-lx-annotate-pipeline.sh  --follow";
+
 
         # hms = "home-manager switch --flake ~/luxnix#${config.luxnix.user.admin.name}@${host}";
         # nrs = "sudo nixos-rebuild switch --flake ~/luxnix#${host}";
