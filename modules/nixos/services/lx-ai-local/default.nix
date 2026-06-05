@@ -347,18 +347,30 @@ EOF
     exec devenv shell -- bash -c '
       set -euo pipefail
 
+      VENV_PY="${repoDir}/.devenv/state/venv/bin/python"
+
+      if [ ! -x "$VENV_PY" ]; then
+        echo "ERROR: devenv Python virtualenv was not created or is not executable: $VENV_PY" >&2
+        echo "devenv shell should create/sync this before editable installs run." >&2
+        exit 1
+      fi
+
+      echo "Using devenv Python: $VENV_PY"
+      "$VENV_PY" -V
+
       echo "Installing lx-data-models in editable mode inside devenv..."
-      ${pkgs.uv}/bin/uv pip install -e libs/lx-data-models || {
+      ${pkgs.uv}/bin/uv pip install --python "$VENV_PY" -e libs/lx-data-models || {
         echo "ERROR: Failed to install lx-data-models"
         exit 1
       }
 
       echo "Installing endoreg-db in editable mode inside devenv..."
-      ${pkgs.uv}/bin/uv pip install -e libs/endoreg-db || {
+      ${pkgs.uv}/bin/uv pip install --python "$VENV_PY" -e libs/endoreg-db || {
         echo "ERROR: Failed to install endoreg-db"
         exit 1
       }
 
+      echo "Starting lxai_training..."
       lxai_training
     '
   '';
@@ -532,7 +544,8 @@ in
 
     systemd.services."lx-ai-boot" = {
       description = "Clone lx-ai repository and run training pipeline";
-      wantedBy = [ "multi-user.target" ];
+      #wantedBy = [ "multi-user.target" ];
+      wantedBy = []; # just to start manually , it keeps the unit installed but prevents it from auto-running during switch.
 
       wants = [
         "postgres-endoreg-setup.service"
@@ -560,37 +573,58 @@ in
 
         ExecStartPre = "+${pkgs.writeShellScript "lx-ai-pre-start" ''
           set -euo pipefail
-
-          if [ -e ${repoDir} ]; then
-            ${pkgs.coreutils}/bin/chown -R ${endoreg-service-user-name}:${endoreg-service-group-name} ${repoDir}
+        
+          echo "Preparing lx-ai runtime repository and secrets..."
+        
+          # Ensure the service-user home exists and is owned correctly.
+          ${pkgs.coreutils}/bin/mkdir -p ${endoreg-service-user-home}
+          ${pkgs.coreutils}/bin/chown ${endoreg-service-user-name}:${endoreg-service-group-name} ${endoreg-service-user-home}
+        
+          # Important:
+          # Do NOT create ${envConfDir} before ${repoDir} is a git repository.
+          # Otherwise ${repoDir} exists as a non-git directory and the main service
+          # later fails trying to remove it as endoreg-service-user.
+          if [ -d ${repoDir} ] && [ ! -d ${repoDir}/.git ]; then
+            echo "WARNING: ${repoDir} exists but is not a git repository. Removing it as root before clone."
+            ${pkgs.coreutils}/bin/rm -rf ${repoDir}
           fi
-
-          mkdir -p ${envConfDir}
-
+        
+          if [ ! -d ${repoDir} ]; then
+            echo "Cloning lx-ai repository in ExecStartPre before creating conf..."
+            ${pkgs.git}/bin/git clone -b "${branchName}" "${gitURL}" "${repoDir}"
+          fi
+        
+          # Make sure the cloned/existing repo is writable by the service user.
+          ${pkgs.coreutils}/bin/chown -R ${endoreg-service-user-name}:${endoreg-service-group-name} ${repoDir}
+        
+          # Now it is safe to create conf inside the lx-ai repository.
+          ${pkgs.coreutils}/bin/mkdir -p ${envConfDir}
+        
           SOURCE_PWD="${cfg.database.endoregLocalUserPasswordFile}"
           TARGET_PWD="${envConfDir}/db_pwd"
-
+        
           if [ -f "$SOURCE_PWD" ]; then
             echo "Copying database password..."
-            cp "$SOURCE_PWD" "$TARGET_PWD"
-            chown ${endoreg-service-user-name}:${endoreg-service-group-name} "$TARGET_PWD"
-            chmod 600 "$TARGET_PWD"
+            ${pkgs.coreutils}/bin/cp "$SOURCE_PWD" "$TARGET_PWD"
+            ${pkgs.coreutils}/bin/chown ${endoreg-service-user-name}:${endoreg-service-group-name} "$TARGET_PWD"
+            ${pkgs.coreutils}/bin/chmod 600 "$TARGET_PWD"
           else
             echo "WARNING: DB password file missing: $SOURCE_PWD"
           fi
-
-          chown -R ${endoreg-service-user-name}:${endoreg-service-group-name} ${envConfDir}
-
+        
+          ${pkgs.coreutils}/bin/chown -R ${endoreg-service-user-name}:${endoreg-service-group-name} ${envConfDir}
+        
           if [ -f "${toString cfg.runtime.masterKeyFile}" ]; then
-            chown root:${endoreg-service-group-name} "${toString cfg.runtime.masterKeyFile}" || true
-            chmod 640 "${toString cfg.runtime.masterKeyFile}" || true
+            ${pkgs.coreutils}/bin/chown root:${endoreg-service-group-name} "${toString cfg.runtime.masterKeyFile}" || true
+            ${pkgs.coreutils}/bin/chmod 640 "${toString cfg.runtime.masterKeyFile}" || true
           else
             echo "ERROR: LX-AI production requires the application master key file: ${toString cfg.runtime.masterKeyFile}" >&2
             echo "This must be the same LX_ANNOTATE_MASTER_KEY_FILE used by lx-annotate/endoreg-db for encrypted media." >&2
             exit 1
           fi
         ''}";
-
+        
+        
         ExecStart = "${runLxAiTraining}/bin/${scriptName}";
         TimeoutStartSec = "infinity";
 
