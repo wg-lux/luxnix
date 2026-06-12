@@ -1779,7 +1779,6 @@ in
           "lx-annotate-migrate.service"
           "lx-annotate-load-base-data.service"
           "lx-annotate-master-key-check.service"
-          "lx-annotate.service"
         ];
         serviceConfig = {
           Type = "oneshot";
@@ -1790,9 +1789,6 @@ in
 
       systemd.services.lx-annotate-migrate = mkLxAnnotateAppService {
         description = "Run LX-Annotate database migrations";
-        after = dataRecoveryServiceUnits;
-        wants = dataRecoveryServiceUnits;
-        requires = dataRecoveryServiceUnits;
         before = [
           "lx-annotate-load-base-data.service"
           "lx-annotate-master-key-check.service"
@@ -1812,7 +1808,6 @@ in
         requires = [ "lx-annotate-migrate.service" ];
         before = [
           "lx-annotate-master-key-check.service"
-          "lx-annotate.service"
         ];
         serviceConfig = {
           Type = "oneshot";
