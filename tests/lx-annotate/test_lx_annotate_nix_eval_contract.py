@@ -569,7 +569,7 @@ def test_lx_annotate_boot_service_config_evaluates() -> None:
     assert "/var/lib/lx-annotate/data" in service_config["ReadWritePaths"]
     assert "/var/endoreg-service-user/lx-annotate-wheel/.venv" in service_config["ReadWritePaths"]
     env = dict(value.split("=", 1) for value in service_config["Environment"])
-    assert "lx-annotate.local" in env["DJANGO_ALLOWED_HOSTS"].split(",")
+    assert "lx-annotate.local" in env["ALLOWED_HOSTS"].split(",")
     assert "lx-annotate.local" in env["ALLOWED_HOSTS"].split(",")
 
 

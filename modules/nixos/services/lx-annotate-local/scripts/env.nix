@@ -126,7 +126,7 @@ rec {
       export SSL_CERT_FILE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
       export REQUESTS_CA_BUNDLE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
 
-      export DJANGO_ALLOWED_HOSTS="${envAllowedHosts}"
+      export ALLOWED_HOSTS="${envAllowedHosts}"
       export ALLOWED_HOSTS="${envAllowedHosts}"
       export DJANGO_CORS_ALLOWED_ORIGINS="${envCorsAllowedOrigins}"
       export DJANGO_CSRF_TRUSTED_ORIGINS="${envCorsAllowedOrigins}"

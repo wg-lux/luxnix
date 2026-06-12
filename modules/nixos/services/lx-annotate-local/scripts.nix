@@ -436,7 +436,6 @@ let
     DJANGO_HOST=${envDjangoHost}
     DJANGO_PORT=${envDjangoPort}
     BASE_URL=${envBaseUrl}
-    DJANGO_ALLOWED_HOSTS=${envAllowedHosts}
     ALLOWED_HOSTS=${envAllowedHosts}
     DJANGO_CORS_ALLOWED_ORIGINS=${envCorsAllowedOrigins}
     DJANGO_CSRF_TRUSTED_ORIGINS=${envCorsAllowedOrigins}

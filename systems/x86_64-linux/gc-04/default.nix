@@ -69,6 +69,8 @@ custom-packages.baseDevelopment = true;
   services = {
 luxnix.lxAnnotateLocal.django.baseUrl = "https://lx-annotate.endo-reg.net";
 luxnix.lxAnnotateLocal.django.djangoAllowedHosts = [ "lx-annotate.endo-reg.net" "localhost" "127.0.0.1" ];
+endoreg-client.api.djangoAllowedHosts = [ "localhost" "127.0.0.1" "lx-annotate.local" "172.16.255.106" "172.16.255.230" ];
+
 luxnix.lxAnnotateLocal.django.hostname = "lx-annotate.endo-reg.net";
 luxnix.lxAnnotateLocal.django.httpProtocol = "https";
 luxnix.lxAnnotateLocal.django.useHttps = true;

@@ -455,7 +455,6 @@ let
     export WATCHER_REPORT_DIR="${runtimeWatcherReportDirPath}"
     export WATCHER_PREANONYMIZED_DIR="${runtimeWatcherPreanonymizedDirPath}"
     export DJANGO_STATIC_ROOT="${packageStaticRoot}"
-    export DJANGO_ALLOWED_HOSTS="${envAllowedHosts}"
     export ALLOWED_HOSTS="${envAllowedHosts}"
     export DJANGO_CORS_ALLOWED_ORIGINS="${envCorsAllowedOrigins}"
     export DJANGO_CSRF_TRUSTED_ORIGINS="${envCorsAllowedOrigins}"
@@ -481,7 +480,6 @@ let
     DJANGO_HOST = "127.0.0.1";
     DJANGO_PORT = envDjangoPort;
     DJANGO_STATIC_ROOT = packageStaticRoot;
-    DJANGO_ALLOWED_HOSTS = envAllowedHosts;
     ALLOWED_HOSTS = envAllowedHosts;
     DJANGO_CORS_ALLOWED_ORIGINS = envCorsAllowedOrigins;
     DJANGO_CSRF_TRUSTED_ORIGINS = envCorsAllowedOrigins;
