@@ -36,6 +36,7 @@ in
             "127.0.0.1"
             "172.16.255.106"
             "172.16.255.230"
+            "lx-annotate.local"
           ];
           httpProtocol = mkDefault "https";
           language = mkDefault "en-us";
