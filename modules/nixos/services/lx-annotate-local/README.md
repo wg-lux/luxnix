@@ -123,7 +123,8 @@ intentionally not watched. `move-my-files` first copies operator input into that
 staging tree, fixes ownership and permissions, then moves top-level staged
 entries into the watched video/report intake directories. Source files are
 deleted only after the publish step succeeds; unreadable files are moved under
-the `failed_input` quarantine tree.
+the `failed_input` quarantine tree. Stable video files that `ffprobe` still
+rejects after 30 minutes are also quarantined so later inputs can continue.
 
 For video entries, `move-my-files` invokes the lx-annotate/endoreg-db
 `transcode_video` management command before publishing into the watched intake
