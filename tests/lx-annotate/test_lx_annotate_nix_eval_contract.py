@@ -73,7 +73,11 @@ def _gc_02_contract() -> dict[str, Any]:
         in {
           topLevelDrv = cfg.system.build.toplevel.drvPath;
           tmpfiles = cfg.systemd.tmpfiles.rules;
-          bootServiceConfig = cfg.systemd.services.lx-annotate.serviceConfig;
+          bootServiceConfig =
+            cfg.systemd.services.lx-annotate.serviceConfig
+            // {
+              Environment = envList cfg.systemd.services.lx-annotate.environment;
+            };
           wheelBootstrap = {
             migrate = cfg.systemd.services."lx-annotate-migrate".serviceConfig;
             loadBaseData = cfg.systemd.services."lx-annotate-load-base-data".serviceConfig;
@@ -564,6 +568,17 @@ def test_lx_annotate_boot_service_config_evaluates() -> None:
     assert service_config["ExecStart"].endswith("/bin/lx-annotate-server")
     assert "/var/lib/lx-annotate/data" in service_config["ReadWritePaths"]
     assert "/var/endoreg-service-user/lx-annotate-wheel/.venv" in service_config["ReadWritePaths"]
+    assert any(
+        value == "DJANGO_ALLOWED_HOSTS=localhost,lx-annotate.local,127.0.0.1"
+        or value == "DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,lx-annotate.local"
+        or value == "DJANGO_ALLOWED_HOSTS=lx-annotate.local,127.0.0.1,localhost"
+        or value == "DJANGO_ALLOWED_HOSTS=lx-annotate.local,localhost,127.0.0.1"
+        for value in service_config["Environment"]
+    )
+    assert any(
+        value.startswith("ALLOWED_HOSTS=") and "lx-annotate.local" in value
+        for value in service_config["Environment"]
+    )
 
 
 def test_lx_annotate_generated_master_key_is_recoverable_runtime_contract() -> None:
