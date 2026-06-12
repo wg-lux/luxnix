@@ -137,6 +137,7 @@ let
       cfg.django.djangoAllowedHosts
       ++ [
         cfg.django.hostname
+        "lx-annotate.local"
         "localhost"
         "127.0.0.1"
       ]
