@@ -607,6 +607,12 @@ def test_lx_annotate_generated_master_key_is_recoverable_runtime_contract() -> N
         in runtime_script
     )
     assert "repair_managed_payloads" in runtime_script
+    assert (
+        "Managed payload repair failed; continuing startup so the application can serve existing data."
+        in runtime_script
+    )
+    assert "migration_mark_eligible failed; continuing data recovery startup path." in runtime_script
+    assert "reap_upload_job_sources failed; continuing data recovery startup path." in runtime_script
 
 
 def test_lx_annotate_master_key_check_blocks_boot() -> None:

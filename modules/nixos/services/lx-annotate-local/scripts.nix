@@ -1696,15 +1696,21 @@ let
           sync_source_dir "${cfg.dataRecovery.legacyMediaDir}" "legacy media"
         fi
 
-        repair_managed_runtime_payloads "$migration_helper_python"
+        repair_managed_runtime_payloads "$migration_helper_python" || {
+          echo "WARNING: Managed payload repair failed; continuing startup so the application can serve existing data." >&2
+        }
 
         if [ -n "$migration_helper_python" ]; then
           echo "Marking migration-created upload job source files as cleanup-eligible after data recovery."
           if [ "$use_wheel_runtime" = "true" ]; then
-            run_installed_django_command "$migration_helper_python" migration_mark_eligible --apply
+            run_installed_django_command "$migration_helper_python" migration_mark_eligible --apply || {
+              echo "WARNING: migration_mark_eligible failed; continuing data recovery startup path." >&2
+            }
           else
             cd "${repoDir}"
-            "$migration_helper_python" "${repoDir}/manage.py" migration_mark_eligible --apply
+            "$migration_helper_python" "${repoDir}/manage.py" migration_mark_eligible --apply || {
+              echo "WARNING: migration_mark_eligible failed; continuing data recovery startup path." >&2
+            }
           fi
 
           echo "Backfilling cleanup eligibility for failed/quarantined delete-after-success upload jobs."
@@ -1737,7 +1743,9 @@ let
         updated += 1
 
     print(f"updated_failed_upload_jobs={updated}")
-    '
+    ' || {
+              echo "WARNING: failed upload-job cleanup eligibility backfill failed; continuing data recovery startup path." >&2
+            }
           else
             cd "${repoDir}"
             "$migration_helper_python" "${repoDir}/manage.py" shell -c '
@@ -1768,15 +1776,21 @@ let
         updated += 1
 
     print(f"updated_failed_upload_jobs={updated}")
-    '
+    ' || {
+              echo "WARNING: failed upload-job cleanup eligibility backfill failed; continuing data recovery startup path." >&2
+            }
           fi
 
           echo "Reaping upload job source files after data recovery."
           if [ "$use_wheel_runtime" = "true" ]; then
-            run_installed_django_command "$migration_helper_python" reap_upload_job_sources
+            run_installed_django_command "$migration_helper_python" reap_upload_job_sources || {
+              echo "WARNING: reap_upload_job_sources failed; continuing data recovery startup path." >&2
+            }
           else
             cd "${repoDir}"
-            "$migration_helper_python" "${repoDir}/manage.py" reap_upload_job_sources
+            "$migration_helper_python" "${repoDir}/manage.py" reap_upload_job_sources || {
+              echo "WARNING: reap_upload_job_sources failed; continuing data recovery startup path." >&2
+            }
           fi
         else
           echo "Skipping upload job source reaping; Django helper python unavailable."
