@@ -161,7 +161,7 @@ limits come from `runtime.workerPools.*`.
 
 | Unit | Type / trigger | Runtime role |
 | --- | --- | --- |
-| `lx-annotate-ffmpeg-stream-throttle.timer` | timer, default every minute | Starts `lx-annotate-ffmpeg-stream-throttle.service`, which asks Django whether user video streams are active and then applies runtime cgroup CPU/IO weights to the FFmpeg worker. Its last applied profile is stored in `/run/lx-annotate/ffmpeg-stream-throttle.state`. |
+| `lx-annotate-ffmpeg-stream-throttle.timer` | timer, default every two minutes | Starts `lx-annotate-ffmpeg-stream-throttle.service`, which asks Django whether user video streams are active and then applies runtime cgroup CPU/IO weights to the FFmpeg worker. Its last applied profile is stored in `/run/lx-annotate/ffmpeg-stream-throttle.state`. |
 | `lx-annotate-data-cleanup.timer` | timer when `dataCleanup.enable` | Starts duplicate cleanup for legacy anonymized payloads, moving verified duplicates into the configured archive tree. |
 | `lx-annotate-emergency-storage-relief.timer` | optional timer | Starts the emergency relief job when explicitly enabled. The service fails closed unless the external archive mount matches the configured device id or filesystem UUID, then archives only verified duplicates or validated export bundles. Manual starts are the default workflow. |
 | `lx-annotate-hub-backup.timer` | timer when `hub.backup.enable` | Starts hub snapshots. The service rsyncs the encrypted runtime tree into timestamped snapshots, writes JSON manifests, maintains a `latest` symlink, and prunes by `hub.backup.retainCount`. |
