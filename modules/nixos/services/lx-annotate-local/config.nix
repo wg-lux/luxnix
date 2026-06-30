@@ -74,6 +74,7 @@ let
     envDeploymentRole
     envDjangoPort
     envHttpProtocol
+    envNginxProtectedMediaUrl
     envViteEnableDebug
     ;
 
@@ -517,6 +518,8 @@ let
     SKIP_EXPENSIVE_TESTS = if cfg.django.skipExpensiveTests then "true" else "false";
     FFMPEG_TRANSCODE_TIMEOUT_SECONDS = "86400";
     MEDIA_OPERATION_STREAM_LEASE_SECONDS = "300";
+    SERVE_WITH_NGINX = boolString cfg.runtime.streamableServing.nginxOffload;
+    NGINX_PROTECTED_MEDIA_URL = envNginxProtectedMediaUrl;
     LX_ANNOTATE_DEFAULT_CENTER = envDefaultCenter;
     ENDOREG_DEPLOYMENT_ROLE = envDeploymentRole;
     ENDOREG_STORAGE_PROFILE = streamableStorageProfile;

@@ -372,8 +372,8 @@ in
           wheelPath = mkOption {
             type = types.nullOr types.path;
             default = pkgs.fetchurl {
-              url = "https://files.pythonhosted.org/packages/d1/29/f6ef40581328b56a72e13424ad2a8139676805ee7682a611642db8673302/lx_annotate-0.9.17-py3-none-any.whl";
-              hash = "sha256-SenaAuFt8mFPw968M5s7xdSi7+6qOO+GXqFFyVog/mA=";
+              url = "https://files.pythonhosted.org/packages/4f/1d/8fef21f80d1e0759e417577fe57728ce9d2693d47ea83d938804f483f479/lx_annotate-0.9.18-py3-none-any.whl";
+              hash = "sha256-9PSCRlVS8yukRtscPrgQSj1qMogJdflOopzLCqAVC8Y=";
             };
             description = "Path to the lx-annotate wheel artifact used in wheel mode.";
           };
@@ -576,6 +576,24 @@ in
             type = types.str;
             default = "/mnt/fast-nvme-cache/endoreg-training";
             description = "Ephemeral local staging root used by model-training jobs.";
+          };
+          streamableServing = mkOption {
+            type = types.submodule {
+              options = {
+                nginxOffload = mkOption {
+                  type = types.bool;
+                  default = true;
+                  description = "Export SERVE_WITH_NGINX for lx-annotate stream endpoints so authenticated video responses use Nginx X-Accel-Redirect instead of app-level byte streaming.";
+                };
+                protectedMediaUrl = mkOption {
+                  type = types.str;
+                  default = "/protected_media/";
+                  description = "Internal Nginx location prefix exported as NGINX_PROTECTED_MEDIA_URL for protected lx-annotate media offload.";
+                };
+              };
+            };
+            default = { };
+            description = "Nginx-backed protected media serving controls for lx-annotate streamable video artifacts.";
           };
           limits = mkOption {
             type = types.submodule {

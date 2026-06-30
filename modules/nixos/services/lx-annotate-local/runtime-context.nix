@@ -65,7 +65,7 @@ let
   runtimeStreamableVideoRootPath = "${runtimeStorageRootPath}/streamable_videos";
   runtimeStreamableVideoRawRootPath = "${runtimeStreamableVideoRootPath}/raw";
   runtimeStreamableVideoProcessedRootPath = "${runtimeStreamableVideoRootPath}/processed";
-  envNginxProtectedMediaUrl = "/protected_media/";
+  envNginxProtectedMediaUrl = cfg.runtime.streamableServing.protectedMediaUrl;
   runtimeStaticRootPath = "/var/lib/lx-annotate/staticfiles";
   runtimeWheelRootPath = "${endoreg-service-user-home}/lx-annotate-wheel";
   runtimeWheelVenvPath = "${runtimeWheelRootPath}/.venv";
