@@ -78,6 +78,7 @@ let
     ;
 
   boolString = value: if value then "true" else "false";
+  streamableStorageProfile = "fs_encrypted_streaming";
   wheelhousePath =
     if cfg.runtime.wheelhousePath == null then "" else toString cfg.runtime.wheelhousePath;
   wheelDependencyOverrides = cfg.runtime.wheelDependencyOverrides;
@@ -451,6 +452,10 @@ let
     export DJANGO_DB_PORT="${toString cfg.database.port}"
     export DJANGO_DB_SSLMODE="${cfg.database.sslMode}"
     export LX_ANNOTATE_ENCRYPTED_DATA_DIR="${runtimeDataRootPath}"
+    export ENDOREG_STORAGE_PROFILE="${streamableStorageProfile}"
+    export LX_ANNOTATE_STREAMABLE_VIDEO_ROOT="${runtimeStreamableVideoRootPath}"
+    export LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT="${runtimeStreamableVideoRawRootPath}"
+    export LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT="${runtimeStreamableVideoProcessedRootPath}"
     export WATCHER_VIDEO_DIR="${runtimeWatcherVideoDirPath}"
     export WATCHER_REPORT_DIR="${runtimeWatcherReportDirPath}"
     export WATCHER_PREANONYMIZED_DIR="${runtimeWatcherPreanonymizedDirPath}"
@@ -506,6 +511,7 @@ let
     MEDIA_OPERATION_STREAM_LEASE_SECONDS = "300";
     LX_ANNOTATE_DEFAULT_CENTER = envDefaultCenter;
     ENDOREG_DEPLOYMENT_ROLE = envDeploymentRole;
+    ENDOREG_STORAGE_PROFILE = streamableStorageProfile;
     ENDOREG_HUB_MODE = boolString cfg.hub.enable;
     ENDOREG_ENABLE_HUB_TRANSFERS = boolString cfg.hub.transferApi.enable;
     ENDOREG_HUB_TRANSFER_REQUIRE_SECURE_TRANSPORT = boolString cfg.hub.transferApi.requireSecureTransport;
@@ -535,6 +541,9 @@ let
     SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
     REQUESTS_CA_BUNDLE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
     LX_ANNOTATE_PACKAGE_VERSION = effectivePackageVersion;
+    LX_ANNOTATE_STREAMABLE_VIDEO_ROOT = runtimeStreamableVideoRootPath;
+    LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT = runtimeStreamableVideoRawRootPath;
+    LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT = runtimeStreamableVideoProcessedRootPath;
   }
   // optionalAttrs (cfg.runtime.masterKeyFile != null) {
     LX_ANNOTATE_MASTER_KEY_FILE = toString cfg.runtime.masterKeyFile;
@@ -1110,8 +1119,11 @@ let
     emergencyStorageReliefConfig
     emergencyStorageReliefHelper
     ;
-  lxAnnotateScripts = import ./scripts.nix args;
-  inherit (lxAnnotateScripts.packages) runLocalDataRecoveryScript;
+  lxAnnotateScripts = import ./scripts.nix (args // { inherit effectiveRuntimePackage; });
+  inherit (lxAnnotateScripts.packages)
+    lxAnnotateMigrateVideoStreamableStorageScript
+    runLocalDataRecoveryScript
+    ;
   inherit (lxAnnotateScripts.serviceOrdering)
     fileMoverAfter
     fileMoverRequires
@@ -2011,6 +2023,56 @@ in
           ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-manage verify_encrypted_storage";
           EnvironmentFile = envSystemdFilePath;
           TimeoutStartSec = "10min";
+          ProtectSystem = "full";
+          PrivateTmp = true;
+          NoNewPrivileges = true;
+          ReadWritePaths = appReadWritePaths;
+        };
+      };
+
+      systemd.services.lx-annotate-video-streamable-migration = mkIf cfg.streamableMigration.enable {
+        description = "Backfill LX-Annotate streamable video artifacts";
+        wantedBy = [ ];
+        after = [
+          "systemd-tmpfiles-setup.service"
+          "lx-annotate-runtime-env.service"
+          "lx-annotate-load-base-data.service"
+          "lx-annotate-master-key-check.service"
+        ]
+        ++ localPostgresServiceUnits
+        ++ localPostgresSetupUnits
+        ++ managedSecretsSetupUnits
+        ++ encryptionServiceUnits;
+        wants = [
+          "lx-annotate-load-base-data.service"
+        ]
+        ++ localPostgresServiceUnits
+        ++ managedSecretsSetupUnits
+        ++ encryptionServiceUnits;
+        requires = [
+          "lx-annotate-runtime-env.service"
+          "lx-annotate-load-base-data.service"
+          "lx-annotate-master-key-check.service"
+        ]
+        ++ managedSecretsSetupUnits
+        ++ encryptionServiceUnits;
+        restartTriggers = [ effectiveRuntimePackage ];
+        unitConfig = encryptedDataMountUnitConfig;
+        environment = commonExtraEnv;
+        serviceConfig = {
+          Type = "oneshot";
+          User = endoreg-service-user-name;
+          Group = endoreg-service-group-name;
+          SupplementaryGroups = [ config.luxnix.generic-settings.sensitiveServiceGroupName ];
+          WorkingDirectory = runtimeDataRootPath;
+          ExecStart = lib.escapeShellArgs [
+            "${lxAnnotateMigrateVideoStreamableStorageScript}/bin/lx-annotate-migrate-video-streamable-storage"
+          ];
+          EnvironmentFile = envSystemdFilePath;
+          TimeoutStartSec = "infinity";
+          Nice = 15;
+          IOSchedulingClass = "best-effort";
+          IOSchedulingPriority = 6;
           ProtectSystem = "full";
           PrivateTmp = true;
           NoNewPrivileges = true;

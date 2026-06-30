@@ -205,6 +205,38 @@ Queue watch:
 watch -n 5 "redis-cli -h 127.0.0.1 -p 6379 LLEN default; redis-cli -h 127.0.0.1 -p 6379 LLEN pipeline; redis-cli -h 127.0.0.1 -p 6379 LLEN frame_extraction; redis-cli -h 127.0.0.1 -p 6379 LLEN ffmpeg_media; redis-cli -h 127.0.0.1 -p 6379 LLEN inference; redis-cli -h 127.0.0.1 -p 6379 LLEN model_training; redis-cli -h 127.0.0.1 -p 6379 LLEN llm_inference"
 ```
 
+## Celery broker settings warnings
+
+`endoreg_db.W001` is emitted by the Django system check
+`endoreg_db.checks.check_celery_runtime_configuration`. It means Django loaded
+settings with an empty `settings.CELERY_BROKER_URL` while one or more
+Celery-backed job modes are enabled. It is not a systemd warning.
+
+LuxNix exports `CELERY_BROKER_URL` into the generated unit environment and
+`/var/lib/lx-annotate/.env.systemd`. If systemd shows the value but Django still
+emits `endoreg_db.W001`, inspect the lx-annotate settings module: the setting
+must be present as `settings.CELERY_BROKER_URL`, not only in `os.environ`.
+
+```bash
+sudo systemctl cat lx-annotate-ffmpeg-stream-throttle.service | grep CELERY_BROKER_URL
+sudo grep '^CELERY_BROKER_URL=' /var/lib/lx-annotate/.env.systemd
+sudo systemctl show lx-annotate-ffmpeg-stream-throttle.service -p Environment | tr ' ' '\n' | grep CELERY_BROKER_URL
+sudo -u endoreg-service-user bash -lc 'set -a; . /var/lib/lx-annotate/.env.systemd; set +a; python - <<'"'"'PY'"'"'
+import os
+url = os.environ.get("CELERY_BROKER_URL", "")
+print(f"env CELERY_BROKER_URL set={bool(url)} scheme={url.split(':', 1)[0] if url else ''}")
+PY'
+sudo -u endoreg-service-user bash -lc 'set -a; . /var/lib/lx-annotate/.env.systemd; set +a; /var/endoreg-service-user/lx-annotate-wheel/.venv/bin/python - <<'"'"'PY'"'"'
+import os
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "lx_annotate.settings.settings_prod")
+import django
+django.setup()
+from django.conf import settings
+url = getattr(settings, "CELERY_BROKER_URL", "")
+print(f"settings.CELERY_BROKER_URL set={bool(url)} scheme={url.split(':', 1)[0] if url else ''}")
+PY'
+```
+
 ## PostgreSQL
 
 Default lx-annotate database connection uses local PostgreSQL on port `5433`.

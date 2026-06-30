@@ -91,6 +91,7 @@ rec {
       export VITE_ENABLE_DEBUG="${envViteEnableDebug}"
       export LX_ANNOTATE_PACKAGE_VERSION="${packageVersion}"
       export ENDOREG_DEPLOYMENT_ROLE="${envDeploymentRole}"
+      export ENDOREG_STORAGE_PROFILE="fs_encrypted_streaming"
       export ENDOREG_HUB_MODE="${if cfg.hub.enable then "true" else "false"}"
       export ENDOREG_ENABLE_HUB_TRANSFERS="${if cfg.hub.transferApi.enable then "true" else "false"}"
       export ENDOREG_HUB_TRANSFER_REQUIRE_SECURE_TRANSPORT="${
@@ -136,6 +137,9 @@ rec {
     lx_annotate_export_storage_env() {
       local data_root="$1"
       export LX_ANNOTATE_ENCRYPTED_DATA_DIR="$data_root"
+      export LX_ANNOTATE_STREAMABLE_VIDEO_ROOT="$data_root/storage/streamable_videos"
+      export LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT="$data_root/storage/streamable_videos/raw"
+      export LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT="$data_root/storage/streamable_videos/processed"
       export WATCHER_VIDEO_DIR="${runtimeWatcherVideoDirPath}"
       export WATCHER_REPORT_DIR="${runtimeWatcherReportDirPath}"
       export WATCHER_PREANONYMIZED_DIR="${runtimeWatcherPreanonymizedDirPath}"

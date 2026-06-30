@@ -372,8 +372,8 @@ in
           wheelPath = mkOption {
             type = types.nullOr types.path;
             default = pkgs.fetchurl {
-              url = "https://files.pythonhosted.org/packages/2c/64/acca610f58632fd8a8db4d0d89c02c63d9d10b6200e9aaaa1572c7548ced/lx_annotate-0.9.14-py3-none-any.whl";
-              hash = "sha256-JAKm0wH+QI+MiwCJeacfxLDEqZRkv4iQ5I1/C1RXhtI=";
+              url = "https://files.pythonhosted.org/packages/33/16/796bfaa47ee0e3f6702928d95e1d338ce8ab34eed940bf349b224cf0d223/lx_annotate-0.9.15-py3-none-any.whl";
+              hash = "sha256-gOdHEav6r+1HZX9cfjWBXF3LWxhWM3SZFMhLffJ0Kko=";
             };
             description = "Path to the lx-annotate wheel artifact used in wheel mode.";
           };
@@ -391,7 +391,7 @@ in
           };
           wheelDependencyOverrides = mkOption {
             type = types.listOf types.str;
-            default = [];
+            default = [ ];
             description = ''
               Python packages force-upgraded with --no-deps after installing
               the lx-annotate wheel. This carries targeted runtime fixes while
@@ -887,7 +887,7 @@ in
                 mediaMigration = mkOption {
                   type = types.nullOr types.str;
                   default = null;
-                  description = "Legacy helper override for media migration helper scripts.";
+                  description = "Legacy helper override retained for older media migration helper scripts. The streamable migration unit uses lx-annotate-manage directly.";
                 };
                 transcodeVideo = mkOption {
                   type = types.nullOr types.str;
@@ -1029,7 +1029,7 @@ in
         options = {
           enable = mkOption {
             type = types.bool;
-            default = false;
+            default = true;
             description = "Expose the manual lx-annotate video streamable backfill systemd unit. The unit is not started by any target.";
           };
         };
