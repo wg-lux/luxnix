@@ -2314,7 +2314,7 @@ in
         timerConfig = {
           OnBootSec = cfg.runtime.ffmpegStreamThrottle.interval;
           OnUnitActiveSec = cfg.runtime.ffmpegStreamThrottle.interval;
-          AccuracySec = "1s";
+          AccuracySec = "10s";
           Unit = "lx-annotate-ffmpeg-stream-throttle.service";
         };
       };

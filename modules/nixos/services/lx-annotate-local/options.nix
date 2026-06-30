@@ -749,7 +749,7 @@ in
                 };
                 interval = mkOption {
                   type = types.str;
-                  default = "10s";
+                  default = "2m";
                   description = "Systemd timer interval for reconciling stream-aware FFmpeg throttling.";
                 };
                 streaming = mkOption {
