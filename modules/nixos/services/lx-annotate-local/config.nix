@@ -79,6 +79,14 @@ let
 
   boolString = value: if value then "true" else "false";
   streamableStorageProfile = "fs_encrypted_streaming";
+  videoStreamProxyExtraConfig = ''
+    proxy_set_header Range $http_range;
+    proxy_set_header If-Range $http_if_range;
+    proxy_buffering off;
+    proxy_request_buffering off;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+  '';
   wheelhousePath =
     if cfg.runtime.wheelhousePath == null then "" else toString cfg.runtime.wheelhousePath;
   wheelDependencyOverrides = cfg.runtime.wheelDependencyOverrides;
@@ -1660,14 +1668,12 @@ in
           locations."/api/media/videos/" = {
             proxyPass = "http://127.0.0.1:${toString cfg.django.port}";
             proxyWebsockets = true;
-            extraConfig = ''
-              proxy_set_header Range $http_range;
-              proxy_set_header If-Range $http_if_range;
-              proxy_buffering off;
-              proxy_request_buffering off;
-              proxy_read_timeout 3600s;
-              proxy_send_timeout 3600s;
-            '';
+            extraConfig = videoStreamProxyExtraConfig;
+          };
+          locations."/endoreg-api/media/videos/" = {
+            proxyPass = "http://127.0.0.1:${toString cfg.django.port}";
+            proxyWebsockets = true;
+            extraConfig = videoStreamProxyExtraConfig;
           };
           locations."/" = {
             proxyPass = "http://127.0.0.1:${toString cfg.django.port}";
