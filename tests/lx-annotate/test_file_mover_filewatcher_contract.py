@@ -364,6 +364,41 @@ def test_file_mover_video_validation_reports_permission_and_ffprobe_failures() -
     assert 'return "$validation_status"' in validation_body
 
 
+def test_file_mover_quarantines_stale_ffprobe_rejected_videos() -> None:
+    source = FILE_MOVER_SOURCE.read_text(encoding="utf-8")
+    validation_body = source[
+        source.index("        validate_video_sources() {") :
+        source.index("        export_video_transcode_fallback_env() {")
+    ]
+    wait_body = source[
+        source.index("        wait_for_input_ready() {") :
+        source.index("        quarantine_unreadable_files() {")
+    ]
+    process_body = source[
+        source.index("        process_input_dir() {") :
+        source.index("        # Rsync with retry logic is not needed here")
+    ]
+
+    assert "ffprobe_reject_grace_seconds=1800" in wait_body
+    assert 'local quarantine_dir="$2"' in wait_body
+    assert 'local label="$3"' in wait_body
+    assert (
+        'validate_video_sources "$source_dir" "$quarantine_dir" '
+        '"$ffprobe_reject_grace_seconds"'
+    ) in wait_body
+    assert 'wait_for_input_ready "$source_dir" "$quarantine_dir" "$label"' in process_body
+    assert 'file_age=$((now_epoch - file_ctime))' in validation_body
+    assert 'if [ "$file_age" -ge "$ffprobe_reject_grace_seconds" ]; then' in validation_body
+    assert 'quarantine_target="\'\'${quarantine_dir}/' in validation_body
+    assert '/bin/mv -f "$video_file" "$quarantine_target"' in validation_body
+    assert "Failed to quarantine ffprobe-rejected video input" in validation_body
+    assert validation_body.index(
+        'if [ "$file_age" -ge "$ffprobe_reject_grace_seconds" ]; then'
+    ) < validation_body.index(
+        'echo "Waiting: video input is readable but ffprobe rejected it for'
+    )
+
+
 def test_file_mover_transcodes_video_before_publish() -> None:
     contract = _gc_02_contract()
     source = FILE_MOVER_SOURCE.read_text(encoding="utf-8")

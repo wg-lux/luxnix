@@ -132,7 +132,17 @@ let
   envRunVideoTests = if cfg.django.runVideoTests then "true" else "false";
   envSkipExpensiveTests = if cfg.django.skipExpensiveTests then "true" else "false";
   envViteEnableDebug = if cfg.debug.enable then "true" else "false";
-  envAllowedHosts = lib.concatStringsSep "," cfg.django.djangoAllowedHosts;
+  envAllowedHosts = lib.concatStringsSep "," (
+    lib.unique (
+      cfg.django.djangoAllowedHosts
+      ++ [
+        cfg.django.hostname
+        "lx-annotate.local"
+        "localhost"
+        "127.0.0.1"
+      ]
+    )
+  );
   envCorsAllowedOrigins = lib.concatStringsSep "," cfg.django.corsAllowedOrigins;
 
   settingsProfile = cfg.django.settingsProfile;

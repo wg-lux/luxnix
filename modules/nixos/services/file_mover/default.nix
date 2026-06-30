@@ -410,9 +410,17 @@ in
 
           validate_video_sources() {
             local source_dir="$1"
+            local quarantine_dir="$2"
+            local ffprobe_reject_grace_seconds="$3"
             local validation_status=0
             local ffprobe_error=""
             local ffprobe_error_summary=""
+            local now_epoch=0
+            local file_ctime=0
+            local file_age=0
+            local base_name=""
+            local timestamp=""
+            local quarantine_target=""
 
             while IFS= read -r -d "" video_file; do
               if [ ! -r "$video_file" ]; then
@@ -423,10 +431,34 @@ in
 
               if ! ffprobe_error="$(${pkgs.ffmpeg}/bin/ffprobe -v error -show_entries format=format_name,duration -of default=noprint_wrappers=1 "$video_file" 2>&1 >/dev/null)"; then
                 ffprobe_error_summary="$(${pkgs.coreutils}/bin/printf '%s\n' "$ffprobe_error" | ${pkgs.coreutils}/bin/head -n 1)"
+                now_epoch="$(${pkgs.coreutils}/bin/date +%s)"
+                file_ctime="$(${pkgs.coreutils}/bin/stat -c '%Z' "$video_file" 2>/dev/null || echo "$now_epoch")"
+                file_age=$((now_epoch - file_ctime))
+                if [ "$file_age" -lt 0 ]; then
+                  file_age=0
+                fi
+
+                if [ "$file_age" -ge "$ffprobe_reject_grace_seconds" ]; then
+                  base_name="$(${pkgs.coreutils}/bin/basename "$video_file")"
+                  timestamp="$(${pkgs.coreutils}/bin/date +%Y%m%d-%H%M%S)"
+                  quarantine_target="''${quarantine_dir}/''${timestamp}-''${base_name}"
+                  if [ -n "$ffprobe_error_summary" ]; then
+                    echo "Warning: video input is readable but ffprobe rejected it for ''${file_age}s. Quarantining: $video_file ($ffprobe_error_summary)"
+                  else
+                    echo "Warning: video input is readable but ffprobe rejected it for ''${file_age}s without details. Quarantining: $video_file"
+                  fi
+                  if ! ${pkgs.coreutils}/bin/mv -f "$video_file" "$quarantine_target"; then
+                    echo "Warning: Failed to quarantine ffprobe-rejected video input: $video_file"
+                    overall_status=1
+                    validation_status=1
+                  fi
+                  continue
+                fi
+
                 if [ -n "$ffprobe_error_summary" ]; then
-                  echo "Waiting: video input is readable but ffprobe rejected it: $video_file ($ffprobe_error_summary)"
+                  echo "Waiting: video input is readable but ffprobe rejected it for ''${file_age}s: $video_file ($ffprobe_error_summary)"
                 else
-                  echo "Waiting: video input is readable but ffprobe rejected it without details: $video_file"
+                  echo "Waiting: video input is readable but ffprobe rejected it for ''${file_age}s without details: $video_file"
                 fi
                 if [ "$validation_status" -eq 0 ]; then
                   validation_status=1
@@ -500,11 +532,13 @@ in
 
           wait_for_input_ready() {
             local source_dir="$1"
-            local label="$2"
+            local quarantine_dir="$2"
+            local label="$3"
             local interval_seconds=10
             local min_age_seconds=60
             local required_stable_checks=3
             local max_wait_seconds=7200
+            local ffprobe_reject_grace_seconds=1800
             local elapsed_seconds=0
             local stable_checks=0
             local previous_snapshot=""
@@ -543,7 +577,7 @@ in
                   return 0
                 fi
 
-                if validate_video_sources "$source_dir"; then
+                if validate_video_sources "$source_dir" "$quarantine_dir" "$ffprobe_reject_grace_seconds"; then
                   return 0
                 else
                   video_validation_status="$?"
@@ -620,7 +654,7 @@ in
               return 0
             fi
 
-            if ! wait_for_input_ready "$source_dir" "$label"; then
+            if ! wait_for_input_ready "$source_dir" "$quarantine_dir" "$label"; then
               overall_status=1
               return 0
             fi

@@ -78,6 +78,15 @@ let
     ;
 
   boolString = value: if value then "true" else "false";
+  streamableStorageProfile = "fs_encrypted_streaming";
+  videoStreamProxyExtraConfig = ''
+    proxy_set_header Range $http_range;
+    proxy_set_header If-Range $http_if_range;
+    proxy_buffering off;
+    proxy_request_buffering off;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+  '';
   wheelhousePath =
     if cfg.runtime.wheelhousePath == null then "" else toString cfg.runtime.wheelhousePath;
   wheelDependencyOverrides = cfg.runtime.wheelDependencyOverrides;
@@ -451,11 +460,14 @@ let
     export DJANGO_DB_PORT="${toString cfg.database.port}"
     export DJANGO_DB_SSLMODE="${cfg.database.sslMode}"
     export LX_ANNOTATE_ENCRYPTED_DATA_DIR="${runtimeDataRootPath}"
+    export ENDOREG_STORAGE_PROFILE="${streamableStorageProfile}"
+    export LX_ANNOTATE_STREAMABLE_VIDEO_ROOT="${runtimeStreamableVideoRootPath}"
+    export LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT="${runtimeStreamableVideoRawRootPath}"
+    export LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT="${runtimeStreamableVideoProcessedRootPath}"
     export WATCHER_VIDEO_DIR="${runtimeWatcherVideoDirPath}"
     export WATCHER_REPORT_DIR="${runtimeWatcherReportDirPath}"
     export WATCHER_PREANONYMIZED_DIR="${runtimeWatcherPreanonymizedDirPath}"
     export DJANGO_STATIC_ROOT="${packageStaticRoot}"
-    export DJANGO_ALLOWED_HOSTS="${envAllowedHosts}"
     export ALLOWED_HOSTS="${envAllowedHosts}"
     export DJANGO_CORS_ALLOWED_ORIGINS="${envCorsAllowedOrigins}"
     export DJANGO_CSRF_TRUSTED_ORIGINS="${envCorsAllowedOrigins}"
@@ -481,7 +493,6 @@ let
     DJANGO_HOST = "127.0.0.1";
     DJANGO_PORT = envDjangoPort;
     DJANGO_STATIC_ROOT = packageStaticRoot;
-    DJANGO_ALLOWED_HOSTS = envAllowedHosts;
     ALLOWED_HOSTS = envAllowedHosts;
     DJANGO_CORS_ALLOWED_ORIGINS = envCorsAllowedOrigins;
     DJANGO_CSRF_TRUSTED_ORIGINS = envCorsAllowedOrigins;
@@ -508,6 +519,7 @@ let
     MEDIA_OPERATION_STREAM_LEASE_SECONDS = "300";
     LX_ANNOTATE_DEFAULT_CENTER = envDefaultCenter;
     ENDOREG_DEPLOYMENT_ROLE = envDeploymentRole;
+    ENDOREG_STORAGE_PROFILE = streamableStorageProfile;
     ENDOREG_HUB_MODE = boolString cfg.hub.enable;
     ENDOREG_ENABLE_HUB_TRANSFERS = boolString cfg.hub.transferApi.enable;
     ENDOREG_HUB_TRANSFER_REQUIRE_SECURE_TRANSPORT = boolString cfg.hub.transferApi.requireSecureTransport;
@@ -537,6 +549,9 @@ let
     SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
     REQUESTS_CA_BUNDLE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
     LX_ANNOTATE_PACKAGE_VERSION = effectivePackageVersion;
+    LX_ANNOTATE_STREAMABLE_VIDEO_ROOT = runtimeStreamableVideoRootPath;
+    LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT = runtimeStreamableVideoRawRootPath;
+    LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT = runtimeStreamableVideoProcessedRootPath;
   }
   // optionalAttrs (cfg.runtime.masterKeyFile != null) {
     LX_ANNOTATE_MASTER_KEY_FILE = toString cfg.runtime.masterKeyFile;
@@ -1112,8 +1127,11 @@ let
     emergencyStorageReliefConfig
     emergencyStorageReliefHelper
     ;
-  lxAnnotateScripts = import ./scripts.nix args;
-  inherit (lxAnnotateScripts.packages) runLocalDataRecoveryScript;
+  lxAnnotateScripts = import ./scripts.nix (args // { inherit effectiveRuntimePackage; });
+  inherit (lxAnnotateScripts.packages)
+    lxAnnotateMigrateVideoStreamableStorageScript
+    runLocalDataRecoveryScript
+    ;
   inherit (lxAnnotateScripts.serviceOrdering)
     fileMoverAfter
     fileMoverRequires
@@ -1650,14 +1668,12 @@ in
           locations."/api/media/videos/" = {
             proxyPass = "http://127.0.0.1:${toString cfg.django.port}";
             proxyWebsockets = true;
-            extraConfig = ''
-              proxy_set_header Range $http_range;
-              proxy_set_header If-Range $http_if_range;
-              proxy_buffering off;
-              proxy_request_buffering off;
-              proxy_read_timeout 3600s;
-              proxy_send_timeout 3600s;
-            '';
+            extraConfig = videoStreamProxyExtraConfig;
+          };
+          locations."/endoreg-api/media/videos/" = {
+            proxyPass = "http://127.0.0.1:${toString cfg.django.port}";
+            proxyWebsockets = true;
+            extraConfig = videoStreamProxyExtraConfig;
           };
           locations."/" = {
             proxyPass = "http://127.0.0.1:${toString cfg.django.port}";
@@ -1779,7 +1795,6 @@ in
           "lx-annotate-migrate.service"
           "lx-annotate-load-base-data.service"
           "lx-annotate-master-key-check.service"
-          "lx-annotate.service"
         ];
         serviceConfig = {
           Type = "oneshot";
@@ -1790,9 +1805,6 @@ in
 
       systemd.services.lx-annotate-migrate = mkLxAnnotateAppService {
         description = "Run LX-Annotate database migrations";
-        after = dataRecoveryServiceUnits;
-        wants = dataRecoveryServiceUnits;
-        requires = dataRecoveryServiceUnits;
         before = [
           "lx-annotate-load-base-data.service"
           "lx-annotate-master-key-check.service"
@@ -1812,7 +1824,6 @@ in
         requires = [ "lx-annotate-migrate.service" ];
         before = [
           "lx-annotate-master-key-check.service"
-          "lx-annotate.service"
         ];
         serviceConfig = {
           Type = "oneshot";
@@ -2018,6 +2029,56 @@ in
           ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-manage verify_encrypted_storage";
           EnvironmentFile = envSystemdFilePath;
           TimeoutStartSec = "10min";
+          ProtectSystem = "full";
+          PrivateTmp = true;
+          NoNewPrivileges = true;
+          ReadWritePaths = appReadWritePaths;
+        };
+      };
+
+      systemd.services.lx-annotate-video-streamable-migration = mkIf cfg.streamableMigration.enable {
+        description = "Backfill LX-Annotate streamable video artifacts";
+        wantedBy = [ ];
+        after = [
+          "systemd-tmpfiles-setup.service"
+          "lx-annotate-runtime-env.service"
+          "lx-annotate-load-base-data.service"
+          "lx-annotate-master-key-check.service"
+        ]
+        ++ localPostgresServiceUnits
+        ++ localPostgresSetupUnits
+        ++ managedSecretsSetupUnits
+        ++ encryptionServiceUnits;
+        wants = [
+          "lx-annotate-load-base-data.service"
+        ]
+        ++ localPostgresServiceUnits
+        ++ managedSecretsSetupUnits
+        ++ encryptionServiceUnits;
+        requires = [
+          "lx-annotate-runtime-env.service"
+          "lx-annotate-load-base-data.service"
+          "lx-annotate-master-key-check.service"
+        ]
+        ++ managedSecretsSetupUnits
+        ++ encryptionServiceUnits;
+        restartTriggers = [ effectiveRuntimePackage ];
+        unitConfig = encryptedDataMountUnitConfig;
+        environment = commonExtraEnv;
+        serviceConfig = {
+          Type = "oneshot";
+          User = endoreg-service-user-name;
+          Group = endoreg-service-group-name;
+          SupplementaryGroups = [ config.luxnix.generic-settings.sensitiveServiceGroupName ];
+          WorkingDirectory = runtimeDataRootPath;
+          ExecStart = lib.escapeShellArgs [
+            "${lxAnnotateMigrateVideoStreamableStorageScript}/bin/lx-annotate-migrate-video-streamable-storage"
+          ];
+          EnvironmentFile = envSystemdFilePath;
+          TimeoutStartSec = "infinity";
+          Nice = 15;
+          IOSchedulingClass = "best-effort";
+          IOSchedulingPriority = 6;
           ProtectSystem = "full";
           PrivateTmp = true;
           NoNewPrivileges = true;
@@ -2253,7 +2314,7 @@ in
         timerConfig = {
           OnBootSec = cfg.runtime.ffmpegStreamThrottle.interval;
           OnUnitActiveSec = cfg.runtime.ffmpegStreamThrottle.interval;
-          AccuracySec = "1s";
+          AccuracySec = "10s";
           Unit = "lx-annotate-ffmpeg-stream-throttle.service";
         };
       };

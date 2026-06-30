@@ -73,7 +73,11 @@ def _gc_02_contract() -> dict[str, Any]:
         in {
           topLevelDrv = cfg.system.build.toplevel.drvPath;
           tmpfiles = cfg.systemd.tmpfiles.rules;
-          bootServiceConfig = cfg.systemd.services.lx-annotate.serviceConfig;
+          bootServiceConfig =
+            cfg.systemd.services.lx-annotate.serviceConfig
+            // {
+              Environment = envList cfg.systemd.services.lx-annotate.environment;
+            };
           wheelBootstrap = {
             migrate = cfg.systemd.services."lx-annotate-migrate".serviceConfig;
             loadBaseData = cfg.systemd.services."lx-annotate-load-base-data".serviceConfig;
@@ -564,6 +568,9 @@ def test_lx_annotate_boot_service_config_evaluates() -> None:
     assert service_config["ExecStart"].endswith("/bin/lx-annotate-server")
     assert "/var/lib/lx-annotate/data" in service_config["ReadWritePaths"]
     assert "/var/endoreg-service-user/lx-annotate-wheel/.venv" in service_config["ReadWritePaths"]
+    env = dict(value.split("=", 1) for value in service_config["Environment"])
+    assert "lx-annotate.local" in env["ALLOWED_HOSTS"].split(",")
+    assert "lx-annotate.local" in env["ALLOWED_HOSTS"].split(",")
 
 
 def test_lx_annotate_generated_master_key_is_recoverable_runtime_contract() -> None:
@@ -607,6 +614,12 @@ def test_lx_annotate_generated_master_key_is_recoverable_runtime_contract() -> N
         in runtime_script
     )
     assert "repair_managed_payloads" in runtime_script
+    assert (
+        "Managed payload repair failed; continuing startup so the application can serve existing data."
+        in runtime_script
+    )
+    assert "migration_mark_eligible failed; continuing data recovery startup path." in runtime_script
+    assert "reap_upload_job_sources failed; continuing data recovery startup path." in runtime_script
 
 
 def test_lx_annotate_master_key_check_blocks_boot() -> None:

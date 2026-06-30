@@ -372,8 +372,8 @@ in
           wheelPath = mkOption {
             type = types.nullOr types.path;
             default = pkgs.fetchurl {
-              url = "https://files.pythonhosted.org/packages/76/82/f002ecdfe4653c8160b28d80e6f84f4dccc6baf4fa44181dbf3eb544fb2e/lx_annotate-0.8.1-py3-none-any.whl";
-              hash = "sha256-CXa3HJAIwk7zLrn9fYi0r9Gf/OSIYWSctNSbRR7rNp4=";
+              url = "https://files.pythonhosted.org/packages/56/62/db90b38ade4cf83c6ab547222e004b041139903c88dd98e0ff1ba0df4904/lx_annotate-0.9.16-py3-none-any.whl";
+              hash = "sha256-k+3+hnuvDjIWPb8vYPZWkSd2qPf/xt9zMN+MKNQPe6s=";
             };
             description = "Path to the lx-annotate wheel artifact used in wheel mode.";
           };
@@ -391,7 +391,7 @@ in
           };
           wheelDependencyOverrides = mkOption {
             type = types.listOf types.str;
-            default = [ "endoreg-db==1.0.1.8" ];
+            default = [ ];
             description = ''
               Python packages force-upgraded with --no-deps after installing
               the lx-annotate wheel. This carries targeted runtime fixes while
@@ -749,7 +749,7 @@ in
                 };
                 interval = mkOption {
                   type = types.str;
-                  default = "10s";
+                  default = "2m";
                   description = "Systemd timer interval for reconciling stream-aware FFmpeg throttling.";
                 };
                 streaming = mkOption {
@@ -887,7 +887,7 @@ in
                 mediaMigration = mkOption {
                   type = types.nullOr types.str;
                   default = null;
-                  description = "Legacy helper override for media migration helper scripts.";
+                  description = "Legacy helper override retained for older media migration helper scripts. The streamable migration unit uses lx-annotate-manage directly.";
                 };
                 transcodeVideo = mkOption {
                   type = types.nullOr types.str;
@@ -1029,7 +1029,7 @@ in
         options = {
           enable = mkOption {
             type = types.bool;
-            default = false;
+            default = true;
             description = "Expose the manual lx-annotate video streamable backfill systemd unit. The unit is not started by any target.";
           };
         };

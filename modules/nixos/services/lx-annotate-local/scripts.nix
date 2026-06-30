@@ -4,6 +4,7 @@ args@{
   pkgs,
   cfg,
   lxAnnotateRuntime,
+  effectiveRuntimePackage,
   ...
 }:
 let
@@ -134,7 +135,6 @@ let
   wheelExportFramesCommand = cfg.runtime.commands.exportFrames or "";
   wheelCeleryWorkerCommand = cfg.runtime.commands.celeryWorker or "";
   wheelSapImportCommand = cfg.runtime.commands.sapImport or "";
-  wheelMediaMigrationCommand = cfg.runtime.commands.mediaMigration or "";
   storageReliefScripts = import ./scripts/storage-relief.nix args;
   inherit (storageReliefScripts)
     emergencyStorageReliefConfig
@@ -399,6 +399,7 @@ let
     DJANGO_KEYCLOAK_CLIENT_SECRET_FILE=${toString cfg.django.keycloakSecretFile}
     OIDC_RP_CLIENT_ID=${cfg.django.keycloakClientId}
     ENDOREG_DEPLOYMENT_ROLE=${envDeploymentRole}
+    ENDOREG_STORAGE_PROFILE=fs_encrypted_streaming
     ENDOREG_HUB_MODE=${if cfg.hub.enable then "true" else "false"}
     ENDOREG_ENABLE_HUB_TRANSFERS=${if cfg.hub.transferApi.enable then "true" else "false"}
     ENDOREG_HUB_TRANSFER_REQUIRE_SECURE_TRANSPORT=${
@@ -436,7 +437,6 @@ let
     DJANGO_HOST=${envDjangoHost}
     DJANGO_PORT=${envDjangoPort}
     BASE_URL=${envBaseUrl}
-    DJANGO_ALLOWED_HOSTS=${envAllowedHosts}
     ALLOWED_HOSTS=${envAllowedHosts}
     DJANGO_CORS_ALLOWED_ORIGINS=${envCorsAllowedOrigins}
     DJANGO_CSRF_TRUSTED_ORIGINS=${envCorsAllowedOrigins}
@@ -444,6 +444,9 @@ let
     RUN_VIDEO_TESTS=${envRunVideoTests}
     SKIP_EXPENSIVE_TESTS=${envSkipExpensiveTests}
     LX_ANNOTATE_DEFAULT_CENTER=${envDefaultCenter}
+    LX_ANNOTATE_STREAMABLE_VIDEO_ROOT=${runtimeStreamableVideoRootPath}
+    LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT=${runtimeStreamableVideoRawRootPath}
+    LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT=${runtimeStreamableVideoProcessedRootPath}
     WATCHER_VIDEO_DIR=${runtimeWatcherVideoDirPath}
     WATCHER_REPORT_DIR=${runtimeWatcherReportDirPath}
     WATCHER_PREANONYMIZED_DIR=${runtimeWatcherPreanonymizedDirPath}
@@ -817,39 +820,16 @@ let
     set -euo pipefail
     source "${lxAnnotateRuntimeLib}"
 
-    if [ "${
-      if useWheelRuntime then "true" else "false"
-    }" = "true" ] && [ -z ${lib.escapeShellArg wheelMediaMigrationCommand} ]; then
-      echo "ERROR: runtime.commands.mediaMigration must be set when wheel mode enables media migration."
-      exit 1
-    fi
-
-    media_storage_args=("$@")
-    if [ "$#" -eq 0 ]; then
-      media_storage_args=(
-        --apply
-        --repeat-until-empty
-        --include-raw
-        --include-processed
-        --include-reports
-        --include-streamable
-        --json
-      )
-    fi
-
-    log "Migrating canonical media into encrypted storage and syncing streamable artifacts..."
+    log "Syncing LX-Annotate video streamable artifacts..."
     if [ "${if useWheelRuntime then "true" else "false"}" = "true" ]; then
       source "${lxAnnotateEnvHelpers}"
       lx_annotate_export_wheel_service_env "${envDataDir}"
       ensure_wheel_runtime_installed
-      media_migration_command=${lib.escapeShellArg wheelMediaMigrationCommand}
-      printf -v media_storage_args_shell '%q ' "''${media_storage_args[@]}"
-      exec "${pkgs.bash}/bin/bash" -lc "$media_migration_command $media_storage_args_shell"
     else
       lx_annotate_export_runtime_env
       lx_annotate_activate_runtime
-      python manage.py migrate_media_storage "''${media_storage_args[@]}"
     fi
+    exec ${effectiveRuntimePackage}/bin/lx-annotate-manage migrate_video_streamable_storage "$@"
   '';
 
   lxAnnotateBootstrapScript = pkgs.writeShellScriptBin "${bootstrapScriptName}" ''
@@ -1696,15 +1676,21 @@ let
           sync_source_dir "${cfg.dataRecovery.legacyMediaDir}" "legacy media"
         fi
 
-        repair_managed_runtime_payloads "$migration_helper_python"
+        repair_managed_runtime_payloads "$migration_helper_python" || {
+          echo "WARNING: Managed payload repair failed; continuing startup so the application can serve existing data." >&2
+        }
 
         if [ -n "$migration_helper_python" ]; then
           echo "Marking migration-created upload job source files as cleanup-eligible after data recovery."
           if [ "$use_wheel_runtime" = "true" ]; then
-            run_installed_django_command "$migration_helper_python" migration_mark_eligible --apply
+            run_installed_django_command "$migration_helper_python" migration_mark_eligible --apply || {
+              echo "WARNING: migration_mark_eligible failed; continuing data recovery startup path." >&2
+            }
           else
             cd "${repoDir}"
-            "$migration_helper_python" "${repoDir}/manage.py" migration_mark_eligible --apply
+            "$migration_helper_python" "${repoDir}/manage.py" migration_mark_eligible --apply || {
+              echo "WARNING: migration_mark_eligible failed; continuing data recovery startup path." >&2
+            }
           fi
 
           echo "Backfilling cleanup eligibility for failed/quarantined delete-after-success upload jobs."
@@ -1737,7 +1723,9 @@ let
         updated += 1
 
     print(f"updated_failed_upload_jobs={updated}")
-    '
+    ' || {
+              echo "WARNING: failed upload-job cleanup eligibility backfill failed; continuing data recovery startup path." >&2
+            }
           else
             cd "${repoDir}"
             "$migration_helper_python" "${repoDir}/manage.py" shell -c '
@@ -1768,15 +1756,21 @@ let
         updated += 1
 
     print(f"updated_failed_upload_jobs={updated}")
-    '
+    ' || {
+              echo "WARNING: failed upload-job cleanup eligibility backfill failed; continuing data recovery startup path." >&2
+            }
           fi
 
           echo "Reaping upload job source files after data recovery."
           if [ "$use_wheel_runtime" = "true" ]; then
-            run_installed_django_command "$migration_helper_python" reap_upload_job_sources
+            run_installed_django_command "$migration_helper_python" reap_upload_job_sources || {
+              echo "WARNING: reap_upload_job_sources failed; continuing data recovery startup path." >&2
+            }
           else
             cd "${repoDir}"
-            "$migration_helper_python" "${repoDir}/manage.py" reap_upload_job_sources
+            "$migration_helper_python" "${repoDir}/manage.py" reap_upload_job_sources || {
+              echo "WARNING: reap_upload_job_sources failed; continuing data recovery startup path." >&2
+            }
           fi
         else
           echo "Skipping upload job source reaping; Django helper python unavailable."

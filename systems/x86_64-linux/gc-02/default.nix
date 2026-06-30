@@ -28,7 +28,7 @@ custom-packages.cloud = true;
 
 custom-packages.enable = true;
 
-endoreg-client.api.djangoAllowedHosts = [ "localhost" "127.0.0.1" "172.16.255.106" "172.16.255.230" ];
+endoreg-client.api.djangoAllowedHosts = [ "localhost" "127.0.0.1" "lx-annotate.local" "172.16.255.106" "172.16.255.230" ];
 
 endoreg-client.api.httpProtocol = "https";
 

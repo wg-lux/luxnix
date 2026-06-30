@@ -60,10 +60,9 @@ When changing LuxNix or lx-annotate integration code, keep these rules:
 
 ## Streamable Video Migration
 
-The module exposes an opt-in manual migration unit for backfilling existing
-videos into the streamable protected subtree:
+The module exposes a manual migration unit for backfilling existing videos into
+the streamable protected subtree:
 
-- set `services.luxnix.lxAnnotateLocal.streamableMigration.enable = true`
 - rebuild
 - run `systemctl start lx-annotate-video-streamable-migration`
 
@@ -71,39 +70,116 @@ The module also exposes a dedicated manual post-deploy acceptance unit:
 
 - `systemctl start lx-annotate-acceptance`
 
-`lx-annotate-video-streamable-migration.service` runs the lx-annotate media
-migration wrapper with streamable artifact synchronization enabled and the same
-production environment as the main application service. It is intentionally not
-enabled by default, timer-driven, or wanted by a boot target so operators can
-control rollout pace and observe I/O.
+`lx-annotate-video-streamable-migration.service` runs the lx-annotate
+`migrate_video_streamable_storage` command with the same production environment
+as the main application service. Its no-argument default lets lx-annotate sync
+raw and processed streamable video artifacts according to the active storage
+policy. It is intentionally not
+timer-driven or wanted by a boot target so operators can control rollout pace and
+observe I/O.
 
 `lx-annotate-acceptance.service` runs the deployed Django system checks with the
 real LuxNix environment, verifies encrypted storage round-trips without
 plaintext on disk, and fetches the Vite manifest through the local Nginx TLS
 vhost.
 
-## Wheel Runtime Roles
+## Runtime Services
 
-Wheel mode separates bootstrap jobs from the long-running web process:
+The module splits runtime work into short bootstrap/check jobs, one long-running
+web process, path-triggered intake jobs, queue workers, and optional maintenance
+timers. The main web unit is produced by the upstream `services.lx-annotate`
+module and then hardened/ordered here; the surrounding `lx-annotate-*` units are
+owned directly by this module.
 
-- `lx-annotate-migrate.service` runs `runtime.commands.migrate`
-- `lx-annotate-load-base-data.service` runs `runtime.commands.loadBaseData`
-- `lx-annotate-boot.service` installs/prepares the wheel runtime and starts only
-  `runtime.commands.web`
-- `lx-annotate-celery-worker.service` runs `runtime.commands.celeryWorker`
-- `lx-annotate-celery-pipeline-worker.service` runs the upload/anonymization
-  queue
-- `lx-annotate-celery-frame-extraction-worker.service` runs only the
-  `frame_extraction` queue
-- `lx-annotate-filewatcher.service` runs `runtime.commands.fileWatcherOnce` when
-  set, otherwise `runtime.commands.fileWatcher`
-- `lx-annotate-filewatcher.path` starts the watcher service when files are
-  dropped into the runtime video, report, or preanonymized intake directories
+Most application units share the same service contract: they run as
+`endoreg-service-user`, load `/var/lib/lx-annotate/.env.systemd`, use the
+protected runtime data root as their working directory, get the same Django,
+database, Celery, storage, and encryption environment, and run with
+`ProtectSystem=full`, `PrivateTmp=true`, and `NoNewPrivileges=true`. Their write
+access is limited to the lx-annotate runtime, wheel, static, config, storage, and
+model-training staging paths. The root-run exceptions are the environment writer
+and the optional encrypted-data mount unit.
+
+### Core Boot Units
+
+| Unit | Type / trigger | Runtime role |
+| --- | --- | --- |
+| `lx-annotate-runtime-env.service` | root oneshot, remains active | Creates the runtime/config/data directories, copies the database password into the runtime config directory, normalizes Keycloak secret permissions, and writes `/var/lib/lx-annotate/.env.systemd` plus the compatibility copy under the data root. |
+| `lx-annotate-encrypted-data.service` | optional root oneshot, remains active | Opens the configured LUKS device, mounts it at `runtime.encryptedDataDir`, fixes owner/mode on the mount point, and closes it again on stop. Enabled by `runtime.managedEncryptedData.enable`. |
+| `lx-annotate-data-recovery.service` | oneshot, enabled by default | Runs before migrations when `dataRecovery.enable` is true. It moves or overlays legacy data/media into the current protected data root, repairs managed payloads when possible, and records recovery state so heavy recovery is not repeated unnecessarily. |
+| `lx-annotate-migrate.service` | oneshot | Runs `lx-annotate-manage migrate --noinput` against the effective runtime package. It is ordered before base-data loading, encrypted-storage validation, and the web service. |
+| `lx-annotate-load-base-data.service` | oneshot | Runs `lx-annotate-load-base-data` after successful migrations. The script logs a failed base-data load but exits successfully so schema-correct deployments can still boot. |
+| `lx-annotate-master-key-check.service` | oneshot, remains active | Runs `lx-annotate-manage verify_encrypted_storage` with the deployed environment. The web service and workers require this check so a wrong or missing application master key fails closed before user traffic or background processing starts. |
+| `lx-annotate.service` / `lx-annotate-boot.service` | long-running web service | Starts the ASGI/web entrypoint on `127.0.0.1:${django.port}`. It requires the runtime env, base data, master-key check, managed secrets, encrypted data, and local Redis/PostgreSQL units when those local services are in use. |
+
+In wheel mode, the effective runtime package is a wrapper around
+`runtime.wheelPath`. The first command that needs it creates or updates the
+host-local virtualenv under the service-user home, installs the wheel and any
+configured wheelhouse/override packages, exports secrets from files into the
+process environment, and then execs the wheel console script. The web wrapper
+also syncs packaged static assets into `/var/lib/lx-annotate/staticfiles`.
+
+### Intake And Manual Jobs
+
+| Unit | Type / trigger | Runtime role |
+| --- | --- | --- |
+| `lx-annotate-filewatcher.path` | path unit | Watches the resolved video, report, and preanonymized intake directories from `runtime.intakeDirs`. |
+| `lx-annotate-filewatcher.service` | path-triggered oneshot | Runs `lx-annotate-watch --once` after migrations/base data and the master-key check. It drains files already present in the watched intake directories instead of running a permanent watcher process. |
+| `lx-annotate-sap-import.path` | path unit | Watches `runtime.intakeDirs.sap` for `*.zip` drops. |
+| `lx-annotate-sap-import.service` | path-triggered oneshot | Waits for each SAP IS-H zip to become stable, converts it with `lx-annotate-import-sap`, writes preanonymized watcher payload into the preanonymized intake directory, and moves the original zip to processed or failed storage. |
+| `lx-annotate-export-frames.service` | manual oneshot | Runs `lx-annotate-export-frames` and writes frame export output below the protected runtime storage tree. It is not started by a boot target. |
+| `lx-annotate-video-streamable-migration.service` | manual oneshot | Backfills raw and processed streamable video artifacts into the protected streamable-video subtree according to lx-annotate's active storage policy. It is intentionally operator-started. |
+| `lx-annotate-acceptance.service` | manual oneshot | Runs Django critical checks, verifies encrypted storage, and fetches the Vite manifest through the local TLS Nginx vhost. Use it as a post-deploy smoke test. |
 
 The intake directory contract is centralized under `runtime.intakeDirs`. Defaults
 mirror lx-annotate `secretspec.toml` names such as `data/import/video_import`
 and `data/import/report_import`; Nix resolves `data/...` against
 `runtime.encryptedDataDir`.
+
+### Celery Worker Units
+
+All worker services wait for base data and the master-key check. Workers in
+`mode = "always"` are wanted by `multi-user.target` and restart on failure.
+Timer-scheduled workers are started by their matching timer, and workers in
+`mode = "manual"` are available for explicit operator starts only.
+
+| Unit | Default mode | Queues | Runtime role |
+| --- | --- | --- | --- |
+| `lx-annotate-celery-worker.service` | always | `maintenance,default` | General maintenance/default work, including post-validation behavior selected by `VIDEO_POST_VALIDATION_JOB_MODE=celery`. |
+| `lx-annotate-celery-pipeline-worker.service` | always | `pipeline` | Upload, import, anonymization, and other pipeline jobs separated from the default queue. |
+| `lx-annotate-celery-frame-extraction-worker.service` | `maintenance-window` timer | `frame_extraction` | FFmpeg frame extraction and post-validation rebuild work. The default policy starts it from a timer at 22:00 and caps each activation with `RuntimeMaxSec=7h`. |
+| `lx-annotate-celery-ffmpeg-worker.service` | always | `ffmpeg_media` | Heavy FFmpeg media processing with its own CPU, memory, IO, and OOM scoring profile. |
+| `lx-annotate-celery-inference-worker.service` | always | `inference` | Temporal inference jobs with stream-backed frame input and optional `CUDA_VISIBLE_DEVICES`. |
+| `lx-annotate-celery-training-worker.service` | manual | `model_training` | GPU model-training jobs using `runtime.modelTrainingStagingRoot`; exports `CUDA_VISIBLE_DEVICES`, defaulting to `0`. |
+| `lx-annotate-celery-llm-inference-worker.service` | manual | `llm_inference` | Ollama-backed report and metadata LLM inference. It requires and orders after `ollama.service`. |
+
+Each worker calls `lx-annotate-worker` with an explicit hostname, queue list,
+concurrency, `--prefetch-multiplier=1`, and optional child recycling. Pool
+limits come from `runtime.workerPools.*`.
+
+### Maintenance Timers
+
+| Unit | Type / trigger | Runtime role |
+| --- | --- | --- |
+| `lx-annotate-ffmpeg-stream-throttle.timer` | timer, default every two minutes | Starts `lx-annotate-ffmpeg-stream-throttle.service`, which asks Django whether user video streams are active and then applies runtime cgroup CPU/IO weights to the FFmpeg worker. Its last applied profile is stored in `/run/lx-annotate/ffmpeg-stream-throttle.state`. |
+| `lx-annotate-data-cleanup.timer` | timer when `dataCleanup.enable` | Starts duplicate cleanup for legacy anonymized payloads, moving verified duplicates into the configured archive tree. |
+| `lx-annotate-emergency-storage-relief.timer` | optional timer | Starts the emergency relief job when explicitly enabled. The service fails closed unless the external archive mount matches the configured device id or filesystem UUID, then archives only verified duplicates or validated export bundles. Manual starts are the default workflow. |
+| `lx-annotate-hub-backup.timer` | timer when `hub.backup.enable` | Starts hub snapshots. The service rsyncs the encrypted runtime tree into timestamped snapshots, writes JSON manifests, maintains a `latest` symlink, and prunes by `hub.backup.retainCount`. |
+
+### Supporting Runtime Services
+
+The module enables or orders against several non-`lx-annotate-*` services:
+
+- `nginx.service` exposes the TLS vhost, proxies application traffic to the
+  local web port, serves static files, and provides internal protected-media
+  handoff for authorized downloads.
+- `redis-lx-annotate.service` is enabled when no external Redis URL is
+  configured. It listens on `127.0.0.1:6379` and uses append-only persistence so
+  queued Celery work survives ordinary service or host restarts.
+- `postgresql.service` and `postgres-endoreg-setup.service` are used when no
+  external PostgreSQL host is configured.
+- `managed-secrets-setup.service` and `vault-auth-setup.service` are part of the
+  secret delivery chain when the managed-secrets/Vault roles are enabled.
 
 ## File Mover Handoff Contract
 
@@ -123,7 +199,8 @@ intentionally not watched. `move-my-files` first copies operator input into that
 staging tree, fixes ownership and permissions, then moves top-level staged
 entries into the watched video/report intake directories. Source files are
 deleted only after the publish step succeeds; unreadable files are moved under
-the `failed_input` quarantine tree.
+the `failed_input` quarantine tree. Stable video files that `ffprobe` still
+rejects after 30 minutes are also quarantined so later inputs can continue.
 
 For video entries, `move-my-files` invokes the lx-annotate/endoreg-db
 `transcode_video` management command before publishing into the watched intake
@@ -363,19 +440,29 @@ The main review caveats have now been addressed in code:
 
 ## Boot Order
 
-The effective service order is:
+The core fail-closed service order is, with optional links omitted when their
+options or roles are disabled:
 
 ```text
 vault-auth-setup.service
   -> managed-secrets-setup.service
     -> lx-annotate-encrypted-data.service
-      -> lx-annotate-boot.service
-      -> lx-annotate-filewatcher.service
-      -> lx-annotate-filewatcher.path
-      -> lx-annotate-export-frames.service
+      -> lx-annotate-runtime-env.service
+        -> lx-annotate-data-recovery.service
+          -> lx-annotate-migrate.service
+            -> lx-annotate-load-base-data.service
+              -> lx-annotate-master-key-check.service
+                -> lx-annotate.service
 ```
 
-That is the intended fail-closed behavior. If Vault lookup or LUKS unlock fails, the app services do not start.
+`lx-annotate-boot.service` is an alias for `lx-annotate.service`. Path units,
+worker units, and timer units are activated independently by systemd, but their
+services still require the same runtime environment, base-data, master-key, and
+encrypted-data gates before doing application work.
+
+That is the intended fail-closed behavior. If Vault lookup, secret delivery,
+LUKS unlock, or encrypted-storage validation fails, the app services do not
+start.
 
 ## Rotation Behavior
 
