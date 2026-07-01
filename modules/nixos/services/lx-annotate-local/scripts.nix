@@ -125,7 +125,6 @@ let
   storageReliefScripts = import ./scripts/storage-relief.nix args;
   inherit (storageReliefScripts)
     emergencyStorageReliefConfig
-    emergencyStorageReliefHelper
     ;
 
   lxAnnotateRuntimeLib = pkgs.writeShellScript "lx-annotate-runtime-lib.sh" ''
@@ -1844,7 +1843,7 @@ let
           exit 1
         fi
 
-        exec "$helper_python" "${emergencyStorageReliefHelper}" --config "${emergencyStorageReliefConfig}"
+        exec ${effectiveRuntimePackage}/bin/lx-annotate-manage emergency_storage_relief --config "${emergencyStorageReliefConfig}"
   '';
 
   hubBackupScripts = import ./scripts/hub-backup.nix args;

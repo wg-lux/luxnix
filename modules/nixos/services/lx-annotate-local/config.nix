@@ -999,7 +999,6 @@ let
   storageReliefScripts = import ./scripts/storage-relief.nix args;
   inherit (storageReliefScripts)
     emergencyStorageReliefConfig
-    emergencyStorageReliefHelper
     ;
   lxAnnotateScripts = import ./scripts.nix (
     args
@@ -1019,16 +1018,6 @@ let
     fileMoverRequires
     fileMoverWants
     ;
-  emergencyStorageReliefPython = ''
-    import runpy
-    import sys
-    sys.argv = [
-        "lx-annotate-emergency-storage-relief",
-        "--config",
-        ${builtins.toJSON (toString emergencyStorageReliefConfig)},
-    ]
-    runpy.run_path(${builtins.toJSON (toString emergencyStorageReliefHelper)}, run_name="__main__")
-  '';
   emergencyStorageReliefScript = pkgs.writeShellScriptBin "runLxAnnotateEmergencyStorageRelief" ''
     set -euo pipefail
 
@@ -1088,7 +1077,7 @@ let
       fi
     fi
 
-    exec ${effectiveRuntimePackage}/bin/lx-annotate-manage shell -c ${lib.escapeShellArg emergencyStorageReliefPython}
+    exec ${effectiveRuntimePackage}/bin/lx-annotate-manage emergency_storage_relief --config ${lib.escapeShellArg (toString emergencyStorageReliefConfig)}
   '';
 
   hubBackupScripts = import ./scripts/hub-backup.nix args;

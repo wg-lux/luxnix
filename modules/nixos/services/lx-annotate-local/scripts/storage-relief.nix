@@ -50,8 +50,4 @@ in
       ];
     }
   );
-
-  emergencyStorageReliefHelper = pkgs.writeText "lx-annotate-emergency-storage-relief.py" (
-    builtins.readFile ./storage-relief.py
-  );
 }

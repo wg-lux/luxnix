@@ -1207,11 +1207,13 @@ def test_emergency_storage_relief_helper_uses_verified_archive_contract() -> Non
                 "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts/storage-relief.nix"
             ).read_text(encoding="utf-8"),
             Path(
-                "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts/storage-relief.py"
+                "/home/admin/endoreg-db/endoreg_db/management/commands/emergency_storage_relief.py"
             ).read_text(encoding="utf-8"),
         ]
     )
 
+    assert "emergency_storage_relief --config" in source
+    assert "builtins.readFile ./storage-relief.py" not in source
     assert "mountpoint\" -q \"$external_mount_point\"" in source
     assert "findmnt\" -n -o SOURCE --target \"$external_mount_point\"" in source
     assert "expectedDeviceId or expectedFsUuid" in source
