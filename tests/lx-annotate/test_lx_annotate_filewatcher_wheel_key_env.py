@@ -61,11 +61,9 @@ def test_runtime_exports_ffmpeg_transcode_timeout_to_wheel_services():
     )
 
     assert 'ffmpegTranscodeTimeoutSeconds = "86400";' in source
-    assert (
-        'export FFMPEG_TRANSCODE_TIMEOUT_SECONDS="${ffmpegTranscodeTimeoutSeconds}"'
-        in source
-    )
-    assert "FFMPEG_TRANSCODE_TIMEOUT_SECONDS=${ffmpegTranscodeTimeoutSeconds}" in source
+    assert "FFMPEG_TRANSCODE_TIMEOUT_SECONDS = ffmpegTranscodeTimeoutSeconds;" in source
+    assert "commonShellExportText" in source
+    assert "commonSystemdEnvText" in source
     assert "FFMPEG_TRANSCODE_TIMEOUT_SECONDS=1000000" not in source
 
 

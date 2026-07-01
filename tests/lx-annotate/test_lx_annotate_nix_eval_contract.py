@@ -1061,8 +1061,8 @@ def test_lx_annotate_celery_worker_scripts_bind_to_dedicated_queues() -> None:
     assert "queues = celeryFrameExtractionQueueName;" in source
     assert "queues = celeryInferenceQueueName;" in source
     assert "--prefetch-multiplier=1" in source
-    assert 'export CELERY_INFERENCE_QUEUE="${celeryInferenceQueueName}"' in source
-    assert 'export VIDEO_TEMPORAL_INFERENCE_JOB_MODE="celery"' in source
+    assert "CELERY_INFERENCE_QUEUE = celeryInferenceQueueName;" in source
+    assert 'VIDEO_TEMPORAL_INFERENCE_JOB_MODE = "celery";' in source
     assert "CELERY_FRAME_EXTRACTION_REQUIRE_SECURE_TRANSPORT" in source
     assert "CELERY_BROKER_SECURE_TRANSPORT_CONFIRMED" in source
 
@@ -1088,6 +1088,19 @@ def test_lx_annotate_intake_dirs_match_secretspec_style_defaults() -> None:
         "sapFailed": "data/import/sap_import_failed",
         "moverStaging": "data/import/.move-my-files-staging",
     }
+
+
+def test_lx_annotate_local_exposes_generic_runtime_env_override() -> None:
+    options_source = Path(
+        "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/options.nix"
+    ).read_text(encoding="utf-8")
+    env_source = Path(
+        "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts/env.nix"
+    ).read_text(encoding="utf-8")
+
+    assert "extraEnvironment = mkOption" in options_source
+    assert "commonEnv = {" in env_source
+    assert "// cfg.runtime.extraEnvironment;" in env_source
 
 
 def test_lx_annotate_filewatcher_exports_central_intake_dirs() -> None:

@@ -372,8 +372,8 @@ in
           wheelPath = mkOption {
             type = types.nullOr types.path;
             default = pkgs.fetchurl {
-              url = "https://files.pythonhosted.org/packages/4f/1d/8fef21f80d1e0759e417577fe57728ce9d2693d47ea83d938804f483f479/lx_annotate-0.9.18-py3-none-any.whl";
-              hash = "sha256-9PSCRlVS8yukRtscPrgQSj1qMogJdflOopzLCqAVC8Y=";
+              url = "https://files.pythonhosted.org/packages/bb/86/38d007998a46b722103296d277e18d124f10dae7580a6f253c545efe408e/lx_annotate-0.9.19-py3-none-any.whl";
+              hash = "sha256-7+qD/8eVv+TX9n3DIpwj5ZSBjCrnBjD5rczk4SALPQ8=";
             };
             description = "Path to the lx-annotate wheel artifact used in wheel mode.";
           };
@@ -382,6 +382,15 @@ in
             default = inferWheelPackageVersion cfg.runtime.wheelPath;
             defaultText = literalExpression "version parsed from runtime.wheelPath";
             description = "lx-annotate Python package version exported as LX_ANNOTATE_PACKAGE_VERSION.";
+          };
+          extraEnvironment = mkOption {
+            type = types.attrsOf types.str;
+            default = { };
+            example = {
+              SERVE_WITH_NGINX = "true";
+              LOG_LEVEL = "INFO";
+            };
+            description = "Additional lx-annotate environment variables merged into the generated systemd environment. Use this for secretspec keys that do not need a dedicated LuxNix option.";
           };
           wheelhousePath = mkOption {
             type = types.nullOr types.path;
@@ -589,6 +598,19 @@ in
                   type = types.str;
                   default = "/protected_media/";
                   description = "Internal Nginx location prefix exported as NGINX_PROTECTED_MEDIA_URL for protected lx-annotate media offload.";
+                };
+                externalStorageRoot = mkOption {
+                  type = types.nullOr types.str;
+                  default = null;
+                  example = "/data/raid01/lx-annotate/streamable_videos";
+                  description = ''
+                    Optional external filesystem root for streamable video artifacts.
+                    When set, LuxNix bind-mounts this directory onto the canonical
+                    protected-media streamable subtree below runtime.encryptedDataDir.
+                    The lx-annotate application and nginx continue to use
+                    runtime.encryptedDataDir/storage/streamable_videos so persisted
+                    streamable relative paths remain stable.
+                  '';
                 };
               };
             };

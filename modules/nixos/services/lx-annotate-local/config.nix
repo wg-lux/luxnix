@@ -79,7 +79,8 @@ let
     ;
 
   boolString = value: if value then "true" else "false";
-  streamableStorageProfile = "fs_encrypted_streaming";
+  streamableExternalStorageRoot = cfg.runtime.streamableServing.externalStorageRoot;
+  streamableExternalStorageEnabled = streamableExternalStorageRoot != null;
   videoStreamProxyExtraConfig = ''
     proxy_set_header Range $http_range;
     proxy_set_header If-Range $http_if_range;
@@ -386,17 +387,6 @@ let
   endoregCentralServer = lib.attrByPath [ "roles" "endoreg-db-central-01" "enable" ] false config;
   externalPostgresConfigured = cfg.runtime.externalServices.postgresHost != null;
   externalRedisConfigured = cfg.runtime.externalServices.redisUrl != null;
-  celeryBrokerUrl =
-    if cfg.runtime.externalServices.redisUrl != null then
-      cfg.runtime.externalServices.redisUrl
-    else
-      lib.attrByPath [
-        "roles"
-        "endoreg-client"
-        "service"
-        "extraEnvironment"
-        "CELERY_BROKER_URL"
-      ] "redis://localhost:6379/1" config;
   localPostgresSetupUnits = lib.optionals (!externalPostgresConfigured) [
     "postgres-endoreg-setup.service"
   ];
@@ -427,9 +417,29 @@ let
     pkgs.libxcb
   ];
   runtimeLdLibraryPath = lib.makeLibraryPath (runtimeLibraryPackages ++ [ pkgs.ffmpeg ]);
+  envContract = import ./scripts/env.nix (
+    args
+    // {
+      inherit
+        effectivePackageVersion
+        packageStaticRoot
+        runtimeLdLibraryPath
+        ;
+    }
+  );
+  inherit (envContract)
+    celeryBrokerUrl
+    celeryWorkerResourceEnv
+    commonEnv
+    llmInferenceWorkerEnv
+    ;
+  commonExtraEnv = commonEnv;
 
   encryptedDataMountUnitConfig = {
-    RequiresMountsFor = [ envDataDir ];
+    RequiresMountsFor = [
+      envDataDir
+    ]
+    ++ lib.optional streamableExternalStorageEnabled runtimeStreamableVideoRootPath;
   };
   appReadWritePaths = [
     endoreg-service-user-home
@@ -450,115 +460,9 @@ let
   lxAnnotateTranscodeVideoCommand = "${effectiveRuntimePackage}/bin/lx-annotate-manage transcode_video";
   lxAnnotateFileMoverTranscodeCommand = "${lxAnnotateTranscodeVideoCommand} --input-dir \"$1\" --filename \"$2\" --output-dir \"$3\" --overwrite --json";
   lxAnnotateFileMoverTranscodeEnv = ''
-    export DJANGO_SECRET_KEY_FILE="${toString cfg.django.djangoSecretKeyFile}"
-    export DJANGO_KEYCLOAK_CLIENT_SECRET_FILE="${toString cfg.django.keycloakSecretFile}"
-    export OIDC_RP_CLIENT_ID="${cfg.django.keycloakClientId}"
-    export DJANGO_DB_PASSWORD_FILE="${envConfDir}/db_pwd"
-    export DJANGO_DB_ENGINE="django.db.backends.postgresql"
-    export DJANGO_DB_NAME="${cfg.database.name}"
-    export DJANGO_DB_USER="${cfg.database.user}"
-    export DJANGO_DB_HOST="${cfg.database.host}"
-    export DJANGO_DB_PORT="${toString cfg.database.port}"
-    export DJANGO_DB_SSLMODE="${cfg.database.sslMode}"
-    export LX_ANNOTATE_ENCRYPTED_DATA_DIR="${runtimeDataRootPath}"
-    export ENDOREG_STORAGE_PROFILE="${streamableStorageProfile}"
-    export LX_ANNOTATE_STREAMABLE_VIDEO_ROOT="${runtimeStreamableVideoRootPath}"
-    export LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT="${runtimeStreamableVideoRawRootPath}"
-    export LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT="${runtimeStreamableVideoProcessedRootPath}"
-    export WATCHER_VIDEO_DIR="${runtimeWatcherVideoDirPath}"
-    export WATCHER_REPORT_DIR="${runtimeWatcherReportDirPath}"
-    export WATCHER_PREANONYMIZED_DIR="${runtimeWatcherPreanonymizedDirPath}"
-    export DJANGO_STATIC_ROOT="${packageStaticRoot}"
-    export ALLOWED_HOSTS="${envAllowedHosts}"
-    export DJANGO_CORS_ALLOWED_ORIGINS="${envCorsAllowedOrigins}"
-    export DJANGO_CSRF_TRUSTED_ORIGINS="${envCorsAllowedOrigins}"
-    export LX_ANNOTATE_MASTER_KEY_FILE="${
-      optionalString (cfg.runtime.masterKeyFile != null) (toString cfg.runtime.masterKeyFile)
-    }"
+    ${envContract.commonShellExportText}
     export LD_LIBRARY_PATH="${runtimeLdLibraryPath}:''${LD_LIBRARY_PATH:-}"
-    export SSL_CERT_FILE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
-    export REQUESTS_CA_BUNDLE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
   '';
-
-  commonExtraEnv = {
-    HOME_DIR = endoreg-service-user-home;
-    CONF_DIR = envConfDir;
-    CONF_TEMPLATE_DIR = envConfTemplateDir;
-    WORKING_DIR = runtimeWorkingDir;
-    ASSET_DIR = envAssetDir;
-    XDG_DATA_HOME = runtimeRootPath;
-    LX_ANNOTATE_ENCRYPTED_DATA_DIR = envDataDir;
-    WATCHER_VIDEO_DIR = runtimeWatcherVideoDirPath;
-    WATCHER_REPORT_DIR = runtimeWatcherReportDirPath;
-    WATCHER_PREANONYMIZED_DIR = runtimeWatcherPreanonymizedDirPath;
-    DJANGO_HOST = "127.0.0.1";
-    DJANGO_PORT = envDjangoPort;
-    DJANGO_STATIC_ROOT = packageStaticRoot;
-    ALLOWED_HOSTS = envAllowedHosts;
-    DJANGO_CORS_ALLOWED_ORIGINS = envCorsAllowedOrigins;
-    DJANGO_CSRF_TRUSTED_ORIGINS = envCorsAllowedOrigins;
-    DJANGO_DB_ENGINE = "django.db.backends.postgresql";
-    DJANGO_DB_NAME = cfg.database.name;
-    DJANGO_DB_USER = cfg.database.user;
-    DJANGO_DB_HOST = cfg.database.host;
-    DJANGO_DB_PORT = toString cfg.database.port;
-    DJANGO_DB_SSLMODE = cfg.database.sslMode;
-    DJANGO_DB_PASSWORD_FILE = "${envConfDir}/db_pwd";
-    DJANGO_SECRET_KEY_FILE = toString cfg.django.djangoSecretKeyFile;
-    DJANGO_KEYCLOAK_CLIENT_SECRET_FILE = toString cfg.django.keycloakSecretFile;
-    DJANGO_KEYCLOAK_CLIENT_ID = cfg.django.keycloakClientId;
-    OIDC_RP_CLIENT_ID = cfg.django.keycloakClientId;
-    ENFORCE_AUTH = "1";
-    EXEMPT_URLS = "^/accounts/login/$";
-    LOGIN_URL = "/accounts/login/";
-    VITE_ENABLE_DEBUG = envViteEnableDebug;
-    HTTP_PROTOCOL = envHttpProtocol;
-    TIME_ZONE = cfg.django.timeZone;
-    RUN_VIDEO_TESTS = if cfg.django.runVideoTests then "true" else "false";
-    SKIP_EXPENSIVE_TESTS = if cfg.django.skipExpensiveTests then "true" else "false";
-    FFMPEG_TRANSCODE_TIMEOUT_SECONDS = "86400";
-    MEDIA_OPERATION_STREAM_LEASE_SECONDS = "300";
-    SERVE_WITH_NGINX = boolString cfg.runtime.streamableServing.nginxOffload;
-    NGINX_PROTECTED_MEDIA_URL = envNginxProtectedMediaUrl;
-    LX_ANNOTATE_DEFAULT_CENTER = envDefaultCenter;
-    ENDOREG_DEPLOYMENT_ROLE = envDeploymentRole;
-    ENDOREG_STORAGE_PROFILE = streamableStorageProfile;
-    ENDOREG_HUB_MODE = boolString cfg.hub.enable;
-    ENDOREG_ENABLE_HUB_TRANSFERS = boolString cfg.hub.transferApi.enable;
-    ENDOREG_HUB_TRANSFER_REQUIRE_SECURE_TRANSPORT = boolString cfg.hub.transferApi.requireSecureTransport;
-    ENDOREG_HUB_TRANSFER_REQUIRE_MTLS = boolString cfg.hub.transferApi.requireMtls;
-    ENDOREG_HUB_TRANSFER_MTLS_META_KEY = cfg.hub.transferApi.mtlsMetaKey;
-    ENDOREG_HUB_TRANSFER_MTLS_META_VALUE = cfg.hub.transferApi.mtlsMetaValue;
-    CELERY_BROKER_URL = celeryBrokerUrl;
-    CELERY_DEFAULT_QUEUE = "default";
-    CELERY_PIPELINE_QUEUE = "pipeline";
-    CELERY_FRAME_EXTRACTION_QUEUE = "frame_extraction";
-    CELERY_FFMPEG_MEDIA_QUEUE = "ffmpeg_media";
-    CELERY_INFERENCE_QUEUE = "inference";
-    CELERY_TRAINING_QUEUE = "model_training";
-    CELERY_LLM_INFERENCE_QUEUE = "llm_inference";
-    CELERY_MAINTENANCE_QUEUE = "maintenance";
-    CELERY_FRAME_EXTRACTION_REQUIRE_SECURE_TRANSPORT = boolString cfg.runtime.celeryBroker.requireSecureTransport;
-    CELERY_FFMPEG_MEDIA_REQUIRE_SECURE_TRANSPORT = boolString cfg.runtime.celeryBroker.requireSecureTransport;
-    CELERY_BROKER_SECURE_TRANSPORT_CONFIRMED = boolString cfg.runtime.celeryBroker.secureTransportConfirmed;
-    MODEL_TRAINING_JOB_MODE = "celery";
-    MODEL_TRAINING_STAGING_ROOT = cfg.runtime.modelTrainingStagingRoot;
-    VIDEO_POST_VALIDATION_JOB_MODE = "celery";
-    VIDEO_TEMPORAL_INFERENCE_JOB_MODE = "celery";
-    VIDEO_TEMPORAL_INFERENCE_FRAME_SOURCE_MODE = "stream";
-    TESSDATA_PREFIX = cfg.runtime.tessdataPrefix;
-    PYTORCH_ALLOC_CONF = cfg.runtime.pytorchAllocConf;
-    LD_LIBRARY_PATH = runtimeLdLibraryPath;
-    SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
-    REQUESTS_CA_BUNDLE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
-    LX_ANNOTATE_PACKAGE_VERSION = effectivePackageVersion;
-    LX_ANNOTATE_STREAMABLE_VIDEO_ROOT = runtimeStreamableVideoRootPath;
-    LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT = runtimeStreamableVideoRawRootPath;
-    LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT = runtimeStreamableVideoProcessedRootPath;
-  }
-  // optionalAttrs (cfg.runtime.masterKeyFile != null) {
-    LX_ANNOTATE_MASTER_KEY_FILE = toString cfg.runtime.masterKeyFile;
-  };
 
   mkWorker =
     {
@@ -622,25 +526,9 @@ let
       inherit timeoutStopSec;
     };
 
-  postValidationWorkerEnv = {
-    VIDEO_POST_VALIDATION_JOB_MODE = "celery";
-  };
-  inferenceWorkerEnv = {
-    VIDEO_TEMPORAL_INFERENCE_JOB_MODE = "celery";
-    VIDEO_TEMPORAL_INFERENCE_FRAME_SOURCE_MODE = "stream";
-  };
-  trainingWorkerEnv = {
-    MODEL_TRAINING_JOB_MODE = "celery";
-    MODEL_TRAINING_STAGING_ROOT = cfg.runtime.modelTrainingStagingRoot;
-  };
-  llmInferenceWorkerEnv = {
-    REPORT_LLM_JOB_MODE = "celery";
-    LLM_ENABLED = "true";
-    LLM_PROVIDER = "ollama";
-    LLM_MODEL = "lx-gemma4-e2b-json";
-    LLM_BASE_URL = "http://127.0.0.1:11434";
-    LLM_TIMEOUT = "120";
-  };
+  postValidationWorkerEnv = { };
+  inferenceWorkerEnv = { };
+  trainingWorkerEnv = { };
   appServiceBaseAfter = [
     "network.target"
     "lx-annotate-runtime-env.service"
@@ -855,14 +743,7 @@ let
       cudaVisibleDevices = workerCfg.cudaVisibleDevices or null;
       workerEnvironment =
         workerCfg.environment
-        // {
-          CELERY_LOG_LEVEL = "INFO";
-          OMP_NUM_THREADS = "1";
-          OPENBLAS_NUM_THREADS = "1";
-          MKL_NUM_THREADS = "1";
-          NUMEXPR_NUM_THREADS = "1";
-          MALLOC_ARENA_MAX = "2";
-        }
+        // celeryWorkerResourceEnv
         // lib.optionalAttrs (cudaVisibleDevices != null) {
           CUDA_VISIBLE_DEVICES = cudaVisibleDevices;
         };
@@ -1015,19 +896,9 @@ let
     [ -f "${toString cfg.django.keycloakSecretFile}" ] && chmod 0640 "${toString cfg.django.keycloakSecretFile}" || true
 
     tmp_file="${envSystemdFilePath}.tmp"
-    : > "$tmp_file"
-    write_env() {
-      local key="$1"
-      local value="$2"
-      value="$(printf '%s' "$value" | ${pkgs.gnused}/bin/sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')"
-      printf '%s="%s"\n' "$key" "$value" >> "$tmp_file"
-    }
-
-    ${lib.concatStringsSep "\n" (
-      lib.mapAttrsToList (
-        name: value: "write_env ${lib.escapeShellArg name} ${lib.escapeShellArg value}"
-      ) commonExtraEnv
-    )}
+    cat > "$tmp_file" <<'EOF'
+    ${envContract.commonSystemdEnvText}
+    EOF
 
     install -m 0640 -o root -g ${endoreg-service-group-name} "$tmp_file" "${envSystemdFilePath}"
     cp -f "${envSystemdFilePath}" "${envDataDir}/.env.systemd"
@@ -1130,7 +1001,15 @@ let
     emergencyStorageReliefConfig
     emergencyStorageReliefHelper
     ;
-  lxAnnotateScripts = import ./scripts.nix (args // { inherit effectiveRuntimePackage; });
+  lxAnnotateScripts = import ./scripts.nix (
+    args
+    // {
+      inherit
+        effectiveRuntimePackage
+        envContract
+        ;
+    }
+  );
   inherit (lxAnnotateScripts.packages)
     lxAnnotateMigrateVideoStreamableStorageScript
     runLocalDataRecoveryScript
@@ -1691,6 +1570,17 @@ in
         };
       };
 
+      fileSystems = mkIf streamableExternalStorageEnabled {
+        "${runtimeStreamableVideoRootPath}" = {
+          device = streamableExternalStorageRoot;
+          fsType = "none";
+          options = [
+            "bind"
+            "x-systemd.requires-mounts-for=${streamableExternalStorageRoot}"
+          ];
+        };
+      };
+
       luxnix.generic-settings.postgres.enable = mkDefault (!externalPostgresConfigured);
       services.redis.servers."lx-annotate" = mkIf (!externalRedisConfigured) {
         enable = true;
@@ -1707,50 +1597,52 @@ in
       };
       users.users.nginx.extraGroups = mkAfter [ endoreg-service-group-name ];
 
-      systemd.tmpfiles.rules = [
-        "d ${endoreg-service-user-home} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "d ${runtimeRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "z ${runtimeRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "d ${envDataDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "z ${envDataDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "d ${envConfDir} 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "d ${runtimeStorageRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "z ${runtimeStorageRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "d ${runtimeIoImportRootPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "z ${runtimeIoImportRootPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "d ${runtimeWatcherVideoDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "d ${runtimeWatcherReportDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "d ${runtimeWatcherPreanonymizedDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "d ${runtimeSapImportDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "d ${runtimeMoverStagingDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "L ${serviceUserIoAccessLinkPath} - - - - ${runtimeIoImportRootPath}"
-        "d ${runtimeStreamableVideoRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "z ${runtimeStreamableVideoRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "d ${runtimeStreamableVideoRawRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "z ${runtimeStreamableVideoRawRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "d ${runtimeStreamableVideoProcessedRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "z ${runtimeStreamableVideoProcessedRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "d ${cfg.runtime.modelTrainingStagingRoot} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} 7d -"
-        "z ${cfg.runtime.modelTrainingStagingRoot} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "d ${cfg.dataCleanup.archiveDir} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "z ${cfg.dataCleanup.archiveDir} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "d ${hubRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "z ${hubRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "d ${hubRootPath}/backup 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "z ${hubRootPath}/backup 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "d ${cfg.hub.backup.incomingDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "z ${cfg.hub.backup.incomingDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "d ${cfg.hub.backup.snapshotDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "z ${cfg.hub.backup.snapshotDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "d ${cfg.hub.backup.manifestDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "z ${cfg.hub.backup.manifestDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        "d ${sslCfg.sslDir} 0750 root nginx - -"
-        "z ${sslCfg.sslDir} 0750 root nginx - -"
-        "d /run/lx-annotate 0755 root root - -"
-      ]
-      ++ lib.optionals (!config.roles.endoreg-client.enable) [
-        "d ${endoreg-service-user-home}/config 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-      ];
+      systemd.tmpfiles.rules =
+        lib.optional streamableExternalStorageEnabled "d ${streamableExternalStorageRoot} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+        ++ [
+          "d ${endoreg-service-user-home} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "d ${runtimeRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "z ${runtimeRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "d ${envDataDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "z ${envDataDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "d ${envConfDir} 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "d ${runtimeStorageRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "z ${runtimeStorageRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "d ${runtimeIoImportRootPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "z ${runtimeIoImportRootPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "d ${runtimeWatcherVideoDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "d ${runtimeWatcherReportDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "d ${runtimeWatcherPreanonymizedDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "d ${runtimeSapImportDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "d ${runtimeMoverStagingDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "L ${serviceUserIoAccessLinkPath} - - - - ${runtimeIoImportRootPath}"
+          "d ${runtimeStreamableVideoRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "z ${runtimeStreamableVideoRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "d ${runtimeStreamableVideoRawRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "z ${runtimeStreamableVideoRawRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "d ${runtimeStreamableVideoProcessedRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "z ${runtimeStreamableVideoProcessedRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "d ${cfg.runtime.modelTrainingStagingRoot} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} 7d -"
+          "z ${cfg.runtime.modelTrainingStagingRoot} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "d ${cfg.dataCleanup.archiveDir} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "z ${cfg.dataCleanup.archiveDir} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "d ${hubRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "z ${hubRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "d ${hubRootPath}/backup 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "z ${hubRootPath}/backup 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "d ${cfg.hub.backup.incomingDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "z ${cfg.hub.backup.incomingDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "d ${cfg.hub.backup.snapshotDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "z ${cfg.hub.backup.snapshotDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "d ${cfg.hub.backup.manifestDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "z ${cfg.hub.backup.manifestDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "d ${sslCfg.sslDir} 0750 root nginx - -"
+          "z ${sslCfg.sslDir} 0750 root nginx - -"
+          "d /run/lx-annotate 0755 root root - -"
+        ]
+        ++ lib.optionals (!config.roles.endoreg-client.enable) [
+          "d ${endoreg-service-user-home}/config 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+        ];
 
       system.activationScripts.lxAnnotateRuntimePathMigration = ''
         hub_backup_dir="${hubRootPath}/backup"

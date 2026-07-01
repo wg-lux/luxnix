@@ -28,7 +28,7 @@ def test_lx_annotate_scripts_export_protected_storage_contract():
     options_source = OPTIONS_NIX.read_text(encoding="utf-8")
     helper_source = SCRIPTS_ENV_NIX.read_text(encoding="utf-8")
 
-    assert "Host-owned values only." in source
+    assert "This is the lx-annotate environment contract." in helper_source
     assert "wheelRuntimePackage = pkgs.runCommand" in config_source
     assert "lx_annotate_wheel_ensure" in config_source
     assert "lx_annotate_wheel_sync_static" in config_source
@@ -38,7 +38,7 @@ def test_lx_annotate_scripts_export_protected_storage_contract():
     assert "PIP_CACHE_DIR" in config_source
     assert "pip-cache" in config_source
     assert "install --upgrade $pip_install_args" in config_source
-    assert "endoreg-db==1.0.1.8" in options_source
+    assert "wheelDependencyOverrides = mkOption" in options_source
     assert "install --upgrade --no-deps $pip_install_args $wheel_dependency_overrides" in config_source
     assert "--force-reinstall" not in config_source
     assert "--no-cache-dir" not in config_source
@@ -60,9 +60,10 @@ def test_lx_annotate_scripts_export_protected_storage_contract():
     assert 'TimeoutStartSec = "2h";' in config_source
     assert 'ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-watch --once";' in config_source
     assert 'ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-export-frames";' in config_source
-    assert "LX_ANNOTATE_ENCRYPTED_DATA_DIR = envDataDir;" in config_source
-    assert "DJANGO_SECRET_KEY_FILE=${toString cfg.django.djangoSecretKeyFile}" in source
-    assert "DJANGO_DB_PASSWORD_FILE=${envConfDir}/db_pwd" in source
+    assert "LX_ANNOTATE_ENCRYPTED_DATA_DIR = envDataDir;" in helper_source
+    assert "commonExtraEnv = commonEnv;" in config_source
+    assert "DJANGO_SECRET_KEY_FILE = toString cfg.django.djangoSecretKeyFile;" in helper_source
+    assert 'DJANGO_DB_PASSWORD_FILE = "${envConfDir}/db_pwd";' in helper_source
 
     assert not _has_assignment(config_source, "DATA_DIR")
     assert not _has_assignment(config_source, "LX_ANNOTATE_DATA_DIR")

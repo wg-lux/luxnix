@@ -9,6 +9,7 @@ This module manages the local `lx-annotate` deployment on LuxNix hosts.
 - [`options.nix`](/home/admin/luxnix/modules/nixos/services/lx-annotate-local/options.nix): public option surface.
 - [`config.nix`](/home/admin/luxnix/modules/nixos/services/lx-annotate-local/config.nix): systemd, nginx, tmpfiles, assertions, and secret wiring.
 - [`scripts.nix`](/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts.nix): shell-script derivations used by the service units.
+- [`scripts/env.nix`](/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts/env.nix): single source of truth for shared lx-annotate runtime environment variables.
 
 ## Encrypted Data Flow
 
@@ -58,6 +59,55 @@ When changing LuxNix or lx-annotate integration code, keep these rules:
 4. Any path under the service-user home is an access path only unless the
    contract is explicitly redesigned.
 
+## Environment Contract
+
+Shared lx-annotate application environment variables are centralized in:
+
+- [`scripts/env.nix`](/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts/env.nix)
+
+The main attrset to inspect is `commonEnv`. It is the contract rendered into:
+
+- systemd service `environment` attrsets through `config.nix`
+- `/var/lib/lx-annotate/.env.systemd`
+- the compatibility copy at `runtime.encryptedDataDir/.env.systemd`
+- shell wrappers through `commonShellExportText`
+- file-mover transcode fallback environment
+
+Worker-specific env that is still shared across generated service/script paths
+also lives in `scripts/env.nix`, currently `celeryWorkerResourceEnv` and
+`llmInferenceWorkerEnv`.
+
+When adding or changing a shared lx-annotate/secretspec-style variable, update
+`commonEnv` first. Do not add a parallel export block in `config.nix` or
+`scripts.nix`. Small wrapper-only variables can stay in the wrapper that owns
+them, for example `PATH`, wheel virtualenv paths, command arguments,
+`CUDA_VISIBLE_DEVICES`, and export-frame compatibility `DATA_DIR`/`STORAGE_DIR`.
+
+Host-specific env overrides that do not need a dedicated LuxNix option can be
+set with:
+
+```nix
+services.luxnix.lxAnnotateLocal.runtime.extraEnvironment = {
+  LOG_LEVEL = "INFO";
+  SOME_SECRETSPEC_FLAG = "true";
+};
+```
+
+`runtime.extraEnvironment` is merged last, so it can also override a value from
+`commonEnv` when a host needs an escape hatch. Prefer a typed option for values
+that affect systemd ordering, nginx config, storage paths, or security policy.
+
+For streamable media offload, the exported variable name is
+`SERVE_WITH_NGINX`. The older-looking name `SERVE_FROM_NGINX` is not exported
+by this module. `NGINX_PROTECTED_MEDIA_URL` is exported alongside it.
+
+Secret values are still read from files at runtime where the application expects
+process secrets. The shared env contract exports the file/path variables such as
+`DJANGO_SECRET_KEY_FILE`, `DJANGO_DB_PASSWORD_FILE`,
+`DJANGO_KEYCLOAK_CLIENT_SECRET_FILE`, `LX_ANNOTATE_MASTER_KEY_FILE`, and
+`OIDC_RP_CLIENT_ID`; shell helpers derive process-only secret values when
+needed.
+
 ## Streamable Video Migration
 
 The module exposes a manual migration unit for backfilling existing videos into
@@ -94,11 +144,12 @@ owned directly by this module.
 Most application units share the same service contract: they run as
 `endoreg-service-user`, load `/var/lib/lx-annotate/.env.systemd`, use the
 protected runtime data root as their working directory, get the same Django,
-database, Celery, storage, and encryption environment, and run with
-`ProtectSystem=full`, `PrivateTmp=true`, and `NoNewPrivileges=true`. Their write
-access is limited to the lx-annotate runtime, wheel, static, config, storage, and
-model-training staging paths. The root-run exceptions are the environment writer
-and the optional encrypted-data mount unit.
+database, Celery, storage, and encryption environment from `scripts/env.nix`,
+and run with `ProtectSystem=full`, `PrivateTmp=true`, and
+`NoNewPrivileges=true`. Their write access is limited to the lx-annotate
+runtime, wheel, static, config, storage, and model-training staging paths. The
+root-run exceptions are the environment writer and the optional encrypted-data
+mount unit.
 
 ### Core Boot Units
 

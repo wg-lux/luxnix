@@ -49,21 +49,8 @@ let
     dataRecoveryStateFile
     ;
   inherit (runtime.env)
-    envAllowedHosts
     envAnnotateDjangoSettingsModule
-    envBaseUrl
-    envCentralNodeFlag
-    envCorsAllowedOrigins
-    envDefaultCenter
-    envDeploymentRole
     envDjangoEnv
-    envDjangoHost
-    envDjangoModule
-    envDjangoPort
-    envHttpProtocol
-    envRunVideoTests
-    envSkipExpensiveTests
-    envViteEnableDebug
     ;
   inherit (runtime.runtime)
     useWheelRuntime
@@ -77,9 +64,8 @@ let
     processedVideoDirName
     ;
   makeBin = "${pkgs.gnumake}/bin/make";
-  envScripts = import ./scripts/env.nix args;
+  envScripts = args.envContract or (import ./scripts/env.nix args);
   inherit (envScripts)
-    celeryBrokerUrl
     celeryDefaultQueueName
     celeryPipelineQueueName
     celeryFrameExtractionQueueName
@@ -87,7 +73,8 @@ let
     celeryInferenceQueueName
     celeryTrainingQueueName
     celeryMaintenanceQueueName
-    ffmpegTranscodeTimeoutSeconds
+    celeryWorkerResourceShellExportText
+    commonSystemdEnvText
     lxAnnotateEnvHelpers
     ;
 
@@ -167,10 +154,6 @@ let
           export DJANGO_DJANGO_DB_PASSWORD="$DJANGO_DB_PASSWORD"
           lx_annotate_export_secret_key_env
           lx_annotate_export_oidc_env
-          export EXEMPT_URLS="^/accounts/login/$"
-          export LOGIN_URL="/accounts/login/"
-          export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
-          export LX_ANNOTATE_DEFAULT_CENTER="${envDefaultCenter}"
           export LX_ANNOTATE_ENV_FILE="${repoDir}/.env"
         }
 
@@ -373,104 +356,24 @@ let
         }
 
         emit_common_systemd_env() {
-          # Host-owned values only. lx-annotate derives DATA_DIR, STORAGE_DIR,
-          # PROTECTED_MEDIA_ROOT, and streamable video roots from this contract.
-          cat <<EOF
-    HOME_DIR=${endoreg-service-user-home}
-    LX_ANNOTATE_ENCRYPTED_DATA_DIR=${envDataDir}
-    CONF_DIR=${envConfDir}
-    CONF_TEMPLATE_DIR=${envConfTemplateDir}
-    WORKING_DIR=${repoDir}
-    DJANGO_STATIC_ROOT=${djangoStaticRootPath}
-    ASSET_DIR=${envAssetDir}
-    XDG_DATA_HOME=${runtimeRootPath}
-    LX_ANNOTATE_PACKAGE_VERSION=${packageVersion}
-    ${optionalString (
-      cfg.runtime.masterKeyFile != null
-    ) "LX_ANNOTATE_MASTER_KEY_FILE=${toString cfg.runtime.masterKeyFile}"}
-    DJANGO_SECRET_KEY_FILE=${toString cfg.django.djangoSecretKeyFile}
-    DJANGO_DB_ENGINE=django.db.backends.postgresql
-    DJANGO_DB_NAME=${cfg.database.name}
-    DJANGO_DB_USER=${cfg.database.user}
-    DJANGO_DB_PASSWORD_FILE=${envConfDir}/db_pwd
-    DJANGO_DB_HOST=${cfg.database.host}
-    DJANGO_DB_PORT=${toString cfg.database.port}
-    DJANGO_DB_SSLMODE=${cfg.database.sslMode}
-    DJANGO_KEYCLOAK_CLIENT_SECRET_FILE=${toString cfg.django.keycloakSecretFile}
-    OIDC_RP_CLIENT_ID=${cfg.django.keycloakClientId}
-    ENDOREG_DEPLOYMENT_ROLE=${envDeploymentRole}
-    ENDOREG_STORAGE_PROFILE=fs_encrypted_streaming
-    ENDOREG_HUB_MODE=${if cfg.hub.enable then "true" else "false"}
-    ENDOREG_ENABLE_HUB_TRANSFERS=${if cfg.hub.transferApi.enable then "true" else "false"}
-    ENDOREG_HUB_TRANSFER_REQUIRE_SECURE_TRANSPORT=${
-      if cfg.hub.transferApi.requireSecureTransport then "true" else "false"
-    }
-    ENDOREG_HUB_TRANSFER_REQUIRE_MTLS=${if cfg.hub.transferApi.requireMtls then "true" else "false"}
-    ENDOREG_HUB_TRANSFER_MTLS_META_KEY=${cfg.hub.transferApi.mtlsMetaKey}
-    ENDOREG_HUB_TRANSFER_MTLS_META_VALUE=${cfg.hub.transferApi.mtlsMetaValue}
-    CELERY_BROKER_URL=${celeryBrokerUrl}
-    CELERY_DEFAULT_QUEUE=${celeryDefaultQueueName}
-    CELERY_PIPELINE_QUEUE=${celeryPipelineQueueName}
-    CELERY_FRAME_EXTRACTION_QUEUE=${celeryFrameExtractionQueueName}
-    CELERY_FFMPEG_MEDIA_QUEUE=${celeryFfmpegMediaQueueName}
-    CELERY_INFERENCE_QUEUE=${celeryInferenceQueueName}
-    CELERY_TRAINING_QUEUE=${celeryTrainingQueueName}
-    CELERY_MAINTENANCE_QUEUE=${celeryMaintenanceQueueName}
-    CELERY_FRAME_EXTRACTION_REQUIRE_SECURE_TRANSPORT=${
-      if cfg.runtime.celeryBroker.requireSecureTransport then "true" else "false"
-    }
-    CELERY_FFMPEG_MEDIA_REQUIRE_SECURE_TRANSPORT=${
-      if cfg.runtime.celeryBroker.requireSecureTransport then "true" else "false"
-    }
-    CELERY_BROKER_SECURE_TRANSPORT_CONFIRMED=${
-      if cfg.runtime.celeryBroker.secureTransportConfirmed then "true" else "false"
-    }
-    MODEL_TRAINING_JOB_MODE=celery
-    MODEL_TRAINING_STAGING_ROOT=${cfg.runtime.modelTrainingStagingRoot}
-    VIDEO_POST_VALIDATION_JOB_MODE=celery
-    VIDEO_TEMPORAL_INFERENCE_JOB_MODE=celery
-    VIDEO_TEMPORAL_INFERENCE_FRAME_SOURCE_MODE=stream
-    SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
-    REQUESTS_CA_BUNDLE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
-    VITE_ENABLE_DEBUG=${envViteEnableDebug}
-    HTTP_PROTOCOL=${envHttpProtocol}
-    DJANGO_HOST=${envDjangoHost}
-    DJANGO_PORT=${envDjangoPort}
-    BASE_URL=${envBaseUrl}
-    ALLOWED_HOSTS=${envAllowedHosts}
-    DJANGO_CORS_ALLOWED_ORIGINS=${envCorsAllowedOrigins}
-    DJANGO_CSRF_TRUSTED_ORIGINS=${envCorsAllowedOrigins}
-    TIME_ZONE=${cfg.django.timeZone}
-    RUN_VIDEO_TESTS=${envRunVideoTests}
-    SKIP_EXPENSIVE_TESTS=${envSkipExpensiveTests}
-    LX_ANNOTATE_DEFAULT_CENTER=${envDefaultCenter}
-    LX_ANNOTATE_STREAMABLE_VIDEO_ROOT=${runtimeStreamableVideoRootPath}
-    LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT=${runtimeStreamableVideoRawRootPath}
-    LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT=${runtimeStreamableVideoProcessedRootPath}
-    WATCHER_VIDEO_DIR=${runtimeWatcherVideoDirPath}
-    WATCHER_REPORT_DIR=${runtimeWatcherReportDirPath}
-    WATCHER_PREANONYMIZED_DIR=${runtimeWatcherPreanonymizedDirPath}
-    FFMPEG_TRANSCODE_TIMEOUT_SECONDS=${ffmpegTranscodeTimeoutSeconds}
-
-
+          cat <<'EOF'
+    ${commonSystemdEnvText}
     EOF
         }
 
         write_systemd_env_file() {
           install -d -m 0750 "${runtimeRootPath}" "${envDataDir}"
-          emit_common_systemd_env > "${envSystemdFilePath}"
+          if [ ! -s "${envSystemdFilePath}" ]; then
+            emit_common_systemd_env > "${envSystemdFilePath}"
+          fi
           # Legacy compatibility: older app builds read .env.systemd from the data root.
           # Keep both paths aligned to avoid startup failures on stale/corrupted legacy files.
-          emit_common_systemd_env > "${envDataDir}/.env.systemd"
+          cp -f "${envSystemdFilePath}" "${envDataDir}/.env.systemd"
           chmod 0640 "${envSystemdFilePath}" "${envDataDir}/.env.systemd"
         }
 
         write_wheel_systemd_env_file() {
           write_systemd_env_file
-          cat >> "${envSystemdFilePath}" <<EOF
-    TESSDATA_PREFIX=${cfg.runtime.tessdataPrefix}
-    PYTORCH_ALLOC_CONF=${cfg.runtime.pytorchAllocConf}
-    EOF
           cp -f "${envSystemdFilePath}" "${envDataDir}/.env.systemd"
           chmod 0640 "${envSystemdFilePath}" "${envDataDir}/.env.systemd"
         }
@@ -1033,7 +936,6 @@ let
     lx_annotate_export_encryption_env
     lx_annotate_export_db_env
     lx_annotate_export_secret_key_env
-    export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
     export LX_ANNOTATE_FILEWATCHER_ARGS="--process-existing-once"
     ${devenvSyncCompatExports}
 
@@ -1074,26 +976,13 @@ let
   celeryFfmpegWorkerScriptName = "runLocalCeleryFfmpegWorker";
   celeryInferenceWorkerScriptName = "runLocalCeleryInferenceWorker";
   celeryTrainingWorkerScriptName = "runLocalCeleryTrainingWorker";
-  celeryWorkerResourceEnv = ''
-    export OMP_NUM_THREADS="1"
-    export OPENBLAS_NUM_THREADS="1"
-    export MKL_NUM_THREADS="1"
-    export NUMEXPR_NUM_THREADS="1"
-    export MALLOC_ARENA_MAX="2"
-  '';
-  celeryPostValidationEnv = ''
-    export VIDEO_POST_VALIDATION_JOB_MODE="celery"
-  '';
+  celeryPostValidationEnv = "";
   celeryInferenceEnv = ''
-    export VIDEO_TEMPORAL_INFERENCE_JOB_MODE="celery"
-    export VIDEO_TEMPORAL_INFERENCE_FRAME_SOURCE_MODE="stream"
     ${optionalString (cfg.runtime.inferenceWorker.cudaVisibleDevices != null) ''
       export CUDA_VISIBLE_DEVICES="${cfg.runtime.inferenceWorker.cudaVisibleDevices}"
     ''}
   '';
   celeryTrainingEnv = ''
-    export MODEL_TRAINING_JOB_MODE="celery"
-    export MODEL_TRAINING_STAGING_ROOT="${cfg.runtime.modelTrainingStagingRoot}"
     export CUDA_VISIBLE_DEVICES="${cfg.runtime.trainingWorker.cudaVisibleDevices}"
   '';
   mkRepoCeleryWorkerScript =
@@ -1115,9 +1004,8 @@ let
       lx_annotate_export_encryption_env
       lx_annotate_export_db_env
       lx_annotate_export_secret_key_env
-      export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
       ${extraEnv}
-      ${celeryWorkerResourceEnv}
+      ${celeryWorkerResourceShellExportText}
       ${devenvSyncCompatExports}
 
       celery_worker_args=(
@@ -1153,7 +1041,7 @@ let
       source "${lxAnnotateEnvHelpers}"
       lx_annotate_export_wheel_service_env "${envDataDir}"
       ${extraEnv}
-      ${celeryWorkerResourceEnv}
+      ${celeryWorkerResourceShellExportText}
       export PATH="${runtimeWheelVenvPath}/bin:$PATH"
 
       if [ ! -x "${runtimeWheelVenvPath}/bin/python" ]; then
@@ -1352,25 +1240,24 @@ let
     done
   '';
   runLocalSapImportScript = pkgs.writeShellScriptBin "${sapImportScriptName}" ''
-        source "${lxAnnotateEnvHelpers}"
-        lx_annotate_export_base_env
-        lx_annotate_export_storage_env "${envDataDir}"
-        lx_annotate_export_encryption_env
-        lx_annotate_export_db_env
-        lx_annotate_export_secret_key_env
-        export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
-        ${devenvSyncCompatExports}
+    source "${lxAnnotateEnvHelpers}"
+    lx_annotate_export_base_env
+    lx_annotate_export_storage_env "${envDataDir}"
+    lx_annotate_export_encryption_env
+    lx_annotate_export_db_env
+    lx_annotate_export_secret_key_env
+    ${devenvSyncCompatExports}
 
-        sap_import_one() {
-          cd "${repoDir}"
-          VENV_PYTHON="${repoDir}/.devenv/state/venv/bin/python"
-          if [ ! -x "$VENV_PYTHON" ]; then
-            echo "ERROR: repo venv missing at $VENV_PYTHON"
-            return 1
-          fi
+    sap_import_one() {
+      cd "${repoDir}"
+      VENV_PYTHON="${repoDir}/.devenv/state/venv/bin/python"
+      if [ ! -x "$VENV_PYTHON" ]; then
+        echo "ERROR: repo venv missing at $VENV_PYTHON"
+        return 1
+      fi
 
-          secretspec run --provider env "$VENV_PYTHON" manage.py import_sap_ish_zip "$1" --output_dir "${runtimeWatcherPreanonymizedDirPath}"
-        }
+      secretspec run --provider env "$VENV_PYTHON" manage.py import_sap_ish_zip "$1" --output_dir "${runtimeWatcherPreanonymizedDirPath}"
+    }
 
     ${sapImportScriptBody}
   '';
@@ -1509,15 +1396,6 @@ let
         lx_annotate_export_db_env
         lx_annotate_export_secret_key_env
         lx_annotate_export_oidc_env
-
-        export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
-        export WORKING_DIR="${runtimeWorkingDir}"
-        export HOME_DIR="${endoreg-service-user-home}"
-        export XDG_DATA_HOME="${runtimeRootPath}"
-        export LX_ANNOTATE_ENCRYPTED_DATA_DIR="${envDataDir}"
-        export LX_ANNOTATE_DEFAULT_CENTER="${envDefaultCenter}"
-        export TESSDATA_PREFIX="${cfg.runtime.tessdataPrefix}"
-        export PYTORCH_ALLOC_CONF="${cfg.runtime.pytorchAllocConf}"
 
         if [ "$use_wheel_runtime" = "true" ]; then
           ensure_wheel_runtime_installed
