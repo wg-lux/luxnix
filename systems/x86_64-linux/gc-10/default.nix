@@ -70,13 +70,14 @@ ssh-access.dev-04.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICSpoZVcX+K6N
 
 custom-packages.baseDevelopment = true;
 
+endoreg-client.lxAi = true;
+
 endoreg-client.defaultCenterKey = "university_hospital_wuerzburg";
 
 };
 
   services = {
 luxnix.lxAiLocal.runtime.protectedDataDir = "/var/lib/lx-annotate/data";
-luxnix.lxAnnotateLocal.runtime.streamableServing.externalStorageRoot = "/data/raid01/lx-annotate/streamable_videos";
 
   };
 
@@ -122,6 +123,12 @@ luxnix.lxAnnotateLocal.runtime.streamableServing.externalStorageRoot = "/data/ra
 
 
     generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_6;
+
+
+    generic-settings.network.glm52.domain = "glm.endo-reg.net";
+
+
+    generic-settings.network.glm52.port = 8088;
 
 
     generic-settings.network.hosts.gc-01.domains = [ "gc-01.intern" "lx-annotate.local" ];
@@ -205,7 +212,7 @@ luxnix.lxAnnotateLocal.runtime.streamableServing.externalStorageRoot = "/data/ra
     generic-settings.network.hosts.gs-01.syncthing-id = "X2KFB5D-HJWUNFK-GS6TP7A-GV4TGEF-ZYH3RHL-AWWJIW4-76SSCHP-YIMUUAA";
 
 
-    generic-settings.network.hosts.gs-02.domains = [ "gs-02.intern" ];
+    generic-settings.network.hosts.gs-02.domains = [ "glm.endo-reg.net" "gs-02.intern" ];
 
 
     generic-settings.network.hosts.gs-02.ip-local = "192.168.0.56";
@@ -290,6 +297,9 @@ luxnix.lxAnnotateLocal.runtime.streamableServing.externalStorageRoot = "/data/ra
 
 
     generic-settings.network.psqlTest.domain = "psql-test.endo-reg.net";
+
+
+    generic-settings.network.serviceHosts.glm52 = "gs-02";
 
 
     generic-settings.network.serviceHosts.keycloak = "s-02";

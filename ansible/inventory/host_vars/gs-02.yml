@@ -2,12 +2,29 @@
 ---
 template_name: "main"
 
-host_roles: {}
+host_roles:
+  nginxHost.enable: true
+  nginxHost.glm52.enable: true
+  nginxHost.keycloak.enable: false
+  nginxHost.nextcloud.enable: false
 
-host_services: {}
+host_services:
+  luxnix.ollama.enable: true
+  luxnix.ollama.acceleration: cuda
+  luxnix.ollama.enableModelBootstrap: false
+  luxnix.ollama.models:
+    - "gemma4:e2b"
+  'luxnix.lxAnnotateLocal.django.extraSettings."IS_CENTRAL_NODE"': "lib.mkForce true"
+  ollama.host: "0.0.0.0"
+  luxnix.glm52.enable: true
+  luxnix.glm52.gpuLayers: 999
+  luxnix.glm52.host: "0.0.0.0"
+  luxnix.glm52.port: 8088
+  luxnix.glm52.quant: "UD-IQ2_M"
 
 ansible_roles:
   - "dev_access"
+  - "nginx_host"
 
 host_luxnix:
   boot_decryption_stick_gs_01.enable: "true"
@@ -41,3 +58,6 @@ host_luxnix:
   generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
   generic_settings.linux.kernelParams: []
   generic_settings.linux.kernelModulesBlacklist: []
+
+host_nixos:
+  networking.firewall.interfaces.tun0.allowedTCPPorts: "lib.mkAfter [ 11434 8088 ]"

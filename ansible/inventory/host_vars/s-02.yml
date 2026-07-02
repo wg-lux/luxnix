@@ -8,7 +8,8 @@ ansible_roles:
   - keycloak_host
   - ssl_cert
 
-host_roles: {}
+host_roles:
+  nginxHost.glm52.enable: false
 host_services: {}
 
 host_luxnix:

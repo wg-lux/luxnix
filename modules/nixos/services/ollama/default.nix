@@ -8,28 +8,68 @@ with lib;
 with lib.luxnix;
 let
   cfg = config.services.luxnix.ollama;
-  lxGemma4JsonModelfile = pkgs.writeText "lx-gemma4-e2b-json.Modelfile" ''
-    FROM gemma4:e2b
+  defaultCustomModels = {
+    lx-gemma4-e2b-json = ''
+      FROM gemma4:e2b
 
-    PARAMETER temperature 0
-    PARAMETER num_ctx 8192
-    PARAMETER num_predict 256
+      PARAMETER temperature 0
+      PARAMETER num_ctx 8192
+      PARAMETER num_predict 256
 
-    SYSTEM """
-    Return exactly one JSON object and nothing else.
-    Do not return markdown, comments, explanations, or reasoning.
-    Do not include <think> blocks.
-    Use null for unknown values.
-    Only use these keys:
-    patient_first_name
-    patient_last_name
-    patient_dob
-    casenumber
-    examination_date
-    Normalize dates to YYYY-MM-DD when possible.
-    Do not invent values.
-    """
-  '';
+      SYSTEM """
+      Return exactly one JSON object and nothing else.
+      Do not return markdown, comments, explanations, or reasoning.
+      Do not include <think> blocks.
+      Use null for unknown values.
+      Only use these keys:
+      patient_first_name
+      patient_last_name
+      patient_dob
+      casenumber
+      examination_date
+      Normalize dates to YYYY-MM-DD when possible.
+      Do not invent values.
+      """
+    '';
+  };
+  sanitizeUnitName =
+    replaceStrings
+      [
+        "/"
+        ":"
+        "."
+        "@"
+        " "
+      ]
+      [
+        "-"
+        "-"
+        "-"
+        "-"
+        "-"
+      ];
+  modelLoaderUnits = optional (cfg.models != [ ]) "ollama-model-loader.service";
+  customModelFiles = mapAttrs (
+    modelName: modelfile: pkgs.writeText "ollama-${sanitizeUnitName modelName}.Modelfile" modelfile
+  ) cfg.customModels;
+  mkCustomModelService = modelName: modelfile: {
+    description = "Create Ollama model ${modelName}";
+    after = [ "ollama.service" ] ++ modelLoaderUnits;
+    requires = [ "ollama.service" ] ++ modelLoaderUnits;
+    environment = config.systemd.services.ollama.environment;
+    serviceConfig = {
+      Type = "oneshot";
+      DynamicUser = true;
+      ExecStart = escapeShellArgs [
+        "${config.services.ollama.package}/bin/ollama"
+        "create"
+        modelName
+        "-f"
+        "${modelfile}"
+      ];
+    };
+    wantedBy = [ "multi-user.target" ];
+  };
 in
 {
   options.services.luxnix.ollama = {
@@ -44,7 +84,13 @@ in
     )) false "Ollama hardware acceleration backend; false keeps this wrapper on CPU";
     enableOpenWebUi = mkBoolOpt false "Enable Open WebUI for Ollama";
     openWebUiPort = mkOpt types.port 8085 "Open WebUI port";
-    enableModelBootstrap = mkBoolOpt false "Pull and create the default Ollama model";
+    enableModelBootstrap = mkBoolOpt false "Pull configured Ollama models and create configured custom models";
+    models = mkOpt (types.listOf types.str) [
+      "gemma4:e2b"
+    ] "Ollama model names to pull when model bootstrap is enabled";
+    customModels =
+      mkOpt (types.attrsOf types.lines) defaultCustomModels
+        "Custom Ollama models to create when model bootstrap is enabled. Attribute names are model names and values are Modelfile contents.";
   };
 
   config = mkIf cfg.enable (mkMerge [
@@ -67,33 +113,19 @@ in
       };
     })
 
-    (mkIf cfg.enableModelBootstrap {
-      services.ollama.loadModels = [ "gemma4:e2b" ];
+    (mkIf cfg.enableModelBootstrap (mkMerge [
+      (mkIf (cfg.models != [ ]) {
+        services.ollama.loadModels = cfg.models;
+      })
 
-      systemd.services."ollama-create-lx-gemma4-e2b-json" = {
-        description = "Create lx-anonymizer Gemma 4 E2B JSON Ollama model";
-        after = [
-          "ollama.service"
-          "ollama-model-loader.service"
-        ];
-        requires = [
-          "ollama.service"
-          "ollama-model-loader.service"
-        ];
-        environment = config.systemd.services.ollama.environment;
-        serviceConfig = {
-          Type = "oneshot";
-          DynamicUser = true;
-          ExecStart = concatStringsSep " " [
-            "${config.services.ollama.package}/bin/ollama"
-            "create"
-            "lx-gemma4-e2b-json"
-            "-f"
-            "${lxGemma4JsonModelfile}"
-          ];
-        };
-        wantedBy = [ "multi-user.target" ];
-      };
-    })
+      (mkIf (cfg.customModels != { }) {
+        systemd.services = mapAttrs' (
+          modelName: modelfile:
+          nameValuePair "ollama-create-${sanitizeUnitName modelName}" (
+            mkCustomModelService modelName modelfile
+          )
+        ) customModelFiles;
+      })
+    ]))
   ]);
 }

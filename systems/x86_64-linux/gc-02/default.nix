@@ -28,7 +28,7 @@ custom-packages.cloud = true;
 
 custom-packages.enable = true;
 
-endoreg-client.api.djangoAllowedHosts = [ "localhost" "127.0.0.1" "lx-annotate.local" "172.16.255.106" "172.16.255.230" ];
+endoreg-client.api.djangoAllowedHosts = [ "localhost" "127.0.0.1" "172.16.255.106" "172.16.255.230" ];
 
 endoreg-client.api.httpProtocol = "https";
 
@@ -124,6 +124,12 @@ luxnix.vllm.port = 8000;
     generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_6;
 
 
+    generic-settings.network.glm52.domain = "glm.endo-reg.net";
+
+
+    generic-settings.network.glm52.port = 8088;
+
+
     generic-settings.network.hosts.gc-01.domains = [ "gc-01.intern" "lx-annotate.local" ];
 
 
@@ -205,7 +211,7 @@ luxnix.vllm.port = 8000;
     generic-settings.network.hosts.gs-01.syncthing-id = "X2KFB5D-HJWUNFK-GS6TP7A-GV4TGEF-ZYH3RHL-AWWJIW4-76SSCHP-YIMUUAA";
 
 
-    generic-settings.network.hosts.gs-02.domains = [ "gs-02.intern" ];
+    generic-settings.network.hosts.gs-02.domains = [ "glm.endo-reg.net" "gs-02.intern" ];
 
 
     generic-settings.network.hosts.gs-02.ip-local = "192.168.0.56";
@@ -290,6 +296,9 @@ luxnix.vllm.port = 8000;
 
 
     generic-settings.network.psqlTest.domain = "psql-test.endo-reg.net";
+
+
+    generic-settings.network.serviceHosts.glm52 = "gs-02";
 
 
     generic-settings.network.serviceHosts.keycloak = "s-02";
