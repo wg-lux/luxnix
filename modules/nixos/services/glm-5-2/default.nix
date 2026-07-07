@@ -11,7 +11,10 @@ let
   cfg = config.services.luxnix.glm52;
   unstablePkgs = import inputs.nixpkgs-unstable {
     system = pkgs.stdenv.hostPlatform.system;
-    config.allowUnfree = true;
+    config = {
+      allowUnfree = true;
+      cudaSupport = config.nixpkgs.config.cudaSupport or false;
+    };
   };
   modelFile =
     if cfg.modelFile != null then
