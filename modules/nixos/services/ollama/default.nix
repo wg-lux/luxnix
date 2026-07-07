@@ -1,5 +1,6 @@
 {
   config,
+  inputs,
   lib,
   pkgs,
   ...
@@ -8,6 +9,17 @@ with lib;
 with lib.luxnix;
 let
   cfg = config.services.luxnix.ollama;
+  unstablePkgs = import inputs.nixpkgs-unstable {
+    system = pkgs.stdenv.hostPlatform.system;
+    config.allowUnfree = true;
+  };
+  unstableOllama =
+    if cfg.acceleration == null then
+      unstablePkgs.ollama
+    else if cfg.acceleration == false then
+      unstablePkgs.ollama-cpu
+    else
+      unstablePkgs.${"ollama-${cfg.acceleration}"};
   defaultCustomModels = {
     lx-gemma4-e2b-json = ''
       FROM gemma4:e2b
@@ -97,6 +109,7 @@ in
     {
       services.ollama = {
         enable = true;
+        package = mkDefault unstableOllama;
         acceleration = mkDefault cfg.acceleration;
         environmentVariables = {
           OLLAMA_KEEP_ALIVE = mkDefault "1m";
