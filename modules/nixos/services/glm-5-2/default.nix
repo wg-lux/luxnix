@@ -9,7 +9,10 @@ with lib;
 with lib.luxnix;
 let
   cfg = config.services.luxnix.glm52;
-
+  unstablePkgs = import inputs.nixpkgs-unstable {
+    system = pkgs.stdenv.hostPlatform.system;
+    config.allowUnfree = true;
+  };
   modelFile =
     if cfg.modelFile != null then
       cfg.modelFile
@@ -150,7 +153,7 @@ in
   options.services.luxnix.glm52 = {
     enable = mkBoolOpt false "Enable the GLM-5.2 llama.cpp inference service.";
 
-    package = inputs.nixpkgs-unstable.legacyPackages.${pkgs.system}.llama-cpp "llama.cpp package used for `llama-server`.";
+    package =   unstablePkgs.llama-cpp "llama.cpp package used for `llama-server`.";
 
     huggingFaceHubPackage = mkPackageOpt pkgs.python313Packages.huggingface-hub "Python package providing the `hf` CLI used by the download unit.";
 
