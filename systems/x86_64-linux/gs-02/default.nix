@@ -95,6 +95,9 @@ luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort = 5432;
 luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl = "redis://172.16.255.14:6380/1";
 luxnix.lxAnnotateLocal.runtime.trainingWorker.cudaVisibleDevices = "0";
 luxnix.lxAnnotateLocal.runtime.trainingWorker.mode = "manual";
+luxnix.glm52.package = pkgs.llama-cpp.override {
+  cudaSupport = true;
+};
 luxnix.glm52.enable = true;
 luxnix.glm52.gpuLayers = 999;
 luxnix.glm52.host = "0.0.0.0";
