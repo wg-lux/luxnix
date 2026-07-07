@@ -110,7 +110,12 @@ let
       exit 1
     fi
 
-    if [ ! -s "$cookie_secret_file" ]; then
+    cookie_secret_bytes=0
+    if [ -s "$cookie_secret_file" ]; then
+      cookie_secret_bytes="$(${pkgs.coreutils}/bin/tr -d '\n' < "$cookie_secret_file" | ${pkgs.coreutils}/bin/wc -c)"
+    fi
+
+    if [ "$cookie_secret_bytes" != 16 ] && [ "$cookie_secret_bytes" != 24 ] && [ "$cookie_secret_bytes" != 32 ]; then
       umask 077
       ${pkgs.openssl}/bin/openssl rand -hex 16 > "$cookie_secret_file"
       ${pkgs.coreutils}/bin/chown root:root "$cookie_secret_file"
@@ -455,7 +460,6 @@ in
               extraConfig =
                 all-extraConfig
                 + ''
-                  proxy_http_version 1.1;
                   proxy_buffering off;
                   proxy_request_buffering off;
                   proxy_read_timeout 3600s;
