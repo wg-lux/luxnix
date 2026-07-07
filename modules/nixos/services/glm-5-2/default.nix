@@ -15,6 +15,39 @@ let
     else
       "${cfg.modelDir}/${cfg.quant}/GLM-5.2-${cfg.quant}-00001-of-00006.gguf";
 
+  pathDirsFrom =
+    base: path:
+    let
+      baseSlash = "${base}/";
+      relativePath = removePrefix baseSlash path;
+      pathParts = filter (part: part != "") (splitString "/" relativePath);
+      folded =
+        foldl'
+          (
+            acc: part:
+            let
+              next = "${acc.current}/${part}";
+            in
+            {
+              current = next;
+              dirs = acc.dirs ++ [ next ];
+            }
+          )
+          {
+            current = base;
+            dirs = [ base ];
+          }
+          pathParts;
+    in
+    if path == base then
+      [ base ]
+    else if hasPrefix baseSlash path then
+      folded.dirs
+    else
+      [ path ];
+
+  storageDirs = unique ((pathDirsFrom cfg.stateDir cfg.modelDir) ++ [ cfg.cacheDir ]);
+
   thinkingArgs =
     if cfg.thinkingMode == "default" then
       [ ]
@@ -99,6 +132,14 @@ let
 
     mkdir -p ${escapeShellArg cfg.modelDir}
     exec ${escapeShellArgs ([ "${cfg.huggingFaceHubPackage}/bin/hf" ] ++ downloadArgs)}
+  '';
+
+  prepareStorage = pkgs.writeShellScript "glm-5-2-prepare-storage" ''
+    set -euo pipefail
+
+    for dir in ${escapeShellArgs storageDirs}; do
+      install -d -o ${escapeShellArg cfg.user} -g ${escapeShellArg cfg.group} -m 0750 "$dir"
+    done
   '';
 
   serverExec = escapeShellArgs ([ "${cfg.package}/bin/llama-server" ] ++ serverArgs);
@@ -213,11 +254,10 @@ in
         extraGroups = cfg.supplementaryGroups;
       };
 
-      systemd.tmpfiles.rules = [
-        "d ${cfg.stateDir} 0750 ${cfg.user} ${cfg.group} -"
-        "d ${cfg.cacheDir} 0750 ${cfg.user} ${cfg.group} -"
-        "d ${cfg.modelDir} 0750 ${cfg.user} ${cfg.group} -"
-      ];
+      systemd.tmpfiles.rules = concatMap (dir: [
+        "d ${dir} 0750 ${cfg.user} ${cfg.group} -"
+        "z ${dir} 0750 ${cfg.user} ${cfg.group} -"
+      ]) storageDirs;
 
       networking.firewall.allowedTCPPorts = optional cfg.openFirewall cfg.port;
 
@@ -238,6 +278,7 @@ in
           User = cfg.user;
           Group = cfg.group;
           WorkingDirectory = cfg.stateDir;
+          ExecStartPre = "+${prepareStorage}";
           ExecStart = downloadModel;
           TimeoutStartSec = "infinity";
           PrivateTmp = true;
@@ -269,7 +310,10 @@ in
           User = cfg.user;
           Group = cfg.group;
           WorkingDirectory = cfg.stateDir;
-          ExecStartPre = checkModel;
+          ExecStartPre = [
+            "+${prepareStorage}"
+            checkModel
+          ];
           ExecStart = serverExec;
           Restart = "on-failure";
           RestartSec = "10s";
