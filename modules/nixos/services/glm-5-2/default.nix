@@ -153,8 +153,8 @@ in
   options.services.luxnix.glm52 = {
     enable = mkBoolOpt false "Enable the GLM-5.2 llama.cpp inference service.";
 
-    package =   unstablePkgs.llama-cpp "llama.cpp package used for `llama-server`.";
-
+    package = mkPackageOpt unstablePkgs.llama-cpp "llama.cpp package used for `llama-server`.";
+    
     huggingFaceHubPackage = mkPackageOpt pkgs.python313Packages.huggingface-hub "Python package providing the `hf` CLI used by the download unit.";
 
     user = mkOpt types.str "glm-5-2" "System user used to run GLM-5.2 services.";
