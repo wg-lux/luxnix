@@ -71,12 +71,11 @@ endoreg-client.defaultCenterKey = "university_hospital_wuerzburg";
   services = {
 luxnix.endoregDbApiLocal.enable = lib.mkForce false;
 luxnix.lxAnnotateLocal.runtime.mode = "wheel";
-luxnix.vllm.enable = false;
-luxnix.vllm.gpuMemoryUtilization = 0.85;
-luxnix.vllm.host = "127.0.0.1";
-luxnix.vllm.maxModelLen = 8192;
-luxnix.vllm.model = "Qwen/Qwen2.5-1.5B-Instruct";
-luxnix.vllm.port = 8000;
+luxnix.ollama.acceleration = "cuda";
+luxnix.ollama.enable = true;
+luxnix.ollama.enableModelBootstrap = false;
+luxnix.ollama.models = [ "gemma4:e2b" ];
+ollama.host = "0.0.0.0";
 
   };
 
