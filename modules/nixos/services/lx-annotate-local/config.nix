@@ -416,7 +416,17 @@ let
     pkgs.glib
     pkgs.libxcb
   ];
-  runtimeLdLibraryPath = lib.makeLibraryPath (runtimeLibraryPackages ++ [ pkgs.ffmpeg ]);
+  # CUDA/NVENC load the real host driver from NixOS' OpenGL driver profile.
+  runtimeHostDriverLibraryPaths = [
+    "/run/opengl-driver/lib"
+    "/run/opengl-driver-32/lib"
+  ];
+  runtimeLdLibraryPath = lib.concatStringsSep ":" (
+    runtimeHostDriverLibraryPaths
+    ++ [
+      (lib.makeLibraryPath (runtimeLibraryPackages ++ [ pkgs.ffmpeg ]))
+    ]
+  );
   envContract = import ./scripts/env.nix (
     args
     // {
@@ -1012,6 +1022,7 @@ let
   inherit (lxAnnotateScripts.packages)
     lxAnnotateMigrateVideoStreamableStorageScript
     runLocalDataRecoveryScript
+    runLocalHlsMaterializationScript
     ;
   inherit (lxAnnotateScripts.serviceOrdering)
     fileMoverAfter
@@ -1969,6 +1980,39 @@ in
           ReadWritePaths = appReadWritePaths;
         };
       };
+
+      systemd.services.lx-annotate-hls-materialization =
+        mkIf cfg.hlsMaterialization.enable
+          (mkLxAnnotateAppService {
+            description = "Dispatch encrypted HLS materialization for processed LX-Annotate videos";
+            wantedBy = [ ];
+            after = [
+              "lx-annotate-load-base-data.service"
+              "lx-annotate-master-key-check.service"
+              ffmpegStreamThrottleWorkerUnit
+            ];
+            wants = [
+              "lx-annotate-load-base-data.service"
+              ffmpegStreamThrottleWorkerUnit
+            ];
+            requires = [
+              "lx-annotate-load-base-data.service"
+              "lx-annotate-master-key-check.service"
+            ];
+            serviceConfig = {
+              Type = "oneshot";
+              ExecStart = lib.escapeShellArgs (
+                [
+                  "${runLocalHlsMaterializationScript}/bin/runLxAnnotateHlsMaterialization"
+                ]
+                ++ cfg.hlsMaterialization.extraArgs
+              );
+              TimeoutStartSec = cfg.hlsMaterialization.timeoutStartSec;
+              Nice = 15;
+              IOSchedulingClass = "best-effort";
+              IOSchedulingPriority = 6;
+            };
+          });
 
       systemd.services.lx-annotate-data-cleanup = mkIf cfg.dataCleanup.enable {
         description = "Move duplicate anonymized lx-annotate payload into external archive storage";

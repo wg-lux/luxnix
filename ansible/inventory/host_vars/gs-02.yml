@@ -5,6 +5,7 @@ template_name: "main"
 host_roles:
   nginxHost.enable: true
   nginxHost.glm52.enable: true
+  nginxHost.glm52.acme.email: '"maxhild10@gmail.com"'
   nginxHost.keycloak.enable: false
   nginxHost.nextcloud.enable: false
 

@@ -1078,6 +1078,31 @@ in
       description = "Settings for the manual streamable video backfill migration unit.";
     };
 
+    hlsMaterialization = mkOption {
+      type = types.submodule {
+        options = {
+          enable = mkOption {
+            type = types.bool;
+            default = true;
+            description = "Expose the manual processed-video HLS materialization systemd unit. The unit is not started by any target.";
+          };
+          extraArgs = mkOption {
+            type = types.listOf types.str;
+            default = [ ];
+            example = literalExpression ''[ "--limit" "25" ]'';
+            description = "Additional safe arguments passed to materialize_video_hls. The wrapper rejects --force, --inline, and --artifact-kind overrides.";
+          };
+          timeoutStartSec = mkOption {
+            type = types.str;
+            default = "1h";
+            description = "Maximum time allowed for dispatching HLS materialization jobs.";
+          };
+        };
+      };
+      default = { };
+      description = "Settings for the manual processed-video encrypted HLS materialization unit.";
+    };
+
     dataCleanup = mkOption {
       type = types.submodule {
         options = {

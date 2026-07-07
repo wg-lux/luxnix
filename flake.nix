@@ -10,6 +10,7 @@
       "cuda-maintainers.cachix.org-1:0dq3bujKpuEPMCX6U4WylrUDZ9JyUG0VpVZa7CNfq5E="
     ];
   };
+
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-25.11";
     devenv.url = "github:cachix/devenv";
@@ -43,8 +44,6 @@
 
     impermanence.url = "github:nix-community/impermanence";
     # lanzaboote.url = "github:nix-community/lanzaboote";
-
-    nixgl.url = "github:nix-community/nixGL";
     # stylix.url = "github:danth/stylix";
     catppuccin.url = "github:catppuccin/nix";
     nix-index-database.url = "github:nix-community/nix-index-database";
@@ -171,18 +170,7 @@
         ];
 
         overlays = with inputs; [
-          (final: _prev:
-            let
-              isIntelX86Platform = final.stdenv.hostPlatform.system == "x86_64-linux";
-            in
-            {
-              nixgl = import (nixgl.outPath + "/default.nix") {
-                pkgs = final;
-                enable32bits = isIntelX86Platform;
-                enableIntelX86Extensions = isIntelX86Platform;
-              };
-            }
-          )
+
           nur.overlays.default
           nix-topology.overlays.default
           (final: _prev: {

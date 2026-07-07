@@ -84,6 +84,8 @@ nginxHost.settings.recommendedProxySettings = true;
 
 nginxHost.settings.recommendedTlsSettings = true;
 
+nginxHost.glm52.acme.email = "maxhild10@gmail.com";
+
 };
 
   services = {

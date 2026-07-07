@@ -101,6 +101,7 @@ let
   buildScriptName = "lx-annotate-build";
   migrateScriptName = "lx-annotate-migrate";
   migrateVideoStreamableStorageScriptName = "lx-annotate-migrate-video-streamable-storage";
+  hlsMaterializationScriptName = "runLxAnnotateHlsMaterialization";
   loadBaseDataServiceName = "lx-annotate-load-base-data.service";
   masterKeyCheckServiceName = "lx-annotate-master-key-check.service";
   emergencyStorageReliefScriptName = "runLxAnnotateEmergencyStorageRelief";
@@ -732,6 +733,41 @@ let
       lx_annotate_activate_runtime
     fi
     exec ${effectiveRuntimePackage}/bin/lx-annotate-manage migrate_video_streamable_storage "$@"
+  '';
+
+  runLocalHlsMaterializationScript = pkgs.writeShellScriptBin "${hlsMaterializationScriptName}" ''
+    set -euo pipefail
+    source "${lxAnnotateRuntimeLib}"
+
+    previous_arg=""
+    for arg in "$@"; do
+      if [ "$previous_arg" = "--artifact-kind" ]; then
+        die "runLxAnnotateHlsMaterialization only supports processed HLS; do not pass --artifact-kind."
+      fi
+      case "$arg" in
+        --force)
+          die "runLxAnnotateHlsMaterialization refuses --force; use lx-annotate-manage materialize_video_hls manually for audited repair runs."
+          ;;
+        --inline)
+          die "runLxAnnotateHlsMaterialization dispatches queued ffmpeg_media work; use lx-annotate-manage materialize_video_hls manually for inline retries."
+          ;;
+        --artifact-kind|--artifact-kind=*)
+          die "runLxAnnotateHlsMaterialization only supports processed HLS; do not pass --artifact-kind."
+          ;;
+      esac
+      previous_arg="$arg"
+    done
+
+    log "Dispatching processed-video HLS materialization jobs..."
+    if [ "${if useWheelRuntime then "true" else "false"}" = "true" ]; then
+      source "${lxAnnotateEnvHelpers}"
+      lx_annotate_export_wheel_service_env "${envDataDir}"
+      ensure_wheel_runtime_installed
+    else
+      lx_annotate_export_runtime_env
+      lx_annotate_activate_runtime
+    fi
+    exec ${effectiveRuntimePackage}/bin/lx-annotate-manage materialize_video_hls --artifact-kind processed --apply --json "$@"
   '';
 
   lxAnnotateBootstrapScript = pkgs.writeShellScriptBin "${bootstrapScriptName}" ''
@@ -1877,6 +1913,7 @@ in
       watcherScriptName
       sapImportScriptName
       migrateVideoStreamableStorageScriptName
+      hlsMaterializationScriptName
       ;
   };
 
@@ -1899,6 +1936,7 @@ in
       lxAnnotateBuildScript
       lxAnnotateMigrateScript
       lxAnnotateMigrateVideoStreamableStorageScript
+      runLocalHlsMaterializationScript
       lxAnnotateBootstrapScript
       runLocalLxAnnotateStartScript
       runLocalLxAnnotateScript

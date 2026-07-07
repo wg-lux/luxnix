@@ -31,6 +31,12 @@ let
   nginxSecretsDir = "${nginxStateDir}/secrets";
   nginx_cert_path = "${nginxStateDir}/ssl_cert";
   nginx_key_path = "${nginxStateDir}/ssl_key";
+  fileBackedTlsEnabled =
+    cfg.psqlMain.enable
+    || cfg.psqlTest.enable
+    || cfg.nextcloud.enable
+    || (cfg.glm52.enable && !cfg.glm52.acme.enable)
+    || cfg.keycloak.enable;
 
   all-extraConfig = ''
     proxy_headers_hash_bucket_size ${toString cfg.settings.proxyHeadersHashBucketSize};
@@ -106,7 +112,7 @@ let
 
     if [ ! -s "$cookie_secret_file" ]; then
       umask 077
-      ${pkgs.openssl}/bin/openssl rand -base64 32 > "$cookie_secret_file"
+      ${pkgs.openssl}/bin/openssl rand -hex 16 > "$cookie_secret_file"
       ${pkgs.coreutils}/bin/chown root:root "$cookie_secret_file"
       ${pkgs.coreutils}/bin/chmod 0600 "$cookie_secret_file"
     fi
@@ -148,6 +154,12 @@ in
       vpnIp = mkOpt types.str glm52Config.vpnIp "VPN IP of the GLM-5.2 llama.cpp server";
       port = mkOpt types.port glm52Config.port "Port of the GLM-5.2 llama.cpp server";
       extraLocationConfig = mkOpt types.lines "" "Additional nginx location config for the GLM-5.2 proxy";
+      acme = {
+        enable = mkBoolOpt true "Use the NixOS ACME module to issue and renew the GLM-5.2 TLS certificate";
+        email =
+          mkOpt (types.nullOr types.str) null
+            "Optional Let's Encrypt contact email for the GLM-5.2 certificate";
+      };
       oauth2 = {
         enable = mkBoolOpt true "Protect the public GLM-5.2 endpoint with oauth2-proxy";
         clientID = mkOpt types.str "glm-service" "Keycloak OIDC client ID for GLM-5.2";
@@ -247,7 +259,7 @@ in
       "d ${nginxSecretsDir} 0700 root root -"
     ];
 
-    systemd.services.nginx-prepare-files = {
+    systemd.services.nginx-prepare-files = mkIf fileBackedTlsEnabled {
       description = "Deploy SSL certificate and key for NGINX";
       before = [ "nginx.service" ];
       requiredBy = [ "nginx.service" ];
@@ -258,7 +270,7 @@ in
       };
     };
 
-    systemd.services.nginx-sync-certificates = {
+    systemd.services.nginx-sync-certificates = mkIf fileBackedTlsEnabled {
       description = "Synchronize SSL material for NGINX";
       after = [ "nginx-prepare-files.service" ];
       wantedBy = [ "multi-user.target" ];
@@ -268,7 +280,7 @@ in
       };
     };
 
-    systemd.paths.nginx-sync-certificates = {
+    systemd.paths.nginx-sync-certificates = mkIf fileBackedTlsEnabled {
       description = "Watch for SSL material changes";
       wantedBy = [ "multi-user.target" ];
       pathConfig = {
@@ -280,7 +292,7 @@ in
       };
     };
 
-    systemd.timers.nginx-sync-certificates = {
+    systemd.timers.nginx-sync-certificates = mkIf fileBackedTlsEnabled {
       description = "Periodic SSL material synchronization";
       wantedBy = [ "timers.target" ];
       timerConfig = {
@@ -290,8 +302,10 @@ in
       };
     };
 
-    systemd.services.nginx.wants = [ "nginx-prepare-files.service" ];
-    systemd.services.nginx.after = [ "nginx-prepare-files.service" ];
+    systemd.services.nginx = mkIf fileBackedTlsEnabled {
+      wants = [ "nginx-prepare-files.service" ];
+      after = [ "nginx-prepare-files.service" ];
+    };
 
     systemd.services.glm-5-2-oauth2-proxy-env = mkIf (cfg.glm52.enable && cfg.glm52.oauth2.enable) {
       description = "Prepare oauth2-proxy secret environment for GLM-5.2";
@@ -323,6 +337,17 @@ in
       80
       443
     ];
+
+    security.acme = mkIf (cfg.glm52.enable && cfg.glm52.acme.enable) (
+      {
+        acceptTerms = true;
+      }
+      // optionalAttrs (cfg.glm52.acme.email != null) {
+        defaults.email = cfg.glm52.acme.email;
+      }
+    );
+
+    users.users.nginx.extraGroups = mkIf (cfg.glm52.enable && cfg.glm52.acme.enable) (mkAfter [ "acme" ]);
 
     services.oauth2-proxy = mkIf (cfg.glm52.enable && cfg.glm52.oauth2.enable) {
       enable = true;
@@ -420,8 +445,9 @@ in
         (mkIf cfg.glm52.enable {
           "${cfg.glm52.domain}" = {
             forceSSL = true;
-            sslCertificate = nginx_cert_path;
-            sslCertificateKey = nginx_key_path;
+            enableACME = cfg.glm52.acme.enable;
+            sslCertificate = mkIf (!cfg.glm52.acme.enable) nginx_cert_path;
+            sslCertificateKey = mkIf (!cfg.glm52.acme.enable) nginx_key_path;
 
             locations."/" = {
               proxyPass = "http://${cfg.glm52.vpnIp}:${toString cfg.glm52.port}";
