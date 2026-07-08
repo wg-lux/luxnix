@@ -7,7 +7,7 @@ This document describes the network architecture of the LuxNix system, detailing
 
 The OpenVPN Service is used for accessing the devices in the Network through SSH.
 
-The command for running the OpenVPN service is 
+The command for running the OpenVPN service is
 
 ```
 bash
@@ -64,6 +64,8 @@ Network-critical systems implement watchdog services:
 - Local DNS resolution through Avahi (nssmdns4)
 - DNS utilities available on server systems
 - Integrated with service discovery
+- Public browser-facing domains such as `*.endo-reg.net` must not be written into
+  `/etc/hosts`; they should resolve through normal DNS only
 
 ## Security Considerations
 

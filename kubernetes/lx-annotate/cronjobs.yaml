@@ -1,0 +1,302 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: lx-annotate-filewatcher-once
+spec:
+  schedule: "*/30 * * * *"
+  suspend: true
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: filewatcher-once
+              image: ghcr.io/wg-lux/lx-annotate:0.5.1
+              command:
+                - /bin/sh
+                - -lc
+              args:
+                - |
+                  set -eu
+
+                  marker="${LX_ANNOTATE_BOOTSTRAP_MARKER_DIR:-/var/lib/lx-annotate/data/.bootstrap}/release-${LX_ANNOTATE_RELEASE_ID}.ready"
+                  until [ -f "$marker" ]; do
+                    echo "waiting for lx-annotate bootstrap marker: $marker"
+                    sleep 10
+                  done
+
+                  exec python -m django run_filewatcher --settings=lx_annotate.settings.settings_prod --process-existing-once
+              envFrom:
+                - configMapRef:
+                    name: lx-annotate-config
+              env:
+                - name: DJANGO_SECRET_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: lx-annotate-secret
+                      key: DJANGO_SECRET_KEY
+                - name: DJANGO_DB_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: lx-annotate-secret
+                      key: DJANGO_DB_PASSWORD
+                - name: OIDC_RP_CLIENT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: lx-annotate-secret
+                      key: OIDC_RP_CLIENT_ID
+                - name: OIDC_RP_CLIENT_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: lx-annotate-secret
+                      key: OIDC_RP_CLIENT_SECRET
+              volumeMounts:
+                - name: data
+                  mountPath: /var/lib/lx-annotate/data
+                - name: master-key
+                  mountPath: /run/secrets/lx-annotate
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 250m
+                  memory: 1Gi
+                limits:
+                  cpu: "1"
+                  memory: 2Gi
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: lx-annotate-data
+            - name: master-key
+              secret:
+                secretName: lx-annotate-secret
+                items:
+                  - key: master-key
+                    path: master-key
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: lx-annotate-sap-import
+spec:
+  schedule: "*/15 * * * *"
+  suspend: true
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: sap-import
+              image: ghcr.io/wg-lux/lx-annotate:0.5.1
+              command:
+                - /bin/sh
+                - -lc
+              args:
+                - |
+                  set -eu
+
+                  marker="${LX_ANNOTATE_BOOTSTRAP_MARKER_DIR:-/var/lib/lx-annotate/data/.bootstrap}/release-${LX_ANNOTATE_RELEASE_ID}.ready"
+                  until [ -f "$marker" ]; do
+                    echo "waiting for lx-annotate bootstrap marker: $marker"
+                    sleep 10
+                  done
+
+                  exec python -m django import_sap_ish_zip "$SAP_IMPORT_ZIP" \
+                    --output_dir /var/lib/lx-annotate/data/import/preanonymized_import \
+                    --settings=lx_annotate.settings.settings_prod
+              envFrom:
+                - configMapRef:
+                    name: lx-annotate-config
+              env:
+                - name: SAP_IMPORT_ZIP
+                  value: /var/lib/lx-annotate/data/import/sap_import/drop.zip
+                - name: DJANGO_SECRET_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: lx-annotate-secret
+                      key: DJANGO_SECRET_KEY
+                - name: DJANGO_DB_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: lx-annotate-secret
+                      key: DJANGO_DB_PASSWORD
+                - name: OIDC_RP_CLIENT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: lx-annotate-secret
+                      key: OIDC_RP_CLIENT_ID
+                - name: OIDC_RP_CLIENT_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: lx-annotate-secret
+                      key: OIDC_RP_CLIENT_SECRET
+              volumeMounts:
+                - name: data
+                  mountPath: /var/lib/lx-annotate/data
+                - name: master-key
+                  mountPath: /run/secrets/lx-annotate
+                  readOnly: true
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: lx-annotate-data
+            - name: master-key
+              secret:
+                secretName: lx-annotate-secret
+                items:
+                  - key: master-key
+                    path: master-key
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: lx-annotate-export-frames
+spec:
+  schedule: "0 1 * * *"
+  suspend: true
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: export-frames
+              image: ghcr.io/wg-lux/lx-annotate:0.5.1
+              command:
+                - /bin/sh
+                - -lc
+              args:
+                - |
+                  set -eu
+
+                  marker="${LX_ANNOTATE_BOOTSTRAP_MARKER_DIR:-/var/lib/lx-annotate/data/.bootstrap}/release-${LX_ANNOTATE_RELEASE_ID}.ready"
+                  until [ -f "$marker" ]; do
+                    echo "waiting for lx-annotate bootstrap marker: $marker"
+                    sleep 10
+                  done
+
+                  exec export-frames
+              envFrom:
+                - configMapRef:
+                    name: lx-annotate-config
+              env:
+                - name: DJANGO_SECRET_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: lx-annotate-secret
+                      key: DJANGO_SECRET_KEY
+                - name: DJANGO_DB_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: lx-annotate-secret
+                      key: DJANGO_DB_PASSWORD
+                - name: OIDC_RP_CLIENT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: lx-annotate-secret
+                      key: OIDC_RP_CLIENT_ID
+                - name: OIDC_RP_CLIENT_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: lx-annotate-secret
+                      key: OIDC_RP_CLIENT_SECRET
+              volumeMounts:
+                - name: data
+                  mountPath: /var/lib/lx-annotate/data
+                - name: master-key
+                  mountPath: /run/secrets/lx-annotate
+                  readOnly: true
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: lx-annotate-data
+            - name: master-key
+              secret:
+                secretName: lx-annotate-secret
+                items:
+                  - key: master-key
+                    path: master-key
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: lx-annotate-media-migration
+spec:
+  schedule: "0 2 * * *"
+  suspend: true
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: media-migration
+              image: ghcr.io/wg-lux/lx-annotate:0.5.1
+              command:
+                - /bin/sh
+                - -lc
+              args:
+                - |
+                  set -eu
+
+                  marker="${LX_ANNOTATE_BOOTSTRAP_MARKER_DIR:-/var/lib/lx-annotate/data/.bootstrap}/release-${LX_ANNOTATE_RELEASE_ID}.ready"
+                  until [ -f "$marker" ]; do
+                    echo "waiting for lx-annotate bootstrap marker: $marker"
+                    sleep 10
+                  done
+
+                  exec python -m django migrate_media_storage \
+                    --settings=lx_annotate.settings.settings_prod \
+                    --apply \
+                    --repeat-until-empty \
+                    --include-raw \
+                    --include-processed \
+                    --include-reports \
+                    --include-streamable \
+                    --json
+              envFrom:
+                - configMapRef:
+                    name: lx-annotate-config
+              env:
+                - name: DJANGO_SECRET_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: lx-annotate-secret
+                      key: DJANGO_SECRET_KEY
+                - name: DJANGO_DB_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: lx-annotate-secret
+                      key: DJANGO_DB_PASSWORD
+                - name: OIDC_RP_CLIENT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: lx-annotate-secret
+                      key: OIDC_RP_CLIENT_ID
+                - name: OIDC_RP_CLIENT_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: lx-annotate-secret
+                      key: OIDC_RP_CLIENT_SECRET
+              volumeMounts:
+                - name: data
+                  mountPath: /var/lib/lx-annotate/data
+                - name: master-key
+                  mountPath: /run/secrets/lx-annotate
+                  readOnly: true
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: lx-annotate-data
+            - name: master-key
+              secret:
+                secretName: lx-annotate-secret
+                items:
+                  - key: master-key
+                    path: master-key

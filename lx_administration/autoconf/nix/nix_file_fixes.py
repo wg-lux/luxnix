@@ -25,12 +25,16 @@ def fix_yml_list_in_nix_file(
         match = pattern.search(line)
         if match:
             left_side, list_content = match.groups()
+            if "," not in list_content:
+                output.append(line)
+                continue
             items = [
                 i.strip().strip("'\"") for i in list_content.split(",") if i.strip()
             ]
             # Convert items to Nix-style list
             new_list = "[" + " ".join(f'"{item}"' for item in items) + "]"
-            line = f"{left_side} = {new_list};"
+            line_ending = "\n" if original_line.endswith("\n") else ""
+            line = f"{left_side} = {new_list};{line_ending}"
 
             logger.info(
                 f"\nFound list in line {i}: {original_line.strip()}\nFixed line {i}: {line.strip()}\n"

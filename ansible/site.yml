@@ -77,13 +77,6 @@
 #   roles:
 #     - dev_access
 
-# - name: Set role local_endoreg_db
-#   gather_facts: false
-#   hosts: managed # , gc-06, gc-02, gc-08
-#   become: true
-#   roles:
-#     - local_endoreg_db
-
 # - name: Set base_server group's roles
 #   hosts: base_server
 #   become: true

@@ -10,8 +10,13 @@ host_roles:
   custom_packages.cuda: "true"
   custom_packages.office: "true"
   custom_packages.baseDevelopment: "true"
+  endoreg-client.lxAi: "true"
 
 host_services: {}
+
+host_nixos:
+  users.users.admin.extraGroups:
+    - "config.luxnix.generic-settings.sensitiveServiceGroupName"
 
 extra_secret_names:
   - "SCRT_roles_system_password_postgres_host_test_password"

@@ -32,6 +32,15 @@ in {
         description = "Extra binary caches (substituters) to use in addition to cache.nixos.org.";
       };
 
+      extraTrustedPublicKeys = mkOption {
+        type = types.listOf types.str;
+        default = [
+          "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
+          "cuda-maintainers.cachix.org-1:0dq3bujKpuEPMCX6U4WylrUDZ9JyUG0VpVZa7CNfq5E="
+        ];
+        description = "Trusted public keys for the configured extra binary caches.";
+      };
+
       maxJobs = mkOption {
         type = types.nullOr (types.either types.int types.str);
         default = "auto";
@@ -206,6 +215,12 @@ in {
       '';
     };
 
+    transferCaPath = mkOption {
+      type = types.path;
+      default = "/var/lib/lx-annotate-ssl/transfer_ca.crt";
+      description = "Path to Transfer CA certificate used for mTLS/client certificate verification.";
+    };
+
     smtpUserFilePath = mkOption {
       type = types.path;
       default = "/etc/secrets/vault/smtp_user";
@@ -224,14 +239,14 @@ in {
 
     configurationPathRelative = mkOption {
       type = types.str;
-      default = "lx-production";
+      default = "luxnix";
       description = ''
         Relative path to the luxnix directory.
       '';
     };
     configurationPath = mkOption {
       type = types.path;
-      default = "/home/${config.user.admin.name}/${cfg.configurationPathRelative}/";
+      default = "/home/${config.user.admin.name}/luxnix";
       description = ''
         Path to the luxnix directory.
       '';
@@ -239,7 +254,7 @@ in {
 
     systemConfigurationPath = mkOption {
       type = types.path;
-      default = "/home/${config.user.admin.name}/${cfg.configurationPathRelative}/systems/x86_64-linux/${hostname}";
+      default = "${cfg.configurationPath}/systems/x86_64-linux/${hostname}";
       description = ''
         Path to the systems specif nixos configuration directory.
       '';
@@ -331,11 +346,32 @@ in {
       cacert
     ];
 
-    nix.settings.ssl-cert-file = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+    nix.settings =
+      {
+        ssl-cert-file = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+      }
+      // optionalAttrs cfg.nix.enableOptimizations (
+        {
+          auto-optimise-store = mkDefault true;
+          cores = mkDefault cfg.nix.cores;
+          substituters = mkDefault ([ "https://cache.nixos.org/" ] ++ cfg.nix.extraSubstituters);
+          trusted-public-keys = mkDefault (
+            [
+              "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
+            ]
+            ++ cfg.nix.extraTrustedPublicKeys
+          );
+        }
+        // optionalAttrs (cfg.nix.maxJobs != null) {
+          max-jobs = mkDefault cfg.nix.maxJobs;
+        }
+      );
 
     environment.variables = {
       SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
       NIX_SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+      LUXNIX_FLAKE = toString cfg.configurationPath;
+      LUXNIX_HOST = hostname;
     };
 
     # GPU Configuration warnings

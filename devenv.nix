@@ -51,7 +51,9 @@ let
     zlib
     git
     secretspec
-    xorg.libxcb
+    libxcb
+    nixd
+    nixfmt
   ];
   _module.args.buildInputs = baseBuildInputs;
   SYNC_CMD = "uv sync";
@@ -85,6 +87,7 @@ in
   languages.javascript = {
     enable = true;
     package = pkgs.nodejs_22;
+    npm.enable = true;
     npm.install.enable = true;
   };
 
@@ -98,7 +101,9 @@ in
   scripts = devenv_utils.scripts;
 
   enterShell = ''
-    env-setup
+    if command -v env-setup >/dev/null 2>&1; then
+      env-setup
+    fi
     # Ensure dependencies are synced using uv
     # Check if venv exists. If not, run sync verbosely. If it exists, sync quietly.
     SYNC_STAMP=".devenv/state/.uv-sync.stamp"

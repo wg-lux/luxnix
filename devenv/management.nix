@@ -22,7 +22,7 @@ let
       isDev
       ;
   };
-  processes = import ./processes.nix {
+  customProcesses = import ./processes.nix {
     inherit
       pkgs
       lib
@@ -110,12 +110,12 @@ in
 
     #     secretspec run --provider env uv run daphne -b "${env.DJANGO_HOST}" -p "${env.DJANGO_PORT}" lx_annotate.asgi:application    '';
 
-    # "start-filewatcher".exec = ''
+    # "run-filewatcher".exec = ''
     #   echo "👀 Starting file watcher for auto-import..."
-    #   secretspec run --provider env python manage.py start_filewatcher
+    #   secretspec run --provider env python manage.py run_filewatcher
     # '';
 
   };
 
-  processes = processes;
+  processes = customProcesses;
 }

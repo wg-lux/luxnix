@@ -6,6 +6,22 @@
 with lib; let
   cfg = config.roles.managed-secrets;
   sensitiveServiceGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
+  vaultCfg = config.luxnix.vault;
+  vaultAuthEnabled =
+    vaultCfg.enable && vaultCfg.client.enable && vaultCfg.client.auth.method != "none";
+  managedSecretsVaultEnvironmentFiles =
+    lib.optionals (vaultCfg.enable && vaultCfg.client.environmentFile != null) [
+      (toString vaultCfg.client.environmentFile)
+    ]
+    ++ lib.optionals vaultAuthEnabled [
+      vaultCfg.client.runtimeEnvironmentFile
+    ];
+  humanFacingSecretNames = [
+    "client_user_password"
+    "client_user_password_hash"
+    "nextcloud_admin_password"
+  ];
+  isHumanFacingSecret = name: builtins.elem name humanFacingSecretNames;
 
   # Generator for human-readable two-word passwords
   twoWordPasswordGenerator = pkgs.writeShellScript "generate-two-word-password" ''
@@ -129,14 +145,56 @@ PY
     };
   };
 
-  activeSecretFiles = lib.filterAttrs (name: _: cfg.secrets.${name}.enable) secretFiles;
-  secretNames = lib.attrNames activeSecretFiles;
+  builtinSecrets = lib.mapAttrs (name: secret: secret // {
+    enable = cfg.secrets.${name}.enable;
+    forceRegenerate = cfg.secrets.${name}.forceRegenerate;
+    refreshOnBoot = cfg.secrets.${name}.refreshOnBoot;
+  }) secretFiles;
+  activeBuiltinSecrets = lib.filterAttrs (_: secret: secret.enable) builtinSecrets;
+  activeCustomSecrets = cfg.customSecrets;
+  allManagedSecrets = activeBuiltinSecrets // activeCustomSecrets;
+  activeHumanFacingBuiltinSecretNames =
+    lib.filter isHumanFacingSecret (lib.attrNames activeBuiltinSecrets);
+  activeHumanFacingCustomSecretNames =
+    lib.attrNames (lib.filterAttrs (_: secret: secret.humanFacing or false) activeCustomSecrets);
+  activeHumanFacingSecretNames =
+    activeHumanFacingBuiltinSecretNames ++ activeHumanFacingCustomSecretNames;
+  sopsSecretPaths =
+    lib.mapAttrsToList
+      (name: secret: {
+        inherit name;
+        path = toString (secret.path or "");
+      })
+      (config.sops.secrets or {});
+  nonEmptySopsSecretPaths = lib.filter (secret: secret.path != "") sopsSecretPaths;
+  managedSecretPaths =
+    lib.mapAttrsToList
+      (name: secret: {
+        inherit name;
+        path = toString secret.path;
+      })
+      allManagedSecrets;
+  managedSecretsSopsPathConflicts =
+    lib.filter
+      (managedSecret:
+        lib.any
+          (sopsSecret: sopsSecret.path == managedSecret.path)
+          nonEmptySopsSecretPaths)
+      managedSecretPaths;
+  formatManagedSopsConflict = managedSecret:
+    let
+      matchingSopsSecrets =
+        lib.filter (sopsSecret: sopsSecret.path == managedSecret.path) nonEmptySopsSecretPaths;
+      matchingNames = lib.concatStringsSep ", " (map (secret: secret.name) matchingSopsSecrets);
+    in
+      "${managedSecret.name} -> ${managedSecret.path} also owned by SOPS secret(s): ${matchingNames}";
+  secretNames = lib.attrNames allManagedSecrets;
   secretNamesString = lib.concatStringsSep " " secretNames;
-  secretPathAssignments = lib.concatStringsSep "\n" (lib.mapAttrsToList (name: secret: ''SECRET_PATHS["${name}"]="${secret.path}"'') activeSecretFiles);
-  secretDescriptionAssignments = lib.concatStringsSep "\n" (lib.mapAttrsToList (name: secret: ''SECRET_DESCRIPTIONS["${name}"]="${secret.description}"'') activeSecretFiles);
-  secretOwnerAssignments = lib.concatStringsSep "\n" (lib.mapAttrsToList (name: secret: ''SECRET_OWNERS["${name}"]="${secret.owner}"'') activeSecretFiles);
-  secretGroupAssignments = lib.concatStringsSep "\n" (lib.mapAttrsToList (name: secret: ''SECRET_GROUPS["${name}"]="${secret.group}"'') activeSecretFiles);
-  secretPermissionAssignments = lib.concatStringsSep "\n" (lib.mapAttrsToList (name: secret: ''SECRET_PERMS["${name}"]="${secret.permissions}"'') activeSecretFiles);
+  secretPathAssignments = lib.concatStringsSep "\n" (lib.mapAttrsToList (name: secret: ''SECRET_PATHS["${name}"]="${secret.path}"'') allManagedSecrets);
+  secretDescriptionAssignments = lib.concatStringsSep "\n" (lib.mapAttrsToList (name: secret: ''SECRET_DESCRIPTIONS["${name}"]="${secret.description}"'') allManagedSecrets);
+  secretOwnerAssignments = lib.concatStringsSep "\n" (lib.mapAttrsToList (name: secret: ''SECRET_OWNERS["${name}"]="${secret.owner}"'') allManagedSecrets);
+  secretGroupAssignments = lib.concatStringsSep "\n" (lib.mapAttrsToList (name: secret: ''SECRET_GROUPS["${name}"]="${secret.group}"'') allManagedSecrets);
+  secretPermissionAssignments = lib.concatStringsSep "\n" (lib.mapAttrsToList (name: secret: ''SECRET_PERMS["${name}"]="${secret.permissions}"'') allManagedSecrets);
   specificLinkedSecrets = {
     client_user_password = [ "client_user_password_hash" ];
     client_user_password_hash = [ "client_user_password" ];
@@ -151,27 +209,35 @@ PY
       secretNames
   );
 
-  # Generate script for creating a secret file
+  # Generate script for creating or refreshing a secret file
   mkSecretScript = name: secretConfig: pkgs.writeShellScript "generate-${name}" ''
     set -euo pipefail
-    
+
     SECRET_FILE="${secretConfig.path}"
-    TARGET_FILE="$SECRET_FILE"
-    
+    SECRET_DIR="$(dirname "$SECRET_FILE")"
+    SHOULD_REFRESH="${if secretConfig.forceRegenerate or false || secretConfig.refreshOnBoot or false then "true" else "false"}"
+
     echo "Checking secret: ${name} at $SECRET_FILE"
-    
-    if [ ! -f "$SECRET_FILE" ]; then
+
+    if [ ! -f "$SECRET_FILE" ] || [ "$SHOULD_REFRESH" = "true" ]; then
       echo "Generating ${secretConfig.description}..."
-      mkdir -p "$(dirname "$SECRET_FILE")"
-      
+      mkdir -p "$SECRET_DIR"
+
+      TARGET_FILE="$(mktemp "$SECRET_DIR/.${name}.tmp.XXXXXX")"
+      cleanup() {
+        rm -f "$TARGET_FILE"
+      }
+      trap cleanup EXIT
+
       ${if secretConfig.customScript or false then secretConfig.generator else ''
-        ${secretConfig.generator} > "$SECRET_FILE"
+        ${secretConfig.generator} > "$TARGET_FILE"
       ''}
-      
-      # Set ownership and permissions
-      chown ${secretConfig.owner}:${secretConfig.group} "$SECRET_FILE"
-      chmod ${secretConfig.permissions} "$SECRET_FILE"
-      
+
+      chown ${secretConfig.owner}:${secretConfig.group} "$TARGET_FILE"
+      chmod ${secretConfig.permissions} "$TARGET_FILE"
+      mv -f "$TARGET_FILE" "$SECRET_FILE"
+      trap - EXIT
+
       echo "Generated ${secretConfig.description} at $SECRET_FILE"
     else
       echo "Secret already exists: ${secretConfig.description}"
@@ -203,7 +269,7 @@ PY
     
     ${lib.concatStringsSep "\n" (lib.mapAttrsToList (name: config: ''
       ${mkSecretScript name config}
-    '') activeSecretFiles)}
+    '') allManagedSecrets)}
     
     echo "Managed secrets generation completed successfully"
   '';
@@ -215,6 +281,16 @@ in
       type = types.bool;
       default = true;
       description = "Enable automatic management of common secret files";
+    };
+
+    allowGeneratedHumanSecrets = mkOption {
+      type = types.bool;
+      default = false;
+      description = ''
+        Permit managed-secrets to generate human-facing passwords. This is only
+        intended as a temporary migration escape hatch; login and human admin
+        passwords should normally come from SOPS or an existing hash file.
+      '';
     };
 
     secrets = mkOption {
@@ -231,9 +307,25 @@ in
             default = false;
             description = "Force regeneration of this secret even if it exists";
           };
+
+          refreshOnBoot = mkOption {
+            type = types.bool;
+            default = false;
+            description = "Refresh this secret on every managed-secrets run, even if the file already exists.";
+          };
         };
       });
-      default = lib.mapAttrs (name: config: { enable = true; forceRegenerate = false; }) secretFiles;
+      default =
+        lib.mapAttrs (_: _: {
+          enable = true;
+          forceRegenerate = false;
+          refreshOnBoot = false;
+        }) secretFiles
+        // lib.genAttrs humanFacingSecretNames (_: {
+          enable = false;
+          forceRegenerate = false;
+          refreshOnBoot = false;
+        });
       description = "Configuration for individual secrets";
     };
 
@@ -274,11 +366,29 @@ in
             type = types.str;
             description = "Description of the secret";
           };
+
+          humanFacing = mkOption {
+            type = types.bool;
+            default = false;
+            description = "Whether this secret is a password a person must know or type interactively.";
+          };
           
           customScript = mkOption {
             type = types.bool;
             default = false;
             description = "Whether the generator is a custom script (uses TARGET_FILE variable)";
+          };
+
+          forceRegenerate = mkOption {
+            type = types.bool;
+            default = false;
+            description = "Force regeneration of this custom secret even if it exists.";
+          };
+
+          refreshOnBoot = mkOption {
+            type = types.bool;
+            default = false;
+            description = "Refresh this custom secret on every managed-secrets run.";
           };
         };
       });
@@ -294,12 +404,36 @@ in
 
     runBefore = mkOption {
       type = types.listOf types.str;
-      default = [ "postgresql.service" "nextcloud-setup.service" "endo-api-boot.service" ];
+      default = [ "postgresql.service" "nextcloud-setup.service" "endoreg-db-api-local.service" ];
       description = "Services that should wait for secret generation";
     };
   };
 
   config = mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = cfg.allowGeneratedHumanSecrets || activeHumanFacingSecretNames == [];
+        message = ''
+          roles.managed-secrets refuses to generate human-facing passwords by default:
+          ${lib.concatStringsSep ", " activeHumanFacingSecretNames}
+
+          Move these passwords to SOPS or a pre-existing hashed file. If this is
+          an intentional short-lived migration, set
+          roles.managed-secrets.allowGeneratedHumanSecrets = true.
+        '';
+      }
+      {
+        assertion = managedSecretsSopsPathConflicts == [];
+        message = ''
+          A secret path is owned by both roles.managed-secrets and sops.secrets:
+          ${lib.concatStringsSep "\n" (map formatManagedSopsConflict managedSecretsSopsPathConflicts)}
+
+          Disable the corresponding roles.managed-secrets entry when SOPS owns
+          the same deployed file path.
+        '';
+      }
+    ];
+
     # Ensure the sensitive service group exists
     users.groups.${sensitiveServiceGroupName} = {};
 
@@ -308,15 +442,21 @@ in
       description = "Generate and manage system secrets";
       wantedBy = [ "multi-user.target" ];
       before = cfg.runBefore;
-      after = [ "local-fs.target" "systemd-tmpfiles-setup.service" ];
+      after =
+        [ "local-fs.target" "systemd-tmpfiles-setup.service" ]
+        ++ lib.optionals vaultAuthEnabled [ "vault-auth-setup.service" ];
       wants = [ "local-fs.target" ];
-      requires = [ "systemd-tmpfiles-setup.service" ];
-      
+      requires =
+        [ "systemd-tmpfiles-setup.service" ]
+        ++ lib.optionals vaultAuthEnabled [ "vault-auth-setup.service" ];
+
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
         User = "root";
         ExecStart = generateSecretsScript;
+        UMask = "0077";
+        EnvironmentFile = managedSecretsVaultEnvironmentFiles;
       };
     };
 

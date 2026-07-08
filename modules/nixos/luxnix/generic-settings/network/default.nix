@@ -8,10 +8,12 @@ with lib;
 with lib.luxnix; let
   cfg = config.luxnix.generic-settings.network;
   hostname = config.networking.hostName;
-  
+  isPublicDomain = domain:
+    builtins.any (suffix: lib.hasSuffix suffix domain) cfg.publicDomainSuffixes;
+
   # Add proper null handling for host config lookup
   ownNetConfig = cfg.hosts.${hostname} or {};
-  
+
   # Add proper null handling for network-cluster
   ownNetworkCluster = ownNetConfig.network-cluster or null;
 
@@ -38,8 +40,16 @@ with lib.luxnix; let
              then hostConfig.ip-local
              else hostConfig.ip-vpn;
              
-        # Default to empty list if domains is null
-        domains = hostConfig.domains or ["localhost"];
+        # Keep selected aliases local-only (e.g. lx-annotate.local should resolve to the current node only)
+        domainsRaw = hostConfig.domains or ["localhost"];
+        domains = builtins.filter (
+          domain:
+            !(isPublicDomain domain)
+            && (
+              !(builtins.elem domain cfg.localOnlyDomains)
+              || hostName == hostname
+            )
+        ) domainsRaw;
       in { 
         "${ip}" = [ hostName ] ++ domains;
       }
@@ -55,7 +65,7 @@ with lib.luxnix; let
     in
       if hostConfig != null && hostConfig.ip-vpn != null
       then hostConfig.ip-vpn
-      else -1; # "172.16.255.x"; # Default fallback
+      else "172.16.255.x";
 
 in {
   options.luxnix.generic-settings.network = {
@@ -120,6 +130,25 @@ in {
         - network_cluster
       '';
     };
+
+    localOnlyDomains = mkOption {
+      type = types.listOf types.str;
+      default = [ "lx-annotate.local" ];
+      description = ''
+        Domain aliases that must only map to the current host in /etc/hosts.
+        This prevents multi-IP alias collisions that can cause client timeouts.
+      '';
+    };
+
+    publicDomainSuffixes = mkOption {
+      type = types.listOf types.str;
+      default = [ ".endo-reg.net" ];
+      description = ''
+        Public DNS suffixes that must never be written into /etc/hosts.
+        Browser-facing domains under these suffixes should resolve via normal DNS,
+        not via host-local overrides.
+      '';
+    };
     
     # New option to map services to host names
     serviceHosts = mkOption {
@@ -129,6 +158,7 @@ in {
         nginx = "s-02";
         keycloak = "s-02";
         nextcloud = "s-03";
+        glm52 = "gs-02";
         psqlMain = "gs-02";
         psqlTest = "s-04";
       };
@@ -210,6 +240,29 @@ in {
       };
     };
 
+    glm52 = {
+      vpnIp = mkOption {
+        type = types.str;
+        default = getServiceVpnIp "glm52";
+        description = ''
+          The VPN IP of the GLM-5.2 host (derived from serviceHosts mapping).
+        '';
+      };
+      port = mkOption {
+        type = types.port;
+        default = 8088;
+        description = ''
+          The GLM-5.2 llama.cpp HTTP server port.
+        '';
+      };
+      domain = mkOption {
+        type = types.str;
+        default = "glm.endo-reg.net";
+        description = ''
+          The public GLM-5.2 inference domain.
+        '';
+      };
+    };
 
     psqlMain = {
       vpnIp = mkOption {
