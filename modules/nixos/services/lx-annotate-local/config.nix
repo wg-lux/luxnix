@@ -395,6 +395,9 @@ let
   dataRecoveryServiceUnits = lib.optionals cfg.dataRecovery.enable [
     "lx-annotate-data-recovery.service"
   ];
+  hlsBackfillServiceUnits = lib.optionals cfg.hlsBackfill.enable [
+    "lx-annotate-hls-backfill.service"
+  ];
   managedSecretsSetupUnits =
     lib.optionals (lib.attrByPath [ "roles" "managed-secrets" "enable" ] false config)
       [
@@ -1840,6 +1843,7 @@ in
           "lx-annotate-load-base-data.service"
         ]
         ++ dataRecoveryServiceUnits
+        ++ hlsBackfillServiceUnits
         ++ localRedisServiceUnits
         ++ localPostgresServiceUnits
         ++ localPostgresSetupUnits
@@ -1851,6 +1855,7 @@ in
           "lx-annotate-master-key-check.service"
         ]
         ++ dataRecoveryServiceUnits
+        ++ hlsBackfillServiceUnits
         ++ managedSecretsSetupUnits
         ++ encryptionServiceUnits;
         after = [
@@ -1861,6 +1866,7 @@ in
           "systemd-tmpfiles-setup.service"
         ]
         ++ dataRecoveryServiceUnits
+        ++ hlsBackfillServiceUnits
         ++ localRedisServiceUnits
         ++ localPostgresServiceUnits
         ++ localPostgresSetupUnits
@@ -2008,6 +2014,38 @@ in
                 ++ cfg.hlsMaterialization.extraArgs
               );
               TimeoutStartSec = cfg.hlsMaterialization.timeoutStartSec;
+              Nice = 15;
+              IOSchedulingClass = "best-effort";
+              IOSchedulingPriority = 6;
+            };
+          });
+
+      systemd.services.lx-annotate-hls-backfill =
+        mkIf cfg.hlsBackfill.enable
+          (mkLxAnnotateAppService {
+            description = "Backfill encrypted HLS artifacts for processed LX-Annotate videos";
+            wantedBy = [ "multi-user.target" ];
+            before = [ "lx-annotate.service" ];
+            after = [
+              "lx-annotate-load-base-data.service"
+              "lx-annotate-master-key-check.service"
+            ];
+            wants = [
+              "lx-annotate-load-base-data.service"
+            ];
+            requires = [
+              "lx-annotate-load-base-data.service"
+              "lx-annotate-master-key-check.service"
+            ];
+            serviceConfig = {
+              Type = "oneshot";
+              ExecStart = lib.escapeShellArgs (
+                [
+                  "${runLocalHlsMaterializationScript}/bin/runLxAnnotateHlsMaterialization"
+                ]
+                ++ cfg.hlsBackfill.extraArgs
+              );
+              TimeoutStartSec = cfg.hlsBackfill.timeoutStartSec;
               Nice = 15;
               IOSchedulingClass = "best-effort";
               IOSchedulingPriority = 6;

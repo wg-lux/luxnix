@@ -372,8 +372,8 @@ in
           wheelPath = mkOption {
             type = types.nullOr types.path;
             default = pkgs.fetchurl {
-              url = "https://files.pythonhosted.org/packages/cd/65/a97c38677c78c4c500a4174338e14b2bb5619471e5797de68279ec455c21/lx_annotate-0.9.22-py3-none-any.whl";
-              hash = "sha256-Cb2qlB8Zv7/pKgpu8Pm00zWLmjtulsBgM90JGtFEdms=";
+              url = "https://files.pythonhosted.org/packages/34/ed/9c1b5cee28ef414176778014e201ba2d5e0480a7d53f4c6a2d8b1b9731f9/lx_annotate-0.9.26-py3-none-any.whl";
+              hash = "sha256-iiq/zX8+fnXFbBTXOwT5JVn12jh13nZywjKnZdh8bmE=";
             };
             description = "Path to the lx-annotate wheel artifact used in wheel mode.";
           };
@@ -1101,6 +1101,31 @@ in
       };
       default = { };
       description = "Settings for the manual processed-video encrypted HLS materialization unit.";
+    };
+
+    hlsBackfill = mkOption {
+      type = types.submodule {
+        options = {
+          enable = mkOption {
+            type = types.bool;
+            default = true;
+            description = "Run a boot-time processed-video HLS backfill dispatcher after migrations, base data loading, and encrypted storage validation.";
+          };
+          extraArgs = mkOption {
+            type = types.listOf types.str;
+            default = [ ];
+            example = literalExpression ''[ "--limit" "25" ]'';
+            description = "Additional safe arguments passed to materialize_video_hls for the automatic backfill. The wrapper rejects --force, --inline, and --artifact-kind overrides.";
+          };
+          timeoutStartSec = mkOption {
+            type = types.str;
+            default = "1h";
+            description = "Maximum time allowed for dispatching automatic HLS backfill jobs.";
+          };
+        };
+      };
+      default = { };
+      description = "Settings for the automatic processed-video encrypted HLS backfill dispatcher.";
     };
 
     dataCleanup = mkOption {

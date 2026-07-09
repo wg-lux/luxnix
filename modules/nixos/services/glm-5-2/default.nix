@@ -13,7 +13,7 @@ let
     system = pkgs.stdenv.hostPlatform.system;
     config = {
       allowUnfree = true;
-      cudaSupport = config.nixpkgs.config.cudaSupport or false;
+      cudaSupport = true;
     };
   };
   modelFile =
