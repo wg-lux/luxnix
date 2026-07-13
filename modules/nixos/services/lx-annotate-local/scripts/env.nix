@@ -85,6 +85,7 @@ rec {
   celeryTrainingQueueName = "model_training";
   celeryLlmInferenceQueueName = "llm_inference";
   celeryMaintenanceQueueName = "maintenance";
+  celeryHubTransferQueueName = "hub_transfer";
   ffmpegTranscodeTimeoutSeconds = "86400";
 
   # This is the lx-annotate environment contract. Config modules, systemd
@@ -143,6 +144,11 @@ rec {
     ENDOREG_HUB_TRANSFER_REQUIRE_MTLS = boolString cfg.hub.transferApi.requireMtls;
     ENDOREG_HUB_TRANSFER_MTLS_META_KEY = cfg.hub.transferApi.mtlsMetaKey;
     ENDOREG_HUB_TRANSFER_MTLS_META_VALUE = cfg.hub.transferApi.mtlsMetaValue;
+    ENDOREG_HUB_TRANSFER_MAX_UPLOAD_BYTES = toString cfg.hub.transferApi.maxUploadBytes;
+    LX_ANNOTATE_HUB_EXPORT_AUTO_QUEUE = boolString cfg.hub.outboundTransfer.enable;
+    LX_ANNOTATE_HUB_EXPORT_REQUIRE_MTLS = boolString cfg.hub.outboundTransfer.requireMtls;
+    LX_ANNOTATE_HUB_EXPORT_STALE_AFTER_SECONDS = toString cfg.hub.outboundTransfer.staleAfterSeconds;
+    LX_ANNOTATE_HUB_EXPORT_MAX_RETRIES = toString cfg.hub.outboundTransfer.maxRetries;
     CELERY_BROKER_URL = celeryBrokerUrl;
     CELERY_DEFAULT_QUEUE = celeryDefaultQueueName;
     CELERY_PIPELINE_QUEUE = celeryPipelineQueueName;
@@ -152,6 +158,7 @@ rec {
     CELERY_TRAINING_QUEUE = celeryTrainingQueueName;
     CELERY_LLM_INFERENCE_QUEUE = celeryLlmInferenceQueueName;
     CELERY_MAINTENANCE_QUEUE = celeryMaintenanceQueueName;
+    CELERY_HUB_TRANSFER_QUEUE = celeryHubTransferQueueName;
     CELERY_FRAME_EXTRACTION_REQUIRE_SECURE_TRANSPORT = boolString cfg.runtime.celeryBroker.requireSecureTransport;
     CELERY_FFMPEG_MEDIA_REQUIRE_SECURE_TRANSPORT = boolString cfg.runtime.celeryBroker.requireSecureTransport;
     CELERY_BROKER_SECURE_TRANSPORT_CONFIRMED = boolString cfg.runtime.celeryBroker.secureTransportConfirmed;
@@ -172,6 +179,18 @@ rec {
   }
   // optionalAttrs (cfg.runtime.masterKeyFile != null) {
     LX_ANNOTATE_MASTER_KEY_FILE = toString cfg.runtime.masterKeyFile;
+  }
+  // optionalAttrs (cfg.hub.outboundTransfer.clientCertificateFile != null) {
+    LX_ANNOTATE_HUB_EXPORT_CLIENT_CERT_FILE = toString cfg.hub.outboundTransfer.clientCertificateFile;
+  }
+  // optionalAttrs (cfg.hub.outboundTransfer.clientKeyFile != null) {
+    LX_ANNOTATE_HUB_EXPORT_CLIENT_KEY_FILE = toString cfg.hub.outboundTransfer.clientKeyFile;
+  }
+  // optionalAttrs (cfg.hub.outboundTransfer.caFile != null) {
+    LX_ANNOTATE_HUB_EXPORT_CA_FILE = toString cfg.hub.outboundTransfer.caFile;
+  }
+  // optionalAttrs (cfg.hub.outboundTransfer.sourceNodeSecretFile != null) {
+    LX_ANNOTATE_HUB_SOURCE_NODE_SECRET_FILE = toString cfg.hub.outboundTransfer.sourceNodeSecretFile;
   }
   // cfg.runtime.extraEnvironment;
 

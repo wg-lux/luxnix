@@ -3,7 +3,6 @@
 with lib; 
 with lib.luxnix; let
   cfg = config.roles.traefikHost;
-  hostVpnIp = config.luxnix.generic-settings.traefikHostIp;
 in {
   options.roles.traefikHost = {
     enable = mkBoolOpt false "Enable traefik";

@@ -7,10 +7,6 @@
 with lib;
 with lib.luxnix; let
   cfg = config.services.luxnix.endoAi;
-  gs = config.luxnix.generic-settings;
-  gsp = gs.postgres;
-
-  adminName = config.user.admin.name;
   scriptName = "runEndoAi";
 
   gitURL = "https://github.com/wg-lux/endo-ai";

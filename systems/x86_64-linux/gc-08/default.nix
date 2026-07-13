@@ -113,7 +113,7 @@ endoreg-client.lxAi = true;
     generic-settings.language = "english";
 
 
-    generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_6;
+    generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
 
 
     generic-settings.network.glm52.domain = "glm.endo-reg.net";
@@ -418,6 +418,10 @@ endoreg-client.lxAi = true;
 
 
   };
+
+  programs.nix-ld.enable = true;
+
+  xdg.menus.enable = true;
 
   users.users.admin.extraGroups = [ config.luxnix.generic-settings.sensitiveServiceGroupName ];
 

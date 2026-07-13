@@ -17,14 +17,12 @@ let
     endoreg-service-group-name
     ;
   inherit (runtime.names) scriptName exportFramesScriptName;
-  inherit (runtime.source) gitURL repoDirName branchName;
+  inherit (runtime.source) gitURL branchName;
   inherit (runtime.paths)
     runtimeRootPath
     repoDir
     repoStaticRootPath
     runtimeStorageRootPath
-    runtimeWatcherVideoDirPath
-    runtimeWatcherReportDirPath
     runtimeWatcherPreanonymizedDirPath
     runtimeSapImportDirPath
     runtimeSapImportProcessedDirPath
@@ -35,18 +33,13 @@ let
     runtimeStaticRootPath
     runtimeWheelRootPath
     runtimeWheelVenvPath
-    runtimeWorkingDir
     staticRootPath
     djangoStaticRootPath
     viteSourcePath
     envDataDir
     envConfDir
     makeCacheDir
-    envConfTemplateDir
     envSystemdFilePath
-    envAssetDir
-    dataRecoveryStateDir
-    dataRecoveryStateFile
     ;
   inherit (runtime.env)
     envAnnotateDjangoSettingsModule
@@ -56,7 +49,6 @@ let
     useWheelRuntime
     pythonInterpreter
     wheelFilePath
-    packageVersion
     ;
   inherit (runtime.defaults)
     exportFramesStorageRootDefault
@@ -134,6 +126,7 @@ let
 
   lxAnnotateRuntimeLib = pkgs.writeShellScript "lx-annotate-runtime-lib.sh" ''
         set -euo pipefail
+        umask 027
 
         log() {
           printf '%s\n' "$*"
@@ -701,7 +694,7 @@ let
   lxAnnotatePrepareScript = pkgs.writeShellScriptBin "${prepareScriptName}" ''
     set -euo pipefail
     source "${lxAnnotateRuntimeLib}"
-    mkdir -p "${envConfDir}" "${envDataDir}"
+    install -d -m 0750 "${envConfDir}" "${envDataDir}"
     ensure_runtime_static_root || warn "Failed to prepare runtime static root."
     lx_annotate_export_runtime_env
     lx_annotate_activate_runtime
@@ -984,7 +977,7 @@ let
     lx_annotate_activate_runtime
 
     cd "${repoDir}"
-    mkdir -p "${runtimeStorageRootPath}" "${runtimeStreamableVideoRootPath}" "${runtimeStreamableVideoRawRootPath}" "${runtimeStreamableVideoProcessedRootPath}"
+    install -d -m 0750 "${runtimeStorageRootPath}" "${runtimeStreamableVideoRootPath}" "${runtimeStreamableVideoRawRootPath}" "${runtimeStreamableVideoProcessedRootPath}"
 
     run_repo_django_command check --fail-level CRITICAL
     run_repo_django_command verify_encrypted_storage
@@ -998,6 +991,7 @@ let
   watcherScriptName = "runLocalFileWatcher";
   runLocalFileWatcherScript = pkgs.writeShellScriptBin "${watcherScriptName}" ''
     set -euo pipefail
+    umask 027
 
     # 1. Go to the repo (Cloned by the main boot service)
     cd "${repoDir}"
@@ -1025,6 +1019,7 @@ let
   '';
   runLocalFileWatcherWheelScript = pkgs.writeShellScriptBin "${watcherScriptName}" ''
     set -euo pipefail
+    umask 027
 
     if [ -z ${lib.escapeShellArg wheelFileWatcherOnceCommand} ]; then
       echo "ERROR: runtime.commands.fileWatcherOnce or runtime.commands.fileWatcher must be set when wheel mode enables the watcher service."
@@ -1070,6 +1065,7 @@ let
     }:
     pkgs.writeShellScriptBin "${scriptName}" ''
       set -euo pipefail
+      umask 027
 
       cd "${repoDir}"
 
@@ -1106,6 +1102,7 @@ let
     }:
     pkgs.writeShellScriptBin "${scriptName}" ''
       set -euo pipefail
+      umask 027
 
       if [ -z ${lib.escapeShellArg wheelCeleryWorkerCommand} ]; then
         echo "ERROR: runtime.commands.celeryWorker must be set when wheel mode enables the Celery worker service."
@@ -1229,7 +1226,7 @@ let
 
     source "${lxAnnotateRuntimeLib}"
     ensure_wheel_runtime_installed
-    mkdir -p "${runtimeStorageRootPath}" "${runtimeStreamableVideoRootPath}" "${runtimeStreamableVideoRawRootPath}" "${runtimeStreamableVideoProcessedRootPath}"
+    install -d -m 0750 "${runtimeStorageRootPath}" "${runtimeStreamableVideoRootPath}" "${runtimeStreamableVideoRawRootPath}" "${runtimeStreamableVideoProcessedRootPath}"
 
     run_installed_django_command "${wheelVenvPythonPath}" check --fail-level CRITICAL
     run_installed_django_command "${wheelVenvPythonPath}" verify_encrypted_storage
@@ -1253,7 +1250,7 @@ let
 
     source "${lxAnnotateRuntimeLib}"
     ensure_wheel_runtime_installed
-    mkdir -p "${runtimeStorageRootPath}" "${runtimeStreamableVideoRootPath}" "${runtimeStreamableVideoRawRootPath}" "${runtimeStreamableVideoProcessedRootPath}"
+    install -d -m 0750 "${runtimeStorageRootPath}" "${runtimeStreamableVideoRootPath}" "${runtimeStreamableVideoRawRootPath}" "${runtimeStreamableVideoProcessedRootPath}"
 
     run_installed_django_command "${wheelVenvPythonPath}" verify_encrypted_storage
 
@@ -1262,11 +1259,12 @@ let
   sapImportScriptName = "runLocalSapImport";
   sapImportScriptBody = ''
     set -euo pipefail
+    umask 027
 
     sap_drop_dir="${runtimeSapImportDirPath}"
     sap_processed_dir="${runtimeSapImportProcessedDirPath}"
     sap_failed_dir="${runtimeSapImportFailedDirPath}"
-    mkdir -p "$sap_drop_dir" "$sap_processed_dir" "$sap_failed_dir" "${runtimeWatcherPreanonymizedDirPath}"
+    install -d -m 0770 "$sap_drop_dir" "$sap_processed_dir" "$sap_failed_dir" "${runtimeWatcherPreanonymizedDirPath}"
 
     wait_for_stable_zip() {
       local file_path="$1"
@@ -1358,6 +1356,7 @@ let
   '';
   runLocalExportFramesScript = pkgs.writeShellScriptBin "${exportFramesScriptName}" ''
     set -euo pipefail
+    umask 027
 
     # 1. Go to the repo (Cloned by the main boot service)
     cd "${repoDir}"
@@ -1378,7 +1377,7 @@ let
 
     # 4. Ensure target directory exists
     exportFramesDir="$exportFramesStorageRoot/export/frames"
-    mkdir -p "$exportFramesDir"
+    install -d -m 0750 "$exportFramesDir"
 
     # 5. Run export inside devenv shell
     if [ -f Makefile ] && command -v devenv >/dev/null 2>&1; then
@@ -1391,6 +1390,7 @@ let
   '';
   runLocalExportFramesWheelScript = pkgs.writeShellScriptBin "${exportFramesScriptName}" ''
     set -euo pipefail
+    umask 027
 
     if [ -z ${lib.escapeShellArg wheelExportFramesCommand} ]; then
       echo "ERROR: runtime.commands.exportFrames must be set when wheel mode enables the export service."
@@ -1408,7 +1408,7 @@ let
     export STORAGE_DIR="$exportFramesStorageRoot/storage"
     export DATA_DIR="$exportFramesStorageRoot"
 
-    mkdir -p "$exportFramesStorageRoot/export/frames"
+    install -d -m 0750 "$exportFramesStorageRoot/export/frames"
 
     if [ ! -x "${runtimeWheelVenvPath}/bin/python" ]; then
       echo "ERROR: Wheel virtualenv missing at ${runtimeWheelVenvPath}."
@@ -1422,6 +1422,7 @@ let
 
   runLocalDataRecoveryScript = pkgs.writeShellScriptBin "runLxAnnotateDataRecovery" ''
         set -euo pipefail
+        umask 027
         target_dir="${envDataDir}"
         resolved_target_dir="$(${pkgs.coreutils}/bin/realpath -m "$target_dir")"
         marker_dir="$target_dir/logs"
@@ -1431,7 +1432,7 @@ let
         state_dir="$(${pkgs.coreutils}/bin/dirname "$state_file")"
         previous_effective_dir=""
         use_wheel_runtime="${if useWheelRuntime then "true" else "false"}"
-        mkdir -p "$target_dir" "$marker_dir" "$state_dir"
+        install -d -m 0750 "$target_dir" "$marker_dir" "$state_dir"
 
         if [ -f "$state_file" ]; then
           previous_effective_dir="$(${pkgs.gnugrep}/bin/grep '^LAST_EFFECTIVE_DATA_DIR=' "$state_file" | ${pkgs.coreutils}/bin/tail -n 1 | ${pkgs.coreutils}/bin/cut -d= -f2- || true)"
@@ -1741,25 +1742,42 @@ let
 
   runLocalDataCleanupScript = pkgs.writeShellScriptBin "runLxAnnotateDataCleanup" ''
     set -euo pipefail
+    umask 027
 
     runtime_root="${envDataDir}"
     archive_root="${cfg.dataCleanup.archiveDir}"
+    persisting_mount="${config.roles.endoreg-client.paths.storagePersistingMountPoint}"
     marker_dir="$runtime_root/logs"
     marker_file="$marker_dir/data_cleanup_latest.log"
 
-    mkdir -p "$marker_dir"
+    install -d -m 0750 "$marker_dir"
 
     if [ ! -d "$runtime_root" ]; then
       echo "Skipping cleanup; runtime root missing: $runtime_root"
       exit 0
     fi
 
-    if [ ! -d "${config.roles.endoreg-client.paths.storagePersistingMountPoint}" ]; then
-      echo "Skipping cleanup; persisting storage mount missing: ${config.roles.endoreg-client.paths.storagePersistingMountPoint}"
-      exit 0
+    if ! ${pkgs.util-linux}/bin/mountpoint -q "$persisting_mount"; then
+      echo "ERROR: refusing cleanup because persisting storage is not a mounted filesystem: $persisting_mount" >&2
+      exit 1
     fi
 
-    mkdir -p "$archive_root"
+    resolved_mount="$(${pkgs.coreutils}/bin/realpath -m "$persisting_mount")"
+    resolved_archive="$(${pkgs.coreutils}/bin/realpath -m "$archive_root")"
+    case "$resolved_archive/" in
+      "$resolved_mount/"*) ;;
+      *)
+        echo "ERROR: refusing cleanup because archive is outside the persisting mount: $resolved_archive" >&2
+        exit 1
+        ;;
+    esac
+    ${pkgs.coreutils}/bin/install -d -m 0750 "$archive_root"
+    if [ "$(${pkgs.util-linux}/bin/findmnt -n -o TARGET --target "$resolved_archive" 2>/dev/null || true)" != "$resolved_mount" ]; then
+      echo "ERROR: refusing cleanup because archive does not resolve to the configured persisting mount: $resolved_archive" >&2
+      exit 1
+    fi
+
+    install -d -m 0750 "$archive_root"
 
     moved_count=0
     skipped_count=0
@@ -1791,7 +1809,7 @@ let
 
         archive_file="$archive_root/$label/$rel_path"
         archive_dir="$(${pkgs.coreutils}/bin/dirname "$archive_file")"
-        ${pkgs.coreutils}/bin/mkdir -p "$archive_dir"
+        ${pkgs.coreutils}/bin/install -d -m 0750 "$archive_dir"
 
         if [ -e "$archive_file" ]; then
           if ${pkgs.diffutils}/bin/cmp -s "$source_file" "$archive_file"; then

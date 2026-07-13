@@ -118,7 +118,7 @@ nginx.recommendedTlsSettings = true;
     generic-settings.gpu.nvidia.prime.enable = true;
 
 
-    generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_6;
+    generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
 
 
     generic-settings.network.glm52.domain = "glm.endo-reg.net";
@@ -423,6 +423,10 @@ nginx.recommendedTlsSettings = true;
 
 
   };
+
+  programs.nix-ld.enable = true;
+
+  xdg.menus.enable = true;
 
   networking.firewall.allowedTCPPorts = lib.mkAfter [ 80 443 ];
 

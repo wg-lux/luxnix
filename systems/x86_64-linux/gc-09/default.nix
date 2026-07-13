@@ -113,7 +113,7 @@ endoreg-client.defaultCenterKey = "university_hospital_wuerzburg";
     generic-settings.language = "english";
 
 
-    generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_6;
+    generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
 
 
     generic-settings.network.glm52.domain = "glm.endo-reg.net";
@@ -424,6 +424,10 @@ endoreg-client.defaultCenterKey = "university_hospital_wuerzburg";
 
 
   };
+
+  programs.nix-ld.enable = true;
+
+  xdg.menus.enable = true;
 
   nix.settings.cores = 4;
 

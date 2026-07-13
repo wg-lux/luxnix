@@ -5,9 +5,7 @@
 }:
 #CHANGEME 
 with lib;
-with lib.luxnix; let
-  cfg = config.services.luxnix.authentik;
-in {
+with lib.luxnix; {
   # options.services.luxnix.authentik = with types; {
   #   enable = mkBoolOpt false "Enable authentik host";
   # };

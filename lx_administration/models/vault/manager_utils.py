@@ -91,13 +91,6 @@ def _get_by_target_name(obj_list: List, target_name: str, logger=None):
         return None
 
 
-def _check_unique_list(lst: Sequence[Hashable]) -> bool:
-    if not len(lst) == len(set(lst)):
-        return False
-
-    return True
-
-
 def _assert_unique_list(lst: Sequence[Hashable]) -> bool:
     from collections import Counter
 

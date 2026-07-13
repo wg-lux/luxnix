@@ -71,11 +71,12 @@ endoreg-client.defaultCenterKey = "university_hospital_wuerzburg";
   services = {
 luxnix.endoregDbApiLocal.enable = lib.mkForce false;
 luxnix.lxAnnotateLocal.runtime.mode = "wheel";
-luxnix.ollama.acceleration = "cuda";
-luxnix.ollama.enable = true;
-luxnix.ollama.enableModelBootstrap = false;
-luxnix.ollama.models = [ "gemma4:e2b" ];
-ollama.host = "0.0.0.0";
+luxnix.vllm.enable = false;
+luxnix.vllm.gpuMemoryUtilization = 0.85;
+luxnix.vllm.host = "127.0.0.1";
+luxnix.vllm.maxModelLen = 8192;
+luxnix.vllm.model = "Qwen/Qwen2.5-1.5B-Instruct";
+luxnix.vllm.port = 8000;
 
   };
 
@@ -120,7 +121,7 @@ ollama.host = "0.0.0.0";
     generic-settings.language = "english";
 
 
-    generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_6;
+    generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
 
 
     generic-settings.network.glm52.domain = "glm.endo-reg.net";
@@ -425,6 +426,10 @@ ollama.host = "0.0.0.0";
 
 
   };
+
+  programs.nix-ld.enable = true;
+
+  xdg.menus.enable = true;
 
   nix.settings.cores = 4;
 

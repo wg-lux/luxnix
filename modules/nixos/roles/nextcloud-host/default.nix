@@ -17,20 +17,8 @@ with lib.luxnix;
 let
   cfg = config.roles.nextcloudHost;
 
-  ncApps = config.services.nextcloud.package.packages.apps;
-
-  sslCertFile = config.luxnix.generic-settings.sslCertificatePath;
-  sslKeyFile = config.luxnix.generic-settings.sslCertificateKeyPath;
   sensitiveServicesGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
   sslCertGroupName = sensitiveServicesGroupName;
-
-  nginx_cert_path = "/etc/nginx-host/ssl_cert";
-  nginx_key_path = "/etc/nginx-host/ssl_key";
-
-  networkSettings = config.luxnix.generic-settings.network;
-  serviceHosts = networkSettings.hosts;
-
-  lxVaultDir = config.luxnix.vault.dir;
 
   nextcloudPwdFile = "/etc/nextcloud-admin-pass";
   minioSecretFile = "/etc/minio-secret";
@@ -39,15 +27,6 @@ let
   rootCredentialsFile = "/etc/minio-credentials";
 
   accessKey = "nextcloud";
-
-  nginxPrepareScript = pkgs.writeShellScript "nginx-prepare-files_nxtcld.sh" ''
-    #!${pkgs.zsh}/bin/zsh
-    set -e
-    cp ${sslCertFile} ${nginx_cert_path}
-    cp ${sslKeyFile} ${nginx_key_path}
-    chown nginx:${sslCertGroupName} ${nginx_cert_path} ${nginx_key_path}
-    chmod 600 ${nginx_cert_path} ${nginx_key_path}
-  '';
 
   # Safe maintenance script for resetting Nextcloud services
   nextcloudMaintenanceScript = pkgs.writeScriptBin "nextcloud-maintenance" ''

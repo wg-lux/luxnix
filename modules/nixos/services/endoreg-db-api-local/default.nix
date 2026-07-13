@@ -6,10 +6,6 @@
 with lib;
 with lib.luxnix; let
   cfg = config.services.luxnix.endoregDbApiLocal;
-  gs = config.luxnix.generic-settings;
-  gsp = gs.postgres;
-
-  adminName = config.user.admin.name;
   scriptName = "runLocalEndoApi";
 
   # Use configuration options or fallback to defaults

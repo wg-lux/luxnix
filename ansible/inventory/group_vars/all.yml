@@ -27,6 +27,9 @@ group_roles:
   custom_packages.cloud: "true"
   common.enable: "true"
 group_services: {}
+group_nixos:
+  xdg.menus.enable: "true"
+  programs.nix-ld.enable: "true"
 group_luxnix:
   maintenance.autoUpdates.operation: '"switch"'
   maintenance.autoUpdates.flake: '"github:wg-lux/luxnix/prototype"'
@@ -185,7 +188,7 @@ group_luxnix:
   generic_settings.postgres.enable: "true"
   dns.enable: "true"
   generic_settings.enable: "true"
-  generic_settings.linux.kernelPackages: "pkgs.linuxPackages_6_6"
+  generic_settings.linux.kernelPackages: "pkgs.linuxPackages_6_12"
   generic_settings.adminVpnIp: '"172.16.255.106"'
   generic_settings.traefikHostIp: '"172.16.255.12"'
   generic_settings.traefikHostDomain: '"traefik.endo-reg.net"'
@@ -224,6 +227,7 @@ authentication:
 
 network_conf:
   domain: "endo-reg.net"
+
 
 aglnet_conf:
   domain: "{{ network_conf.domain }}"

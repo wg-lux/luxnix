@@ -3,7 +3,6 @@
 with lib; 
 with lib.luxnix; let
   cfg = config.services.luxnix.podman;
-  adminUser = config.user.admin.name;
   # Use comprehensive NVIDIA detection logic
   cudaSupport = (config.luxnix.nvidia-default.enable or false) || 
                 (config.luxnix.nvidia-prime.enable or false) || 

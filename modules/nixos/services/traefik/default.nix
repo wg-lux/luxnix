@@ -3,7 +3,6 @@
 with lib; 
 with lib.luxnix; let
   cfg = config.services.luxnix.traefik;
-  dynCfgFile = "./${cfg.dynamicConfigFile}";
 in {
   options.services.luxnix.traefik = {
     enable = mkBoolOpt false "Enable traefik";

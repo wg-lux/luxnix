@@ -3,12 +3,14 @@
   ntlib,
   repoRoot,
   ...
-}: let
+}:
+let
   lxAnnotateOptions = "${repoRoot}/modules/nixos/services/lx-annotate-local/options.nix";
   lxAnnotateConfig = "${repoRoot}/modules/nixos/services/lx-annotate-local/config.nix";
   lxAnnotateScripts = "${repoRoot}/modules/nixos/services/lx-annotate-local/scripts.nix";
   lxAnnotateEnvScripts = "${repoRoot}/modules/nixos/services/lx-annotate-local/scripts/env.nix";
-in {
+in
+{
   suites."lx-annotate hub contracts" = {
     pos = __curPos;
     tests = [
@@ -16,19 +18,21 @@ in {
         name = "lx-annotate-hub-default-is-explicit-central-node";
         type = "script";
         script = ''
-          ${ntlib.helpers.path [pkgs.gnugrep]}
+          ${ntlib.helpers.path [ pkgs.gnugrep ]}
           ${ntlib.helpers.scriptHelpers}
           assert_file_contains ${lxAnnotateOptions} 'deploymentRole = mkOption' "lx-annotate must expose an explicit deployment role"
           assert_file_contains ${lxAnnotateOptions} 'LuxNix central server nodes map to central_hub' "deployment role docs must distinguish central servers from laptop center nodes"
           assert_file_contains ${lxAnnotateConfig} 'endoregCentralServer = lib\.attrByPath \[ "roles" "endoreg-db-central-01" "enable" \] false config;' "lx-annotate must derive central server classification from the central role"
           assert_file_contains ${lxAnnotateConfig} 'config\.networking\.hostName == "gs-02" \|\| endoregCentralServer' "lx-annotate hub mode must default for declared central nodes"
+          assert_file_contains ${lxAnnotateConfig} 'extraSettings\.IS_CENTRAL_NODE = mkIf cfg\.hub\.enable' "hub mode must set the Django central-node contract"
+          assert_file_contains ${lxAnnotateConfig} 'mkForce true' "the central-node contract must override the site-role default"
         '';
       }
       {
         name = "lx-annotate-exports-endoreg-hub-env";
         type = "script";
         script = ''
-          ${ntlib.helpers.path [pkgs.gnugrep]}
+          ${ntlib.helpers.path [ pkgs.gnugrep ]}
           ${ntlib.helpers.scriptHelpers}
           assert_file_contains ${lxAnnotateEnvScripts} 'export ENDOREG_DEPLOYMENT_ROLE=.*envDeploymentRole' "lx-annotate shell runtime env must export ENDOREG_DEPLOYMENT_ROLE"
           assert_file_contains ${lxAnnotateEnvScripts} 'export ENDOREG_HUB_MODE=' "lx-annotate shell runtime env must export ENDOREG_HUB_MODE"
@@ -48,7 +52,7 @@ in {
         name = "lx-annotate-transfer-api-requires-hub";
         type = "script";
         script = ''
-          ${ntlib.helpers.path [pkgs.gnugrep]}
+          ${ntlib.helpers.path [ pkgs.gnugrep ]}
           ${ntlib.helpers.scriptHelpers}
           assert_file_contains ${lxAnnotateOptions} 'description = "Enable the authenticated node-to-node hub transfer API\. Disabled by default even on hub nodes\."' "transfer API option must stay explicit and default-off"
           assert_file_contains ${lxAnnotateConfig} 'hub\.transferApi\.enable requires services\.luxnix\.lxAnnotateLocal\.hub\.enable' "transfer API must not be enabled outside hub mode"
@@ -58,6 +62,26 @@ in {
           assert_file_contains ${lxAnnotateConfig} 'proxy_set_header X-Client-Cert-Verified \$ssl_client_verify;' "nginx must forward client certificate verification to Django"
           assert_file_contains ${lxAnnotateConfig} 'ssl_client_certificate \$[{]toString cfg\.hub\.transferApi\.clientCaFile};' "nginx must use the configured transfer client CA bundle"
           assert_file_contains ${lxAnnotateConfig} 'ssl_verify_client optional;' "nginx must request and verify supplied client certificates when transfer API is enabled"
+        '';
+      }
+      {
+        name = "lx-annotate-outbound-transfer-requires-mtls-identity";
+        type = "script";
+        script = ''
+          ${ntlib.helpers.path [ pkgs.gnugrep ]}
+          ${ntlib.helpers.scriptHelpers}
+          assert_file_contains ${lxAnnotateOptions} 'outboundTransfer = mkOption' "site nodes must expose explicit outbound transfer configuration"
+          assert_file_contains ${lxAnnotateConfig} 'outboundTransfer\.enable requires runtime\.deploymentRole = \\"site_node\\"' "outbound transfer must be site-node-only"
+          assert_file_contains ${lxAnnotateConfig} 'outboundTransfer\.enable requires an outbound client certificate file' "outbound transfer must require a client certificate"
+          assert_file_contains ${lxAnnotateConfig} 'outboundTransfer\.enable requires an outbound client key file' "outbound transfer must require a client key"
+          assert_file_contains ${lxAnnotateConfig} 'outboundTransfer\.enable requires a source-node secret file' "outbound transfer must require request authentication"
+          assert_file_contains ${lxAnnotateEnvScripts} 'LX_ANNOTATE_HUB_EXPORT_CLIENT_CERT_FILE' "client certificate path must reach the worker environment"
+          assert_file_contains ${lxAnnotateEnvScripts} 'LX_ANNOTATE_HUB_SOURCE_NODE_SECRET_FILE' "node secret file path must reach the worker environment"
+          assert_file_contains ${lxAnnotateEnvScripts} 'CELERY_HUB_TRANSFER_QUEUE = celeryHubTransferQueueName' "hub transfer tasks must have a dedicated queue"
+          assert_file_contains ${lxAnnotateEnvScripts} 'LX_ANNOTATE_HUB_EXPORT_STALE_AFTER_SECONDS' "stale recovery bounds must reach the worker environment"
+          assert_file_contains ${lxAnnotateConfig} 'unitName = "lx-annotate-celery-hub-transfer-worker"' "outbound transfer must use a dedicated worker"
+          assert_file_contains ${lxAnnotateConfig} 'dispatch_hub_export_recovery' "site nodes must periodically dispatch stale transfer recovery"
+          assert_file_contains ${lxAnnotateConfig} 'systemd\.timers\.lx-annotate-hub-export-recovery' "outbound recovery must be level-triggered by a persistent timer"
         '';
       }
     ];

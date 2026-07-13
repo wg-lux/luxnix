@@ -61,7 +61,7 @@ desktop.enable = true;
     generic-settings.enable = true;
 
 
-    generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_6;
+    generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
 
 
     generic-settings.network.glm52.domain = "glm.endo-reg.net";
@@ -336,5 +336,9 @@ desktop.enable = true;
 
 
   };
+
+  programs.nix-ld.enable = true;
+
+  xdg.menus.enable = true;
 
 }

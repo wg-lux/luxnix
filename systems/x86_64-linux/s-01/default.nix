@@ -69,7 +69,7 @@ endoreg-client.enable = false;
     generic-settings.language = "english";
 
 
-    generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_6;
+    generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
 
 
     generic-settings.linux.rmemMax = 7500000;
@@ -356,5 +356,9 @@ endoreg-client.enable = false;
 
 
   };
+
+  programs.nix-ld.enable = true;
+
+  xdg.menus.enable = true;
 
 }

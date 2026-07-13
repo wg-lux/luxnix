@@ -44,9 +44,6 @@ let
     runtimeStaticRootPath
     runtimeWheelRootPath
     runtimeWheelVenvPath
-    runtimeWorkingDir
-    envConfTemplateDir
-    envAssetDir
     envDataDir
     envConfDir
     sslKeyPath
@@ -68,14 +65,6 @@ let
     processedVideoDirName
     ;
   inherit (runtime.env)
-    envAllowedHosts
-    envCorsAllowedOrigins
-    envDefaultCenter
-    envDeploymentRole
-    envDjangoPort
-    envHttpProtocol
-    envNginxProtectedMediaUrl
-    envViteEnableDebug
     ;
 
   boolString = value: if value then "true" else "false";
@@ -605,13 +594,7 @@ let
     };
   loadBaseDataServiceScript = pkgs.writeShellScript "lx-annotate-load-base-data-service" ''
     set -euo pipefail
-
-    if ${effectiveRuntimePackage}/bin/lx-annotate-load-base-data; then
-      exit 0
-    fi
-
-    echo "lx-annotate load-base-data failed; continuing after successful migrations." >&2
-    exit 0
+    exec ${effectiveRuntimePackage}/bin/lx-annotate-load-base-data
   '';
   sapImportServiceScript = pkgs.writeShellScript "lx-annotate-sap-import-service" ''
     set -euo pipefail
@@ -677,6 +660,16 @@ let
       ];
       pool = maintenanceWorkerPool;
       environment = postValidationWorkerEnv;
+    };
+    hub-transfer = mkWorker {
+      unitName = "lx-annotate-celery-hub-transfer-worker";
+      hostname = "hub-transfer";
+      queues = [ "hub_transfer" ];
+      pool = cfg.runtime.workerPools.hubTransfer;
+      mode = if cfg.hub.outboundTransfer.enable then "always" else "manual";
+      environment = postValidationWorkerEnv;
+      after = [ "network-online.target" ];
+      wants = [ "network-online.target" ];
     };
     pipeline = mkWorker {
       unitName = "lx-annotate-celery-pipeline-worker";
@@ -925,6 +918,7 @@ let
 
     runtime_root="${envDataDir}"
     archive_root="${cfg.dataCleanup.archiveDir}"
+    persisting_mount="${config.roles.endoreg-client.paths.storagePersistingMountPoint}"
     marker_dir="$runtime_root/logs"
     marker_file="$marker_dir/data_cleanup_latest.log"
 
@@ -935,9 +929,24 @@ let
       exit 0
     fi
 
-    if [ ! -d "${config.roles.endoreg-client.paths.storagePersistingMountPoint}" ]; then
-      echo "Skipping cleanup; persisting storage mount missing: ${config.roles.endoreg-client.paths.storagePersistingMountPoint}"
-      exit 0
+    if ! ${pkgs.util-linux}/bin/mountpoint -q "$persisting_mount"; then
+      echo "ERROR: refusing cleanup because persisting storage is not a mounted filesystem: $persisting_mount" >&2
+      exit 1
+    fi
+
+    resolved_mount="$(${pkgs.coreutils}/bin/realpath -m "$persisting_mount")"
+    resolved_archive="$(${pkgs.coreutils}/bin/realpath -m "$archive_root")"
+    case "$resolved_archive/" in
+      "$resolved_mount/"*) ;;
+      *)
+        echo "ERROR: refusing cleanup because archive is outside the persisting mount: $resolved_archive" >&2
+        exit 1
+        ;;
+    esac
+    ${pkgs.coreutils}/bin/install -d -m 0750 "$archive_root"
+    if [ "$(${pkgs.util-linux}/bin/findmnt -n -o TARGET --target "$resolved_archive" 2>/dev/null || true)" != "$resolved_mount" ]; then
+      echo "ERROR: refusing cleanup because archive does not resolve to the configured persisting mount: $resolved_archive" >&2
+      exit 1
     fi
 
     mkdir -p "$archive_root"
@@ -1292,6 +1301,28 @@ in
           message = "services.luxnix.lxAnnotateLocal.hub.transferApi.enable requires services.luxnix.lxAnnotateLocal.hub.transferApi.clientCaFile to be set.";
         }
         {
+          assertion = !cfg.hub.outboundTransfer.enable || cfg.runtime.deploymentRole == "site_node";
+          message = "services.luxnix.lxAnnotateLocal.hub.outboundTransfer.enable requires runtime.deploymentRole = \"site_node\".";
+        }
+        {
+          assertion = !cfg.hub.outboundTransfer.enable || cfg.hub.outboundTransfer.requireMtls;
+          message = "services.luxnix.lxAnnotateLocal.hub.outboundTransfer.enable requires outboundTransfer.requireMtls = true.";
+        }
+        {
+          assertion =
+            !cfg.hub.outboundTransfer.enable || cfg.hub.outboundTransfer.clientCertificateFile != null;
+          message = "services.luxnix.lxAnnotateLocal.hub.outboundTransfer.enable requires an outbound client certificate file.";
+        }
+        {
+          assertion = !cfg.hub.outboundTransfer.enable || cfg.hub.outboundTransfer.clientKeyFile != null;
+          message = "services.luxnix.lxAnnotateLocal.hub.outboundTransfer.enable requires an outbound client key file.";
+        }
+        {
+          assertion =
+            !cfg.hub.outboundTransfer.enable || cfg.hub.outboundTransfer.sourceNodeSecretFile != null;
+          message = "services.luxnix.lxAnnotateLocal.hub.outboundTransfer.enable requires a source-node secret file.";
+        }
+        {
           assertion =
             !cfg.hub.transferApi.enable
             || (cfg.hub.transferApi.mtlsMetaKey != "" && cfg.hub.transferApi.mtlsMetaValue != "");
@@ -1347,7 +1378,7 @@ in
       ];
 
       services.luxnix.lxAnnotateLocal.django.extraSettings.IS_CENTRAL_NODE = mkIf cfg.hub.enable (
-        mkDefault true
+        mkForce true
       );
       services.luxnix.lxAnnotateLocal.runtime.managedEncryptedData.enable =
         mkIf cfg.runtime.vaultManagedEncryptedData.enable (mkDefault true);
@@ -1783,6 +1814,50 @@ in
           ];
           Unit = "lx-annotate-filewatcher.service";
           MakeDirectory = true;
+        };
+      };
+
+      systemd.timers.lx-annotate-filewatcher = {
+        description = "Periodically retry pending LX-Annotate import files";
+        wantedBy = [ "timers.target" ];
+        timerConfig = {
+          OnBootSec = "2m";
+          OnUnitActiveSec = "5m";
+          RandomizedDelaySec = "30s";
+          Persistent = true;
+          Unit = "lx-annotate-filewatcher.service";
+        };
+      };
+
+      systemd.services.lx-annotate-hub-export-recovery = mkIf cfg.hub.outboundTransfer.enable (
+        mkLxAnnotateAppService {
+          description = "Dispatch bounded recovery for LX-Annotate outbound hub transfers";
+          wantedBy = [ ];
+          after = [
+            "network-online.target"
+            "lx-annotate-celery-hub-transfer-worker.service"
+          ];
+          wants = [
+            "network-online.target"
+            "lx-annotate-celery-hub-transfer-worker.service"
+          ];
+          serviceConfig = {
+            Type = "oneshot";
+            ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-manage dispatch_hub_export_recovery";
+            TimeoutStartSec = "2m";
+          };
+        }
+      );
+
+      systemd.timers.lx-annotate-hub-export-recovery = mkIf cfg.hub.outboundTransfer.enable {
+        description = "Periodically recover LX-Annotate outbound hub transfers";
+        wantedBy = [ "timers.target" ];
+        timerConfig = {
+          OnBootSec = "5m";
+          OnUnitActiveSec = cfg.hub.outboundTransfer.recoveryInterval;
+          RandomizedDelaySec = "30s";
+          Persistent = true;
+          Unit = "lx-annotate-hub-export-recovery.service";
         };
       };
 

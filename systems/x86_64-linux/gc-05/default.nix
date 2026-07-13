@@ -116,7 +116,7 @@ endoreg-client.defaultCenterKey = "rbk_stuttgart";
     generic-settings.gpu.nvidia.prime.enable = true;
 
 
-    generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_6;
+    generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
 
 
     generic-settings.network.glm52.domain = "glm.endo-reg.net";
@@ -421,6 +421,10 @@ endoreg-client.defaultCenterKey = "rbk_stuttgart";
 
 
   };
+
+  programs.nix-ld.enable = true;
+
+  xdg.menus.enable = true;
 
   nix.settings.cores = 4;
 

@@ -1,4 +1,4 @@
-from .utils import parse_nix_file, find_duplicates, remove_duplicates
+from .utils import parse_nix_file, remove_duplicates
 
 
 def validate_default_nix_file(filepath):

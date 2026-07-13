@@ -1,3 +1,3 @@
-{config, lib, ...}@inputs: {
+{config, lib, ...}: {
    
 }

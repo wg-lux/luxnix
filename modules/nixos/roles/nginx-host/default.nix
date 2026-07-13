@@ -10,7 +10,6 @@ with lib.luxnix;
 let
   cfg = config.roles.nginxHost;
   conf = cfg.settings;
-  vpnIp = config.luxnix.generic-settings.vpnIp;
   vpnSubnet = config.luxnix.generic-settings.vpnSubnet;
   sensitiveServicesGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
   sslCertGroupName =
@@ -20,7 +19,6 @@ let
       sensitiveServicesGroupName;
 
   networkConfig = config.luxnix.generic-settings.network;
-  nginxConfig = networkConfig.nginx;
   keycloakConfig = networkConfig.keycloak;
   nextcloudConfig = networkConfig.nextcloud;
   glm52Config = networkConfig.glm52;

@@ -122,7 +122,7 @@ luxnix.lxAiLocal.runtime.protectedDataDir = "/var/lib/lx-annotate/data";
     generic-settings.language = "english";
 
 
-    generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_6;
+    generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
 
 
     generic-settings.network.glm52.domain = "glm.endo-reg.net";
@@ -427,5 +427,9 @@ luxnix.lxAiLocal.runtime.protectedDataDir = "/var/lib/lx-annotate/data";
 
 
   };
+
+  programs.nix-ld.enable = true;
+
+  xdg.menus.enable = true;
 
 }

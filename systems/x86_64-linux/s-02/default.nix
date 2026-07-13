@@ -101,7 +101,7 @@ postgres.main.enable = true;
     generic-settings.language = "english";
 
 
-    generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_6;
+    generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
 
 
     generic-settings.linux.rmemMax = 7500000;
@@ -388,5 +388,9 @@ postgres.main.enable = true;
 
 
   };
+
+  programs.nix-ld.enable = true;
+
+  xdg.menus.enable = true;
 
 }

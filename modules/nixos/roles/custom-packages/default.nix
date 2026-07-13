@@ -68,10 +68,6 @@ with lib.luxnix; let
     zotero
   ];
 
-  cuda = with pkgs; [
-    autoAddDriverRunpath
-  ];
-
   ldBase = with pkgs; [
     stdenv.cc.cc
     zlib

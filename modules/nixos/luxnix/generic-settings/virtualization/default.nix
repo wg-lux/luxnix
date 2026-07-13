@@ -7,7 +7,6 @@
 with lib;
 with lib.luxnix; let
   cfg = config.luxnix.generic-settings.virtualization;
-  hostname = config.networking.hostName;
   username = config.user.admin.name;
   sensitiveServiceGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
 

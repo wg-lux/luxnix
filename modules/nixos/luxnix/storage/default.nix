@@ -8,12 +8,6 @@ with lib;
 with lib.luxnix;
 let
   cfg = config.luxnix.storage;
-  hostname = config.networking.hostName;
-  username = config.user.admin.name;
-
-  sensitiveServiceGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
-  adminUserName = config.user.admin.name;
-  endoregServiceUserName = config.user.endoreg-service-user.name;
 
   # luxnix persisting default mountpoint
 
@@ -27,16 +21,11 @@ in
     };
   };
 
-  config = mkIf cfg.enable (
-    let
-      endoregServiceUserName = config.user.endoreg-service-user.name;
-    in
-    {
+  config = mkIf cfg.enable {
       # add package smartmontools
       environment.systemPackages = with pkgs; [
         smartmontools
       ];
 
-    }
-  );
+  };
 }

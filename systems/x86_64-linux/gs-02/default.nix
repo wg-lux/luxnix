@@ -96,12 +96,10 @@ luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl = "redis://172.16.255.1
 luxnix.lxAnnotateLocal.runtime.trainingWorker.cudaVisibleDevices = "0";
 luxnix.lxAnnotateLocal.runtime.trainingWorker.mode = "manual";
 luxnix.glm52.enable = true;
-luxnix.glm52.contextSize = 4096;
-luxnix.glm52.gpuLayers = 4;
+luxnix.glm52.gpuLayers = 999;
 luxnix.glm52.host = "0.0.0.0";
 luxnix.glm52.port = 8088;
 luxnix.glm52.quant = "UD-IQ2_M";
-luxnix.glm52.thinkingMode = "off";
 luxnix.lxAnnotateLocal.django.extraSettings."IS_CENTRAL_NODE" = lib.mkForce true;
 luxnix.ollama.acceleration = "cuda";
 luxnix.ollama.enable = true;
@@ -138,8 +136,6 @@ ollama.host = "0.0.0.0";
 
 
     generic-settings.gpu.nvidia.enable = true;
-
-    nvidia-prime.enable = lib.mkForce false;
 
 
     generic-settings.language = "english";
@@ -450,6 +446,10 @@ ollama.host = "0.0.0.0";
 
 
   };
+
+  programs.nix-ld.enable = true;
+
+  xdg.menus.enable = true;
 
   networking.firewall.interfaces.tun0.allowedTCPPorts = lib.mkAfter [ 11434 8088 ];
 
