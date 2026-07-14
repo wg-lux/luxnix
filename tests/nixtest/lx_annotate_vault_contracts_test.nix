@@ -3,12 +3,15 @@
   ntlib,
   repoRoot,
   ...
-}: let
+}:
+let
   vaultModule = "${repoRoot}/modules/nixos/luxnix/vault/default.nix";
   managedSecretsModule = "${repoRoot}/modules/nixos/roles/managed-secrets/default.nix";
   clientUserModule = "${repoRoot}/modules/nixos/user/client/default.nix";
   lxAnnotateConfig = "${repoRoot}/modules/nixos/services/lx-annotate-local/config.nix";
-in {
+  lxAnnotateEnv = "${repoRoot}/modules/nixos/services/lx-annotate-local/scripts/env.nix";
+in
+{
   suites."lx-annotate vault contracts" = {
     pos = __curPos;
     tests = [
@@ -16,7 +19,7 @@ in {
         name = "vault-client-bootstrap-service-exists";
         type = "script";
         script = ''
-          ${ntlib.helpers.path [pkgs.gnugrep]}
+          ${ntlib.helpers.path [ pkgs.gnugrep ]}
           ${ntlib.helpers.scriptHelpers}
           assert_file_contains ${vaultModule} 'systemd\.services\.vault-auth-setup' "vault auth bootstrap service must exist"
           assert_file_contains ${vaultModule} 'runtimeEnvironmentFile' "vault runtime env file must be defined"
@@ -27,10 +30,60 @@ in {
         '';
       }
       {
+        name = "vault-server-hub-pki-is-production-and-fail-closed";
+        type = "script";
+        script = ''
+          ${ntlib.helpers.path [ pkgs.gnugrep ]}
+          ${ntlib.helpers.scriptHelpers}
+          assert_file_contains ${vaultModule} 'storageBackend = "raft"' "Vault server must use integrated Raft storage"
+          assert_file_contains ${vaultModule} 'luxnix-vault-bootstrap-hub-pki' "Vault must expose explicit hub PKI bootstrap tooling"
+          assert_file_contains ${vaultModule} 'luxnix-vault-enroll-hub-site' "Vault must expose bounded per-site enrollment tooling"
+          assert_file_contains ${vaultModule} 'client_flag=true' "hub certificates must be client identities"
+          assert_file_contains ${vaultModule} 'server_flag=false' "hub client certificates must not be valid server identities"
+          assert_file_contains ${vaultModule} 'systemd\.services\.luxnix-vault-issue-hub-client-certificate' "site client identities must be issued and renewed by a dedicated service"
+          assert_file_contains ${vaultModule} 'Vault returned a client certificate and private key that do not match' "issued certificate and key pairs must be verified"
+          assert_file_contains ${vaultModule} 'source-node-secret' "site enrollment must provision separate request-authentication material"
+          assert_file_contains ${vaultModule} 'vault-server-ca.pem' "site enrollment must include pinned Vault server trust material"
+          assert_file_contains ${vaultModule} 'kv_mount/data/nodes' "site AppRoles must read only their own request-authentication secret"
+          assert_file_contains ${vaultModule} 'lx_hub_source_node_secret' "site request-authentication material must be refreshed through managed secrets"
+          assert_file_contains ${vaultModule} 'systemd\.services\.luxnix-vault-publish-hub-client-ca' "hub client CA publication must be managed"
+          assert_file_contains ${vaultModule} '--cacert.*serverCfg\.caCertFile' "hub CA publication must verify a private Vault server certificate"
+          assert_file_contains ${vaultModule} 'openssl x509.*-checkend' "published CA material must be validated"
+          assert_file_contains ${vaultModule} 'VAULT_TOKEN are required' "PKI bootstrap must require an explicit administrative token"
+        '';
+      }
+      {
+        name = "lx-annotate-network-nodes-are-provisioned-at-the-model-boundary";
+        type = "script";
+        script = ''
+          ${ntlib.helpers.path [ pkgs.gnugrep ]}
+          ${ntlib.helpers.scriptHelpers}
+          assert_file_contains ${lxAnnotateConfig} 'NetworkNode\.objects\.update_or_create' "NetworkNode records must be provisioned idempotently"
+          assert_file_contains ${lxAnnotateConfig} 'node\.set_shared_secret' "NetworkNode request secrets must be hashed through the model helper"
+          assert_file_contains ${lxAnnotateConfig} 'transaction\.atomic' "NetworkNode provisioning must be atomic"
+          assert_file_contains ${lxAnnotateConfig} 'hub\.node_provisioned' "NetworkNode provisioning must emit structured JSON events"
+          assert_file_contains ${lxAnnotateConfig} 'lx-annotate-hub-node-provisioning' "application services must be gated on NetworkNode provisioning"
+          assert_file_contains ${lxAnnotateConfig} '/api/media/hub/transfers/' "machine-to-machine hub routes must bypass browser OIDC redirects"
+          assert_file_contains ${lxAnnotateConfig} 'cfg\.hub\.transferApi\.enable' "the OIDC route policy must be scoped to transfer API hubs"
+          assert_file_contains ${lxAnnotateConfig} 'lx_annotate\.settings\.settings_prod' "hub OIDC policy initialization must preserve the lx-annotate settings boundary"
+          assert_file_contains ${lxAnnotateEnv} 'DJANGO_ALLOWED_HOSTS = envAllowedHosts' "production deployments must export Django's required allowed-hosts variable"
+        '';
+      }
+      {
+        name = "lx-annotate-wheel-runtime-is-owned-by-the-service-principal";
+        type = "script";
+        script = ''
+          ${ntlib.helpers.path [ pkgs.gnugrep ]}
+          ${ntlib.helpers.scriptHelpers}
+          assert_file_contains ${lxAnnotateConfig} 'd \$\{runtimeWheelRootPath\} 0750 \$\{endoreg-service-user-name\}' "wheel runtime root must be created for the service principal"
+          assert_file_contains ${lxAnnotateConfig} 'z \$\{runtimeWheelRootPath\} 0750 \$\{endoreg-service-user-name\}' "existing wheel runtime ownership must be corrected"
+        '';
+      }
+      {
         name = "managed-secrets-handles-custom-secrets-atomically";
         type = "script";
         script = ''
-          ${ntlib.helpers.path [pkgs.gnugrep]}
+          ${ntlib.helpers.path [ pkgs.gnugrep ]}
           ${ntlib.helpers.scriptHelpers}
           assert_file_contains ${managedSecretsModule} 'allManagedSecrets = .*activeBuiltinSecrets // activeCustomSecrets' "custom secrets must be included in generation set"
           assert_file_contains ${managedSecretsModule} 'refreshOnBoot = mkOption' "refreshOnBoot option must exist"
@@ -43,7 +96,7 @@ in {
         name = "managed-secrets-does-not-own-human-facing-passwords";
         type = "script";
         script = ''
-          ${ntlib.helpers.path [pkgs.gnugrep]}
+          ${ntlib.helpers.path [ pkgs.gnugrep ]}
           ${ntlib.helpers.scriptHelpers}
           assert_file_contains ${managedSecretsModule} 'humanFacingSecretNames' "managed-secrets must classify human-facing password built-ins"
           assert_file_contains ${managedSecretsModule} 'humanFacing = mkOption' "custom secrets must be able to declare human-facing credentials"
@@ -57,7 +110,7 @@ in {
         name = "lx-annotate-vault-secrets-are-root-only-and-refreshed";
         type = "script";
         script = ''
-          ${ntlib.helpers.path [pkgs.gnugrep]}
+          ${ntlib.helpers.path [ pkgs.gnugrep ]}
           ${ntlib.helpers.scriptHelpers}
           assert_file_contains ${lxAnnotateConfig} 'lx_annotate_luks_key' "LUKS key secret must be declared"
           assert_file_contains ${lxAnnotateConfig} 'lx_annotate_luks_uuid' "LUKS UUID secret must be declared"
@@ -70,7 +123,7 @@ in {
         name = "lx-annotate-vault-mode-fails-closed";
         type = "script";
         script = ''
-          ${ntlib.helpers.path [pkgs.gnugrep]}
+          ${ntlib.helpers.path [ pkgs.gnugrep ]}
           ${ntlib.helpers.scriptHelpers}
           assert_file_contains ${lxAnnotateConfig} 'networking\.hostName to be set' "vault mode must require hostname"
           assert_file_contains ${lxAnnotateConfig} 'requires luxnix\.vault client configuration' "vault mode must require explicit vault client config"

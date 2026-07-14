@@ -372,8 +372,8 @@ in
           wheelPath = mkOption {
             type = types.nullOr types.path;
             default = pkgs.fetchurl {
-              url = "https://files.pythonhosted.org/packages/1b/7e/89866d5d7155e8eb7de7c35d4fbad14301f51914025ac4716e8def1dfb6a/lx_annotate-0.9.30-py3-none-any.whl";
-              hash = "sha256-AE2mw1lXzhp8xDHzwMhYTFVS7tpjTkJVIF4fv3FnBTA=";
+              url = "https://files.pythonhosted.org/packages/00/f4/65b9f6c03da6d4bc6f27a2a099caaa29358f300370b40c7191ea80800977/lx_annotate-0.9.36-py3-none-any.whl";
+              hash = "sha256-yi0T0AGXoOMkfEOO7IlaNKJ0VhkTuz9/sTiVLVUofFo=";
             };
             description = "Path to the lx-annotate wheel artifact used in wheel mode.";
           };
@@ -1077,6 +1077,27 @@ in
       description = "Recovery settings for migrating legacy lx-annotate media into the runtime storage root.";
     };
 
+    centerAdminBootstrap = mkOption {
+      type = types.submodule {
+        options = {
+          username = mkOption {
+            type = types.nullOr (types.strMatching "[A-Za-z0-9@.+_-]+");
+            default = null;
+            example = "lx_bootstrap_admin";
+            description = ''
+              Existing Keycloak-provisioned Django username to promote through
+              the audited bootstrap_center_admin management command. Setting a
+              username enables a deployment-time one-shot unit. The user must
+              already have the exact synchronized center_scope:admin group.
+              Clear this option after the successful bootstrap deployment.
+            '';
+          };
+        };
+      };
+      default = { };
+      description = "Controlled, temporary first-administrator bootstrap action.";
+    };
+
     streamableMigration = mkOption {
       type = types.submodule {
         options = {
@@ -1097,13 +1118,13 @@ in
           enable = mkOption {
             type = types.bool;
             default = true;
-            description = "Expose the manual processed-video HLS materialization systemd unit. The unit is not started by any target.";
+            description = "Expose the manual local encrypted-HLS materialization systemd unit. The unit is not started by any target.";
           };
           extraArgs = mkOption {
             type = types.listOf types.str;
             default = [ ];
             example = literalExpression ''[ "--limit" "25" ]'';
-            description = "Additional safe arguments passed to materialize_video_hls. The wrapper rejects --force, --inline, and --artifact-kind overrides.";
+            description = "Additional safe arguments passed to materialize_video_hls. Use --artifact-kind raw for a raw-only run; processed is the default. The wrapper rejects --force, --inline, and unsupported artifact kinds.";
           };
           timeoutStartSec = mkOption {
             type = types.str;
@@ -1113,7 +1134,7 @@ in
         };
       };
       default = { };
-      description = "Settings for the manual processed-video encrypted HLS materialization unit.";
+      description = "Settings for the manual local raw or processed encrypted-HLS materialization unit.";
     };
 
     hlsBackfill = mkOption {
@@ -1122,13 +1143,13 @@ in
           enable = mkOption {
             type = types.bool;
             default = true;
-            description = "Run a boot-time processed-video HLS backfill dispatcher after migrations, base data loading, and encrypted storage validation.";
+            description = "Run a boot-time local encrypted-HLS backfill dispatcher after migrations, base data loading, and encrypted storage validation.";
           };
           extraArgs = mkOption {
             type = types.listOf types.str;
             default = [ ];
             example = literalExpression ''[ "--limit" "25" ]'';
-            description = "Additional safe arguments passed to materialize_video_hls for the automatic backfill. The wrapper rejects --force, --inline, and --artifact-kind overrides.";
+            description = "Additional safe arguments passed to materialize_video_hls for the automatic backfill. Use --artifact-kind raw for a raw-only run; processed is the default. The wrapper rejects --force, --inline, and unsupported artifact kinds.";
           };
           timeoutStartSec = mkOption {
             type = types.str;
@@ -1138,7 +1159,7 @@ in
         };
       };
       default = { };
-      description = "Settings for the automatic processed-video encrypted HLS backfill dispatcher.";
+      description = "Settings for the automatic local encrypted-HLS backfill dispatcher.";
     };
 
     dataCleanup = mkOption {
@@ -1414,6 +1435,60 @@ in
             };
             default = { };
             description = "Fail-closed outbound hub transfer settings for site nodes.";
+          };
+          nodeProvisioning = mkOption {
+            type = types.submodule {
+              options = {
+                enable = mkOption {
+                  type = types.bool;
+                  default = false;
+                  description = "Idempotently provision the local and peer NetworkNode records required for hub transfer.";
+                };
+                nodes = mkOption {
+                  type = types.listOf (
+                    types.submodule {
+                      options = {
+                        nodeKey = mkOption {
+                          type = types.strMatching "[A-Za-z0-9_-]+";
+                          description = "Immutable NetworkNode key shared by sender and hub databases.";
+                        };
+                        displayName = mkOption {
+                          type = types.str;
+                          description = "Operator-facing NetworkNode name.";
+                        };
+                        role = mkOption {
+                          type = types.enum [
+                            "central_hub"
+                            "site_node"
+                            "standalone"
+                          ];
+                          description = "NetworkNode deployment role.";
+                        };
+                        baseUrl = mkOption {
+                          type = types.str;
+                          default = "";
+                          description = "HTTPS base URL used when this node is a transfer target.";
+                        };
+                        centerKey = mkOption {
+                          type = types.nullOr types.str;
+                          default = null;
+                          description = "Existing Center.center_key owning this node.";
+                        };
+                        sharedSecretFile = mkOption {
+                          type = types.nullOr (types.either types.path types.str);
+                          default = null;
+                          description = "Optional runtime file whose secret is hashed into this node record; never stored in Nix.";
+                        };
+                      };
+                    }
+                  );
+                  default = [ ];
+                  description = "Complete NetworkNode records required by this deployment.";
+                };
+              };
+            };
+            default = { };
+            description = "Model-boundary provisioning for hub-transfer node identities.";
           };
           backup = mkOption {
             type = types.submodule {

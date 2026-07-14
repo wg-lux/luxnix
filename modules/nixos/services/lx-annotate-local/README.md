@@ -110,6 +110,16 @@ needed.
 
 ## Streamable Video Migration
 
+The full cross-repository production contract, including encrypted HLS
+materialization, authenticated browser playback, deployment, hub separation,
+readiness, and incident response, is documented in
+[`docs/lx-annotate-secure-hls.md`](/home/admin/luxnix/docs/lx-annotate-secure-hls.md).
+
+The essential operational distinction is that HLS systemd oneshots are
+dispatchers. A successful exit confirms that eligible work was selected and
+queued; only a terminal worker result and a `ready` artifact establish that the
+video is playable.
+
 The module exposes a manual migration unit for backfilling existing videos into
 the streamable protected subtree:
 
@@ -161,6 +171,7 @@ mount unit.
 | `lx-annotate-migrate.service` | oneshot | Runs `lx-annotate-manage migrate --noinput` against the effective runtime package. It is ordered before base-data loading, encrypted-storage validation, and the web service. |
 | `lx-annotate-load-base-data.service` | oneshot | Runs `lx-annotate-load-base-data` after successful migrations. The script logs a failed base-data load but exits successfully so schema-correct deployments can still boot. |
 | `lx-annotate-master-key-check.service` | oneshot, remains active | Runs `lx-annotate-manage verify_encrypted_storage` with the deployed environment. The web service and workers require this check so a wrong or missing application master key fails closed before user traffic or background processing starts. |
+| `lx-annotate-center-admin-bootstrap.service` | temporary oneshot | When `centerAdminBootstrap.username` is set, runs the audited `bootstrap_center_admin` command after migrations, base-data loading, and encrypted-storage validation. It refuses users without the exact synchronized `center_scope:admin` group. Clear the option after a successful bootstrap deployment. |
 | `lx-annotate.service` / `lx-annotate-boot.service` | long-running web service | Starts the ASGI/web entrypoint on `127.0.0.1:${django.port}`. It requires the runtime env, base data, master-key check, managed secrets, encrypted data, and local Redis/PostgreSQL units when those local services are in use. |
 
 In wheel mode, the effective runtime package is a wrapper around
@@ -486,6 +497,79 @@ In other words:
 - TLS and mTLS protect the channel and node identity
 - `NetworkNode.shared_secret` still authenticates the request
 - payload encryption beyond TLS is a later phase, not part of this module yet
+
+### Vault-backed transfer PKI
+
+`gs-02` is the declared central hub and runs the production HashiCorp Vault
+service on the VPN address `172.16.255.22:8200`. Vault uses integrated Raft
+storage and its cryptographic barrier; it is never configured in development
+mode. Only TCP port 8200 is opened on `tun0`.
+
+The canonical transfer endpoint is `https://gs-02.intern`. Both
+`gs-02.intern` and `vault.endo-reg.net` resolve to `172.16.255.22` inside the
+LuxNix VPN. The hub generates one pinned server certificate containing both DNS
+names; enrollment distributes only its public certificate to the site node.
+
+Vault initialization and unsealing are deliberately not zero-touch. Store the
+Shamir unseal shares and initial root token offline with separate custodians.
+Writing an unseal key beside the Raft data would make physical disk access
+sufficient to decrypt Vault and is therefore prohibited.
+
+After the first deployment, initialize and unseal Vault through the documented
+operator ceremony, then use a short-lived administrative token to configure the
+dedicated transfer PKI:
+
+```bash
+export VAULT_ADDR=https://vault.endo-reg.net:8200
+export VAULT_TOKEN='<short-lived-admin-token>'
+luxnix-vault-bootstrap-hub-pki
+sudo systemctl restart luxnix-vault-publish-hub-client-ca.service
+sudo systemctl restart nginx.service
+```
+
+The bootstrap command creates an internal, Vault-held client CA, a dedicated
+PKI mount, a KV v2 mount for request-authentication secrets, and client-only
+certificate roles. It is idempotent and refuses to run while Vault is sealed.
+
+Enroll a site node into a root-only temporary directory:
+
+```bash
+luxnix-vault-enroll-hub-site gc-02.intern /run/luxnix/gc-02-enrollment
+```
+
+The enrollment directory contains an AppRole role ID, AppRole secret ID, the
+public client CA, the pinned Vault server certificate, and a separate
+`NetworkNode` request secret. Install the role ID, secret ID, and server
+certificate under `/etc/secrets/vault/hub-pki/` on the site node. Install a copy
+of the request secret as
+`/etc/secrets/vault/hub-pki/gc-02-source-node-secret` on the hub for the
+idempotent database provisioner. Move this material only through the approved
+secret-delivery channel and remove temporary copies. Do not place it in the Nix
+store or version control.
+
+On the site node, configure the Vault client with the delivered AppRole files
+and enable `luxnix.vault.client.hubPki`. The
+`luxnix-vault-issue-hub-client-certificate` service then issues short-lived,
+client-only certificates, validates that each certificate matches its private
+key, writes the files atomically, and checks twice daily whether renewal is
+needed. LX-Annotate automatically takes the resulting certificate and key paths
+when the Vault client PKI is enabled.
+
+The AppRole can issue only its exact client identity, read the transfer CA, and
+read its own KV request secret. The managed-secrets service installs that
+request secret locally, and `lx-annotate-hub-node-provisioning` creates or
+updates the matching `NetworkNode` rows through Django's model API. The hub
+hashes the secret with `NetworkNode.set_shared_secret`; plaintext is never
+stored in the database.
+
+The application-level `NetworkNode` records must still use the separately
+generated request secret. The Vault certificate is transport identity and must
+not replace that authentication check.
+
+On transfer API hubs, LuxNix exempts only `/api/media/hub/transfers/` from the
+browser-oriented Keycloak redirect middleware. The transfer views remain
+protected by Nginx client-certificate verification and their independent
+`NetworkNode` key/secret authentication; global API authentication is unchanged.
 
 ## Current Security Posture
 

@@ -771,10 +771,19 @@ let
     set -euo pipefail
     source "${lxAnnotateRuntimeLib}"
 
+    artifact_kind="processed"
+    explicit_artifact_kind="false"
     previous_arg=""
     for arg in "$@"; do
       if [ "$previous_arg" = "--artifact-kind" ]; then
-        die "runLxAnnotateHlsMaterialization only supports processed HLS; do not pass --artifact-kind."
+        case "$arg" in
+          raw|processed)
+            artifact_kind="$arg"
+            ;;
+          *)
+            die "runLxAnnotateHlsMaterialization requires --artifact-kind raw or processed."
+            ;;
+        esac
       fi
       case "$arg" in
         --force)
@@ -783,14 +792,30 @@ let
         --inline)
           die "runLxAnnotateHlsMaterialization dispatches queued ffmpeg_media work; use lx-annotate-manage materialize_video_hls manually for inline retries."
           ;;
-        --artifact-kind|--artifact-kind=*)
-          die "runLxAnnotateHlsMaterialization only supports processed HLS; do not pass --artifact-kind."
+        --artifact-kind)
+          explicit_artifact_kind="true"
+          ;;
+        --artifact-kind=raw|--artifact-kind=processed)
+          explicit_artifact_kind="true"
+          artifact_kind="''${arg#*=}"
+          ;;
+        --artifact-kind=*)
+          die "runLxAnnotateHlsMaterialization requires --artifact-kind raw or processed."
           ;;
       esac
       previous_arg="$arg"
     done
 
-    log "Dispatching processed-video HLS materialization jobs..."
+    if [ "$previous_arg" = "--artifact-kind" ]; then
+      die "runLxAnnotateHlsMaterialization requires a value after --artifact-kind."
+    fi
+
+    artifact_kind_args=(--artifact-kind processed)
+    if [ "$explicit_artifact_kind" = "true" ]; then
+      artifact_kind_args=()
+    fi
+
+    log "Dispatching $artifact_kind-video HLS materialization jobs..."
     if [ "${if useWheelRuntime then "true" else "false"}" = "true" ]; then
       source "${lxAnnotateEnvHelpers}"
       lx_annotate_export_wheel_service_env "${envDataDir}"
@@ -799,7 +824,7 @@ let
       lx_annotate_export_runtime_env
       lx_annotate_activate_runtime
     fi
-    exec ${effectiveRuntimePackage}/bin/lx-annotate-manage materialize_video_hls --artifact-kind processed --apply --json "$@"
+    exec ${effectiveRuntimePackage}/bin/lx-annotate-manage materialize_video_hls "''${artifact_kind_args[@]}" --apply --json "$@"
   '';
 
   lxAnnotateBootstrapScript = pkgs.writeShellScriptBin "${bootstrapScriptName}" ''

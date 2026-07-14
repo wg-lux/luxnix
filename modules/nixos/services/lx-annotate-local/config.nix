@@ -374,6 +374,7 @@ let
   };
 
   endoregCentralServer = lib.attrByPath [ "roles" "endoreg-db-central-01" "enable" ] false config;
+  vaultClientHubPkiEnabled = lib.attrByPath [ "luxnix" "vault" "client" "hubPki" "enable" ] false config;
   externalPostgresConfigured = cfg.runtime.externalServices.postgresHost != null;
   externalRedisConfigured = cfg.runtime.externalServices.redisUrl != null;
   localPostgresSetupUnits = lib.optionals (!externalPostgresConfigured) [
@@ -386,6 +387,9 @@ let
   ];
   hlsBackfillServiceUnits = lib.optionals cfg.hlsBackfill.enable [
     "lx-annotate-hls-backfill.service"
+  ];
+  hubNodeProvisioningServiceUnits = lib.optionals cfg.hub.nodeProvisioning.enable [
+    "lx-annotate-hub-node-provisioning.service"
   ];
   managedSecretsSetupUnits =
     lib.optionals (lib.attrByPath [ "roles" "managed-secrets" "enable" ] false config)
@@ -435,7 +439,32 @@ let
     commonEnv
     llmInferenceWorkerEnv
     ;
-  commonExtraEnv = commonEnv;
+  hubOidcMiddlewarePolicy = pkgs.writeTextDir "sitecustomize.py" ''
+    import importlib.util
+    import json
+    import os
+
+    if importlib.util.find_spec("endoreg_db") is not None:
+        os.environ.setdefault(
+            "DJANGO_SETTINGS_MODULE",
+            "lx_annotate.settings.settings_prod",
+        )
+        from endoreg_db.authz import middleware
+
+        hub_transfer_prefix = "/api/media/hub/transfers/"
+        public_prefixes = getattr(middleware, "PUBLIC_PREFIXES", None)
+        if not isinstance(public_prefixes, tuple):
+            raise RuntimeError("endoreg_db OIDC middleware PUBLIC_PREFIXES contract is unavailable")
+        if hub_transfer_prefix not in public_prefixes:
+            middleware.PUBLIC_PREFIXES = (*public_prefixes, hub_transfer_prefix)
+        print(json.dumps({
+            "event": "hub.oidc_middleware_policy_installed",
+            "path_prefix": hub_transfer_prefix,
+        }, sort_keys=True))
+  '';
+  commonExtraEnv = commonEnv // lib.optionalAttrs cfg.hub.transferApi.enable {
+    PYTHONPATH = toString hubOidcMiddlewarePolicy;
+  };
 
   encryptedDataMountUnitConfig = {
     RequiresMountsFor = [
@@ -464,6 +493,72 @@ let
   lxAnnotateFileMoverTranscodeEnv = ''
     ${envContract.commonShellExportText}
     export LD_LIBRARY_PATH="${runtimeLdLibraryPath}:''${LD_LIBRARY_PATH:-}"
+  '';
+
+  hubNodeProvisioningData = pkgs.writeText "lx-annotate-hub-nodes.json" (
+    builtins.toJSON (
+      map
+        (node: node // {
+          sharedSecretFile =
+            if node.sharedSecretFile == null then null else toString node.sharedSecretFile;
+        })
+        cfg.hub.nodeProvisioning.nodes
+    )
+  );
+  hubNodeProvisioningPython = pkgs.writeText "lx-annotate-provision-hub-nodes.py" ''
+    import json
+    from pathlib import Path
+
+    from django.db import transaction
+    from endoreg_db.models import Center, NetworkNode
+
+    topology = json.loads(Path(${builtins.toJSON (toString hubNodeProvisioningData)}).read_text(encoding="utf-8"))
+
+    with transaction.atomic():
+        for spec in topology:
+            center = None
+            center_key = spec.get("centerKey")
+            if center_key:
+                center = Center.objects.filter(center_key=center_key).first()
+                if center is None:
+                    raise RuntimeError(f"Required Center.center_key is missing: {center_key}")
+
+            node, created = NetworkNode.objects.update_or_create(
+                node_key=spec["nodeKey"],
+                defaults={
+                    "display_name": spec["displayName"],
+                    "role": spec["role"],
+                    "base_url": spec.get("baseUrl", ""),
+                    "is_active": True,
+                    "owning_center": center,
+                },
+            )
+
+            secret_changed = False
+            secret_file = spec.get("sharedSecretFile")
+            if secret_file:
+                secret_path = Path(secret_file)
+                if not secret_path.is_file():
+                    raise RuntimeError(f"Required NetworkNode secret file is missing: {secret_path}")
+                secret = secret_path.read_text(encoding="utf-8").strip()
+                if not secret:
+                    raise RuntimeError(f"Required NetworkNode secret file is empty: {secret_path}")
+                if not node.check_shared_secret(secret):
+                    node.set_shared_secret(secret)
+                    node.save(update_fields=["shared_secret_hash", "updated_at"])
+                    secret_changed = True
+
+            print(json.dumps({
+                "event": "hub.node_provisioned",
+                "node_key": node.node_key,
+                "role": node.role,
+                "created": created,
+                "secret_changed": secret_changed,
+            }, sort_keys=True))
+  '';
+  hubNodeProvisioningScript = pkgs.writeShellScript "lx-annotate-provision-hub-nodes" ''
+    set -euo pipefail
+    exec ${effectiveRuntimePackage}/bin/lx-annotate-manage shell < ${hubNodeProvisioningPython}
   '';
 
   mkWorker =
@@ -670,6 +765,11 @@ let
       environment = postValidationWorkerEnv;
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];
+      requires =
+        lib.optionals vaultClientHubPkiEnabled [
+          "luxnix-vault-issue-hub-client-certificate.service"
+        ]
+        ++ hubNodeProvisioningServiceUnits;
     };
     pipeline = mkWorker {
       unitName = "lx-annotate-celery-pipeline-worker";
@@ -1120,6 +1220,18 @@ in
       services.luxnix.lxAnnotateLocal.runtime.deploymentRole = mkDefault (
         if cfg.hub.enable || endoregCentralServer then "central_hub" else "site_node"
       );
+      services.luxnix.lxAnnotateLocal.hub.outboundTransfer.clientCertificateFile =
+        mkIf vaultClientHubPkiEnabled (
+          mkDefault config.luxnix.vault.client.hubPki.certificateFile
+        );
+      services.luxnix.lxAnnotateLocal.hub.outboundTransfer.clientKeyFile =
+        mkIf vaultClientHubPkiEnabled (
+          mkDefault config.luxnix.vault.client.hubPki.keyFile
+        );
+      services.luxnix.lxAnnotateLocal.hub.outboundTransfer.sourceNodeSecretFile =
+        mkIf vaultClientHubPkiEnabled (
+          mkDefault config.luxnix.vault.client.hubPki.nodeSecretFile
+        );
       services.luxnix.lxAnnotateLocal.runtime.celeryBroker.requireSecureTransport = mkDefault (
         cfg.runtime.clustered.enable
         || (externalRedisConfigured && !isLocalRedisUrl cfg.runtime.externalServices.redisUrl)
@@ -1321,6 +1433,25 @@ in
           assertion =
             !cfg.hub.outboundTransfer.enable || cfg.hub.outboundTransfer.sourceNodeSecretFile != null;
           message = "services.luxnix.lxAnnotateLocal.hub.outboundTransfer.enable requires a source-node secret file.";
+        }
+        {
+          assertion = !cfg.hub.nodeProvisioning.enable || cfg.hub.nodeProvisioning.nodes != [ ];
+          message = "hub.nodeProvisioning.enable requires at least one NetworkNode specification.";
+        }
+        {
+          assertion =
+            let
+              keys = map (node: node.nodeKey) cfg.hub.nodeProvisioning.nodes;
+            in
+            builtins.length keys == builtins.length (lib.unique keys);
+          message = "hub.nodeProvisioning.nodes requires unique nodeKey values.";
+        }
+        {
+          assertion =
+            lib.all
+              (node: node.role != "central_hub" || lib.hasPrefix "https://" node.baseUrl)
+              cfg.hub.nodeProvisioning.nodes;
+          message = "Every provisioned central_hub NetworkNode requires an HTTPS baseUrl.";
         }
         {
           assertion =
@@ -1635,6 +1766,10 @@ in
         lib.optional streamableExternalStorageEnabled "d ${streamableExternalStorageRoot} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
         ++ [
           "d ${endoreg-service-user-home} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "d ${runtimeWheelRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "z ${runtimeWheelRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "d ${runtimeWheelVenvPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "z ${runtimeWheelVenvPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
           "d ${runtimeRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
           "z ${runtimeRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
           "d ${envDataDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
@@ -1760,6 +1895,57 @@ in
           TimeoutStartSec = "10min";
         };
       };
+
+      systemd.services.lx-annotate-center-admin-bootstrap =
+        mkIf (cfg.centerAdminBootstrap.username != null)
+          (mkLxAnnotateAppService {
+            description = "Bootstrap an authorized LX-Annotate center administrator";
+            after = [
+              "lx-annotate-load-base-data.service"
+              "lx-annotate-master-key-check.service"
+            ];
+            wants = [ "lx-annotate-load-base-data.service" ];
+            requires = [
+              "lx-annotate-load-base-data.service"
+              "lx-annotate-master-key-check.service"
+            ];
+            before = [ "lx-annotate.service" ];
+            serviceConfig = {
+              Type = "oneshot";
+              RemainAfterExit = true;
+              ExecStart = lib.escapeShellArgs [
+                "${effectiveRuntimePackage}/bin/lx-annotate-manage"
+                "bootstrap_center_admin"
+                "--username"
+                cfg.centerAdminBootstrap.username
+              ];
+              TimeoutStartSec = "5min";
+            };
+          });
+
+      systemd.services.lx-annotate-hub-node-provisioning =
+        mkIf cfg.hub.nodeProvisioning.enable
+          (mkLxAnnotateAppService {
+            description = "Idempotently provision LX-Annotate hub NetworkNode records";
+            after = [
+              "lx-annotate-load-base-data.service"
+              "lx-annotate-master-key-check.service"
+            ];
+            wants = [ "lx-annotate-load-base-data.service" ];
+            requires = [
+              "lx-annotate-load-base-data.service"
+              "lx-annotate-master-key-check.service"
+            ];
+            before = [
+              "lx-annotate.service"
+              "lx-annotate-celery-hub-transfer-worker.service"
+            ];
+            serviceConfig = {
+              Type = "oneshot";
+              RemainAfterExit = true;
+              ExecStart = hubNodeProvisioningScript;
+            };
+          });
 
       systemd.services.lx-annotate-encrypted-data = mkIf cfg.runtime.managedEncryptedData.enable {
         description = "Unlock and mount encrypted data volume for lx-annotate";
@@ -1919,6 +2105,7 @@ in
         ]
         ++ dataRecoveryServiceUnits
         ++ hlsBackfillServiceUnits
+        ++ hubNodeProvisioningServiceUnits
         ++ localRedisServiceUnits
         ++ localPostgresServiceUnits
         ++ localPostgresSetupUnits
@@ -1931,6 +2118,7 @@ in
         ]
         ++ dataRecoveryServiceUnits
         ++ hlsBackfillServiceUnits
+        ++ hubNodeProvisioningServiceUnits
         ++ managedSecretsSetupUnits
         ++ encryptionServiceUnits;
         after = [
@@ -1942,6 +2130,7 @@ in
         ]
         ++ dataRecoveryServiceUnits
         ++ hlsBackfillServiceUnits
+        ++ hubNodeProvisioningServiceUnits
         ++ localRedisServiceUnits
         ++ localPostgresServiceUnits
         ++ localPostgresSetupUnits
@@ -2065,7 +2254,7 @@ in
       systemd.services.lx-annotate-hls-materialization =
         mkIf cfg.hlsMaterialization.enable
           (mkLxAnnotateAppService {
-            description = "Dispatch encrypted HLS materialization for processed LX-Annotate videos";
+            description = "Dispatch local encrypted HLS materialization for LX-Annotate videos";
             wantedBy = [ ];
             after = [
               "lx-annotate-load-base-data.service"
@@ -2098,7 +2287,7 @@ in
       systemd.services.lx-annotate-hls-backfill =
         mkIf cfg.hlsBackfill.enable
           (mkLxAnnotateAppService {
-            description = "Backfill encrypted HLS artifacts for processed LX-Annotate videos";
+            description = "Dispatch local encrypted HLS backfill for LX-Annotate videos";
             wantedBy = [ "multi-user.target" ];
             before = [ "lx-annotate.service" ];
             after = [

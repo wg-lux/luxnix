@@ -77,10 +77,8 @@ ssh-access.dev-04.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICSpoZVcX+K6N
 };
 
   services = {
-luxnix.lxAnnotateLocal.hub.transferApi.clientCaFile = "/etc/secrets/vault/lx_annotate_hub_transfer_client_ca.pem";
-luxnix.lxAnnotateLocal.hub.transferApi.enable = true;
-luxnix.lxAnnotateLocal.hub.transferApi.requireMtls = true;
-luxnix.lxAnnotateLocal.hub.transferApi.requireSecureTransport = true;
+luxnix.lxAnnotateLocal.hub.enable = false;
+luxnix.lxAnnotateLocal.runtime.deploymentRole = "site_node";
 luxnix.lxAnnotateLocal.runtime.celeryBroker.secureTransportConfirmed = true;
 luxnix.lxAnnotateLocal.runtime.externalServices.postgresHost = "172.16.255.22";
 luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort = 5432;

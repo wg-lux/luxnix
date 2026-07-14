@@ -105,6 +105,7 @@ rec {
     DJANGO_PORT = envDjangoPort;
     DJANGO_STATIC_ROOT = packageStaticRoot;
     ALLOWED_HOSTS = envAllowedHosts;
+    DJANGO_ALLOWED_HOSTS = envAllowedHosts;
     DJANGO_CORS_ALLOWED_ORIGINS = envCorsAllowedOrigins;
     DJANGO_CSRF_TRUSTED_ORIGINS = envCorsAllowedOrigins;
     DJANGO_DB_ENGINE = "django.db.backends.postgresql";

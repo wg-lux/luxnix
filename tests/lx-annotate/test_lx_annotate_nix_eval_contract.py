@@ -220,10 +220,11 @@ def _live_host_contract() -> dict[str, Any]:
           flake = builtins.getFlake "git+file:///home/admin/luxnix";
           gc02 = flake.nixosConfigurations.gc-02.config;
           gs01 = flake.nixosConfigurations.gs-01.config;
+          gs02 = flake.nixosConfigurations.gs-02.config;
           s04 = flake.nixosConfigurations.s-04.config;
           envList = env: flake.inputs.nixpkgs.lib.mapAttrsToList (name: value: "${name}=${toString value}") env;
           gs01Training = gs01.systemd.services."lx-annotate-celery-training-worker";
-          s04HostName = s04.services.luxnix.lxAnnotateLocal.django.hostname;
+          gs02HostName = gs02.services.luxnix.lxAnnotateLocal.django.hostname;
         in {
           gs01Training = {
             externalServices = gs01.services.luxnix.lxAnnotateLocal.runtime.externalServices;
@@ -244,19 +245,39 @@ def _live_host_contract() -> dict[str, Any]:
           deploymentRoles = {
             laptopRole = gc02.services.luxnix.lxAnnotateLocal.runtime.deploymentRole;
             laptopEnvironment = envList gc02.systemd.services.lx-annotate-filewatcher.environment;
-            serverRole = s04.services.luxnix.lxAnnotateLocal.runtime.deploymentRole;
-            serverHubEnable = s04.services.luxnix.lxAnnotateLocal.hub.enable;
-            serverRequireMtls = s04.services.luxnix.lxAnnotateLocal.hub.transferApi.requireMtls;
+            serverRole = gs02.services.luxnix.lxAnnotateLocal.runtime.deploymentRole;
+            serverHubEnable = gs02.services.luxnix.lxAnnotateLocal.hub.enable;
+            serverRequireMtls = gs02.services.luxnix.lxAnnotateLocal.hub.transferApi.requireMtls;
           };
-          s04Transfer = {
+          hubTransfer = {
+            role = gs02.services.luxnix.lxAnnotateLocal.runtime.deploymentRole;
+            hubEnable = gs02.services.luxnix.lxAnnotateLocal.hub.enable;
+            transferEnable = gs02.services.luxnix.lxAnnotateLocal.hub.transferApi.enable;
+            requireSecure = gs02.services.luxnix.lxAnnotateLocal.hub.transferApi.requireSecureTransport;
+            requireMtls = gs02.services.luxnix.lxAnnotateLocal.hub.transferApi.requireMtls;
+            clientCaFile = toString gs02.services.luxnix.lxAnnotateLocal.hub.transferApi.clientCaFile;
+            bootEnvironment = envList gs02.systemd.services.lx-annotate.environment;
+            nginxExtraConfig = gs02.services.nginx.virtualHosts.${gs02HostName}.extraConfig;
+            vaultEnabled = gs02.services.vault.enable;
+            vaultStorageBackend = gs02.services.vault.storageBackend;
+            vaultAddress = gs02.services.vault.address;
+            vaultServerCaFile = toString gs02.luxnix.vault.server.caCertFile;
+            postgresHost = gs02.services.luxnix.lxAnnotateLocal.runtime.externalServices.postgresHost;
+            vaultFirewallPorts = gs02.networking.firewall.interfaces.tun0.allowedTCPPorts;
+            caPublisherExecStart = gs02.systemd.services.luxnix-vault-publish-hub-client-ca.serviceConfig.ExecStart;
+          };
+          siteTransfer = {
+            outbound = gc02.services.luxnix.lxAnnotateLocal.hub.outboundTransfer;
+            vaultClient = gc02.luxnix.vault.client;
+            nodeProvisioning = gc02.services.luxnix.lxAnnotateLocal.hub.nodeProvisioning;
+            workerRequires = gc02.systemd.services."lx-annotate-celery-hub-transfer-worker".requires;
+            bootRequires = gc02.systemd.services.lx-annotate.requires;
+            hubVpnAliases = gc02.networking.hosts."172.16.255.22";
+          };
+          formerHub = {
             role = s04.services.luxnix.lxAnnotateLocal.runtime.deploymentRole;
             hubEnable = s04.services.luxnix.lxAnnotateLocal.hub.enable;
             transferEnable = s04.services.luxnix.lxAnnotateLocal.hub.transferApi.enable;
-            requireSecure = s04.services.luxnix.lxAnnotateLocal.hub.transferApi.requireSecureTransport;
-            requireMtls = s04.services.luxnix.lxAnnotateLocal.hub.transferApi.requireMtls;
-            clientCaFile = toString s04.services.luxnix.lxAnnotateLocal.hub.transferApi.clientCaFile;
-            bootEnvironment = envList s04.systemd.services.lx-annotate.environment;
-            nginxExtraConfig = s04.services.nginx.virtualHosts.${s04HostName}.extraConfig;
           };
         }
         """
@@ -1270,8 +1291,8 @@ def test_lx_annotate_deployment_role_distinguishes_central_servers_from_center_n
     assert evaluated["serverRequireMtls"] is True
 
 
-def test_lx_annotate_s04_transfer_api_live_contract() -> None:
-    evaluated = _live_host_contract()["s04Transfer"]
+def test_lx_annotate_gs02_transfer_api_and_vault_live_contract() -> None:
+    evaluated = _live_host_contract()["hubTransfer"]
 
     assert evaluated["role"] == "central_hub"
     assert evaluated["hubEnable"] is True
@@ -1280,15 +1301,47 @@ def test_lx_annotate_s04_transfer_api_live_contract() -> None:
     assert evaluated["requireMtls"] is True
     assert (
         evaluated["clientCaFile"]
-        == "/etc/secrets/vault/lx_annotate_hub_transfer_client_ca.pem"
+        == "/var/lib/lx-annotate/hub-pki/client-ca.pem"
     )
     assert "ENDOREG_ENABLE_HUB_TRANSFERS=true" in evaluated["bootEnvironment"]
     assert "ENDOREG_HUB_TRANSFER_REQUIRE_MTLS=true" in evaluated["bootEnvironment"]
     assert "ssl_verify_client optional;" in evaluated["nginxExtraConfig"]
     assert (
-        "ssl_client_certificate /etc/secrets/vault/lx_annotate_hub_transfer_client_ca.pem;"
+        "ssl_client_certificate /var/lib/lx-annotate/hub-pki/client-ca.pem;"
         in evaluated["nginxExtraConfig"]
     )
+    assert evaluated["vaultEnabled"] is True
+    assert evaluated["vaultStorageBackend"] == "raft"
+    assert evaluated["vaultAddress"] == "172.16.255.22:8200"
+    assert evaluated["vaultServerCaFile"] == "/var/lib/lx-annotate-ssl/lx-annotate-selfsigned.crt"
+    assert evaluated["postgresHost"] == "127.0.0.1"
+    assert 8200 in evaluated["vaultFirewallPorts"]
+    assert "publish-lx-hub-client-ca" in evaluated["caPublisherExecStart"]
+
+
+def test_lx_annotate_gc02_outbound_transfer_is_vault_backed_and_fail_closed() -> None:
+    evaluated = _live_host_contract()["siteTransfer"]
+
+    assert evaluated["outbound"]["enable"] is True
+    assert evaluated["outbound"]["requireMtls"] is True
+    assert evaluated["outbound"]["caFile"] == "/etc/secrets/vault/hub-pki/vault-server-ca.pem"
+    assert evaluated["outbound"]["sourceNodeSecretFile"] == "/etc/secrets/vault/hub-pki/source-node-secret"
+    assert evaluated["vaultClient"]["auth"]["method"] == "approle"
+    assert evaluated["vaultClient"]["hubPki"]["enable"] is True
+    assert evaluated["nodeProvisioning"]["enable"] is True
+    assert "luxnix-vault-issue-hub-client-certificate.service" in evaluated["workerRequires"]
+    assert "lx-annotate-hub-node-provisioning.service" in evaluated["workerRequires"]
+    assert "lx-annotate-hub-node-provisioning.service" in evaluated["bootRequires"]
+    assert "gs-02.intern" in evaluated["hubVpnAliases"]
+    assert "vault.endo-reg.net" in evaluated["hubVpnAliases"]
+
+
+def test_lx_annotate_s04_is_not_the_hub() -> None:
+    evaluated = _live_host_contract()["formerHub"]
+
+    assert evaluated["role"] == "site_node"
+    assert evaluated["hubEnable"] is False
+    assert evaluated["transferEnable"] is False
 
 
 def test_lx_annotate_clustered_mode_rejects_local_runtime_assumptions() -> None:
