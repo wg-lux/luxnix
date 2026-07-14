@@ -4,7 +4,6 @@ import os
 import re
 import stat
 import subprocess
-import sys
 import textwrap
 from pathlib import Path
 

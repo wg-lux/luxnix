@@ -706,7 +706,7 @@ let
                 maxTasksPerChild = 1;
                 memoryHigh = "10G";
                 memoryMax = "12G";
-                cpuQuota = "200%";
+                cpuQuota = "600%";
                 cpuWeight = 100;
                 ioWeight = 100;
                 nice = 0;

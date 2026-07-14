@@ -3,7 +3,7 @@
   lib,
   modulesPath,
   ...
-}@inputs: 
+}:
   let
     extraImports = [ ];
 

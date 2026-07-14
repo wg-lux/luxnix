@@ -17,14 +17,12 @@ let
     endoreg-service-group-name
     ;
   inherit (runtime.names) scriptName exportFramesScriptName;
-  inherit (runtime.source) gitURL repoDirName branchName;
+  inherit (runtime.source) gitURL branchName;
   inherit (runtime.paths)
     runtimeRootPath
     repoDir
     repoStaticRootPath
     runtimeStorageRootPath
-    runtimeWatcherVideoDirPath
-    runtimeWatcherReportDirPath
     runtimeWatcherPreanonymizedDirPath
     runtimeSapImportDirPath
     runtimeSapImportProcessedDirPath
@@ -35,18 +33,13 @@ let
     runtimeStaticRootPath
     runtimeWheelRootPath
     runtimeWheelVenvPath
-    runtimeWorkingDir
     staticRootPath
     djangoStaticRootPath
     viteSourcePath
     envDataDir
     envConfDir
     makeCacheDir
-    envConfTemplateDir
     envSystemdFilePath
-    envAssetDir
-    dataRecoveryStateDir
-    dataRecoveryStateFile
     ;
   inherit (runtime.env)
     envAnnotateDjangoSettingsModule
@@ -56,7 +49,6 @@ let
     useWheelRuntime
     pythonInterpreter
     wheelFilePath
-    packageVersion
     ;
   inherit (runtime.defaults)
     exportFramesStorageRootDefault
@@ -101,6 +93,11 @@ let
   buildScriptName = "lx-annotate-build";
   migrateScriptName = "lx-annotate-migrate";
   migrateVideoStreamableStorageScriptName = "lx-annotate-migrate-video-streamable-storage";
+  hlsMaterializationScriptName = "runLxAnnotateHlsMaterialization";
+  repoVenvPythonPath = "${repoDir}/.devenv/state/venv/bin/python";
+  repoLegacyVenvPythonPath = "${repoDir}/.venv/bin/python";
+  wheelVenvPythonPath = "${runtimeWheelVenvPath}/bin/python";
+  helperPythonPath = pythonInterpreter;
   loadBaseDataServiceName = "lx-annotate-load-base-data.service";
   masterKeyCheckServiceName = "lx-annotate-master-key-check.service";
   emergencyStorageReliefScriptName = "runLxAnnotateEmergencyStorageRelief";
@@ -129,6 +126,7 @@ let
 
   lxAnnotateRuntimeLib = pkgs.writeShellScript "lx-annotate-runtime-lib.sh" ''
         set -euo pipefail
+        umask 027
 
         log() {
           printf '%s\n' "$*"
@@ -174,7 +172,7 @@ let
           fi
           if [ -n "''${LOCK_HASH:-}" ] && command -v uv >/dev/null 2>&1; then
             previousLockHash="$(cat "$SYNC_STAMP" 2>/dev/null || true)"
-            if [ ! -x "${repoDir}/.devenv/state/venv/bin/python" ] || [ "$LOCK_HASH" != "$previousLockHash" ]; then
+            if [ ! -x "${repoVenvPythonPath}" ] || [ "$LOCK_HASH" != "$previousLockHash" ]; then
               log "uv deps changed or venv missing -> syncing..."
               eval "$SYNC_CMD" || warn "uv sync failed; continuing with existing environment."
               printf '%s\n' "$LOCK_HASH" > "$SYNC_STAMP"
@@ -182,6 +180,41 @@ let
               log "uv deps unchanged -> skipping sync."
             fi
           fi
+        }
+
+        lx_annotate_repo_python() {
+          if [ -x "${repoVenvPythonPath}" ]; then
+            printf '%s\n' "${repoVenvPythonPath}"
+            return 0
+          fi
+          if [ -x "${repoLegacyVenvPythonPath}" ]; then
+            printf '%s\n' "${repoLegacyVenvPythonPath}"
+            return 0
+          fi
+          die "lx-annotate repo Python runtime missing. Expected ${repoVenvPythonPath} or ${repoLegacyVenvPythonPath}."
+        }
+
+        lx_annotate_wheel_python() {
+          if [ -x "${wheelVenvPythonPath}" ]; then
+            printf '%s\n' "${wheelVenvPythonPath}"
+            return 0
+          fi
+          die "lx-annotate wheel Python runtime missing. Expected ${wheelVenvPythonPath}."
+        }
+
+        run_django_command_with_python() {
+          local python_bin="$1"
+          shift
+          "$python_bin" -m django "$@" --settings="${envAnnotateDjangoSettingsModule}"
+        }
+
+        run_repo_django_command() {
+          local python_bin
+          python_bin="$(lx_annotate_repo_python)"
+          (
+            cd "${repoDir}"
+            run_django_command_with_python "$python_bin" "$@"
+          )
         }
 
         ensure_wheel_runtime_installed() {
@@ -229,7 +262,7 @@ let
               "$wheel_hash" \
               "$wheelhouse_hash" \
               "$wheel_dependency_overrides_hash" \
-              "${pythonInterpreter}" \
+              "${helperPythonPath}" \
               "$wheel_installer_revision" \
               | ${pkgs.coreutils}/bin/sha256sum \
               | ${pkgs.coreutils}/bin/cut -d ' ' -f1
@@ -238,8 +271,8 @@ let
           exec 9>"$wheel_install_lock_file"
           ${pkgs.util-linux}/bin/flock 9
 
-          if [ ! -x "${runtimeWheelVenvPath}/bin/python" ]; then
-            "${pythonInterpreter}" -m venv "${runtimeWheelVenvPath}"
+          if [ ! -x "${wheelVenvPythonPath}" ]; then
+            "${helperPythonPath}" -m venv "${runtimeWheelVenvPath}"
             venv_created="true"
           fi
 
@@ -272,11 +305,11 @@ let
         run_installed_django_command() {
           local python_bin="$1"
           shift
-          "$python_bin" -m django "$@" --settings=lx_annotate.settings.settings_prod
+          run_django_command_with_python "$python_bin" "$@"
         }
 
         repair_known_wheel_schema_drift() {
-          "${runtimeWheelVenvPath}/bin/python" - <<'PY'
+          "${wheelVenvPythonPath}" - <<'PY'
     import django
     from django.apps import apps
     from django.db import connection
@@ -394,7 +427,7 @@ let
             log "Aligning .env with production settings module"
             export DESIRED_SETTINGS_MODULE="${envAnnotateDjangoSettingsModule}"
             export DESIRED_ENVIRONMENT="${envDjangoEnv}"
-            "${pkgs.python3}/bin/python3" "${alignEnvFileScript}"
+            "${helperPythonPath}" "${alignEnvFileScript}"
           else
             warn ".env not found"
           fi
@@ -406,7 +439,7 @@ let
           if [ ! -f "$manifest_path" ]; then
             return 1
           fi
-          main_entry_file="$("${pkgs.python3}/bin/python3" "${viteManifestEntryScript}" "$manifest_path" 2>/dev/null || true)"
+          main_entry_file="$("${helperPythonPath}" "${viteManifestEntryScript}" "$manifest_path" 2>/dev/null || true)"
           if [ -z "$main_entry_file" ]; then
             return 1
           fi
@@ -423,7 +456,7 @@ let
             return 0
           fi
 
-          if [ -s "$manifest_path" ] && "${pkgs.python3}/bin/python3" - "$manifest_path" >/dev/null 2>&1 <<'PY'
+          if [ -s "$manifest_path" ] && "${helperPythonPath}" - "$manifest_path" >/dev/null 2>&1 <<'PY'
     import json
     import pathlib
     import sys
@@ -440,7 +473,7 @@ let
           fi
 
           install -d -m 0775 "$(${pkgs.coreutils}/bin/dirname "$manifest_path")"
-          "${pkgs.python3}/bin/python3" - "$manifest_path" "$main_js" "$main_css" <<'PY'
+          "${helperPythonPath}" - "$manifest_path" "$main_js" "$main_css" <<'PY'
     import json
     from pathlib import Path
     import sys
@@ -661,7 +694,7 @@ let
   lxAnnotatePrepareScript = pkgs.writeShellScriptBin "${prepareScriptName}" ''
     set -euo pipefail
     source "${lxAnnotateRuntimeLib}"
-    mkdir -p "${envConfDir}" "${envDataDir}"
+    install -d -m 0750 "${envConfDir}" "${envDataDir}"
     ensure_runtime_static_root || warn "Failed to prepare runtime static root."
     lx_annotate_export_runtime_env
     lx_annotate_activate_runtime
@@ -702,14 +735,14 @@ let
     lx_annotate_activate_runtime
 
     log "Running database migrations..."
-    python manage.py migrate --noinput
+    run_repo_django_command migrate --noinput
 
     bootstrap_stamp_file="${envConfDir}/.bootstrap-revision"
     current_revision="$(git rev-parse --verify HEAD 2>/dev/null || echo unknown)"
     last_bootstrap_revision="$(cat "$bootstrap_stamp_file" 2>/dev/null || true)"
 
 
-    python manage.py load_base_db_data || warn "load_base_db_data failed; continuing after successful migrations."
+    run_repo_django_command load_base_db_data || warn "load_base_db_data failed; continuing after successful migrations."
 
 
     if [ "$current_revision" != "$last_bootstrap_revision" ]; then
@@ -732,6 +765,41 @@ let
       lx_annotate_activate_runtime
     fi
     exec ${effectiveRuntimePackage}/bin/lx-annotate-manage migrate_video_streamable_storage "$@"
+  '';
+
+  runLocalHlsMaterializationScript = pkgs.writeShellScriptBin "${hlsMaterializationScriptName}" ''
+    set -euo pipefail
+    source "${lxAnnotateRuntimeLib}"
+
+    previous_arg=""
+    for arg in "$@"; do
+      if [ "$previous_arg" = "--artifact-kind" ]; then
+        die "runLxAnnotateHlsMaterialization only supports processed HLS; do not pass --artifact-kind."
+      fi
+      case "$arg" in
+        --force)
+          die "runLxAnnotateHlsMaterialization refuses --force; use lx-annotate-manage materialize_video_hls manually for audited repair runs."
+          ;;
+        --inline)
+          die "runLxAnnotateHlsMaterialization dispatches queued ffmpeg_media work; use lx-annotate-manage materialize_video_hls manually for inline retries."
+          ;;
+        --artifact-kind|--artifact-kind=*)
+          die "runLxAnnotateHlsMaterialization only supports processed HLS; do not pass --artifact-kind."
+          ;;
+      esac
+      previous_arg="$arg"
+    done
+
+    log "Dispatching processed-video HLS materialization jobs..."
+    if [ "${if useWheelRuntime then "true" else "false"}" = "true" ]; then
+      source "${lxAnnotateEnvHelpers}"
+      lx_annotate_export_wheel_service_env "${envDataDir}"
+      ensure_wheel_runtime_installed
+    else
+      lx_annotate_export_runtime_env
+      lx_annotate_activate_runtime
+    fi
+    exec ${effectiveRuntimePackage}/bin/lx-annotate-manage materialize_video_hls --artifact-kind processed --apply --json "$@"
   '';
 
   lxAnnotateBootstrapScript = pkgs.writeShellScriptBin "${bootstrapScriptName}" ''
@@ -909,10 +977,11 @@ let
     lx_annotate_activate_runtime
 
     cd "${repoDir}"
-    mkdir -p "${runtimeStorageRootPath}" "${runtimeStreamableVideoRootPath}" "${runtimeStreamableVideoRawRootPath}" "${runtimeStreamableVideoProcessedRootPath}"
+    install -d -m 0750 "${runtimeStorageRootPath}" "${runtimeStreamableVideoRootPath}" "${runtimeStreamableVideoRawRootPath}" "${runtimeStreamableVideoProcessedRootPath}"
 
-    python manage.py check --fail-level CRITICAL
-    python manage.py verify_encrypted_storage
+    run_repo_django_command check --fail-level CRITICAL
+    run_repo_django_command verify_encrypted_storage
+    run_repo_django_command check_production_hls_readiness
     ${pkgs.curl}/bin/curl --fail --silent --show-error --insecure \
       --resolve "${cfg.django.hostname}:443:127.0.0.1" \
       "https://${cfg.django.hostname}/static/.vite/manifest.json" >/dev/null
@@ -922,6 +991,7 @@ let
   watcherScriptName = "runLocalFileWatcher";
   runLocalFileWatcherScript = pkgs.writeShellScriptBin "${watcherScriptName}" ''
     set -euo pipefail
+    umask 027
 
     # 1. Go to the repo (Cloned by the main boot service)
     cd "${repoDir}"
@@ -949,6 +1019,7 @@ let
   '';
   runLocalFileWatcherWheelScript = pkgs.writeShellScriptBin "${watcherScriptName}" ''
     set -euo pipefail
+    umask 027
 
     if [ -z ${lib.escapeShellArg wheelFileWatcherOnceCommand} ]; then
       echo "ERROR: runtime.commands.fileWatcherOnce or runtime.commands.fileWatcher must be set when wheel mode enables the watcher service."
@@ -960,7 +1031,7 @@ let
     export LX_ANNOTATE_FILEWATCHER_ARGS="--process-existing-once"
     export PATH="${runtimeWheelVenvPath}/bin:$PATH"
 
-    if [ ! -x "${runtimeWheelVenvPath}/bin/python" ]; then
+    if [ ! -x "${wheelVenvPythonPath}" ]; then
       echo "ERROR: Wheel virtualenv missing at ${runtimeWheelVenvPath}."
       exit 1
     fi
@@ -994,6 +1065,7 @@ let
     }:
     pkgs.writeShellScriptBin "${scriptName}" ''
       set -euo pipefail
+      umask 027
 
       cd "${repoDir}"
 
@@ -1030,6 +1102,7 @@ let
     }:
     pkgs.writeShellScriptBin "${scriptName}" ''
       set -euo pipefail
+      umask 027
 
       if [ -z ${lib.escapeShellArg wheelCeleryWorkerCommand} ]; then
         echo "ERROR: runtime.commands.celeryWorker must be set when wheel mode enables the Celery worker service."
@@ -1043,7 +1116,7 @@ let
       ${celeryWorkerResourceShellExportText}
       export PATH="${runtimeWheelVenvPath}/bin:$PATH"
 
-      if [ ! -x "${runtimeWheelVenvPath}/bin/python" ]; then
+      if [ ! -x "${wheelVenvPythonPath}" ]; then
         echo "ERROR: Wheel virtualenv missing at ${runtimeWheelVenvPath}."
         exit 1
       fi
@@ -1153,10 +1226,11 @@ let
 
     source "${lxAnnotateRuntimeLib}"
     ensure_wheel_runtime_installed
-    mkdir -p "${runtimeStorageRootPath}" "${runtimeStreamableVideoRootPath}" "${runtimeStreamableVideoRawRootPath}" "${runtimeStreamableVideoProcessedRootPath}"
+    install -d -m 0750 "${runtimeStorageRootPath}" "${runtimeStreamableVideoRootPath}" "${runtimeStreamableVideoRawRootPath}" "${runtimeStreamableVideoProcessedRootPath}"
 
-    run_installed_django_command "${runtimeWheelVenvPath}/bin/python" check --fail-level CRITICAL
-    run_installed_django_command "${runtimeWheelVenvPath}/bin/python" verify_encrypted_storage
+    run_installed_django_command "${wheelVenvPythonPath}" check --fail-level CRITICAL
+    run_installed_django_command "${wheelVenvPythonPath}" verify_encrypted_storage
+    run_installed_django_command "${wheelVenvPythonPath}" check_production_hls_readiness
     ${pkgs.curl}/bin/curl --fail --silent --show-error --insecure \
       --resolve "${cfg.django.hostname}:443:127.0.0.1" \
       "https://${cfg.django.hostname}/static/.vite/manifest.json" >/dev/null
@@ -1176,20 +1250,21 @@ let
 
     source "${lxAnnotateRuntimeLib}"
     ensure_wheel_runtime_installed
-    mkdir -p "${runtimeStorageRootPath}" "${runtimeStreamableVideoRootPath}" "${runtimeStreamableVideoRawRootPath}" "${runtimeStreamableVideoProcessedRootPath}"
+    install -d -m 0750 "${runtimeStorageRootPath}" "${runtimeStreamableVideoRootPath}" "${runtimeStreamableVideoRawRootPath}" "${runtimeStreamableVideoProcessedRootPath}"
 
-    run_installed_django_command "${runtimeWheelVenvPath}/bin/python" verify_encrypted_storage
+    run_installed_django_command "${wheelVenvPythonPath}" verify_encrypted_storage
 
     log "lx-annotate application master key check passed."
   '';
   sapImportScriptName = "runLocalSapImport";
   sapImportScriptBody = ''
     set -euo pipefail
+    umask 027
 
     sap_drop_dir="${runtimeSapImportDirPath}"
     sap_processed_dir="${runtimeSapImportProcessedDirPath}"
     sap_failed_dir="${runtimeSapImportFailedDirPath}"
-    mkdir -p "$sap_drop_dir" "$sap_processed_dir" "$sap_failed_dir" "${runtimeWatcherPreanonymizedDirPath}"
+    install -d -m 0770 "$sap_drop_dir" "$sap_processed_dir" "$sap_failed_dir" "${runtimeWatcherPreanonymizedDirPath}"
 
     wait_for_stable_zip() {
       local file_path="$1"
@@ -1240,6 +1315,7 @@ let
   '';
   runLocalSapImportScript = pkgs.writeShellScriptBin "${sapImportScriptName}" ''
     source "${lxAnnotateEnvHelpers}"
+    source "${lxAnnotateRuntimeLib}"
     lx_annotate_export_base_env
     lx_annotate_export_storage_env "${envDataDir}"
     lx_annotate_export_encryption_env
@@ -1249,11 +1325,7 @@ let
 
     sap_import_one() {
       cd "${repoDir}"
-      VENV_PYTHON="${repoDir}/.devenv/state/venv/bin/python"
-      if [ ! -x "$VENV_PYTHON" ]; then
-        echo "ERROR: repo venv missing at $VENV_PYTHON"
-        return 1
-      fi
+      VENV_PYTHON="$(lx_annotate_repo_python)"
 
       secretspec run --provider env "$VENV_PYTHON" manage.py import_sap_ish_zip "$1" --output_dir "${runtimeWatcherPreanonymizedDirPath}"
     }
@@ -1284,6 +1356,7 @@ let
   '';
   runLocalExportFramesScript = pkgs.writeShellScriptBin "${exportFramesScriptName}" ''
     set -euo pipefail
+    umask 027
 
     # 1. Go to the repo (Cloned by the main boot service)
     cd "${repoDir}"
@@ -1304,7 +1377,7 @@ let
 
     # 4. Ensure target directory exists
     exportFramesDir="$exportFramesStorageRoot/export/frames"
-    mkdir -p "$exportFramesDir"
+    install -d -m 0750 "$exportFramesDir"
 
     # 5. Run export inside devenv shell
     if [ -f Makefile ] && command -v devenv >/dev/null 2>&1; then
@@ -1317,6 +1390,7 @@ let
   '';
   runLocalExportFramesWheelScript = pkgs.writeShellScriptBin "${exportFramesScriptName}" ''
     set -euo pipefail
+    umask 027
 
     if [ -z ${lib.escapeShellArg wheelExportFramesCommand} ]; then
       echo "ERROR: runtime.commands.exportFrames must be set when wheel mode enables the export service."
@@ -1334,7 +1408,7 @@ let
     export STORAGE_DIR="$exportFramesStorageRoot/storage"
     export DATA_DIR="$exportFramesStorageRoot"
 
-    mkdir -p "$exportFramesStorageRoot/export/frames"
+    install -d -m 0750 "$exportFramesStorageRoot/export/frames"
 
     if [ ! -x "${runtimeWheelVenvPath}/bin/python" ]; then
       echo "ERROR: Wheel virtualenv missing at ${runtimeWheelVenvPath}."
@@ -1348,6 +1422,7 @@ let
 
   runLocalDataRecoveryScript = pkgs.writeShellScriptBin "runLxAnnotateDataRecovery" ''
         set -euo pipefail
+        umask 027
         target_dir="${envDataDir}"
         resolved_target_dir="$(${pkgs.coreutils}/bin/realpath -m "$target_dir")"
         marker_dir="$target_dir/logs"
@@ -1357,7 +1432,7 @@ let
         state_dir="$(${pkgs.coreutils}/bin/dirname "$state_file")"
         previous_effective_dir=""
         use_wheel_runtime="${if useWheelRuntime then "true" else "false"}"
-        mkdir -p "$target_dir" "$marker_dir" "$state_dir"
+        install -d -m 0750 "$target_dir" "$marker_dir" "$state_dir"
 
         if [ -f "$state_file" ]; then
           previous_effective_dir="$(${pkgs.gnugrep}/bin/grep '^LAST_EFFECTIVE_DATA_DIR=' "$state_file" | ${pkgs.coreutils}/bin/tail -n 1 | ${pkgs.coreutils}/bin/cut -d= -f2- || true)"
@@ -1398,9 +1473,9 @@ let
 
         if [ "$use_wheel_runtime" = "true" ]; then
           ensure_wheel_runtime_installed
-          if [ -x "${runtimeWheelVenvPath}/bin/python" ]; then
+          if [ -x "${wheelVenvPythonPath}" ]; then
             echo "Applying Django migrations before data recovery helper commands."
-            run_installed_django_command "${runtimeWheelVenvPath}/bin/python" migrate --noinput
+            run_installed_django_command "${wheelVenvPythonPath}" migrate --noinput
           fi
         fi
 
@@ -1443,7 +1518,7 @@ let
         run_installed_django_command() {
           local helper_python="$1"
           shift
-          "$helper_python" -m django "$@" --settings=lx_annotate.settings.settings_prod
+          run_django_command_with_python "$helper_python" "$@"
         }
 
         write_repair_failure() {
@@ -1516,11 +1591,11 @@ let
 
         migration_helper_python=""
         if [ "$use_wheel_runtime" = "true" ]; then
-          if [ -x "${runtimeWheelVenvPath}/bin/python" ]; then
-            migration_helper_python="${runtimeWheelVenvPath}/bin/python"
+          if [ -x "${wheelVenvPythonPath}" ]; then
+            migration_helper_python="${wheelVenvPythonPath}"
           fi
-        elif [ -f "${repoDir}/scripts/migrate_data_dir.py" ] && [ -x "${repoDir}/.devenv/state/venv/bin/python" ]; then
-          migration_helper_python="${repoDir}/.devenv/state/venv/bin/python"
+        elif [ -f "${repoDir}/scripts/migrate_data_dir.py" ] && [ -x "${repoVenvPythonPath}" ]; then
+          migration_helper_python="${repoVenvPythonPath}"
         fi
 
         if [ -n "$migration_helper_python" ]; then
@@ -1667,25 +1742,42 @@ let
 
   runLocalDataCleanupScript = pkgs.writeShellScriptBin "runLxAnnotateDataCleanup" ''
     set -euo pipefail
+    umask 027
 
     runtime_root="${envDataDir}"
     archive_root="${cfg.dataCleanup.archiveDir}"
+    persisting_mount="${config.roles.endoreg-client.paths.storagePersistingMountPoint}"
     marker_dir="$runtime_root/logs"
     marker_file="$marker_dir/data_cleanup_latest.log"
 
-    mkdir -p "$marker_dir"
+    install -d -m 0750 "$marker_dir"
 
     if [ ! -d "$runtime_root" ]; then
       echo "Skipping cleanup; runtime root missing: $runtime_root"
       exit 0
     fi
 
-    if [ ! -d "${config.roles.endoreg-client.paths.storagePersistingMountPoint}" ]; then
-      echo "Skipping cleanup; persisting storage mount missing: ${config.roles.endoreg-client.paths.storagePersistingMountPoint}"
-      exit 0
+    if ! ${pkgs.util-linux}/bin/mountpoint -q "$persisting_mount"; then
+      echo "ERROR: refusing cleanup because persisting storage is not a mounted filesystem: $persisting_mount" >&2
+      exit 1
     fi
 
-    mkdir -p "$archive_root"
+    resolved_mount="$(${pkgs.coreutils}/bin/realpath -m "$persisting_mount")"
+    resolved_archive="$(${pkgs.coreutils}/bin/realpath -m "$archive_root")"
+    case "$resolved_archive/" in
+      "$resolved_mount/"*) ;;
+      *)
+        echo "ERROR: refusing cleanup because archive is outside the persisting mount: $resolved_archive" >&2
+        exit 1
+        ;;
+    esac
+    ${pkgs.coreutils}/bin/install -d -m 0750 "$archive_root"
+    if [ "$(${pkgs.util-linux}/bin/findmnt -n -o TARGET --target "$resolved_archive" 2>/dev/null || true)" != "$resolved_mount" ]; then
+      echo "ERROR: refusing cleanup because archive does not resolve to the configured persisting mount: $resolved_archive" >&2
+      exit 1
+    fi
+
+    install -d -m 0750 "$archive_root"
 
     moved_count=0
     skipped_count=0
@@ -1717,7 +1809,7 @@ let
 
         archive_file="$archive_root/$label/$rel_path"
         archive_dir="$(${pkgs.coreutils}/bin/dirname "$archive_file")"
-        ${pkgs.coreutils}/bin/mkdir -p "$archive_dir"
+        ${pkgs.coreutils}/bin/install -d -m 0750 "$archive_dir"
 
         if [ -e "$archive_file" ]; then
           if ${pkgs.diffutils}/bin/cmp -s "$source_file" "$archive_file"; then
@@ -1758,7 +1850,7 @@ let
         set -euo pipefail
 
         json_log() {
-          "${pkgs.python3}/bin/python3" - "$1" "$2" <<-'PY'
+          "${helperPythonPath}" - "$1" "$2" <<-'PY'
     import json
     import sys
     print(json.dumps({
@@ -1831,11 +1923,11 @@ let
           source "${lxAnnotateEnvHelpers}"
           lx_annotate_export_wheel_service_env "${envDataDir}"
           ensure_wheel_runtime_installed
-          helper_python="${runtimeWheelVenvPath}/bin/python"
+          helper_python="${wheelVenvPythonPath}"
         else
           lx_annotate_export_runtime_env
           lx_annotate_activate_runtime
-          helper_python="$(command -v python)"
+          helper_python="$(lx_annotate_repo_python)"
         fi
 
         if [ ! -x "$helper_python" ]; then
@@ -1877,6 +1969,7 @@ in
       watcherScriptName
       sapImportScriptName
       migrateVideoStreamableStorageScriptName
+      hlsMaterializationScriptName
       ;
   };
 
@@ -1899,6 +1992,7 @@ in
       lxAnnotateBuildScript
       lxAnnotateMigrateScript
       lxAnnotateMigrateVideoStreamableStorageScript
+      runLocalHlsMaterializationScript
       lxAnnotateBootstrapScript
       runLocalLxAnnotateStartScript
       runLocalLxAnnotateScript

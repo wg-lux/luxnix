@@ -1,6 +1,5 @@
 import unittest
 from lx_administration.password.generator import PasswordGenerator
-import string
 
 
 class TestPasswordGenerator(unittest.TestCase):

@@ -1,6 +1,5 @@
 # my_nix_manager/template_renderer.py
 from jinja2 import Environment, FileSystemLoader
-import os
 from typing import Dict, Any
 
 

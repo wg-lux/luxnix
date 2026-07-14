@@ -372,8 +372,8 @@ in
           wheelPath = mkOption {
             type = types.nullOr types.path;
             default = pkgs.fetchurl {
-              url = "https://files.pythonhosted.org/packages/81/d6/1fc7e2bceebfb7da5ec36c86c5f8429b26a4d605c56eda248688ee6c0a07/lx_annotate-0.9.21-py3-none-any.whl";
-              hash = "sha256-IpIuztnY0uRN63R+/ywEPAtcIs7iJQxlPvbqbEYshJU=";
+              url = "https://files.pythonhosted.org/packages/1b/7e/89866d5d7155e8eb7de7c35d4fbad14301f51914025ac4716e8def1dfb6a/lx_annotate-0.9.30-py3-none-any.whl";
+              hash = "sha256-AE2mw1lXzhp8xDHzwMhYTFVS7tpjTkJVIF4fv3FnBTA=";
             };
             description = "Path to the lx-annotate wheel artifact used in wheel mode.";
           };
@@ -691,7 +691,7 @@ in
                     maxTasksPerChild = 1;
                     memoryHigh = "10G";
                     memoryMax = "12G";
-                    cpuQuota = "200%";
+                    cpuQuota = "600%";
                     cpuWeight = 100;
                     ioWeight = 100;
                     nice = 0;
@@ -763,6 +763,19 @@ in
                     oomScoreAdjust = 700;
                   };
                   description = "Celery pool for default and maintenance queues.";
+                };
+                hubTransfer = mkOption {
+                  type = workerPoolType;
+                  default = {
+                    concurrency = 1;
+                    maxTasksPerChild = 20;
+                    memoryHigh = "768M";
+                    memoryMax = "1536M";
+                    cpuQuota = "35%";
+                    nice = 14;
+                    oomScoreAdjust = 750;
+                  };
+                  description = "Celery pool dedicated to bounded outbound hub transfer and recovery jobs.";
                 };
               };
             };
@@ -1078,6 +1091,56 @@ in
       description = "Settings for the manual streamable video backfill migration unit.";
     };
 
+    hlsMaterialization = mkOption {
+      type = types.submodule {
+        options = {
+          enable = mkOption {
+            type = types.bool;
+            default = true;
+            description = "Expose the manual processed-video HLS materialization systemd unit. The unit is not started by any target.";
+          };
+          extraArgs = mkOption {
+            type = types.listOf types.str;
+            default = [ ];
+            example = literalExpression ''[ "--limit" "25" ]'';
+            description = "Additional safe arguments passed to materialize_video_hls. The wrapper rejects --force, --inline, and --artifact-kind overrides.";
+          };
+          timeoutStartSec = mkOption {
+            type = types.str;
+            default = "1h";
+            description = "Maximum time allowed for dispatching HLS materialization jobs.";
+          };
+        };
+      };
+      default = { };
+      description = "Settings for the manual processed-video encrypted HLS materialization unit.";
+    };
+
+    hlsBackfill = mkOption {
+      type = types.submodule {
+        options = {
+          enable = mkOption {
+            type = types.bool;
+            default = true;
+            description = "Run a boot-time processed-video HLS backfill dispatcher after migrations, base data loading, and encrypted storage validation.";
+          };
+          extraArgs = mkOption {
+            type = types.listOf types.str;
+            default = [ ];
+            example = literalExpression ''[ "--limit" "25" ]'';
+            description = "Additional safe arguments passed to materialize_video_hls for the automatic backfill. The wrapper rejects --force, --inline, and --artifact-kind overrides.";
+          };
+          timeoutStartSec = mkOption {
+            type = types.str;
+            default = "1h";
+            description = "Maximum time allowed for dispatching automatic HLS backfill jobs.";
+          };
+        };
+      };
+      default = { };
+      description = "Settings for the automatic processed-video encrypted HLS backfill dispatcher.";
+    };
+
     dataCleanup = mkOption {
       type = types.submodule {
         options = {
@@ -1289,10 +1352,68 @@ in
                   default = null;
                   description = "PEM bundle used by Nginx to verify client certificates for hub transfer requests.";
                 };
+                maxUploadBytes = mkOption {
+                  type = types.ints.positive;
+                  default = 50 * 1024 * 1024 * 1024;
+                  description = "Maximum accepted processed-media upload size in bytes.";
+                };
               };
             };
             default = { };
             description = "Transfer API settings for lx-annotate hub deployments.";
+          };
+          outboundTransfer = mkOption {
+            type = types.submodule {
+              options = {
+                enable = mkOption {
+                  type = types.bool;
+                  default = false;
+                  description = "Enable automatic processed-media transfer from a site node to its configured central hub.";
+                };
+                requireMtls = mkOption {
+                  type = types.bool;
+                  default = true;
+                  description = "Require an outbound mTLS client identity for every hub request.";
+                };
+                clientCertificateFile = mkOption {
+                  type = types.nullOr (types.either types.path types.str);
+                  default = null;
+                  description = "Readable PEM client certificate presented by the site node.";
+                };
+                clientKeyFile = mkOption {
+                  type = types.nullOr (types.either types.path types.str);
+                  default = null;
+                  description = "Readable PEM private key for the outbound client certificate; keep this outside the Nix store.";
+                };
+                caFile = mkOption {
+                  type = types.nullOr (types.either types.path types.str);
+                  default = null;
+                  description = "Optional private CA bundle used to verify the central hub server certificate.";
+                };
+                sourceNodeSecretFile = mkOption {
+                  type = types.nullOr (types.either types.path types.str);
+                  default = null;
+                  description = "Readable file containing the NetworkNode request-authentication secret; keep this outside the Nix store.";
+                };
+                recoveryInterval = mkOption {
+                  type = types.str;
+                  default = "5m";
+                  description = "Systemd interval for dispatching bounded recovery of queued, stale, and retryable outbound transfers.";
+                };
+                staleAfterSeconds = mkOption {
+                  type = types.ints.positive;
+                  default = 1800;
+                  description = "Age in seconds after which an unchanged outbound transfer is eligible for recovery.";
+                };
+                maxRetries = mkOption {
+                  type = types.ints.positive;
+                  default = 5;
+                  description = "Maximum bounded retry count for retryable outbound transfer failures.";
+                };
+              };
+            };
+            default = { };
+            description = "Fail-closed outbound hub transfer settings for site nodes.";
           };
           backup = mkOption {
             type = types.submodule {

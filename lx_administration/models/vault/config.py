@@ -1,6 +1,5 @@
 import yaml
 from datetime import datetime as dt, timedelta as td
-from ..config import DEFAULT_USERS
 
 
 def datetime_representer(dumper, data):

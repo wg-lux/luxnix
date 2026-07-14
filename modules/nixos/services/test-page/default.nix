@@ -4,7 +4,6 @@ with lib;
 with lib.luxnix; let
   cfg = config.services.luxnix.testPage;
 
-  vpnIp = config.luxnix.generic-settings.vpnIp;
 in {
   options.services.luxnix.testPage = {
     enable = mkBoolOpt false "Enable httpd test page";

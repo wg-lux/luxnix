@@ -1,14 +1,5 @@
-{config, ...}: let
-  inherit
-    (config.lib.topology)
-    mkInternet
-    mkDevice
-    mkSwitch
-    mkRouter
-    mkConnection
-    ;
-    #CHANGEME Implement proper network configuration
-in {
+{config, ...}: {
+  #CHANGEME Implement proper network configuration
   networks.home = {
     name = "Home";
     cidrv4 = "192.168.1.1/24";

@@ -20,7 +20,6 @@ let
   keyFile = conf.keyFile;
 
   # Logging configuration
-  user = conf.user;
   group = conf.group;
   logDir = conf.logDir;
 

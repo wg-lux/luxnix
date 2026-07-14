@@ -464,6 +464,23 @@ Current scope:
 - it does not replace the separate shared-secret request authentication used by
   `NetworkNode`
 
+Site-node sending is configured separately with
+`hub.outboundTransfer.enable = true`. LuxNix fails evaluation unless the node
+uses the `site_node` deployment role and supplies all of the following:
+
+- `hub.outboundTransfer.clientCertificateFile`
+- `hub.outboundTransfer.clientKeyFile`
+- `hub.outboundTransfer.sourceNodeSecretFile`
+- `hub.outboundTransfer.requireMtls = true`
+
+`hub.outboundTransfer.caFile` may additionally pin a private CA for the hub's
+server certificate. When outbound transfer is enabled, eligible marked jobs are
+dispatched to the maintenance worker, which presents the client certificate,
+verifies the hub certificate, refuses redirects, authenticates with the
+separate node secret, and uploads only processed anonymized media. The private
+key and node secret paths should refer to runtime-managed files outside the Nix
+store.
+
 In other words:
 
 - TLS and mTLS protect the channel and node identity

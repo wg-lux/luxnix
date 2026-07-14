@@ -571,6 +571,8 @@ def test_lx_annotate_boot_service_config_evaluates() -> None:
     env = dict(value.split("=", 1) for value in service_config["Environment"])
     assert "lx-annotate.local" in env["ALLOWED_HOSTS"].split(",")
     assert "lx-annotate.local" in env["ALLOWED_HOSTS"].split(",")
+    assert env["LD_LIBRARY_PATH"].split(":")[0] == "/run/opengl-driver/lib"
+    assert "/run/opengl-driver-32/lib" in env["LD_LIBRARY_PATH"].split(":")
 
 
 def test_lx_annotate_generated_master_key_is_recoverable_runtime_contract() -> None:
@@ -671,6 +673,8 @@ def test_lx_annotate_dedicated_celery_workers_follow_pool_contract() -> None:
             value.startswith("LD_LIBRARY_PATH=")
             for value in service_config["Environment"]
         )
+        env = dict(value.split("=", 1) for value in service_config["Environment"])
+        assert env["LD_LIBRARY_PATH"].split(":")[0] == "/run/opengl-driver/lib"
 
     for worker_name in ("pipeline", "frameExtraction", "inference", "training"):
         service_config = services[worker_name]

@@ -9,9 +9,6 @@
 with lib;
 with lib.luxnix; let
   cfg = config.luxnix.python.sw;
-  # we need to find out what system we are working on (eg linux, darwin, ...)
-  system = config.system.build.host.system;
-  
 in {
   options.luxnix.python.sw = with types; {
     enable = mkBoolOpt false "Enable or disable sw python";

@@ -8,7 +8,6 @@ with lib;
 with lib.luxnix; let
   cfg = config.luxnix.generic-settings;
   hostname = config.networking.hostName;
-  username = config.user.admin.name;
 
   sensitiveServiceGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
   adminUserName = config.user.admin.name;

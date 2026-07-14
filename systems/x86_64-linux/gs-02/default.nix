@@ -64,6 +64,28 @@ ssh-access.dev-04.enable = true;
 
 ssh-access.dev-04.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICSpoZVcX+K6NdrfqcUVPTU8Ljqlp83YDzzEHjTHU2NO flippos@inexen9";
 
+nginxHost.enable = true;
+
+nginxHost.glm52.enable = true;
+
+nginxHost.keycloak.enable = false;
+
+nginxHost.nextcloud.enable = false;
+
+nginxHost.settings.proxyHeadersHashBucketSize = 64;
+
+nginxHost.settings.proxyHeadersHashMaxSize = 512;
+
+nginxHost.settings.recommendedGzipSettings = true;
+
+nginxHost.settings.recommendedOptimisation = true;
+
+nginxHost.settings.recommendedProxySettings = true;
+
+nginxHost.settings.recommendedTlsSettings = true;
+
+nginxHost.glm52.acme.email = "maxhild10@gmail.com";
+
 };
 
   services = {
@@ -73,6 +95,17 @@ luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort = 5432;
 luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl = "redis://172.16.255.14:6380/1";
 luxnix.lxAnnotateLocal.runtime.trainingWorker.cudaVisibleDevices = "0";
 luxnix.lxAnnotateLocal.runtime.trainingWorker.mode = "manual";
+luxnix.glm52.enable = true;
+luxnix.glm52.gpuLayers = 999;
+luxnix.glm52.host = "0.0.0.0";
+luxnix.glm52.port = 8088;
+luxnix.glm52.quant = "UD-IQ2_M";
+luxnix.lxAnnotateLocal.django.extraSettings."IS_CENTRAL_NODE" = lib.mkForce true;
+luxnix.ollama.acceleration = "cuda";
+luxnix.ollama.enable = true;
+luxnix.ollama.enableModelBootstrap = false;
+luxnix.ollama.models = [ "gemma4:e2b" ];
+ollama.host = "0.0.0.0";
 
   };
 
@@ -108,13 +141,19 @@ luxnix.lxAnnotateLocal.runtime.trainingWorker.mode = "manual";
     generic-settings.language = "english";
 
 
-    generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_6;
+    generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
 
 
     generic-settings.linux.rmemMax = 7500000;
 
 
     generic-settings.linux.wmemMax = 7500000;
+
+
+    generic-settings.network.glm52.domain = "glm.endo-reg.net";
+
+
+    generic-settings.network.glm52.port = 8088;
 
 
     generic-settings.network.hosts.gc-01.domains = [ "gc-01.intern" "lx-annotate.local" ];
@@ -198,7 +237,7 @@ luxnix.lxAnnotateLocal.runtime.trainingWorker.mode = "manual";
     generic-settings.network.hosts.gs-01.syncthing-id = "X2KFB5D-HJWUNFK-GS6TP7A-GV4TGEF-ZYH3RHL-AWWJIW4-76SSCHP-YIMUUAA";
 
 
-    generic-settings.network.hosts.gs-02.domains = [ "gs-02.intern" ];
+    generic-settings.network.hosts.gs-02.domains = [ "glm.endo-reg.net" "gs-02.intern" ];
 
 
     generic-settings.network.hosts.gs-02.ip-local = "192.168.0.56";
@@ -283,6 +322,9 @@ luxnix.lxAnnotateLocal.runtime.trainingWorker.mode = "manual";
 
 
     generic-settings.network.psqlTest.domain = "psql-test.endo-reg.net";
+
+
+    generic-settings.network.serviceHosts.glm52 = "gs-02";
 
 
     generic-settings.network.serviceHosts.keycloak = "s-02";
@@ -404,5 +446,11 @@ luxnix.lxAnnotateLocal.runtime.trainingWorker.mode = "manual";
 
 
   };
+
+  programs.nix-ld.enable = true;
+
+  xdg.menus.enable = true;
+
+  networking.firewall.interfaces.tun0.allowedTCPPorts = lib.mkAfter [ 11434 8088 ];
 
 }

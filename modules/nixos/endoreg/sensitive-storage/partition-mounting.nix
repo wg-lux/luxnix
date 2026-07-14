@@ -16,7 +16,6 @@ let
 
   partition-luks-uuid = partitionConfiguration.luks-uuid;
   mountpoint = conf.mountPoint;
-  filemode-secret = conf.filemodeSecret;
   filemode-mountpoint = conf.filemodeMountpoint;
 
   mount-script-name = conf.mountScriptName;

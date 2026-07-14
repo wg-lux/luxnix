@@ -95,30 +95,11 @@ in
           config.user.admin.name
         else
           "admin";
-      adminUid = config.users.users.${adminUserName}.uid or 1000;
-      configurationPath =
-        if
-          config ? luxnix
-          && config.luxnix ? "generic-settings"
-          && config.luxnix."generic-settings" ? configurationPath
-        then
-          config.luxnix."generic-settings".configurationPath
-        else
-          "/home/${adminUserName}/luxnix";
       clientUserName =
         if config ? user && config.user ? client && config.user.client ? name then
           config.user.client.name
         else
           "client-user";
-      clientUserHome =
-        let
-          maybeHome =
-            if config ? user && config.user ? client && config.user.client ? home then
-              config.user.client.home
-            else
-              null;
-        in
-        if maybeHome != null then maybeHome else "/home/${clientUserName}";
       clientHomeStateVersion =
         if config ? user && config.user ? client && config.user.client ? homeStateVersion then
           config.user.client.homeStateVersion
@@ -127,16 +108,12 @@ in
       storageBaseDir = cfg.paths.storageBaseDir;
       videoInputDir = cfg.paths.videoInputDir;
       pdfInputDir = cfg.paths.pdfInputDir;
-      desktopDirName = cfg.paths.desktopDirName;
-      processingRepo = cfg.paths.processingRepo;
       storagePersistingMountPoint = cfg.paths.storagePersistingMountPoint;
 
       normalUsers = lib.filterAttrs (_: user: (user.isNormalUser or false)) config.users.users;
       normalUserNames = lib.attrNames normalUsers;
 
       firstNonNull = values: lib.foldl' (acc: val: if acc != null then acc else val) null values;
-      services.nginx.enable = lib.mkForce true;
-
       endoregServiceUserName =
         if
           config ? user && config.user ? endoreg-service-user && config.user.endoreg-service-user ? name

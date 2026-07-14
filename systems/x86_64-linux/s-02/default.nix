@@ -46,6 +46,8 @@ keycloakHost.homeDir = "/etc/keycloak";
 
 nginxHost.enable = true;
 
+nginxHost.glm52.enable = false;
+
 nginxHost.keycloak.enable = true;
 
 nginxHost.nextcloud.enable = true;
@@ -99,13 +101,19 @@ postgres.main.enable = true;
     generic-settings.language = "english";
 
 
-    generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_6;
+    generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
 
 
     generic-settings.linux.rmemMax = 7500000;
 
 
     generic-settings.linux.wmemMax = 7500000;
+
+
+    generic-settings.network.glm52.domain = "glm.endo-reg.net";
+
+
+    generic-settings.network.glm52.port = 8088;
 
 
     generic-settings.network.hosts.gc-01.domains = [ "gc-01.intern" "lx-annotate.local" ];
@@ -189,7 +197,7 @@ postgres.main.enable = true;
     generic-settings.network.hosts.gs-01.syncthing-id = "X2KFB5D-HJWUNFK-GS6TP7A-GV4TGEF-ZYH3RHL-AWWJIW4-76SSCHP-YIMUUAA";
 
 
-    generic-settings.network.hosts.gs-02.domains = [ "gs-02.intern" ];
+    generic-settings.network.hosts.gs-02.domains = [ "glm.endo-reg.net" "gs-02.intern" ];
 
 
     generic-settings.network.hosts.gs-02.ip-local = "192.168.0.56";
@@ -274,6 +282,9 @@ postgres.main.enable = true;
 
 
     generic-settings.network.psqlTest.domain = "psql-test.endo-reg.net";
+
+
+    generic-settings.network.serviceHosts.glm52 = "gs-02";
 
 
     generic-settings.network.serviceHosts.keycloak = "s-02";
@@ -377,5 +388,9 @@ postgres.main.enable = true;
 
 
   };
+
+  programs.nix-ld.enable = true;
+
+  xdg.menus.enable = true;
 
 }

@@ -26,9 +26,6 @@ with lib.luxnix; let
     };
   };
 
-  # we need to find out what system we are working on (eg linux, darwin, ...)
-  system = config.system.build.host.system;
-
 in
 {
   options.luxnix.nvidia-default = with types; {

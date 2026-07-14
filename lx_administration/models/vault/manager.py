@@ -75,7 +75,7 @@ class Vault(BaseModel):
 
         logger = get_logger("Vaults-load_dir", reset=True)
 
-        vault_dir_p, vault_key_path_p, vault_file_p = cls._get_vault_paths(
+        vault_dir_p, _, vault_file_p = cls._get_vault_paths(
             vault_dir, vault_key_path
         )
 
@@ -271,27 +271,6 @@ class Vault(BaseModel):
                 )
                 secret_templates.extend(_secret_templates)
                 created_secret_templates.extend(_created_secret_templates)
-
-        return secret_templates, created_secret_templates
-
-    def _build_client_secret_templates(self):
-        """Build secret templates for clients based on inventory hostnames and base client secret types."""
-        secret_templates: List[SecretTemplate] = []
-        created_secret_templates: List[SecretTemplate] = []
-        owner_type = "clients"
-        assert self.inventory is not None, "Inventory must be loaded"
-        secret_names = [h for h in self.inventory.get_hostnames() if h is not None]
-        secret_types = BASE_CLIENT_SECRET_TYPES
-
-        assert owner_type in OWNER_TYPES, f"Invalid owner_type: {owner_type}"
-        for secret_type in secret_types:
-            _secret_templates, _created_secret_templates = (
-                self.get_or_create_secret_templates(
-                    secret_names, owner_type, secret_type
-                )
-            )
-            secret_templates.extend(_secret_templates)
-            created_secret_templates.extend(_created_secret_templates)
 
         return secret_templates, created_secret_templates
 
