@@ -66,7 +66,6 @@ in
       nvidiaSettings = true;
       package = nvidiaDrivers.${cfg.nvidiaDriver};
       nvidiaPersistenced = true;
-      gsp.enable = false;
     };
   };
 

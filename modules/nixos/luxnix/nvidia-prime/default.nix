@@ -72,7 +72,6 @@ in
     nixpkgs.config.cudaSupport = true;
 
     services.xserver.videoDrivers = [ "nvidia" ];
-    boot.initrd.kernelModules = [ "nvidia" ];
     hardware.nvidia-container-toolkit.enable = lib.mkDefault true;
     hardware.nvidia = {
 
@@ -89,7 +88,13 @@ in
       open = lib.mkForce false;
 
       package = config.boot.kernelPackages.nvidiaPackages.production;
+
+      gsp.enable = false; # GSP disabled is supposed to solve sleep issues on laptops
+
     };
+    boot.extraModprobeConfig = ''
+        options nvidia NVreg_EnableGpuFirmware=0
+    '';
   };
 
 }
