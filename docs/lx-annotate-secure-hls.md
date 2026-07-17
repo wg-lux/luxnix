@@ -144,6 +144,39 @@ It documents the current Keycloak-to-Django role synchronization, compatibility
 roles, `PortalUserInfo → Examiner → Center` provisioning requirement, masked
 center-scope `404` behavior, and each playlist/key/segment gate.
 
+### Operator role model
+
+Keycloak realm roles are the source of truth for technical permissions. On
+each successful login they are copied by exact name into local Django groups;
+the previous synchronized memberships are replaced. Keycloak group names are
+not permissions by themselves. A group named `video_group`, for example, must
+map realm roles such as `video:read` into the token.
+
+The current frontend has a global `endoregdb_user` gate. Thus a normal browser
+user currently needs all of the following:
+
+```text
+Keycloak: endoregdb_user
+Keycloak: explicit workflow roles such as video:read
+local DB: PortalUserInfo -> Examiner -> Center assignment
+```
+
+`endoregdb_user` is a broad compatibility role that also satisfies every
+ordinary backend route role. The explicit workflow roles document intended
+access but do not make that compatibility role least-privileged. The stricter
+`center_scope:admin` role is checked by exact name and is not implied by
+`endoregdb_user` or `data:write`.
+
+Local records are node-specific. A user must log into each independent node
+once, and center assignments and Django superuser promotion must be performed
+separately on each node. A gc-02 promotion does not promote gc-10. Keycloak role
+changes take effect after a fresh successful login; manual edits to synchronized
+Django groups are unsupported because the next login replaces them.
+
+The complete role catalogue, compatibility hierarchy, decision examples, and
+administrative invariants are maintained in the authoritative backend contract
+linked above.
+
 The canonical local playlist URLs are:
 
 ```text

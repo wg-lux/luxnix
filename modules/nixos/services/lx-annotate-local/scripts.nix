@@ -48,7 +48,6 @@ let
   inherit (runtime.runtime)
     useWheelRuntime
     pythonInterpreter
-    wheelFilePath
     ;
   inherit (runtime.defaults)
     exportFramesStorageRootDefault
@@ -218,88 +217,7 @@ let
         }
 
         ensure_wheel_runtime_installed() {
-          local wheel_hash=""
-          local wheelhouse_path="${
-            optionalString (cfg.runtime.wheelhousePath != null) (toString cfg.runtime.wheelhousePath)
-          }"
-          local wheelhouse_hash="no-wheelhouse"
-          local wheel_dependency_overrides=${lib.escapeShellArg (lib.concatStringsSep " " cfg.runtime.wheelDependencyOverrides)}
-          local wheel_dependency_overrides_hash=${lib.escapeShellArg (builtins.hashString "sha256" (lib.concatStringsSep "\n" cfg.runtime.wheelDependencyOverrides))}
-          local pip_install_args=""
-          local wheel_install_stamp_file="${runtimeRootPath}/.wheel-install.sha256"
-          local wheel_install_lock_file="${runtimeRootPath}/.wheel-install.lock"
-          local installed_hash=""
-          local canonical_wheel_name=""
-          local staged_wheel_path=""
-          local install_hash=""
-          local wheel_installer_revision="stop-workers-before-wheel-install-v3-endoreg-db-storage-stream-patch"
-          local venv_created="false"
-          local pip_cache_dir="${runtimeRootPath}/pip-cache"
-
-          if [ -z "${wheelFilePath}" ]; then
-            die "services.luxnix.lxAnnotateLocal.runtime.wheelPath must be set in wheel mode."
-          fi
-
-          install -d -m 0750 "${runtimeRootPath}" "${runtimeWheelRootPath}" "${runtimeWheelVenvPath}" "$pip_cache_dir" "${envConfDir}" "${envDataDir}"
-          install -d -m 0775 "${runtimeStaticRootPath}" "${runtimeStaticRootPath}/.vite"
-
-          wheel_hash="$(${pkgs.coreutils}/bin/sha256sum "${wheelFilePath}" | ${pkgs.coreutils}/bin/cut -d ' ' -f1)"
-          canonical_wheel_name="$(${pkgs.coreutils}/bin/basename "${wheelFilePath}" | ${pkgs.gnused}/bin/sed -E 's/^[a-z0-9]{32}-//')"
-          staged_wheel_path="${runtimeRootPath}/$canonical_wheel_name"
-
-          if [ -n "$wheelhouse_path" ]; then
-            if [ ! -d "$wheelhouse_path" ]; then
-              die "Configured runtime.wheelhousePath does not exist: $wheelhouse_path"
-            fi
-            wheelhouse_hash="$((
-              ${pkgs.findutils}/bin/find "$wheelhouse_path" -maxdepth 1 -type f             \( -name '*.whl' -o -name '*.tar.gz' -o -name '*.zip' \) -print0           | ${pkgs.coreutils}/bin/sort -z           | ${pkgs.findutils}/bin/xargs -0 -r ${pkgs.coreutils}/bin/sha256sum
-            ) | ${pkgs.coreutils}/bin/sha256sum | ${pkgs.coreutils}/bin/cut -d ' ' -f1)"
-            pip_install_args="--no-index --find-links $wheelhouse_path"
-          fi
-
-          install_hash="$(
-            printf '%s\n%s\n%s\n%s\n%s\n' \
-              "$wheel_hash" \
-              "$wheelhouse_hash" \
-              "$wheel_dependency_overrides_hash" \
-              "${helperPythonPath}" \
-              "$wheel_installer_revision" \
-              | ${pkgs.coreutils}/bin/sha256sum \
-              | ${pkgs.coreutils}/bin/cut -d ' ' -f1
-          )"
-
-          exec 9>"$wheel_install_lock_file"
-          ${pkgs.util-linux}/bin/flock 9
-
-          if [ ! -x "${wheelVenvPythonPath}" ]; then
-            "${helperPythonPath}" -m venv "${runtimeWheelVenvPath}"
-            venv_created="true"
-          fi
-
-          installed_hash="$(${pkgs.coreutils}/bin/cat "$wheel_install_stamp_file" 2>/dev/null || true)"
-
-          if [ "$venv_created" = "true" ] || [ "$install_hash" != "$installed_hash" ]; then
-            ${pkgs.coreutils}/bin/install -m 0640 "${wheelFilePath}" "$staged_wheel_path"
-            export PIP_CACHE_DIR="$pip_cache_dir"
-            export PIP_DISABLE_PIP_VERSION_CHECK=1
-            # shellcheck disable=SC2086
-            "${runtimeWheelVenvPath}/bin/pip" install --upgrade $pip_install_args "$staged_wheel_path"
-            if [ -n "$wheel_dependency_overrides" ]; then
-              # shellcheck disable=SC2086
-              "${runtimeWheelVenvPath}/bin/pip" install --upgrade --no-deps $pip_install_args $wheel_dependency_overrides
-            fi
-            printf '%s
-    ' "$install_hash" > "$wheel_install_stamp_file"
-            chmod 0640 "$wheel_install_stamp_file" 2>/dev/null || true
-          fi
-
-          ${pkgs.util-linux}/bin/flock -u 9
-          exec 9>&-
-
-          export PATH="${runtimeWheelVenvPath}/bin:$PATH"
-          export LX_ANNOTATE_WHEEL_VENV="${runtimeWheelVenvPath}"
-          export LX_ANNOTATE_WHEEL_APP_ROOT="${runtimeWheelRootPath}"
-          export WHEEL_INSTALL_HASH="$install_hash"
+          "${effectiveRuntimePackage}/bin/lx-annotate-runtime-ensure"
         }
 
         run_installed_django_command() {
@@ -771,17 +689,15 @@ let
     set -euo pipefail
     source "${lxAnnotateRuntimeLib}"
 
-    artifact_kind="processed"
     explicit_artifact_kind="false"
     previous_arg=""
     for arg in "$@"; do
       if [ "$previous_arg" = "--artifact-kind" ]; then
         case "$arg" in
-          raw|processed)
-            artifact_kind="$arg"
+          raw|processed|both)
             ;;
           *)
-            die "runLxAnnotateHlsMaterialization requires --artifact-kind raw or processed."
+            die "runLxAnnotateHlsMaterialization requires --artifact-kind raw, processed, or both."
             ;;
         esac
       fi
@@ -795,12 +711,11 @@ let
         --artifact-kind)
           explicit_artifact_kind="true"
           ;;
-        --artifact-kind=raw|--artifact-kind=processed)
+        --artifact-kind=raw|--artifact-kind=processed|--artifact-kind=both)
           explicit_artifact_kind="true"
-          artifact_kind="''${arg#*=}"
           ;;
         --artifact-kind=*)
-          die "runLxAnnotateHlsMaterialization requires --artifact-kind raw or processed."
+          die "runLxAnnotateHlsMaterialization requires --artifact-kind raw, processed, or both."
           ;;
       esac
       previous_arg="$arg"
@@ -810,12 +725,6 @@ let
       die "runLxAnnotateHlsMaterialization requires a value after --artifact-kind."
     fi
 
-    artifact_kind_args=(--artifact-kind processed)
-    if [ "$explicit_artifact_kind" = "true" ]; then
-      artifact_kind_args=()
-    fi
-
-    log "Dispatching $artifact_kind-video HLS materialization jobs..."
     if [ "${if useWheelRuntime then "true" else "false"}" = "true" ]; then
       source "${lxAnnotateEnvHelpers}"
       lx_annotate_export_wheel_service_env "${envDataDir}"
@@ -824,7 +733,23 @@ let
       lx_annotate_export_runtime_env
       lx_annotate_activate_runtime
     fi
-    exec ${effectiveRuntimePackage}/bin/lx-annotate-manage materialize_video_hls "''${artifact_kind_args[@]}" --apply --json "$@"
+
+    run_hls_materialization() {
+      local artifact_kind="$1"
+      shift
+      log "Dispatching $artifact_kind-video HLS materialization jobs..."
+      ${effectiveRuntimePackage}/bin/lx-annotate-manage materialize_video_hls \
+        --artifact-kind "$artifact_kind" --apply --json "$@"
+    }
+
+    if [ "$explicit_artifact_kind" = "true" ]; then
+      log "Dispatching explicitly selected video HLS materialization jobs..."
+      exec ${effectiveRuntimePackage}/bin/lx-annotate-manage materialize_video_hls --apply --json "$@"
+    fi
+
+    for default_artifact_kind in raw processed; do
+      run_hls_materialization "$default_artifact_kind" "$@"
+    done
   '';
 
   lxAnnotateBootstrapScript = pkgs.writeShellScriptBin "${bootstrapScriptName}" ''

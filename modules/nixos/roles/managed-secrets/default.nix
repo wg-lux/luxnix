@@ -14,7 +14,7 @@ with lib; let
       (toString vaultCfg.client.environmentFile)
     ]
     ++ lib.optionals vaultAuthEnabled [
-      vaultCfg.client.runtimeEnvironmentFile
+      (lib.optionalString vaultCfg.client.allowOffline "-" + vaultCfg.client.runtimeEnvironmentFile)
     ];
   humanFacingSecretNames = [
     "client_user_password"
@@ -229,9 +229,24 @@ PY
       }
       trap cleanup EXIT
 
-      ${if secretConfig.customScript or false then secretConfig.generator else ''
-        ${secretConfig.generator} > "$TARGET_FILE"
-      ''}
+      if (
+        set -euo pipefail
+        ${if secretConfig.customScript or false then secretConfig.generator else ''
+          ${secretConfig.generator} > "$TARGET_FILE"
+        ''}
+      ); then
+        :
+      elif [ "${if vaultCfg.client.allowOffline then "true" else "false"}" = "true" ] \
+        && [ -f "$SECRET_FILE" ] \
+        && [ "$SHOULD_REFRESH" = "true" ]; then
+        echo "WARNING: Could not refresh ${name}; continuing with the existing local secret." >&2
+        chown ${secretConfig.owner}:${secretConfig.group} "$SECRET_FILE"
+        chmod ${secretConfig.permissions} "$SECRET_FILE"
+        exit 0
+      else
+        echo "ERROR: Failed to generate or refresh ${name}." >&2
+        exit 1
+      fi
 
       chown ${secretConfig.owner}:${secretConfig.group} "$TARGET_FILE"
       chmod ${secretConfig.permissions} "$TARGET_FILE"
@@ -456,6 +471,7 @@ in
         User = "root";
         ExecStart = generateSecretsScript;
         UMask = "0077";
+        Environment = lib.optionals vaultCfg.client.allowOffline [ "VAULT_CLIENT_TIMEOUT=5s" ];
         EnvironmentFile = managedSecretsVaultEnvironmentFiles;
       };
     };

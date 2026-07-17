@@ -61,6 +61,16 @@ sudo journalctl -b -u nginx.service -u redis-lx-annotate.service -u postgresql.s
 
 ## Startup chain
 
+The startup-critical LX-Annotate units log to the `lx-annotate` journal
+namespace. Read it as a single boot-ordered stream to find the first unit that
+failed or delayed startup:
+
+```bash
+sudo journalctl --namespace=lx-annotate -b --no-pager
+sudo journalctl --namespace=lx-annotate -b -p warning..alert --no-pager
+sudo journalctl --namespace=lx-annotate -f
+```
+
 ```bash
 sudo systemctl status lx-annotate-runtime-env.service
 sudo systemctl status lx-annotate-migrate.service

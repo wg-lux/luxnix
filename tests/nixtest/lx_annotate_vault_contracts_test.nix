@@ -7,6 +7,7 @@
 let
   vaultModule = "${repoRoot}/modules/nixos/luxnix/vault/default.nix";
   managedSecretsModule = "${repoRoot}/modules/nixos/roles/managed-secrets/default.nix";
+  endoregClientModule = "${repoRoot}/modules/nixos/roles/endoreg-client/default.nix";
   clientUserModule = "${repoRoot}/modules/nixos/user/client/default.nix";
   lxAnnotateConfig = "${repoRoot}/modules/nixos/services/lx-annotate-local/config.nix";
   lxAnnotateEnv = "${repoRoot}/modules/nixos/services/lx-annotate-local/scripts/env.nix";
@@ -48,6 +49,8 @@ in
           assert_file_contains ${vaultModule} 'lx_hub_source_node_secret' "site request-authentication material must be refreshed through managed secrets"
           assert_file_contains ${vaultModule} 'systemd\.services\.luxnix-vault-publish-hub-client-ca' "hub client CA publication must be managed"
           assert_file_contains ${vaultModule} '--cacert.*serverCfg\.caCertFile' "hub CA publication must verify a private Vault server certificate"
+          assert_file_contains ${vaultModule} '--retry-connrefused' "hub CA publication must tolerate the bounded Vault listener startup race"
+          assert_file_contains ${vaultModule} 'Restart = "on-failure"' "hub CA publication must retry a failed refresh"
           assert_file_contains ${vaultModule} 'openssl x509.*-checkend' "published CA material must be validated"
           assert_file_contains ${vaultModule} 'VAULT_TOKEN are required' "PKI bootstrap must require an explicit administrative token"
         '';
@@ -66,7 +69,9 @@ in
           assert_file_contains ${lxAnnotateConfig} '/api/media/hub/transfers/' "machine-to-machine hub routes must bypass browser OIDC redirects"
           assert_file_contains ${lxAnnotateConfig} 'cfg\.hub\.transferApi\.enable' "the OIDC route policy must be scoped to transfer API hubs"
           assert_file_contains ${lxAnnotateConfig} 'lx_annotate\.settings\.settings_prod' "hub OIDC policy initialization must preserve the lx-annotate settings boundary"
+          assert_file_contains ${lxAnnotateConfig} 'file=sys\.stderr' "hub OIDC policy logging must not corrupt command stdout contracts"
           assert_file_contains ${lxAnnotateEnv} 'DJANGO_ALLOWED_HOSTS = envAllowedHosts' "production deployments must export Django's required allowed-hosts variable"
+          assert_file_contains ${lxAnnotateConfig} 'install --force-reinstall --no-deps.*staged_wheel_path' "changed wheel content must replace an installed wheel with the same version"
         '';
       }
       {
@@ -75,8 +80,8 @@ in
         script = ''
           ${ntlib.helpers.path [ pkgs.gnugrep ]}
           ${ntlib.helpers.scriptHelpers}
-          assert_file_contains ${lxAnnotateConfig} 'd \$\{runtimeWheelRootPath\} 0750 \$\{endoreg-service-user-name\}' "wheel runtime root must be created for the service principal"
-          assert_file_contains ${lxAnnotateConfig} 'z \$\{runtimeWheelRootPath\} 0750 \$\{endoreg-service-user-name\}' "existing wheel runtime ownership must be corrected"
+          assert_file_contains ${lxAnnotateConfig} 'd .*runtimeWheelRootPath.* 0750 .*endoreg-service-user-name' "wheel runtime root must be created for the service principal"
+          assert_file_contains ${lxAnnotateConfig} 'z .*runtimeWheelRootPath.* 0750 .*endoreg-service-user-name' "existing wheel runtime ownership must be corrected"
         '';
       }
       {
@@ -90,6 +95,21 @@ in
           assert_file_contains ${managedSecretsModule} 'mktemp "\$SECRET_DIR/\..*\.tmp\.' "secret refresh must use temp files"
           assert_file_contains ${managedSecretsModule} 'mv -f "\$TARGET_FILE" "\$SECRET_FILE"' "secret writes must be atomic"
           assert_file_contains ${managedSecretsModule} 'vault-auth-setup\.service' "managed-secrets must wait for vault auth bootstrap"
+        '';
+      }
+      {
+        name = "endoreg-clients-can-start-with-cached-secrets-while-vault-is-offline";
+        type = "script";
+        script = ''
+          ${ntlib.helpers.path [ pkgs.gnugrep ]}
+          ${ntlib.helpers.scriptHelpers}
+          assert_file_contains ${endoregClientModule} 'vault\.client\.allowOffline = mkDefault true' "EndoReg clients must opt into offline Vault startup"
+          assert_file_contains ${vaultModule} 'continuing with locally cached secrets' "Vault auth failures must degrade to cached secrets for offline-capable clients"
+          assert_file_contains ${vaultModule} 'continuing with cached hub PKI files' "hub certificate renewal must reuse cached PKI files while Vault is offline"
+          assert_file_contains ${vaultModule} 'VAULT_CLIENT_TIMEOUT=5s' "offline Vault authentication must use a bounded timeout"
+          assert_file_contains ${managedSecretsModule} 'continuing with the existing local secret' "failed Vault refreshes must preserve existing secrets"
+          assert_file_contains ${managedSecretsModule} '\[ -f "\$SECRET_FILE" \]' "offline fallback must require an existing secret file"
+          assert_file_contains ${managedSecretsModule} 'VAULT_CLIENT_TIMEOUT=5s' "offline Vault secret refresh must use a bounded timeout"
         '';
       }
       {

@@ -422,6 +422,10 @@ remote authentication, replication policy, or restore orchestration.
 The module now has an explicit Phase 1 secure-transfer contract for the
 optional node-to-node hub transfer API.
 
+For the non-technical clinical workflow, onboarding checklist, status meanings,
+and failure procedure, see the
+[Clinical Hub Transfer Guide](../../../../docs/clinical-hub-transfer-guide.md).
+
 Enable transfer intake with:
 
 - `hub.transferApi.enable = true`

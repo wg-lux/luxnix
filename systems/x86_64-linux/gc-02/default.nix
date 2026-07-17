@@ -93,7 +93,6 @@ luxnix.lxAnnotateLocal.hub.nodeProvisioning.nodes = [
     baseUrl = "https://gs-02.intern";
   }
 ];
-luxnix.lxAnnotateLocal.runtime.wheelDependencyOverrides = [ "endoreg-db==1.0.5.8" ];
 luxnix.lxAnnotateLocal.runtime.mode = "wheel";
 luxnix.vllm.enable = false;
 luxnix.vllm.gpuMemoryUtilization = 0.85;

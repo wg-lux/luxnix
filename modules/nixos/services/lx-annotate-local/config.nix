@@ -203,7 +203,7 @@ let
       local canonical_wheel_name=""
       local staged_wheel_path=""
       local install_hash=""
-      local wheel_installer_revision="wheel-console-contract-v4-endoreg-db-storage-stream-patch"
+      local wheel_installer_revision="wheel-console-contract-v5-content-addressed-reinstall"
       local venv_created="false"
       local pip_cache_dir=${lib.escapeShellArg "${runtimeRootPath}/pip-cache"}
 
@@ -264,6 +264,7 @@ let
         export PIP_DISABLE_PIP_VERSION_CHECK=1
         # shellcheck disable=SC2086
         ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/pip"} install --upgrade $pip_install_args "$staged_wheel_path"
+        ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/pip"} install --force-reinstall --no-deps "$staged_wheel_path"
         if [ -n "$wheel_dependency_overrides" ]; then
           # shellcheck disable=SC2086
           ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/pip"} install --upgrade --no-deps $pip_install_args $wheel_dependency_overrides
@@ -311,6 +312,14 @@ let
     }
     EOF
     chmod +x "$out/libexec/lx-annotate-wheel-runtime-lib"
+
+    cat > "$out/bin/lx-annotate-runtime-ensure" <<EOF
+    #!${pkgs.bash}/bin/bash
+    set -euo pipefail
+    source "$out/libexec/lx-annotate-wheel-runtime-lib"
+    lx_annotate_wheel_ensure
+    EOF
+    chmod +x "$out/bin/lx-annotate-runtime-ensure"
 
     make_entrypoint() {
       local name="$1"
@@ -443,6 +452,7 @@ let
     import importlib.util
     import json
     import os
+    import sys
 
     if importlib.util.find_spec("endoreg_db") is not None:
         os.environ.setdefault(
@@ -460,7 +470,7 @@ let
         print(json.dumps({
             "event": "hub.oidc_middleware_policy_installed",
             "path_prefix": hub_transfer_prefix,
-        }, sort_keys=True))
+        }, sort_keys=True), file=sys.stderr)
   '';
   commonExtraEnv = commonEnv // lib.optionalAttrs cfg.hub.transferApi.enable {
     PYTHONPATH = toString hubOidcMiddlewarePolicy;
@@ -649,6 +659,7 @@ let
   ]
   ++ managedSecretsSetupUnits
   ++ encryptionServiceUnits;
+  lxAnnotateJournalNamespace = "lx-annotate";
   mkLxAnnotateAppService =
     {
       description,
@@ -680,6 +691,7 @@ let
         SupplementaryGroups = [ config.luxnix.generic-settings.sensitiveServiceGroupName ];
         WorkingDirectory = runtimeDataRootPath;
         EnvironmentFile = envSystemdFilePath;
+        LogNamespace = lxAnnotateJournalNamespace;
         ProtectSystem = "full";
         PrivateTmp = true;
         NoNewPrivileges = true;
@@ -1210,6 +1222,9 @@ let
     lxAnnotateEncryptedDataMountScript
     lxAnnotateEncryptedDataUmountScript
     ;
+  workerSubservice = import ./subservices/workers.nix {
+    inherit workerServices workerTimers;
+  };
 in
 {
   config = mkIf cfg.enable (mkMerge [
@@ -1849,6 +1864,7 @@ in
           RemainAfterExit = true;
           User = "root";
           ExecStart = runtimeEnvScript;
+          LogNamespace = lxAnnotateJournalNamespace;
         };
       };
 
@@ -1960,6 +1976,7 @@ in
           Group = "root";
           ExecStart = "${lxAnnotateEncryptedDataMountScript}/bin/lx-annotate-encrypted-data-mount";
           ExecStop = "${lxAnnotateEncryptedDataUmountScript}/bin/lx-annotate-encrypted-data-umount";
+          LogNamespace = lxAnnotateJournalNamespace;
           TimeoutStartSec = "2min";
           TimeoutStopSec = "2min";
         };
@@ -2141,6 +2158,7 @@ in
           TimeoutStartSec = "5min";
           Restart = "on-failure";
           RestartSec = mkDefault 5;
+          LogNamespace = lxAnnotateJournalNamespace;
           MemoryHigh = cfg.runtime.limits.memoryHigh;
           MemoryMax = cfg.runtime.limits.memoryMax;
           CPUQuota = cfg.runtime.limits.cpuQuota;
@@ -2193,6 +2211,7 @@ in
           WorkingDirectory = runtimeDataRootPath;
           ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-manage verify_encrypted_storage";
           EnvironmentFile = envSystemdFilePath;
+          LogNamespace = lxAnnotateJournalNamespace;
           TimeoutStartSec = "10min";
           ProtectSystem = "full";
           PrivateTmp = true;
@@ -2320,7 +2339,6 @@ in
         description = "Move duplicate anonymized lx-annotate payload into external archive storage";
         after = [
           "systemd-tmpfiles-setup.service"
-          "endoreg-mount-persisting-storage.service"
         ]
         ++ encryptionServiceUnits;
         wants = encryptionServiceUnits;
@@ -2360,23 +2378,17 @@ in
         ]
         ++ localPostgresServiceUnits
         ++ localPostgresSetupUnits
-        ++ lib.optionals cfg.storageRelief.requireExternalMount [
-          "endoreg-mount-persisting-storage.service"
-        ]
+
         ++ encryptionServiceUnits;
         wants = [
           "lx-annotate-runtime-env.service"
         ]
-        ++ lib.optionals cfg.storageRelief.requireExternalMount [
-          "endoreg-mount-persisting-storage.service"
-        ]
+
         ++ encryptionServiceUnits;
         requires = [
           "lx-annotate-runtime-env.service"
         ]
-        ++ lib.optionals cfg.storageRelief.requireExternalMount [
-          "endoreg-mount-persisting-storage.service"
-        ]
+
         ++ encryptionServiceUnits;
         unitConfig = {
           RequiresMountsFor = [
@@ -2561,9 +2573,6 @@ in
         OOMScoreAdjust = -500;
       };
     }
-    {
-      systemd.services = workerServices;
-      systemd.timers = workerTimers;
-    }
+    workerSubservice
   ]);
 }

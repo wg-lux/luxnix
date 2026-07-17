@@ -175,6 +175,11 @@ in
 
         luxnix.nvidia-prime.enable = true;
 
+        # Development clients must remain usable while the central Vault host is
+        # being rebuilt. Existing local secrets are reused; first provisioning
+        # still fails closed if a required secret has never been deployed.
+        luxnix.vault.client.allowOffline = mkDefault true;
+
         services.luxnix.lxAnnotateLocal = lxAnnotateRole.service;
 
         services.lx-annotate.extraEnv = mkIf lxAnnotateRole.enable (

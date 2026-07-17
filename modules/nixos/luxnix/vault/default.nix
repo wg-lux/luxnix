@@ -222,10 +222,19 @@ let
     }
     trap cleanup EXIT
 
-    ${pkgs.vault}/bin/vault write -format=json \
+    if ! ${pkgs.vault}/bin/vault write -format=json \
       ${lib.escapeShellArg "${clientHubPkiCfg.mountPath}/issue/${clientHubPkiCfg.roleName}"} \
       common_name=${lib.escapeShellArg clientHubPkiCfg.commonName} \
-      ttl=${lib.escapeShellArg clientHubPkiCfg.ttl} > "$response"
+      ttl=${lib.escapeShellArg clientHubPkiCfg.ttl} > "$response"; then
+      ${optionalString cfg.client.allowOffline ''
+        if [ -s "$certificate" ] && [ -s "$private_key" ] && [ -s "$client_ca" ]; then
+          echo "WARNING: Vault certificate renewal failed; continuing with cached hub PKI files." >&2
+          exit 0
+        fi
+      ''}
+      echo "ERROR: Vault client certificate issuance failed." >&2
+      exit 1
+    fi
     ${pkgs.jq}/bin/jq -er '.data.certificate' "$response" > "$cert_tmp"
     ${pkgs.jq}/bin/jq -er '.data.private_key' "$response" > "$key_tmp"
     ${pkgs.jq}/bin/jq -er '.data.issuing_ca' "$response" > "$ca_tmp"
@@ -263,6 +272,8 @@ let
     temporary="$(${pkgs.coreutils}/bin/mktemp "$destination_dir/.hub-client-ca.XXXXXX")"
     trap '${pkgs.coreutils}/bin/rm -f "$temporary"' EXIT
     ${pkgs.curl}/bin/curl --fail --silent --show-error \
+      --retry 30 --retry-delay 2 --retry-connrefused \
+      --connect-timeout 2 --max-time 90 \
       --proto '=https' --tlsv1.2 \
       ${
         lib.optionalString (
@@ -322,9 +333,16 @@ let
         fi
         ROLE_ID="$(tr -d '\n' < "$ROLE_ID_FILE")"
         SECRET_ID="$(tr -d '\n' < "$SECRET_ID_FILE")"
-        ${pkgs.vault}/bin/vault write -field=token auth/approle/login \
+        if ! ${pkgs.vault}/bin/vault write -field=token auth/approle/login \
           role_id="$ROLE_ID" \
-          secret_id="$SECRET_ID" > "$TMP_TOKEN"
+          secret_id="$SECRET_ID" > "$TMP_TOKEN"; then
+          ${optionalString cfg.client.allowOffline ''
+            echo "WARNING: Vault authentication failed; continuing with locally cached secrets." >&2
+            exit 0
+          ''}
+          echo "ERROR: Vault AppRole authentication failed." >&2
+          exit 1
+        fi
         ;;
       *)
         echo "ERROR: Unsupported Vault auth method ${cfg.client.auth.method}." >&2
@@ -407,6 +425,16 @@ in
             type = types.bool;
             default = true;
             description = "Enable runtime Vault client bootstrap for systemd services.";
+          };
+
+          allowOffline = mkOption {
+            type = types.bool;
+            default = false;
+            description = ''
+              Allow activation to continue when Vault is temporarily unreachable.
+              Services may reuse already deployed secret files, but initial
+              provisioning still fails when a required local secret is absent.
+            '';
           };
 
           address = mkOption {
@@ -773,7 +801,11 @@ in
       serviceConfig = {
         Type = "oneshot";
         ExecStart = issueHubClientCertificateScript;
-        EnvironmentFile = cfg.client.runtimeEnvironmentFile;
+        Environment = lib.optionals cfg.client.allowOffline [
+          "VAULT_CLIENT_TIMEOUT=5s"
+        ];
+        EnvironmentFile =
+          lib.optionalString cfg.client.allowOffline "-" + cfg.client.runtimeEnvironmentFile;
         UMask = "0077";
       };
     };
@@ -804,6 +836,8 @@ in
         Type = "oneshot";
         RemainAfterExit = true;
         ExecStart = publishHubClientCaScript;
+        Restart = "on-failure";
+        RestartSec = "5s";
         UMask = "0027";
       };
     };
@@ -819,6 +853,7 @@ in
       after = [
         "local-fs.target"
         "systemd-tmpfiles-setup.service"
+        "network-online.target"
       ];
       requires = [ "systemd-tmpfiles-setup.service" ];
       wants = [ "local-fs.target" ];
@@ -830,6 +865,9 @@ in
         UMask = "0077";
         ExecStart = vaultAuthSetupScript;
         ExecStop = vaultAuthCleanupScript;
+        Environment = lib.optionals cfg.client.allowOffline [
+          "VAULT_CLIENT_TIMEOUT=5s"
+        ];
         EnvironmentFile = lib.optionals (cfg.client.environmentFile != null) [
           (toString cfg.client.environmentFile)
         ];

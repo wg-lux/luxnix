@@ -372,8 +372,8 @@ in
           wheelPath = mkOption {
             type = types.nullOr types.path;
             default = pkgs.fetchurl {
-              url = "https://files.pythonhosted.org/packages/00/f4/65b9f6c03da6d4bc6f27a2a099caaa29358f300370b40c7191ea80800977/lx_annotate-0.9.36-py3-none-any.whl";
-              hash = "sha256-yi0T0AGXoOMkfEOO7IlaNKJ0VhkTuz9/sTiVLVUofFo=";
+              url = "https://files.pythonhosted.org/packages/b2/27/1add6dcf5b47a441b7c2adde760aa7f2f8bb68e13d130ffb7ac53bc162bb/lx_annotate-0.9.39-py3-none-any.whl";
+              hash = "sha256-q3v6iJ/LKpP3gQ8sngRS1SFZyHHv5yDUwvKA6LHycH0=";
             };
             description = "Path to the lx-annotate wheel artifact used in wheel mode.";
           };
@@ -1124,7 +1124,7 @@ in
             type = types.listOf types.str;
             default = [ ];
             example = literalExpression ''[ "--limit" "25" ]'';
-            description = "Additional safe arguments passed to materialize_video_hls. Use --artifact-kind raw for a raw-only run; processed is the default. The wrapper rejects --force, --inline, and unsupported artifact kinds.";
+            description = "Additional safe arguments passed to materialize_video_hls. By default the wrapper reconciles both raw and processed HLS artifacts; use --artifact-kind raw or --artifact-kind processed to limit a manual run. The wrapper rejects --force, --inline, and unsupported artifact kinds.";
           };
           timeoutStartSec = mkOption {
             type = types.str;
@@ -1149,7 +1149,7 @@ in
             type = types.listOf types.str;
             default = [ ];
             example = literalExpression ''[ "--limit" "25" ]'';
-            description = "Additional safe arguments passed to materialize_video_hls for the automatic backfill. Use --artifact-kind raw for a raw-only run; processed is the default. The wrapper rejects --force, --inline, and unsupported artifact kinds.";
+            description = "Additional safe arguments passed to materialize_video_hls for the automatic backfill. By default the wrapper reconciles both raw and processed HLS artifacts; use --artifact-kind raw or --artifact-kind processed to limit a run. The wrapper rejects --force, --inline, and unsupported artifact kinds.";
           };
           timeoutStartSec = mkOption {
             type = types.str;
