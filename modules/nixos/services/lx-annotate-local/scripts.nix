@@ -153,6 +153,52 @@ let
           export LX_ANNOTATE_ENV_FILE="${repoDir}/.env"
         }
 
+        require_file_backed_master_key() {
+          local key_file="''${LX_ANNOTATE_MASTER_KEY_FILE:-}"
+
+          if [ -n "''${LX_ANNOTATE_MASTER_KEY:-}" ]; then
+            die "LX_ANNOTATE_MASTER_KEY must not be set in production; use the host-owned LX_ANNOTATE_MASTER_KEY_FILE secret handle."
+          fi
+          if [ -z "$key_file" ]; then
+            die "LX_ANNOTATE_MASTER_KEY_FILE is not configured."
+          fi
+          if [ ! -f "$key_file" ] || [ ! -r "$key_file" ] || [ ! -s "$key_file" ]; then
+            die "LX_ANNOTATE_MASTER_KEY_FILE is not a readable, non-empty regular file: $key_file"
+          fi
+
+          "${helperPythonPath}" - "$key_file" <<'PY'
+    import base64
+    import binascii
+    import stat
+    import sys
+    from pathlib import Path
+
+    key_path = Path(sys.argv[1])
+    key_stat = key_path.stat()
+    key_mode = stat.S_IMODE(key_stat.st_mode)
+
+    if key_stat.st_uid != 0:
+        raise SystemExit("Application master key file must be owned by root")
+    if key_mode & 0o020:
+        raise SystemExit("Application master key file must not be group-writable")
+    if key_mode & 0o007:
+        raise SystemExit("Application master key file must not grant access to other users")
+
+    try:
+        encoded_key = key_path.read_text(encoding="ascii").strip()
+        decoded_key = base64.urlsafe_b64decode(encoded_key.encode("ascii"))
+    except (UnicodeDecodeError, ValueError, binascii.Error) as exc:
+        raise SystemExit(
+            "Application master key file must contain URL-safe base64 key material"
+        ) from exc
+
+    if len(decoded_key) not in {16, 24, 32}:
+        raise SystemExit(
+            "Application master key must decode to 16, 24, or 32 bytes"
+        )
+    PY
+        }
+
         lx_annotate_activate_runtime() {
           cd "${repoDir}"
           if command -v direnv >/dev/null 2>&1; then
@@ -728,9 +774,11 @@ let
     if [ "${if useWheelRuntime then "true" else "false"}" = "true" ]; then
       source "${lxAnnotateEnvHelpers}"
       lx_annotate_export_wheel_service_env "${envDataDir}"
+      require_file_backed_master_key
       ensure_wheel_runtime_installed
     else
       lx_annotate_export_runtime_env
+      require_file_backed_master_key
       lx_annotate_activate_runtime
     fi
 
@@ -794,6 +842,7 @@ let
     set -euo pipefail
     source "${lxAnnotateRuntimeLib}"
     lx_annotate_export_runtime_env
+    require_file_backed_master_key
     lx_annotate_activate_runtime
     if ! vite_manifest_points_to_existing_asset "${djangoStaticRootPath}/.vite/manifest.json"; then
       warn "Vite manifest is missing/invalid before server start. Continuing with backend startup."
@@ -879,6 +928,7 @@ let
         source "${lxAnnotateRuntimeLib}"
         source "${lxAnnotateEnvHelpers}"
         lx_annotate_export_wheel_service_env "${envDataDir}"
+        require_file_backed_master_key
         ensure_wheel_runtime_installed
 
         write_wheel_systemd_env_file
@@ -924,6 +974,7 @@ let
 
     source "${lxAnnotateRuntimeLib}"
     lx_annotate_export_runtime_env
+    require_file_backed_master_key
     lx_annotate_activate_runtime
 
     cd "${repoDir}"
@@ -1176,6 +1227,7 @@ let
 
     source "${lxAnnotateRuntimeLib}"
     ensure_wheel_runtime_installed
+    require_file_backed_master_key
     install -d -m 0750 "${runtimeStorageRootPath}" "${runtimeStreamableVideoRootPath}" "${runtimeStreamableVideoRawRootPath}" "${runtimeStreamableVideoProcessedRootPath}"
 
     run_installed_django_command "${wheelVenvPythonPath}" check --fail-level CRITICAL
@@ -1187,22 +1239,27 @@ let
 
     log "lx-annotate acceptance checks passed."
   '';
-  runLocalMasterKeyCheckWheelScript = pkgs.writeShellScriptBin "${masterKeyCheckScriptName}" ''
+  runLocalMasterKeyCheckScript = pkgs.writeShellScriptBin "${masterKeyCheckScriptName}" ''
     set -euo pipefail
 
-    source "${lxAnnotateEnvHelpers}"
-    lx_annotate_export_wheel_service_env "${envDataDir}"
-
-    if [ -z "''${LX_ANNOTATE_MASTER_KEY_FILE:-}" ] || [ ! -r "$LX_ANNOTATE_MASTER_KEY_FILE" ] || [ ! -s "$LX_ANNOTATE_MASTER_KEY_FILE" ]; then
-      echo "ERROR: LX_ANNOTATE_MASTER_KEY_FILE is not configured, readable, and non-empty; refusing to boot without validating encrypted storage."
-      exit 1
-    fi
-
     source "${lxAnnotateRuntimeLib}"
-    ensure_wheel_runtime_installed
+    if [ "${if useWheelRuntime then "true" else "false"}" = "true" ]; then
+      source "${lxAnnotateEnvHelpers}"
+      lx_annotate_export_wheel_service_env "${envDataDir}"
+      require_file_backed_master_key
+      ensure_wheel_runtime_installed
+    else
+      lx_annotate_export_runtime_env
+      require_file_backed_master_key
+      lx_annotate_activate_runtime
+    fi
     install -d -m 0750 "${runtimeStorageRootPath}" "${runtimeStreamableVideoRootPath}" "${runtimeStreamableVideoRawRootPath}" "${runtimeStreamableVideoProcessedRootPath}"
 
-    run_installed_django_command "${wheelVenvPythonPath}" verify_encrypted_storage
+    if [ "${if useWheelRuntime then "true" else "false"}" = "true" ]; then
+      run_installed_django_command "${wheelVenvPythonPath}" verify_encrypted_storage
+    else
+      run_repo_django_command verify_encrypted_storage
+    fi
 
     log "lx-annotate application master key check passed."
   '';
@@ -1951,7 +2008,7 @@ in
       runLocalLxAnnotateWheelScript
       runLocalAcceptanceScript
       runLocalAcceptanceWheelScript
-      runLocalMasterKeyCheckWheelScript
+      runLocalMasterKeyCheckScript
       runLocalCeleryFrameExtractionWorkerScript
       runLocalCeleryFrameExtractionWorkerWheelScript
       runLocalCeleryFfmpegWorkerScript

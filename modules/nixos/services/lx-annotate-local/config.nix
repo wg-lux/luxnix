@@ -1147,6 +1147,7 @@ let
     lxAnnotateMigrateVideoStreamableStorageScript
     runLocalDataRecoveryScript
     runLocalHlsMaterializationScript
+    runLocalMasterKeyCheckScript
     ;
   inherit (lxAnnotateScripts.serviceOrdering)
     fileMoverAfter
@@ -2209,7 +2210,7 @@ in
           Group = endoreg-service-group-name;
           SupplementaryGroups = [ config.luxnix.generic-settings.sensitiveServiceGroupName ];
           WorkingDirectory = runtimeDataRootPath;
-          ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-manage verify_encrypted_storage";
+          ExecStart = "${runLocalMasterKeyCheckScript}/bin/runLocalMasterKeyCheck";
           EnvironmentFile = envSystemdFilePath;
           LogNamespace = lxAnnotateJournalNamespace;
           TimeoutStartSec = "10min";
