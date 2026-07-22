@@ -10,11 +10,6 @@
 
   ];
 
-  networking.hosts."172.16.255.22" = [
-    "gs-02.intern"
-    "vault.endo-reg.net"
-  ];
-
   user = {
     admin = {
       name = "admin";
@@ -75,24 +70,6 @@ endoreg-client.defaultCenterKey = "university_hospital_wuerzburg";
 
   services = {
 luxnix.endoregDbApiLocal.enable = lib.mkForce false;
-luxnix.lxAnnotateLocal.centerAdminBootstrap.username = "hild_m";
-luxnix.lxAnnotateLocal.hub.outboundTransfer.caFile = "/etc/secrets/vault/hub-pki/vault-server-ca.pem";
-luxnix.lxAnnotateLocal.hub.outboundTransfer.enable = true;
-luxnix.lxAnnotateLocal.hub.nodeProvisioning.enable = true;
-luxnix.lxAnnotateLocal.hub.nodeProvisioning.nodes = [
-  {
-    nodeKey = "gc-02";
-    displayName = "GC-02 site node";
-    role = "site_node";
-    centerKey = "university_hospital_wuerzburg";
-  }
-  {
-    nodeKey = "gs-02";
-    displayName = "GS-02 central hub";
-    role = "central_hub";
-    baseUrl = "https://gs-02.intern";
-  }
-];
 luxnix.lxAnnotateLocal.runtime.mode = "wheel";
 luxnix.vllm.enable = false;
 luxnix.vllm.gpuMemoryUtilization = 0.85;
@@ -399,24 +376,6 @@ luxnix.vllm.port = 8000;
     vault.enable = true;
 
 
-    vault.client.address = "https://vault.endo-reg.net:8200";
-
-
-    vault.client.auth.method = "approle";
-
-
-    vault.client.auth.roleIdFile = "/etc/secrets/vault/hub-pki/approle_role_id";
-
-
-    vault.client.auth.secretIdFile = "/etc/secrets/vault/hub-pki/approle_secret_id";
-
-
-    vault.client.caCertFile = "/etc/secrets/vault/hub-pki/vault-server-ca.pem";
-
-
-    vault.client.hubPki.enable = true;
-
-
     vault.key = "/etc/secrets/.key";
 
 
@@ -469,30 +428,6 @@ luxnix.vllm.port = 8000;
   };
 
   programs.nix-ld.enable = true;
-
-  environment.systemPackages = [
-    (pkgs.writeShellScriptBin "tcia-data-retriever" ''
-      appimage_path="''${TCIA_DATA_RETRIEVER_APPIMAGE:-$HOME/lx-anonymizer/midi-b-dataset/TCIA_Data_Retriever-x86_64.AppImage}"
-      if [[ ! -x "$appimage_path" ]]; then
-        echo "TCIA Data Retriever AppImage is missing or not executable: $appimage_path" >&2
-        exit 1
-      fi
-
-      export LD_LIBRARY_PATH="${lib.makeLibraryPath [
-        pkgs.glib
-        pkgs.webkitgtk_4_1
-        pkgs.gtk3
-        pkgs.gdk-pixbuf
-        pkgs.libsoup_3
-      ]}:''${LD_LIBRARY_PATH:-}"
-      export WEBKIT_DISABLE_DMABUF_RENDERER=1
-      export LIBGL_ALWAYS_SOFTWARE=1
-      export GDK_BACKEND=x11
-      export GTK_PATH=
-
-      exec ${pkgs.appimage-run}/bin/appimage-run "$appimage_path" "$@"
-    '')
-  ];
 
   xdg.menus.enable = true;
 
