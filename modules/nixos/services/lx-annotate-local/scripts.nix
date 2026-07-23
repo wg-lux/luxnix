@@ -1435,10 +1435,15 @@ let
         marker_dir="$target_dir/logs"
         marker_file="$marker_dir/data_recovery_complete"
         repair_marker_file="$marker_dir/data_migration_repair_latest.log"
+        # Bump this when managed-payload repair gains new eligibility or encryption semantics.
+        repair_revision="v2"
+        repair_completion_marker_file="$marker_dir/managed_payload_repair_$repair_revision"
         state_file="${cfg.dataRecovery.stateFile}"
         state_dir="$(${pkgs.coreutils}/bin/dirname "$state_file")"
         previous_effective_dir=""
         use_wheel_runtime="${if useWheelRuntime then "true" else "false"}"
+        force_data_recovery="''${LX_ANNOTATE_FORCE_DATA_RECOVERY:-false}"
+        force_managed_payload_repair="''${LX_ANNOTATE_FORCE_MANAGED_PAYLOAD_REPAIR:-false}"
         install -d -m 0750 "$target_dir" "$marker_dir" "$state_dir"
 
         if [ -f "$state_file" ]; then
@@ -1452,19 +1457,35 @@ let
         fi
 
         recovery_already_current=false
-        # Heavy data recovery is a one-time operation for a data root.  A successful
-        # repair marker is required before skipping, so interrupted/corrupt repair
-        # runs still fail closed and retry before the app starts.
+        # Heavy legacy recovery is one-time work for a data root. It must not use the
+        # payload-repair marker: repair logic can improve after legacy recovery is done.
         if [ "$resolved_previous_effective_dir" = "$resolved_target_dir" ] \
           && [ -f "$marker_file" ] \
-          && ${pkgs.gnugrep}/bin/grep -q '^completed_at=' "$marker_file" \
-          && [ -f "$repair_marker_file" ] \
-          && ${pkgs.gnugrep}/bin/grep -q '^completed_at=' "$repair_marker_file"; then
+          && ${pkgs.gnugrep}/bin/grep -q '^completed_at=' "$marker_file"; then
           recovery_already_current=true
         fi
 
-        if [ "$recovery_already_current" = "true" ] && [ "''${LX_ANNOTATE_FORCE_DATA_RECOVERY:-false}" != "true" ]; then
-          echo "Data recovery already completed for $resolved_target_dir; skipping heavy recovery and managed payload repair."
+        repair_already_current=false
+        if [ -f "$repair_completion_marker_file" ] \
+          && ${pkgs.gnugrep}/bin/grep -qx "repair_revision=$repair_revision" "$repair_completion_marker_file" \
+          && ${pkgs.gnugrep}/bin/grep -q '^completed_at=' "$repair_completion_marker_file"; then
+          repair_already_current=true
+        fi
+
+        run_heavy_recovery=true
+        if [ "$recovery_already_current" = "true" ] && [ "$force_data_recovery" != "true" ]; then
+          run_heavy_recovery=false
+        fi
+
+        run_managed_payload_repair=true
+        if [ "$run_heavy_recovery" = "false" ] \
+          && [ "$repair_already_current" = "true" ] \
+          && [ "$force_managed_payload_repair" != "true" ]; then
+          run_managed_payload_repair=false
+        fi
+
+        if [ "$run_heavy_recovery" = "false" ] && [ "$run_managed_payload_repair" = "false" ]; then
+          echo "Data recovery and managed payload repair revision $repair_revision are already current for $resolved_target_dir."
           exit 0
         fi
 
@@ -1530,7 +1551,9 @@ let
 
         write_repair_failure() {
           local repair_output="$1"
+          ${pkgs.coreutils}/bin/rm -f "$repair_completion_marker_file"
           {
+            printf 'repair_revision=%s\n' "$repair_revision"
             printf 'failed_at=%s\n' "$(${pkgs.coreutils}/bin/date --iso-8601=seconds)"
             printf 'target_dir=%s\n' "$target_dir"
             printf '%s\n' "$repair_output"
@@ -1544,6 +1567,10 @@ let
           local helper_python="$1"
           local repair_output=""
           local has_master_key="false"
+          local repair_completion_tmp="$repair_completion_marker_file.tmp"
+
+          # A forced retry must not leave an old successful revision marker behind.
+          ${pkgs.coreutils}/bin/rm -f "$repair_completion_marker_file"
 
           if [ -z "$helper_python" ] || [ ! -x "$helper_python" ]; then
             echo "Skipping managed payload repair; helper python unavailable." | ${pkgs.coreutils}/bin/tee "$repair_marker_file"
@@ -1577,24 +1604,22 @@ let
           fi
 
           {
+            printf 'repair_revision=%s\n' "$repair_revision"
             printf 'completed_at=%s\n' "$(${pkgs.coreutils}/bin/date --iso-8601=seconds)"
             printf 'target_dir=%s\n' "$target_dir"
             printf '%s\n' "$repair_output"
           } > "$repair_marker_file"
           chmod 0640 "$repair_marker_file"
-          echo "Managed payload repair marker written to $repair_marker_file"
+          {
+            printf 'repair_revision=%s\n' "$repair_revision"
+            printf 'completed_at=%s\n' "$(${pkgs.coreutils}/bin/date --iso-8601=seconds)"
+            printf 'target_dir=%s\n' "$target_dir"
+          } > "$repair_completion_tmp"
+          ${pkgs.coreutils}/bin/mv "$repair_completion_tmp" "$repair_completion_marker_file"
+          chmod 0640 "$repair_completion_marker_file"
+          echo "Managed payload repair revision $repair_revision completed; log=$repair_marker_file marker=$repair_completion_marker_file"
           return 0
         }
-
-        if [ -n "$previous_effective_dir" ]; then
-          if [ "$resolved_previous_effective_dir" != "$resolved_target_dir" ]; then
-            sync_source_dir "$previous_effective_dir" "previous effective data dir"
-          else
-            echo "Configured data dir unchanged since last successful recovery: $resolved_target_dir"
-          fi
-        else
-          echo "No previous effective data dir recorded in $state_file"
-        fi
 
         migration_helper_python=""
         if [ "$use_wheel_runtime" = "true" ]; then
@@ -1603,6 +1628,17 @@ let
           fi
         elif [ -f "${repoDir}/scripts/migrate_data_dir.py" ] && [ -x "${repoVenvPythonPath}" ]; then
           migration_helper_python="${repoVenvPythonPath}"
+        fi
+
+        if [ "$run_heavy_recovery" = "true" ]; then
+        if [ -n "$previous_effective_dir" ]; then
+          if [ "$resolved_previous_effective_dir" != "$resolved_target_dir" ]; then
+            sync_source_dir "$previous_effective_dir" "previous effective data dir"
+          else
+            echo "Configured data dir unchanged since last successful recovery: $resolved_target_dir"
+          fi
+        else
+          echo "No previous effective data dir recorded in $state_file"
         fi
 
         if [ -n "$migration_helper_python" ]; then
@@ -1634,10 +1670,6 @@ let
           sync_source_dir "${cfg.dataRecovery.legacyDataDir}" "legacy repo data"
           sync_source_dir "${cfg.dataRecovery.legacyMediaDir}" "legacy media"
         fi
-
-        repair_managed_runtime_payloads "$migration_helper_python" || {
-          echo "WARNING: Managed payload repair failed; continuing startup so the application can serve existing data." >&2
-        }
 
         if [ -n "$migration_helper_python" ]; then
           echo "Marking migration-created upload job source files as cleanup-eligible after data recovery."
@@ -1745,6 +1777,17 @@ let
         printf 'completed_at=%s\n' "$(${pkgs.coreutils}/bin/date --iso-8601=seconds)" > "$marker_file"
         chmod 0640 "$marker_file"
         echo "Data recovery marker written to $marker_file"
+        else
+          echo "Data recovery already completed for $resolved_target_dir; skipping heavy legacy recovery."
+        fi
+
+        if [ "$run_managed_payload_repair" = "true" ]; then
+          repair_managed_runtime_payloads "$migration_helper_python" || {
+            echo "WARNING: Managed payload repair failed; continuing startup so the application can serve existing data." >&2
+          }
+        else
+          echo "Managed payload repair revision $repair_revision is already current; skipping."
+        fi
   '';
 
   runLocalDataCleanupScript = pkgs.writeShellScriptBin "runLxAnnotateDataCleanup" ''

@@ -991,6 +991,18 @@ let
 
     echo "Applied FFmpeg stream throttle mode=$mode cpu_quota=$cpu_quota cpu_weight=$cpu_weight io_weight=$io_weight"
   '';
+  ffmpegStreamThrottleResetScript = pkgs.writeShellScript "lx-annotate-ffmpeg-stream-throttle-reset" ''
+    set -euo pipefail
+
+    ${pkgs.systemd}/bin/systemctl set-property --runtime \
+      ${lib.escapeShellArg ffmpegStreamThrottleWorkerUnit} \
+      CPUQuota=${lib.escapeShellArg cfg.runtime.workerPools.ffmpeg.cpuQuota} \
+      CPUWeight=${lib.escapeShellArg (toString cfg.runtime.workerPools.ffmpeg.cpuWeight)} \
+      IOWeight=${lib.escapeShellArg (toString cfg.runtime.workerPools.ffmpeg.ioWeight)}
+    ${pkgs.coreutils}/bin/rm -f ${lib.escapeShellArg ffmpegStreamThrottleStateFile}
+
+    echo "Reset FFmpeg worker runtime controls to the declared worker-pool profile."
+  '';
 
   runtimeEnvScript = pkgs.writeShellScript "lx-annotate-runtime-env" ''
     set -euo pipefail
@@ -2561,6 +2573,23 @@ in
           Unit = "lx-annotate-ffmpeg-stream-throttle.service";
         };
       };
+
+      systemd.services.lx-annotate-ffmpeg-stream-throttle-reset =
+        mkIf (!cfg.runtime.ffmpegStreamThrottle.enable)
+          {
+            description = "Reset runtime controls left by LX-Annotate FFmpeg stream throttling";
+            wantedBy = [ "multi-user.target" ];
+            after = [ ffmpegStreamThrottleWorkerUnit ];
+            serviceConfig = {
+              Type = "oneshot";
+              RemainAfterExit = true;
+              ExecStart = ffmpegStreamThrottleResetScript;
+              ProtectSystem = "full";
+              PrivateTmp = true;
+              NoNewPrivileges = true;
+              ReadWritePaths = [ "/run/lx-annotate" ];
+            };
+          };
 
       systemd.services.move-my-files = mkIf config.services.luxnix.fileMover.enable {
         after = mkAfter [ "lx-annotate-runtime-env.service" ];
