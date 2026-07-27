@@ -34,6 +34,31 @@ def _nix_eval_expr_result(expr: str) -> subprocess.CompletedProcess[str]:
 
 
 @lru_cache(maxsize=None)
+def _gc_02_tls_contract() -> dict[str, Any]:
+    return _nix_eval_expr_json(
+        """
+        let
+          flake = builtins.getFlake "git+file:///home/admin/luxnix";
+          lib = flake.inputs.nixpkgs.lib;
+          cfg = flake.nixosConfigurations.gc-02.config;
+          lxCfg = cfg.services.luxnix.lxAnnotateLocal;
+        in {
+          hostname = lxCfg.django.hostname;
+          nginxVirtualHosts = builtins.attrNames cfg.services.nginx.virtualHosts;
+          publicCertPath = toString cfg.services.luxnix.lxSsl.publicCertPath;
+          generatorScript =
+            builtins.readFile (
+              lib.removeSuffix " "
+                cfg.systemd.services."generate-lx-ssl".serviceConfig.ExecStart
+            );
+          acceptanceScript =
+            builtins.readFile cfg.systemd.services."lx-annotate-acceptance".serviceConfig.ExecStart;
+        }
+        """
+    )
+
+
+@lru_cache(maxsize=None)
 def _gc_02_contract() -> dict[str, Any]:
     return _nix_eval_expr_json(
         """
@@ -1000,6 +1025,21 @@ def test_lx_annotate_celery_worker_service_config_evaluates() -> None:
     assert "/var/lib/lx-annotate/data" in service_config["ReadWritePaths"]
 
 
+def test_lx_annotate_ffmpeg_worker_allows_warm_task_shutdown() -> None:
+    service_config = _nix_eval_expr_json(
+        """
+        let
+          flake = builtins.getFlake "git+file:///home/admin/luxnix";
+          cfg = flake.nixosConfigurations.gc-02.config;
+        in
+          cfg.systemd.services."lx-annotate-celery-ffmpeg-worker".serviceConfig
+        """
+    )
+
+    assert "--queues=ffmpeg_media" in service_config["ExecStart"]
+    assert service_config["TimeoutStopSec"] == "6h15min"
+
+
 def test_lx_annotate_frame_extraction_worker_defaults_to_always_on() -> None:
     evaluated = _gc_02_contract()["frameExtractionWorkerDefault"]
 
@@ -1164,6 +1204,23 @@ def test_lx_annotate_acceptance_service_config_evaluates() -> None:
     assert service_config["EnvironmentFile"] == "/var/lib/lx-annotate/.env.systemd"
 
 
+def test_lx_annotate_tls_uses_public_hostname_and_strict_acceptance() -> None:
+    tls = _gc_02_tls_contract()
+
+    assert tls["hostname"] == "lx-annotate.local"
+    assert "lx-annotate.local" in tls["nginxVirtualHosts"]
+    assert tls["publicCertPath"] == (
+        "/run/lx-annotate-ssl/lx-annotate-selfsigned.crt"
+    )
+    assert "-subj \"/CN=lx-annotate.local\"" in tls["generatorScript"]
+    assert "subjectAltName=DNS:lx-annotate.local" in tls["generatorScript"]
+    assert "--cacert" in tls["acceptanceScript"]
+    assert "--insecure" not in tls["acceptanceScript"]
+    assert "https://lx-annotate.local/static/.vite/manifest.json" in (
+        tls["acceptanceScript"]
+    )
+
+
 def test_wheel_acceptance_script_uses_installed_django_not_manage_py() -> None:
     source = (
         open(
@@ -1186,6 +1243,20 @@ def test_wheel_acceptance_script_uses_installed_django_not_manage_py() -> None:
     assert 'run_installed_django_command "${runtimeWheelVenvPath}/bin/python" check --fail-level CRITICAL' in body
     assert 'run_installed_django_command "${runtimeWheelVenvPath}/bin/python" verify_encrypted_storage' in body
     assert "${runtimeWheelRootPath}/manage.py" not in body
+
+
+def test_all_lx_annotate_acceptance_scripts_verify_tls() -> None:
+    source = Path(
+        "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts.nix"
+    ).read_text(encoding="utf-8")
+    service_source = Path(
+        "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/config.nix"
+    ).read_text(encoding="utf-8")
+
+    assert source.count('--cacert "${publicSslCertificatePath}"') == 2
+    assert service_source.count('--cacert "${publicSslCertificatePath}"') == 1
+    assert "--insecure" not in source
+    assert "--insecure" not in service_source
 
 
 def test_lx_annotate_streamable_migration_service_config_evaluates() -> None:

@@ -146,6 +146,11 @@ let
         default = "always";
         description = "Scheduling mode for the low-priority FFmpeg media Celery worker.";
       };
+      timeoutStopSec = mkOption {
+        type = types.str;
+        default = "6h15min";
+        description = "Warm-shutdown grace period for an active FFmpeg media task before systemd may send a final kill signal.";
+      };
     };
   };
   inferenceWorkerType = types.submodule {
@@ -913,9 +918,10 @@ let
 
       djangoOverrides = {
         djangoModule = roleCfg.django.djangoModule;
+        hostname = roleCfg.django.hostname;
         assetDir = if roleCfg.django.assetDir != null then roleCfg.django.assetDir else cfg.api.assetDir;
         port = 8117;
-        djangoAllowedHosts = lib.unique (cfg.api.djangoAllowedHosts ++ [ "lx-annotate.local" ]);
+        djangoAllowedHosts = lib.unique (cfg.api.djangoAllowedHosts ++ [ roleCfg.django.hostname ]);
         keycloakClientId = "endoregdb-api";
       };
 
@@ -1059,6 +1065,12 @@ in
     django = mkOption {
       type = types.submodule {
         options = {
+          hostname = mkOption {
+            type = types.str;
+            default = "lx-annotate.local";
+            description = "Public DNS hostname used by LX-Annotate, Nginx, and its TLS certificate.";
+          };
+
           djangoModule = mkOption {
             type = types.str;
             default = "lx_annotate";

@@ -12,10 +12,12 @@ let
     sslDir = "/var/lib/lx-annotate-ssl";
     certPath = "/var/lib/lx-annotate-ssl/lx-annotate-selfsigned.crt";
     keyPath = "/var/lib/lx-annotate-ssl/lx-annotate-selfsigned.key";
+    publicCertPath = "/run/lx-annotate-ssl/lx-annotate-selfsigned.crt";
   } config;
 
   defaultSslCertificatePath = sslCfg.certPath;
   defaultSslKeyPath = sslCfg.keyPath;
+  publicSslCertificatePath = sslCfg.publicCertPath;
 
   adminName = config.user.admin.name;
   scriptName = "runLocalLxAnnotate";
@@ -245,6 +247,7 @@ let
         sslDir
         sslKeyPath
         sslCertPath
+        publicSslCertificatePath
         envSystemdFilePath
         envAssetDir
         hubRootPath

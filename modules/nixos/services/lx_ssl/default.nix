@@ -46,6 +46,13 @@ in
       description = "Path to the generated certificate.";
     };
 
+    publicCertPath = mkOption {
+      type = types.path;
+      default = "/run/lx-annotate-ssl/lx-annotate-selfsigned.crt";
+      readOnly = true;
+      description = "Runtime path exposing only the public certificate for strict local TLS checks.";
+    };
+
     extraDnsNames = mkOption {
       type = types.listOf types.str;
       default = [ ];
@@ -85,6 +92,8 @@ in
         serviceConfig = {
           Type = "oneshot";
           RemainAfterExit = true;
+          RuntimeDirectory = "lx-annotate-ssl";
+          RuntimeDirectoryMode = "0755";
         };
         script = ''
           set -euo pipefail
@@ -129,6 +138,8 @@ in
           else
             printf '{"event":"lx_ssl.certificate_valid","common_name":"%s"}\n' ${lib.escapeShellArg annotateCfg.django.hostname}
           fi
+
+          ${pkgs.coreutils}/bin/install -m 0644 "${sslCertPath}" "${cfg.publicCertPath}"
         '';
       };
 

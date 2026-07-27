@@ -146,6 +146,11 @@ let
         default = "always";
         description = "Scheduling mode for the low-priority FFmpeg media Celery worker.";
       };
+      timeoutStopSec = mkOption {
+        type = types.str;
+        default = "6h15min";
+        description = "Warm-shutdown grace period for an active FFmpeg media task before systemd may send a final kill signal.";
+      };
     };
   };
   ffmpegStreamThrottleProfileType = types.submodule {
@@ -372,8 +377,8 @@ in
           wheelPath = mkOption {
             type = types.nullOr types.path;
             default = pkgs.fetchurl {
-              url = "https://files.pythonhosted.org/packages/3e/ab/807888af64f0f7ddad84cde72fd2ef9fc0797a2fd9dc50ba491dbd950397/lx_annotate-0.9.46-py3-none-any.whl";
-              hash = "sha256-1L5v2a9W+kNFPQpwwzQ3oVqaQJcohp+cmR/XPk46iDE=";
+              url = "https://files.pythonhosted.org/packages/7c/5a/8493f70c29c3ea088580728861cb6229a70f896abfa83c2633c965e6a7f8/lx_annotate-0.9.47-py3-none-any.whl";
+              hash = "sha256-vslTq402WGU2WmMGwcIQuKxvIHHE8l/2N1ejsZ0/4IE=";
             };
             description = "Path to the lx-annotate wheel artifact used in wheel mode.";
           };

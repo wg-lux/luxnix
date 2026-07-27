@@ -48,6 +48,7 @@ let
     envConfDir
     sslKeyPath
     sslCertPath
+    publicSslCertificatePath
     hubRootPath
     ;
   inherit (runtime.runtime)
@@ -813,6 +814,7 @@ let
       queues = [ "ffmpeg_media" ];
       pool = cfg.runtime.workerPools.ffmpeg;
       mode = cfg.runtime.ffmpegWorker.mode;
+      timeoutStopSec = cfg.runtime.ffmpegWorker.timeoutStopSec;
       environment = postValidationWorkerEnv;
     };
     inference = mkWorker {
@@ -2502,7 +2504,8 @@ in
             set -euo pipefail
             ${effectiveRuntimePackage}/bin/lx-annotate-manage check --fail-level CRITICAL
             ${effectiveRuntimePackage}/bin/lx-annotate-manage verify_encrypted_storage
-            ${pkgs.curl}/bin/curl --fail --silent --show-error --insecure \
+            ${pkgs.curl}/bin/curl --fail --silent --show-error \
+              --cacert "${publicSslCertificatePath}" \
               --resolve "${cfg.django.hostname}:443:127.0.0.1" \
               "https://${cfg.django.hostname}/static/.vite/manifest.json" >/dev/null
           '';

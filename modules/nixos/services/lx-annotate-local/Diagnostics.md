@@ -108,8 +108,8 @@ sudo journalctl -u nginx.service -n 200 --no-pager
 sudo journalctl -u nginx.service -f
 ss -ltnp | grep -E ':(443|80|8117)\b'
 curl --fail --silent --show-error http://127.0.0.1:8117/ >/dev/null
-curl --fail --silent --show-error --insecure --resolve lx-annotate.local:443:127.0.0.1 https://lx-annotate.local/ >/dev/null
-curl --fail --silent --show-error --insecure --resolve lx-annotate.local:443:127.0.0.1 https://lx-annotate.local/static/.vite/manifest.json >/dev/null
+curl --fail --silent --show-error --cacert /run/lx-annotate-ssl/lx-annotate-selfsigned.crt --resolve lx-annotate.local:443:127.0.0.1 https://lx-annotate.local/ >/dev/null
+curl --fail --silent --show-error --cacert /run/lx-annotate-ssl/lx-annotate-selfsigned.crt --resolve lx-annotate.local:443:127.0.0.1 https://lx-annotate.local/static/.vite/manifest.json >/dev/null
 ```
 
 Inspect nginx's generated vhost:

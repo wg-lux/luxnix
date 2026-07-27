@@ -73,6 +73,11 @@ luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort = 5432;
 luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl = "redis://172.16.255.14:6380/1";
 luxnix.lxAnnotateLocal.runtime.trainingWorker.cudaVisibleDevices = "0";
 luxnix.lxAnnotateLocal.runtime.trainingWorker.mode = "manual";
+luxnix.ollama.acceleration = "cuda";
+luxnix.ollama.enable = true;
+luxnix.ollama.enableModelBootstrap = false;
+luxnix.ollama.models = [ "gemma4:e2b" ];
+ollama.host = "0.0.0.0";
 
   };
 
@@ -351,18 +356,6 @@ luxnix.lxAnnotateLocal.runtime.trainingWorker.mode = "manual";
     generic-settings.vpnSubnet = "172.16.255.0/24";
 
 
-    luxnix.ollama.acceleration = "cuda";
-
-
-    luxnix.ollama.enable = true;
-
-
-    luxnix.ollama.enableModelBootstrap = false;
-
-
-    luxnix.ollama.models = [ 'gemma4:e2b' ];
-
-
     maintenance.autoUpdates.dates = "17:00";
 
 
@@ -370,9 +363,6 @@ luxnix.lxAnnotateLocal.runtime.trainingWorker.mode = "manual";
 
 
     maintenance.autoUpdates.operation = "switch";
-
-
-    ollama.host = '0.0.0.0';
 
 
     vault.dir = "/etc/secrets/vault";

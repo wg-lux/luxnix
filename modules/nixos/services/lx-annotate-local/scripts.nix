@@ -40,6 +40,7 @@ let
     envConfDir
     makeCacheDir
     envSystemdFilePath
+    publicSslCertificatePath
     ;
   inherit (runtime.env)
     envAnnotateDjangoSettingsModule
@@ -983,7 +984,8 @@ let
     run_repo_django_command check --fail-level CRITICAL
     run_repo_django_command verify_encrypted_storage
     run_repo_django_command check_production_hls_readiness
-    ${pkgs.curl}/bin/curl --fail --silent --show-error --insecure \
+    ${pkgs.curl}/bin/curl --fail --silent --show-error \
+      --cacert "${publicSslCertificatePath}" \
       --resolve "${cfg.django.hostname}:443:127.0.0.1" \
       "https://${cfg.django.hostname}/static/.vite/manifest.json" >/dev/null
 
@@ -1233,7 +1235,8 @@ let
     run_installed_django_command "${wheelVenvPythonPath}" check --fail-level CRITICAL
     run_installed_django_command "${wheelVenvPythonPath}" verify_encrypted_storage
     run_installed_django_command "${wheelVenvPythonPath}" check_production_hls_readiness
-    ${pkgs.curl}/bin/curl --fail --silent --show-error --insecure \
+    ${pkgs.curl}/bin/curl --fail --silent --show-error \
+      --cacert "${publicSslCertificatePath}" \
       --resolve "${cfg.django.hostname}:443:127.0.0.1" \
       "https://${cfg.django.hostname}/static/.vite/manifest.json" >/dev/null
 
