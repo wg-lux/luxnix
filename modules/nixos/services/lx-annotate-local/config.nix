@@ -62,6 +62,34 @@ let
     ;
 
   boolString = value: if value then "true" else "false";
+
+  hubTransferProxyExtraConfig = ''
+    proxy_http_version 1.1;
+
+    # Stream large multipart uploads to Django instead of buffering the
+    # complete file in Nginx temporary storage.
+    proxy_request_buffering off;
+    proxy_buffering off;
+
+    # A processed video transfer may take considerably longer than an
+    # ordinary browser/API request.
+    proxy_connect_timeout 60s;
+    proxy_read_timeout 21600s;
+    proxy_send_timeout 21600s;
+    send_timeout 21600s;
+
+    # Explicit reverse-proxy contract used by Django.
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Real-IP $remote_addr;
+
+    # Never trust an incoming value for this header. Replace it with the
+    # result of Nginx client-certificate verification.
+    proxy_set_header X-Client-Cert-Verified $ssl_client_verify;
+  '';
+
   wheelhousePath = if cfg.runtime.wheelhousePath == null then "" else toString cfg.runtime.wheelhousePath;
   wheelRuntimePackage = pkgs.runCommand "lx-annotate-wheel-runtime-${packageVersion}" { } ''
     mkdir -p "$out/bin" "$out/libexec" "$out/share/lx-annotate"
@@ -1388,6 +1416,19 @@ in
             proxy_send_timeout 3600s;
           '';
         };
+        locations."/api/media/hub/transfers/" = mkIf cfg.hub.transferApi.enable {
+          proxyPass = "http://127.0.0.1:${toString cfg.django.port}";
+          extraConfig = hubTransferProxyExtraConfig;
+        };
+
+        # Canonical lx-annotate API prefix. Keep the /api/ route above for
+        # compatibility with the existing HubTransferClient.
+        locations."/endoreg-api/media/hub/transfers/" =
+          mkIf cfg.hub.transferApi.enable {
+            proxyPass = "http://127.0.0.1:${toString cfg.django.port}";
+            extraConfig = hubTransferProxyExtraConfig;
+          };
+
         locations."/" = {
           proxyPass = "http://127.0.0.1:${toString cfg.django.port}";
           proxyWebsockets = true;
