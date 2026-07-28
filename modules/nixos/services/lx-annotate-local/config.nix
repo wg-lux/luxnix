@@ -69,6 +69,35 @@ let
     ;
 
   boolString = value: if value then "true" else "false";
+
+  hubTransferProxyExtraConfig = ''
+    proxy_http_version 1.1;
+
+    # Stream large multipart uploads to Django instead of buffering the
+    # complete file in Nginx temporary storage.
+    proxy_request_buffering off;
+    proxy_buffering off;
+
+    # A processed video transfer may take considerably longer than an
+    # ordinary browser/API request.
+    proxy_connect_timeout 60s;
+    proxy_read_timeout 21600s;
+    proxy_send_timeout 21600s;
+    send_timeout 21600s;
+
+    # Explicit reverse-proxy contract used by Django.
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Real-IP $remote_addr;
+
+    # Never trust an incoming value for this header. Replace it with the
+    # result of Nginx client-certificate verification.
+    proxy_set_header X-Client-Cert-Verified $ssl_client_verify;
+  '';
+
+  wheelhousePath = if cfg.runtime.wheelhousePath == null then "" else toString cfg.runtime.wheelhousePath;
   streamableExternalStorageRoot = cfg.runtime.streamableServing.externalStorageRoot;
   streamableExternalStorageEnabled = streamableExternalStorageRoot != null;
   videoStreamProxyExtraConfig = ''
@@ -863,6 +892,14 @@ let
       cudaVisibleDevices = workerCfg.cudaVisibleDevices or null;
       workerEnvironment =
         workerCfg.environment
+        // {
+          CELERY_LOG_LEVEL = "INFO";
+          OMP_NUM_THREADS = "1";
+          OPENBLAS_NUM_THREADS = "1";
+          MKL_NUM_THREADS = "1";
+          NUMEXPR_NUM_THREADS = "1";
+          MALLOC_ARENA_MAX = "2";
+        }
         // celeryWorkerResourceEnv
         // lib.optionalAttrs (cudaVisibleDevices != null) {
           CUDA_VISIBLE_DEVICES = cudaVisibleDevices;
@@ -1288,6 +1325,40 @@ in
           preanonymized_import = mkDefault desktopPreanonymizedLinkTarget;
           sap_import = mkDefault desktopSapImportLinkTarget;
         };
+        locations."/api/media/videos/" = {
+          proxyPass = "http://127.0.0.1:${toString cfg.django.port}";
+          proxyWebsockets = true;
+          extraConfig = ''
+            proxy_set_header Range $http_range;
+            proxy_set_header If-Range $http_if_range;
+            proxy_buffering off;
+            proxy_request_buffering off;
+            proxy_read_timeout 3600s;
+            proxy_send_timeout 3600s;
+          '';
+        };
+        locations."/api/media/hub/transfers/" = mkIf cfg.hub.transferApi.enable {
+          proxyPass = "http://127.0.0.1:${toString cfg.django.port}";
+          extraConfig = hubTransferProxyExtraConfig;
+        };
+
+        # Canonical lx-annotate API prefix. Keep the /api/ route above for
+        # compatibility with the existing HubTransferClient.
+        locations."/endoreg-api/media/hub/transfers/" =
+          mkIf cfg.hub.transferApi.enable {
+            proxyPass = "http://127.0.0.1:${toString cfg.django.port}";
+            extraConfig = hubTransferProxyExtraConfig;
+          };
+
+        locations."/" = {
+          proxyPass = "http://127.0.0.1:${toString cfg.django.port}";
+          proxyWebsockets = true;
+          extraConfig = ''
+            proxy_set_header X-Client-Cert-Verified $ssl_client_verify;
+            proxy_read_timeout 600s;
+            proxy_send_timeout 600s;
+            proxy_buffering off;
+          '';
         videoTranscodeFallback = {
           command = mkDefault lxAnnotateFileMoverTranscodeCommand;
           workingDir = mkDefault runtimeDataRootPath;
@@ -2021,6 +2092,53 @@ in
         };
       };
 
+    systemd.services.lx-annotate = {
+      aliases = [ "lx-annotate-boot.service" ];
+      wants = [
+        "nginx.service"
+        "lx-annotate-runtime-env.service"
+        "lx-annotate-load-base-data.service"
+      ]
+      ++ localRedisServiceUnits
+      ++ localPostgresServiceUnits
+      ++ localPostgresSetupUnits
+      ++ managedSecretsSetupUnits
+      ++ encryptionServiceUnits;
+      requires = [
+        "lx-annotate-runtime-env.service"
+        "lx-annotate-load-base-data.service"
+        "lx-annotate-master-key-check.service"
+      ]
+      ++ managedSecretsSetupUnits
+      ++ encryptionServiceUnits;
+      after = [
+        "lx-annotate-runtime-env.service"
+        "lx-annotate-load-base-data.service"
+        "lx-annotate-master-key-check.service"
+        "endoreg-django-setup.service"
+        "systemd-tmpfiles-setup.service"
+      ]
+      ++ localRedisServiceUnits
+      ++ localPostgresServiceUnits
+      ++ localPostgresSetupUnits
+      ++ managedSecretsSetupUnits
+      ++ encryptionServiceUnits;
+      unitConfig = encryptedDataMountUnitConfig;
+      serviceConfig = {
+        TimeoutStartSec = "5min";
+        Restart = "on-failure";
+        RestartSec = mkDefault 5;
+        MemoryHigh = cfg.runtime.limits.memoryHigh;
+        MemoryMax = cfg.runtime.limits.memoryMax;
+        CPUQuota = cfg.runtime.limits.cpuQuota;
+        Nice = 10;
+        IOSchedulingClass = "best-effort";
+        IOSchedulingPriority = 6;
+        OOMScoreAdjust = 250;
+        ProtectSystem = "full";
+        PrivateTmp = true;
+        NoNewPrivileges = true;
+        ReadWritePaths = appReadWritePaths;
       systemd.paths.lx-annotate-filewatcher = {
         description = "Trigger LX-Annotate file watcher when import files arrive";
         wantedBy = [ "multi-user.target" ];

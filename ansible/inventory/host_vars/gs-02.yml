@@ -1,11 +1,12 @@
-# inventory/host_vars/gs-01.yml
+# inventory/host_vars/gs-02.yml
 ---
 template_name: "main"
 
 host_roles:
+  endoreg-client.enable: "true"
+host_services: {}
   nginxHost.enable: true
   nginxHost.glm52.enable: true
-  nginxHost.glm52.acme.email: '"maxhild10@gmail.com"'
   nginxHost.keycloak.enable: false
   nginxHost.nextcloud.enable: false
 
@@ -28,6 +29,8 @@ ansible_roles:
   - "nginx_host"
 
 host_luxnix:
+  lxAnnotateLocal.database.host: '"127.0.0.1"'
+  lxAnnotateLocal.database.port: "5432"
   boot_decryption_stick_gs_01.enable: "true"
 
   generic_settings.hostPlatform: '"x86_64-linux"'
@@ -59,6 +62,16 @@ host_luxnix:
   generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
   generic_settings.linux.kernelParams: []
   generic_settings.linux.kernelModulesBlacklist: []
+  lxAnnotateLocal.enable: "true"
+  lxAnnotateLocal.runtime.deploymentRole: '"central_hub"'
+  lxAnnotateLocal.hub.enable: "true"
+
+  lxAnnotateLocal.hub.transferApi.enable: "true"
+  lxAnnotateLocal.hub.transferApi.requireSecureTransport: "true"
+  lxAnnotateLocal.hub.transferApi.requireMtls: "true"
+  lxAnnotateLocal.hub.transferApi.mtlsMetaKey: '"HTTP_X_CLIENT_CERT_VERIFIED"'
+  lxAnnotateLocal.hub.transferApi.mtlsMetaValue: '"SUCCESS"'
+  lxAnnotateLocal.hub.transferApi.clientCaFile: '"/etc/secrets/vault/lx-annotate-transfer-client-ca.crt"'
 
 host_nixos:
   networking.firewall.interfaces.tun0.allowedTCPPorts: "lib.mkAfter [ 11434 8088 ]"
