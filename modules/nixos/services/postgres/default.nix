@@ -65,7 +65,11 @@ in {
     enable = mkBoolOpt false "Enable postgresql";
     backupLocation = mkOption {
       type = types.str;
-      default = "/home/${adminName}/postgresql-backup";
+      default = "/var/backup/postgresql";
+      description = ''
+        Directory for local PostgreSQL dumps. This must be reachable by the
+        postgres system user without traversing an administrator home directory.
+      '';
     };
 
     extraAuthentication = mkOption {
@@ -117,7 +121,7 @@ in {
       };
       postgresqlBackup = {
         enable = true;
-        location = "${cfg.backupLocation}";
+        location = cfg.backupLocation;
         backupAll = true;
         startAt = "*-*-* 10:00:00";
       };
