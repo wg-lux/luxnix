@@ -4,13 +4,12 @@ template_name: "main"
 
 host_roles:
   endoreg-client.enable: "true"
-host_services: {}
+
+host_services:
   nginxHost.enable: true
   nginxHost.glm52.enable: true
   nginxHost.keycloak.enable: false
   nginxHost.nextcloud.enable: false
-
-host_services:
   luxnix.ollama.enable: true
   luxnix.ollama.acceleration: cuda
   luxnix.ollama.enableModelBootstrap: false

@@ -2,9 +2,6 @@
 
 { config, pkgs, lib, modulesPath, ... }:
 
-let
-  hubTransferEnabled = import ../hub-transfer-enabled.nix;
-in
 {
   imports = [
     (modulesPath + "/installer/scan/not-detected.nix")
@@ -12,13 +9,6 @@ in
     ./disks.nix
 
   ];
-
-  networking.hosts = lib.optionalAttrs hubTransferEnabled {
-    "172.16.255.22" = [
-      "gs-02.intern"
-      "vault.endo-reg.net"
-    ];
-  };
 
   user = {
     admin = {
@@ -78,9 +68,9 @@ nginxHost.enable = true;
 
 nginxHost.glm52.enable = true;
 
-nginxHost.keycloak.enable = false;
+nginxHost.keycloak.enable = true;
 
-nginxHost.nextcloud.enable = false;
+nginxHost.nextcloud.enable = true;
 
 nginxHost.settings.proxyHeadersHashBucketSize = 64;
 
@@ -94,39 +84,15 @@ nginxHost.settings.recommendedProxySettings = true;
 
 nginxHost.settings.recommendedTlsSettings = true;
 
-nginxHost.glm52.acme.email = "maxhild10@gmail.com";
-
 };
 
   services = {
-luxnix.lxAnnotateLocal.hub.transferApi.clientCaFile = "/var/lib/lx-annotate/hub-pki/client-ca.pem";
-luxnix.lxAnnotateLocal.hub.transferApi.enable = hubTransferEnabled;
-luxnix.lxAnnotateLocal.hub.transferApi.requireMtls = true;
-luxnix.lxAnnotateLocal.hub.transferApi.requireSecureTransport = true;
-luxnix.lxAnnotateLocal.hub.nodeProvisioning.enable = hubTransferEnabled;
-luxnix.lxAnnotateLocal.hub.nodeProvisioning.nodes = [
-  {
-    nodeKey = "gc-02";
-    displayName = "GC-02 site node";
-    role = "site_node";
-    centerKey = "university_hospital_wuerzburg";
-    sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-02-source-node-secret";
-  }
-  {
-    nodeKey = "gs-02";
-    displayName = "GS-02 central hub";
-    role = "central_hub";
-    baseUrl = "https://gs-02.intern";
-  }
-];
-luxnix.lxAnnotateLocal.django.hostname = lib.mkIf hubTransferEnabled "gs-02.intern";
 luxnix.lxAnnotateLocal.runtime.celeryBroker.secureTransportConfirmed = true;
 luxnix.lxAnnotateLocal.runtime.externalServices.postgresHost = "172.16.255.22";
 luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort = 5432;
 luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl = "redis://172.16.255.14:6380/1";
 luxnix.lxAnnotateLocal.runtime.trainingWorker.cudaVisibleDevices = "0";
 luxnix.lxAnnotateLocal.runtime.trainingWorker.mode = "manual";
-luxnix.lxSsl.extraDnsNames = lib.optionals hubTransferEnabled [ "vault.endo-reg.net" ];
 luxnix.glm52.enable = true;
 luxnix.glm52.gpuLayers = 999;
 luxnix.glm52.host = "0.0.0.0";
@@ -137,6 +103,10 @@ luxnix.ollama.acceleration = "cuda";
 luxnix.ollama.enable = true;
 luxnix.ollama.enableModelBootstrap = false;
 luxnix.ollama.models = [ "gemma4:e2b" ];
+nginxHost.enable = true;
+nginxHost.glm52.enable = true;
+nginxHost.keycloak.enable = false;
+nginxHost.nextcloud.enable = false;
 ollama.host = "0.0.0.0";
 
   };
@@ -416,6 +386,18 @@ ollama.host = "0.0.0.0";
     generic-settings.vpnSubnet = "172.16.255.0/24";
 
 
+    luxnix.ollama.acceleration = "cuda";
+
+
+    luxnix.ollama.enable = true;
+
+
+    luxnix.ollama.enableModelBootstrap = false;
+
+
+    luxnix.ollama.models = [ 'gemma4:e2b' ];
+
+
     maintenance.autoUpdates.dates = "17:00";
 
 
@@ -425,33 +407,13 @@ ollama.host = "0.0.0.0";
     maintenance.autoUpdates.operation = "switch";
 
 
+    ollama.host = '0.0.0.0';
+
+
     vault.dir = "/etc/secrets/vault";
 
 
     vault.enable = true;
-
-    vault.server.apiAddress = "https://vault.endo-reg.net:8200";
-
-
-    vault.server.bindAddress = "172.16.255.22:8200";
-
-
-    vault.server.clusterAddress = "https://vault.endo-reg.net:8201";
-
-
-    vault.server.caCertFile = "/var/lib/lx-annotate-ssl/lx-annotate-selfsigned.crt";
-
-
-    vault.server.enable = hubTransferEnabled;
-
-
-    vault.server.hubPki.enable = hubTransferEnabled;
-
-
-    vault.server.tlsCertFile = "/var/lib/lx-annotate-ssl/lx-annotate-selfsigned.crt";
-
-
-    vault.server.tlsKeyFile = "/var/lib/lx-annotate-ssl/lx-annotate-selfsigned.key";
 
 
     vault.key = "/etc/secrets/.key";
@@ -496,6 +458,39 @@ ollama.host = "0.0.0.0";
     generic-settings.systemStateVersion = "23.11";
 
 
+    lxAnnotateLocal.database.host = "127.0.0.1";
+
+
+    lxAnnotateLocal.database.port = 5432;
+
+
+    lxAnnotateLocal.enable = true;
+
+
+    lxAnnotateLocal.hub.enable = true;
+
+
+    lxAnnotateLocal.hub.transferApi.clientCaFile = "/etc/secrets/vault/lx-annotate-transfer-client-ca.crt";
+
+
+    lxAnnotateLocal.hub.transferApi.enable = true;
+
+
+    lxAnnotateLocal.hub.transferApi.mtlsMetaKey = "HTTP_X_CLIENT_CERT_VERIFIED";
+
+
+    lxAnnotateLocal.hub.transferApi.mtlsMetaValue = "SUCCESS";
+
+
+    lxAnnotateLocal.hub.transferApi.requireMtls = true;
+
+
+    lxAnnotateLocal.hub.transferApi.requireSecureTransport = true;
+
+
+    lxAnnotateLocal.runtime.deploymentRole = "central_hub";
+
+
 
   };
 
@@ -503,7 +498,6 @@ ollama.host = "0.0.0.0";
 
   xdg.menus.enable = true;
 
-  networking.firewall.interfaces.tun0.allowedTCPPorts =
-    lib.mkAfter ([ 11434 8088 ] ++ lib.optional hubTransferEnabled 8200);
+  networking.firewall.interfaces.tun0.allowedTCPPorts = lib.mkAfter [ 11434 8088 ];
 
 }
