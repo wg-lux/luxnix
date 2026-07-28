@@ -77,7 +77,13 @@ endoreg-client.defaultCenterKey = "university_hospital_wuerzburg";
 };
 
   services = {
-luxnix.lxAiLocal.runtime.protectedDataDir = "/var/lib/lx-annotate/data";
+    luxnix.lxAnnotateLocal.runtime.workerPools.ffmpeg.cpuQuota = "600%";
+    luxnix.lxAnnotateLocal.runtime.ffmpegStreamThrottle.streaming = {
+      cpuQuota = "200%";
+      cpuWeight = 10;
+      ioWeight = 10;
+    };
+    luxnix.lxAiLocal.runtime.protectedDataDir = "/var/lib/lx-annotate/data";
 
   };
 

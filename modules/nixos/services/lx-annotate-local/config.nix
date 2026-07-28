@@ -97,7 +97,6 @@ let
     proxy_set_header X-Client-Cert-Verified $ssl_client_verify;
   '';
 
-  wheelhousePath = if cfg.runtime.wheelhousePath == null then "" else toString cfg.runtime.wheelhousePath;
   streamableExternalStorageRoot = cfg.runtime.streamableServing.externalStorageRoot;
   streamableExternalStorageEnabled = streamableExternalStorageRoot != null;
   videoStreamProxyExtraConfig = ''
@@ -741,7 +740,12 @@ let
     sap_failed_dir=${lib.escapeShellArg runtimeSapImportFailedDirPath}
     sap_output_dir=${lib.escapeShellArg runtimeWatcherPreanonymizedDirPath}
 
-    install -d -m 0770 "$sap_drop_dir" "$sap_processed_dir" "$sap_failed_dir" "$sap_output_dir"
+    for required_dir in "$sap_drop_dir" "$sap_processed_dir" "$sap_failed_dir" "$sap_output_dir"; do
+      if [ ! -d "$required_dir" ]; then
+        echo "ERROR: required SAP intake directory is missing: $required_dir" >&2
+        exit 1
+      fi
+    done
 
     wait_for_stable_zip() {
       local file_path="$1"
@@ -876,6 +880,9 @@ let
       requires = [ "ollama.service" ];
     };
   };
+  alwaysWorkerServiceUnits = lib.mapAttrsToList (
+    _: workerCfg: "${workerCfg.unitName}.service"
+  ) (lib.filterAttrs (_: workerCfg: workerCfg.mode == "always") workerConfigs);
   mkWorkerService =
     name: workerCfg:
     let
@@ -913,12 +920,18 @@ let
       after = [
         "lx-annotate-load-base-data.service"
         "lx-annotate-master-key-check.service"
+        "lx-annotate-preflight.service"
       ]
       ++ workerCfg.after;
-      wants = [ "lx-annotate-load-base-data.service" ] ++ workerCfg.wants;
+      wants = [
+        "lx-annotate-load-base-data.service"
+        "lx-annotate-preflight.service"
+      ]
+      ++ workerCfg.wants;
       requires = [
         "lx-annotate-load-base-data.service"
         "lx-annotate-master-key-check.service"
+        "lx-annotate-preflight.service"
       ]
       ++ workerCfg.requires;
       environment = workerEnvironment;
@@ -1325,40 +1338,6 @@ in
           preanonymized_import = mkDefault desktopPreanonymizedLinkTarget;
           sap_import = mkDefault desktopSapImportLinkTarget;
         };
-        locations."/api/media/videos/" = {
-          proxyPass = "http://127.0.0.1:${toString cfg.django.port}";
-          proxyWebsockets = true;
-          extraConfig = ''
-            proxy_set_header Range $http_range;
-            proxy_set_header If-Range $http_if_range;
-            proxy_buffering off;
-            proxy_request_buffering off;
-            proxy_read_timeout 3600s;
-            proxy_send_timeout 3600s;
-          '';
-        };
-        locations."/api/media/hub/transfers/" = mkIf cfg.hub.transferApi.enable {
-          proxyPass = "http://127.0.0.1:${toString cfg.django.port}";
-          extraConfig = hubTransferProxyExtraConfig;
-        };
-
-        # Canonical lx-annotate API prefix. Keep the /api/ route above for
-        # compatibility with the existing HubTransferClient.
-        locations."/endoreg-api/media/hub/transfers/" =
-          mkIf cfg.hub.transferApi.enable {
-            proxyPass = "http://127.0.0.1:${toString cfg.django.port}";
-            extraConfig = hubTransferProxyExtraConfig;
-          };
-
-        locations."/" = {
-          proxyPass = "http://127.0.0.1:${toString cfg.django.port}";
-          proxyWebsockets = true;
-          extraConfig = ''
-            proxy_set_header X-Client-Cert-Verified $ssl_client_verify;
-            proxy_read_timeout 600s;
-            proxy_send_timeout 600s;
-            proxy_buffering off;
-          '';
         videoTranscodeFallback = {
           command = mkDefault lxAnnotateFileMoverTranscodeCommand;
           workingDir = mkDefault runtimeDataRootPath;
@@ -1881,9 +1860,17 @@ in
           "d ${runtimeIoImportRootPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
           "z ${runtimeIoImportRootPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
           "d ${runtimeWatcherVideoDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "z ${runtimeWatcherVideoDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
           "d ${runtimeWatcherReportDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "z ${runtimeWatcherReportDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
           "d ${runtimeWatcherPreanonymizedDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "z ${runtimeWatcherPreanonymizedDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
           "d ${runtimeSapImportDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "z ${runtimeSapImportDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "d ${runtimeSapImportProcessedDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "z ${runtimeSapImportProcessedDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "d ${runtimeSapImportFailedDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "z ${runtimeSapImportFailedDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
           "d ${runtimeMoverStagingDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
           "L ${serviceUserIoAccessLinkPath} - - - - ${runtimeIoImportRootPath}"
           "d ${runtimeStreamableVideoRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
@@ -2092,53 +2079,6 @@ in
         };
       };
 
-    systemd.services.lx-annotate = {
-      aliases = [ "lx-annotate-boot.service" ];
-      wants = [
-        "nginx.service"
-        "lx-annotate-runtime-env.service"
-        "lx-annotate-load-base-data.service"
-      ]
-      ++ localRedisServiceUnits
-      ++ localPostgresServiceUnits
-      ++ localPostgresSetupUnits
-      ++ managedSecretsSetupUnits
-      ++ encryptionServiceUnits;
-      requires = [
-        "lx-annotate-runtime-env.service"
-        "lx-annotate-load-base-data.service"
-        "lx-annotate-master-key-check.service"
-      ]
-      ++ managedSecretsSetupUnits
-      ++ encryptionServiceUnits;
-      after = [
-        "lx-annotate-runtime-env.service"
-        "lx-annotate-load-base-data.service"
-        "lx-annotate-master-key-check.service"
-        "endoreg-django-setup.service"
-        "systemd-tmpfiles-setup.service"
-      ]
-      ++ localRedisServiceUnits
-      ++ localPostgresServiceUnits
-      ++ localPostgresSetupUnits
-      ++ managedSecretsSetupUnits
-      ++ encryptionServiceUnits;
-      unitConfig = encryptedDataMountUnitConfig;
-      serviceConfig = {
-        TimeoutStartSec = "5min";
-        Restart = "on-failure";
-        RestartSec = mkDefault 5;
-        MemoryHigh = cfg.runtime.limits.memoryHigh;
-        MemoryMax = cfg.runtime.limits.memoryMax;
-        CPUQuota = cfg.runtime.limits.cpuQuota;
-        Nice = 10;
-        IOSchedulingClass = "best-effort";
-        IOSchedulingPriority = 6;
-        OOMScoreAdjust = 250;
-        ProtectSystem = "full";
-        PrivateTmp = true;
-        NoNewPrivileges = true;
-        ReadWritePaths = appReadWritePaths;
       systemd.paths.lx-annotate-filewatcher = {
         description = "Trigger LX-Annotate file watcher when import files arrive";
         wantedBy = [ "multi-user.target" ];
@@ -2252,6 +2192,7 @@ in
           "nginx.service"
           "lx-annotate-runtime-env.service"
           "lx-annotate-load-base-data.service"
+          "lx-annotate-preflight.service"
         ]
         ++ dataRecoveryServiceUnits
         ++ hlsBackfillServiceUnits
@@ -2265,6 +2206,7 @@ in
           "lx-annotate-runtime-env.service"
           "lx-annotate-load-base-data.service"
           "lx-annotate-master-key-check.service"
+          "lx-annotate-preflight.service"
         ]
         ++ dataRecoveryServiceUnits
         ++ hlsBackfillServiceUnits
@@ -2275,6 +2217,7 @@ in
           "lx-annotate-runtime-env.service"
           "lx-annotate-load-base-data.service"
           "lx-annotate-master-key-check.service"
+          "lx-annotate-preflight.service"
           "endoreg-django-setup.service"
           "systemd-tmpfiles-setup.service"
         ]
@@ -2345,6 +2288,67 @@ in
           ExecStart = "${runLocalMasterKeyCheckScript}/bin/runLocalMasterKeyCheck";
           EnvironmentFile = envSystemdFilePath;
           LogNamespace = lxAnnotateJournalNamespace;
+          TimeoutStartSec = "10min";
+          ProtectSystem = "full";
+          PrivateTmp = true;
+          NoNewPrivileges = true;
+          ReadWritePaths = appReadWritePaths;
+        };
+      };
+
+      systemd.services.lx-annotate-preflight = {
+        description = "Gate LX-Annotate web and workers on production runtime readiness";
+        before = [ "lx-annotate.service" ] ++ alwaysWorkerServiceUnits;
+        after = [
+          "lx-annotate-runtime-env.service"
+          "lx-annotate-load-base-data.service"
+          "lx-annotate-master-key-check.service"
+        ]
+        ++ dataRecoveryServiceUnits
+        ++ hlsBackfillServiceUnits
+        ++ hubNodeProvisioningServiceUnits
+        ++ localPostgresServiceUnits
+        ++ localPostgresSetupUnits
+        ++ managedSecretsSetupUnits
+        ++ encryptionServiceUnits;
+        wants = [
+          "lx-annotate-load-base-data.service"
+          "lx-annotate-master-key-check.service"
+        ]
+        ++ dataRecoveryServiceUnits
+        ++ hlsBackfillServiceUnits
+        ++ hubNodeProvisioningServiceUnits
+        ++ localPostgresServiceUnits
+        ++ managedSecretsSetupUnits
+        ++ encryptionServiceUnits;
+        requires = [
+          "lx-annotate-runtime-env.service"
+          "lx-annotate-load-base-data.service"
+          "lx-annotate-master-key-check.service"
+        ]
+        ++ dataRecoveryServiceUnits
+        ++ hlsBackfillServiceUnits
+        ++ hubNodeProvisioningServiceUnits
+        ++ managedSecretsSetupUnits
+        ++ encryptionServiceUnits;
+        restartTriggers = [ effectiveRuntimePackage ];
+        unitConfig = encryptedDataMountUnitConfig;
+        environment = commonExtraEnv;
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+          User = endoreg-service-user-name;
+          Group = endoreg-service-group-name;
+          SupplementaryGroups = [ config.luxnix.generic-settings.sensitiveServiceGroupName ];
+          WorkingDirectory = runtimeDataRootPath;
+          EnvironmentFile = envSystemdFilePath;
+          LogNamespace = lxAnnotateJournalNamespace;
+          ExecStart = pkgs.writeShellScript "lx-annotate-preflight" ''
+            set -euo pipefail
+            ${effectiveRuntimePackage}/bin/lx-annotate-manage check --fail-level CRITICAL
+            ${effectiveRuntimePackage}/bin/lx-annotate-manage verify_encrypted_storage
+            test -s ${lib.escapeShellArg "${packageStaticRoot}/.vite/manifest.json"}
+          '';
           TimeoutStartSec = "10min";
           ProtectSystem = "full";
           PrivateTmp = true;
@@ -2610,18 +2614,28 @@ in
       };
 
       systemd.services.lx-annotate-acceptance = {
-        description = "Run lx-annotate encrypted-storage and nginx acceptance checks";
+        description = "Run LX-Annotate live web, worker, storage, and static acceptance checks";
         after = [
+          "lx-annotate-preflight.service"
           "lx-annotate.service"
           "nginx.service"
         ]
+        ++ alwaysWorkerServiceUnits
         ++ encryptionServiceUnits;
         wants = [
+          "lx-annotate-preflight.service"
           "lx-annotate.service"
           "nginx.service"
         ]
+        ++ alwaysWorkerServiceUnits
         ++ encryptionServiceUnits;
-        requires = encryptionServiceUnits;
+        requires = [
+          "lx-annotate-preflight.service"
+          "lx-annotate.service"
+          "nginx.service"
+        ]
+        ++ alwaysWorkerServiceUnits
+        ++ encryptionServiceUnits;
         unitConfig = encryptedDataMountUnitConfig;
         environment = commonExtraEnv;
         serviceConfig = {
@@ -2634,6 +2648,10 @@ in
             set -euo pipefail
             ${effectiveRuntimePackage}/bin/lx-annotate-manage check --fail-level CRITICAL
             ${effectiveRuntimePackage}/bin/lx-annotate-manage verify_encrypted_storage
+            required_workers=( ${lib.concatMapStringsSep " " lib.escapeShellArg alwaysWorkerServiceUnits} )
+            for worker_unit in "''${required_workers[@]}"; do
+              ${pkgs.systemd}/bin/systemctl is-active --quiet "$worker_unit"
+            done
             ${pkgs.curl}/bin/curl --fail --silent --show-error \
               --cacert "${publicSslCertificatePath}" \
               --resolve "${cfg.django.hostname}:443:127.0.0.1" \

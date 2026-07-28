@@ -93,6 +93,17 @@ luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort = 5432;
 luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl = "redis://172.16.255.14:6380/1";
 luxnix.lxAnnotateLocal.runtime.trainingWorker.cudaVisibleDevices = "0";
 luxnix.lxAnnotateLocal.runtime.trainingWorker.mode = "manual";
+luxnix.lxAnnotateLocal.database.host = "127.0.0.1";
+luxnix.lxAnnotateLocal.database.port = 5432;
+luxnix.lxAnnotateLocal.enable = true;
+luxnix.lxAnnotateLocal.hub.enable = true;
+luxnix.lxAnnotateLocal.hub.transferApi.clientCaFile = "/etc/secrets/vault/lx-annotate-transfer-client-ca.crt";
+luxnix.lxAnnotateLocal.hub.transferApi.enable = true;
+luxnix.lxAnnotateLocal.hub.transferApi.mtlsMetaKey = "HTTP_X_CLIENT_CERT_VERIFIED";
+luxnix.lxAnnotateLocal.hub.transferApi.mtlsMetaValue = "SUCCESS";
+luxnix.lxAnnotateLocal.hub.transferApi.requireMtls = true;
+luxnix.lxAnnotateLocal.hub.transferApi.requireSecureTransport = true;
+luxnix.lxAnnotateLocal.runtime.deploymentRole = "central_hub";
 luxnix.glm52.enable = true;
 luxnix.glm52.gpuLayers = 999;
 luxnix.glm52.host = "0.0.0.0";
@@ -103,10 +114,6 @@ luxnix.ollama.acceleration = "cuda";
 luxnix.ollama.enable = true;
 luxnix.ollama.enableModelBootstrap = false;
 luxnix.ollama.models = [ "gemma4:e2b" ];
-nginxHost.enable = true;
-nginxHost.glm52.enable = true;
-nginxHost.keycloak.enable = false;
-nginxHost.nextcloud.enable = false;
 ollama.host = "0.0.0.0";
 
   };
@@ -386,18 +393,6 @@ ollama.host = "0.0.0.0";
     generic-settings.vpnSubnet = "172.16.255.0/24";
 
 
-    luxnix.ollama.acceleration = "cuda";
-
-
-    luxnix.ollama.enable = true;
-
-
-    luxnix.ollama.enableModelBootstrap = false;
-
-
-    luxnix.ollama.models = [ 'gemma4:e2b' ];
-
-
     maintenance.autoUpdates.dates = "17:00";
 
 
@@ -405,9 +400,6 @@ ollama.host = "0.0.0.0";
 
 
     maintenance.autoUpdates.operation = "switch";
-
-
-    ollama.host = '0.0.0.0';
 
 
     vault.dir = "/etc/secrets/vault";
@@ -456,39 +448,6 @@ ollama.host = "0.0.0.0";
 
 
     generic-settings.systemStateVersion = "23.11";
-
-
-    lxAnnotateLocal.database.host = "127.0.0.1";
-
-
-    lxAnnotateLocal.database.port = 5432;
-
-
-    lxAnnotateLocal.enable = true;
-
-
-    lxAnnotateLocal.hub.enable = true;
-
-
-    lxAnnotateLocal.hub.transferApi.clientCaFile = "/etc/secrets/vault/lx-annotate-transfer-client-ca.crt";
-
-
-    lxAnnotateLocal.hub.transferApi.enable = true;
-
-
-    lxAnnotateLocal.hub.transferApi.mtlsMetaKey = "HTTP_X_CLIENT_CERT_VERIFIED";
-
-
-    lxAnnotateLocal.hub.transferApi.mtlsMetaValue = "SUCCESS";
-
-
-    lxAnnotateLocal.hub.transferApi.requireMtls = true;
-
-
-    lxAnnotateLocal.hub.transferApi.requireSecureTransport = true;
-
-
-    lxAnnotateLocal.runtime.deploymentRole = "central_hub";
 
 
 
