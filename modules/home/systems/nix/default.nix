@@ -36,7 +36,6 @@ in {
 
 ###########
     home.packages = with pkgs; [
-      nixgl.nixGLIntel
       # nixgl.nvidiaPackages
       # nixgl.
       nix-output-monitor

@@ -9,26 +9,6 @@ with lib;
 with lib.luxnix; let
   cfg = config.luxnix.nvidia-prime;
 
-  nvidiaDrivers = {
-    "stable" = config.boot.kernelPackages.nvidiaPackages.stable;
-    "beta" = config.boot.kernelPackages.nvidiaPackages.beta;
-    "production" = config.boot.kernelPackages.nvidiaPackages.production;
-
-
-    # Custom imports
-    "555_58" = {
-      version = "555.58";
-      sha256_64bit = "sha256-bXvcXkg2kQZuCNKRZM5QoTaTjF4l2TtrsKUvyicj5ew=";
-      sha256_aarch64 = pkgs.lib.fakeSha256;
-      openSha256 = pkgs.lib.fakeSha256;
-      settingsSha256 = "sha256-vWnrXlBCb3K5uVkDFmJDVq51wrCoqgPF03lSjZOuU8M=";
-      persistencedSha256 = pkgs.lib.fakeSha256;
-    };
-  };
-
-  # we need to find out what system we are working on (eg linux, darwin, ...)
-  system = config.system.build.host.system;
-
 in
 {
   options.luxnix.nvidia-prime = with types; {
@@ -72,7 +52,6 @@ in
     nixpkgs.config.cudaSupport = true;
 
     services.xserver.videoDrivers = [ "nvidia" ];
-    boot.initrd.kernelModules = [ "nvidia" ];
     hardware.nvidia-container-toolkit.enable = lib.mkDefault true;
     hardware.nvidia = {
 
@@ -89,7 +68,13 @@ in
       open = lib.mkForce false;
 
       package = config.boot.kernelPackages.nvidiaPackages.production;
+
+      gsp.enable = false; # GSP disabled is supposed to solve sleep issues on laptops
+
     };
+    boot.extraModprobeConfig = ''
+        options nvidia NVreg_EnableGpuFirmware=0
+    '';
   };
 
 }

@@ -2,12 +2,23 @@
 
 { config, pkgs, lib, modulesPath, ... }:
 
+let
+  hubTransferEnabled = import ../hub-transfer-enabled.nix;
+in
 {
   imports = [
     (modulesPath + "/installer/scan/not-detected.nix")
     ./boot-decryption-config.nix
     ./disks.nix
+
   ];
+
+  networking.hosts = lib.optionalAttrs hubTransferEnabled {
+    "172.16.255.22" = [
+      "gs-02.intern"
+      "vault.endo-reg.net"
+    ];
+  };
 
   user = {
     admin = {
@@ -17,214 +28,482 @@
     settings.mutable = false;
   };
 
-  profiles.endoregClient.enable = true;
+  roles = {
 
-  roles = { 
-    base-server.enable = true;
-    gpu-server.enable = true;
-    ssh-access.dev-01.enable = true;
-    ssh-access.dev-01.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK";
-    ssh-access.dev-03.enable = true;
-    ssh-access.dev-03.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAVt7FP3BCARMRyL791VauxIPd3t8nVm4A49VVpL9FUj";
-    ssh-access.dev-04.enable = true;
-    ssh-access.dev-04.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICSpoZVcX+K6NdrfqcUVPTU8Ljqlp83YDzzEHjTHU2NO flippos@inexen9";
-    };
+aglnet.client.enable = true;
 
-  services = {
-    luxnix.lxAnnotateLocal.runtime = {
-      externalServices.redisUrl = "redis://172.16.255.14:6380/1";
-      externalServices.postgresHost = "172.16.255.22";
-      externalServices.postgresPort = 5432;
-      celeryBroker.secureTransportConfirmed = true;
-      trainingWorker.mode = "manual";
-      trainingWorker.cudaVisibleDevices = "0";
-    };
-    };
+base-server.enable = true;
 
-  luxnix = {
-    dns.enable = true;
+common.enable = true;
 
-generic-settings.smtpPwdFilePath = "/etc/secrets/vault/smtp_pwd";
+custom-packages.cloud = true;
 
-generic-settings.smtpUserFilePath = "/etc/secrets/vault/smtp_user";
+custom-packages.enable = true;
 
-generic-settings.sslCertificateKeyPath = "/etc/secrets/vault/ssl_key";
+endoreg-client.api.djangoAllowedHosts = [ "localhost" "127.0.0.1" "172.16.255.106" "172.16.255.230" ];
 
-generic-settings.sslCertificatePath = "/etc/secrets/vault/ssl_cert";
+endoreg-client.api.httpProtocol = "https";
 
-generic-settings.adminVpnIp = "172.16.255.106";
+endoreg-client.api.language = "en-us";
 
-generic-settings.enable = true;
+endoreg-client.api.logLevel = "WARNING";
 
-generic-settings.gpu.nvidia.driver = "production";
+endoreg-client.api.maxRequestSize = "50G";
 
-generic-settings.gpu.nvidia.enable = true;
+endoreg-client.api.settingsProfile = "prod";
 
-generic-settings.language = "english";
+endoreg-client.centralNodes = [ "s-04" ];
 
-generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_6;
+endoreg-client.dbApiLocal = true;
 
-generic-settings.network.hosts.gc-01.domains = ["gc-01.intern" "lx-annotate.local"];
-generic-settings.network.hosts.gc-01.ip-vpn = "172.16.255.101";
+endoreg-client.enable = true;
 
-generic-settings.network.hosts.gc-02.domains = ["gc-02.intern" "lx-annotate.local"];
-generic-settings.network.hosts.gc-02.ip-vpn = "172.16.255.102";
+endoreg-client.repository.branch = "container";
 
-generic-settings.network.hosts.gc-03.domains = ["gc-03.intern" "lx-annotate.local"];
-generic-settings.network.hosts.gc-03.ip-vpn = "172.16.255.103";
+gpu-server.enable = true;
 
-generic-settings.network.hosts.gc-04.domains = ["gc-04.intern" "lx-annotate.local"];
-generic-settings.network.hosts.gc-04.ip-vpn = "172.16.255.104";
+ssh-access.dev-01.enable = true;
 
-generic-settings.network.hosts.gc-05.domains = ["gc-05.intern" "lx-annotate.local"];
-generic-settings.network.hosts.gc-05.ip-vpn = "172.16.255.105";
+ssh-access.dev-01.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK";
 
-generic-settings.network.hosts.gc-06.domains = ["gc-06.intern"];
-generic-settings.network.hosts.gc-06.ip-local = "172.31.179.8";
+ssh-access.dev-03.enable = true;
 
-generic-settings.network.hosts.gc-06.ip-vpn = "172.16.255.106";
+ssh-access.dev-03.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAVt7FP3BCARMRyL791VauxIPd3t8nVm4A49VVpL9FUj";
 
-generic-settings.network.hosts.gc-06.syncthing-id = "MJU2YAF-4IXFRSS-I3JHU2Z-6LUSSTN-L6BR5HS-PLS6ACJ-4E2X2UQ-5AVBUAQ";
+ssh-access.dev-04.enable = true;
 
-generic-settings.network.hosts.gc-07.domains = ["gc-07.intern" "lx-annotate.local"];
-generic-settings.network.hosts.gc-07.ip-vpn = "172.16.255.107";
+ssh-access.dev-04.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICSpoZVcX+K6NdrfqcUVPTU8Ljqlp83YDzzEHjTHU2NO flippos@inexen9";
 
-generic-settings.network.hosts.gc-08.domains = ["gc-08.intern" "lx-annotate.local"];
-generic-settings.network.hosts.gc-08.ip-vpn = "172.16.255.108";
+nginxHost.enable = true;
 
-generic-settings.network.hosts.gc-09.domains = ["gc-09.intern" "lx-annotate.local"];
-generic-settings.network.hosts.gc-09.ip-vpn = "172.16.255.109";
+nginxHost.glm52.enable = true;
 
-generic-settings.network.hosts.gc-10.domains = ["gc-10.intern" "lx-annotate.local"];
-generic-settings.network.hosts.gc-10.ip-vpn = "172.16.255.110";
+nginxHost.keycloak.enable = false;
 
-generic-settings.network.hosts.gs-01.domains = ["gs-01.intern"];
-generic-settings.network.hosts.gs-01.ip-local = "192.168.0.228";
+nginxHost.nextcloud.enable = false;
 
-generic-settings.network.hosts.gs-01.ip-vpn = "172.16.255.21";
+nginxHost.settings.proxyHeadersHashBucketSize = 64;
 
-generic-settings.network.hosts.gs-01.network-cluster = "L2";
+nginxHost.settings.proxyHeadersHashMaxSize = 512;
 
-generic-settings.network.hosts.gs-01.syncthing-id = "X2KFB5D-HJWUNFK-GS6TP7A-GV4TGEF-ZYH3RHL-AWWJIW4-76SSCHP-YIMUUAA";
+nginxHost.settings.recommendedGzipSettings = true;
 
-generic-settings.network.hosts.gs-02.domains = ["gs-02.intern"];
-generic-settings.network.hosts.gs-02.ip-local = "192.168.0.56";
+nginxHost.settings.recommendedOptimisation = true;
 
-generic-settings.network.hosts.gs-02.ip-vpn = "172.16.255.22";
+nginxHost.settings.recommendedProxySettings = true;
 
-generic-settings.network.hosts.gs-02.network-cluster = "L2";
+nginxHost.settings.recommendedTlsSettings = true;
 
-generic-settings.network.hosts.gs-02.syncthing-id = "XSAKTSB-36K6OY4-NEPJ2K4-WHGZF2D-EMDOMFQ-Q5DEVO6-2BYD2MS-JWPFVQ4";
-
-generic-settings.network.hosts.s-01.domains = ["s-01.intern"];
-generic-settings.network.hosts.s-01.ip-local = "192.168.179.1";
-
-generic-settings.network.hosts.s-01.ip-vpn = "172.16.255.1";
-
-generic-settings.network.hosts.s-01.network-cluster = "L1";
-
-generic-settings.network.hosts.s-01.syncthing-id = "WTGG7YQ-AGGOG6H-PQPA54T-HQRCF4P-2T52JSI-OQTIBUG-JUCC45Y-MBCB4QS";
-
-generic-settings.network.hosts.s-02.domains = ["nginx.endo-reg.net" "cloud.endo-reg.net" "keycloak.endo-reg.net" "s-02.intern"];
-generic-settings.network.hosts.s-02.ip-local = "192.168.179.2";
-
-generic-settings.network.hosts.s-02.ip-vpn = "172.16.255.12";
-
-generic-settings.network.hosts.s-02.network-cluster = "L1";
-
-generic-settings.network.hosts.s-02.syncthing-id = "GF7EOBC-UVEYSV7-BK77MKA-DIK62JP-TPVG4M3-3NUUWS7-B724MAI-OK2J7AW";
-
-generic-settings.network.hosts.s-03.domains = ["s-03.intern"];
-generic-settings.network.hosts.s-03.ip-local = "192.168.179.3";
-
-generic-settings.network.hosts.s-03.ip-vpn = "172.16.255.13";
-
-generic-settings.network.hosts.s-03.network-cluster = "L1";
-
-generic-settings.network.hosts.s-03.syncthing-id = "MLC6QP7-MI5RMNB-H7JCOTE-ODXOCV7-UIIOMUS-ZRJULS7-5ZLD2LB-LYZVZAF";
-
-generic-settings.network.hosts.s-04.domains = ["s-04.intern"];
-generic-settings.network.hosts.s-04.ip-local = "192.168.0.194";
-
-generic-settings.network.hosts.s-04.ip-vpn = "172.16.255.14";
-
-generic-settings.network.keycloak.adminDomain = "adminKeycloak.endo-reg.net";
-
-generic-settings.network.keycloak.domain = "keycloak.endo-reg.net";
-
-generic-settings.network.keycloak.port = 8443;
-
-generic-settings.network.nextcloud.domain = "cloud.endo-reg.net";
-
-generic-settings.network.psqlMain.port = 5432;
-
-generic-settings.network.psqlTest.domain = "psql-test.endo-reg.net";
-
-generic-settings.network.serviceHosts.keycloak = "s-02";
-
-generic-settings.network.serviceHosts.nextcloud = "s-03";
-
-generic-settings.network.serviceHosts.nginx = "s-02";
-
-generic-settings.network.serviceHosts.psqlMain = "gs-02";
-
-generic-settings.network.serviceHosts.psqlTest = "s-04";
-
-generic-settings.network.syncthing.enable = true;
-
-generic-settings.network.syncthing.extraFlags = [];
-generic-settings.postgres.enable = true;
-
-generic-settings.sensitiveServiceGroupName = "sensitiveServices";
-
-generic-settings.traefikHostDomain = "traefik.endo-reg.net";
-
-generic-settings.traefikHostIp = "172.16.255.12";
-
-generic-settings.virtualization.enable = true;
-
-generic-settings.virtualization.kvm = {};
-
-generic-settings.virtualization.podman = {};
-
-generic-settings.virtualization.supportedArchitectures = [];
-generic-settings.virtualization.userGroups = [];
-generic-settings.virtualization.vfio = {};
-
-generic-settings.vpnSubnet = "172.16.255.0/24";
-
-maintenance.autoUpdates.dates = "17:00";
-
-maintenance.autoUpdates.enable = true;
-
-maintenance.autoUpdates.flake = "github:wg-lux/luxnix/prototype";
-
-maintenance.autoUpdates.operation = "switch";
-
-vault.dir = "/etc/secrets/vault";
-
-vault.enable = true;
-
-vault.key = "/etc/secrets/.key";
-
-vault.psk = "/etc/secrets/.psk";
-
-boot-decryption-stick-gs-01.enable = true;
-
-generic-settings.hostPlatform = "x86_64-linux";
-
-generic-settings.linux.cpuMicrocode = "amd";
-
-generic-settings.linux.initrd.availableKernelModules = ["xhci_pci" "ahci" "thunderbolt" "nvme" "usb_storage" "usbhid" "sd_mod"];
-generic-settings.linux.initrd.kernelModules = ["nfs" "btrfs" "dm-snapshot"];
-generic-settings.linux.initrd.supportedFilesystems = ["nfs" "btrfs"];
-generic-settings.linux.kernelModules = ["kvm-amd"];
-generic-settings.linux.kernelModulesBlacklist = [];
-generic-settings.linux.kernelParams = [];
-generic-settings.linux.resumeDevice = "/dev/disk/by-label/nixos";
-
-generic-settings.linux.supportedFilesystems = ["nfs" "btrfs"];
-generic-settings.systemStateVersion = "23.11";
+nginxHost.glm52.acme.email = "maxhild10@gmail.com";
 
 };
+
+  services = {
+luxnix.lxAnnotateLocal.hub.transferApi.clientCaFile = "/var/lib/lx-annotate/hub-pki/client-ca.pem";
+luxnix.lxAnnotateLocal.hub.transferApi.enable = hubTransferEnabled;
+luxnix.lxAnnotateLocal.hub.transferApi.requireMtls = true;
+luxnix.lxAnnotateLocal.hub.transferApi.requireSecureTransport = true;
+luxnix.lxAnnotateLocal.hub.nodeProvisioning.enable = hubTransferEnabled;
+luxnix.lxAnnotateLocal.hub.nodeProvisioning.nodes = [
+  {
+    nodeKey = "gc-02";
+    displayName = "GC-02 site node";
+    role = "site_node";
+    centerKey = "university_hospital_wuerzburg";
+    sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-02-source-node-secret";
+  }
+  {
+    nodeKey = "gs-02";
+    displayName = "GS-02 central hub";
+    role = "central_hub";
+    baseUrl = "https://gs-02.intern";
+  }
+];
+luxnix.lxAnnotateLocal.django.hostname = lib.mkIf hubTransferEnabled "gs-02.intern";
+luxnix.lxAnnotateLocal.runtime.celeryBroker.secureTransportConfirmed = true;
+luxnix.lxAnnotateLocal.runtime.externalServices.postgresHost = "172.16.255.22";
+luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort = 5432;
+luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl = "redis://172.16.255.14:6380/1";
+luxnix.lxAnnotateLocal.runtime.trainingWorker.cudaVisibleDevices = "0";
+luxnix.lxAnnotateLocal.runtime.trainingWorker.mode = "manual";
+luxnix.lxSsl.extraDnsNames = lib.optionals hubTransferEnabled [ "vault.endo-reg.net" ];
+luxnix.glm52.enable = true;
+luxnix.glm52.gpuLayers = 999;
+luxnix.glm52.host = "0.0.0.0";
+luxnix.glm52.port = 8088;
+luxnix.glm52.quant = "UD-IQ2_M";
+luxnix.lxAnnotateLocal.django.extraSettings."IS_CENTRAL_NODE" = lib.mkForce true;
+luxnix.ollama.acceleration = "cuda";
+luxnix.ollama.enable = true;
+luxnix.ollama.enableModelBootstrap = false;
+luxnix.ollama.models = [ "gemma4:e2b" ];
+ollama.host = "0.0.0.0";
+
+  };
+
+  luxnix = {
+
+    dns.enable = true;
+
+
+    generic-settings.smtpPwdFilePath = "/etc/secrets/vault/smtp_pwd";
+
+
+    generic-settings.smtpUserFilePath = "/etc/secrets/vault/smtp_user";
+
+
+    generic-settings.sslCertificateKeyPath = "/etc/secrets/vault/ssl_key";
+
+
+    generic-settings.sslCertificatePath = "/etc/secrets/vault/ssl_cert";
+
+
+    generic-settings.adminVpnIp = "172.16.255.106";
+
+
+    generic-settings.enable = true;
+
+
+    generic-settings.gpu.nvidia.driver = "production";
+
+
+    generic-settings.gpu.nvidia.enable = true;
+
+
+    generic-settings.language = "english";
+
+
+    generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
+
+
+    generic-settings.linux.rmemMax = 7500000;
+
+
+    generic-settings.linux.wmemMax = 7500000;
+
+
+    generic-settings.network.glm52.domain = "glm.endo-reg.net";
+
+
+    generic-settings.network.glm52.port = 8088;
+
+
+    generic-settings.network.hosts.gc-01.domains = [ "gc-01.intern" "lx-annotate.local" ];
+
+
+    generic-settings.network.hosts.gc-01.ip-vpn = "172.16.255.101";
+
+
+    generic-settings.network.hosts.gc-02.domains = [ "gc-02.intern" "lx-annotate.local" ];
+
+
+    generic-settings.network.hosts.gc-02.ip-vpn = "172.16.255.102";
+
+
+    generic-settings.network.hosts.gc-03.domains = [ "gc-03.intern" "lx-annotate.local" ];
+
+
+    generic-settings.network.hosts.gc-03.ip-vpn = "172.16.255.103";
+
+
+    generic-settings.network.hosts.gc-04.domains = [ "gc-04.intern" "lx-annotate.local" ];
+
+
+    generic-settings.network.hosts.gc-04.ip-vpn = "172.16.255.104";
+
+
+    generic-settings.network.hosts.gc-05.domains = [ "gc-05.intern" "lx-annotate.local" ];
+
+
+    generic-settings.network.hosts.gc-05.ip-vpn = "172.16.255.105";
+
+
+    generic-settings.network.hosts.gc-06.domains = [ "gc-06.intern" ];
+
+
+    generic-settings.network.hosts.gc-06.ip-local = "172.31.179.8";
+
+
+    generic-settings.network.hosts.gc-06.ip-vpn = "172.16.255.106";
+
+
+    generic-settings.network.hosts.gc-06.syncthing-id = "MJU2YAF-4IXFRSS-I3JHU2Z-6LUSSTN-L6BR5HS-PLS6ACJ-4E2X2UQ-5AVBUAQ";
+
+
+    generic-settings.network.hosts.gc-07.domains = [ "gc-07.intern" "lx-annotate.local" ];
+
+
+    generic-settings.network.hosts.gc-07.ip-vpn = "172.16.255.107";
+
+
+    generic-settings.network.hosts.gc-08.domains = [ "gc-08.intern" "lx-annotate.local" ];
+
+
+    generic-settings.network.hosts.gc-08.ip-vpn = "172.16.255.108";
+
+
+    generic-settings.network.hosts.gc-09.domains = [ "gc-09.intern" "lx-annotate.local" ];
+
+
+    generic-settings.network.hosts.gc-09.ip-vpn = "172.16.255.109";
+
+
+    generic-settings.network.hosts.gc-10.domains = [ "gc-10.intern" "lx-annotate.local" ];
+
+
+    generic-settings.network.hosts.gc-10.ip-vpn = "172.16.255.110";
+
+
+    generic-settings.network.hosts.gs-01.domains = [ "gs-01.intern" ];
+
+
+    generic-settings.network.hosts.gs-01.ip-local = "192.168.0.228";
+
+
+    generic-settings.network.hosts.gs-01.ip-vpn = "172.16.255.21";
+
+
+    generic-settings.network.hosts.gs-01.network-cluster = "L2";
+
+
+    generic-settings.network.hosts.gs-01.syncthing-id = "X2KFB5D-HJWUNFK-GS6TP7A-GV4TGEF-ZYH3RHL-AWWJIW4-76SSCHP-YIMUUAA";
+
+
+    generic-settings.network.hosts.gs-02.domains = [ "glm.endo-reg.net" "gs-02.intern" ];
+
+
+    generic-settings.network.hosts.gs-02.ip-local = "192.168.0.56";
+
+
+    generic-settings.network.hosts.gs-02.ip-vpn = "172.16.255.22";
+
+
+    generic-settings.network.hosts.gs-02.network-cluster = "L2";
+
+
+    generic-settings.network.hosts.gs-02.syncthing-id = "XSAKTSB-36K6OY4-NEPJ2K4-WHGZF2D-EMDOMFQ-Q5DEVO6-2BYD2MS-JWPFVQ4";
+
+
+    generic-settings.network.hosts.s-01.domains = [ "s-01.intern" ];
+
+
+    generic-settings.network.hosts.s-01.ip-local = "192.168.179.1";
+
+
+    generic-settings.network.hosts.s-01.ip-vpn = "172.16.255.1";
+
+
+    generic-settings.network.hosts.s-01.network-cluster = "L1";
+
+
+    generic-settings.network.hosts.s-01.syncthing-id = "WTGG7YQ-AGGOG6H-PQPA54T-HQRCF4P-2T52JSI-OQTIBUG-JUCC45Y-MBCB4QS";
+
+
+    generic-settings.network.hosts.s-02.domains = [ "nginx.endo-reg.net" "cloud.endo-reg.net" "keycloak.endo-reg.net" "s-02.intern" ];
+
+
+    generic-settings.network.hosts.s-02.ip-local = "192.168.179.2";
+
+
+    generic-settings.network.hosts.s-02.ip-vpn = "172.16.255.12";
+
+
+    generic-settings.network.hosts.s-02.network-cluster = "L1";
+
+
+    generic-settings.network.hosts.s-02.syncthing-id = "GF7EOBC-UVEYSV7-BK77MKA-DIK62JP-TPVG4M3-3NUUWS7-B724MAI-OK2J7AW";
+
+
+    generic-settings.network.hosts.s-03.domains = [ "s-03.intern" ];
+
+
+    generic-settings.network.hosts.s-03.ip-local = "192.168.179.3";
+
+
+    generic-settings.network.hosts.s-03.ip-vpn = "172.16.255.13";
+
+
+    generic-settings.network.hosts.s-03.network-cluster = "L1";
+
+
+    generic-settings.network.hosts.s-03.syncthing-id = "MLC6QP7-MI5RMNB-H7JCOTE-ODXOCV7-UIIOMUS-ZRJULS7-5ZLD2LB-LYZVZAF";
+
+
+    generic-settings.network.hosts.s-04.domains = [ "s-04.intern" ];
+
+
+    generic-settings.network.hosts.s-04.ip-local = "192.168.0.194";
+
+
+    generic-settings.network.hosts.s-04.ip-vpn = "172.16.255.14";
+
+
+    generic-settings.network.keycloak.adminDomain = "adminKeycloak.endo-reg.net";
+
+
+    generic-settings.network.keycloak.domain = "keycloak.endo-reg.net";
+
+
+    generic-settings.network.keycloak.port = 8443;
+
+
+    generic-settings.network.nextcloud.domain = "cloud.endo-reg.net";
+
+
+    generic-settings.network.psqlMain.port = 5432;
+
+
+    generic-settings.network.psqlTest.domain = "psql-test.endo-reg.net";
+
+
+    generic-settings.network.serviceHosts.glm52 = "gs-02";
+
+
+    generic-settings.network.serviceHosts.keycloak = "s-02";
+
+
+    generic-settings.network.serviceHosts.nextcloud = "s-03";
+
+
+    generic-settings.network.serviceHosts.nginx = "s-02";
+
+
+    generic-settings.network.serviceHosts.psqlMain = "gs-02";
+
+
+    generic-settings.network.serviceHosts.psqlTest = "s-04";
+
+
+    generic-settings.network.syncthing.enable = true;
+
+
+    generic-settings.network.syncthing.extraFlags = [  ];
+
+
+    generic-settings.postgres.enable = true;
+
+
+    generic-settings.sensitiveServiceGroupName = "sensitiveServices";
+
+
+    generic-settings.traefikHostDomain = "traefik.endo-reg.net";
+
+
+    generic-settings.traefikHostIp = "172.16.255.12";
+
+
+    generic-settings.transferCaPath = "/var/lib/lx-annotate/ssl/transfer_ca.crt";
+
+
+    generic-settings.virtualization.enable = true;
+
+
+    generic-settings.virtualization.kvm = {};
+
+
+    generic-settings.virtualization.podman = {};
+
+
+    generic-settings.virtualization.supportedArchitectures = [];
+
+
+    generic-settings.virtualization.userGroups = [];
+
+
+    generic-settings.virtualization.vfio = {};
+
+
+    generic-settings.vpnSubnet = "172.16.255.0/24";
+
+
+    maintenance.autoUpdates.dates = "17:00";
+
+
+    maintenance.autoUpdates.flake = "github:wg-lux/luxnix/prototype";
+
+
+    maintenance.autoUpdates.operation = "switch";
+
+
+    vault.dir = "/etc/secrets/vault";
+
+
+    vault.enable = true;
+
+    vault.server.apiAddress = "https://vault.endo-reg.net:8200";
+
+
+    vault.server.bindAddress = "172.16.255.22:8200";
+
+
+    vault.server.clusterAddress = "https://vault.endo-reg.net:8201";
+
+
+    vault.server.caCertFile = "/var/lib/lx-annotate-ssl/lx-annotate-selfsigned.crt";
+
+
+    vault.server.enable = hubTransferEnabled;
+
+
+    vault.server.hubPki.enable = hubTransferEnabled;
+
+
+    vault.server.tlsCertFile = "/var/lib/lx-annotate-ssl/lx-annotate-selfsigned.crt";
+
+
+    vault.server.tlsKeyFile = "/var/lib/lx-annotate-ssl/lx-annotate-selfsigned.key";
+
+
+    vault.key = "/etc/secrets/.key";
+
+
+    vault.psk = "/etc/secrets/.psk";
+
+
+    boot-decryption-stick-gs-01.enable = true;
+
+
+    generic-settings.hostPlatform = "x86_64-linux";
+
+
+    generic-settings.linux.cpuMicrocode = "amd";
+
+
+    generic-settings.linux.initrd.availableKernelModules = [ "xhci_pci" "ahci" "thunderbolt" "nvme" "usb_storage" "usbhid" "sd_mod" ];
+
+
+    generic-settings.linux.initrd.kernelModules = [ "nfs" "btrfs" "dm-snapshot" ];
+
+
+    generic-settings.linux.initrd.supportedFilesystems = [ "nfs" "btrfs" ];
+
+
+    generic-settings.linux.kernelModules = [ "kvm-amd" ];
+
+
+    generic-settings.linux.kernelModulesBlacklist = [  ];
+
+
+    generic-settings.linux.kernelParams = [  ];
+
+
+    generic-settings.linux.resumeDevice = "/dev/disk/by-label/nixos";
+
+
+    generic-settings.linux.supportedFilesystems = [ "nfs" "btrfs" ];
+
+
+    generic-settings.systemStateVersion = "23.11";
+
+
+
+  };
+
+  programs.nix-ld.enable = true;
+
+  xdg.menus.enable = true;
+
+  networking.firewall.interfaces.tun0.allowedTCPPorts =
+    lib.mkAfter ([ 11434 8088 ] ++ lib.optional hubTransferEnabled 8200);
+
 }

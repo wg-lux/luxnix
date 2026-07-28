@@ -6,12 +6,13 @@ template_name: "main"
 
 host_roles:
   custom_packages.baseDevelopment: "true"
+  endoreg_client.defaultCenterKey: '"rbk_stuttgart"'
 
 host_services: {}
 
 host_nixos:
   nix.settings.max_jobs: 1
-  nix.settings.cores: 2
+  nix.settings.cores: 4
 
 ansible_roles:
   - "dev_access"
@@ -20,8 +21,6 @@ extra_secret_names:
   - "SCRT_roles_system_password_postgres_host_test_password"
 
 host_luxnix:
-  generic_settings.configurationPathRelative: '"luxnix"'
-  generic_settings.configurationPath: 'lib.mkForce "/home/admin/luxnix"'
 
   generic_settings.hostPlatform: '"x86_64-linux"'
   generic_settings.systemStateVersion: '"23.11"'

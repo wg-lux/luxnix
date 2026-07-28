@@ -7,13 +7,29 @@ template_name: "main"
 host_roles:
   custom_packages.baseDevelopment: "true"
 
-host_services: {}
+host_services:
+  luxnix.lxAnnotateLocal.django.baseUrl: '"https://lx-annotate.endo-reg.net"'
+  luxnix.lxAnnotateLocal.django.djangoAllowedHosts:
+    - "lx-annotate.endo-reg.net"
+    - "localhost"
+    - "127.0.0.1"
+  luxnix.lxAnnotateLocal.django.hostname: '"lx-annotate.endo-reg.net"'
+  luxnix.lxAnnotateLocal.django.httpProtocol: '"https"'
+  luxnix.lxAnnotateLocal.django.useHttps: "true"
+  nginx.enable: "true"
+  nginx.recommendedGzipSettings: "true"
+  nginx.recommendedOptimisation: "true"
+  nginx.recommendedProxySettings: "true"
+  nginx.recommendedTlsSettings: "true"
+
+host_nixos:
+  networking.firewall.allowedTCPPorts: "lib.mkAfter [ 80 443 ]"
+  'networking.hosts."127.0.0.1"':
+    - "lx-annotate.endo-reg.net"
 
 extra_secret_names: []
 
 host_luxnix:
-  generic_settings.configurationPathRelative: '"luxnix"'
-  generic_settings.configurationPath: 'lib.mkForce "/home/admin/luxnix"'
 
   generic_settings.hostPlatform: '"x86_64-linux"'
   generic_settings.systemStateVersion: '"23.11"'

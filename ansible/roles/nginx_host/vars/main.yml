@@ -9,6 +9,8 @@ nginx_host_roles:
 
   nginxHost.keycloak.enable: "true"
 
+  nginxHost.glm52.enable: "true"
+
   nginxHost.nextcloud.enable: "true"
 
   nginxHost.settings.proxyHeadersHashMaxSize: "512"

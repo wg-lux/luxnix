@@ -10,10 +10,10 @@ with lib.luxnix; let
   hostname = config.networking.hostName;
   isPublicDomain = domain:
     builtins.any (suffix: lib.hasSuffix suffix domain) cfg.publicDomainSuffixes;
-  
+
   # Add proper null handling for host config lookup
   ownNetConfig = cfg.hosts.${hostname} or {};
-  
+
   # Add proper null handling for network-cluster
   ownNetworkCluster = ownNetConfig.network-cluster or null;
 
@@ -65,7 +65,7 @@ with lib.luxnix; let
     in
       if hostConfig != null && hostConfig.ip-vpn != null
       then hostConfig.ip-vpn
-      else -1; # "172.16.255.x"; # Default fallback
+      else "172.16.255.x";
 
 in {
   options.luxnix.generic-settings.network = {
@@ -158,6 +158,7 @@ in {
         nginx = "s-02";
         keycloak = "s-02";
         nextcloud = "s-03";
+        glm52 = "gs-02";
         psqlMain = "gs-02";
         psqlTest = "s-04";
       };
@@ -239,6 +240,29 @@ in {
       };
     };
 
+    glm52 = {
+      vpnIp = mkOption {
+        type = types.str;
+        default = getServiceVpnIp "glm52";
+        description = ''
+          The VPN IP of the GLM-5.2 host (derived from serviceHosts mapping).
+        '';
+      };
+      port = mkOption {
+        type = types.port;
+        default = 8088;
+        description = ''
+          The GLM-5.2 llama.cpp HTTP server port.
+        '';
+      };
+      domain = mkOption {
+        type = types.str;
+        default = "glm.endo-reg.net";
+        description = ''
+          The public GLM-5.2 inference domain.
+        '';
+      };
+    };
 
     psqlMain = {
       vpnIp = mkOption {

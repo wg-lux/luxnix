@@ -225,7 +225,16 @@ systemctl list-dependencies managed-secrets-setup.service
 
 # Restart dependent services
 sudo systemctl restart postgres-endoreg-setup.service
-sudo systemctl restart endo-api-boot.service
+sudo systemctl restart endoreg-db-api-local.service
+```
+
+If the failing secret is Vault-backed, inspect the chain in order:
+
+```bash
+sudo systemctl status vault-auth-setup.service
+sudo systemctl status managed-secrets-setup.service
+sudo journalctl -u vault-auth-setup.service -b
+sudo journalctl -u managed-secrets-setup.service -b
 ```
 
 If the failing secret is Vault-backed, inspect the chain in order:

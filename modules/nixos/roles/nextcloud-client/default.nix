@@ -4,10 +4,6 @@ with lib;
 with lib.luxnix; let
   cfg = config.roles.nextcloudClient;
 
-  conf = config.luxnix.generic-settings.network.nextcloud;
-
-
-
 in
 {
   options.roles.nextcloudClient = {

@@ -1,7 +1,13 @@
-args@{ lib, ... }:
-with lib;
-with args;
+{
+  lib,
+  pkgs,
+  cfg,
+  lxAnnotateRuntime,
+  ...
+}:
 let
+  inherit (lib) optionalString;
+
   runtime = lxAnnotateRuntime;
   inherit (runtime.paths) envDataDir;
   inherit (runtime.runtime) encryptedDataMountOptions;

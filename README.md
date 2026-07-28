@@ -5,6 +5,7 @@ LuxNix is a NixOS configuration framework for reproducible multi-host deployment
 ## Start Here
 
 - [Getting Started (Day-0 canonical flow)](docs/getting-started.md)
+- [Architecture](docs/architecture.md)
 - [Deployment Guide](docs/deployment-guide.md)
 - [Vault Setup](docs/vault-setup.md)
 - [Hardware Setup](docs/hardware-setup.md)
@@ -44,6 +45,8 @@ luxnix/
 │   └── nixos/
 ├── systems/
 ├── homes/
+├── packages/
+├── overlays/
 ├── docs/
 └── scripts/
 ```

@@ -1,11 +1,8 @@
 {
   config,
   lib,
-  pkgs,
   ...
 }:
-with lib;
-with lib.luxnix;
 let
   cfg = config.services.luxnix.lxAnnotateLocal;
   gs = config.luxnix.generic-settings;
@@ -15,10 +12,12 @@ let
     sslDir = "/var/lib/lx-annotate-ssl";
     certPath = "/var/lib/lx-annotate-ssl/lx-annotate-selfsigned.crt";
     keyPath = "/var/lib/lx-annotate-ssl/lx-annotate-selfsigned.key";
+    publicCertPath = "/run/lx-annotate-ssl/lx-annotate-selfsigned.crt";
   } config;
 
   defaultSslCertificatePath = sslCfg.certPath;
   defaultSslKeyPath = sslCfg.keyPath;
+  publicSslCertificatePath = sslCfg.publicCertPath;
 
   adminName = config.user.admin.name;
   scriptName = "runLocalLxAnnotate";
@@ -68,7 +67,7 @@ let
   runtimeStreamableVideoRootPath = "${runtimeStorageRootPath}/streamable_videos";
   runtimeStreamableVideoRawRootPath = "${runtimeStreamableVideoRootPath}/raw";
   runtimeStreamableVideoProcessedRootPath = "${runtimeStreamableVideoRootPath}/processed";
-  envNginxProtectedMediaUrl = "/protected_media/";
+  envNginxProtectedMediaUrl = cfg.runtime.streamableServing.protectedMediaUrl;
   runtimeStaticRootPath = "/var/lib/lx-annotate/staticfiles";
   runtimeWheelRootPath = "${endoreg-service-user-home}/lx-annotate-wheel";
   runtimeWheelVenvPath = "${runtimeWheelRootPath}/.venv";
@@ -135,7 +134,17 @@ let
   envRunVideoTests = if cfg.django.runVideoTests then "true" else "false";
   envSkipExpensiveTests = if cfg.django.skipExpensiveTests then "true" else "false";
   envViteEnableDebug = if cfg.debug.enable then "true" else "false";
-  envAllowedHosts = lib.concatStringsSep "," cfg.django.djangoAllowedHosts;
+  envAllowedHosts = lib.concatStringsSep "," (
+    lib.unique (
+      cfg.django.djangoAllowedHosts
+      ++ [
+        cfg.django.hostname
+        "lx-annotate.local"
+        "localhost"
+        "127.0.0.1"
+      ]
+    )
+  );
   envCorsAllowedOrigins = lib.concatStringsSep "," cfg.django.corsAllowedOrigins;
 
   settingsProfile = cfg.django.settingsProfile;
@@ -148,19 +157,16 @@ let
 
   envDefaultCenter =
     let
-      explicitDefaultCenterKey = cfg.django.extraSettings.DEFAULT_CENTER_KEY or null;
-      defaultCenterReference = lib.strings.trim (toString (
-        cfg.django.extraSettings.DEFAULT_CENTER or
-        config.roles.endoreg-client.defaultCenter or
-        "University Hospital Wuerzburg"
-      ));
+      trimToString = value: lib.strings.trim (toString value);
+      explicitDefaultCenterKey = trimToString (
+        cfg.django.extraSettings.DEFAULT_CENTER_KEY or ""
+      );
+      hostDefaultCenterKey = trimToString config.roles.endoreg-client.defaultCenterKey;
     in
-    if explicitDefaultCenterKey != null then
+    if explicitDefaultCenterKey != "" then
       explicitDefaultCenterKey
-    else if defaultCenterReference == "" then
-      "University Hospital Wuerzburg"
     else
-      defaultCenterReference;
+      hostDefaultCenterKey;
   exportFramesStorageRootDefault =
     config.roles.endoreg-client.paths.storagePersistingMountPoint;
   externalCleanupArchiveRootDefault =
@@ -241,6 +247,7 @@ let
         sslDir
         sslKeyPath
         sslCertPath
+        publicSslCertificatePath
         envSystemdFilePath
         envAssetDir
         hubRootPath

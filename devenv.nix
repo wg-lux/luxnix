@@ -7,23 +7,9 @@
   ...
 }:
 let
-  appName = "lx_annotate";
-  DEPLOYMENT_MODE = "prod";
   python = pkgs.python312;
-  nodejs = pkgs.nodejs_22;
   uvPackage = pkgs.uv;
-  languages.python.enable = true;
-  languages.python.uv.enable = true;
-  languages.javascript.enable = true;
-  languages.javascript.package = nodejs;
-
-  devTasks = import ./devenv/devTasks/default.nix {
-    inherit config pkgs lib;
-    env = baseEnv;
-  };
   isDev = if config.secretspec.secrets.DJANGO_ENV == "development" then true else false;
-
-  processes = import ./devenv/processes.nix { inherit pkgs; };
 
   baseEnv = {
     # --- Directories & Paths ---
@@ -39,10 +25,6 @@ let
     isDev = isDev;
     env = baseEnv;
   };
-  commonShellHook = ''
-    export PATH="$PATH:$(yarn global bin)"
-  '';
-
   runtimePackages = with pkgs; [
     stdenv.cc.cc
     uvPackage
@@ -51,12 +33,10 @@ let
     zlib
     git
     secretspec
-    xorg.libxcb
+    libxcb
+    nixd
+    nixfmt
   ];
-  _module.args.buildInputs = baseBuildInputs;
-  SYNC_CMD = "uv sync";
-  nixpkgs.config.allowUnfree = true;
-
 in
 {
 
@@ -85,6 +65,7 @@ in
   languages.javascript = {
     enable = true;
     package = pkgs.nodejs_22;
+    npm.enable = true;
     npm.install.enable = true;
   };
 
@@ -98,7 +79,9 @@ in
   scripts = devenv_utils.scripts;
 
   enterShell = ''
-    env-setup
+    if command -v env-setup >/dev/null 2>&1; then
+      env-setup
+    fi
     # Ensure dependencies are synced using uv
     # Check if venv exists. If not, run sync verbosely. If it exists, sync quietly.
     SYNC_STAMP=".devenv/state/.uv-sync.stamp"

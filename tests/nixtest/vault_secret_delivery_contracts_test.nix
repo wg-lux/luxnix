@@ -9,6 +9,7 @@
   localUsersModule = "${repoRoot}/modules/nixos/security/local-users/default.nix";
   lxAnnotateConfig = "${repoRoot}/modules/nixos/services/lx-annotate-local/config.nix";
   lxAnnotateScripts = "${repoRoot}/modules/nixos/services/lx-annotate-local/scripts.nix";
+  lxAnnotateEnvScripts = "${repoRoot}/modules/nixos/services/lx-annotate-local/scripts/env.nix";
 in {
   suites."vault secret delivery contracts" = {
     pos = __curPos;
@@ -48,7 +49,8 @@ in {
           ${ntlib.helpers.scriptHelpers}
           assert_file_contains ${localUsersModule} 'clientPassword = with types' "local user policy must expose client password source"
           assert_file_contains ${localUsersModule} 'client-user-password-hash' "client password SOPS secret name must be explicit"
-          assert_file_contains ${localUsersModule} 'sops.secrets.\$\{clientPassword.sops.secretName\}' "client password hash must be declared as a SOPS secret"
+          assert_file_contains ${localUsersModule} 'sops.secrets' "client password hash must be declared as a SOPS secret"
+          assert_file_contains ${localUsersModule} 'clientPassword.sops.secretName' "client password hash must use the configured SOPS secret name"
           assert_file_contains ${localUsersModule} 'neededForUsers = true' "SOPS-backed login hashes must be available before user creation"
         '';
       }
@@ -75,10 +77,17 @@ in {
         script = ''
           ${ntlib.helpers.path [pkgs.gnugrep]}
           ${ntlib.helpers.scriptHelpers}
-          assert_file_contains ${lxAnnotateScripts} 'export LX_ANNOTATE_ENCRYPTED_DATA_DIR=' "lx-annotate scripts must export the encrypted data dir"
-          assert_file_contains ${lxAnnotateScripts} 'export LX_ANNOTATE_MASTER_KEY_FILE=' "lx-annotate scripts must export the application master key file when configured"
+          assert_file_contains ${lxAnnotateEnvScripts} 'export LX_ANNOTATE_ENCRYPTED_DATA_DIR=' "lx-annotate scripts must export the encrypted data dir"
+          assert_file_contains ${lxAnnotateEnvScripts} 'export LX_ANNOTATE_MASTER_KEY_FILE=' "lx-annotate scripts must export the application master key file when configured"
+          assert_file_contains ${lxAnnotateScripts} 'require_file_backed_master_key' "lx-annotate scripts must enforce the file-backed master key contract"
+          assert_file_contains ${lxAnnotateScripts} 'LX_ANNOTATE_MASTER_KEY must not be set in production' "lx-annotate scripts must reject an inline master key that would override the key file"
+          assert_file_contains ${lxAnnotateScripts} 'key_stat\.st_uid != 0' "lx-annotate scripts must require a root-owned application master key file"
+          assert_file_contains ${lxAnnotateScripts} 'key_mode & 0o007' "lx-annotate scripts must reject application master key access for unrelated users"
+          assert_file_contains ${lxAnnotateScripts} 'decoded_key.*16, 24, 32' "lx-annotate scripts must validate the decoded AES key length"
+          assert_file_contains ${lxAnnotateScripts} 'runLocalHlsMaterializationScript.*pkgs\.writeShellScriptBin' "lx-annotate must provide the guarded HLS materialization wrapper"
           assert_file_contains ${lxAnnotateScripts} 'verify_encrypted_storage' "lx-annotate rebuild guard must validate encrypted storage with the application master key"
-          assert_file_contains ${lxAnnotateConfig} 'RequiresMountsFor = \[ envDataDir \]' "lx-annotate services must require the encrypted data mount"
+          assert_file_contains ${lxAnnotateConfig} 'ExecStart =.*runLocalMasterKeyCheckScript' "the master key systemd gate must execute the guarded wrapper"
+          assert_file_contains ${lxAnnotateConfig} 'unitConfig = encryptedDataMountUnitConfig' "lx-annotate services must apply the shared encrypted-data mount contract"
           assert_file_contains ${lxAnnotateConfig} 'encryptionServiceUnits' "lx-annotate config must derive shared encryption service dependencies"
           assert_file_contains ${lxAnnotateConfig} '\+\+ encryptionServiceUnits' "lx-annotate app units must append encryption service dependencies"
           assert_file_contains ${lxAnnotateConfig} 'cmp -s "\$SECRET_FILE" "\$TARGET_FILE"' "Vault master key refresh must refuse accidental app-key rotation"

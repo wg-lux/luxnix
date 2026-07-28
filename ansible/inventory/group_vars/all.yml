@@ -27,6 +27,9 @@ group_roles:
   custom_packages.cloud: "true"
   common.enable: "true"
 group_services: {}
+group_nixos:
+  xdg.menus.enable: "true"
+  programs.nix-ld.enable: "true"
 group_luxnix:
   maintenance.autoUpdates.operation: '"switch"'
   maintenance.autoUpdates.flake: '"github:wg-lux/luxnix/prototype"'
@@ -86,6 +89,7 @@ group_luxnix:
   generic_settings.network.hosts.gs_02.ip_vpn: '"172.16.255.22"'
   generic_settings.network.hosts.gs_02.syncthing_id: '"XSAKTSB-36K6OY4-NEPJ2K4-WHGZF2D-EMDOMFQ-Q5DEVO6-2BYD2MS-JWPFVQ4"'
   generic_settings.network.hosts.gs_02.domains:
+    - "glm.endo-reg.net"
     - "gs-02.intern"
   # generic_settings.network.hosts.gs_02.syncthing_id: null
   generic_settings.network.hosts.gs_02.network_cluster: '"L2"'
@@ -152,6 +156,7 @@ group_luxnix:
   # Service Hosts
   generic_settings.network.serviceHosts.keycloak: '"s-02"'
   generic_settings.network.serviceHosts.nextcloud: '"s-03"'
+  generic_settings.network.serviceHosts.glm52: '"gs-02"'
   generic_settings.network.serviceHosts.psqlMain: '"gs-02"'
   generic_settings.network.serviceHosts.psqlTest: '"s-04"'
   generic_settings.network.serviceHosts.nginx: '"s-02"'
@@ -164,6 +169,8 @@ group_luxnix:
   generic_settings.network.keycloak.port: "8443"
   # generic_settings.network.nextcloud.vpnIp: '"172.16.255.13"'
   generic_settings.network.nextcloud.domain: '"cloud.endo-reg.net"'
+  generic_settings.network.glm52.domain: '"glm.endo-reg.net"'
+  generic_settings.network.glm52.port: "8088"
   # generic_settings.network.psqlMain.vpnIp: '"172.16.255.12"'
   generic_settings.network.psqlMain.port: "5432"
   # generic_settings.network.psqlMain.domain: '"psql-main.endo-reg.net"'
@@ -181,7 +188,7 @@ group_luxnix:
   generic_settings.postgres.enable: "true"
   dns.enable: "true"
   generic_settings.enable: "true"
-  generic_settings.linux.kernelPackages: "pkgs.linuxPackages_6_6"
+  generic_settings.linux.kernelPackages: "pkgs.linuxPackages_6_12"
   generic_settings.adminVpnIp: '"172.16.255.106"'
   generic_settings.traefikHostIp: '"172.16.255.12"'
   generic_settings.traefikHostDomain: '"traefik.endo-reg.net"'
@@ -195,17 +202,13 @@ ansible_key_source_dir: "{{ luxnix_dev_repo }}/secrets/ansible-vault-keys-source
 
 luxnix_dev_repo: "/home/admin/dev/luxnix"
 luxnix_repo: "https://github.com/wg-lux/luxnix.git"
-luxnix_dest: "/home/admin/lx-production"
+luxnix_dest: "/home/admin/dev/luxnix"
 luxnix_branch: "main"
 # luxnix_secrets: []
 
 endoreg_db_repo: "https://github.com/wg-lux/endoreg-db.git"
 endoreg_db_dest: "/home/admin/endoreg-db-production"
 endoreg_db_branch: "main"
-
-endoreg_db_api_repo: "https://github.com/wg-lux/endoreg-db-api.git"
-endoreg_db_api_dest: "/home/admin/endoreg-db-api-production"
-endoreg_db_api_branch: "main"
 
 ansible_user: admin
 ansible_become_user: admin
@@ -224,6 +227,7 @@ authentication:
 
 network_conf:
   domain: "endo-reg.net"
+
 
 aglnet_conf:
   domain: "{{ network_conf.domain }}"

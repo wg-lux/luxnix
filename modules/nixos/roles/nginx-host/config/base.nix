@@ -2,13 +2,11 @@
 let
 
     service-users = import ../../service-users.nix { inherit lib; };
-    service-hosts = import ../../service-hosts.nix { inherit lib; };
     paths = import ../../paths/nginx.nix { }; 
 
     network = import ../../network/main.nix { inherit lib; };
     ips = network.ips;
 
-    hostnames = import ../../hostnames.nix { inherit lib; };
 
     hostname = "s-02";
 

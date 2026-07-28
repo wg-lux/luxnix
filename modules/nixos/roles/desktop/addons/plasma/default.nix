@@ -20,8 +20,11 @@ in
 
     services.desktopManager.plasma6.enable = true;
     services.displayManager = {
-      defaultSession = "plasmax11";
-      sddm.enable = true;
+      defaultSession = "plasma"; # Correct session name for Plasma Wayland
+      sddm = {
+        enable = true;
+        wayland.enable = true; # Forces the SDDM greeter to use Wayland
+      };
     };
 
     services.displayManager = {

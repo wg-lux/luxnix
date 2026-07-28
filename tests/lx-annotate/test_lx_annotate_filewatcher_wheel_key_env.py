@@ -15,6 +15,15 @@ SCRIPTS_NIX = (
     / "lx-annotate-local"
     / "scripts.nix"
 )
+ENV_NIX = (
+    REPO_ROOT
+    / "modules"
+    / "nixos"
+    / "services"
+    / "lx-annotate-local"
+    / "scripts"
+    / "env.nix"
+)
 
 
 def _extract_wheel_filewatcher_script_body() -> str:
@@ -44,14 +53,17 @@ def test_wheel_filewatcher_exports_encryption_env_before_start():
 
 
 def test_runtime_exports_ffmpeg_transcode_timeout_to_wheel_services():
-    source = SCRIPTS_NIX.read_text(encoding="utf-8")
+    source = "\n".join(
+        [
+            SCRIPTS_NIX.read_text(encoding="utf-8"),
+            ENV_NIX.read_text(encoding="utf-8"),
+        ]
+    )
 
     assert 'ffmpegTranscodeTimeoutSeconds = "86400";' in source
-    assert (
-        'export FFMPEG_TRANSCODE_TIMEOUT_SECONDS="${ffmpegTranscodeTimeoutSeconds}"'
-        in source
-    )
-    assert "FFMPEG_TRANSCODE_TIMEOUT_SECONDS=${ffmpegTranscodeTimeoutSeconds}" in source
+    assert "FFMPEG_TRANSCODE_TIMEOUT_SECONDS = ffmpegTranscodeTimeoutSeconds;" in source
+    assert "commonShellExportText" in source
+    assert "commonSystemdEnvText" in source
     assert "FFMPEG_TRANSCODE_TIMEOUT_SECONDS=1000000" not in source
 
 

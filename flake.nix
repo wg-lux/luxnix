@@ -10,8 +10,10 @@
       "cuda-maintainers.cachix.org-1:0dq3bujKpuEPMCX6U4WylrUDZ9JyUG0VpVZa7CNfq5E="
     ];
   };
+
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-25.11";
+    nixpkgs-unstable.url = "github:nixos/nixpkgs/nixos-unstable";
     devenv.url = "github:cachix/devenv";
     home-manager = {
       url = "github:nix-community/home-manager/release-25.11";
@@ -43,8 +45,6 @@
 
     impermanence.url = "github:nix-community/impermanence";
     # lanzaboote.url = "github:nix-community/lanzaboote";
-
-    nixgl.url = "github:nix-community/nixGL";
     # stylix.url = "github:danth/stylix";
     catppuccin.url = "github:catppuccin/nix";
     nix-index-database.url = "github:nix-community/nix-index-database";
@@ -171,11 +171,11 @@
         ];
 
         overlays = with inputs; [
-          nixgl.overlay
+
           nur.overlays.default
           nix-topology.overlays.default
           (final: _prev: {
-            lx-annotate = inputs.lx-annotate.packages.${final.system}.default;
+            lx-annotate = inputs.lx-annotate.packages.${final.stdenv.hostPlatform.system}.default;
           })
         ];
 

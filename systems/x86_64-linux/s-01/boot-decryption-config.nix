@@ -1,10 +1,5 @@
 let
-  usb-uuid = "6eb5de91-8143-4a19-9f59-a4e0f721424b";
-  usb-mountpoint = "/mnt/usb_key";
   usb-device = "/dev/disk/by-uuid/6eb5de91-8143-4a19-9f59-a4e0f721424b";
-
-  bs = 1;
-  offset-m = 50;
   offset-b = 52428800;
   keyfile-size = 4096;
 in {

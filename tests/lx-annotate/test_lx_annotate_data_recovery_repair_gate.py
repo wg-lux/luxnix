@@ -46,6 +46,7 @@ def _run_repair_gate(
     helper_python.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
     helper_python.chmod(0o755)
     marker_file = tmp_path / "data_migration_repair_latest.log"
+    completion_marker_file = tmp_path / "managed_payload_repair_v2"
     calls_file = tmp_path / "calls.log"
 
     script = textwrap.dedent(
@@ -53,6 +54,8 @@ def _run_repair_gate(
         set -euo pipefail
         use_wheel_runtime="true"
         repair_marker_file="{marker_file}"
+        repair_revision="v2"
+        repair_completion_marker_file="{completion_marker_file}"
         target_dir="{tmp_path / 'data'}"
         repoDir="{tmp_path / 'repo'}"
         unset LX_ANNOTATE_MASTER_KEY
@@ -85,31 +88,35 @@ def _run_repair_gate(
         capture_output=True,
         text=True,
     )
-    return result, marker_file, calls_file
+    return result, marker_file, completion_marker_file, calls_file
 
 
 def test_repair_managed_runtime_payloads_skips_when_master_key_is_not_configured(
     tmp_path: Path,
 ):
-    result, marker_file, calls_file = _run_repair_gate(tmp_path)
+    result, marker_file, completion_marker_file, calls_file = _run_repair_gate(tmp_path)
 
     assert result.returncode == 0, result.stderr
     assert marker_file.read_text(encoding="utf-8").strip() == (
         "Skipping managed payload repair; LX_ANNOTATE_MASTER_KEY or LX_ANNOTATE_MASTER_KEY_FILE is not configured for this runtime."
     )
     assert not calls_file.exists()
+    assert not completion_marker_file.exists()
 
 
 def test_repair_managed_runtime_payloads_runs_when_master_key_is_configured(
     tmp_path: Path,
 ):
-    result, marker_file, calls_file = _run_repair_gate(
+    result, marker_file, completion_marker_file, calls_file = _run_repair_gate(
         tmp_path,
         master_key_file="/run/secrets/lx-annotate-master-key",
     )
 
     assert result.returncode == 0, result.stderr
     assert "repair-ok" in marker_file.read_text(encoding="utf-8")
+    assert completion_marker_file.read_text(encoding="utf-8").splitlines()[0] == (
+        "repair_revision=v2"
+    )
     assert calls_file.read_text(encoding="utf-8").splitlines() == [
         f"django:{tmp_path / 'python'} repair_managed_payloads",
     ]
@@ -118,7 +125,7 @@ def test_repair_managed_runtime_payloads_runs_when_master_key_is_configured(
 def test_wheel_data_recovery_keeps_legacy_media_overlay_after_helper_success():
     source = SCRIPTS_NIX.read_text(encoding="utf-8")
     assert (
-        'run_installed_django_command "${runtimeWheelVenvPath}/bin/python" migrate --noinput'
+        'run_installed_django_command "${wheelVenvPythonPath}" migrate --noinput'
         in source
     )
     assert (
@@ -135,4 +142,16 @@ def test_wheel_data_recovery_keeps_legacy_media_overlay_after_helper_success():
     )
     assert source.index('updated_failed_upload_jobs=') < source.index(
         'reap_upload_job_sources'
+    )
+
+
+def test_data_recovery_versions_payload_repair_independently_of_legacy_recovery():
+    source = SCRIPTS_NIX.read_text(encoding="utf-8")
+
+    assert 'repair_revision="v2"' in source
+    assert 'repair_completion_marker_file="$marker_dir/managed_payload_repair_$repair_revision"' in source
+    assert "LX_ANNOTATE_FORCE_MANAGED_PAYLOAD_REPAIR" in source
+    assert "skipping heavy legacy recovery" in source
+    assert source.index('if [ "$run_heavy_recovery" = "true" ]; then') < source.index(
+        'if [ "$run_managed_payload_repair" = "true" ]; then'
     )

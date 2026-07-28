@@ -1,22 +1,28 @@
-args@{ lib, ... }:
-with lib;
-with lib.luxnix;
-with args;
+args@{
+  config,
+  lib,
+  pkgs,
+  cfg,
+  lxAnnotateRuntime,
+  effectiveRuntimePackage,
+  ...
+}:
 let
+  inherit (lib) optionalString;
+
   runtime = lxAnnotateRuntime;
   inherit (runtime.identities)
     endoreg-service-user-name
     endoreg-service-user-home
-    endoreg-service-group-name;
+    endoreg-service-group-name
+    ;
   inherit (runtime.names) scriptName exportFramesScriptName;
-  inherit (runtime.source) gitURL repoDirName branchName;
+  inherit (runtime.source) gitURL branchName;
   inherit (runtime.paths)
     runtimeRootPath
     repoDir
     repoStaticRootPath
     runtimeStorageRootPath
-    runtimeWatcherVideoDirPath
-    runtimeWatcherReportDirPath
     runtimeWatcherPreanonymizedDirPath
     runtimeSapImportDirPath
     runtimeSapImportProcessedDirPath
@@ -27,46 +33,31 @@ let
     runtimeStaticRootPath
     runtimeWheelRootPath
     runtimeWheelVenvPath
-    runtimeWorkingDir
     staticRootPath
     djangoStaticRootPath
+    viteSourcePath
     envDataDir
     envConfDir
     makeCacheDir
-    envConfTemplateDir
     envSystemdFilePath
-    envAssetDir
-    dataRecoveryStateDir
-    dataRecoveryStateFile;
+    publicSslCertificatePath
+    ;
   inherit (runtime.env)
-    envAllowedHosts
     envAnnotateDjangoSettingsModule
-    envBaseUrl
-    envCentralNodeFlag
-    envCorsAllowedOrigins
-    envDefaultCenter
-    envDeploymentRole
     envDjangoEnv
-    envDjangoHost
-    envDjangoModule
-    envDjangoPort
-    envHttpProtocol
-    envRunVideoTests
-    envSkipExpensiveTests
-    envViteEnableDebug;
+    ;
   inherit (runtime.runtime)
     useWheelRuntime
     pythonInterpreter
-    wheelFilePath
-    packageVersion;
+    ;
   inherit (runtime.defaults)
     exportFramesStorageRootDefault
     processedReportDirName
-    processedVideoDirName;
+    processedVideoDirName
+    ;
   makeBin = "${pkgs.gnumake}/bin/make";
-  envScripts = import ./scripts/env.nix args;
+  envScripts = args.envContract or (import ./scripts/env.nix args);
   inherit (envScripts)
-    celeryBrokerUrl
     celeryDefaultQueueName
     celeryPipelineQueueName
     celeryFrameExtractionQueueName
@@ -74,8 +65,10 @@ let
     celeryInferenceQueueName
     celeryTrainingQueueName
     celeryMaintenanceQueueName
-    ffmpegTranscodeTimeoutSeconds
-    lxAnnotateEnvHelpers;
+    celeryWorkerResourceShellExportText
+    commonSystemdEnvText
+    lxAnnotateEnvHelpers
+    ;
 
   # Compat exports for lx-annotate/devenv.nix shellHook, which expects these vars.
   devenvSyncCompatExports = ''
@@ -92,14 +85,21 @@ let
   frontendAssetScripts = import ./scripts/frontend-assets.nix args;
   inherit (frontendAssetScripts)
     alignEnvFileScript
-    viteManifestEntryScript;
-
+    viteManifestEntryScript
+    ;
 
   syncScriptName = "lx-annotate-sync";
   prepareScriptName = "lx-annotate-prepare";
   buildScriptName = "lx-annotate-build";
   migrateScriptName = "lx-annotate-migrate";
   migrateVideoStreamableStorageScriptName = "lx-annotate-migrate-video-streamable-storage";
+  hlsMaterializationScriptName = "runLxAnnotateHlsMaterialization";
+  repoVenvPythonPath = "${repoDir}/.devenv/state/venv/bin/python";
+  repoLegacyVenvPythonPath = "${repoDir}/.venv/bin/python";
+  wheelVenvPythonPath = "${runtimeWheelVenvPath}/bin/python";
+  helperPythonPath = pythonInterpreter;
+  loadBaseDataServiceName = "lx-annotate-load-base-data.service";
+  masterKeyCheckServiceName = "lx-annotate-master-key-check.service";
   emergencyStorageReliefScriptName = "runLxAnnotateEmergencyStorageRelief";
   startScriptName = "lx-annotate-start";
   bootstrapScriptName = "lx-annotate-bootstrap";
@@ -119,15 +119,14 @@ let
   wheelExportFramesCommand = cfg.runtime.commands.exportFrames or "";
   wheelCeleryWorkerCommand = cfg.runtime.commands.celeryWorker or "";
   wheelSapImportCommand = cfg.runtime.commands.sapImport or "";
-  wheelMediaMigrationCommand = cfg.runtime.commands.mediaMigration or "";
   storageReliefScripts = import ./scripts/storage-relief.nix args;
   inherit (storageReliefScripts)
     emergencyStorageReliefConfig
-    emergencyStorageReliefHelper;
-
+    ;
 
   lxAnnotateRuntimeLib = pkgs.writeShellScript "lx-annotate-runtime-lib.sh" ''
         set -euo pipefail
+        umask 027
 
         log() {
           printf '%s\n' "$*"
@@ -152,11 +151,53 @@ let
           export DJANGO_DJANGO_DB_PASSWORD="$DJANGO_DB_PASSWORD"
           lx_annotate_export_secret_key_env
           lx_annotate_export_oidc_env
-          export EXEMPT_URLS="^/accounts/login/$"
-          export LOGIN_URL="/accounts/login/"
-          export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
-          export LX_ANNOTATE_DEFAULT_CENTER="${envDefaultCenter}"
           export LX_ANNOTATE_ENV_FILE="${repoDir}/.env"
+        }
+
+        require_file_backed_master_key() {
+          local key_file="''${LX_ANNOTATE_MASTER_KEY_FILE:-}"
+
+          if [ -n "''${LX_ANNOTATE_MASTER_KEY:-}" ]; then
+            die "LX_ANNOTATE_MASTER_KEY must not be set in production; use the host-owned LX_ANNOTATE_MASTER_KEY_FILE secret handle."
+          fi
+          if [ -z "$key_file" ]; then
+            die "LX_ANNOTATE_MASTER_KEY_FILE is not configured."
+          fi
+          if [ ! -f "$key_file" ] || [ ! -r "$key_file" ] || [ ! -s "$key_file" ]; then
+            die "LX_ANNOTATE_MASTER_KEY_FILE is not a readable, non-empty regular file: $key_file"
+          fi
+
+          "${helperPythonPath}" - "$key_file" <<'PY'
+    import base64
+    import binascii
+    import stat
+    import sys
+    from pathlib import Path
+
+    key_path = Path(sys.argv[1])
+    key_stat = key_path.stat()
+    key_mode = stat.S_IMODE(key_stat.st_mode)
+
+    if key_stat.st_uid != 0:
+        raise SystemExit("Application master key file must be owned by root")
+    if key_mode & 0o020:
+        raise SystemExit("Application master key file must not be group-writable")
+    if key_mode & 0o007:
+        raise SystemExit("Application master key file must not grant access to other users")
+
+    try:
+        encoded_key = key_path.read_text(encoding="ascii").strip()
+        decoded_key = base64.urlsafe_b64decode(encoded_key.encode("ascii"))
+    except (UnicodeDecodeError, ValueError, binascii.Error) as exc:
+        raise SystemExit(
+            "Application master key file must contain URL-safe base64 key material"
+        ) from exc
+
+    if len(decoded_key) not in {16, 24, 32}:
+        raise SystemExit(
+            "Application master key must decode to 16, 24, or 32 bytes"
+        )
+    PY
         }
 
         lx_annotate_activate_runtime() {
@@ -177,7 +218,7 @@ let
           fi
           if [ -n "''${LOCK_HASH:-}" ] && command -v uv >/dev/null 2>&1; then
             previousLockHash="$(cat "$SYNC_STAMP" 2>/dev/null || true)"
-            if [ ! -x "${repoDir}/.devenv/state/venv/bin/python" ] || [ "$LOCK_HASH" != "$previousLockHash" ]; then
+            if [ ! -x "${repoVenvPythonPath}" ] || [ "$LOCK_HASH" != "$previousLockHash" ]; then
               log "uv deps changed or venv missing -> syncing..."
               eval "$SYNC_CMD" || warn "uv sync failed; continuing with existing environment."
               printf '%s\n' "$LOCK_HASH" > "$SYNC_STAMP"
@@ -187,85 +228,53 @@ let
           fi
         }
 
+        lx_annotate_repo_python() {
+          if [ -x "${repoVenvPythonPath}" ]; then
+            printf '%s\n' "${repoVenvPythonPath}"
+            return 0
+          fi
+          if [ -x "${repoLegacyVenvPythonPath}" ]; then
+            printf '%s\n' "${repoLegacyVenvPythonPath}"
+            return 0
+          fi
+          die "lx-annotate repo Python runtime missing. Expected ${repoVenvPythonPath} or ${repoLegacyVenvPythonPath}."
+        }
+
+        lx_annotate_wheel_python() {
+          if [ -x "${wheelVenvPythonPath}" ]; then
+            printf '%s\n' "${wheelVenvPythonPath}"
+            return 0
+          fi
+          die "lx-annotate wheel Python runtime missing. Expected ${wheelVenvPythonPath}."
+        }
+
+        run_django_command_with_python() {
+          local python_bin="$1"
+          shift
+          "$python_bin" -m django "$@" --settings="${envAnnotateDjangoSettingsModule}"
+        }
+
+        run_repo_django_command() {
+          local python_bin
+          python_bin="$(lx_annotate_repo_python)"
+          (
+            cd "${repoDir}"
+            run_django_command_with_python "$python_bin" "$@"
+          )
+        }
+
         ensure_wheel_runtime_installed() {
-          local wheel_hash=""
-          local wheelhouse_path="${optionalString (cfg.runtime.wheelhousePath != null) (toString cfg.runtime.wheelhousePath)}"
-          local wheelhouse_hash="no-wheelhouse"
-          local pip_install_args=""
-          local wheel_install_stamp_file="${runtimeRootPath}/.wheel-install.sha256"
-          local wheel_install_lock_file="${runtimeRootPath}/.wheel-install.lock"
-          local installed_hash=""
-          local canonical_wheel_name=""
-          local staged_wheel_path=""
-          local install_hash=""
-          local wheel_installer_revision="stop-workers-before-wheel-install-v1"
-          local venv_created="false"
-
-          if [ -z "${wheelFilePath}" ]; then
-            die "services.luxnix.lxAnnotateLocal.runtime.wheelPath must be set in wheel mode."
-          fi
-
-          install -d -m 0750 "${runtimeRootPath}" "${runtimeWheelRootPath}" "${runtimeWheelVenvPath}" "${envConfDir}" "${envDataDir}"
-          install -d -m 0775 "${runtimeStaticRootPath}" "${runtimeStaticRootPath}/.vite"
-
-          wheel_hash="$(${pkgs.coreutils}/bin/sha256sum "${wheelFilePath}" | ${pkgs.coreutils}/bin/cut -d ' ' -f1)"
-          canonical_wheel_name="$(${pkgs.coreutils}/bin/basename "${wheelFilePath}" | ${pkgs.gnused}/bin/sed -E 's/^[a-z0-9]{32}-//')"
-          staged_wheel_path="${runtimeRootPath}/$canonical_wheel_name"
-
-          if [ -n "$wheelhouse_path" ]; then
-            if [ ! -d "$wheelhouse_path" ]; then
-              die "Configured runtime.wheelhousePath does not exist: $wheelhouse_path"
-            fi
-            wheelhouse_hash="$((
-              ${pkgs.findutils}/bin/find "$wheelhouse_path" -maxdepth 1 -type f             \( -name '*.whl' -o -name '*.tar.gz' -o -name '*.zip' \) -print0           | ${pkgs.coreutils}/bin/sort -z           | ${pkgs.findutils}/bin/xargs -0 -r ${pkgs.coreutils}/bin/sha256sum
-            ) | ${pkgs.coreutils}/bin/sha256sum | ${pkgs.coreutils}/bin/cut -d ' ' -f1)"
-            pip_install_args="--no-index --find-links $wheelhouse_path"
-          fi
-
-          install_hash="$(
-            printf '%s
-    %s
-    %s
-    %s
-    '           "$wheel_hash"           "$wheelhouse_hash"           "${pythonInterpreter}"           "$wheel_installer_revision"         | ${pkgs.coreutils}/bin/sha256sum         | ${pkgs.coreutils}/bin/cut -d ' ' -f1
-          )"
-
-          exec 9>"$wheel_install_lock_file"
-          ${pkgs.util-linux}/bin/flock 9
-
-          if [ ! -x "${runtimeWheelVenvPath}/bin/python" ]; then
-            "${pythonInterpreter}" -m venv "${runtimeWheelVenvPath}"
-            venv_created="true"
-          fi
-
-          installed_hash="$(${pkgs.coreutils}/bin/cat "$wheel_install_stamp_file" 2>/dev/null || true)"
-
-          if [ "$venv_created" = "true" ] || [ "$install_hash" != "$installed_hash" ]; then
-            ${pkgs.coreutils}/bin/install -m 0640 "${wheelFilePath}" "$staged_wheel_path"
-            # shellcheck disable=SC2086
-            "${runtimeWheelVenvPath}/bin/pip" install --upgrade --force-reinstall $pip_install_args "$staged_wheel_path"
-            printf '%s
-    ' "$install_hash" > "$wheel_install_stamp_file"
-            chmod 0640 "$wheel_install_stamp_file" 2>/dev/null || true
-          fi
-
-          ${pkgs.util-linux}/bin/flock -u 9
-          exec 9>&-
-
-          export PATH="${runtimeWheelVenvPath}/bin:$PATH"
-          export LX_ANNOTATE_WHEEL_VENV="${runtimeWheelVenvPath}"
-          export LX_ANNOTATE_WHEEL_APP_ROOT="${runtimeWheelRootPath}"
-          export WHEEL_INSTALL_HASH="$install_hash"
+          "${effectiveRuntimePackage}/bin/lx-annotate-runtime-ensure"
         }
 
         run_installed_django_command() {
           local python_bin="$1"
           shift
-          "$python_bin" -m django "$@" --settings=lx_annotate.settings.settings_prod
+          run_django_command_with_python "$python_bin" "$@"
         }
 
         repair_known_wheel_schema_drift() {
-          "${runtimeWheelVenvPath}/bin/python" - <<'PY'
+          "${wheelVenvPythonPath}" - <<'PY'
     import django
     from django.apps import apps
     from django.db import connection
@@ -344,90 +353,24 @@ let
         }
 
         emit_common_systemd_env() {
-          # Host-owned values only. lx-annotate derives DATA_DIR, STORAGE_DIR,
-          # PROTECTED_MEDIA_ROOT, and streamable video roots from this contract.
-          cat <<EOF
-    HOME_DIR=${endoreg-service-user-home}
-    LX_ANNOTATE_ENCRYPTED_DATA_DIR=${envDataDir}
-    CONF_DIR=${envConfDir}
-    CONF_TEMPLATE_DIR=${envConfTemplateDir}
-    WORKING_DIR=${repoDir}
-    DJANGO_STATIC_ROOT=${djangoStaticRootPath}
-    ASSET_DIR=${envAssetDir}
-    XDG_DATA_HOME=${runtimeRootPath}
-    LX_ANNOTATE_PACKAGE_VERSION=${packageVersion}
-    ${optionalString (cfg.runtime.masterKeyFile != null) "LX_ANNOTATE_MASTER_KEY_FILE=${toString cfg.runtime.masterKeyFile}"}
-    DJANGO_SECRET_KEY_FILE=${toString cfg.django.djangoSecretKeyFile}
-    DJANGO_DB_ENGINE=django.db.backends.postgresql
-    DJANGO_DB_NAME=${cfg.database.name}
-    DJANGO_DB_USER=${cfg.database.user}
-    DJANGO_DB_PASSWORD_FILE=${envConfDir}/db_pwd
-    DJANGO_DB_HOST=${cfg.database.host}
-    DJANGO_DB_PORT=${toString cfg.database.port}
-    DJANGO_DB_SSLMODE=${cfg.database.sslMode}
-    DJANGO_KEYCLOAK_CLIENT_SECRET_FILE=${toString cfg.django.keycloakSecretFile}
-    OIDC_RP_CLIENT_ID=${cfg.django.keycloakClientId}
-    ENDOREG_DEPLOYMENT_ROLE=${envDeploymentRole}
-    ENDOREG_HUB_MODE=${if cfg.hub.enable then "true" else "false"}
-    ENDOREG_ENABLE_HUB_TRANSFERS=${if cfg.hub.transferApi.enable then "true" else "false"}
-    ENDOREG_HUB_TRANSFER_REQUIRE_SECURE_TRANSPORT=${if cfg.hub.transferApi.requireSecureTransport then "true" else "false"}
-    ENDOREG_HUB_TRANSFER_REQUIRE_MTLS=${if cfg.hub.transferApi.requireMtls then "true" else "false"}
-    ENDOREG_HUB_TRANSFER_MTLS_META_KEY=${cfg.hub.transferApi.mtlsMetaKey}
-    ENDOREG_HUB_TRANSFER_MTLS_META_VALUE=${cfg.hub.transferApi.mtlsMetaValue}
-    CELERY_BROKER_URL=${celeryBrokerUrl}
-    CELERY_DEFAULT_QUEUE=${celeryDefaultQueueName}
-    CELERY_PIPELINE_QUEUE=${celeryPipelineQueueName}
-    CELERY_FRAME_EXTRACTION_QUEUE=${celeryFrameExtractionQueueName}
-    CELERY_FFMPEG_MEDIA_QUEUE=${celeryFfmpegMediaQueueName}
-    CELERY_INFERENCE_QUEUE=${celeryInferenceQueueName}
-    CELERY_TRAINING_QUEUE=${celeryTrainingQueueName}
-    CELERY_MAINTENANCE_QUEUE=${celeryMaintenanceQueueName}
-    CELERY_FRAME_EXTRACTION_REQUIRE_SECURE_TRANSPORT=${if cfg.runtime.celeryBroker.requireSecureTransport then "true" else "false"}
-    CELERY_FFMPEG_MEDIA_REQUIRE_SECURE_TRANSPORT=${if cfg.runtime.celeryBroker.requireSecureTransport then "true" else "false"}
-    CELERY_BROKER_SECURE_TRANSPORT_CONFIRMED=${if cfg.runtime.celeryBroker.secureTransportConfirmed then "true" else "false"}
-    MODEL_TRAINING_JOB_MODE=celery
-    MODEL_TRAINING_STAGING_ROOT=${cfg.runtime.modelTrainingStagingRoot}
-    VIDEO_POST_VALIDATION_JOB_MODE=celery
-    VIDEO_TEMPORAL_INFERENCE_JOB_MODE=celery
-    VIDEO_TEMPORAL_INFERENCE_FRAME_SOURCE_MODE=stream
-    SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
-    REQUESTS_CA_BUNDLE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
-    VITE_ENABLE_DEBUG=${envViteEnableDebug}
-    HTTP_PROTOCOL=${envHttpProtocol}
-    DJANGO_HOST=${envDjangoHost}
-    DJANGO_PORT=${envDjangoPort}
-    BASE_URL=${envBaseUrl}
-    DJANGO_ALLOWED_HOSTS=${envAllowedHosts}
-    ALLOWED_HOSTS=${envAllowedHosts}
-    DJANGO_CORS_ALLOWED_ORIGINS=${envCorsAllowedOrigins}
-    DJANGO_CSRF_TRUSTED_ORIGINS=${envCorsAllowedOrigins}
-    TIME_ZONE=${cfg.django.timeZone}
-    RUN_VIDEO_TESTS=${envRunVideoTests}
-    SKIP_EXPENSIVE_TESTS=${envSkipExpensiveTests}
-    WATCHER_VIDEO_DIR=${runtimeWatcherVideoDirPath}
-    WATCHER_REPORT_DIR=${runtimeWatcherReportDirPath}
-    WATCHER_PREANONYMIZED_DIR=${runtimeWatcherPreanonymizedDirPath}
-    FFMPEG_TRANSCODE_TIMEOUT_SECONDS=${ffmpegTranscodeTimeoutSeconds}
-
-
+          cat <<'EOF'
+    ${commonSystemdEnvText}
     EOF
         }
 
         write_systemd_env_file() {
           install -d -m 0750 "${runtimeRootPath}" "${envDataDir}"
-          emit_common_systemd_env > "${envSystemdFilePath}"
+          if [ ! -s "${envSystemdFilePath}" ]; then
+            emit_common_systemd_env > "${envSystemdFilePath}"
+          fi
           # Legacy compatibility: older app builds read .env.systemd from the data root.
           # Keep both paths aligned to avoid startup failures on stale/corrupted legacy files.
-          emit_common_systemd_env > "${envDataDir}/.env.systemd"
+          cp -f "${envSystemdFilePath}" "${envDataDir}/.env.systemd"
           chmod 0640 "${envSystemdFilePath}" "${envDataDir}/.env.systemd"
         }
 
         write_wheel_systemd_env_file() {
           write_systemd_env_file
-          cat >> "${envSystemdFilePath}" <<EOF
-    TESSDATA_PREFIX=${cfg.runtime.tessdataPrefix}
-    PYTORCH_ALLOC_CONF=${cfg.runtime.pytorchAllocConf}
-    EOF
           cp -f "${envSystemdFilePath}" "${envDataDir}/.env.systemd"
           chmod 0640 "${envSystemdFilePath}" "${envDataDir}/.env.systemd"
         }
@@ -449,7 +392,7 @@ let
             log "Aligning .env with production settings module"
             export DESIRED_SETTINGS_MODULE="${envAnnotateDjangoSettingsModule}"
             export DESIRED_ENVIRONMENT="${envDjangoEnv}"
-            "${pkgs.python3}/bin/python3" "${alignEnvFileScript}"
+            "${helperPythonPath}" "${alignEnvFileScript}"
           else
             warn ".env not found"
           fi
@@ -461,7 +404,7 @@ let
           if [ ! -f "$manifest_path" ]; then
             return 1
           fi
-          main_entry_file="$("${pkgs.python3}/bin/python3" "${viteManifestEntryScript}" "$manifest_path" 2>/dev/null || true)"
+          main_entry_file="$("${helperPythonPath}" "${viteManifestEntryScript}" "$manifest_path" 2>/dev/null || true)"
           if [ -z "$main_entry_file" ]; then
             return 1
           fi
@@ -478,7 +421,7 @@ let
             return 0
           fi
 
-          if [ -s "$manifest_path" ] && "${pkgs.python3}/bin/python3" - "$manifest_path" >/dev/null 2>&1 <<'PY'
+          if [ -s "$manifest_path" ] && "${helperPythonPath}" - "$manifest_path" >/dev/null 2>&1 <<'PY'
     import json
     import pathlib
     import sys
@@ -495,7 +438,7 @@ let
           fi
 
           install -d -m 0775 "$(${pkgs.coreutils}/bin/dirname "$manifest_path")"
-          "${pkgs.python3}/bin/python3" - "$manifest_path" "$main_js" "$main_css" <<'PY'
+          "${helperPythonPath}" - "$manifest_path" "$main_js" "$main_css" <<'PY'
     import json
     from pathlib import Path
     import sys
@@ -577,7 +520,9 @@ let
 
         guarded_hard_reset() {
           local target_ref="$1"
-          : "''${LX_ANNOTATE_ALLOW_DESTRUCTIVE_GIT_RESET:=${if cfg.source.updateOnBoot then "true" else "false"}}"
+          : "''${LX_ANNOTATE_ALLOW_DESTRUCTIVE_GIT_RESET:=${
+            if cfg.source.updateOnBoot then "true" else "false"
+          }}"
           warn "Destructive git reset requested to $target_ref."
           backup_git_state
           if [ "$LX_ANNOTATE_ALLOW_DESTRUCTIVE_GIT_RESET" != "true" ]; then
@@ -714,7 +659,7 @@ let
   lxAnnotatePrepareScript = pkgs.writeShellScriptBin "${prepareScriptName}" ''
     set -euo pipefail
     source "${lxAnnotateRuntimeLib}"
-    mkdir -p "${envConfDir}" "${envDataDir}"
+    install -d -m 0750 "${envConfDir}" "${envDataDir}"
     ensure_runtime_static_root || warn "Failed to prepare runtime static root."
     lx_annotate_export_runtime_env
     lx_annotate_activate_runtime
@@ -755,14 +700,14 @@ let
     lx_annotate_activate_runtime
 
     log "Running database migrations..."
-    python manage.py migrate --noinput
+    run_repo_django_command migrate --noinput
 
     bootstrap_stamp_file="${envConfDir}/.bootstrap-revision"
     current_revision="$(git rev-parse --verify HEAD 2>/dev/null || echo unknown)"
     last_bootstrap_revision="$(cat "$bootstrap_stamp_file" 2>/dev/null || true)"
 
 
-    python manage.py load_base_db_data || warn "load_base_db_data failed; continuing after successful migrations."
+    run_repo_django_command load_base_db_data || warn "load_base_db_data failed; continuing after successful migrations."
 
 
     if [ "$current_revision" != "$last_bootstrap_revision" ]; then
@@ -775,37 +720,85 @@ let
     set -euo pipefail
     source "${lxAnnotateRuntimeLib}"
 
-    if [ "${if useWheelRuntime then "true" else "false"}" = "true" ] && [ -z ${lib.escapeShellArg wheelMediaMigrationCommand} ]; then
-      echo "ERROR: runtime.commands.mediaMigration must be set when wheel mode enables media migration."
-      exit 1
-    fi
-
-    media_storage_args=("$@")
-    if [ "$#" -eq 0 ]; then
-      media_storage_args=(
-        --apply
-        --repeat-until-empty
-        --include-raw
-        --include-processed
-        --include-reports
-        --include-streamable
-        --json
-      )
-    fi
-
-    log "Migrating canonical media into encrypted storage and syncing streamable artifacts..."
+    log "Syncing LX-Annotate video streamable artifacts..."
     if [ "${if useWheelRuntime then "true" else "false"}" = "true" ]; then
       source "${lxAnnotateEnvHelpers}"
       lx_annotate_export_wheel_service_env "${envDataDir}"
       ensure_wheel_runtime_installed
-      media_migration_command=${lib.escapeShellArg wheelMediaMigrationCommand}
-      printf -v media_storage_args_shell '%q ' "''${media_storage_args[@]}"
-      exec "${pkgs.bash}/bin/bash" -lc "$media_migration_command $media_storage_args_shell"
     else
       lx_annotate_export_runtime_env
       lx_annotate_activate_runtime
-      python manage.py migrate_media_storage "''${media_storage_args[@]}"
     fi
+    exec ${effectiveRuntimePackage}/bin/lx-annotate-manage migrate_video_streamable_storage "$@"
+  '';
+
+  runLocalHlsMaterializationScript = pkgs.writeShellScriptBin "${hlsMaterializationScriptName}" ''
+    set -euo pipefail
+    source "${lxAnnotateRuntimeLib}"
+
+    explicit_artifact_kind="false"
+    previous_arg=""
+    for arg in "$@"; do
+      if [ "$previous_arg" = "--artifact-kind" ]; then
+        case "$arg" in
+          raw|processed|both)
+            ;;
+          *)
+            die "runLxAnnotateHlsMaterialization requires --artifact-kind raw, processed, or both."
+            ;;
+        esac
+      fi
+      case "$arg" in
+        --force)
+          die "runLxAnnotateHlsMaterialization refuses --force; use lx-annotate-manage materialize_video_hls manually for audited repair runs."
+          ;;
+        --inline)
+          die "runLxAnnotateHlsMaterialization dispatches queued ffmpeg_media work; use lx-annotate-manage materialize_video_hls manually for inline retries."
+          ;;
+        --artifact-kind)
+          explicit_artifact_kind="true"
+          ;;
+        --artifact-kind=raw|--artifact-kind=processed|--artifact-kind=both)
+          explicit_artifact_kind="true"
+          ;;
+        --artifact-kind=*)
+          die "runLxAnnotateHlsMaterialization requires --artifact-kind raw, processed, or both."
+          ;;
+      esac
+      previous_arg="$arg"
+    done
+
+    if [ "$previous_arg" = "--artifact-kind" ]; then
+      die "runLxAnnotateHlsMaterialization requires a value after --artifact-kind."
+    fi
+
+    if [ "${if useWheelRuntime then "true" else "false"}" = "true" ]; then
+      source "${lxAnnotateEnvHelpers}"
+      lx_annotate_export_wheel_service_env "${envDataDir}"
+      require_file_backed_master_key
+      ensure_wheel_runtime_installed
+    else
+      lx_annotate_export_runtime_env
+      require_file_backed_master_key
+      lx_annotate_activate_runtime
+    fi
+
+    run_hls_materialization() {
+      local artifact_kind="$1"
+      shift
+      log "Dispatching $artifact_kind-video HLS materialization jobs..."
+      ${effectiveRuntimePackage}/bin/lx-annotate-manage materialize_video_hls \
+        --artifact-kind "$artifact_kind" --apply --json "$@"
+    }
+
+    if [ "$explicit_artifact_kind" = "true" ]; then
+      log "Dispatching explicitly selected video HLS materialization jobs..."
+      exec ${effectiveRuntimePackage}/bin/lx-annotate-manage materialize_video_hls --apply --json "$@"
+    fi
+
+    for default_artifact_kind in raw processed; do
+      run_hls_materialization "$default_artifact_kind" "$@"
+    done
   '';
 
   lxAnnotateBootstrapScript = pkgs.writeShellScriptBin "${bootstrapScriptName}" ''
@@ -850,6 +843,7 @@ let
     set -euo pipefail
     source "${lxAnnotateRuntimeLib}"
     lx_annotate_export_runtime_env
+    require_file_backed_master_key
     lx_annotate_activate_runtime
     if ! vite_manifest_points_to_existing_asset "${djangoStaticRootPath}/.vite/manifest.json"; then
       warn "Vite manifest is missing/invalid before server start. Continuing with backend startup."
@@ -862,68 +856,68 @@ let
   '';
 
   runLocalLxAnnotateScript = pkgs.writeShellScriptBin "${scriptName}" ''
-        set -euo pipefail
-        "${lxAnnotateSyncScript}/bin/${syncScriptName}"
-        "${lxAnnotatePrepareScript}/bin/${prepareScriptName}"
-        "${lxAnnotateBuildScript}/bin/${buildScriptName}"
-        "${lxAnnotateMigrateScript}/bin/${migrateScriptName}"
-        exec "${runLocalLxAnnotateStartScript}/bin/${startScriptName}"
-      '';
+    set -euo pipefail
+    "${lxAnnotateSyncScript}/bin/${syncScriptName}"
+    "${lxAnnotatePrepareScript}/bin/${prepareScriptName}"
+    "${lxAnnotateBuildScript}/bin/${buildScriptName}"
+    "${lxAnnotateMigrateScript}/bin/${migrateScriptName}"
+    exec "${runLocalLxAnnotateStartScript}/bin/${startScriptName}"
+  '';
   runLocalMigrateWheelScript = pkgs.writeShellScriptBin "${migrateWheelScriptName}" ''
-        set -euo pipefail
+    set -euo pipefail
 
-        if [ -z ${lib.escapeShellArg wheelMigrateCommand} ]; then
-          echo "ERROR: runtime.commands.migrate must be set when wheel mode uses the migration service."
-          exit 1
-        fi
+    if [ -z ${lib.escapeShellArg wheelMigrateCommand} ]; then
+      echo "ERROR: runtime.commands.migrate must be set when wheel mode uses the migration service."
+      exit 1
+    fi
 
-        source "${lxAnnotateRuntimeLib}"
-        source "${lxAnnotateEnvHelpers}"
-        lx_annotate_export_wheel_service_env "${envDataDir}"
-        ensure_wheel_runtime_installed
-        write_wheel_systemd_env_file
-        export PATH="${runtimeWheelVenvPath}/bin:$PATH"
-        export LX_ANNOTATE_WHEEL_VENV="${runtimeWheelVenvPath}"
-        export LX_ANNOTATE_WHEEL_APP_ROOT="${runtimeWheelRootPath}"
+    source "${lxAnnotateRuntimeLib}"
+    source "${lxAnnotateEnvHelpers}"
+    lx_annotate_export_wheel_service_env "${envDataDir}"
+    ensure_wheel_runtime_installed
+    write_wheel_systemd_env_file
+    export PATH="${runtimeWheelVenvPath}/bin:$PATH"
+    export LX_ANNOTATE_WHEEL_VENV="${runtimeWheelVenvPath}"
+    export LX_ANNOTATE_WHEEL_APP_ROOT="${runtimeWheelRootPath}"
 
-        log "Applying Django migrations for wheel runtime."
-        "${pkgs.bash}/bin/bash" -lc ${lib.escapeShellArg wheelMigrateCommand}
-        repair_known_wheel_schema_drift
-      '';
+    log "Applying Django migrations for wheel runtime."
+    "${pkgs.bash}/bin/bash" -lc ${lib.escapeShellArg wheelMigrateCommand}
+    repair_known_wheel_schema_drift
+  '';
   runLocalLoadBaseDataWheelScript = pkgs.writeShellScriptBin "${loadBaseDataWheelScriptName}" ''
-        set -euo pipefail
+    set -euo pipefail
 
-        if [ -z ${lib.escapeShellArg wheelLoadBaseDataCommand} ]; then
-          echo "ERROR: runtime.commands.loadBaseData must be set when wheel mode uses the base-data service."
-          exit 1
-        fi
+    if [ -z ${lib.escapeShellArg wheelLoadBaseDataCommand} ]; then
+      echo "ERROR: runtime.commands.loadBaseData must be set when wheel mode uses the base-data service."
+      exit 1
+    fi
 
-        source "${lxAnnotateRuntimeLib}"
-        source "${lxAnnotateEnvHelpers}"
-        lx_annotate_export_wheel_service_env "${envDataDir}"
-        ensure_wheel_runtime_installed
-        install_hash="$WHEEL_INSTALL_HASH"
-        write_wheel_systemd_env_file
-        export PATH="${runtimeWheelVenvPath}/bin:$PATH"
-        export LX_ANNOTATE_WHEEL_VENV="${runtimeWheelVenvPath}"
-        export LX_ANNOTATE_WHEEL_APP_ROOT="${runtimeWheelRootPath}"
+    source "${lxAnnotateRuntimeLib}"
+    source "${lxAnnotateEnvHelpers}"
+    lx_annotate_export_wheel_service_env "${envDataDir}"
+    ensure_wheel_runtime_installed
+    install_hash="$WHEEL_INSTALL_HASH"
+    write_wheel_systemd_env_file
+    export PATH="${runtimeWheelVenvPath}/bin:$PATH"
+    export LX_ANNOTATE_WHEEL_VENV="${runtimeWheelVenvPath}"
+    export LX_ANNOTATE_WHEEL_APP_ROOT="${runtimeWheelRootPath}"
 
-        bootstrap_stamp_file="${envConfDir}/.bootstrap-wheel"
-        last_bootstrap_hash="$(${pkgs.coreutils}/bin/cat "$bootstrap_stamp_file" 2>/dev/null || true)"
+    bootstrap_stamp_file="${envConfDir}/.bootstrap-wheel"
+    last_bootstrap_hash="$(${pkgs.coreutils}/bin/cat "$bootstrap_stamp_file" 2>/dev/null || true)"
 
-        if [ "$install_hash" = "$last_bootstrap_hash" ]; then
-          log "Wheel runtime unchanged; skipping base data load."
-          exit 0
-        fi
+    if [ "$install_hash" = "$last_bootstrap_hash" ]; then
+      log "Wheel runtime unchanged; skipping base data load."
+      exit 0
+    fi
 
-        log "Wheel runtime changed; loading base data."
-        if "${pkgs.bash}/bin/bash" -lc ${lib.escapeShellArg wheelLoadBaseDataCommand}; then
-          printf '%s\n' "$install_hash" > "$bootstrap_stamp_file"
-          chmod 600 "$bootstrap_stamp_file" 2>/dev/null || true
-        else
-          warn "load_base_db_data failed; continuing after successful migrations."
-        fi
-      '';
+    log "Wheel runtime changed; loading base data."
+    if "${pkgs.bash}/bin/bash" -lc ${lib.escapeShellArg wheelLoadBaseDataCommand}; then
+      printf '%s\n' "$install_hash" > "$bootstrap_stamp_file"
+      chmod 600 "$bootstrap_stamp_file" 2>/dev/null || true
+    else
+      warn "load_base_db_data failed; continuing after successful migrations."
+    fi
+  '';
   runLocalLxAnnotateWheelScript = pkgs.writeShellScriptBin "${scriptName}" ''
         set -euo pipefail
 
@@ -935,6 +929,7 @@ let
         source "${lxAnnotateRuntimeLib}"
         source "${lxAnnotateEnvHelpers}"
         lx_annotate_export_wheel_service_env "${envDataDir}"
+        require_file_backed_master_key
         ensure_wheel_runtime_installed
 
         write_wheel_systemd_env_file
@@ -980,14 +975,17 @@ let
 
     source "${lxAnnotateRuntimeLib}"
     lx_annotate_export_runtime_env
+    require_file_backed_master_key
     lx_annotate_activate_runtime
 
     cd "${repoDir}"
-    mkdir -p "${runtimeStorageRootPath}" "${runtimeStreamableVideoRootPath}" "${runtimeStreamableVideoRawRootPath}" "${runtimeStreamableVideoProcessedRootPath}"
+    install -d -m 0750 "${runtimeStorageRootPath}" "${runtimeStreamableVideoRootPath}" "${runtimeStreamableVideoRawRootPath}" "${runtimeStreamableVideoProcessedRootPath}"
 
-    python manage.py check --fail-level CRITICAL
-    python manage.py verify_encrypted_storage
-    ${pkgs.curl}/bin/curl --fail --silent --show-error --insecure \
+    run_repo_django_command check --fail-level CRITICAL
+    run_repo_django_command verify_encrypted_storage
+    run_repo_django_command check_production_hls_readiness
+    ${pkgs.curl}/bin/curl --fail --silent --show-error \
+      --cacert "${publicSslCertificatePath}" \
       --resolve "${cfg.django.hostname}:443:127.0.0.1" \
       "https://${cfg.django.hostname}/static/.vite/manifest.json" >/dev/null
 
@@ -996,6 +994,7 @@ let
   watcherScriptName = "runLocalFileWatcher";
   runLocalFileWatcherScript = pkgs.writeShellScriptBin "${watcherScriptName}" ''
     set -euo pipefail
+    umask 027
 
     # 1. Go to the repo (Cloned by the main boot service)
     cd "${repoDir}"
@@ -1009,7 +1008,6 @@ let
     lx_annotate_export_encryption_env
     lx_annotate_export_db_env
     lx_annotate_export_secret_key_env
-    export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
     export LX_ANNOTATE_FILEWATCHER_ARGS="--process-existing-once"
     ${devenvSyncCompatExports}
 
@@ -1024,6 +1022,7 @@ let
   '';
   runLocalFileWatcherWheelScript = pkgs.writeShellScriptBin "${watcherScriptName}" ''
     set -euo pipefail
+    umask 027
 
     if [ -z ${lib.escapeShellArg wheelFileWatcherOnceCommand} ]; then
       echo "ERROR: runtime.commands.fileWatcherOnce or runtime.commands.fileWatcher must be set when wheel mode enables the watcher service."
@@ -1035,7 +1034,7 @@ let
     export LX_ANNOTATE_FILEWATCHER_ARGS="--process-existing-once"
     export PATH="${runtimeWheelVenvPath}/bin:$PATH"
 
-    if [ ! -x "${runtimeWheelVenvPath}/bin/python" ]; then
+    if [ ! -x "${wheelVenvPythonPath}" ]; then
       echo "ERROR: Wheel virtualenv missing at ${runtimeWheelVenvPath}."
       exit 1
     fi
@@ -1050,26 +1049,13 @@ let
   celeryFfmpegWorkerScriptName = "runLocalCeleryFfmpegWorker";
   celeryInferenceWorkerScriptName = "runLocalCeleryInferenceWorker";
   celeryTrainingWorkerScriptName = "runLocalCeleryTrainingWorker";
-  celeryWorkerResourceEnv = ''
-    export OMP_NUM_THREADS="1"
-    export OPENBLAS_NUM_THREADS="1"
-    export MKL_NUM_THREADS="1"
-    export NUMEXPR_NUM_THREADS="1"
-    export MALLOC_ARENA_MAX="2"
-  '';
-  celeryPostValidationEnv = ''
-    export VIDEO_POST_VALIDATION_JOB_MODE="celery"
-  '';
+  celeryPostValidationEnv = "";
   celeryInferenceEnv = ''
-    export VIDEO_TEMPORAL_INFERENCE_JOB_MODE="celery"
-    export VIDEO_TEMPORAL_INFERENCE_FRAME_SOURCE_MODE="stream"
     ${optionalString (cfg.runtime.inferenceWorker.cudaVisibleDevices != null) ''
       export CUDA_VISIBLE_DEVICES="${cfg.runtime.inferenceWorker.cudaVisibleDevices}"
     ''}
   '';
   celeryTrainingEnv = ''
-    export MODEL_TRAINING_JOB_MODE="celery"
-    export MODEL_TRAINING_STAGING_ROOT="${cfg.runtime.modelTrainingStagingRoot}"
     export CUDA_VISIBLE_DEVICES="${cfg.runtime.trainingWorker.cudaVisibleDevices}"
   '';
   mkRepoCeleryWorkerScript =
@@ -1082,6 +1068,7 @@ let
     }:
     pkgs.writeShellScriptBin "${scriptName}" ''
       set -euo pipefail
+      umask 027
 
       cd "${repoDir}"
 
@@ -1091,9 +1078,8 @@ let
       lx_annotate_export_encryption_env
       lx_annotate_export_db_env
       lx_annotate_export_secret_key_env
-      export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
       ${extraEnv}
-      ${celeryWorkerResourceEnv}
+      ${celeryWorkerResourceShellExportText}
       ${devenvSyncCompatExports}
 
       celery_worker_args=(
@@ -1119,6 +1105,7 @@ let
     }:
     pkgs.writeShellScriptBin "${scriptName}" ''
       set -euo pipefail
+      umask 027
 
       if [ -z ${lib.escapeShellArg wheelCeleryWorkerCommand} ]; then
         echo "ERROR: runtime.commands.celeryWorker must be set when wheel mode enables the Celery worker service."
@@ -1129,10 +1116,10 @@ let
       source "${lxAnnotateEnvHelpers}"
       lx_annotate_export_wheel_service_env "${envDataDir}"
       ${extraEnv}
-      ${celeryWorkerResourceEnv}
+      ${celeryWorkerResourceShellExportText}
       export PATH="${runtimeWheelVenvPath}/bin:$PATH"
 
-      if [ ! -x "${runtimeWheelVenvPath}/bin/python" ]; then
+      if [ ! -x "${wheelVenvPythonPath}" ]; then
         echo "ERROR: Wheel virtualenv missing at ${runtimeWheelVenvPath}."
         exit 1
       fi
@@ -1242,43 +1229,52 @@ let
 
     source "${lxAnnotateRuntimeLib}"
     ensure_wheel_runtime_installed
-    mkdir -p "${runtimeStorageRootPath}" "${runtimeStreamableVideoRootPath}" "${runtimeStreamableVideoRawRootPath}" "${runtimeStreamableVideoProcessedRootPath}"
+    require_file_backed_master_key
+    install -d -m 0750 "${runtimeStorageRootPath}" "${runtimeStreamableVideoRootPath}" "${runtimeStreamableVideoRawRootPath}" "${runtimeStreamableVideoProcessedRootPath}"
 
-    run_installed_django_command "${runtimeWheelVenvPath}/bin/python" check --fail-level CRITICAL
-    run_installed_django_command "${runtimeWheelVenvPath}/bin/python" verify_encrypted_storage
-    ${pkgs.curl}/bin/curl --fail --silent --show-error --insecure \
+    run_installed_django_command "${wheelVenvPythonPath}" check --fail-level CRITICAL
+    run_installed_django_command "${wheelVenvPythonPath}" verify_encrypted_storage
+    run_installed_django_command "${wheelVenvPythonPath}" check_production_hls_readiness
+    ${pkgs.curl}/bin/curl --fail --silent --show-error \
+      --cacert "${publicSslCertificatePath}" \
       --resolve "${cfg.django.hostname}:443:127.0.0.1" \
       "https://${cfg.django.hostname}/static/.vite/manifest.json" >/dev/null
 
     log "lx-annotate acceptance checks passed."
   '';
-  runLocalMasterKeyCheckWheelScript = pkgs.writeShellScriptBin "${masterKeyCheckScriptName}" ''
+  runLocalMasterKeyCheckScript = pkgs.writeShellScriptBin "${masterKeyCheckScriptName}" ''
     set -euo pipefail
 
-    source "${lxAnnotateEnvHelpers}"
-    lx_annotate_export_wheel_service_env "${envDataDir}"
-
-    if [ -z "''${LX_ANNOTATE_MASTER_KEY_FILE:-}" ] || [ ! -r "$LX_ANNOTATE_MASTER_KEY_FILE" ] || [ ! -s "$LX_ANNOTATE_MASTER_KEY_FILE" ]; then
-      echo "ERROR: LX_ANNOTATE_MASTER_KEY_FILE is not configured, readable, and non-empty; refusing to boot without validating encrypted storage."
-      exit 1
-    fi
-
     source "${lxAnnotateRuntimeLib}"
-    ensure_wheel_runtime_installed
-    mkdir -p "${runtimeStorageRootPath}" "${runtimeStreamableVideoRootPath}" "${runtimeStreamableVideoRawRootPath}" "${runtimeStreamableVideoProcessedRootPath}"
+    if [ "${if useWheelRuntime then "true" else "false"}" = "true" ]; then
+      source "${lxAnnotateEnvHelpers}"
+      lx_annotate_export_wheel_service_env "${envDataDir}"
+      require_file_backed_master_key
+      ensure_wheel_runtime_installed
+    else
+      lx_annotate_export_runtime_env
+      require_file_backed_master_key
+      lx_annotate_activate_runtime
+    fi
+    install -d -m 0750 "${runtimeStorageRootPath}" "${runtimeStreamableVideoRootPath}" "${runtimeStreamableVideoRawRootPath}" "${runtimeStreamableVideoProcessedRootPath}"
 
-    run_installed_django_command "${runtimeWheelVenvPath}/bin/python" verify_encrypted_storage
+    if [ "${if useWheelRuntime then "true" else "false"}" = "true" ]; then
+      run_installed_django_command "${wheelVenvPythonPath}" verify_encrypted_storage
+    else
+      run_repo_django_command verify_encrypted_storage
+    fi
 
     log "lx-annotate application master key check passed."
   '';
   sapImportScriptName = "runLocalSapImport";
   sapImportScriptBody = ''
     set -euo pipefail
+    umask 027
 
     sap_drop_dir="${runtimeSapImportDirPath}"
     sap_processed_dir="${runtimeSapImportProcessedDirPath}"
     sap_failed_dir="${runtimeSapImportFailedDirPath}"
-    mkdir -p "$sap_drop_dir" "$sap_processed_dir" "$sap_failed_dir" "${runtimeWatcherPreanonymizedDirPath}"
+    install -d -m 0770 "$sap_drop_dir" "$sap_processed_dir" "$sap_failed_dir" "${runtimeWatcherPreanonymizedDirPath}"
 
     wait_for_stable_zip() {
       local file_path="$1"
@@ -1328,25 +1324,21 @@ let
     done
   '';
   runLocalSapImportScript = pkgs.writeShellScriptBin "${sapImportScriptName}" ''
-        source "${lxAnnotateEnvHelpers}"
-        lx_annotate_export_base_env
-        lx_annotate_export_storage_env "${envDataDir}"
-        lx_annotate_export_encryption_env
-        lx_annotate_export_db_env
-        lx_annotate_export_secret_key_env
-        export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
-        ${devenvSyncCompatExports}
+    source "${lxAnnotateEnvHelpers}"
+    source "${lxAnnotateRuntimeLib}"
+    lx_annotate_export_base_env
+    lx_annotate_export_storage_env "${envDataDir}"
+    lx_annotate_export_encryption_env
+    lx_annotate_export_db_env
+    lx_annotate_export_secret_key_env
+    ${devenvSyncCompatExports}
 
-        sap_import_one() {
-          cd "${repoDir}"
-          VENV_PYTHON="${repoDir}/.devenv/state/venv/bin/python"
-          if [ ! -x "$VENV_PYTHON" ]; then
-            echo "ERROR: repo venv missing at $VENV_PYTHON"
-            return 1
-          fi
+    sap_import_one() {
+      cd "${repoDir}"
+      VENV_PYTHON="$(lx_annotate_repo_python)"
 
-          secretspec run --provider env "$VENV_PYTHON" manage.py import_sap_ish_zip "$1" --output_dir "${runtimeWatcherPreanonymizedDirPath}"
-        }
+      secretspec run --provider env "$VENV_PYTHON" manage.py import_sap_ish_zip "$1" --output_dir "${runtimeWatcherPreanonymizedDirPath}"
+    }
 
     ${sapImportScriptBody}
   '';
@@ -1374,6 +1366,7 @@ let
   '';
   runLocalExportFramesScript = pkgs.writeShellScriptBin "${exportFramesScriptName}" ''
     set -euo pipefail
+    umask 027
 
     # 1. Go to the repo (Cloned by the main boot service)
     cd "${repoDir}"
@@ -1394,7 +1387,7 @@ let
 
     # 4. Ensure target directory exists
     exportFramesDir="$exportFramesStorageRoot/export/frames"
-    mkdir -p "$exportFramesDir"
+    install -d -m 0750 "$exportFramesDir"
 
     # 5. Run export inside devenv shell
     if [ -f Makefile ] && command -v devenv >/dev/null 2>&1; then
@@ -1407,6 +1400,7 @@ let
   '';
   runLocalExportFramesWheelScript = pkgs.writeShellScriptBin "${exportFramesScriptName}" ''
     set -euo pipefail
+    umask 027
 
     if [ -z ${lib.escapeShellArg wheelExportFramesCommand} ]; then
       echo "ERROR: runtime.commands.exportFrames must be set when wheel mode enables the export service."
@@ -1424,7 +1418,7 @@ let
     export STORAGE_DIR="$exportFramesStorageRoot/storage"
     export DATA_DIR="$exportFramesStorageRoot"
 
-    mkdir -p "$exportFramesStorageRoot/export/frames"
+    install -d -m 0750 "$exportFramesStorageRoot/export/frames"
 
     if [ ! -x "${runtimeWheelVenvPath}/bin/python" ]; then
       echo "ERROR: Wheel virtualenv missing at ${runtimeWheelVenvPath}."
@@ -1438,16 +1432,22 @@ let
 
   runLocalDataRecoveryScript = pkgs.writeShellScriptBin "runLxAnnotateDataRecovery" ''
         set -euo pipefail
+        umask 027
         target_dir="${envDataDir}"
         resolved_target_dir="$(${pkgs.coreutils}/bin/realpath -m "$target_dir")"
         marker_dir="$target_dir/logs"
         marker_file="$marker_dir/data_recovery_complete"
         repair_marker_file="$marker_dir/data_migration_repair_latest.log"
+        # Bump this when managed-payload repair gains new eligibility or encryption semantics.
+        repair_revision="v2"
+        repair_completion_marker_file="$marker_dir/managed_payload_repair_$repair_revision"
         state_file="${cfg.dataRecovery.stateFile}"
         state_dir="$(${pkgs.coreutils}/bin/dirname "$state_file")"
         previous_effective_dir=""
         use_wheel_runtime="${if useWheelRuntime then "true" else "false"}"
-        mkdir -p "$target_dir" "$marker_dir" "$state_dir"
+        force_data_recovery="''${LX_ANNOTATE_FORCE_DATA_RECOVERY:-false}"
+        force_managed_payload_repair="''${LX_ANNOTATE_FORCE_MANAGED_PAYLOAD_REPAIR:-false}"
+        install -d -m 0750 "$target_dir" "$marker_dir" "$state_dir"
 
         if [ -f "$state_file" ]; then
           previous_effective_dir="$(${pkgs.gnugrep}/bin/grep '^LAST_EFFECTIVE_DATA_DIR=' "$state_file" | ${pkgs.coreutils}/bin/tail -n 1 | ${pkgs.coreutils}/bin/cut -d= -f2- || true)"
@@ -1460,19 +1460,35 @@ let
         fi
 
         recovery_already_current=false
-        # Heavy data recovery is a one-time operation for a data root.  A successful
-        # repair marker is required before skipping, so interrupted/corrupt repair
-        # runs still fail closed and retry before the app starts.
+        # Heavy legacy recovery is one-time work for a data root. It must not use the
+        # payload-repair marker: repair logic can improve after legacy recovery is done.
         if [ "$resolved_previous_effective_dir" = "$resolved_target_dir" ] \
           && [ -f "$marker_file" ] \
-          && ${pkgs.gnugrep}/bin/grep -q '^completed_at=' "$marker_file" \
-          && [ -f "$repair_marker_file" ] \
-          && ${pkgs.gnugrep}/bin/grep -q '^completed_at=' "$repair_marker_file"; then
+          && ${pkgs.gnugrep}/bin/grep -q '^completed_at=' "$marker_file"; then
           recovery_already_current=true
         fi
 
-        if [ "$recovery_already_current" = "true" ] && [ "''${LX_ANNOTATE_FORCE_DATA_RECOVERY:-false}" != "true" ]; then
-          echo "Data recovery already completed for $resolved_target_dir; skipping heavy recovery and managed payload repair."
+        repair_already_current=false
+        if [ -f "$repair_completion_marker_file" ] \
+          && ${pkgs.gnugrep}/bin/grep -qx "repair_revision=$repair_revision" "$repair_completion_marker_file" \
+          && ${pkgs.gnugrep}/bin/grep -q '^completed_at=' "$repair_completion_marker_file"; then
+          repair_already_current=true
+        fi
+
+        run_heavy_recovery=true
+        if [ "$recovery_already_current" = "true" ] && [ "$force_data_recovery" != "true" ]; then
+          run_heavy_recovery=false
+        fi
+
+        run_managed_payload_repair=true
+        if [ "$run_heavy_recovery" = "false" ] \
+          && [ "$repair_already_current" = "true" ] \
+          && [ "$force_managed_payload_repair" != "true" ]; then
+          run_managed_payload_repair=false
+        fi
+
+        if [ "$run_heavy_recovery" = "false" ] && [ "$run_managed_payload_repair" = "false" ]; then
+          echo "Data recovery and managed payload repair revision $repair_revision are already current for $resolved_target_dir."
           exit 0
         fi
 
@@ -1486,20 +1502,11 @@ let
         lx_annotate_export_secret_key_env
         lx_annotate_export_oidc_env
 
-        export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
-        export WORKING_DIR="${runtimeWorkingDir}"
-        export HOME_DIR="${endoreg-service-user-home}"
-        export XDG_DATA_HOME="${runtimeRootPath}"
-        export LX_ANNOTATE_ENCRYPTED_DATA_DIR="${envDataDir}"
-        export LX_ANNOTATE_DEFAULT_CENTER="${envDefaultCenter}"
-        export TESSDATA_PREFIX="${cfg.runtime.tessdataPrefix}"
-        export PYTORCH_ALLOC_CONF="${cfg.runtime.pytorchAllocConf}"
-
         if [ "$use_wheel_runtime" = "true" ]; then
           ensure_wheel_runtime_installed
-          if [ -x "${runtimeWheelVenvPath}/bin/python" ]; then
+          if [ -x "${wheelVenvPythonPath}" ]; then
             echo "Applying Django migrations before data recovery helper commands."
-            run_installed_django_command "${runtimeWheelVenvPath}/bin/python" migrate --noinput
+            run_installed_django_command "${wheelVenvPythonPath}" migrate --noinput
           fi
         fi
 
@@ -1542,12 +1549,14 @@ let
         run_installed_django_command() {
           local helper_python="$1"
           shift
-          "$helper_python" -m django "$@" --settings=lx_annotate.settings.settings_prod
+          run_django_command_with_python "$helper_python" "$@"
         }
 
         write_repair_failure() {
           local repair_output="$1"
+          ${pkgs.coreutils}/bin/rm -f "$repair_completion_marker_file"
           {
+            printf 'repair_revision=%s\n' "$repair_revision"
             printf 'failed_at=%s\n' "$(${pkgs.coreutils}/bin/date --iso-8601=seconds)"
             printf 'target_dir=%s\n' "$target_dir"
             printf '%s\n' "$repair_output"
@@ -1561,6 +1570,10 @@ let
           local helper_python="$1"
           local repair_output=""
           local has_master_key="false"
+          local repair_completion_tmp="$repair_completion_marker_file.tmp"
+
+          # A forced retry must not leave an old successful revision marker behind.
+          ${pkgs.coreutils}/bin/rm -f "$repair_completion_marker_file"
 
           if [ -z "$helper_python" ] || [ ! -x "$helper_python" ]; then
             echo "Skipping managed payload repair; helper python unavailable." | ${pkgs.coreutils}/bin/tee "$repair_marker_file"
@@ -1594,15 +1607,33 @@ let
           fi
 
           {
+            printf 'repair_revision=%s\n' "$repair_revision"
             printf 'completed_at=%s\n' "$(${pkgs.coreutils}/bin/date --iso-8601=seconds)"
             printf 'target_dir=%s\n' "$target_dir"
             printf '%s\n' "$repair_output"
           } > "$repair_marker_file"
           chmod 0640 "$repair_marker_file"
-          echo "Managed payload repair marker written to $repair_marker_file"
+          {
+            printf 'repair_revision=%s\n' "$repair_revision"
+            printf 'completed_at=%s\n' "$(${pkgs.coreutils}/bin/date --iso-8601=seconds)"
+            printf 'target_dir=%s\n' "$target_dir"
+          } > "$repair_completion_tmp"
+          ${pkgs.coreutils}/bin/mv "$repair_completion_tmp" "$repair_completion_marker_file"
+          chmod 0640 "$repair_completion_marker_file"
+          echo "Managed payload repair revision $repair_revision completed; log=$repair_marker_file marker=$repair_completion_marker_file"
           return 0
         }
 
+        migration_helper_python=""
+        if [ "$use_wheel_runtime" = "true" ]; then
+          if [ -x "${wheelVenvPythonPath}" ]; then
+            migration_helper_python="${wheelVenvPythonPath}"
+          fi
+        elif [ -f "${repoDir}/scripts/migrate_data_dir.py" ] && [ -x "${repoVenvPythonPath}" ]; then
+          migration_helper_python="${repoVenvPythonPath}"
+        fi
+
+        if [ "$run_heavy_recovery" = "true" ]; then
         if [ -n "$previous_effective_dir" ]; then
           if [ "$resolved_previous_effective_dir" != "$resolved_target_dir" ]; then
             sync_source_dir "$previous_effective_dir" "previous effective data dir"
@@ -1611,15 +1642,6 @@ let
           fi
         else
           echo "No previous effective data dir recorded in $state_file"
-        fi
-
-        migration_helper_python=""
-        if [ "$use_wheel_runtime" = "true" ]; then
-          if [ -x "${runtimeWheelVenvPath}/bin/python" ]; then
-            migration_helper_python="${runtimeWheelVenvPath}/bin/python"
-          fi
-        elif [ -f "${repoDir}/scripts/migrate_data_dir.py" ] && [ -x "${repoDir}/.devenv/state/venv/bin/python" ]; then
-          migration_helper_python="${repoDir}/.devenv/state/venv/bin/python"
         fi
 
         if [ -n "$migration_helper_python" ]; then
@@ -1652,15 +1674,17 @@ let
           sync_source_dir "${cfg.dataRecovery.legacyMediaDir}" "legacy media"
         fi
 
-        repair_managed_runtime_payloads "$migration_helper_python"
-
         if [ -n "$migration_helper_python" ]; then
           echo "Marking migration-created upload job source files as cleanup-eligible after data recovery."
           if [ "$use_wheel_runtime" = "true" ]; then
-            run_installed_django_command "$migration_helper_python" migration_mark_eligible --apply
+            run_installed_django_command "$migration_helper_python" migration_mark_eligible --apply || {
+              echo "WARNING: migration_mark_eligible failed; continuing data recovery startup path." >&2
+            }
           else
             cd "${repoDir}"
-            "$migration_helper_python" "${repoDir}/manage.py" migration_mark_eligible --apply
+            "$migration_helper_python" "${repoDir}/manage.py" migration_mark_eligible --apply || {
+              echo "WARNING: migration_mark_eligible failed; continuing data recovery startup path." >&2
+            }
           fi
 
           echo "Backfilling cleanup eligibility for failed/quarantined delete-after-success upload jobs."
@@ -1693,7 +1717,9 @@ let
         updated += 1
 
     print(f"updated_failed_upload_jobs={updated}")
-    '
+    ' || {
+              echo "WARNING: failed upload-job cleanup eligibility backfill failed; continuing data recovery startup path." >&2
+            }
           else
             cd "${repoDir}"
             "$migration_helper_python" "${repoDir}/manage.py" shell -c '
@@ -1724,15 +1750,21 @@ let
         updated += 1
 
     print(f"updated_failed_upload_jobs={updated}")
-    '
+    ' || {
+              echo "WARNING: failed upload-job cleanup eligibility backfill failed; continuing data recovery startup path." >&2
+            }
           fi
 
           echo "Reaping upload job source files after data recovery."
           if [ "$use_wheel_runtime" = "true" ]; then
-            run_installed_django_command "$migration_helper_python" reap_upload_job_sources
+            run_installed_django_command "$migration_helper_python" reap_upload_job_sources || {
+              echo "WARNING: reap_upload_job_sources failed; continuing data recovery startup path." >&2
+            }
           else
             cd "${repoDir}"
-            "$migration_helper_python" "${repoDir}/manage.py" reap_upload_job_sources
+            "$migration_helper_python" "${repoDir}/manage.py" reap_upload_job_sources || {
+              echo "WARNING: reap_upload_job_sources failed; continuing data recovery startup path." >&2
+            }
           fi
         else
           echo "Skipping upload job source reaping; Django helper python unavailable."
@@ -1748,102 +1780,130 @@ let
         printf 'completed_at=%s\n' "$(${pkgs.coreutils}/bin/date --iso-8601=seconds)" > "$marker_file"
         chmod 0640 "$marker_file"
         echo "Data recovery marker written to $marker_file"
+        else
+          echo "Data recovery already completed for $resolved_target_dir; skipping heavy legacy recovery."
+        fi
+
+        if [ "$run_managed_payload_repair" = "true" ]; then
+          repair_managed_runtime_payloads "$migration_helper_python" || {
+            echo "WARNING: Managed payload repair failed; continuing startup so the application can serve existing data." >&2
+          }
+        else
+          echo "Managed payload repair revision $repair_revision is already current; skipping."
+        fi
   '';
 
   runLocalDataCleanupScript = pkgs.writeShellScriptBin "runLxAnnotateDataCleanup" ''
-        set -euo pipefail
+    set -euo pipefail
+    umask 027
 
-        runtime_root="${envDataDir}"
-        archive_root="${cfg.dataCleanup.archiveDir}"
-        marker_dir="$runtime_root/logs"
-        marker_file="$marker_dir/data_cleanup_latest.log"
+    runtime_root="${envDataDir}"
+    archive_root="${cfg.dataCleanup.archiveDir}"
+    persisting_mount="${config.roles.endoreg-client.paths.storagePersistingMountPoint}"
+    marker_dir="$runtime_root/logs"
+    marker_file="$marker_dir/data_cleanup_latest.log"
 
-        mkdir -p "$marker_dir"
+    install -d -m 0750 "$marker_dir"
 
-        if [ ! -d "$runtime_root" ]; then
-          echo "Skipping cleanup; runtime root missing: $runtime_root"
-          exit 0
+    if [ ! -d "$runtime_root" ]; then
+      echo "Skipping cleanup; runtime root missing: $runtime_root"
+      exit 0
+    fi
+
+    if ! ${pkgs.util-linux}/bin/mountpoint -q "$persisting_mount"; then
+      echo "ERROR: refusing cleanup because persisting storage is not a mounted filesystem: $persisting_mount" >&2
+      exit 1
+    fi
+
+    resolved_mount="$(${pkgs.coreutils}/bin/realpath -m "$persisting_mount")"
+    resolved_archive="$(${pkgs.coreutils}/bin/realpath -m "$archive_root")"
+    case "$resolved_archive/" in
+      "$resolved_mount/"*) ;;
+      *)
+        echo "ERROR: refusing cleanup because archive is outside the persisting mount: $resolved_archive" >&2
+        exit 1
+        ;;
+    esac
+    ${pkgs.coreutils}/bin/install -d -m 0750 "$archive_root"
+    if [ "$(${pkgs.util-linux}/bin/findmnt -n -o TARGET --target "$resolved_archive" 2>/dev/null || true)" != "$resolved_mount" ]; then
+      echo "ERROR: refusing cleanup because archive does not resolve to the configured persisting mount: $resolved_archive" >&2
+      exit 1
+    fi
+
+    install -d -m 0750 "$archive_root"
+
+    moved_count=0
+    skipped_count=0
+
+    move_duplicate_tree() {
+      local source_root="$1"
+      local runtime_target_root="$2"
+      local label="$3"
+
+      if [ ! -d "$source_root" ]; then
+        echo "Skipping $label source; directory not present: $source_root"
+        return 0
+      fi
+
+      while IFS= read -r -d "" source_file; do
+        local rel_path runtime_file archive_file archive_dir
+
+        rel_path="''${source_file#"$source_root"/}"
+        runtime_file="$runtime_target_root/$rel_path"
+        if [ ! -f "$runtime_file" ]; then
+          skipped_count=$((skipped_count + 1))
+          continue
         fi
 
-        if [ ! -d "${config.roles.endoreg-client.paths.storagePersistingMountPoint}" ]; then
-          echo "Skipping cleanup; persisting storage mount missing: ${config.roles.endoreg-client.paths.storagePersistingMountPoint}"
-          exit 0
+        if ! ${pkgs.diffutils}/bin/cmp -s "$source_file" "$runtime_file"; then
+          skipped_count=$((skipped_count + 1))
+          continue
         fi
 
-        mkdir -p "$archive_root"
+        archive_file="$archive_root/$label/$rel_path"
+        archive_dir="$(${pkgs.coreutils}/bin/dirname "$archive_file")"
+        ${pkgs.coreutils}/bin/install -d -m 0750 "$archive_dir"
 
-        moved_count=0
-        skipped_count=0
-
-        move_duplicate_tree() {
-          local source_root="$1"
-          local runtime_target_root="$2"
-          local label="$3"
-
-          if [ ! -d "$source_root" ]; then
-            echo "Skipping $label source; directory not present: $source_root"
-            return 0
+        if [ -e "$archive_file" ]; then
+          if ${pkgs.diffutils}/bin/cmp -s "$source_file" "$archive_file"; then
+            ${pkgs.coreutils}/bin/rm -f "$source_file"
+          else
+            archive_file="$archive_file.$(${pkgs.coreutils}/bin/date +%s)"
+            ${pkgs.coreutils}/bin/mv "$source_file" "$archive_file"
           fi
+        else
+          ${pkgs.coreutils}/bin/mv "$source_file" "$archive_file"
+        fi
 
-          while IFS= read -r -d "" source_file; do
-            local rel_path runtime_file archive_file archive_dir
+        moved_count=$((moved_count + 1))
+      done < <(${pkgs.findutils}/bin/find "$source_root" -type f -print0)
 
-            rel_path="''${source_file#"$source_root"/}"
-            runtime_file="$runtime_target_root/$rel_path"
-            if [ ! -f "$runtime_file" ]; then
-              skipped_count=$((skipped_count + 1))
-              continue
-            fi
+      ${pkgs.findutils}/bin/find "$source_root" -depth -type d -empty -delete || true
+    }
 
-            if ! ${pkgs.diffutils}/bin/cmp -s "$source_file" "$runtime_file"; then
-              skipped_count=$((skipped_count + 1))
-              continue
-            fi
+    move_duplicate_tree "${cfg.dataCleanup.legacyProcessedReportDir}" "${cfg.dataCleanup.runtimeProcessedReportDir}" "legacy-data/${processedReportDirName}"
+    move_duplicate_tree "${cfg.dataCleanup.legacyProcessedVideoDir}" "${cfg.dataCleanup.runtimeProcessedVideoDir}" "legacy-data/${processedVideoDirName}"
+    move_duplicate_tree "${cfg.dataCleanup.legacyMediaProcessedReportDir}" "${cfg.dataCleanup.runtimeProcessedReportDir}" "legacy-media/${processedReportDirName}"
+    move_duplicate_tree "${cfg.dataCleanup.legacyMediaProcessedVideoDir}" "${cfg.dataCleanup.runtimeProcessedVideoDir}" "legacy-media/${processedVideoDirName}"
 
-            archive_file="$archive_root/$label/$rel_path"
-            archive_dir="$(${pkgs.coreutils}/bin/dirname "$archive_file")"
-            ${pkgs.coreutils}/bin/mkdir -p "$archive_dir"
+    {
+      printf 'completed_at=%s\n' "$(${pkgs.coreutils}/bin/date --iso-8601=seconds)"
+      printf 'runtime_root=%s\n' "$runtime_root"
+      printf 'archive_root=%s\n' "$archive_root"
+      printf 'moved_count=%s\n' "$moved_count"
+      printf 'skipped_count=%s\n' "$skipped_count"
+    } > "$marker_file"
 
-            if [ -e "$archive_file" ]; then
-              if ${pkgs.diffutils}/bin/cmp -s "$source_file" "$archive_file"; then
-                ${pkgs.coreutils}/bin/rm -f "$source_file"
-              else
-                archive_file="$archive_file.$(${pkgs.coreutils}/bin/date +%s)"
-                ${pkgs.coreutils}/bin/mv "$source_file" "$archive_file"
-              fi
-            else
-              ${pkgs.coreutils}/bin/mv "$source_file" "$archive_file"
-            fi
+    chmod 0640 "$marker_file"
 
-            moved_count=$((moved_count + 1))
-          done < <(${pkgs.findutils}/bin/find "$source_root" -type f -print0)
-
-          ${pkgs.findutils}/bin/find "$source_root" -depth -type d -empty -delete || true
-        }
-
-        move_duplicate_tree "${cfg.dataCleanup.legacyProcessedReportDir}" "${cfg.dataCleanup.runtimeProcessedReportDir}" "legacy-data/${processedReportDirName}"
-        move_duplicate_tree "${cfg.dataCleanup.legacyProcessedVideoDir}" "${cfg.dataCleanup.runtimeProcessedVideoDir}" "legacy-data/${processedVideoDirName}"
-        move_duplicate_tree "${cfg.dataCleanup.legacyMediaProcessedReportDir}" "${cfg.dataCleanup.runtimeProcessedReportDir}" "legacy-media/${processedReportDirName}"
-        move_duplicate_tree "${cfg.dataCleanup.legacyMediaProcessedVideoDir}" "${cfg.dataCleanup.runtimeProcessedVideoDir}" "legacy-media/${processedVideoDirName}"
-
-        {
-          printf 'completed_at=%s\n' "$(${pkgs.coreutils}/bin/date --iso-8601=seconds)"
-          printf 'runtime_root=%s\n' "$runtime_root"
-          printf 'archive_root=%s\n' "$archive_root"
-          printf 'moved_count=%s\n' "$moved_count"
-          printf 'skipped_count=%s\n' "$skipped_count"
-        } > "$marker_file"
-
-        chmod 0640 "$marker_file"
-
-        echo "Cleanup completed. moved=$moved_count skipped=$skipped_count archive=$archive_root"
-      '';
+    echo "Cleanup completed. moved=$moved_count skipped=$skipped_count archive=$archive_root"
+  '';
 
   runLocalEmergencyStorageReliefScript = pkgs.writeShellScriptBin "${emergencyStorageReliefScriptName}" ''
         set -euo pipefail
 
         json_log() {
-          "${pkgs.python3}/bin/python3" - "$1" "$2" <<-'PY'
+          "${helperPythonPath}" - "$1" "$2" <<-'PY'
     import json
     import sys
     print(json.dumps({
@@ -1855,9 +1915,17 @@ let
         }
 
         external_mount_point=${lib.escapeShellArg cfg.storageRelief.externalMountPoint}
-        expected_device_id=${lib.escapeShellArg (if cfg.storageRelief.expectedDeviceId == null then "" else cfg.storageRelief.expectedDeviceId)}
+        expected_device_id=${
+          lib.escapeShellArg (
+            if cfg.storageRelief.expectedDeviceId == null then "" else cfg.storageRelief.expectedDeviceId
+          )
+        }
         expected_device_part=${lib.escapeShellArg cfg.storageRelief.expectedDevicePart}
-        expected_fs_uuid=${lib.escapeShellArg (if cfg.storageRelief.expectedFsUuid == null then "" else cfg.storageRelief.expectedFsUuid)}
+        expected_fs_uuid=${
+          lib.escapeShellArg (
+            if cfg.storageRelief.expectedFsUuid == null then "" else cfg.storageRelief.expectedFsUuid
+          )
+        }
 
         if [ "${if cfg.storageRelief.requireExternalMount then "true" else "false"}" = "true" ]; then
           if [ -z "$expected_device_id" ] && [ -z "$expected_fs_uuid" ]; then
@@ -1908,11 +1976,11 @@ let
           source "${lxAnnotateEnvHelpers}"
           lx_annotate_export_wheel_service_env "${envDataDir}"
           ensure_wheel_runtime_installed
-          helper_python="${runtimeWheelVenvPath}/bin/python"
+          helper_python="${wheelVenvPythonPath}"
         else
           lx_annotate_export_runtime_env
           lx_annotate_activate_runtime
-          helper_python="$(command -v python)"
+          helper_python="$(lx_annotate_repo_python)"
         fi
 
         if [ ! -x "$helper_python" ]; then
@@ -1920,8 +1988,8 @@ let
           exit 1
         fi
 
-        exec "$helper_python" "${emergencyStorageReliefHelper}" --config "${emergencyStorageReliefConfig}"
-      '';
+        exec ${effectiveRuntimePackage}/bin/lx-annotate-manage emergency_storage_relief --config "${emergencyStorageReliefConfig}"
+  '';
 
   hubBackupScripts = import ./scripts/hub-backup.nix args;
   inherit (hubBackupScripts) runLocalHubBackupScript;
@@ -1929,7 +1997,8 @@ let
   encryptedDataScripts = import ./scripts/encrypted-data.nix args;
   inherit (encryptedDataScripts)
     lxAnnotateEncryptedDataMountScript
-    lxAnnotateEncryptedDataUmountScript;
+    lxAnnotateEncryptedDataUmountScript
+    ;
 
 in
 {
@@ -1952,7 +2021,21 @@ in
       migrateWheelScriptName
       watcherScriptName
       sapImportScriptName
-      migrateVideoStreamableStorageScriptName;
+      migrateVideoStreamableStorageScriptName
+      hlsMaterializationScriptName
+      ;
+  };
+
+  serviceOrdering = {
+    fileMoverAfter = [
+      loadBaseDataServiceName
+      masterKeyCheckServiceName
+    ];
+    fileMoverWants = [ loadBaseDataServiceName ];
+    fileMoverRequires = [
+      loadBaseDataServiceName
+      masterKeyCheckServiceName
+    ];
   };
 
   packages = {
@@ -1962,6 +2045,7 @@ in
       lxAnnotateBuildScript
       lxAnnotateMigrateScript
       lxAnnotateMigrateVideoStreamableStorageScript
+      runLocalHlsMaterializationScript
       lxAnnotateBootstrapScript
       runLocalLxAnnotateStartScript
       runLocalLxAnnotateScript
@@ -1970,7 +2054,7 @@ in
       runLocalLxAnnotateWheelScript
       runLocalAcceptanceScript
       runLocalAcceptanceWheelScript
-      runLocalMasterKeyCheckWheelScript
+      runLocalMasterKeyCheckScript
       runLocalCeleryFrameExtractionWorkerScript
       runLocalCeleryFrameExtractionWorkerWheelScript
       runLocalCeleryFfmpegWorkerScript
@@ -1994,6 +2078,7 @@ in
       runLocalEmergencyStorageReliefScript
       runLocalHubBackupScript
       lxAnnotateEncryptedDataMountScript
-      lxAnnotateEncryptedDataUmountScript;
+      lxAnnotateEncryptedDataUmountScript
+      ;
   };
 }

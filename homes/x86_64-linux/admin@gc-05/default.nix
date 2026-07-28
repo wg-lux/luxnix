@@ -5,7 +5,6 @@ cli.programs.git.allowedSigners = "";
 cli.programs.git.enable = true;
 cli.programs.ssh.keychain.keys = [];
 desktops.plasma.enable = true;
-luxnix.generic-settings.configurationPath = "dev/luxnix";
 luxnix.generic-settings.language = "english";
 luxnix.generic-settings.enable = true;
 luxnix.generic-settings.hostPlatform = "x86_64-linux";

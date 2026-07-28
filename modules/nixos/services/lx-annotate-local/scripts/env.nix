@@ -1,20 +1,36 @@
-args@{ lib, ... }:
-with lib;
-with lib.luxnix;
-with args;
+{
+  config,
+  lib,
+  pkgs,
+  cfg,
+  lxAnnotateRuntime,
+  effectivePackageVersion ? lxAnnotateRuntime.runtime.packageVersion,
+  packageStaticRoot ? lxAnnotateRuntime.paths.djangoStaticRootPath,
+  runtimeLdLibraryPath ? "",
+  ...
+}:
 let
+  inherit (lib)
+    concatStringsSep
+    escapeShellArg
+    mapAttrsToList
+    optionalAttrs
+    optionalString
+    ;
+
   runtime = lxAnnotateRuntime;
   inherit (runtime.identities)
     endoreg-service-user-home
     ;
   inherit (runtime.paths)
     runtimeRootPath
-    repoDir
     runtimeWatcherVideoDirPath
     runtimeWatcherReportDirPath
     runtimeWatcherPreanonymizedDirPath
+    runtimeStreamableVideoRootPath
+    runtimeStreamableVideoRawRootPath
+    runtimeStreamableVideoProcessedRootPath
     runtimeWorkingDir
-    djangoStaticRootPath
     envDataDir
     envConfDir
     envConfTemplateDir
@@ -27,7 +43,6 @@ let
     envCorsAllowedOrigins
     envDefaultCenter
     envDeploymentRole
-    envDjangoHost
     envDjangoModule
     envDjangoPort
     envHttpProtocol
@@ -35,7 +50,19 @@ let
     envSkipExpensiveTests
     envViteEnableDebug
     ;
-  inherit (runtime.runtime) packageVersion;
+
+  boolString = value: if value then "true" else "false";
+  streamableStorageProfile = "fs_encrypted_streaming";
+
+  renderSystemdEnvLine =
+    name: value:
+    let
+      escapedValue = lib.replaceStrings [ "\\" "\"" ] [ "\\\\" "\\\"" ] (toString value);
+    in
+    ''${name}="${escapedValue}"'';
+
+  renderShellExport = name: value: "export ${name}=${escapeShellArg (toString value)}";
+  renderShellExports = env: concatStringsSep "\n" (mapAttrsToList renderShellExport env);
 in
 rec {
   celeryBrokerUrl =
@@ -56,80 +83,153 @@ rec {
   celeryFfmpegMediaQueueName = "ffmpeg_media";
   celeryInferenceQueueName = "inference";
   celeryTrainingQueueName = "model_training";
+  celeryLlmInferenceQueueName = "llm_inference";
   celeryMaintenanceQueueName = "maintenance";
+  celeryHubTransferQueueName = "hub_transfer";
   ffmpegTranscodeTimeoutSeconds = "86400";
+
+  # This is the lx-annotate environment contract. Config modules, systemd
+  # EnvironmentFiles, and shell wrappers render from this attrset.
+  commonEnv = {
+    HOME_DIR = endoreg-service-user-home;
+    CONF_DIR = envConfDir;
+    CONF_TEMPLATE_DIR = envConfTemplateDir;
+    WORKING_DIR = runtimeWorkingDir;
+    ASSET_DIR = envAssetDir;
+    XDG_DATA_HOME = runtimeRootPath;
+    LX_ANNOTATE_ENCRYPTED_DATA_DIR = envDataDir;
+    WATCHER_VIDEO_DIR = runtimeWatcherVideoDirPath;
+    WATCHER_REPORT_DIR = runtimeWatcherReportDirPath;
+    WATCHER_PREANONYMIZED_DIR = runtimeWatcherPreanonymizedDirPath;
+    DJANGO_HOST = "127.0.0.1";
+    DJANGO_PORT = envDjangoPort;
+    DJANGO_STATIC_ROOT = packageStaticRoot;
+    ALLOWED_HOSTS = envAllowedHosts;
+    DJANGO_ALLOWED_HOSTS = envAllowedHosts;
+    DJANGO_CORS_ALLOWED_ORIGINS = envCorsAllowedOrigins;
+    DJANGO_CSRF_TRUSTED_ORIGINS = envCorsAllowedOrigins;
+    DJANGO_DB_ENGINE = "django.db.backends.postgresql";
+    DJANGO_DB_NAME = cfg.database.name;
+    DJANGO_DB_USER = cfg.database.user;
+    DJANGO_DB_HOST = cfg.database.host;
+    DJANGO_DB_PORT = toString cfg.database.port;
+    DJANGO_DB_SSLMODE = cfg.database.sslMode;
+    DB_PWD_FILE = "${envConfDir}/db_pwd";
+    DJANGO_DB_PASSWORD_FILE = "${envConfDir}/db_pwd";
+    DJANGO_SECRET_KEY_FILE = toString cfg.django.djangoSecretKeyFile;
+    DJANGO_KEYCLOAK_CLIENT_SECRET_FILE = toString cfg.django.keycloakSecretFile;
+    DJANGO_KEYCLOAK_CLIENT_ID = cfg.django.keycloakClientId;
+    OIDC_RP_CLIENT_ID = cfg.django.keycloakClientId;
+    DJANGO_MODULE = envDjangoModule;
+    DJANGO_SETTINGS_MODULE_DEVELOPMENT = "lx_annotate.settings.settings_dev";
+    CENTRAL_NODE = envCentralNodeFlag;
+    BASE_URL = envBaseUrl;
+    ENFORCE_AUTH = "1";
+    EXEMPT_URLS = "^/accounts/login/$";
+    LOGIN_URL = "/accounts/login/";
+    VITE_ENABLE_DEBUG = envViteEnableDebug;
+    HTTP_PROTOCOL = envHttpProtocol;
+    TIME_ZONE = cfg.django.timeZone;
+    RUN_VIDEO_TESTS = envRunVideoTests;
+    SKIP_EXPENSIVE_TESTS = envSkipExpensiveTests;
+    FFMPEG_TRANSCODE_TIMEOUT_SECONDS = ffmpegTranscodeTimeoutSeconds;
+    MEDIA_OPERATION_STREAM_LEASE_SECONDS = "300";
+    SERVE_WITH_NGINX = boolString cfg.runtime.streamableServing.nginxOffload;
+    NGINX_PROTECTED_MEDIA_URL = cfg.runtime.streamableServing.protectedMediaUrl;
+    LX_ANNOTATE_DEFAULT_CENTER = envDefaultCenter;
+    ENDOREG_DEPLOYMENT_ROLE = envDeploymentRole;
+    ENDOREG_STORAGE_PROFILE = streamableStorageProfile;
+    ENDOREG_HUB_MODE = boolString cfg.hub.enable;
+    ENDOREG_ENABLE_HUB_TRANSFERS = boolString cfg.hub.transferApi.enable;
+    ENDOREG_HUB_TRANSFER_REQUIRE_SECURE_TRANSPORT = boolString cfg.hub.transferApi.requireSecureTransport;
+    ENDOREG_HUB_TRANSFER_REQUIRE_MTLS = boolString cfg.hub.transferApi.requireMtls;
+    ENDOREG_HUB_TRANSFER_MTLS_META_KEY = cfg.hub.transferApi.mtlsMetaKey;
+    ENDOREG_HUB_TRANSFER_MTLS_META_VALUE = cfg.hub.transferApi.mtlsMetaValue;
+    ENDOREG_HUB_TRANSFER_MAX_UPLOAD_BYTES = toString cfg.hub.transferApi.maxUploadBytes;
+    LX_ANNOTATE_HUB_EXPORT_AUTO_QUEUE = boolString cfg.hub.outboundTransfer.enable;
+    LX_ANNOTATE_HUB_EXPORT_REQUIRE_MTLS = boolString cfg.hub.outboundTransfer.requireMtls;
+    LX_ANNOTATE_HUB_EXPORT_STALE_AFTER_SECONDS = toString cfg.hub.outboundTransfer.staleAfterSeconds;
+    LX_ANNOTATE_HUB_EXPORT_MAX_RETRIES = toString cfg.hub.outboundTransfer.maxRetries;
+    CELERY_BROKER_URL = celeryBrokerUrl;
+    CELERY_DEFAULT_QUEUE = celeryDefaultQueueName;
+    CELERY_PIPELINE_QUEUE = celeryPipelineQueueName;
+    CELERY_FRAME_EXTRACTION_QUEUE = celeryFrameExtractionQueueName;
+    CELERY_FFMPEG_MEDIA_QUEUE = celeryFfmpegMediaQueueName;
+    CELERY_INFERENCE_QUEUE = celeryInferenceQueueName;
+    CELERY_TRAINING_QUEUE = celeryTrainingQueueName;
+    CELERY_LLM_INFERENCE_QUEUE = celeryLlmInferenceQueueName;
+    CELERY_MAINTENANCE_QUEUE = celeryMaintenanceQueueName;
+    CELERY_HUB_TRANSFER_QUEUE = celeryHubTransferQueueName;
+    CELERY_FRAME_EXTRACTION_REQUIRE_SECURE_TRANSPORT = boolString cfg.runtime.celeryBroker.requireSecureTransport;
+    CELERY_FFMPEG_MEDIA_REQUIRE_SECURE_TRANSPORT = boolString cfg.runtime.celeryBroker.requireSecureTransport;
+    CELERY_BROKER_SECURE_TRANSPORT_CONFIRMED = boolString cfg.runtime.celeryBroker.secureTransportConfirmed;
+    MODEL_TRAINING_JOB_MODE = "celery";
+    MODEL_TRAINING_STAGING_ROOT = cfg.runtime.modelTrainingStagingRoot;
+    VIDEO_POST_VALIDATION_JOB_MODE = "celery";
+    VIDEO_TEMPORAL_INFERENCE_JOB_MODE = "celery";
+    VIDEO_TEMPORAL_INFERENCE_FRAME_SOURCE_MODE = "stream";
+    TESSDATA_PREFIX = cfg.runtime.tessdataPrefix;
+    PYTORCH_ALLOC_CONF = cfg.runtime.pytorchAllocConf;
+    LD_LIBRARY_PATH = runtimeLdLibraryPath;
+    SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+    REQUESTS_CA_BUNDLE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+    LX_ANNOTATE_PACKAGE_VERSION = effectivePackageVersion;
+    LX_ANNOTATE_STREAMABLE_VIDEO_ROOT = runtimeStreamableVideoRootPath;
+    LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT = runtimeStreamableVideoRawRootPath;
+    LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT = runtimeStreamableVideoProcessedRootPath;
+  }
+  // optionalAttrs (cfg.runtime.masterKeyFile != null) {
+    LX_ANNOTATE_MASTER_KEY_FILE = toString cfg.runtime.masterKeyFile;
+  }
+  // optionalAttrs (cfg.hub.outboundTransfer.clientCertificateFile != null) {
+    LX_ANNOTATE_HUB_EXPORT_CLIENT_CERT_FILE = toString cfg.hub.outboundTransfer.clientCertificateFile;
+  }
+  // optionalAttrs (cfg.hub.outboundTransfer.clientKeyFile != null) {
+    LX_ANNOTATE_HUB_EXPORT_CLIENT_KEY_FILE = toString cfg.hub.outboundTransfer.clientKeyFile;
+  }
+  // optionalAttrs (cfg.hub.outboundTransfer.caFile != null) {
+    LX_ANNOTATE_HUB_EXPORT_CA_FILE = toString cfg.hub.outboundTransfer.caFile;
+  }
+  // optionalAttrs (cfg.hub.outboundTransfer.sourceNodeSecretFile != null) {
+    LX_ANNOTATE_HUB_SOURCE_NODE_SECRET_FILE = toString cfg.hub.outboundTransfer.sourceNodeSecretFile;
+  }
+  // cfg.runtime.extraEnvironment;
+
+  commonSystemdEnvText = concatStringsSep "\n" (mapAttrsToList renderSystemdEnvLine commonEnv);
+  commonShellExportText = renderShellExports commonEnv;
+
+  celeryWorkerResourceEnv = {
+    CELERY_LOG_LEVEL = "INFO";
+    OMP_NUM_THREADS = "1";
+    OPENBLAS_NUM_THREADS = "1";
+    MKL_NUM_THREADS = "1";
+    NUMEXPR_NUM_THREADS = "1";
+    MALLOC_ARENA_MAX = "2";
+  };
+  celeryWorkerResourceShellExportText = renderShellExports celeryWorkerResourceEnv;
+
+  llmInferenceWorkerEnv = {
+    REPORT_LLM_JOB_MODE = "celery";
+    LLM_ENABLED = "true";
+    LLM_PROVIDER = "ollama";
+    LLM_MODEL = "lx-gemma4-e2b-json";
+    LLM_BASE_URL = "http://127.0.0.1:11434";
+    LLM_TIMEOUT = "120";
+  };
 
   lxAnnotateEnvHelpers = pkgs.writeShellScript "lx-annotate-env-helpers.sh" ''
     lx_annotate_export_base_env() {
-      export DJANGO_SECRET_KEY_FILE="${cfg.django.djangoSecretKeyFile}"
-      export OIDC_RP_CLIENT_ID="${cfg.django.keycloakClientId}"
+      ${commonShellExportText}
       OIDC_CLIENT_SECRET_VALUE="$(tr -d '\n' < "${cfg.django.keycloakSecretFile}" 2>/dev/null || true)"
       export OIDC_RP_CLIENT_SECRET="$OIDC_CLIENT_SECRET_VALUE"
-      export CONF_DIR="${envConfDir}"
-      export CONF_TEMPLATE_DIR="${envConfTemplateDir}"
-      export WORKING_DIR="${repoDir}"
-      export HOME_DIR="${endoreg-service-user-home}"
-      export DB_PWD_FILE="${envConfDir}/db_pwd"
-      export DJANGO_DB_PASSWORD_FILE="${envConfDir}/db_pwd"
-
-      export DJANGO_MODULE="${envDjangoModule}"
-      export DJANGO_SETTINGS_MODULE_DEVELOPMENT="lx_annotate.settings.settings_dev"
-      export CENTRAL_NODE="${envCentralNodeFlag}"
-      export HTTP_PROTOCOL="${envHttpProtocol}"
-      export DJANGO_HOST="${envDjangoHost}"
-      export DJANGO_PORT="${envDjangoPort}"
-      export BASE_URL="${envBaseUrl}"
-      export TIME_ZONE="${cfg.django.timeZone}"
-      export RUN_VIDEO_TESTS="${envRunVideoTests}"
-      export SKIP_EXPENSIVE_TESTS="${envSkipExpensiveTests}"
-      export VITE_ENABLE_DEBUG="${envViteEnableDebug}"
-      export LX_ANNOTATE_PACKAGE_VERSION="${packageVersion}"
-      export ENDOREG_DEPLOYMENT_ROLE="${envDeploymentRole}"
-      export ENDOREG_HUB_MODE="${if cfg.hub.enable then "true" else "false"}"
-      export ENDOREG_ENABLE_HUB_TRANSFERS="${if cfg.hub.transferApi.enable then "true" else "false"}"
-      export ENDOREG_HUB_TRANSFER_REQUIRE_SECURE_TRANSPORT="${
-        if cfg.hub.transferApi.requireSecureTransport then "true" else "false"
-      }"
-      export ENDOREG_HUB_TRANSFER_REQUIRE_MTLS="${
-        if cfg.hub.transferApi.requireMtls then "true" else "false"
-      }"
-      export ENDOREG_HUB_TRANSFER_MTLS_META_KEY="${cfg.hub.transferApi.mtlsMetaKey}"
-      export ENDOREG_HUB_TRANSFER_MTLS_META_VALUE="${cfg.hub.transferApi.mtlsMetaValue}"
-      export CELERY_BROKER_URL="${celeryBrokerUrl}"
-      export CELERY_DEFAULT_QUEUE="${celeryDefaultQueueName}"
-      export CELERY_PIPELINE_QUEUE="${celeryPipelineQueueName}"
-      export CELERY_FRAME_EXTRACTION_QUEUE="${celeryFrameExtractionQueueName}"
-      export CELERY_FFMPEG_MEDIA_QUEUE="${celeryFfmpegMediaQueueName}"
-      export CELERY_INFERENCE_QUEUE="${celeryInferenceQueueName}"
-      export CELERY_TRAINING_QUEUE="${celeryTrainingQueueName}"
-      export CELERY_MAINTENANCE_QUEUE="${celeryMaintenanceQueueName}"
-      export CELERY_FRAME_EXTRACTION_REQUIRE_SECURE_TRANSPORT="${
-        if cfg.runtime.celeryBroker.requireSecureTransport then "true" else "false"
-      }"
-      export CELERY_FFMPEG_MEDIA_REQUIRE_SECURE_TRANSPORT="${
-        if cfg.runtime.celeryBroker.requireSecureTransport then "true" else "false"
-      }"
-      export CELERY_BROKER_SECURE_TRANSPORT_CONFIRMED="${
-        if cfg.runtime.celeryBroker.secureTransportConfirmed then "true" else "false"
-      }"
-      export MODEL_TRAINING_JOB_MODE="celery"
-      export MODEL_TRAINING_STAGING_ROOT="${cfg.runtime.modelTrainingStagingRoot}"
-      export VIDEO_POST_VALIDATION_JOB_MODE="celery"
-      export VIDEO_TEMPORAL_INFERENCE_JOB_MODE="celery"
-      export VIDEO_TEMPORAL_INFERENCE_FRAME_SOURCE_MODE="stream"
-      export SSL_CERT_FILE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
-      export REQUESTS_CA_BUNDLE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
-
-      export DJANGO_ALLOWED_HOSTS="${envAllowedHosts}"
-      export ALLOWED_HOSTS="${envAllowedHosts}"
-      export DJANGO_CORS_ALLOWED_ORIGINS="${envCorsAllowedOrigins}"
-      export DJANGO_CSRF_TRUSTED_ORIGINS="${envCorsAllowedOrigins}"
-      export FFMPEG_TRANSCODE_TIMEOUT_SECONDS="${ffmpegTranscodeTimeoutSeconds}"
     }
 
     lx_annotate_export_storage_env() {
       local data_root="$1"
       export LX_ANNOTATE_ENCRYPTED_DATA_DIR="$data_root"
+      export LX_ANNOTATE_STREAMABLE_VIDEO_ROOT="$data_root/storage/streamable_videos"
+      export LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT="$data_root/storage/streamable_videos/raw"
+      export LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT="$data_root/storage/streamable_videos/processed"
       export WATCHER_VIDEO_DIR="${runtimeWatcherVideoDirPath}"
       export WATCHER_REPORT_DIR="${runtimeWatcherReportDirPath}"
       export WATCHER_PREANONYMIZED_DIR="${runtimeWatcherPreanonymizedDirPath}"
@@ -181,15 +281,7 @@ rec {
       export DJANGO_DJANGO_DB_PASSWORD="$DJANGO_DB_PASSWORD"
       lx_annotate_export_secret_key_env
       lx_annotate_export_oidc_env
-      export EXEMPT_URLS="^/accounts/login/$"
-      export LOGIN_URL="/accounts/login/"
-      export DJANGO_STATIC_ROOT="${djangoStaticRootPath}"
       export WORKING_DIR="${runtimeWorkingDir}"
-      export HOME_DIR="${endoreg-service-user-home}"
-      export XDG_DATA_HOME="${runtimeRootPath}"
-      export LX_ANNOTATE_DEFAULT_CENTER="${envDefaultCenter}"
-      export TESSDATA_PREFIX="${cfg.runtime.tessdataPrefix}"
-      export PYTORCH_ALLOC_CONF="${cfg.runtime.pytorchAllocConf}"
     }
   '';
 }

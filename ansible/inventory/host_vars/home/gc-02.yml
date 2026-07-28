@@ -5,6 +5,7 @@ host_home_cli:
 
 host_home_luxnix:
   luxnix.generic-settings.enable: true
+  luxnix.generic-settings.configurationPath: "dev/luxnix"
   luxnix.generic-settings.hostPlatform: '"x86_64-linux"'
   luxnix.generic-settings.language: "german"
 

@@ -176,15 +176,6 @@ class MergedHostVars(BaseModel):
 
         return mergerd_vars
 
-    def _is_aglnet_host(self):
-        is_aglnet_host = False
-        for role_name in (self.group_roles or {}).keys():
-            if "aglnet.host" in role_name:
-                if (self.group_roles or {}).get(role_name) == "true":
-                    is_aglnet_host = True
-                    break
-        return is_aglnet_host
-
     def prepare_roles(self, logger=None):
         role_configs: Dict[str, Any] = {}
         # merge group_roles and host_roles

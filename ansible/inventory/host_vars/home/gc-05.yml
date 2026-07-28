@@ -1,3 +1,6 @@
+host_home_cli:
+  cli.programs.ssh.keychain.keys: []
+
 host_home_luxnix:
   luxnix.generic-settings.enable: true
   luxnix.generic-settings.hostPlatform: '"x86_64-linux"'

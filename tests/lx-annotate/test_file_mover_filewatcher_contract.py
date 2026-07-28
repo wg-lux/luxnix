@@ -28,12 +28,25 @@ def _nix_script_body(source: str, marker: str) -> str:
     return source[body_start:body_end]
 
 
+def _tmpfiles_declares_dir(
+    tmpfiles: list[str], path: str, mode: str, user: str, group: str
+) -> bool:
+    return any(
+        rule in tmpfiles
+        for rule in (
+            f'd "{path}" {mode} {user} {group} -',
+            f"d {path} {mode} {user} {group} - -",
+        )
+    )
+
+
 def _file_mover_host_matrix() -> dict[str, Any]:
     return _nix_eval_expr_json(
         """
         let
           flake = builtins.getFlake "git+file:///home/admin/luxnix";
           lib = flake.inputs.nixpkgs.lib;
+          envList = env: lib.mapAttrsToList (name: value: "${name}=${toString value}") env;
           hostNames = builtins.attrNames flake.nixosConfigurations;
           fileMoverEnabledHosts = lib.filter
             (hostName:
@@ -73,11 +86,16 @@ def _file_mover_host_matrix() -> dict[str, Any]:
                 fileMoverPathConfig =
                   cfg.systemd.paths.move-my-files.pathConfig;
                 transcodeVideoCommand =
-                  lxCfg.runtime.commands.transcodeVideo or null;
+                  cfg.services.luxnix.fileMover.videoTranscodeFallback.command;
+                transcodeEnvironmentScript =
+                  cfg.services.luxnix.fileMover.videoTranscodeFallback.environmentScript;
                 inherit hasWatcherService hasWatcherPath;
                 fileWatcherServiceConfig =
                   if hasWatcherService then
                     cfg.systemd.services."lx-annotate-filewatcher".serviceConfig
+                    // {
+                      Environment = envList cfg.systemd.services."lx-annotate-filewatcher".environment;
+                    }
                   else
                     {};
                 fileWatcherPathConfig =
@@ -146,6 +164,7 @@ def test_all_file_mover_hosts_publish_into_filewatcher_intake_contract() -> None
         assert contract["hasWatcherPath"], host_name
         assert transcode_command is not None, host_name
         assert "transcode_video" in transcode_command, host_name
+        assert "LD_LIBRARY_PATH=" in contract["transcodeEnvironmentScript"], host_name
 
         watcher_config = contract["fileWatcherServiceConfig"]
         watcher_path = contract["fileWatcherPathConfig"]
@@ -184,7 +203,7 @@ def test_all_file_mover_hosts_publish_into_filewatcher_intake_contract() -> None
             resolved["preanonymized"],
             resolved["sap"],
         ):
-            assert f'd "{path}" 0770 {user} {group} -' in tmpfiles, host_name
+            assert _tmpfiles_declares_dir(tmpfiles, path, "0770", user, group), host_name
 
 
 def test_file_mover_path_triggers_only_on_operator_source_dirs() -> None:
@@ -256,7 +275,23 @@ def test_tmpfiles_create_file_mover_handoff_dirs_with_service_ownership() -> Non
         resolved["preanonymized"],
         resolved["sap"],
     ):
-        assert f'd "{path}" 0770 {user} {group} -' in tmpfiles
+        assert _tmpfiles_declares_dir(tmpfiles, path, "0770", user, group)
+
+
+def test_gc10_file_mover_transcode_fallback_exports_runtime_library_path() -> None:
+    env_script = _nix_eval_expr_json(
+        """
+        let
+          flake = builtins.getFlake "git+file:///home/admin/luxnix";
+          cfg = flake.nixosConfigurations.gc-10.config;
+        in
+          cfg.services.luxnix.fileMover.videoTranscodeFallback.environmentScript
+        """
+    )
+
+    assert "LD_LIBRARY_PATH=" in env_script
+    assert "-gcc-" in env_script
+    assert "-lib/lib" in env_script
 
 
 def test_file_mover_stages_before_publishing_and_deletes_only_after_success() -> None:
@@ -280,34 +315,88 @@ def test_file_mover_stages_before_publishing_and_deletes_only_after_success() ->
 
 def test_file_mover_quarantines_unreadable_inputs_in_failed_input_dirs() -> None:
     source = FILE_MOVER_SOURCE.read_text(encoding="utf-8")
-    failed_input_base = (
-        'failedInputBaseDir = "${endoregPaths.storageBaseDir}/failed_input";'
-    )
     quarantine_call = (
         'quarantine_unreadable_files "$source_dir" "$quarantine_dir" "$label"'
     )
 
-    assert failed_input_base in source
+    assert 'default = "${endoregPaths.storageBaseDir}/failed_input/video";' in source
+    assert 'default = "${endoregPaths.storageBaseDir}/failed_input/pdf";' in source
     assert "quarantine_unreadable_files()" in source
     assert 'quarantine_target="\'\'${quarantine_dir}/' in source
     assert '/bin/mv -f "$unreadable_file" "$quarantine_target"' in source
     assert quarantine_call in source
 
 
+def test_file_mover_quarantines_symlink_inputs_without_dereferencing() -> None:
+    source = FILE_MOVER_SOURCE.read_text(encoding="utf-8")
+    process_body = source[
+        source.index("        process_input_dir() {") :
+        source.index("        # Rsync with retry logic is not needed here")
+    ]
+    symlink_call = (
+        'quarantine_symlink_entries "$source_dir" "$quarantine_dir" "$label"'
+    )
+    unreadable_call = (
+        'quarantine_unreadable_files "$source_dir" "$quarantine_dir" "$label"'
+    )
+
+    assert "quarantine_symlink_entries()" in source
+    assert "-type l -exec ${pkgs.coreutils}/bin/chgrp -h" in source
+    assert 'find "$source_dir" -mindepth 1 ! -type l ! -group' in source
+    assert "Quarantining instead of dereferencing" in source
+    assert "/bin/mv -f \"$symlink_entry\" \"$quarantine_target\"" in source
+    assert process_body.index(symlink_call) < process_body.index(unreadable_call)
+
+
 def test_file_mover_video_validation_reports_permission_and_ffprobe_failures() -> None:
     source = FILE_MOVER_SOURCE.read_text(encoding="utf-8")
     validation_body = source[
         source.index("        validate_video_sources() {") :
-        source.index("        export_lx_annotate_transcode_env() {")
+        source.index("        export_video_transcode_fallback_env() {")
     ]
 
     assert '[ ! -r "$video_file" ]' in validation_body
-    assert "not readable by ${endoregServiceUserName}" in validation_body
+    assert "not readable by ${serviceUserName}" in validation_body
     assert "ffprobe rejected it" in validation_body
     assert "ffprobe_error_summary" in validation_body
     assert "2>&1 >/dev/null" in validation_body
     assert ">/dev/null 2>&1" not in validation_body
     assert 'return "$validation_status"' in validation_body
+
+
+def test_file_mover_quarantines_stale_ffprobe_rejected_videos() -> None:
+    source = FILE_MOVER_SOURCE.read_text(encoding="utf-8")
+    validation_body = source[
+        source.index("        validate_video_sources() {") :
+        source.index("        export_video_transcode_fallback_env() {")
+    ]
+    wait_body = source[
+        source.index("        wait_for_input_ready() {") :
+        source.index("        quarantine_unreadable_files() {")
+    ]
+    process_body = source[
+        source.index("        process_input_dir() {") :
+        source.index("        # Rsync with retry logic is not needed here")
+    ]
+
+    assert "ffprobe_reject_grace_seconds=1800" in wait_body
+    assert 'local quarantine_dir="$2"' in wait_body
+    assert 'local label="$3"' in wait_body
+    assert (
+        'validate_video_sources "$source_dir" "$quarantine_dir" '
+        '"$ffprobe_reject_grace_seconds"'
+    ) in wait_body
+    assert 'wait_for_input_ready "$source_dir" "$quarantine_dir" "$label"' in process_body
+    assert 'file_age=$((now_epoch - file_ctime))' in validation_body
+    assert 'if [ "$file_age" -ge "$ffprobe_reject_grace_seconds" ]; then' in validation_body
+    assert 'quarantine_target="\'\'${quarantine_dir}/' in validation_body
+    assert '/bin/mv -f "$video_file" "$quarantine_target"' in validation_body
+    assert "Failed to quarantine ffprobe-rejected video input" in validation_body
+    assert validation_body.index(
+        'if [ "$file_age" -ge "$ffprobe_reject_grace_seconds" ]; then'
+    ) < validation_body.index(
+        'echo "Waiting: video input is readable but ffprobe rejected it for'
+    )
 
 
 def test_file_mover_transcodes_video_before_publish() -> None:
@@ -322,19 +411,15 @@ def test_file_mover_transcodes_video_before_publish() -> None:
         source.index("        wait_for_input_ready() {")
     ]
 
-    assert "transcode_video" in contract["commands"]["transcodeVideo"]
-    assert "--settings=lx_annotate.settings.settings_prod" in contract["commands"][
-        "transcodeVideo"
-    ]
-    assert "export_lx_annotate_transcode_env()" in source
-    assert "LX_ANNOTATE_WHEEL_VENV" in source
-    assert "WATCHER_VIDEO_DIR" in source
+    assert "transcode_video" in contract["fileMover"]["transcodeVideoCommand"]
+    assert "export_video_transcode_fallback_env()" in source
+    assert "WATCHER_VIDEO_DIR" in contract["fileMover"]["transcodeEnvironmentScript"]
     assert "FFMPEG_TRANSCODE_TIMEOUT_SECONDS" in source
-    assert "--input-dir" in source
-    assert "--filename" in source
-    assert "--output-dir" in source
+    assert "--input-dir" in contract["fileMover"]["transcodeVideoCommand"]
+    assert "--filename" in contract["fileMover"]["transcodeVideoCommand"]
+    assert "--output-dir" in contract["fileMover"]["transcodeVideoCommand"]
     assert '"$input_dir" "$entry_name" "$dest_dir"' in source
-    assert "--overwrite --json" in source
+    assert "--overwrite --json" in contract["fileMover"]["transcodeVideoCommand"]
     assert (
         process_body.index('is_video_filename "$entry_name"')
         < process_body.index('transcode_video_entry "$staged_entry"')
@@ -342,8 +427,33 @@ def test_file_mover_transcodes_video_before_publish() -> None:
     )
     assert "failed to transcode staged Video entry" in process_body
     assert "Published transcoded Video entry" in transcode_body
+    assert ") < /dev/null; then" in transcode_body
     assert "-pix_fmt" not in transcode_body
     assert "-color_range" not in transcode_body
+
+
+def test_file_mover_transcode_fallback_fails_closed_before_publish() -> None:
+    source = FILE_MOVER_SOURCE.read_text(encoding="utf-8")
+    transcode_body = source[
+        source.index("        transcode_video_entry() {") :
+        source.index("        wait_for_input_ready() {")
+    ]
+
+    assert "video transcode command failed" in transcode_body
+    assert (
+        "video transcode command did not create a non-empty output file"
+        in transcode_body
+    )
+    assert '[ ! -s "$output_file" ]' in transcode_body
+    assert 'chgrp ${serviceGroup} "$output_file" || true' not in transcode_body
+    assert 'chmod 0660 "$output_file" || true' not in transcode_body
+    assert (
+        transcode_body.index("if ! (")
+        < transcode_body.index('[ ! -s "$output_file" ]')
+        < transcode_body.index("chgrp ${serviceGroup}")
+        < transcode_body.index("chmod 0660")
+        < transcode_body.index("Published transcoded Video entry")
+    )
 
 
 def test_wheel_and_repo_filewatchers_process_existing_once() -> None:

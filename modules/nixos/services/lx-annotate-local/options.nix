@@ -1,8 +1,16 @@
-args@{ lib, ... }:
-with lib;
-with lib.luxnix;
-with args;
+{
+  config,
+  lib,
+  pkgs,
+  cfg,
+  lxAnnotateRuntime,
+  ...
+}:
 let
+  inherit (builtins) elemAt;
+  inherit (lib) literalExpression mkOption types;
+  inherit (lib.luxnix) mkBoolOpt;
+
   runtime = lxAnnotateRuntime;
   inherit (runtime.identities)
     endoreg-service-user-name
@@ -68,6 +76,16 @@ let
         default = "35%";
         description = "CPUQuota assigned to this Celery workload pool.";
       };
+      cpuWeight = mkOption {
+        type = types.ints.between 1 10000;
+        default = 100;
+        description = "CPUWeight assigned to this Celery workload pool.";
+      };
+      ioWeight = mkOption {
+        type = types.ints.between 1 10000;
+        default = 100;
+        description = "IOWeight assigned to this Celery workload pool.";
+      };
       nice = mkOption {
         type = types.int;
         default = 15;
@@ -88,8 +106,8 @@ let
           "always"
           "manual"
         ];
-        default = "manual";
-        description = "Scheduling mode for export-stage frame extraction. Manual keeps this worker stopped until export workflows or operators start it.";
+        default = "maintenance-window";
+        description = "Scheduling mode for export-stage frame extraction. Maintenance-window keeps bounded frame materialization out of foreground hours by default.";
       };
       onCalendar = mkOption {
         type = types.str;
@@ -128,6 +146,46 @@ let
         default = "always";
         description = "Scheduling mode for the low-priority FFmpeg media Celery worker.";
       };
+      timeoutStopSec = mkOption {
+        type = types.str;
+        default = "6h15min";
+        description = "Warm-shutdown grace period for an active FFmpeg media task before systemd may send a final kill signal.";
+      };
+    };
+  };
+  ffmpegStreamThrottleProfileType = types.submodule {
+    options = {
+      cpuQuota = mkOption {
+        type = types.str;
+        description = "Runtime CPUQuota applied to the FFmpeg worker in this stream-throttle profile.";
+      };
+      cpuWeight = mkOption {
+        type = types.ints.between 1 10000;
+        description = "Runtime CPUWeight applied to the FFmpeg worker in this stream-throttle profile.";
+      };
+      ioWeight = mkOption {
+        type = types.ints.between 1 10000;
+        description = "Runtime IOWeight applied to the FFmpeg worker in this stream-throttle profile.";
+      };
+    };
+  };
+  ffmpegStreamThrottleNormalProfileType = types.submodule {
+    options = {
+      cpuQuota = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Runtime CPUQuota applied when no user stream is active. Null follows runtime.workerPools.ffmpeg.cpuQuota.";
+      };
+      cpuWeight = mkOption {
+        type = types.nullOr (types.ints.between 1 10000);
+        default = null;
+        description = "Runtime CPUWeight applied when no user stream is active. Null follows runtime.workerPools.ffmpeg.cpuWeight.";
+      };
+      ioWeight = mkOption {
+        type = types.ints.between 1 10000;
+        default = 100;
+        description = "Runtime IOWeight applied when no user stream is active.";
+      };
     };
   };
   inferenceWorkerType = types.submodule {
@@ -161,6 +219,18 @@ let
         type = types.str;
         default = "0";
         description = "CUDA_VISIBLE_DEVICES value exported to the model-training worker.";
+      };
+    };
+  };
+  llmInferenceWorkerType = types.submodule {
+    options = {
+      mode = mkOption {
+        type = types.enum [
+          "always"
+          "manual"
+        ];
+        default = "manual";
+        description = "Scheduling mode for the dedicated Ollama-backed LLM inference Celery worker.";
       };
     };
   };
@@ -307,8 +377,8 @@ in
           wheelPath = mkOption {
             type = types.nullOr types.path;
             default = pkgs.fetchurl {
-              url = "https://files.pythonhosted.org/packages/4a/66/36361769721bb24717fee0abbffeca0ec1856485791c6e07d5d203896ceb/lx_annotate-0.6.2-py3-none-any.whl";
-              hash = "sha256-JlUtBZrvHtA2EV+xg4geM0JVeef/lTGKBsSW8dznlO0=";
+              url = "https://files.pythonhosted.org/packages/46/e1/a2e9f2a2d1743c9c33f91af04b2b25ea907e7f42787fcd9ad5c475007962/lx_annotate-0.9.49-py3-none-any.whl";
+              hash = "sha256-fd34Gy1Boytr+gwQ5+FxzOO3QXXRPMfXxEoJSDGQEA8=";
             };
             description = "Path to the lx-annotate wheel artifact used in wheel mode.";
           };
@@ -318,11 +388,31 @@ in
             defaultText = literalExpression "version parsed from runtime.wheelPath";
             description = "lx-annotate Python package version exported as LX_ANNOTATE_PACKAGE_VERSION.";
           };
+          extraEnvironment = mkOption {
+            type = types.attrsOf types.str;
+            default = { };
+            example = {
+              SERVE_WITH_NGINX = "true";
+              LOG_LEVEL = "INFO";
+            };
+            description = "Additional lx-annotate environment variables merged into the generated systemd environment. Use this for secretspec keys that do not need a dedicated LuxNix option.";
+          };
           wheelhousePath = mkOption {
             type = types.nullOr types.path;
             default = null;
             example = "/var/lib/lx-annotate/artifacts/wheelhouse";
             description = "Optional directory containing prebuilt dependency wheels. When set, wheel installs run with --no-index --find-links so the service does not resolve/download dependencies from the network during startup.";
+          };
+          wheelDependencyOverrides = mkOption {
+            type = types.listOf types.str;
+            default = [ ];
+            description = ''
+              Python packages force-upgraded with --no-deps after installing
+              the lx-annotate wheel. This carries targeted runtime fixes while
+              the upstream lx-annotate wheel still pins an older transitive
+              dependency. If runtime.wheelhousePath is set, matching wheels must
+              be present in that wheelhouse.
+            '';
           };
           encryptedDataDir = mkOption {
             type = types.str;
@@ -501,6 +591,37 @@ in
             default = "/mnt/fast-nvme-cache/endoreg-training";
             description = "Ephemeral local staging root used by model-training jobs.";
           };
+          streamableServing = mkOption {
+            type = types.submodule {
+              options = {
+                nginxOffload = mkOption {
+                  type = types.bool;
+                  default = true;
+                  description = "Export SERVE_WITH_NGINX for lx-annotate stream endpoints so authenticated video responses use Nginx X-Accel-Redirect instead of app-level byte streaming.";
+                };
+                protectedMediaUrl = mkOption {
+                  type = types.str;
+                  default = "/protected_media/";
+                  description = "Internal Nginx location prefix exported as NGINX_PROTECTED_MEDIA_URL for protected lx-annotate media offload.";
+                };
+                externalStorageRoot = mkOption {
+                  type = types.nullOr types.str;
+                  default = null;
+                  example = "/data/raid01/lx-annotate/streamable_videos";
+                  description = ''
+                    Optional external filesystem root for streamable video artifacts.
+                    When set, LuxNix bind-mounts this directory onto the canonical
+                    protected-media streamable subtree below runtime.encryptedDataDir.
+                    The lx-annotate application and nginx continue to use
+                    runtime.encryptedDataDir/storage/streamable_videos so persisted
+                    streamable relative paths remain stable.
+                  '';
+                };
+              };
+            };
+            default = { };
+            description = "Nginx-backed protected media serving controls for lx-annotate streamable video artifacts.";
+          };
           limits = mkOption {
             type = types.submodule {
               options = {
@@ -573,13 +694,15 @@ in
                   default = {
                     concurrency = 1;
                     maxTasksPerChild = 1;
-                    memoryHigh = "3G";
-                    memoryMax = "5G";
-                    cpuQuota = "35%";
-                    nice = 18;
+                    memoryHigh = "10G";
+                    memoryMax = "12G";
+                    cpuQuota = "600%";
+                    cpuWeight = 100;
+                    ioWeight = 100;
+                    nice = 0;
                     oomScoreAdjust = 850;
                   };
-                  description = "Celery pool for delayed low-priority FFmpeg media reprocessing.";
+                  description = "Celery pool for bounded FFmpeg media reprocessing.";
                 };
                 frameExtraction = mkOption {
                   type = workerPoolType;
@@ -620,6 +743,19 @@ in
                   };
                   description = "Celery pool for single-GPU model training jobs.";
                 };
+                llmInference = mkOption {
+                  type = workerPoolType;
+                  default = {
+                    concurrency = 1;
+                    maxTasksPerChild = 1;
+                    memoryHigh = "4G";
+                    memoryMax = "8G";
+                    cpuQuota = "150%";
+                    nice = 12;
+                    oomScoreAdjust = 350;
+                  };
+                  description = "Celery pool for Ollama-backed report and metadata LLM inference jobs.";
+                };
                 maintenance = mkOption {
                   type = workerPoolType;
                   default = {
@@ -632,6 +768,19 @@ in
                     oomScoreAdjust = 700;
                   };
                   description = "Celery pool for default and maintenance queues.";
+                };
+                hubTransfer = mkOption {
+                  type = workerPoolType;
+                  default = {
+                    concurrency = 1;
+                    maxTasksPerChild = 20;
+                    memoryHigh = "768M";
+                    memoryMax = "1536M";
+                    cpuQuota = "35%";
+                    nice = 14;
+                    oomScoreAdjust = 750;
+                  };
+                  description = "Celery pool dedicated to bounded outbound hub transfer and recovery jobs.";
                 };
               };
             };
@@ -648,6 +797,38 @@ in
             default = { };
             description = "Scheduling policy for the dedicated low-priority FFmpeg media Celery worker.";
           };
+          ffmpegStreamThrottle = mkOption {
+            type = types.submodule {
+              options = {
+                enable = mkOption {
+                  type = types.bool;
+                  default = true;
+                  description = "Enable runtime stream-aware throttling for the FFmpeg worker cgroup.";
+                };
+                interval = mkOption {
+                  type = types.str;
+                  default = "2m";
+                  description = "Systemd timer interval for reconciling stream-aware FFmpeg throttling.";
+                };
+                streaming = mkOption {
+                  type = ffmpegStreamThrottleProfileType;
+                  default = {
+                    cpuQuota = "50%";
+                    cpuWeight = 10;
+                    ioWeight = 10;
+                  };
+                  description = "Runtime cgroup profile applied while user stream leases are active.";
+                };
+                normal = mkOption {
+                  type = ffmpegStreamThrottleNormalProfileType;
+                  default = { };
+                  description = "Runtime cgroup profile applied after active stream leases expire.";
+                };
+              };
+            };
+            default = { };
+            description = "Stream-aware runtime throttling for the dedicated FFmpeg worker.";
+          };
           inferenceWorker = mkOption {
             type = inferenceWorkerType;
             default = { };
@@ -657,6 +838,11 @@ in
             type = trainingWorkerType;
             default = { };
             description = "Scheduling policy for the dedicated GPU model-training Celery worker.";
+          };
+          llmInferenceWorker = mkOption {
+            type = llmInferenceWorkerType;
+            default = { };
+            description = "Scheduling policy for the dedicated Ollama-backed LLM inference Celery worker.";
           };
           externalServices = mkOption {
             type = types.submodule {
@@ -759,7 +945,7 @@ in
                 mediaMigration = mkOption {
                   type = types.nullOr types.str;
                   default = null;
-                  description = "Legacy helper override for media migration helper scripts.";
+                  description = "Legacy helper override retained for older media migration helper scripts. The streamable migration unit uses lx-annotate-manage directly.";
                 };
                 transcodeVideo = mkOption {
                   type = types.nullOr types.str;
@@ -896,18 +1082,89 @@ in
       description = "Recovery settings for migrating legacy lx-annotate media into the runtime storage root.";
     };
 
+    centerAdminBootstrap = mkOption {
+      type = types.submodule {
+        options = {
+          username = mkOption {
+            type = types.nullOr (types.strMatching "[A-Za-z0-9@.+_-]+");
+            default = null;
+            example = "lx_bootstrap_admin";
+            description = ''
+              Existing Keycloak-provisioned Django username to promote through
+              the audited bootstrap_center_admin management command. Setting a
+              username enables a deployment-time one-shot unit. The user must
+              already have the exact synchronized center_scope:admin group.
+              Clear this option after the successful bootstrap deployment.
+            '';
+          };
+        };
+      };
+      default = { };
+      description = "Controlled, temporary first-administrator bootstrap action.";
+    };
+
     streamableMigration = mkOption {
       type = types.submodule {
         options = {
           enable = mkOption {
             type = types.bool;
-            default = false;
+            default = true;
             description = "Expose the manual lx-annotate video streamable backfill systemd unit. The unit is not started by any target.";
           };
         };
       };
       default = { };
       description = "Settings for the manual streamable video backfill migration unit.";
+    };
+
+    hlsMaterialization = mkOption {
+      type = types.submodule {
+        options = {
+          enable = mkOption {
+            type = types.bool;
+            default = true;
+            description = "Expose the manual local encrypted-HLS materialization systemd unit. The unit is not started by any target.";
+          };
+          extraArgs = mkOption {
+            type = types.listOf types.str;
+            default = [ ];
+            example = literalExpression ''[ "--limit" "25" ]'';
+            description = "Additional safe arguments passed to materialize_video_hls. By default the wrapper reconciles both raw and processed HLS artifacts; use --artifact-kind raw or --artifact-kind processed to limit a manual run. The wrapper rejects --force, --inline, and unsupported artifact kinds.";
+          };
+          timeoutStartSec = mkOption {
+            type = types.str;
+            default = "1h";
+            description = "Maximum time allowed for dispatching HLS materialization jobs.";
+          };
+        };
+      };
+      default = { };
+      description = "Settings for the manual local raw or processed encrypted-HLS materialization unit.";
+    };
+
+    hlsBackfill = mkOption {
+      type = types.submodule {
+        options = {
+          enable = mkOption {
+            type = types.bool;
+            default = true;
+            description = "Run a boot-time local encrypted-HLS backfill dispatcher after migrations, base data loading, and encrypted storage validation.";
+          };
+          extraArgs = mkOption {
+            type = types.listOf types.str;
+            default = [ ];
+            example = literalExpression ''[ "--limit" "25" ]'';
+            description = "Additional safe arguments passed to materialize_video_hls for the automatic backfill. By default the wrapper reconciles both raw and processed HLS artifacts; use --artifact-kind raw or --artifact-kind processed to limit a run. The wrapper rejects --force, --inline, and unsupported artifact kinds.";
+          };
+          timeoutStartSec = mkOption {
+            type = types.str;
+            default = "1h";
+            description = "Maximum time allowed for dispatching automatic HLS backfill jobs.";
+          };
+        };
+      };
+      default = { };
+      description = "Settings for the automatic local encrypted-HLS backfill dispatcher.";
     };
 
     dataCleanup = mkOption {
@@ -1121,10 +1378,122 @@ in
                   default = null;
                   description = "PEM bundle used by Nginx to verify client certificates for hub transfer requests.";
                 };
+                maxUploadBytes = mkOption {
+                  type = types.ints.positive;
+                  default = 50 * 1024 * 1024 * 1024;
+                  description = "Maximum accepted processed-media upload size in bytes.";
+                };
               };
             };
             default = { };
             description = "Transfer API settings for lx-annotate hub deployments.";
+          };
+          outboundTransfer = mkOption {
+            type = types.submodule {
+              options = {
+                enable = mkOption {
+                  type = types.bool;
+                  default = false;
+                  description = "Enable automatic processed-media transfer from a site node to its configured central hub.";
+                };
+                requireMtls = mkOption {
+                  type = types.bool;
+                  default = true;
+                  description = "Require an outbound mTLS client identity for every hub request.";
+                };
+                clientCertificateFile = mkOption {
+                  type = types.nullOr (types.either types.path types.str);
+                  default = null;
+                  description = "Readable PEM client certificate presented by the site node.";
+                };
+                clientKeyFile = mkOption {
+                  type = types.nullOr (types.either types.path types.str);
+                  default = null;
+                  description = "Readable PEM private key for the outbound client certificate; keep this outside the Nix store.";
+                };
+                caFile = mkOption {
+                  type = types.nullOr (types.either types.path types.str);
+                  default = null;
+                  description = "Optional private CA bundle used to verify the central hub server certificate.";
+                };
+                sourceNodeSecretFile = mkOption {
+                  type = types.nullOr (types.either types.path types.str);
+                  default = null;
+                  description = "Readable file containing the NetworkNode request-authentication secret; keep this outside the Nix store.";
+                };
+                recoveryInterval = mkOption {
+                  type = types.str;
+                  default = "5m";
+                  description = "Systemd interval for dispatching bounded recovery of queued, stale, and retryable outbound transfers.";
+                };
+                staleAfterSeconds = mkOption {
+                  type = types.ints.positive;
+                  default = 1800;
+                  description = "Age in seconds after which an unchanged outbound transfer is eligible for recovery.";
+                };
+                maxRetries = mkOption {
+                  type = types.ints.positive;
+                  default = 5;
+                  description = "Maximum bounded retry count for retryable outbound transfer failures.";
+                };
+              };
+            };
+            default = { };
+            description = "Fail-closed outbound hub transfer settings for site nodes.";
+          };
+          nodeProvisioning = mkOption {
+            type = types.submodule {
+              options = {
+                enable = mkOption {
+                  type = types.bool;
+                  default = false;
+                  description = "Idempotently provision the local and peer NetworkNode records required for hub transfer.";
+                };
+                nodes = mkOption {
+                  type = types.listOf (
+                    types.submodule {
+                      options = {
+                        nodeKey = mkOption {
+                          type = types.strMatching "[A-Za-z0-9_-]+";
+                          description = "Immutable NetworkNode key shared by sender and hub databases.";
+                        };
+                        displayName = mkOption {
+                          type = types.str;
+                          description = "Operator-facing NetworkNode name.";
+                        };
+                        role = mkOption {
+                          type = types.enum [
+                            "central_hub"
+                            "site_node"
+                            "standalone"
+                          ];
+                          description = "NetworkNode deployment role.";
+                        };
+                        baseUrl = mkOption {
+                          type = types.str;
+                          default = "";
+                          description = "HTTPS base URL used when this node is a transfer target.";
+                        };
+                        centerKey = mkOption {
+                          type = types.nullOr types.str;
+                          default = null;
+                          description = "Existing Center.center_key owning this node.";
+                        };
+                        sharedSecretFile = mkOption {
+                          type = types.nullOr (types.either types.path types.str);
+                          default = null;
+                          description = "Optional runtime file whose secret is hashed into this node record; never stored in Nix.";
+                        };
+                      };
+                    }
+                  );
+                  default = [ ];
+                  description = "Complete NetworkNode records required by this deployment.";
+                };
+              };
+            };
+            default = { };
+            description = "Model-boundary provisioning for hub-transfer node identities.";
           };
           backup = mkOption {
             type = types.submodule {

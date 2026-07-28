@@ -8,12 +8,6 @@
   isDev ? false,
 }:
 let
-  # Utility functions (legacy placeholders; kept for future use)
-  containerName = mode: "${env.app.name}-${mode}-test";
-  commonContainerArgs = mode: [ ];
-  gpuArgs = ''
-    : # GPU args placeholder
-  '';
   customScripts = import ./scripts.nix {
     inherit
       pkgs

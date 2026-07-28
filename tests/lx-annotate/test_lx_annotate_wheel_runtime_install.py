@@ -16,7 +16,7 @@ WHEEL_FILENAME = (
     "0123456789abcdef0123456789abcdef-lx_annotate-0.0.3-py3-none-any.whl"
 )
 CANONICAL_WHEEL_FILENAME = "lx_annotate-0.0.3-py3-none-any.whl"
-PIP_INSTALL_PREFIX = "pip:install --upgrade --force-reinstall"
+PIP_INSTALL_PREFIX = "pip:install --upgrade"
 
 
 def _extract_function(function_name: str) -> str:
@@ -39,14 +39,21 @@ def _extract_function(function_name: str) -> str:
 
     body = textwrap.dedent("\n".join(body_lines))
     body = re.sub(r"\$\{pkgs\.[^}]+\}/bin/([A-Za-z0-9_.+-]+)", r"\1", body)
-    wheelhouse_template = (
-        'local wheelhouse_path="${optionalString '
-        "(cfg.runtime.wheelhousePath != null) "
-        '(toString cfg.runtime.wheelhousePath)}"'
+    body = re.sub(
+        r'local wheelhouse_path="\$\{\s*optionalString '
+        r'\(cfg\.runtime\.wheelhousePath != null\) '
+        r'\(toString cfg\.runtime\.wheelhousePath\)\s*\}"',
+        'local wheelhouse_path="${WHEELHOUSE_PATH:-}"',
+        body,
+        flags=re.DOTALL,
     )
     body = body.replace(
-        wheelhouse_template,
-        'local wheelhouse_path="${WHEELHOUSE_PATH:-}"',
+        'local wheel_dependency_overrides=${lib.escapeShellArg (lib.concatStringsSep " " cfg.runtime.wheelDependencyOverrides)}',
+        'local wheel_dependency_overrides="${WHEEL_DEPENDENCY_OVERRIDES:-endoreg-db==1.0.1.8}"',
+    )
+    body = body.replace(
+        'local wheel_dependency_overrides_hash=${lib.escapeShellArg (builtins.hashString "sha256" (lib.concatStringsSep "\\n" cfg.runtime.wheelDependencyOverrides))}',
+        'local wheel_dependency_overrides_hash="${WHEEL_DEPENDENCY_OVERRIDES_HASH:-test-overrides-hash}"',
     )
     body = body.replace("''${", "${")
     return f"{function_name}() {{\n{body}\n}}"
@@ -140,9 +147,11 @@ def test_ensure_wheel_runtime_installed_mocks_venv_creation(tmp_path: Path):
     assert result.returncode == 0, result.stderr
     assert runtime_venv.joinpath("bin", "python").exists()
     assert runtime_venv.joinpath("bin", "pip").exists()
+    assert runtime_root.joinpath("pip-cache").is_dir()
     assert calls_log.read_text(encoding="utf-8").splitlines() == [
         f"python:-m venv {runtime_venv}",
         f"{PIP_INSTALL_PREFIX} {runtime_root / CANONICAL_WHEEL_FILENAME}",
+        f"{PIP_INSTALL_PREFIX} --no-deps endoreg-db==1.0.1.8",
     ]
     assert f"venv={runtime_venv}" in result.stdout
     assert f"app_root={runtime_wheel_root}" in result.stdout
@@ -219,6 +228,7 @@ def test_ensure_wheel_runtime_installed_skips_venv_creation_when_python_exists(
     assert result.returncode == 0, result.stderr
     assert calls_log.read_text(encoding="utf-8").splitlines() == [
         f"{PIP_INSTALL_PREFIX} {runtime_root / CANONICAL_WHEEL_FILENAME}",
+        f"{PIP_INSTALL_PREFIX} --no-deps endoreg-db==1.0.1.8",
     ]
 
 
@@ -312,6 +322,8 @@ def test_ensure_wheel_runtime_installed_serializes_concurrent_install(tmp_path: 
         f"{PIP_INSTALL_PREFIX} {runtime_root / CANONICAL_WHEEL_FILENAME}"
     )
     assert calls.count(expected_pip_call) == 1
+    expected_override_call = f"{PIP_INSTALL_PREFIX} --no-deps endoreg-db==1.0.1.8"
+    assert calls.count(expected_override_call) == 1
 
 
 def test_ensure_runtime_vite_manifest_repairs_empty_manifest(tmp_path: Path):

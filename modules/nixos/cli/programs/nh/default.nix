@@ -3,11 +3,15 @@
   lib,
   ...
 }:
-with lib;
-with lib.luxnix; let
+let
+  inherit (lib) mkIf;
+  inherit (lib.luxnix) mkBoolOpt;
+
   cfg = config.cli.programs.nh;
-in {
-  options.cli.programs.nh = with types; {
+  configurationPath = config.luxnix.generic-settings.configurationPath;
+in
+{
+  options.cli.programs.nh = {
     enable = mkBoolOpt false "Whether or not to enable nh (nix commandline helper).";
   };
 
@@ -17,7 +21,7 @@ in {
       clean.enable = true;
       clean.dates = "weekly";
       clean.extraArgs = "--keep-since 4d --keep 3"; # nh clean all --help
-      flake = config.luxnix.generic-settings.configurationPath;
+      flake = configurationPath;
     };
 
     systemd.services.nh-clean.serviceConfig = {

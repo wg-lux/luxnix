@@ -67,4 +67,3 @@ echo "Unmounting filesystems..."
 sudo umount -R $MOUNT_POINT || handle_error "Failed to unmount filesystems."
 
 echo "Recovery process complete. You can now reboot the system."
-

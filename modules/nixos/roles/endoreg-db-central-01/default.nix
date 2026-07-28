@@ -216,7 +216,7 @@ in
     systemd.services.endoreg-central-django-setup = {
       description = "Generate Django secret key and configuration for central node";
       wantedBy = [ "multi-user.target" ];
-      before = [ "endo-api-boot.service" ];
+      before = [ "endoreg-db-api-local.service" ];
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;

@@ -105,7 +105,7 @@ in
         pkgs.gnugrep
         pkgs.gnused
       ];
-      description = "Packages added to PATH for the mover and optional video fallback hook.";
+      description = "Packages added to PATH for the mover and optional video processing hook.";
     };
 
     paths = mkOption {
@@ -199,30 +199,56 @@ in
           command = mkOption {
             type = types.nullOr types.str;
             default = null;
-            description = "Optional shell command for video fallback processing. It is invoked with input directory, input filename, and output directory as positional arguments.";
+            description = "Optional shell command for video processing. It is invoked with input directory, input filename, and output directory as positional arguments.";
           };
 
           workingDir = mkOption {
             type = types.str;
             default = "/";
-            description = "Working directory used when running the video fallback command.";
+            description = "Working directory used when running the video processing command.";
           };
 
           environmentScript = mkOption {
             type = types.lines;
             default = "";
-            description = "Shell snippet that exports environment required by the video fallback command.";
+            description = "Shell snippet that exports environment required by the video processing command.";
           };
 
           timeoutSeconds = mkOption {
             type = types.str;
             default = "86400";
-            description = "FFmpeg timeout value exported for fallback video processing.";
+            description = "FFmpeg timeout value exported for video processing.";
           };
         };
       };
       default = { };
-      description = "Optional video processing fallback used when direct video publishing is not enough.";
+      description = "Optional video processing command used before publishing video entries.";
+    };
+
+    serviceDependencies = mkOption {
+      type = types.submodule {
+        options = {
+          after = mkOption {
+            type = types.listOf types.str;
+            default = [ ];
+            description = "Additional systemd units that move-my-files.service must start after.";
+          };
+
+          wants = mkOption {
+            type = types.listOf types.str;
+            default = [ ];
+            description = "Additional systemd units that move-my-files.service should pull in.";
+          };
+
+          requires = mkOption {
+            type = types.listOf types.str;
+            default = [ ];
+            description = "Additional systemd units required before move-my-files.service may run.";
+          };
+        };
+      };
+      default = { };
+      description = "Systemd dependency hooks for deployments that publish into another service's runtime tree.";
     };
   };
 
@@ -276,6 +302,7 @@ in
                 XDG_DESKTOP_DIR = "${config.home.homeDirectory}/${cfg.desktop.dirName}";
               };
             };
+            xdg.configFile."user-dirs.dirs".force = true;
 
             home.file = lib.mapAttrs' (
               linkName: targetPath:
@@ -294,6 +321,9 @@ in
       # 3. The Worker Service
       systemd.services.move-my-files = {
         description = "Move files from Source to Destination";
+        after = cfg.serviceDependencies.after;
+        wants = cfg.serviceDependencies.wants;
+        requires = cfg.serviceDependencies.requires;
         serviceConfig = {
           Type = "oneshot";
           User = serviceUserName;
@@ -320,7 +350,8 @@ in
 
             normalize_tree_permissions() {
               local source_dir="$1"
-              ${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 ! -group ${serviceGroup} -exec ${pkgs.coreutils}/bin/chgrp ${serviceGroup} {} + || true
+              ${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -type l -exec ${pkgs.coreutils}/bin/chgrp -h ${serviceGroup} {} + || true
+              ${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 ! -type l ! -group ${serviceGroup} -exec ${pkgs.coreutils}/bin/chgrp ${serviceGroup} {} + || true
               ${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -type d \( ! -perm -2070 -o -perm /0007 \) -exec ${pkgs.coreutils}/bin/chmod g+rws,o-rwx {} + || true
               ${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -type f \( ! -perm -0060 -o -perm /0007 \) -exec ${pkgs.coreutils}/bin/chmod g+rw,o-rwx {} + || true
             }
@@ -354,7 +385,8 @@ in
           normalize_source_permissions() {
             local source_dir="$1"
 
-            ${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 ! -group ${serviceGroup} -exec ${pkgs.coreutils}/bin/chgrp ${serviceGroup} {} + || true
+            ${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -type l -exec ${pkgs.coreutils}/bin/chgrp -h ${serviceGroup} {} + || true
+            ${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 ! -type l ! -group ${serviceGroup} -exec ${pkgs.coreutils}/bin/chgrp ${serviceGroup} {} + || true
             ${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -type d \( ! -perm -2070 -o -perm /0007 \) -exec ${pkgs.coreutils}/bin/chmod g+rws,o-rwx {} + || true
             ${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -type f \( ! -perm -0060 -o -perm /0007 \) -exec ${pkgs.coreutils}/bin/chmod g+rw,o-rwx {} + || true
           }
@@ -378,9 +410,17 @@ in
 
           validate_video_sources() {
             local source_dir="$1"
+            local quarantine_dir="$2"
+            local ffprobe_reject_grace_seconds="$3"
             local validation_status=0
             local ffprobe_error=""
             local ffprobe_error_summary=""
+            local now_epoch=0
+            local file_ctime=0
+            local file_age=0
+            local base_name=""
+            local timestamp=""
+            local quarantine_target=""
 
             while IFS= read -r -d "" video_file; do
               if [ ! -r "$video_file" ]; then
@@ -391,10 +431,34 @@ in
 
               if ! ffprobe_error="$(${pkgs.ffmpeg}/bin/ffprobe -v error -show_entries format=format_name,duration -of default=noprint_wrappers=1 "$video_file" 2>&1 >/dev/null)"; then
                 ffprobe_error_summary="$(${pkgs.coreutils}/bin/printf '%s\n' "$ffprobe_error" | ${pkgs.coreutils}/bin/head -n 1)"
+                now_epoch="$(${pkgs.coreutils}/bin/date +%s)"
+                file_ctime="$(${pkgs.coreutils}/bin/stat -c '%Z' "$video_file" 2>/dev/null || echo "$now_epoch")"
+                file_age=$((now_epoch - file_ctime))
+                if [ "$file_age" -lt 0 ]; then
+                  file_age=0
+                fi
+
+                if [ "$file_age" -ge "$ffprobe_reject_grace_seconds" ]; then
+                  base_name="$(${pkgs.coreutils}/bin/basename "$video_file")"
+                  timestamp="$(${pkgs.coreutils}/bin/date +%Y%m%d-%H%M%S)"
+                  quarantine_target="''${quarantine_dir}/''${timestamp}-''${base_name}"
+                  if [ -n "$ffprobe_error_summary" ]; then
+                    echo "Warning: video input is readable but ffprobe rejected it for ''${file_age}s. Quarantining: $video_file ($ffprobe_error_summary)"
+                  else
+                    echo "Warning: video input is readable but ffprobe rejected it for ''${file_age}s without details. Quarantining: $video_file"
+                  fi
+                  if ! ${pkgs.coreutils}/bin/mv -f "$video_file" "$quarantine_target"; then
+                    echo "Warning: Failed to quarantine ffprobe-rejected video input: $video_file"
+                    overall_status=1
+                    validation_status=1
+                  fi
+                  continue
+                fi
+
                 if [ -n "$ffprobe_error_summary" ]; then
-                  echo "Waiting: video input is readable but ffprobe rejected it: $video_file ($ffprobe_error_summary)"
+                  echo "Waiting: video input is readable but ffprobe rejected it for ''${file_age}s: $video_file ($ffprobe_error_summary)"
                 else
-                  echo "Waiting: video input is readable but ffprobe rejected it without details: $video_file"
+                  echo "Waiting: video input is readable but ffprobe rejected it for ''${file_age}s without details: $video_file"
                 fi
                 if [ "$validation_status" -eq 0 ]; then
                   validation_status=1
@@ -416,6 +480,7 @@ in
             local dest_dir="$2"
             local entry_name="$3"
             local input_dir=""
+            local output_file=""
             local output_name=""
 
             if ! is_video_filename "$entry_name"; then
@@ -423,33 +488,57 @@ in
             fi
 
             if [ -z ${lib.escapeShellArg videoTranscodeCommand} ]; then
-              echo "Warning: Video publish failed, but no video transcode fallback command is configured."
+              echo "Warning: Video entry requires transcode processing, but no video transcode command is configured."
               return 1
             fi
 
             input_dir="$(${pkgs.coreutils}/bin/dirname "$input_file")"
             output_name="''${entry_name%.*}.mp4"
+            output_file="''${dest_dir}/''${output_name}"
             export_video_transcode_fallback_env
 
-            echo "Warning: Direct video publish failed; trying transcode fallback to system standard: $input_file -> ''${dest_dir}/''${output_name}"
-            (
+            echo "Transcoding Video entry to system standard: $input_file -> $output_file"
+            # Do not let the fallback command consume bytes from the find -print0 loop.
+            if ! (
               cd "${videoTranscodeWorkingDir}"
               "${pkgs.bash}/bin/bash" -lc ${lib.escapeShellArg videoTranscodeCommand} file-mover-transcode "$input_dir" "$entry_name" "$dest_dir"
-            )
+            ) < /dev/null; then
+              ${pkgs.coreutils}/bin/rm -f "$output_file" || true
+              echo "Warning: video transcode command failed for $input_file"
+              return 1
+            fi
 
-            ${pkgs.coreutils}/bin/chgrp ${serviceGroup} "''${dest_dir}/''${output_name}" || true
-            ${pkgs.coreutils}/bin/chmod 0660 "''${dest_dir}/''${output_name}" || true
+            if [ ! -s "$output_file" ]; then
+              ${pkgs.coreutils}/bin/rm -f "$output_file" || true
+              echo "Warning: video transcode command did not create a non-empty output file: $output_file"
+              return 1
+            fi
+
+            if ! ${pkgs.coreutils}/bin/chgrp ${serviceGroup} "$output_file"; then
+              ${pkgs.coreutils}/bin/rm -f "$output_file" || true
+              echo "Warning: failed to set group on transcoded Video entry: $output_file"
+              return 1
+            fi
+
+            if ! ${pkgs.coreutils}/bin/chmod 0660 "$output_file"; then
+              ${pkgs.coreutils}/bin/rm -f "$output_file" || true
+              echo "Warning: failed to set mode on transcoded Video entry: $output_file"
+              return 1
+            fi
+
             ${pkgs.coreutils}/bin/rm -f "$input_file" || true
-            echo "Published transcoded Video entry: ''${dest_dir}/''${output_name}"
+            echo "Published transcoded Video entry: $output_file"
           }
 
           wait_for_input_ready() {
             local source_dir="$1"
-            local label="$2"
+            local quarantine_dir="$2"
+            local label="$3"
             local interval_seconds=10
             local min_age_seconds=60
             local required_stable_checks=3
             local max_wait_seconds=7200
+            local ffprobe_reject_grace_seconds=1800
             local elapsed_seconds=0
             local stable_checks=0
             local previous_snapshot=""
@@ -488,7 +577,7 @@ in
                   return 0
                 fi
 
-                if validate_video_sources "$source_dir"; then
+                if validate_video_sources "$source_dir" "$quarantine_dir" "$ffprobe_reject_grace_seconds"; then
                   return 0
                 else
                   video_validation_status="$?"
@@ -527,6 +616,24 @@ in
             done < <(${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -type f ! -readable -print0)
           }
 
+          quarantine_symlink_entries() {
+            local source_dir="$1"
+            local quarantine_dir="$2"
+            local label="$3"
+
+            while IFS= read -r -d "" symlink_entry; do
+              base_name="$(${pkgs.coreutils}/bin/basename "$symlink_entry")"
+              timestamp="$(${pkgs.coreutils}/bin/date +%Y%m%d-%H%M%S)"
+              quarantine_target="''${quarantine_dir}/''${timestamp}-''${base_name}"
+              echo "Warning: ''${label} input is a symlink. Quarantining instead of dereferencing: $symlink_entry"
+
+              if ! ${pkgs.coreutils}/bin/mv -f "$symlink_entry" "$quarantine_target"; then
+                echo "Warning: Failed to quarantine symlink input: $symlink_entry"
+                overall_status=1
+              fi
+            done < <(${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -type l -print0)
+          }
+
           process_input_dir() {
             local source_dir="$1"
             local dest_dir="$2"
@@ -539,6 +646,7 @@ in
 
             echo "Processing ''${label} Input..."
             normalize_source_permissions "$source_dir"
+            quarantine_symlink_entries "$source_dir" "$quarantine_dir" "$label"
             quarantine_unreadable_files "$source_dir" "$quarantine_dir" "$label"
 
             # If everything was quarantined, there's nothing left to sync.
@@ -546,7 +654,7 @@ in
               return 0
             fi
 
-            if ! wait_for_input_ready "$source_dir" "$label"; then
+            if ! wait_for_input_ready "$source_dir" "$quarantine_dir" "$label"; then
               overall_status=1
               return 0
             fi

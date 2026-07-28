@@ -1,30 +1,42 @@
-{ config
-, lib
-, ...
+{
+  config,
+  lib,
+  ...
 }:
-#CHANGEME: Add agl admin
-with lib;
-with lib.luxnix; let
+let
+  inherit (lib) mkDefault mkIf;
+  inherit (lib.luxnix) mkBoolOpt;
+
   cfg = config.system.nix;
-  gs = config.luxnix.generic-settings;
-
   endoregServiceUserName = config.user.endoreg-service-user.name;
-
+  trustedUsers = [
+    "@wheel"
+    "root"
+    "admin"
+    endoregServiceUserName
+  ];
 in
 {
-  options.system.nix = with types; {
+  options.system.nix = {
     enable = mkBoolOpt false "Whether or not to manage nix configuration";
   };
 
   config = mkIf cfg.enable {
     nix = {
       settings = {
-        trusted-users = [ "@wheel" "root" "admin" "${endoregServiceUserName}" ];
-        auto-optimise-store = lib.mkDefault true;
+        trusted-users = trustedUsers;
+        auto-optimise-store = mkDefault true;
         use-xdg-base-directories = true;
-        experimental-features = [ "nix-command" "flakes" ];
+        experimental-features = [
+          "nix-command"
+          "flakes"
+        ];
         warn-dirty = false;
-        system-features = [ "kvm" "big-parallel" "nixos-test" ];
+        system-features = [
+          "kvm"
+          "big-parallel"
+          "nixos-test"
+        ];
       };
 
       # flake-utils-plus

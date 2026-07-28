@@ -8,7 +8,6 @@ with lib;
 with lib.luxnix; let
   cfg = config.luxnix.generic-settings;
   hostname = config.networking.hostName;
-  username = config.user.admin.name;
 
   sensitiveServiceGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
   adminUserName = config.user.admin.name;
@@ -239,14 +238,14 @@ in {
 
     configurationPathRelative = mkOption {
       type = types.str;
-      default = "lx-production";
+      default = "luxnix";
       description = ''
         Relative path to the luxnix directory.
       '';
     };
     configurationPath = mkOption {
       type = types.path;
-      default = "/home/${config.user.admin.name}/${cfg.configurationPathRelative}/";
+      default = "/home/${config.user.admin.name}/luxnix";
       description = ''
         Path to the luxnix directory.
       '';
@@ -254,7 +253,7 @@ in {
 
     systemConfigurationPath = mkOption {
       type = types.path;
-      default = "/home/${config.user.admin.name}/${cfg.configurationPathRelative}/systems/x86_64-linux/${hostname}";
+      default = "${cfg.configurationPath}/systems/x86_64-linux/${hostname}";
       description = ''
         Path to the systems specif nixos configuration directory.
       '';
@@ -370,6 +369,8 @@ in {
     environment.variables = {
       SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
       NIX_SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+      LUXNIX_FLAKE = toString cfg.configurationPath;
+      LUXNIX_HOST = hostname;
     };
 
     # GPU Configuration warnings

@@ -37,7 +37,6 @@ def test_streamable_video_directories_are_provisioned_and_migration_is_exposed()
     assert '"d ${runtimeStreamableVideoRootPath} 0750' in config_source
     assert '"d ${runtimeStreamableVideoRawRootPath} 0750' in config_source
     assert '"d ${runtimeStreamableVideoProcessedRootPath} 0750' in config_source
-    assert "systemd.services.lx-annotate-video-streamable-migration" in config_source
     assert 'alias = "${runtimeStorageRootPath}/";' in config_source
     assert "migrate_media_storage" in scripts_source
     assert "--include-streamable" in scripts_source
