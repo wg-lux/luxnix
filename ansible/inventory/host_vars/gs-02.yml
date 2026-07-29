@@ -29,8 +29,7 @@ ansible_roles:
   - "nginx_host"
 
 host_luxnix:
-  lxAnnotateLocal.database.host: '"127.0.0.1"'
-  lxAnnotateLocal.database.port: "5432"
+
   boot_decryption_stick_gs_01.enable: "true"
 
   generic_settings.hostPlatform: '"x86_64-linux"'
