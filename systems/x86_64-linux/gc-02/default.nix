@@ -2,9 +2,6 @@
 
 { config, pkgs, lib, modulesPath, ... }:
 
-let
-  hubTransferEnabled = import ../hub-transfer-enabled.nix;
-in
 {
   imports = [
     (modulesPath + "/installer/scan/not-detected.nix")
@@ -12,13 +9,6 @@ in
     ./disks.nix
 
   ];
-
-  networking.hosts = lib.optionalAttrs hubTransferEnabled {
-    "172.16.255.22" = [
-      "gs-02.intern"
-      "vault.endo-reg.net"
-    ];
-  };
 
   user = {
     admin = {
@@ -80,23 +70,6 @@ endoreg-client.defaultCenterKey = "university_hospital_wuerzburg";
 
   services = {
 luxnix.endoregDbApiLocal.enable = lib.mkForce false;
-luxnix.lxAnnotateLocal.hub.outboundTransfer.caFile = "/etc/secrets/vault/hub-pki/vault-server-ca.pem";
-luxnix.lxAnnotateLocal.hub.outboundTransfer.enable = hubTransferEnabled;
-luxnix.lxAnnotateLocal.hub.nodeProvisioning.enable = hubTransferEnabled;
-luxnix.lxAnnotateLocal.hub.nodeProvisioning.nodes = [
-  {
-    nodeKey = "gc-02";
-    displayName = "GC-02 site node";
-    role = "site_node";
-    centerKey = "university_hospital_wuerzburg";
-  }
-  {
-    nodeKey = "gs-02";
-    displayName = "GS-02 central hub";
-    role = "central_hub";
-    baseUrl = "https://gs-02.intern";
-  }
-];
 luxnix.lxAnnotateLocal.runtime.mode = "wheel";
 luxnix.vllm.enable = false;
 luxnix.vllm.gpuMemoryUtilization = 0.85;
@@ -401,23 +374,6 @@ luxnix.vllm.port = 8000;
 
 
     vault.enable = true;
-
-    vault.client.address = "https://vault.endo-reg.net:8200";
-
-
-    vault.client.auth.method = if hubTransferEnabled then "approle" else "none";
-
-
-    vault.client.auth.roleIdFile = "/etc/secrets/vault/hub-pki/approle_role_id";
-
-
-    vault.client.auth.secretIdFile = "/etc/secrets/vault/hub-pki/approle_secret_id";
-
-
-    vault.client.caCertFile = "/etc/secrets/vault/hub-pki/vault-server-ca.pem";
-
-
-    vault.client.hubPki.enable = hubTransferEnabled;
 
 
     vault.key = "/etc/secrets/.key";

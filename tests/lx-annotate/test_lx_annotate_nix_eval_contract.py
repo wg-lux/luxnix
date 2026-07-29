@@ -441,7 +441,7 @@ def _gc_02_extended_contracts() -> dict[str, Any]:
           defaultCenterCfg = (gc02.extendModules {
             modules = [
               ({ ... }: {
-                endoreg-client.defaultCenterKey = "university_hospital_wuerzburg";
+                roles.endoreg-client.defaultCenterKey = "university_hospital_wuerzburg";
               })
             ];
           }).config;

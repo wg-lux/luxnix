@@ -707,7 +707,7 @@ let
     last_bootstrap_revision="$(cat "$bootstrap_stamp_file" 2>/dev/null || true)"
 
 
-    run_repo_django_command load_base_db_data || warn "load_base_db_data failed; continuing after successful migrations."
+    run_repo_django_command load_base_db_data
 
 
     if [ "$current_revision" != "$last_bootstrap_revision" ]; then
@@ -911,12 +911,9 @@ let
     fi
 
     log "Wheel runtime changed; loading base data."
-    if "${pkgs.bash}/bin/bash" -lc ${lib.escapeShellArg wheelLoadBaseDataCommand}; then
-      printf '%s\n' "$install_hash" > "$bootstrap_stamp_file"
-      chmod 600 "$bootstrap_stamp_file" 2>/dev/null || true
-    else
-      warn "load_base_db_data failed; continuing after successful migrations."
-    fi
+    "${pkgs.bash}/bin/bash" -lc ${lib.escapeShellArg wheelLoadBaseDataCommand}
+    printf '%s\n' "$install_hash" > "$bootstrap_stamp_file"
+    chmod 600 "$bootstrap_stamp_file" 2>/dev/null || true
   '';
   runLocalLxAnnotateWheelScript = pkgs.writeShellScriptBin "${scriptName}" ''
         set -euo pipefail
@@ -1274,7 +1271,17 @@ let
     sap_drop_dir="${runtimeSapImportDirPath}"
     sap_processed_dir="${runtimeSapImportProcessedDirPath}"
     sap_failed_dir="${runtimeSapImportFailedDirPath}"
-    install -d -m 0770 "$sap_drop_dir" "$sap_processed_dir" "$sap_failed_dir" "${runtimeWatcherPreanonymizedDirPath}"
+    for required_dir in \
+      "$sap_drop_dir" \
+      "$sap_processed_dir" \
+      "$sap_failed_dir" \
+      "${runtimeWatcherPreanonymizedDirPath}"
+    do
+      if [ ! -d "$required_dir" ]; then
+        echo "ERROR: required SAP intake directory is missing: $required_dir" >&2
+        exit 1
+      fi
+    done
 
     wait_for_stable_zip() {
       local file_path="$1"
@@ -1717,9 +1724,7 @@ let
         updated += 1
 
     print(f"updated_failed_upload_jobs={updated}")
-    ' || {
-              echo "WARNING: failed upload-job cleanup eligibility backfill failed; continuing data recovery startup path." >&2
-            }
+    '
           else
             cd "${repoDir}"
             "$migration_helper_python" "${repoDir}/manage.py" shell -c '
@@ -1750,24 +1755,19 @@ let
         updated += 1
 
     print(f"updated_failed_upload_jobs={updated}")
-    ' || {
-              echo "WARNING: failed upload-job cleanup eligibility backfill failed; continuing data recovery startup path." >&2
-            }
+    '
           fi
 
           echo "Reaping upload job source files after data recovery."
           if [ "$use_wheel_runtime" = "true" ]; then
-            run_installed_django_command "$migration_helper_python" reap_upload_job_sources || {
-              echo "WARNING: reap_upload_job_sources failed; continuing data recovery startup path." >&2
-            }
+            run_installed_django_command "$migration_helper_python" reap_upload_job_sources
           else
             cd "${repoDir}"
-            "$migration_helper_python" "${repoDir}/manage.py" reap_upload_job_sources || {
-              echo "WARNING: reap_upload_job_sources failed; continuing data recovery startup path." >&2
-            }
+            "$migration_helper_python" "${repoDir}/manage.py" reap_upload_job_sources
           fi
         else
-          echo "Skipping upload job source reaping; Django helper python unavailable."
+          echo "ERROR: cannot complete upload-job recovery; Django helper python is unavailable." >&2
+          exit 1
         fi
 
         {
@@ -1785,9 +1785,7 @@ let
         fi
 
         if [ "$run_managed_payload_repair" = "true" ]; then
-          repair_managed_runtime_payloads "$migration_helper_python" || {
-            echo "WARNING: Managed payload repair failed; continuing startup so the application can serve existing data." >&2
-          }
+          repair_managed_runtime_payloads "$migration_helper_python"
         else
           echo "Managed payload repair revision $repair_revision is already current; skipping."
         fi
