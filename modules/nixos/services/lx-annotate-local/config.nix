@@ -65,9 +65,6 @@ let
     processedReportDirName
     processedVideoDirName
     ;
-  inherit (runtime.env)
-    ;
-
   boolString = value: if value then "true" else "false";
 
   hubTransferProxyExtraConfig = ''
@@ -1802,6 +1799,18 @@ in
             proxyWebsockets = true;
             extraConfig = videoStreamProxyExtraConfig;
           };
+          locations."/api/media/hub/transfers/" = mkIf cfg.hub.transferApi.enable {
+            proxyPass = "http://127.0.0.1:${toString cfg.django.port}";
+            extraConfig = hubTransferProxyExtraConfig;
+          };
+
+          # Canonical lx-annotate API prefix. Keep the /api/ route above for
+          # compatibility with the existing HubTransferClient.
+          locations."/endoreg-api/media/hub/transfers/" = mkIf cfg.hub.transferApi.enable {
+            proxyPass = "http://127.0.0.1:${toString cfg.django.port}";
+            extraConfig = hubTransferProxyExtraConfig;
+          };
+
           locations."/" = {
             proxyPass = "http://127.0.0.1:${toString cfg.django.port}";
             proxyWebsockets = true;
