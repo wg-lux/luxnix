@@ -6,46 +6,78 @@ host_roles:
   endoreg-client.enable: "true"
 
 host_services:
-  nginxHost.enable: true
-  nginxHost.glm52.enable: true
-  nginxHost.keycloak.enable: false
-  nginxHost.nextcloud.enable: false
-  luxnix.ollama.enable: true
-  luxnix.ollama.acceleration: cuda
-  luxnix.ollama.enableModelBootstrap: false
-  luxnix.ollama.models:
-    - "gemma4:e2b"
+  # Nginx-host services
+  nginxHost.enable: "true"
+  nginxHost.glm52.enable: "true"
+  nginxHost.keycloak.enable: "false"
+  nginxHost.nextcloud.enable: "false"
+
+  # Ollama service
+  luxnix.ollama.enable: "true"
+  luxnix.ollama.acceleration: '"cuda"'
+  luxnix.ollama.enableModelBootstrap: "false"
+
+  # Raw Nix list expression.
+  # A normal YAML list currently generates invalid Nix single quotes.
+  luxnix.ollama.models: '[ "gemma4:e2b" ]'
+
+  ollama.host: '"0.0.0.0"'
+
+  # GLM service
+  luxnix.glm52.enable: "true"
+  luxnix.glm52.gpuLayers: "999"
+  luxnix.glm52.host: '"0.0.0.0"'
+  luxnix.glm52.port: "8088"
+  luxnix.glm52.quant: '"UD-IQ2_M"'
+
+  # LX-Annotate receiver application
+  luxnix.lxAnnotateLocal.enable: "true"
+  luxnix.lxAnnotateLocal.runtime.deploymentRole: '"central_hub"'
+  luxnix.lxAnnotateLocal.hub.enable: "true"
+
+  # Use PostgreSQL running locally on gs-02.
+  luxnix.lxAnnotateLocal.database.host: '"127.0.0.1"'
+  luxnix.lxAnnotateLocal.database.port: "5432"
+
+  # Remove inherited external PostgreSQL overrides.
+  # Otherwise config.nix applies them with mkForce.
+  luxnix.lxAnnotateLocal.runtime.externalServices.postgresHost: "null"
+  luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort: "null"
+
+  # Secure hub-transfer receiver through Nginx and mTLS
+  luxnix.lxAnnotateLocal.hub.transferApi.enable: "true"
+  luxnix.lxAnnotateLocal.hub.transferApi.requireSecureTransport: "true"
+  luxnix.lxAnnotateLocal.hub.transferApi.requireMtls: "true"
+  luxnix.lxAnnotateLocal.hub.transferApi.mtlsMetaKey: '"HTTP_X_CLIENT_CERT_VERIFIED"'
+  luxnix.lxAnnotateLocal.hub.transferApi.mtlsMetaValue: '"SUCCESS"'
+  luxnix.lxAnnotateLocal.hub.transferApi.clientCaFile: '"/etc/secrets/vault/lx-annotate-transfer-client-ca.crt"'
+
+  # Explicit Django central-node setting
   'luxnix.lxAnnotateLocal.django.extraSettings."IS_CENTRAL_NODE"': "lib.mkForce true"
-  ollama.host: "0.0.0.0"
-  luxnix.glm52.enable: true
-  luxnix.glm52.gpuLayers: 999
-  luxnix.glm52.host: "0.0.0.0"
-  luxnix.glm52.port: 8088
-  luxnix.glm52.quant: "UD-IQ2_M"
 
 ansible_roles:
   - "dev_access"
   - "nginx_host"
 
 host_luxnix:
-  lxAnnotateLocal.database.host: '"127.0.0.1"'
-  lxAnnotateLocal.database.port: "5432"
   boot_decryption_stick_gs_01.enable: "true"
 
   generic_settings.hostPlatform: '"x86_64-linux"'
   generic_settings.systemStateVersion: '"23.11"'
-
   generic_settings.linux.cpuMicrocode: '"amd"'
 
   generic_settings.linux.kernelModules:
     - "kvm-amd"
+
   generic_settings.linux.initrd.supportedFilesystems:
     - "nfs"
     - "btrfs"
+
   generic_settings.linux.initrd.kernelModules:
     - "nfs"
     - "btrfs"
     - "dm-snapshot"
+
   generic_settings.linux.initrd.availableKernelModules:
     - "xhci_pci"
     - "ahci"
@@ -58,19 +90,10 @@ host_luxnix:
   generic_settings.linux.supportedFilesystems:
     - "nfs"
     - "btrfs"
+
   generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
   generic_settings.linux.kernelParams: []
   generic_settings.linux.kernelModulesBlacklist: []
-  lxAnnotateLocal.enable: "true"
-  lxAnnotateLocal.runtime.deploymentRole: '"central_hub"'
-  lxAnnotateLocal.hub.enable: "true"
-
-  lxAnnotateLocal.hub.transferApi.enable: "true"
-  lxAnnotateLocal.hub.transferApi.requireSecureTransport: "true"
-  lxAnnotateLocal.hub.transferApi.requireMtls: "true"
-  lxAnnotateLocal.hub.transferApi.mtlsMetaKey: '"HTTP_X_CLIENT_CERT_VERIFIED"'
-  lxAnnotateLocal.hub.transferApi.mtlsMetaValue: '"SUCCESS"'
-  lxAnnotateLocal.hub.transferApi.clientCaFile: '"/etc/secrets/vault/lx-annotate-transfer-client-ca.crt"'
 
 host_nixos:
   networking.firewall.interfaces.tun0.allowedTCPPorts: "lib.mkAfter [ 11434 8088 ]"
