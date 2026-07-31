@@ -60,6 +60,10 @@ ansible_roles:
   - "nginx_host"
 
 host_luxnix:
+  # Override malformed gpu_server group values only for gs-02.
+  luxnix.ollama.models: '[ "gemma4:e2b" ]'
+  ollama.host: '"0.0.0.0"'
+
   boot_decryption_stick_gs_01.enable: "true"
 
   generic_settings.hostPlatform: '"x86_64-linux"'
