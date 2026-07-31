@@ -20,9 +20,8 @@ host_services:
 
   # Raw Nix list expression.
   # A normal YAML list currently generates invalid Nix single quotes.
-  luxnix.ollama.models: '[ "gemma4:e2b" ]'
-
-  ollama.host: '"0.0.0.0"'
+  # luxnix.ollama.models: '[ "gemma4:e2b" ]'
+  # ollama.host: '"0.0.0.0"'
 
   # GLM service
   luxnix.glm52.enable: "true"
