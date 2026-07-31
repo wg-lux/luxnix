@@ -46,6 +46,8 @@ endoreg-client.centralNodes = [ "s-04" ];
 
 endoreg-client.dbApiLocal = true;
 
+endoreg-client.database.host = "127.0.0.1";
+
 endoreg-client.enable = true;
 
 endoreg-client.repository.branch = "container";
@@ -93,7 +95,6 @@ luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort = 5432;
 luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl = "redis://172.16.255.14:6380/1";
 luxnix.lxAnnotateLocal.runtime.trainingWorker.cudaVisibleDevices = "0";
 luxnix.lxAnnotateLocal.runtime.trainingWorker.mode = "manual";
-luxnix.lxAnnotateLocal.database.host = "127.0.0.1";
 luxnix.lxAnnotateLocal.database.port = 5432;
 luxnix.lxAnnotateLocal.enable = true;
 luxnix.lxAnnotateLocal.hub.enable = true;

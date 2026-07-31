@@ -123,6 +123,7 @@ def test_wheel_filewatcher_passes_master_key_file_to_child_process(tmp_path: Pat
         '${cfg.runtime.tessdataPrefix}': "",
         '${cfg.runtime.pytorchAllocConf}': "",
         '${runtimeWheelVenvPath}': str(runtime_venv),
+        '${wheelVenvPythonPath}': str(runtime_venv / "bin" / "python"),
         '${runtimeWheelRootPath}': str(runtime_wheel_root),
         '${cfg.runtime.commands.fileWatcher or ""}': filewatcher_command,
         '${lib.escapeShellArg wheelFileWatcherOnceCommand}': f'"{filewatcher_command}"',

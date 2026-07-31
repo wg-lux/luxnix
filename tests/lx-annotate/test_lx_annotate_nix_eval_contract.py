@@ -98,6 +98,10 @@ def _gc_02_contract() -> dict[str, Any]:
         in {
           topLevelDrv = cfg.system.build.toplevel.drvPath;
           tmpfiles = cfg.systemd.tmpfiles.rules;
+          runtimeArtifact = {
+            wheelPath = toString lxCfg.runtime.wheelPath;
+            packageVersion = lxCfg.runtime.packageVersion;
+          };
           bootServiceConfig =
             cfg.systemd.services.lx-annotate.serviceConfig
             // {
@@ -596,6 +600,71 @@ def test_gc_02_top_level_evaluates() -> None:
     assert drv_path.startswith("/nix/store/")
     assert drv_path.endswith(".drv")
     assert "nixos-system-gc-02" in drv_path
+
+
+def test_lx_annotate_wheel_pin_version_and_exported_version_agree() -> None:
+    evaluated = _gc_02_contract()
+    artifact = evaluated["runtimeArtifact"]
+    environment = dict(
+        value.split("=", 1)
+        for value in evaluated["bootServiceConfig"]["Environment"]
+    )
+
+    assert artifact["wheelPath"].endswith(
+        "lx_annotate-0.9.52-py3-none-any.whl"
+    )
+    assert artifact["packageVersion"] == "0.9.52"
+    assert environment["LX_ANNOTATE_PACKAGE_VERSION"] == "0.9.52"
+
+
+def test_lx_annotate_candidate_wheel_filename_infers_0_9_53() -> None:
+    evaluated = _nix_eval_expr_json(
+        """
+        let
+          flake = builtins.getFlake "git+file:///home/admin/luxnix";
+          lib = flake.inputs.nixpkgs.lib;
+          candidateWheel = builtins.toFile "lx_annotate-0.9.53-py3-none-any.whl" "";
+          cfg = (flake.nixosConfigurations.gc-02.extendModules {
+            modules = [
+              ({ ... }: {
+                services.luxnix.lxAnnotateLocal.runtime.wheelPath =
+                  lib.mkForce candidateWheel;
+              })
+            ];
+          }).config;
+        in {
+          wheelPath = toString cfg.services.luxnix.lxAnnotateLocal.runtime.wheelPath;
+          packageVersion = cfg.services.luxnix.lxAnnotateLocal.runtime.packageVersion;
+        }
+        """
+    )
+
+    assert evaluated["wheelPath"].endswith(
+        "lx_annotate-0.9.53-py3-none-any.whl"
+    )
+    assert evaluated["packageVersion"] == "0.9.53"
+
+
+def test_lx_annotate_wheel_mode_rejects_empty_package_version() -> None:
+    result = _nix_eval_expr_result(
+        """
+        let
+          flake = builtins.getFlake "git+file:///home/admin/luxnix";
+          lib = flake.inputs.nixpkgs.lib;
+          cfg = (flake.nixosConfigurations.gc-02.extendModules {
+            modules = [
+              ({ ... }: {
+                services.luxnix.lxAnnotateLocal.runtime.packageVersion =
+                  lib.mkForce "";
+              })
+            ];
+          }).config;
+        in cfg.system.build.toplevel.drvPath
+        """
+    )
+
+    assert result.returncode != 0
+    assert "runtime.packageVersion must be set or inferable" in result.stderr
 
 
 def test_lx_annotate_tmpfiles_rules_evaluate_with_runtime_storage_paths() -> None:

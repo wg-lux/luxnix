@@ -218,6 +218,7 @@ let
       local wheel_path=${lib.escapeShellArg wheelFilePath}
       local wheelhouse_path=${lib.escapeShellArg wheelhousePath}
       local python_bin=${lib.escapeShellArg pythonInterpreter}
+      local expected_package_version=${lib.escapeShellArg packageVersion}
       local wheel_hash=""
       local wheelhouse_hash="no-wheelhouse"
       local wheel_dependency_overrides=${lib.escapeShellArg wheelDependencyOverrideArgs}
@@ -229,12 +230,17 @@ let
       local canonical_wheel_name=""
       local staged_wheel_path=""
       local install_hash=""
-      local wheel_installer_revision="wheel-console-contract-v5-content-addressed-reinstall"
+      local installed_package_version=""
+      local wheel_installer_revision="wheel-console-contract-v6-version-verified"
       local venv_created="false"
       local pip_cache_dir=${lib.escapeShellArg "${runtimeRootPath}/pip-cache"}
 
       if [ -z "$wheel_path" ]; then
         echo "ERROR: services.luxnix.lxAnnotateLocal.runtime.wheelPath must be set in wheel mode." >&2
+        exit 1
+      fi
+      if [ -z "$expected_package_version" ]; then
+        echo "ERROR: services.luxnix.lxAnnotateLocal.runtime.packageVersion must be set in wheel mode." >&2
         exit 1
       fi
 
@@ -256,20 +262,23 @@ let
           echo "ERROR: Configured runtime.wheelhousePath does not exist: $wheelhouse_path" >&2
           exit 1
         fi
-        wheelhouse_hash="$((
-          find "$wheelhouse_path" -maxdepth 1 -type f \( -name '*.whl' -o -name '*.tar.gz' -o -name '*.zip' \) -print0 \
-            | sort -z \
-            | xargs -0 -r sha256sum
-        ) | sha256sum | cut -d ' ' -f1)"
+        wheelhouse_hash="$(
+          (
+            find "$wheelhouse_path" -maxdepth 1 -type f \( -name '*.whl' -o -name '*.tar.gz' -o -name '*.zip' \) -print0 \
+              | sort -z \
+              | xargs -0 -r sha256sum
+          ) | sha256sum | cut -d ' ' -f1
+        )"
         pip_install_args="--no-index --find-links $wheelhouse_path"
       fi
 
       install_hash="$(
-        printf '%s\n%s\n%s\n%s\n%s\n' \
+        printf '%s\n%s\n%s\n%s\n%s\n%s\n' \
           "$wheel_hash" \
           "$wheelhouse_hash" \
           "$wheel_dependency_overrides_hash" \
           "$python_bin" \
+          "$expected_package_version" \
           "$wheel_installer_revision" \
           | sha256sum \
           | cut -d ' ' -f1
@@ -295,6 +304,17 @@ let
           # shellcheck disable=SC2086
           ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/pip"} install --upgrade --no-deps $pip_install_args $wheel_dependency_overrides
         fi
+      fi
+
+      if ! installed_package_version="$(${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/python"} -c 'from importlib.metadata import version; print(version("lx-annotate"))')"; then
+        echo "ERROR: Installed wheel does not expose lx-annotate package metadata." >&2
+        exit 1
+      fi
+      if [ "$installed_package_version" != "$expected_package_version" ]; then
+        echo "ERROR: Installed lx-annotate version $installed_package_version does not match configured runtime.packageVersion $expected_package_version." >&2
+        exit 1
+      fi
+      if [ "$venv_created" = "true" ] || [ "$install_hash" != "$installed_hash" ]; then
         printf '%s\n' "$install_hash" > "$wheel_install_stamp_file"
         chmod 0640 "$wheel_install_stamp_file" 2>/dev/null || true
       fi
@@ -1343,6 +1363,14 @@ in
       };
 
       assertions = [
+        {
+          assertion = !useWheelRuntime || cfg.runtime.wheelPath != null;
+          message = "services.luxnix.lxAnnotateLocal.runtime.wheelPath must be set in wheel mode.";
+        }
+        {
+          assertion = !useWheelRuntime || packageVersion != "";
+          message = "services.luxnix.lxAnnotateLocal.runtime.packageVersion must be set or inferable from the wheel filename in wheel mode.";
+        }
         {
           assertion = !cfg.runtime.clustered.enable || cfg.runtime.externalServices.redisUrl != null;
           message = "services.luxnix.lxAnnotateLocal.runtime.clustered.enable requires runtime.externalServices.redisUrl.";
