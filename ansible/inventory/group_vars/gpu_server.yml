@@ -18,5 +18,5 @@ group_luxnix:
   luxnix.ollama.acceleration: "cuda"
   luxnix.ollama.enable: "true"
   luxnix.ollama.enableModelBootstrap: "false"
-  luxnix.ollama.models: "[ 'gemma4:e2b' ]"
-  ollama.host: "'0.0.0.0'"
+  luxnix.ollama.models: '[ "gemma4:e2b" ]'
+  ollama.host: '"0.0.0.0"'
