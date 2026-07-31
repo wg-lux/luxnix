@@ -15,8 +15,8 @@ group_luxnix:
   generic_settings.gpu.nvidia.driver: '"production"'
   # Note: Servers typically don't need PRIME hybrid graphics
   # maintenance.autoUpdates.enable: "true"
-  luxnix.ollama.acceleration: "cuda"
-  luxnix.ollama.enable: "true"
-  luxnix.ollama.enableModelBootstrap: "false"
-  luxnix.ollama.models: '[ "gemma4:e2b" ]'
+  ollama.acceleration: '"cuda"'
+  ollama.enable: "true"
+  ollama.enableModelBootstrap: "false"
+  ollama.models: '[ "gemma4:e2b" ]'
   ollama.host: '"0.0.0.0"'
