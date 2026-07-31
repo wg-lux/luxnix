@@ -111,6 +111,33 @@ let
   wheelDependencyOverrideHash = builtins.hashString "sha256" (
     lib.concatStringsSep "\n" wheelDependencyOverrides
   );
+  terminologyRegistryPath = cfg.runtime.terminology.registryPath;
+  terminologyRegistryDir = builtins.dirOf terminologyRegistryPath;
+  terminologyImportRoot = cfg.runtime.terminology.importRoot;
+  terminologyInitialBundle = cfg.runtime.terminology.initialBundle;
+  terminologyPathStaysInsideEncryptedData =
+    path:
+    lib.hasPrefix "${cfg.runtime.encryptedDataDir}/" path
+    && lib.all (segment: segment != "." && segment != "..") (lib.splitString "/" path);
+  terminologyInitialBundleArgs =
+    if terminologyInitialBundle == null then
+      ""
+    else
+      lib.escapeShellArgs (
+        [
+          "--module"
+          terminologyInitialBundle.moduleName
+          "--version"
+          terminologyInitialBundle.version
+          "--input-dir"
+          (toString terminologyInitialBundle.inputDirectory)
+        ]
+        ++ lib.optionals (terminologyInitialBundle.medicalField != null) [
+          "--medical-field"
+          terminologyInitialBundle.medicalField
+        ]
+        ++ [ "--activate" ]
+      );
   wheelRuntimePackage = pkgs.runCommand "lx-annotate-wheel-runtime-${packageVersion}" { } ''
     mkdir -p "$out/bin" "$out/libexec" "$out/share/lx-annotate"
     ln -s ${lib.escapeShellArg runtimeStaticRootPath} "$out/share/lx-annotate/staticfiles"
@@ -399,6 +426,8 @@ let
     make_entrypoint lx-annotate-watch lx-annotate-watch 0
     make_entrypoint lx-annotate-export-frames lx-annotate-export-frames 0
     make_entrypoint lx-annotate-import-sap lx-annotate-import-sap 0
+    make_entrypoint lx-dtypes-kb-registry lx-dtypes-kb-registry 0
+    make_entrypoint lx-dtypes-prototype-kb-smoke lx-dtypes-prototype-kb-smoke 0
   '';
   effectiveRuntimePackage = if useWheelRuntime then wheelRuntimePackage else cfg.runtime.package;
   effectivePackageVersion =
@@ -429,7 +458,13 @@ let
   };
 
   endoregCentralServer = lib.attrByPath [ "roles" "endoreg-db-central-01" "enable" ] false config;
-  vaultClientHubPkiEnabled = lib.attrByPath [ "luxnix" "vault" "client" "hubPki" "enable" ] false config;
+  vaultClientHubPkiEnabled = lib.attrByPath [
+    "luxnix"
+    "vault"
+    "client"
+    "hubPki"
+    "enable"
+  ] false config;
   externalPostgresConfigured = cfg.runtime.externalServices.postgresHost != null;
   externalRedisConfigured = cfg.runtime.externalServices.redisUrl != null;
   localPostgresSetupUnits = lib.optionals (!externalPostgresConfigured) [
@@ -439,6 +474,9 @@ let
   localRedisServiceUnits = lib.optionals (!externalRedisConfigured) [ "redis-lx-annotate.service" ];
   dataRecoveryServiceUnits = lib.optionals cfg.dataRecovery.enable [
     "lx-annotate-data-recovery.service"
+  ];
+  terminologyBootstrapServiceUnits = lib.optionals useWheelRuntime [
+    "lx-annotate-terminology-bootstrap.service"
   ];
   hlsBackfillServiceUnits = lib.optionals cfg.hlsBackfill.enable [
     "lx-annotate-hls-backfill.service"
@@ -518,9 +556,11 @@ let
             "path_prefix": hub_transfer_prefix,
         }, sort_keys=True), file=sys.stderr)
   '';
-  commonExtraEnv = commonEnv // lib.optionalAttrs cfg.hub.transferApi.enable {
-    PYTHONPATH = toString hubOidcMiddlewarePolicy;
-  };
+  commonExtraEnv =
+    commonEnv
+    // lib.optionalAttrs cfg.hub.transferApi.enable {
+      PYTHONPATH = toString hubOidcMiddlewarePolicy;
+    };
 
   encryptedDataMountUnitConfig = {
     RequiresMountsFor = [
@@ -553,12 +593,13 @@ let
 
   hubNodeProvisioningData = pkgs.writeText "lx-annotate-hub-nodes.json" (
     builtins.toJSON (
-      map
-        (node: node // {
-          sharedSecretFile =
-            if node.sharedSecretFile == null then null else toString node.sharedSecretFile;
-        })
-        cfg.hub.nodeProvisioning.nodes
+      map (
+        node:
+        node
+        // {
+          sharedSecretFile = if node.sharedSecretFile == null then null else toString node.sharedSecretFile;
+        }
+      ) cfg.hub.nodeProvisioning.nodes
     )
   );
   hubNodeProvisioningPython = pkgs.writeText "lx-annotate-provision-hub-nodes.py" ''
@@ -749,6 +790,56 @@ let
     set -euo pipefail
     exec ${effectiveRuntimePackage}/bin/lx-annotate-load-base-data
   '';
+  terminologyBootstrapScript = pkgs.writeShellScript "lx-annotate-terminology-bootstrap" ''
+    set -euo pipefail
+
+    registry_path=${lib.escapeShellArg terminologyRegistryPath}
+    registry_dir=${lib.escapeShellArg terminologyRegistryDir}
+    import_root=${lib.escapeShellArg terminologyImportRoot}
+
+    if [ ! -d "$registry_dir" ] || [ ! -d "$import_root" ]; then
+      echo "ERROR: governed terminology directories were not prepared inside encrypted storage." >&2
+      exit 1
+    fi
+
+    if [ ! -e "$registry_path" ]; then
+      ${
+        if terminologyInitialBundle == null then
+          ''
+            echo "ERROR: no governed terminology registry exists and runtime.terminology.initialBundle is not configured." >&2
+            exit 1
+          ''
+        else
+          ''
+            ${effectiveRuntimePackage}/bin/lx-dtypes-kb-registry add \
+              "$registry_path" \
+              ${terminologyInitialBundleArgs}
+          ''
+      }
+    fi
+
+    active_module="$(${pkgs.jq}/bin/jq -er '.active.module_name | select(type == "string" and length > 0)' "$registry_path")" || {
+      echo "ERROR: governed terminology registry has no valid active module." >&2
+      exit 1
+    }
+    active_version="$(${pkgs.jq}/bin/jq -er '.active.version | select(type == "string" and length > 0)' "$registry_path")" || {
+      echo "ERROR: governed terminology registry has no valid active version." >&2
+      exit 1
+    }
+    if ! ${pkgs.jq}/bin/jq -e \
+      --arg module "$active_module" \
+      --arg version "$active_version" \
+      '.modules[$module][$version] != null' \
+      "$registry_path" >/dev/null; then
+      echo "ERROR: active governed terminology identity is not registered." >&2
+      exit 1
+    fi
+
+    LX_DTYPES_KB_REGISTRY="$registry_path" \
+      ${effectiveRuntimePackage}/bin/lx-dtypes-prototype-kb-smoke \
+      --module "$active_module" \
+      --version "$active_version" >/dev/null
+  '';
   sapImportServiceScript = pkgs.writeShellScript "lx-annotate-sap-import-service" ''
     set -euo pipefail
 
@@ -897,9 +988,9 @@ let
       requires = [ "ollama.service" ];
     };
   };
-  alwaysWorkerServiceUnits = lib.mapAttrsToList (
-    _: workerCfg: "${workerCfg.unitName}.service"
-  ) (lib.filterAttrs (_: workerCfg: workerCfg.mode == "always") workerConfigs);
+  alwaysWorkerServiceUnits = lib.mapAttrsToList (_: workerCfg: "${workerCfg.unitName}.service") (
+    lib.filterAttrs (_: workerCfg: workerCfg.mode == "always") workerConfigs
+  );
   mkWorkerService =
     name: workerCfg:
     let
@@ -1318,17 +1409,12 @@ in
         if cfg.hub.enable || endoregCentralServer then "central_hub" else "site_node"
       );
       services.luxnix.lxAnnotateLocal.hub.outboundTransfer.clientCertificateFile =
-        mkIf vaultClientHubPkiEnabled (
-          mkDefault config.luxnix.vault.client.hubPki.certificateFile
-        );
-      services.luxnix.lxAnnotateLocal.hub.outboundTransfer.clientKeyFile =
-        mkIf vaultClientHubPkiEnabled (
-          mkDefault config.luxnix.vault.client.hubPki.keyFile
-        );
+        mkIf vaultClientHubPkiEnabled (mkDefault config.luxnix.vault.client.hubPki.certificateFile);
+      services.luxnix.lxAnnotateLocal.hub.outboundTransfer.clientKeyFile = mkIf vaultClientHubPkiEnabled (
+        mkDefault config.luxnix.vault.client.hubPki.keyFile
+      );
       services.luxnix.lxAnnotateLocal.hub.outboundTransfer.sourceNodeSecretFile =
-        mkIf vaultClientHubPkiEnabled (
-          mkDefault config.luxnix.vault.client.hubPki.nodeSecretFile
-        );
+        mkIf vaultClientHubPkiEnabled (mkDefault config.luxnix.vault.client.hubPki.nodeSecretFile);
       services.luxnix.lxAnnotateLocal.runtime.celeryBroker.requireSecureTransport = mkDefault (
         cfg.runtime.clustered.enable
         || (externalRedisConfigured && !isLocalRedisUrl cfg.runtime.externalServices.redisUrl)
@@ -1370,6 +1456,24 @@ in
         {
           assertion = !useWheelRuntime || packageVersion != "";
           message = "services.luxnix.lxAnnotateLocal.runtime.packageVersion must be set or inferable from the wheel filename in wheel mode.";
+        }
+        {
+          assertion = terminologyPathStaysInsideEncryptedData terminologyRegistryPath;
+          message = "services.luxnix.lxAnnotateLocal.runtime.terminology.registryPath must stay inside runtime.encryptedDataDir.";
+        }
+        {
+          assertion = terminologyPathStaysInsideEncryptedData terminologyImportRoot;
+          message = "services.luxnix.lxAnnotateLocal.runtime.terminology.importRoot must stay inside runtime.encryptedDataDir.";
+        }
+        {
+          assertion =
+            terminologyInitialBundle == null
+            || (terminologyInitialBundle.moduleName != "" && terminologyInitialBundle.version != "");
+          message = "services.luxnix.lxAnnotateLocal.runtime.terminology.initialBundle requires non-empty moduleName and version.";
+        }
+        {
+          assertion = terminologyInitialBundle == null || useWheelRuntime;
+          message = "services.luxnix.lxAnnotateLocal.runtime.terminology.initialBundle is currently supported only in wheel mode.";
         }
         {
           assertion = !cfg.runtime.clustered.enable || cfg.runtime.externalServices.redisUrl != null;
@@ -1552,10 +1656,9 @@ in
           message = "hub.nodeProvisioning.nodes requires unique nodeKey values.";
         }
         {
-          assertion =
-            lib.all
-              (node: node.role != "central_hub" || lib.hasPrefix "https://" node.baseUrl)
-              cfg.hub.nodeProvisioning.nodes;
+          assertion = lib.all (
+            node: node.role != "central_hub" || lib.hasPrefix "https://" node.baseUrl
+          ) cfg.hub.nodeProvisioning.nodes;
           message = "Every provisioned central_hub NetworkNode requires an HTTPS baseUrl.";
         }
         {
@@ -1891,6 +1994,10 @@ in
           "z ${runtimeRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
           "d ${envDataDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
           "z ${envDataDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "d ${terminologyRegistryDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "z ${terminologyRegistryDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "d ${terminologyImportRoot} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          "z ${terminologyImportRoot} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
           "d ${envConfDir} 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
           "d ${runtimeStorageRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
           "z ${runtimeStorageRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
@@ -2007,11 +2114,27 @@ in
         };
       };
 
+      systemd.services.lx-annotate-terminology-bootstrap = mkIf useWheelRuntime (mkLxAnnotateAppService {
+        description = "Provision and validate the governed LX-Annotate terminology registry";
+        before = [
+          "lx-annotate-load-base-data.service"
+          "lx-annotate-preflight.service"
+          "lx-annotate.service"
+        ]
+        ++ alwaysWorkerServiceUnits;
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+          ExecStart = terminologyBootstrapScript;
+          TimeoutStartSec = "10min";
+        };
+      });
+
       systemd.services.lx-annotate-load-base-data = mkLxAnnotateAppService {
         description = "Load LX-Annotate base data";
-        after = [ "lx-annotate-migrate.service" ];
-        wants = [ "lx-annotate-migrate.service" ];
-        requires = [ "lx-annotate-migrate.service" ];
+        after = [ "lx-annotate-migrate.service" ] ++ terminologyBootstrapServiceUnits;
+        wants = [ "lx-annotate-migrate.service" ] ++ terminologyBootstrapServiceUnits;
+        requires = [ "lx-annotate-migrate.service" ] ++ terminologyBootstrapServiceUnits;
         before = [
           "lx-annotate-master-key-check.service"
         ];
@@ -2142,25 +2265,25 @@ in
         };
       };
 
-      systemd.services.lx-annotate-hub-export-recovery = mkIf cfg.hub.outboundTransfer.enable (
-        mkLxAnnotateAppService {
-          description = "Dispatch bounded recovery for LX-Annotate outbound hub transfers";
-          wantedBy = [ ];
-          after = [
-            "network-online.target"
-            "lx-annotate-celery-hub-transfer-worker.service"
-          ];
-          wants = [
-            "network-online.target"
-            "lx-annotate-celery-hub-transfer-worker.service"
-          ];
-          serviceConfig = {
-            Type = "oneshot";
-            ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-manage dispatch_hub_export_recovery";
-            TimeoutStartSec = "2m";
-          };
-        }
-      );
+      systemd.services.lx-annotate-hub-export-recovery =
+        mkIf cfg.hub.outboundTransfer.enable
+          (mkLxAnnotateAppService {
+            description = "Dispatch bounded recovery for LX-Annotate outbound hub transfers";
+            wantedBy = [ ];
+            after = [
+              "network-online.target"
+              "lx-annotate-celery-hub-transfer-worker.service"
+            ];
+            wants = [
+              "network-online.target"
+              "lx-annotate-celery-hub-transfer-worker.service"
+            ];
+            serviceConfig = {
+              Type = "oneshot";
+              ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-manage dispatch_hub_export_recovery";
+              TimeoutStartSec = "2m";
+            };
+          });
 
       systemd.timers.lx-annotate-hub-export-recovery = mkIf cfg.hub.outboundTransfer.enable {
         description = "Periodically recover LX-Annotate outbound hub transfers";
@@ -2231,6 +2354,7 @@ in
           "lx-annotate-load-base-data.service"
           "lx-annotate-preflight.service"
         ]
+        ++ terminologyBootstrapServiceUnits
         ++ dataRecoveryServiceUnits
         ++ hlsBackfillServiceUnits
         ++ hubNodeProvisioningServiceUnits
@@ -2245,6 +2369,7 @@ in
           "lx-annotate-master-key-check.service"
           "lx-annotate-preflight.service"
         ]
+        ++ terminologyBootstrapServiceUnits
         ++ dataRecoveryServiceUnits
         ++ hlsBackfillServiceUnits
         ++ hubNodeProvisioningServiceUnits
@@ -2258,6 +2383,7 @@ in
           "endoreg-django-setup.service"
           "systemd-tmpfiles-setup.service"
         ]
+        ++ terminologyBootstrapServiceUnits
         ++ dataRecoveryServiceUnits
         ++ hlsBackfillServiceUnits
         ++ hubNodeProvisioningServiceUnits
@@ -2296,6 +2422,7 @@ in
           "lx-annotate-runtime-env.service"
           "lx-annotate-load-base-data.service"
         ]
+        ++ terminologyBootstrapServiceUnits
         ++ localPostgresServiceUnits
         ++ localPostgresSetupUnits
         ++ managedSecretsSetupUnits
@@ -2341,6 +2468,7 @@ in
           "lx-annotate-load-base-data.service"
           "lx-annotate-master-key-check.service"
         ]
+        ++ terminologyBootstrapServiceUnits
         ++ dataRecoveryServiceUnits
         ++ hlsBackfillServiceUnits
         ++ hubNodeProvisioningServiceUnits
@@ -2352,6 +2480,7 @@ in
           "lx-annotate-load-base-data.service"
           "lx-annotate-master-key-check.service"
         ]
+        ++ terminologyBootstrapServiceUnits
         ++ dataRecoveryServiceUnits
         ++ hlsBackfillServiceUnits
         ++ hubNodeProvisioningServiceUnits
@@ -2363,6 +2492,7 @@ in
           "lx-annotate-load-base-data.service"
           "lx-annotate-master-key-check.service"
         ]
+        ++ terminologyBootstrapServiceUnits
         ++ dataRecoveryServiceUnits
         ++ hlsBackfillServiceUnits
         ++ hubNodeProvisioningServiceUnits
@@ -2477,37 +2607,35 @@ in
             };
           });
 
-      systemd.services.lx-annotate-hls-backfill =
-        mkIf cfg.hlsBackfill.enable
-          (mkLxAnnotateAppService {
-            description = "Dispatch local encrypted HLS backfill for LX-Annotate videos";
-            wantedBy = [ "multi-user.target" ];
-            before = [ "lx-annotate.service" ];
-            after = [
-              "lx-annotate-load-base-data.service"
-              "lx-annotate-master-key-check.service"
-            ];
-            wants = [
-              "lx-annotate-load-base-data.service"
-            ];
-            requires = [
-              "lx-annotate-load-base-data.service"
-              "lx-annotate-master-key-check.service"
-            ];
-            serviceConfig = {
-              Type = "oneshot";
-              ExecStart = lib.escapeShellArgs (
-                [
-                  "${runLocalHlsMaterializationScript}/bin/runLxAnnotateHlsMaterialization"
-                ]
-                ++ cfg.hlsBackfill.extraArgs
-              );
-              TimeoutStartSec = cfg.hlsBackfill.timeoutStartSec;
-              Nice = 15;
-              IOSchedulingClass = "best-effort";
-              IOSchedulingPriority = 6;
-            };
-          });
+      systemd.services.lx-annotate-hls-backfill = mkIf cfg.hlsBackfill.enable (mkLxAnnotateAppService {
+        description = "Dispatch local encrypted HLS backfill for LX-Annotate videos";
+        wantedBy = [ "multi-user.target" ];
+        before = [ "lx-annotate.service" ];
+        after = [
+          "lx-annotate-load-base-data.service"
+          "lx-annotate-master-key-check.service"
+        ];
+        wants = [
+          "lx-annotate-load-base-data.service"
+        ];
+        requires = [
+          "lx-annotate-load-base-data.service"
+          "lx-annotate-master-key-check.service"
+        ];
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = lib.escapeShellArgs (
+            [
+              "${runLocalHlsMaterializationScript}/bin/runLxAnnotateHlsMaterialization"
+            ]
+            ++ cfg.hlsBackfill.extraArgs
+          );
+          TimeoutStartSec = cfg.hlsBackfill.timeoutStartSec;
+          Nice = 15;
+          IOSchedulingClass = "best-effort";
+          IOSchedulingPriority = 6;
+        };
+      });
 
       systemd.services.lx-annotate-data-cleanup = mkIf cfg.dataCleanup.enable {
         description = "Move duplicate anonymized lx-annotate payload into external archive storage";

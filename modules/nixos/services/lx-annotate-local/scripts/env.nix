@@ -137,6 +137,8 @@ rec {
     SERVE_WITH_NGINX = boolString cfg.runtime.streamableServing.nginxOffload;
     NGINX_PROTECTED_MEDIA_URL = cfg.runtime.streamableServing.protectedMediaUrl;
     LX_ANNOTATE_DEFAULT_CENTER = envDefaultCenter;
+    LX_DTYPES_KB_REGISTRY = cfg.runtime.terminology.registryPath;
+    LX_DTYPES_TERMINOLOGY_IMPORT_ROOT = cfg.runtime.terminology.importRoot;
     ENDOREG_DEPLOYMENT_ROLE = envDeploymentRole;
     ENDOREG_STORAGE_PROFILE = streamableStorageProfile;
     ENDOREG_HUB_MODE = boolString cfg.hub.enable;

@@ -414,6 +414,65 @@ in
               be present in that wheelhouse.
             '';
           };
+          terminology = mkOption {
+            type = types.submodule {
+              options = {
+                registryPath = mkOption {
+                  type = types.str;
+                  default = "${runtimeDataRootPath}/terminology/registry.json";
+                  description = ''
+                    Writable governed lx-dtypes knowledge-base registry. The
+                    path must remain inside runtime.encryptedDataDir.
+                  '';
+                };
+                importRoot = mkOption {
+                  type = types.str;
+                  default = "${runtimeDataRootPath}/terminology/packages";
+                  description = ''
+                    Writable root for validated terminology bundle imports. The
+                    path must remain inside runtime.encryptedDataDir.
+                  '';
+                };
+                initialBundle = mkOption {
+                  type = types.nullOr (
+                    types.submodule {
+                      options = {
+                        inputDirectory = mkOption {
+                          type = types.path;
+                          description = ''
+                            Immutable parent directory containing the initial
+                            knowledge-base module. Nix retains this path in the
+                            deployment closure.
+                          '';
+                        };
+                        moduleName = mkOption {
+                          type = types.str;
+                          description = "Declared module name from the bundle config.yaml.";
+                        };
+                        version = mkOption {
+                          type = types.str;
+                          description = "Declared module version from the bundle config.yaml.";
+                        };
+                        medicalField = mkOption {
+                          type = types.nullOr types.str;
+                          default = null;
+                          description = "Optional medical-field metadata stored with the registry entry.";
+                        };
+                      };
+                    }
+                  );
+                  default = null;
+                  description = ''
+                    Explicit immutable bundle used only when no registry exists.
+                    Existing registries and later operator selections are never
+                    reset. Fresh deployments fail closed when this is null.
+                  '';
+                };
+              };
+            };
+            default = { };
+            description = "Governed lx-dtypes terminology registry configuration.";
+          };
           encryptedDataDir = mkOption {
             type = types.str;
             default = "/var/lib/lx-annotate/data";
