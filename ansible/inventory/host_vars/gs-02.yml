@@ -4,15 +4,13 @@ template_name: "main"
 
 host_roles:
   endoreg-client.enable: "true"
-
-host_services:
-  # Nginx-host services
   nginxHost.enable: "true"
   nginxHost.glm52.enable: "true"
   nginxHost.glm52.acme.email: '"hild@coloreg.de"'
   nginxHost.keycloak.enable: "false"
   nginxHost.nextcloud.enable: "false"
 
+host_services:
   # Ollama service
   luxnix.ollama.enable: "true"
   luxnix.ollama.acceleration: '"cuda"'
@@ -60,7 +58,6 @@ ansible_roles:
   - "nginx_host"
 
 host_luxnix:
-
   boot_decryption_stick_gs_01.enable: "true"
 
   generic_settings.hostPlatform: '"x86_64-linux"'
