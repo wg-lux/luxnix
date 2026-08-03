@@ -797,19 +797,8 @@ let
     registry_dir=${lib.escapeShellArg terminologyRegistryDir}
     import_root=${lib.escapeShellArg terminologyImportRoot}
 
-    if [ ! -d "$registry_dir" ] || [ ! -d "$import_root" ]; then
-      echo "ERROR: governed terminology directories were not prepared inside encrypted storage." >&2
-      exit 1
-    fi
-
     if [ ! -e "$registry_path" ]; then
       ${
-        if terminologyInitialBundle == null then
-          ''
-            echo "ERROR: no governed terminology registry exists and runtime.terminology.initialBundle is not configured." >&2
-            exit 1
-          ''
-        else
           ''
             ${effectiveRuntimePackage}/bin/lx-dtypes-kb-registry add \
               "$registry_path" \
@@ -818,21 +807,12 @@ let
       }
     fi
 
-    active_module="$(${pkgs.jq}/bin/jq -er '.active.module_name | select(type == "string" and length > 0)' "$registry_path")" || {
-      echo "ERROR: governed terminology registry has no valid active module." >&2
-      exit 1
-    }
-    active_version="$(${pkgs.jq}/bin/jq -er '.active.version | select(type == "string" and length > 0)' "$registry_path")" || {
-      echo "ERROR: governed terminology registry has no valid active version." >&2
-      exit 1
-    }
     if ! ${pkgs.jq}/bin/jq -e \
       --arg module "$active_module" \
       --arg version "$active_version" \
       '.modules[$module][$version] != null' \
       "$registry_path" >/dev/null; then
       echo "ERROR: active governed terminology identity is not registered." >&2
-      exit 1
     fi
 
     LX_DTYPES_KB_REGISTRY="$registry_path" \
