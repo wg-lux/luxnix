@@ -70,6 +70,8 @@ nginxHost.enable = true;
 
 nginxHost.glm52.enable = true;
 
+nginxHost.glm52.acme.email = "hild@coloreg.de";
+
 nginxHost.keycloak.enable = true;
 
 nginxHost.nextcloud.enable = true;
