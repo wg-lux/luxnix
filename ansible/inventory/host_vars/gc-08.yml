@@ -12,7 +12,8 @@ host_roles:
   custom_packages.baseDevelopment: "true"
   endoreg-client.lxAi: "true"
 
-host_services: {}
+host_services:
+  luxnix.lxAnnotateLocal.runtime.deploymentRole: '"site_node"'
 
 host_nixos:
   users.users.admin.extraGroups:
@@ -22,6 +23,7 @@ extra_secret_names:
   - "SCRT_roles_system_password_postgres_host_test_password"
 
 host_luxnix:
+  vault.client.hubPki.enable: "false"
   generic_settings.hostPlatform: '"x86_64-linux"'
   generic_settings.systemStateVersion: '"23.11"'
 
