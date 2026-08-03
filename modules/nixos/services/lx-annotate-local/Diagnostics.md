@@ -79,6 +79,19 @@ sudo systemctl status lx-annotate-master-key-check.service
 sudo systemctl status lx-annotate.service
 ```
 
+Wheel mode also runs `lx-annotate-terminology-bootstrap.service` as a
+best-effort job. It registers the `report_template_examples` bundle shipped
+under the installed `lx_dtypes/data` package when no registry exists. Base-data
+loading orders this attempt with `Wants` and `After` so the published `0.9.53`
+runtime cannot race it, but deliberately does not use `Requires`. Missing or
+invalid terminology therefore disables terminology features without blocking
+the web service, workers, migrations, or base-data loading.
+
+```bash
+sudo systemctl status lx-annotate-terminology-bootstrap.service
+sudo journalctl -u lx-annotate-terminology-bootstrap.service -b -n 200 --no-pager
+```
+
 ```bash
 sudo journalctl -u lx-annotate-runtime-env.service -n 200 --no-pager
 sudo journalctl -u lx-annotate-migrate.service -n 200 --no-pager
@@ -93,9 +106,25 @@ sudo systemctl start lx-annotate-runtime-env.service
 sudo systemctl start lx-annotate-migrate.service
 sudo systemctl start lx-annotate-load-base-data.service
 sudo systemctl start lx-annotate-master-key-check.service
+sudo systemctl restart lx-annotate-terminology-bootstrap.service
 sudo systemctl start lx-annotate-acceptance.service
 sudo journalctl -u lx-annotate-acceptance.service -n 200 --no-pager
 ```
+
+If automatic terminology provisioning warns, inspect the packaged data and
+registry without copying data from a checkout:
+
+```bash
+sudo -u endoreg-service-user find \
+  /var/endoreg-service-user/lx-annotate-wheel/.venv/lib/python3.12/site-packages/lx_dtypes/data \
+  -maxdepth 2 -name config.yaml -print
+sudo -u endoreg-service-user \
+  /var/endoreg-service-user/lx-annotate-wheel/.venv/bin/lx-dtypes-kb-registry \
+  show /var/lib/lx-annotate/data/terminology/registry.json
+```
+
+Do not replace an existing registry during diagnostics. An authorized user can
+import and activate a different validated bundle after startup.
 
 ## Web and nginx
 

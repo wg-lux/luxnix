@@ -463,9 +463,15 @@ in
                   );
                   default = null;
                   description = ''
-                    Explicit immutable bundle used only when no registry exists.
+                    Optional immutable bundle used only when no registry exists.
+                    When this is null, the bootstrap registers and activates
+                    the report_template_examples bundle shipped by lx-dtypes
+                    in the wheel environment. Provisioning failures only
+                    disable terminology features; they do not block LX-Annotate.
+                    An authorized user can also import a data folder or an
+                    lx-terminology-editor ZIP from the frontend.
                     Existing registries and later operator selections are never
-                    reset. Fresh deployments fail closed when this is null.
+                    reset.
                   '';
                 };
               };

@@ -48,6 +48,7 @@ def _gc_02_terminology_contract() -> dict[str, Any]:
         }};
         loadBaseData = {{
           after = cfg.systemd.services."lx-annotate-load-base-data".after;
+          wants = cfg.systemd.services."lx-annotate-load-base-data".wants;
           requires = cfg.systemd.services."lx-annotate-load-base-data".requires;
         }};
         preflight = {{
@@ -126,7 +127,7 @@ def test_governed_terminology_paths_are_exported_inside_encrypted_storage() -> N
     assert any("/terminology/packages 0750" in rule for rule in contract["terminologyTmpfiles"])
 
 
-def test_terminology_bootstrap_is_fail_closed_and_orders_runtime_services() -> None:
+def test_packaged_default_terminology_is_best_effort_and_not_a_startup_gate() -> None:
     contract = _gc_02_terminology_contract()
     unit_name = "lx-annotate-terminology-bootstrap.service"
     bootstrap = contract["bootstrap"]
@@ -136,18 +137,20 @@ def test_terminology_bootstrap_is_fail_closed_and_orders_runtime_services() -> N
     assert bootstrap["serviceConfig"]["RemainAfterExit"] is True
     assert bootstrap["serviceConfig"]["User"] == "endoreg-service-user"
     assert "/var/lib/lx-annotate/data" in bootstrap["unitConfig"]["RequiresMountsFor"]
-    assert "runtime.terminology.initialBundle is not configured" in script
-    assert "lx-dtypes-kb-registry" not in script
-    assert "--activate" not in script  # Null default must not invent a clinical bundle.
-    assert "active governed terminology identity is not registered" in script
+    assert bootstrap["before"] == []
+    assert "lx-dtypes-kb-registry add-current" in script
+    assert "--activate" in script
+    assert "shipped in the wheel environment" in script
+    assert "exit 0" in script
     assert "lx-dtypes-prototype-kb-smoke" in script
 
     assert unit_name in contract["loadBaseData"]["after"]
-    assert unit_name in contract["loadBaseData"]["requires"]
-    assert unit_name in contract["preflight"]["after"]
-    assert unit_name in contract["preflight"]["requires"]
-    assert unit_name in contract["web"]["after"]
-    assert unit_name in contract["web"]["requires"]
+    assert unit_name in contract["loadBaseData"]["wants"]
+    assert unit_name not in contract["loadBaseData"]["requires"]
+    assert unit_name not in contract["preflight"]["after"]
+    assert unit_name not in contract["preflight"]["requires"]
+    assert unit_name not in contract["web"]["after"]
+    assert unit_name not in contract["web"]["requires"]
 
 
 def test_explicit_initial_bundle_is_registered_and_activated() -> None:
@@ -158,6 +161,7 @@ def test_explicit_initial_bundle_is_registered_and_activated() -> None:
     assert "--version 1.2.3" in script
     assert "--medical-field gastroenterology" in script
     assert "--activate" in script
+    assert "lx-dtypes-kb-registry add-current" not in script
 
 
 def test_repo_mode_does_not_require_wheel_only_terminology_bootstrap() -> None:

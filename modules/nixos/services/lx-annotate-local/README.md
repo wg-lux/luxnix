@@ -169,6 +169,7 @@ mount unit.
 | `lx-annotate-encrypted-data.service` | optional root oneshot, remains active | Opens the configured LUKS device, mounts it at `runtime.encryptedDataDir`, fixes owner/mode on the mount point, and closes it again on stop. Enabled by `runtime.managedEncryptedData.enable`. |
 | `lx-annotate-data-recovery.service` | oneshot, enabled by default | Runs before migrations when `dataRecovery.enable` is true. It moves or overlays legacy data/media into the current protected data root, repairs managed payloads when possible, and records recovery state so heavy recovery is not repeated unnecessarily. |
 | `lx-annotate-migrate.service` | oneshot | Runs `lx-annotate-manage migrate --noinput` against the effective runtime package. It is ordered before base-data loading, encrypted-storage validation, and the web service. |
+| `lx-annotate-terminology-bootstrap.service` | best-effort oneshot in wheel mode | Before base-data loading, registers and activates the `report_template_examples` bundle shipped under the installed `lx_dtypes/data` package when no registry exists. Base-data loading wants and orders the attempt but does not require it, so warnings never block unrelated LX-Annotate services. An existing registry is never reset. |
 | `lx-annotate-load-base-data.service` | oneshot | Runs `lx-annotate-load-base-data` after successful migrations. The script logs a failed base-data load but exits successfully so schema-correct deployments can still boot. |
 | `lx-annotate-master-key-check.service` | oneshot, remains active | Runs `lx-annotate-manage verify_encrypted_storage` with the deployed environment. The web service and workers require this check so a wrong or missing application master key fails closed before user traffic or background processing starts. |
 | `lx-annotate-center-admin-bootstrap.service` | temporary oneshot | When `centerAdminBootstrap.username` is set, runs the audited `bootstrap_center_admin` command after migrations, base-data loading, and encrypted-storage validation. It refuses users without the exact synchronized `center_scope:admin` group. Clear the option after a successful bootstrap deployment. |
@@ -180,6 +181,9 @@ host-local virtualenv under the service-user home, installs the wheel and any
 configured wheelhouse/override packages, exports secrets from files into the
 process environment, and then execs the wheel console script. The web wrapper
 also syncs packaged static assets into `/var/lib/lx-annotate/staticfiles`.
+The installed `lx-dtypes` dependency supplies the default terminology data
+under its `site-packages/lx_dtypes/data` directory; LuxNix registers that path
+directly rather than copying a mutable checkout or duplicating the bundle.
 
 ### Intake And Manual Jobs
 

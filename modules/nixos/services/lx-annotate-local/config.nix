@@ -475,7 +475,7 @@ let
   dataRecoveryServiceUnits = lib.optionals cfg.dataRecovery.enable [
     "lx-annotate-data-recovery.service"
   ];
-  terminologyBootstrapServiceUnits = lib.optionals useWheelRuntime [
+  terminologyProvisioningServiceUnits = lib.optionals useWheelRuntime [
     "lx-annotate-terminology-bootstrap.service"
   ];
   hlsBackfillServiceUnits = lib.optionals cfg.hlsBackfill.enable [
@@ -794,31 +794,54 @@ let
     set -euo pipefail
 
     registry_path=${lib.escapeShellArg terminologyRegistryPath}
-    registry_dir=${lib.escapeShellArg terminologyRegistryDir}
-    import_root=${lib.escapeShellArg terminologyImportRoot}
 
     if [ ! -e "$registry_path" ]; then
       ${
+        if terminologyInitialBundle == null then
           ''
-            ${effectiveRuntimePackage}/bin/lx-dtypes-kb-registry add \
+            if ! ${effectiveRuntimePackage}/bin/lx-dtypes-kb-registry add-current \
               "$registry_path" \
-              ${terminologyInitialBundleArgs}
+              --activate; then
+              echo "WARNING: the default terminology bundle shipped in the wheel environment could not be registered; LX-Annotate remains available without terminology features." >&2
+              exit 0
+            fi
+          ''
+        else
+          ''
+            if ! ${effectiveRuntimePackage}/bin/lx-dtypes-kb-registry add \
+              "$registry_path" \
+              ${terminologyInitialBundleArgs}; then
+              echo "WARNING: the configured initial terminology bundle could not be installed; frontend setup remains available." >&2
+              exit 0
+            fi
           ''
       }
     fi
 
+    active_module="$(${pkgs.jq}/bin/jq -er '.active.module_name | select(type == "string" and length > 0)' "$registry_path")" || {
+      echo "WARNING: terminology registry has no valid active module; frontend setup remains available." >&2
+      exit 0
+    }
+    active_version="$(${pkgs.jq}/bin/jq -er '.active.version | select(type == "string" and length > 0)' "$registry_path")" || {
+      echo "WARNING: terminology registry has no valid active version; frontend setup remains available." >&2
+      exit 0
+    }
     if ! ${pkgs.jq}/bin/jq -e \
       --arg module "$active_module" \
       --arg version "$active_version" \
       '.modules[$module][$version] != null' \
       "$registry_path" >/dev/null; then
-      echo "ERROR: active governed terminology identity is not registered." >&2
+      echo "WARNING: active terminology identity is not registered; frontend setup remains available." >&2
+      exit 0
     fi
 
-    LX_DTYPES_KB_REGISTRY="$registry_path" \
+    if ! LX_DTYPES_KB_REGISTRY="$registry_path" \
       ${effectiveRuntimePackage}/bin/lx-dtypes-prototype-kb-smoke \
-      --module "$active_module" \
-      --version "$active_version" >/dev/null
+        --module "$active_module" \
+        --version "$active_version" >/dev/null; then
+      echo "WARNING: active terminology bundle did not pass startup validation; annotation remains available and the bundle can be replaced from the frontend." >&2
+      exit 0
+    fi
   '';
   sapImportServiceScript = pkgs.writeShellScript "lx-annotate-sap-import-service" ''
     set -euo pipefail
@@ -2095,13 +2118,7 @@ in
       };
 
       systemd.services.lx-annotate-terminology-bootstrap = mkIf useWheelRuntime (mkLxAnnotateAppService {
-        description = "Provision and validate the governed LX-Annotate terminology registry";
-        before = [
-          "lx-annotate-load-base-data.service"
-          "lx-annotate-preflight.service"
-          "lx-annotate.service"
-        ]
-        ++ alwaysWorkerServiceUnits;
+        description = "Best-effort provisioning of LX-Annotate terminology";
         serviceConfig = {
           Type = "oneshot";
           RemainAfterExit = true;
@@ -2112,9 +2129,9 @@ in
 
       systemd.services.lx-annotate-load-base-data = mkLxAnnotateAppService {
         description = "Load LX-Annotate base data";
-        after = [ "lx-annotate-migrate.service" ] ++ terminologyBootstrapServiceUnits;
-        wants = [ "lx-annotate-migrate.service" ] ++ terminologyBootstrapServiceUnits;
-        requires = [ "lx-annotate-migrate.service" ] ++ terminologyBootstrapServiceUnits;
+        after = [ "lx-annotate-migrate.service" ] ++ terminologyProvisioningServiceUnits;
+        wants = [ "lx-annotate-migrate.service" ] ++ terminologyProvisioningServiceUnits;
+        requires = [ "lx-annotate-migrate.service" ];
         before = [
           "lx-annotate-master-key-check.service"
         ];
@@ -2334,7 +2351,6 @@ in
           "lx-annotate-load-base-data.service"
           "lx-annotate-preflight.service"
         ]
-        ++ terminologyBootstrapServiceUnits
         ++ dataRecoveryServiceUnits
         ++ hlsBackfillServiceUnits
         ++ hubNodeProvisioningServiceUnits
@@ -2349,7 +2365,6 @@ in
           "lx-annotate-master-key-check.service"
           "lx-annotate-preflight.service"
         ]
-        ++ terminologyBootstrapServiceUnits
         ++ dataRecoveryServiceUnits
         ++ hlsBackfillServiceUnits
         ++ hubNodeProvisioningServiceUnits
@@ -2363,7 +2378,6 @@ in
           "endoreg-django-setup.service"
           "systemd-tmpfiles-setup.service"
         ]
-        ++ terminologyBootstrapServiceUnits
         ++ dataRecoveryServiceUnits
         ++ hlsBackfillServiceUnits
         ++ hubNodeProvisioningServiceUnits
@@ -2402,7 +2416,6 @@ in
           "lx-annotate-runtime-env.service"
           "lx-annotate-load-base-data.service"
         ]
-        ++ terminologyBootstrapServiceUnits
         ++ localPostgresServiceUnits
         ++ localPostgresSetupUnits
         ++ managedSecretsSetupUnits
@@ -2448,7 +2461,6 @@ in
           "lx-annotate-load-base-data.service"
           "lx-annotate-master-key-check.service"
         ]
-        ++ terminologyBootstrapServiceUnits
         ++ dataRecoveryServiceUnits
         ++ hlsBackfillServiceUnits
         ++ hubNodeProvisioningServiceUnits
@@ -2460,7 +2472,6 @@ in
           "lx-annotate-load-base-data.service"
           "lx-annotate-master-key-check.service"
         ]
-        ++ terminologyBootstrapServiceUnits
         ++ dataRecoveryServiceUnits
         ++ hlsBackfillServiceUnits
         ++ hubNodeProvisioningServiceUnits
@@ -2472,7 +2483,6 @@ in
           "lx-annotate-load-base-data.service"
           "lx-annotate-master-key-check.service"
         ]
-        ++ terminologyBootstrapServiceUnits
         ++ dataRecoveryServiceUnits
         ++ hlsBackfillServiceUnits
         ++ hubNodeProvisioningServiceUnits
