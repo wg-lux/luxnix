@@ -453,6 +453,9 @@ luxnix.lxSsl.extraDnsNames = [ "vault.endo-reg.net" "gs-02.intern" ];
     generic-settings.systemStateVersion = "23.11";
 
 
+    maintenance.autoUpdates.enable = false;
+
+
     vault.server.apiAddress = "https://vault.endo-reg.net:8200";
 
 

@@ -68,6 +68,9 @@ ansible_roles:
   - "nginx_host"
 
 host_luxnix:
+  # Keep system upgrades manual on this host.
+  maintenance.autoUpdates.enable: "false"
+
   # Production Vault server for the transfer PKI. Initialization and unseal
   # remain an explicit offline-custodian ceremony.
   vault.server.enable: "true"
