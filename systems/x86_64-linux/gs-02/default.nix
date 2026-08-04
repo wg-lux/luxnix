@@ -88,8 +88,8 @@ nginxHost.glm52.acme.email = "hild@coloreg.de";
 
   services = {
 luxnix.lxAnnotateLocal.runtime.celeryBroker.secureTransportConfirmed = true;
-luxnix.lxAnnotateLocal.runtime.externalServices.postgresHost = null;
-luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort = null;
+luxnix.lxAnnotateLocal.runtime.externalServices.postgresHost = "127.0.0.1";
+luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort = 5432;
 luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl = "redis://172.16.255.14:6380/1";
 luxnix.lxAnnotateLocal.runtime.trainingWorker.cudaVisibleDevices = "0";
 luxnix.lxAnnotateLocal.runtime.trainingWorker.mode = "manual";
@@ -109,7 +109,7 @@ luxnix.lxAnnotateLocal.enable = true;
 luxnix.lxAnnotateLocal.hub.backup.enable = true;
 luxnix.lxAnnotateLocal.hub.enable = true;
 luxnix.lxAnnotateLocal.hub.nodeProvisioning.enable = true;
-luxnix.lxAnnotateLocal.hub.nodeProvisioning.nodes = [ { nodeKey = "gc-02"; displayName = "gc-02 site node"; role = "site_node"; centerKey = "university_hospital_wuerzburg"; sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-02-source-node-secret"; } { nodeKey = "gs-02"; displayName = "gs-02 central hub"; role = "central_hub"; baseUrl = "https://gs-02.intern"; } ];
+luxnix.lxAnnotateLocal.hub.nodeProvisioning.nodes = [ { nodeKey = "gc-02"; displayName = "gc-02 site node"; role = "site_node"; centerKey = "university_hospital_wuerzburg"; sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-02-source-node-secret"; } { nodeKey = "gc-10"; displayName = "gc-10 site node"; role = "site_node"; centerKey = "university_hospital_wuerzburg"; sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-10-source-node-secret"; } { nodeKey = "gs-02"; displayName = "gs-02 central hub"; role = "central_hub"; baseUrl = "https://gs-02.intern"; } ];
 luxnix.lxAnnotateLocal.hub.transferApi.clientCaFile = "/var/lib/lx-annotate/hub-pki/client-ca.pem";
 luxnix.lxAnnotateLocal.hub.transferApi.enable = true;
 luxnix.lxAnnotateLocal.hub.transferApi.mtlsMetaKey = "HTTP_X_CLIENT_CERT_VERIFIED";

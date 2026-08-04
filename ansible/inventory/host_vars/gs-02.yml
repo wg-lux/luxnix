@@ -17,6 +17,8 @@ host_services:
   luxnix.ollama.enableModelBootstrap: "false"
 
   luxnix.lxAnnotateLocal.database.port: "5432"
+  luxnix.lxAnnotateLocal.runtime.externalServices.postgresHost: '"127.0.0.1"'
+  luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort: "5432"
 
   # Raw Nix list expression.
   # A normal YAML list currently generates invalid Nix single quotes.
@@ -52,6 +54,9 @@ host_services:
     displayName = "gc-02 site node"; role = "site_node";
     centerKey = "university_hospital_wuerzburg";
     sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-02-source-node-secret"; }
+    { nodeKey = "gc-10"; displayName = "gc-10 site node";
+    role = "site_node"; centerKey = "university_hospital_wuerzburg";
+    sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-10-source-node-secret"; }
     { nodeKey = "gs-02"; displayName = "gs-02 central hub";
     role = "central_hub"; baseUrl = "https://gs-02.intern"; } ]'
 

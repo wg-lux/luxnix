@@ -74,6 +74,12 @@ endoreg-client.defaultCenterKey = "university_hospital_wuerzburg";
 
   services = {
 luxnix.lxAiLocal.runtime.protectedDataDir = "/var/lib/lx-annotate/data";
+luxnix.lxAnnotateLocal.hub.nodeProvisioning.enable = true;
+luxnix.lxAnnotateLocal.hub.nodeProvisioning.nodes = [ { nodeKey = "gc-10"; displayName = "gc-10 site node"; role = "site_node"; centerKey = "university_hospital_wuerzburg"; sharedSecretFile = "/etc/secrets/vault/hub-pki/source-node-secret"; } { nodeKey = "gs-02"; displayName = "gs-02 central hub"; role = "central_hub"; baseUrl = "https://gs-02.intern"; } ];
+luxnix.lxAnnotateLocal.hub.outboundTransfer.caFile = "/etc/secrets/vault/hub-pki/vault-server-ca.pem";
+luxnix.lxAnnotateLocal.hub.outboundTransfer.enable = true;
+luxnix.lxAnnotateLocal.hub.outboundTransfer.requireMtls = true;
+luxnix.lxAnnotateLocal.runtime.mode = "wheel";
 
   };
 
@@ -421,11 +427,37 @@ luxnix.lxAiLocal.runtime.protectedDataDir = "/var/lib/lx-annotate/data";
     generic-settings.systemStateVersion = "23.11";
 
 
+    vault.client.address = "https://vault.endo-reg.net:8200";
+
+
+    vault.client.allowOffline = false;
+
+
+    vault.client.auth.method = "approle";
+
+
+    vault.client.auth.roleIdFile = "/etc/secrets/vault/hub-pki/approle_role_id";
+
+
+    vault.client.auth.secretIdFile = "/etc/secrets/vault/hub-pki/approle_secret_id";
+
+
+    vault.client.caCertFile = "/etc/secrets/vault/hub-pki/vault-server-ca.pem";
+
+
+    vault.client.hubPki.commonName = "gc-10.intern";
+
+
+    vault.client.hubPki.enable = true;
+
+
 
   };
 
   programs.nix-ld.enable = true;
 
   xdg.menus.enable = true;
+
+  networking.hosts."172.16.255.22" = [ "vault.endo-reg.net" ];
 
 }
