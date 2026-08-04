@@ -16,6 +16,8 @@ host_services:
   luxnix.ollama.acceleration: '"cuda"'
   luxnix.ollama.enableModelBootstrap: "false"
 
+  luxnix.lxAnnotateLocal.database.port: "5432"
+
   # Raw Nix list expression.
   # A normal YAML list currently generates invalid Nix single quotes.
   # luxnix.ollama.models: '[ "gemma4:e2b" ]'
@@ -35,14 +37,6 @@ host_services:
   luxnix.lxAnnotateLocal.hub.backup.enable: "true"
 
   # Use PostgreSQL running locally on gs-02.
-  luxnix.lxAnnotateLocal.database.host: '"127.0.0.1"'
-  luxnix.lxAnnotateLocal.database.port: "5432"
-
-  # Remove inherited external PostgreSQL overrides.
-  # Otherwise config.nix applies them with mkForce.
-  luxnix.lxAnnotateLocal.runtime.externalServices.postgresHost: "null"
-  luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort: "null"
-
   # Secure hub-transfer receiver through Nginx and mTLS
   luxnix.lxAnnotateLocal.hub.transferApi.enable: "true"
   luxnix.lxAnnotateLocal.hub.transferApi.requireSecureTransport: "true"
