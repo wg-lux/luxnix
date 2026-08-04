@@ -303,7 +303,17 @@ def _live_host_contract() -> dict[str, Any]:
             bootRequires = gc02.systemd.services.lx-annotate.requires;
             hubVpnAliases = gc02.networking.hosts."172.16.255.22";
           };
-          formerHub = {
+          featureRegistryGuard = {
+            wantedBy = gc02.systemd.services.lx-annotate-feature-registry-guard.wantedBy;
+            before = gc02.systemd.services.lx-annotate-feature-registry-guard.before;
+            requires = gc02.systemd.services.lx-annotate-feature-registry-guard.requires;
+            restartTriggers = builtins.map toString gc02.systemd.services.lx-annotate-feature-registry-guard.restartTriggers;
+            environment = envList gc02.systemd.services.lx-annotate-feature-registry-guard.environment;
+            execStart = toString gc02.systemd.services.lx-annotate-feature-registry-guard.serviceConfig.ExecStart;
+            migrateRequires = gc02.systemd.services.lx-annotate-migrate.requires;
+            workerRequires = gc02.systemd.services."lx-annotate-celery-worker".requires;
+          };
+          centralHub = {
             role = s04.services.luxnix.lxAnnotateLocal.runtime.deploymentRole;
             hubEnable = s04.services.luxnix.lxAnnotateLocal.hub.enable;
             transferEnable = s04.services.luxnix.lxAnnotateLocal.hub.transferApi.enable;
@@ -442,6 +452,18 @@ def _gc_02_extended_contracts() -> dict[str, Any]:
             ];
           }).config;
           hubHostName = hubTransferCfg.services.luxnix.lxAnnotateLocal.django.hostname;
+          hubOutboundCfg = (gc02.extendModules {
+            modules = [
+              ({ ... }: {
+                services.luxnix.lxAnnotateLocal.hub.outboundTransfer = {
+                  enable = true;
+                  clientCertificateFile = "/tmp/hub-client.crt";
+                  clientKeyFile = "/tmp/hub-client.key";
+                  sourceNodeSecretFile = "/tmp/hub-node-secret";
+                };
+              })
+            ];
+          }).config;
           defaultCenterCfg = (gc02.extendModules {
             modules = [
               ({ ... }: {
@@ -570,10 +592,19 @@ def _gc_02_extended_contracts() -> dict[str, Any]:
             hostName = hubTransferCfg.services.luxnix.lxAnnotateLocal.django.hostname;
             hubEnable = hubTransferCfg.services.luxnix.lxAnnotateLocal.hub.enable;
             hostExtraConfig = hubTransferCfg.services.nginx.virtualHosts.${hubHostName}.extraConfig;
+            transferLocationExtraConfig = hubTransferCfg.services.nginx.virtualHosts.${hubHostName}.locations."/api/media/hub/transfers/".extraConfig;
             rootLocationExtraConfig = hubTransferCfg.services.nginx.virtualHosts.${hubHostName}.locations."/".extraConfig;
             tmpfiles = hubTransferCfg.systemd.tmpfiles.rules;
             isCentralNode = hubTransferCfg.services.luxnix.lxAnnotateLocal.django.extraSettings.IS_CENTRAL_NODE;
             hubBackupExecStart = hubTransferCfg.systemd.services.lx-annotate-hub-backup.serviceConfig.ExecStart;
+            hubBackupAfter = hubTransferCfg.systemd.services.lx-annotate-hub-backup.after;
+            hubBackupRequires = hubTransferCfg.systemd.services.lx-annotate-hub-backup.requires;
+            hubBackupCredentials = hubTransferCfg.systemd.services.lx-annotate-hub-backup.serviceConfig.LoadCredential;
+          };
+          hubOutboundHealth = {
+            execStart = hubOutboundCfg.systemd.services.lx-annotate-hub-export-health.serviceConfig.ExecStart;
+            serviceAfter = hubOutboundCfg.systemd.services.lx-annotate-hub-export-health.after;
+            timer = hubOutboundCfg.systemd.timers.lx-annotate-hub-export-health.timerConfig;
           };
           defaultCenter = {
             djangoDefaultCenterKey = defaultCenterCfg.services.luxnix.lxAnnotateLocal.django.extraSettings.DEFAULT_CENTER_KEY;
@@ -1403,12 +1434,32 @@ def test_hub_transfer_api_extend_modules_enables_nginx_and_backup_surfaces() -> 
     assert evaluated["hubEnable"] is True
     assert "ssl_verify_client optional;" in evaluated["hostExtraConfig"]
     assert "ssl_client_certificate /tmp/client-ca.pem;" in evaluated["hostExtraConfig"]
+    assert "if ($ssl_client_verify != SUCCESS)" in evaluated["transferLocationExtraConfig"]
+    assert "return 403;" in evaluated["transferLocationExtraConfig"]
+    assert "proxy_set_header X-Forwarded-Proto https;" in evaluated["transferLocationExtraConfig"]
+    assert "proxy_set_header X-Client-Cert-Verified $ssl_client_verify;" in evaluated["transferLocationExtraConfig"]
     assert "proxy_set_header X-Client-Cert-Verified $ssl_client_verify;" in evaluated["rootLocationExtraConfig"]
     assert any("/var/lib/lx-annotate/data/hub " in rule for rule in evaluated["tmpfiles"])
     assert any("/var/lib/lx-annotate/data/hub/backup/incoming " in rule for rule in evaluated["tmpfiles"])
     assert any("/var/lib/lx-annotate/data/hub/backup/snapshots " in rule for rule in evaluated["tmpfiles"])
     assert any("/var/lib/lx-annotate/data/hub/backup/manifests " in rule for rule in evaluated["tmpfiles"])
     assert evaluated["hubBackupExecStart"].endswith("/bin/runLxAnnotateHubBackup")
+    assert "postgresqlBackup.service" in evaluated["hubBackupAfter"]
+    assert "postgresqlBackup.service" in evaluated["hubBackupRequires"]
+    assert evaluated["hubBackupCredentials"] == [
+        "hub-postgresql.sql.gz:/var/backup/postgresql/all.sql.gz"
+    ]
+
+
+def test_hub_outbound_health_timer_classifies_and_alerts_on_transfer_failures() -> None:
+    evaluated = _gc_02_extended_contracts()["hubOutboundHealth"]
+
+    assert evaluated["execStart"].endswith(
+        "/bin/lx-annotate-manage check_hub_export_health"
+    )
+    assert "lx-annotate-celery-hub-transfer-worker.service" in evaluated["serviceAfter"]
+    assert evaluated["timer"]["Persistent"] is True
+    assert evaluated["timer"]["Unit"] == "lx-annotate-hub-export-health.service"
 
 
 def test_endoreg_client_default_center_key_flows_to_lx_annotate_runtime_env() -> None:
@@ -1476,12 +1527,25 @@ def test_lx_annotate_gc02_outbound_transfer_is_vault_backed_and_fail_closed() ->
     assert "vault.endo-reg.net" in evaluated["hubVpnAliases"]
 
 
-def test_lx_annotate_s04_is_not_the_hub() -> None:
-    evaluated = _live_host_contract()["formerHub"]
+def test_lx_annotate_s04_uses_the_explicit_central_hub_contract() -> None:
+    evaluated = _live_host_contract()["centralHub"]
 
-    assert evaluated["role"] == "site_node"
-    assert evaluated["hubEnable"] is False
-    assert evaluated["transferEnable"] is False
+    assert evaluated["role"] == "central_hub"
+    assert evaluated["hubEnable"] is True
+    assert evaluated["transferEnable"] is True
+
+
+def test_lx_annotate_runtime_is_gated_by_the_pinned_feature_registry() -> None:
+    evaluated = _live_host_contract()["featureRegistryGuard"]
+
+    assert "multi-user.target" in evaluated["wantedBy"]
+    assert "lx-annotate.service" in evaluated["before"]
+    assert "lx-annotate-runtime-env.service" in evaluated["requires"]
+    assert any("endoreg-feature-registry-1.0.8.1" in path for path in evaluated["restartTriggers"])
+    assert "ENDOREG_RUNTIME_ENDOREG_DB_VERSION=1.0.8.2" in evaluated["environment"]
+    assert "lx-annotate-feature-registry-guard" in evaluated["execStart"]
+    assert "lx-annotate-feature-registry-guard.service" in evaluated["migrateRequires"]
+    assert "lx-annotate-feature-registry-guard.service" in evaluated["workerRequires"]
 
 
 def test_lx_annotate_clustered_mode_rejects_local_runtime_assumptions() -> None:

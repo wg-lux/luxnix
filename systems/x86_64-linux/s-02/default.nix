@@ -197,7 +197,7 @@ postgres.main.enable = true;
     generic-settings.network.hosts.gs-01.syncthing-id = "X2KFB5D-HJWUNFK-GS6TP7A-GV4TGEF-ZYH3RHL-AWWJIW4-76SSCHP-YIMUUAA";
 
 
-    generic-settings.network.hosts.gs-02.domains = [ "glm.endo-reg.net" "gs-02.intern" ];
+    generic-settings.network.hosts.gs-02.domains = [ "glm.endo-reg.net" "gs-02.intern" "vault.endo-reg.net" ];
 
 
     generic-settings.network.hosts.gs-02.ip-local = "192.168.0.56";

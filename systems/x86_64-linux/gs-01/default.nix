@@ -44,11 +44,7 @@ endoreg-client.api.settingsProfile = "prod";
 
 endoreg-client.centralNodes = [ "s-04" ];
 
-endoreg-client.dbApiLocal = true;
-
 endoreg-client.enable = true;
-
-endoreg-client.repository.branch = "container";
 
 gpu-server.enable = true;
 
@@ -73,6 +69,11 @@ luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort = 5432;
 luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl = "redis://172.16.255.14:6380/1";
 luxnix.lxAnnotateLocal.runtime.trainingWorker.cudaVisibleDevices = "0";
 luxnix.lxAnnotateLocal.runtime.trainingWorker.mode = "manual";
+luxnix.ollama.acceleration = "cuda";
+luxnix.ollama.enable = true;
+luxnix.ollama.enableModelBootstrap = false;
+luxnix.ollama.models = [ "gemma4:e2b" ];
+ollama.host = "0.0.0.0";
 
   };
 
@@ -204,7 +205,7 @@ luxnix.lxAnnotateLocal.runtime.trainingWorker.mode = "manual";
     generic-settings.network.hosts.gs-01.syncthing-id = "X2KFB5D-HJWUNFK-GS6TP7A-GV4TGEF-ZYH3RHL-AWWJIW4-76SSCHP-YIMUUAA";
 
 
-    generic-settings.network.hosts.gs-02.domains = [ "glm.endo-reg.net" "gs-02.intern" ];
+    generic-settings.network.hosts.gs-02.domains = [ "glm.endo-reg.net" "gs-02.intern" "vault.endo-reg.net" ];
 
 
     generic-settings.network.hosts.gs-02.ip-local = "192.168.0.56";
@@ -351,18 +352,6 @@ luxnix.lxAnnotateLocal.runtime.trainingWorker.mode = "manual";
     generic-settings.vpnSubnet = "172.16.255.0/24";
 
 
-    luxnix.ollama.acceleration = "cuda";
-
-
-    luxnix.ollama.enable = true;
-
-
-    luxnix.ollama.enableModelBootstrap = false;
-
-
-    luxnix.ollama.models = [ 'gemma4:e2b' ];
-
-
     maintenance.autoUpdates.dates = "17:00";
 
 
@@ -370,9 +359,6 @@ luxnix.lxAnnotateLocal.runtime.trainingWorker.mode = "manual";
 
 
     maintenance.autoUpdates.operation = "switch";
-
-
-    ollama.host = '0.0.0.0';
 
 
     vault.dir = "/etc/secrets/vault";

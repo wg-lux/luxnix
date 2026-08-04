@@ -166,6 +166,7 @@ mount unit.
 | Unit | Type / trigger | Runtime role |
 | --- | --- | --- |
 | `lx-annotate-runtime-env.service` | root oneshot, remains active | Creates the runtime/config/data directories, copies the database password into the runtime config directory, normalizes Keycloak secret permissions, and writes `/var/lib/lx-annotate/.env.systemd` plus the compatibility copy under the data root. |
+| `lx-annotate-feature-registry-guard.service` | oneshot, remains active | Gates every application unit on the immutable, build-validated `endoreg-db/feature-tracking` registry. It records the pinned registry Git revision and rejects an installed `endoreg-db` version that differs from LX-Annotate's exact pinned dependency. |
 | `lx-annotate-encrypted-data.service` | optional root oneshot, remains active | Opens the configured LUKS device, mounts it at `runtime.encryptedDataDir`, fixes owner/mode on the mount point, and closes it again on stop. Enabled by `runtime.managedEncryptedData.enable`. |
 | `lx-annotate-data-recovery.service` | oneshot, enabled by default | Runs before migrations when `dataRecovery.enable` is true. It moves or overlays legacy data/media into the current protected data root, repairs managed payloads when possible, and records recovery state so heavy recovery is not repeated unnecessarily. |
 | `lx-annotate-migrate.service` | oneshot | Runs `lx-annotate-manage migrate --noinput` against the effective runtime package. It is ordered before base-data loading, encrypted-storage validation, and the web service. |
@@ -608,11 +609,12 @@ vault-auth-setup.service
   -> managed-secrets-setup.service
     -> lx-annotate-encrypted-data.service
       -> lx-annotate-runtime-env.service
-        -> lx-annotate-data-recovery.service
-          -> lx-annotate-migrate.service
-            -> lx-annotate-load-base-data.service
-              -> lx-annotate-master-key-check.service
-                -> lx-annotate.service
+        -> lx-annotate-feature-registry-guard.service
+          -> lx-annotate-data-recovery.service
+            -> lx-annotate-migrate.service
+              -> lx-annotate-load-base-data.service
+                -> lx-annotate-master-key-check.service
+                  -> lx-annotate.service
 ```
 
 `lx-annotate-boot.service` is an alias for `lx-annotate.service`. Path units,
@@ -621,8 +623,8 @@ services still require the same runtime environment, base-data, master-key, and
 encrypted-data gates before doing application work.
 
 That is the intended fail-closed behavior. If Vault lookup, secret delivery,
-LUKS unlock, or encrypted-storage validation fails, the app services do not
-start.
+LUKS unlock, feature-registry attestation, or encrypted-storage validation
+fails, the app services do not start.
 
 ## Rotation Behavior
 

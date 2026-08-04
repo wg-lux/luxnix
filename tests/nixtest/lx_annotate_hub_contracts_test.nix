@@ -22,8 +22,8 @@ in
           ${ntlib.helpers.scriptHelpers}
           assert_file_contains ${lxAnnotateOptions} 'deploymentRole = mkOption' "lx-annotate must expose an explicit deployment role"
           assert_file_contains ${lxAnnotateOptions} 'LuxNix central server nodes map to central_hub' "deployment role docs must distinguish central servers from laptop center nodes"
-          assert_file_contains ${lxAnnotateConfig} 'endoregCentralServer = lib\.attrByPath \[ "roles" "endoreg-db-central-01" "enable" \] false config;' "lx-annotate must derive central server classification from the central role"
-          assert_file_contains ${lxAnnotateConfig} 'config\.networking\.hostName == "gs-02" \|\| endoregCentralServer' "lx-annotate hub mode must default for declared central nodes"
+          assert_file_contains ${lxAnnotateConfig} 'config\.networking\.hostName == "gs-02"' "lx-annotate hub mode must retain the declared gs-02 default"
+          assert_file_contains ${lxAnnotateConfig} 'if cfg\.hub\.enable then "central_hub" else "site_node"' "lx-annotate deployment role must derive from its own hub contract"
           assert_file_contains ${lxAnnotateConfig} 'extraSettings\.IS_CENTRAL_NODE = mkIf cfg\.hub\.enable' "hub mode must set the Django central-node contract"
           assert_file_contains ${lxAnnotateConfig} 'mkForce true' "the central-node contract must override the site-role default"
         '';
@@ -60,6 +60,9 @@ in
           assert_file_contains ${lxAnnotateConfig} 'hub\.transferApi\.enable requires services\.luxnix\.lxAnnotateLocal\.hub\.transferApi\.requireMtls = true' "transfer API must require mTLS"
           assert_file_contains ${lxAnnotateConfig} 'hub\.transferApi\.enable requires services\.luxnix\.lxAnnotateLocal\.hub\.transferApi\.clientCaFile to be set' "transfer API must require a client CA file"
           assert_file_contains ${lxAnnotateConfig} 'proxy_set_header X-Client-Cert-Verified \$ssl_client_verify;' "nginx must forward client certificate verification to Django"
+          assert_file_contains ${lxAnnotateConfig} 'if [(]\$ssl_client_verify != SUCCESS[)]' "nginx must enforce verified client certificates on transfer locations"
+          assert_file_contains ${lxAnnotateConfig} 'return 403;' "nginx must reject unverified transfer clients before proxying"
+          assert_file_contains ${lxAnnotateConfig} 'proxy_set_header X-Forwarded-Proto https;' "nginx must provide a fixed secure transport assertion to Django"
           assert_file_contains ${lxAnnotateConfig} 'ssl_client_certificate \$[{]toString cfg\.hub\.transferApi\.clientCaFile};' "nginx must use the configured transfer client CA bundle"
           assert_file_contains ${lxAnnotateConfig} 'ssl_verify_client optional;' "nginx must request and verify supplied client certificates when transfer API is enabled"
         '';
@@ -82,6 +85,8 @@ in
           assert_file_contains ${lxAnnotateConfig} 'unitName = "lx-annotate-celery-hub-transfer-worker"' "outbound transfer must use a dedicated worker"
           assert_file_contains ${lxAnnotateConfig} 'dispatch_hub_export_recovery' "site nodes must periodically dispatch stale transfer recovery"
           assert_file_contains ${lxAnnotateConfig} 'systemd\.timers\.lx-annotate-hub-export-recovery' "outbound recovery must be level-triggered by a persistent timer"
+          assert_file_contains ${lxAnnotateConfig} 'check_hub_export_health' "site nodes must classify transfer failures without exposing request payloads"
+          assert_file_contains ${lxAnnotateConfig} 'systemd\.timers\.lx-annotate-hub-export-health' "site nodes must periodically surface classified transfer health"
         '';
       }
     ];

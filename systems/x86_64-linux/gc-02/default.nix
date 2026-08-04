@@ -42,8 +42,6 @@ endoreg-client.api.settingsProfile = "prod";
 
 endoreg-client.centralNodes = [ "s-04" ];
 
-endoreg-client.dbApiLocal = false;
-
 endoreg-client.enable = true;
 
 endoreg-client.paths.storagePersistingEnable = true;
@@ -51,8 +49,6 @@ endoreg-client.paths.storagePersistingEnable = true;
 endoreg-client.paths.storagePersistingIsExternalDrive = true;
 
 endoreg-client.paths.storagePersistingMountPoint = "/mnt/endoreg-client-storage";
-
-endoreg-client.repository.branch = "container";
 
 nextcloudClient.enable = true;
 
@@ -69,7 +65,11 @@ endoreg-client.defaultCenterKey = "university_hospital_wuerzburg";
 };
 
   services = {
-luxnix.endoregDbApiLocal.enable = lib.mkForce false;
+luxnix.lxAnnotateLocal.hub.nodeProvisioning.enable = true;
+luxnix.lxAnnotateLocal.hub.nodeProvisioning.nodes = [ { nodeKey = "gc-02"; displayName = "gc-02 site node"; role = "site_node"; centerKey = "university_hospital_wuerzburg"; sharedSecretFile = "/etc/secrets/vault/hub-pki/source-node-secret"; } { nodeKey = "gs-02"; displayName = "gs-02 central hub"; role = "central_hub"; baseUrl = "https://gs-02.intern"; } ];
+luxnix.lxAnnotateLocal.hub.outboundTransfer.caFile = "/etc/secrets/vault/hub-pki/vault-server-ca.pem";
+luxnix.lxAnnotateLocal.hub.outboundTransfer.enable = true;
+luxnix.lxAnnotateLocal.hub.outboundTransfer.requireMtls = true;
 luxnix.lxAnnotateLocal.runtime.mode = "wheel";
 luxnix.vllm.enable = false;
 luxnix.vllm.gpuMemoryUtilization = 0.85;
@@ -211,7 +211,7 @@ luxnix.vllm.port = 8000;
     generic-settings.network.hosts.gs-01.syncthing-id = "X2KFB5D-HJWUNFK-GS6TP7A-GV4TGEF-ZYH3RHL-AWWJIW4-76SSCHP-YIMUUAA";
 
 
-    generic-settings.network.hosts.gs-02.domains = [ "glm.endo-reg.net" "gs-02.intern" ];
+    generic-settings.network.hosts.gs-02.domains = [ "glm.endo-reg.net" "gs-02.intern" "vault.endo-reg.net" ];
 
 
     generic-settings.network.hosts.gs-02.ip-local = "192.168.0.56";
@@ -424,10 +424,38 @@ luxnix.vllm.port = 8000;
     generic-settings.systemStateVersion = "23.11";
 
 
+    vault.client.address = "https://vault.endo-reg.net:8200";
+
+
+    vault.client.allowOffline = false;
+
+
+    vault.client.auth.method = "approle";
+
+
+    vault.client.auth.roleIdFile = "/etc/secrets/vault/hub-pki/approle_role_id";
+
+
+    vault.client.auth.secretIdFile = "/etc/secrets/vault/hub-pki/approle_secret_id";
+
+
+    vault.client.caCertFile = "/etc/secrets/vault/hub-pki/vault-server-ca.pem";
+
+
+    vault.client.hubPki.commonName = "gc-02.intern";
+
+
+    vault.client.hubPki.enable = true;
+
+
 
   };
 
   programs.nix-ld.enable = true;
+
+  # Vault is intentionally reachable only through the AGL VPN. Keep this
+  # single public-looking service name pinned to gs-02's VPN address.
+  networking.hosts."172.16.255.22" = [ "vault.endo-reg.net" ];
 
   xdg.menus.enable = true;
 

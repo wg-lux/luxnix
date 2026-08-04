@@ -385,9 +385,11 @@ sudo journalctl -u lx-annotate-acceptance.service -n 200 --no-pager
 ```
 
 `lx-annotate-acceptance.service` is the final host-level check. The
-`endoreg-db/feature-tracking` YAML is release evidence and is not read by these
-units; package/revision alignment and the live database gate must be verified
-separately.
+`endoreg-db/feature-tracking` YAML is validated into an immutable Nix store
+registry. `lx-annotate-feature-registry-guard.service` records the pinned
+registry revision and refuses startup when the installed `endoreg-db` version
+does not match the exact dependency selected by the pinned LX-Annotate source.
+The live database gate remains a separate acceptance check.
 
 ## Intake and file triggers
 

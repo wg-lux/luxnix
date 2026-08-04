@@ -156,6 +156,23 @@
         "type": "github"
       }
     },
+    "endoreg-db": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1785509369,
+        "narHash": "sha256-yH/PIlhgrZemrH7Geqa7bOteatQb1LMX7f/r4VwuhlE=",
+        "ref": "prototype",
+        "rev": "65bb109f30062a79930c718372129f132c2bb923",
+        "revCount": 1496,
+        "type": "git",
+        "url": "https://github.com/wg-lux/endoreg-db.git"
+      },
+      "original": {
+        "ref": "prototype",
+        "type": "git",
+        "url": "https://github.com/wg-lux/endoreg-db.git"
+      }
+    },
     "fenix": {
       "inputs": {
         "nixpkgs": [
@@ -582,11 +599,11 @@
         "uv2nix": "uv2nix_2"
       },
       "locked": {
-        "lastModified": 1779115318,
-        "narHash": "sha256-brYhnMHEWwKj1nM1lsWp8syR/viHAcWwlk7odRlsjug=",
+        "lastModified": 1785775922,
+        "narHash": "sha256-xstRssiee2eflzGYDi4THJOHk4bpLGRVpLyeUrbP92s=",
         "owner": "wg-lux",
         "repo": "lx-annotate",
-        "rev": "864853a59ae129ba7200bc06f1722977a86862ea",
+        "rev": "7e2ce39085863c6aae5afbe3ad9b10466694ec75",
         "type": "github"
       },
       "original": {
@@ -1255,6 +1272,7 @@
         "deploy-rs": "deploy-rs",
         "devenv": "devenv",
         "disko": "disko",
+        "endoreg-db": "endoreg-db",
         "home-manager": "home-manager",
         "impermanence": "impermanence",
         "lx-annotate": "lx-annotate",

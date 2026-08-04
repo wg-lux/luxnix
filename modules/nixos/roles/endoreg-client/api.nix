@@ -30,7 +30,7 @@ mkDjangoOptions {
     dataDir = "data";
     confDir = "conf";
     confTemplateDir = "conf_template";
-    djangoModule = "endo_api";
+    djangoModule = "lx_annotate";
     assetDir = "tests/assets";
     httpProtocol = "https";
     baseUrl = null;

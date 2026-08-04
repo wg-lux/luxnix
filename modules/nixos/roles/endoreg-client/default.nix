@@ -13,9 +13,7 @@ let
   sensitiveServiceGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
   endoregServiceGroupName = config.luxnix.generic-settings.endoregServiceGroupName;
   fileMoverDefinition = import ./file-mover.nix { inherit lib; };
-  endoregDbApiLocalDefinition = import ./endoreg-db-api-local.nix { inherit lib; };
   lxAiDefinition = import ./lx-ai.nix { };
-  endoAiDefinition = import ./endo-ai.nix { };
   persistingStorageDefinition = import ./persisting-storage.nix { inherit lib; };
   lxAnnotateDefinition = import ./lx-annotate.nix { inherit lib; };
 
@@ -26,8 +24,6 @@ in
       pathOptions = import ./paths.nix { inherit lib config; };
       apiOptions = import ./api.nix { inherit lib; };
       databaseOptions = import ./database.nix { inherit lib; };
-      serviceOptions = import ./service.nix { inherit lib; };
-      repositoryOptions = import ./repository.nix { inherit lib; };
       environmentDefaultsOptions = import ./environment-details.nix { inherit lib; };
     in
     {
@@ -44,18 +40,6 @@ in
           "s-04.local"
           "backup-central.local"
         ];
-      };
-
-      dbApiLocal = mkOption {
-        type = types.bool;
-        default = false;
-        description = "Deprecated no-op. The endoreg-client role no longer manages a local endo-api service.";
-      };
-
-      endoAi = mkOption {
-        type = types.bool;
-        default = false;
-        description = "Enable endoAi service";
       };
 
       lxAi = mkOption {
@@ -76,12 +60,6 @@ in
 
       # Database Configuration Options
       database = databaseOptions;
-
-      # Service Configuration Options
-      service = serviceOptions;
-
-      # Git Repository Options
-      repository = repositoryOptions;
 
       environmentDefaults = environmentDefaultsOptions;
 
@@ -139,13 +117,9 @@ in
       fileMoverRole = fileMoverDefinition.entrypoint {
         inherit lxAnnotateRole;
       };
-      endoregDbApiLocalRole = endoregDbApiLocalDefinition.entrypoint {
-        inherit config;
-      };
       lxAiRole = lxAiDefinition.entrypoint {
         inherit cfg;
       };
-      endoAiRole = endoAiDefinition.entrypoint { };
       persistingStorageRole = persistingStorageDefinition.entrypoint {
         inherit
           cfg
@@ -213,9 +187,7 @@ in
           };
       }
       fileMoverRole.config
-      endoregDbApiLocalRole.config
       lxAiRole.config
-      endoAiRole.config
       persistingStorageRole.config
     ]
   );

@@ -377,8 +377,8 @@ in
           wheelPath = mkOption {
             type = types.nullOr types.path;
             default = pkgs.fetchurl {
-              url = "https://files.pythonhosted.org/packages/e7/e0/f8d71080f91cd2c3a5ab4d93afce94fa8e696952d6461c576b2ca27239a1/lx_annotate-0.9.53-py3-none-any.whl";
-              hash = "sha256-EB2qMC0gpP0LmKDxiOshUwQ/7Q5BqwzZRRG8gavGbsI=";
+              url = "https://files.pythonhosted.org/packages/84/4d/4517876366555c48c7ebde0ed317ecf5adeb6d72b7fdb48a41313ae03006/lx_annotate-0.9.55-py3-none-any.whl";
+              hash = "sha256-mUbtkYxPi0v2nnRKPCMthq4otKmyRM8wvAyGNIk7VFs=";
             };
             description = "Path to the lx-annotate wheel artifact used in wheel mode.";
           };
@@ -1597,6 +1597,11 @@ in
                   type = types.int;
                   default = 48;
                   description = "How many completed snapshots the hub node keeps before pruning older ones.";
+                };
+                minimumFreeBytes = mkOption {
+                  type = types.ints.unsigned;
+                  default = 10737418240;
+                  description = "Minimum free bytes that must remain on the snapshot filesystem before and after staging a coupled database/media restore point.";
                 };
                 exclude = mkOption {
                   type = types.listOf types.str;

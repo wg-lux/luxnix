@@ -42,8 +42,6 @@ endoreg-client.api.settingsProfile = "prod";
 
 endoreg-client.centralNodes = [ "s-04" ];
 
-endoreg-client.dbApiLocal = true;
-
 endoreg-client.enable = true;
 
 endoreg-client.paths.storagePersistingEnable = true;
@@ -51,8 +49,6 @@ endoreg-client.paths.storagePersistingEnable = true;
 endoreg-client.paths.storagePersistingIsExternalDrive = true;
 
 endoreg-client.paths.storagePersistingMountPoint = "/mnt/endoreg-client-storage";
-
-endoreg-client.repository.branch = "container";
 
 nextcloudClient.enable = true;
 
@@ -77,13 +73,7 @@ endoreg-client.defaultCenterKey = "university_hospital_wuerzburg";
 };
 
   services = {
-    luxnix.lxAnnotateLocal.runtime.workerPools.ffmpeg.cpuQuota = "600%";
-    luxnix.lxAnnotateLocal.runtime.ffmpegStreamThrottle.streaming = {
-      cpuQuota = "200%";
-      cpuWeight = 10;
-      ioWeight = 10;
-    };
-    luxnix.lxAiLocal.runtime.protectedDataDir = "/var/lib/lx-annotate/data";
+luxnix.lxAiLocal.runtime.protectedDataDir = "/var/lib/lx-annotate/data";
 
   };
 
@@ -218,7 +208,7 @@ endoreg-client.defaultCenterKey = "university_hospital_wuerzburg";
     generic-settings.network.hosts.gs-01.syncthing-id = "X2KFB5D-HJWUNFK-GS6TP7A-GV4TGEF-ZYH3RHL-AWWJIW4-76SSCHP-YIMUUAA";
 
 
-    generic-settings.network.hosts.gs-02.domains = [ "glm.endo-reg.net" "gs-02.intern" ];
+    generic-settings.network.hosts.gs-02.domains = [ "glm.endo-reg.net" "gs-02.intern" "vault.endo-reg.net" ];
 
 
     generic-settings.network.hosts.gs-02.ip-local = "192.168.0.56";

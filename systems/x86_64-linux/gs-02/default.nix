@@ -44,13 +44,9 @@ endoreg-client.api.settingsProfile = "prod";
 
 endoreg-client.centralNodes = [ "s-04" ];
 
-endoreg-client.dbApiLocal = true;
-
 endoreg-client.database.host = "127.0.0.1";
 
 endoreg-client.enable = true;
-
-endoreg-client.repository.branch = "container";
 
 gpu-server.enable = true;
 
@@ -70,11 +66,9 @@ nginxHost.enable = true;
 
 nginxHost.glm52.enable = true;
 
-nginxHost.glm52.acme.email = "hild@coloreg.de";
+nginxHost.keycloak.enable = false;
 
-nginxHost.keycloak.enable = true;
-
-nginxHost.nextcloud.enable = true;
+nginxHost.nextcloud.enable = false;
 
 nginxHost.settings.proxyHeadersHashBucketSize = 64;
 
@@ -88,36 +82,42 @@ nginxHost.settings.recommendedProxySettings = true;
 
 nginxHost.settings.recommendedTlsSettings = true;
 
+nginxHost.glm52.acme.email = "hild@coloreg.de";
+
 };
 
   services = {
 luxnix.lxAnnotateLocal.runtime.celeryBroker.secureTransportConfirmed = true;
-luxnix.lxAnnotateLocal.runtime.externalServices.postgresHost = "172.16.255.22";
-luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort = 5432;
+luxnix.lxAnnotateLocal.runtime.externalServices.postgresHost = null;
+luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort = null;
 luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl = "redis://172.16.255.14:6380/1";
 luxnix.lxAnnotateLocal.runtime.trainingWorker.cudaVisibleDevices = "0";
 luxnix.lxAnnotateLocal.runtime.trainingWorker.mode = "manual";
+luxnix.ollama.acceleration = "cuda";
+luxnix.ollama.enable = true;
+luxnix.ollama.enableModelBootstrap = false;
+luxnix.ollama.models = [ "gemma4:e2b" ];
+ollama.host = "0.0.0.0";
+luxnix.glm52.enable = true;
+luxnix.glm52.gpuLayers = 999;
+luxnix.glm52.host = "0.0.0.0";
+luxnix.glm52.port = 8088;
+luxnix.glm52.quant = "UD-IQ2_M";
 luxnix.lxAnnotateLocal.database.port = 5432;
+luxnix.lxAnnotateLocal.django.extraSettings."IS_CENTRAL_NODE" = lib.mkForce true;
 luxnix.lxAnnotateLocal.enable = true;
+luxnix.lxAnnotateLocal.hub.backup.enable = true;
 luxnix.lxAnnotateLocal.hub.enable = true;
-luxnix.lxAnnotateLocal.hub.transferApi.clientCaFile = "/etc/secrets/vault/lx-annotate-transfer-client-ca.crt";
+luxnix.lxAnnotateLocal.hub.nodeProvisioning.enable = true;
+luxnix.lxAnnotateLocal.hub.nodeProvisioning.nodes = [ { nodeKey = "gc-02"; displayName = "gc-02 site node"; role = "site_node"; centerKey = "university_hospital_wuerzburg"; sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-02-source-node-secret"; } { nodeKey = "gs-02"; displayName = "gs-02 central hub"; role = "central_hub"; baseUrl = "https://gs-02.intern"; } ];
+luxnix.lxAnnotateLocal.hub.transferApi.clientCaFile = "/var/lib/lx-annotate/hub-pki/client-ca.pem";
 luxnix.lxAnnotateLocal.hub.transferApi.enable = true;
 luxnix.lxAnnotateLocal.hub.transferApi.mtlsMetaKey = "HTTP_X_CLIENT_CERT_VERIFIED";
 luxnix.lxAnnotateLocal.hub.transferApi.mtlsMetaValue = "SUCCESS";
 luxnix.lxAnnotateLocal.hub.transferApi.requireMtls = true;
 luxnix.lxAnnotateLocal.hub.transferApi.requireSecureTransport = true;
 luxnix.lxAnnotateLocal.runtime.deploymentRole = "central_hub";
-luxnix.glm52.enable = true;
-luxnix.glm52.gpuLayers = 999;
-luxnix.glm52.host = "0.0.0.0";
-luxnix.glm52.port = 8088;
-luxnix.glm52.quant = "UD-IQ2_M";
-luxnix.lxAnnotateLocal.django.extraSettings."IS_CENTRAL_NODE" = lib.mkForce true;
-luxnix.ollama.acceleration = "cuda";
-luxnix.ollama.enable = true;
-luxnix.ollama.enableModelBootstrap = false;
-luxnix.ollama.models = [ "gemma4:e2b" ];
-ollama.host = "0.0.0.0";
+luxnix.lxSsl.extraDnsNames = [ "vault.endo-reg.net" "gs-02.intern" ];
 
   };
 
@@ -249,7 +249,7 @@ ollama.host = "0.0.0.0";
     generic-settings.network.hosts.gs-01.syncthing-id = "X2KFB5D-HJWUNFK-GS6TP7A-GV4TGEF-ZYH3RHL-AWWJIW4-76SSCHP-YIMUUAA";
 
 
-    generic-settings.network.hosts.gs-02.domains = [ "glm.endo-reg.net" "gs-02.intern" ];
+    generic-settings.network.hosts.gs-02.domains = [ "glm.endo-reg.net" "gs-02.intern" "vault.endo-reg.net" ];
 
 
     generic-settings.network.hosts.gs-02.ip-local = "192.168.0.56";
@@ -453,6 +453,33 @@ ollama.host = "0.0.0.0";
     generic-settings.systemStateVersion = "23.11";
 
 
+    vault.server.apiAddress = "https://vault.endo-reg.net:8200";
+
+
+    vault.server.bindAddress = "172.16.255.22:8200";
+
+
+    vault.server.caCertFile = "/var/lib/lx-annotate-ssl/lx-annotate-selfsigned.crt";
+
+
+    vault.server.clusterAddress = "https://gs-02.intern:8201";
+
+
+    vault.server.enable = true;
+
+
+    vault.server.hubPki.caCertificateFile = "/var/lib/lx-annotate/hub-pki/client-ca.pem";
+
+
+    vault.server.hubPki.enable = true;
+
+
+    vault.server.tlsCertFile = "/var/lib/lx-annotate-ssl/lx-annotate-selfsigned.crt";
+
+
+    vault.server.tlsKeyFile = "/var/lib/lx-annotate-ssl/lx-annotate-selfsigned.key";
+
+
 
   };
 
@@ -460,6 +487,10 @@ ollama.host = "0.0.0.0";
 
   xdg.menus.enable = true;
 
-  networking.firewall.interfaces.tun0.allowedTCPPorts = lib.mkAfter [ 11434 8088 ];
+  networking.firewall.interfaces.tun0.allowedTCPPorts = lib.mkAfter [ 11434 8088 8200 ];
+
+  # Vault is intentionally reachable only through the AGL VPN. Keep this
+  # single public-looking service name pinned to gs-02's VPN address.
+  networking.hosts."172.16.255.22" = [ "vault.endo-reg.net" ];
 
 }

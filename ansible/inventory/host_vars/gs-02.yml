@@ -32,6 +32,7 @@ host_services:
   luxnix.lxAnnotateLocal.enable: "true"
   luxnix.lxAnnotateLocal.runtime.deploymentRole: '"central_hub"'
   luxnix.lxAnnotateLocal.hub.enable: "true"
+  luxnix.lxAnnotateLocal.hub.backup.enable: "true"
 
   # Use PostgreSQL running locally on gs-02.
   luxnix.lxAnnotateLocal.database.host: '"127.0.0.1"'
@@ -48,7 +49,17 @@ host_services:
   luxnix.lxAnnotateLocal.hub.transferApi.requireMtls: "true"
   luxnix.lxAnnotateLocal.hub.transferApi.mtlsMetaKey: '"HTTP_X_CLIENT_CERT_VERIFIED"'
   luxnix.lxAnnotateLocal.hub.transferApi.mtlsMetaValue: '"SUCCESS"'
-  luxnix.lxAnnotateLocal.hub.transferApi.clientCaFile: '"/etc/secrets/vault/lx-annotate-transfer-client-ca.crt"'
+  luxnix.lxAnnotateLocal.hub.transferApi.clientCaFile: '"/var/lib/lx-annotate/hub-pki/client-ca.pem"'
+
+  # Provision the receiver-side node ledger from the separately delivered
+  # request secret. The plaintext secret is hashed by the application model.
+  luxnix.lxAnnotateLocal.hub.nodeProvisioning.enable: "true"
+  luxnix.lxAnnotateLocal.hub.nodeProvisioning.nodes: '[ { nodeKey = "gc-02";
+    displayName = "gc-02 site node"; role = "site_node";
+    centerKey = "university_hospital_wuerzburg";
+    sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-02-source-node-secret"; }
+    { nodeKey = "gs-02"; displayName = "gs-02 central hub";
+    role = "central_hub"; baseUrl = "https://gs-02.intern"; } ]'
 
   # Explicit Django central-node setting
   'luxnix.lxAnnotateLocal.django.extraSettings."IS_CENTRAL_NODE"': "lib.mkForce true"
@@ -58,6 +69,18 @@ ansible_roles:
   - "nginx_host"
 
 host_luxnix:
+  # Production Vault server for the transfer PKI. Initialization and unseal
+  # remain an explicit offline-custodian ceremony.
+  vault.server.enable: "true"
+  vault.server.bindAddress: '"172.16.255.22:8200"'
+  vault.server.apiAddress: '"https://vault.endo-reg.net:8200"'
+  vault.server.clusterAddress: '"https://gs-02.intern:8201"'
+  vault.server.tlsCertFile: '"/var/lib/lx-annotate-ssl/lx-annotate-selfsigned.crt"'
+  vault.server.tlsKeyFile: '"/var/lib/lx-annotate-ssl/lx-annotate-selfsigned.key"'
+  vault.server.caCertFile: '"/var/lib/lx-annotate-ssl/lx-annotate-selfsigned.crt"'
+  vault.server.hubPki.enable: "true"
+  vault.server.hubPki.caCertificateFile: '"/var/lib/lx-annotate/hub-pki/client-ca.pem"'
+
   boot_decryption_stick_gs_01.enable: "true"
 
   generic_settings.hostPlatform: '"x86_64-linux"'
@@ -94,4 +117,4 @@ host_luxnix:
   generic_settings.linux.kernelModulesBlacklist: []
 
 host_nixos:
-  networking.firewall.interfaces.tun0.allowedTCPPorts: "lib.mkAfter [ 11434 8088 ]"
+  networking.firewall.interfaces.tun0.allowedTCPPorts: "lib.mkAfter [ 11434 8088 8200 ]"

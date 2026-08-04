@@ -73,6 +73,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    endoreg-db = {
+      url = "git+https://github.com/wg-lux/endoreg-db.git?ref=prototype";
+      flake = false;
+    };
+
     nixos-generators = {
       url = "github:nix-community/nixos-generators";
       inputs.nixpkgs.follows = "nixpkgs";

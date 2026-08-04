@@ -67,7 +67,7 @@ The following secrets are automatically managed:
 ### Django Application Secrets  
 - **`/etc/secrets/vault/django_secret_key`**: Django SECRET_KEY for local API instances
 - **`/etc/secrets/vault/django_central_secret_key`**: Django SECRET_KEY for central API instances
-  - Used by: endoreg-client role, endoreg-db-central-01 role
+  - Used by: lx-annotate through the endoreg-client role
 
 ### Nextcloud Secrets
 - **`/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_minio_credentials`**: MinIO credentials for Nextcloud
@@ -225,7 +225,9 @@ systemctl list-dependencies managed-secrets-setup.service
 
 # Restart dependent services
 sudo systemctl restart postgres-endoreg-setup.service
-sudo systemctl restart endoreg-db-api-local.service
+sudo systemctl restart lx-annotate-runtime-env.service
+sudo systemctl restart lx-annotate-feature-registry-guard.service
+sudo systemctl restart lx-annotate.service
 ```
 
 If the failing secret is Vault-backed, inspect the chain in order:

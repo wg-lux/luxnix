@@ -10,6 +10,64 @@ For a first-time setup flow, start with [Getting Started](./getting-started.md).
 - Deployment method: `nixos-anywhere`
 - Control machine: host where this repository is cloned
 
+## Production Source And Temporary-File Policy
+
+LuxNix is a fleet repository: shared modules and defaults can affect every
+clinical-network host, even when a command names only one target. A production
+deployment must therefore be built from an attributable, reviewable source.
+
+Use a long-lived LuxNix clone or a deliberately retained release worktree as the
+deployment source. Before evaluating or switching a host:
+
+1. Confirm the repository path and target host explicitly.
+2. Record `git rev-parse HEAD`, the selected branch or tag, and the `flake.lock`
+   revision with the deployment evidence.
+3. Review `git status --short`; do not deploy unrelated or unexplained changes.
+4. Run evaluation and build from the same source path that will be deployed.
+5. Run the host acceptance checks after activation and retain their logs.
+
+Do not use any of the following as a production Flake or repository source:
+
+- an untracked checkout or Git worktree below `/tmp`;
+- a copied repository whose commit and local changes are not recorded;
+- a generated render directory, test fixture, cache, or verification clone;
+- a temporary safety override that has not been incorporated into the reviewed
+  production configuration.
+
+Temporary directories are appropriate for disposable build output, rendered
+configuration, test environments, and short-lived artifact staging. They are
+not runtime dependencies and must not become an operator's source of truth.
+Secrets, clinical data, and durable audit evidence must never be stored there.
+
+### Release Worktrees
+
+A release worktree is justified when it provides a stable, named and reviewable
+release boundary while other development continues. Keep it outside `/tmp`,
+attach it to a named branch or tag, and require a clean status before deployment.
+Remove it when the release is superseded and all unique commits are preserved by
+a durable Git reference. A worktree created only to render, build, or test one
+candidate has no continuing production need after acceptance.
+
+### Post-Deployment Cleanup
+
+After acceptance succeeds:
+
+1. Verify `/run/current-system` and the relevant service `ExecStart` paths. The
+   active NixOS generation must resolve to `/nix/store`, not to a temporary
+   checkout.
+2. Confirm that no live process references the candidate's temporary paths.
+3. Remove registered temporary worktrees with `git worktree remove`, then run
+   `git worktree prune` in the owning repository.
+4. Remove disposable wheels, virtual environments, render output, caches, and
+   diagnostic response bodies according to the host's temporary-file policy.
+5. Remove an extra temporary GC root only after another durable root, such as
+   `/run/current-system` or a system profile generation, protects the selected
+   closure. Never delete paths directly from `/nix/store`.
+
+Prefer a recoverable quarantine when the contents have not yet been independently
+verified. Preserve structured deployment and acceptance logs, but move them to
+the approved audit-log location rather than leaving them in `/tmp`.
+
 ## Prerequisites
 
 - Nix + flakes enabled on the control machine

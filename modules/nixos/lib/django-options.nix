@@ -45,8 +45,7 @@ in
   djangoAllowedHosts = mkOption {
     type = types.listOf types.str;
     default =
-      defaults.djangoAllowedHosts
-      or [
+      defaults.djangoAllowedHosts or [
         "localhost"
         "127.0.0.1"
       ];
@@ -138,7 +137,7 @@ in
 
   djangoModule = mkOption {
     type = types.str;
-    default = defaults.djangoModule or "endo_api";
+    default = defaults.djangoModule or "lx_annotate";
     description = "Python module containing the Django project.";
   };
 

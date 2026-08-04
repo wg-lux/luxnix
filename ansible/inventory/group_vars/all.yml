@@ -91,6 +91,7 @@ group_luxnix:
   generic_settings.network.hosts.gs_02.domains:
     - "glm.endo-reg.net"
     - "gs-02.intern"
+    - "vault.endo-reg.net"
   # generic_settings.network.hosts.gs_02.syncthing_id: null
   generic_settings.network.hosts.gs_02.network_cluster: '"L2"'
 
