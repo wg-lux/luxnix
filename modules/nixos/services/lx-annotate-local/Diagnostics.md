@@ -81,11 +81,11 @@ sudo systemctl status lx-annotate.service
 
 Wheel mode also runs `lx-annotate-terminology-bootstrap.service` as a
 best-effort job. It registers the `report_template_examples` bundle shipped
-under the installed `lx_dtypes/data` package when no registry exists. Base-data
-loading orders this attempt with `Wants` and `After` so the published `0.9.53`
-runtime cannot race it, but deliberately does not use `Requires`. Missing or
-invalid terminology therefore disables terminology features without blocking
-the web service, workers, migrations, or base-data loading.
+under the installed `lx_dtypes/data` package when no registry exists. The job
+is ordered after the web service and runs independently; no application startup
+unit wants, requires, or waits for it. Missing or invalid terminology therefore
+disables terminology features without blocking the web service, workers,
+migrations, or base-data loading.
 
 ```bash
 sudo systemctl status lx-annotate-terminology-bootstrap.service

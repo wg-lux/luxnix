@@ -583,9 +583,6 @@ let
   dataRecoveryServiceUnits = lib.optionals cfg.dataRecovery.enable [
     "lx-annotate-data-recovery.service"
   ];
-  terminologyProvisioningServiceUnits = lib.optionals useWheelRuntime [
-    "lx-annotate-terminology-bootstrap.service"
-  ];
   hlsBackfillServiceUnits = lib.optionals cfg.hlsBackfill.enable [
     "lx-annotate-hls-backfill.service"
   ];
@@ -2304,6 +2301,7 @@ in
 
       systemd.services.lx-annotate-terminology-bootstrap = mkIf useWheelRuntime (mkLxAnnotateAppService {
         description = "Best-effort provisioning of LX-Annotate terminology";
+        after = [ "lx-annotate.service" ];
         serviceConfig = {
           Type = "oneshot";
           RemainAfterExit = true;
@@ -2314,8 +2312,8 @@ in
 
       systemd.services.lx-annotate-load-base-data = mkLxAnnotateAppService {
         description = "Load LX-Annotate base data";
-        after = [ "lx-annotate-migrate.service" ] ++ terminologyProvisioningServiceUnits;
-        wants = [ "lx-annotate-migrate.service" ] ++ terminologyProvisioningServiceUnits;
+        after = [ "lx-annotate-migrate.service" ];
+        wants = [ "lx-annotate-migrate.service" ];
         requires = [ "lx-annotate-migrate.service" ];
         before = [
           "lx-annotate-master-key-check.service"

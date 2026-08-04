@@ -42,6 +42,8 @@ def _gc_02_terminology_contract() -> dict[str, Any]:
         }};
         bootstrap = {{
           before = bootstrap.before;
+          after = bootstrap.after;
+          wantedBy = bootstrap.wantedBy;
           serviceConfig = bootstrap.serviceConfig;
           unitConfig = bootstrap.unitConfig;
           script = builtins.readFile bootstrap.serviceConfig.ExecStart;
@@ -138,14 +140,16 @@ def test_packaged_default_terminology_is_best_effort_and_not_a_startup_gate() ->
     assert bootstrap["serviceConfig"]["User"] == "endoreg-service-user"
     assert "/var/lib/lx-annotate/data" in bootstrap["unitConfig"]["RequiresMountsFor"]
     assert bootstrap["before"] == []
+    assert "lx-annotate.service" in bootstrap["after"]
+    assert "multi-user.target" in bootstrap["wantedBy"]
     assert "lx-dtypes-kb-registry add-current" in script
     assert "--activate" in script
     assert "shipped in the wheel environment" in script
     assert "exit 0" in script
     assert "lx-dtypes-prototype-kb-smoke" in script
 
-    assert unit_name in contract["loadBaseData"]["after"]
-    assert unit_name in contract["loadBaseData"]["wants"]
+    assert unit_name not in contract["loadBaseData"]["after"]
+    assert unit_name not in contract["loadBaseData"]["wants"]
     assert unit_name not in contract["loadBaseData"]["requires"]
     assert unit_name not in contract["preflight"]["after"]
     assert unit_name not in contract["preflight"]["requires"]
