@@ -456,7 +456,7 @@ luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort = 5432;
     maintenance.autoUpdates.enable = false;
 
 
-    vault.server.apiAddress = "https://vault.endo-reg.net:8200";
+    vault.server.apiAddress = "https://127.0.0.1:8200";
 
 
     vault.server.bindAddress = "172.16.255.22:8200";
