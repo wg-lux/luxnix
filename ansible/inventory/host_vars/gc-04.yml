@@ -1,6 +1,5 @@
 # inventory/host_vars/gc-04.yml
 ---
-ansible_python_interpreter: "{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python"
 luxnix_dev_repo: "/home/admin/dev/luxnix"
 template_name: "main"
 

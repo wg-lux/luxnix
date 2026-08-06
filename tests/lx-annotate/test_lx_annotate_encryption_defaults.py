@@ -4,18 +4,12 @@ from pathlib import Path
 import re
 
 
-SCRIPTS_NIX = Path(
-    "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts.nix"
-)
-CONFIG_NIX = Path(
-    "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/config.nix"
-)
-OPTIONS_NIX = Path(
-    "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/options.nix"
-)
-SCRIPTS_ENV_NIX = Path(
-    "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts/env.nix"
-)
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SERVICE_DIR = REPO_ROOT / "modules/nixos/services/lx-annotate-local"
+SCRIPTS_NIX = SERVICE_DIR / "scripts.nix"
+CONFIG_NIX = SERVICE_DIR / "config.nix"
+OPTIONS_NIX = SERVICE_DIR / "options.nix"
+SCRIPTS_ENV_NIX = SERVICE_DIR / "scripts/env.nix"
 
 
 def _has_assignment(source: str, name: str) -> bool:
@@ -61,7 +55,8 @@ def test_lx_annotate_scripts_export_protected_storage_contract():
     assert 'ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-watch --once";' in config_source
     assert 'ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-export-frames";' in config_source
     assert "LX_ANNOTATE_ENCRYPTED_DATA_DIR = envDataDir;" in helper_source
-    assert "commonExtraEnv = commonEnv // lib.optionalAttrs cfg.hub.transferApi.enable" in config_source
+    assert "commonExtraEnv =" in config_source
+    assert "// lib.optionalAttrs cfg.hub.transferApi.enable {" in config_source
     assert "DJANGO_SECRET_KEY_FILE = toString cfg.django.djangoSecretKeyFile;" in helper_source
     assert 'DJANGO_DB_PASSWORD_FILE = "${envConfDir}/db_pwd";' in helper_source
 

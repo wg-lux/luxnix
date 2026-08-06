@@ -74,7 +74,8 @@ the approved audit-log location rather than leaving them in `/tmp`.
 - `nixos-anywhere` available on the control machine
 - SSH keypair on control machine (`~/.ssh/id_ed25519` by default)
 - Target machine booted into NixOS installer
-- Host config exists under `systems/x86_64-linux/<host>/`
+- Existing host inputs are present in the Ansible inventory, or you are ready
+  to add them in the next section.
 
 ## 1. Prepare target machine (NixOS installer)
 
@@ -105,13 +106,29 @@ ssh nixos@<target-ip>
 
 On the control machine:
 
-1. Ensure these files exist:
-   - `systems/x86_64-linux/<host>/default.nix`
-   - `systems/x86_64-linux/<host>/disks.nix`
-   - `systems/x86_64-linux/<host>/hardware-configuration.nix`
-   - `homes/x86_64-linux/admin@<host>/default.nix`
-2. If generating hardware config from installer output, copy only relevant hardware fields.
-3. Confirm disk identifiers in `disks.nix` match target hardware.
+1. Add a new remote target to `ansible/inventory/hosts.ini` and its appropriate
+   inventory groups. Existing hosts should already be present there.
+2. Put durable host values in `ansible/inventory/host_vars/<host>.yml` and
+   shared defaults below `ansible/inventory/group_vars/`.
+3. When Home Manager is needed, add the host to
+   `ansible/inventory/home-hosts.yml` and its values below
+   `ansible/inventory/host_vars/home/<host>.yml`. A Home-only host does not need
+   a fake remote inventory entry.
+4. Run `devenv tasks run autoconf:check`, then
+   `devenv tasks run autoconf:generate`.
+5. Review the generated outputs without editing them directly:
+   - `systems/x86_64-linux/<host>/default.nix`: Required for every exported
+     NixOS host configuration.
+   - `homes/x86_64-linux/<user>@<host>/default.nix`: Required only when the host
+     has a Home Manager configuration.
+6. Inspect the system entry point's imports and add only the adjacent files the
+   selected host needs:
+   - `disks.nix`: Required when the host entry point imports it for a disko-based installation.
+   - `hardware-configuration.nix`: Required only when the host entry point imports generated hardware configuration.
+7. If the entry point imports generated hardware configuration, copy only the
+   relevant fields from the installer output into `hardware-configuration.nix`.
+8. If the entry point imports `disks.nix`, confirm its disk identifiers match
+   the target hardware.
 
 ## 3. Optional: bootstrap vault/secrets
 
@@ -119,14 +136,11 @@ If your host relies on managed secrets:
 
 ```bash
 # Create local password mapping from tracked example
+mkdir -p ansible/secrets
 cp ansible/admin-passwords.example.yml ansible/secrets/admin-passwords.yml
 
-# Build autoconf outputs (including autoconf/inventory.yml)
-devenv tasks run autoconf:finished
-
 # Bootstrap vault and export per-host encrypted secrets
-devenv run vault-bootstrap -- \
-  --inventory ./autoconf/inventory.yml \
+devenv shell vault-bootstrap \
   --admin-passwords ansible/secrets/admin-passwords.yml \
   --export
 ```
@@ -134,7 +148,7 @@ devenv run vault-bootstrap -- \
 Validate admin passwords (optional):
 
 ```bash
-devenv run validate-admin-passwords -- \
+devenv shell validate-admin-passwords \
   --vault-dir ~/.lxv \
   --vault-key ~/.lxv.key \
   --admin-passwords ansible/secrets/admin-passwords.yml
@@ -152,7 +166,7 @@ nix eval ".#nixosConfigurations.<host>.config.system.build.toplevel.drvPath"
 nix build ".#nixosConfigurations.<host>.config.system.build.toplevel" --no-link
 
 # Connectivity via Ansible inventory
-./scripts/check-connectivity.sh <host>
+devenv shell check-connectivity <host>
 ```
 
 Optional full validation for all configured hosts:
@@ -179,17 +193,26 @@ nh home switch
 # nhh
 ```
 
-If using boot decryption stick setup, continue in [Security](./security.md#boot-decryption-usb-stick-setup).
+If using a boot decryption stick, continue with
+[Hardware Setup](./hardware-setup.md#boot-decryption-setup).
 
 ## 7. Add a new host checklist
 
-1. Add system directory: `systems/x86_64-linux/<host>/`
-2. Add home config: `homes/x86_64-linux/admin@<host>/default.nix`
-3. Add host to `ansible/inventory/hosts.ini`
-4. Add/update `ansible/inventory/host_vars/<host>.yml` as needed
-5. Run `devenv tasks run autoconf:finished`
-6. Run preflight checks
-7. Deploy with `nixos-anywhere`
+1. Add the remote target to `ansible/inventory/hosts.ini` and the appropriate
+   inventory groups.
+2. Add durable host inputs below `ansible/inventory/host_vars/<host>.yml` and
+   shared defaults below `ansible/inventory/group_vars/`.
+3. When an admin Home Manager configuration is needed, add the host to
+   `ansible/inventory/home-hosts.yml` and its values below
+   `ansible/inventory/host_vars/home/<host>.yml`.
+4. Add deliberately hand-maintained disk, boot, or hardware files beside the
+   system entry point only when its imports require them.
+5. Run `devenv tasks run autoconf:check`, then
+   `devenv tasks run autoconf:generate`.
+6. Review generated outputs without editing them directly. Correct their
+   Inventory, template, or Autoconf inputs instead.
+7. Run the preflight checks and deploy with `nixos-anywhere` only after they
+   pass.
 
 ## Notes on old commands in historical docs
 

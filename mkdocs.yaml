@@ -34,6 +34,9 @@ theme:
         name: Switch to light mode
 
 docs_dir: ./docs
+exclude_docs: |
+  Luxnix_Setup.excalidraw.md
+  Nixicle reference/
 
 plugins:
   - search:
@@ -50,17 +53,35 @@ markdown_extensions:
   - toc:
       permalink: true
   - pymdownx.emoji:
-      emoji_index: !!python/name:materialx.emoji.twemoji
-      emoji_generator: !!python/name:materialx.emoji.to_svg
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
 
 nav:
-  - Introduction: index.md
-  - Getting Started: getting-started.md
-  - Architecture: architecture.md
-  - Deployment Guide: deployment-guide.md
-  - Vault Setup: vault-setup.md
-  - SSH Host Identity: ssh-host-identity.md
-  - Hardware Setup: hardware-setup.md
-  - Security: security.md
-  - Service Architecture: service-architecture.md
-  - User Management: user-management.md
+  - Home: index.md
+  - Start Here:
+      - Getting Started: getting-started.md
+      - Development: development.md
+      - Autoconf and Local Inventory: autoconf.md
+  - Architecture:
+      - System Architecture: architecture.md
+      - Network Architecture: network-architecture.md
+      - Network Resolution: network-resolution.md
+      - Database Ownership: database-ownership.md
+      - Access Management: access-management.md
+  - Deployment and Testing:
+      - Deployment Guide: deployment-guide.md
+      - Hardware Setup: hardware-setup.md
+      - Virtualization: virtualization-guide.md
+      - SSH Host Identity: ssh-host-identity.md
+      - Configuration Tests: testing-nixtests.md
+  - Services:
+      - Service Module Pattern: deploying-services-lx-annotate-style.md
+      - lx-annotate Encrypted Data: lx-annotate-encrypted-data.md
+      - lx-annotate Secure HLS: lx-annotate-secure-hls.md
+      - lx-annotate Cluster Readiness: lx-annotate-cluster-readiness.md
+  - Vault:
+      - Setup and Bootstrap: vault-setup.md
+      - Machine Enrollment: vault-hub-machine-enrollment.md
+      - Owner Actions: vault-owner-immediate-actions.md
+  - Clinical Operations:
+      - Central Hub Transfer: clinical-hub-transfer-guide.md

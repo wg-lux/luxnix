@@ -313,6 +313,7 @@ luxnix.generic-settings = {
 ## See Also
 
 - [GPU Configuration Guide](gpu-readme.md) - Detailed GPU setup
-- [Virtualization Module](../virtualization/readme.md) - VFIO and GPU passthrough
-- [Security Guide](../../../../docs/security.md) - Security best practices
+- [Virtualization Guide](../../../../docs/virtualization-guide.md) - VFIO and GPU passthrough
+- [Vault Setup](../../../../docs/vault-setup.md) - Secret bootstrap and lifecycle
+- [SSH Host Identity](../../../../docs/ssh-host-identity.md) - Host-key verification and rotation
 - [Network Architecture](../../../../docs/network-architecture.md) - Network setup

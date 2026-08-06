@@ -1,14 +1,16 @@
-from lx_administration.storage.manager import (
-    # StorageManager,
-    initialize_storage_manager_from_env,
-)
-from lx_administration.storage.mounting import (
+"""Mount the configured persisting-storage drive when required."""
+
+import subprocess
+
+from lx_administration.storage import (
     drive_with_serial_available,
     external_drive_requires_mount,
+    initialize_storage_manager_from_env,
     mount_drive,
 )
 
-if __name__ == "__main__":
+
+def main() -> int:
     sm = initialize_storage_manager_from_env()
     if external_drive_requires_mount(sm):
         device = drive_with_serial_available(sm)
@@ -22,12 +24,14 @@ if __name__ == "__main__":
                 sm.storage_persisting_mount_point,
                 filesystem="ext4",
             )
-        except Exception as exc:
-            # Surface the underlying mount error for troubleshooting
-            if hasattr(exc, "stdout") or hasattr(exc, "stderr"):
-                print("mount stdout:\n", getattr(exc, "stdout", ""))
-                print("mount stderr:\n", getattr(exc, "stderr", ""))
-            raise
+        except subprocess.CalledProcessError as exc:
+            raise RuntimeError(
+                f"Persisting-storage mount failed (exit {exc.returncode})."
+            ) from exc
     else:
         print("Persisting storage drive is already mounted or not required.")
-    #
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

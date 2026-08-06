@@ -1,4 +1,4 @@
-# /default.nix
+# gc-05/default.nix
 
 { config, pkgs, lib, modulesPath, ... }:
 
@@ -119,6 +119,9 @@ endoreg-client.defaultCenterKey = "rbk_stuttgart";
 
 
     generic-settings.network.glm52.port = 8088;
+
+
+    generic-settings.network.hosts.c-01.ip-vpn = "172.16.255.131";
 
 
     generic-settings.network.hosts.gc-01.domains = [ "gc-01.intern" "lx-annotate.local" ];

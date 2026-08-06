@@ -1,4 +1,4 @@
-# /default.nix
+# gs-01/default.nix
 
 { config, pkgs, lib, modulesPath, ... }:
 
@@ -64,8 +64,6 @@ ssh-access.dev-04.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICSpoZVcX+K6N
 
   services = {
 luxnix.lxAnnotateLocal.runtime.celeryBroker.secureTransportConfirmed = true;
-luxnix.lxAnnotateLocal.runtime.externalServices.postgresHost = "172.16.255.22";
-luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort = 5432;
 luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl = "redis://172.16.255.14:6380/1";
 luxnix.lxAnnotateLocal.runtime.trainingWorker.cudaVisibleDevices = "0";
 luxnix.lxAnnotateLocal.runtime.trainingWorker.mode = "manual";
@@ -122,6 +120,9 @@ ollama.host = "0.0.0.0";
 
 
     generic-settings.network.glm52.port = 8088;
+
+
+    generic-settings.network.hosts.c-01.ip-vpn = "172.16.255.131";
 
 
     generic-settings.network.hosts.gc-01.domains = [ "gc-01.intern" "lx-annotate.local" ];

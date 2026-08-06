@@ -1,18 +1,18 @@
-from configparser import ConfigParser
-from pydantic import BaseModel
-from pydantic import ConfigDict
-from pathlib import Path
-from typing import Optional, Dict, Any, List
 import warnings
+from configparser import ConfigParser
+from pathlib import Path
+from typing import Self
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+def _config_section(values: dict[str, object]) -> dict[str, str]:
+    """Convert model data to values accepted by ConfigParser."""
+    return {key: str(value) for key, value in values.items() if value is not None}
 
 
 class AnsibleCfgDefaults(BaseModel):
-    """
-    Default configuration settings for Ansible.
-
-    This class defines the default paths and settings used in the Ansible configuration,
-    including inventory locations, variable paths, roles path, logging, and vault identities.
-    """
+    """Default paths and vault identities for Ansible."""
 
     inventory: str = "./ansible/inventory/hosts.ini"
     group_vars: str = "./ansible/inventory/group_vars"
@@ -20,80 +20,64 @@ class AnsibleCfgDefaults(BaseModel):
     roles_path: str = "./ansible/roles"
     log_path: str = "./logs/ansible.log"
     library: str = "./ansible/modules"
-    vault_identity_list: Optional[str] = None
-    private_key_file: Optional[str] = None
+    vault_identity_list: str | None = None
+    private_key_file: str | None = None
 
-    def get_vid_list(self) -> List[str]:
-        """
-        Get the vault identity list as a list of strings.
-
-        Returns:
-            list: List of vault identity strings split by comma, or empty list if no vault identities exist.
-        """
-        if self.vault_identity_list:
-            return self.vault_identity_list.split(",")
-        else:
+    def get_vid_list(self) -> list[str]:
+        """Return the configured non-empty vault identity entries."""
+        if not self.vault_identity_list:
             return []
+        return [
+            entry.strip()
+            for entry in self.vault_identity_list.split(",")
+            if entry.strip()
+        ]
 
-    def get_vid_dict(self) -> Dict[str, str]:
-        """
-        Convert vault identity list into a dictionary mapping hosts to paths.
+    def get_vid_dict(self) -> dict[str, str]:
+        """Return vault identities keyed by host."""
+        return {
+            host: path
+            for entry in self.get_vid_list()
+            if "@" in entry
+            for host, path in [entry.split("@", 1)]
+        }
 
-        Returns:
-            dict: Dictionary with host as key and path as value.
-        """
-        vid_list = self.get_vid_list()
-        vid_dict: Dict[str, str] = {}
-        for vid in vid_list:
-            if "@" in vid:
-                host, path = vid.split("@", 1)
-                vid_dict[host] = path
+    @staticmethod
+    def vid_dict2list(vid_dict: dict[str, str]) -> list[str]:
+        """Format host-to-path mappings as Ansible vault identities."""
+        return [f"{host}@{path}" for host, path in vid_dict.items()]
 
-        return vid_dict
-
-    def vid_dict2list(self, vid_dict: Dict[str, str]) -> List[str]:
-        """
-        Convert a dictionary of vault identities to a list format.
-
-        Args:
-            vid_dict (dict): Dictionary with host as key and path as value.
-
-        Returns:
-            list: List of strings in format 'host@path'.
-        """
-        vid_list: List[str] = []
-        for host, path in vid_dict.items():
-            vid_list.append(f"{host}@{path}")
-        return vid_list
-
-    def vid_list2str(self, vid_list: List[str]) -> str:
+    @staticmethod
+    def vid_list2str(vid_list: list[str]) -> str:
         return ",".join(vid_list)
 
-    def update_vid_entry(self, host: str, path: str):
+    def update_vid_entry(self, host: str, path: str) -> None:
         vid_dict = self.get_vid_dict()
         vid_dict[host] = path
         vault_identity_list = self.vid_dict2list(vid_dict)
         self.vault_identity_list = self.vid_list2str(vault_identity_list)
         self.drop_missing_vid()
 
-    def drop_missing_vid(self):
-        file_not_found: List[str] = []
+    def drop_missing_vid(self) -> None:
+        missing_hosts: list[str] = []
         vid_dict = self.get_vid_dict()
         for host, path in vid_dict.items():
-            if not Path(path).exists():
-                file_not_found.append(host)
+            if not Path(path).expanduser().exists():
+                missing_hosts.append(host)
 
-        for host in file_not_found:
+        for host in missing_hosts:
             del vid_dict[host]
 
         self.vault_identity_list = self.vid_list2str(self.vid_dict2list(vid_dict))
 
-        if file_not_found:
+        if missing_hosts:
             warnings.warn(
-                f"Removing vault_identities with missing files in ansible.cfg: {file_not_found}"
+                "Removing vault_identities with missing files in ansible.cfg: "
+                f"{missing_hosts}",
+                stacklevel=2,
             )
 
-    def validate_cfg(self):
+    def validate_cfg(self) -> None:
         self.drop_missing_vid()
 
 
@@ -103,59 +87,74 @@ class AnsibleCfgPrivilegeEscalation(BaseModel):
     become_user: str = "admin"
     become_ask_pass: bool = False
 
-    def validate_cfg(self):
-        pass
-
 
 class AnsibleCfg(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="allow")
 
-    defaults: AnsibleCfgDefaults = AnsibleCfgDefaults()
-    privilege_escalation: AnsibleCfgPrivilegeEscalation = (
-        AnsibleCfgPrivilegeEscalation()
+    defaults: AnsibleCfgDefaults = Field(default_factory=AnsibleCfgDefaults)
+    privilege_escalation: AnsibleCfgPrivilegeEscalation = Field(
+        default_factory=AnsibleCfgPrivilegeEscalation
     )
 
     @classmethod
-    def ensure_vault_id_pwdfile(cls, cfg_path: str, host: str, path: str):
-        """Ensure vault_id and password_file entries in ansible.cfg"""
+    def ensure_vault_id_pwdfile(
+        cls,
+        cfg_path: str | Path,
+        host: str,
+        path: str | Path,
+    ) -> None:
+        """Ensure one host-to-password-file entry exists in ansible.cfg."""
         host = host.replace("@", "_")
-        path = path.replace("@", "_")
+        path_string = str(path).replace("@", "_")
         ansible_cfg = cls.from_file(cfg_path)
-        ansible_cfg.defaults.update_vid_entry(host, path)
+        ansible_cfg.defaults.update_vid_entry(host, path_string)
         ansible_cfg.save_to_file(cfg_path)
 
     @classmethod
-    def from_file(cls, file: str):
-        """Load ansible.cfg file"""
-        config = ConfigParser()
-        config.read(file)
+    def from_file(cls, file: str | Path) -> Self:
+        """Load an existing ansible.cfg file."""
+        config_path = Path(file).expanduser().resolve()
+        if not config_path.is_file():
+            raise FileNotFoundError(f"Ansible config not found: {config_path}")
 
-        # Convert ConfigParser to dict structure
-        data: Dict[str, Dict[str, Any]] = {"defaults": {}, "privilege_escalation": {}}
+        config = ConfigParser()
+        config.read(config_path, encoding="utf-8")
+
+        data: dict[str, dict[str, str | bool]] = {
+            "defaults": {},
+            "privilege_escalation": {},
+        }
 
         if config.has_section("defaults"):
             data["defaults"] = dict(config["defaults"])
 
         if config.has_section("privilege_escalation"):
-            # Convert string 'True'/'False' to boolean for boolean fields
-            priv_esc: Dict[str, Any] = dict(config["privilege_escalation"])
+            privilege_escalation: dict[str, str | bool] = dict(
+                config["privilege_escalation"]
+            )
             for key in ["become", "become_ask_pass"]:
-                if key in priv_esc:
-                    priv_esc[key] = config.getboolean("privilege_escalation", key)
-            data["privilege_escalation"] = priv_esc
+                if key in privilege_escalation:
+                    privilege_escalation[key] = config.getboolean(
+                        "privilege_escalation", key
+                    )
+            data["privilege_escalation"] = privilege_escalation
 
         return cls.model_validate(data)
 
-    def validate_cfg(self):
-        """Validate ansible.cfg model"""
+    def validate_cfg(self) -> None:
+        """Remove vault identities whose files no longer exist."""
         self.defaults.validate_cfg()
-        self.privilege_escalation.validate_cfg()
 
-    def save_to_file(self, file: str):
-        """Save ansible.cfg file"""
+    def save_to_file(self, file: str | Path) -> None:
+        """Save ansible.cfg, omitting unset optional values."""
+        config_path = Path(file).expanduser().resolve()
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+
         config = ConfigParser()
-        config["defaults"] = self.defaults.model_dump()
-        config["privilege_escalation"] = self.privilege_escalation.model_dump()
+        config["defaults"] = _config_section(self.defaults.model_dump())
+        config["privilege_escalation"] = _config_section(
+            self.privilege_escalation.model_dump()
+        )
 
-        with open(file, "w") as f:
-            config.write(f)
+        with config_path.open("w", encoding="utf-8") as output:
+            config.write(output)

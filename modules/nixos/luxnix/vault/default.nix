@@ -12,8 +12,10 @@ let
   runtimeDir = "/run/luxnix/vault";
   runtimeEnvironmentFile = "${runtimeDir}/vault.env";
   runtimeTokenFile = "${runtimeDir}/vault.token";
+  runtimeStatusFile = "${runtimeDir}/enrollment-status";
   vaultAuthEnabled = cfg.enable && cfg.client.enable && cfg.client.auth.method != "none";
   serverCfg = cfg.server;
+  managedTlsCfg = serverCfg.managedTls;
   hubPkiCfg = serverCfg.hubPki;
   clientHubPkiCfg = cfg.client.hubPki;
 
@@ -158,30 +160,134 @@ let
       secret_id_tmp="$(${pkgs.coreutils}/bin/mktemp "$output_directory/.secret-id.XXXXXX")"
       ca_tmp="$(${pkgs.coreutils}/bin/mktemp "$output_directory/.client-ca.XXXXXX")"
       server_ca_tmp="$(${pkgs.coreutils}/bin/mktemp "$output_directory/.server-ca.XXXXXX")"
+      server_ca_fingerprint_tmp="$(${pkgs.coreutils}/bin/mktemp "$output_directory/.server-ca-fingerprint.XXXXXX")"
       node_secret_tmp="$(${pkgs.coreutils}/bin/mktemp "$output_directory/.node-secret.XXXXXX")"
       cleanup_outputs() {
-        ${pkgs.coreutils}/bin/rm -f "$role_id_tmp" "$secret_id_tmp" "$ca_tmp" "$server_ca_tmp" "$node_secret_tmp"
+        ${pkgs.coreutils}/bin/rm -f "$role_id_tmp" "$secret_id_tmp" "$ca_tmp" \
+          "$server_ca_tmp" "$server_ca_fingerprint_tmp" "$node_secret_tmp"
       }
       trap cleanup_outputs EXIT
 
       vault read -field=role_id "auth/approle/role/$role/role-id" > "$role_id_tmp"
       vault write -field=secret_id -f "auth/approle/role/$role/secret-id" > "$secret_id_tmp"
       vault read -field=certificate "$mount/cert/ca" > "$ca_tmp"
-      ${pkgs.coreutils}/bin/cp ${lib.escapeShellArg (toString serverCfg.tlsCertFile)} "$server_ca_tmp"
+      ${pkgs.coreutils}/bin/cp ${lib.escapeShellArg (toString serverCfg.caCertFile)} "$server_ca_tmp"
+      server_ca_fingerprint="$(${pkgs.openssl}/bin/openssl x509 \
+        -in "$server_ca_tmp" -noout -fingerprint -sha256 \
+        | ${pkgs.coreutils}/bin/cut -d= -f2)"
+      ${pkgs.coreutils}/bin/printf '%s\n' "$server_ca_fingerprint" > "$server_ca_fingerprint_tmp"
       if ! vault kv get -field=shared_secret "$kv_mount/nodes/$node_fqdn" > "$node_secret_tmp" 2>/dev/null; then
         ${pkgs.openssl}/bin/openssl rand -base64 48 | ${pkgs.coreutils}/bin/tr -d '\n' > "$node_secret_tmp"
         vault kv put "$kv_mount/nodes/$node_fqdn" shared_secret=- < "$node_secret_tmp" >/dev/null
       fi
-      ${pkgs.coreutils}/bin/chmod 0400 "$role_id_tmp" "$secret_id_tmp" "$ca_tmp" "$server_ca_tmp" "$node_secret_tmp"
+      ${pkgs.coreutils}/bin/chmod 0400 "$role_id_tmp" "$secret_id_tmp" "$ca_tmp" \
+        "$server_ca_tmp" "$server_ca_fingerprint_tmp" "$node_secret_tmp"
       ${pkgs.coreutils}/bin/mv -f "$role_id_tmp" "$output_directory/approle_role_id"
       ${pkgs.coreutils}/bin/mv -f "$secret_id_tmp" "$output_directory/approle_secret_id"
       ${pkgs.coreutils}/bin/mv -f "$ca_tmp" "$output_directory/client-ca.pem"
       ${pkgs.coreutils}/bin/mv -f "$server_ca_tmp" "$output_directory/vault-server-ca.pem"
+      ${pkgs.coreutils}/bin/mv -f "$server_ca_fingerprint_tmp" "$output_directory/vault-server-ca.sha256"
       ${pkgs.coreutils}/bin/mv -f "$node_secret_tmp" "$output_directory/source-node-secret"
       trap - EXIT
 
       echo "Enrollment material created in $output_directory. Transfer it through an approved secret-delivery channel."
+      echo "Vault server CA SHA-256: $server_ca_fingerprint"
       echo "Configure the client PKI role as $role."
+    '';
+  };
+
+  managedServerTlsTool = pkgs.writeShellApplication {
+    name = "luxnix-vault-maintain-server-tls";
+    runtimeInputs = [
+      pkgs.bash
+      pkgs.coreutils
+      pkgs.gnugrep
+      pkgs.openssl
+    ];
+    text = builtins.readFile ../../../../scripts/vault/maintain-server-tls.sh;
+  };
+
+  vaultAuthErrorClassifierTool = pkgs.writeShellApplication {
+    name = "luxnix-vault-classify-auth-error";
+    runtimeInputs = [ pkgs.gnugrep ];
+    text = builtins.readFile ../../../../scripts/vault/classify-auth-error.sh;
+  };
+
+  managedServerTlsCommand = lib.escapeShellArgs (
+    [
+      "${managedServerTlsTool}/bin/luxnix-vault-maintain-server-tls"
+      "--state-dir"
+      managedTlsCfg.stateDirectory
+      "--ca-cert"
+      (toString serverCfg.caCertFile)
+      "--ca-key"
+      managedTlsCfg.caKeyFile
+      "--server-cert"
+      (toString serverCfg.tlsCertFile)
+      "--server-key"
+      (toString serverCfg.tlsKeyFile)
+      "--read-group"
+      config.luxnix.generic-settings.sensitiveServiceGroupName
+      "--ca-common-name"
+      managedTlsCfg.caCommonName
+      "--server-common-name"
+      managedTlsCfg.serverCommonName
+      "--ca-validity-days"
+      (toString managedTlsCfg.caValidityDays)
+      "--leaf-validity-days"
+      (toString managedTlsCfg.leafValidityDays)
+      "--renew-before-days"
+      (toString managedTlsCfg.renewBeforeDays)
+      "--rotation-marker"
+      "${runtimeDir}/server-leaf-rotated"
+    ]
+    ++ lib.concatMap (name: [
+      "--dns-name"
+      name
+    ]) managedTlsCfg.dnsNames
+    ++ lib.concatMap (address: [
+      "--ip-address"
+      address
+    ]) managedTlsCfg.ipAddresses
+  );
+  vaultCaInstallTool = pkgs.writeShellApplication {
+    name = "luxnix-vault-install-server-ca";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.gnugrep
+      pkgs.openssl
+    ];
+    text = ''
+      set -euo pipefail
+      umask 077
+      if [ "$#" -ne 2 ]; then
+        echo "Usage: luxnix-vault-install-server-ca <trusted-ca.pem> <expected-sha256-fingerprint>" >&2
+        exit 2
+      fi
+      source_ca="$1"
+      expected="$(${pkgs.coreutils}/bin/printf '%s' "$2" | ${pkgs.coreutils}/bin/tr -d ':[:space:]' | ${pkgs.coreutils}/bin/tr '[:lower:]' '[:upper:]')"
+      actual="$(${pkgs.openssl}/bin/openssl x509 -in "$source_ca" -noout -fingerprint -sha256 \
+        | ${pkgs.coreutils}/bin/cut -d= -f2 \
+        | ${pkgs.coreutils}/bin/tr -d ':[:space:]' | ${pkgs.coreutils}/bin/tr '[:lower:]' '[:upper:]')"
+      if [ -z "$expected" ] || [ "$actual" != "$expected" ]; then
+        echo "ERROR: Vault CA fingerprint mismatch; refusing installation." >&2
+        exit 1
+      fi
+      if ! ${pkgs.openssl}/bin/openssl x509 -in "$source_ca" -noout -text | grep -q 'CA:TRUE'; then
+        echo "ERROR: supplied Vault trust anchor is not a CA certificate." >&2
+        exit 1
+      fi
+      target=${lib.escapeShellArg (toString cfg.client.caCertFile)}
+      target_dir="$(${pkgs.coreutils}/bin/dirname "$target")"
+      ${pkgs.coreutils}/bin/install -d -m 0750 -o root \
+        -g ${lib.escapeShellArg config.luxnix.generic-settings.sensitiveServiceGroupName} "$target_dir"
+      temporary="$(${pkgs.coreutils}/bin/mktemp "$target_dir/.vault-server-ca.XXXXXX")"
+      trap '${pkgs.coreutils}/bin/rm -f "$temporary"' EXIT
+      ${pkgs.coreutils}/bin/install -m 0644 -o root -g root "$source_ca" "$temporary"
+      ${pkgs.coreutils}/bin/mv -f "$temporary" "$target"
+      trap - EXIT
+      echo "Installed authenticated Vault CA with SHA-256 fingerprint $actual."
+      echo "No service was restarted. Verify configuration, then start vault-auth-setup.service explicitly."
     '';
   };
 
@@ -211,6 +317,22 @@ let
         -checkend ${toString clientHubPkiCfg.renewBeforeSeconds} \
       && certificate_matches_key; then
       exit 0
+    fi
+
+    if [ ! -s ${lib.escapeShellArg runtimeEnvironmentFile} ]; then
+      state="enrollment-pending"
+      if [ -s ${lib.escapeShellArg runtimeStatusFile} ]; then
+        state="$(${pkgs.coreutils}/bin/cat ${lib.escapeShellArg runtimeStatusFile})"
+      fi
+      ${optionalString cfg.client.allowOffline ''
+        if [ -s "$certificate" ] && [ -s "$private_key" ] && [ -s "$client_ca" ]; then
+          echo "WARNING: Vault runtime credentials are unavailable (state: $state); retaining cached hub PKI files." >&2
+          exit 0
+        fi
+      ''}
+      echo "ERROR: Vault runtime credentials are unavailable (state: $state); client certificate issuance remains fail-closed." >&2
+      echo "Run luxnix-vault-enrollment-status for recovery guidance." >&2
+      exit 1
     fi
 
     response="$(${pkgs.coreutils}/bin/mktemp "$output_directory/.issue-response.XXXXXX")"
@@ -298,7 +420,8 @@ let
     ENV_FILE="${runtimeEnvironmentFile}"
     TMP_ENV="$(mktemp "$RUNTIME_DIR/.vault.env.XXXXXX")"
     TMP_TOKEN="$(mktemp "$RUNTIME_DIR/.vault.token.XXXXXX")"
-    trap 'rm -f "$TMP_ENV" "$TMP_TOKEN"' EXIT
+    TMP_AUTH="$(mktemp "$RUNTIME_DIR/.vault-approle.XXXXXX")"
+    trap 'rm -f "$TMP_ENV" "$TMP_TOKEN" "$TMP_AUTH"' EXIT
 
     mkdir -p "$RUNTIME_DIR"
     chmod 0700 "$RUNTIME_DIR"
@@ -333,9 +456,17 @@ let
         fi
         ROLE_ID="$(tr -d '\n' < "$ROLE_ID_FILE")"
         SECRET_ID="$(tr -d '\n' < "$SECRET_ID_FILE")"
-        if ! ${pkgs.vault}/bin/vault write -field=token auth/approle/login \
-          role_id="$ROLE_ID" \
-          secret_id="$SECRET_ID" > "$TMP_TOKEN"; then
+        if [ -z "$ROLE_ID" ] || [ -z "$SECRET_ID" ]; then
+          echo "ERROR: Vault AppRole files must not be empty." >&2
+          exit 1
+        fi
+        chmod 0600 "$TMP_AUTH"
+        printf '%s\n%s\n' "$ROLE_ID" "$SECRET_ID" \
+          | ${pkgs.jq}/bin/jq -Rn \
+            '[inputs] as $credentials | { role_id: $credentials[0], secret_id: $credentials[1] }' \
+            > "$TMP_AUTH"
+        unset ROLE_ID SECRET_ID
+        if ! ${pkgs.vault}/bin/vault write -field=token auth/approle/login @"$TMP_AUTH" > "$TMP_TOKEN"; then
           ${optionalString cfg.client.allowOffline ''
             echo "WARNING: Vault authentication failed; continuing with locally cached secrets." >&2
             exit 0
@@ -343,6 +474,7 @@ let
           echo "ERROR: Vault AppRole authentication failed." >&2
           exit 1
         fi
+        rm -f "$TMP_AUTH"
         ;;
       *)
         echo "ERROR: Unsupported Vault auth method ${cfg.client.auth.method}." >&2
@@ -365,12 +497,126 @@ let
     chmod 0600 "$TMP_ENV"
     mv -f "$TMP_ENV" "$ENV_FILE"
     chmod 0600 "$ENV_FILE"
+    rm -f "$TMP_AUTH"
     trap - EXIT
   '';
 
+  vaultAuthProvisioningConditionScript = pkgs.writeShellScript "luxnix-vault-auth-provisioning-condition" ''
+    set -euo pipefail
+
+    write_status() {
+      status="$1"
+      temporary="$(${pkgs.coreutils}/bin/mktemp ${lib.escapeShellArg runtimeDir}/.enrollment-status.XXXXXX)"
+      ${pkgs.coreutils}/bin/printf '%s\n' "$status" > "$temporary"
+      ${pkgs.coreutils}/bin/chmod 0644 "$temporary"
+      ${pkgs.coreutils}/bin/mv -f "$temporary" ${lib.escapeShellArg runtimeStatusFile}
+    }
+
+    missing=0
+    ${optionalString (cfg.client.auth.method == "approle") ''
+      ROLE_ID_FILE=${lib.escapeShellArg (toString cfg.client.auth.roleIdFile)}
+      SECRET_ID_FILE=${lib.escapeShellArg (toString cfg.client.auth.secretIdFile)}
+      CA_CERT_FILE=${lib.escapeShellArg (toString cfg.client.caCertFile)}
+
+      for required_file in "$ROLE_ID_FILE" "$SECRET_ID_FILE" "$CA_CERT_FILE"; do
+        if [ ! -s "$required_file" ]; then
+          echo "WARNING: vault-auth-setup is deferred; required enrollment file is missing or empty: $required_file" >&2
+          missing=1
+        fi
+      done
+    ''}
+
+    if [ "$missing" -ne 0 ]; then
+      rm -f ${lib.escapeShellArg runtimeEnvironmentFile} ${lib.escapeShellArg runtimeTokenFile}
+      write_status enrollment-pending
+      echo "WARNING: lx-annotate remains fail-closed until its Vault enrollment bundle is installed." >&2
+      echo "After installing the bundle, run: systemctl start vault-auth-setup.service" >&2
+      exit 1
+    fi
+
+    auth_error="$(${pkgs.coreutils}/bin/mktemp ${lib.escapeShellArg runtimeDir}/.vault-auth-error.XXXXXX)"
+    trap '${pkgs.coreutils}/bin/rm -f "$auth_error"' EXIT
+    if ! ${vaultAuthSetupScript} 2> "$auth_error"; then
+      rm -f ${lib.escapeShellArg runtimeEnvironmentFile} ${lib.escapeShellArg runtimeTokenFile}
+      auth_state="$(${vaultAuthErrorClassifierTool}/bin/luxnix-vault-classify-auth-error "$auth_error")"
+      write_status "$auth_state"
+      case "$auth_state" in
+        tls-trust-failed)
+          echo "ERROR: vault-auth-setup is deferred: TLS trust failed. The installed Vault CA does not authenticate the presented server leaf." >&2
+          echo "Use the authenticated CA migration procedure; never enable VAULT_SKIP_VERIFY or fetch a CA from the unauthenticated endpoint." >&2
+          ;;
+        vault-sealed)
+          echo "ERROR: vault-auth-setup is deferred: Vault is sealed." >&2
+          echo "An authorized operator must unseal Vault on gs-02; clients never receive or use unseal keys." >&2
+          ;;
+        vault-unreachable)
+          echo "ERROR: vault-auth-setup is deferred: Vault is unreachable through the configured network path." >&2
+          ;;
+        auth-rejected)
+          echo "ERROR: vault-auth-setup is deferred: Vault rejected the supplied authentication material." >&2
+          ;;
+        *)
+          echo "ERROR: vault-auth-setup is deferred because Vault authentication failed with an unclassified, non-secret error." >&2
+          ;;
+      esac
+      echo "WARNING: lx-annotate remains fail-closed. Run luxnix-vault-enrollment-status for safe recovery guidance." >&2
+      echo "After correcting the problem, run: systemctl start vault-auth-setup.service" >&2
+      exit 1
+    fi
+    if [ -s ${lib.escapeShellArg runtimeEnvironmentFile} ]; then
+      write_status ready
+    else
+      write_status offline-cached
+      echo "WARNING: Vault authentication is unavailable; only explicitly allowed cached artifacts may continue." >&2
+    fi
+    ${pkgs.coreutils}/bin/rm -f "$auth_error"
+    trap - EXIT
+  '';
+
+  vaultEnrollmentStatusTool = pkgs.writeShellApplication {
+    name = "luxnix-vault-enrollment-status";
+    runtimeInputs = [ pkgs.coreutils ];
+    text = ''
+      set -euo pipefail
+      status_file=${lib.escapeShellArg runtimeStatusFile}
+      if [ ! -s "$status_file" ]; then
+        echo "Vault enrollment state: unknown (vault-auth-setup has not recorded a state)."
+        exit 1
+      fi
+      state="$(cat "$status_file")"
+      echo "Vault enrollment state: $state"
+      case "$state" in
+        ready) exit 0 ;;
+        enrollment-pending)
+          echo "Install the authenticated enrollment bundle, then start vault-auth-setup.service."
+          ;;
+        tls-trust-failed)
+          echo "Install the stable server CA only after verifying its SHA-256 fingerprint from trusted gs-02 state."
+          ;;
+        vault-sealed)
+          echo "An authorized operator must unseal Vault on gs-02. Do not place unseal keys on this client."
+          ;;
+        vault-unreachable)
+          echo "Check the configured VPN/DNS route and Vault service availability; TLS verification remains mandatory."
+          ;;
+        auth-rejected)
+          echo "Replace the AppRole enrollment files through the approved authenticated delivery channel."
+          ;;
+        vault-error)
+          echo "Inspect: journalctl -u vault-auth-setup.service -b"
+          ;;
+        offline-cached)
+          echo "Vault is not authenticated; only services with an explicit cached-artifact policy may continue."
+          ;;
+        *) echo "Inspect: journalctl -u vault-auth-setup.service -b" ;;
+      esac
+      exit 1
+    '';
+  };
+
   vaultAuthCleanupScript = pkgs.writeShellScript "luxnix-vault-auth-cleanup" ''
     set -euo pipefail
-    rm -f ${lib.escapeShellArg runtimeEnvironmentFile} ${lib.escapeShellArg runtimeTokenFile}
+    rm -f ${lib.escapeShellArg runtimeEnvironmentFile} ${lib.escapeShellArg runtimeTokenFile} ${lib.escapeShellArg runtimeStatusFile}
   '';
 in
 {
@@ -469,6 +715,13 @@ in
             description = "Generated runtime token file used by LuxNix systemd services.";
           };
 
+          runtimeStatusFile = mkOption {
+            type = types.str;
+            default = runtimeStatusFile;
+            readOnly = true;
+            description = "Generated non-secret Vault client status file used for operator diagnostics.";
+          };
+
           auth = mkOption {
             type = types.submodule {
               options = {
@@ -498,6 +751,18 @@ in
                   type = types.nullOr types.path;
                   default = null;
                   description = "Root-readable file containing a Vault AppRole secret_id.";
+                };
+
+                deferUntilProvisioned = mkOption {
+                  type = types.bool;
+                  default = false;
+                  description = ''
+                    Temporarily skip vault-auth-setup without failing system
+                    activation while initial AppRole enrollment is incomplete.
+                    This does not let lx-annotate start without its secrets.
+                    Disable this option after the first successful login so
+                    subsequent authentication failures remain strict.
+                  '';
                 };
               };
             };
@@ -623,6 +888,64 @@ in
             default = null;
             description = "Optional CA used by local provisioning clients to verify the Vault server certificate.";
           };
+          managedTls = mkOption {
+            type = types.submodule {
+              options = {
+                enable = mkOption {
+                  type = types.bool;
+                  default = false;
+                  description = "Create one persistent local CA and renew only the CA-signed Vault server leaf.";
+                };
+                stateDirectory = mkOption {
+                  type = types.str;
+                  default = "/var/lib/luxnix-vault-pki";
+                  description = "Root-only persistent directory containing the Vault server CA and leaf material.";
+                };
+                caKeyFile = mkOption {
+                  type = types.str;
+                  default = "${serverCfg.managedTls.stateDirectory}/ca.key";
+                  description = "Persistent root-only Vault server CA key; it is never automatically replaced.";
+                };
+                caCommonName = mkOption {
+                  type = types.str;
+                  default = "LuxNix Vault Server CA";
+                  description = "Common name used only when initially creating the stable Vault server CA.";
+                };
+                serverCommonName = mkOption {
+                  type = types.str;
+                  default = "vault.endo-reg.net";
+                  description = "Common name of renewed Vault server leaf certificates.";
+                };
+                dnsNames = mkOption {
+                  type = types.listOf types.str;
+                  default = [ ];
+                  description = "DNS subject alternative names required in every Vault server leaf.";
+                };
+                ipAddresses = mkOption {
+                  type = types.listOf types.str;
+                  default = [ ];
+                  description = "IP subject alternative names required in every Vault server leaf.";
+                };
+                caValidityDays = mkOption {
+                  type = types.ints.positive;
+                  default = 3650;
+                  description = "Validity of the CA when it is first created; CA renewal is always manual.";
+                };
+                leafValidityDays = mkOption {
+                  type = types.ints.positive;
+                  default = 90;
+                  description = "Validity of each automatically renewed Vault server leaf.";
+                };
+                renewBeforeDays = mkOption {
+                  type = types.ints.positive;
+                  default = 14;
+                  description = "Renew a Vault leaf this many days before expiry; never renew the CA automatically.";
+                };
+              };
+            };
+            default = { };
+            description = "Stable local CA and renewable server-leaf lifecycle for Vault TLS.";
+          };
           hubPki = mkOption {
             type = types.submodule {
               options = {
@@ -700,8 +1023,53 @@ in
         message = "luxnix.vault.client.auth.roleIdFile and secretIdFile must be set when auth.method = \"approle\".";
       }
       {
+        assertion =
+          !cfg.client.auth.deferUntilProvisioned
+          || (
+            cfg.client.auth.method == "approle"
+            && cfg.client.auth.roleIdFile != null
+            && cfg.client.auth.secretIdFile != null
+            && cfg.client.caCertFile != null
+          );
+        message = "luxnix.vault.client.auth.deferUntilProvisioned requires AppRole authentication files and a Vault CA certificate file.";
+      }
+      {
         assertion = !serverCfg.enable || (serverCfg.tlsCertFile != null && serverCfg.tlsKeyFile != null);
         message = "luxnix.vault.server.enable requires runtime TLS certificate and key files.";
+      }
+      {
+        assertion =
+          !managedTlsCfg.enable
+          || (
+            serverCfg.enable
+            && serverCfg.caCertFile != null
+            && serverCfg.tlsCertFile != null
+            && serverCfg.tlsKeyFile != null
+            && serverCfg.caCertFile != serverCfg.tlsCertFile
+            && managedTlsCfg.dnsNames != [ ]
+          );
+        message = "luxnix.vault.server.managedTls requires Vault, distinct CA/leaf paths, and at least one DNS SAN.";
+      }
+      {
+        assertion =
+          !managedTlsCfg.enable
+          || lib.all (path: builtins.dirOf path == managedTlsCfg.stateDirectory) [
+            (toString serverCfg.caCertFile)
+            managedTlsCfg.caKeyFile
+            (toString serverCfg.tlsCertFile)
+            (toString serverCfg.tlsKeyFile)
+          ];
+        message = "Managed Vault CA and server-leaf files must share managedTls.stateDirectory.";
+      }
+      {
+        assertion =
+          !managedTlsCfg.enable
+          || (
+            managedTlsCfg.leafValidityDays > managedTlsCfg.renewBeforeDays
+            && managedTlsCfg.caValidityDays > managedTlsCfg.renewBeforeDays
+            && lib.elem managedTlsCfg.serverCommonName managedTlsCfg.dnsNames
+          );
+        message = "Managed Vault TLS validity must exceed its renewal window, and the server common name must be a DNS SAN.";
       }
       {
         assertion = !serverCfg.enable || lib.hasPrefix "https://" serverCfg.apiAddress;
@@ -710,6 +1078,10 @@ in
       {
         assertion = !hubPkiCfg.enable || serverCfg.enable;
         message = "luxnix.vault.server.hubPki.enable requires the Vault server.";
+      }
+      {
+        assertion = !hubPkiCfg.enable || serverCfg.caCertFile != null;
+        message = "luxnix.vault.server.hubPki.enable requires the stable Vault server CA file.";
       }
       {
         assertion = !clientHubPkiCfg.enable || vaultAuthEnabled;
@@ -758,9 +1130,13 @@ in
       after = [
         "managed-secrets-setup.service"
       ]
-      ++ lib.optional config.services.luxnix.lxSsl.enable "generate-lx-ssl.service";
+      ++ lib.optional (
+        config.services.luxnix.lxSsl.enable && !managedTlsCfg.enable
+      ) "generate-lx-ssl.service";
       wants = [ "managed-secrets-setup.service" ];
-      requires = lib.optional config.services.luxnix.lxSsl.enable "generate-lx-ssl.service";
+      requires = lib.optional (
+        config.services.luxnix.lxSsl.enable && !managedTlsCfg.enable
+      ) "generate-lx-ssl.service";
     };
 
     roles.managed-secrets.customSecrets.lx_hub_source_node_secret = lib.mkIf clientHubPkiCfg.enable {
@@ -782,11 +1158,50 @@ in
       '';
     };
 
-    environment.systemPackages = lib.optionals hubPkiCfg.enable [
-      hubPkiBootstrapTool
-      hubSiteEnrollmentTool
-      pkgs.vault
-    ];
+    environment.systemPackages =
+      lib.optionals hubPkiCfg.enable [
+        hubPkiBootstrapTool
+        hubSiteEnrollmentTool
+        pkgs.vault
+      ]
+      ++ lib.optionals (cfg.client.enable && cfg.client.caCertFile != null) [
+        vaultCaInstallTool
+      ]
+      ++ lib.optionals vaultAuthEnabled [
+        vaultEnrollmentStatusTool
+      ];
+
+    systemd.services.luxnix-vault-managed-server-tls = lib.mkIf managedTlsCfg.enable {
+      description = "Maintain the CA-signed Vault server leaf without rotating its CA";
+      before = [ "vault.service" ];
+      requiredBy = [ "vault.service" ];
+      after = [ "systemd-tmpfiles-setup.service" ];
+      requires = [ "systemd-tmpfiles-setup.service" ];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = managedServerTlsCommand;
+        ExecStartPost = pkgs.writeShellScript "reload-vault-after-leaf-rotation" ''
+          marker=${lib.escapeShellArg "${runtimeDir}/server-leaf-rotated"}
+          if [ -e "$marker" ] && ${pkgs.systemd}/bin/systemctl is-active --quiet vault.service; then
+            # Vault reloads listener certificate/key file contents on SIGHUP.
+            ${pkgs.systemd}/bin/systemctl kill --kill-whom=main --signal=HUP vault.service
+          fi
+        '';
+        UMask = "0077";
+      };
+    };
+
+    systemd.timers.luxnix-vault-managed-server-tls = lib.mkIf managedTlsCfg.enable {
+      description = "Check whether the Vault server leaf needs renewal";
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnBootSec = "5m";
+        OnUnitActiveSec = "12h";
+        RandomizedDelaySec = "30m";
+        Persistent = true;
+        Unit = "luxnix-vault-managed-server-tls.service";
+      };
+    };
 
     systemd.services.luxnix-vault-issue-hub-client-certificate = lib.mkIf clientHubPkiCfg.enable {
       description = "Issue or renew the LX-Annotate hub-transfer client certificate";
@@ -804,8 +1219,7 @@ in
         Environment = lib.optionals cfg.client.allowOffline [
           "VAULT_CLIENT_TIMEOUT=5s"
         ];
-        EnvironmentFile =
-          lib.optionalString cfg.client.allowOffline "-" + cfg.client.runtimeEnvironmentFile;
+        EnvironmentFile = "-${cfg.client.runtimeEnvironmentFile}";
         UMask = "0077";
       };
     };
@@ -856,14 +1270,24 @@ in
         "network-online.target"
       ];
       requires = [ "systemd-tmpfiles-setup.service" ];
-      wants = [ "local-fs.target" ];
+      wants = [
+        "local-fs.target"
+        "network-online.target"
+      ];
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
         User = "root";
         Group = "root";
         UMask = "0077";
-        ExecStart = vaultAuthSetupScript;
+        ExecCondition = lib.optionals cfg.client.auth.deferUntilProvisioned [
+          vaultAuthProvisioningConditionScript
+        ];
+        ExecStart =
+          if cfg.client.auth.deferUntilProvisioned then
+            "${pkgs.coreutils}/bin/true"
+          else
+            vaultAuthSetupScript;
         ExecStop = vaultAuthCleanupScript;
         Environment = lib.optionals cfg.client.allowOffline [
           "VAULT_CLIENT_TIMEOUT=5s"

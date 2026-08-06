@@ -384,12 +384,7 @@ sudo systemctl start lx-annotate-acceptance.service
 sudo journalctl -u lx-annotate-acceptance.service -n 200 --no-pager
 ```
 
-`lx-annotate-acceptance.service` is the final host-level check. The
-`endoreg-db/feature-tracking` YAML is validated into an immutable Nix store
-registry. `lx-annotate-feature-registry-guard.service` records the pinned
-registry revision and refuses startup when the installed `endoreg-db` version
-does not match the exact dependency selected by the pinned LX-Annotate source.
-The live database gate remains a separate acceptance check.
+`lx-annotate-acceptance.service` is the final host-level check.
 
 ## Intake and file triggers
 
@@ -497,7 +492,7 @@ sudo journalctl -u lx-annotate-hub-backup.service -n 200 --no-pager
 
 ## NixOS evaluation and rebuild checks
 
-From `/home/admin/luxnix`:
+From the LuxNix repository root:
 
 ```bash
 nix flake check

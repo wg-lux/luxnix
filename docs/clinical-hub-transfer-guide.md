@@ -304,4 +304,4 @@ sends the bytes.
 
 - [lx-annotate secure HLS and hub security boundary](./lx-annotate-secure-hls.md)
 - [lx-annotate encrypted data](./lx-annotate-encrypted-data.md)
-- [LuxNix Vault-backed transfer implementation](../modules/nixos/services/lx-annotate-local/README.md#vault-backed-transfer-pki)
+- [LuxNix Vault-backed transfer implementation](https://github.com/wg-lux/luxnix/blob/main/modules/nixos/services/lx-annotate-local/README.md#vault-backed-transfer-pki)

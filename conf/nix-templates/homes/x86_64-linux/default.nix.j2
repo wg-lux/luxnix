@@ -48,6 +48,6 @@ roles.{{ role_key }}.{{ subkey }} = {{ subval | to_nix }};
 {%- endfor %}
 {%- endif %}
 
-home.stateVersion = "23.11";
+home.stateVersion = {{ stateVersion | nix_string }};
 
 }

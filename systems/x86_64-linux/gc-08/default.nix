@@ -1,4 +1,4 @@
-# /default.nix
+# gc-08/default.nix
 
 { config, pkgs, lib, modulesPath, ... }:
 
@@ -65,6 +65,7 @@ endoreg-client.lxAi = true;
 };
 
   services = {
+luxnix.lxAnnotateLocal.runtime.deploymentRole = "site_node";
 
   };
 
@@ -116,6 +117,9 @@ endoreg-client.lxAi = true;
 
 
     generic-settings.network.glm52.port = 8088;
+
+
+    generic-settings.network.hosts.c-01.ip-vpn = "172.16.255.131";
 
 
     generic-settings.network.hosts.gc-01.domains = [ "gc-01.intern" "lx-annotate.local" ];
@@ -410,6 +414,9 @@ endoreg-client.lxAi = true;
 
 
     generic-settings.systemStateVersion = "23.11";
+
+
+    vault.client.hubPki.enable = false;
 
 
 

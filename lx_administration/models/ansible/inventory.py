@@ -1,11 +1,32 @@
-from pydantic import BaseModel, Field, model_validator
-from typing import Dict, List, Optional, Union, Any
+import ipaddress
 from pathlib import Path
-from lx_administration.logging import log_heading, get_logger
-from .facts import AnsibleFactsModel
-from lx_administration.models.ansible.merged_host_vars import MergedHostVars
-from lx_administration.yaml import dump_yaml, ansible_lint, format_yaml
+from typing import Any
+
+from pydantic import BaseModel, Field, model_validator
+
+from lx_administration.autoconf.imports.merge import ConfigMapping, deep_update
+from lx_administration.autoconf.imports.sources import (
+    load_group_vars as load_group_variable_sources,
+)
+from lx_administration.autoconf.imports.sources import (
+    load_host_vars as load_host_variable_sources,
+)
+from lx_administration.autoconf.imports.sources import (
+    load_roles as load_role_sources,
+)
+from lx_administration.autoconf.imports.sources import (
+    load_roles_vars as load_role_variable_sources,
+)
+from lx_administration.logging import get_logger, log_heading
+from lx_administration.yaml import (
+    ansible_lint,
+    dump_yaml,
+    format_yaml,
+    load_unique_yaml_file,
+)
+
 from ..config import DEFAULT_USERS
+from .facts import AnsibleFactsModel
 
 
 def _is_extra_user_attribute(attribute_name: str) -> bool:
@@ -16,39 +37,52 @@ def _is_extra_user_name_attribute(attribute_name: str) -> bool:
     is_extra_user_attribute = _is_extra_user_attribute(attribute_name)
     if not is_extra_user_attribute:
         return False
-
-    else:
-        return attribute_name.endswith("name")
+    return attribute_name.endswith("name")
 
 
-def _get_extra_user_names(vars: Dict[str, Any]) -> List[str]:
+def _get_extra_user_names(vars: dict[str, Any]) -> list[str]:
     extra_user_names = []
     for key in vars.keys():
         if _is_extra_user_name_attribute(key):
             name = vars[key]
-            assert isinstance(
-                name, str
-            ), f"Extra user name must be a string, got {name}"
+            assert isinstance(name, str), (
+                f"Extra user name must be a string, got {name}"
+            )
             extra_user_names.append(name)
 
     return extra_user_names
 
 
-class AnsibleInventoryHost(BaseModel):
-    ansible_host: Optional[str] = ""
-    hostname: Optional[str]
-    ansible_group_names: List[str] = []
-    ansible_role_names: List[str] = []
-    extra_secret_names: List[str] = []
-    extra_user_names: List[str] = [
-        "dev"
-    ]  # ["dev", "maintenance", "root", "center-user"]
-    subnet: Optional[str] = "172.16.255."
-    vars: Dict[str, Any] = {}
-    files: List[str] = []
-    facts: Optional[AnsibleFactsModel] = None
+def _unique_names(names: list[str]) -> list[str]:
+    """Remove duplicate names without changing their precedence order."""
+    return list(dict.fromkeys(names))
 
-    def get_extra_user_names(self) -> List[str]:
+
+def _membership_names(
+    variables: ConfigMapping,
+    option: str,
+    source: str,
+) -> list[str]:
+    """Read one group or role membership list with a useful source error."""
+    value = variables.get(option, [])
+    if not isinstance(value, list) or any(not isinstance(name, str) for name in value):
+        raise ValueError(f"{source} {option} must be a list of names")
+    return value
+
+
+class AnsibleInventoryHost(BaseModel):
+    ansible_host: str | None = ""
+    hostname: str | None
+    ansible_group_names: list[str] = Field(default_factory=list)
+    ansible_role_names: list[str] = Field(default_factory=list)
+    extra_secret_names: list[str] = Field(default_factory=list)
+    extra_user_names: list[str] = Field(default_factory=lambda: ["dev"])
+    subnet: str | None = None
+    vars: dict[str, Any] = Field(default_factory=dict)
+    files: list[str] = Field(default_factory=list)
+    facts: AnsibleFactsModel | None = None
+
+    def get_extra_user_names(self) -> list[str]:
         extra_user_names = DEFAULT_USERS.copy()
         extra_user_names.extend(self.vars.get("os_extra_user_names", []))
 
@@ -100,13 +134,13 @@ class AnsibleInventoryHost(BaseModel):
 
 class AnsibleInventoryGroup(BaseModel):
     name: str
-    vars: Dict[str, Any] = Field(default_factory=dict)
-    files: List[str] = Field(default_factory=list)
-    extra_user_names: List[str] = Field(default_factory=list)
+    vars: dict[str, Any] = Field(default_factory=dict)
+    files: list[str] = Field(default_factory=list)
+    extra_user_names: list[str] = Field(default_factory=list)
 
     @model_validator(mode="before")
     @classmethod
-    def _coerce_optional_fields(cls, values: Dict[str, Any]):
+    def _coerce_optional_fields(cls, values: dict[str, Any]):
         vars_val = values.get("vars")
         if vars_val is None:
             values["vars"] = {}
@@ -125,7 +159,7 @@ class AnsibleInventoryGroup(BaseModel):
     def __str__(self):
         return super().__str__()
 
-    def get_extra_user_names(self) -> List[str]:
+    def get_extra_user_names(self) -> list[str]:
         extra_user_names = _get_extra_user_names(self.vars)
 
         return extra_user_names
@@ -136,19 +170,18 @@ class AnsibleInventoryGroup(BaseModel):
 
 class AnsibleInventoryRole(BaseModel):
     name: str
-    vars: Optional[Dict[str, Any]] = None
-    files: List[str] = Field(default_factory=list)
-    extra_user_names: List[str] = Field(default_factory=list)
+    vars: dict[str, Any] | None = None
+    files: list[str] = Field(default_factory=list)
+    extra_user_names: list[str] = Field(default_factory=list)
 
     @model_validator(mode="before")
     @classmethod
-    def _coerce_optional_fields(cls, values: Dict[str, Any]):
+    def _coerce_optional_fields(cls, values: dict[str, Any]):
         if values.get("vars") is None:
             values["vars"] = {}
         elif isinstance(values["vars"], dict):
             values["vars"] = {
-                key: ({} if val is None else val)
-                for key, val in values["vars"].items()
+                key: ({} if val is None else val) for key, val in values["vars"].items()
             }
         if values.get("files") is None:
             values["files"] = []
@@ -162,7 +195,7 @@ class AnsibleInventoryRole(BaseModel):
             self.vars = {}
         return self
 
-    def get_extra_user_names(self) -> List[str]:
+    def get_extra_user_names(self) -> list[str]:
         if not self.vars:
             return []
 
@@ -176,39 +209,40 @@ class AnsibleInventoryRole(BaseModel):
 
 
 class AnsibleInventory(BaseModel):
-    groups: List[AnsibleInventoryGroup] = []
-    roles: List[AnsibleInventoryRole] = []
-    all: List[AnsibleInventoryHost] = []
-    file: str = "./ansible/inventory/hosts.ini"
+    groups: list[AnsibleInventoryGroup] = Field(default_factory=list)
+    roles: list[AnsibleInventoryRole] = Field(default_factory=list)
+    all: list[AnsibleInventoryHost] = Field(default_factory=list)
+    file: str | None = None
 
     @classmethod
-    def from_file(cls, filepath: Union[str, Path]):
-        import yaml
-
+    def from_file(cls, filepath: str | Path) -> "AnsibleInventory":
         path_obj = Path(filepath)
-        assert path_obj.exists(), f"File not found: {path_obj}"
+        if not path_obj.is_file():
+            raise FileNotFoundError(f"Inventory file not found: {path_obj}")
 
-        with open(path_obj, "r") as f:
-            data = yaml.load(f, yaml.SafeLoader)
+        return cls.model_validate(load_unique_yaml_file(path_obj))
 
-            inventory = cls.model_validate(data)
-
-        return inventory
-
-    # Create Class Method to load inventory from file
     @classmethod
-    def load_from_hosts_ini(cls, file: Path, subnet: str = "172.16.255."):
-        logger = get_logger("AnsibleInventory-load_from_file", reset=True)
+    def load_from_hosts_ini(cls, file: Path, subnet: str, logger=None):
+        """Load inventory hosts using an explicitly configured address prefix."""
+        try:
+            if not subnet.endswith(".") or subnet.count(".") != 3:
+                raise ValueError
+            ipaddress.IPv4Address(f"{subnet}0")
+        except (ipaddress.AddressValueError, ValueError) as exc:
+            raise ValueError(
+                "subnet must be a three-octet IPv4 prefix ending in '.'"
+            ) from exc
+
+        if logger is None:
+            logger = get_logger("AnsibleInventory-load_from_file", reset=True)
         file = file.resolve()
         ansible_inventory_dir = file.parent
         ansible_root_dir = ansible_inventory_dir.parent
-        # assert subnet is ip address with missing last octet
-        assert subnet.endswith(".") and len(subnet.split(".")) == 4
-        # Initialize temporary dict to read inventory
         inventory = cls(file=file.as_posix())
         inventory.load_host_vars(ansible_inventory_dir=ansible_inventory_dir)
-        group_name: Optional[str] = None
-        with open(file, "r") as f:
+        group_name: str | None = None
+        with open(file) as f:
             for raw_line in f:
                 line = raw_line.strip()
 
@@ -226,6 +260,9 @@ class AnsibleInventory(BaseModel):
                     hostname = parts[0]
                     assert hostname, "hostname is required"
                     inventory.add_host_by_name(hostname)
+                    host = inventory.get_host_by_name(hostname)
+                    assert host, f"No host found with name {hostname}"
+                    host.subnet = subnet
 
                     # If no group header was seen yet, default to "all"
                     if group_name is None:
@@ -240,6 +277,7 @@ class AnsibleInventory(BaseModel):
 
         inventory.load_roles(ansible_root_dir)
         inventory.load_group_vars(ansible_inventory_dir)
+        inventory.add_inventory_network_vars()
         inventory.load_role_vars(ansible_inventory_dir)
 
         log_heading(logger, f"Loaded Inventory from {file}")
@@ -276,66 +314,62 @@ class AnsibleInventory(BaseModel):
 
         return extra_user_names
 
-    def export_merged_host_vars(self, hostname: str) -> Dict:
-        from lx_administration.autoconf.imports.utils import deep_update
+    def _expand_membership_names(
+        self,
+        group_names: list[str],
+        role_names: list[str],
+    ) -> tuple[list[str], list[str]]:
+        """Resolve transitive group and role memberships in precedence order."""
+        expanded_groups = _unique_names(group_names)
+        expanded_roles = _unique_names(role_names)
 
-        # self.update_hosts_group_vars()
+        while True:
+            discovered_groups = list(expanded_groups)
+            discovered_roles = list(expanded_roles)
+
+            for current_group_name in expanded_groups:
+                variables = self.get_group_by_name(current_group_name).vars
+                source = f"group {current_group_name}"
+                discovered_groups.extend(
+                    _membership_names(variables, "ansible_groups", source)
+                )
+                discovered_roles.extend(
+                    _membership_names(variables, "ansible_roles", source)
+                )
+
+            for current_role_name in expanded_roles:
+                variables = self.get_role_by_name(current_role_name).vars or {}
+                source = f"role {current_role_name}"
+                discovered_groups.extend(
+                    _membership_names(variables, "ansible_groups", source)
+                )
+                discovered_roles.extend(
+                    _membership_names(variables, "ansible_roles", source)
+                )
+
+            next_groups = _unique_names(discovered_groups)
+            next_roles = _unique_names(discovered_roles)
+            if next_groups == expanded_groups and next_roles == expanded_roles:
+                return expanded_groups, expanded_roles
+
+            expanded_groups = next_groups
+            expanded_roles = next_roles
+
+    def export_merged_host_vars(self, hostname: str) -> ConfigMapping:
         host = self.get_host_by_name(hostname)
-
         assert host, f"No host found with name {hostname}"
 
-        group_names = host.ansible_group_names
-        role_names = host.ansible_role_names
+        group_names, role_names = self._expand_membership_names(
+            host.ansible_group_names,
+            host.ansible_role_names,
+        )
 
-        _check_again = True
-
-        while _check_again:
-            _check_again = False
-            new_group_names: List[str] = []
-            new_role_names: List[str] = []
-            for group_name in group_names:
-                group = self.get_group_by_name(group_name)
-                _new_group_names = group.vars.get("ansible_groups", [])
-                _new_role_names = group.vars.get("ansible_roles", [])
-
-                for group_name in _new_group_names:
-                    if group_name not in group_names:
-                        new_group_names.append(group_name)
-                        _check_again = True
-
-                for role_name in _new_role_names:
-                    if role_name not in role_names:
-                        new_role_names.append(role_name)
-                        _check_again = True
-
-            for role_name in role_names:
-                role = self.get_role_by_name(role_name)
-                _role_vars = role.vars or {}
-                _new_group_names = _role_vars.get("ansible_groups", [])
-                _new_role_names = _role_vars.get("ansible_roles", [])
-
-                for group_name in _new_group_names:
-                    if group_name not in group_names:
-                        new_group_names.append(group_name)
-                        _check_again = True
-
-                for role_name in _new_role_names:
-                    if role_name not in role_names:
-                        new_role_names.append(role_name)
-                        _check_again = True
-
-            if _check_again:
-                group_names = group_names + new_group_names
-                group_names = list(set(group_names))
-                role_names = role_names + new_role_names
-                role_names = list(set(role_names))
-
-        group_vars: Dict[str, Any] = {}
+        group_vars: ConfigMapping = {}
         for group_name in group_names:
             group = self.get_group_by_name(group_name)
             group_vars = deep_update(group_vars, group.vars)
 
-        role_vars: Dict[str, Any] = {}
+        role_vars: ConfigMapping = {}
         for role_name in role_names:
             role = self.get_role_by_name(role_name)
             role_vars = deep_update(role_vars, role.vars or {})
@@ -355,13 +389,21 @@ class AnsibleInventory(BaseModel):
         for host in self.all:
             host.validate_ansible_host()
 
-    def save_to_file(self, inventory_file: Path = Path("./autoconf/inventory.yml")):
+    def save_to_file(
+        self,
+        inventory_file: Path,
+        *,
+        directory_mode: int | None = None,
+        file_mode: int | None = None,
+    ):
         self.validate_inventory()
         dump_yaml(
             self.model_dump(mode="python"),
             inventory_file,
             format_func=format_yaml,
             lint_func=ansible_lint,
+            directory_mode=directory_mode,
+            file_mode=file_mode,
         )
 
     def hostname_update_ansible_facts(self, hostname: str, facts: AnsibleFactsModel):
@@ -369,38 +411,41 @@ class AnsibleInventory(BaseModel):
         assert host, f"No host found with name {hostname}"
         host.update_facts(facts)
 
-    def group_name_exists(self, group_name: str):
-        return any(group_name in group.name for group in self.groups)
+    def group_name_exists(self, group_name: str) -> bool:
+        return any(group.name == group_name for group in self.groups)
 
-    def role_name_exists(self, role_name: str):
-        return any(role_name in role.name for role in self.roles)
+    def role_name_exists(self, role_name: str) -> bool:
+        return any(role.name == role_name for role in self.roles)
 
-    def get_group_by_name(self, group_name: str, logger=None):
-        if not logger:
+    def get_group_by_name(self, group_name: str, logger=None) -> AnsibleInventoryGroup:
+        """Return the exact group, creating it when it is not loaded yet."""
+        if logger is None:
             logger = get_logger("AnsibleInventory-get_group_by_name", reset=True)
-        group = [_ for _ in self.groups if _.name == group_name]
-        if group:
-            assert len(group) == 1, f"Multiple groups found with name {group_name}"
-            return group[0]
+        matches = [group for group in self.groups if group.name == group_name]
+        if len(matches) > 1:
+            raise ValueError(f"Multiple groups found with name {group_name}")
+        if matches:
+            return matches[0]
 
-        else:
-            logger.warning(f"No group found with name {group_name}, adding")
-            self.add_group_by_name(group_name)
-            group = self.get_group_by_name(group_name)
-            return group
+        logger.warning("No group found with name %s; adding it", group_name)
+        group = AnsibleInventoryGroup(name=group_name)
+        self.groups.append(group)
+        return group
 
     def get_role_by_name(self, role_name: str, logger=None) -> AnsibleInventoryRole:
-        if not logger:
+        """Return the exact role, creating it when it is not loaded yet."""
+        if logger is None:
             logger = get_logger("AnsibleInventory-get_role_by_name", reset=True)
-        roles = [_ for _ in self.roles if _.name == role_name]
-        if roles:
-            assert len(roles) == 1, f"Multiple roles found with name {role_name}"
-            return roles[0]
+        matches = [role for role in self.roles if role.name == role_name]
+        if len(matches) > 1:
+            raise ValueError(f"Multiple roles found with name {role_name}")
+        if matches:
+            return matches[0]
 
-        else:
-            logger.warning(f"No role found with name {role_name}, adding")
-            self.add_role_by_name(role_name)
-            return self.get_role_by_name(role_name)
+        logger.warning("No role found with name %s; adding it", role_name)
+        role = AnsibleInventoryRole(name=role_name)
+        self.roles.append(role)
+        return role
 
     def host_name_exists(self, host_name: str):
         _host = [_ for _ in self.all if _.hostname == host_name]
@@ -429,7 +474,7 @@ class AnsibleInventory(BaseModel):
         assert len(host) == 1, f"Multiple hosts found with name {ansible_host}"
         return host[0]
 
-    def get_host_by_name(self, host_name: str) -> Optional[AnsibleInventoryHost]:
+    def get_host_by_name(self, host_name: str) -> AnsibleInventoryHost | None:
         host = [_ for _ in self.all if _.hostname == host_name]
         if host:
             assert len(host) == 1, f"Multiple hosts found with name {host_name}"
@@ -450,21 +495,19 @@ class AnsibleInventory(BaseModel):
         host = self.get_host_by_name(host_name)
         assert host, f"No host found with name {host_name}"
         host.ansible_group_names.append(group_name)
-        host.ansible_group_names = list(set(host.ansible_group_names))
+        host.ansible_group_names = _unique_names(host.ansible_group_names)
 
     def add_role_to_host(self, host_name: str, role_name: str):
         host = self.get_host_by_name(host_name)
         assert host, f"No host found with name {host_name}"
         host.ansible_role_names.append(role_name)
-        host.ansible_role_names = list(set(host.ansible_role_names))
+        host.ansible_role_names = _unique_names(host.ansible_role_names)
 
     def load_roles(self, ansible_root_dir: Path):
-        from lx_administration.autoconf.imports.utils import load_roles
-
         roles_dir = ansible_root_dir / "roles"
 
-        _roles = load_roles(roles_dir)
-        roles: List[AnsibleInventoryRole] = []
+        _roles = load_role_sources(roles_dir)
+        roles: list[AnsibleInventoryRole] = []
         for role, value in _roles.items():
             if isinstance(value, dict):
                 files_list = value.get("files", [])
@@ -480,14 +523,9 @@ class AnsibleInventory(BaseModel):
         self.roles = roles
 
     def load_role_vars(self, ansible_inventory_dir: Path):
-        from lx_administration.autoconf.imports.utils import (
-            load_roles_vars,
-            deep_update,
-        )
-
         role_vars_dir = ansible_inventory_dir / "role_vars"
 
-        role_vars = load_roles_vars(role_vars_dir)
+        role_vars = load_role_variable_sources(role_vars_dir)
 
         for role_name, vars in role_vars.items():
             role = self.get_role_by_name(role_name)
@@ -495,26 +533,43 @@ class AnsibleInventory(BaseModel):
             role.vars = deep_update(role.vars or {}, vars)
 
     def load_group_vars(self, ansible_inventory_dir: Path):
-        from lx_administration.autoconf.imports.utils import (
-            load_group_vars,
-            deep_update,
-        )
-
         group_vars_dir = ansible_inventory_dir / "group_vars"
 
-        group_vars = load_group_vars(group_vars_dir)
+        group_vars = load_group_variable_sources(group_vars_dir)
 
         for group_name, vars in group_vars.items():
             group = self.get_group_by_name(group_name)
             assert isinstance(vars, dict)
             group.vars = deep_update(group.vars, vars)
 
-    def load_host_vars(self, ansible_inventory_dir: Path):
-        from lx_administration.autoconf.imports.utils import load_host_vars, deep_update
+    def add_inventory_network_vars(self) -> None:
+        """Expose canonical inventory addresses as generated LuxNix options."""
+        all_group = self.get_group_by_name("all")
+        group_luxnix = all_group.vars.setdefault("group_luxnix", {})
+        if not isinstance(group_luxnix, dict):
+            raise ValueError("all.group_luxnix must be a mapping")
 
+        derived = {
+            (
+                "generic_settings.network.hosts."
+                f"{host.hostname.replace('-', '_')}.ip_vpn"
+            ): f'"{host.ansible_host}"'
+            for host in self.all
+            if host.hostname and host.ansible_host
+        }
+        duplicates = set(group_luxnix) & set(derived)
+        if duplicates:
+            names = ", ".join(sorted(duplicates))
+            raise ValueError(
+                "VPN host addresses are derived from hosts.ini; "
+                f"remove duplicate group variables: {names}"
+            )
+        group_luxnix.update(derived)
+
+    def load_host_vars(self, ansible_inventory_dir: Path):
         host_vars_dir = ansible_inventory_dir / "host_vars"
 
-        host_vars = load_host_vars(host_vars_dir)
+        host_vars = load_host_variable_sources(host_vars_dir)
 
         for host_name, vars in host_vars.items():
             host = self.get_host_by_name(host_name)
@@ -526,33 +581,3 @@ class AnsibleInventory(BaseModel):
             assert isinstance(vars, dict)
 
             host.vars = deep_update(host.vars, vars)
-
-    def build_merged_vars(self, hostname: str) -> MergedHostVars:
-        merged_data = self.export_merged_host_vars(hostname)
-        return MergedHostVars(
-            group_luxnix=merged_data.get("group_luxnix", {}),
-            group_roles=merged_data.get("group_roles", {}),
-            group_services=merged_data.get("group_services", {}),
-            group_nixos=merged_data.get("group_nixos", {}),
-            group_imports=merged_data.get("group_imports", []),
-            role_luxnix=merged_data.get("role_luxnix", {}),
-            role_roles=merged_data.get("role_roles", {}),
-            role_services=merged_data.get("role_services", {}),
-            role_nixos=merged_data.get("role_nixos", {}),
-            role_imports=merged_data.get("role_imports", []),
-            host_luxnix=merged_data.get("host_luxnix", {}),
-            host_roles=merged_data.get("host_roles", {}),
-            host_services=merged_data.get("host_services", {}),
-            host_nixos=merged_data.get("host_nixos", {}),
-            host_imports=merged_data.get("host_imports", []),
-        )
-
-
-# DEPRECEATED
-# def gather_client_access_keys(inventory, all_access_keys):
-#     results = {}
-#     for client in inventory.get("all", []):
-#         results[client["hostname"]] = get_access_keys_for_client(
-#             client, all_access_keys
-#         )
-#     return results

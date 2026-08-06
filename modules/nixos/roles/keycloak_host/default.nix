@@ -13,8 +13,12 @@ with lib.luxnix; let
     then config.users.groups.sslCert.name
     else sensitiveServicesGroupName;
   
-  # Use the host's VPN IP since keycloak.vpnIp is not defined
-  vpnIp = config.luxnix.generic-settings.network.hosts.s-02.ip-vpn or "127.0.0.1";
+  vpnServiceName = "openvpn-${config.roles.aglnet.client.networkName}.service";
+  keycloakServiceDependencies = [
+    vpnServiceName
+    "keycloak-db-setup.service"
+    "keycloak-prepare-files.service"
+  ];
   cfg = config.roles.keycloakHost;
   conf = config.luxnix.generic-settings.network.keycloak;
   sslCertFile = config.luxnix.generic-settings.sslCertificatePath;
@@ -262,8 +266,8 @@ with lib.luxnix; let
       };
     };
 
-    systemd.services.keycloak.wants = [ "openvpn-aglNet.service" "keycloak-db-setup.service" "keycloak-prepare-files.service" ];
-    systemd.services.keycloak.after = [ "openvpn-aglNet.service" "keycloak-db-setup.service" "keycloak-prepare-files.service" ];
+    systemd.services.keycloak.wants = keycloakServiceDependencies;
+    systemd.services.keycloak.after = keycloakServiceDependencies;
 
     services.keycloak = {
       enable = true;
@@ -281,7 +285,7 @@ with lib.luxnix; let
       };
       settings = {
         http-relative-path = "/";
-        http-host = vpnIp;  
+        http-host = conf.vpnIp;
         http-port = 8080;
         https-port = conf.port;
         https-certificate-file = "${cfg.homeDir}/tls.crt";

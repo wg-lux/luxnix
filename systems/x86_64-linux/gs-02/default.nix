@@ -1,4 +1,4 @@
-# /default.nix
+# gs-02/default.nix
 
 { config, pkgs, lib, modulesPath, ... }:
 
@@ -44,8 +44,6 @@ endoreg-client.api.settingsProfile = "prod";
 
 endoreg-client.centralNodes = [ "s-04" ];
 
-endoreg-client.database.host = "127.0.0.1";
-
 endoreg-client.enable = true;
 
 gpu-server.enable = true;
@@ -88,8 +86,6 @@ nginxHost.glm52.acme.email = "hild@coloreg.de";
 
   services = {
 luxnix.lxAnnotateLocal.runtime.celeryBroker.secureTransportConfirmed = true;
-luxnix.lxAnnotateLocal.runtime.externalServices.postgresHost = "127.0.0.1";
-luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort = 5432;
 luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl = "redis://172.16.255.14:6380/1";
 luxnix.lxAnnotateLocal.runtime.trainingWorker.cudaVisibleDevices = "0";
 luxnix.lxAnnotateLocal.runtime.trainingWorker.mode = "manual";
@@ -117,7 +113,8 @@ luxnix.lxAnnotateLocal.hub.transferApi.mtlsMetaValue = "SUCCESS";
 luxnix.lxAnnotateLocal.hub.transferApi.requireMtls = true;
 luxnix.lxAnnotateLocal.hub.transferApi.requireSecureTransport = true;
 luxnix.lxAnnotateLocal.runtime.deploymentRole = "central_hub";
-luxnix.lxSsl.extraDnsNames = [ "vault.endo-reg.net" "gs-02.intern" ];
+luxnix.lxAnnotateLocal.runtime.externalServices.postgresHost = "127.0.0.1";
+luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort = 5432;
 
   };
 
@@ -166,6 +163,9 @@ luxnix.lxSsl.extraDnsNames = [ "vault.endo-reg.net" "gs-02.intern" ];
 
 
     generic-settings.network.glm52.port = 8088;
+
+
+    generic-settings.network.hosts.c-01.ip-vpn = "172.16.255.131";
 
 
     generic-settings.network.hosts.gc-01.domains = [ "gc-01.intern" "lx-annotate.local" ];
@@ -462,7 +462,7 @@ luxnix.lxSsl.extraDnsNames = [ "vault.endo-reg.net" "gs-02.intern" ];
     vault.server.bindAddress = "172.16.255.22:8200";
 
 
-    vault.server.caCertFile = "/var/lib/lx-annotate-ssl/lx-annotate-selfsigned.crt";
+    vault.server.caCertFile = "/var/lib/luxnix-vault-pki/ca.crt";
 
 
     vault.server.clusterAddress = "https://gs-02.intern:8201";
@@ -477,10 +477,22 @@ luxnix.lxSsl.extraDnsNames = [ "vault.endo-reg.net" "gs-02.intern" ];
     vault.server.hubPki.enable = true;
 
 
-    vault.server.tlsCertFile = "/var/lib/lx-annotate-ssl/lx-annotate-selfsigned.crt";
+    vault.server.managedTls.dnsNames = [ "vault.endo-reg.net" "gs-02.intern" ];
 
 
-    vault.server.tlsKeyFile = "/var/lib/lx-annotate-ssl/lx-annotate-selfsigned.key";
+    vault.server.managedTls.enable = true;
+
+
+    vault.server.managedTls.ipAddresses = [ "172.16.255.22" ];
+
+
+    vault.server.managedTls.serverCommonName = "vault.endo-reg.net";
+
+
+    vault.server.tlsCertFile = "/var/lib/luxnix-vault-pki/server.crt";
+
+
+    vault.server.tlsKeyFile = "/var/lib/luxnix-vault-pki/server.key";
 
 
 
@@ -491,9 +503,5 @@ luxnix.lxSsl.extraDnsNames = [ "vault.endo-reg.net" "gs-02.intern" ];
   xdg.menus.enable = true;
 
   networking.firewall.interfaces.tun0.allowedTCPPorts = lib.mkAfter [ 11434 8088 8200 ];
-
-  # Vault is intentionally reachable only through the AGL VPN. Keep this
-  # single public-looking service name pinned to gs-02's VPN address.
-  networking.hosts."172.16.255.22" = [ "vault.endo-reg.net" ];
 
 }

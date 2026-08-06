@@ -17,19 +17,19 @@ class PostgreSQLBackupContract(TypedDict):
 
 
 def test_gc_10_postgresql_backup_uses_system_backup_directory() -> None:
-    expression = """
+    expression = f"""
       let
-        flake = builtins.getFlake "git+file:///home/admin/luxnix";
+        flake = builtins.getFlake "git+{REPO_ROOT.as_uri()}";
         lib = flake.inputs.nixpkgs.lib;
         cfg = flake.nixosConfigurations.gc-10.config;
-      in {
+      in {{
         backup_location = cfg.services.luxnix.postgresql.backupLocation;
         backup_script = builtins.readFile (
           lib.removeSuffix " "
             cfg.systemd.services.postgresqlBackup.serviceConfig.ExecStart
         );
         tmpfiles = cfg.systemd.tmpfiles.rules;
-      }
+      }}
     """
     result = subprocess.run(
         ["nix", "eval", "--impure", "--json", "--expr", expression],

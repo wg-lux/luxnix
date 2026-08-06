@@ -1,36 +1,24 @@
 from __future__ import annotations
 
-import json
-import subprocess
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from nix_eval_helpers import (
+    REPO_ROOT,
+    eval_json as _nix_eval_expr_json,
+    eval_result as _nix_eval_expr_result,
+)
 
-REPO_ROOT = "/home/admin/luxnix"
-
-
-@lru_cache(maxsize=None)
-def _nix_eval_expr_json(expr: str) -> Any:
-    result = subprocess.run(
-        ["nix", "eval", "--impure", "--json", "--expr", expr, "--show-trace"],
-        cwd=REPO_ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 0, result.stderr
-    return json.loads(result.stdout)
-
-
-def _nix_eval_expr_result(expr: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["nix", "eval", "--impure", "--expr", expr, "--show-trace"],
-        cwd=REPO_ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+SERVICE_DIR = REPO_ROOT / "modules/nixos/services/lx-annotate-local"
+SCRIPTS_NIX = SERVICE_DIR / "scripts.nix"
+SCRIPTS_ENV_NIX = SERVICE_DIR / "scripts/env.nix"
+STORAGE_RELIEF_NIX = SERVICE_DIR / "scripts/storage-relief.nix"
+OPTIONS_NIX = SERVICE_DIR / "options.nix"
+CONFIG_NIX = SERVICE_DIR / "config.nix"
+DEV_OVERLOAD_GUARD_NIX = (
+    REPO_ROOT / "modules/nixos/luxnix/dev-overload-guard/default.nix"
+)
 
 
 @lru_cache(maxsize=None)
@@ -38,7 +26,7 @@ def _gc_02_tls_contract() -> dict[str, Any]:
     return _nix_eval_expr_json(
         """
         let
-          flake = builtins.getFlake "git+file:///home/admin/luxnix";
+          flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
           lib = flake.inputs.nixpkgs.lib;
           cfg = flake.nixosConfigurations.gc-02.config;
           lxCfg = cfg.services.luxnix.lxAnnotateLocal;
@@ -63,7 +51,7 @@ def _gc_02_contract() -> dict[str, Any]:
     return _nix_eval_expr_json(
         """
         let
-          flake = builtins.getFlake "git+file:///home/admin/luxnix";
+          flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
           lib = flake.inputs.nixpkgs.lib;
           cfg = flake.nixosConfigurations.gc-02.config;
           lxCfg = cfg.services.luxnix.lxAnnotateLocal;
@@ -246,7 +234,7 @@ def _live_host_contract() -> dict[str, Any]:
     return _nix_eval_expr_json(
         """
         let
-          flake = builtins.getFlake "git+file:///home/admin/luxnix";
+          flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
           gc02 = flake.nixosConfigurations.gc-02.config;
           gs01 = flake.nixosConfigurations.gs-01.config;
           gs02 = flake.nixosConfigurations.gs-02.config;
@@ -291,6 +279,10 @@ def _live_host_contract() -> dict[str, Any]:
             vaultStorageBackend = gs02.services.vault.storageBackend;
             vaultAddress = gs02.services.vault.address;
             vaultServerCaFile = toString gs02.luxnix.vault.server.caCertFile;
+            vaultServerCertFile = toString gs02.luxnix.vault.server.tlsCertFile;
+            vaultManagedTls = gs02.luxnix.vault.server.managedTls;
+            vaultManagedTlsExecStart =
+              gs02.systemd.services.luxnix-vault-managed-server-tls.serviceConfig.ExecStart;
             postgresHost = gs02.services.luxnix.lxAnnotateLocal.runtime.externalServices.postgresHost;
             vaultFirewallPorts = gs02.networking.firewall.interfaces.tun0.allowedTCPPorts;
             caPublisherExecStart = gs02.systemd.services.luxnix-vault-publish-hub-client-ca.serviceConfig.ExecStart;
@@ -302,17 +294,12 @@ def _live_host_contract() -> dict[str, Any]:
             workerRequires = gc02.systemd.services."lx-annotate-celery-hub-transfer-worker".requires;
             bootRequires = gc02.systemd.services.lx-annotate.requires;
             hubVpnAliases = gc02.networking.hosts."172.16.255.22";
+            managedSecretsEnvironmentFile =
+              gc02.systemd.services.managed-secrets-setup.serviceConfig.EnvironmentFile;
+            certificateIssuerEnvironmentFile =
+              gc02.systemd.services.luxnix-vault-issue-hub-client-certificate.serviceConfig.EnvironmentFile;
           };
-          featureRegistryGuard = {
-            wantedBy = gc02.systemd.services.lx-annotate-feature-registry-guard.wantedBy;
-            before = gc02.systemd.services.lx-annotate-feature-registry-guard.before;
-            requires = gc02.systemd.services.lx-annotate-feature-registry-guard.requires;
-            restartTriggers = builtins.map toString gc02.systemd.services.lx-annotate-feature-registry-guard.restartTriggers;
-            environment = envList gc02.systemd.services.lx-annotate-feature-registry-guard.environment;
-            execStart = toString gc02.systemd.services.lx-annotate-feature-registry-guard.serviceConfig.ExecStart;
-            migrateRequires = gc02.systemd.services.lx-annotate-migrate.requires;
-            workerRequires = gc02.systemd.services."lx-annotate-celery-worker".requires;
-          };
+
           centralHub = {
             role = s04.services.luxnix.lxAnnotateLocal.runtime.deploymentRole;
             hubEnable = s04.services.luxnix.lxAnnotateLocal.hub.enable;
@@ -328,7 +315,7 @@ def _gc_02_extended_contracts() -> dict[str, Any]:
     return _nix_eval_expr_json(
         """
         let
-          flake = builtins.getFlake "git+file:///home/admin/luxnix";
+          flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
           lib = flake.inputs.nixpkgs.lib;
           gc02 = flake.nixosConfigurations.gc-02;
           envList = env: lib.mapAttrsToList (name: value: "${name}=${toString value}") env;
@@ -561,7 +548,7 @@ def _gc_02_extended_contracts() -> dict[str, Any]:
           streamableUnit = let
             enabledHasService = builtins.hasAttr "lx-annotate-video-streamable-migration" streamableEnabled.systemd.services;
           in {
-            disabledHasService = builtins.hasAttr "lx-annotate-video-streamable-migration" gc02.config.systemd.services;
+            defaultHasService = builtins.hasAttr "lx-annotate-video-streamable-migration" gc02.config.systemd.services;
             inherit enabledHasService;
             enabledAfter =
               if enabledHasService then
@@ -637,13 +624,10 @@ def test_lx_annotate_wheel_pin_version_and_exported_version_agree() -> None:
     evaluated = _gc_02_contract()
     artifact = evaluated["runtimeArtifact"]
     environment = dict(
-        value.split("=", 1)
-        for value in evaluated["bootServiceConfig"]["Environment"]
+        value.split("=", 1) for value in evaluated["bootServiceConfig"]["Environment"]
     )
 
-    assert artifact["wheelPath"].endswith(
-        "lx_annotate-0.9.52-py3-none-any.whl"
-    )
+    assert artifact["wheelPath"].endswith("lx_annotate-0.9.52-py3-none-any.whl")
     assert artifact["packageVersion"] == "0.9.52"
     assert environment["LX_ANNOTATE_PACKAGE_VERSION"] == "0.9.52"
 
@@ -652,7 +636,7 @@ def test_lx_annotate_candidate_wheel_filename_infers_0_9_53() -> None:
     evaluated = _nix_eval_expr_json(
         """
         let
-          flake = builtins.getFlake "git+file:///home/admin/luxnix";
+          flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
           lib = flake.inputs.nixpkgs.lib;
           candidateWheel = builtins.toFile "lx_annotate-0.9.53-py3-none-any.whl" "";
           cfg = (flake.nixosConfigurations.gc-02.extendModules {
@@ -670,9 +654,7 @@ def test_lx_annotate_candidate_wheel_filename_infers_0_9_53() -> None:
         """
     )
 
-    assert evaluated["wheelPath"].endswith(
-        "lx_annotate-0.9.53-py3-none-any.whl"
-    )
+    assert evaluated["wheelPath"].endswith("lx_annotate-0.9.53-py3-none-any.whl")
     assert evaluated["packageVersion"] == "0.9.53"
 
 
@@ -680,7 +662,7 @@ def test_lx_annotate_wheel_mode_rejects_empty_package_version() -> None:
     result = _nix_eval_expr_result(
         """
         let
-          flake = builtins.getFlake "git+file:///home/admin/luxnix";
+          flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
           lib = flake.inputs.nixpkgs.lib;
           cfg = (flake.nixosConfigurations.gc-02.extendModules {
             modules = [
@@ -701,10 +683,20 @@ def test_lx_annotate_wheel_mode_rejects_empty_package_version() -> None:
 def test_lx_annotate_tmpfiles_rules_evaluate_with_runtime_storage_paths() -> None:
     rules = _gc_02_contract()["tmpfiles"]
 
-    assert any("/var/lib/lx-annotate/data/storage/streamable_videos " in rule for rule in rules)
-    assert any("/var/lib/lx-annotate/data/storage/streamable_videos/raw " in rule for rule in rules)
-    assert any("/var/lib/lx-annotate/data/storage/streamable_videos/processed " in rule for rule in rules)
-    assert any("/var/lib/lx-annotate/data/hub/backup/incoming " in rule for rule in rules)
+    assert any(
+        "/var/lib/lx-annotate/data/storage/streamable_videos " in rule for rule in rules
+    )
+    assert any(
+        "/var/lib/lx-annotate/data/storage/streamable_videos/raw " in rule
+        for rule in rules
+    )
+    assert any(
+        "/var/lib/lx-annotate/data/storage/streamable_videos/processed " in rule
+        for rule in rules
+    )
+    assert any(
+        "/var/lib/lx-annotate/data/hub/backup/incoming " in rule for rule in rules
+    )
 
 
 def test_lx_annotate_boot_service_config_evaluates() -> None:
@@ -713,7 +705,10 @@ def test_lx_annotate_boot_service_config_evaluates() -> None:
     assert service_config["WorkingDirectory"] == "/var/lib/lx-annotate/data"
     assert service_config["ExecStart"].endswith("/bin/lx-annotate-server")
     assert "/var/lib/lx-annotate/data" in service_config["ReadWritePaths"]
-    assert "/var/endoreg-service-user/lx-annotate-wheel/.venv" in service_config["ReadWritePaths"]
+    assert (
+        "/var/endoreg-service-user/lx-annotate-wheel/.venv"
+        in service_config["ReadWritePaths"]
+    )
     env = dict(value.split("=", 1) for value in service_config["Environment"])
     assert "lx-annotate.local" in env["ALLOWED_HOSTS"].split(",")
     assert "lx-annotate.local" in env["ALLOWED_HOSTS"].split(",")
@@ -743,18 +738,16 @@ def test_lx_annotate_generated_master_key_is_recoverable_runtime_contract() -> N
     assert data_recovery["serviceConfig"]["ExecStart"].endswith(
         "/bin/runLxAnnotateDataRecovery"
     )
-    assert "/var/lib/lx-annotate/data" in data_recovery["serviceConfig"]["ReadWritePaths"]
+    assert (
+        "/var/lib/lx-annotate/data" in data_recovery["serviceConfig"]["ReadWritePaths"]
+    )
     assert "lx-annotate-data-recovery.service" in evaluated["bootRequires"]
     assert "lx-annotate-data-recovery.service" in evaluated["migrateAfter"]
 
     runtime_script = "\n".join(
         [
-            Path(
-                "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts.nix"
-            ).read_text(encoding="utf-8"),
-            Path(
-                "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts/env.nix"
-            ).read_text(encoding="utf-8"),
+            SCRIPTS_NIX.read_text(encoding="utf-8"),
+            SCRIPTS_ENV_NIX.read_text(encoding="utf-8"),
         ]
     )
     assert (
@@ -766,8 +759,14 @@ def test_lx_annotate_generated_master_key_is_recoverable_runtime_contract() -> N
         "Managed payload repair failed; continuing startup so the application can serve existing data."
         in runtime_script
     )
-    assert "migration_mark_eligible failed; continuing data recovery startup path." in runtime_script
-    assert "reap_upload_job_sources failed; continuing data recovery startup path." in runtime_script
+    assert (
+        "migration_mark_eligible failed; continuing data recovery startup path."
+        in runtime_script
+    )
+    assert (
+        "reap_upload_job_sources failed; continuing data recovery startup path."
+        in runtime_script
+    )
 
 
 def test_lx_annotate_master_key_check_blocks_boot() -> None:
@@ -786,9 +785,7 @@ def test_lx_annotate_master_key_check_blocks_boot() -> None:
     assert "lx-annotate-master-key-check.service" in evaluated["bootAfter"]
     assert "lx-annotate-master-key-check.service" in evaluated["bootRequires"]
 
-    runtime_script = Path(
-        "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts.nix"
-    ).read_text(encoding="utf-8")
+    runtime_script = SCRIPTS_NIX.read_text(encoding="utf-8")
     assert 'pkgs.writeShellScriptBin "${masterKeyCheckScriptName}"' in runtime_script
     assert (
         'run_installed_django_command "${runtimeWheelVenvPath}/bin/python" verify_encrypted_storage'
@@ -883,7 +880,10 @@ def test_endoreg_client_lx_annotate_worker_limits_flow_to_celery_systemd() -> No
 def test_external_postgres_endpoint_flows_to_lx_annotate_database_config() -> None:
     evaluated = _gc_02_extended_contracts()["externalPostgres"]
 
-    assert evaluated["externalServices"]["redisUrl"] == "redis://redis.example.internal:6379/1"
+    assert (
+        evaluated["externalServices"]["redisUrl"]
+        == "redis://redis.example.internal:6379/1"
+    )
     assert evaluated["celeryBroker"]["requireSecureTransport"] is True
     assert evaluated["celeryBroker"]["secureTransportConfirmed"] is True
     assert evaluated["database"] == {"host": "postgres.example.internal", "port": 5432}
@@ -897,7 +897,7 @@ def test_external_plaintext_celery_broker_requires_confirmation() -> None:
     result = _nix_eval_expr_result(
         """
         let
-          flake = builtins.getFlake "git+file:///home/admin/luxnix";
+          flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
           cfg = (flake.nixosConfigurations.gc-02.extendModules {
             modules = [
               ({ ... }: {
@@ -934,7 +934,10 @@ def test_gpu_training_worker_is_manual_and_uses_shared_control_plane() -> None:
     assert "/bin/lx-annotate-worker" in evaluated["execStart"]
     assert "--queues=model_training" in evaluated["execStart"]
     assert "/mnt/fast-nvme-cache/endoreg-training" in evaluated["readWritePaths"]
-    assert any("/mnt/fast-nvme-cache/endoreg-training " in rule for rule in evaluated["tmpfiles"])
+    assert any(
+        "/mnt/fast-nvme-cache/endoreg-training " in rule
+        for rule in evaluated["tmpfiles"]
+    )
 
 
 def test_s_04_exports_shared_redis_for_training_broker() -> None:
@@ -971,10 +974,7 @@ def test_local_redis_broker_is_enabled_when_external_redis_is_unset() -> None:
 
 
 def test_wheel_web_startup_is_split_from_migration_and_base_data() -> None:
-    source = open(
-        "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts.nix",
-        encoding="utf-8",
-    ).read()
+    source = SCRIPTS_NIX.read_text(encoding="utf-8")
 
     marker = 'runLocalLxAnnotateWheelScript = pkgs.writeShellScriptBin "${scriptName}"'
     start = source.find(marker)
@@ -989,10 +989,16 @@ def test_wheel_web_startup_is_split_from_migration_and_base_data() -> None:
     assert "migrate --noinput" not in body
     assert "load_base_db_data" not in body
     assert "wheelWebCommand" in body
-    assert "exec \"${pkgs.bash}/bin/bash\" -lc" in body
+    assert 'exec "${pkgs.bash}/bin/bash" -lc' in body
 
-    assert 'runLocalMigrateWheelScript = pkgs.writeShellScriptBin "${migrateWheelScriptName}"' in source
-    assert 'runLocalLoadBaseDataWheelScript = pkgs.writeShellScriptBin "${loadBaseDataWheelScriptName}"' in source
+    assert (
+        'runLocalMigrateWheelScript = pkgs.writeShellScriptBin "${migrateWheelScriptName}"'
+        in source
+    )
+    assert (
+        'runLocalLoadBaseDataWheelScript = pkgs.writeShellScriptBin "${loadBaseDataWheelScriptName}"'
+        in source
+    )
     assert "wheelMigrateCommand" in source
     assert "wheelLoadBaseDataCommand" in source
     assert ".bootstrap-wheel" in source
@@ -1006,17 +1012,16 @@ def test_wheel_migrate_and_load_base_data_services_run_before_web() -> None:
         "/bin/lx-annotate-manage migrate --noinput"
     )
     assert evaluated["loadBaseData"]["Type"] == "oneshot"
-    assert "lx-annotate-load-base-data-service" in evaluated["loadBaseData"]["ExecStart"]
+    assert (
+        "lx-annotate-load-base-data-service" in evaluated["loadBaseData"]["ExecStart"]
+    )
     assert "lx-annotate-load-base-data.service" in evaluated["bootAfter"]
     assert "lx-annotate-load-base-data.service" in evaluated["bootRequires"]
     assert "lx-annotate-data-recovery.service" in evaluated["bootRequires"]
 
 
 def test_wheel_migrate_repairs_known_videostate_schema_drift() -> None:
-    source = open(
-        "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts.nix",
-        encoding="utf-8",
-    ).read()
+    source = SCRIPTS_NIX.read_text(encoding="utf-8")
 
     assert "repair_known_wheel_schema_drift()" in source
     assert '"outside_segments_removed",' in source
@@ -1073,12 +1078,8 @@ def test_lx_annotate_wheel_export_frames_command_uses_wheel_venv_path() -> None:
 def test_lx_annotate_wheel_celery_worker_exports_shared_runtime_env() -> None:
     source = "\n".join(
         [
-            Path(
-                "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts.nix"
-            ).read_text(encoding="utf-8"),
-            Path(
-                "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts/env.nix"
-            ).read_text(encoding="utf-8"),
+            SCRIPTS_NIX.read_text(encoding="utf-8"),
+            SCRIPTS_ENV_NIX.read_text(encoding="utf-8"),
         ]
     )
 
@@ -1087,7 +1088,7 @@ def test_lx_annotate_wheel_celery_worker_exports_shared_runtime_env() -> None:
     assert 'if [ ! -x "${runtimeWheelVenvPath}/bin/python" ]; then' in source
     assert 'export LX_ANNOTATE_WHEEL_VENV="${runtimeWheelVenvPath}"' in source
     assert "wheelCeleryWorkerCommand" in source
-    assert 'export LX_ANNOTATE_DEFAULT_CENTER="${envDefaultCenter}"' in source
+    assert "LX_ANNOTATE_DEFAULT_CENTER = envDefaultCenter;" in source
     assert 'export DJANGO_DB_HOST="${cfg.database.host}"' in source
     assert 'export LX_ANNOTATE_ENCRYPTED_DATA_DIR="$data_root"' in source
 
@@ -1102,8 +1103,14 @@ def test_lx_annotate_celery_worker_service_config_evaluates() -> None:
     assert service_config["WorkingDirectory"] == "/var/lib/lx-annotate/data"
     assert "/bin/lx-annotate-worker" in service_config["ExecStart"]
     assert "--queues=maintenance,default" in service_config["ExecStart"]
-    assert "lx-annotate-master-key-check.service" in _gc_02_contract()["localRedis"]["workerRequires"]
-    assert "lx-annotate-load-base-data.service" in _gc_02_contract()["localRedis"]["workerAfter"]
+    assert (
+        "lx-annotate-master-key-check.service"
+        in _gc_02_contract()["localRedis"]["workerRequires"]
+    )
+    assert (
+        "lx-annotate-load-base-data.service"
+        in _gc_02_contract()["localRedis"]["workerAfter"]
+    )
     assert "--queues=pipeline" in pipeline_config["ExecStart"]
     assert "--queues=frame_extraction" in frame_extraction_config["ExecStart"]
     assert "--queues=inference" in inference_config["ExecStart"]
@@ -1120,8 +1127,14 @@ def test_lx_annotate_celery_worker_service_config_evaluates() -> None:
     assert inference_config["MemoryMax"] == "16G"
     assert inference_config["Nice"] == 10
     assert inference_config["Restart"] == "on-failure"
-    assert "/var/endoreg-service-user/lx-annotate-wheel" in service_config["ReadWritePaths"]
-    assert "/var/endoreg-service-user/lx-annotate-wheel/.venv" in service_config["ReadWritePaths"]
+    assert (
+        "/var/endoreg-service-user/lx-annotate-wheel"
+        in service_config["ReadWritePaths"]
+    )
+    assert (
+        "/var/endoreg-service-user/lx-annotate-wheel/.venv"
+        in service_config["ReadWritePaths"]
+    )
     assert "/var/lib/lx-annotate/data" in service_config["ReadWritePaths"]
 
 
@@ -1129,7 +1142,7 @@ def test_lx_annotate_ffmpeg_worker_allows_warm_task_shutdown() -> None:
     service_config = _nix_eval_expr_json(
         """
         let
-          flake = builtins.getFlake "git+file:///home/admin/luxnix";
+          flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
           cfg = flake.nixosConfigurations.gc-02.config;
         in
           cfg.systemd.services."lx-annotate-celery-ffmpeg-worker".serviceConfig
@@ -1206,12 +1219,8 @@ def test_endoreg_client_inference_worker_options_flow_to_service() -> None:
 def test_lx_annotate_celery_worker_scripts_bind_to_dedicated_queues() -> None:
     source = "\n".join(
         [
-            Path(
-                "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts.nix"
-            ).read_text(encoding="utf-8"),
-            Path(
-                "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts/env.nix"
-            ).read_text(encoding="utf-8"),
+            SCRIPTS_NIX.read_text(encoding="utf-8"),
+            SCRIPTS_ENV_NIX.read_text(encoding="utf-8"),
         ]
     )
 
@@ -1220,8 +1229,12 @@ def test_lx_annotate_celery_worker_scripts_bind_to_dedicated_queues() -> None:
         'celeryFrameExtractionWorkerScriptName = "runLocalCeleryFrameExtractionWorker";'
         in source
     )
-    assert 'celeryInferenceWorkerScriptName = "runLocalCeleryInferenceWorker";' in source
-    assert 'queues = "${celeryMaintenanceQueueName},${celeryDefaultQueueName}";' in source
+    assert (
+        'celeryInferenceWorkerScriptName = "runLocalCeleryInferenceWorker";' in source
+    )
+    assert (
+        'queues = "${celeryMaintenanceQueueName},${celeryDefaultQueueName}";' in source
+    )
     assert "queues = celeryPipelineQueueName;" in source
     assert "queues = celeryFrameExtractionQueueName;" in source
     assert "queues = celeryInferenceQueueName;" in source
@@ -1237,8 +1250,14 @@ def test_lx_annotate_filewatcher_service_config_uses_wheel_runtime_paths() -> No
 
     assert service_config["WorkingDirectory"] == "/var/lib/lx-annotate/data"
     assert service_config["ExecStart"].endswith("/bin/lx-annotate-watch --once")
-    assert "/var/endoreg-service-user/lx-annotate-wheel" in service_config["ReadWritePaths"]
-    assert "/var/endoreg-service-user/lx-annotate-wheel/.venv" in service_config["ReadWritePaths"]
+    assert (
+        "/var/endoreg-service-user/lx-annotate-wheel"
+        in service_config["ReadWritePaths"]
+    )
+    assert (
+        "/var/endoreg-service-user/lx-annotate-wheel/.venv"
+        in service_config["ReadWritePaths"]
+    )
     assert "/var/lib/lx-annotate/data" in service_config["ReadWritePaths"]
 
 
@@ -1256,12 +1275,8 @@ def test_lx_annotate_intake_dirs_match_secretspec_style_defaults() -> None:
 
 
 def test_lx_annotate_local_exposes_generic_runtime_env_override() -> None:
-    options_source = Path(
-        "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/options.nix"
-    ).read_text(encoding="utf-8")
-    env_source = Path(
-        "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts/env.nix"
-    ).read_text(encoding="utf-8")
+    options_source = OPTIONS_NIX.read_text(encoding="utf-8")
+    env_source = SCRIPTS_ENV_NIX.read_text(encoding="utf-8")
 
     assert "extraEnvironment = mkOption" in options_source
     assert "commonEnv = {" in env_source
@@ -1271,8 +1286,13 @@ def test_lx_annotate_local_exposes_generic_runtime_env_override() -> None:
 def test_lx_annotate_filewatcher_exports_central_intake_dirs() -> None:
     environment = _gc_02_contract()["fileWatcherServiceConfig"]["Environment"]
 
-    assert "WATCHER_VIDEO_DIR=/var/lib/lx-annotate/data/import/video_import" in environment
-    assert "WATCHER_REPORT_DIR=/var/lib/lx-annotate/data/import/report_import" in environment
+    assert (
+        "WATCHER_VIDEO_DIR=/var/lib/lx-annotate/data/import/video_import" in environment
+    )
+    assert (
+        "WATCHER_REPORT_DIR=/var/lib/lx-annotate/data/import/report_import"
+        in environment
+    )
     assert (
         "WATCHER_PREANONYMIZED_DIR=/var/lib/lx-annotate/data/import/preanonymized_import"
         in environment
@@ -1309,26 +1329,19 @@ def test_lx_annotate_tls_uses_public_hostname_and_strict_acceptance() -> None:
 
     assert tls["hostname"] == "lx-annotate.local"
     assert "lx-annotate.local" in tls["nginxVirtualHosts"]
-    assert tls["publicCertPath"] == (
-        "/run/lx-annotate-ssl/lx-annotate-selfsigned.crt"
-    )
-    assert "-subj \"/CN=lx-annotate.local\"" in tls["generatorScript"]
+    assert tls["publicCertPath"] == ("/run/lx-annotate-ssl/lx-annotate-selfsigned.crt")
+    assert '-subj "/CN=lx-annotate.local"' in tls["generatorScript"]
     assert "subjectAltName=DNS:lx-annotate.local" in tls["generatorScript"]
     assert "--cacert" in tls["acceptanceScript"]
     assert "--insecure" not in tls["acceptanceScript"]
-    assert "https://lx-annotate.local/static/.vite/manifest.json" in (
-        tls["acceptanceScript"]
+    assert (
+        "https://lx-annotate.local/static/.vite/manifest.json"
+        in (tls["acceptanceScript"])
     )
 
 
 def test_wheel_acceptance_script_uses_installed_django_not_manage_py() -> None:
-    source = (
-        open(
-            "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts.nix",
-            encoding="utf-8",
-        )
-        .read()
-    )
+    source = SCRIPTS_NIX.read_text(encoding="utf-8")
 
     marker = 'runLocalAcceptanceWheelScript = pkgs.writeShellScriptBin "${acceptanceScriptName}"'
     start = source.find(marker)
@@ -1340,18 +1353,20 @@ def test_wheel_acceptance_script_uses_installed_django_not_manage_py() -> None:
     assert body_end != -1
     body = source[body_start:body_end]
 
-    assert 'run_installed_django_command "${runtimeWheelVenvPath}/bin/python" check --fail-level CRITICAL' in body
-    assert 'run_installed_django_command "${runtimeWheelVenvPath}/bin/python" verify_encrypted_storage' in body
+    assert (
+        'run_installed_django_command "${wheelVenvPythonPath}" check --fail-level CRITICAL'
+        in body
+    )
+    assert (
+        'run_installed_django_command "${wheelVenvPythonPath}" verify_encrypted_storage'
+        in body
+    )
     assert "${runtimeWheelRootPath}/manage.py" not in body
 
 
 def test_all_lx_annotate_acceptance_scripts_verify_tls() -> None:
-    source = Path(
-        "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts.nix"
-    ).read_text(encoding="utf-8")
-    service_source = Path(
-        "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/config.nix"
-    ).read_text(encoding="utf-8")
+    source = SCRIPTS_NIX.read_text(encoding="utf-8")
+    service_source = CONFIG_NIX.read_text(encoding="utf-8")
 
     assert source.count('--cacert "${publicSslCertificatePath}"') == 2
     assert service_source.count('--cacert "${publicSslCertificatePath}"') == 1
@@ -1362,17 +1377,20 @@ def test_all_lx_annotate_acceptance_scripts_verify_tls() -> None:
 def test_lx_annotate_streamable_migration_service_config_evaluates() -> None:
     evaluated = _gc_02_extended_contracts()["streamableService"]
 
-    assert evaluated["serviceExists"] is False
-    assert evaluated["serviceConfig"] == {}
+    assert evaluated["serviceExists"] is True
+    assert evaluated["serviceConfig"]["Type"] == "oneshot"
+    assert evaluated["serviceConfig"]["ExecStart"].endswith(
+        "/bin/lx-annotate-migrate-video-streamable-storage"
+    )
 
 
 def test_lx_annotate_streamable_migration_unit_is_opt_in_manual() -> None:
     evaluated = _gc_02_extended_contracts()["streamableUnit"]
 
-    assert evaluated["disabledHasService"] is False
-    assert evaluated["enabledHasService"] is False
-    assert evaluated["enabledAfter"] == []
-    assert evaluated["enabledRequires"] == []
+    assert evaluated["defaultHasService"] is True
+    assert evaluated["enabledHasService"] is True
+    assert "lx-annotate-runtime-env.service" in evaluated["enabledAfter"]
+    assert "lx-annotate-load-base-data.service" in evaluated["enabledRequires"]
     assert evaluated["enabledWantedBy"] == []
 
 
@@ -1396,12 +1414,8 @@ def test_emergency_storage_relief_service_is_opt_in_and_mount_gated() -> None:
 def test_emergency_storage_relief_helper_uses_verified_archive_contract() -> None:
     source = "\n".join(
         [
-            Path(
-                "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts.nix"
-            ).read_text(encoding="utf-8"),
-            Path(
-                "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts/storage-relief.nix"
-            ).read_text(encoding="utf-8"),
+            SCRIPTS_NIX.read_text(encoding="utf-8"),
+            STORAGE_RELIEF_NIX.read_text(encoding="utf-8"),
             Path(
                 "/home/admin/endoreg-db/endoreg_db/management/commands/emergency_storage_relief.py"
             ).read_text(encoding="utf-8"),
@@ -1410,8 +1424,8 @@ def test_emergency_storage_relief_helper_uses_verified_archive_contract() -> Non
 
     assert "emergency_storage_relief --config" in source
     assert "builtins.readFile ./storage-relief.py" not in source
-    assert "mountpoint\" -q \"$external_mount_point\"" in source
-    assert "findmnt\" -n -o SOURCE --target \"$external_mount_point\"" in source
+    assert 'mountpoint" -q "$external_mount_point"' in source
+    assert 'findmnt" -n -o SOURCE --target "$external_mount_point"' in source
     assert "expectedDeviceId or expectedFsUuid" in source
     assert "atomic_copy_file" in source
     assert "atomic_move_file" in source
@@ -1419,10 +1433,7 @@ def test_emergency_storage_relief_helper_uses_verified_archive_contract() -> Non
     assert "sha256_file" in source
     assert "staging_destination" in source
     assert "ReliefResourceKind" in source
-    options_source = open(
-        "/home/admin/luxnix/modules/nixos/services/lx-annotate-local/options.nix",
-        encoding="utf-8",
-    ).read()
+    options_source = OPTIONS_NIX.read_text(encoding="utf-8")
     assert "validatedExportMarkerNames" in source
     assert ".lx-annotate-export-validated.json" in options_source
     assert "lx_annotate_storage_relief_complete" in source
@@ -1434,15 +1445,37 @@ def test_hub_transfer_api_extend_modules_enables_nginx_and_backup_surfaces() -> 
     assert evaluated["hubEnable"] is True
     assert "ssl_verify_client optional;" in evaluated["hostExtraConfig"]
     assert "ssl_client_certificate /tmp/client-ca.pem;" in evaluated["hostExtraConfig"]
-    assert "if ($ssl_client_verify != SUCCESS)" in evaluated["transferLocationExtraConfig"]
+    assert (
+        "if ($ssl_client_verify != SUCCESS)" in evaluated["transferLocationExtraConfig"]
+    )
     assert "return 403;" in evaluated["transferLocationExtraConfig"]
-    assert "proxy_set_header X-Forwarded-Proto https;" in evaluated["transferLocationExtraConfig"]
-    assert "proxy_set_header X-Client-Cert-Verified $ssl_client_verify;" in evaluated["transferLocationExtraConfig"]
-    assert "proxy_set_header X-Client-Cert-Verified $ssl_client_verify;" in evaluated["rootLocationExtraConfig"]
-    assert any("/var/lib/lx-annotate/data/hub " in rule for rule in evaluated["tmpfiles"])
-    assert any("/var/lib/lx-annotate/data/hub/backup/incoming " in rule for rule in evaluated["tmpfiles"])
-    assert any("/var/lib/lx-annotate/data/hub/backup/snapshots " in rule for rule in evaluated["tmpfiles"])
-    assert any("/var/lib/lx-annotate/data/hub/backup/manifests " in rule for rule in evaluated["tmpfiles"])
+    assert (
+        "proxy_set_header X-Forwarded-Proto https;"
+        in evaluated["transferLocationExtraConfig"]
+    )
+    assert (
+        "proxy_set_header X-Client-Cert-Verified $ssl_client_verify;"
+        in evaluated["transferLocationExtraConfig"]
+    )
+    assert (
+        "proxy_set_header X-Client-Cert-Verified $ssl_client_verify;"
+        in evaluated["rootLocationExtraConfig"]
+    )
+    assert any(
+        "/var/lib/lx-annotate/data/hub " in rule for rule in evaluated["tmpfiles"]
+    )
+    assert any(
+        "/var/lib/lx-annotate/data/hub/backup/incoming " in rule
+        for rule in evaluated["tmpfiles"]
+    )
+    assert any(
+        "/var/lib/lx-annotate/data/hub/backup/snapshots " in rule
+        for rule in evaluated["tmpfiles"]
+    )
+    assert any(
+        "/var/lib/lx-annotate/data/hub/backup/manifests " in rule
+        for rule in evaluated["tmpfiles"]
+    )
     assert evaluated["hubBackupExecStart"].endswith("/bin/runLxAnnotateHubBackup")
     assert "postgresqlBackup.service" in evaluated["hubBackupAfter"]
     assert "postgresqlBackup.service" in evaluated["hubBackupRequires"]
@@ -1472,7 +1505,9 @@ def test_endoreg_client_default_center_key_flows_to_lx_annotate_runtime_env() ->
     )
 
 
-def test_lx_annotate_deployment_role_distinguishes_central_servers_from_center_nodes() -> None:
+def test_lx_annotate_deployment_role_distinguishes_central_servers_from_center_nodes() -> (
+    None
+):
     evaluated = _live_host_contract()["deploymentRoles"]
 
     assert evaluated["laptopRole"] == "site_node"
@@ -1490,10 +1525,7 @@ def test_lx_annotate_gs02_transfer_api_and_vault_live_contract() -> None:
     assert evaluated["transferEnable"] is True
     assert evaluated["requireSecure"] is True
     assert evaluated["requireMtls"] is True
-    assert (
-        evaluated["clientCaFile"]
-        == "/var/lib/lx-annotate/hub-pki/client-ca.pem"
-    )
+    assert evaluated["clientCaFile"] == "/var/lib/lx-annotate/hub-pki/client-ca.pem"
     assert "ENDOREG_ENABLE_HUB_TRANSFERS=true" in evaluated["bootEnvironment"]
     assert "ENDOREG_HUB_TRANSFER_REQUIRE_MTLS=true" in evaluated["bootEnvironment"]
     assert "ssl_verify_client optional;" in evaluated["nginxExtraConfig"]
@@ -1504,7 +1536,14 @@ def test_lx_annotate_gs02_transfer_api_and_vault_live_contract() -> None:
     assert evaluated["vaultEnabled"] is True
     assert evaluated["vaultStorageBackend"] == "raft"
     assert evaluated["vaultAddress"] == "172.16.255.22:8200"
-    assert evaluated["vaultServerCaFile"] == "/var/lib/lx-annotate-ssl/lx-annotate-selfsigned.crt"
+    assert evaluated["vaultServerCaFile"] == "/var/lib/luxnix-vault-pki/ca.crt"
+    assert evaluated["vaultServerCertFile"] == "/var/lib/luxnix-vault-pki/server.crt"
+    assert evaluated["vaultManagedTls"]["enable"] is True
+    assert evaluated["vaultManagedTls"]["dnsNames"] == [
+        "vault.endo-reg.net",
+        "gs-02.intern",
+    ]
+    assert "luxnix-vault-maintain-server-tls" in evaluated["vaultManagedTlsExecStart"]
     assert evaluated["postgresHost"] == "127.0.0.1"
     assert 8200 in evaluated["vaultFirewallPorts"]
     assert "publish-lx-hub-client-ca" in evaluated["caPublisherExecStart"]
@@ -1515,16 +1554,31 @@ def test_lx_annotate_gc02_outbound_transfer_is_vault_backed_and_fail_closed() ->
 
     assert evaluated["outbound"]["enable"] is True
     assert evaluated["outbound"]["requireMtls"] is True
-    assert evaluated["outbound"]["caFile"] == "/etc/secrets/vault/hub-pki/vault-server-ca.pem"
-    assert evaluated["outbound"]["sourceNodeSecretFile"] == "/etc/secrets/vault/hub-pki/source-node-secret"
+    assert (
+        evaluated["outbound"]["caFile"]
+        == "/etc/secrets/vault/hub-pki/vault-server-ca.pem"
+    )
+    assert (
+        evaluated["outbound"]["sourceNodeSecretFile"]
+        == "/etc/secrets/vault/hub-pki/source-node-secret"
+    )
     assert evaluated["vaultClient"]["auth"]["method"] == "approle"
     assert evaluated["vaultClient"]["hubPki"]["enable"] is True
     assert evaluated["nodeProvisioning"]["enable"] is True
-    assert "luxnix-vault-issue-hub-client-certificate.service" in evaluated["workerRequires"]
+    assert (
+        "luxnix-vault-issue-hub-client-certificate.service"
+        in evaluated["workerRequires"]
+    )
     assert "lx-annotate-hub-node-provisioning.service" in evaluated["workerRequires"]
     assert "lx-annotate-hub-node-provisioning.service" in evaluated["bootRequires"]
     assert "gs-02.intern" in evaluated["hubVpnAliases"]
     assert "vault.endo-reg.net" in evaluated["hubVpnAliases"]
+    assert evaluated["managedSecretsEnvironmentFile"] == [
+        "-/run/luxnix/vault/vault.env"
+    ]
+    assert (
+        evaluated["certificateIssuerEnvironmentFile"] == "-/run/luxnix/vault/vault.env"
+    )
 
 
 def test_lx_annotate_s04_uses_the_explicit_central_hub_contract() -> None:
@@ -1535,24 +1589,12 @@ def test_lx_annotate_s04_uses_the_explicit_central_hub_contract() -> None:
     assert evaluated["transferEnable"] is True
 
 
-def test_lx_annotate_runtime_is_gated_by_the_pinned_feature_registry() -> None:
-    evaluated = _live_host_contract()["featureRegistryGuard"]
-
-    assert "multi-user.target" in evaluated["wantedBy"]
-    assert "lx-annotate.service" in evaluated["before"]
-    assert "lx-annotate-runtime-env.service" in evaluated["requires"]
-    assert any("endoreg-feature-registry-1.0.8.1" in path for path in evaluated["restartTriggers"])
-    assert "ENDOREG_RUNTIME_ENDOREG_DB_VERSION=1.0.8.2" in evaluated["environment"]
-    assert "lx-annotate-feature-registry-guard" in evaluated["execStart"]
-    assert "lx-annotate-feature-registry-guard.service" in evaluated["migrateRequires"]
-    assert "lx-annotate-feature-registry-guard.service" in evaluated["workerRequires"]
-
 
 def test_lx_annotate_clustered_mode_rejects_local_runtime_assumptions() -> None:
     result = _nix_eval_expr_result(
         """
         let
-          flake = builtins.getFlake "git+file:///home/admin/luxnix";
+          flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
           cfg = (flake.nixosConfigurations.gc-02.extendModules {
             modules = [
               ({ ... }: {
@@ -1577,7 +1619,9 @@ def test_lx_annotate_clustered_mode_accepts_external_shared_contract() -> None:
         "host": "postgres.lx-annotate.svc.cluster.local",
         "port": 5432,
     }
-    assert evaluated["redisUrl"] == "rediss://redis.lx-annotate.svc.cluster.local:6379/1"
+    assert (
+        evaluated["redisUrl"] == "rediss://redis.lx-annotate.svc.cluster.local:6379/1"
+    )
     assert evaluated["celeryBroker"]["requireSecureTransport"] is True
     assert evaluated["celeryBroker"]["secureTransportConfirmed"] is False
     assert "postgres-endoreg-setup.service" not in evaluated["bootAfter"]
@@ -1605,12 +1649,12 @@ def test_luxnix_dev_overload_guard_enabled_on_gc_02_dev_laptop() -> None:
     assert any(name.startswith("luxnix-test-lowprio") for name in evaluated["packages"])
 
 
-def test_luxnix_dev_overload_guard_script_keeps_agents_and_interactive_tests_safe() -> None:
-    source = Path(
-        "/home/admin/luxnix/modules/nixos/luxnix/dev-overload-guard/default.nix"
-    ).read_text()
+def test_luxnix_dev_overload_guard_script_keeps_agents_and_interactive_tests_safe() -> (
+    None
+):
+    source = DEV_OVERLOAD_GUARD_NIX.read_text(encoding="utf-8")
 
-    assert 'STALE_AGE_SECONDS = ${toString cfg.staleAgeSeconds}' in source
+    assert "STALE_AGE_SECONDS = ${toString cfg.staleAgeSeconds}" in source
     assert 'process["tty"] != "?"' in source
     assert "os.killpg(pgid, signal.SIGTERM)" in source
     assert "os.killpg(pgid, signal.SIGKILL)" in source

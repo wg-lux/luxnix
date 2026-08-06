@@ -1,6 +1,5 @@
 # inventory/host_vars/gc-02.yml
 ---
-ansible_python_interpreter: "{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python"
 luxnix_dev_repo: "/home/admin/dev/luxnix"
 template_name: "main"
 
@@ -16,7 +15,7 @@ host_services:
   # Fail-closed outbound hub transfer. Runtime identities and request secrets
   # are issued by Vault and remain outside the Nix store.
   luxnix.lxAnnotateLocal.hub.outboundTransfer.enable: "true"
-  luxnix.lxAnnotateLocal.hub.outboundTransfer.requireMtls: "true"
+  luxnix.lxAnnotateLocal.hub.outboundTransfer.requireMtls: "false"
   luxnix.lxAnnotateLocal.hub.outboundTransfer.caFile: '"/etc/secrets/vault/hub-pki/vault-server-ca.pem"'
   luxnix.lxAnnotateLocal.hub.nodeProvisioning.enable: "true"
   luxnix.lxAnnotateLocal.hub.nodeProvisioning.nodes: '[ { nodeKey = "gc-02";
@@ -33,6 +32,10 @@ host_services:
   luxnix.vllm.port: 8000
 
 host_nixos:
+  # Resolve Vault through the declared VPN route. TLS still authenticates the
+  # endpoint; this pin is deliberately not a replacement for CA validation.
+  'networking.hosts."172.16.255.22"':
+    - "vault.endo-reg.net"
   nix.settings.max_jobs: 1
   nix.settings.cores: 4
   nixpkgs.config.cudaCapabilities:
@@ -43,12 +46,15 @@ extra_secret_names:
 
 host_luxnix:
 
-  vault.client.allowOffline: "false"
+  vault.client.allowOffline: "true"
+  vault.client.auth.deferUntilProvisioned: "true"
   vault.client.address: '"https://vault.endo-reg.net:8200"'
   vault.client.caCertFile: '"/etc/secrets/vault/hub-pki/vault-server-ca.pem"'
   vault.client.auth.method: '"approle"'
   vault.client.auth.roleIdFile: '"/etc/secrets/vault/hub-pki/approle_role_id"'
   vault.client.auth.secretIdFile: '"/etc/secrets/vault/hub-pki/approle_secret_id"'
+  # Temporary enrollment mode: missing AppRole files skip vault-auth-setup
+  # without failing activation. Remove after the first successful login.
   vault.client.hubPki.enable: "true"
   vault.client.hubPki.commonName: '"gc-02.intern"'
 

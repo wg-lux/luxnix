@@ -226,7 +226,6 @@ systemctl list-dependencies managed-secrets-setup.service
 # Restart dependent services
 sudo systemctl restart postgres-endoreg-setup.service
 sudo systemctl restart lx-annotate-runtime-env.service
-sudo systemctl restart lx-annotate-feature-registry-guard.service
 sudo systemctl restart lx-annotate.service
 ```
 
@@ -267,5 +266,5 @@ The managed-secrets role ensures these files exist before dependent services sta
 
 ## Related Docs
 
-- [lx-annotate Encrypted Data](/home/admin/luxnix/docs/lx-annotate-encrypted-data.md)
-- [Nixtest Safety Suite](/home/admin/luxnix/docs/testing-nixtests.md)
+- [lx-annotate Encrypted Data](../../../../docs/lx-annotate-encrypted-data.md)
+- [Nixtest Safety Suite](../../../../docs/testing-nixtests.md)

@@ -1,6 +1,5 @@
 # inventory/host_vars/gc-10.yml
 ---
-ansible_python_interpreter: "{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python"
 luxnix_dev_repo: "/home/admin/luxnix"
 template_name: "main"
 
@@ -37,14 +36,17 @@ extra_secret_names: []
 
 host_luxnix:
 
-  # Keep first provisioning fail-closed. Enrollment material is delivered out
-  # of band and is never rendered into the Nix store or inventory.
-  vault.client.allowOffline: "false"
+  # Enrollment material is delivered out of band and is never rendered into
+  # the Nix store or inventory.
+  vault.client.allowOffline: "true"
   vault.client.address: '"https://vault.endo-reg.net:8200"'
   vault.client.caCertFile: '"/etc/secrets/vault/hub-pki/vault-server-ca.pem"'
   vault.client.auth.method: '"approle"'
   vault.client.auth.roleIdFile: '"/etc/secrets/vault/hub-pki/approle_role_id"'
   vault.client.auth.secretIdFile: '"/etc/secrets/vault/hub-pki/approle_secret_id"'
+  # Temporary enrollment mode: missing AppRole files skip vault-auth-setup
+  # without failing activation. Remove after the first successful login.
+  vault.client.auth.deferUntilProvisioned: "true"
   vault.client.hubPki.enable: "true"
   vault.client.hubPki.commonName: '"gc-10.intern"'
 

@@ -1,20 +1,32 @@
-# my_nix_manager/config_loader.py
-import yaml
-from typing import Any, Dict
+"""Write rendered Nix configuration files."""
+
+import logging
+from collections.abc import Iterable
+from pathlib import Path
+
 from .nix_file_fixes import fix_yml_list_in_nix_file
-from lx_administration.logging import get_logger, log_heading
+
+RenderedNixOutput = tuple[Path, str]
 
 
-def load_config(config_path: str) -> Dict[str, Any]:
-    with open(config_path, "r") as f:
-        return yaml.safe_load(f)
+def write_nix_file(
+    content: str,
+    filepath: str | Path,
+    logger: logging.Logger | None = None,
+) -> None:
+    """Write and normalize one rendered Nix file."""
+    destination = Path(filepath)
+    destination.write_text(content, encoding="utf-8")
+    fix_yml_list_in_nix_file(destination, logger=logger)
 
 
-def write_nix_file(content, filepath, logger=None):
-    if not logger:
-        logger = get_logger("write_nix_file", reset=True)
-
-    with open(filepath, "w") as f:
-        f.write(content)
-
-    fix_yml_list_in_nix_file(filepath, logger=logger)
+def write_nix_outputs(
+    outputs: Iterable[RenderedNixOutput],
+    logger: logging.Logger | None = None,
+) -> None:
+    """Publish a sequence of fully rendered Nix outputs."""
+    for destination, content in outputs:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        write_nix_file(content, destination, logger=logger)
+        if logger is not None:
+            logger.info("Wrote generated Nix configuration: %s", destination)

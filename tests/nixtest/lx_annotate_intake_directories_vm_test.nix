@@ -38,6 +38,7 @@ in
             fileSystems.${protectedDataRoot} = {
               device = "tmpfs";
               fsType = "tmpfs";
+              neededForBoot = true; 
               options = [
                 "mode=0750"
                 "size=16M"
@@ -48,7 +49,10 @@ in
               description = "Assert lx-annotate intake volume starts empty";
               requiredBy = [ "systemd-tmpfiles-setup.service" ];
               before = [ "systemd-tmpfiles-setup.service" ];
-              unitConfig.RequiresMountsFor = [ protectedDataRoot ];
+              unitConfig = {
+                DefaultDependencies = false; # Fixes the sysinit.target dependency cycle
+                RequiresMountsFor = [ protectedDataRoot ];
+              };
               serviceConfig = {
                 Type = "oneshot";
                 ExecStart = pkgs.writeShellScript "assert-lx-annotate-intake-volume-empty" ''

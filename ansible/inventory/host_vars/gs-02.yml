@@ -77,9 +77,18 @@ host_luxnix:
   vault.server.bindAddress: '"172.16.255.22:8200"'
   vault.server.apiAddress: '"https://vault.endo-reg.net:8200"'
   vault.server.clusterAddress: '"https://gs-02.intern:8201"'
-  vault.server.tlsCertFile: '"/var/lib/lx-annotate-ssl/lx-annotate-selfsigned.crt"'
-  vault.server.tlsKeyFile: '"/var/lib/lx-annotate-ssl/lx-annotate-selfsigned.key"'
-  vault.server.caCertFile: '"/var/lib/lx-annotate-ssl/lx-annotate-selfsigned.crt"'
+  # Vault owns a persistent CA. Renewal rotates only its CA-signed server leaf;
+  # LX-Annotate's unrelated self-signed certificate is never a trust anchor.
+  vault.server.tlsCertFile: '"/var/lib/luxnix-vault-pki/server.crt"'
+  vault.server.tlsKeyFile: '"/var/lib/luxnix-vault-pki/server.key"'
+  vault.server.caCertFile: '"/var/lib/luxnix-vault-pki/ca.crt"'
+  vault.server.managedTls.enable: "true"
+  vault.server.managedTls.serverCommonName: '"vault.endo-reg.net"'
+  vault.server.managedTls.dnsNames:
+    - '"vault.endo-reg.net"'
+    - '"gs-02.intern"'
+  vault.server.managedTls.ipAddresses:
+    - '"172.16.255.22"'
   vault.server.hubPki.enable: "true"
   vault.server.hubPki.caCertificateFile: '"/var/lib/lx-annotate/hub-pki/client-ca.pem"'
 

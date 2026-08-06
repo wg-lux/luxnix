@@ -1,4 +1,4 @@
-# /default.nix
+# gc-10/default.nix
 
 { config, pkgs, lib, modulesPath, ... }:
 
@@ -131,6 +131,9 @@ luxnix.lxAnnotateLocal.runtime.mode = "wheel";
 
 
     generic-settings.network.glm52.port = 8088;
+
+
+    generic-settings.network.hosts.c-01.ip-vpn = "172.16.255.131";
 
 
     generic-settings.network.hosts.gc-01.domains = [ "gc-01.intern" "lx-annotate.local" ];
@@ -430,7 +433,10 @@ luxnix.lxAnnotateLocal.runtime.mode = "wheel";
     vault.client.address = "https://vault.endo-reg.net:8200";
 
 
-    vault.client.allowOffline = false;
+    vault.client.allowOffline = true;
+
+
+    vault.client.auth.deferUntilProvisioned = true;
 
 
     vault.client.auth.method = "approle";

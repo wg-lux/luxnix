@@ -1,9 +1,9 @@
-.repo_initialized
 .ansible/.lock
 conf/ansible.cfg
 result
 result/
-autoconf/
+/autoconf/*
+!/autoconf/config.yml
 # direnv
 .direnv
 .devenv_built
@@ -12,9 +12,14 @@ autoconf/
 utils/secrets/
 *keyfile.bin
 luxnix.code-workspace
-docs/hostinfo/
-docs/luxnix-hostinfo.md
-conf/hostinfo.json
+/cmdb/
+/conf/hostinfo.json
+/conf/hostinfos/
+/docs/hostinfo/
+/docs/luxnix-hostinfo.md
+/ansible/cmdb/*
+!/ansible/cmdb/.gitkeep
+/ansible/.cmdb-refresh.*/
 logs/
 **.env
 test_wd/

@@ -4,24 +4,22 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime as dt
 from pathlib import Path
-from typing import Dict, Iterable, Tuple
 
-import yaml
-
+from lx_administration.autoconf import AutoconfConfig, DEFAULT_CONFIG_PATH
 from lx_administration.logging import get_logger
-from lx_administration.models.vault.ansible_cfg import AnsibleCfg
-from lx_administration.models.vault.manager import Vault
+from lx_administration.models.vault import (
+    AnsibleCfg,
+    Vault,
+    import_admin_passwords,
+    load_admin_passwords,
+)
 from lx_administration.models.vault.manager_utils import ensure_local_vault_key
-from lx_administration.models.vault.secret import Secret
-from lx_administration.password.generator import PasswordGenerator
-
 
 LOGGER = get_logger("bootstrap-lx-vault", reset=True)
 
 
-def _parse_args() -> argparse.Namespace:
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Bootstrap the Luxnix vault setup")
     parser.add_argument(
         "--vault-dir",
@@ -35,8 +33,18 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--inventory",
-        default="./autoconf/inventory.yml",
-        help="Inventory file used to discover hosts, roles, and groups",
+        type=Path,
+        default=None,
+        help=(
+            "Inventory file used to discover hosts, roles, and groups; "
+            "defaults to the configured Autoconf output inventory"
+        ),
+    )
+    parser.add_argument(
+        "--autoconf-config",
+        type=Path,
+        default=DEFAULT_CONFIG_PATH,
+        help=f"Autoconf configuration file (default: {DEFAULT_CONFIG_PATH})",
     )
     parser.add_argument(
         "--ansible-cfg",
@@ -55,7 +63,8 @@ def _parse_args() -> argparse.Namespace:
         "--admin-passwords",
         default=None,
         help=(
-            "Optional YAML file containing admin passwords keyed by inventory hostname. "
+            "Optional YAML file containing admin passwords keyed by "
+            "inventory hostname. "
             "Passwords and their hashes will be imported into the vault."
         ),
     )
@@ -67,9 +76,22 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--skip-sync",
         action="store_true",
-        help="Skip syncing the inventory (use only when vault already contains templates)",
+        help=(
+            "Skip syncing the inventory (use only when the vault already "
+            "contains templates)"
+        ),
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
+
+
+def _resolve_inventory_path(
+    inventory: Path | None,
+    autoconf_config: Path,
+) -> Path:
+    """Resolve an explicit inventory or derive it from central Autoconf options."""
+    if inventory is not None:
+        return inventory.expanduser().resolve()
+    return AutoconfConfig.load(autoconf_config).output_layout.inventory_file
 
 
 def _ensure_ansible_cfg(ansible_cfg_path: Path, private_key_file: str) -> Path:
@@ -95,87 +117,13 @@ def _ensure_ansible_cfg(ansible_cfg_path: Path, private_key_file: str) -> Path:
     return ansible_cfg_path
 
 
-def _load_admin_passwords(path: Path) -> Dict[str, str]:
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    if not data:
-        return {}
-    if isinstance(data, dict):
-        return data.get("admin_passwords", {}) or {}
-    raise ValueError("Admin passwords file must contain a mapping under 'admin_passwords'.")
-
-
-def _admin_secret_values(password: str, generator: PasswordGenerator) -> Iterable[Tuple[str, str]]:
-    hashed = generator.create_password_hash(password)
-    return ("password", password), ("password_hash", hashed)
-
-
-def _import_admin_passwords(vault: Vault, passwords: Dict[str, str]) -> None:
-    if not passwords:
-        LOGGER.info("No admin passwords supplied; skipping import")
-        return
-
-    LOGGER.info("Importing %d admin passwords into the vault", len(passwords))
-    generator = PasswordGenerator(mode="password", require_special=False)
-
-    for hostname, password in passwords.items():
-        if not password:
-            LOGGER.warning("Hostname %s has an empty password entry; skipping", hostname)
-            continue
-
-        template_name = f"admin@{hostname}"
-        template, _ = vault.get_or_create_secret_template(
-            name=template_name,
-            owner_type="local",
-            secret_type="password",
-            vault_dir=vault.dir,
-        )
-
-        secret_dir = Path(template.directory or "").expanduser()
-        if not secret_dir:
-            secret_dir = template.get_secret_dir(Path(vault.dir))
-            template.directory = secret_dir.as_posix()
-        secret_dir.mkdir(parents=True, exist_ok=True)
-
-        for suffix, value in _admin_secret_values(password, generator):
-            secret_name = f"{template.name}_{suffix}"
-            secret_file = secret_dir / secret_name
-            pseudo_secret_name = secret_name.replace(f"@{hostname}", "")
-            target_name = (
-                f"SCRT_{template.owner_type}_{template.secret_type}_{pseudo_secret_name}"
-            )
-
-            existing = next((s for s in vault.secrets if s.name == secret_name), None)
-            if existing:
-                existing.value = value
-                existing.updated = dt.now()
-                existing.update_file_encryption(vault)
-                existing.value = None
-            else:
-                Secret.create_secret(value, secret_file.as_posix(), vault)
-                secret = Secret(
-                    name=secret_name,
-                    template_name=template.name,
-                    file=secret_file.as_posix(),
-                    target_name=target_name,
-                    owner_type=template.owner_type,
-                    secret_type=template.secret_type,
-                    local_vault_key=template.local_vault_key,
-                    created=dt.now(),
-                    updated=dt.now(),
-                )
-                vault.secrets.append(secret)
-
-            if secret_name not in template.secret_names:
-                template.secret_names.append(secret_name)
-
-
 def main() -> None:
     args = _parse_args()
 
     vault_dir = Path(args.vault_dir).expanduser().resolve()
     vault_key = Path(args.vault_key).expanduser().resolve()
     ansible_cfg_path = Path(args.ansible_cfg).expanduser().resolve()
-    inventory_path = Path(args.inventory).expanduser().resolve()
+    inventory_path = _resolve_inventory_path(args.inventory, args.autoconf_config)
 
     vault_dir.mkdir(parents=True, exist_ok=True)
     ensure_local_vault_key(vault_key)
@@ -207,12 +155,8 @@ def main() -> None:
 
     if args.admin_passwords:
         passwords_path = Path(args.admin_passwords).expanduser().resolve()
-        if not passwords_path.exists():
-            raise FileNotFoundError(
-                f"Admin password file not found: {passwords_path}"
-            )
-        passwords = _load_admin_passwords(passwords_path)
-        _import_admin_passwords(vault, passwords)
+        passwords = load_admin_passwords(passwords_path)
+        import_admin_passwords(vault, passwords, logger=LOGGER)
 
     vault.validate_vault()
     vault.save_to_file(logger=LOGGER)

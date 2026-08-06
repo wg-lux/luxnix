@@ -7,7 +7,7 @@ import textwrap
 from pathlib import Path
 
 
-REPO_ROOT = Path("/home/admin/luxnix")
+REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS_NIX = (
     REPO_ROOT / "modules" / "nixos" / "services" / "lx-annotate-local" / "scripts.nix"
 )

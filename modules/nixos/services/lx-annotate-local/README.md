@@ -4,12 +4,12 @@ This module manages the local `lx-annotate` deployment on LuxNix hosts.
 
 ## Structure
 
-- [`default.nix`](/home/admin/luxnix/modules/nixos/services/lx-annotate-local/default.nix): thin wrapper that assembles the runtime context, script exports, and split submodules.
-- [`runtime-context.nix`](/home/admin/luxnix/modules/nixos/services/lx-annotate-local/runtime-context.nix): canonical derived runtime paths, environment values, defaults, and helper functions shared by the module.
-- [`options.nix`](/home/admin/luxnix/modules/nixos/services/lx-annotate-local/options.nix): public option surface.
-- [`config.nix`](/home/admin/luxnix/modules/nixos/services/lx-annotate-local/config.nix): systemd, nginx, tmpfiles, assertions, and secret wiring.
-- [`scripts.nix`](/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts.nix): shell-script derivations used by the service units.
-- [`scripts/env.nix`](/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts/env.nix): single source of truth for shared lx-annotate runtime environment variables.
+- [`default.nix`](default.nix): thin wrapper that assembles the runtime context, script exports, and split submodules.
+- [`runtime-context.nix`](runtime-context.nix): canonical derived runtime paths, environment values, defaults, and helper functions shared by the module.
+- [`options.nix`](options.nix): public option surface.
+- [`config.nix`](config.nix): systemd, nginx, tmpfiles, assertions, and secret wiring.
+- [`scripts.nix`](scripts.nix): shell-script derivations used by the service units.
+- [`scripts/env.nix`](scripts/env.nix): single source of truth for shared lx-annotate runtime environment variables.
 
 ## Encrypted Data Flow
 
@@ -63,7 +63,7 @@ When changing LuxNix or lx-annotate integration code, keep these rules:
 
 Shared lx-annotate application environment variables are centralized in:
 
-- [`scripts/env.nix`](/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts/env.nix)
+- [`scripts/env.nix`](scripts/env.nix)
 
 The main attrset to inspect is `commonEnv`. It is the contract rendered into:
 
@@ -113,7 +113,7 @@ needed.
 The full cross-repository production contract, including encrypted HLS
 materialization, authenticated browser playback, deployment, hub separation,
 readiness, and incident response, is documented in
-[`docs/lx-annotate-secure-hls.md`](/home/admin/luxnix/docs/lx-annotate-secure-hls.md).
+[`docs/lx-annotate-secure-hls.md`](../../../../docs/lx-annotate-secure-hls.md).
 
 The essential operational distinction is that HLS systemd oneshots are
 dispatchers. A successful exit confirms that eligible work was selected and
@@ -137,6 +137,13 @@ raw and processed streamable video artifacts according to the active storage
 policy. It is intentionally not
 timer-driven or wanted by a boot target so operators can control rollout pace and
 observe I/O.
+
+For bounded runs with command arguments from the admin machine, use the Devenv
+entry point. It invokes the same deployed helper as the systemd unit:
+
+```console
+devenv shell lx-annotate-streamable-migration <host> --video-id 34 --processed-only
+```
 
 `lx-annotate-acceptance.service` runs the deployed Django system checks with the
 real LuxNix environment, verifies encrypted storage round-trips without
@@ -166,7 +173,6 @@ mount unit.
 | Unit | Type / trigger | Runtime role |
 | --- | --- | --- |
 | `lx-annotate-runtime-env.service` | root oneshot, remains active | Creates the runtime/config/data directories, copies the database password into the runtime config directory, normalizes Keycloak secret permissions, and writes `/var/lib/lx-annotate/.env.systemd` plus the compatibility copy under the data root. |
-| `lx-annotate-feature-registry-guard.service` | oneshot, remains active | Gates every application unit on the immutable, build-validated `endoreg-db/feature-tracking` registry. It records the pinned registry Git revision and rejects an installed `endoreg-db` version that differs from LX-Annotate's exact pinned dependency. |
 | `lx-annotate-encrypted-data.service` | optional root oneshot, remains active | Opens the configured LUKS device, mounts it at `runtime.encryptedDataDir`, fixes owner/mode on the mount point, and closes it again on stop. Enabled by `runtime.managedEncryptedData.enable`. |
 | `lx-annotate-data-recovery.service` | oneshot, enabled by default | Runs before migrations when `dataRecovery.enable` is true. It moves or overlays legacy data/media into the current protected data root, repairs managed payloads when possible, and records recovery state so heavy recovery is not repeated unnecessarily. |
 | `lx-annotate-migrate.service` | oneshot | Runs `lx-annotate-manage migrate --noinput` against the effective runtime package. It is ordered before base-data loading, encrypted-storage validation, and the web service. |
@@ -340,7 +346,7 @@ worker replicas.
 
 The first Kubernetes package lives at:
 
-- [`kubernetes/lx-annotate`](/home/admin/luxnix/kubernetes/lx-annotate)
+- [`kubernetes/lx-annotate`](../../../../kubernetes/lx-annotate)
 
 It contains plain Kustomize-managed YAML for web, worker, Service, Ingress,
 ConfigMap, Secret references, a shared PVC, and singleton CronJobs with
@@ -609,12 +615,11 @@ vault-auth-setup.service
   -> managed-secrets-setup.service
     -> lx-annotate-encrypted-data.service
       -> lx-annotate-runtime-env.service
-        -> lx-annotate-feature-registry-guard.service
-          -> lx-annotate-data-recovery.service
-            -> lx-annotate-migrate.service
-              -> lx-annotate-load-base-data.service
-                -> lx-annotate-master-key-check.service
-                  -> lx-annotate.service
+        -> lx-annotate-data-recovery.service
+          -> lx-annotate-migrate.service
+            -> lx-annotate-load-base-data.service
+              -> lx-annotate-master-key-check.service
+                -> lx-annotate.service
 ```
 
 `lx-annotate-boot.service` is an alias for `lx-annotate.service`. Path units,

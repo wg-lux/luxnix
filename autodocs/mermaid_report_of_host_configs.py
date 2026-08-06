@@ -1,3 +1,7 @@
+# STATUS: inactive preserved generator, not the canonical inventory report.
+# See autodocs/status.yml before use. Its dated input is currently absent and
+# its output has no redaction or restrictive-permission contract.
+
 import yaml
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -334,4 +338,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

@@ -33,20 +33,6 @@ wheels = [
 ]
 
 [[package]]
-name = "ansible-cmdb"
-version = "1.31"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "jsonxs" },
-    { name = "mako" },
-    { name = "pyyaml" },
-    { name = "ushlex" },
-]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/68/b1/69da43f4d3fd7d34c107cfe999de10131d6937152ba85815c18733d8fe23/ansible_cmdb-1.31-py2.py3-none-any.whl", hash = "sha256:e522cbf3fce3e5fe50d661d462d8b9ec2992ef9f092f506bbaad55e90cc48f35", size = 355169, upload-time = "2021-02-15T09:03:16.568Z" },
-]
-
-[[package]]
 name = "ansible-core"
 version = "2.20.1"
 source = { registry = "https://pypi.org/simple" }
@@ -632,12 +618,6 @@ wheels = [
 ]
 
 [[package]]
-name = "jsonxs"
-version = "0.6"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/65/62/67257a84338fde1b89fce8b28164364bf2ad6a5a4459a6a890cf497cf721/jsonxs-0.6.tar.gz", hash = "sha256:dc41ae07961f3f19f97241e4c7f611d84d076c420dd2876aadfd936e59c8c302", size = 4071, upload-time = "2017-08-16T16:39:22.937Z" }
-
-[[package]]
 name = "librt"
 version = "0.7.8"
 source = { registry = "https://pypi.org/simple" }
@@ -716,7 +696,6 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "ansible" },
-    { name = "ansible-cmdb" },
     { name = "ansible-core" },
     { name = "arsenal-cli" },
     { name = "black" },
@@ -746,7 +725,6 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "ansible", specifier = ">=11.1.0" },
-    { name = "ansible-cmdb", specifier = ">=1.31" },
     { name = "ansible-core", specifier = ">=2.18.1" },
     { name = "arsenal-cli", specifier = ">=1.2.7" },
     { name = "black", specifier = ">=23.7.0" },
@@ -851,18 +829,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/0f/85/86766dfebfa87bea0ab78e9ff7a4b4b45225df4b4d3b8cc3c03c5cd68464/lxml-6.0.2-cp314-cp314t-win32.whl", hash = "sha256:da08e7bb297b04e893d91087df19638dc7a6bb858a954b0cc2b9f5053c922312", size = 3911420, upload-time = "2025-09-22T04:03:32.198Z" },
     { url = "https://files.pythonhosted.org/packages/fe/1a/b248b355834c8e32614650b8008c69ffeb0ceb149c793961dd8c0b991bb3/lxml-6.0.2-cp314-cp314t-win_amd64.whl", hash = "sha256:252a22982dca42f6155125ac76d3432e548a7625d56f5a273ee78a5057216eca", size = 4406837, upload-time = "2025-09-22T04:03:34.027Z" },
     { url = "https://files.pythonhosted.org/packages/92/aa/df863bcc39c5e0946263454aba394de8a9084dbaff8ad143846b0d844739/lxml-6.0.2-cp314-cp314t-win_arm64.whl", hash = "sha256:bb4c1847b303835d89d785a18801a883436cdfd5dc3d62947f9c49e24f0f5a2c", size = 3822205, upload-time = "2025-09-22T04:03:36.249Z" },
-]
-
-[[package]]
-name = "mako"
-version = "1.3.10"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "markupsafe" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/9e/38/bd5b78a920a64d708fe6bc8e0a2c075e1389d53bef8413725c63ba041535/mako-1.3.10.tar.gz", hash = "sha256:99579a6f39583fa7e5630a28c3c1f440e4e97a414b80372649c0ce338da2ea28", size = 392474, upload-time = "2025-04-10T12:44:31.16Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/87/fb/99f81ac72ae23375f22b7afdb7642aba97c00a713c217124420147681a2f/mako-1.3.10-py3-none-any.whl", hash = "sha256:baef24a52fc4fc514a0887ac600f9f1cff3d82c61d4d700a1fa84d597b88db59", size = 78509, upload-time = "2025-04-10T12:50:53.297Z" },
 ]
 
 [[package]]
@@ -1901,12 +1867,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/c7/24/5f1b3bdffd70275f6
 wheels = [
     { url = "https://files.pythonhosted.org/packages/39/08/aaaad47bc4e9dc8c725e68f9d04865dbcb2052843ff09c97b08904852d84/urllib3-2.6.3-py3-none-any.whl", hash = "sha256:bf272323e553dfb2e87d9bfd225ca7b0f467b919d7bbd355436d3fd37cb0acd4", size = 131584, upload-time = "2026-01-07T16:24:42.685Z" },
 ]
-
-[[package]]
-name = "ushlex"
-version = "0.99.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/48/e0/33fa11058c8efc51ba3520ceb85c9fa0c5e42ce414b885fcd5e12132d13b/ushlex-0.99.1.tar.gz", hash = "sha256:6d681561545a9781430d5254eab9a648bade78c82ffd127d56c9228ae8887d46", size = 4712, upload-time = "2018-08-22T15:40:31.562Z" }
 
 [[package]]
 name = "w3lib"

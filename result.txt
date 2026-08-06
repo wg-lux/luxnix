@@ -1,0 +1,507 @@
+Start working on the continuous goal to ahve a easy to read luxnix
+
+
+
+
+
+
+Dienstag, 15:58
+
+
+
+
+
+
+4m 49s lang gearbeitet
+
+
+
+Started the continuous readability goal with test consolidation.
+Completed:
+Removed eight stale duplicate root-level LX-Annotate test files—1,064 lines. They remain recoverable from Git.
+Kept the authoritative suite under tests/lx-annotate/.
+Removed 29 duplicate/stale collected tests: collection dropped from 184 to 155.
+Updated three stale assertions to reflect current migration, environment, and streamable-storage contracts.
+Replaced absolute paths in the smaller [encryption](/home/admin/luxnix/tests/lx-annotate/test_lx_annotate_encryption_defaults.py) and [streamable-video](/home/admin/luxnix/tests/lx-annotate/test_lx_annotate_streamable_video_contract.py) tests.
+Clarified default/manual migration expectations in the [Nix evaluation contract (line 1362)](/home/admin/luxnix/tests/lx-annotate/test_lx_annotate_nix_eval_contract.py:1362).
+Verification:
+22 source-level tests passed.
+Four relevant Nix contract checks passed.
+Pytest collection succeeds with 155 tests.
+Ruff non-formatting checks and git diff --check pass.
+The continuous goal remains active. The next cleanup area is documentation navigation and absolute local links.
+
+11 Dateien bearbeitet+35-1.102Änderungen prüfenRückgängig machenÜberprüfen
+
+tests/test_lx_annotate_align_env_script.pytests/test_lx_annotate_align_env_script.py+0-100
+tests/test_lx_annotate_data_recovery_repair_gate.pytests/test_lx_annotate_data_recovery_repair_gate.py+0-150
+tests/test_lx_annotate_encryption_defaults.pytests/test_lx_annotate_encryption_defaults.py+0-27
+8 weitere Dateien anzeigen
+
+
+
+
+Dienstag, 16:03
+
+
+
+
+
+
+
+
+6m 5s lang gearbeitet
+
+
+
+Completed the documentation readability pass.
+Changes:
+Replaced three broken MkDocs targets with structured navigation covering 20 real pages.
+Grouped docs into Start Here, Architecture, Deployment, Services, Vault, and Clinical Operations.
+Replaced machine-specific /home/admin/... documentation links with portable relative or GitHub links.
+Replaced missing security-page references with current hardware, Vault, SSH, access, and service documentation.
+Excluded archival Excalidraw and Nixicle sources from the published site.
+Updated the obsolete materialx.emoji integration to material.extensions.emoji.
+Added [test_documentation_contract.py](/home/admin/luxnix/tests/test_documentation_contract.py), checking navigation uniqueness, target existence, portable links, and missing local targets.
+Added devenv tasks run docs:check.
+Verification:
+Documentation contract: 2 tests passed.
+New test passes Ruff.
+Devenv documentation check passes.
+Strict MkDocs Material build succeeds without repository warnings.
+git diff --check passes.
+No /home/admin/luxnix links remain in the audited documentation.
+The continuous goal remains active. A useful next pass is consolidating generated CMDB/inventory artifacts and removing obsolete scaffolding.
+
+17 Dateien bearbeitet+155-48Änderungen prüfenRückgängig machenÜberprüfen
+
+docs/deploying-services-lx-annotate-style.mddocs/deploying-services-lx-annotate-style.md+5-5
+docs/lx-annotate-secure-hls.mddocs/lx-annotate-secure-hls.md+1-1
+docs/network-resolution.mddocs/network-resolution.md+1-1
+14 weitere Dateien anzeigen
+
+
+
+
+Dienstag, 16:09
+
+
+
+
+
+
+
+
+Follow the goal to make luxnix easy to use for agents and people
+
+
+
+
+
+
+Dienstag, 14:25
+
+
+
+
+
+
+4m 22s lang gearbeitet
+
+
+
+Implemented a clearer entry point for humans and agents:
+Added [luxnix.yml](/home/admin/luxnix/luxnix.yml), a machine-readable map of paths, prerequisites, host conventions, safe workflows, and deployment risk levels.
+Linked it from [README.md](/home/admin/luxnix/README.md).
+Corrected inaccurate host-file requirements and a broken host-discovery command in [getting-started.md](/home/admin/luxnix/docs/getting-started.md).
+Verified:
+YAML structure, unique workflow IDs, risk classifications, and referenced paths.
+Host discovery returns 16 configurations.
+c-01 evaluates successfully.
+git diff --check passes.
+The evaluation emitted an existing warning that c-01 lacks a registry-derived SSH host key; no new failure was introduced.
+Goal completed in about 4 minutes, using 55,057 tokens.
+
+3 Dateien bearbeitet+157-5Änderungen prüfenRückgängig machenÜberprüfen
+
+README.mdREADME.md+5-0
+docs/getting-started.mddocs/getting-started.md+11-5
+luxnix.ymlluxnix.yml+141-0
+
+
+
+
+
+Dienstag, 14:29
+
+
+
+
+
+
+
+
+Bitte verbessere die Zentralisierung von Optionen und die Benutzbarkeit des Autoconf-Moduls
+
+
+
+
+
+
+Dienstag, 14:34
+
+
+
+
+
+
+6m 52s lang gearbeitet
+
+
+
+Die Autoconf-Konfiguration ist jetzt zentralisiert und besser bedienbar.
+[autoconf/config.yml (line 1)](/home/admin/luxnix/autoconf/config.yml:1) ist die kanonische Quelle für Pfade, Templates, Ausgaben und Inventory-Subnetz.
+Strikte Validierung mit verständlichen Fehlern in [config.py (line 50)](/home/admin/luxnix/lx_administration/autoconf/config.py:50).
+Neue CLI:python scripts/autoconf-pipeline.py --check
+python scripts/autoconf-pipeline.py --config <datei>
+
+Funktionierende Devenv-Tasks:devenv tasks run autoconf:check
+devenv tasks run autoconf:finished
+
+Die Generierung führt den Check automatisch zuerst aus.
+Ein bestehender Fehler wurde behoben: Das konfigurierte Subnetz erreicht nun tatsächlich jeden geladenen Inventory-Host.
+Dokumentation und maschinenlesbare Projektübersicht wurden aktualisiert.
+Verifiziert:
+13 relevante Tests bestanden.
+Ruff für alle geänderten Python-Dateien bestanden.
+Devenv-Task erfolgreich ausgeführt.
+CLI funktioniert auch außerhalb des Repository-Verzeichnisses.
+git diff --check bestanden.
+Die Hostkonfigurationen wurden bewusst nicht vollständig neu generiert, um keine fachlich unabhängigen Generated-File-Änderungen zu erzeugen.
+
+17 Dateien bearbeitet+426-39Änderungen prüfenRückgängig machenÜberprüfen
+
+.gitignore.gitignore+2-1
+autoconf/config.ymlautoconf/config.yml+13-0
+conf/nix-templates/readme.mdconf/nix-templates/readme.md+4-0
+14 weitere Dateien anzeigen
+
+
+
+
+Dienstag, 14:41
+
+
+
+
+
+
+
+
+Identify areas for cleanup
+
+
+
+
+
+
+Dienstag, 14:57
+
+
+
+
+
+
+4m 37s lang gearbeitet
+
+
+
+The highest-value cleanup areas are:
+Test-suite duplication and hard-coded worktrees
+Eight test_lx_annotate_* files exist both in tests/ and tests/lx-annotate/. They have diverged, while at least 27 test names are executed twice. Several root tests read /home/admin/dev/luxnix, so tests may validate a different checkout than the current one.
+Cleanup: retain the newer tests/lx-annotate/ suite, migrate the two root-only tests, and derive REPO_ROOT from __file__.
+Broken documentation structure
+[mkdocs.yaml (line 56)](/home/admin/luxnix/mkdocs.yaml:56) references three nonexistent pages:
+security.md
+service-architecture.md
+user-management.md
+Meanwhile, around 15 existing pages are absent from navigation, and many Markdown links contain /home/admin/luxnix.
+Cleanup: rebuild navigation, convert absolute links to repository-relative links, and add a strict documentation/link check.
+Generated inventory and CMDB ownership
+The repository tracks:
+6 Ansible fact snapshots: 262 KB
+10 generated CMDB HTML files: 800 KB
+One additional host-info snapshot
+[scripts/ansible-cmdb.sh (line 1)](/home/admin/luxnix/scripts/ansible-cmdb.sh:1) destructively recreates part of this state. There is also an empty duplicate [conf/nix-configs/s-02.yml](/home/admin/luxnix/conf/nix-configs/s-02.yml).
+Cleanup: decide which files are canonical inputs versus generated artifacts, generate atomically into one ignored directory, and publish reports separately if needed.
+LX-Annotate configuration duplication
+There are two parallel option surfaces:
+[role adapter](/home/admin/luxnix/modules/nixos/roles/endoreg-client/lx-annotate.nix): 1,113 lines
+[service options](/home/admin/luxnix/modules/nixos/services/lx-annotate-local/options.nix): 1,630 lines
+The service implementation additionally contains roughly 5,200 lines across config.nix and scripts.nix. The existing [ownership matrix (line 94)](/home/admin/luxnix/modules/nixos/services/lx-annotate-local/OWNERSHIP.md:94) already identifies application logic that should move upstream.
+Cleanup: make the service options authoritative, reduce the role to defaults/mapping, then execute the ownership matrix incrementally.
+Unused or prototype Nix modules
+authentik and plausible are essentially commented-out scaffolds. vpn, netdata, nfs, and monitoring have no external configuration references. Some contain hard-coded homelab domains, addresses, or secret locations.
+Cleanup: remove unused scaffolds or move genuine examples outside Snowfall’s auto-discovered module tree. Keep Redis, PostgreSQL, and MinIO until their active references are reviewed.
+Python legacy and consistencylx_administration/nix_manager/genererate_nix_config.py appears superseded by Autoconf and is misspelled.
+Ansible models contain many {} and [] field defaults instead of Field(default_factory=...).
+Assertions are used for input/runtime validation.
+Ruff currently reports 294 repository-wide issues, primarily line length.
+
+Cleanup: deprecate the old Nix manager, normalize Pydantic fields, replace validation assertions with explicit exceptions, then establish a clean Ruff baseline.
+General repository debris[DEADCODE.md](/home/admin/luxnix/DEADCODE.md) documents cleanup in other repositories and has no references here.
+51 empty Ansible role files are likely unnecessary structural placeholders.
+Three devlog scripts hard-code /home/admin/dev/luxnix.
+The misspelled audo-update directory should become auto-update.
+
+Recommended order: tests and paths → documentation → obvious stubs/debris → generated-state policy → LX-Annotate refactor. No files were changed during this audit.
+
+
+Dienstag, 15:02
+
+❯ journalctl -f                                
+Aug 05 12:34:22 gc-02 systemd[1]: lx-annotate-load-base-data.service: Job lx-annotate-load-base-data.service/start failed with result 'dependency'.
+Aug 05 12:34:22 gc-02 systemd[1]: lx-annotate-migrate.service: Job lx-annotate-migrate.service/start failed with result 'dependency'.
+Aug 05 12:34:22 gc-02 systemd[1]: Dependency failed for Set up endoregDbLocal PostgreSQL user password.
+Aug 05 12:34:22 gc-02 systemd[1]: postgres-endoreg-setup.service: Job postgres-endoreg-setup.service/start failed with result 'dependency'.
+Aug 05 12:34:22 gc-02 systemd[1]: Dependency failed for Prepare LuxNix runtime environment for lx-annotate.
+Aug 05 12:34:22 gc-02 systemd[1]: Dependency failed for Attest LX-Annotate against the pinned EndoReg feature registry.
+Aug 05 12:34:22 gc-02 systemd[1]: lx-annotate-feature-registry-guard.service: Job lx-annotate-feature-registry-guard.service/start failed with result 'dependency'.
+Aug 05 12:34:22 gc-02 systemd[1]: lx-annotate-runtime-env.service: Job lx-annotate-runtime-env.service/start failed with result 'dependency'.
+Aug 05 12:34:22 gc-02 systemd[1]: managed-secrets-setup.service: Consumed 9ms CPU time, 4.8M memory peak, 3.8M read from disk.
+Aug 05 12:34:22 gc-02 nix-daemon[1496]: accepted connection from pid 1082175, user admin (trusted)
+Aug 05 12:34:52 gc-02 systemd[1]: Starting Bootstrap Vault client environment for LuxNix system services...
+Aug 05 12:34:55 gc-02 fn41ff80vp5phyi1757ld1njad26vnwy-luxnix-vault-auth-provisioning-condition[1083859]: ERROR: vault-auth-setup is deferred: Vault is sealed.
+Aug 05 12:34:55 gc-02 fn41ff80vp5phyi1757ld1njad26vnwy-luxnix-vault-auth-provisioning-condition[1083859]: An authorized operator must unseal Vault on gs-02; clients never receive or use unseal keys.
+Aug 05 12:34:55 gc-02 fn41ff80vp5phyi1757ld1njad26vnwy-luxnix-vault-auth-provisioning-condition[1083859]: WARNING: lx-annotate remains fail-closed. Run luxnix-vault-enrollment-status for safe recovery guidance.
+Aug 05 12:34:55 gc-02 fn41ff80vp5phyi1757ld1njad26vnwy-luxnix-vault-auth-provisioning-condition[1083859]: After correcting the problem, run: systemctl start vault-auth-setup.service
+Aug 05 12:34:55 gc-02 systemd[1]: vault-auth-setup.service: Skipped due to 'exec-condition'.
+Aug 05 12:34:55 gc-02 systemd[1]: Condition check resulted in Bootstrap Vault client environment for LuxNix system services being skipped.
+Aug 05 12:34:55 gc-02 systemd[1]: vault-auth-setup.service: Consumed 523ms CPU time, 305M memory peak, 176.1M read from disk, 5.9M written to disk, 3.3K incoming IP traffic, 2.6K outgoing IP traffic.
+Aug 05 12:34:55 gc-02 systemd[1]: Starting Generate and manage system secrets...
+Aug 05 12:34:55 gc-02 pfpikvrn22byyggmbjh4rssiizqqx2iz-generate-managed-secrets[1083910]: Starting managed secrets generation...
+Aug 05 12:34:55 gc-02 pfpikvrn22byyggmbjh4rssiizqqx2iz-generate-managed-secrets[1083910]: ERROR: Vault runtime credentials are unavailable (state: vault-sealed); managed secrets remain fail-closed.
+Aug 05 12:34:55 gc-02 pfpikvrn22byyggmbjh4rssiizqqx2iz-generate-managed-secrets[1083910]: Run luxnix-vault-enrollment-status for recovery guidance.
+Aug 05 12:34:55 gc-02 systemd[1]: managed-secrets-setup.service: Main process exited, code=exited, status=1/FAILURE
+Aug 05 12:34:55 gc-02 systemd[1]: managed-secrets-setup.service: Failed with result 'exit-code'.
+Aug 05 12:34:55 gc-02 systemd[1]: Failed to start Generate and manage system secrets.
+Aug 05 12:34:55 gc-02 systemd[1]: Dependency failed for Apply stream-aware runtime throttling to the LX-Annotate FFmpeg worker.
+Aug 05 12:34:55 gc-02 systemd[1]: lx-annotate-ffmpeg-stream-throttle.service: Job lx-annotate-ffmpeg-stream-throttle.service/start failed with result 'dependency'.
+Aug 05 12:34:55 gc-02 systemd[1]: Dependency failed for Set up endoregDbLocal PostgreSQL user password.
+Aug 05 12:34:55 gc-02 systemd[1]: postgres-endoreg-setup.service: Job postgres-endoreg-setup.service/start failed with result 'dependency'.
+Aug 05 12:34:55 gc-02 systemd[1]: Dependency failed for Prepare LuxNix runtime environment for lx-annotate.
+Aug 05 12:34:55 gc-02 systemd[1]: lx-annotate-runtime-env.service: Job lx-annotate-runtime-env.service/start failed with result 'dependency'.
+Aug 05 12:35:45 gc-02 systemd[1]: Starting Mount endoreg persisting storage via devenv...
+Aug 05 12:35:45 gc-02 systemd[1]: Starting LuxNix guard for stale detached developer test process groups...
+Aug 05 12:35:45 gc-02 b01ylws175irbq529xamn521srwimr61-mount-persisting-storage-service[1084866]: ERROR: STORAGE_PERSISTING_HDD_ID is not set
+Aug 05 12:35:45 gc-02 systemd[1]: endoreg-mount-persisting-storage.service: Main process exited, code=exited, status=1/FAILURE
+Aug 05 12:35:45 gc-02 systemd[1]: endoreg-mount-persisting-storage.service: Failed with result 'exit-code'.
+Aug 05 12:35:45 gc-02 systemd[1]: Failed to start Mount endoreg persisting storage via devenv.
+Aug 05 12:35:45 gc-02 systemd[1]: endoreg-mount-persisting-storage.service: Consumed 8ms CPU time, 2.9M memory peak, 1.2M read from disk.
+Aug 05 12:35:45 gc-02 luxnix-dev-overload-guard[1084867]: {"event": "observed", "load1": 3.0205078125, "max_load1": 8.0, "stale_age_seconds": 7200, "unit": "luxnix-dev-overload-guard"}
+Aug 05 12:35:46 gc-02 systemd[1]: luxnix-dev-overload-guard.service: Deactivated successfully.
+Aug 05 12:35:46 gc-02 systemd[1]: Finished LuxNix guard for stale detached developer test process groups.
+Aug 05 12:35:46 gc-02 systemd[1]: luxnix-dev-overload-guard.service: Consumed 114ms CPU time, 25.7M memory peak, 11.7M read from disk.
+
+Aug 05 12:36:08 gc-02 sudo[1084529]:    admin : TTY=pts/21 ; PWD=/home/admin/luxnix ; USER=root ; COMMAND=/nix/store/mp8s10fwm685azvvv1qq7zyf7iajjlj8-coreutils-9.11/bin/env NIX_SSL_CERT_FILE=/nix/store/gllry7rx4yrx76ajx25k3ap4pd5i57fy-nss-cacert-3.117/etc/ssl/certs/ca-bundle.crt LOCALE_ARCHIVE=/run/current-system/sw/lib/locale/locale-archive NH_FLAKE=/home/admin/luxnix
+Aug 05 12:36:08 gc-02 sudo[1084529]:    admin : (command continued) PATH=/nix/store/xni8ylc4v12mjsds5cwmy37mqkmlf2ih-nix-output-monitor-2.1.8/bin:/home/admin/luxnix/.devenv/state/venv/bin:node_modules/.bin:/nix/store/dddwfz7nph37q3cjky9lhpy9kb90rrrx-bash-interactive-5.3p15/bin:/nix/store/3s4pf8j5zfkahcbvf7h4bd77kq2i9ksr-python3-3.12.13-env/bin:/nix/store/zrq88ys031mx35ib1lb3xahcm4dsq71r-uv-0.11.28/bin:/nix/store/d1n3z9p7na9p34795ia5fprgrr9dans9-pyright-1.1.411/bin:/nix/store/l7b3cb5p19qnlykasxwqdggck3ijilqq-nodejs-22.23.1/bin:/nix/store/20kgcsdc05gb3jykggi43xhav6nmn8dj-typescript-language-server-5.3.0/bin:/nix/store/6xk1i0jaid8dc1bff8pvc1b6wjl88f6x-bnsc/bin:/nix/store/n2q22q6xslnndp87drif3rk68s0c0imz-check-connectivity/bin:/nix/store/7yjdbks610rrs03p0zr2pgbhx8jfq910-conn-server-ssh/bin:/nix/store/47zr19qq2qy9w9km58nk71zr8hb0blnf-init-server-ssh/bin:/nix/store/q5h5pai8s7qr83d06fcg80g3rdfhvqk0-kill-server-ssh/bin:/nix/store/v1lhnbds3ndj35xv50yiwy6lgqxkx8dc-lx-annotate-streamable-migratio
+Aug 05 12:36:08 gc-02 sudo[1084529]:    admin : (command continued) n/bin:/nix/store/vanl4sp2pkcvg7zjx7x880zh65v50zhq-manage/bin:/nix/store/lvfzczd0pbfph76b1czy4n7swy6i41b9-mount-persisting-storage/bin:/nix/store/f5gzk5rna5d1nshyxm0lcr0drkvyqhrz-run-ansible/bin:/nix/store/p85ca8w86q08bxks9kr3mgn9863c18x7-ssh-all/bin:/nix/store/p0k4g70li1s85yzfwma1gbsffn9h4pvr-sync-secrets/bin:/nix/store/rgfmbfwki73gir79jz39130vd0bq7s69-validate-admin-passwords/bin:/nix/store/wa220rdd34hixyqbs6hyycb18givq66c-vault-bootstrap/bin:/nix/store/cmjirs6g57ddbyjglwic2g2cjrwy3ppr-gcc-15.3.0/bin:/nix/store/fsfnv7a0fbsxh6h7smx9phhp3f2nrx8j-cmake-4.3.4/bin:/nix/store/swljvs2gz4mcb1avyjzb0cc2qrbslmbb-pkg-config-wrapper-0.29.2/bin:/nix/store/ilj7wlw3rh408lv96k7vglxzbb0mhf1d-protobuf-35.1/bin:/nix/store/qqd37kj25f68wxmr9rg05850y9daxbrp-jq-1.8.2-bin/bin:/nix/store/rq1vg974qcxzb9dazz9dbq2qm72r9fa4-git-2.55.0/bin:/nix/store/a8607kv75ka3m1wf70vz6hv1cgzxa2dl-secretspec-0.14.0/bin:/nix/store/ir5wmvr1f2mkz1c353xbhqxjisg7gk48
+Aug 05 12:36:08 gc-02 sudo[1084529]:    admin : (command continued) -nixd-2.9.1/bin:/nix/store/03ll5c4q8j8dqsx4q822g7h9js51gfyp-nixfmt-1.4.0/bin:/nix/store/cxkwj5gfyzjc6pw9yzy135zl5547y3d5-openssh-10.4p1/bin:/nix/store/g7xz6l9lp0w3fh0c4xralli79vd2vzpi-openssl-3.6.3-bin/bin:/nix/store/66dqji43vzq0yi71hxlx5gc59fmfgzsr-sops-3.13.2/bin:/nix/store/avncfvcb37swybh4q8vw1kj2i3sh7s9k-tesseract-5.5.2/bin:/nix/store/593rzz2xs5i67biyv2hz898j6v5ylms0-glib-2.88.1-dev/bin:/nix/store/infvp3l4db6n0cpspv3am7n64a82lbk6-gettext-1.0/bin:/nix/store/h6bq6in7nbkmcwp64racbx6641pdpgil-glib-2.88.1-bin/bin:/nix/store/zy1qp9qm62dpdd44vwg3rjbfs854qlnh-prek-0.4.4/bin:/nix/store/m5cc6zhkrrd4aklhrq1vdl4xpamg8286-ansible-lint-25.8.2/bin:/nix/store/bk7xd50hx8q9ps2vd4fn4nm1314z99ga-python3.14-ansible-core-2.21.1/bin:/nix/store/6s6nrwb7kwnwzabsgx4al9j18q632l8m-python3.14-ansible-14.1.0/bin:/nix/store/rgnappqqc5vbq60gza5fflyk84sylwl6-python3-3.14.6/bin:/nix/store/y2k47wj3m2fa6id0j2fsvm2x9rm5bwc3-python3.14-cffi-2.1.0/bin:/
+Aug 05 12:36:08 gc-02 sudo[1084529]:    admin : (command continued) nix/store/ka8kz5n7jv59nslw6ypi46s5kc9088fv-python3.14-invoke-2.2.1/bin:/nix/store/i1xpiailfhxl3nr3mwd0cxx3srxjf7fl-python3.14-netaddr-1.3.0/bin:/nix/store/g8pxfvxspm17l2i5xq206riavd9rndp6-python3.14-jsonschema-4.26.0/bin:/nix/store/4ksbp89pxj1jkkfs83lxzws4bn36qz8a-python3.14-jsonpath-ng-1.8.0/bin:/nix/store/qvidz22a679ni4gv6v563n4zcnjvqrjp-python3.14-textfsm-2.1.0/bin:/nix/store/wqm19hrmpxp6lk9akp1rwmxmd9ivc175-python3.14-ttp-0.10.1/bin:/nix/store/z71lghpjrn4lpil9sszwhwqk8w35l808-python3.14-deepdiff-8.6.2/bin:/nix/store/80v2nbn71dvi6fa9f65x9kcnlpi4asx9-python3.14-idna-3.18/bin:/nix/store/pxw0sq17779g058db25gj3bfl8f3xr0c-python3.14-charset-normalizer-3.4.9/bin:/nix/store/a43qir99k4yi8kgw0yzml7kbk60r92nk-python3.14-netmiko-4.6.0/bin:/nix/store/k2s3m2b9if5hba6pzd14cxjdg4dza4wy-python3.14-pyserial-3.5/bin:/nix/store/46d5z8gigzvp39f8gjxywspwj3gmifwb-python3.14-markdown-it-py-4.2.0/bin:/nix/store/1j8cch7q0zhi5kfjbkgsny7bfiv4
+Aug 05 12:36:08 gc-02 sudo[1084529]:    admin : (command continued) flnq-python3.14-pygments-2.20.0/bin:/nix/store/ysq5nqsfvpizivzqvc363l394hdj6y5f-python3.14-tabulate-0.10.0/bin:/nix/store/7jqgg8q76zw18g5vzyb3kv7fm1y20crr-python3.14-yangson-1.7.8/bin:/nix/store/76j18swd1hmy21wmlix71imihzn1kl28-python3.14-jmespath-1.1.0/bin:/nix/store/clb69ydfsjygp4i2b7md45dwb3m7wi7w-python3.14-black-26.5.1/bin:/nix/store/88ij78r6sva9l9d28cmw76fw610j7cnm-python3.14-yamllint-1.37.1/bin:/nix/store/f13cgj4sypbjrwwpshfc2x4fd11is8dp-patchelf-0.15.2/bin:/nix/store/adcz0m6qq2flmshdf0zz2xwjr5zbq1gr-gcc-wrapper-15.3.0/bin:/nix/store/wnkmdd3nm0af5lxgwq1h4v52y6mdl4vj-glibc-2.42-67-bin/bin:/nix/store/mp8s10fwm685azvvv1qq7zyf7iajjlj8-coreutils-9.11/bin:/nix/store/9q284bcg9jr5hd5537i7v9n2ngqm1dq8-binutils-wrapper-2.46/bin:/nix/store/b01rwyg0ii5v8r50yrikcs5af64x0v0q-binutils-2.46/bin:/nix/store/m1p6gxgxis75rn0d549ny2y8gpxjv9pd-findutils-4.10.0/bin:/nix/store/bx0a1ijcg9ss307lrizi1cavyfs4s2g5-diffutils-3.12/bin:/nix/st
+Aug 05 12:36:08 gc-02 sudo[1084529]:    admin : (command continued) ore/x2kfd3hnhqk8d6kxkyffpk7lyaz8iy76-gnused-4.10/bin:/nix/store/xj9dgyqrcq8hrf4mrkvbcp4pa3hgrbhy-gnugrep-3.12/bin:/nix/store/0fpnmyzv3jv5a3q3p3f08hfmy2qrhmnj-gawk-5.4.1/bin:/nix/store/j5r2kzhzb2x8avna8rb21xq7dxrrr6wv-gnutar-1.35/bin:/nix/store/5chmw9ib7xz2f4rw6bgdwxx0vb9bqqpa-gzip-1.14/bin:/nix/store/mbakq7rmq5sf04xljvvaj19d5xgzr1zr-bzip2-1.0.8-bin/bin:/nix/store/xrj3v3k9v5hvx3vl0jgfp5if3syqgh8g-gnumake-4.4.1/bin:/nix/store/c9mv5v53f7vy3wd00ah0f77k509mzmn7-bash-5.3p15/bin:/nix/store/xbdvi1a0mqzml869i0123pylhgjdyqi5-patch-2.8/bin:/nix/store/6gkcds8g0vi54xrmxpyv58r8x2fvqw79-xz-5.8.3-bin/bin:/nix/store/w5rsmvy2fcp7lrnn6y73zgf1rsjk6wn0-file-5.48/bin:/nix/store/f4jdacwy5067kagfy6l1344digazzik1-devenv-wrapped-2.1.2/bin:/nix/store/1n8qprji99fq74kph3al9dyyjyhyh335-cachix-1.11.1/bin:/nix/store/yq0yxbx2k5av4cq2pxfvix0zsnzlnp9n-nixd-nightly/bin:/nix/store/sppmi7xjnhys3f1v2mvivx395ks71vjg-glib-2.86.3-bin/bin:/nix/store/737jwbhw8ji
+Aug 05 12:36:08 gc-02 sudo[1084529]:    admin : (command continued) 13x9s88z3wpp8pxaqla92-gnugrep-3.12/bin:/nix/store/iiishysy5bzkjrawxl4rld1s04qj0k0c-coreutils-9.8/bin:/run/wrappers/bin:/home/admin/.nix-profile/bin:/nix/profile/bin:/home/admin/.local/state/nix/profile/bin:/etc/profiles/per-user/admin/bin:/nix/var/nix/profiles/default/bin:/run/current-system/sw/bin NIX_PATH=/etc/nix/inputs NH_CURRENT_COMMAND=os USER=admin /nix/store/6ndsddd467jp5z3m5xhja5vxha1w1vl9-nixos-system-gc-02-25.11.20260125.1cd347b/bin/switch-to-configuration test
+Aug 05 12:36:08 gc-02 sudo[1084529]: pam_unix(sudo:session): session opened for user root(uid=0) by admin(uid=1000)
+Aug 05 12:36:08 gc-02 nixos[1085032]: switching to system configuration /nix/store/6ndsddd467jp5z3m5xhja5vxha1w1vl9-nixos-system-gc-02-25.11.20260125.1cd347b
+Aug 05 12:36:08 gc-02 systemd[1]: Stopped target Remote File Systems.
+Aug 05 12:36:08 gc-02 systemd[1]: Stopped target Local File Systems.
+Aug 05 12:36:08 gc-02 systemd[1]: Starting Refresh fwupd metadata and update motd...
+Aug 05 12:36:08 gc-02 polkitd[1062949]: Reloading rules
+Aug 05 12:36:08 gc-02 polkitd[1062949]: Collecting garbage unconditionally...
+Aug 05 12:36:08 gc-02 polkitd[1062949]: Loading rules from directory /etc/polkit-1/rules.d
+Aug 05 12:36:08 gc-02 polkitd[1062949]: Loading rules from directory /run/polkit-1/rules.d
+Aug 05 12:36:08 gc-02 polkitd[1062949]: Error opening rules directory: Error opening directory “/run/polkit-1/rules.d”: No such file or directory (g-file-error-quark, 4)
+Aug 05 12:36:08 gc-02 polkitd[1062949]: Loading rules from directory /usr/local/share/polkit-1/rules.d
+Aug 05 12:36:08 gc-02 polkitd[1062949]: Error opening rules directory: Error opening directory “/usr/local/share/polkit-1/rules.d”: No such file or directory (g-file-error-quark, 4)
+Aug 05 12:36:08 gc-02 polkitd[1062949]: Loading rules from directory /run/current-system/sw/share/polkit-1/rules.d
+Aug 05 12:36:08 gc-02 polkitd[1062949]: Finished loading, compiling and executing 5 rules
+Aug 05 12:36:08 gc-02 polkitd[1062949]: Reloading rules
+Aug 05 12:36:08 gc-02 polkitd[1062949]: Collecting garbage unconditionally...
+Aug 05 12:36:08 gc-02 polkitd[1062949]: Loading rules from directory /etc/polkit-1/rules.d
+Aug 05 12:36:08 gc-02 polkitd[1062949]: Loading rules from directory /run/polkit-1/rules.d
+Aug 05 12:36:08 gc-02 polkitd[1062949]: Error opening rules directory: Error opening directory “/run/polkit-1/rules.d”: No such file or directory (g-file-error-quark, 4)
+Aug 05 12:36:08 gc-02 polkitd[1062949]: Loading rules from directory /usr/local/share/polkit-1/rules.d
+Aug 05 12:36:08 gc-02 polkitd[1062949]: Error opening rules directory: Error opening directory “/usr/local/share/polkit-1/rules.d”: No such file or directory (g-file-error-quark, 4)
+Aug 05 12:36:08 gc-02 polkitd[1062949]: Loading rules from directory /run/current-system/sw/share/polkit-1/rules.d
+Aug 05 12:36:08 gc-02 polkitd[1062949]: Finished loading, compiling and executing 5 rules
+Aug 05 12:36:08 gc-02 systemd-timesyncd[634]: Contacted time server 195.201.20.16:123 (2.nixos.pool.ntp.org).
+Aug 05 12:36:08 gc-02 systemd[1]: Reload requested from client PID 1085032 ('.switch-to-conf') (unit user@1000.service)...
+Aug 05 12:36:08 gc-02 systemd[1]: Reloading...
+Aug 05 12:36:09 gc-02 systemd-timesyncd[634]: Contacted time server 195.201.20.16:123 (2.nixos.pool.ntp.org).
+Aug 05 12:36:09 gc-02 systemd[1]: Reloading finished in 185 ms.
+Aug 05 12:36:09 gc-02 systemd[1]: Stopping Sync Journal for Namespace lx-annotate...
+Aug 05 12:36:09 gc-02 systemd[1]: Starting Journal Service for Namespace lx-annotate...
+Aug 05 12:36:09 gc-02 systemd[1390]: Reexecution requested from client PID 1085219 ('switch-to-confi') (unit app-code@a3cd32859c074268823163970e2a8476.service)...
+Aug 05 12:36:09 gc-02 systemd[1390]: Reexecuting.
+Aug 05 12:36:09 gc-02 systemd-journald[1085220]: Failed to open /dev/kmsg for wo access, ignoring: Operation not permitted
+Aug 05 12:36:09 gc-02 systemd-journald[1085220]: Collecting audit messages is disabled.
+Aug 05 12:36:09 gc-02 fwupd[2781]: 10:36:09.223 FuPluginLinuxSwap    could not parse /proc/swaps: no volumes for devnum 39
+Aug 05 12:36:09 gc-02 systemd-journald[1085220]: Received client request to sync journal (with offlining).
+Aug 05 12:36:09 gc-02 systemd[1]: Started Journal Service for Namespace lx-annotate.
+Aug 05 12:36:09 gc-02 fwupdmgr[1085067]: Idle…: 0%
+Aug 05 12:36:09 gc-02 systemd[1]: systemd-journald-sync@lx-annotate.service: Deactivated successfully.
+Aug 05 12:36:09 gc-02 systemd[1]: Stopped Sync Journal for Namespace lx-annotate.
+Aug 05 12:36:09 gc-02 fwupdmgr[1085067]: Metadata is up to date; use --force to refresh again.
+Aug 05 12:36:09 gc-02 systemd[1]: fwupd-refresh.service: Deactivated successfully.
+Aug 05 12:36:09 gc-02 systemd[1]: Finished Refresh fwupd metadata and update motd.
+Aug 05 12:36:09 gc-02 systemd[1]: fwupd-refresh.service: Consumed 45ms CPU time, 14.5M memory peak, 15.6M read from disk.
+Aug 05 12:36:09 gc-02 systemd[1390]: Starting Run user-specific NixOS activation...
+Aug 05 12:36:09 gc-02 nixos-activation-start[1085263]: removed '/home/admin/.cache/ksycoca6_en_+2LYTH4TKEaFKz0K2T_9XSij4ho='
+Aug 05 12:36:09 gc-02 nixos-activation-start[1085263]: removed '/home/admin/.cache/ksycoca6_en_Lt_DKRdz6Vg9+GePbCWbDL8HHQw='
+Aug 05 12:36:09 gc-02 nixos-activation-start[1085263]: removed '/home/admin/.cache/ksycoca6_en_VHlojsPXNL_rDBYLsNxihgUdsjs='
+Aug 05 12:36:09 gc-02 nixos-activation-start[1085263]: removed '/home/admin/.cache/ksycoca6_en_vtaqli9DI5uvwYnYoT5pyrPUknI='
+Aug 05 12:36:09 gc-02 systemd[1390]: Finished Run user-specific NixOS activation.
+Aug 05 12:36:09 gc-02 systemd[1]: Stopped target Reactivate sysinit units.
+Aug 05 12:36:09 gc-02 systemd[1]: Stopping Reactivate sysinit units...
+Aug 05 12:36:09 gc-02 systemd[1]: Reached target Reactivate sysinit units.
+Aug 05 12:36:09 gc-02 systemd[1]: Stopping SSH Daemon...
+Aug 05 12:36:09 gc-02 sshd[1062945]: Received signal 15; terminating.
+Aug 05 12:36:09 gc-02 systemd[1]: sshd.service: Deactivated successfully.
+Aug 05 12:36:09 gc-02 systemd[1]: Stopped SSH Daemon.
+Aug 05 12:36:09 gc-02 systemd[1]: sshd.service: Consumed 17ms CPU time, 2.1M memory peak, 1M memory swap peak, 1.8M read from disk, 1M written to disk.
+Aug 05 12:36:09 gc-02 systemd[1]: SSH Host Keys Generation was skipped because no trigger condition checks were met.
+Aug 05 12:36:09 gc-02 systemd[1]: Starting SSH Daemon...
+Aug 05 12:36:09 gc-02 sshd[1085271]: Server listening on 0.0.0.0 port 22.
+Aug 05 12:36:09 gc-02 sshd[1085271]: Server listening on :: port 22.
+Aug 05 12:36:09 gc-02 systemd[1]: Started SSH Daemon.
+Aug 05 12:36:09 gc-02 systemd[1]: Reached target Local File Systems.
+Aug 05 12:36:09 gc-02 systemd[1]: Make TPM PCR Policy was skipped because of an unmet condition check (ConditionSecurity=measured-uki).
+Aug 05 12:36:09 gc-02 systemd[1]: Load Kernel Module efi_pstore was skipped because of an unmet condition check (ConditionKernelModuleLoaded=!efi_pstore).
+Aug 05 12:36:09 gc-02 systemd[1]: Starting Create SUID/SGID Wrappers...
+Aug 05 12:36:09 gc-02 systemd[1]: Clear Stale Hibernate Storage Info was skipped because of an unmet condition check (ConditionPathExists=/sys/firmware/efi/efivars/HibernateLocation-8cf2644b-4b0b-428f-9387-6d876050dc67).
+Aug 05 12:36:09 gc-02 systemd[1]: Rebuild Journal Catalog was skipped because of an unmet condition check (ConditionNeedsUpdate=/var).
+Aug 05 12:36:09 gc-02 systemd[1]: Save Transient machine-id to Disk was skipped because of an unmet condition check (ConditionPathIsMountPoint=/etc/machine-id).
+Aug 05 12:36:09 gc-02 systemd[1]: Platform Persistent Storage Archival was skipped because of an unmet condition check (ConditionDirectoryNotEmpty=/sys/fs/pstore).
+Aug 05 12:36:09 gc-02 systemd[1]: Early TPM SRK Setup was skipped because of an unmet condition check (ConditionSecurity=measured-uki).
+Aug 05 12:36:09 gc-02 systemd[1]: TPM SRK Setup was skipped because of an unmet condition check (ConditionSecurity=measured-uki).
+Aug 05 12:36:09 gc-02 systemd[1]: Update is Completed was skipped because no trigger condition checks were met.
+Aug 05 12:36:09 gc-02 systemd[1]: Reached target Remote File Systems.
+Aug 05 12:36:09 gc-02 systemd[1]: suid-sgid-wrappers.service: Deactivated successfully.
+Aug 05 12:36:09 gc-02 systemd[1]: Finished Create SUID/SGID Wrappers.
+Aug 05 12:36:09 gc-02 systemd[1]: suid-sgid-wrappers.service: Consumed 100ms CPU time, 5M memory peak, 1.9M read from disk.
+Aug 05 12:36:09 gc-02 systemd[1]: Starting Network Manager Script Dispatcher Service...
+Aug 05 12:36:09 gc-02 systemd[1]: Starting Deploy secretfile...
+Aug 05 12:36:09 gc-02 systemd[1]: Starting Home Manager environment for admin...
+Aug 05 12:36:09 gc-02 systemd[1]: Starting Home Manager environment for client-user...
+Aug 05 12:36:09 gc-02 systemd[1]: Import lastlog data into lastlog2 database was skipped because of an unmet condition check (ConditionPathExists=!/var/lib/lastlog/lastlog2.db).
+Aug 05 12:36:09 gc-02 systemd[1]: Starting linger-users.service...
+Aug 05 12:36:09 gc-02 systemd[1]: Finished Sync Journal for Namespace lx-annotate.
+Aug 05 12:36:09 gc-02 systemd[1]: Starting Bootstrap Vault client environment for LuxNix system services...
+Aug 05 12:36:09 gc-02 systemd[1]: endoreg-service-user-deploy-secretfile-postgres.service: Deactivated successfully.
+Aug 05 12:36:09 gc-02 systemd[1]: Finished Deploy secretfile.
+Aug 05 12:36:09 gc-02 systemd[1]: Started Network Manager Script Dispatcher Service.
+Aug 05 12:36:09 gc-02 hm-activate-client-user[1085360]: Starting Home Manager activation
+Aug 05 12:36:09 gc-02 hm-activate-admin[1085359]: Starting Home Manager activation
+Aug 05 12:36:09 gc-02 systemd[1]: linger-users.service: Deactivated successfully.
+Aug 05 12:36:09 gc-02 systemd[1]: Finished linger-users.service.
+Aug 05 12:36:09 gc-02 nix-daemon[1496]: accepted connection from pid 1085390, user client-user
+Aug 05 12:36:09 gc-02 nix-daemon[1496]: accepted connection from pid 1085391, user admin (trusted)
+Aug 05 12:36:09 gc-02 hm-activate-client-user[1085390]: warning: ignoring the client-specified setting 'trusted-public-keys', because it is a restricted setting and you are not a trusted user
+Aug 05 12:36:09 gc-02 hm-activate-client-user[1085390]: warning: ignoring the client-specified setting 'trusted-substituters', because it is a restricted setting and you are not a trusted user
+Aug 05 12:36:09 gc-02 hm-activate-client-user[1085390]: warning: ignoring the client-specified setting 'use-xdg-base-directories', because it is a restricted setting and you are not a trusted user
+Aug 05 12:36:09 gc-02 nix-daemon[1496]: accepted connection from pid 1085470, user client-user
+Aug 05 12:36:09 gc-02 nix-daemon[1496]: accepted connection from pid 1085472, user admin (trusted)
+Aug 05 12:36:09 gc-02 hm-activate-client-user[1085360]: Activating checkFilesChanged
+Aug 05 12:36:09 gc-02 hm-activate-client-user[1085360]: Activating prepareFileMoverDesktopLinks
+Aug 05 12:36:09 gc-02 hm-activate-client-user[1085360]: Activating checkLinkTargets
+Aug 05 12:36:09 gc-02 hm-activate-admin[1085359]: Activating checkFilesChanged
+Aug 05 12:36:09 gc-02 hm-activate-admin[1085359]: Activating prepareFileMoverDesktopLinks
+Aug 05 12:36:09 gc-02 hm-activate-admin[1085359]: Activating checkLinkTargets
+Aug 05 12:36:10 gc-02 hm-activate-client-user[1085360]: Activating writeBoundary
+Aug 05 12:36:10 gc-02 hm-activate-client-user[1085360]: Activating configure-plasma
+Aug 05 12:36:10 gc-02 hm-activate-admin[1085359]: Activating writeBoundary
+Aug 05 12:36:10 gc-02 hm-activate-admin[1085359]: Activating configure-plasma
+Aug 05 12:36:10 gc-02 fn41ff80vp5phyi1757ld1njad26vnwy-luxnix-vault-auth-provisioning-condition[1085364]: ERROR: vault-auth-setup is deferred: Vault is sealed.
+Aug 05 12:36:10 gc-02 fn41ff80vp5phyi1757ld1njad26vnwy-luxnix-vault-auth-provisioning-condition[1085364]: An authorized operator must unseal Vault on gs-02; clients never receive or use unseal keys.
+Aug 05 12:36:10 gc-02 fn41ff80vp5phyi1757ld1njad26vnwy-luxnix-vault-auth-provisioning-condition[1085364]: WARNING: lx-annotate remains fail-closed. Run luxnix-vault-enrollment-status for safe recovery guidance.
+Aug 05 12:36:10 gc-02 fn41ff80vp5phyi1757ld1njad26vnwy-luxnix-vault-auth-provisioning-condition[1085364]: After correcting the problem, run: systemctl start vault-auth-setup.service
+Aug 05 12:36:10 gc-02 systemd[1]: vault-auth-setup.service: Skipped due to 'exec-condition'.
+Aug 05 12:36:10 gc-02 systemd[1]: Condition check resulted in Bootstrap Vault client environment for LuxNix system services being skipped.
+Aug 05 12:36:10 gc-02 systemd[1]: vault-auth-setup.service: Consumed 135ms CPU time, 79.8M memory peak, 43.9M read from disk, 3.4K incoming IP traffic, 2.6K outgoing IP traffic.
+Aug 05 12:36:10 gc-02 systemd[1]: Starting Issue or renew the LX-Annotate hub-transfer client certificate...
+Aug 05 12:36:10 gc-02 systemd[1]: Starting Generate and manage system secrets...
+Aug 05 12:36:10 gc-02 pfpikvrn22byyggmbjh4rssiizqqx2iz-generate-managed-secrets[1085610]: Starting managed secrets generation...
+Aug 05 12:36:10 gc-02 pfpikvrn22byyggmbjh4rssiizqqx2iz-generate-managed-secrets[1085610]: ERROR: Vault runtime credentials are unavailable (state: vault-sealed); managed secrets remain fail-closed.
+Aug 05 12:36:10 gc-02 pfpikvrn22byyggmbjh4rssiizqqx2iz-generate-managed-secrets[1085610]: Run luxnix-vault-enrollment-status for recovery guidance.
+Aug 05 12:36:10 gc-02 systemd[1]: managed-secrets-setup.service: Main process exited, code=exited, status=1/FAILURE
+Aug 05 12:36:10 gc-02 systemd[1]: managed-secrets-setup.service: Failed with result 'exit-code'.
+Aug 05 12:36:10 gc-02 systemd[1]: Failed to start Generate and manage system secrets.
+Aug 05 12:36:10 gc-02 systemd[1]: Dependency failed for Load LX-Annotate base data.
+Aug 05 12:36:10 gc-02 systemd[1]: Dependency failed for LX-Annotate Celery worker inference.
+Aug 05 12:36:10 gc-02 systemd[1]: lx-annotate-celery-inference-worker.service: Job lx-annotate-celery-inference-worker.service/start failed with result 'dependency'.
+Aug 05 12:36:10 gc-02 systemd[1]: Dependency failed for LX-Annotate Celery worker hub-transfer.
+Aug 05 12:36:10 gc-02 systemd[1]: lx-annotate-celery-hub-transfer-worker.service: Job lx-annotate-celery-hub-transfer-worker.service/start failed with result 'dependency'.
+Aug 05 12:36:10 gc-02 systemd[1]: Dependency failed for LX-Annotate Celery worker pipeline.
+Aug 05 12:36:10 gc-02 systemd[1]: lx-annotate-celery-pipeline-worker.service: Job lx-annotate-celery-pipeline-worker.service/start failed with result 'dependency'.
+Aug 05 12:36:10 gc-02 systemd[1]: Dependency failed for Validate lx-annotate application master key against encrypted storage.
+Aug 05 12:36:10 gc-02 systemd[1]: Dependency failed for Gate LX-Annotate web and workers on production runtime readiness.
+Aug 05 12:36:10 gc-02 systemd[1]: Dependency failed for LX-Annotate Celery worker maintenance.
+Aug 05 12:36:10 gc-02 systemd[1]: lx-annotate-celery-worker.service: Job lx-annotate-celery-worker.service/start failed with result 'dependency'.
+Aug 05 12:36:10 gc-02 systemd[1]: Dependency failed for LX-Annotate Celery worker frame-extraction.
+Aug 05 12:36:10 gc-02 systemd[1]: lx-annotate-celery-frame-extraction-worker.service: Job lx-annotate-celery-frame-extraction-worker.service/start failed with result 'dependency'.
+Aug 05 12:36:10 gc-02 systemd[1]: Dependency failed for Packaged LX-Annotate web service.
+Aug 05 12:36:10 gc-02 systemd[1]: lx-annotate.service: Job lx-annotate.service/start failed with result 'dependency'.
+Aug 05 12:36:10 gc-02 systemd[1]: Dependency failed for LX-Annotate Celery worker ffmpeg.
+Aug 05 12:36:10 gc-02 systemd[1]: lx-annotate-celery-ffmpeg-worker.service: Job lx-annotate-celery-ffmpeg-worker.service/start failed with result 'dependency'.
+Aug 05 12:36:10 gc-02 systemd[1]: lx-annotate-preflight.service: Job lx-annotate-preflight.service/start failed with result 'dependency'.
+Aug 05 12:36:10 gc-02 systemd[1]: Dependency failed for Dispatch local encrypted HLS backfill for LX-Annotate videos.
+Aug 05 12:36:10 gc-02 systemd[1]: lx-annotate-hls-backfill.service: Job lx-annotate-hls-backfill.service/start failed with result 'dependency'.
+Aug 05 12:36:10 gc-02 systemd[1]: Dependency failed for Idempotently provision LX-Annotate hub NetworkNode records.
+Aug 05 12:36:10 gc-02 systemd[1]: lx-annotate-hub-node-provisioning.service: Job lx-annotate-hub-node-provisioning.service/start failed with result 'dependency'.
+Aug 05 12:36:10 gc-02 systemd[1]: lx-annotate-master-key-check.service: Job lx-annotate-master-key-check.service/start failed with result 'dependency'.
+Aug 05 12:36:10 gc-02 systemd[1]: lx-annotate-load-base-data.service: Job lx-annotate-load-base-data.service/start failed with result 'dependency'.
+Aug 05 12:36:10 gc-02 systemd[1]: Dependency failed for Best-effort provisioning of LX-Annotate terminology.
+Aug 05 12:36:10 gc-02 systemd[1]: lx-annotate-terminology-bootstrap.service: Job lx-annotate-terminology-bootstrap.service/start failed with result 'dependency'.
+Aug 05 12:36:10 gc-02 systemd[1]: Dependency failed for Run LX-Annotate database migrations.
+Aug 05 12:36:10 gc-02 systemd[1]: lx-annotate-migrate.service: Job lx-annotate-migrate.service/start failed with result 'dependency'.
+Aug 05 12:36:10 gc-02 systemd[1]: Dependency failed for Set up endoregDbLocal PostgreSQL user password.
+Aug 05 12:36:10 gc-02 systemd[1]: postgres-endoreg-setup.service: Job postgres-endoreg-setup.service/start failed with result 'dependency'.
+Aug 05 12:36:10 gc-02 systemd[1]: Dependency failed for Prepare LuxNix runtime environment for lx-annotate.
+Aug 05 12:36:10 gc-02 systemd[1]: Dependency failed for Attest LX-Annotate against the pinned EndoReg feature registry.
+Aug 05 12:36:10 gc-02 systemd[1]: Dependency failed for Recover legacy LX-Annotate data into the runtime storage root.
+Aug 05 12:36:10 gc-02 systemd[1]: lx-annotate-data-recovery.service: Job lx-annotate-data-recovery.service/start failed with result 'dependency'.
+Aug 05 12:36:10 gc-02 systemd[1]: lx-annotate-feature-registry-guard.service: Job lx-annotate-feature-registry-guard.service/start failed with result 'dependency'.
+Aug 05 12:36:10 gc-02 systemd[1]: lx-annotate-runtime-env.service: Job lx-annotate-runtime-env.service/start failed with result 'dependency'.
+Aug 05 12:36:10 gc-02 cn700ad9q8qn6daqyyci1s2lg4ljg78f-issue-lx-hub-client-certificate[1085616]: Certificate will not expire
+Aug 05 12:36:10 gc-02 hm-activate-client-user[1085360]: Activating linkGeneration
+Aug 05 12:36:10 gc-02 hm-activate-client-user[1085360]: Cleaning up orphan links from /home/client-user
+Aug 05 12:36:10 gc-02 systemd[1]: luxnix-vault-issue-hub-client-certificate.service: Deactivated successfully.
+Aug 05 12:36:10 gc-02 systemd[1]: Finished Issue or renew the LX-Annotate hub-transfer client certificate.
+Aug 05 12:36:10 gc-02 systemd[1]: luxnix-vault-issue-hub-client-certificate.service: Consumed 53ms CPU time, 7.6M memory peak, 1.5M read from disk.
+Aug 05 12:36:10 gc-02 hm-activate-admin[1085359]: Activating linkGeneration
+Aug 05 12:36:10 gc-02 hm-activate-client-user[1085360]: Creating home file links in /home/client-user
+Aug 05 12:36:10 gc-02 hm-activate-admin[1085359]: Cleaning up orphan links from /home/admin
+Aug 05 12:36:10 gc-02 hm-activate-admin[1085359]: Creating home file links in /home/admin
+Aug 05 12:36:10 gc-02 hm-activate-client-user[1085360]: Activating createXdgUserDirectories
+Aug 05 12:36:10 gc-02 hm-activate-client-user[1085360]: Activating installPackages
+Aug 05 12:36:10 gc-02 hm-activate-admin[1085359]: Activating createXdgUserDirectories
+Aug 05 12:36:10 gc-02 hm-activate-client-user[1085360]: Activating onFilesChange
+Aug 05 12:36:10 gc-02 hm-activate-client-user[1085360]: Activating reloadSystemd
+Aug 05 12:36:10 gc-02 hm-activate-admin[1085359]: Activating installPackages
+Aug 05 12:36:10 gc-02 hm-activate-client-user[1085360]: User systemd daemon not running. Skipping reload.
+Aug 05 12:36:10 gc-02 nix-daemon[1496]: accepted connection from pid 1085917, user client-user
+Aug 05 12:36:10 gc-02 systemd[1]: home-manager-client\x2duser.service: Deactivated successfully.
+Aug 05 12:36:10 gc-02 systemd[1]: Finished Home Manager environment for client-user.
+Aug 05 12:36:10 gc-02 systemd[1]: home-manager-client\x2duser.service: Consumed 508ms CPU time, 42.8M memory peak, 34.6M read from disk.
+Aug 05 12:36:10 gc-02 hm-activate-admin[1085359]: Activating onFilesChange
+Aug 05 12:36:10 gc-02 hm-activate-admin[1085359]: Activating reloadSystemd
+Aug 05 12:36:10 gc-02 systemd[1390]: Reload requested from client PID 1085952 ('sd-switch')...
+Aug 05 12:36:10 gc-02 systemd[1390]: Reloading...
+Aug 05 12:36:10 gc-02 systemd[1390]: Reloading finished in 117 ms.
+Aug 05 12:36:10 gc-02 nix-daemon[1496]: accepted connection from pid 1085981, user admin (trusted)
+Aug 05 12:36:10 gc-02 systemd[1]: home-manager-admin.service: Deactivated successfully.
+Aug 05 12:36:10 gc-02 systemd[1]: Finished Home Manager environment for admin.
+Aug 05 12:36:10 gc-02 systemd[1]: home-manager-admin.service: Consumed 552ms CPU time, 27.8M memory peak, 5.9M read from disk.
+Aug 05 12:36:10 gc-02 nixos[1085032]: switching to system configuration /nix/store/6ndsddd467jp5z3m5xhja5vxha1w1vl9-nixos-system-gc-02-25.11.20260125.1cd347b failed (status 4)
+Aug 05 12:36:10 gc-02 sudo[1084529]: pam_unix(sudo:session): session closed for user root
+^C%                                                                                                                                                

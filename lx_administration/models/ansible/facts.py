@@ -1,11 +1,15 @@
+"""Validated subset of Ansible facts used by Autoconf."""
+
 from pydantic import BaseModel, Field
-from typing import List, Optional
+
 from ..hardware import BiosModel, NetworkInterfaceModel
 
 
 class AnsibleFactsModel(BaseModel):
+    """Facts retained when generating LuxNix host configuration."""
+
     bios: BiosModel
-    current_date: Optional[str]
-    machine: Optional[str]
-    default_ipv4: Optional[NetworkInterfaceModel]
-    all_ipv4_addresses: List[str] = Field(default_factory=list)
+    current_date: str | None
+    machine: str | None
+    default_ipv4: NetworkInterfaceModel | None
+    all_ipv4_addresses: list[str] = Field(default_factory=list)

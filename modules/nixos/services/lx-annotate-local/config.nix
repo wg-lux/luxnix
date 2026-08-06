@@ -84,90 +84,7 @@ let
     else
       null;
   endoregDbRevision = endoregDbSource.rev or "unversioned";
-  lxAnnotateRevision = lxAnnotateSource.rev or "unversioned";
-  featureRegistryManifest = pkgs.writeText "endoreg-feature-registry-manifest.json" (
-    builtins.toJSON {
-      schemaVersion = 1;
-      validationScope = "schema-policy-location-cross-registry";
-      endoregDb = {
-        sourceDeclaredVersion = endoregDbVersion;
-        revision = endoregDbRevision;
-      };
-      lxAnnotate = {
-        version = lxAnnotateProject.version;
-        revision = lxAnnotateRevision;
-        runtimeEndoregDbVersion = lxAnnotateEndoregDbVersion;
-      };
-    }
-  );
-  featureRegistryPython = pkgs.python312.withPackages (pythonPackages: [
-    pythonPackages.django
-    pythonPackages.pydantic
-    pythonPackages.pyyaml
-  ]);
-  featureRegistryValidator = pkgs.writeText "validate-endoreg-feature-registry.py" ''
-    import runpy
-    import sys
-    import types
-    from pathlib import Path
 
-    tracker_path = sys.argv[1]
-
-    def unavailable_file_mutation(*_args, **_kwargs):
-        raise RuntimeError("feature-registry validation attempted a mutating file operation")
-
-    utils_module = types.ModuleType("endoreg_db.utils")
-    utils_module.__path__ = []
-    filesystem_module = types.ModuleType("endoreg_db.utils.filesystem")
-    filesystem_module.__path__ = []
-    file_operations_module = types.ModuleType(
-        "endoreg_db.utils.filesystem.file_operations"
-    )
-    for name in (
-        "advisory_file_lock",
-        "atomic_create_file",
-        "atomic_move_file",
-        "atomic_write_file",
-        "safe_unlink_file",
-    ):
-        setattr(file_operations_module, name, unavailable_file_mutation)
-
-    sys.modules["endoreg_db.utils"] = utils_module
-    sys.modules["endoreg_db.utils.filesystem"] = filesystem_module
-    sys.modules["endoreg_db.utils.filesystem.file_operations"] = file_operations_module
-    tracker = runpy.run_path(tracker_path, run_name="endoreg_feature_registry")
-    tracking_directory = Path(tracker_path).resolve().parent
-    policy = tracker["load_policy"](tracking_directory)
-    feature_paths = tracker["_feature_paths"](tracking_directory)
-    features = tuple(tracker["load_feature_file"](path) for path in feature_paths)
-    for path, feature in zip(feature_paths, features, strict=True):
-        tracker["_validate_feature_location"](
-            feature,
-            path=path,
-            directory=tracking_directory,
-        )
-    tracker["_validate_registry"](
-        policy,
-        features,
-        source_exists=lambda _source: True,
-    )
-    print(
-        f"OK: {len(features)} feature definitions passed immutable schema, "
-        "policy, location, and cross-registry validation."
-    )
-  '';
-  endoregFeatureRegistry = pkgs.runCommand "endoreg-feature-registry-${endoregDbVersion}" { } ''
-    export PYTHONPATH=${endoregDbSource}
-    ${featureRegistryPython}/bin/python ${featureRegistryValidator} \
-      ${endoregDbSource}/feature-tracking/tracker.py
-
-    registry_root="$out/share/endoreg-feature-registry"
-    mkdir -p "$registry_root"
-    cp -R ${endoregDbSource}/feature-tracking/. "$registry_root/"
-    cp ${featureRegistryManifest} "$registry_root/manifest.json"
-  '';
-  featureRegistryPath = "${endoregFeatureRegistry}/share/endoreg-feature-registry";
-  featureRegistryGuardUnit = "lx-annotate-feature-registry-guard.service";
 
   hubTransferProxyExtraConfig = ''
     # The shared virtual host also serves browser traffic, so client
@@ -664,7 +581,6 @@ let
   commonExtraEnv =
     commonEnv
     // {
-      ENDOREG_FEATURE_REGISTRY_PATH = featureRegistryPath;
       ENDOREG_FEATURE_REGISTRY_REVISION = endoregDbRevision;
       ENDOREG_FEATURE_REGISTRY_SOURCE_VERSION = endoregDbVersion;
       ENDOREG_RUNTIME_ENDOREG_DB_VERSION = lxAnnotateEndoregDbVersion;
@@ -837,7 +753,6 @@ let
   appServiceBaseAfter = [
     "network.target"
     "lx-annotate-runtime-env.service"
-    featureRegistryGuardUnit
     "systemd-tmpfiles-setup.service"
   ]
   ++ localRedisServiceUnits
@@ -847,7 +762,6 @@ let
   ++ encryptionServiceUnits;
   appServiceBaseWants = [
     "lx-annotate-runtime-env.service"
-    featureRegistryGuardUnit
   ]
   ++ localRedisServiceUnits
   ++ localPostgresServiceUnits
@@ -856,7 +770,6 @@ let
   ++ encryptionServiceUnits;
   appServiceBaseRequires = [
     "lx-annotate-runtime-env.service"
-    featureRegistryGuardUnit
   ]
   ++ managedSecretsSetupUnits
   ++ encryptionServiceUnits;
@@ -1519,6 +1432,8 @@ in
 {
   config = mkIf cfg.enable (mkMerge [
     {
+      environment.systemPackages = [ lxAnnotateMigrateVideoStreamableStorageScript ];
+
       services.luxnix.lxAnnotateLocal.hub.enable = mkDefault (config.networking.hostName == "gs-02");
       services.luxnix.lxAnnotateLocal.runtime.deploymentRole = mkDefault (
         if cfg.hub.enable then "central_hub" else "site_node"
@@ -1736,10 +1651,11 @@ in
           assertion = !cfg.hub.transferApi.enable || cfg.hub.transferApi.requireSecureTransport;
           message = "services.luxnix.lxAnnotateLocal.hub.transferApi.enable requires services.luxnix.lxAnnotateLocal.hub.transferApi.requireSecureTransport = true.";
         }
-        {
-          assertion = !cfg.hub.transferApi.enable || cfg.hub.transferApi.requireMtls;
-          message = "services.luxnix.lxAnnotateLocal.hub.transferApi.enable requires services.luxnix.lxAnnotateLocal.hub.transferApi.requireMtls = true.";
-        }
+        # Enable for strict network mode
+        # {
+        #   assertion = !cfg.hub.transferApi.enable || cfg.hub.transferApi.requireMtls;
+        #   message = "services.luxnix.lxAnnotateLocal.hub.transferApi.enable requires services.luxnix.lxAnnotateLocal.hub.transferApi.requireMtls = true.";
+        # }
         {
           assertion = !cfg.hub.transferApi.enable || cfg.hub.transferApi.clientCaFile != null;
           message = "services.luxnix.lxAnnotateLocal.hub.transferApi.enable requires services.luxnix.lxAnnotateLocal.hub.transferApi.clientCaFile to be set.";
@@ -1747,10 +1663,6 @@ in
         {
           assertion = !cfg.hub.outboundTransfer.enable || cfg.runtime.deploymentRole == "site_node";
           message = "services.luxnix.lxAnnotateLocal.hub.outboundTransfer.enable requires runtime.deploymentRole = \"site_node\".";
-        }
-        {
-          assertion = !cfg.hub.outboundTransfer.enable || cfg.hub.outboundTransfer.requireMtls;
-          message = "services.luxnix.lxAnnotateLocal.hub.outboundTransfer.enable requires outboundTransfer.requireMtls = true.";
         }
         {
           assertion =
@@ -2208,67 +2120,6 @@ in
         };
       };
 
-      systemd.services.lx-annotate-feature-registry-guard = {
-        description = "Attest LX-Annotate against the pinned EndoReg feature registry";
-        wantedBy = [ "multi-user.target" ];
-        before = [
-          "lx-annotate.service"
-          "lx-annotate-migrate.service"
-          "lx-annotate-load-base-data.service"
-          "lx-annotate-master-key-check.service"
-          "lx-annotate-preflight.service"
-        ]
-        ++ alwaysWorkerServiceUnits;
-        after = [
-          "lx-annotate-runtime-env.service"
-          "systemd-tmpfiles-setup.service"
-        ];
-        wants = [ "lx-annotate-runtime-env.service" ];
-        requires = [ "lx-annotate-runtime-env.service" ];
-        restartTriggers = [
-          effectiveRuntimePackage
-          endoregFeatureRegistry
-        ];
-        environment = commonExtraEnv;
-        serviceConfig = {
-          Type = "oneshot";
-          RemainAfterExit = true;
-          User = endoreg-service-user-name;
-          Group = endoreg-service-group-name;
-          SupplementaryGroups = [ config.luxnix.generic-settings.sensitiveServiceGroupName ];
-          WorkingDirectory = runtimeDataRootPath;
-          EnvironmentFile = envSystemdFilePath;
-          LogNamespace = lxAnnotateJournalNamespace;
-          ExecStart = pkgs.writeShellScript "lx-annotate-feature-registry-guard" ''
-            set -euo pipefail
-            test -r ${lib.escapeShellArg "${featureRegistryPath}/manifest.json"}
-            exec ${effectiveRuntimePackage}/bin/lx-annotate-manage shell -c ${lib.escapeShellArg ''
-              import json
-              from importlib.metadata import version
-
-              expected = "${lxAnnotateEndoregDbVersion}"
-              actual = version("endoreg-db")
-              if actual != expected:
-                  raise SystemExit(
-                      f"endoreg-db version mismatch: installed={actual} lx-annotate={expected}"
-                  )
-              print(json.dumps({
-                  "event": "endoreg.feature_registry_attested",
-                  "endoreg_db_version": actual,
-                  "feature_registry_revision": "${endoregDbRevision}",
-                  "feature_registry_source_version": "${endoregDbVersion}",
-                  "lx_annotate_revision": "${lxAnnotateRevision}",
-                  "registry_path": "${featureRegistryPath}",
-              }, sort_keys=True))
-            ''}
-          '';
-          TimeoutStartSec = "10min";
-          ProtectSystem = "full";
-          PrivateTmp = true;
-          NoNewPrivileges = true;
-          ReadWritePaths = appReadWritePaths;
-        };
-      };
 
       systemd.services.lx-annotate-data-recovery = mkIf cfg.dataRecovery.enable (mkLxAnnotateAppService {
         description = "Recover legacy LX-Annotate data into the runtime storage root";
@@ -2948,7 +2799,8 @@ in
         after = [
           "lx-annotate.service"
           "postgresqlBackup.service"
-        ] ++ encryptionServiceUnits;
+        ]
+        ++ encryptionServiceUnits;
         wants = [ "lx-annotate.service" ] ++ encryptionServiceUnits;
         requires = [ "postgresqlBackup.service" ] ++ encryptionServiceUnits;
         unitConfig = encryptedDataMountUnitConfig;

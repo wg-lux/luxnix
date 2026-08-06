@@ -16,7 +16,7 @@ let
       (toString vaultCfg.client.environmentFile)
     ]
     ++ lib.optionals vaultAuthEnabled [
-      (lib.optionalString vaultCfg.client.allowOffline "-" + vaultCfg.client.runtimeEnvironmentFile)
+      "-${vaultCfg.client.runtimeEnvironmentFile}"
     ];
   humanFacingSecretNames = [
     "client_user_password"
@@ -295,6 +295,27 @@ let
     set -euo pipefail
 
     echo "Starting managed secrets generation..."
+
+    ${lib.optionalString vaultAuthEnabled ''
+      if [ ! -s ${lib.escapeShellArg vaultCfg.client.runtimeEnvironmentFile} ]; then
+        vault_state="enrollment-pending"
+        if [ -s ${lib.escapeShellArg vaultCfg.client.runtimeStatusFile} ]; then
+          vault_state="$(${pkgs.coreutils}/bin/cat ${lib.escapeShellArg vaultCfg.client.runtimeStatusFile})"
+        fi
+        ${
+          if vaultCfg.client.allowOffline then
+            ''
+              echo "WARNING: Vault runtime credentials are unavailable (state: $vault_state); only last-known-good local secrets may be retained." >&2
+            ''
+          else
+            ''
+              echo "ERROR: Vault runtime credentials are unavailable (state: $vault_state); managed secrets remain fail-closed." >&2
+              echo "Run luxnix-vault-enrollment-status for recovery guidance." >&2
+              exit 1
+            ''
+        }
+      fi
+    ''}
 
     # Verify sensitive service group exists by checking /etc/group
     if ! grep -q "^${sensitiveServiceGroupName}:" /etc/group; then

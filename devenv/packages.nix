@@ -1,28 +1,27 @@
-{ pkgs }:
-{
-  buildInputs = with pkgs; [
-    # python313Full
-    stdenv.cc.cc
-    tesseract
-    glib
-    openssh
-    openssl
-    black
-    nixpkgs-fmt
-    ansible-lint
-  ];
+{ pkgs, uvPackage, ... }:
+with pkgs;
+[
+  # Build tools required by Python packages with native extensions.
+  stdenv.cc.cc
+  cmake
+  pkg-config
+  protobuf
 
-  packages = with pkgs; [
-    cudaPackages.cuda_nvcc
-    # python313Full
-    jq
-    age
-    openssh
-    stdenv.cc.cc
-    tesseract
-    sops
-    openssl
-    black
-    nixpkgs-fmt
-  ];
-}
+  # Commands used by repository workflows and Devenv tasks.
+  uvPackage
+  jq
+  git
+  secretspec
+  nixd
+  nixfmt
+  openssh
+  openssl
+  sops
+  tesseract
+
+  # Shared libraries required by Python and media tooling at runtime.
+  libglvnd
+  glib
+  libxcb
+  zlib
+]

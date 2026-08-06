@@ -2,6 +2,12 @@
 
 LuxNix generates `/etc/hosts` entries from `luxnix.generic-settings.network.hosts`.
 
+VPN addresses have one source of truth: each host's `ansible_host` value in
+`ansible/inventory/hosts.ini`. Autoconf derives the corresponding
+`generic-settings.network.hosts.<host>.ip-vpn` option automatically. Keep only
+additional metadata such as domains, local addresses, clusters, and Syncthing
+IDs under `ansible/inventory/group_vars/all/30-nix.yml`.
+
 This is useful for stable internal names such as `s-02` or `s-02.intern`, but it must not override public service domains such as `keycloak.endo-reg.net`.
 
 ## Why `ping` and `dig` Can Disagree
@@ -33,19 +39,17 @@ networking.hosts."172.16.255.12" = [
 ];
 ```
 
-Public DNS names are filtered out of generated `/etc/hosts` by:
+Public DNS names are filtered out of generated `/etc/hosts` by the configured
+suffix list:
 
 ```nix
-luxnix.generic-settings.network.publicDnsDomains = [
-  "adminKeycloak.endo-reg.net"
-  "cloud.endo-reg.net"
-  "keycloak-admin.endo-reg.net"
-  "keycloak.endo-reg.net"
-  "nginx.endo-reg.net"
+luxnix.generic-settings.network.publicDomainSuffixes = [
+  ".endo-reg.net"
 ];
 ```
 
-This prevents `keycloak.endo-reg.net`, `cloud.endo-reg.net`, and `nginx.endo-reg.net` from being pinned to `172.16.255.12` in generated host files.
+This prevents `keycloak.endo-reg.net`, `cloud.endo-reg.net`, and other names
+under that suffix from being pinned to `172.16.255.12` in generated host files.
 
 ## Local-Only Domains
 
@@ -76,7 +80,7 @@ Use this only on the host that owns the service. Do not apply it globally.
 After rebuilding:
 
 ```bash
-sudo nixos-rebuild switch --flake /home/admin/luxnix#<host>
+sudo nixos-rebuild switch --flake .#<host>
 ```
 
 Check NSS resolution:

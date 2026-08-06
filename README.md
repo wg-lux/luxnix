@@ -1,35 +1,47 @@
-# LuxNix
+# LuxNix 🌐
 
 LuxNix is a NixOS configuration framework for reproducible multi-host deployments with security-focused defaults.
 
 ## Start Here
 
-- [Getting Started (Day-0 canonical flow)](docs/getting-started.md)
-- [Architecture](docs/architecture.md)
-- [Deployment Guide](docs/deployment-guide.md)
-- [Vault Setup](docs/vault-setup.md)
-- [Hardware Setup](docs/hardware-setup.md)
-- [Common Errors](CommonErrors.md)
-- [Cheatsheet](LxCheatsheet.md)
+| Goal | Entry point |
+| --- | --- |
+| Set up or deploy a host | [Getting Started](docs/getting-started.md) |
+| Browse operator and contributor guides | [Documentation Home](docs/index.md) · [Documentation Map](TABLE_OF_CONTENTS.md) |
+| Inspect paths, workflows, commands, and risks as data | [Project Map](luxnix.yml) · [Developer Command Catalog](devenv/commands.yml) |
 
 ## Quick Start
+
+The final install command can repartition the target. Complete the
+[Getting Started](docs/getting-started.md) checklist and confirm both the host
+and target address before running it.
 
 ```bash
 # Clone
 git clone https://github.com/wg-lux/luxnix.git
 cd luxnix
 
-# Validate selected host config (replace <host>)
-nix eval ".#nixosConfigurations.<host>.config.system.build.toplevel.drvPath"
-nix build ".#nixosConfigurations.<host>.config.system.build.toplevel" --no-link
+# Discover and validate a host configuration (read-only)
+nix eval --json '.#nixosConfigurations' --apply builtins.attrNames
+nix eval '.#nixosConfigurations.<host>.config.system.build.toplevel.drvPath'
 
-# Deploy (replace <host> and <ip>)
-nixos-anywhere --flake ".#<host>" nixos@<ip>
+# Build locally without creating a result link or activating it
+nix build '.#nixosConfigurations.<host>.config.system.build.toplevel' --no-link
+
+# Confirm remote connectivity without changing the host
+devenv shell check-connectivity <host>
+
+# Destructive remote install (replace <host> and <target-ip>)
+nixos-anywhere --flake '.#<host>' nixos@<target-ip>
 
 # Post-install switch on host
 nh os switch
 nh home switch
 ```
+
+Agents and automation should read [`luxnix.yml`](luxnix.yml) first. It provides
+the same entry points as structured data and labels commands that affect local
+or remote state.
 
 Alias notes:
 - `nho` = `nh os switch`
@@ -39,16 +51,29 @@ Alias notes:
 
 ```text
 luxnix/
-├── flake.nix
-├── modules/
+├── flake.nix                 # Nix flake entry point
+├── luxnix.yml                # machine-readable project map and workflows
+├── TABLE_OF_CONTENTS.md      # generated documentation map
+├── autoconf/                 # centralized pipeline options and intermediates
+├── ansible/                  # inventory, variables, roles, and local facts
+├── conf/                     # Nix generation templates
+├── devenv/                   # contributor packages, tasks, and wrappers
+├── shells/                   # Snowfall development-shell definitions
+├── lx_administration/        # Python administration and Autoconf package
+├── lib/                      # Snowfall helpers and repository task scripts
+├── modules/                  # reusable Home Manager and NixOS modules
 │   ├── home/
 │   └── nixos/
-├── systems/
-├── homes/
-├── packages/
-├── overlays/
-├── docs/
-└── scripts/
+├── packages/                 # project package definitions
+├── overlays/                 # package-set overrides
+├── systems/                  # generated or host-specific NixOS entry points
+├── homes/                    # generated or user-specific home entry points
+├── kubernetes/               # cluster deployment manifests
+├── topology/                 # nix-topology module for flake output
+├── scripts/                  # operational and maintenance tools
+├── tmux/                     # inventory-driven session configuration
+├── tests/                    # Python and Nix regression contracts
+└── docs/                     # canonical operator and contributor guides
 ```
 
 ## Supported Host Types

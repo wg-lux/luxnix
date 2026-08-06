@@ -1,10 +1,13 @@
-from pydantic import BaseModel, Field, ConfigDict
 import os
 from pathlib import Path
-from typing import Any, Optional, TypedDict, cast
-import yaml
+from typing import Any, TypedDict
 
-STORAGE_CONF_FILENAME = "storage_manager.yaml"
+from pydantic import BaseModel, ConfigDict, Field
+
+from lx_administration.yaml import dump_yaml, load_unique_yaml_file
+
+STORAGE_CONF_FILENAME = "storage_manager.yml"
+LEGACY_STORAGE_CONF_FILENAME = "storage_manager.yaml"
 
 
 class StoragePaths(TypedDict):
@@ -30,6 +33,12 @@ def conf_filepath(storage_fast_root: Path) -> Path:
     return dirtree["configs"] / STORAGE_CONF_FILENAME
 
 
+def legacy_conf_filepath(storage_fast_root: Path) -> Path:
+    """Return the pre-migration `.yaml` configuration path."""
+    dirtree = generate_storage_directory_tree(storage_fast_root)
+    return dirtree["configs"] / LEGACY_STORAGE_CONF_FILENAME
+
+
 def serialize_path(path: Path | None) -> str | None:
     """Serialize a Path object to its POSIX string representation.
 
@@ -37,11 +46,9 @@ def serialize_path(path: Path | None) -> str | None:
         path (Path | None): The Path object to serialize.
 
     Returns:
-        str | None: The POSIX string representation of the path, or None if the input is None.
+        str | None: The POSIX representation, or None when no path was given.
     """
-    if path is not None:
-        return path.as_posix()
-    return None
+    return path.as_posix() if path is not None else None
 
 
 def _expand_env_template(value: str) -> str:
@@ -58,28 +65,27 @@ def _expand_env_template(value: str) -> str:
 
 
 def _default_home_dir() -> Path:
-    home_dir = str(os.getenv("HOME_DIR"))
+    home_dir = os.getenv("HOME_DIR")
     if home_dir:
         return Path(home_dir).expanduser().resolve()
-    else:
-        raise ValueError("HOME_DIR environment variable is not set.")
+    raise ValueError("HOME_DIR environment variable is not set.")
 
 
 def _default_working_dir() -> Path:
-    working_dir = str(os.getenv("WORKING_DIR"))
+    working_dir = os.getenv("WORKING_DIR")
     if working_dir:
         return Path(_expand_env_template(working_dir)).expanduser().resolve()
     return Path.cwd().expanduser().resolve()
 
 
-def _default_storage_persitinve_external_drive() -> bool:
+def _default_storage_persisting_external_drive() -> bool:
     external_drive = os.getenv("STORAGE_PERSISTING_EXTERNAL_DRIVE")
     if external_drive is not None:
         return external_drive.lower() in ("true", "1", "yes")
     return False
 
 
-def _default_storage_persisting_hdd_id() -> Optional[str]:
+def _default_storage_persisting_hdd_id() -> str | None:
     hdd_id = os.getenv("STORAGE_PERSISTING_HDD_ID")
     return hdd_id if hdd_id else None
 
@@ -112,22 +118,19 @@ def generate_storage_directory_tree(
         base_path (Path): The base path where the directory tree will be created.
     """
     directories = StoragePaths(
-        **{
-            "data": base_path / "data",
-            "video_dir": base_path / "data" / "videos",
-            "image_dir": base_path / "data" / "images",
-            "document_dir": base_path / "data" / "documents",
-            "backups": base_path / "backups",
-            "logs": base_path / "logs",
-            "temp": base_path / "temp",
-            "configs": base_path / "configs",
-        }
+        data=base_path / "data",
+        video_dir=base_path / "data" / "videos",
+        image_dir=base_path / "data" / "images",
+        document_dir=base_path / "data" / "documents",
+        backups=base_path / "backups",
+        logs=base_path / "logs",
+        temp=base_path / "temp",
+        configs=base_path / "configs",
     )
-    path_list = cast(list[Path], [dir_path for dir_path in directories.values()])
 
     if create:
-        for p in path_list:
-            p.mkdir(parents=True, exist_ok=True)
+        for directory in directories.values():
+            directory.mkdir(parents=True, exist_ok=True)
 
     return directories
 
@@ -142,11 +145,13 @@ class StorageManager(BaseModel):
         description="The current working directory.",
     )
     storage_persisting_external_drive: bool = Field(
-        default_factory=_default_storage_persitinve_external_drive,
-        description="Flag to indicate if an external drive is used for persisting storage.",
+        default_factory=_default_storage_persisting_external_drive,
+        description=(
+            "Flag indicating whether persisting storage uses an external drive."
+        ),
     )
 
-    storage_persisting_hdd_id: Optional[str] = Field(
+    storage_persisting_hdd_id: str | None = Field(
         default_factory=_default_storage_persisting_hdd_id,
         description="Identifier for the persisting HDD.",
     )
@@ -207,15 +212,18 @@ class StorageManager(BaseModel):
 
     @classmethod
     def get_or_create_instance(cls, storage_fast_root: Path) -> "StorageManager":
-        """Get or create a singleton instance of StorageManager."""
-        _path = conf_filepath(storage_fast_root)
-        if _path.exists():
-            # load from file
-            with open(_path, "r") as f:
-                return cls.model_validate(f.read())
+        """Load canonical or legacy configuration, otherwise create one."""
+        canonical_path = conf_filepath(storage_fast_root)
+        legacy_path = legacy_conf_filepath(storage_fast_root)
+        for config_path in (canonical_path, legacy_path):
+            if not config_path.is_file():
+                continue
+            data = load_unique_yaml_file(config_path)
+            if not isinstance(data, dict):
+                raise ValueError(f"Expected a YAML mapping in {config_path}")
+            return cls.model_validate(data)
 
-        else:
-            return initialize_storage_manager_from_env()
+        return initialize_storage_manager_from_env()
 
     @property
     def config_dir(self) -> Path:
@@ -227,38 +235,22 @@ class StorageManager(BaseModel):
 
     @property
     def storage_persisting_available(self) -> bool:
-        """Check if the persisting storage is mounted."""
-        external_drive = self.storage_persisting_external_drive
-        is_mount = self.storage_persisting_mount_point.is_mount()
-        serial = self.storage_persisting_hdd_id
+        """Return whether configured persistent storage is usable."""
+        if self.storage_persisting_external_drive:
+            return (
+                self.storage_persisting_mount_point.is_mount()
+                and self.storage_persisting_hdd_id is not None
+            )
+        return self.storage_persisting_mount_point.exists()
 
-        # External drive case
-        if external_drive:
-            if not is_mount:
-                return False
-            if serial is None:
-                return False
-            return True
-
-        # non-external drive case
-        else:
-            assert self.storage_persisting_mount_point.exists()
-            return True
-
-    def save_to_file(self, filepath: Optional[Path] = None) -> None:
+    def save_to_file(self, filepath: Path | None = None) -> None:
         """Save the StorageManager configuration to a file.
 
         Args:
-            filepath (Optional[Path]): The file path to save the configuration.
-                                       If None, uses the default config_filepath.
+            filepath: File path to save, or the canonical config path by default.
         """
         if filepath is None:
             filepath = self.config_filepath
         dump: dict[str, Any] = self.model_dump(mode="json")
 
-        filepath.parent.mkdir(parents=True, exist_ok=True)
-
-        with open(filepath, "w", encoding="utf-8") as f:
-            yaml.safe_dump(  # type: ignore
-                dump, f, encoding="utf-8", allow_unicode=True, indent=2, sort_keys=False
-            )
+        dump_yaml(dump, filepath)

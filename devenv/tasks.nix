@@ -1,51 +1,68 @@
-
-{pkgs,...}: {
-
+{ pkgs, ... }:
+{
+  # Environment initialization
   "initialize-environment:endoreg-db" = {
-    description = "Initialize endoreg-db by running tasks 'endoreg-db:init' and 'endoreg-db:migrate'";
-    # Trigger endoreg-db:init and endoreg-db:migrate
+    description = "Initialize and migrate the EndoReg database";
     exec = "devenv tasks run endoreg-db:init && devenv tasks run endoreg-db:migrate";
   };
 
   "initialize-environment:finished" = {
-    description = "If called, this task triggers the ";
+    description = "Confirm that development environment initialization finished";
     exec = "echo 'Initialized Development & Administration Environment'";
-    after = [ "initialize-environment:endoreg-db"];
+    after = [ "initialize-environment:endoreg-db" ];
   };
 
-  "autoconf:generate-hostinfo" = {
-      description = "Generate conf/hostinfo.json; Generates hostinfo @ ./docs/hostinfo (summary markdown; html split by host)";
-      exec = "./scripts/ansible-cmdb.sh";
-    };
+  # Autoconf and local inventory
+  "autoconf:check" = {
+    description = "Validate and show resolved options from autoconf/config.yml";
+    exec = "${pkgs.uv}/bin/uv run python scripts/autoconf-pipeline.py --check";
+  };
+
+  "autoconf:refresh-facts" = {
+    description = "Refresh local Ansible facts; retain last-known-good data for failed hosts";
+    exec = "./scripts/refresh-ansible-facts.sh";
+  };
+
+  "autoconf:refresh-facts-strict" = {
+    description = "Refresh local Ansible facts and fail if any inventory host is stale";
+    exec = "./scripts/refresh-ansible-facts.sh --strict";
+  };
+
+  "autoconf:generate-report" = {
+    description = "Generate a private, redacted HTML inventory report from local facts";
+    exec = "${pkgs.uv}/bin/uv run python scripts/generate-cmdb-report.py";
+  };
+
   "autoconf:initialize-vault" = {
-      description = "Initialize vault";
-      exec = "${pkgs.uv}/bin/uv run python scripts/bootstrap-lx-vault.py";
+    description = "Initialize the Autoconf vault";
+    exec = "${pkgs.uv}/bin/uv run python scripts/bootstrap-lx-vault.py";
   };
 
-  "autoconf:build-nix-system-configs" = {
-      description = "Build nix system configs";
-      exec = "bnsc";
-      # after = [ "autoconf:generate-hostinfo"];
-    };
-
-  # devenv run tasks autoconf:finished
-  "autoconf:finished" = {
-    description = "Start the finalize task";
-    exec = "echo 'Starting finalize task'";
-    after = [ "autoconf:build-nix-system-configs"];
+  "autoconf:generate" = {
+    description = "Validate Autoconf options and generate NixOS and Home Manager configs";
+    exec = "${pkgs.uv}/bin/uv run python scripts/autoconf-pipeline.py";
+    after = [ "autoconf:check" ];
   };
 
+  # Documentation
   "docs:toc-generator" = {
-    description = "Updating the documentation overview in TABLE OF CONTENTS";
-    exec =  "${pkgs.uv}/bin/uv run python lib/toc-generator/generate-toc.py";
+    description = "Regenerate TABLE_OF_CONTENTS.md";
+    exec = "${pkgs.uv}/bin/uv run python lib/toc-generator/generate-toc.py";
   };
+
+  "docs:check" = {
+    description = "Validate documentation navigation and portable local links";
+    exec = "${pkgs.uv}/bin/uv run pytest -q tests/test_documentation_contract.py";
+  };
+
+  # EndoReg database
   "endoreg-db:init" = {
-    description = "Initializing endoreg-db module";
+    description = "Initialize the EndoReg database";
     exec = "./lib/endoreg-db/init.sh";
   };
-  "endoreg-db:migrate" = {
-      description = "Migrating the database of endoreg-db";
-      exec = "./lib/endoreg-db/migrate.sh";
-    };
 
+  "endoreg-db:migrate" = {
+    description = "Migrate the EndoReg database";
+    exec = "./lib/endoreg-db/migrate.sh";
+  };
 }

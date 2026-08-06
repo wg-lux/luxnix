@@ -1,4 +1,4 @@
-# /default.nix
+# gc-09/default.nix
 
 { config, pkgs, lib, modulesPath, ... }:
 
@@ -116,6 +116,9 @@ endoreg-client.defaultCenterKey = "university_hospital_wuerzburg";
 
 
     generic-settings.network.glm52.port = 8088;
+
+
+    generic-settings.network.hosts.c-01.ip-vpn = "172.16.255.131";
 
 
     generic-settings.network.hosts.gc-01.domains = [ "gc-01.intern" "lx-annotate.local" ];
@@ -368,12 +371,6 @@ endoreg-client.defaultCenterKey = "university_hospital_wuerzburg";
 
 
     vault.psk = "/etc/secrets/.psk";
-
-
-    generic-settings.configurationPath = lib.mkForce "/home/admin/lx-production";
-
-
-    generic-settings.configurationPathRelative = "lx-production";
 
 
     generic-settings.gpu.nvidia.prime.nvidiaBusId = "PCI:1:0:0";

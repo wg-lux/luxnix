@@ -1,8 +1,25 @@
-# LuxNix Nixtests
+# Configuration and Nixtest Suites
 
-This page documents the `technofab/nixtest` integration now exposed by the LuxNix flake.
+LuxNix has two complementary Nix configuration entry points. Use the repository
+configuration suite for every exported host and Nixtests for focused safety and
+VM contracts.
 
-## Entry Point
+## Repository configuration suite
+
+Run the full host evaluation and build loop from the repository root:
+
+```bash
+./tests/run-configuration-tests.sh
+```
+
+The script discovers every `nixosConfigurations` output, evaluates each host,
+and builds it with `--no-link` without activating it. It continues after
+per-host failures, returns nonzero when any host fails, and writes diagnostic
+output below `tests/eval-logs/`. The build phase has an 80-second timeout per
+host, so a timeout can indicate a large derivation or unavailable cache rather
+than an evaluation error.
+
+## Nixtest entry point
 
 From the LuxNix repo root:
 
@@ -48,7 +65,7 @@ These tests are intended to prevent two classes of outage:
 
 Tests live in:
 
-- [tests/nixtest](/home/admin/luxnix/tests/nixtest)
+- [`tests/nixtest`](https://github.com/wg-lux/luxnix/tree/main/tests/nixtest)
 
 Rules of thumb:
 

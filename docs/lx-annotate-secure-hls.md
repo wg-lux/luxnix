@@ -139,7 +139,7 @@ delivery.
 ## HTTP playback contract
 
 The authoritative backend permission and request-flow reference is
-[`endoreg-db/docs/video_hls_permissions_and_streaming.md`](/home/admin/endoreg-db/docs/video_hls_permissions_and_streaming.md).
+[`endoreg-db/docs/video_hls_permissions_and_streaming.md`](https://github.com/wg-lux/endoreg-db/blob/HEAD/docs/video_hls_permissions_and_streaming.md).
 It documents the current Keycloak-to-Django role synchronization, compatibility
 roles, `PortalUserInfo → Examiner → Center` provisioning requirement, masked
 center-scope `404` behavior, and each playlist/key/segment gate.

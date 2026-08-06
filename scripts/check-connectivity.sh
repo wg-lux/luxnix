@@ -1,5 +1,36 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 077
+
+usage() {
+  cat <<'EOF'
+Usage: check-connectivity.sh <inventory-host-or-group> [ansible-playbook arguments...]
+
+Checks SSH connectivity and remote command execution for one explicit inventory
+host or group. Use "all" explicitly when a full-inventory check is intended.
+EOF
+}
+
+if [[ $# -eq 0 ]]; then
+  echo "ERROR: an inventory host or group is required; refusing to default to all." >&2
+  usage >&2
+  exit 2
+fi
+
+case "$1" in
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  -*)
+    echo "ERROR: the first argument must be an inventory host or group, not an option." >&2
+    usage >&2
+    exit 2
+    ;;
+esac
+
+target="$1"
+shift
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 project_root="$(cd -- "${script_dir}/.." && pwd)"
@@ -17,21 +48,8 @@ if [[ ! -f "${inventory_file}" ]]; then
   exit 1
 fi
 
-mkdir -p "${logs_dir}"
-log_file="${logs_dir}/connectivity-$(date +%Y%m%d-%H%M%S).log"
-
-# Determine the limit target. Default to 'all' if the first argument is missing or starts with '-'.
-target="all"
-extra_args=()
-
-if [[ $# -gt 0 && ${1} != --* ]]; then
-  target="${1}"
-  shift
-fi
-
-if [[ $# -gt 0 ]]; then
-  extra_args=("$@")
-fi
+install -d -m 0700 "${logs_dir}"
+log_file="${logs_dir}/connectivity-$(date +%Y%m%d-%H%M%S)-$$.log"
 
 ansible_config="${project_root}/ansible.cfg"
 if [[ -L "${ansible_config}" && ! -e "${ansible_config}" ]]; then
@@ -45,13 +63,12 @@ if [[ -L "${ansible_config}" && ! -e "${ansible_config}" ]]; then
 fi
 
 cmd=(ansible-playbook "${playbook_file}" -i "${inventory_file}" --limit "${target}")
-if [[ ${#extra_args[@]} -gt 0 ]]; then
-  cmd+=("${extra_args[@]}")
+if [[ $# -gt 0 ]]; then
+  cmd+=("$@")
 fi
 
-echo "Running: ${cmd[*]}"
-printf 'Running: %s\n\n' "${cmd[*]}" > "${log_file}"
-
+echo "Running connectivity check for inventory target: ${target}"
+printf 'Connectivity check target: %s\n\n' "${target}" > "${log_file}"
 
 set +e
 if [[ -n "${ansible_config}" && -f "${ansible_config}" ]]; then
