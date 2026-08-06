@@ -84,7 +84,7 @@ for days in "$ca_validity_days" "$leaf_validity_days" "$renew_before_days"; do
   fi
 done
 
-install -d -m 0750 "$state_dir"Q  AySXedrw432 A
+install -d -m 0750 "$state_dir"  AySXedrw432 A
 chgrp "$read_group" "$state_dir"
 rm -f "$rotation_marker"
 
