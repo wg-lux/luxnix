@@ -393,26 +393,32 @@ let
       "$destination_dir"
     temporary="$(${pkgs.coreutils}/bin/mktemp "$destination_dir/.hub-client-ca.XXXXXX")"
     trap '${pkgs.coreutils}/bin/rm -f "$temporary"' EXIT
+
     if ! ${pkgs.coreutils}/bin/timeout 30s ${pkgs.bash}/bin/bash -c '
+      curl_bin="$1"
+      ca_cert="$2"
+      health_url="$3"
+
+      cmd=("$curl_bin" --fail --silent --show-error --connect-timeout 2 --max-time 5 --proto =https --tlsv1.2)
+      if [[ -n "$ca_cert" ]]; then
+        cmd+=(--cacert "$ca_cert")
+      fi
+
       for retry in $(seq 1 15); do
-        if '"${pkgs.curl}/bin/curl"' --fail --silent --show-error \
-          --connect-timeout 2 --max-time 5 \
-          --proto '"'"'=https'"'"' --tlsv1.2 \
-          '${
-            lib.optionalString (
-              serverCfg.caCertFile != null
-            ) "'--cacert ${lib.escapeShellArg (toString serverCfg.caCertFile)}'"
-          } \
-          '"${lib.escapeShellArg "${serverCfg.apiAddress}/v1/sys/health"}"' >/dev/null 2>&1; then
+        if "''${cmd[@]}" "$health_url" >/dev/null 2>&1; then
           exit 0
         fi
         sleep 2
       done
       exit 1
-    '; then
+    ' _ \
+      "${pkgs.curl}/bin/curl" \
+      "${lib.optionalString (serverCfg.caCertFile != null) (toString serverCfg.caCertFile)}" \
+      "${serverCfg.apiAddress}/v1/sys/health"; then
       echo "Vault API at ${lib.escapeShellArg "${serverCfg.apiAddress}/v1/sys/health"} did not become reachable." >&2
       exit 1
     fi
+
     ${pkgs.curl}/bin/curl --fail --silent --show-error \
       --retry 30 --retry-delay 2 --retry-connrefused \
       --connect-timeout 2 --max-time 90 \
@@ -430,7 +436,6 @@ let
     ${pkgs.coreutils}/bin/mv -f "$temporary" "$destination"
     trap - EXIT
   '';
-
   vaultAuthSetupScript = pkgs.writeShellScript "luxnix-vault-auth-setup" ''
     set -euo pipefail
     umask 077
