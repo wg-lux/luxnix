@@ -77,7 +77,7 @@ host_luxnix:
   vault.server.enable: "true"
   vault.server.bindAddress: '"172.16.255.22:8200"'
   vault.server.apiAddress: '"https://172.16.255.22:8200"'
-  vault.server.clusterAddress: '"https://172.16.255.22:8201"'
+  vault.server.clusterAddress: '"https://172.16.255.22:8201"' # CLUSTER NEEDS TO BE DIFFERENT
   # Vault owns a persistent CA. Renewal rotates only its CA-signed server leaf;
   # LX-Annotate's unrelated self-signed certificate is never a trust anchor.
   vault.server.tlsCertFile: '"/var/lib/luxnix-vault-pki/server.crt"'
