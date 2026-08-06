@@ -416,6 +416,10 @@ ollama.host = "0.0.0.0";
 
   };
 
+  hardware.nvidia.powerManagement.enable = true;
+
+  hardware.nvidia.powerManagement.finegrained = false;
+
   programs.nix-ld.enable = true;
 
   xdg.menus.enable = true;

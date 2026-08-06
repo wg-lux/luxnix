@@ -12,9 +12,6 @@ host_roles:
 
 host_services:
 
-  hardware.nvidia.powerManagement.enable: "true"
-  hardware.nvidia.powerManagement.finegrained: "false"
-
   # Ollama service
   luxnix.ollama.enable: "true"
   luxnix.ollama.acceleration: '"cuda"'

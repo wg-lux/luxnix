@@ -18,3 +18,7 @@ group_luxnix:
   generic_settings.gpu.nvidia.driver: '"production"'
   # Note: Servers typically don't need PRIME hybrid graphics
   # maintenance.autoUpdates.enable: "true"
+
+group_nixos:
+  hardware.nvidia.powerManagement.enable: "true"
+  hardware.nvidia.powerManagement.finegrained: "false"

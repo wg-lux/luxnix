@@ -94,8 +94,6 @@ luxnix.ollama.enable = true;
 luxnix.ollama.enableModelBootstrap = false;
 luxnix.ollama.models = [ "gemma4:e2b" ];
 ollama.host = "0.0.0.0";
-hardware.nvidia.powerManagement.enable = true;
-hardware.nvidia.powerManagement.finegrained = false;
 luxnix.glm52.enable = true;
 luxnix.glm52.gpuLayers = 999;
 luxnix.glm52.host = "0.0.0.0";
@@ -499,6 +497,10 @@ luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort = 5432;
 
 
   };
+
+  hardware.nvidia.powerManagement.enable = true;
+
+  hardware.nvidia.powerManagement.finegrained = false;
 
   programs.nix-ld.enable = true;
 
