@@ -118,6 +118,10 @@ luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort = 5432;
 
   };
 
+  hardware.nvidia.powerManagement.enable = true;
+
+  hardware.nvidia.powerManagement.finegrained = false;
+
   luxnix = {
 
     dns.enable = true;
@@ -141,10 +145,15 @@ luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort = 5432;
     generic-settings.enable = true;
 
 
+    generic-settings.gpu.autoDetect = false;
+
+    generic-settings.gpu.type = "nvidia";
+
     generic-settings.gpu.nvidia.driver = "production";
 
-
     generic-settings.gpu.nvidia.enable = true;
+
+    generic-settings.gpu.nvidia.prime.enable = false;
 
 
     generic-settings.language = "english";
