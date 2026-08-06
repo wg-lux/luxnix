@@ -401,7 +401,7 @@ let
           '${
             lib.optionalString (
               serverCfg.caCertFile != null
-            ) "--cacert ${lib.escapeShellArg (toString serverCfg.caCertFile)}"
+            ) "'--cacert ${lib.escapeShellArg (toString serverCfg.caCertFile)}'"
           } \
           '"${lib.escapeShellArg "${serverCfg.apiAddress}/v1/sys/health"}"' >/dev/null 2>&1; then
           exit 0
