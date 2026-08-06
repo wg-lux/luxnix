@@ -456,7 +456,7 @@ luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort = 5432;
     maintenance.autoUpdates.enable = false;
 
 
-    vault.server.apiAddress = "https://127.0.0.1:8200";
+    vault.server.apiAddress = "https://172.16.255.22:8200";
 
 
     vault.server.bindAddress = "172.16.255.22:8200";
@@ -465,7 +465,7 @@ luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort = 5432;
     vault.server.caCertFile = "/var/lib/luxnix-vault-pki/ca.crt";
 
 
-    vault.server.clusterAddress = "https://gs-02.intern:8201";
+    vault.server.clusterAddress = "https://172.16.255.22:8200";
 
 
     vault.server.enable = true;
