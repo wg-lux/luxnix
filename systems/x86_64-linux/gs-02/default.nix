@@ -94,6 +94,8 @@ luxnix.ollama.enable = true;
 luxnix.ollama.enableModelBootstrap = false;
 luxnix.ollama.models = [ "gemma4:e2b" ];
 ollama.host = "0.0.0.0";
+hardware.nvidia.powerManagement.enable = true;
+hardware.nvidia.powerManagement.finegrained = false;
 luxnix.glm52.enable = true;
 luxnix.glm52.gpuLayers = 999;
 luxnix.glm52.host = "0.0.0.0";
@@ -118,10 +120,6 @@ luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort = 5432;
 
   };
 
-  hardware.nvidia.powerManagement.enable = true;
-
-  hardware.nvidia.powerManagement.finegrained = false;
-
   luxnix = {
 
     dns.enable = true;
@@ -145,15 +143,10 @@ luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort = 5432;
     generic-settings.enable = true;
 
 
-    generic-settings.gpu.autoDetect = false;
-
-    generic-settings.gpu.type = "nvidia";
-
     generic-settings.gpu.nvidia.driver = "production";
 
-    generic-settings.gpu.nvidia.enable = true;
 
-    generic-settings.gpu.nvidia.prime.enable = false;
+    generic-settings.gpu.nvidia.enable = true;
 
 
     generic-settings.language = "english";
@@ -465,7 +458,7 @@ luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort = 5432;
     maintenance.autoUpdates.enable = false;
 
 
-    vault.server.apiAddress = "https://172.16.255.22:8200";
+    vault.server.apiAddress = "https://vault.endo-reg.net:8200";
 
 
     vault.server.bindAddress = "172.16.255.22:8200";
