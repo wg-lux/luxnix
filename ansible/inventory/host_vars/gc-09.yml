@@ -7,8 +7,26 @@ template_name: "main"
 host_roles:
   custom_packages.baseDevelopment: "true"
   endoreg-client.defaultCenterKey: "university_hospital_wuerzburg"
+  endoreg-client.enable: "true"
 
-host_services: {}
+host_services:
+  # LX-Annotate receiver application
+  luxnix.lxAnnotateLocal.enable: "true"
+  luxnix.lxAnnotateLocal.runtime.deploymentRole: '"central_hub"'
+  luxnix.lxAnnotateLocal.hub.enable: "true"
+
+  # Local PostgreSQL and Redis are provided automatically by lxAnnotateLocal.
+  luxnix.lxAnnotateLocal.database.port: "5432"
+
+  # Secure hub-transfer receiver through Nginx and mTLS.
+  luxnix.lxAnnotateLocal.hub.transferApi.enable: "true"
+  luxnix.lxAnnotateLocal.hub.transferApi.requireSecureTransport: "true"
+  luxnix.lxAnnotateLocal.hub.transferApi.requireMtls: "true"
+  luxnix.lxAnnotateLocal.hub.transferApi.mtlsMetaKey: '"HTTP_X_CLIENT_CERT_VERIFIED"'
+  luxnix.lxAnnotateLocal.hub.transferApi.mtlsMetaValue: '"SUCCESS"'
+  luxnix.lxAnnotateLocal.hub.transferApi.clientCaFile: '"/etc/secrets/vault/lx-annotate-transfer-client-ca.crt"'
+  # Explicit compatibility setting for Django.
+  'luxnix.lxAnnotateLocal.django.extraSettings."IS_CENTRAL_NODE"': "lib.mkForce true"
 
 host_nixos:
   nix.settings.max_jobs: 1
