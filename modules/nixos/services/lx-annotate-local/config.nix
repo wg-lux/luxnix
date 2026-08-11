@@ -66,8 +66,6 @@ let
     processedVideoDirName
     ;
   boolString = value: if value then "true" else "false";
-  transferClientCaRuntimePath =
-    "/run/lx-annotate-ssl/lx-annotate-transfer-client-ca.crt";
 
   hubTransferProxyExtraConfig = ''
     proxy_http_version 1.1;
@@ -1756,21 +1754,6 @@ in
         settingsModule = "lx_annotate.settings.settings_prod";
         environmentFile = envSystemdFilePath;
         extraEnv = commonExtraEnv;
-      };
-
-      systemd.services.generate-lx-ssl = mkIf cfg.hub.transferApi.enable {
-        serviceConfig.LoadCredential = [
-          "transfer-client-ca.crt:${toString cfg.hub.transferApi.clientCaFile}"
-        ];
-  
-        preStart = ''
-          ${pkgs.coreutils}/bin/install \
-            -o root \
-            -g nginx \
-            -m 0644 \
-            "$CREDENTIALS_DIRECTORY/transfer-client-ca.crt" \
-            ${lib.escapeShellArg transferClientCaRuntimePath}
-        '';
       };
 
       services.nginx = {
