@@ -66,6 +66,8 @@ let
     processedVideoDirName
     ;
   boolString = value: if value then "true" else "false";
+  transferClientCaRuntimePath =
+    "/run/lx-annotate-ssl/lx-annotate-transfer-client-ca.crt";
 
   hubTransferProxyExtraConfig = ''
     proxy_http_version 1.1;
