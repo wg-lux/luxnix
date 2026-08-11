@@ -1758,6 +1758,21 @@ in
         extraEnv = commonExtraEnv;
       };
 
+      systemd.services.generate-lx-ssl = mkIf cfg.hub.transferApi.enable {
+        serviceConfig.LoadCredential = [
+          "transfer-client-ca.crt:${toString cfg.hub.transferApi.clientCaFile}"
+        ];
+  
+        preStart = ''
+          ${pkgs.coreutils}/bin/install \
+            -o root \
+            -g nginx \
+            -m 0644 \
+            "$CREDENTIALS_DIRECTORY/transfer-client-ca.crt" \
+            ${lib.escapeShellArg transferClientCaRuntimePath}
+        '';
+      };
+
       services.nginx = {
         enable = true;
         recommendedProxySettings = true;
