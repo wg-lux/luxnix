@@ -18,6 +18,13 @@ host_services:
   # Local PostgreSQL and Redis are provided automatically by lxAnnotateLocal.
   luxnix.lxAnnotateLocal.database.port: "5432"
 
+   # Public receiver identity for Nginx, TLS and inter-machine transfers.
+  luxnix.lxAnnotateLocal.django.hostname: '"gc-09.intern"'
+  # Keep lx-annotate.local valid for local access to gc-09.
+  luxnix.lxSsl.extraDnsNames:
+    - "gc-09"
+    - "lx-annotate.local"
+
   # Secure hub-transfer receiver through Nginx and mTLS.
   luxnix.lxAnnotateLocal.hub.transferApi.enable: "true"
   luxnix.lxAnnotateLocal.hub.transferApi.requireSecureTransport: "true"
@@ -31,6 +38,7 @@ host_services:
 host_nixos:
   nix.settings.max_jobs: 1
   nix.settings.cores: 4
+  networking.firewall.allowedTCPPorts: "lib.mkAfter [ 80 443 ]"
 
 extra_secret_names: []
 
