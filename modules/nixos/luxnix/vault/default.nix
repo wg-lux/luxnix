@@ -52,7 +52,7 @@ let
       recipient_sensitive_group=${lib.escapeShellArg config.luxnix.generic-settings.sensitiveServiceGroupName}
 
       if [ "$recipient_private_key" = "$recipient_public_key" ]; then
-        recipient_private_key="${recipient_public_key}.pem"
+        recipient_private_key="$recipient_public_key.pem"
       fi
 
       if [ -L "$recipient_public_key" ]; then
