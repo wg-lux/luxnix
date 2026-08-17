@@ -2459,7 +2459,7 @@ in
             mkIf (cfg.hub.transferApi.enable || cfg.hub.outboundTransfer.enable)
               {
                 description = "Validate LX-Annotate Hub envelope recipient identities";
-                after = [ "systemd-tmpfiles-setup.service" ] ++ managedSecretsSetupUnits;
+                after = [ "systemd-tmpfiles-setup.service" ];
                 wants = managedSecretsSetupUnits;
                 requires = managedSecretsSetupUnits;
                 serviceConfig = {
