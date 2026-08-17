@@ -183,15 +183,15 @@ in
           mkOpt types.str "https://${glm52Config.domain}/oauth2/callback"
             "OAuth2 callback URL registered on the Keycloak client";
         emailDomains = mkOpt (types.listOf types.str) [ "*" ] "Allowed email domains for Keycloak users";
-        allowedGroups =
-          mkOpt (types.nullOr (types.listOf types.str)) null
-            "Optional Keycloak groups allowed to access the GLM-5.2 vhost";
-        allowedEmails =
-          mkOpt (types.nullOr (types.listOf types.str)) null
-            "Optional email addresses allowed to access the GLM-5.2 vhost";
-        allowedEmailDomains =
-          mkOpt (types.nullOr (types.listOf types.str)) null
-            "Optional email domains allowed to access the GLM-5.2 vhost";
+        allowedGroups = mkOpt (types.nullOr (
+          types.listOf types.str
+        )) null "Optional Keycloak groups allowed to access the GLM-5.2 vhost";
+        allowedEmails = mkOpt (types.nullOr (
+          types.listOf types.str
+        )) null "Optional email addresses allowed to access the GLM-5.2 vhost";
+        allowedEmailDomains = mkOpt (types.nullOr (
+          types.listOf types.str
+        )) null "Optional email domains allowed to access the GLM-5.2 vhost";
       };
     };
     psqlMain = {
@@ -250,90 +250,93 @@ in
   };
 
   config = mkIf cfg.enable {
-    # if cfg.testPage is enabled, we should set up services.luxnix.testPage using our settings
-    services.luxnix.testPage = {
-      enable = cfg.testPage.enable;
-      port = cfg.testPage.port;
-    };
-
     # systemd.tmpfile.rule to make sure /etc/nginx-host exists
-    systemd.tmpfiles.rules = [
-      "d ${nginxStateDir} 0700 nginx nginx -"
-      "d ${nginxSecretsDir} 0700 root root -"
-    ];
+    systemd = {
+      tmpfiles.rules = [
+        "d ${nginxStateDir} 0700 nginx nginx -"
+        "d ${nginxSecretsDir} 0700 root root -"
+      ];
 
-    systemd.services.nginx-prepare-files = mkIf fileBackedTlsEnabled {
-      description = "Deploy SSL certificate and key for NGINX";
-      before = [ "nginx.service" ];
-      requiredBy = [ "nginx.service" ];
-      serviceConfig = {
-        Type = "oneshot";
-        RemainAfterExit = true;
-        ExecStart = nginxSyncScript;
+      services = {
+        nginx-prepare-files = mkIf fileBackedTlsEnabled {
+          description = "Deploy SSL certificate and key for NGINX";
+          before = [ "nginx.service" ];
+          requiredBy = [ "nginx.service" ];
+          serviceConfig = {
+            Type = "oneshot";
+            RemainAfterExit = true;
+            ExecStart = nginxSyncScript;
+          };
+        };
+
+        nginx-sync-certificates = mkIf fileBackedTlsEnabled {
+          description = "Synchronize SSL material for NGINX";
+          after = [ "nginx-prepare-files.service" ];
+          wantedBy = [ "multi-user.target" ];
+          serviceConfig = {
+            Type = "oneshot";
+            ExecStart = nginxSyncScript;
+          };
+        };
+
+        nginx = mkIf fileBackedTlsEnabled {
+          wants = [ "nginx-prepare-files.service" ];
+          after = [ "nginx-prepare-files.service" ];
+        };
+
+        glm-5-2-oauth2-proxy-env = mkIf (cfg.glm52.enable && cfg.glm52.oauth2.enable) {
+          description = "Prepare oauth2-proxy secret environment for GLM-5.2";
+          before = [ "oauth2-proxy.service" ];
+          requiredBy = [ "oauth2-proxy.service" ];
+          serviceConfig = {
+            Type = "oneshot";
+            RemainAfterExit = true;
+            ExecStart = glm52Oauth2ProxyEnvScript;
+          };
+        };
+
+        oauth2-proxy = mkIf (cfg.glm52.enable && cfg.glm52.oauth2.enable) {
+          requires = [ "glm-5-2-oauth2-proxy-env.service" ];
+          after = [ "glm-5-2-oauth2-proxy-env.service" ];
+        };
+      };
+
+      paths.nginx-sync-certificates = mkIf fileBackedTlsEnabled {
+        description = "Watch for SSL material changes";
+        wantedBy = [ "multi-user.target" ];
+        pathConfig = {
+          PathChanged = [
+            "${cfg.sslCertPath}"
+            "${cfg.sslKeyPath}"
+          ];
+          Unit = "nginx-sync-certificates.service";
+        };
+      };
+
+      timers.nginx-sync-certificates = mkIf fileBackedTlsEnabled {
+        description = "Periodic SSL material synchronization";
+        wantedBy = [ "timers.target" ];
+        timerConfig = {
+          OnBootSec = "10m";
+          OnUnitActiveSec = "6h";
+          Unit = "nginx-sync-certificates.service";
+        };
       };
     };
 
-    systemd.services.nginx-sync-certificates = mkIf fileBackedTlsEnabled {
-      description = "Synchronize SSL material for NGINX";
-      after = [ "nginx-prepare-files.service" ];
-      wantedBy = [ "multi-user.target" ];
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = nginxSyncScript;
+    users = {
+      # make sure the user exists
+      extraUsers."nginx" = {
+        isSystemUser = true;
+        group = "nginx";
+        inherit (conf) extraGroups;
       };
+      # make sure the group exists
+      groups.nginx = { };
+      users.nginx.extraGroups = mkIf (cfg.glm52.enable && cfg.glm52.acme.enable) (mkAfter [
+        "acme"
+      ]);
     };
-
-    systemd.paths.nginx-sync-certificates = mkIf fileBackedTlsEnabled {
-      description = "Watch for SSL material changes";
-      wantedBy = [ "multi-user.target" ];
-      pathConfig = {
-        PathChanged = [
-          "${cfg.sslCertPath}"
-          "${cfg.sslKeyPath}"
-        ];
-        Unit = "nginx-sync-certificates.service";
-      };
-    };
-
-    systemd.timers.nginx-sync-certificates = mkIf fileBackedTlsEnabled {
-      description = "Periodic SSL material synchronization";
-      wantedBy = [ "timers.target" ];
-      timerConfig = {
-        OnBootSec = "10m";
-        OnUnitActiveSec = "6h";
-        Unit = "nginx-sync-certificates.service";
-      };
-    };
-
-    systemd.services.nginx = mkIf fileBackedTlsEnabled {
-      wants = [ "nginx-prepare-files.service" ];
-      after = [ "nginx-prepare-files.service" ];
-    };
-
-    systemd.services.glm-5-2-oauth2-proxy-env = mkIf (cfg.glm52.enable && cfg.glm52.oauth2.enable) {
-      description = "Prepare oauth2-proxy secret environment for GLM-5.2";
-      before = [ "oauth2-proxy.service" ];
-      requiredBy = [ "oauth2-proxy.service" ];
-      serviceConfig = {
-        Type = "oneshot";
-        RemainAfterExit = true;
-        ExecStart = glm52Oauth2ProxyEnvScript;
-      };
-    };
-
-    systemd.services.oauth2-proxy = mkIf (cfg.glm52.enable && cfg.glm52.oauth2.enable) {
-      requires = [ "glm-5-2-oauth2-proxy-env.service" ];
-      after = [ "glm-5-2-oauth2-proxy-env.service" ];
-    };
-
-    # make sure the user exists
-    users.extraUsers."nginx" = {
-      isSystemUser = true;
-      group = "nginx";
-      extraGroups = conf.extraGroups;
-    };
-    # make sure the group exists
-    users.groups.nginx = { };
 
     # Allow default http and https ports
     networking.firewall.allowedTCPPorts = [
@@ -350,150 +353,158 @@ in
       }
     );
 
-    users.users.nginx.extraGroups = mkIf (cfg.glm52.enable && cfg.glm52.acme.enable) (mkAfter [ "acme" ]);
-
-    services.oauth2-proxy = mkIf (cfg.glm52.enable && cfg.glm52.oauth2.enable) {
-      enable = true;
-      provider = "keycloak-oidc";
-      clientID = cfg.glm52.oauth2.clientID;
-      keyFile = cfg.glm52.oauth2.keyFile;
-      oidcIssuerUrl = cfg.glm52.oauth2.issuerUrl;
-      redirectURL = cfg.glm52.oauth2.redirectURL;
-      httpAddress = cfg.glm52.oauth2.httpAddress;
-      reverseProxy = true;
-      setXauthrequest = true;
-      passAccessToken = true;
-      passBasicAuth = false;
-      scope = "openid email profile";
-      upstream = [ "http://${cfg.glm52.vpnIp}:${toString cfg.glm52.port}" ];
-      email.domains = cfg.glm52.oauth2.emailDomains;
-      cookie = {
-        name = "_glm_oauth2_proxy";
-        secure = true;
-        httpOnly = true;
-        expire = "8h0m0s";
-        refresh = "1h0m0s";
+    services = {
+      # if cfg.testPage is enabled, we should set up services.luxnix.testPage using our settings
+      luxnix.testPage = {
+        enable = cfg.testPage.enable;
+        port = cfg.testPage.port;
       };
-      nginx = {
-        domain = cfg.glm52.domain;
-        proxy = cfg.glm52.oauth2.httpAddress;
-        virtualHosts."${cfg.glm52.domain}" = {
-          allowed_groups = cfg.glm52.oauth2.allowedGroups;
-          allowed_emails = cfg.glm52.oauth2.allowedEmails;
-          allowed_email_domains = cfg.glm52.oauth2.allowedEmailDomains;
+
+      oauth2-proxy = mkIf (cfg.glm52.enable && cfg.glm52.oauth2.enable) {
+        enable = true;
+        provider = "keycloak-oidc";
+        clientID = cfg.glm52.oauth2.clientID;
+        keyFile = cfg.glm52.oauth2.keyFile;
+        oidcIssuerUrl = cfg.glm52.oauth2.issuerUrl;
+        redirectURL = cfg.glm52.oauth2.redirectURL;
+        httpAddress = cfg.glm52.oauth2.httpAddress;
+        reverseProxy = true;
+        setXauthrequest = true;
+        passAccessToken = true;
+        passBasicAuth = false;
+        scope = "openid email profile";
+        upstream = [ "http://${cfg.glm52.vpnIp}:${toString cfg.glm52.port}" ];
+        email.domains = cfg.glm52.oauth2.emailDomains;
+        cookie = {
+          name = "_glm_oauth2_proxy";
+          secure = true;
+          httpOnly = true;
+          expire = "8h0m0s";
+          refresh = "1h0m0s";
+        };
+        nginx = {
+          domain = cfg.glm52.domain;
+          proxy = cfg.glm52.oauth2.httpAddress;
+          virtualHosts."${cfg.glm52.domain}" = {
+            allowed_groups = cfg.glm52.oauth2.allowedGroups;
+            allowed_emails = cfg.glm52.oauth2.allowedEmails;
+            allowed_email_domains = cfg.glm52.oauth2.allowedEmailDomains;
+          };
         };
       };
-    };
 
-    services.nginx = {
-      enable = true;
-      user = "nginx";
-      group = "nginx";
-      recommendedGzipSettings = conf.recommendedGzipSettings;
-      recommendedOptimisation = conf.recommendedOptimisation;
-      recommendedProxySettings = conf.recommendedProxySettings;
-      recommendedTlsSettings = conf.recommendedTlsSettings;
+      nginx = {
+        enable = true;
+        user = "nginx";
+        group = "nginx";
+        inherit (conf)
+          recommendedGzipSettings
+          recommendedOptimisation
+          recommendedProxySettings
+          recommendedTlsSettings
+          ;
 
-      appendHttpConfig = appendHttpConfig;
-      virtualHosts = lib.mkMerge [
-        (mkIf cfg.psqlMain.enable {
-          #TODO domain in psql config
-          ${psqlMainConfig.domain} = {
-            forceSSL = true;
-            sslCertificate = nginx_cert_path;
-            sslCertificateKey = nginx_key_path;
+        inherit appendHttpConfig;
+        virtualHosts = lib.mkMerge [
+          (mkIf cfg.psqlMain.enable {
+            #TODO domain in psql config
+            ${psqlMainConfig.domain} = {
+              forceSSL = true;
+              sslCertificate = nginx_cert_path;
+              sslCertificateKey = nginx_key_path;
 
-            locations."/" = {
-              proxyPass = "https://${psqlMainConfig.vpnIp}:${toString psqlMainConfig.port}";
-              extraConfig = all-extraConfig + intern-endoreg-net-extraConfig;
+              locations."/" = {
+                proxyPass = "https://${psqlMainConfig.vpnIp}:${toString psqlMainConfig.port}";
+                extraConfig = all-extraConfig + intern-endoreg-net-extraConfig;
+              };
             };
-          };
-        })
-        (mkIf cfg.psqlTest.enable {
-          #TODO domain in psql config
-          ${psqlTestConfig.domain} = {
-            forceSSL = true;
-            sslCertificate = nginx_cert_path;
-            sslCertificateKey = nginx_key_path;
+          })
+          (mkIf cfg.psqlTest.enable {
+            #TODO domain in psql config
+            ${psqlTestConfig.domain} = {
+              forceSSL = true;
+              sslCertificate = nginx_cert_path;
+              sslCertificateKey = nginx_key_path;
 
-            locations."/" = {
-              proxyPass = "https://${psqlTestConfig.vpnIp}:${toString psqlTestConfig.port}";
-              extraConfig = all-extraConfig + intern-endoreg-net-extraConfig;
+              locations."/" = {
+                proxyPass = "https://${psqlTestConfig.vpnIp}:${toString psqlTestConfig.port}";
+                extraConfig = all-extraConfig + intern-endoreg-net-extraConfig;
+              };
             };
-          };
-        })
-        (mkIf cfg.nextcloud.enable {
-          ${nextcloudConfig.domain} = {
-            forceSSL = true;
-            sslCertificate = nginx_cert_path;
-            sslCertificateKey = nginx_key_path;
+          })
+          (mkIf cfg.nextcloud.enable {
+            ${nextcloudConfig.domain} = {
+              forceSSL = true;
+              sslCertificate = nginx_cert_path;
+              sslCertificateKey = nginx_key_path;
 
-            # locations."/whiteboard/" = {
-            #   proxyPass = "http://${nextcloudConfig.vpnIp}:3002/";
-            #   proxy_http_version = "1.1";
-            #   proxyWebsockets = true; #
-            #   # proxy_set_header Upgrade $http_upgrade;
-            #   # proxy_set_header Connection "Upgrade";
-            #   extraConfig = all-extraConfig + ''
-            #     proxy_set_header Upgrade $http_upgrade
-            #     proxy_set_header Connection "Upgrade"'';
-            # };
+              # locations."/whiteboard/" = {
+              #   proxyPass = "http://${nextcloudConfig.vpnIp}:3002/";
+              #   proxy_http_version = "1.1";
+              #   proxyWebsockets = true; #
+              #   # proxy_set_header Upgrade $http_upgrade;
+              #   # proxy_set_header Connection "Upgrade";
+              #   extraConfig = all-extraConfig + ''
+              #     proxy_set_header Upgrade $http_upgrade
+              #     proxy_set_header Connection "Upgrade"'';
+              # };
 
-            locations."/" = {
-              proxyPass = "http://${nextcloudConfig.vpnIp}/";
-              extraConfig = all-extraConfig;
+              locations."/" = {
+                proxyPass = "http://${nextcloudConfig.vpnIp}/";
+                extraConfig = all-extraConfig;
+              };
             };
-          };
-        })
-        (mkIf cfg.glm52.enable {
-          "${cfg.glm52.domain}" = {
-            forceSSL = true;
-            enableACME = cfg.glm52.acme.enable;
-            sslCertificate = mkIf (!cfg.glm52.acme.enable) nginx_cert_path;
-            sslCertificateKey = mkIf (!cfg.glm52.acme.enable) nginx_key_path;
+          })
+          (mkIf cfg.glm52.enable {
+            "${cfg.glm52.domain}" = {
+              forceSSL = true;
+              enableACME = cfg.glm52.acme.enable;
+              sslCertificate = mkIf (!cfg.glm52.acme.enable) nginx_cert_path;
+              sslCertificateKey = mkIf (!cfg.glm52.acme.enable) nginx_key_path;
 
-            locations."/" = {
-              proxyPass = "http://${cfg.glm52.vpnIp}:${toString cfg.glm52.port}";
-              proxyWebsockets = true;
-              extraConfig =
-                all-extraConfig
-                + ''
-                  proxy_buffering off;
-                  proxy_request_buffering off;
-                  proxy_read_timeout 3600s;
-                  proxy_send_timeout 3600s;
-                  client_max_body_size 100M;
-                ''
-                + cfg.glm52.extraLocationConfig;
+              locations."/" = {
+                proxyPass = "http://${cfg.glm52.vpnIp}:${toString cfg.glm52.port}";
+                proxyWebsockets = true;
+                extraConfig =
+                  all-extraConfig
+                  + ''
+                    proxy_buffering off;
+                    proxy_request_buffering off;
+                    proxy_read_timeout 3600s;
+                    proxy_send_timeout 3600s;
+                    client_max_body_size 100M;
+                  ''
+                  + cfg.glm52.extraLocationConfig;
+              };
             };
-          };
-        })
-        (mkIf cfg.keycloak.enable {
-          "${keycloakConfig.domain}" = {
-            forceSSL = true;
-            sslCertificate = nginx_cert_path;
-            sslCertificateKey = nginx_key_path;
+          })
+          (mkIf cfg.keycloak.enable {
+            "${keycloakConfig.domain}" = {
+              forceSSL = true;
+              sslCertificate = nginx_cert_path;
+              sslCertificateKey = nginx_key_path;
 
-            locations."/" = {
-              proxyPass = "https://${keycloakConfig.vpnIp}:${toString keycloakConfig.port}";
-              proxyWebsockets = true;
-              extraConfig = all-extraConfig;
+              locations."/" = {
+                proxyPass = "https://${keycloakConfig.vpnIp}:${toString keycloakConfig.port}";
+                proxyWebsockets = true;
+                extraConfig = all-extraConfig;
+              };
             };
-          };
 
-          "${keycloakConfig.adminDomain}" = {
-            forceSSL = true;
-            sslCertificate = nginx_cert_path;
-            sslCertificateKey = nginx_key_path;
+            "${keycloakConfig.adminDomain}" = {
+              forceSSL = true;
+              sslCertificate = nginx_cert_path;
+              sslCertificateKey = nginx_key_path;
 
-            locations."/" = {
-              proxyPass = "https://${keycloakConfig.vpnIp}:${toString keycloakConfig.port}";
-              extraConfig = all-extraConfig + intern-endoreg-net-extraConfig;
+              locations."/" = {
+                proxyPass = "https://${keycloakConfig.vpnIp}:${toString keycloakConfig.port}";
+                extraConfig = all-extraConfig + intern-endoreg-net-extraConfig;
+              };
             };
-          };
 
-        })
-      ];
+          })
+        ];
+      };
     };
 
   };

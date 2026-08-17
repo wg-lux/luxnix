@@ -11,7 +11,7 @@ let
   cfg = config.services.luxnix.lxSsl;
   annotateCfg = config.services.luxnix.lxAnnotateLocal;
 
-  sslDir = cfg.sslDir;
+  inherit (cfg) sslDir;
   sslKeyPath = cfg.keyPath;
   sslCertPath = cfg.certPath;
   trustStoreCfg = cfg.trustStore;

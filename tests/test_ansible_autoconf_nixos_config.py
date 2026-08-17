@@ -104,6 +104,13 @@ def test_current_home_inventory_renders_as_parseable_nix(tmp_path) -> None:
         assert parsed.returncode == 0, f"{hostname}: {parsed.stderr}"
 
 
+def test_c01_home_source_declares_both_managed_users() -> None:
+    values = load_home_host_vars(REPO_ROOT / "ansible/inventory")["c-01"]
+    merged = MergedHostVars(**values)
+
+    assert merged.system_users == ["admin", "client-user"]
+
+
 def test_merged_host_vars_defaults_are_not_shared() -> None:
     first = MergedHostVars()
     second = MergedHostVars()
@@ -257,11 +264,58 @@ def test_system_template_renders_ansible_driven_top_level_nixos(tmp_path):
 
     assert rendered.startswith("# node-01/default.nix")
     assert "./hardware-extra.nix" in rendered
-    assert "networking.firewall.allowedTCPPorts = [ 22 443 ];" in rendered
-    assert 'networking.firewall.trustedInterfaces = [ "wg0" "eth0" ];' in rendered
+    assert (
+        """networking.firewall.allowedTCPPorts = [
+        22
+        443
+      ];"""
+        in rendered
+    )
+    assert (
+        '''networking.firewall.trustedInterfaces = [
+        "wg0"
+        "eth0"
+      ];'''
+        in rendered
+    )
     assert 'boot.kernel.sysctl."net.core.rmem_max" = 16777216;' in rendered
     assert "programs.zsh.enable = true;" in rendered
 
+    subprocess.run(
+        ["nix-instantiate", "--parse", str(output_file)],
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
+
+
+def test_system_template_preserves_nested_lists_in_raw_service_expressions(
+    tmp_path,
+):
+    if shutil.which("nix-instantiate") is None:
+        pytest.skip("nix-instantiate is not available")
+
+    nodes = (
+        '[ { identity = "storage-01"; '
+        'artifactKinds = [ "video" "manifest" ]; '
+        'endpoint = "https://storage-01:9443"; } ]'
+    )
+    rendered = render_nix_template(
+        "conf/nix-templates/systems/x86_64-linux/main",
+        "default.nix.j2",
+        {
+            "hostname": "hub-01",
+            "role_configs": {},
+            "service_configs": {"luxnix.hubStorage.hubClient.nodes": nodes},
+            "luxnix_configs": {},
+            "nixos_configs": {},
+            "import_configs": [],
+        },
+    )
+    output_file = tmp_path / "default.nix"
+    write_nix_file(rendered, output_file)
+
+    assert 'artifactKinds = [ "video" "manifest" ];' in rendered
+    assert rendered.count("[ ") >= 2
     subprocess.run(
         ["nix-instantiate", "--parse", str(output_file)],
         check=True,

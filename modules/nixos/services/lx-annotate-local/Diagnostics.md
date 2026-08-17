@@ -73,6 +73,7 @@ sudo journalctl --namespace=lx-annotate -f
 
 ```bash
 sudo systemctl status lx-annotate-runtime-env.service
+sudo systemctl status lx-annotate-wheel-runtime.service
 sudo systemctl status lx-annotate-migrate.service
 sudo systemctl status lx-annotate-load-base-data.service
 sudo systemctl status lx-annotate-master-key-check.service
@@ -80,9 +81,10 @@ sudo systemctl status lx-annotate.service
 ```
 
 Wheel mode also runs `lx-annotate-terminology-bootstrap.service` as a
-best-effort job. It registers the `report_template_examples` bundle shipped
-under the installed `lx_dtypes/data` package when no registry exists. The job
-is ordered after the web service and runs independently; no application startup
+best-effort job. It registers the packaged `dgvs_reporting`, `mst_3_0`, and
+`star_upper_gi` reporting bundles. A new registry activates `star_upper_gi`;
+an existing active selection is preserved. The job is ordered after the web
+service and runs independently; no application startup
 unit wants, requires, or waits for it. Missing or invalid terminology therefore
 disables terminology features without blocking the web service, workers,
 migrations, or base-data loading.
@@ -94,6 +96,7 @@ sudo journalctl -u lx-annotate-terminology-bootstrap.service -b -n 200 --no-page
 
 ```bash
 sudo journalctl -u lx-annotate-runtime-env.service -n 200 --no-pager
+sudo journalctl -u lx-annotate-wheel-runtime.service -n 200 --no-pager
 sudo journalctl -u lx-annotate-migrate.service -n 200 --no-pager
 sudo journalctl -u lx-annotate-load-base-data.service -n 200 --no-pager
 sudo journalctl -u lx-annotate-master-key-check.service -n 200 --no-pager
@@ -103,12 +106,35 @@ Manually rerun one-shot checks:
 
 ```bash
 sudo systemctl start lx-annotate-runtime-env.service
+sudo systemctl start lx-annotate-wheel-runtime.service
 sudo systemctl start lx-annotate-migrate.service
 sudo systemctl start lx-annotate-load-base-data.service
 sudo systemctl start lx-annotate-master-key-check.service
 sudo systemctl restart lx-annotate-terminology-bootstrap.service
 sudo systemctl start lx-annotate-acceptance.service
 sudo journalctl -u lx-annotate-acceptance.service -n 200 --no-pager
+```
+
+In wheel mode, `lx-annotate-wheel-runtime.service` is the only startup unit
+permitted to install or upgrade packages in the shared virtual environment.
+It is intentionally inactive after a successful run so every application-start
+transaction rechecks the currently selected wheel instead of accepting a
+successful run retained from an older release. The wheel hash stamp makes an
+already prepared runtime a no-op.
+Migration, web, worker, and maintenance entrypoints validate the prepared
+runtime and fail closed if its release stamp is absent or stale. If package
+installation fails, repair and restart the wheel-runtime unit before retrying
+`lx-annotate-migrate.service`; do not run `pip` concurrently with application
+units.
+
+`lx-annotate-migrate.service` runs
+`repair_legacy_migration_history --apply` before Django's `migrate` command.
+The repair is additive and records only the reviewed canonical prefix for a
+recognized legacy leaf. Inspect the automatic repair result with:
+
+```bash
+sudo journalctl -u lx-annotate-migrate.service -b --no-pager \
+  | grep lx_annotate.legacy_migration_history_repair
 ```
 
 If automatic terminology provisioning warns, inspect the packaged data and

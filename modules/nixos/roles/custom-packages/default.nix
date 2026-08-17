@@ -1,15 +1,23 @@
-{ lib
-, pkgs
-, config
-, ...
+{
+  lib,
+  pkgs,
+  config,
+  ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.roles.custom-packages;
 
-  # Check if both podman and nvidia are enabled  
-  podmanEnabled = config.services.luxnix.podman.enable or config.services.virtualisation.podman.enable or config.luxnix.generic-settings.virtualization.enable or false;
-  nvidiaEnabled = (config.luxnix.nvidia-default.enable or false) || (config.luxnix.nvidia-prime.enable or false) || (config.luxnix.generic-settings.gpu.nvidia.enable or false);
+  # Check if both podman and nvidia are enabled
+  podmanEnabled =
+    (config.services.luxnix.podman.enable or false)
+    || (config.services.virtualisation.podman.enable or false)
+    || (config.luxnix.generic-settings.virtualization.enable or false);
+  nvidiaEnabled =
+    (config.luxnix.nvidia-default.enable or false)
+    || (config.luxnix.nvidia-prime.enable or false)
+    || (config.luxnix.generic-settings.gpu.nvidia.enable or false);
 
   dev01 = [ ];
   dev02 = [ ];
@@ -127,40 +135,39 @@ with lib.luxnix; let
     nvidia-container-toolkit
   ];
 
-  customPackages = with pkgs; [
-    bash
-    bashInteractive
-    iftop
-    bmon
-    nload
-  ]
-  ++ optionals cfg.kdePlasma kdePlasma
-  ++ optionals cfg.baseDevelopment baseDevelopment
-  ++ optionals cfg.office office
-  ++ optionals cfg.visuals visuals
-  ++ optionals cfg.dev01 dev01
-  ++ optionals cfg.dev02 dev02
-  ++ optionals cfg.dev03 dev03
-  ++ optionals cfg.cloud cloud
-  ++ optionals cfg.protonmail [
-    protonmail-bridge-gui
-    protonmail-desktop
-    proton-pass
-    planify
-  ]
-  ++ optionals cfg.hardwareAcceleration [
-    pciutils
-    libva
+  customPackages =
+    with pkgs;
+    [
+      bash
+      bashInteractive
+      iftop
+      bmon
+      nload
+    ]
+    ++ optionals cfg.kdePlasma kdePlasma
+    ++ optionals cfg.baseDevelopment baseDevelopment
+    ++ optionals cfg.office office
+    ++ optionals cfg.visuals visuals
+    ++ optionals cfg.dev01 dev01
+    ++ optionals cfg.dev02 dev02
+    ++ optionals cfg.dev03 dev03
+    ++ optionals cfg.cloud cloud
+    ++ optionals cfg.protonmail [
+      protonmail-bridge-gui
+      protonmail-desktop
+      proton-pass
+      planify
+    ]
+    ++ optionals cfg.hardwareAcceleration [
+      pciutils
+      libva
 
-    vdpauinfo # sudo vainfo
-    libva-utils # sudo vainfo
-  ]
-  ++ optionals (podmanEnabled && nvidiaEnabled) podmanNvidia
-  ;
+      vdpauinfo # sudo vainfo
+      libva-utils # sudo vainfo
+    ]
+    ++ optionals (podmanEnabled && nvidiaEnabled) podmanNvidia;
 
-  ldPackages = lib.mkIf cfg.ld.enable (
-    ldBase ++ optionals cfg.cuda ldCuda
-  );
+  ldPackages = lib.mkIf cfg.ld.enable (ldBase ++ optionals cfg.cuda ldCuda);
 in
 {
   options.roles.custom-packages = {
@@ -181,7 +188,6 @@ in
     cloud = mkBoolOpt false "Add Cloud packages to custom packages";
     hardwareAcceleration = mkBoolOpt false "Add Hardware Acceleration packages to custom packages";
   };
-
 
   config = mkIf cfg.enable {
     environment.systemPackages = customPackages;

@@ -1,12 +1,17 @@
-{ lib
-, pkgs
-, config
-, ...
+{
+  lib,
+  pkgs,
+  config,
+  ...
 }:
-with lib; let
+with lib;
+let
   cfg = config.roles.aglnet.host;
 
-  defaultBackupNameservers = [ "8.8.8.8" "1.1.1.1" ];
+  defaultBackupNameservers = [
+    "8.8.8.8"
+    "1.1.1.1"
+  ];
   defaultPort = 1194;
   defaultProtocol = "TCP";
   defaultProtocolLc = "tcp";
@@ -20,7 +25,6 @@ with lib; let
   defaultKeepalive = "10 1200";
   defaultCipher = "AES-256-GCM";
   defaultVerbosity = "3";
-
 
   defaultCaPath = "/etc/openvpn/ca.pem";
   defaultTlsAuthPath = "/etc/openvpn/tls.pem";
@@ -219,7 +223,6 @@ in
 
   };
 
-
   config = mkIf cfg.enable {
     environment = {
       systemPackages = with pkgs; [
@@ -228,11 +231,8 @@ in
     };
 
     systemd.tmpfiles.rules = [
-      "d /etc/openvpn 0750 admin users -" #TODO Harden?
+      "d /etc/openvpn 0750 admin users -" # TODO Harden?
     ];
-
-
-
 
     # Networking
     networking = {
@@ -292,7 +292,7 @@ in
           proto ${cfg.protocolLc}
           dev ${cfg.dev}
           server ${cfg.subnet} ${cfg.subnetIntern}
-        
+
           ${if cfg.persistKey then "persist-key" else ""}
           ${if cfg.persistTun then "persist-tun" else ""}
 
@@ -320,18 +320,17 @@ in
           push "dhcp-option DOMAIN ${cfg.localDomain}"
           push "dhcp-option DOMAIN-ROUTE ${cfg.localDomain}"
           push "dhcp-option DOMAIN-SEARCH ${cfg.localDomain}"  # Add search domain
-        
+
         '';
 
       in
       {
-        restartAfterSleep = cfg.restartAfterSleep;
+        inherit (cfg) restartAfterSleep;
 
         servers = {
           "${cfg.networkName}" = {
-            config = config;
-            autoStart = cfg.autoStart;
-            updateResolvConf = cfg.updateResolvConf;
+            inherit config;
+            inherit (cfg) autoStart updateResolvConf;
           };
         };
       };

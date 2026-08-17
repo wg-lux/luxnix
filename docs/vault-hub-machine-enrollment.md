@@ -160,7 +160,7 @@ only the approved custodian backup required by the credential policy.
 
 ## 6. Deploy and verify
 
-During initial `gc-02` and `gc-10` enrollment,
+During initial `gc-*` enrollment,
 `vault.client.auth.deferUntilProvisioned = true` makes authentication failures
 a non-failing systemd condition. The NixOS switch can finish, but
 `vault-auth-setup.service` is deliberately inactive and LX-Annotate remains
@@ -207,11 +207,11 @@ sudo systemctl start luxnix-vault-issue-hub-client-certificate.service
 systemctl is-active vault-auth-setup.service
 ```
 
-The last command must print `active`. Then remove the temporary setting from
-the site's file under
-`ansible/inventory/host_vars/`, regenerate the host configuration, and switch
-once more. From that point onward, missing credentials and real Vault
-authentication errors fail activation normally.
+The last command must print `active`. After every active GC host has completed
+enrollment, remove the temporary `vault.client.auth.deferUntilProvisioned`
+setting from `ansible/inventory/group_vars/gpu_client.yml`, regenerate the host
+configurations, and switch once more. From that point onward, missing
+credentials and real Vault authentication errors fail activation normally.
 
 Deploy `gs-02` first, then the site:
 

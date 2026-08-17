@@ -13,7 +13,10 @@ from lx_administration.autoconf import (  # noqa: E402
     AutoconfConfigError,
     AutoconfPipelineError,
 )
-from lx_administration.autoconf.main import run_pipeline  # noqa: E402
+from lx_administration.autoconf.main import (  # noqa: E402
+    run_isolated_nix_render,
+    run_pipeline,
+)
 
 # Refresh local host facts when needed with:
 # devenv tasks run autoconf:refresh-facts
@@ -42,7 +45,29 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         choices=AUTOCONF_OPTION_NAMES,
         help="print one resolved option value for scripts and exit",
     )
+    action.add_argument(
+        "--nix-output",
+        type=Path,
+        metavar="PATH",
+        help=(
+            "render existing merged data into a new directory outside the "
+            "repository without replacing configured Nix outputs"
+        ),
+    )
     return parser.parse_args(argv)
+
+
+def _isolated_nix_output(path: Path) -> Path:
+    """Resolve and constrain a render-only destination outside the repository."""
+    destination = path.expanduser().resolve()
+    try:
+        destination.relative_to(REPO_ROOT)
+    except ValueError:
+        return destination
+    raise AutoconfPipelineError(
+        "--nix-output must name a new directory outside the repository: "
+        f"{destination}"
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -65,7 +90,12 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     try:
-        run_pipeline(config)
+        if args.nix_output is not None:
+            output_root = _isolated_nix_output(args.nix_output)
+            run_isolated_nix_render(config, output_root)
+            print(f"isolated Nix render output: {output_root}")
+        else:
+            run_pipeline(config)
     except AutoconfPipelineError as exc:
         print(f"autoconf generation error: {exc}", file=sys.stderr)
         return 1

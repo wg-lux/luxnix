@@ -56,6 +56,28 @@ in
         '';
       }
       {
+        name = "hub-envelope-keys-are-role-separated-and-fail-closed";
+        type = "script";
+        script = ''
+          ${ntlib.helpers.path [ pkgs.gnugrep ]}
+          ${ntlib.helpers.scriptHelpers}
+          assert_file_contains ${vaultModule} 'lx_hub_recipient_public_key' "sites must receive the hub envelope public key through managed secrets"
+          assert_file_contains ${vaultModule} 'kv_mount/data/.*recipientPublicKeyKvPath' "site AppRoles may read the dedicated hub recipient public-key path"
+          assert_file_contains ${vaultModule} 'vault kv put.*public_key=-' "PKI bootstrap must publish only the hub recipient public key"
+          assert_file_contains ${vaultModule} 'LUXNIX_VAULT_ALLOW_HUB_RECIPIENT_ROTATION' "recipient public-key replacement must require an explicit rotation action"
+          assert_file_contains ${vaultModule} 'openssl pkey -pubin' "published and fetched recipient keys must be parsed as public keys"
+          assert_file_contains ${vaultModule} 'X25519 PEM public key' "published and fetched recipient keys must be restricted to X25519"
+          assert_file_contains ${lxAnnotateConfig} 'lx-annotate-hub-envelope-key-preflight' "hub sender and receiver services must be gated on envelope-key validation"
+          assert_file_contains ${lxAnnotateConfig} 'builtins.length cfg\.hub\.transferApi\.recipientPrivateKeyFiles <= 3' "recipient rotation must permit only a bounded current-and-retiring key set"
+          assert_file_contains ${lxAnnotateEnv} 'LX_ANNOTATE_HUB_EXPORT_RECIPIENT_PUBLIC_KEY_FILE' "site workers must receive only the hub recipient public-key path"
+          assert_file_contains ${lxAnnotateEnv} 'ENDOREG_HUB_TRANSFER_RECIPIENT_PRIVATE_KEY_FILES' "the hub receiver must receive its explicit private-key path list"
+          if grep -Eq 'vault kv put.*private_key' ${vaultModule}; then
+            echo "the hub recipient private key must never be published to Vault KV" >&2
+            exit 1
+          fi
+        '';
+      }
+      {
         name = "lx-annotate-network-nodes-are-provisioned-at-the-model-boundary";
         type = "script";
         script = ''

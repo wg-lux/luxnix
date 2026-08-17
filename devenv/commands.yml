@@ -125,6 +125,33 @@ commands:
 # Tasks are listed separately because they are invoked through `devenv tasks`
 # rather than the shell-wrapper namespace above.
 tasks:
+  - id: nix-quality:check
+    summary: Run ratcheted parse, deadnix, statix, nixfmt, and flake-checker checks without modifying files.
+    risk: read-only
+    operator_confirmation_required: false
+    usage: devenv tasks run nix-quality:check
+    implementation: scripts/nix-quality.py
+    policy: nix-quality.yml
+    documentation: docs/nix-quality.md
+
+  - id: nix-quality:generators
+    summary: Run 61 non-evaluating Autoconf render, isolated-output, and boot-renderer contracts.
+    risk: read-only
+    operator_confirmation_required: false
+    usage: devenv tasks run nix-quality:generators
+    implementation: devenv/tasks.nix
+    policy: nix-quality.yml
+    documentation: docs/nix-quality.md
+
+  - id: nix-quality:full
+    summary: Add full flake evaluation to the Nix quality checks.
+    risk: read-only
+    operator_confirmation_required: false
+    usage: devenv tasks run nix-quality:full
+    implementation: scripts/nix-quality.py
+    policy: nix-quality.yml
+    documentation: docs/nix-quality.md
+
   - id: env:setup
     summary: Prepare the development shell and probe optional CUDA support.
     risk: local-state

@@ -15,8 +15,6 @@ let
     publicCertPath = "/run/lx-annotate-ssl/lx-annotate-selfsigned.crt";
   } config;
 
-  defaultSslCertificatePath = sslCfg.certPath;
-  defaultSslKeyPath = sslCfg.keyPath;
   publicSslCertificatePath = sslCfg.publicCertPath;
 
   adminName = config.user.admin.name;
@@ -36,7 +34,8 @@ let
   repoDir = "${endoreg-service-user-home}/${repoDirName}";
   repoStaticRootPath = "${repoDir}/staticfiles";
   runtimeDataRootPath = cfg.runtime.encryptedDataDir;
-  resolveRuntimeDataPath = path:
+  resolveRuntimeDataPath =
+    path:
     let
       pathString = toString path;
     in
@@ -75,10 +74,7 @@ let
   runtimeWorkingDir = if useWheelRuntime then runtimeWheelRootPath else repoDir;
   staticRootPath = runtimeStaticRootPath;
   djangoStaticRootPath =
-    if useWheelRuntime then
-      "${runtimeWheelRootPath}/staticfiles"
-    else
-      repoStaticRootPath;
+    if useWheelRuntime then "${runtimeWheelRootPath}/staticfiles" else repoStaticRootPath;
   viteSourcePath = "${repoDir}/static";
 
   envDataDir = runtimeDataRootPath;
@@ -108,9 +104,10 @@ let
       cfg.django.baseUrl
     else
       "${envHttpProtocol}://${envDjangoHost}:${envDjangoPort}";
-  sslDir = sslCfg.sslDir;
-  sslKeyPath = sslCfg.keyPath;
-  sslCertPath = sslCfg.certPath;
+  inherit (sslCfg) sslDir;
+  sslKeyPath = if cfg.django.sslKeyPath != null then cfg.django.sslKeyPath else sslCfg.keyPath;
+  sslCertPath =
+    if cfg.django.sslCertificatePath != null then cfg.django.sslCertificatePath else sslCfg.certPath;
 
   envSystemdFilePath = "${runtimeRootPath}/.env.systemd";
   pythonInterpreter = "${cfg.runtime.pythonPackage}/bin/python3";
@@ -122,11 +119,9 @@ let
       [ managedEncryptedDataServiceName ]
     else
       lib.optionals (cfg.runtime.encryptionService != null) [ cfg.runtime.encryptionService ];
-  encryptedDataMountOptions =
-    lib.concatStringsSep "," cfg.runtime.managedEncryptedData.mountOptions;
+  encryptedDataMountOptions = lib.concatStringsSep "," cfg.runtime.managedEncryptedData.mountOptions;
 
-  makeAbsolute = path:
-    if lib.hasPrefix "/" path then path else "${runtimeWorkingDir}/${path}";
+  makeAbsolute = path: if lib.hasPrefix "/" path then path else "${runtimeWorkingDir}/${path}";
 
   envAssetDir = makeAbsolute cfg.django.assetDir;
   envStaticUrl = cfg.django.staticUrl;
@@ -151,34 +146,22 @@ let
   envIsCentralNode = cfg.django.extraSettings.IS_CENTRAL_NODE or false;
   envAnnotateDjangoSettingsModule = "lx_annotate.settings.settings_prod";
   envDjangoEnv = "production";
-  envCentralNodeFlag =
-    if envIsCentralNode || settingsProfile == "central" then "true" else "false";
+  envCentralNodeFlag = if envIsCentralNode || settingsProfile == "central" then "true" else "false";
   envDeploymentRole = cfg.runtime.deploymentRole;
 
   envDefaultCenter =
     let
       trimToString = value: lib.strings.trim (toString value);
-      explicitDefaultCenterKey = trimToString (
-        cfg.django.extraSettings.DEFAULT_CENTER_KEY or ""
-      );
+      explicitDefaultCenterKey = trimToString (cfg.django.extraSettings.DEFAULT_CENTER_KEY or "");
       hostDefaultCenterKey = trimToString config.roles.endoreg-client.defaultCenterKey;
     in
-    if explicitDefaultCenterKey != "" then
-      explicitDefaultCenterKey
-    else
-      hostDefaultCenterKey;
-  exportFramesStorageRootDefault =
-    config.roles.endoreg-client.paths.storagePersistingMountPoint;
-  externalCleanupArchiveRootDefault =
-    "${config.roles.endoreg-client.paths.storagePersistingMountPoint}/lx-annotate-archive";
-  emergencyReliefArchiveRootDefault =
-    "${config.roles.endoreg-client.paths.storagePersistingMountPoint}/lx-annotate-emergency-relief";
-  emergencyReliefManifestDirDefault =
-    "${emergencyReliefArchiveRootDefault}/manifests";
-  emergencyReliefStagingDirDefault =
-    "${emergencyReliefArchiveRootDefault}/.staging";
-  emergencyReliefValidatedExportDirsDefault =
-    [ "${runtimeDataRootPath}/export/frames" ];
+    if explicitDefaultCenterKey != "" then explicitDefaultCenterKey else hostDefaultCenterKey;
+  exportFramesStorageRootDefault = config.roles.endoreg-client.paths.storagePersistingMountPoint;
+  externalCleanupArchiveRootDefault = "${config.roles.endoreg-client.paths.storagePersistingMountPoint}/lx-annotate-archive";
+  emergencyReliefArchiveRootDefault = "${config.roles.endoreg-client.paths.storagePersistingMountPoint}/lx-annotate-emergency-relief";
+  emergencyReliefManifestDirDefault = "${emergencyReliefArchiveRootDefault}/manifests";
+  emergencyReliefStagingDirDefault = "${emergencyReliefArchiveRootDefault}/.staging";
+  emergencyReliefValidatedExportDirsDefault = [ "${runtimeDataRootPath}/export/frames" ];
   mkDjangoOptions = import ../../lib/django-options.nix { inherit lib; };
   dataRecoveryStateDir = "${runtimeRootPath}/state";
   dataRecoveryStateFile = "${dataRecoveryStateDir}/effective-data-dir.env";
@@ -207,7 +190,8 @@ let
         endoreg-service-user-name
         endoreg-service-user
         endoreg-service-user-home
-        endoreg-service-group-name;
+        endoreg-service-group-name
+        ;
     };
     names = {
       inherit scriptName exportFramesScriptName;
@@ -264,7 +248,8 @@ let
         legacyMediaProcessedReportDir
         legacyMediaProcessedVideoDir
         runtimeProcessedReportDir
-        runtimeProcessedVideoDir;
+        runtimeProcessedVideoDir
+        ;
     };
     env = {
       inherit
@@ -287,7 +272,8 @@ let
         envDeploymentRole
         envDefaultCenter
         envIsCentralNode
-        settingsProfile;
+        settingsProfile
+        ;
     };
     runtime = {
       inherit
@@ -297,12 +283,11 @@ let
         packageVersion
         managedEncryptedDataServiceName
         encryptionServiceUnits
-        encryptedDataMountOptions;
+        encryptedDataMountOptions
+        ;
     };
     defaults = {
       inherit
-        defaultSslCertificatePath
-        defaultSslKeyPath
         exportFramesStorageRootDefault
         externalCleanupArchiveRootDefault
         emergencyReliefArchiveRootDefault
@@ -310,7 +295,8 @@ let
         emergencyReliefStagingDirDefault
         emergencyReliefValidatedExportDirsDefault
         processedReportDirName
-        processedVideoDirName;
+        processedVideoDirName
+        ;
     };
     helpers = {
       inherit makeAbsolute mkDjangoOptions;
@@ -318,5 +304,11 @@ let
   };
 in
 {
-  inherit cfg gs gsp sslCfg lxAnnotateRuntime;
+  inherit
+    cfg
+    gs
+    gsp
+    sslCfg
+    lxAnnotateRuntime
+    ;
 }

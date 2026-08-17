@@ -132,8 +132,16 @@ in
     in
     mkMerge [
       {
-        # Storage settings
-        luxnix.storage.enable = mkDefault true;
+        luxnix = {
+          # Storage settings
+          storage.enable = mkDefault true;
+          nvidia-prime.enable = true;
+
+          # Development clients must remain usable while the central Vault host is
+          # being rebuilt. Existing local secrets are reused; first provisioning
+          # still fails closed if a required secret has never been deployed.
+          vault.client.allowOffline = mkDefault true;
+        };
 
         user.client.enable = mkDefault true;
         user.endoreg-service-user.enable = true;
@@ -146,13 +154,6 @@ in
           aglnet.client.enable = true;
           managed-secrets.enable = mkDefault true;
         };
-
-        luxnix.nvidia-prime.enable = true;
-
-        # Development clients must remain usable while the central Vault host is
-        # being rebuilt. Existing local secrets are reused; first provisioning
-        # still fails closed if a required secret has never been deployed.
-        luxnix.vault.client.allowOffline = mkDefault true;
 
         services.luxnix.lxAnnotateLocal = lxAnnotateRole.service;
 
@@ -177,14 +178,12 @@ in
         ];
 
         # Update Home Manager configuration to use XDG User Dirs and OutOfStore symlinks
-        home-manager.users.${clientUserName} =
-          { ... }:
-          {
-            home.username = mkDefault clientUserName;
-            home.stateVersion = mkDefault clientHomeStateVersion;
+        home-manager.users.${clientUserName} = _: {
+          home.username = mkDefault clientUserName;
+          home.stateVersion = mkDefault clientHomeStateVersion;
 
-            roles.desktop.enable = mkDefault true;
-          };
+          roles.desktop.enable = mkDefault true;
+        };
       }
       fileMoverRole.config
       lxAiRole.config

@@ -65,7 +65,16 @@ paths:
   development_tasks: devenv/tasks.nix
   development_scripts: devenv/scripts.nix
   development_command_catalog: devenv/commands.yml
+  nix_quality_policy: nix-quality.yml
+  nix_quality_runner: scripts/nix-quality.py
   network_topology_map: docs/network-topology.yaml
+
+quality:
+  generator_tests:
+    - tests/test_autoconf_rendering.py
+    - tests/test_ansible_autoconf_nixos_config.py
+    - tests/test_autoconf_cli.py
+    - tests/test_boot_decryption_renderer.py
 
 # Paths are durable and expected to exist unless their lifecycle is declared here.
 path_lifecycle:
@@ -126,6 +135,31 @@ host_conventions:
 # Risk is intentionally explicit so tools can distinguish inspection from mutation.
 # Commands containing <host> or <target-ip> require those values to be substituted.
 workflows:
+  - id: check-nix-quality
+    summary: Run fast, ratcheted source and lockfile quality checks without modifying files.
+    risk: read-only
+    documentation: docs/nix-quality.md
+    prerequisites:
+      - devenv
+    command: devenv tasks run nix-quality:check
+
+  - id: check-nix-quality-generators
+    summary: Run 61 non-evaluating Autoconf and boot-decryption renderer contracts.
+    risk: read-only
+    documentation: docs/nix-quality.md
+    prerequisites:
+      - devenv
+    command: devenv tasks run nix-quality:generators
+
+  - id: check-nix-quality-full
+    summary: Run all Nix quality checks plus full flake evaluation.
+    risk: read-only
+    documentation: docs/nix-quality.md
+    prerequisites:
+      - devenv
+      - nix
+    command: devenv tasks run nix-quality:full
+
   - id: discover-hosts
     summary: List host configurations exported by the flake.
     risk: read-only

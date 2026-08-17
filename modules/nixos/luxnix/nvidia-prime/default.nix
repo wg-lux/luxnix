@@ -1,12 +1,12 @@
-{ config
-, inputs
-, pkgs
-, lib
-, ...
+{
+  config,
+  lib,
+  ...
 }:
 
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.luxnix.nvidia-prime;
 
 in
@@ -15,7 +15,7 @@ in
     enable = mkBoolOpt false "Enable or disable the Nvidia GPU Support";
 
     # Other bool options are: enable cuda support for nix packages, add xserver driver, add initrd-kernel-module, addd autoadddriverrunpath
-    # enable prime sync, enable modesetting, 
+    # enable prime sync, enable modesetting,
 
     # input for nvidia, intel and amd busid
     nvidiaBusId = mkOption {
@@ -45,35 +45,38 @@ in
 
   config = mkIf cfg.enable {
 
-    hardware.graphics = {
-      enable = true;
+    hardware = {
+      graphics = {
+        enable = true;
+      };
+
+      nvidia-container-toolkit.enable = lib.mkDefault true;
+      nvidia = {
+
+        prime = {
+          sync.enable = true;
+          inherit (cfg) nvidiaBusId;
+          "${cfg.onboardGpuType}BusId" = cfg.onboardBusId;
+        };
+        modesetting.enable = true;
+        nvidiaSettings = true;
+
+        powerManagement.enable = true;
+        powerManagement.finegrained = false;
+        open = lib.mkForce false;
+
+        package = config.boot.kernelPackages.nvidiaPackages.production;
+
+        gsp.enable = false; # GSP disabled is supposed to solve sleep issues on laptops
+
+      };
     };
 
     nixpkgs.config.cudaSupport = true;
 
     services.xserver.videoDrivers = [ "nvidia" ];
-    hardware.nvidia-container-toolkit.enable = lib.mkDefault true;
-    hardware.nvidia = {
-
-      prime = {
-        sync.enable = true;
-        nvidiaBusId = cfg.nvidiaBusId;
-        "${cfg.onboardGpuType}BusId" = cfg.onboardBusId;
-      };
-      modesetting.enable = true;
-      nvidiaSettings = true;
-
-      powerManagement.enable = true;
-      powerManagement.finegrained = false;
-      open = lib.mkForce false;
-
-      package = config.boot.kernelPackages.nvidiaPackages.production;
-
-      gsp.enable = false; # GSP disabled is supposed to solve sleep issues on laptops
-
-    };
     boot.extraModprobeConfig = ''
-        options nvidia NVreg_EnableGpuFirmware=0
+      options nvidia NVreg_EnableGpuFirmware=0
     '';
   };
 

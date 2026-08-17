@@ -5,9 +5,11 @@
   ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.system.nix;
-in {
+in
+{
   options.system.nix = with types; {
     enable = mkBoolOpt false "Whether or not to manage nix configuration";
   };
@@ -22,19 +24,19 @@ in {
 
     #TODO https://github.com/nix-community/nixGL
 
-###########
+    ###########
 
-          # # makes it easy to use "nix run nixGL --impure -- program"
-          # default = pkgs.auto.nixGLDefault;
+    # # makes it easy to use "nix run nixGL --impure -- program"
+    # default = pkgs.auto.nixGLDefault;
 
-          # nixGLDefault = pkgs.auto.nixGLDefault;
-          # nixGLNvidia = pkgs.auto.nixGLNvidia;
-          # nixGLNvidiaBumblebee = pkgs.auto.nixGLNvidiaBumblebee;
-          # nixGLIntel = pkgs.nixGLIntel;
-          # nixVulkanNvidia = pkgs.auto.nixVulkanNvidia;
-          # nixVulkanIntel = pkgs.nixVulkanIntel;
+    # nixGLDefault = pkgs.auto.nixGLDefault;
+    # nixGLNvidia = pkgs.auto.nixGLNvidia;
+    # nixGLNvidiaBumblebee = pkgs.auto.nixGLNvidiaBumblebee;
+    # nixGLIntel = pkgs.nixGLIntel;
+    # nixVulkanNvidia = pkgs.auto.nixVulkanNvidia;
+    # nixVulkanIntel = pkgs.nixVulkanIntel;
 
-###########
+    ###########
     home.packages = with pkgs; [
       # nixgl.nvidiaPackages
       # nixgl.
@@ -47,8 +49,6 @@ in {
     programs = {
       home-manager.enable = true;
     };
-
-    
 
     nix = {
       settings = {
@@ -64,7 +64,10 @@ in {
           "numtide.cachix.org-1:2ps1kLBUWjxIneOy1Ik6cQjb41X0iXVXeHigGmycPPE="
         ];
 
-        experimental-features = ["nix-command" "flakes"];
+        experimental-features = [
+          "nix-command"
+          "flakes"
+        ];
         warn-dirty = false;
         use-xdg-base-directories = true;
       };
@@ -72,8 +75,8 @@ in {
 
     news = {
       display = "silent";
-      json = lib.mkForce {};
-      entries = lib.mkForce [];
+      json = lib.mkForce { };
+      entries = lib.mkForce [ ];
     };
   };
 }

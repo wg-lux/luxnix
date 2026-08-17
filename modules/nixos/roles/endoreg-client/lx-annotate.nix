@@ -941,10 +941,15 @@ let
           extraSettings = djangoExtraSettings;
         }
       );
-      serviceDjango = (lib.mapAttrs (_: value: lib.mkDefault value) django) // {
-        extraSettings = lib.mapAttrs (_: value: lib.mkDefault value) djangoExtraSettings;
-        port = lib.mkForce 8117;
-      };
+      # A null role value means "let the service choose its fallback". Passing
+      # it through as mkDefault would conflict with a non-null mkDefault in the
+      # service module at the same priority (notably for the TLS paths).
+      serviceDjango =
+        (lib.mapAttrs (_: value: lib.mkDefault value) (lib.filterAttrs (_: value: value != null) django))
+        // {
+          extraSettings = lib.mapAttrs (_: value: lib.mkDefault value) djangoExtraSettings;
+          port = lib.mkForce 8117;
+        };
 
       serviceRuntime = {
         mode = lib.mkDefault runtimeCfg.mode;
@@ -990,7 +995,7 @@ let
       };
     in
     {
-      enable = roleCfg.enable;
+      inherit (roleCfg) enable;
       environment = {
         values = environment;
         extraEnv = {
@@ -1005,11 +1010,10 @@ let
         };
       };
       service = {
-        enable = roleCfg.enable;
+        inherit (roleCfg) enable source;
         debug.enable = roleCfg.debug.enable;
-        source = roleCfg.source;
         django = serviceDjango;
-        database = cfg.database;
+        inherit (cfg) database;
         runtime = serviceRuntime;
       };
     };

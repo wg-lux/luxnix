@@ -22,10 +22,10 @@ in
   };
 
   config = mkIf cfg.enable {
-      # add package smartmontools
-      environment.systemPackages = with pkgs; [
-        smartmontools
-      ];
+    # add package smartmontools
+    environment.systemPackages = with pkgs; [
+      smartmontools
+    ];
 
   };
 }

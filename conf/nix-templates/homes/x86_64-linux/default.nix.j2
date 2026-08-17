@@ -1,53 +1,43 @@
 # /default.nix
-{ pkgs, ... }: {
-{% raw %}
-{% endraw %}
+_: {
+{% macro render_attrset(data, indentation) %}
+{% for key, value in data.items() %}
+{{ " " * indentation }}{{ key }} = {% if value is mapping %}
+{
+{{ render_attrset(value, indentation + 2) }}{{ " " * indentation }}};
+{% else %}
+{{ "[ ]" if value is sequence and value is not string and (value | length) == 0 else value | to_nix }};
+{% endif %}
+{% endfor %}
+{% endmacro %}
+{% if cli %}
+  cli = {
+{{ render_attrset(cli, 4) }}  };
+{% endif %}
+{% if desktops %}
+  desktops = {
+{{ render_attrset(desktops, 4) }}  };
+{% endif %}
+{% if networking %}
+  networking = {
+{{ render_attrset(networking, 4) }}  };
+{% endif %}
+{% if editors %}
+  programs = {
+{{ render_attrset(editors, 4) }}  };
+{% endif %}
+{% if services %}
+  services = {
+{{ render_attrset(services, 4) }}  };
+{% endif %}
+{% if luxnix %}
+  luxnix = {
+{{ render_attrset(luxnix, 4) }}  };
+{% endif %}
+{% if roles %}
+  roles = {
+{{ render_attrset(roles, 4) }}  };
+{% endif %}
 
-{%- macro render_dict(data, parent_key='') %}
-{%- for key, value in data.items() %}
-  {%- set full_key = parent_key ~ "." ~ key if parent_key else key %}
-  {%- if value is mapping %}
-{{ render_dict(value, full_key) }}
-  {%- else %}
-{{ full_key }} = {{ value | to_nix }};
-  {% endif %}
-{%- endfor %}
-{%- endmacro %}
-
-{%- if cli %}
-{{ render_dict(cli, "cli") }}
-{%- endif %}
-
-{%- if desktops %}
-{{ render_dict(desktops, "desktops") }}
-{%- endif %}
-
-{%- if networking %}
-{{ render_dict(networking, "networking") }}
-{%- endif %}
-
-{%- if editors %}
-{{ render_dict(editors, "programs") }}
-{%- endif %}
-
-{%- if services %}
-{{ render_dict(services, "services") }}
-{%- endif %}
-
-{%- if luxnix %}
-{{ render_dict(luxnix, "luxnix") }}
-{%- endif %}
-
-
-
-{%- if roles %}
-{%- for role_key, role_dict in roles.items() %}
-  {%- for subkey, subval in role_dict.items() %}
-roles.{{ role_key }}.{{ subkey }} = {{ subval | to_nix }};
-  {% endfor %}
-{%- endfor %}
-{%- endif %}
-
-home.stateVersion = {{ stateVersion | nix_string }};
-
-}
+  home.stateVersion = {{ stateVersion | nix_string }};
+}{{ "\n" }}

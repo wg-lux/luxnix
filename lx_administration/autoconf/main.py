@@ -1,8 +1,12 @@
+import logging
+from pathlib import Path
+
 from lx_administration.logging import get_logger, shutdown_logging
 
 from .config import AutoconfConfig
 from .imports import build_home_merged_variables, import_source_data
 from .nix import render_configurations
+from .nix.main import render_isolated_configurations
 
 
 def run_pipeline(config: AutoconfConfig) -> None:
@@ -28,3 +32,10 @@ def run_from_config(config: AutoconfConfig) -> None:
     """Run the pipeline using only options from the central YAML config."""
     config.require_valid()
     run_pipeline(config)
+
+
+def run_isolated_nix_render(config: AutoconfConfig, nix_output: Path) -> None:
+    """Render existing merged data without importing or replacing configured output."""
+    logger = logging.Logger("autoconf_isolated_nix_render")
+    logger.addHandler(logging.NullHandler())
+    render_isolated_configurations(config, nix_output=nix_output, logger=logger)

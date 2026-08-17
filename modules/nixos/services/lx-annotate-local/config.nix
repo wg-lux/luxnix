@@ -61,8 +61,6 @@ let
     encryptionServiceUnits
     ;
   inherit (runtime.defaults)
-    defaultSslCertificatePath
-    defaultSslKeyPath
     processedReportDirName
     processedVideoDirName
     ;
@@ -84,7 +82,6 @@ let
     else
       null;
   endoregDbRevision = endoregDbSource.rev or "unversioned";
-
 
   hubTransferProxyExtraConfig = ''
     # The shared virtual host also serves browser traffic, so client
@@ -162,7 +159,6 @@ let
           "--medical-field"
           terminologyInitialBundle.medicalField
         ]
-        ++ [ "--activate" ]
       );
   wheelRuntimePackage = pkgs.runCommand "lx-annotate-wheel-runtime-${packageVersion}" { } ''
     mkdir -p "$out/bin" "$out/libexec" "$out/share/lx-annotate"
@@ -284,6 +280,7 @@ let
       local staged_wheel_path=""
       local install_hash=""
       local installed_package_version=""
+      local install_allowed="''${LX_ANNOTATE_WHEEL_INSTALL_ALLOWED:-true}"
       local wheel_installer_revision="wheel-console-contract-v6-version-verified"
       local venv_created="false"
       local pip_cache_dir=${lib.escapeShellArg "${runtimeRootPath}/pip-cache"}
@@ -340,12 +337,20 @@ let
       exec 9>"$wheel_install_lock_file"
       flock 9
 
+      installed_hash="$(cat "$wheel_install_stamp_file" 2>/dev/null || true)"
+      if
+        [ "$install_allowed" != "true" ] \
+          && { [ "$install_hash" != "$installed_hash" ] || [ ! -x ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/python"} ]; }
+      then
+        echo "ERROR: The LX-Annotate wheel runtime is not prepared for this release." >&2
+        echo "Start lx-annotate-wheel-runtime.service before application units." >&2
+        exit 1
+      fi
+
       if [ ! -x ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/python"} ]; then
         "$python_bin" -m venv ${lib.escapeShellArg runtimeWheelVenvPath}
         venv_created="true"
       fi
-
-      installed_hash="$(cat "$wheel_install_stamp_file" 2>/dev/null || true)"
       if [ "$venv_created" = "true" ] || [ "$install_hash" != "$installed_hash" ]; then
         install -m 0640 "$wheel_path" "$staged_wheel_path"
         export PIP_CACHE_DIR="$pip_cache_dir"
@@ -428,6 +433,7 @@ let
     #!${pkgs.bash}/bin/bash
     set -euo pipefail
     source "$out/libexec/lx-annotate-wheel-runtime-lib"
+    export LX_ANNOTATE_WHEEL_INSTALL_ALLOWED=false
     lx_annotate_wheel_ensure
     lx_annotate_wheel_export_secret_env
     if [ "$sync_static" = "1" ]; then
@@ -452,6 +458,7 @@ let
     make_entrypoint lx-annotate-watch lx-annotate-watch 0
     make_entrypoint lx-annotate-export-frames lx-annotate-export-frames 0
     make_entrypoint lx-annotate-import-sap lx-annotate-import-sap 0
+    make_entrypoint lx-annotate-bootstrap-terminology lx-annotate-bootstrap-terminology 0
     make_entrypoint lx-dtypes-kb-registry lx-dtypes-kb-registry 0
     make_entrypoint lx-dtypes-prototype-kb-smoke lx-dtypes-prototype-kb-smoke 0
   '';
@@ -506,6 +513,9 @@ let
   hubNodeProvisioningServiceUnits = lib.optionals cfg.hub.nodeProvisioning.enable [
     "lx-annotate-hub-node-provisioning.service"
   ];
+  hubEnvelopePreflightServiceUnits = lib.optionals (
+    cfg.hub.transferApi.enable || cfg.hub.outboundTransfer.enable
+  ) [ "lx-annotate-hub-envelope-key-preflight.service" ];
   managedSecretsSetupUnits =
     lib.optionals (lib.attrByPath [ "roles" "managed-secrets" "enable" ] false config)
       [
@@ -684,6 +694,46 @@ let
     set -euo pipefail
     exec ${effectiveRuntimePackage}/bin/lx-annotate-manage shell < ${hubNodeProvisioningPython}
   '';
+  hubEnvelopeKeyPreflightScript = pkgs.writeShellScript "lx-annotate-hub-envelope-key-preflight" ''
+    set -euo pipefail
+
+    validate_regular_file() {
+      local path="$1"
+      local label="$2"
+      if [ -L "$path" ] || [ ! -f "$path" ] || [ ! -s "$path" ]; then
+        echo "ERROR: $label must be a non-empty regular non-symlink file: $path" >&2
+        exit 1
+      fi
+    }
+
+    ${lib.optionalString cfg.hub.outboundTransfer.enable ''
+      public_key=${lib.escapeShellArg (toString cfg.hub.outboundTransfer.recipientPublicKeyFile)}
+      validate_regular_file "$public_key" "hub envelope recipient public key"
+      if ! ${pkgs.openssl}/bin/openssl pkey -pubin -in "$public_key" -text_pub -noout 2>/dev/null \
+        | ${pkgs.gnugrep}/bin/grep -q X25519; then
+        echo "ERROR: hub envelope recipient public key is not a valid X25519 PEM public key: $public_key" >&2
+        exit 1
+      fi
+    ''}
+
+    ${lib.concatMapStringsSep "\n" (privateKeyFile: ''
+      private_key=${lib.escapeShellArg privateKeyFile}
+      validate_regular_file "$private_key" "hub envelope recipient private key"
+      if [ "$(${pkgs.coreutils}/bin/stat -c %U "$private_key")" != "root" ] \
+        || [ "$(${pkgs.coreutils}/bin/stat -c %G "$private_key")" != ${lib.escapeShellArg config.luxnix.generic-settings.sensitiveServiceGroupName} ] \
+        || ! ${pkgs.findutils}/bin/find "$private_key" -maxdepth 0 -perm -0040 -print -quit | ${pkgs.gnugrep}/bin/grep -q . \
+        || ${pkgs.findutils}/bin/find "$private_key" -maxdepth 0 -perm /0007 -print -quit | ${pkgs.gnugrep}/bin/grep -q .; then
+        echo "ERROR: hub envelope recipient private key must be root-owned, group-readable by the sensitive service group, and inaccessible to other users: $private_key" >&2
+        exit 1
+      fi
+      if ! ${pkgs.openssl}/bin/openssl pkey -in "$private_key" -check -noout 2>/dev/null \
+        || ! ${pkgs.openssl}/bin/openssl pkey -in "$private_key" -text -noout 2>/dev/null \
+          | ${pkgs.gnugrep}/bin/grep -q X25519; then
+        echo "ERROR: hub envelope recipient private key is not a valid X25519 PEM private key: $private_key" >&2
+        exit 1
+      fi
+    '') cfg.hub.transferApi.recipientPrivateKeyFiles}
+  '';
 
   mkWorker =
     {
@@ -713,8 +763,10 @@ let
         wants
         requires
         ;
-      concurrency = pool.concurrency;
-      maxTasksPerChild = pool.maxTasksPerChild;
+      inherit (pool)
+        concurrency
+        maxTasksPerChild
+        ;
       serviceConfig = {
         MemoryHigh = pool.memoryHigh;
         MemoryMax = pool.memoryMax;
@@ -750,11 +802,18 @@ let
   postValidationWorkerEnv = { };
   inferenceWorkerEnv = { };
   trainingWorkerEnv = { };
+  wheelRuntimePrepareServiceUnits = lib.optionals useWheelRuntime [
+    "lx-annotate-wheel-runtime.service"
+  ];
+  terminologyBootstrapServiceUnits = lib.optionals useWheelRuntime [
+    "lx-annotate-terminology-bootstrap.service"
+  ];
   appServiceBaseAfter = [
     "network.target"
     "lx-annotate-runtime-env.service"
     "systemd-tmpfiles-setup.service"
   ]
+  ++ wheelRuntimePrepareServiceUnits
   ++ localRedisServiceUnits
   ++ localPostgresServiceUnits
   ++ localPostgresSetupUnits
@@ -763,6 +822,7 @@ let
   appServiceBaseWants = [
     "lx-annotate-runtime-env.service"
   ]
+  ++ wheelRuntimePrepareServiceUnits
   ++ localRedisServiceUnits
   ++ localPostgresServiceUnits
   ++ localPostgresSetupUnits
@@ -771,6 +831,7 @@ let
   appServiceBaseRequires = [
     "lx-annotate-runtime-env.service"
   ]
+  ++ wheelRuntimePrepareServiceUnits
   ++ managedSecretsSetupUnits
   ++ encryptionServiceUnits;
   lxAnnotateJournalNamespace = "lx-annotate";
@@ -821,54 +882,9 @@ let
     set -euo pipefail
 
     registry_path=${lib.escapeShellArg terminologyRegistryPath}
-
-    if [ ! -e "$registry_path" ]; then
-      ${
-        if terminologyInitialBundle == null then
-          ''
-            if ! ${effectiveRuntimePackage}/bin/lx-dtypes-kb-registry add-current \
-              "$registry_path" \
-              --activate; then
-              echo "WARNING: the default terminology bundle shipped in the wheel environment could not be registered; LX-Annotate remains available without terminology features." >&2
-              exit 0
-            fi
-          ''
-        else
-          ''
-            if ! ${effectiveRuntimePackage}/bin/lx-dtypes-kb-registry add \
-              "$registry_path" \
-              ${terminologyInitialBundleArgs}; then
-              echo "WARNING: the configured initial terminology bundle could not be installed; frontend setup remains available." >&2
-              exit 0
-            fi
-          ''
-      }
-    fi
-
-    active_module="$(${pkgs.jq}/bin/jq -er '.active.module_name | select(type == "string" and length > 0)' "$registry_path")" || {
-      echo "WARNING: terminology registry has no valid active module; frontend setup remains available." >&2
-      exit 0
-    }
-    active_version="$(${pkgs.jq}/bin/jq -er '.active.version | select(type == "string" and length > 0)' "$registry_path")" || {
-      echo "WARNING: terminology registry has no valid active version; frontend setup remains available." >&2
-      exit 0
-    }
-    if ! ${pkgs.jq}/bin/jq -e \
-      --arg module "$active_module" \
-      --arg version "$active_version" \
-      '.modules[$module][$version] != null' \
-      "$registry_path" >/dev/null; then
-      echo "WARNING: active terminology identity is not registered; frontend setup remains available." >&2
-      exit 0
-    fi
-
-    if ! LX_DTYPES_KB_REGISTRY="$registry_path" \
-      ${effectiveRuntimePackage}/bin/lx-dtypes-prototype-kb-smoke \
-        --module "$active_module" \
-        --version "$active_version" >/dev/null; then
-      echo "WARNING: active terminology bundle did not pass startup validation; annotation remains available and the bundle can be replaced from the frontend." >&2
-      exit 0
-    fi
+    exec ${effectiveRuntimePackage}/bin/lx-annotate-bootstrap-terminology \
+      --registry "$registry_path" \
+      ${terminologyInitialBundleArgs}
   '';
   sapImportServiceScript = pkgs.writeShellScript "lx-annotate-sap-import-service" ''
     set -euo pipefail
@@ -945,7 +961,21 @@ let
       hostname = "hub-transfer";
       queues = [ "hub_transfer" ];
       pool = cfg.runtime.workerPools.hubTransfer;
-      mode = if cfg.hub.outboundTransfer.enable then "always" else "manual";
+      mode =
+        if
+          cfg.hub.outboundTransfer.enable
+          || lib.attrByPath [
+            "services"
+            "luxnix"
+            "hubStorage"
+            "hubClient"
+            "balancing"
+            "enable"
+          ] false config
+        then
+          "always"
+        else
+          "manual";
       environment = postValidationWorkerEnv;
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];
@@ -953,7 +983,8 @@ let
         lib.optionals vaultClientHubPkiEnabled [
           "luxnix-vault-issue-hub-client-certificate.service"
         ]
-        ++ hubNodeProvisioningServiceUnits;
+        ++ hubNodeProvisioningServiceUnits
+        ++ hubEnvelopePreflightServiceUnits;
     };
     pipeline = mkWorker {
       unitName = "lx-annotate-celery-pipeline-worker";
@@ -1087,8 +1118,24 @@ let
       // workerCfg.serviceConfig;
     });
   workerServices = lib.listToAttrs (lib.mapAttrsToList mkWorkerService workerConfigs);
+  celeryBeatService = mkLxAnnotateAppService {
+    description = "LX-Annotate Celery periodic task scheduler";
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
+    serviceConfig = {
+      ExecStart = lib.escapeShellArgs [
+        "${effectiveRuntimePackage}/bin/lx-annotate-celery"
+        "beat"
+        "--loglevel=INFO"
+        "--schedule=/var/lib/lx-annotate-celery-beat/schedule"
+      ];
+      StateDirectory = "lx-annotate-celery-beat";
+      Restart = "on-failure";
+      RestartSec = "5s";
+    };
+  };
   mkTimer = unitName: timerCfg: {
-    description = timerCfg.description;
+    inherit (timerCfg) description;
     wantedBy = [ "timers.target" ];
     timerConfig = {
       Unit = "${unitName}.service";
@@ -1426,57 +1473,13 @@ let
     lxAnnotateEncryptedDataUmountScript
     ;
   workerSubservice = import ./subservices/workers.nix {
-    inherit workerServices workerTimers;
+    inherit celeryBeatService workerServices workerTimers;
   };
 in
 {
   config = mkIf cfg.enable (mkMerge [
     {
       environment.systemPackages = [ lxAnnotateMigrateVideoStreamableStorageScript ];
-
-      services.luxnix.lxAnnotateLocal.hub.enable = mkDefault (config.networking.hostName == "gs-02");
-      services.luxnix.lxAnnotateLocal.runtime.deploymentRole = mkDefault (
-        if cfg.hub.enable then "central_hub" else "site_node"
-      );
-      services.luxnix.lxAnnotateLocal.hub.outboundTransfer.clientCertificateFile =
-        mkIf vaultClientHubPkiEnabled (mkDefault config.luxnix.vault.client.hubPki.certificateFile);
-      services.luxnix.lxAnnotateLocal.hub.outboundTransfer.clientKeyFile = mkIf vaultClientHubPkiEnabled (
-        mkDefault config.luxnix.vault.client.hubPki.keyFile
-      );
-      services.luxnix.lxAnnotateLocal.hub.outboundTransfer.sourceNodeSecretFile =
-        mkIf vaultClientHubPkiEnabled (mkDefault config.luxnix.vault.client.hubPki.nodeSecretFile);
-      services.luxnix.lxAnnotateLocal.runtime.celeryBroker.requireSecureTransport = mkDefault (
-        cfg.runtime.clustered.enable
-        || (externalRedisConfigured && !isLocalRedisUrl cfg.runtime.externalServices.redisUrl)
-      );
-      services.luxnix.lxAnnotateLocal.hub.transferApi.requireMtls = mkIf (
-        cfg.runtime.deploymentRole == "central_hub"
-      ) (mkDefault true);
-      services.luxnix.ollama.enable = mkIf (cfg.runtime.llmInferenceWorker.mode == "always") (
-        mkDefault true
-      );
-
-      services.luxnix.fileMover = {
-        serviceDependencies = {
-          after = mkAfter fileMoverAfter;
-          wants = mkAfter fileMoverWants;
-          requires = mkAfter fileMoverRequires;
-        };
-        paths = {
-          destinationVideoDir = mkDefault runtimeWatcherVideoDirPath;
-          destinationReportDir = mkDefault runtimeWatcherReportDirPath;
-          stagingDir = mkDefault runtimeMoverStagingDirPath;
-        };
-        desktop.links = {
-          preanonymized_import = mkDefault desktopPreanonymizedLinkTarget;
-          sap_import = mkDefault desktopSapImportLinkTarget;
-        };
-        videoTranscodeFallback = {
-          command = mkDefault lxAnnotateFileMoverTranscodeCommand;
-          workingDir = mkDefault runtimeDataRootPath;
-          environmentScript = mkDefault lxAnnotateFileMoverTranscodeEnv;
-        };
-      };
 
       assertions = [
         {
@@ -1636,6 +1639,15 @@ in
           message = "services.luxnix.lxAnnotateLocal requires an application master key for encrypted storage. Set runtime.masterKeyFile, keep runtime.autoGenerateMasterKey = true, or enable vaultManagedEncryptedData.manageMasterKey.";
         }
         {
+          assertion = (cfg.django.sslCertificatePath == null) == (cfg.django.sslKeyPath == null);
+          message = "services.luxnix.lxAnnotateLocal.django.sslCertificatePath and sslKeyPath must either both be set or both be null.";
+        }
+        {
+          assertion =
+            sslCfg.enable || (cfg.django.sslCertificatePath != null && cfg.django.sslKeyPath != null);
+          message = "services.luxnix.lxAnnotateLocal requires explicit django.sslCertificatePath and sslKeyPath when services.luxnix.lxSsl.enable = false.";
+        }
+        {
           assertion = !cfg.hub.backup.enable || cfg.hub.enable;
           message = "services.luxnix.lxAnnotateLocal.hub.backup.enable requires services.luxnix.lxAnnotateLocal.hub.enable.";
         }
@@ -1648,21 +1660,43 @@ in
           message = "services.luxnix.lxAnnotateLocal.hub.transferApi.enable requires services.luxnix.lxAnnotateLocal.hub.enable.";
         }
         {
+          assertion = !cfg.hub.transferApi.enable || cfg.runtime.deploymentRole == "central_hub";
+          message = "services.luxnix.lxAnnotateLocal.hub.transferApi.enable requires runtime.deploymentRole = \"central_hub\".";
+        }
+        {
           assertion = !cfg.hub.transferApi.enable || cfg.hub.transferApi.requireSecureTransport;
           message = "services.luxnix.lxAnnotateLocal.hub.transferApi.enable requires services.luxnix.lxAnnotateLocal.hub.transferApi.requireSecureTransport = true.";
         }
-        # Enable for strict network mode
-        # {
-        #   assertion = !cfg.hub.transferApi.enable || cfg.hub.transferApi.requireMtls;
-        #   message = "services.luxnix.lxAnnotateLocal.hub.transferApi.enable requires services.luxnix.lxAnnotateLocal.hub.transferApi.requireMtls = true.";
-        # }
+        {
+          assertion = !cfg.hub.transferApi.enable || cfg.hub.transferApi.requireMtls;
+          message = "services.luxnix.lxAnnotateLocal.hub.transferApi.enable requires services.luxnix.lxAnnotateLocal.hub.transferApi.requireMtls = true.";
+        }
         {
           assertion = !cfg.hub.transferApi.enable || cfg.hub.transferApi.clientCaFile != null;
           message = "services.luxnix.lxAnnotateLocal.hub.transferApi.enable requires services.luxnix.lxAnnotateLocal.hub.transferApi.clientCaFile to be set.";
         }
         {
+          assertion =
+            !cfg.hub.transferApi.enable
+            || (
+              cfg.hub.transferApi.recipientPrivateKeyFiles != [ ]
+              && builtins.length cfg.hub.transferApi.recipientPrivateKeyFiles <= 3
+              &&
+                builtins.length cfg.hub.transferApi.recipientPrivateKeyFiles
+                == builtins.length (lib.unique cfg.hub.transferApi.recipientPrivateKeyFiles)
+              && lib.all (
+                path: lib.hasPrefix "/" path && !lib.hasInfix "," path
+              ) cfg.hub.transferApi.recipientPrivateKeyFiles
+            );
+          message = "hub.transferApi requires one current and at most two distinct retiring absolute X25519 recipient private-key paths.";
+        }
+        {
           assertion = !cfg.hub.outboundTransfer.enable || cfg.runtime.deploymentRole == "site_node";
           message = "services.luxnix.lxAnnotateLocal.hub.outboundTransfer.enable requires runtime.deploymentRole = \"site_node\".";
+        }
+        {
+          assertion = !cfg.hub.outboundTransfer.enable || cfg.hub.outboundTransfer.requireMtls;
+          message = "services.luxnix.lxAnnotateLocal.hub.outboundTransfer.enable requires services.luxnix.lxAnnotateLocal.hub.outboundTransfer.requireMtls = true.";
         }
         {
           assertion =
@@ -1677,6 +1711,15 @@ in
           assertion =
             !cfg.hub.outboundTransfer.enable || cfg.hub.outboundTransfer.sourceNodeSecretFile != null;
           message = "services.luxnix.lxAnnotateLocal.hub.outboundTransfer.enable requires a source-node secret file.";
+        }
+        {
+          assertion =
+            !cfg.hub.outboundTransfer.enable
+            || (
+              cfg.hub.outboundTransfer.recipientPublicKeyFile != null
+              && lib.hasPrefix "/" cfg.hub.outboundTransfer.recipientPublicKeyFile
+            );
+          message = "hub.outboundTransfer requires an absolute X25519 recipient public-key path.";
         }
         {
           assertion = !cfg.hub.nodeProvisioning.enable || cfg.hub.nodeProvisioning.nodes != [ ];
@@ -1751,246 +1794,313 @@ in
         }
       ];
 
-      services.luxnix.lxAnnotateLocal.django.extraSettings.IS_CENTRAL_NODE = mkIf cfg.hub.enable (
-        mkForce true
-      );
-      services.luxnix.lxAnnotateLocal.runtime.managedEncryptedData.enable =
-        mkIf cfg.runtime.vaultManagedEncryptedData.enable (mkDefault true);
-      services.luxnix.lxAnnotateLocal.runtime.managedEncryptedData.keyFile =
-        mkIf cfg.runtime.vaultManagedEncryptedData.enable (
-          mkDefault cfg.runtime.vaultManagedEncryptedData.keyFilePath
-        );
-      services.luxnix.lxAnnotateLocal.runtime.managedEncryptedData.luksUuidFile =
-        mkIf cfg.runtime.vaultManagedEncryptedData.enable (
-          mkDefault cfg.runtime.vaultManagedEncryptedData.luksUuidFilePath
-        );
-      services.luxnix.lxAnnotateLocal.runtime.managedEncryptedData.after =
-        mkIf cfg.runtime.vaultManagedEncryptedData.enable
-          (mkBefore [ cfg.runtime.vaultManagedEncryptedData.setupService ]);
-      services.luxnix.lxAnnotateLocal.runtime.managedEncryptedData.requires =
-        mkIf cfg.runtime.vaultManagedEncryptedData.enable
-          (mkBefore [ cfg.runtime.vaultManagedEncryptedData.setupService ]);
-      services.luxnix.lxAnnotateLocal.runtime.masterKeyFile = mkDefault (
-        if cfg.runtime.clustered.enable && cfg.runtime.clustered.sharedMasterKeyFile != null then
-          cfg.runtime.clustered.sharedMasterKeyFile
-        else if
-          cfg.runtime.vaultManagedEncryptedData.enable
-          && cfg.runtime.vaultManagedEncryptedData.manageMasterKey
-        then
-          cfg.runtime.vaultManagedEncryptedData.masterKeyFilePath
-        else if cfg.runtime.autoGenerateMasterKey then
-          cfg.runtime.autoGeneratedMasterKeyFilePath
-        else
-          null
-      );
-      services.luxnix.lxAnnotateLocal.database.host = mkIf (
-        cfg.runtime.externalServices.postgresHost != null
-      ) (mkForce cfg.runtime.externalServices.postgresHost);
-      services.luxnix.lxAnnotateLocal.database.port = mkIf (
-        cfg.runtime.externalServices.postgresPort != null
-      ) (mkForce cfg.runtime.externalServices.postgresPort);
+      roles = {
+        managed-secrets = {
+          runBefore = mkAfter [
+            "lx-annotate-runtime-env.service"
+            "lx-annotate-master-key-check.service"
+            "lx-annotate.service"
+          ];
 
-      roles.managed-secrets.runBefore = mkAfter [
-        "lx-annotate-runtime-env.service"
-        "lx-annotate-master-key-check.service"
-        "lx-annotate.service"
-      ];
-
-      roles.managed-secrets.customSecrets.lx_annotate_master_key_local =
-        mkIf
-          (
-            cfg.runtime.autoGenerateMasterKey
-            && !cfg.runtime.vaultManagedEncryptedData.enable
-            && (
-              cfg.runtime.masterKeyFile == null
-              || cfg.runtime.masterKeyFile == cfg.runtime.autoGeneratedMasterKeyFilePath
-            )
-          )
-          {
-            path = toString cfg.runtime.autoGeneratedMasterKeyFilePath;
-            owner = "root";
-            group = config.luxnix.generic-settings.sensitiveServiceGroupName;
-            permissions = "640";
-            description = "Per-machine application master key for lx-annotate encrypted storage";
-            generator = "${pkgs.openssl}/bin/openssl rand -base64 32 | tr -d '\n'";
-          };
-
-      roles.managed-secrets.customSecrets.lx_annotate_luks_key =
-        mkIf cfg.runtime.vaultManagedEncryptedData.enable
-          {
-            path = toString cfg.runtime.vaultManagedEncryptedData.keyFilePath;
-            owner = "root";
-            group = "root";
-            permissions = "400";
-            description = "Vault-backed LUKS key for lx-annotate encrypted data";
-            customScript = true;
-            refreshOnBoot = true;
-            generator = ''
-              HOSTNAME=${lib.escapeShellArg config.networking.hostName}
-              VAULT_PATH=${
-                lib.escapeShellArg (
-                  lib.replaceStrings [ "{hostname}" ] [ config.networking.hostName ]
-                    cfg.runtime.vaultManagedEncryptedData.vaultPathTemplate
+          customSecrets = {
+            lx_annotate_master_key_local =
+              mkIf
+                (
+                  cfg.runtime.autoGenerateMasterKey
+                  && !cfg.runtime.vaultManagedEncryptedData.enable
+                  && (
+                    cfg.runtime.masterKeyFile == null
+                    || cfg.runtime.masterKeyFile == cfg.runtime.autoGeneratedMasterKeyFilePath
+                  )
                 )
-              }
-              ${pkgs.vault}/bin/vault kv get -format=json "$VAULT_PATH" \
-                | ${pkgs.jq}/bin/jq -er '.data.data.${cfg.runtime.vaultManagedEncryptedData.vaultKeyField}' \
-                > "$TARGET_FILE"
-            '';
-          };
+                {
+                  path = toString cfg.runtime.autoGeneratedMasterKeyFilePath;
+                  owner = "root";
+                  group = config.luxnix.generic-settings.sensitiveServiceGroupName;
+                  permissions = "640";
+                  description = "Per-machine application master key for lx-annotate encrypted storage";
+                  generator = "${pkgs.openssl}/bin/openssl rand -base64 32 | tr -d '\n'";
+                };
 
-      roles.managed-secrets.customSecrets.lx_annotate_luks_uuid =
-        mkIf cfg.runtime.vaultManagedEncryptedData.enable
-          {
-            path = toString cfg.runtime.vaultManagedEncryptedData.luksUuidFilePath;
-            owner = "root";
-            group = "root";
-            permissions = "400";
-            description = "Vault-backed LUKS UUID for lx-annotate encrypted data";
-            customScript = true;
-            refreshOnBoot = true;
-            generator = ''
-              HOSTNAME=${lib.escapeShellArg config.networking.hostName}
-              VAULT_PATH=${
-                lib.escapeShellArg (
-                  lib.replaceStrings [ "{hostname}" ] [ config.networking.hostName ]
-                    cfg.runtime.vaultManagedEncryptedData.vaultPathTemplate
+            lx_annotate_luks_key = mkIf cfg.runtime.vaultManagedEncryptedData.enable {
+              path = toString cfg.runtime.vaultManagedEncryptedData.keyFilePath;
+              owner = "root";
+              group = "root";
+              permissions = "400";
+              description = "Vault-backed LUKS key for lx-annotate encrypted data";
+              customScript = true;
+              refreshOnBoot = true;
+              generator = ''
+                HOSTNAME=${lib.escapeShellArg config.networking.hostName}
+                VAULT_PATH=${
+                  lib.escapeShellArg (
+                    lib.replaceStrings [ "{hostname}" ] [ config.networking.hostName ]
+                      cfg.runtime.vaultManagedEncryptedData.vaultPathTemplate
+                  )
+                }
+                ${pkgs.vault}/bin/vault kv get -format=json "$VAULT_PATH" \
+                  | ${pkgs.jq}/bin/jq -er '.data.data.${cfg.runtime.vaultManagedEncryptedData.vaultKeyField}' \
+                  > "$TARGET_FILE"
+              '';
+            };
+
+            lx_annotate_luks_uuid = mkIf cfg.runtime.vaultManagedEncryptedData.enable {
+              path = toString cfg.runtime.vaultManagedEncryptedData.luksUuidFilePath;
+              owner = "root";
+              group = "root";
+              permissions = "400";
+              description = "Vault-backed LUKS UUID for lx-annotate encrypted data";
+              customScript = true;
+              refreshOnBoot = true;
+              generator = ''
+                HOSTNAME=${lib.escapeShellArg config.networking.hostName}
+                VAULT_PATH=${
+                  lib.escapeShellArg (
+                    lib.replaceStrings [ "{hostname}" ] [ config.networking.hostName ]
+                      cfg.runtime.vaultManagedEncryptedData.vaultPathTemplate
+                  )
+                }
+                ${pkgs.vault}/bin/vault kv get -format=json "$VAULT_PATH" \
+                  | ${pkgs.jq}/bin/jq -er '.data.data.${cfg.runtime.vaultManagedEncryptedData.vaultUuidField}' \
+                  | tr -d '\n' > "$TARGET_FILE"
+              '';
+            };
+
+            lx_annotate_master_key =
+              mkIf
+                (
+                  cfg.runtime.vaultManagedEncryptedData.enable
+                  && cfg.runtime.vaultManagedEncryptedData.manageMasterKey
                 )
-              }
-              ${pkgs.vault}/bin/vault kv get -format=json "$VAULT_PATH" \
-                | ${pkgs.jq}/bin/jq -er '.data.data.${cfg.runtime.vaultManagedEncryptedData.vaultUuidField}' \
-                | tr -d '\n' > "$TARGET_FILE"
-            '';
-          };
-
-      roles.managed-secrets.customSecrets.lx_annotate_master_key =
-        mkIf
-          (
-            cfg.runtime.vaultManagedEncryptedData.enable
-            && cfg.runtime.vaultManagedEncryptedData.manageMasterKey
-          )
-          {
-            path = toString cfg.runtime.vaultManagedEncryptedData.masterKeyFilePath;
-            owner = "root";
-            group = config.luxnix.generic-settings.sensitiveServiceGroupName;
-            permissions = "640";
-            description = "Vault-backed application master key for lx-annotate encrypted storage";
-            customScript = true;
-            refreshOnBoot = true;
-            generator = ''
-              HOSTNAME=${lib.escapeShellArg config.networking.hostName}
-              VAULT_PATH=${
-                lib.escapeShellArg (
-                  lib.replaceStrings [ "{hostname}" ] [ config.networking.hostName ]
-                    cfg.runtime.vaultManagedEncryptedData.vaultPathTemplate
-                )
-              }
-              ${pkgs.vault}/bin/vault kv get -format=json "$VAULT_PATH" \
-                | ${pkgs.jq}/bin/jq -er '.data.data.${cfg.runtime.vaultManagedEncryptedData.vaultMasterKeyField}' \
-                | tr -d '\n' > "$TARGET_FILE"
-              if [ ! -s "$TARGET_FILE" ]; then
-                echo "ERROR: Vault returned an empty lx-annotate application master key from $VAULT_PATH."
-                exit 1
-              fi
-              if [ -f "$SECRET_FILE" ] && ! ${pkgs.diffutils}/bin/cmp -s "$SECRET_FILE" "$TARGET_FILE"; then
-                echo "ERROR: Vault lx-annotate application master key differs from the existing local key at $SECRET_FILE."
-                echo "Refusing to replace it during managed-secrets refresh because that would break decryption of existing app-layer encrypted data."
-                exit 1
-              fi
-            '';
-          };
-
-      services.luxnix.lxAnnotateLocal.django.djangoAllowedHosts = mkAfter [
-        cfg.django.hostname
-      ];
-      services.luxnix.lxAnnotateLocal.django.sslCertificatePath = mkDefault defaultSslCertificatePath;
-      services.luxnix.lxAnnotateLocal.django.sslKeyPath = mkDefault defaultSslKeyPath;
-      services.luxnix.lxSsl.enable = mkDefault true;
-
-      services.lx-annotate = {
-        enable = true;
-        package = effectiveRuntimePackage;
-        user = endoreg-service-user-name;
-        group = endoreg-service-group-name;
-        host = "127.0.0.1";
-        port = cfg.django.port;
-        deploymentRole = cfg.runtime.deploymentRole;
-        encryptedDataDir = cfg.runtime.encryptedDataDir;
-        dataDir = cfg.runtime.encryptedDataDir;
-        settingsModule = "lx_annotate.settings.settings_prod";
-        environmentFile = envSystemdFilePath;
-        extraEnv = commonExtraEnv;
-      };
-
-      services.nginx = {
-        enable = true;
-        recommendedProxySettings = true;
-        recommendedTlsSettings = true;
-
-        virtualHosts."${cfg.django.hostname}" = {
-          forceSSL = true;
-          sslCertificate = sslCertPath;
-          sslCertificateKey = sslKeyPath;
-          extraConfig = ''
-            client_max_body_size 50G;
-            proxy_request_buffering off;
-          ''
-          + optionalString sslCfg.enable ''
-            ssl_stapling off;
-            ssl_stapling_verify off;
-            ${optionalString cfg.hub.transferApi.enable ''
-              ssl_verify_client optional;
-              ssl_client_certificate ${toString cfg.hub.transferApi.clientCaFile};
-            ''}
-          '';
-          locations."/static/" = {
-            alias = "${packageStaticRoot}/";
-            extraConfig = "expires 30d; add_header Cache-Control 'public';";
-          };
-          locations."/media/" = {
-            alias = "${envDataDir}/";
-            extraConfig = "sendfile on; tcp_nopush on;";
-          };
-          locations."/protected_media/" = {
-            alias = "${runtimeStorageRootPath}/";
-            extraConfig = "internal; sendfile on; tcp_nopush on;";
-          };
-          locations."/api/media/videos/" = {
-            proxyPass = "http://127.0.0.1:${toString cfg.django.port}";
-            proxyWebsockets = true;
-            extraConfig = videoStreamProxyExtraConfig;
-          };
-          locations."/endoreg-api/media/videos/" = {
-            proxyPass = "http://127.0.0.1:${toString cfg.django.port}";
-            proxyWebsockets = true;
-            extraConfig = videoStreamProxyExtraConfig;
-          };
-          locations."/api/media/hub/transfers/" = mkIf cfg.hub.transferApi.enable {
-            proxyPass = "http://127.0.0.1:${toString cfg.django.port}";
-            extraConfig = hubTransferProxyExtraConfig;
-          };
-
-          # Canonical lx-annotate API prefix. Keep the /api/ route above for
-          # compatibility with the existing HubTransferClient.
-          locations."/endoreg-api/media/hub/transfers/" = mkIf cfg.hub.transferApi.enable {
-            proxyPass = "http://127.0.0.1:${toString cfg.django.port}";
-            extraConfig = hubTransferProxyExtraConfig;
-          };
-
-          locations."/" = {
-            proxyPass = "http://127.0.0.1:${toString cfg.django.port}";
-            proxyWebsockets = true;
-            extraConfig = ''
-              proxy_set_header X-Client-Cert-Verified $ssl_client_verify;
-              proxy_read_timeout 600s;
-              proxy_send_timeout 600s;
-              proxy_buffering off;
-            '';
+                {
+                  path = toString cfg.runtime.vaultManagedEncryptedData.masterKeyFilePath;
+                  owner = "root";
+                  group = config.luxnix.generic-settings.sensitiveServiceGroupName;
+                  permissions = "640";
+                  description = "Vault-backed application master key for lx-annotate encrypted storage";
+                  customScript = true;
+                  refreshOnBoot = true;
+                  generator = ''
+                    HOSTNAME=${lib.escapeShellArg config.networking.hostName}
+                    VAULT_PATH=${
+                      lib.escapeShellArg (
+                        lib.replaceStrings [ "{hostname}" ] [ config.networking.hostName ]
+                          cfg.runtime.vaultManagedEncryptedData.vaultPathTemplate
+                      )
+                    }
+                    ${pkgs.vault}/bin/vault kv get -format=json "$VAULT_PATH" \
+                      | ${pkgs.jq}/bin/jq -er '.data.data.${cfg.runtime.vaultManagedEncryptedData.vaultMasterKeyField}' \
+                      | tr -d '\n' > "$TARGET_FILE"
+                    if [ ! -s "$TARGET_FILE" ]; then
+                      echo "ERROR: Vault returned an empty lx-annotate application master key from $VAULT_PATH."
+                      exit 1
+                    fi
+                    if [ -f "$SECRET_FILE" ] && ! ${pkgs.diffutils}/bin/cmp -s "$SECRET_FILE" "$TARGET_FILE"; then
+                      echo "ERROR: Vault lx-annotate application master key differs from the existing local key at $SECRET_FILE."
+                      echo "Refusing to replace it during managed-secrets refresh because that would break decryption of existing app-layer encrypted data."
+                      exit 1
+                    fi
+                  '';
+                };
           };
         };
       };
 
-      fileSystems = mkIf streamableExternalStorageEnabled {
+      services = {
+        luxnix = {
+          lxAnnotateLocal = {
+            hub = {
+              enable = mkDefault (config.networking.hostName == "gs-02");
+              outboundTransfer = {
+                clientCertificateFile = mkIf vaultClientHubPkiEnabled (
+                  mkDefault config.luxnix.vault.client.hubPki.certificateFile
+                );
+                clientKeyFile = mkIf vaultClientHubPkiEnabled (mkDefault config.luxnix.vault.client.hubPki.keyFile);
+                sourceNodeSecretFile = mkIf vaultClientHubPkiEnabled (
+                  mkDefault config.luxnix.vault.client.hubPki.nodeSecretFile
+                );
+                recipientPublicKeyFile = mkIf vaultClientHubPkiEnabled (
+                  mkDefault config.luxnix.vault.client.hubPki.recipientPublicKeyFile
+                );
+              };
+              transferApi = {
+                requireMtls = mkIf (cfg.runtime.deploymentRole == "central_hub") (mkDefault true);
+                recipientPrivateKeyFiles = mkIf cfg.hub.transferApi.enable (mkDefault [
+                  "/etc/secrets/vault/hub-pki/hub-recipient-current.pem"
+                ]);
+              };
+            };
+            runtime = {
+              deploymentRole = mkDefault (if cfg.hub.enable then "central_hub" else "site_node");
+              celeryBroker.requireSecureTransport = mkDefault (
+                cfg.runtime.clustered.enable
+                || (externalRedisConfigured && !isLocalRedisUrl cfg.runtime.externalServices.redisUrl)
+              );
+              managedEncryptedData = {
+                enable = mkIf cfg.runtime.vaultManagedEncryptedData.enable (mkDefault true);
+                keyFile = mkIf cfg.runtime.vaultManagedEncryptedData.enable (
+                  mkDefault cfg.runtime.vaultManagedEncryptedData.keyFilePath
+                );
+                luksUuidFile = mkIf cfg.runtime.vaultManagedEncryptedData.enable (
+                  mkDefault cfg.runtime.vaultManagedEncryptedData.luksUuidFilePath
+                );
+                after = mkIf cfg.runtime.vaultManagedEncryptedData.enable (mkBefore [
+                  cfg.runtime.vaultManagedEncryptedData.setupService
+                ]);
+                requires = mkIf cfg.runtime.vaultManagedEncryptedData.enable (mkBefore [
+                  cfg.runtime.vaultManagedEncryptedData.setupService
+                ]);
+              };
+              masterKeyFile = mkDefault (
+                if cfg.runtime.clustered.enable && cfg.runtime.clustered.sharedMasterKeyFile != null then
+                  cfg.runtime.clustered.sharedMasterKeyFile
+                else if
+                  cfg.runtime.vaultManagedEncryptedData.enable
+                  && cfg.runtime.vaultManagedEncryptedData.manageMasterKey
+                then
+                  cfg.runtime.vaultManagedEncryptedData.masterKeyFilePath
+                else if cfg.runtime.autoGenerateMasterKey then
+                  cfg.runtime.autoGeneratedMasterKeyFilePath
+                else
+                  null
+              );
+            };
+            django = {
+              extraSettings.IS_CENTRAL_NODE = mkIf cfg.hub.enable (mkForce true);
+              djangoAllowedHosts = mkAfter [ cfg.django.hostname ];
+            };
+            database = {
+              host = mkIf (cfg.runtime.externalServices.postgresHost != null) (
+                mkForce cfg.runtime.externalServices.postgresHost
+              );
+              port = mkIf (cfg.runtime.externalServices.postgresPort != null) (
+                mkForce cfg.runtime.externalServices.postgresPort
+              );
+            };
+          };
+          ollama.enable = mkIf (cfg.runtime.llmInferenceWorker.mode == "always") (mkDefault true);
+          fileMover = {
+            serviceDependencies = {
+              after = mkAfter fileMoverAfter;
+              wants = mkAfter fileMoverWants;
+              requires = mkAfter fileMoverRequires;
+            };
+            paths = {
+              destinationVideoDir = mkDefault runtimeWatcherVideoDirPath;
+              destinationReportDir = mkDefault runtimeWatcherReportDirPath;
+              stagingDir = mkDefault runtimeMoverStagingDirPath;
+            };
+            desktop.links = {
+              preanonymized_import = mkDefault desktopPreanonymizedLinkTarget;
+              sap_import = mkDefault desktopSapImportLinkTarget;
+            };
+            videoTranscodeFallback = {
+              command = mkDefault lxAnnotateFileMoverTranscodeCommand;
+              workingDir = mkDefault runtimeDataRootPath;
+              environmentScript = mkDefault lxAnnotateFileMoverTranscodeEnv;
+            };
+          };
+          lxSsl.enable = mkDefault true;
+        };
+
+        lx-annotate = {
+          enable = true;
+          package = effectiveRuntimePackage;
+          user = endoreg-service-user-name;
+          group = endoreg-service-group-name;
+          host = "127.0.0.1";
+          port = cfg.django.port;
+          deploymentRole = cfg.runtime.deploymentRole;
+          encryptedDataDir = cfg.runtime.encryptedDataDir;
+          dataDir = cfg.runtime.encryptedDataDir;
+          settingsModule = "lx_annotate.settings.settings_prod";
+          environmentFile = envSystemdFilePath;
+          extraEnv = commonExtraEnv;
+        };
+
+        nginx = {
+          enable = true;
+          recommendedProxySettings = true;
+          recommendedTlsSettings = true;
+
+          virtualHosts."${cfg.django.hostname}" = {
+            forceSSL = true;
+            sslCertificate = sslCertPath;
+            sslCertificateKey = sslKeyPath;
+            extraConfig = ''
+              client_max_body_size 50G;
+              proxy_request_buffering off;
+            ''
+            + optionalString sslCfg.enable ''
+              ssl_stapling off;
+              ssl_stapling_verify off;
+            ''
+            + optionalString cfg.hub.transferApi.enable ''
+              ssl_verify_client optional;
+              ssl_client_certificate ${toString cfg.hub.transferApi.clientCaFile};
+            '';
+            locations = {
+              "/static/" = {
+                alias = "${packageStaticRoot}/";
+                extraConfig = "expires 30d; add_header Cache-Control 'public';";
+              };
+              "/media/" = {
+                alias = "${envDataDir}/";
+                extraConfig = "sendfile on; tcp_nopush on;";
+              };
+              "/protected_media/" = {
+                alias = "${runtimeStorageRootPath}/";
+                extraConfig = "internal; sendfile on; tcp_nopush on;";
+              };
+              "/api/media/videos/" = {
+                proxyPass = "http://127.0.0.1:${toString cfg.django.port}";
+                proxyWebsockets = true;
+                extraConfig = videoStreamProxyExtraConfig;
+              };
+              "/endoreg-api/media/videos/" = {
+                proxyPass = "http://127.0.0.1:${toString cfg.django.port}";
+                proxyWebsockets = true;
+                extraConfig = videoStreamProxyExtraConfig;
+              };
+              "/api/media/hub/transfers/" = mkIf cfg.hub.transferApi.enable {
+                proxyPass = "http://127.0.0.1:${toString cfg.django.port}";
+                extraConfig = hubTransferProxyExtraConfig;
+              };
+
+              # Canonical lx-annotate API prefix. Keep the /api/ route above for
+              # compatibility with the existing HubTransferClient.
+              "/endoreg-api/media/hub/transfers/" = mkIf cfg.hub.transferApi.enable {
+                proxyPass = "http://127.0.0.1:${toString cfg.django.port}";
+                extraConfig = hubTransferProxyExtraConfig;
+              };
+
+              "/" = {
+                proxyPass = "http://127.0.0.1:${toString cfg.django.port}";
+                proxyWebsockets = true;
+                extraConfig = ''
+                  proxy_set_header X-Client-Cert-Verified $ssl_client_verify;
+                  proxy_read_timeout 600s;
+                  proxy_send_timeout 600s;
+                  proxy_buffering off;
+                '';
+              };
+            };
+          };
+        };
+
+        redis.servers."lx-annotate" = mkIf (!externalRedisConfigured) {
+          enable = true;
+          port = 6379;
+          bind = "127.0.0.1";
+          openFirewall = false;
+          appendOnly = true;
+          appendFsync = "everysec";
+        };
+      };
+
+      luxnix.generic-settings.postgres.enable = mkDefault (!externalPostgresConfigured);
+
+      fileSystems = optionalAttrs streamableExternalStorageEnabled {
         "${runtimeStreamableVideoRootPath}" = {
           device = streamableExternalStorageRoot;
           fsType = "none";
@@ -2001,84 +2111,11 @@ in
         };
       };
 
-      luxnix.generic-settings.postgres.enable = mkDefault (!externalPostgresConfigured);
-      services.redis.servers."lx-annotate" = mkIf (!externalRedisConfigured) {
-        enable = true;
-        port = 6379;
-        bind = "127.0.0.1";
-        openFirewall = false;
-        appendOnly = true;
-        appendFsync = "everysec";
-      };
-
       users.users.${endoreg-service-user-name} = {
         home = mkForce endoreg-service-user-home;
         group = mkForce endoreg-service-group-name;
       };
       users.users.nginx.extraGroups = mkAfter [ endoreg-service-group-name ];
-
-      systemd.tmpfiles.rules =
-        lib.optional streamableExternalStorageEnabled "d ${streamableExternalStorageRoot} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        ++ [
-          "d ${endoreg-service-user-home} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "d ${runtimeWheelRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "z ${runtimeWheelRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "d ${runtimeWheelVenvPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "z ${runtimeWheelVenvPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "d ${runtimeRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "z ${runtimeRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "d ${envDataDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "z ${envDataDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "d ${terminologyRegistryDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "z ${terminologyRegistryDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "d ${terminologyImportRoot} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "z ${terminologyImportRoot} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "d ${envConfDir} 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "d ${runtimeStorageRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "z ${runtimeStorageRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "d ${runtimeIoImportRootPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "z ${runtimeIoImportRootPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "d ${runtimeWatcherVideoDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "z ${runtimeWatcherVideoDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "d ${runtimeWatcherReportDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "z ${runtimeWatcherReportDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "d ${runtimeWatcherPreanonymizedDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "z ${runtimeWatcherPreanonymizedDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "d ${runtimeSapImportDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "z ${runtimeSapImportDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "d ${runtimeSapImportProcessedDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "z ${runtimeSapImportProcessedDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "d ${runtimeSapImportFailedDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "z ${runtimeSapImportFailedDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "d ${runtimeMoverStagingDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "L ${serviceUserIoAccessLinkPath} - - - - ${runtimeIoImportRootPath}"
-          "d ${runtimeStreamableVideoRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "z ${runtimeStreamableVideoRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "d ${runtimeStreamableVideoRawRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "z ${runtimeStreamableVideoRawRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "d ${runtimeStreamableVideoProcessedRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "z ${runtimeStreamableVideoProcessedRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "d ${cfg.runtime.modelTrainingStagingRoot} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} 7d -"
-          "z ${cfg.runtime.modelTrainingStagingRoot} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "d ${cfg.dataCleanup.archiveDir} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "z ${cfg.dataCleanup.archiveDir} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "d ${hubRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "z ${hubRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "d ${hubRootPath}/backup 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "z ${hubRootPath}/backup 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "d ${cfg.hub.backup.incomingDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "z ${cfg.hub.backup.incomingDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "d ${cfg.hub.backup.snapshotDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "z ${cfg.hub.backup.snapshotDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "d ${cfg.hub.backup.manifestDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "z ${cfg.hub.backup.manifestDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-          "d ${sslCfg.sslDir} 0750 root nginx - -"
-          "z ${sslCfg.sslDir} 0750 root nginx - -"
-          "d /run/lx-annotate 0755 root root - -"
-        ]
-        ++ lib.optionals (!config.roles.endoreg-client.enable) [
-          "d ${endoreg-service-user-home}/config 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-        ];
 
       system.activationScripts.lxAnnotateRuntimePathMigration = ''
         hub_backup_dir="${hubRootPath}/backup"
@@ -2098,114 +2135,305 @@ in
         fi
       '';
 
-      systemd.services.lx-annotate-runtime-env = {
-        description = "Prepare LuxNix runtime environment for lx-annotate";
-        before = [
-          "lx-annotate.service"
-          "lx-annotate-master-key-check.service"
-        ];
-        after = [
-          "systemd-tmpfiles-setup.service"
-        ]
-        ++ managedSecretsSetupUnits
-        ++ localPostgresSetupUnits;
-        wants = managedSecretsSetupUnits ++ localPostgresSetupUnits;
-        requires = managedSecretsSetupUnits;
-        serviceConfig = {
-          Type = "oneshot";
-          RemainAfterExit = true;
-          User = "root";
-          ExecStart = runtimeEnvScript;
-          LogNamespace = lxAnnotateJournalNamespace;
+      systemd = {
+        tmpfiles.rules =
+          lib.optional streamableExternalStorageEnabled "d ${streamableExternalStorageRoot} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          ++ [
+            "d ${endoreg-service-user-home} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "d ${runtimeWheelRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "z ${runtimeWheelRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "d ${runtimeWheelVenvPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "z ${runtimeWheelVenvPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "d ${runtimeRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "z ${runtimeRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "d ${envDataDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "z ${envDataDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "d ${terminologyRegistryDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "z ${terminologyRegistryDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "d ${terminologyImportRoot} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "z ${terminologyImportRoot} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "d ${envConfDir} 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "d ${runtimeStorageRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "z ${runtimeStorageRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "d ${runtimeIoImportRootPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "z ${runtimeIoImportRootPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "d ${runtimeWatcherVideoDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "z ${runtimeWatcherVideoDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "d ${runtimeWatcherReportDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "z ${runtimeWatcherReportDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "d ${runtimeWatcherPreanonymizedDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "z ${runtimeWatcherPreanonymizedDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "d ${runtimeSapImportDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "z ${runtimeSapImportDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "d ${runtimeSapImportProcessedDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "z ${runtimeSapImportProcessedDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "d ${runtimeSapImportFailedDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "z ${runtimeSapImportFailedDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "d ${runtimeMoverStagingDirPath} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "L ${serviceUserIoAccessLinkPath} - - - - ${runtimeIoImportRootPath}"
+            "d ${runtimeStreamableVideoRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "z ${runtimeStreamableVideoRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "d ${runtimeStreamableVideoRawRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "z ${runtimeStreamableVideoRawRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "d ${runtimeStreamableVideoProcessedRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "z ${runtimeStreamableVideoProcessedRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "d ${cfg.runtime.modelTrainingStagingRoot} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} 7d -"
+            "z ${cfg.runtime.modelTrainingStagingRoot} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "d ${cfg.dataCleanup.archiveDir} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "z ${cfg.dataCleanup.archiveDir} 0770 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "d ${hubRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "z ${hubRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "d ${hubRootPath}/backup 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "z ${hubRootPath}/backup 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "d ${cfg.hub.backup.incomingDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "z ${cfg.hub.backup.incomingDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "d ${cfg.hub.backup.snapshotDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "z ${cfg.hub.backup.snapshotDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "d ${cfg.hub.backup.manifestDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "z ${cfg.hub.backup.manifestDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+            "d ${sslCfg.sslDir} 0750 root nginx - -"
+            "z ${sslCfg.sslDir} 0750 root nginx - -"
+            "d /run/lx-annotate 0755 root root - -"
+          ]
+          ++ lib.optionals (!config.roles.endoreg-client.enable) [
+            "d ${endoreg-service-user-home}/config 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+          ];
+
+        paths = {
+          lx-annotate-filewatcher = {
+            description = "Trigger LX-Annotate file watcher when import files arrive";
+            wantedBy = [ "multi-user.target" ];
+            pathConfig = {
+              PathChanged = [
+                runtimeWatcherVideoDirPath
+                runtimeWatcherReportDirPath
+                runtimeWatcherPreanonymizedDirPath
+              ];
+              Unit = "lx-annotate-filewatcher.service";
+              MakeDirectory = true;
+            };
+          };
+          lx-annotate-sap-import = {
+            description = "Trigger SAP IS-H zip conversion when SAP drops exist";
+            wantedBy = [ "multi-user.target" ];
+            pathConfig = {
+              PathExistsGlob = [ "${runtimeSapImportDirPath}/*.zip" ];
+              Unit = "lx-annotate-sap-import.service";
+              MakeDirectory = true;
+            };
+          };
         };
-      };
 
-
-      systemd.services.lx-annotate-data-recovery = mkIf cfg.dataRecovery.enable (mkLxAnnotateAppService {
-        description = "Recover legacy LX-Annotate data into the runtime storage root";
-        wantedBy = [ ];
-        before = [
-          "lx-annotate-migrate.service"
-          "lx-annotate-load-base-data.service"
-          "lx-annotate-master-key-check.service"
-        ];
-        serviceConfig = {
-          Type = "oneshot";
-          ExecStart = "${runLocalDataRecoveryScript}/bin/runLxAnnotateDataRecovery";
-          TimeoutStartSec = "2h";
+        timers = {
+          lx-annotate-filewatcher = {
+            description = "Periodically retry pending LX-Annotate import files";
+            wantedBy = [ "timers.target" ];
+            timerConfig = {
+              OnBootSec = "2m";
+              OnUnitActiveSec = "5m";
+              RandomizedDelaySec = "30s";
+              Persistent = true;
+              Unit = "lx-annotate-filewatcher.service";
+            };
+          };
+          lx-annotate-hub-export-recovery = mkIf cfg.hub.outboundTransfer.enable {
+            description = "Periodically recover LX-Annotate outbound hub transfers";
+            wantedBy = [ "timers.target" ];
+            timerConfig = {
+              OnBootSec = "5m";
+              OnUnitActiveSec = cfg.hub.outboundTransfer.recoveryInterval;
+              RandomizedDelaySec = "30s";
+              Persistent = true;
+              Unit = "lx-annotate-hub-export-recovery.service";
+            };
+          };
+          lx-annotate-hub-export-health = mkIf cfg.hub.outboundTransfer.enable {
+            description = "Alert on classified LX-Annotate hub transfer failures";
+            wantedBy = [ "timers.target" ];
+            timerConfig = {
+              OnBootSec = "7m";
+              OnUnitActiveSec = cfg.hub.outboundTransfer.recoveryInterval;
+              RandomizedDelaySec = "30s";
+              Persistent = true;
+              Unit = "lx-annotate-hub-export-health.service";
+            };
+          };
+          lx-annotate-data-cleanup = mkIf cfg.dataCleanup.enable {
+            description = "Periodic duplicate cleanup for anonymized lx-annotate legacy storage";
+            wantedBy = [ "timers.target" ];
+            timerConfig = {
+              OnBootSec = "15m";
+              OnCalendar = cfg.dataCleanup.onCalendar;
+              Unit = "lx-annotate-data-cleanup.service";
+            };
+          };
+          lx-annotate-emergency-storage-relief =
+            mkIf (cfg.storageRelief.enable && cfg.storageRelief.timer.enable)
+              {
+                description = "Periodic emergency lx-annotate storage relief";
+                wantedBy = [ "timers.target" ];
+                timerConfig = {
+                  OnBootSec = "20m";
+                  OnCalendar = cfg.storageRelief.timer.onCalendar;
+                  Unit = "lx-annotate-emergency-storage-relief.service";
+                };
+              };
+          lx-annotate-hub-backup = mkIf cfg.hub.backup.enable {
+            description = "Periodic protected snapshots for the lx-annotate hub node";
+            wantedBy = [ "timers.target" ];
+            timerConfig = {
+              OnBootSec = "10m";
+              OnCalendar = cfg.hub.backup.onCalendar;
+              Unit = "lx-annotate-hub-backup.service";
+            };
+          };
+          lx-annotate-ffmpeg-stream-throttle = mkIf cfg.runtime.ffmpegStreamThrottle.enable {
+            description = "Periodically reconcile stream-aware FFmpeg worker throttling";
+            wantedBy = [ "timers.target" ];
+            timerConfig = {
+              OnBootSec = cfg.runtime.ffmpegStreamThrottle.interval;
+              OnUnitActiveSec = cfg.runtime.ffmpegStreamThrottle.interval;
+              AccuracySec = "10s";
+              Unit = "lx-annotate-ffmpeg-stream-throttle.service";
+            };
+          };
         };
-      });
 
-      systemd.services.lx-annotate-migrate = mkLxAnnotateAppService {
-        description = "Run LX-Annotate database migrations";
-        before = [
-          "lx-annotate-load-base-data.service"
-          "lx-annotate-master-key-check.service"
-          "lx-annotate.service"
-        ];
-        serviceConfig = {
-          Type = "oneshot";
-          ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-manage migrate --noinput";
-          TimeoutStartSec = "2h";
-        };
-      };
-
-      systemd.services.lx-annotate-terminology-bootstrap = mkIf useWheelRuntime (mkLxAnnotateAppService {
-        description = "Best-effort provisioning of LX-Annotate terminology";
-        after = [ "lx-annotate.service" ];
-        serviceConfig = {
-          Type = "oneshot";
-          RemainAfterExit = true;
-          ExecStart = terminologyBootstrapScript;
-          TimeoutStartSec = "10min";
-        };
-      });
-
-      systemd.services.lx-annotate-load-base-data = mkLxAnnotateAppService {
-        description = "Load LX-Annotate base data";
-        after = [ "lx-annotate-migrate.service" ];
-        wants = [ "lx-annotate-migrate.service" ];
-        requires = [ "lx-annotate-migrate.service" ];
-        before = [
-          "lx-annotate-master-key-check.service"
-        ];
-        serviceConfig = {
-          Type = "oneshot";
-          ExecStart = loadBaseDataServiceScript;
-          TimeoutStartSec = "10min";
-        };
-      };
-
-      systemd.services.lx-annotate-center-admin-bootstrap =
-        mkIf (cfg.centerAdminBootstrap.username != null)
-          (mkLxAnnotateAppService {
-            description = "Bootstrap an authorized LX-Annotate center administrator";
+        services = {
+          lx-annotate-runtime-env = {
+            description = "Prepare LuxNix runtime environment for lx-annotate";
+            before = [
+              "lx-annotate.service"
+              "lx-annotate-master-key-check.service"
+            ];
             after = [
-              "lx-annotate-load-base-data.service"
-              "lx-annotate-master-key-check.service"
-            ];
-            wants = [ "lx-annotate-load-base-data.service" ];
-            requires = [
-              "lx-annotate-load-base-data.service"
-              "lx-annotate-master-key-check.service"
-            ];
-            before = [ "lx-annotate.service" ];
+              "systemd-tmpfiles-setup.service"
+            ]
+            ++ managedSecretsSetupUnits
+            ++ localPostgresSetupUnits;
+            wants = managedSecretsSetupUnits ++ localPostgresSetupUnits;
+            requires = managedSecretsSetupUnits;
             serviceConfig = {
               Type = "oneshot";
               RemainAfterExit = true;
-              ExecStart = lib.escapeShellArgs [
-                "${effectiveRuntimePackage}/bin/lx-annotate-manage"
-                "bootstrap_center_admin"
-                "--username"
-                cfg.centerAdminBootstrap.username
-              ];
-              TimeoutStartSec = "5min";
+              User = "root";
+              ExecStart = runtimeEnvScript;
+              LogNamespace = lxAnnotateJournalNamespace;
+            };
+          };
+
+          lx-annotate-wheel-runtime = mkIf useWheelRuntime {
+            description = "Prepare the shared LX-Annotate wheel runtime";
+            before = [ "lx-annotate-migrate.service" ];
+            after = [ "lx-annotate-runtime-env.service" ];
+            wants = [ "lx-annotate-runtime-env.service" ];
+            requires = [ "lx-annotate-runtime-env.service" ];
+            restartTriggers = [ effectiveRuntimePackage ];
+            serviceConfig = {
+              Type = "oneshot";
+              # Do not let a successful preparation for the previous package remain
+              # active across an interrupted switch. Application start transactions
+              # must run the idempotent stamp check for the currently selected wheel.
+              RemainAfterExit = false;
+              User = endoreg-service-user-name;
+              Group = endoreg-service-group-name;
+              WorkingDirectory = runtimeDataRootPath;
+              ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-runtime-ensure";
+              LogNamespace = lxAnnotateJournalNamespace;
+              TimeoutStartSec = "2h";
+            };
+          };
+
+          lx-annotate-data-recovery = mkIf cfg.dataRecovery.enable (mkLxAnnotateAppService {
+            description = "Recover legacy LX-Annotate data into the runtime storage root";
+            wantedBy = [ ];
+            before = [
+              "lx-annotate-migrate.service"
+              "lx-annotate-load-base-data.service"
+              "lx-annotate-master-key-check.service"
+            ];
+            serviceConfig = {
+              Type = "oneshot";
+              ExecStart = "${runLocalDataRecoveryScript}/bin/runLxAnnotateDataRecovery";
+              TimeoutStartSec = "2h";
             };
           });
 
-      systemd.services.lx-annotate-hub-node-provisioning =
-        mkIf cfg.hub.nodeProvisioning.enable
-          (mkLxAnnotateAppService {
+          lx-annotate-migrate = mkLxAnnotateAppService {
+            description = "Run LX-Annotate database migrations";
+            after = terminologyBootstrapServiceUnits;
+            wants = terminologyBootstrapServiceUnits;
+            requires = terminologyBootstrapServiceUnits;
+            before = [
+              "lx-annotate-load-base-data.service"
+              "lx-annotate-master-key-check.service"
+              "lx-annotate.service"
+            ];
+            serviceConfig = {
+              Type = "oneshot";
+              ExecStartPre = "${effectiveRuntimePackage}/bin/lx-annotate-manage repair_legacy_migration_history --apply";
+              ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-manage migrate --noinput";
+              TimeoutStartSec = "2h";
+            };
+          };
+
+          lx-annotate-terminology-bootstrap = mkIf useWheelRuntime (mkLxAnnotateAppService {
+            description = "Provision and validate LX-Annotate terminology";
+            before = [
+              "lx-annotate-migrate.service"
+              "lx-annotate.service"
+            ];
+            serviceConfig = {
+              Type = "oneshot";
+              RemainAfterExit = true;
+              ExecStart = terminologyBootstrapScript;
+              TimeoutStartSec = "10min";
+            };
+          });
+
+          lx-annotate-load-base-data = mkLxAnnotateAppService {
+            description = "Load LX-Annotate base data";
+            after = [ "lx-annotate-migrate.service" ];
+            wants = [ "lx-annotate-migrate.service" ];
+            requires = [ "lx-annotate-migrate.service" ];
+            before = [
+              "lx-annotate-master-key-check.service"
+            ];
+            serviceConfig = {
+              Type = "oneshot";
+              ExecStart = loadBaseDataServiceScript;
+              TimeoutStartSec = "10min";
+            };
+          };
+
+          lx-annotate-center-admin-bootstrap =
+            mkIf (cfg.centerAdminBootstrap.username != null)
+              (mkLxAnnotateAppService {
+                description = "Bootstrap an authorized LX-Annotate center administrator";
+                after = [
+                  "lx-annotate-load-base-data.service"
+                  "lx-annotate-master-key-check.service"
+                ];
+                wants = [ "lx-annotate-load-base-data.service" ];
+                requires = [
+                  "lx-annotate-load-base-data.service"
+                  "lx-annotate-master-key-check.service"
+                ];
+                before = [ "lx-annotate.service" ];
+                serviceConfig = {
+                  Type = "oneshot";
+                  RemainAfterExit = true;
+                  ExecStart = lib.escapeShellArgs [
+                    "${effectiveRuntimePackage}/bin/lx-annotate-manage"
+                    "bootstrap_center_admin"
+                    "--username"
+                    cfg.centerAdminBootstrap.username
+                  ];
+                  TimeoutStartSec = "5min";
+                };
+              });
+
+          lx-annotate-hub-node-provisioning = mkIf cfg.hub.nodeProvisioning.enable (mkLxAnnotateAppService {
             description = "Idempotently provision LX-Annotate hub NetworkNode records";
             after = [
               "lx-annotate-load-base-data.service"
@@ -2227,78 +2455,67 @@ in
             };
           });
 
-      systemd.services.lx-annotate-encrypted-data = mkIf cfg.runtime.managedEncryptedData.enable {
-        description = "Unlock and mount encrypted data volume for lx-annotate";
-        wantedBy = [ "multi-user.target" ];
-        before = [ "lx-annotate.service" ];
-        after = [ "systemd-tmpfiles-setup.service" ] ++ cfg.runtime.managedEncryptedData.after;
-        requires = cfg.runtime.managedEncryptedData.requires;
-        serviceConfig = {
-          Type = "oneshot";
-          RemainAfterExit = true;
-          User = "root";
-          Group = "root";
-          ExecStart = "${lxAnnotateEncryptedDataMountScript}/bin/lx-annotate-encrypted-data-mount";
-          ExecStop = "${lxAnnotateEncryptedDataUmountScript}/bin/lx-annotate-encrypted-data-umount";
-          LogNamespace = lxAnnotateJournalNamespace;
-          TimeoutStartSec = "2min";
-          TimeoutStopSec = "2min";
-        };
-        path = [
-          pkgs.coreutils
-          pkgs.cryptsetup
-          pkgs.util-linux
-        ];
-      };
+          lx-annotate-hub-envelope-key-preflight =
+            mkIf (cfg.hub.transferApi.enable || cfg.hub.outboundTransfer.enable)
+              {
+                description = "Validate LX-Annotate Hub envelope recipient identities";
+                after = [ "systemd-tmpfiles-setup.service" ] ++ managedSecretsSetupUnits;
+                wants = managedSecretsSetupUnits;
+                requires = managedSecretsSetupUnits;
+                serviceConfig = {
+                  Type = "oneshot";
+                  RemainAfterExit = true;
+                  User = "root";
+                  Group = "root";
+                  ExecStart = hubEnvelopeKeyPreflightScript;
+                  UMask = "0077";
+                };
+              };
 
-      systemd.services.lx-annotate-filewatcher = mkLxAnnotateAppService {
-        description = "Process pending LX-Annotate import files";
-        wantedBy = [ ];
-        after = [
-          "lx-annotate-load-base-data.service"
-          "lx-annotate-master-key-check.service"
-        ];
-        wants = [ "lx-annotate-load-base-data.service" ];
-        requires = [
-          "lx-annotate-load-base-data.service"
-          "lx-annotate-master-key-check.service"
-        ];
-        serviceConfig = {
-          Type = "oneshot";
-          ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-watch --once";
-          Restart = "no";
-        };
-      };
+          lx-annotate-encrypted-data = mkIf cfg.runtime.managedEncryptedData.enable {
+            description = "Unlock and mount encrypted data volume for lx-annotate";
+            wantedBy = [ "multi-user.target" ];
+            before = [ "lx-annotate.service" ];
+            after = [ "systemd-tmpfiles-setup.service" ] ++ cfg.runtime.managedEncryptedData.after;
+            requires = cfg.runtime.managedEncryptedData.requires;
+            serviceConfig = {
+              Type = "oneshot";
+              RemainAfterExit = true;
+              User = "root";
+              Group = "root";
+              ExecStart = "${lxAnnotateEncryptedDataMountScript}/bin/lx-annotate-encrypted-data-mount";
+              ExecStop = "${lxAnnotateEncryptedDataUmountScript}/bin/lx-annotate-encrypted-data-umount";
+              LogNamespace = lxAnnotateJournalNamespace;
+              TimeoutStartSec = "2min";
+              TimeoutStopSec = "2min";
+            };
+            path = [
+              pkgs.coreutils
+              pkgs.cryptsetup
+              pkgs.util-linux
+            ];
+          };
 
-      systemd.paths.lx-annotate-filewatcher = {
-        description = "Trigger LX-Annotate file watcher when import files arrive";
-        wantedBy = [ "multi-user.target" ];
-        pathConfig = {
-          PathChanged = [
-            runtimeWatcherVideoDirPath
-            runtimeWatcherReportDirPath
-            runtimeWatcherPreanonymizedDirPath
-          ];
-          Unit = "lx-annotate-filewatcher.service";
-          MakeDirectory = true;
-        };
-      };
+          lx-annotate-filewatcher = mkLxAnnotateAppService {
+            description = "Process pending LX-Annotate import files";
+            wantedBy = [ ];
+            after = [
+              "lx-annotate-load-base-data.service"
+              "lx-annotate-master-key-check.service"
+            ];
+            wants = [ "lx-annotate-load-base-data.service" ];
+            requires = [
+              "lx-annotate-load-base-data.service"
+              "lx-annotate-master-key-check.service"
+            ];
+            serviceConfig = {
+              Type = "oneshot";
+              ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-watch --once";
+              Restart = "no";
+            };
+          };
 
-      systemd.timers.lx-annotate-filewatcher = {
-        description = "Periodically retry pending LX-Annotate import files";
-        wantedBy = [ "timers.target" ];
-        timerConfig = {
-          OnBootSec = "2m";
-          OnUnitActiveSec = "5m";
-          RandomizedDelaySec = "30s";
-          Persistent = true;
-          Unit = "lx-annotate-filewatcher.service";
-        };
-      };
-
-      systemd.services.lx-annotate-hub-export-recovery =
-        mkIf cfg.hub.outboundTransfer.enable
-          (mkLxAnnotateAppService {
+          lx-annotate-hub-export-recovery = mkIf cfg.hub.outboundTransfer.enable (mkLxAnnotateAppService {
             description = "Dispatch bounded recovery for LX-Annotate outbound hub transfers";
             wantedBy = [ ];
             after = [
@@ -2316,21 +2533,7 @@ in
             };
           });
 
-      systemd.timers.lx-annotate-hub-export-recovery = mkIf cfg.hub.outboundTransfer.enable {
-        description = "Periodically recover LX-Annotate outbound hub transfers";
-        wantedBy = [ "timers.target" ];
-        timerConfig = {
-          OnBootSec = "5m";
-          OnUnitActiveSec = cfg.hub.outboundTransfer.recoveryInterval;
-          RandomizedDelaySec = "30s";
-          Persistent = true;
-          Unit = "lx-annotate-hub-export-recovery.service";
-        };
-      };
-
-      systemd.services.lx-annotate-hub-export-health =
-        mkIf cfg.hub.outboundTransfer.enable
-          (mkLxAnnotateAppService {
+          lx-annotate-hub-export-health = mkIf cfg.hub.outboundTransfer.enable (mkLxAnnotateAppService {
             description = "Classify LX-Annotate outbound hub transfer health";
             wantedBy = [ ];
             after = [
@@ -2345,291 +2548,273 @@ in
             };
           });
 
-      systemd.timers.lx-annotate-hub-export-health = mkIf cfg.hub.outboundTransfer.enable {
-        description = "Alert on classified LX-Annotate hub transfer failures";
-        wantedBy = [ "timers.target" ];
-        timerConfig = {
-          OnBootSec = "7m";
-          OnUnitActiveSec = cfg.hub.outboundTransfer.recoveryInterval;
-          RandomizedDelaySec = "30s";
-          Persistent = true;
-          Unit = "lx-annotate-hub-export-health.service";
-        };
-      };
+          lx-annotate-sap-import = mkLxAnnotateAppService {
+            description = "Convert SAP IS-H zip drops into preanonymized watcher payload";
+            wantedBy = [ ];
+            after = [
+              "lx-annotate-load-base-data.service"
+              "lx-annotate-master-key-check.service"
+            ];
+            wants = [ "lx-annotate-load-base-data.service" ];
+            requires = [
+              "lx-annotate-load-base-data.service"
+              "lx-annotate-master-key-check.service"
+            ];
+            serviceConfig = {
+              Type = "oneshot";
+              ExecStart = sapImportServiceScript;
+            };
+          };
 
-      systemd.services.lx-annotate-sap-import = mkLxAnnotateAppService {
-        description = "Convert SAP IS-H zip drops into preanonymized watcher payload";
-        wantedBy = [ ];
-        after = [
-          "lx-annotate-load-base-data.service"
-          "lx-annotate-master-key-check.service"
-        ];
-        wants = [ "lx-annotate-load-base-data.service" ];
-        requires = [
-          "lx-annotate-load-base-data.service"
-          "lx-annotate-master-key-check.service"
-        ];
-        serviceConfig = {
-          Type = "oneshot";
-          ExecStart = sapImportServiceScript;
-        };
-      };
+          lx-annotate-export-frames = mkLxAnnotateAppService {
+            description = "Export annotated frames for LX-Annotate";
+            wantedBy = [ ];
+            after = [
+              "lx-annotate-load-base-data.service"
+              "lx-annotate-master-key-check.service"
+            ];
+            wants = [ "lx-annotate-load-base-data.service" ];
+            requires = [
+              "lx-annotate-load-base-data.service"
+              "lx-annotate-master-key-check.service"
+            ];
+            environment = {
+              LX_ANNOTATE_EXPORT_FRAMES_OUTPUT_DIR = "${runtimeStorageRootPath}/export/frames";
+            };
+            serviceConfig = {
+              Type = "oneshot";
+              ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-export-frames";
+            };
+          };
 
-      systemd.paths.lx-annotate-sap-import = {
-        description = "Trigger SAP IS-H zip conversion when SAP drops exist";
-        wantedBy = [ "multi-user.target" ];
-        pathConfig = {
-          PathExistsGlob = [ "${runtimeSapImportDirPath}/*.zip" ];
-          Unit = "lx-annotate-sap-import.service";
-          MakeDirectory = true;
-        };
-      };
+          lx-annotate = {
+            aliases = [ "lx-annotate-boot.service" ];
+            wants = [
+              "nginx.service"
+              "lx-annotate-runtime-env.service"
+              "lx-annotate-load-base-data.service"
+              "lx-annotate-preflight.service"
+            ]
+            ++ terminologyBootstrapServiceUnits
+            ++ dataRecoveryServiceUnits
+            ++ hlsBackfillServiceUnits
+            ++ hubNodeProvisioningServiceUnits
+            ++ hubEnvelopePreflightServiceUnits
+            ++ localRedisServiceUnits
+            ++ localPostgresServiceUnits
+            ++ localPostgresSetupUnits
+            ++ managedSecretsSetupUnits
+            ++ encryptionServiceUnits;
+            requires = [
+              "lx-annotate-runtime-env.service"
+              "lx-annotate-load-base-data.service"
+              "lx-annotate-master-key-check.service"
+              "lx-annotate-preflight.service"
+            ]
+            ++ terminologyBootstrapServiceUnits
+            ++ dataRecoveryServiceUnits
+            ++ hlsBackfillServiceUnits
+            ++ hubNodeProvisioningServiceUnits
+            ++ hubEnvelopePreflightServiceUnits
+            ++ managedSecretsSetupUnits
+            ++ encryptionServiceUnits;
+            after = [
+              "lx-annotate-runtime-env.service"
+              "lx-annotate-load-base-data.service"
+              "lx-annotate-master-key-check.service"
+              "lx-annotate-preflight.service"
+              "endoreg-django-setup.service"
+              "systemd-tmpfiles-setup.service"
+            ]
+            ++ terminologyBootstrapServiceUnits
+            ++ dataRecoveryServiceUnits
+            ++ hlsBackfillServiceUnits
+            ++ hubNodeProvisioningServiceUnits
+            ++ hubEnvelopePreflightServiceUnits
+            ++ localRedisServiceUnits
+            ++ localPostgresServiceUnits
+            ++ localPostgresSetupUnits
+            ++ managedSecretsSetupUnits
+            ++ encryptionServiceUnits;
+            unitConfig = encryptedDataMountUnitConfig;
+            serviceConfig = {
+              TimeoutStartSec = "5min";
+              Restart = "on-failure";
+              RestartSec = mkDefault 5;
+              LogNamespace = lxAnnotateJournalNamespace;
+              MemoryHigh = cfg.runtime.limits.memoryHigh;
+              MemoryMax = cfg.runtime.limits.memoryMax;
+              CPUQuota = cfg.runtime.limits.cpuQuota;
+              Nice = 10;
+              IOSchedulingClass = "best-effort";
+              IOSchedulingPriority = 6;
+              OOMScoreAdjust = 250;
+              ProtectSystem = "full";
+              PrivateTmp = true;
+              NoNewPrivileges = true;
+              SupplementaryGroups = [ config.luxnix.generic-settings.sensitiveServiceGroupName ];
+              ReadWritePaths = appReadWritePaths;
+            };
+          };
 
-      systemd.services.lx-annotate-export-frames = mkLxAnnotateAppService {
-        description = "Export annotated frames for LX-Annotate";
-        wantedBy = [ ];
-        after = [
-          "lx-annotate-load-base-data.service"
-          "lx-annotate-master-key-check.service"
-        ];
-        wants = [ "lx-annotate-load-base-data.service" ];
-        requires = [
-          "lx-annotate-load-base-data.service"
-          "lx-annotate-master-key-check.service"
-        ];
-        environment = {
-          LX_ANNOTATE_EXPORT_FRAMES_OUTPUT_DIR = "${runtimeStorageRootPath}/export/frames";
-        };
-        serviceConfig = {
-          Type = "oneshot";
-          ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-export-frames";
-        };
-      };
+          lx-annotate-master-key-check = {
+            description = "Validate lx-annotate application master key against encrypted storage";
+            wantedBy = [ "multi-user.target" ];
+            before = [ "lx-annotate.service" ];
+            after = [
+              "systemd-tmpfiles-setup.service"
+              "lx-annotate-runtime-env.service"
+              "lx-annotate-load-base-data.service"
+            ]
+            ++ localPostgresServiceUnits
+            ++ localPostgresSetupUnits
+            ++ managedSecretsSetupUnits
+            ++ encryptionServiceUnits;
+            wants = [
+              "lx-annotate-load-base-data.service"
+            ]
+            ++ localPostgresServiceUnits
+            ++ managedSecretsSetupUnits
+            ++ encryptionServiceUnits;
+            requires = [
+              "lx-annotate-runtime-env.service"
+              "lx-annotate-load-base-data.service"
+            ]
+            ++ managedSecretsSetupUnits
+            ++ encryptionServiceUnits;
+            restartTriggers = [ effectiveRuntimePackage ];
+            unitConfig = encryptedDataMountUnitConfig;
+            environment = commonExtraEnv;
+            serviceConfig = {
+              Type = "oneshot";
+              RemainAfterExit = true;
+              User = endoreg-service-user-name;
+              Group = endoreg-service-group-name;
+              SupplementaryGroups = [ config.luxnix.generic-settings.sensitiveServiceGroupName ];
+              WorkingDirectory = runtimeDataRootPath;
+              ExecStart = "${runLocalMasterKeyCheckScript}/bin/runLocalMasterKeyCheck";
+              EnvironmentFile = envSystemdFilePath;
+              LogNamespace = lxAnnotateJournalNamespace;
+              TimeoutStartSec = "10min";
+              ProtectSystem = "full";
+              PrivateTmp = true;
+              NoNewPrivileges = true;
+              ReadWritePaths = appReadWritePaths;
+            };
+          };
 
-      systemd.services.lx-annotate = {
-        aliases = [ "lx-annotate-boot.service" ];
-        wants = [
-          "nginx.service"
-          "lx-annotate-runtime-env.service"
-          "lx-annotate-load-base-data.service"
-          "lx-annotate-preflight.service"
-        ]
-        ++ dataRecoveryServiceUnits
-        ++ hlsBackfillServiceUnits
-        ++ hubNodeProvisioningServiceUnits
-        ++ localRedisServiceUnits
-        ++ localPostgresServiceUnits
-        ++ localPostgresSetupUnits
-        ++ managedSecretsSetupUnits
-        ++ encryptionServiceUnits;
-        requires = [
-          "lx-annotate-runtime-env.service"
-          "lx-annotate-load-base-data.service"
-          "lx-annotate-master-key-check.service"
-          "lx-annotate-preflight.service"
-        ]
-        ++ dataRecoveryServiceUnits
-        ++ hlsBackfillServiceUnits
-        ++ hubNodeProvisioningServiceUnits
-        ++ managedSecretsSetupUnits
-        ++ encryptionServiceUnits;
-        after = [
-          "lx-annotate-runtime-env.service"
-          "lx-annotate-load-base-data.service"
-          "lx-annotate-master-key-check.service"
-          "lx-annotate-preflight.service"
-          "endoreg-django-setup.service"
-          "systemd-tmpfiles-setup.service"
-        ]
-        ++ dataRecoveryServiceUnits
-        ++ hlsBackfillServiceUnits
-        ++ hubNodeProvisioningServiceUnits
-        ++ localRedisServiceUnits
-        ++ localPostgresServiceUnits
-        ++ localPostgresSetupUnits
-        ++ managedSecretsSetupUnits
-        ++ encryptionServiceUnits;
-        unitConfig = encryptedDataMountUnitConfig;
-        serviceConfig = {
-          TimeoutStartSec = "5min";
-          Restart = "on-failure";
-          RestartSec = mkDefault 5;
-          LogNamespace = lxAnnotateJournalNamespace;
-          MemoryHigh = cfg.runtime.limits.memoryHigh;
-          MemoryMax = cfg.runtime.limits.memoryMax;
-          CPUQuota = cfg.runtime.limits.cpuQuota;
-          Nice = 10;
-          IOSchedulingClass = "best-effort";
-          IOSchedulingPriority = 6;
-          OOMScoreAdjust = 250;
-          ProtectSystem = "full";
-          PrivateTmp = true;
-          NoNewPrivileges = true;
-          SupplementaryGroups = [ config.luxnix.generic-settings.sensitiveServiceGroupName ];
-          ReadWritePaths = appReadWritePaths;
-        };
-      };
+          lx-annotate-preflight = {
+            description = "Gate LX-Annotate web and workers on production runtime readiness";
+            before = [ "lx-annotate.service" ] ++ alwaysWorkerServiceUnits;
+            after = [
+              "lx-annotate-runtime-env.service"
+              "lx-annotate-load-base-data.service"
+              "lx-annotate-master-key-check.service"
+            ]
+            ++ dataRecoveryServiceUnits
+            ++ hlsBackfillServiceUnits
+            ++ hubNodeProvisioningServiceUnits
+            ++ localPostgresServiceUnits
+            ++ localPostgresSetupUnits
+            ++ managedSecretsSetupUnits
+            ++ encryptionServiceUnits;
+            wants = [
+              "lx-annotate-load-base-data.service"
+              "lx-annotate-master-key-check.service"
+            ]
+            ++ dataRecoveryServiceUnits
+            ++ hlsBackfillServiceUnits
+            ++ hubNodeProvisioningServiceUnits
+            ++ localPostgresServiceUnits
+            ++ managedSecretsSetupUnits
+            ++ encryptionServiceUnits;
+            requires = [
+              "lx-annotate-runtime-env.service"
+              "lx-annotate-load-base-data.service"
+              "lx-annotate-master-key-check.service"
+            ]
+            ++ dataRecoveryServiceUnits
+            ++ hlsBackfillServiceUnits
+            ++ hubNodeProvisioningServiceUnits
+            ++ managedSecretsSetupUnits
+            ++ encryptionServiceUnits;
+            restartTriggers = [ effectiveRuntimePackage ];
+            unitConfig = encryptedDataMountUnitConfig;
+            environment = commonExtraEnv;
+            serviceConfig = {
+              Type = "oneshot";
+              RemainAfterExit = true;
+              User = endoreg-service-user-name;
+              Group = endoreg-service-group-name;
+              SupplementaryGroups = [ config.luxnix.generic-settings.sensitiveServiceGroupName ];
+              WorkingDirectory = runtimeDataRootPath;
+              EnvironmentFile = envSystemdFilePath;
+              LogNamespace = lxAnnotateJournalNamespace;
+              ExecStart = pkgs.writeShellScript "lx-annotate-preflight" ''
+                set -euo pipefail
+                ${effectiveRuntimePackage}/bin/lx-annotate-manage check --fail-level CRITICAL
+                ${effectiveRuntimePackage}/bin/lx-annotate-manage verify_encrypted_storage
+                test -s ${lib.escapeShellArg "${packageStaticRoot}/.vite/manifest.json"}
+              '';
+              TimeoutStartSec = "10min";
+              ProtectSystem = "full";
+              PrivateTmp = true;
+              NoNewPrivileges = true;
+              ReadWritePaths = appReadWritePaths;
+            };
+          };
 
-      systemd.services.lx-annotate-master-key-check = {
-        description = "Validate lx-annotate application master key against encrypted storage";
-        wantedBy = [ "multi-user.target" ];
-        before = [ "lx-annotate.service" ];
-        after = [
-          "systemd-tmpfiles-setup.service"
-          "lx-annotate-runtime-env.service"
-          "lx-annotate-load-base-data.service"
-        ]
-        ++ localPostgresServiceUnits
-        ++ localPostgresSetupUnits
-        ++ managedSecretsSetupUnits
-        ++ encryptionServiceUnits;
-        wants = [
-          "lx-annotate-load-base-data.service"
-        ]
-        ++ localPostgresServiceUnits
-        ++ managedSecretsSetupUnits
-        ++ encryptionServiceUnits;
-        requires = [
-          "lx-annotate-runtime-env.service"
-          "lx-annotate-load-base-data.service"
-        ]
-        ++ managedSecretsSetupUnits
-        ++ encryptionServiceUnits;
-        restartTriggers = [ effectiveRuntimePackage ];
-        unitConfig = encryptedDataMountUnitConfig;
-        environment = commonExtraEnv;
-        serviceConfig = {
-          Type = "oneshot";
-          RemainAfterExit = true;
-          User = endoreg-service-user-name;
-          Group = endoreg-service-group-name;
-          SupplementaryGroups = [ config.luxnix.generic-settings.sensitiveServiceGroupName ];
-          WorkingDirectory = runtimeDataRootPath;
-          ExecStart = "${runLocalMasterKeyCheckScript}/bin/runLocalMasterKeyCheck";
-          EnvironmentFile = envSystemdFilePath;
-          LogNamespace = lxAnnotateJournalNamespace;
-          TimeoutStartSec = "10min";
-          ProtectSystem = "full";
-          PrivateTmp = true;
-          NoNewPrivileges = true;
-          ReadWritePaths = appReadWritePaths;
-        };
-      };
+          lx-annotate-video-streamable-migration = mkIf cfg.streamableMigration.enable {
+            description = "Backfill LX-Annotate streamable video artifacts";
+            wantedBy = [ ];
+            after = [
+              "systemd-tmpfiles-setup.service"
+              "lx-annotate-runtime-env.service"
+              "lx-annotate-load-base-data.service"
+              "lx-annotate-master-key-check.service"
+            ]
+            ++ localPostgresServiceUnits
+            ++ localPostgresSetupUnits
+            ++ managedSecretsSetupUnits
+            ++ encryptionServiceUnits;
+            wants = [
+              "lx-annotate-load-base-data.service"
+            ]
+            ++ localPostgresServiceUnits
+            ++ managedSecretsSetupUnits
+            ++ encryptionServiceUnits;
+            requires = [
+              "lx-annotate-runtime-env.service"
+              "lx-annotate-load-base-data.service"
+              "lx-annotate-master-key-check.service"
+            ]
+            ++ managedSecretsSetupUnits
+            ++ encryptionServiceUnits;
+            restartTriggers = [ effectiveRuntimePackage ];
+            unitConfig = encryptedDataMountUnitConfig;
+            environment = commonExtraEnv;
+            serviceConfig = {
+              Type = "oneshot";
+              User = endoreg-service-user-name;
+              Group = endoreg-service-group-name;
+              SupplementaryGroups = [ config.luxnix.generic-settings.sensitiveServiceGroupName ];
+              WorkingDirectory = runtimeDataRootPath;
+              ExecStart = lib.escapeShellArgs [
+                "${lxAnnotateMigrateVideoStreamableStorageScript}/bin/lx-annotate-migrate-video-streamable-storage"
+              ];
+              EnvironmentFile = envSystemdFilePath;
+              TimeoutStartSec = "infinity";
+              Nice = 15;
+              IOSchedulingClass = "best-effort";
+              IOSchedulingPriority = 6;
+              ProtectSystem = "full";
+              PrivateTmp = true;
+              NoNewPrivileges = true;
+              ReadWritePaths = appReadWritePaths;
+            };
+          };
 
-      systemd.services.lx-annotate-preflight = {
-        description = "Gate LX-Annotate web and workers on production runtime readiness";
-        before = [ "lx-annotate.service" ] ++ alwaysWorkerServiceUnits;
-        after = [
-          "lx-annotate-runtime-env.service"
-          "lx-annotate-load-base-data.service"
-          "lx-annotate-master-key-check.service"
-        ]
-        ++ dataRecoveryServiceUnits
-        ++ hlsBackfillServiceUnits
-        ++ hubNodeProvisioningServiceUnits
-        ++ localPostgresServiceUnits
-        ++ localPostgresSetupUnits
-        ++ managedSecretsSetupUnits
-        ++ encryptionServiceUnits;
-        wants = [
-          "lx-annotate-load-base-data.service"
-          "lx-annotate-master-key-check.service"
-        ]
-        ++ dataRecoveryServiceUnits
-        ++ hlsBackfillServiceUnits
-        ++ hubNodeProvisioningServiceUnits
-        ++ localPostgresServiceUnits
-        ++ managedSecretsSetupUnits
-        ++ encryptionServiceUnits;
-        requires = [
-          "lx-annotate-runtime-env.service"
-          "lx-annotate-load-base-data.service"
-          "lx-annotate-master-key-check.service"
-        ]
-        ++ dataRecoveryServiceUnits
-        ++ hlsBackfillServiceUnits
-        ++ hubNodeProvisioningServiceUnits
-        ++ managedSecretsSetupUnits
-        ++ encryptionServiceUnits;
-        restartTriggers = [ effectiveRuntimePackage ];
-        unitConfig = encryptedDataMountUnitConfig;
-        environment = commonExtraEnv;
-        serviceConfig = {
-          Type = "oneshot";
-          RemainAfterExit = true;
-          User = endoreg-service-user-name;
-          Group = endoreg-service-group-name;
-          SupplementaryGroups = [ config.luxnix.generic-settings.sensitiveServiceGroupName ];
-          WorkingDirectory = runtimeDataRootPath;
-          EnvironmentFile = envSystemdFilePath;
-          LogNamespace = lxAnnotateJournalNamespace;
-          ExecStart = pkgs.writeShellScript "lx-annotate-preflight" ''
-            set -euo pipefail
-            ${effectiveRuntimePackage}/bin/lx-annotate-manage check --fail-level CRITICAL
-            ${effectiveRuntimePackage}/bin/lx-annotate-manage verify_encrypted_storage
-            test -s ${lib.escapeShellArg "${packageStaticRoot}/.vite/manifest.json"}
-          '';
-          TimeoutStartSec = "10min";
-          ProtectSystem = "full";
-          PrivateTmp = true;
-          NoNewPrivileges = true;
-          ReadWritePaths = appReadWritePaths;
-        };
-      };
-
-      systemd.services.lx-annotate-video-streamable-migration = mkIf cfg.streamableMigration.enable {
-        description = "Backfill LX-Annotate streamable video artifacts";
-        wantedBy = [ ];
-        after = [
-          "systemd-tmpfiles-setup.service"
-          "lx-annotate-runtime-env.service"
-          "lx-annotate-load-base-data.service"
-          "lx-annotate-master-key-check.service"
-        ]
-        ++ localPostgresServiceUnits
-        ++ localPostgresSetupUnits
-        ++ managedSecretsSetupUnits
-        ++ encryptionServiceUnits;
-        wants = [
-          "lx-annotate-load-base-data.service"
-        ]
-        ++ localPostgresServiceUnits
-        ++ managedSecretsSetupUnits
-        ++ encryptionServiceUnits;
-        requires = [
-          "lx-annotate-runtime-env.service"
-          "lx-annotate-load-base-data.service"
-          "lx-annotate-master-key-check.service"
-        ]
-        ++ managedSecretsSetupUnits
-        ++ encryptionServiceUnits;
-        restartTriggers = [ effectiveRuntimePackage ];
-        unitConfig = encryptedDataMountUnitConfig;
-        environment = commonExtraEnv;
-        serviceConfig = {
-          Type = "oneshot";
-          User = endoreg-service-user-name;
-          Group = endoreg-service-group-name;
-          SupplementaryGroups = [ config.luxnix.generic-settings.sensitiveServiceGroupName ];
-          WorkingDirectory = runtimeDataRootPath;
-          ExecStart = lib.escapeShellArgs [
-            "${lxAnnotateMigrateVideoStreamableStorageScript}/bin/lx-annotate-migrate-video-streamable-storage"
-          ];
-          EnvironmentFile = envSystemdFilePath;
-          TimeoutStartSec = "infinity";
-          Nice = 15;
-          IOSchedulingClass = "best-effort";
-          IOSchedulingPriority = 6;
-          ProtectSystem = "full";
-          PrivateTmp = true;
-          NoNewPrivileges = true;
-          ReadWritePaths = appReadWritePaths;
-        };
-      };
-
-      systemd.services.lx-annotate-hls-materialization =
-        mkIf cfg.hlsMaterialization.enable
-          (mkLxAnnotateAppService {
+          lx-annotate-hls-materialization = mkIf cfg.hlsMaterialization.enable (mkLxAnnotateAppService {
             description = "Dispatch local encrypted HLS materialization for LX-Annotate videos";
             wantedBy = [ ];
             after = [
@@ -2660,288 +2845,246 @@ in
             };
           });
 
-      systemd.services.lx-annotate-hls-backfill = mkIf cfg.hlsBackfill.enable (mkLxAnnotateAppService {
-        description = "Dispatch local encrypted HLS backfill for LX-Annotate videos";
-        wantedBy = [ "multi-user.target" ];
-        before = [ "lx-annotate.service" ];
-        after = [
-          "lx-annotate-load-base-data.service"
-          "lx-annotate-master-key-check.service"
-        ];
-        wants = [
-          "lx-annotate-load-base-data.service"
-        ];
-        requires = [
-          "lx-annotate-load-base-data.service"
-          "lx-annotate-master-key-check.service"
-        ];
-        serviceConfig = {
-          Type = "oneshot";
-          ExecStart = lib.escapeShellArgs (
-            [
-              "${runLocalHlsMaterializationScript}/bin/runLxAnnotateHlsMaterialization"
+          lx-annotate-hls-backfill = mkIf cfg.hlsBackfill.enable (mkLxAnnotateAppService {
+            description = "Dispatch local encrypted HLS backfill for LX-Annotate videos";
+            wantedBy = [ "multi-user.target" ];
+            before = [ "lx-annotate.service" ];
+            after = [
+              "lx-annotate-load-base-data.service"
+              "lx-annotate-master-key-check.service"
+            ];
+            wants = [
+              "lx-annotate-load-base-data.service"
+            ];
+            requires = [
+              "lx-annotate-load-base-data.service"
+              "lx-annotate-master-key-check.service"
+            ];
+            serviceConfig = {
+              Type = "oneshot";
+              ExecStart = lib.escapeShellArgs (
+                [
+                  "${runLocalHlsMaterializationScript}/bin/runLxAnnotateHlsMaterialization"
+                ]
+                ++ cfg.hlsBackfill.extraArgs
+              );
+              TimeoutStartSec = cfg.hlsBackfill.timeoutStartSec;
+              Nice = 15;
+              IOSchedulingClass = "best-effort";
+              IOSchedulingPriority = 6;
+            };
+          });
+
+          lx-annotate-data-cleanup = mkIf cfg.dataCleanup.enable {
+            description = "Move duplicate anonymized lx-annotate payload into external archive storage";
+            after = [
+              "systemd-tmpfiles-setup.service"
             ]
-            ++ cfg.hlsBackfill.extraArgs
-          );
-          TimeoutStartSec = cfg.hlsBackfill.timeoutStartSec;
-          Nice = 15;
-          IOSchedulingClass = "best-effort";
-          IOSchedulingPriority = 6;
-        };
-      });
+            ++ encryptionServiceUnits;
+            wants = encryptionServiceUnits;
+            requires = encryptionServiceUnits;
+            unitConfig = encryptedDataMountUnitConfig;
+            serviceConfig = {
+              Type = "oneshot";
+              User = endoreg-service-user-name;
+              Group = endoreg-service-group-name;
+              WorkingDirectory = endoreg-service-user-home;
+              ExecStart = "${dataCleanupScript}/bin/runLxAnnotateDataCleanup";
+              ReadWritePaths = [
+                endoreg-service-user-home
+                envDataDir
+                cfg.dataCleanup.archiveDir
+                runtimeRootPath
+                "/var/endoreg-service-user/lx-annotate"
+                config.roles.endoreg-client.paths.storagePersistingMountPoint
+              ];
+            };
+          };
+          lx-annotate-emergency-storage-relief = mkIf cfg.storageRelief.enable {
+            description = "Emergency lx-annotate storage relief to verified external archive";
+            after = [
+              "systemd-tmpfiles-setup.service"
+              "lx-annotate-runtime-env.service"
+            ]
+            ++ localPostgresServiceUnits
+            ++ localPostgresSetupUnits
 
-      systemd.services.lx-annotate-data-cleanup = mkIf cfg.dataCleanup.enable {
-        description = "Move duplicate anonymized lx-annotate payload into external archive storage";
-        after = [
-          "systemd-tmpfiles-setup.service"
-        ]
-        ++ encryptionServiceUnits;
-        wants = encryptionServiceUnits;
-        requires = encryptionServiceUnits;
-        unitConfig = encryptedDataMountUnitConfig;
-        serviceConfig = {
-          Type = "oneshot";
-          User = endoreg-service-user-name;
-          Group = endoreg-service-group-name;
-          WorkingDirectory = endoreg-service-user-home;
-          ExecStart = "${dataCleanupScript}/bin/runLxAnnotateDataCleanup";
-          ReadWritePaths = [
-            endoreg-service-user-home
-            envDataDir
-            cfg.dataCleanup.archiveDir
-            runtimeRootPath
-            "/var/endoreg-service-user/lx-annotate"
-            config.roles.endoreg-client.paths.storagePersistingMountPoint
-          ];
-        };
-      };
-      systemd.timers.lx-annotate-data-cleanup = mkIf cfg.dataCleanup.enable {
-        description = "Periodic duplicate cleanup for anonymized lx-annotate legacy storage";
-        wantedBy = [ "timers.target" ];
-        timerConfig = {
-          OnBootSec = "15m";
-          OnCalendar = cfg.dataCleanup.onCalendar;
-          Unit = "lx-annotate-data-cleanup.service";
-        };
-      };
+            ++ encryptionServiceUnits;
+            wants = [
+              "lx-annotate-runtime-env.service"
+            ]
 
-      systemd.services.lx-annotate-emergency-storage-relief = mkIf cfg.storageRelief.enable {
-        description = "Emergency lx-annotate storage relief to verified external archive";
-        after = [
-          "systemd-tmpfiles-setup.service"
-          "lx-annotate-runtime-env.service"
-        ]
-        ++ localPostgresServiceUnits
-        ++ localPostgresSetupUnits
+            ++ encryptionServiceUnits;
+            requires = [
+              "lx-annotate-runtime-env.service"
+            ]
 
-        ++ encryptionServiceUnits;
-        wants = [
-          "lx-annotate-runtime-env.service"
-        ]
-
-        ++ encryptionServiceUnits;
-        requires = [
-          "lx-annotate-runtime-env.service"
-        ]
-
-        ++ encryptionServiceUnits;
-        unitConfig = {
-          RequiresMountsFor = [
-            envDataDir
-          ]
-          ++ lib.optionals cfg.storageRelief.requireExternalMount [
-            cfg.storageRelief.externalMountPoint
-          ];
-        };
-        environment = commonExtraEnv;
-        serviceConfig = {
-          Type = "oneshot";
-          User = endoreg-service-user-name;
-          Group = endoreg-service-group-name;
-          WorkingDirectory = runtimeDataRootPath;
-          ExecStart = "${emergencyStorageReliefScript}/bin/runLxAnnotateEmergencyStorageRelief";
-          EnvironmentFile = envSystemdFilePath;
-          TimeoutStartSec = "infinity";
-          Nice = 19;
-          IOSchedulingClass = "idle";
-          OOMScoreAdjust = 900;
-          ProtectSystem = "full";
-          PrivateTmp = true;
-          NoNewPrivileges = true;
-          ReadWritePaths = [
-            endoreg-service-user-home
-            envDataDir
-            envConfDir
-            runtimeRootPath
-            cfg.storageRelief.externalMountPoint
-          ];
-        };
-        path = [
-          pkgs.coreutils
-          pkgs.findutils
-          pkgs.util-linux
-        ];
-      };
-      systemd.timers.lx-annotate-emergency-storage-relief =
-        mkIf (cfg.storageRelief.enable && cfg.storageRelief.timer.enable)
-          {
-            description = "Periodic emergency lx-annotate storage relief";
-            wantedBy = [ "timers.target" ];
-            timerConfig = {
-              OnBootSec = "20m";
-              OnCalendar = cfg.storageRelief.timer.onCalendar;
-              Unit = "lx-annotate-emergency-storage-relief.service";
+            ++ encryptionServiceUnits;
+            unitConfig = {
+              RequiresMountsFor = [
+                envDataDir
+              ]
+              ++ lib.optionals cfg.storageRelief.requireExternalMount [
+                cfg.storageRelief.externalMountPoint
+              ];
+            };
+            environment = commonExtraEnv;
+            serviceConfig = {
+              Type = "oneshot";
+              User = endoreg-service-user-name;
+              Group = endoreg-service-group-name;
+              WorkingDirectory = runtimeDataRootPath;
+              ExecStart = "${emergencyStorageReliefScript}/bin/runLxAnnotateEmergencyStorageRelief";
+              EnvironmentFile = envSystemdFilePath;
+              TimeoutStartSec = "infinity";
+              Nice = 19;
+              IOSchedulingClass = "idle";
+              OOMScoreAdjust = 900;
+              ProtectSystem = "full";
+              PrivateTmp = true;
+              NoNewPrivileges = true;
+              ReadWritePaths = [
+                endoreg-service-user-home
+                envDataDir
+                envConfDir
+                runtimeRootPath
+                cfg.storageRelief.externalMountPoint
+              ];
+            };
+            path = [
+              pkgs.coreutils
+              pkgs.findutils
+              pkgs.util-linux
+            ];
+          };
+          lx-annotate-hub-backup = mkIf cfg.hub.backup.enable {
+            description = "Create coupled PostgreSQL and protected lx-annotate hub runtime snapshots";
+            after = [
+              "lx-annotate.service"
+              "postgresqlBackup.service"
+            ]
+            ++ encryptionServiceUnits;
+            wants = [ "lx-annotate.service" ] ++ encryptionServiceUnits;
+            requires = [ "postgresqlBackup.service" ] ++ encryptionServiceUnits;
+            unitConfig = encryptedDataMountUnitConfig;
+            serviceConfig = {
+              Type = "oneshot";
+              User = endoreg-service-user-name;
+              Group = endoreg-service-group-name;
+              WorkingDirectory = runtimeDataRootPath;
+              ExecStart = "${runLocalHubBackupScript}/bin/runLxAnnotateHubBackup";
+              LoadCredential = [
+                "hub-postgresql.sql.gz:${config.services.postgresqlBackup.location}/all.sql.gz"
+              ];
+              ReadWritePaths = [
+                envDataDir
+                cfg.hub.backup.incomingDir
+                cfg.hub.backup.snapshotDir
+                cfg.hub.backup.manifestDir
+                runtimeRootPath
+              ];
+            };
+            path = [
+              pkgs.coreutils
+              pkgs.findutils
+              pkgs.gzip
+              pkgs.jq
+              pkgs.rsync
+            ];
+          };
+          lx-annotate-acceptance = {
+            description = "Run LX-Annotate live web, worker, storage, and static acceptance checks";
+            after = [
+              "lx-annotate-preflight.service"
+              "lx-annotate.service"
+              "nginx.service"
+            ]
+            ++ terminologyBootstrapServiceUnits
+            ++ alwaysWorkerServiceUnits
+            ++ encryptionServiceUnits;
+            wants = [
+              "lx-annotate-preflight.service"
+              "lx-annotate.service"
+              "nginx.service"
+            ]
+            ++ terminologyBootstrapServiceUnits
+            ++ alwaysWorkerServiceUnits
+            ++ encryptionServiceUnits;
+            requires = [
+              "lx-annotate-preflight.service"
+              "lx-annotate.service"
+              "nginx.service"
+            ]
+            ++ terminologyBootstrapServiceUnits
+            ++ alwaysWorkerServiceUnits
+            ++ encryptionServiceUnits;
+            unitConfig = encryptedDataMountUnitConfig;
+            environment = commonExtraEnv;
+            serviceConfig = {
+              Type = "oneshot";
+              User = endoreg-service-user-name;
+              Group = endoreg-service-group-name;
+              WorkingDirectory = runtimeDataRootPath;
+              EnvironmentFile = envSystemdFilePath;
+              ExecStart = pkgs.writeShellScript "lx-annotate-acceptance" ''
+                set -euo pipefail
+                ${effectiveRuntimePackage}/bin/lx-annotate-manage check --fail-level CRITICAL
+                ${effectiveRuntimePackage}/bin/lx-annotate-manage verify_encrypted_storage
+                required_workers=( ${lib.concatMapStringsSep " " lib.escapeShellArg alwaysWorkerServiceUnits} )
+                for worker_unit in "''${required_workers[@]}"; do
+                  ${pkgs.systemd}/bin/systemctl is-active --quiet "$worker_unit"
+                done
+                ${pkgs.curl}/bin/curl --fail --silent --show-error \
+                  --cacert "${publicSslCertificatePath}" \
+                  --resolve "${cfg.django.hostname}:443:127.0.0.1" \
+                  "https://${cfg.django.hostname}/static/.vite/manifest.json" >/dev/null
+              '';
+              ReadWritePaths = appReadWritePaths;
             };
           };
 
-      systemd.services.lx-annotate-hub-backup = mkIf cfg.hub.backup.enable {
-        description = "Create coupled PostgreSQL and protected lx-annotate hub runtime snapshots";
-        after = [
-          "lx-annotate.service"
-          "postgresqlBackup.service"
-        ]
-        ++ encryptionServiceUnits;
-        wants = [ "lx-annotate.service" ] ++ encryptionServiceUnits;
-        requires = [ "postgresqlBackup.service" ] ++ encryptionServiceUnits;
-        unitConfig = encryptedDataMountUnitConfig;
-        serviceConfig = {
-          Type = "oneshot";
-          User = endoreg-service-user-name;
-          Group = endoreg-service-group-name;
-          WorkingDirectory = runtimeDataRootPath;
-          ExecStart = "${runLocalHubBackupScript}/bin/runLxAnnotateHubBackup";
-          LoadCredential = [
-            "hub-postgresql.sql.gz:${config.services.postgresqlBackup.location}/all.sql.gz"
-          ];
-          ReadWritePaths = [
-            envDataDir
-            cfg.hub.backup.incomingDir
-            cfg.hub.backup.snapshotDir
-            cfg.hub.backup.manifestDir
-            runtimeRootPath
-          ];
-        };
-        path = [
-          pkgs.coreutils
-          pkgs.findutils
-          pkgs.gzip
-          pkgs.jq
-          pkgs.rsync
-        ];
-      };
-      systemd.timers.lx-annotate-hub-backup = mkIf cfg.hub.backup.enable {
-        description = "Periodic protected snapshots for the lx-annotate hub node";
-        wantedBy = [ "timers.target" ];
-        timerConfig = {
-          OnBootSec = "10m";
-          OnCalendar = cfg.hub.backup.onCalendar;
-          Unit = "lx-annotate-hub-backup.service";
-        };
-      };
+          lx-annotate-ffmpeg-stream-throttle = mkIf cfg.runtime.ffmpegStreamThrottle.enable {
+            description = "Apply stream-aware runtime throttling to the LX-Annotate FFmpeg worker";
+            after = [
+              "lx-annotate-runtime-env.service"
+              "lx-annotate-migrate.service"
+              ffmpegStreamThrottleWorkerUnit
+            ]
+            ++ localPostgresServiceUnits
+            ++ localPostgresSetupUnits
+            ++ managedSecretsSetupUnits
+            ++ encryptionServiceUnits;
+            wants = [
+              "lx-annotate-runtime-env.service"
+            ]
+            ++ localPostgresServiceUnits
+            ++ localPostgresSetupUnits
+            ++ managedSecretsSetupUnits
+            ++ encryptionServiceUnits;
+            requires = [
+              "lx-annotate-runtime-env.service"
+            ]
+            ++ managedSecretsSetupUnits
+            ++ encryptionServiceUnits;
+            unitConfig = encryptedDataMountUnitConfig;
+            environment = commonExtraEnv;
+            serviceConfig = {
+              Type = "oneshot";
+              WorkingDirectory = runtimeDataRootPath;
+              EnvironmentFile = envSystemdFilePath;
+              ExecStart = ffmpegStreamThrottleScript;
+              ProtectSystem = "full";
+              PrivateTmp = true;
+              NoNewPrivileges = true;
+              ReadWritePaths = appReadWritePaths ++ [ "/run/lx-annotate" ];
+            };
+            path = [
+              pkgs.coreutils
+              pkgs.systemd
+            ];
+          };
 
-      systemd.services.lx-annotate-acceptance = {
-        description = "Run LX-Annotate live web, worker, storage, and static acceptance checks";
-        after = [
-          "lx-annotate-preflight.service"
-          "lx-annotate.service"
-          "nginx.service"
-        ]
-        ++ alwaysWorkerServiceUnits
-        ++ encryptionServiceUnits;
-        wants = [
-          "lx-annotate-preflight.service"
-          "lx-annotate.service"
-          "nginx.service"
-        ]
-        ++ alwaysWorkerServiceUnits
-        ++ encryptionServiceUnits;
-        requires = [
-          "lx-annotate-preflight.service"
-          "lx-annotate.service"
-          "nginx.service"
-        ]
-        ++ alwaysWorkerServiceUnits
-        ++ encryptionServiceUnits;
-        unitConfig = encryptedDataMountUnitConfig;
-        environment = commonExtraEnv;
-        serviceConfig = {
-          Type = "oneshot";
-          User = endoreg-service-user-name;
-          Group = endoreg-service-group-name;
-          WorkingDirectory = runtimeDataRootPath;
-          EnvironmentFile = envSystemdFilePath;
-          ExecStart = pkgs.writeShellScript "lx-annotate-acceptance" ''
-            set -euo pipefail
-            ${effectiveRuntimePackage}/bin/lx-annotate-manage check --fail-level CRITICAL
-            ${effectiveRuntimePackage}/bin/lx-annotate-manage verify_encrypted_storage
-            required_workers=( ${lib.concatMapStringsSep " " lib.escapeShellArg alwaysWorkerServiceUnits} )
-            for worker_unit in "''${required_workers[@]}"; do
-              ${pkgs.systemd}/bin/systemctl is-active --quiet "$worker_unit"
-            done
-            ${pkgs.curl}/bin/curl --fail --silent --show-error \
-              --cacert "${publicSslCertificatePath}" \
-              --resolve "${cfg.django.hostname}:443:127.0.0.1" \
-              "https://${cfg.django.hostname}/static/.vite/manifest.json" >/dev/null
-          '';
-          ReadWritePaths = appReadWritePaths;
-        };
-      };
-
-      systemd.services.lx-annotate-ffmpeg-stream-throttle = mkIf cfg.runtime.ffmpegStreamThrottle.enable {
-        description = "Apply stream-aware runtime throttling to the LX-Annotate FFmpeg worker";
-        after = [
-          "lx-annotate-runtime-env.service"
-          "lx-annotate-migrate.service"
-          ffmpegStreamThrottleWorkerUnit
-        ]
-        ++ localPostgresServiceUnits
-        ++ localPostgresSetupUnits
-        ++ managedSecretsSetupUnits
-        ++ encryptionServiceUnits;
-        wants = [
-          "lx-annotate-runtime-env.service"
-        ]
-        ++ localPostgresServiceUnits
-        ++ localPostgresSetupUnits
-        ++ managedSecretsSetupUnits
-        ++ encryptionServiceUnits;
-        requires = [
-          "lx-annotate-runtime-env.service"
-        ]
-        ++ managedSecretsSetupUnits
-        ++ encryptionServiceUnits;
-        unitConfig = encryptedDataMountUnitConfig;
-        environment = commonExtraEnv;
-        serviceConfig = {
-          Type = "oneshot";
-          WorkingDirectory = runtimeDataRootPath;
-          EnvironmentFile = envSystemdFilePath;
-          ExecStart = ffmpegStreamThrottleScript;
-          ProtectSystem = "full";
-          PrivateTmp = true;
-          NoNewPrivileges = true;
-          ReadWritePaths = appReadWritePaths ++ [ "/run/lx-annotate" ];
-        };
-        path = [
-          pkgs.coreutils
-          pkgs.systemd
-        ];
-      };
-
-      systemd.timers.lx-annotate-ffmpeg-stream-throttle = mkIf cfg.runtime.ffmpegStreamThrottle.enable {
-        description = "Periodically reconcile stream-aware FFmpeg worker throttling";
-        wantedBy = [ "timers.target" ];
-        timerConfig = {
-          OnBootSec = cfg.runtime.ffmpegStreamThrottle.interval;
-          OnUnitActiveSec = cfg.runtime.ffmpegStreamThrottle.interval;
-          AccuracySec = "10s";
-          Unit = "lx-annotate-ffmpeg-stream-throttle.service";
-        };
-      };
-
-      systemd.services.lx-annotate-ffmpeg-stream-throttle-reset =
-        mkIf (!cfg.runtime.ffmpegStreamThrottle.enable)
-          {
+          lx-annotate-ffmpeg-stream-throttle-reset = mkIf (!cfg.runtime.ffmpegStreamThrottle.enable) {
             description = "Reset runtime controls left by LX-Annotate FFmpeg stream throttling";
             wantedBy = [ "multi-user.target" ];
             after = [ ffmpegStreamThrottleWorkerUnit ];
@@ -2956,16 +3099,18 @@ in
             };
           };
 
-      systemd.services.move-my-files = mkIf config.services.luxnix.fileMover.enable {
-        after = mkAfter [ "lx-annotate-runtime-env.service" ];
-        wants = mkAfter [ "lx-annotate-runtime-env.service" ];
-      };
+          move-my-files = mkIf config.services.luxnix.fileMover.enable {
+            after = mkAfter [ "lx-annotate-runtime-env.service" ];
+            wants = mkAfter [ "lx-annotate-runtime-env.service" ];
+          };
 
-      systemd.services.nginx.serviceConfig = {
-        Nice = -5;
-        IOSchedulingClass = "best-effort";
-        IOSchedulingPriority = 0;
-        OOMScoreAdjust = -500;
+          nginx.serviceConfig = {
+            Nice = -5;
+            IOSchedulingClass = "best-effort";
+            IOSchedulingPriority = 0;
+            OOMScoreAdjust = -500;
+          };
+        };
       };
     }
     workerSubservice

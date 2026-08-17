@@ -9,6 +9,7 @@ let
   lxAnnotateConfig = "${repoRoot}/modules/nixos/services/lx-annotate-local/config.nix";
   lxAnnotateScripts = "${repoRoot}/modules/nixos/services/lx-annotate-local/scripts.nix";
   lxAnnotateEnvScripts = "${repoRoot}/modules/nixos/services/lx-annotate-local/scripts/env.nix";
+  vaultConfig = "${repoRoot}/modules/nixos/luxnix/vault/default.nix";
 in
 {
   suites."lx-annotate hub contracts" = {
@@ -57,7 +58,7 @@ in
           assert_file_contains ${lxAnnotateOptions} 'description = "Enable the authenticated node-to-node hub transfer API\. Disabled by default even on hub nodes\."' "transfer API option must stay explicit and default-off"
           assert_file_contains ${lxAnnotateConfig} 'hub\.transferApi\.enable requires services\.luxnix\.lxAnnotateLocal\.hub\.enable' "transfer API must not be enabled outside hub mode"
           assert_file_contains ${lxAnnotateConfig} 'hub\.transferApi\.enable requires services\.luxnix\.lxAnnotateLocal\.hub\.transferApi\.requireSecureTransport = true' "transfer API must require secure transport"
-          assert_file_contains ${lxAnnotateConfig} 'hub\.transferApi\.enable requires services\.luxnix\.lxAnnotateLocal\.hub\.transferApi\.requireMtls = true' "transfer API must require mTLS"
+          assert_file_contains ${lxAnnotateConfig} '^[[:space:]]*assertion = !cfg\.hub\.transferApi\.enable \|\| cfg\.hub\.transferApi\.requireMtls;' "transfer API must require mTLS"
           assert_file_contains ${lxAnnotateConfig} 'hub\.transferApi\.enable requires services\.luxnix\.lxAnnotateLocal\.hub\.transferApi\.clientCaFile to be set' "transfer API must require a client CA file"
           assert_file_contains ${lxAnnotateConfig} 'proxy_set_header X-Client-Cert-Verified \$ssl_client_verify;' "nginx must forward client certificate verification to Django"
           assert_file_contains ${lxAnnotateConfig} 'if [(]\$ssl_client_verify != SUCCESS[)]' "nginx must enforce verified client certificates on transfer locations"
@@ -75,6 +76,7 @@ in
           ${ntlib.helpers.scriptHelpers}
           assert_file_contains ${lxAnnotateOptions} 'outboundTransfer = mkOption' "site nodes must expose explicit outbound transfer configuration"
           assert_file_contains ${lxAnnotateConfig} 'outboundTransfer\.enable requires runtime\.deploymentRole = \\"site_node\\"' "outbound transfer must be site-node-only"
+          assert_file_contains ${lxAnnotateConfig} '^[[:space:]]*assertion = !cfg\.hub\.outboundTransfer\.enable \|\| cfg\.hub\.outboundTransfer\.requireMtls;' "outbound transfer must require mTLS"
           assert_file_contains ${lxAnnotateConfig} 'outboundTransfer\.enable requires an outbound client certificate file' "outbound transfer must require a client certificate"
           assert_file_contains ${lxAnnotateConfig} 'outboundTransfer\.enable requires an outbound client key file' "outbound transfer must require a client key"
           assert_file_contains ${lxAnnotateConfig} 'outboundTransfer\.enable requires a source-node secret file' "outbound transfer must require request authentication"
@@ -87,6 +89,18 @@ in
           assert_file_contains ${lxAnnotateConfig} 'systemd\.timers\.lx-annotate-hub-export-recovery' "outbound recovery must be level-triggered by a persistent timer"
           assert_file_contains ${lxAnnotateConfig} 'check_hub_export_health' "site nodes must classify transfer failures without exposing request payloads"
           assert_file_contains ${lxAnnotateConfig} 'systemd\.timers\.lx-annotate-hub-export-health' "site nodes must periodically surface classified transfer health"
+        '';
+      }
+      {
+        name = "vault-managed-server-tls-reloads-consumers";
+        type = "script";
+        script = ''
+          ${ntlib.helpers.path [ pkgs.gnugrep ]}
+          ${ntlib.helpers.scriptHelpers}
+          assert_file_contains ${vaultConfig} 'before = \[ "vault\.service" \] \+\+ lib\.optional config\.services\.nginx\.enable "nginx\.service";' "managed TLS identity must exist before Vault and nginx start"
+          assert_file_contains ${vaultConfig} 'requiredBy = \[ "vault\.service" \] \+\+ lib\.optional config\.services\.nginx\.enable "nginx\.service";' "Vault and nginx must require their managed TLS identity"
+          assert_file_contains ${vaultConfig} 'systemctl kill --kill-whom=main --signal=HUP vault\.service' "Vault must reload a rotated server identity"
+          assert_file_contains ${vaultConfig} 'systemctl reload nginx\.service' "nginx must reload a rotated server identity"
         '';
       }
     ];

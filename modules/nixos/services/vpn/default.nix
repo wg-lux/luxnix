@@ -1,13 +1,14 @@
 {
-  pkgs,
   config,
   lib,
   ...
 }:
 #CHANGEME SETUP VPN
-with lib; let
+with lib;
+let
   cfg = config.services.vpn;
-in {
+in
+{
   options.services.vpn = {
     enable = mkEnableOption "Enable vpn";
 
@@ -19,7 +20,10 @@ in {
 
     backup-nameservers = mkOption {
       type = types.listOf types.str;
-      default = ["8.8.8.8" "1.1.1.1"];
+      default = [
+        "8.8.8.8"
+        "1.1.1.1"
+      ];
       description = "The nameservers for the vpn";
     };
 
@@ -33,8 +37,10 @@ in {
 
   config = mkIf cfg.enable {
     networking.domain = cfg.main-domain;
-    networking.nameservers = [ "8.8.8.8" "1.1.1.1" ];
+    networking.nameservers = [
+      "8.8.8.8"
+      "1.1.1.1"
+    ];
 
-  
   };
 }

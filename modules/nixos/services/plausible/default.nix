@@ -1,11 +1,11 @@
 {
-  config,
   lib,
   ...
 }:
 # CHANGEME Maybe in Future
 with lib;
-with lib.luxnix; {
+with lib.luxnix;
+{
   # options.services.luxnix.plausible = {
   #   enable = mkBoolOpt false "Enable the plausible service";
   # };

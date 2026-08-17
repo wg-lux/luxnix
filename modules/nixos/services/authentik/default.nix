@@ -1,11 +1,11 @@
 {
-  config,
   lib,
   ...
 }:
-#CHANGEME 
+#CHANGEME
 with lib;
-with lib.luxnix; {
+with lib.luxnix;
+{
   # options.services.luxnix.authentik = with types; {
   #   enable = mkBoolOpt false "Enable authentik host";
   # };

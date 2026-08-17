@@ -1,19 +1,19 @@
 {
   config,
-  inputs,
-  pkgs,
   lib,
   ...
 }:
 
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.luxnix.maintenance.autoUpdates;
 
-in {
+in
+{
   options.luxnix.maintenance.autoUpdates = with types; {
     enable = mkBoolOpt false "Enable or disable the scheduled rebooting of the system";
-    
+
     dates = mkOption {
       type = with types; str;
       default = "08:49";
@@ -28,7 +28,7 @@ in {
 
     flake = mkOption {
       type = with types; str;
-      default = "github:wg-lux/luxnix"; #TODO Create Production Branch and use it here
+      default = "github:wg-lux/luxnix"; # TODO Create Production Branch and use it here
       description = "The flake to upgrade";
     };
 
@@ -40,17 +40,19 @@ in {
 
   config = mkIf cfg.enable {
     system.autoUpgrade = {
-      enable = cfg.enable;
-      flake = cfg.flake;
+      inherit (cfg)
+        enable
+        flake
+        dates
+        operation
+        ;
       flags = [
         "-L"
       ];
-      dates = cfg.dates;
-      operation = cfg.operation;
       fixedRandomDelay = true;
       randomizedDelaySec = "30min";
       allowReboot = true;
     };
   };
-  
+
 }

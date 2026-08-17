@@ -7,6 +7,9 @@ from typing import Any
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+CONFIG_NIX = (
+    REPO_ROOT / "modules" / "nixos" / "services" / "lx-annotate-local" / "config.nix"
+)
 
 
 def _nix_eval_json(expression: str) -> dict[str, Any]:
@@ -29,6 +32,8 @@ def _gc_02_terminology_contract() -> dict[str, Any]:
         cfg = flake.nixosConfigurations.gc-02.config;
         lxCfg = cfg.services.luxnix.lxAnnotateLocal;
         bootstrap = cfg.systemd.services."lx-annotate-terminology-bootstrap";
+        runtimePackage = cfg.services.lx-annotate.package;
+        bootstrapEntrypoint = "${{runtimePackage}}/bin/lx-annotate-bootstrap-terminology";
         env = bootstrap.environment;
       in {{
         terminology = {{
@@ -43,10 +48,20 @@ def _gc_02_terminology_contract() -> dict[str, Any]:
         bootstrap = {{
           before = bootstrap.before;
           after = bootstrap.after;
+          requires = bootstrap.requires;
           wantedBy = bootstrap.wantedBy;
           serviceConfig = bootstrap.serviceConfig;
           unitConfig = bootstrap.unitConfig;
           script = builtins.readFile bootstrap.serviceConfig.ExecStart;
+        }};
+        bootstrapEntrypoint = {{
+          path = bootstrapEntrypoint;
+          script = builtins.readFile bootstrapEntrypoint;
+        }};
+        migrate = {{
+          after = cfg.systemd.services."lx-annotate-migrate".after;
+          wants = cfg.systemd.services."lx-annotate-migrate".wants;
+          requires = cfg.systemd.services."lx-annotate-migrate".requires;
         }};
         loadBaseData = {{
           after = cfg.systemd.services."lx-annotate-load-base-data".after;
@@ -59,7 +74,13 @@ def _gc_02_terminology_contract() -> dict[str, Any]:
         }};
         web = {{
           after = cfg.systemd.services.lx-annotate.after;
+          wants = cfg.systemd.services.lx-annotate.wants;
           requires = cfg.systemd.services.lx-annotate.requires;
+        }};
+        acceptance = {{
+          after = cfg.systemd.services."lx-annotate-acceptance".after;
+          wants = cfg.systemd.services."lx-annotate-acceptance".wants;
+          requires = cfg.systemd.services."lx-annotate-acceptance".requires;
         }};
         terminologyTmpfiles = builtins.filter
           (rule: lib.hasInfix "/terminology" rule)
@@ -129,7 +150,25 @@ def test_governed_terminology_paths_are_exported_inside_encrypted_storage() -> N
     assert any("/terminology/packages 0750" in rule for rule in contract["terminologyTmpfiles"])
 
 
-def test_packaged_default_terminology_is_best_effort_and_not_a_startup_gate() -> None:
+def test_wheel_runtime_exports_executable_terminology_bootstrap_entrypoint() -> None:
+    contract = _gc_02_terminology_contract()
+    entrypoint = contract["bootstrapEntrypoint"]
+    entrypoint_path = Path(entrypoint["path"])
+
+    assert entrypoint_path.is_file()
+    assert entrypoint_path.stat().st_mode & 0o111
+    assert "LX_ANNOTATE_WHEEL_INSTALL_ALLOWED=false" in entrypoint["script"]
+    assert "lx_annotate_wheel_ensure" in entrypoint["script"]
+    assert '"lx-annotate-bootstrap-terminology" "$@"' in entrypoint["script"]
+
+    config_source = CONFIG_NIX.read_text(encoding="utf-8")
+    assert (
+        "make_entrypoint lx-annotate-bootstrap-terminology "
+        "lx-annotate-bootstrap-terminology 0"
+    ) in config_source
+
+
+def test_packaged_reporting_bundles_are_a_fail_closed_wheel_startup_gate() -> None:
     contract = _gc_02_terminology_contract()
     unit_name = "lx-annotate-terminology-bootstrap.service"
     bootstrap = contract["bootstrap"]
@@ -139,32 +178,45 @@ def test_packaged_default_terminology_is_best_effort_and_not_a_startup_gate() ->
     assert bootstrap["serviceConfig"]["RemainAfterExit"] is True
     assert bootstrap["serviceConfig"]["User"] == "endoreg-service-user"
     assert "/var/lib/lx-annotate/data" in bootstrap["unitConfig"]["RequiresMountsFor"]
-    assert bootstrap["before"] == []
-    assert "lx-annotate.service" in bootstrap["after"]
+    assert "lx-annotate-migrate.service" in bootstrap["before"]
+    assert "lx-annotate.service" in bootstrap["before"]
+    assert "lx-annotate-migrate.service" not in bootstrap["after"]
+    assert "lx-annotate.service" not in bootstrap["after"]
+    assert "lx-annotate-wheel-runtime.service" in bootstrap["after"]
+    assert "lx-annotate-wheel-runtime.service" in bootstrap["requires"]
     assert "multi-user.target" in bootstrap["wantedBy"]
-    assert "lx-dtypes-kb-registry add-current" in script
-    assert "--activate" in script
-    assert "shipped in the wheel environment" in script
-    assert "exit 0" in script
-    assert "lx-dtypes-prototype-kb-smoke" in script
+    assert "lx-annotate-bootstrap-terminology" in script
+    assert "--registry" in script
+    assert "--best-effort" not in script
+    assert "lx-dtypes-kb-registry add-current" not in script
+    assert "--activate" not in script
 
+    assert unit_name in contract["migrate"]["after"]
+    assert unit_name in contract["migrate"]["wants"]
+    assert unit_name in contract["migrate"]["requires"]
+    assert "lx-annotate-migrate.service" in contract["loadBaseData"]["after"]
+    assert "lx-annotate-migrate.service" in contract["loadBaseData"]["requires"]
     assert unit_name not in contract["loadBaseData"]["after"]
     assert unit_name not in contract["loadBaseData"]["wants"]
     assert unit_name not in contract["loadBaseData"]["requires"]
     assert unit_name not in contract["preflight"]["after"]
     assert unit_name not in contract["preflight"]["requires"]
-    assert unit_name not in contract["web"]["after"]
-    assert unit_name not in contract["web"]["requires"]
+    assert unit_name in contract["web"]["after"]
+    assert unit_name in contract["web"]["wants"]
+    assert unit_name in contract["web"]["requires"]
+    assert unit_name in contract["acceptance"]["after"]
+    assert unit_name in contract["acceptance"]["wants"]
+    assert unit_name in contract["acceptance"]["requires"]
 
 
-def test_explicit_initial_bundle_is_registered_and_activated() -> None:
+def test_explicit_initial_bundle_is_passed_to_application_bootstrap() -> None:
     script = _gc_02_initial_bundle_script()
 
-    assert "lx-dtypes-kb-registry" in script
+    assert "lx-annotate-bootstrap-terminology" in script
     assert "--module governed_test_bundle" in script
     assert "--version 1.2.3" in script
     assert "--medical-field gastroenterology" in script
-    assert "--activate" in script
+    assert "--activate" not in script
     assert "lx-dtypes-kb-registry add-current" not in script
 
 

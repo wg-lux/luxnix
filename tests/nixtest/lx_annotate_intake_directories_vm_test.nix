@@ -38,7 +38,7 @@ in
             fileSystems.${protectedDataRoot} = {
               device = "tmpfs";
               fsType = "tmpfs";
-              neededForBoot = true; 
+              neededForBoot = true;
               options = [
                 "mode=0750"
                 "size=16M"

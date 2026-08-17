@@ -1,4 +1,5 @@
 import importlib
+import subprocess
 from pathlib import Path
 from typing import Any
 from unittest.mock import Mock
@@ -133,6 +134,9 @@ def test_nix_writer_has_one_explicit_responsibility() -> None:
     writer = (REPO_ROOT / "lx_administration/autoconf/nix/utils.py").read_text()
 
     assert "def write_nix_file(" in writer
+    assert "def format_nix_outputs(" in writer
+    assert '("nixfmt", str(source))' in writer
+    assert "fix_yml_list_in_nix_file(destination" not in writer
     assert "def load_config(" not in writer
     assert "import yaml" not in writer
     assert "get_logger(" not in writer
@@ -372,6 +376,185 @@ def test_nix_pipeline_renders_homes_before_writing_systems(monkeypatch, tmp_path
 
     assert published == []
     assert not (tmp_path / "output").exists()
+
+
+def test_isolated_renderer_preserves_configured_output_and_requires_new_target(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    nix_pipeline = importlib.import_module("lx_administration.autoconf.nix.main")
+    config = _render_config(tmp_path)
+    config.output_layout.system_vars_dir.mkdir(parents=True)
+    isolated_output = tmp_path / "isolated-output"
+
+    def fake_render(render_config, *, logger=None):
+        assert render_config.nix_output == isolated_output
+        return [
+            (
+                isolated_output / "systems/x86_64-linux/node-01/default.nix",
+                "{ }\n",
+            )
+        ]
+
+    monkeypatch.setattr(nix_pipeline, "_render_configuration_outputs", fake_render)
+
+    nix_pipeline.render_isolated_configurations(
+        config,
+        isolated_output,
+        formatter_runner=lambda _source: None,
+    )
+
+    assert config.nix_output == tmp_path / "output"
+    assert not config.nix_output.exists()
+    assert (
+        isolated_output / "systems/x86_64-linux/node-01/default.nix"
+    ).read_text(encoding="utf-8") == "{ }\n"
+
+    with pytest.raises(AutoconfPipelineError, match="new directory"):
+        nix_pipeline.render_isolated_configurations(
+            config,
+            isolated_output,
+            formatter_runner=lambda _source: None,
+        )
+
+
+def test_isolated_renderer_rejects_outputs_outside_the_new_root(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    nix_pipeline = importlib.import_module("lx_administration.autoconf.nix.main")
+    config = _render_config(tmp_path)
+    config.output_layout.system_vars_dir.mkdir(parents=True)
+    isolated_output = tmp_path / "isolated-output"
+    outside_output = tmp_path / "outside/default.nix"
+    monkeypatch.setattr(
+        nix_pipeline,
+        "_render_configuration_outputs",
+        lambda *_args, **_kwargs: [(outside_output, "{ }\n")],
+    )
+
+    with pytest.raises(AutoconfPipelineError, match="outside its output root"):
+        nix_pipeline.render_isolated_configurations(config, isolated_output)
+
+    assert not isolated_output.exists()
+    assert not outside_output.exists()
+
+
+def test_nix_writer_normalizes_every_output_before_publication(
+    tmp_path: Path,
+) -> None:
+    nix_utils = importlib.import_module("lx_administration.autoconf.nix.utils")
+    first_output = tmp_path / "first/default.nix"
+    second_output = tmp_path / "second/default.nix"
+    formatter_inputs: list[str] = []
+
+    def fake_nixfmt(source: Path) -> None:
+        assert not first_output.exists()
+        assert not second_output.exists()
+        formatter_inputs.append(source.read_text(encoding="utf-8"))
+        source.write_text(
+            source.read_text(encoding="utf-8").replace("unformatted", "formatted"),
+            encoding="utf-8",
+        )
+
+    nix_utils.write_nix_outputs(
+        [
+            (first_output, "unformatted first\n"),
+            (second_output, "unformatted second\n"),
+        ],
+        formatter_runner=fake_nixfmt,
+    )
+
+    assert formatter_inputs == ["unformatted first\n", "unformatted second\n"]
+    assert first_output.read_text(encoding="utf-8") == "formatted first\n"
+    assert second_output.read_text(encoding="utf-8") == "formatted second\n"
+
+
+def test_nix_writer_reports_missing_repository_formatter(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    nix_utils = importlib.import_module("lx_administration.autoconf.nix.utils")
+
+    def missing_nixfmt(*_args: object, **_kwargs: object) -> None:
+        raise FileNotFoundError("nixfmt")
+
+    monkeypatch.setattr(nix_utils.subprocess, "run", missing_nixfmt)
+
+    with pytest.raises(AutoconfPipelineError, match="nixfmt.*not available"):
+        nix_utils.format_nix_outputs([(tmp_path / "default.nix", "{ }\n")])
+
+
+def test_nix_writer_reports_failed_repository_formatter(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    nix_utils = importlib.import_module("lx_administration.autoconf.nix.utils")
+
+    def failed_nixfmt(*_args: object, **_kwargs: object) -> None:
+        raise subprocess.CalledProcessError(23, ("nixfmt", "file.nix"))
+
+    monkeypatch.setattr(nix_utils.subprocess, "run", failed_nixfmt)
+
+    with pytest.raises(AutoconfPipelineError, match="nixfmt.*exit status 23"):
+        nix_utils.format_nix_outputs([(tmp_path / "default.nix", "{ }\n")])
+
+
+def test_nix_writer_does_not_publish_partial_outputs_when_formatting_fails(
+    tmp_path: Path,
+) -> None:
+    nix_utils = importlib.import_module("lx_administration.autoconf.nix.utils")
+    first_output = tmp_path / "first/default.nix"
+    second_output = tmp_path / "second/default.nix"
+    calls = 0
+
+    def fail_on_second_output(_source: Path) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("invalid Nix output")
+
+    with pytest.raises(
+        AutoconfPipelineError,
+        match="repository formatter 'nixfmt'",
+    ) as error:
+        nix_utils.write_nix_outputs(
+            [(first_output, "{ }\n"), (second_output, "{ }\n")],
+            formatter_runner=fail_on_second_output,
+        )
+
+    assert str(second_output) in str(error.value)
+    assert not first_output.exists()
+    assert not second_output.exists()
+
+
+def test_isolated_renderer_cleans_new_target_when_formatting_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    nix_pipeline = importlib.import_module("lx_administration.autoconf.nix.main")
+    config = _render_config(tmp_path)
+    config.output_layout.system_vars_dir.mkdir(parents=True)
+    isolated_output = tmp_path / "isolated-output"
+    monkeypatch.setattr(
+        nix_pipeline,
+        "_render_configuration_outputs",
+        lambda *_args, **_kwargs: [
+            (isolated_output / "systems/x86_64-linux/node-01/default.nix", "{ }\n")
+        ],
+    )
+
+    def failed_nixfmt(_source: Path) -> None:
+        raise RuntimeError("formatter unavailable")
+
+    with pytest.raises(AutoconfPipelineError, match="repository formatter 'nixfmt'"):
+        nix_pipeline.render_isolated_configurations(
+            config,
+            isolated_output,
+            formatter_runner=failed_nixfmt,
+        )
+
+    assert not isolated_output.exists()
 
 
 def test_home_renderer_renders_all_hosts_before_writing(monkeypatch, tmp_path):

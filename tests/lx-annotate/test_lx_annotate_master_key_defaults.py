@@ -21,7 +21,10 @@ def test_lx_annotate_module_declares_auto_generated_master_key_options():
 def test_lx_annotate_module_wires_per_machine_master_key_generation():
     source = CONFIG_NIX.read_text(encoding="utf-8")
 
-    assert "roles.managed-secrets.customSecrets.lx_annotate_master_key_local" in source
+    assert "roles = {" in source
+    assert "managed-secrets = {" in source
+    assert "customSecrets = {" in source
+    assert "lx_annotate_master_key_local =" in source
     assert (
         "Per-machine application master key for lx-annotate encrypted storage" in source
     )
@@ -32,6 +35,9 @@ def test_lx_annotate_module_wires_per_machine_master_key_generation():
 def test_lx_annotate_vault_master_key_refuses_accidental_rotation():
     source = CONFIG_NIX.read_text(encoding="utf-8")
 
-    assert "roles.managed-secrets.customSecrets.lx_annotate_master_key" in source
+    assert "roles = {" in source
+    assert "managed-secrets = {" in source
+    assert "customSecrets = {" in source
+    assert "lx_annotate_master_key =" in source
     assert '${pkgs.diffutils}/bin/cmp -s "$SECRET_FILE" "$TARGET_FILE"' in source
     assert "Refusing to replace it during managed-secrets refresh" in source

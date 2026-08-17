@@ -1,60 +1,89 @@
 # {{ hostname }}/default.nix
 
-{ config, pkgs, lib, modulesPath, ... }:
-
+{% set usage = namespace(config=false) -%}
+{% for value in role_configs.values() %}{% if "config." in (value | nix) %}{% set usage.config = true %}{% endif %}{% endfor -%}
+{% for value in service_configs.values() %}{% if "config." in (value | nix) %}{% set usage.config = true %}{% endif %}{% endfor -%}
+{% for value in luxnix_configs.values() %}{% if "config." in (value | nix) %}{% set usage.config = true %}{% endif %}{% endfor -%}
+{% for value in nixos_configs.values() %}{% if "config." in (value | nix) %}{% set usage.config = true %}{% endif %}{% endfor -%}
 {
-  imports = [
-    (modulesPath + "/installer/scan/not-detected.nix")
-    ./boot-decryption-config.nix
-    ./disks.nix
-{% for import_expr in import_configs %}
-    {{ import_expr }}
-{% endfor %}
-  ];
+{% if usage.config %}  config,
+{% endif %}  pkgs,
+  lib,
+  modulesPath,
+  ...
+}:
 
-  user = {
-    admin = {
-      name = "admin";
+lib.foldl' lib.recursiveUpdate
+  {
+    imports = [
+      (modulesPath + "/installer/scan/not-detected.nix")
+      ./boot-decryption-config.nix
+      ./disks.nix
+{% for import_expr in import_configs %}      {{ import_expr }}
+{% endfor %}    ];
+
+    user = {
+      admin = {
+        name = "admin";
+      };
+      ansible.enable = true;
+      settings.mutable = false;
     };
-    ansible.enable = true;
-    settings.mutable = false;
-  };
-
-  roles = {
-{% for role_str, role_value in role_configs.items() %}{% if role_value is string and '\n' in role_value %}
-{{ role_str }} = ''
-{{ role_value | trim }}
-'';
-{% else %}
-{{ role_str }} = {{ role_value | nix }};
-{% endif %}{% endfor %}
-};
-
-  services = {
-{% for service_str, service_value in service_configs.items() %}{% if service_value is string and '\n' in service_value %}
-      {{ service_str }} = ''
-{{ service_value | trim }}
-'';
-{% else %}{{ service_str }} = {{ service_value | nix }};
-{% endif %}{% endfor %}
-  };
-
-  luxnix = {
-{% for luxnix_str, luxnix_value in luxnix_configs.items() %}{% if luxnix_value is string and '\n' in luxnix_value %}
-{{ luxnix_str }} = ''
-{{ luxnix_value | trim }}
-'';
-{% else %}
-    {{ luxnix_str }} = {{ luxnix_value | nix }};
-
-{% endif %}{% endfor %}
-
-  };
-{% for nixos_str, nixos_value in nixos_configs.items() %}{% if nixos_value is string and '\n' in nixos_value %}
-  {{ nixos_str }} = ''
-{{ nixos_value | trim }}
-'';
-{% else %}
-  {{ nixos_str }} = {{ nixos_value | nix }};
-{% endif %}{% endfor %}
-}
+  }
+  [
+    { }
+{% for role_str, role_value in role_configs.items() %}    {
+{% if role_value is string and '\n' in role_value %}      roles.{{ role_str }} = ''
+{{ role_value | trim | indent(8, true) }}
+      '';
+{% elif role_value | trim == "[]" %}      roles.{{ role_str }} = [ ];
+{% elif role_value | trim == "{}" %}      roles.{{ role_str }} = { };
+{% elif role_value is sequence and role_value is not string %}      roles.{{ role_str }} = [
+{% for role_item in role_value %}        {{ role_item | nix }}
+{% endfor %}      ];
+{% elif role_str | length + (role_value | nix | length) > 84 %}      roles.{{ role_str }} =
+        {{ role_value | nix }};
+{% else %}      roles.{{ role_str }} = {{ role_value | nix }};
+{% endif %}    }
+{% endfor %}{% for service_str, service_value in service_configs.items() %}    {
+{% if service_value is string and '\n' in service_value %}      services.{{ service_str }} = ''
+{{ service_value | trim | indent(8, true) }}
+      '';
+{% elif service_value | trim == "[]" %}      services.{{ service_str }} = [ ];
+{% elif service_value | trim == "{}" %}      services.{{ service_str }} = { };
+{% elif service_value is sequence and service_value is not string %}      services.{{ service_str }} = [
+{% for service_item in service_value %}        {{ service_item | nix }}
+{% endfor %}      ];
+{% elif service_value | trim | first == "[" %}      services.{{ service_str }} =
+        {{ service_value | trim }};
+{% elif service_str | length + (service_value | nix | length) > 81 %}      services.{{ service_str }} =
+        {{ service_value | nix }};
+{% else %}      services.{{ service_str }} = {{ service_value | nix }};
+{% endif %}    }
+{% endfor %}{% for luxnix_str, luxnix_value in luxnix_configs.items() %}    {
+{% if luxnix_value is string and '\n' in luxnix_value %}      luxnix.{{ luxnix_str }} = ''
+{{ luxnix_value | trim | indent(8, true) }}
+      '';
+{% elif luxnix_value | trim == "[]" %}      luxnix.{{ luxnix_str }} = [ ];
+{% elif luxnix_value | trim == "{}" %}      luxnix.{{ luxnix_str }} = { };
+{% elif luxnix_value is sequence and luxnix_value is not string %}      luxnix.{{ luxnix_str }} = [
+{% for luxnix_item in luxnix_value %}        {{ luxnix_item | nix }}
+{% endfor %}      ];
+{% elif luxnix_str | length + (luxnix_value | nix | length) > 83 %}      luxnix.{{ luxnix_str }} =
+        {{ luxnix_value | nix }};
+{% else %}      luxnix.{{ luxnix_str }} = {{ luxnix_value | nix }};
+{% endif %}    }
+{% endfor %}{% for nixos_str, nixos_value in nixos_configs.items() %}    {
+{% if nixos_value is string and '\n' in nixos_value %}      {{ nixos_str }} = ''
+{{ nixos_value | trim | indent(8, true) }}
+      '';
+{% elif nixos_value | trim == "[]" %}      {{ nixos_str }} = [ ];
+{% elif nixos_value | trim == "{}" %}      {{ nixos_str }} = { };
+{% elif nixos_value is sequence and nixos_value is not string %}      {{ nixos_str }} = [
+{% for nixos_item in nixos_value %}        {{ nixos_item | nix }}
+{% endfor %}      ];
+{% elif nixos_str | length + (nixos_value | nix | length) > 90 %}      {{ nixos_str }} =
+        {{ nixos_value | nix }};
+{% else %}      {{ nixos_str }} = {{ nixos_value | nix }};
+{% endif %}    }
+{% endfor %}  ]{{ "\n" }}

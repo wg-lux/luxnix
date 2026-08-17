@@ -23,6 +23,7 @@ let
     name = "luxnix-vault-bootstrap-hub-pki";
     runtimeInputs = [
       pkgs.coreutils
+      pkgs.gnugrep
       pkgs.jq
       pkgs.openssl
       pkgs.vault
@@ -45,6 +46,108 @@ let
       role=${lib.escapeShellArg hubPkiCfg.clientRoleName}
       max_ttl=${lib.escapeShellArg hubPkiCfg.maxTtl}
       client_ttl=${lib.escapeShellArg hubPkiCfg.clientTtl}
+      recipient_public_key=${lib.escapeShellArg hubPkiCfg.recipientPublicKeyFile}
+      recipient_public_key_kv_path=${lib.escapeShellArg hubPkiCfg.recipientPublicKeyKvPath}
+      recipient_private_key="''${recipient_public_key%.pub.pem}.pem"
+      recipient_sensitive_group=${lib.escapeShellArg config.luxnix.generic-settings.sensitiveServiceGroupName}
+
+      if [ "$recipient_private_key" = "$recipient_public_key" ]; then
+        recipient_private_key="${recipient_public_key}.pem"
+      fi
+
+      if [ -L "$recipient_public_key" ]; then
+        echo "Hub envelope recipient public key path must not be a symlink: $recipient_public_key" >&2
+        exit 1
+      fi
+
+      if [ -L "$recipient_private_key" ]; then
+        echo "Hub envelope recipient private key path must not be a symlink: $recipient_private_key" >&2
+        exit 1
+      fi
+
+      ${pkgs.coreutils}/bin/mkdir -p "$(dirname "$recipient_private_key")" "$(dirname "$recipient_public_key")"
+
+      recipient_pub_state=missing
+      recipient_priv_state=missing
+      if [ -s "$recipient_public_key" ]; then
+        recipient_pub_state=present
+      fi
+      if [ -s "$recipient_private_key" ]; then
+        recipient_priv_state=present
+      fi
+
+      if [ "$recipient_pub_state" = "present" ] && [ "$recipient_priv_state" = "present" ]; then
+        if ! ${pkgs.openssl}/bin/openssl pkey -pubin -in "$recipient_public_key" -text_pub -noout 2>/dev/null \
+          | ${pkgs.gnugrep}/bin/grep -q X25519; then
+          echo "Existing hub recipient public key is not a valid X25519 PEM key: $recipient_public_key" >&2
+          exit 1
+        fi
+        if ! ${pkgs.openssl}/bin/openssl pkey -in "$recipient_private_key" -text -noout 2>/dev/null \
+          | ${pkgs.gnugrep}/bin/grep -q X25519; then
+          echo "Existing hub recipient private key is not a valid X25519 PEM key: $recipient_private_key" >&2
+          exit 1
+        fi
+        derived_recipient_public="$(${pkgs.coreutils}/bin/mktemp)"
+        if ! ${pkgs.openssl}/bin/openssl pkey -in "$recipient_private_key" -pubout \
+          > "$derived_recipient_public" 2>/dev/null; then
+          echo "Failed to derive hub recipient public key from: $recipient_private_key" >&2
+          rm -f "$derived_recipient_public"
+          exit 1
+        fi
+        if ! ${pkgs.diffutils}/bin/cmp -s "$recipient_public_key" "$derived_recipient_public"; then
+          echo "Hub recipient key pair mismatch; public and private keys do not match." >&2
+          rm -f "$derived_recipient_public"
+          exit 1
+        fi
+        rm -f "$derived_recipient_public"
+      fi
+
+      if [ "$recipient_priv_state" = "present" ] && [ "$recipient_pub_state" = "missing" ]; then
+        echo "Generating missing hub recipient public key from existing private key." >&2
+        if ! ${pkgs.openssl}/bin/openssl pkey -in "$recipient_private_key" -pubout \
+          > "$recipient_public_key" 2>/dev/null; then
+          echo "Failed to derive public key from recipient private key: $recipient_private_key" >&2
+          exit 1
+        fi
+      fi
+
+      if [ "$recipient_pub_state" = "present" ] && [ "$recipient_priv_state" = "missing" ]; then
+        echo "ERROR: hub envelope recipient public key exists without its matching private key: $recipient_public_key" >&2
+        echo "Install the matching private key or run bootstrap with an explicit rotation after rotating recipient identities." >&2
+        exit 1
+      fi
+
+      if [ "$recipient_pub_state" = "missing" ] && [ "$recipient_priv_state" = "missing" ]; then
+        echo "No hub envelope recipient key pair found; generating a fresh X25519 key pair." >&2
+        if ! ${pkgs.openssl}/bin/openssl genpkey -algorithm X25519 -out "$recipient_private_key" >/dev/null 2>&1; then
+          echo "Failed to generate X25519 envelope recipient private key: $recipient_private_key" >&2
+          exit 1
+        fi
+        if ! ${pkgs.openssl}/bin/openssl pkey -in "$recipient_private_key" -pubout \
+          > "$recipient_public_key" 2>/dev/null; then
+          echo "Failed to derive hub recipient public key from generated private key: $recipient_private_key" >&2
+          exit 1
+        fi
+      fi
+
+      if [ ! -f "$recipient_private_key" ] || [ ! -s "$recipient_private_key" ] \
+        || ! ${pkgs.openssl}/bin/openssl pkey -in "$recipient_private_key" -text -noout 2>/dev/null \
+          | ${pkgs.gnugrep}/bin/grep -q X25519; then
+        echo "Hub envelope recipient private key validation failed: $recipient_private_key" >&2
+        exit 1
+      fi
+
+      if [ ! -f "$recipient_public_key" ] || [ ! -s "$recipient_public_key" ] \
+        || ! ${pkgs.openssl}/bin/openssl pkey -pubin -in "$recipient_public_key" -text_pub -noout 2>/dev/null \
+          | ${pkgs.gnugrep}/bin/grep -q X25519; then
+        echo "Hub envelope recipient public key validation failed: $recipient_public_key" >&2
+        exit 1
+      fi
+
+      ${pkgs.coreutils}/bin/chown "root:$recipient_sensitive_group" "$recipient_private_key"
+      ${pkgs.coreutils}/bin/chmod 0640 "$recipient_private_key"
+      ${pkgs.coreutils}/bin/chown "root:$recipient_sensitive_group" "$recipient_public_key"
+      ${pkgs.coreutils}/bin/chmod 0640 "$recipient_public_key"
 
       if ! vault secrets list -format=json | jq -e --arg path "$mount/" 'has($path)' >/dev/null; then
         vault secrets enable -path="$mount" pki
@@ -54,6 +157,26 @@ let
       if ! vault secrets list -format=json | jq -e --arg path "$kv_mount/" 'has($path)' >/dev/null; then
         vault secrets enable -path="$kv_mount" -version=2 kv
       fi
+
+      published_public_key="$(${pkgs.coreutils}/bin/mktemp)"
+      trap '${pkgs.coreutils}/bin/rm -f "$published_public_key"' EXIT
+      if vault kv get -field=public_key "$kv_mount/$recipient_public_key_kv_path" \
+        > "$published_public_key" 2>/dev/null; then
+        if ! ${pkgs.diffutils}/bin/cmp -s "$recipient_public_key" "$published_public_key"; then
+          if [ "''${LUXNIX_VAULT_ALLOW_HUB_RECIPIENT_ROTATION:-0}" != "1" ]; then
+            echo "Vault already contains a different hub recipient public key; refusing implicit rotation." >&2
+            echo "Deploy the matching current-and-retiring private-key set on the hub, then rerun with LUXNIX_VAULT_ALLOW_HUB_RECIPIENT_ROTATION=1." >&2
+            exit 1
+          fi
+          vault kv put "$kv_mount/$recipient_public_key_kv_path" public_key=- \
+            < "$recipient_public_key" >/dev/null
+        fi
+      else
+        vault kv put "$kv_mount/$recipient_public_key_kv_path" public_key=- \
+          < "$recipient_public_key" >/dev/null
+      fi
+      ${pkgs.coreutils}/bin/rm -f "$published_public_key"
+      trap - EXIT
 
       if ! vault read "$mount/cert/ca" >/dev/null 2>&1; then
         vault write "$mount/root/generate/internal" \
@@ -141,6 +264,9 @@ let
         '  capabilities = ["read"]' \
         '}' \
         "path \"$kv_mount/data/nodes/$node_fqdn\" {" \
+        '  capabilities = ["read"]' \
+        '}' \
+        "path \"$kv_mount/data/${hubPkiCfg.recipientPublicKeyKvPath}\" {" \
         '  capabilities = ["read"]' \
         '}' > "$policy_file"
       vault policy write "$policy" "$policy_file" >/dev/null
@@ -854,6 +980,16 @@ in
                   default = "/etc/secrets/vault/hub-pki/source-node-secret";
                   description = "Runtime path for the Vault-delivered NetworkNode request-authentication secret.";
                 };
+                recipientPublicKeyFile = mkOption {
+                  type = types.str;
+                  default = "/etc/secrets/vault/hub-pki/hub-recipient-current.pub.pem";
+                  description = "Atomic runtime path for the Vault-delivered central-hub X25519 public recipient key.";
+                };
+                recipientPublicKeyKvPath = mkOption {
+                  type = types.strMatching "[A-Za-z0-9_/-]+";
+                  default = "hub/envelope-recipient/current";
+                  description = "Vault KV v2 path containing only the central-hub X25519 public recipient key.";
+                };
               };
             };
             default = { };
@@ -1019,6 +1155,16 @@ in
                   default = "/var/lib/lx-annotate/hub-pki/client-ca.pem";
                   description = "Atomic runtime publication path consumed by the hub Nginx client-certificate verifier.";
                 };
+                recipientPublicKeyFile = mkOption {
+                  type = types.str;
+                  default = "/etc/secrets/vault/hub-pki/hub-recipient-current.pub.pem";
+                  description = "Operator-provisioned central-hub X25519 public recipient key published to authenticated site nodes; the corresponding private key never enters Vault site policy.";
+                };
+                recipientPublicKeyKvPath = mkOption {
+                  type = types.strMatching "[A-Za-z0-9_/-]+";
+                  default = "hub/envelope-recipient/current";
+                  description = "Vault KV v2 path containing only the current central-hub envelope recipient public key.";
+                };
               };
             };
             default = { };
@@ -1132,7 +1278,7 @@ in
       tlsCertFile = toString serverCfg.tlsCertFile;
       tlsKeyFile = toString serverCfg.tlsKeyFile;
       storageBackend = "raft";
-      storagePath = serverCfg.storagePath;
+      inherit (serverCfg) storagePath;
       storageConfig = ''
         node_id = ${builtins.toJSON serverCfg.nodeId}
       '';
@@ -1149,19 +1295,6 @@ in
         config.luxnix.generic-settings.sensitiveServiceGroupName
       ]
       ++ lib.optional config.services.nginx.enable "nginx";
-    };
-
-    systemd.services.vault = lib.mkIf serverCfg.enable {
-      after = [
-        "managed-secrets-setup.service"
-      ]
-      ++ lib.optional (
-        config.services.luxnix.lxSsl.enable && !managedTlsCfg.enable
-      ) "generate-lx-ssl.service";
-      wants = [ "managed-secrets-setup.service" ];
-      requires = lib.optional (
-        config.services.luxnix.lxSsl.enable && !managedTlsCfg.enable
-      ) "generate-lx-ssl.service";
     };
 
     roles.managed-secrets.customSecrets.lx_hub_source_node_secret = lib.mkIf clientHubPkiCfg.enable {
@@ -1183,6 +1316,27 @@ in
       '';
     };
 
+    roles.managed-secrets.customSecrets.lx_hub_recipient_public_key = lib.mkIf clientHubPkiCfg.enable {
+      path = clientHubPkiCfg.recipientPublicKeyFile;
+      owner = "root";
+      group = config.luxnix.generic-settings.sensitiveServiceGroupName;
+      permissions = "640";
+      description = "Vault-authenticated central-hub X25519 envelope recipient public key";
+      customScript = true;
+      refreshOnBoot = true;
+      generator = ''
+        ${pkgs.vault}/bin/vault kv get -field=public_key \
+          ${lib.escapeShellArg "${clientHubPkiCfg.kvMountPath}/${clientHubPkiCfg.recipientPublicKeyKvPath}"} \
+          > "$TARGET_FILE"
+        if [ ! -s "$TARGET_FILE" ] \
+          || ! ${pkgs.openssl}/bin/openssl pkey -pubin -in "$TARGET_FILE" -text_pub -noout 2>/dev/null \
+            | ${pkgs.gnugrep}/bin/grep -q X25519; then
+          echo "ERROR: Vault returned an invalid central-hub X25519 recipient public key." >&2
+          exit 1
+        fi
+      '';
+    };
+
     environment.systemPackages =
       lib.optionals hubPkiCfg.enable [
         hubPkiBootstrapTool
@@ -1196,136 +1350,157 @@ in
         vaultEnrollmentStatusTool
       ];
 
-    systemd.services.luxnix-vault-managed-server-tls = lib.mkIf managedTlsCfg.enable {
-      description = "Maintain the CA-signed Vault server leaf without rotating its CA";
-      before = [ "vault.service" ];
-      requiredBy = [ "vault.service" ];
-      after = [ "systemd-tmpfiles-setup.service" ];
-      requires = [ "systemd-tmpfiles-setup.service" ];
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = managedServerTlsCommand;
-        ExecStartPost = pkgs.writeShellScript "reload-vault-after-leaf-rotation" ''
-          marker=${lib.escapeShellArg "${runtimeDir}/server-leaf-rotated"}
-          if [ -e "$marker" ] && ${pkgs.systemd}/bin/systemctl is-active --quiet vault.service; then
-            # Vault reloads listener certificate/key file contents on SIGHUP.
-            ${pkgs.systemd}/bin/systemctl kill --kill-whom=main --signal=HUP vault.service
-          fi
-        '';
-        UMask = "0077";
-      };
-    };
+    systemd = {
+      services = {
+        vault = lib.mkIf serverCfg.enable {
+          after = [
+            "managed-secrets-setup.service"
+          ]
+          ++ lib.optional (
+            config.services.luxnix.lxSsl.enable && !managedTlsCfg.enable
+          ) "generate-lx-ssl.service";
+          wants = [ "managed-secrets-setup.service" ];
+          requires = lib.optional (
+            config.services.luxnix.lxSsl.enable && !managedTlsCfg.enable
+          ) "generate-lx-ssl.service";
+        };
 
-    systemd.timers.luxnix-vault-managed-server-tls = lib.mkIf managedTlsCfg.enable {
-      description = "Check whether the Vault server leaf needs renewal";
-      wantedBy = [ "timers.target" ];
-      timerConfig = {
-        OnBootSec = "5m";
-        OnUnitActiveSec = "12h";
-        RandomizedDelaySec = "30m";
-        Persistent = true;
-        Unit = "luxnix-vault-managed-server-tls.service";
-      };
-    };
+        luxnix-vault-managed-server-tls = lib.mkIf managedTlsCfg.enable {
+          description = "Maintain the CA-signed Vault server leaf without rotating its CA";
+          before = [ "vault.service" ] ++ lib.optional config.services.nginx.enable "nginx.service";
+          requiredBy = [ "vault.service" ] ++ lib.optional config.services.nginx.enable "nginx.service";
+          after = [ "systemd-tmpfiles-setup.service" ];
+          requires = [ "systemd-tmpfiles-setup.service" ];
+          serviceConfig = {
+            Type = "oneshot";
+            ExecStart = managedServerTlsCommand;
+            ExecStartPost = pkgs.writeShellScript "reload-vault-after-leaf-rotation" ''
+              marker=${lib.escapeShellArg "${runtimeDir}/server-leaf-rotated"}
+              if [ -e "$marker" ] && ${pkgs.systemd}/bin/systemctl is-active --quiet vault.service; then
+                # Vault reloads listener certificate/key file contents on SIGHUP.
+                ${pkgs.systemd}/bin/systemctl kill --kill-whom=main --signal=HUP vault.service
+              fi
+              if [ -e "$marker" ] && ${pkgs.systemd}/bin/systemctl is-active --quiet nginx.service; then
+                ${pkgs.systemd}/bin/systemctl reload nginx.service
+              fi
+            '';
+            UMask = "0077";
+          };
+        };
 
-    systemd.services.luxnix-vault-issue-hub-client-certificate = lib.mkIf clientHubPkiCfg.enable {
-      description = "Issue or renew the LX-Annotate hub-transfer client certificate";
-      wantedBy = [ "multi-user.target" ];
-      before = [ "lx-annotate-celery-hub-transfer-worker.service" ];
-      after = [
-        "vault-auth-setup.service"
-        "network-online.target"
-      ];
-      requires = [ "vault-auth-setup.service" ];
-      wants = [ "network-online.target" ];
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = issueHubClientCertificateScript;
-        Environment = lib.optionals cfg.client.allowOffline [
-          "VAULT_CLIENT_TIMEOUT=5s"
+      };
+
+      timers.luxnix-vault-managed-server-tls = lib.mkIf managedTlsCfg.enable {
+        description = "Check whether the Vault server leaf needs renewal";
+        wantedBy = [ "timers.target" ];
+        timerConfig = {
+          OnBootSec = "5m";
+          OnUnitActiveSec = "12h";
+          RandomizedDelaySec = "30m";
+          Persistent = true;
+          Unit = "luxnix-vault-managed-server-tls.service";
+        };
+      };
+
+      services.luxnix-vault-issue-hub-client-certificate = lib.mkIf clientHubPkiCfg.enable {
+        description = "Issue or renew the LX-Annotate hub-transfer client certificate";
+        wantedBy = [ "multi-user.target" ];
+        before = [ "lx-annotate-celery-hub-transfer-worker.service" ];
+        after = [
+          "vault-auth-setup.service"
+          "network-online.target"
         ];
-        EnvironmentFile = "-${cfg.client.runtimeEnvironmentFile}";
-        UMask = "0077";
+        requires = [ "vault-auth-setup.service" ];
+        wants = [ "network-online.target" ];
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = issueHubClientCertificateScript;
+          Environment = lib.optionals cfg.client.allowOffline [
+            "VAULT_CLIENT_TIMEOUT=5s"
+          ];
+          EnvironmentFile = "-${cfg.client.runtimeEnvironmentFile}";
+          UMask = "0077";
+        };
       };
-    };
 
-    systemd.timers.luxnix-vault-issue-hub-client-certificate = lib.mkIf clientHubPkiCfg.enable {
-      description = "Renew the LX-Annotate hub-transfer client certificate";
-      wantedBy = [ "timers.target" ];
-      timerConfig = {
-        OnBootSec = "2m";
-        OnUnitActiveSec = "12h";
-        RandomizedDelaySec = "15m";
-        Persistent = true;
-        Unit = "luxnix-vault-issue-hub-client-certificate.service";
+      timers.luxnix-vault-issue-hub-client-certificate = lib.mkIf clientHubPkiCfg.enable {
+        description = "Renew the LX-Annotate hub-transfer client certificate";
+        wantedBy = [ "timers.target" ];
+        timerConfig = {
+          OnBootSec = "2m";
+          OnUnitActiveSec = "12h";
+          RandomizedDelaySec = "15m";
+          Persistent = true;
+          Unit = "luxnix-vault-issue-hub-client-certificate.service";
+        };
       };
-    };
 
-    systemd.services.luxnix-vault-publish-hub-client-ca = lib.mkIf hubPkiCfg.enable {
-      description = "Atomically publish the Vault hub-transfer client CA";
-      wantedBy = [ "multi-user.target" ];
-      before = [ "nginx.service" ];
-      after = [
-        "vault.service"
-        "network-online.target"
-      ];
-      requires = [ "vault.service" ];
-      wants = [ "network-online.target" ];
-      serviceConfig = {
-        Type = "oneshot";
-        RemainAfterExit = true;
-        TimeoutStartSec = "4min";
-        ExecStart = publishHubClientCaScript;
-        Restart = "on-failure";
-        RestartSec = "5s";
-        UMask = "0027";
-      };
-    };
-
-    systemd.tmpfiles.rules = [
-      "d ${runtimeDir} 0700 root root - -"
-      "z ${runtimeDir} 0700 root root - -"
-    ];
-
-    systemd.services.vault-auth-setup = mkIf vaultAuthEnabled {
-      description = "Bootstrap Vault client environment for LuxNix system services";
-      wantedBy = [ "multi-user.target" ];
-      after = [
-        "local-fs.target"
-        "systemd-tmpfiles-setup.service"
-        "network-online.target"
-      ];
-      requires = [ "systemd-tmpfiles-setup.service" ];
-      wants = [
-        "local-fs.target"
-        "network-online.target"
-      ];
-      serviceConfig = {
-        Type = "oneshot";
-        RemainAfterExit = true;
-        User = "root";
-        Group = "root";
-        UMask = "0077";
-        ExecCondition = lib.optionals cfg.client.auth.deferUntilProvisioned [
-          vaultAuthProvisioningConditionScript
+      services.luxnix-vault-publish-hub-client-ca = lib.mkIf hubPkiCfg.enable {
+        description = "Atomically publish the Vault hub-transfer client CA";
+        wantedBy = [ "multi-user.target" ];
+        before = [ "nginx.service" ];
+        after = [
+          "vault.service"
+          "network-online.target"
         ];
-        ExecStart =
-          if cfg.client.auth.deferUntilProvisioned then
-            "${pkgs.coreutils}/bin/true"
-          else
-            vaultAuthSetupScript;
-        ExecStop = vaultAuthCleanupScript;
-        Environment = lib.optionals cfg.client.allowOffline [
-          "VAULT_CLIENT_TIMEOUT=5s"
+        requires = [ "vault.service" ];
+        wants = [ "network-online.target" ];
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+          TimeoutStartSec = "4min";
+          ExecStart = publishHubClientCaScript;
+          Restart = "on-failure";
+          RestartSec = "5s";
+          UMask = "0027";
+        };
+      };
+
+      tmpfiles.rules = [
+        "d ${runtimeDir} 0700 root root - -"
+        "z ${runtimeDir} 0700 root root - -"
+      ];
+
+      services.vault-auth-setup = mkIf vaultAuthEnabled {
+        description = "Bootstrap Vault client environment for LuxNix system services";
+        wantedBy = [ "multi-user.target" ];
+        after = [
+          "local-fs.target"
+          "systemd-tmpfiles-setup.service"
+          "network-online.target"
         ];
-        EnvironmentFile = lib.optionals (cfg.client.environmentFile != null) [
-          (toString cfg.client.environmentFile)
+        requires = [ "systemd-tmpfiles-setup.service" ];
+        wants = [
+          "local-fs.target"
+          "network-online.target"
+        ];
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+          User = "root";
+          Group = "root";
+          UMask = "0077";
+          ExecCondition = lib.optionals cfg.client.auth.deferUntilProvisioned [
+            vaultAuthProvisioningConditionScript
+          ];
+          ExecStart =
+            if cfg.client.auth.deferUntilProvisioned then
+              "${pkgs.coreutils}/bin/true"
+            else
+              vaultAuthSetupScript;
+          ExecStop = vaultAuthCleanupScript;
+          Environment = lib.optionals cfg.client.allowOffline [
+            "VAULT_CLIENT_TIMEOUT=5s"
+          ];
+          EnvironmentFile = lib.optionals (cfg.client.environmentFile != null) [
+            (toString cfg.client.environmentFile)
+          ];
+        };
+        path = [
+          pkgs.coreutils
+          pkgs.vault
         ];
       };
-      path = [
-        pkgs.coreutils
-        pkgs.vault
-      ];
     };
   };
 }

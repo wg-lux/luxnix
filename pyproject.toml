@@ -32,6 +32,9 @@ readme = "README.md"
 requires-python = ">=3.12"
 version = "0.1.0"
 
+[project.scripts]
+lx-hub-storage-node = "lx_administration.storage.data_plane:main"
+
 [tool.setuptools]
 packages = ["lx_administration"]
 

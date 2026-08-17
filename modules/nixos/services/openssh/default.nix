@@ -80,7 +80,7 @@ let
         entry = head matchingEd25519Entries;
       in
       "${entry.keyType} ${entry.key}";
-  expectedEd25519PublicKey = hostIdentityCfg.expectedEd25519PublicKey;
+  inherit (hostIdentityCfg) expectedEd25519PublicKey;
   hasExpectedEd25519PublicKey = expectedEd25519PublicKey != null;
   hostKeyGuardScript = strictMissing: ''
     expected='${expectedEd25519PublicKey}'

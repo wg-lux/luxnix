@@ -157,7 +157,7 @@ in
     enable = mkBoolOpt false "Enable the GLM-5.2 llama.cpp inference service.";
 
     package = mkPackageOpt unstablePkgs.llama-cpp "llama.cpp package used for `llama-server`.";
-    
+
     huggingFaceHubPackage = mkPackageOpt pkgs.python313Packages.huggingface-hub "Python package providing the `hf` CLI used by the download unit.";
 
     user = mkOpt types.str "glm-5-2" "System user used to run GLM-5.2 services.";
@@ -255,87 +255,91 @@ in
 
       users.users.${cfg.user} = {
         isSystemUser = true;
-        group = cfg.group;
+        inherit (cfg) group;
         home = cfg.stateDir;
         createHome = false;
         extraGroups = cfg.supplementaryGroups;
       };
 
-      systemd.tmpfiles.rules = concatMap (dir: [
-        "d ${dir} 0750 ${cfg.user} ${cfg.group} -"
-        "z ${dir} 0750 ${cfg.user} ${cfg.group} -"
-      ]) storageDirs;
-
       networking.firewall.allowedTCPPorts = optional cfg.openFirewall cfg.port;
 
-      systemd.services.glm-5-2-download = {
-        description = "Download GLM-5.2 GGUF from Hugging Face";
-        after = [ "network-online.target" ];
-        wants = [ "network-online.target" ];
-        wantedBy = optional cfg.autoDownload "multi-user.target";
+      systemd = {
+        tmpfiles.rules = concatMap (dir: [
+          "d ${dir} 0750 ${cfg.user} ${cfg.group} -"
+          "z ${dir} 0750 ${cfg.user} ${cfg.group} -"
+        ]) storageDirs;
 
-        environment = {
-          HF_HOME = cfg.cacheDir;
-          HF_XET_CACHE = "${cfg.cacheDir}/xet";
-          XDG_CACHE_HOME = cfg.cacheDir;
-        };
+        services = {
+          glm-5-2-download = {
+            description = "Download GLM-5.2 GGUF from Hugging Face";
+            after = [ "network-online.target" ];
+            wants = [ "network-online.target" ];
+            wantedBy = optional cfg.autoDownload "multi-user.target";
 
-        serviceConfig = {
-          Type = "oneshot";
-          User = cfg.user;
-          Group = cfg.group;
-          WorkingDirectory = cfg.stateDir;
-          ExecStartPre = "+${prepareStorage}";
-          ExecStart = downloadModel;
-          TimeoutStartSec = "infinity";
-          PrivateTmp = true;
-          ReadWritePaths = [
-            cfg.stateDir
-            cfg.cacheDir
-            cfg.modelDir
-          ];
-        };
-      };
+            environment = {
+              HF_HOME = cfg.cacheDir;
+              HF_XET_CACHE = "${cfg.cacheDir}/xet";
+              XDG_CACHE_HOME = cfg.cacheDir;
+            };
 
-      systemd.services.glm-5-2 = {
-        description = "GLM-5.2 llama.cpp inference server";
-        after = [ "network-online.target" ] ++ optional cfg.autoDownload downloadUnit;
-        wants = [ "network-online.target" ] ++ optional cfg.autoDownload downloadUnit;
-        requires = optional cfg.autoDownload downloadUnit;
-        wantedBy = optional cfg.autoStart "multi-user.target";
-        unitConfig.ConditionPathExists = modelFile;
+            serviceConfig = {
+              Type = "oneshot";
+              User = cfg.user;
+              Group = cfg.group;
+              WorkingDirectory = cfg.stateDir;
+              ExecStartPre = "+${prepareStorage}";
+              ExecStart = downloadModel;
+              TimeoutStartSec = "infinity";
+              PrivateTmp = true;
+              ReadWritePaths = [
+                cfg.stateDir
+                cfg.cacheDir
+                cfg.modelDir
+              ];
+            };
+          };
 
-        environment = {
-          LLAMA_CACHE = cfg.modelDir;
-          HF_HOME = cfg.cacheDir;
-          XDG_CACHE_HOME = cfg.cacheDir;
-        }
-        // cfg.environment;
+          glm-5-2 = {
+            description = "GLM-5.2 llama.cpp inference server";
+            after = [ "network-online.target" ] ++ optional cfg.autoDownload downloadUnit;
+            wants = [ "network-online.target" ] ++ optional cfg.autoDownload downloadUnit;
+            requires = optional cfg.autoDownload downloadUnit;
+            wantedBy = optional cfg.autoStart "multi-user.target";
+            unitConfig.ConditionPathExists = modelFile;
 
-        serviceConfig = {
-          Type = "exec";
-          User = cfg.user;
-          Group = cfg.group;
-          WorkingDirectory = cfg.stateDir;
-          ExecStartPre = [
-            "+${prepareStorage}"
-            checkModel
-          ];
-          ExecStart = serverExec;
-          Restart = "on-failure";
-          RestartSec = "10s";
-          RuntimeDirectory = "glm-5-2";
-          SupplementaryGroups = cfg.supplementaryGroups;
-          NoNewPrivileges = true;
-          PrivateTmp = true;
-          ProtectSystem = "strict";
-          ProtectHome = true;
-          ReadWritePaths = [
-            cfg.stateDir
-            cfg.cacheDir
-            cfg.modelDir
-          ];
-          LimitNOFILE = 1048576;
+            environment = {
+              LLAMA_CACHE = cfg.modelDir;
+              HF_HOME = cfg.cacheDir;
+              XDG_CACHE_HOME = cfg.cacheDir;
+            }
+            // cfg.environment;
+
+            serviceConfig = {
+              Type = "exec";
+              User = cfg.user;
+              Group = cfg.group;
+              WorkingDirectory = cfg.stateDir;
+              ExecStartPre = [
+                "+${prepareStorage}"
+                checkModel
+              ];
+              ExecStart = serverExec;
+              Restart = "on-failure";
+              RestartSec = "10s";
+              RuntimeDirectory = "glm-5-2";
+              SupplementaryGroups = cfg.supplementaryGroups;
+              NoNewPrivileges = true;
+              PrivateTmp = true;
+              ProtectSystem = "strict";
+              ProtectHome = true;
+              ReadWritePaths = [
+                cfg.stateDir
+                cfg.cacheDir
+                cfg.modelDir
+              ];
+              LimitNOFILE = 1048576;
+            };
+          };
         };
       };
     }

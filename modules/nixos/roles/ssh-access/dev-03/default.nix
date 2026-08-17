@@ -1,10 +1,11 @@
-{ pkgs
-, lib
-, config
-, ...
+{
+  lib,
+  config,
+  ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.roles.ssh-access.dev-03;
 in
 {

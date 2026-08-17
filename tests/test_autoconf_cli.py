@@ -184,3 +184,63 @@ def test_autoconf_cli_validates_once_before_generation(monkeypatch, capsys) -> N
     config.require_valid.assert_called_once_with()
     assert generated == [config]
     assert capsys.readouterr().out == "config: test\n"
+
+
+def test_autoconf_cli_uses_explicit_external_target_for_isolated_render(
+    monkeypatch,
+    tmp_path,
+    capsys,
+) -> None:
+    script = REPO_ROOT / "scripts/autoconf-pipeline.py"
+    spec = importlib.util.spec_from_file_location("autoconf_pipeline_cli", script)
+    assert spec is not None and spec.loader is not None
+    cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cli)
+
+    config = Mock()
+    config.summary.return_value = "config: test"
+    rendered = []
+    monkeypatch.setattr(cli.AutoconfConfig, "load", lambda _path: config)
+    monkeypatch.setattr(cli, "run_pipeline", lambda _config: pytest.fail("pipeline"))
+    monkeypatch.setattr(
+        cli,
+        "run_isolated_nix_render",
+        lambda render_config, destination: rendered.append(
+            (render_config, destination)
+        ),
+    )
+    output = tmp_path / "isolated-render"
+
+    assert cli.main(["--nix-output", str(output)]) == 0
+
+    config.require_valid.assert_called_once_with()
+    assert rendered == [(config, output.resolve())]
+    assert capsys.readouterr().out == (
+        f"config: test\nisolated Nix render output: {output.resolve()}\n"
+    )
+
+
+def test_autoconf_cli_rejects_isolated_target_inside_repository(
+    monkeypatch,
+    capsys,
+) -> None:
+    script = REPO_ROOT / "scripts/autoconf-pipeline.py"
+    spec = importlib.util.spec_from_file_location("autoconf_pipeline_cli", script)
+    assert spec is not None and spec.loader is not None
+    cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cli)
+
+    config = Mock()
+    config.summary.return_value = "config: test"
+    monkeypatch.setattr(cli.AutoconfConfig, "load", lambda _path: config)
+    monkeypatch.setattr(
+        cli,
+        "run_isolated_nix_render",
+        lambda *_args: pytest.fail("isolated render"),
+    )
+
+    assert cli.main(["--nix-output", str(REPO_ROOT / "render-preview")]) == 1
+
+    captured = capsys.readouterr()
+    assert captured.out == "config: test\n"
+    assert "outside the repository" in captured.err

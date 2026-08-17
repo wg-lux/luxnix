@@ -1,19 +1,19 @@
-{ config
-, inputs
-, pkgs
-, lib
-, ...
+{
+  config,
+  pkgs,
+  lib,
+  ...
 }:
 
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.luxnix.nvidia-default;
 
   nvidiaDrivers = {
     "stable" = config.boot.kernelPackages.nvidiaPackages.stable;
     "beta" = config.boot.kernelPackages.nvidiaPackages.beta;
     "production" = config.boot.kernelPackages.nvidiaPackages.production;
-
 
     # Custom imports
     "555_58" = {
@@ -32,7 +32,7 @@ in
     enable = mkBoolOpt false "Enable or disable the Nvidia GPU Support";
 
     # Other bool options are: enable cuda support for nix packages, add xserver driver, add initrd-kernel-module, addd autoadddriverrunpath
-    # enable prime sync, enable modesetting, 
+    # enable prime sync, enable modesetting,
 
     nvidiaDriver = mkOption {
       type = types.str;

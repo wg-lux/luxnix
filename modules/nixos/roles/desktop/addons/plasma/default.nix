@@ -1,7 +1,6 @@
 {
   config,
   lib,
-  pkgs,
   ...
 }:
 with lib;
@@ -18,28 +17,25 @@ in
     ###
     roles.custom-packages.kdePlasma = true;
 
-    services.desktopManager.plasma6.enable = true;
-    services.displayManager = {
-      defaultSession = "plasma"; # Correct session name for Plasma Wayland
-      sddm = {
+    services = {
+      desktopManager.plasma6.enable = true;
+      displayManager = {
+        defaultSession = "plasma"; # Correct session name for Plasma Wayland
+        gdm = {
+          enable = false;
+          autoSuspend = false;
+        };
+        sddm = {
+          enable = true;
+          wayland.enable = true; # Forces the SDDM greeter to use Wayland
+        };
+      };
+      xserver = {
         enable = true;
-        wayland.enable = true; # Forces the SDDM greeter to use Wayland
+        xkb.layout = "de"; # TODO use locale via generic settings
+        xkb.variant = "";
+
       };
     };
-
-    services.displayManager = {
-      gdm = {
-        enable = false;
-        autoSuspend = false;
-      };
-    };
-
-    services.xserver = {
-      enable = true;
-      xkb.layout = "de"; # TODO use locale via generic settings
-      xkb.variant = "";
-
-    };
-
   };
 }

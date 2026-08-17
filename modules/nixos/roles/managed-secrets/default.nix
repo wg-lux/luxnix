@@ -7,7 +7,7 @@
 with lib;
 let
   cfg = config.roles.managed-secrets;
-  sensitiveServiceGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
+  inherit (config.luxnix.generic-settings) sensitiveServiceGroupName;
   vaultCfg = config.luxnix.vault;
   vaultAuthEnabled =
     vaultCfg.enable && vaultCfg.client.enable && vaultCfg.client.auth.method != "none";
@@ -151,9 +151,7 @@ let
     name: secret:
     secret
     // {
-      enable = cfg.secrets.${name}.enable;
-      forceRegenerate = cfg.secrets.${name}.forceRegenerate;
-      refreshOnBoot = cfg.secrets.${name}.refreshOnBoot;
+      inherit (cfg.secrets.${name}) enable forceRegenerate refreshOnBoot;
     }
   ) secretFiles;
   activeBuiltinSecrets = lib.filterAttrs (_: secret: secret.enable) builtinSecrets;
@@ -217,7 +215,7 @@ let
     map (
       name:
       let
-        rawExtras = if specificLinkedSecrets ? ${name} then specificLinkedSecrets.${name} else [ ];
+        rawExtras = specificLinkedSecrets.${name} or [ ];
         extrasList = rawExtras;
         extras = lib.concatStringsSep " " extrasList;
       in

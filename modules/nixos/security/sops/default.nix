@@ -4,11 +4,13 @@
   ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.security.sops;
 
   # CHANGEME Enable sops
-in {
+in
+{
   options.security.sops = with types; {
     enable = mkBoolOpt false "Whether to enable sop for secrets management.";
   };
@@ -17,7 +19,7 @@ in {
     sops = {
       defaultSopsFile = ../../secrets.yaml;
       defaultSopsFormat = "yaml";
-      age.sshKeyPaths = ["/etc/ssh/ssh_host_ed25519_key"];
+      age.sshKeyPaths = [ "/etc/ssh/ssh_host_ed25519_key" ];
 
       # TODO: Deploy SOPS keys and enable
       # secrets = {

@@ -1,9 +1,33 @@
+import ast
 import os
 import subprocess
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parents[1]
+
+
+def test_lux_python_tests_do_not_import_undeclared_lx_annotate_package() -> None:
+    violations: list[str] = []
+    for path in sorted((REPO_ROOT / "tests").rglob("test_*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            modules: tuple[str, ...]
+            if isinstance(node, ast.Import):
+                modules = tuple(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module is not None:
+                modules = (node.module,)
+            else:
+                continue
+            if any(
+                module == "lx_annotate" or module.startswith("lx_annotate.")
+                for module in modules
+            ):
+                violations.append(f"{path.relative_to(REPO_ROOT)}:{node.lineno}")
+    assert violations == [], (
+        "Lux tests must exercise LX-Annotate through an installed wheel child "
+        f"process, not an undeclared import: {violations}"
+    )
 
 
 def _run_isolated_import(source: str) -> subprocess.CompletedProcess[str]:

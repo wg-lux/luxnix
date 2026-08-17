@@ -195,6 +195,12 @@ rec {
   // optionalAttrs (cfg.hub.outboundTransfer.sourceNodeSecretFile != null) {
     LX_ANNOTATE_HUB_SOURCE_NODE_SECRET_FILE = toString cfg.hub.outboundTransfer.sourceNodeSecretFile;
   }
+  // optionalAttrs (cfg.hub.outboundTransfer.recipientPublicKeyFile != null) {
+    LX_ANNOTATE_HUB_EXPORT_RECIPIENT_PUBLIC_KEY_FILE = toString cfg.hub.outboundTransfer.recipientPublicKeyFile;
+  }
+  // optionalAttrs (cfg.hub.transferApi.recipientPrivateKeyFiles != [ ]) {
+    ENDOREG_HUB_TRANSFER_RECIPIENT_PRIVATE_KEY_FILES = lib.concatStringsSep "," cfg.hub.transferApi.recipientPrivateKeyFiles;
+  }
   // cfg.runtime.extraEnvironment;
 
   commonSystemdEnvText = concatStringsSep "\n" (mapAttrsToList renderSystemdEnvLine commonEnv);

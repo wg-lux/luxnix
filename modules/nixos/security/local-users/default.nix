@@ -9,8 +9,7 @@ let
   cfg = config.security.luxnix.local-users;
   hostname = config.networking.hostName;
   isGcHost = hasPrefix "gc-" hostname;
-  adminPassword = cfg.adminPassword;
-  clientPassword = cfg.clientPassword;
+  inherit (cfg) adminPassword clientPassword;
   fallbackHash = "$6$yC9hyVoZEYLlzjbZ$pILBYLOZBlplgoYL9L.dyIKPGPrcW2ifd1I3ffRAYIwsv8B.pA76Eo6OUq71gJJKl8kGyBsmlbKwnGcKQEpoa.";
   adminPasswordFile =
     if adminPassword.source == "sops" then

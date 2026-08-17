@@ -3,12 +3,14 @@
   lib,
   pkgs,
   ...
-}: let
+}:
+let
   inherit (lib) mkIf;
   inherit (lib.luxnix) mkBoolOpt;
   #CHANGEME Dafuq is this?
   cfg = config.system.boot;
-in {
+in
+{
   options.system.boot = {
     enable = mkBoolOpt false "Whether or not to enable booting.";
     plymouth = mkBoolOpt false "Whether or not to enable plymouth boot splash.";
@@ -18,19 +20,22 @@ in {
 
   config = mkIf cfg.enable {
 
-    boot.kernel.sysctl."net.core.rmem_max" = config.luxnix.generic-settings.linux.rmemMax;
-    boot.kernel.sysctl."net.core.wmem_max" = config.luxnix.generic-settings.linux.wmemMax;
-
-    environment.systemPackages = with pkgs;
+    environment.systemPackages =
+      with pkgs;
       [
         efibootmgr
         efitools
         efivar
         fwupd
       ]
-      ++ lib.optionals cfg.secureBoot [sbctl];
+      ++ lib.optionals cfg.secureBoot [ sbctl ];
 
     boot = {
+      kernel.sysctl = {
+        "net.core.rmem_max" = config.luxnix.generic-settings.linux.rmemMax;
+        "net.core.wmem_max" = config.luxnix.generic-settings.linux.wmemMax;
+      };
+
       # TODO: if plymouth on
       kernelParams = lib.optionals cfg.plymouth [
         "quiet"
@@ -68,7 +73,7 @@ in {
     nix = mkIf cfg.spaceManagement {
       #gc = {
       #  automatic = true;
-       # dates = "weekly";
+      # dates = "weekly";
       #  options = "--delete-older-than 30d";
       #  persistent = true;
       #};
@@ -76,20 +81,25 @@ in {
     };
 
     #TODO @Hamzaukw add to documentation
-    systemd.services.boot-space-monitor = mkIf false { # cfg.spaceManagement {
+    systemd.services.boot-space-monitor = mkIf false {
+      # cfg.spaceManagement {
       description = "Monitor and clean boot partition space";
       serviceConfig = {
         Type = "oneshot";
         User = "root";
       };
-      path = with pkgs; [ coreutils gawk util-linux ];
+      path = with pkgs; [
+        coreutils
+        gawk
+        util-linux
+      ];
       script = ''
         BOOT_PATH="/boot"
         AVAILABLE=$(df "$BOOT_PATH" | ${pkgs.gawk}/bin/awk 'NR==2 {print $4}')
         AVAILABLE_MB=$((AVAILABLE / 1024))
-        
+
         echo "Boot partition status: $AVAILABLE_MB MB available"
-        
+
         if [ "$AVAILABLE_MB" -lt 200 ]; then
           echo "Warning: Boot partition space is low ($AVAILABLE_MB MB available)"
           
@@ -130,7 +140,8 @@ in {
       '';
     };
 
-    systemd.timers.boot-space-monitor = mkIf false { #cfg.spaceManagement {
+    systemd.timers.boot-space-monitor = mkIf false {
+      # cfg.spaceManagement {
       wantedBy = [ "timers.target" ];
       timerConfig = {
         OnCalendar = "daily";

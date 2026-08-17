@@ -12,44 +12,12 @@ host_roles:
 
 host_services:
   luxnix.lxAiLocal.runtime.protectedDataDir: '"/var/lib/lx-annotate/data"'
-  luxnix.lxAnnotateLocal.runtime.mode: '"wheel"'
-  # Fail-closed outbound hub transfer. Only explicitly eligible, anonymized
-  # processed media may be queued; Vault supplies every runtime credential.
-  luxnix.lxAnnotateLocal.hub.outboundTransfer.enable: "true"
-  luxnix.lxAnnotateLocal.hub.outboundTransfer.requireMtls: "true"
-  luxnix.lxAnnotateLocal.hub.outboundTransfer.caFile: '"/etc/secrets/vault/hub-pki/vault-server-ca.pem"'
-  luxnix.lxAnnotateLocal.hub.nodeProvisioning.enable: "true"
-  luxnix.lxAnnotateLocal.hub.nodeProvisioning.nodes: '[ { nodeKey = "gc-10";
-    displayName = "gc-10 site node"; role = "site_node";
-    centerKey = "university_hospital_wuerzburg";
-    sharedSecretFile = "/etc/secrets/vault/hub-pki/source-node-secret"; }
-    { nodeKey = "gs-02"; displayName = "gs-02 central hub";
-    role = "central_hub"; baseUrl = "https://gs-02.intern"; } ]'
 
-host_nixos:
-  # Vault must resolve through the authenticated VPN path. Public DNS caused
-  # the previous fail-closed deployment timeout before any Hub API request.
-  'networking.hosts."172.16.255.22"':
-    - "vault.endo-reg.net"
+host_nixos: {}
 
 extra_secret_names: []
 
 host_luxnix:
-
-  # Enrollment material is delivered out of band and is never rendered into
-  # the Nix store or inventory.
-  vault.client.allowOffline: "true"
-  vault.client.address: '"https://vault.endo-reg.net:8200"'
-  vault.client.caCertFile: '"/etc/secrets/vault/hub-pki/vault-server-ca.pem"'
-  vault.client.auth.method: '"approle"'
-  vault.client.auth.roleIdFile: '"/etc/secrets/vault/hub-pki/approle_role_id"'
-  vault.client.auth.secretIdFile: '"/etc/secrets/vault/hub-pki/approle_secret_id"'
-  # Temporary enrollment mode: missing AppRole files skip vault-auth-setup
-  # without failing activation. Remove after the first successful login.
-  vault.client.auth.deferUntilProvisioned: "true"
-  vault.client.hubPki.enable: "true"
-  vault.client.hubPki.commonName: '"gc-10.intern"'
-
   generic_settings.hostPlatform: '"x86_64-linux"'
   generic_settings.systemStateVersion: '"23.11"'
 

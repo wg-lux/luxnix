@@ -60,130 +60,134 @@ in
               package = postgresqlPackage;
             };
 
-            systemd.tmpfiles.rules = [
-              "d ${backupRoot} 0750 ${serviceUser} ${serviceGroup} - -"
-              "d ${runtimeRoot} 0750 ${serviceUser} ${serviceGroup} - -"
-              "d ${incomingRoot} 0750 ${serviceUser} ${serviceGroup} - -"
-              "d ${snapshotRoot} 0750 ${serviceUser} ${serviceGroup} - -"
-              "d ${manifestRoot} 0750 ${serviceUser} ${serviceGroup} - -"
-              "d ${postgresqlBackupRoot} 0700 postgres postgres - -"
-            ];
-
-            systemd.services.hub-backup-test-media = {
-              description = "Provision an anonymized processed-media fixture";
-              wantedBy = [ "multi-user.target" ];
-              before = [ "lx-annotate-hub-backup.service" ];
-              serviceConfig = {
-                Type = "oneshot";
-                RemainAfterExit = true;
-                User = serviceUser;
-                Group = serviceGroup;
-                ExecStart = pkgs.writeShellScript "provision-hub-backup-test-media" ''
-                  set -eu
-                  printf '%s' anonymized-processed-media > ${runtimeRoot}/processed-media.bin
-                  chmod 0640 ${runtimeRoot}/processed-media.bin
-                '';
-              };
-            };
-
-            systemd.services.hub-backup-test-database = {
-              description = "Provision a PostgreSQL transfer-ledger fixture";
-              wantedBy = [ "multi-user.target" ];
-              after = [ "postgresql.service" ];
-              requires = [ "postgresql.service" ];
-              before = [ "postgresqlBackup.service" ];
-              serviceConfig = {
-                Type = "oneshot";
-                RemainAfterExit = true;
-                User = "postgres";
-                ExecStart = pkgs.writeShellScript "provision-hub-backup-test-database" ''
-                  set -eu
-                  ${postgresqlPackage}/bin/createdb hub_restore_test
-                  ${postgresqlPackage}/bin/psql \
-                    --dbname hub_restore_test \
-                    --set ON_ERROR_STOP=1 \
-                    --command "CREATE TABLE transfer_ledger (transfer_key text PRIMARY KEY, resource_hash text NOT NULL, acknowledgement text NOT NULL); INSERT INTO transfer_ledger VALUES ('restore-transfer-1', 'sha256:restored-media', 'applied');"
-                '';
-              };
-            };
-
-            systemd.services.postgresqlBackup = {
-              description = "Produce a root-protected PostgreSQL dump";
-              after = [ "hub-backup-test-database.service" ];
-              requires = [ "hub-backup-test-database.service" ];
-              serviceConfig = {
-                Type = "oneshot";
-                User = "postgres";
-                ExecStart = pkgs.writeShellScript "produce-postgresql-backup-fixture" ''
-                  set -eu
-                  pending=${postgresqlBackupRoot}/all.in-progress.sql.gz
-                  completed=${postgresqlBackupRoot}/all.sql.gz
-                  if [ -e /run/hub-backup-corrupt-dump ]; then
-                    printf '%s' not-a-gzip-dump > "$pending"
-                  else
-                    ${postgresqlPackage}/bin/pg_dumpall \
-                      | ${pkgs.gzip}/bin/gzip -c > "$pending"
-                  fi
-                  chmod 0600 "$pending"
-                  ${pkgs.coreutils}/bin/mv "$pending" "$completed"
-                '';
-              };
-            };
-
-            systemd.services.lx-annotate-hub-backup = {
-              description = "Create a coupled PostgreSQL and media restore point";
-              after = [
-                "hub-backup-test-media.service"
-                "postgresqlBackup.service"
+            systemd = {
+              tmpfiles.rules = [
+                "d ${backupRoot} 0750 ${serviceUser} ${serviceGroup} - -"
+                "d ${runtimeRoot} 0750 ${serviceUser} ${serviceGroup} - -"
+                "d ${incomingRoot} 0750 ${serviceUser} ${serviceGroup} - -"
+                "d ${snapshotRoot} 0750 ${serviceUser} ${serviceGroup} - -"
+                "d ${manifestRoot} 0750 ${serviceUser} ${serviceGroup} - -"
+                "d ${postgresqlBackupRoot} 0700 postgres postgres - -"
               ];
-              requires = [
-                "hub-backup-test-media.service"
-                "postgresqlBackup.service"
-              ];
-              serviceConfig = {
-                Type = "oneshot";
-                User = serviceUser;
-                Group = serviceGroup;
-                ExecStart = "${hubBackupScripts.runLocalHubBackupScript}/bin/runLxAnnotateHubBackup";
-                LoadCredential = [
-                  "hub-postgresql.sql.gz:${postgresqlBackupRoot}/all.sql.gz"
-                ];
-                PrivateTmp = true;
-                ProtectSystem = "full";
-                ReadWritePaths = [ backupRoot ];
-              };
-              path = [
-                pkgs.coreutils
-                pkgs.findutils
-                pkgs.gzip
-                pkgs.jq
-                pkgs.rsync
-              ];
-            };
 
-            systemd.services.lx-annotate-hub-backup-capacity-blocked = {
-              description = "Reject a hub restore point that would breach the free-space reserve";
-              after = [ "postgresqlBackup.service" ];
-              requires = [ "postgresqlBackup.service" ];
-              serviceConfig = {
-                Type = "oneshot";
-                User = serviceUser;
-                Group = serviceGroup;
-                ExecStart = "${capacityBlockedHubBackupScripts.runLocalHubBackupScript}/bin/runLxAnnotateHubBackup";
-                LoadCredential = [
-                  "hub-postgresql.sql.gz:${postgresqlBackupRoot}/all.sql.gz"
-                ];
-                PrivateTmp = true;
-                ProtectSystem = "full";
-                ReadWritePaths = [ backupRoot ];
+              services = {
+                hub-backup-test-media = {
+                  description = "Provision an anonymized processed-media fixture";
+                  wantedBy = [ "multi-user.target" ];
+                  before = [ "lx-annotate-hub-backup.service" ];
+                  serviceConfig = {
+                    Type = "oneshot";
+                    RemainAfterExit = true;
+                    User = serviceUser;
+                    Group = serviceGroup;
+                    ExecStart = pkgs.writeShellScript "provision-hub-backup-test-media" ''
+                      set -eu
+                      printf '%s' anonymized-processed-media > ${runtimeRoot}/processed-media.bin
+                      chmod 0640 ${runtimeRoot}/processed-media.bin
+                    '';
+                  };
+                };
+
+                hub-backup-test-database = {
+                  description = "Provision a PostgreSQL transfer-ledger fixture";
+                  wantedBy = [ "multi-user.target" ];
+                  after = [ "postgresql.service" ];
+                  requires = [ "postgresql.service" ];
+                  before = [ "postgresqlBackup.service" ];
+                  serviceConfig = {
+                    Type = "oneshot";
+                    RemainAfterExit = true;
+                    User = "postgres";
+                    ExecStart = pkgs.writeShellScript "provision-hub-backup-test-database" ''
+                      set -eu
+                      ${postgresqlPackage}/bin/createdb hub_restore_test
+                      ${postgresqlPackage}/bin/psql \
+                        --dbname hub_restore_test \
+                        --set ON_ERROR_STOP=1 \
+                        --command "CREATE TABLE transfer_ledger (transfer_key text PRIMARY KEY, resource_hash text NOT NULL, acknowledgement text NOT NULL); INSERT INTO transfer_ledger VALUES ('restore-transfer-1', 'sha256:restored-media', 'applied');"
+                    '';
+                  };
+                };
+
+                postgresqlBackup = {
+                  description = "Produce a root-protected PostgreSQL dump";
+                  after = [ "hub-backup-test-database.service" ];
+                  requires = [ "hub-backup-test-database.service" ];
+                  serviceConfig = {
+                    Type = "oneshot";
+                    User = "postgres";
+                    ExecStart = pkgs.writeShellScript "produce-postgresql-backup-fixture" ''
+                      set -eu
+                      pending=${postgresqlBackupRoot}/all.in-progress.sql.gz
+                      completed=${postgresqlBackupRoot}/all.sql.gz
+                      if [ -e /run/hub-backup-corrupt-dump ]; then
+                        printf '%s' not-a-gzip-dump > "$pending"
+                      else
+                        ${postgresqlPackage}/bin/pg_dumpall \
+                          | ${pkgs.gzip}/bin/gzip -c > "$pending"
+                      fi
+                      chmod 0600 "$pending"
+                      ${pkgs.coreutils}/bin/mv "$pending" "$completed"
+                    '';
+                  };
+                };
+
+                lx-annotate-hub-backup = {
+                  description = "Create a coupled PostgreSQL and media restore point";
+                  after = [
+                    "hub-backup-test-media.service"
+                    "postgresqlBackup.service"
+                  ];
+                  requires = [
+                    "hub-backup-test-media.service"
+                    "postgresqlBackup.service"
+                  ];
+                  serviceConfig = {
+                    Type = "oneshot";
+                    User = serviceUser;
+                    Group = serviceGroup;
+                    ExecStart = "${hubBackupScripts.runLocalHubBackupScript}/bin/runLxAnnotateHubBackup";
+                    LoadCredential = [
+                      "hub-postgresql.sql.gz:${postgresqlBackupRoot}/all.sql.gz"
+                    ];
+                    PrivateTmp = true;
+                    ProtectSystem = "full";
+                    ReadWritePaths = [ backupRoot ];
+                  };
+                  path = [
+                    pkgs.coreutils
+                    pkgs.findutils
+                    pkgs.gzip
+                    pkgs.jq
+                    pkgs.rsync
+                  ];
+                };
+
+                lx-annotate-hub-backup-capacity-blocked = {
+                  description = "Reject a hub restore point that would breach the free-space reserve";
+                  after = [ "postgresqlBackup.service" ];
+                  requires = [ "postgresqlBackup.service" ];
+                  serviceConfig = {
+                    Type = "oneshot";
+                    User = serviceUser;
+                    Group = serviceGroup;
+                    ExecStart = "${capacityBlockedHubBackupScripts.runLocalHubBackupScript}/bin/runLxAnnotateHubBackup";
+                    LoadCredential = [
+                      "hub-postgresql.sql.gz:${postgresqlBackupRoot}/all.sql.gz"
+                    ];
+                    PrivateTmp = true;
+                    ProtectSystem = "full";
+                    ReadWritePaths = [ backupRoot ];
+                  };
+                  path = [
+                    pkgs.coreutils
+                    pkgs.findutils
+                    pkgs.gzip
+                    pkgs.jq
+                    pkgs.rsync
+                  ];
+                };
               };
-              path = [
-                pkgs.coreutils
-                pkgs.findutils
-                pkgs.gzip
-                pkgs.jq
-                pkgs.rsync
-              ];
             };
           };
 

@@ -1,14 +1,17 @@
-{ pkgs
-, config
-, lib
-, ...
+{
+  pkgs,
+  config,
+  lib,
+  ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.user.client;
   sensitiveServiceGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
   homeDir = if cfg.home != null then cfg.home else "/home/${cfg.name}";
-in {
+in
+{
   options.user.client = with types; {
     enable = mkBoolOpt false "Enable the client user";
     name = mkOpt str "client-user" "The name of the client-facing user account";
@@ -26,10 +29,10 @@ in {
       Refuse activation when the configured hashed password file is missing or empty.
       Disable only for intentionally passwordless client-user deployments.
     '';
-    extraGroups = mkOpt (listOf str) [] "Additional groups for the client user";
+    extraGroups = mkOpt (listOf str) [ ] "Additional groups for the client user";
     homeStateVersion = mkOption {
       type = str;
-      default = (config.system.stateVersion or "24.05");
+      default = config.system.stateVersion or "24.05";
       description = "home-manager stateVersion for the client user";
     };
     extraOptions = mkOpt attrs { } "Additional users.users options for the client user";
@@ -44,35 +47,36 @@ in {
     ];
 
     system.activationScripts.luxnixValidateClientPasswordFile =
-      mkIf (cfg.requireUsablePasswordFile && cfg.hashedPasswordFile != null) {
-        deps = [ "etc" ];
-        text = ''
-          set -euo pipefail
-          client_password_file=${lib.escapeShellArg cfg.hashedPasswordFile}
-          if [ ! -s "$client_password_file" ]; then
-            echo "ERROR: client user password hash file is missing or empty: $client_password_file" >&2
-            echo "Refusing activation to avoid switching into a generation with an unusable client password." >&2
-            exit 1
-          fi
-        '';
-      };
+      mkIf (cfg.requireUsablePasswordFile && cfg.hashedPasswordFile != null)
+        {
+          deps = [ "etc" ];
+          text = ''
+            set -euo pipefail
+            client_password_file=${lib.escapeShellArg cfg.hashedPasswordFile}
+            if [ ! -s "$client_password_file" ]; then
+              echo "ERROR: client user password hash file is missing or empty: $client_password_file" >&2
+              echo "Refusing activation to avoid switching into a generation with an unusable client password." >&2
+              exit 1
+            fi
+          '';
+        };
 
-    users.users.${cfg.name} =
-      {
-        isNormalUser = true;
-        createHome = true;
-        home = homeDir;
-        shell = pkgs.zsh;
-        group = "users";
-        extraGroups = [
-          sensitiveServiceGroupName
-          "endoreg-service"
-        ] ++ cfg.extraGroups;
-      }
-      // optionalAttrs (cfg.hashedPasswordFile != null) {
-        hashedPasswordFile = cfg.hashedPasswordFile;
-      }
-      // cfg.extraOptions;
+    users.users.${cfg.name} = {
+      isNormalUser = true;
+      createHome = true;
+      home = homeDir;
+      shell = pkgs.zsh;
+      group = "users";
+      extraGroups = [
+        sensitiveServiceGroupName
+        "endoreg-service"
+      ]
+      ++ cfg.extraGroups;
+    }
+    // optionalAttrs (cfg.hashedPasswordFile != null) {
+      inherit (cfg) hashedPasswordFile;
+    }
+    // cfg.extraOptions;
 
     home-manager = {
       useGlobalPkgs = false;

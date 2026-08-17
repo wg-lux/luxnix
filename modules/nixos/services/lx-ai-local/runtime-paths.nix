@@ -1,6 +1,7 @@
-{ lib
-, cfg
-, repoDir
+{
+  lib,
+  cfg,
+  repoDir,
 }:
 
 let
@@ -39,10 +40,7 @@ let
     encryptionService = null;
   };
 
-  makeRuntimePath = path:
-    if lib.hasPrefix "/" path
-    then path
-    else "${repoDir}/${path}";
+  makeRuntimePath = path: if lib.hasPrefix "/" path then path else "${repoDir}/${path}";
 
   # lx-ai owned runtime/output root.
   envDataDir = makeRuntimePath cfg.runtime.dataDir;
@@ -52,9 +50,10 @@ let
   # If protectedDataDir is null, lx-ai uses its own data dir.
   # If protectedDataDir is absolute, it is used as-is.
   envProtectedDataDir =
-    if cfg.runtime.protectedDataDir != null
-    then makeRuntimePath cfg.runtime.protectedDataDir
-    else envDataDir;
+    if cfg.runtime.protectedDataDir != null then
+      makeRuntimePath cfg.runtime.protectedDataDir
+    else
+      envDataDir;
 
   envConfDir = makeRuntimePath cfg.runtime.confDir;
 
@@ -120,5 +119,6 @@ in
     envStreamableVideoRawRoot
     envStreamableVideoProcessedRoot
 
-    envSystemdFilePath;
+    envSystemdFilePath
+    ;
 }

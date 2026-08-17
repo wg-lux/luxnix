@@ -7,7 +7,7 @@ suites:
     scope: Central option schema, path resolution, and validation.
   - id: cli
     path: tests/test_autoconf_cli.py
-    scope: Command-line behavior and Vault bootstrap argument resolution.
+    scope: Command-line behavior, isolated render protection, and Vault bootstrap argument resolution.
   - id: errors
     path: tests/test_autoconf_errors.py
     scope: Public exception identities and secret-safe source failures.
@@ -25,7 +25,7 @@ suites:
     scope: Pipeline dispatch, explicit inputs, logging, and stage signatures.
   - id: rendering
     path: tests/test_autoconf_rendering.py
-    scope: Strict deterministic and atomic Nix configuration rendering.
+    scope: Strict deterministic, nixfmt-normalized, atomic, and isolated Nix configuration rendering.
   - id: sources
     path: tests/test_autoconf_sources.py
     scope: Fact snapshots and inventory variable source loading.

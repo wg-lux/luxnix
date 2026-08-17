@@ -5,9 +5,11 @@
 }:
 #CHANGEME
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.services.luxnix.netdata;
-in {
+in
+{
   options.services.luxnix.netdata = {
     enable = mkBoolOpt false "Enable the netdata service";
   };
@@ -31,11 +33,11 @@ in {
 
             routers = {
               netdata = {
-                entryPoints = ["websecure"];
+                entryPoints = [ "websecure" ];
                 rule = "Host(`netdata.homelab.haseebmajid.dev`)";
                 service = "netdata";
                 tls.certResolver = "letsencrypt";
-                middlewares = ["authentik"];
+                middlewares = [ "authentik" ];
               };
             };
           };

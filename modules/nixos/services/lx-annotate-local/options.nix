@@ -377,8 +377,8 @@ in
           wheelPath = mkOption {
             type = types.nullOr types.path;
             default = pkgs.fetchurl {
-              url = "https://files.pythonhosted.org/packages/1f/39/29e0f666347740a9dbac84623209015893ca29c96becbf56515fb8bb4952/lx_annotate-0.9.60-py3-none-any.whl";
-              hash = "sha256-1zUEhetjOts1Y8XD/bhL/jD1ec8zjvXGUH7MLLqG/dc=";
+              url = "https://files.pythonhosted.org/packages/7f/12/092751a879b1a92ec17869c069df7e9e107d8936a0d7441c9cccb7b9730c/lx_annotate-1.0.2-py3-none-any.whl";
+              hash = "sha256-lGoLA/mMVf6vCiSDdFpCKm3CPbwcVHkkoL9Tx7hmXvQ=";
             };
             description = "Path to the lx-annotate wheel artifact used in wheel mode.";
           };
@@ -464,9 +464,9 @@ in
                   default = null;
                   description = ''
                     Optional immutable bundle used only when no registry exists.
-                    When this is null, the bootstrap registers and activates
-                    the report_template_examples bundle shipped by lx-dtypes
-                    in the wheel environment. Provisioning failures only
+                    When this is null, the bootstrap registers the packaged
+                    dgvs_reporting, mst_3_0, and star_upper_gi reporting bundles
+                    and activates star_upper_gi in a new registry. Provisioning failures only
                     disable terminology features; they do not block LX-Annotate.
                     An authorized user can also import a data folder or an
                     lx-terminology-editor ZIP from the frontend.
@@ -1443,6 +1443,11 @@ in
                   default = null;
                   description = "PEM bundle used by Nginx to verify client certificates for hub transfer requests.";
                 };
+                recipientPrivateKeyFiles = mkOption {
+                  type = types.listOf types.str;
+                  default = [ ];
+                  description = "Ordered current and retiring X25519 PEM private recipient keys used only by the central hub to unwrap per-transfer data-encryption keys.";
+                };
                 maxUploadBytes = mkOption {
                   type = types.ints.positive;
                   default = 50 * 1024 * 1024 * 1024;
@@ -1485,6 +1490,11 @@ in
                   type = types.nullOr (types.either types.path types.str);
                   default = null;
                   description = "Readable file containing the NetworkNode request-authentication secret; keep this outside the Nix store.";
+                };
+                recipientPublicKeyFile = mkOption {
+                  type = types.nullOr types.str;
+                  default = null;
+                  description = "Runtime X25519 PEM public key used to wrap a fresh per-transfer data-encryption key for the central hub.";
                 };
                 recoveryInterval = mkOption {
                   type = types.str;

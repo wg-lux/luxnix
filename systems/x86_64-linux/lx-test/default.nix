@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ lib, ... }:
 
 {
   # This host is intentionally hardware-neutral so it can be installed as a
@@ -46,7 +46,12 @@
         baseUrl = "http://lx-test.intern";
         httpProtocol = "http";
         useHttps = false;
-        djangoAllowedHosts = [ "lx-test" "lx-test.intern" "localhost" "127.0.0.1" ];
+        djangoAllowedHosts = [
+          "lx-test"
+          "lx-test.intern"
+          "localhost"
+          "127.0.0.1"
+        ];
       };
     };
   };

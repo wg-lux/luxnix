@@ -8,7 +8,26 @@ ansible_roles:
 
 host_roles: {}
 
-host_services: {}
+host_services:
+  # Canonical declaration for the protected gs-01 storage peer. Activation is
+  # still fail-closed on the encrypted mount and credentials documented in
+  # systems/x86_64-linux/gs-01/storage-node-rollout.yml.
+  luxnix.hubStorage.node.enable: "true"
+  luxnix.hubStorage.node.identity: '"gs-01"'
+  luxnix.hubStorage.node.storage.mountPoint: '"/archive"'
+  luxnix.hubStorage.node.storage.encryptedDevice: '"/dev/mapper/gs-01-storage"'
+  luxnix.hubStorage.node.network.listenAddress: '"172.16.255.21"'
+  luxnix.hubStorage.node.network.interface: '"tun0"'
+  luxnix.hubStorage.node.network.allowedHubAddresses: '[ "172.16.255.22" ]'
+  luxnix.hubStorage.node.network.allowedHubIdentities: '[ "spiffe://endoreg/hub/gs-02" ]'
+  'luxnix.hubStorage.node.network.hubIdentityOperations."spiffe://endoreg/hub/gs-02"': '[
+    "health" "capacity" "inventory" "store" "fetch_ciphertext"
+    "fetch_plaintext" "verify" "delete" ]'
+  luxnix.hubStorage.node.tls.caCertificateFile: '"/etc/secrets/vault/hub-storage/ca.pem"'
+  luxnix.hubStorage.node.tls.certificateFile: '"/etc/secrets/vault/hub-storage/gs-01-server.crt"'
+  luxnix.hubStorage.node.tls.keyFile: '"/etc/secrets/vault/hub-storage/gs-01-server.key"'
+  luxnix.hubStorage.node.recipientPrivateIdentityFiles: '[
+    "/etc/secrets/vault/hub-storage/gs-01-recipient-current.pem" ]'
 
 host_luxnix:
   boot_decryption_stick_gs_01.enable: "true"

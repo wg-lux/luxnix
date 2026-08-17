@@ -61,6 +61,7 @@ nav:
   - Start Here:
       - Getting Started: getting-started.md
       - Development: development.md
+      - Nix Quality: nix-quality.md
       - Autoconf and Local Inventory: autoconf.md
   - Architecture:
       - System Architecture: architecture.md

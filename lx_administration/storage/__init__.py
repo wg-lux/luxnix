@@ -5,8 +5,12 @@ from typing import TYPE_CHECKING
 from .._lazy_exports import public_names, resolve_lazy_export
 
 if TYPE_CHECKING:
+    from .envelope import EnvelopeMetadata
     from .manager import (
+        HubStorageClientContract,
+        HubStorageNodePeerContract,
         StorageManager,
+        StorageNodeContract,
         conf_filepath,
         generate_storage_directory_tree,
         initialize_storage_manager_from_env,
@@ -21,7 +25,11 @@ if TYPE_CHECKING:
     )
 
 __all__ = [
+    "HubStorageClientContract",
+    "HubStorageNodePeerContract",
     "StorageManager",
+    "StorageNodeContract",
+    "EnvelopeMetadata",
     "conf_filepath",
     "legacy_conf_filepath",
     "generate_storage_directory_tree",
@@ -34,7 +42,11 @@ __all__ = [
 ]
 
 _EXPORTS = {
+    "EnvelopeMetadata": (".envelope", "EnvelopeMetadata"),
+    "HubStorageClientContract": (".manager", "HubStorageClientContract"),
+    "HubStorageNodePeerContract": (".manager", "HubStorageNodePeerContract"),
     "StorageManager": (".manager", "StorageManager"),
+    "StorageNodeContract": (".manager", "StorageNodeContract"),
     "conf_filepath": (".manager", "conf_filepath"),
     "legacy_conf_filepath": (".manager", "legacy_conf_filepath"),
     "generate_storage_directory_tree": (

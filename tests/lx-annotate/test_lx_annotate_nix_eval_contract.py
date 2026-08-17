@@ -236,6 +236,16 @@ def _live_host_contract() -> dict[str, Any]:
         let
           flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
           gc02 = flake.nixosConfigurations.gc-02.config;
+          gcHosts = {
+            "gc-02" = gc02;
+            "gc-04" = flake.nixosConfigurations.gc-04.config;
+            "gc-05" = flake.nixosConfigurations.gc-05.config;
+            "gc-06" = flake.nixosConfigurations.gc-06.config;
+            "gc-07" = flake.nixosConfigurations.gc-07.config;
+            "gc-08" = flake.nixosConfigurations.gc-08.config;
+            "gc-09" = flake.nixosConfigurations.gc-09.config;
+            "gc-10" = flake.nixosConfigurations.gc-10.config;
+          };
           gs01 = flake.nixosConfigurations.gs-01.config;
           gs02 = flake.nixosConfigurations.gs-02.config;
           s04 = flake.nixosConfigurations.s-04.config;
@@ -267,12 +277,20 @@ def _live_host_contract() -> dict[str, Any]:
             serverRequireMtls = gs02.services.luxnix.lxAnnotateLocal.hub.transferApi.requireMtls;
           };
           hubTransfer = {
+            hostName = gs02HostName;
+            sslCertificatePath = toString gs02.services.luxnix.lxAnnotateLocal.django.sslCertificatePath;
+            nginxCertificate = toString gs02.services.nginx.virtualHosts.${gs02HostName}.sslCertificate;
+            nginxCertificateKey = toString gs02.services.nginx.virtualHosts.${gs02HostName}.sslCertificateKey;
             role = gs02.services.luxnix.lxAnnotateLocal.runtime.deploymentRole;
             hubEnable = gs02.services.luxnix.lxAnnotateLocal.hub.enable;
             transferEnable = gs02.services.luxnix.lxAnnotateLocal.hub.transferApi.enable;
             requireSecure = gs02.services.luxnix.lxAnnotateLocal.hub.transferApi.requireSecureTransport;
             requireMtls = gs02.services.luxnix.lxAnnotateLocal.hub.transferApi.requireMtls;
             clientCaFile = toString gs02.services.luxnix.lxAnnotateLocal.hub.transferApi.clientCaFile;
+            recipientPrivateKeyFiles = gs02.services.luxnix.lxAnnotateLocal.hub.transferApi.recipientPrivateKeyFiles;
+            provisionedNodeKeys = map
+              (node: node.nodeKey)
+              gs02.services.luxnix.lxAnnotateLocal.hub.nodeProvisioning.nodes;
             bootEnvironment = envList gs02.systemd.services.lx-annotate.environment;
             nginxExtraConfig = gs02.services.nginx.virtualHosts.${gs02HostName}.extraConfig;
             vaultEnabled = gs02.services.vault.enable;
@@ -283,9 +301,16 @@ def _live_host_contract() -> dict[str, Any]:
             vaultManagedTls = gs02.luxnix.vault.server.managedTls;
             vaultManagedTlsExecStart =
               gs02.systemd.services.luxnix-vault-managed-server-tls.serviceConfig.ExecStart;
+            vaultManagedTlsExecStartPost =
+              gs02.systemd.services.luxnix-vault-managed-server-tls.serviceConfig.ExecStartPost;
+            vaultManagedTlsBefore =
+              gs02.systemd.services.luxnix-vault-managed-server-tls.before;
+            vaultManagedTlsRequiredBy =
+              gs02.systemd.services.luxnix-vault-managed-server-tls.requiredBy;
             postgresHost = gs02.services.luxnix.lxAnnotateLocal.runtime.externalServices.postgresHost;
             vaultFirewallPorts = gs02.networking.firewall.interfaces.tun0.allowedTCPPorts;
             caPublisherExecStart = gs02.systemd.services.luxnix-vault-publish-hub-client-ca.serviceConfig.ExecStart;
+            envelopePreflightBefore = gs02.systemd.services.lx-annotate-hub-envelope-key-preflight.before;
           };
           siteTransfer = {
             outbound = gc02.services.luxnix.lxAnnotateLocal.hub.outboundTransfer;
@@ -298,7 +323,25 @@ def _live_host_contract() -> dict[str, Any]:
               gc02.systemd.services.managed-secrets-setup.serviceConfig.EnvironmentFile;
             certificateIssuerEnvironmentFile =
               gc02.systemd.services.luxnix-vault-issue-hub-client-certificate.serviceConfig.EnvironmentFile;
+            workerEnvironment = envList gc02.systemd.services."lx-annotate-celery-hub-transfer-worker".environment;
+            envelopePreflightBefore = gc02.systemd.services.lx-annotate-hub-envelope-key-preflight.before;
           };
+
+          siteTransfers = builtins.mapAttrs (hostName: cfg: {
+            evaluatedHostName = cfg.networking.hostName;
+            role = cfg.services.luxnix.lxAnnotateLocal.runtime.deploymentRole;
+            runtimeMode = cfg.services.luxnix.lxAnnotateLocal.runtime.mode;
+            outbound = cfg.services.luxnix.lxAnnotateLocal.hub.outboundTransfer;
+            nodeKeys = map
+              (node: node.nodeKey)
+              cfg.services.luxnix.lxAnnotateLocal.hub.nodeProvisioning.nodes;
+            hubPkiEnable = cfg.luxnix.vault.client.hubPki.enable;
+            hubPkiCommonName = cfg.luxnix.vault.client.hubPki.commonName;
+            vaultAddress = cfg.luxnix.vault.client.address;
+            vaultAuthMethod = cfg.luxnix.vault.client.auth.method;
+            vaultVpnAliases = cfg.networking.hosts."172.16.255.22";
+            workerEnvironment = envList cfg.systemd.services."lx-annotate-celery-hub-transfer-worker".environment;
+          }) gcHosts;
 
           centralHub = {
             role = s04.services.luxnix.lxAnnotateLocal.runtime.deploymentRole;
@@ -432,8 +475,10 @@ def _gc_02_extended_contracts() -> dict[str, Any]:
                 services.luxnix.lxAnnotateLocal.hub.transferApi.requireSecureTransport = true;
                 services.luxnix.lxAnnotateLocal.hub.transferApi.requireMtls = true;
                 services.luxnix.lxAnnotateLocal.hub.transferApi.clientCaFile = "/tmp/client-ca.pem";
+                services.luxnix.lxAnnotateLocal.hub.transferApi.recipientPrivateKeyFiles = [ "/tmp/hub-recipient.pem" ];
                 services.luxnix.lxAnnotateLocal.hub.transferApi.mtlsMetaKey = "X-Client-Cert-Subject";
                 services.luxnix.lxAnnotateLocal.hub.transferApi.mtlsMetaValue = "$ssl_client_s_dn";
+                services.luxnix.lxAnnotateLocal.runtime.deploymentRole = lib.mkForce "central_hub";
                 services.luxnix.lxAnnotateLocal.django.extraSettings.IS_CENTRAL_NODE = lib.mkForce true;
               })
             ];
@@ -1520,14 +1565,39 @@ def test_lx_annotate_deployment_role_distinguishes_central_servers_from_center_n
 def test_lx_annotate_gs02_transfer_api_and_vault_live_contract() -> None:
     evaluated = _live_host_contract()["hubTransfer"]
 
+    assert evaluated["hostName"] == "gs-02.intern"
+    assert evaluated["sslCertificatePath"] == "/var/lib/luxnix-vault-pki/server.crt"
+    assert evaluated["nginxCertificate"] == "/var/lib/luxnix-vault-pki/server.crt"
+    assert evaluated["nginxCertificateKey"] == "/var/lib/luxnix-vault-pki/server.key"
     assert evaluated["role"] == "central_hub"
     assert evaluated["hubEnable"] is True
     assert evaluated["transferEnable"] is True
     assert evaluated["requireSecure"] is True
     assert evaluated["requireMtls"] is True
     assert evaluated["clientCaFile"] == "/var/lib/lx-annotate/hub-pki/client-ca.pem"
+    assert evaluated["recipientPrivateKeyFiles"] == [
+        "/etc/secrets/vault/hub-pki/hub-recipient-current.pem"
+    ]
+    assert evaluated["provisionedNodeKeys"] == [
+        "gc-01",
+        "gc-02",
+        "gc-03",
+        "gc-04",
+        "gc-05",
+        "gc-06",
+        "gc-07",
+        "gc-08",
+        "gc-09",
+        "gc-10",
+        "gs-02",
+    ]
     assert "ENDOREG_ENABLE_HUB_TRANSFERS=true" in evaluated["bootEnvironment"]
     assert "ENDOREG_HUB_TRANSFER_REQUIRE_MTLS=true" in evaluated["bootEnvironment"]
+    assert (
+        "ENDOREG_HUB_TRANSFER_RECIPIENT_PRIVATE_KEY_FILES=/etc/secrets/vault/hub-pki/hub-recipient-current.pem"
+        in evaluated["bootEnvironment"]
+    )
+    assert "lx-annotate.service" in evaluated["envelopePreflightBefore"]
     assert "ssl_verify_client optional;" in evaluated["nginxExtraConfig"]
     assert (
         "ssl_client_certificate /var/lib/lx-annotate/hub-pki/client-ca.pem;"
@@ -1544,6 +1614,15 @@ def test_lx_annotate_gs02_transfer_api_and_vault_live_contract() -> None:
         "gs-02.intern",
     ]
     assert "luxnix-vault-maintain-server-tls" in evaluated["vaultManagedTlsExecStart"]
+    assert set(evaluated["vaultManagedTlsBefore"]) >= {
+        "vault.service",
+        "nginx.service",
+    }
+    assert set(evaluated["vaultManagedTlsRequiredBy"]) >= {
+        "vault.service",
+        "nginx.service",
+    }
+    assert "reload-vault-after-leaf-rotation" in evaluated["vaultManagedTlsExecStartPost"]
     assert evaluated["postgresHost"] == "127.0.0.1"
     assert 8200 in evaluated["vaultFirewallPorts"]
     assert "publish-lx-hub-client-ca" in evaluated["caPublisherExecStart"]
@@ -1562,6 +1641,10 @@ def test_lx_annotate_gc02_outbound_transfer_is_vault_backed_and_fail_closed() ->
         evaluated["outbound"]["sourceNodeSecretFile"]
         == "/etc/secrets/vault/hub-pki/source-node-secret"
     )
+    assert (
+        evaluated["outbound"]["recipientPublicKeyFile"]
+        == "/etc/secrets/vault/hub-pki/hub-recipient-current.pub.pem"
+    )
     assert evaluated["vaultClient"]["auth"]["method"] == "approle"
     assert evaluated["vaultClient"]["hubPki"]["enable"] is True
     assert evaluated["nodeProvisioning"]["enable"] is True
@@ -1570,6 +1653,12 @@ def test_lx_annotate_gc02_outbound_transfer_is_vault_backed_and_fail_closed() ->
         in evaluated["workerRequires"]
     )
     assert "lx-annotate-hub-node-provisioning.service" in evaluated["workerRequires"]
+    assert "lx-annotate-hub-envelope-key-preflight.service" in evaluated["workerRequires"]
+    assert (
+        "LX_ANNOTATE_HUB_EXPORT_RECIPIENT_PUBLIC_KEY_FILE=/etc/secrets/vault/hub-pki/hub-recipient-current.pub.pem"
+        in evaluated["workerEnvironment"]
+    )
+    assert "lx-annotate-celery-hub-transfer-worker.service" in evaluated["envelopePreflightBefore"]
     assert "lx-annotate-hub-node-provisioning.service" in evaluated["bootRequires"]
     assert "gs-02.intern" in evaluated["hubVpnAliases"]
     assert "vault.endo-reg.net" in evaluated["hubVpnAliases"]
@@ -1579,6 +1668,193 @@ def test_lx_annotate_gc02_outbound_transfer_is_vault_backed_and_fail_closed() ->
     assert (
         evaluated["certificateIssuerEnvironmentFile"] == "-/run/luxnix/vault/vault.env"
     )
+
+
+def test_all_active_gc_hosts_are_ready_for_fail_closed_hub_transfer() -> None:
+    evaluated = _live_host_contract()["siteTransfers"]
+    expected_hosts = {
+        "gc-02",
+        "gc-04",
+        "gc-05",
+        "gc-06",
+        "gc-07",
+        "gc-08",
+        "gc-09",
+        "gc-10",
+    }
+
+    assert set(evaluated) == expected_hosts
+    for host_name, contract in evaluated.items():
+        assert contract["evaluatedHostName"] == host_name
+        assert contract["role"] == "site_node"
+        assert contract["runtimeMode"] == "wheel"
+        assert contract["outbound"]["enable"] is True
+        assert contract["outbound"]["requireMtls"] is True
+        assert contract["outbound"]["caFile"] == (
+            "/etc/secrets/vault/hub-pki/vault-server-ca.pem"
+        )
+        assert contract["outbound"]["recipientPublicKeyFile"] == (
+            "/etc/secrets/vault/hub-pki/hub-recipient-current.pub.pem"
+        )
+        assert (
+            "LX_ANNOTATE_HUB_EXPORT_RECIPIENT_PUBLIC_KEY_FILE=/etc/secrets/vault/hub-pki/hub-recipient-current.pub.pem"
+            in contract["workerEnvironment"]
+        )
+        assert contract["nodeKeys"] == [host_name, "gs-02"]
+        assert contract["hubPkiEnable"] is True
+        assert contract["hubPkiCommonName"] == f"{host_name}.intern"
+        assert contract["vaultAddress"] == "https://vault.endo-reg.net:8200"
+        assert contract["vaultAuthMethod"] == "approle"
+        assert "vault.endo-reg.net" in contract["vaultVpnAliases"]
+
+
+def test_lx_annotate_transfer_endpoints_reject_disabled_mtls() -> None:
+    for host, option_path in (
+        ("gc-02", "hub.outboundTransfer.requireMtls"),
+        ("gs-02", "hub.transferApi.requireMtls"),
+    ):
+        result = _nix_eval_expr_result(
+            f'''
+            let
+              flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
+              lib = flake.inputs.nixpkgs.lib;
+              cfg = (flake.nixosConfigurations.{host}.extendModules {{
+                modules = [
+                  ({{ ... }}: {{
+                    services.luxnix.lxAnnotateLocal.{option_path} = lib.mkForce false;
+                  }})
+                ];
+              }}).config;
+            in cfg.system.build.toplevel.drvPath
+            '''
+        )
+
+        assert result.returncode != 0
+        assert f"{option_path} = true" in result.stderr
+
+
+def test_lx_annotate_rejects_partial_external_tls_identity() -> None:
+    result = _nix_eval_expr_result(
+        '''
+        let
+          flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
+          lib = flake.inputs.nixpkgs.lib;
+          cfg = (flake.nixosConfigurations.gs-02.extendModules {
+            modules = [
+              ({ ... }: {
+                services.luxnix.lxAnnotateLocal.django.sslKeyPath = lib.mkForce null;
+              })
+            ];
+          }).config;
+        in cfg.system.build.toplevel.drvPath
+        '''
+    )
+
+    assert result.returncode != 0
+    assert "sslCertificatePath and sslKeyPath must either both be set" in result.stderr
+
+
+def test_lx_annotate_hub_transfer_rejects_missing_private_recipient_identity() -> None:
+    result = _nix_eval_expr_result(
+        '''
+        let
+          flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
+          lib = flake.inputs.nixpkgs.lib;
+          cfg = (flake.nixosConfigurations.gs-02.extendModules {
+            modules = [
+              ({ ... }: {
+                services.luxnix.lxAnnotateLocal.hub.transferApi.recipientPrivateKeyFiles = lib.mkForce [ ];
+              })
+            ];
+          }).config;
+        in cfg.system.build.toplevel.drvPath
+        '''
+    )
+
+    assert result.returncode != 0
+    assert "one current and at most two distinct retiring" in result.stderr
+
+
+def test_lx_annotate_hub_transfer_exports_current_and_retiring_recipient_identities() -> None:
+    evaluated = _nix_eval_expr_json(
+        '''
+        let
+          flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
+          lib = flake.inputs.nixpkgs.lib;
+          cfg = (flake.nixosConfigurations.gs-02.extendModules {
+            modules = [
+              ({ ... }: {
+                services.luxnix.lxAnnotateLocal.hub.transferApi.recipientPrivateKeyFiles = lib.mkForce [
+                  "/run/secrets/hub-recipient-current.pem"
+                  "/run/secrets/hub-recipient-retiring.pem"
+                ];
+              })
+            ];
+          }).config;
+        in {
+          privateKeyFiles = cfg.services.luxnix.lxAnnotateLocal.hub.transferApi.recipientPrivateKeyFiles;
+          environmentValue = cfg.systemd.services.lx-annotate.environment.ENDOREG_HUB_TRANSFER_RECIPIENT_PRIVATE_KEY_FILES;
+        }
+        '''
+    )
+
+    assert evaluated == {
+        "privateKeyFiles": [
+            "/run/secrets/hub-recipient-current.pem",
+            "/run/secrets/hub-recipient-retiring.pem",
+        ],
+        "environmentValue": (
+            "/run/secrets/hub-recipient-current.pem,"
+            "/run/secrets/hub-recipient-retiring.pem"
+        ),
+    }
+
+
+def test_lx_annotate_hub_transfer_rejects_unbounded_recipient_rotation_set() -> None:
+    result = _nix_eval_expr_result(
+        '''
+        let
+          flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
+          lib = flake.inputs.nixpkgs.lib;
+          cfg = (flake.nixosConfigurations.gs-02.extendModules {
+            modules = [
+              ({ ... }: {
+                services.luxnix.lxAnnotateLocal.hub.transferApi.recipientPrivateKeyFiles = lib.mkForce [
+                  "/run/secrets/recipient-1.pem"
+                  "/run/secrets/recipient-2.pem"
+                  "/run/secrets/recipient-3.pem"
+                  "/run/secrets/recipient-4.pem"
+                ];
+              })
+            ];
+          }).config;
+        in cfg.system.build.toplevel.drvPath
+        '''
+    )
+
+    assert result.returncode != 0
+    assert "at most two distinct retiring" in result.stderr
+
+
+def test_lx_annotate_site_transfer_rejects_missing_public_recipient_identity() -> None:
+    result = _nix_eval_expr_result(
+        '''
+        let
+          flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
+          lib = flake.inputs.nixpkgs.lib;
+          cfg = (flake.nixosConfigurations.gc-02.extendModules {
+            modules = [
+              ({ ... }: {
+                services.luxnix.lxAnnotateLocal.hub.outboundTransfer.recipientPublicKeyFile = lib.mkForce null;
+              })
+            ];
+          }).config;
+        in cfg.system.build.toplevel.drvPath
+        '''
+    )
+
+    assert result.returncode != 0
+    assert "absolute X25519 recipient public-key path" in result.stderr
 
 
 def test_lx_annotate_s04_uses_the_explicit_central_hub_contract() -> None:

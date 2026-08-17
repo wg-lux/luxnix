@@ -1,7 +1,13 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.roles.nextcloudClient;
 
 in
@@ -10,14 +16,12 @@ in
     enable = mkBoolOpt false "Enable Nextcloud Client Apps";
   };
 
+  config = mkIf cfg.enable {
+    environment.systemPackages = with pkgs; [
+      nextcloud-client
+      nextcloud-notify_push
+      nextcloud-talk-desktop
+    ];
 
-  config = mkIf cfg.enable
-    {
-      environment.systemPackages = with pkgs; [
-        nextcloud-client
-        nextcloud-notify_push
-        nextcloud-talk-desktop
-      ];
-
-    };
+  };
 }

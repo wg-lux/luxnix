@@ -74,6 +74,23 @@ in
         '';
       }
       {
+        name = "lx-annotate-wheel-runtime-is-prepared-before-app-services";
+        type = "script";
+        script = ''
+          ${ntlib.helpers.path [ pkgs.gnugrep ]}
+          ${ntlib.helpers.scriptHelpers}
+          assert_file_contains ${lxAnnotateConfig} 'wheelRuntimePrepareServiceUnits = lib\.optionals useWheelRuntime' "wheel mode must declare one shared runtime preparation unit"
+          assert_file_contains ${lxAnnotateConfig} 'systemd\.services\.lx-annotate-wheel-runtime = mkIf useWheelRuntime' "wheel preparation must be a dedicated systemd oneshot"
+          assert_file_contains ${lxAnnotateConfig} 'ExecStart = ".*lx-annotate-runtime-ensure"' "the preparation unit must own wheel installation"
+          assert_file_contains ${lxAnnotateConfig} 'RemainAfterExit = false' "wheel preparation must not retain stale success across package upgrades"
+          assert_file_contains ${lxAnnotateConfig} 'export LX_ANNOTATE_WHEEL_INSTALL_ALLOWED=false' "application entrypoints must validate the prepared runtime without installing packages"
+          assert_file_contains ${lxAnnotateConfig} 'appServiceBaseRequires = \[' "application services must have a fail-closed dependency list"
+          assert_file_contains ${lxAnnotateConfig} '\+\+ wheelRuntimePrepareServiceUnits' "application services must wait for wheel preparation"
+          assert_file_contains ${lxAnnotateConfig} 'repair_legacy_migration_history --apply' "migration service must repair recognized legacy history before migrate"
+          assert_file_contains ${lxAnnotateDiagnostics} 'systemctl status lx-annotate-wheel-runtime\.service' "diagnostics must expose the wheel preparation unit"
+        '';
+      }
+      {
         name = "lx-annotate-hls-backfill-reconciles-raw-and-processed-artifacts";
         type = "script";
         script = ''

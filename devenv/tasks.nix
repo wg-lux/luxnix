@@ -55,6 +55,22 @@
     exec = "${pkgs.uv}/bin/uv run pytest -q tests/test_documentation_contract.py";
   };
 
+  # Nix quality
+  "nix-quality:check" = {
+    description = "Run fast Nix parse, deadnix, statix, nixfmt, and flake-checker checks";
+    exec = "${pkgs.uv}/bin/uv run python scripts/nix-quality.py";
+  };
+
+  "nix-quality:generators" = {
+    description = "Run the 61 non-evaluating Autoconf and boot-renderer quality contracts";
+    exec = "${pkgs.uv}/bin/uv run pytest -q tests/test_autoconf_rendering.py tests/test_ansible_autoconf_nixos_config.py tests/test_autoconf_cli.py tests/test_boot_decryption_renderer.py";
+  };
+
+  "nix-quality:full" = {
+    description = "Run Nix quality checks plus full flake evaluation";
+    exec = "${pkgs.uv}/bin/uv run python scripts/nix-quality.py --full";
+  };
+
   # EndoReg database
   "endoreg-db:init" = {
     description = "Initialize the EndoReg database";

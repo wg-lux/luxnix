@@ -12,9 +12,11 @@ let
 
   baseEnv = {
     # --- Directories & Paths ---
-    STORAGE_PERSISTING_HDD_ID = config.secretspec.secrets.STORAGE_PERSISTING_HDD_ID;
-    HOME_DIR = config.secretspec.secrets.HOME_DIR;
-    WORKING_DIR = config.secretspec.secrets.WORKING_DIR;
+    inherit (config.secretspec.secrets)
+      STORAGE_PERSISTING_HDD_ID
+      HOME_DIR
+      WORKING_DIR
+      ;
   };
   devenvUtils = import ./devenv/default.nix {
     inherit pkgs uvPackage;
@@ -51,14 +53,20 @@ in
     npm.install.enable = true;
   };
 
-  processes = devenvUtils.processes;
-  tasks = devenvUtils.tasks;
+  inherit (devenvUtils) processes tasks;
 
   git-hooks.hooks = {
     ansible-lint.enable = true;
+    nix-quality = {
+      enable = true;
+      name = "nix-quality";
+      entry = "${pkgs.uv}/bin/uv run python scripts/nix-quality.py";
+      files = "\\.nix$|^flake\\.lock$|^nix-quality\\.yml$|^scripts/nix-quality\\.py$|^(homes|lib|modules|overlays|packages|shells|systems|tests/nixtest|topology)/";
+      pass_filenames = false;
+    };
   };
 
-  scripts = devenvUtils.scripts;
+  inherit (devenvUtils) scripts;
 
   enterShell = ''
     if command -v env-setup >/dev/null 2>&1; then

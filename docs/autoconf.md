@@ -14,6 +14,7 @@ pipeline behaves consistently even when invoked from another directory.
 | Require every host to refresh | `devenv tasks run autoconf:refresh-facts-strict` | Performs the same safe refresh but returns nonzero when any host is stale |
 | Build a private local report | `devenv tasks run autoconf:generate-report` | Reads local snapshots and writes only the redacted HTML report |
 | Regenerate configurations | `devenv tasks run autoconf:generate` | Updates derived Autoconf, NixOS, and Home Manager outputs |
+| Inspect rendered Nix safely | `python scripts/autoconf-pipeline.py --nix-output /tmp/luxnix-render` | Renders existing merged data into a new external directory without modifying configured outputs |
 
 Start with `autoconf:check`. Refresh facts only when current host information is
 needed; report generation and configuration generation read the local snapshots
@@ -160,6 +161,25 @@ devenv shell bnsc
 # or
 python scripts/autoconf-pipeline.py
 ```
+
+For a reviewable render without replacing any repository output, use an
+explicit, previously nonexistent directory outside the repository:
+
+```bash
+python scripts/autoconf-pipeline.py --nix-output /tmp/luxnix-render
+```
+
+This render-only mode reads the existing `paths.output/merged_vars/` and
+`paths.output/home_merged_vars/` artifacts. It does not refresh facts, import
+Ansible sources, modify `paths.output`, replace `paths.nix_output`, or evaluate
+Nix. Every generated `.nix` file is normalized with the repository formatter
+`nixfmt` before it is published, so templates do not need to reproduce its
+whitespace or line-wrapping rules. A missing or failed formatter aborts the
+render with an explicit error; an isolated target created for that failed run is
+removed. The target must not already exist; this prevents accidental
+overwrites. The command prints the resolved target after publishing the
+complete rendered set. Regenerate normal outputs only with the regular
+`autoconf:generate` task.
 
 Use an alternative configuration when testing a new setup:
 

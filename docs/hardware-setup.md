@@ -117,6 +117,13 @@ The command can format the selected device and add a key to the LUKS volume.
 Verify the device path and keep a tested recovery key before confirming either
 operation.
 
+For a review-only configuration render, use the installed
+`luxnix-render-boot-decryption-config` command instead of the interactive
+setup command. It requires an explicit destination, UUID, offset, keyfile size,
+and LUKS mapping name; it applies `nixfmt` and never formats, mounts, or changes
+a device or key. See [Nix Quality](./nix-quality.md#generated-files) for an
+example.
+
 ## Manual recovery and provider templates
 
 Two preserved scripts are deliberately not exposed as canonical commands:

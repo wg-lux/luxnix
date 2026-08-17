@@ -1,13 +1,298 @@
+import ipaddress
+import json
 import os
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any, Literal, TypedDict
+from urllib.parse import urlparse
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from lx_administration.yaml import dump_yaml, load_unique_yaml_file
 
 STORAGE_CONF_FILENAME = "storage_manager.yml"
 LEGACY_STORAGE_CONF_FILENAME = "storage_manager.yaml"
+
+
+class StorageNodeContract(BaseModel):
+    """Versioned deployment contract shared with the LuxNix storage-node role.
+
+    This model intentionally carries paths to identity material, never secret values
+    or an application master key. The data-plane application remains responsible for
+    mTLS peer authorization and for per-transfer envelope encryption.
+    """
+
+    schema_version: Literal[1] = 1
+    deployment_role: Literal["storage_node"] = "storage_node"
+    node_id: str = Field(min_length=1)
+    storage_root: Path
+    encrypted_device: Path
+    listen_address: str = Field(min_length=1)
+    port: int = Field(ge=1, le=65535)
+    allowed_hub_addresses: list[str] = Field(min_length=1)
+    allowed_hub_identities: list[str] = Field(min_length=1)
+    hub_identity_operations: dict[
+        str,
+        set[
+            Literal[
+                "health",
+                "capacity",
+                "inventory",
+                "store",
+                "fetch_ciphertext",
+                "fetch_plaintext",
+                "verify",
+                "delete",
+            ]
+        ],
+    ]
+    tls_ca_file: Path
+    tls_cert_file: Path
+    tls_key_file: Path
+    recipient_private_identity_file: Path | None = Field(
+        default=None,
+        description="X25519 PEM private key used only for per-transfer key unwrap",
+    )
+    recipient_private_identity_files: list[Path] = Field(
+        default_factory=list,
+        description=(
+            "Current and retiring X25519 private identities accepted during "
+            "key rotation"
+        ),
+    )
+    capacity_warning_percent: int = Field(default=75, ge=1, le=99)
+    capacity_stop_percent: int = Field(default=90, ge=2, le=100)
+    capacity_recovery_percent: int = Field(default=70, ge=0, le=98)
+    capacity_reserve_bytes: int = Field(default=10 * 1024**3, gt=0)
+    max_object_bytes: int = Field(default=1024**4, gt=0)
+    max_concurrent_requests: int = Field(default=16, ge=1, le=256)
+    request_timeout_seconds: int = Field(default=120, ge=1, le=3600)
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    @classmethod
+    def from_environment(
+        cls, environment: Mapping[str, str] | None = None
+    ) -> "StorageNodeContract":
+        """Load the exact versioned contract rendered by LuxNix."""
+        values = os.environ if environment is None else environment
+
+        def required(name: str) -> str:
+            value = str(values.get(name, "")).strip()
+            if not value:
+                raise ValueError(f"{name} is required")
+            return value
+
+        return cls.model_validate(
+            {
+                "schema_version": int(required("HUB_STORAGE_SCHEMA_VERSION")),
+                "deployment_role": required("HUB_STORAGE_DEPLOYMENT_ROLE"),
+                "node_id": required("HUB_STORAGE_NODE_ID"),
+                "storage_root": required("HUB_STORAGE_ROOT"),
+                "encrypted_device": required("HUB_STORAGE_ENCRYPTED_DEVICE"),
+                "listen_address": required("HUB_STORAGE_LISTEN_ADDRESS"),
+                "port": required("HUB_STORAGE_PORT"),
+                "allowed_hub_addresses": [
+                    address.strip()
+                    for address in required("HUB_STORAGE_ALLOWED_HUB_ADDRESSES").split(
+                        ","
+                    )
+                    if address.strip()
+                ],
+                "allowed_hub_identities": [
+                    identity.strip()
+                    for identity in required(
+                        "HUB_STORAGE_ALLOWED_HUB_IDENTITIES"
+                    ).split(",")
+                    if identity.strip()
+                ],
+                "hub_identity_operations": json.loads(
+                    required("HUB_STORAGE_HUB_IDENTITY_OPERATIONS")
+                ),
+                "tls_ca_file": required("HUB_STORAGE_TLS_CA_FILE"),
+                "tls_cert_file": required("HUB_STORAGE_TLS_CERT_FILE"),
+                "tls_key_file": required("HUB_STORAGE_TLS_KEY_FILE"),
+                "recipient_private_identity_file": str(
+                    values.get("HUB_STORAGE_RECIPIENT_PRIVATE_IDENTITY_FILE", "")
+                ).strip()
+                or None,
+                "recipient_private_identity_files": [
+                    path.strip()
+                    for path in str(
+                        values.get("HUB_STORAGE_RECIPIENT_PRIVATE_IDENTITY_FILES", "")
+                    ).split(",")
+                    if path.strip()
+                ],
+                "capacity_warning_percent": required(
+                    "HUB_STORAGE_CAPACITY_WARNING_PERCENT"
+                ),
+                "capacity_stop_percent": required("HUB_STORAGE_CAPACITY_STOP_PERCENT"),
+                "capacity_recovery_percent": required(
+                    "HUB_STORAGE_CAPACITY_RECOVERY_PERCENT"
+                ),
+                "capacity_reserve_bytes": required(
+                    "HUB_STORAGE_CAPACITY_RESERVE_BYTES"
+                ),
+                "max_object_bytes": required("HUB_STORAGE_MAX_OBJECT_BYTES"),
+                "max_concurrent_requests": required(
+                    "HUB_STORAGE_MAX_CONCURRENT_REQUESTS"
+                ),
+                "request_timeout_seconds": required(
+                    "HUB_STORAGE_REQUEST_TIMEOUT_SECONDS"
+                ),
+            }
+        )
+
+    @model_validator(mode="after")
+    def validate_fail_closed_contract(self) -> "StorageNodeContract":
+        if len(self.node_id) > 253:
+            raise ValueError("storage node identity must be at most 253 characters")
+        if self.listen_address in {"0.0.0.0", "::"}:
+            raise ValueError("storage node must not bind a wildcard address")
+        listen_ip = ipaddress.ip_address(self.listen_address)
+        if not listen_ip.is_private or listen_ip.is_loopback:
+            raise ValueError(
+                "storage node listen_address must be a private non-loopback IP"
+            )
+        for address in self.allowed_hub_addresses:
+            hub_ip = ipaddress.ip_address(address)
+            if not hub_ip.is_private or hub_ip.is_unspecified:
+                raise ValueError("allowed hub addresses must be private IP addresses")
+        if any(
+            not identity or "," in identity or len(identity) > 253
+            for identity in self.allowed_hub_identities
+        ):
+            raise ValueError(
+                "allowed hub identities must be non-empty exact SAN values"
+            )
+        if set(self.hub_identity_operations) != set(self.allowed_hub_identities):
+            raise ValueError(
+                "hub identity operation keys must exactly match allowed identities"
+            )
+        if any(not operations for operations in self.hub_identity_operations.values()):
+            raise ValueError("every allowed hub identity needs at least one operation")
+        if not (
+            self.capacity_recovery_percent
+            < self.capacity_warning_percent
+            < self.capacity_stop_percent
+        ):
+            raise ValueError(
+                "capacity thresholds must satisfy recovery < warning < stop"
+            )
+        recipient_paths = self.recipient_identity_paths()
+        if not recipient_paths:
+            raise ValueError("at least one recipient private identity is required")
+        if len(recipient_paths) != len(set(recipient_paths)):
+            raise ValueError("recipient private identity paths must be unique")
+        if len(recipient_paths) > 3:
+            raise ValueError("at most three recipient identities may overlap")
+        path_fields = (
+            self.storage_root,
+            self.encrypted_device,
+            self.tls_ca_file,
+            self.tls_cert_file,
+            self.tls_key_file,
+            *recipient_paths,
+        )
+        if not all(path.is_absolute() for path in path_fields):
+            raise ValueError("storage and identity paths must be absolute")
+        return self
+
+    def recipient_identity_paths(self) -> tuple[Path, ...]:
+        values = list(self.recipient_private_identity_files)
+        if self.recipient_private_identity_file is not None:
+            values.insert(0, self.recipient_private_identity_file)
+        return tuple(values)
+
+
+class HubStorageNodePeerContract(BaseModel):
+    """One storage-node identity authorized by the central hub."""
+
+    node_key: str = Field(min_length=1, max_length=253)
+    display_name: str = Field(min_length=1, max_length=253)
+    failure_domain: str = Field(min_length=1, max_length=128)
+    residency_key: str = Field(min_length=1, max_length=128)
+    placement_weight: int = Field(gt=0)
+    artifact_kinds: set[
+        Literal[
+            "anonymized_video",
+            "processed_report",
+            "video_hls",
+            "streamable_video",
+            "sidecar",
+            "manifest",
+        ]
+    ] = Field(min_length=1)
+    endpoint: str = Field(min_length=1)
+    ca_certificate_file: Path
+    client_certificate_file: Path
+    client_key_file: Path
+    recipient_public_key_file: Path = Field(
+        description="X25519 PEM public key used for per-transfer key wrapping"
+    )
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    @model_validator(mode="after")
+    def validate_private_peer(self) -> "HubStorageNodePeerContract":
+        parsed = urlparse(self.endpoint)
+        if (
+            parsed.scheme != "https"
+            or not parsed.hostname
+            or parsed.port is None
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+            or parsed.path not in {"", "/"}
+        ):
+            raise ValueError(
+                "storage endpoint must be a host-only HTTPS URL with an explicit port"
+            )
+        try:
+            endpoint_ip = ipaddress.ip_address(parsed.hostname)
+        except ValueError:
+            if not parsed.hostname.endswith((".intern", ".internal", ".aglnet")):
+                raise ValueError(
+                    "storage endpoint hostname must use an approved private suffix"
+                ) from None
+        else:
+            if not endpoint_ip.is_private or endpoint_ip.is_unspecified:
+                raise ValueError("storage endpoint must use a private IP address")
+        paths = (
+            self.ca_certificate_file,
+            self.client_certificate_file,
+            self.client_key_file,
+            self.recipient_public_key_file,
+        )
+        if not all(path.is_absolute() for path in paths):
+            raise ValueError("hub storage credential paths must be absolute")
+        return self
+
+
+class HubStorageClientContract(BaseModel):
+    """Versioned central-hub view of authorized storage-node peers."""
+
+    schema_version: Literal[1] = 1
+    deployment_role: Literal["central_hub"] = "central_hub"
+    nodes: list[HubStorageNodePeerContract] = Field(min_length=1)
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    @model_validator(mode="after")
+    def validate_unique_node_keys(self) -> "HubStorageClientContract":
+        node_keys = [node.node_key for node in self.nodes]
+        if len(node_keys) != len(set(node_keys)):
+            raise ValueError("hub storage node_key values must be unique")
+        endpoints = [node.endpoint.rstrip("/") for node in self.nodes]
+        if len(endpoints) != len(set(endpoints)):
+            raise ValueError("hub storage endpoints must be unique")
+        return self
+
+    @classmethod
+    def load_file(cls, path: Path) -> "HubStorageClientContract":
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return cls.model_validate(payload)
 
 
 class StoragePaths(TypedDict):
@@ -54,7 +339,7 @@ def serialize_path(path: Path | None) -> str | None:
 def _expand_env_template(value: str) -> str:
     """Expand `{VAR}` placeholders using environment variables."""
 
-    class _Env(dict):
+    class _Env(dict[Any, Any]):
         def __missing__(self, key: str) -> str:
             return "{" + key + "}"
 
@@ -130,6 +415,8 @@ def generate_storage_directory_tree(
 
     if create:
         for directory in directories.values():
+            if not isinstance(directory, Path):
+                raise TypeError("storage directory entries must be paths")
             directory.mkdir(parents=True, exist_ok=True)
 
     return directories

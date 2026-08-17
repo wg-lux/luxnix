@@ -1,14 +1,15 @@
 {
   lib,
-  pkgs,
   config,
   ...
 }:
-with lib; 
-with lib.luxnix; let
+with lib;
+with lib.luxnix;
+let
   cfg = config.luxnix.dns;
 
-in {
+in
+{
   options.luxnix.dns = {
     enable = mkOption {
       type = types.bool;
@@ -19,7 +20,6 @@ in {
     };
 
   };
-
 
   config = mkIf cfg.enable {
 

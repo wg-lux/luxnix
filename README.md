@@ -53,6 +53,7 @@ Alias notes:
 luxnix/
 ├── flake.nix                 # Nix flake entry point
 ├── luxnix.yml                # machine-readable project map and workflows
+├── nix-quality.yml           # Nix quality policy, baselines, and progress
 ├── TABLE_OF_CONTENTS.md      # generated documentation map
 ├── autoconf/                 # centralized pipeline options and intermediates
 ├── ansible/                  # inventory, variables, roles, and local facts

@@ -4,9 +4,11 @@
   ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.hardware.networking;
-in {
+in
+{
   options.hardware.networking = with types; {
     enable = mkBoolOpt false "Enable networkmanager";
   };

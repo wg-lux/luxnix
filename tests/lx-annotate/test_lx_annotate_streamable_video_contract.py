@@ -54,6 +54,28 @@ def test_streamable_video_directories_are_provisioned_and_migration_is_exposed()
     assert "lx-annotate-video-streamable-migration" in readme
 
 
+def test_optional_streamable_bind_mount_is_top_level_and_null_lazy():
+    config_source = CONFIG_NIX.read_text(encoding="utf-8")
+
+    assert (
+        "\n      fileSystems = optionalAttrs streamableExternalStorageEnabled {"
+        in config_source
+    )
+    assert "\n        fileSystems =" not in config_source
+    assert "fileSystems = mkIf streamableExternalStorageEnabled" not in config_source
+
+
+def test_generic_postgres_default_is_not_nested_below_services():
+    config_source = CONFIG_NIX.read_text(encoding="utf-8")
+
+    assignment = (
+        "luxnix.generic-settings.postgres.enable = "
+        "mkDefault (!externalPostgresConfigured);"
+    )
+    assert f"\n      {assignment}" in config_source
+    assert f"\n        {assignment}" not in config_source
+
+
 def test_streamable_migration_uses_the_deployed_system_command():
     scripts = (REPO_ROOT / "devenv/scripts.nix").read_text()
     migration_script_path = REPO_ROOT / "scripts/lx-annotate-streamable-migration.sh"

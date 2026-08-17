@@ -14,6 +14,9 @@ with pkgs;
   secretspec
   nixd
   nixfmt
+  deadnix
+  statix
+  flake-checker
   openssh
   openssl
   sops

@@ -58,13 +58,13 @@ bootstrap implementation was executed.
 
 ## 4. Enroll and deliver the site bundles
 
-After the safe client implementation is deployed, enroll the required sites:
+After the safe client implementation is deployed, enroll every GC site:
 
 ```bash
-luxnix-vault-enroll-hub-site \
-  gc-02.intern /root/vault-enrollment/gc-02
-luxnix-vault-enroll-hub-site \
-  gc-10.intern /root/vault-enrollment/gc-10
+for host in gc-{01..10}; do
+  luxnix-vault-enroll-hub-site \
+    "$host.intern" "/root/vault-enrollment/$host"
+done
 ```
 
 Deliver each site's AppRole files, `vault-server-ca.pem`, and
@@ -76,7 +76,8 @@ with trusted local `gs-02` state during installation as described in
 Install matching receiver copies on `gs-02` as:
 
 ```text
-/etc/secrets/vault/hub-pki/gc-02-source-node-secret
+/etc/secrets/vault/hub-pki/gc-01-source-node-secret
+...
 /etc/secrets/vault/hub-pki/gc-10-source-node-secret
 ```
 
@@ -87,6 +88,6 @@ Use owner `root:sensitiveServices` and mode `0640` for the receiver copies.
 - Vault is unsealed.
 - Hub PKI bootstrap completed.
 - Client-CA publication is active.
-- The safe AppRole implementation is deployed on both sites.
+- The safe AppRole implementation is deployed on every GC site.
 - Old Secret IDs were revoked and replacement bundles were delivered.
 - Receiver-side node-secret files were installed.

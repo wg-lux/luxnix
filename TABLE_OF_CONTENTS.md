@@ -6,6 +6,7 @@
 - **Start Here**
   - [Getting Started](docs/getting-started.md)
   - [Development](docs/development.md)
+  - [Nix Quality](docs/nix-quality.md)
   - [Autoconf and Local Inventory](docs/autoconf.md)
 - **Architecture**
   - [System Architecture](docs/architecture.md)

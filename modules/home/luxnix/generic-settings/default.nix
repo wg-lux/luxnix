@@ -1,17 +1,21 @@
 {
   config,
-  pkgs,
   lib,
   ...
 }:
-with lib; let
+with lib;
+let
   cfg = config.luxnix.generic-settings;
-in {
+in
+{
   options.luxnix.generic-settings = {
     enable = mkEnableOption "Enable generic luxnix home settings";
 
     language = mkOption {
-      type = types.enum [ "english" "german" ];
+      type = types.enum [
+        "english"
+        "german"
+      ];
       default = "german";
       description = ''
         Choose system language (e.g. "english", "german").

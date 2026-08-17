@@ -3,7 +3,8 @@
   ntlib,
   repoRoot,
   ...
-}: let
+}:
+let
   flakeRef = toString repoRoot;
   linuxHosts = [
     "c-01"
@@ -47,7 +48,8 @@
     "gc-08"
     "gc-10"
   ];
-in {
+in
+{
   suites."ssh host contracts" = {
     pos = __curPos;
     tests = [
@@ -55,7 +57,12 @@ in {
         name = "all-configured-linux-hosts-keep-secure-ssh-baseline";
         type = "script";
         script = ''
-          ${ntlib.helpers.path [pkgs.coreutils pkgs.gnugrep pkgs.jq pkgs.nix]}
+          ${ntlib.helpers.path [
+            pkgs.coreutils
+            pkgs.gnugrep
+            pkgs.jq
+            pkgs.nix
+          ]}
           ${ntlib.helpers.scriptHelpers}
 
           snapshot=$(nix eval --json --impure --expr '
@@ -161,7 +168,12 @@ in {
         name = "audited-hosts-have-canonical-ssh-host-key-registry-entries";
         type = "script";
         script = ''
-          ${ntlib.helpers.path [pkgs.coreutils pkgs.gnugrep pkgs.jq pkgs.nix]}
+          ${ntlib.helpers.path [
+            pkgs.coreutils
+            pkgs.gnugrep
+            pkgs.jq
+            pkgs.nix
+          ]}
           ${ntlib.helpers.scriptHelpers}
 
           snapshot=$(nix eval --json --impure --expr '
@@ -205,7 +217,12 @@ in {
         name = "developer-access-hosts-keep-explicit-ssh-overlays";
         type = "script";
         script = ''
-          ${ntlib.helpers.path [pkgs.coreutils pkgs.gnugrep pkgs.jq pkgs.nix]}
+          ${ntlib.helpers.path [
+            pkgs.coreutils
+            pkgs.gnugrep
+            pkgs.jq
+            pkgs.nix
+          ]}
           ${ntlib.helpers.scriptHelpers}
 
           snapshot=$(nix eval --json --impure --expr '
@@ -243,7 +260,12 @@ in {
         name = "baseline-hosts-stay-on-root-admin-key-only";
         type = "script";
         script = ''
-          ${ntlib.helpers.path [pkgs.coreutils pkgs.gnugrep pkgs.jq pkgs.nix]}
+          ${ntlib.helpers.path [
+            pkgs.coreutils
+            pkgs.gnugrep
+            pkgs.jq
+            pkgs.nix
+          ]}
           ${ntlib.helpers.scriptHelpers}
 
           snapshot=$(nix eval --json --impure --expr '

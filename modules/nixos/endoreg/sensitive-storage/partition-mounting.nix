@@ -1,6 +1,4 @@
 {
-  config,
-  lib,
   pkgs,
   partitionConfiguration,
   ...
@@ -12,7 +10,7 @@ let
 
   # endoreg-sensitive-hdd = network-config.hardware.${hostname}.endoreg-sensitive;
 
-  label = partitionConfiguration.label;
+  inherit (partitionConfiguration) label;
 
   partition-luks-uuid = partitionConfiguration.luks-uuid;
   mountpoint = conf.mountPoint;
@@ -27,8 +25,7 @@ let
   # Requires sops.sercrets. .... to be defined, happens after "in"
   key-file = conf.keyFile;
 
-  user = conf.user;
-  group = conf.group;
+  inherit (conf) user group;
 
   ############ MOUNT SCRIPT ############
   mount-script-path = pkgs.writeShellScriptBin "${mount-script-name}" ''
