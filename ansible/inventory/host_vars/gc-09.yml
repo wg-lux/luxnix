@@ -31,7 +31,7 @@ host_services:
   luxnix.lxAnnotateLocal.hub.transferApi.requireMtls: "true"
   luxnix.lxAnnotateLocal.hub.transferApi.mtlsMetaKey: '"HTTP_X_CLIENT_CERT_VERIFIED"'
   luxnix.lxAnnotateLocal.hub.transferApi.mtlsMetaValue: '"SUCCESS"'
-  luxnix.lxAnnotateLocal.hub.transferApi.clientCaFile: '"/run/lx-annotate-transfer/client-ca.crt"'
+  luxnix.lxAnnotateLocal.hub.transferApi.clientCaFile: "./lx-annotate-transfer-client-ca.crt"
   # Explicit compatibility setting for Django.
   'luxnix.lxAnnotateLocal.django.extraSettings."IS_CENTRAL_NODE"': "lib.mkForce true"
 
