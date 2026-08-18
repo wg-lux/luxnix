@@ -7,11 +7,19 @@ or node shared secrets in Git, Nix, terminal arguments, logs, or chat.
 
 ## 1. Check and unseal Vault
 
-On `gs-02`:
+In this deployment, `gs-02` is confidured as the central hub:
 
 ```bash
+
 sudo -i
-export VAULT_ADDR=https://vault.endo-reg.net:8200
+vault operator unseal
+# Generate a token valid for 30 minutes with a maximum of 2 uses
+vault token create \
+  -policy=admin \
+  -ttl=30m \
+  -use-limit=2 \
+  -orphan
+export VAULT_ADDR="https://172.16.255.22:8200"
 export VAULT_CACERT=/var/lib/luxnix-vault-pki/ca.crt
 vault status
 ```

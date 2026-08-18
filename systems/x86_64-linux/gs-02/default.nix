@@ -316,6 +316,11 @@ lib.foldl' lib.recursiveUpdate
       services.luxnix.lxAnnotateLocal.hub.transferApi.mtlsMetaValue = "SUCCESS";
     }
     {
+      services.luxnix.lxAnnotateLocal.hub.transferApi.recipientPrivateKeyFiles = [
+        "/etc/secrets/vault/hub-pki/hub-recipient-current.pem"
+      ];
+    }
+    {
       services.luxnix.lxAnnotateLocal.hub.transferApi.requireMtls = true;
     }
     {

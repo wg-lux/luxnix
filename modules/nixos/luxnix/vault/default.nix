@@ -30,6 +30,7 @@ let
     ];
     text = ''
       set -euo pipefail
+      umask 077
 
       if [ -z "''${VAULT_ADDR:-}" ] || [ -z "''${VAULT_TOKEN:-}" ]; then
         echo "VAULT_ADDR and a short-lived administrative VAULT_TOKEN are required." >&2
@@ -50,133 +51,235 @@ let
       recipient_public_key_kv_path=${lib.escapeShellArg hubPkiCfg.recipientPublicKeyKvPath}
       recipient_private_key="''${recipient_public_key%.pub.pem}.pem"
       recipient_sensitive_group=${lib.escapeShellArg config.luxnix.generic-settings.sensitiveServiceGroupName}
+      recipient_private_dir="$(${pkgs.coreutils}/bin/dirname "$recipient_private_key")"
+      recipient_public_dir="$(${pkgs.coreutils}/bin/dirname "$recipient_public_key")"
+      published_json="$(${pkgs.coreutils}/bin/mktemp)"
+      published_error="$(${pkgs.coreutils}/bin/mktemp)"
+      published_public_key="$(${pkgs.coreutils}/bin/mktemp)"
+      secrets_json=""
+      private_tmp=""
+      public_tmp=""
+
+      cleanup() {
+        ${pkgs.coreutils}/bin/rm -f \
+          "$published_json" \
+          "$published_error" \
+          "$published_public_key"
+        if [ -n "$secrets_json" ]; then
+          ${pkgs.coreutils}/bin/rm -f "$secrets_json"
+        fi
+        if [ -n "$private_tmp" ]; then
+          ${pkgs.coreutils}/bin/rm -f "$private_tmp"
+        fi
+        if [ -n "$public_tmp" ]; then
+          ${pkgs.coreutils}/bin/rm -f "$public_tmp"
+        fi
+      }
+      trap cleanup EXIT
 
       if [ "$recipient_private_key" = "$recipient_public_key" ]; then
         recipient_private_key="$recipient_public_key.pem"
+        recipient_private_dir="$(${pkgs.coreutils}/bin/dirname "$recipient_private_key")"
       fi
 
-      if [ -L "$recipient_public_key" ]; then
-        echo "Hub envelope recipient public key path must not be a symlink: $recipient_public_key" >&2
-        exit 1
-      fi
-
-      if [ -L "$recipient_private_key" ]; then
-        echo "Hub envelope recipient private key path must not be a symlink: $recipient_private_key" >&2
-        exit 1
-      fi
-
-      ${pkgs.coreutils}/bin/mkdir -p "$(dirname "$recipient_private_key")" "$(dirname "$recipient_public_key")"
-
-      recipient_pub_state=missing
-      recipient_priv_state=missing
-      if [ -s "$recipient_public_key" ]; then
-        recipient_pub_state=present
-      fi
-      if [ -s "$recipient_private_key" ]; then
-        recipient_priv_state=present
-      fi
-
-      if [ "$recipient_pub_state" = "present" ] && [ "$recipient_priv_state" = "present" ]; then
-        if ! ${pkgs.openssl}/bin/openssl pkey -pubin -in "$recipient_public_key" -text_pub -noout 2>/dev/null \
-          | ${pkgs.gnugrep}/bin/grep -q X25519; then
-          echo "Existing hub recipient public key is not a valid X25519 PEM key: $recipient_public_key" >&2
-          exit 1
-        fi
-        if ! ${pkgs.openssl}/bin/openssl pkey -in "$recipient_private_key" -text -noout 2>/dev/null \
-          | ${pkgs.gnugrep}/bin/grep -q X25519; then
-          echo "Existing hub recipient private key is not a valid X25519 PEM key: $recipient_private_key" >&2
-          exit 1
-        fi
-        derived_recipient_public="$(${pkgs.coreutils}/bin/mktemp)"
-        if ! ${pkgs.openssl}/bin/openssl pkey -in "$recipient_private_key" -pubout \
-          > "$derived_recipient_public" 2>/dev/null; then
-          echo "Failed to derive hub recipient public key from: $recipient_private_key" >&2
-          rm -f "$derived_recipient_public"
-          exit 1
-        fi
-        if ! ${pkgs.diffutils}/bin/cmp -s "$recipient_public_key" "$derived_recipient_public"; then
-          echo "Hub recipient key pair mismatch; public and private keys do not match." >&2
-          rm -f "$derived_recipient_public"
-          exit 1
-        fi
-        rm -f "$derived_recipient_public"
-      fi
-
-      if [ "$recipient_priv_state" = "present" ] && [ "$recipient_pub_state" = "missing" ]; then
-        echo "Generating missing hub recipient public key from existing private key." >&2
-        if ! ${pkgs.openssl}/bin/openssl pkey -in "$recipient_private_key" -pubout \
-          > "$recipient_public_key" 2>/dev/null; then
-          echo "Failed to derive public key from recipient private key: $recipient_private_key" >&2
-          exit 1
-        fi
-      fi
-
-      if [ "$recipient_pub_state" = "present" ] && [ "$recipient_priv_state" = "missing" ]; then
-        echo "ERROR: hub envelope recipient public key exists without its matching private key: $recipient_public_key" >&2
-        echo "Install the matching private key or run bootstrap with an explicit rotation after rotating recipient identities." >&2
-        exit 1
-      fi
-
-      if [ "$recipient_pub_state" = "missing" ] && [ "$recipient_priv_state" = "missing" ]; then
-        echo "No hub envelope recipient key pair found; generating a fresh X25519 key pair." >&2
-        if ! ${pkgs.openssl}/bin/openssl genpkey -algorithm X25519 -out "$recipient_private_key" >/dev/null 2>&1; then
-          echo "Failed to generate X25519 envelope recipient private key: $recipient_private_key" >&2
-          exit 1
-        fi
-        if ! ${pkgs.openssl}/bin/openssl pkey -in "$recipient_private_key" -pubout \
-          > "$recipient_public_key" 2>/dev/null; then
-          echo "Failed to derive hub recipient public key from generated private key: $recipient_private_key" >&2
-          exit 1
-        fi
-      fi
-
-      if [ ! -f "$recipient_private_key" ] || [ ! -s "$recipient_private_key" ] \
-        || ! ${pkgs.openssl}/bin/openssl pkey -in "$recipient_private_key" -text -noout 2>/dev/null \
-          | ${pkgs.gnugrep}/bin/grep -q X25519; then
-        echo "Hub envelope recipient private key validation failed: $recipient_private_key" >&2
-        exit 1
-      fi
-
-      if [ ! -f "$recipient_public_key" ] || [ ! -s "$recipient_public_key" ] \
-        || ! ${pkgs.openssl}/bin/openssl pkey -pubin -in "$recipient_public_key" -text_pub -noout 2>/dev/null \
-          | ${pkgs.gnugrep}/bin/grep -q X25519; then
-        echo "Hub envelope recipient public key validation failed: $recipient_public_key" >&2
-        exit 1
-      fi
-
-      ${pkgs.coreutils}/bin/chown "root:$recipient_sensitive_group" "$recipient_private_key"
-      ${pkgs.coreutils}/bin/chmod 0640 "$recipient_private_key"
-      ${pkgs.coreutils}/bin/chown "root:$recipient_sensitive_group" "$recipient_public_key"
-      ${pkgs.coreutils}/bin/chmod 0640 "$recipient_public_key"
-
-      if ! vault secrets list -format=json | jq -e --arg path "$mount/" 'has($path)' >/dev/null; then
-        vault secrets enable -path="$mount" pki
-      fi
-      vault secrets tune -max-lease-ttl="$max_ttl" "$mount"
-
-      if ! vault secrets list -format=json | jq -e --arg path "$kv_mount/" 'has($path)' >/dev/null; then
-        vault secrets enable -path="$kv_mount" -version=2 kv
-      fi
-
-      published_public_key="$(${pkgs.coreutils}/bin/mktemp)"
-      trap '${pkgs.coreutils}/bin/rm -f "$published_public_key"' EXIT
-      if vault kv get -field=public_key "$kv_mount/$recipient_public_key_kv_path" \
-        > "$published_public_key" 2>/dev/null; then
-        if ! ${pkgs.diffutils}/bin/cmp -s "$recipient_public_key" "$published_public_key"; then
-          if [ "''${LUXNIX_VAULT_ALLOW_HUB_RECIPIENT_ROTATION:-0}" != "1" ]; then
-            echo "Vault already contains a different hub recipient public key; refusing implicit rotation." >&2
-            echo "Deploy the matching current-and-retiring private-key set on the hub, then rerun with LUXNIX_VAULT_ALLOW_HUB_RECIPIENT_ROTATION=1." >&2
+      validate_existing_path() {
+        local path="$1"
+        local label="$2"
+        if [ -e "$path" ] || [ -L "$path" ]; then
+          if [ -L "$path" ] || [ ! -f "$path" ] || [ ! -s "$path" ]; then
+            echo "ERROR: $label must be a non-empty regular non-symlink file: $path" >&2
             exit 1
           fi
-          vault kv put "$kv_mount/$recipient_public_key_kv_path" public_key=- \
+        fi
+      }
+
+      validate_private_key() {
+        local path="$1"
+        ${pkgs.openssl}/bin/openssl pkey -in "$path" -check -noout >/dev/null 2>&1 \
+          && ${pkgs.openssl}/bin/openssl pkey -in "$path" -text -noout 2>/dev/null \
+            | ${pkgs.gnugrep}/bin/grep -q X25519
+      }
+
+      validate_public_key() {
+        local path="$1"
+        ${pkgs.openssl}/bin/openssl pkey -pubin -in "$path" -text_pub -noout 2>/dev/null \
+          | ${pkgs.gnugrep}/bin/grep -q X25519
+      }
+
+      private_public_fingerprint() {
+        local path="$1"
+        ${pkgs.openssl}/bin/openssl pkey -in "$path" -pubout -outform DER 2>/dev/null \
+          | ${pkgs.coreutils}/bin/sha256sum \
+          | ${pkgs.coreutils}/bin/cut -d ' ' -f1
+      }
+
+      public_fingerprint() {
+        local path="$1"
+        ${pkgs.openssl}/bin/openssl pkey -pubin -in "$path" -outform DER 2>/dev/null \
+          | ${pkgs.coreutils}/bin/sha256sum \
+          | ${pkgs.coreutils}/bin/cut -d ' ' -f1
+      }
+
+      read_published_public_key() {
+        : > "$published_json"
+        : > "$published_error"
+        : > "$published_public_key"
+
+        if vault kv get -format=json "$kv_mount/$recipient_public_key_kv_path" \
+          > "$published_json" 2> "$published_error"; then
+          if ! ${pkgs.jq}/bin/jq -er '.data.data.public_key' "$published_json" \
+            > "$published_public_key"; then
+            echo "ERROR: Vault recipient-key record does not contain a non-empty public_key field." >&2
+            return 1
+          fi
+          if ! ${pkgs.jq}/bin/jq -er '.data.metadata.version | numbers' "$published_json" >/dev/null; then
+            echo "ERROR: Vault recipient-key record does not expose a KV v2 version." >&2
+            return 1
+          fi
+          return 0
+        fi
+
+        if ${pkgs.gnugrep}/bin/grep -Fq 'No value found at' "$published_error"; then
+          return 3
+        fi
+
+        echo "ERROR: failed to read the published hub recipient key; refusing to treat the Vault error as an absent key." >&2
+        return 1
+      }
+
+      ${pkgs.coreutils}/bin/install -d -m 0750 -o root -g "$recipient_sensitive_group" \
+        "$recipient_private_dir" "$recipient_public_dir"
+
+      validate_existing_path "$recipient_private_key" "hub envelope recipient private key"
+      validate_existing_path "$recipient_public_key" "hub envelope recipient public key"
+
+      secrets_json="$(${pkgs.coreutils}/bin/mktemp)"
+      if ! vault secrets list -format=json > "$secrets_json"; then
+        ${pkgs.coreutils}/bin/rm -f "$secrets_json"
+        echo "ERROR: unable to inspect Vault secrets engines." >&2
+        exit 1
+      fi
+      if ! ${pkgs.jq}/bin/jq -e --arg path "$mount/" 'has($path)' "$secrets_json" >/dev/null; then
+        vault secrets enable -path="$mount" pki
+      fi
+      if ! ${pkgs.jq}/bin/jq -e --arg path "$kv_mount/" 'has($path)' "$secrets_json" >/dev/null; then
+        vault secrets enable -path="$kv_mount" -version=2 kv
+      fi
+      ${pkgs.coreutils}/bin/rm -f "$secrets_json"
+      secrets_json=""
+      vault secrets tune -max-lease-ttl="$max_ttl" "$mount"
+
+      published_state=missing
+      published_version=""
+      if read_published_public_key; then
+        published_state=present
+        published_version="$(${pkgs.jq}/bin/jq -er '.data.metadata.version' "$published_json")"
+        if ! validate_public_key "$published_public_key"; then
+          echo "ERROR: Vault contains an invalid central-hub X25519 recipient public key." >&2
+          exit 1
+        fi
+      else
+        read_status="$?"
+        if [ "$read_status" -ne 3 ]; then
+          exit "$read_status"
+        fi
+      fi
+
+      recipient_priv_state=missing
+      recipient_pub_state=missing
+      if [ -f "$recipient_private_key" ] && [ -s "$recipient_private_key" ]; then
+        recipient_priv_state=present
+      fi
+      if [ -f "$recipient_public_key" ] && [ -s "$recipient_public_key" ]; then
+        recipient_pub_state=present
+      fi
+
+      if [ "$recipient_priv_state" = "missing" ]; then
+        if [ "$recipient_pub_state" = "present" ]; then
+          echo "ERROR: hub envelope recipient public key exists without its matching private key: $recipient_public_key" >&2
+          echo "Restore the matching private key; never regenerate it implicitly." >&2
+          exit 1
+        fi
+        if [ "$published_state" = "present" ]; then
+          echo "ERROR: Vault already publishes a hub recipient identity, but the matching local private key is absent." >&2
+          echo "Restore the matching private key from the approved backup; refusing to create an unrelated identity." >&2
+          exit 1
+        fi
+
+        echo "No local or published hub envelope recipient identity exists; generating a fresh X25519 key pair." >&2
+        private_tmp="$(${pkgs.coreutils}/bin/mktemp "$recipient_private_dir/.hub-recipient-private.XXXXXX")"
+        public_tmp="$(${pkgs.coreutils}/bin/mktemp "$recipient_public_dir/.hub-recipient-public.XXXXXX")"
+
+        ${pkgs.openssl}/bin/openssl genpkey -algorithm X25519 -out "$private_tmp"
+        ${pkgs.openssl}/bin/openssl pkey -in "$private_tmp" -pubout > "$public_tmp"
+        if ! validate_private_key "$private_tmp" || ! validate_public_key "$public_tmp"; then
+          echo "ERROR: generated hub recipient key pair failed X25519 validation." >&2
+          exit 1
+        fi
+
+        ${pkgs.coreutils}/bin/chown "root:$recipient_sensitive_group" "$private_tmp" "$public_tmp"
+        ${pkgs.coreutils}/bin/chmod 0640 "$private_tmp" "$public_tmp"
+        # Publish the private half first. If interrupted before the public move,
+        # the next run can safely derive the public half from the private key.
+        ${pkgs.coreutils}/bin/mv -f "$private_tmp" "$recipient_private_key"
+        private_tmp=""
+        ${pkgs.coreutils}/bin/mv -f "$public_tmp" "$recipient_public_key"
+        public_tmp=""
+        recipient_priv_state=present
+        recipient_pub_state=present
+      fi
+
+      if ! validate_private_key "$recipient_private_key"; then
+        echo "ERROR: hub envelope recipient private key validation failed: $recipient_private_key" >&2
+        exit 1
+      fi
+
+      if [ "$recipient_pub_state" = "missing" ]; then
+        echo "Deriving missing hub recipient public key from the existing private key." >&2
+        public_tmp="$(${pkgs.coreutils}/bin/mktemp "$recipient_public_dir/.hub-recipient-public.XXXXXX")"
+        ${pkgs.openssl}/bin/openssl pkey -in "$recipient_private_key" -pubout > "$public_tmp"
+        if ! validate_public_key "$public_tmp"; then
+          echo "ERROR: failed to derive a valid X25519 public key from $recipient_private_key" >&2
+          exit 1
+        fi
+        ${pkgs.coreutils}/bin/chown "root:$recipient_sensitive_group" "$public_tmp"
+        ${pkgs.coreutils}/bin/chmod 0640 "$public_tmp"
+        ${pkgs.coreutils}/bin/mv -f "$public_tmp" "$recipient_public_key"
+        public_tmp=""
+      fi
+
+      if ! validate_public_key "$recipient_public_key"; then
+        echo "ERROR: hub envelope recipient public key validation failed: $recipient_public_key" >&2
+        exit 1
+      fi
+
+      local_private_fingerprint="$(private_public_fingerprint "$recipient_private_key")"
+      local_public_fingerprint="$(public_fingerprint "$recipient_public_key")"
+      if [ "$local_private_fingerprint" != "$local_public_fingerprint" ]; then
+        echo "ERROR: hub recipient public and private keys do not match." >&2
+        exit 1
+      fi
+
+      ${pkgs.coreutils}/bin/chown "root:$recipient_sensitive_group" \
+        "$recipient_private_key" "$recipient_public_key"
+      ${pkgs.coreutils}/bin/chmod 0640 "$recipient_private_key" "$recipient_public_key"
+
+      if [ "$published_state" = "present" ]; then
+        published_fingerprint="$(public_fingerprint "$published_public_key")"
+        if [ "$local_public_fingerprint" != "$published_fingerprint" ]; then
+          if [ "''${LUXNIX_VAULT_ALLOW_HUB_RECIPIENT_ROTATION:-0}" != "1" ]; then
+            echo "ERROR: Vault already contains a different hub recipient public key; refusing implicit rotation." >&2
+            echo "Deploy the current-and-retiring private-key set, then rerun with LUXNIX_VAULT_ALLOW_HUB_RECIPIENT_ROTATION=1." >&2
+            exit 1
+          fi
+          vault kv put -cas="$published_version" \
+            "$kv_mount/$recipient_public_key_kv_path" public_key=- \
             < "$recipient_public_key" >/dev/null
         fi
       else
-        vault kv put "$kv_mount/$recipient_public_key_kv_path" public_key=- \
+        vault kv put -cas=0 "$kv_mount/$recipient_public_key_kv_path" public_key=- \
           < "$recipient_public_key" >/dev/null
       fi
-      ${pkgs.coreutils}/bin/rm -f "$published_public_key"
-      trap - EXIT
 
       if ! vault read "$mount/cert/ca" >/dev/null 2>&1; then
         vault write "$mount/root/generate/internal" \
@@ -195,14 +298,136 @@ let
         key_bits=256 \
         max_ttl="$client_ttl" >/dev/null
 
+      trap - EXIT
+      cleanup
       echo "Vault hub-transfer PKI is ready at $mount with role $role."
+    '';
+  };
+
+  hubSitesReconcileTool = pkgs.writeShellApplication {
+    name = "luxnix-vault-reconcile-hub-sites";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.jq
+      pkgs.vault
+    ];
+    text = ''
+      set -euo pipefail
+      umask 077
+
+      if [ "$#" -lt 1 ]; then
+        echo "Usage: luxnix-vault-reconcile-hub-sites <site-node-fqdn>..." >&2
+        exit 2
+      fi
+      if [ -z "''${VAULT_ADDR:-}" ] || [ -z "''${VAULT_TOKEN:-}" ]; then
+        echo "VAULT_ADDR and a short-lived administrative VAULT_TOKEN are required." >&2
+        exit 1
+      fi
+      if ! vault status >/dev/null; then
+        echo "Vault must be initialized and unsealed before site reconciliation." >&2
+        exit 1
+      fi
+
+      mount=${lib.escapeShellArg hubPkiCfg.mountPath}
+      kv_mount=${lib.escapeShellArg hubPkiCfg.kvMountPath}
+      client_ttl=${lib.escapeShellArg hubPkiCfg.clientTtl}
+      recipient_public_key_kv_path=${lib.escapeShellArg hubPkiCfg.recipientPublicKeyKvPath}
+      policy_file=""
+      state_file="$(${pkgs.coreutils}/bin/mktemp)"
+
+      cleanup() {
+        if [ -n "$policy_file" ]; then
+          ${pkgs.coreutils}/bin/rm -f "$policy_file"
+        fi
+        ${pkgs.coreutils}/bin/rm -f "$state_file"
+      }
+      trap cleanup EXIT
+
+      vault secrets list -format=json > "$state_file"
+      if ! ${pkgs.jq}/bin/jq -e --arg path "$mount/" 'has($path)' "$state_file" >/dev/null \
+        || ! ${pkgs.jq}/bin/jq -e --arg path "$kv_mount/" 'has($path)' "$state_file" >/dev/null; then
+        echo "ERROR: hub PKI/KV mounts are absent; run luxnix-vault-bootstrap-hub-pki first." >&2
+        exit 1
+      fi
+
+      vault auth list -format=json > "$state_file"
+      if ! ${pkgs.jq}/bin/jq -e 'has("approle/")' "$state_file" >/dev/null; then
+        vault auth enable approle >/dev/null
+      fi
+
+      reconcile_site() {
+        local node_fqdn="$1"
+        local role=""
+        local policy=""
+
+        case "$node_fqdn" in
+          *[!A-Za-z0-9.-]*|.*|*..*|*.)
+            echo "site-node-fqdn must be a valid DNS name: $node_fqdn" >&2
+            return 2
+            ;;
+        esac
+
+        role="site-$(${pkgs.coreutils}/bin/printf '%s' "$node_fqdn" | ${pkgs.coreutils}/bin/tr '.-' '__')"
+        policy="lx-hub-$role"
+
+        vault write "$mount/roles/$role" \
+          allowed_domains="$node_fqdn" \
+          allow_bare_domains=true \
+          allow_subdomains=false \
+          enforce_hostnames=true \
+          client_flag=true \
+          server_flag=false \
+          key_type=ec \
+          key_bits=256 \
+          max_ttl="$client_ttl" >/dev/null
+
+        policy_file="$(${pkgs.coreutils}/bin/mktemp)"
+        ${pkgs.coreutils}/bin/printf '%s\n' \
+          "path \"$mount/issue/$role\" {" \
+          '  capabilities = ["create", "update"]' \
+          '}' \
+          "path \"$mount/cert/ca\" {" \
+          '  capabilities = ["read"]' \
+          '}' \
+          "path \"$kv_mount/data/nodes/$node_fqdn\" {" \
+          '  capabilities = ["read"]' \
+          '}' \
+          "path \"$kv_mount/data/$recipient_public_key_kv_path\" {" \
+          '  capabilities = ["read"]' \
+          '}' > "$policy_file"
+        vault policy write "$policy" "$policy_file" >/dev/null
+        ${pkgs.coreutils}/bin/rm -f "$policy_file"
+        policy_file=""
+
+        vault write "auth/approle/role/$role" \
+          token_policies="$policy" \
+          token_ttl=1h \
+          token_max_ttl=4h \
+          secret_id_ttl=0 \
+          secret_id_num_uses=0 >/dev/null
+
+        ${pkgs.jq}/bin/jq -n \
+          --arg node_fqdn "$node_fqdn" \
+          --arg role "$role" \
+          --arg policy "$policy" \
+          '{event:"vault.hub_site_reconciled", node_fqdn:$node_fqdn, role:$role, policy:$policy}'
+      }
+
+      for node_fqdn in "$@"; do
+        reconcile_site "$node_fqdn"
+      done
+
+      trap - EXIT
+      cleanup
     '';
   };
 
   hubSiteEnrollmentTool = pkgs.writeShellApplication {
     name = "luxnix-vault-enroll-hub-site";
     runtimeInputs = [
+      hubSitesReconcileTool
       pkgs.coreutils
+      pkgs.gnugrep
       pkgs.jq
       pkgs.openssl
       pkgs.vault
@@ -231,55 +456,15 @@ let
       role="site-$(${pkgs.coreutils}/bin/printf '%s' "$node_fqdn" | ${pkgs.coreutils}/bin/tr '.-' '__')"
       mount=${lib.escapeShellArg hubPkiCfg.mountPath}
       kv_mount=${lib.escapeShellArg hubPkiCfg.kvMountPath}
-      client_ttl=${lib.escapeShellArg hubPkiCfg.clientTtl}
-      policy="lx-hub-$role"
 
       if ! vault status >/dev/null; then
         echo "Vault must be initialized and unsealed before site enrollment." >&2
         exit 1
       fi
-      if ! vault secrets list -format=json | jq -e --arg path "$mount/" 'has($path)' >/dev/null; then
-        echo "Run luxnix-vault-bootstrap-hub-pki before enrolling a site node." >&2
-        exit 1
-      fi
 
-      vault write "$mount/roles/$role" \
-        allowed_domains="$node_fqdn" \
-        allow_bare_domains=true \
-        allow_subdomains=false \
-        enforce_hostnames=true \
-        client_flag=true \
-        server_flag=false \
-        key_type=ec \
-        key_bits=256 \
-        max_ttl="$client_ttl" >/dev/null
-
-      policy_file="$(${pkgs.coreutils}/bin/mktemp)"
-      trap '${pkgs.coreutils}/bin/rm -f "$policy_file"' EXIT
-      ${pkgs.coreutils}/bin/printf '%s\n' \
-        "path \"$mount/issue/$role\" {" \
-        '  capabilities = ["create", "update"]' \
-        '}' \
-        "path \"$mount/cert/ca\" {" \
-        '  capabilities = ["read"]' \
-        '}' \
-        "path \"$kv_mount/data/nodes/$node_fqdn\" {" \
-        '  capabilities = ["read"]' \
-        '}' \
-        "path \"$kv_mount/data/${hubPkiCfg.recipientPublicKeyKvPath}\" {" \
-        '  capabilities = ["read"]' \
-        '}' > "$policy_file"
-      vault policy write "$policy" "$policy_file" >/dev/null
-
-      if ! vault auth list -format=json | jq -e 'has("approle/")' >/dev/null; then
-        vault auth enable approle >/dev/null
-      fi
-      vault write "auth/approle/role/$role" \
-        token_policies="$policy" \
-        token_ttl=1h \
-        token_max_ttl=4h \
-        secret_id_ttl=0 \
-        secret_id_num_uses=0 >/dev/null
+      # Reconcile policy, PKI role, and AppRole without issuing credentials.
+      # Credential issuance remains explicit and happens only below.
+      luxnix-vault-reconcile-hub-sites "$node_fqdn" >/dev/null
 
       ${pkgs.coreutils}/bin/install -d -m 0700 "$output_directory"
       role_id_tmp="$(${pkgs.coreutils}/bin/mktemp "$output_directory/.role-id.XXXXXX")"
@@ -288,9 +473,16 @@ let
       server_ca_tmp="$(${pkgs.coreutils}/bin/mktemp "$output_directory/.server-ca.XXXXXX")"
       server_ca_fingerprint_tmp="$(${pkgs.coreutils}/bin/mktemp "$output_directory/.server-ca-fingerprint.XXXXXX")"
       node_secret_tmp="$(${pkgs.coreutils}/bin/mktemp "$output_directory/.node-secret.XXXXXX")"
+      node_secret_error="$(${pkgs.coreutils}/bin/mktemp "$output_directory/.node-secret-error.XXXXXX")"
       cleanup_outputs() {
-        ${pkgs.coreutils}/bin/rm -f "$role_id_tmp" "$secret_id_tmp" "$ca_tmp" \
-          "$server_ca_tmp" "$server_ca_fingerprint_tmp" "$node_secret_tmp"
+        ${pkgs.coreutils}/bin/rm -f \
+          "$role_id_tmp" \
+          "$secret_id_tmp" \
+          "$ca_tmp" \
+          "$server_ca_tmp" \
+          "$server_ca_fingerprint_tmp" \
+          "$node_secret_tmp" \
+          "$node_secret_error"
       }
       trap cleanup_outputs EXIT
 
@@ -302,10 +494,29 @@ let
         -in "$server_ca_tmp" -noout -fingerprint -sha256 \
         | ${pkgs.coreutils}/bin/cut -d= -f2)"
       ${pkgs.coreutils}/bin/printf '%s\n' "$server_ca_fingerprint" > "$server_ca_fingerprint_tmp"
-      if ! vault kv get -field=shared_secret "$kv_mount/nodes/$node_fqdn" > "$node_secret_tmp" 2>/dev/null; then
-        ${pkgs.openssl}/bin/openssl rand -base64 48 | ${pkgs.coreutils}/bin/tr -d '\n' > "$node_secret_tmp"
-        vault kv put "$kv_mount/nodes/$node_fqdn" shared_secret=- < "$node_secret_tmp" >/dev/null
+
+      if ! vault kv get -field=shared_secret "$kv_mount/nodes/$node_fqdn" \
+        > "$node_secret_tmp" 2> "$node_secret_error"; then
+        if ! ${pkgs.gnugrep}/bin/grep -Fq 'No value found at' "$node_secret_error"; then
+          echo "ERROR: failed to read the site node secret; refusing to treat the Vault error as an absent secret." >&2
+          exit 1
+        fi
+
+        ${pkgs.openssl}/bin/openssl rand -base64 48 \
+          | ${pkgs.coreutils}/bin/tr -d '\n' > "$node_secret_tmp"
+        if ! vault kv put -cas=0 "$kv_mount/nodes/$node_fqdn" shared_secret=- \
+          < "$node_secret_tmp" >/dev/null; then
+          # A concurrent enrollment may have created the record first. Re-read
+          # it; any other failure remains fatal.
+          vault kv get -field=shared_secret "$kv_mount/nodes/$node_fqdn" \
+            > "$node_secret_tmp"
+        fi
       fi
+      if [ ! -s "$node_secret_tmp" ]; then
+        echo "ERROR: Vault returned an empty site node secret." >&2
+        exit 1
+      fi
+
       ${pkgs.coreutils}/bin/chmod 0400 "$role_id_tmp" "$secret_id_tmp" "$ca_tmp" \
         "$server_ca_tmp" "$server_ca_fingerprint_tmp" "$node_secret_tmp"
       ${pkgs.coreutils}/bin/mv -f "$role_id_tmp" "$output_directory/approle_role_id"
@@ -314,11 +525,12 @@ let
       ${pkgs.coreutils}/bin/mv -f "$server_ca_tmp" "$output_directory/vault-server-ca.pem"
       ${pkgs.coreutils}/bin/mv -f "$server_ca_fingerprint_tmp" "$output_directory/vault-server-ca.sha256"
       ${pkgs.coreutils}/bin/mv -f "$node_secret_tmp" "$output_directory/source-node-secret"
+      ${pkgs.coreutils}/bin/rm -f "$node_secret_error"
       trap - EXIT
 
       echo "Enrollment material created in $output_directory. Transfer it through an approved secret-delivery channel."
       echo "Vault server CA SHA-256: $server_ca_fingerprint"
-      echo "Configure the client PKI role as $role."
+      echo "Configured client PKI/AppRole identity: $role."
     '';
   };
 
@@ -1340,6 +1552,7 @@ in
     environment.systemPackages =
       lib.optionals hubPkiCfg.enable [
         hubPkiBootstrapTool
+        hubSitesReconcileTool
         hubSiteEnrollmentTool
         pkgs.vault
       ]
