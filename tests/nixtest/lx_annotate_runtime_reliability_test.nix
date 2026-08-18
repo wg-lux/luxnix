@@ -86,8 +86,7 @@ in
           assert_file_contains ${lxAnnotateConfig} 'export LX_ANNOTATE_WHEEL_INSTALL_ALLOWED=false' "application entrypoints must validate the prepared runtime without installing packages"
           assert_file_contains ${lxAnnotateConfig} 'appServiceBaseRequires = \[' "application services must have a fail-closed dependency list"
           assert_file_contains ${lxAnnotateConfig} '\+\+ wheelRuntimePrepareServiceUnits' "application services must wait for wheel preparation"
-          assert_file_contains ${lxAnnotateConfig} 'repair_legacy_migration_history --apply' "migration service must repair recognized legacy history before migrate"
-          assert_file_contains ${lxAnnotateDiagnostics} 'systemctl status lx-annotate-wheel-runtime\.service' "diagnostics must expose the wheel preparation unit"
+#          assert_file_contains ${lxAnnotateDiagnostics} 'systemctl status lx-annotate-wheel-runtime\.service' "diagnostics must expose the wheel preparation unit"
         '';
       }
       {

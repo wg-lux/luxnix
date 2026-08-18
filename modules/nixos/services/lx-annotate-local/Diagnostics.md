@@ -127,7 +127,7 @@ installation fails, repair and restart the wheel-runtime unit before retrying
 `lx-annotate-migrate.service`; do not run `pip` concurrently with application
 units.
 
-`lx-annotate-migrate.service` runs
+`lx-annotate-migrate.service` can be changed to run
 `repair_legacy_migration_history --apply` before Django's `migrate` command.
 The repair is additive and records only the reviewed canonical prefix for a
 recognized legacy leaf. Inspect the automatic repair result with:
