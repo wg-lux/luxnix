@@ -79,7 +79,6 @@ host_services:
   # request secret. The plaintext secret is hashed by the application model.
   luxnix.lxAnnotateLocal.hub.nodeProvisioning.enable: "true"
   luxnix.lxAnnotateLocal.hub.nodeProvisioning.nodes: '[
-
     { nodeKey = "gc-02"; displayName = "gc-02 site node"; role = "site_node";
       centerKey = "university_hospital_wuerzburg";
       sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-02-source-node-secret"; }
