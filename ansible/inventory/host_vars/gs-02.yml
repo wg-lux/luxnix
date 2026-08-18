@@ -79,13 +79,10 @@ host_services:
   # request secret. The plaintext secret is hashed by the application model.
   luxnix.lxAnnotateLocal.hub.nodeProvisioning.enable: "true"
   luxnix.lxAnnotateLocal.hub.nodeProvisioning.nodes: '[
-    { nodeKey = "gc-01"; displayName = "gc-01 site node"; role = "site_node";
-      sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-01-source-node-secret"; }
+
     { nodeKey = "gc-02"; displayName = "gc-02 site node"; role = "site_node";
       centerKey = "university_hospital_wuerzburg";
       sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-02-source-node-secret"; }
-    { nodeKey = "gc-03"; displayName = "gc-03 site node"; role = "site_node";
-      sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-03-source-node-secret"; }
     { nodeKey = "gc-04"; displayName = "gc-04 site node"; role = "site_node";
       sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-04-source-node-secret"; }
     { nodeKey = "gc-05"; displayName = "gc-05 site node"; role = "site_node";
@@ -106,7 +103,10 @@ host_services:
       sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-10-source-node-secret"; }
     { nodeKey = "gs-02"; displayName = "gs-02 central hub";
     role = "central_hub"; baseUrl = "https://gs-02.intern"; } ]'
-
+    # { nodeKey = "gc-01"; displayName = "gc-01 site node"; role = "site_node";
+    # sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-01-source-node-secret"; }
+    #{ nodeKey = "gc-03"; displayName = "gc-03 site node"; role = "site_node";
+    # sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-03-source-node-secret"; }
   # Explicit Django central-node setting
   'luxnix.lxAnnotateLocal.django.extraSettings."IS_CENTRAL_NODE"': "lib.mkForce true"
 

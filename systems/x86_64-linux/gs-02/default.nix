@@ -228,79 +228,10 @@ lib.foldl' lib.recursiveUpdate
       services.luxnix.lxAnnotateLocal.hub.nodeProvisioning.enable = true;
     }
     {
-      services.luxnix.lxAnnotateLocal.hub.nodeProvisioning.nodes = [
-        {
-          nodeKey = "gc-01";
-          displayName = "gc-01 site node";
-          role = "site_node";
-          sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-01-source-node-secret";
-        }
-        {
-          nodeKey = "gc-02";
-          displayName = "gc-02 site node";
-          role = "site_node";
-          centerKey = "university_hospital_wuerzburg";
-          sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-02-source-node-secret";
-        }
-        {
-          nodeKey = "gc-03";
-          displayName = "gc-03 site node";
-          role = "site_node";
-          sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-03-source-node-secret";
-        }
-        {
-          nodeKey = "gc-04";
-          displayName = "gc-04 site node";
-          role = "site_node";
-          sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-04-source-node-secret";
-        }
-        {
-          nodeKey = "gc-05";
-          displayName = "gc-05 site node";
-          role = "site_node";
-          centerKey = "rbk_stuttgart";
-          sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-05-source-node-secret";
-        }
-        {
-          nodeKey = "gc-06";
-          displayName = "gc-06 site node";
-          role = "site_node";
-          centerKey = "rbk_stuttgart";
-          sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-06-source-node-secret";
-        }
-        {
-          nodeKey = "gc-07";
-          displayName = "gc-07 site node";
-          role = "site_node";
-          sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-07-source-node-secret";
-        }
-        {
-          nodeKey = "gc-08";
-          displayName = "gc-08 site node";
-          role = "site_node";
-          sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-08-source-node-secret";
-        }
-        {
-          nodeKey = "gc-09";
-          displayName = "gc-09 site node";
-          role = "site_node";
-          centerKey = "university_hospital_wuerzburg";
-          sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-09-source-node-secret";
-        }
-        {
-          nodeKey = "gc-10";
-          displayName = "gc-10 site node";
-          role = "site_node";
-          centerKey = "university_hospital_wuerzburg";
-          sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-10-source-node-secret";
-        }
-        {
-          nodeKey = "gs-02";
-          displayName = "gs-02 central hub";
-          role = "central_hub";
-          baseUrl = "https://gs-02.intern";
-        }
-      ];
+      services.luxnix.lxAnnotateLocal.hub.nodeProvisioning.nodes = ''
+        [
+        { nodeKey = "gc-02"; displayName = "gc-02 site node"; role = "site_node"; centerKey = "university_hospital_wuerzburg"; sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-02-source-node-secret"; } { nodeKey = "gc-04"; displayName = "gc-04 site node"; role = "site_node"; sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-04-source-node-secret"; } { nodeKey = "gc-05"; displayName = "gc-05 site node"; role = "site_node"; centerKey = "rbk_stuttgart"; sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-05-source-node-secret"; } { nodeKey = "gc-06"; displayName = "gc-06 site node"; role = "site_node"; centerKey = "rbk_stuttgart"; sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-06-source-node-secret"; } { nodeKey = "gc-07"; displayName = "gc-07 site node"; role = "site_node"; sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-07-source-node-secret"; } { nodeKey = "gc-08"; displayName = "gc-08 site node"; role = "site_node"; sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-08-source-node-secret"; } { nodeKey = "gc-09"; displayName = "gc-09 site node"; role = "site_node"; centerKey = "university_hospital_wuerzburg"; sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-09-source-node-secret"; } { nodeKey = "gc-10"; displayName = "gc-10 site node"; role = "site_node"; centerKey = "university_hospital_wuerzburg"; sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-10-source-node-secret"; } { nodeKey = "gs-02"; displayName = "gs-02 central hub"; role = "central_hub"; baseUrl = "https://gs-02.intern"; } ]
+      '';
     }
     {
       services.luxnix.lxAnnotateLocal.hub.transferApi.clientCaFile =
