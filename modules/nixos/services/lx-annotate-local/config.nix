@@ -2371,6 +2371,7 @@ in
             ];
             serviceConfig = {
               Type = "oneshot";
+              ExecStartPre = "-${effectiveRuntimePackage}/bin/lx-annotate-manage repair_legacy_migration_history --apply";
               ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-manage migrate --noinput";
               TimeoutStartSec = "2h";
             };

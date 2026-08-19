@@ -142,7 +142,7 @@ rec {
     ENDOREG_DEPLOYMENT_ROLE = envDeploymentRole;
     ENDOREG_STORAGE_PROFILE = streamableStorageProfile;
     ENDOREG_HUB_MODE = boolString cfg.hub.enable;
-    ENDOREG_ENABLE_HUB_TRANSFERS = boolString cfg.hub.transferApi.enable;
+    ENDOREG_ENABLE_HUB_TRANSFERS = boolString (cfg.hub.transferApi.enable || cfg.hub.outboundTransfer.enable);
     ENDOREG_HUB_TRANSFER_REQUIRE_SECURE_TRANSPORT = boolString cfg.hub.transferApi.requireSecureTransport;
     ENDOREG_HUB_TRANSFER_REQUIRE_MTLS = boolString cfg.hub.transferApi.requireMtls;
     ENDOREG_HUB_TRANSFER_MTLS_META_KEY = cfg.hub.transferApi.mtlsMetaKey;
