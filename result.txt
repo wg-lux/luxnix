@@ -461,7 +461,6 @@ Aug 05 12:36:10 gc-02 systemd[1]: lx-annotate-hub-node-provisioning.service: Job
 Aug 05 12:36:10 gc-02 systemd[1]: lx-annotate-master-key-check.service: Job lx-annotate-master-key-check.service/start failed with result 'dependency'.
 Aug 05 12:36:10 gc-02 systemd[1]: lx-annotate-load-base-data.service: Job lx-annotate-load-base-data.service/start failed with result 'dependency'.
 Aug 05 12:36:10 gc-02 systemd[1]: Dependency failed for Best-effort provisioning of LX-Annotate terminology.
-Aug 05 12:36:10 gc-02 systemd[1]: lx-annotate-terminology-bootstrap.service: Job lx-annotate-terminology-bootstrap.service/start failed with result 'dependency'.
 Aug 05 12:36:10 gc-02 systemd[1]: Dependency failed for Run LX-Annotate database migrations.
 Aug 05 12:36:10 gc-02 systemd[1]: lx-annotate-migrate.service: Job lx-annotate-migrate.service/start failed with result 'dependency'.
 Aug 05 12:36:10 gc-02 systemd[1]: Dependency failed for Set up endoregDbLocal PostgreSQL user password.

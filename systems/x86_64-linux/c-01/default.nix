@@ -44,6 +44,9 @@ lib.foldl' lib.recursiveUpdate
       roles.desktop.enable = true;
     }
     {
+      services.wg-lux-mcp.enable = true;
+    }
+    {
       luxnix.dns.enable = true;
     }
     {

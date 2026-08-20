@@ -4,7 +4,7 @@ group_roles:
     - "s-04"
   endoreg_client.api.hostname: '"0.0.0.0"'
   endoreg_client.api.port: "8118"
-  endoreg_client.api.useHttps: "false"
+  endoreg_client.api.useHttps: "true"
   endoreg_client.api.djangoAllowedHosts:
     - "s-04"
     - "s-04.local"

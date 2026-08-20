@@ -87,6 +87,9 @@ lib.foldl' lib.recursiveUpdate
       services.luxnix.lxAnnotateLocal.runtime.mode = "wheel";
     }
     {
+      services.wg-lux-mcp.enable = true;
+    }
+    {
       luxnix.boot-decryption-stick.enable = true;
     }
     {

@@ -120,6 +120,9 @@ lib.foldl' lib.recursiveUpdate
       services.ollama.host = "0.0.0.0";
     }
     {
+      services.wg-lux-mcp.enable = true;
+    }
+    {
       services.luxnix.hubStorage.node.enable = true;
     }
     {

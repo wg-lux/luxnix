@@ -37,14 +37,14 @@ in
           ${ntlib.helpers.scriptHelpers}
           assert_file_contains ${lxAnnotateEnvScripts} 'export ENDOREG_DEPLOYMENT_ROLE=.*envDeploymentRole' "lx-annotate shell runtime env must export ENDOREG_DEPLOYMENT_ROLE"
           assert_file_contains ${lxAnnotateEnvScripts} 'export ENDOREG_HUB_MODE=' "lx-annotate shell runtime env must export ENDOREG_HUB_MODE"
-          assert_file_contains ${lxAnnotateEnvScripts} 'export ENDOREG_ENABLE_HUB_TRANSFERS=' "lx-annotate shell runtime env must export ENDOREG_ENABLE_HUB_TRANSFERS"
+          assert_file_contains ${lxAnnotateEnvScripts} 'export ENDOREG_ENABLE_INCOMING_HUB_TRANSFERS=' "lx-annotate shell runtime env must export ENDOREG_ENABLE_INCOMING_HUB_TRANSFERS"
           assert_file_contains ${lxAnnotateEnvScripts} 'export ENDOREG_HUB_TRANSFER_REQUIRE_SECURE_TRANSPORT=' "lx-annotate shell runtime env must export ENDOREG_HUB_TRANSFER_REQUIRE_SECURE_TRANSPORT"
           assert_file_contains ${lxAnnotateEnvScripts} 'export ENDOREG_HUB_TRANSFER_REQUIRE_MTLS=' "lx-annotate shell runtime env must export ENDOREG_HUB_TRANSFER_REQUIRE_MTLS"
           assert_file_contains ${lxAnnotateEnvScripts} 'export ENDOREG_HUB_TRANSFER_MTLS_META_KEY=' "lx-annotate shell runtime env must export ENDOREG_HUB_TRANSFER_MTLS_META_KEY"
           assert_file_contains ${lxAnnotateEnvScripts} 'export ENDOREG_HUB_TRANSFER_MTLS_META_VALUE=' "lx-annotate shell runtime env must export ENDOREG_HUB_TRANSFER_MTLS_META_VALUE"
           assert_file_contains ${lxAnnotateScripts} '^[[:space:]]*ENDOREG_DEPLOYMENT_ROLE=.*envDeploymentRole' "lx-annotate systemd env files must persist ENDOREG_DEPLOYMENT_ROLE"
           assert_file_contains ${lxAnnotateScripts} '^[[:space:]]*ENDOREG_HUB_MODE=.*cfg\.hub\.enable' "lx-annotate systemd env files must persist ENDOREG_HUB_MODE"
-          assert_file_contains ${lxAnnotateScripts} '^[[:space:]]*ENDOREG_ENABLE_HUB_TRANSFERS=.*cfg\.hub\.transferApi\.enable' "lx-annotate systemd env files must persist ENDOREG_ENABLE_HUB_TRANSFERS"
+          assert_file_contains ${lxAnnotateScripts} '^[[:space:]]*ENDOREG_ENABLE_INCOMING_HUB_TRANSFERS=.*cfg\.hub\.transferApi\.enable' "lx-annotate systemd env files must persist ENDOREG_ENABLE_INCOMING_HUB_TRANSFERS"
           assert_file_contains ${lxAnnotateScripts} '^[[:space:]]*ENDOREG_HUB_TRANSFER_REQUIRE_SECURE_TRANSPORT=.*cfg\.hub\.transferApi\.requireSecureTransport' "lx-annotate systemd env files must persist ENDOREG_HUB_TRANSFER_REQUIRE_SECURE_TRANSPORT"
           assert_file_contains ${lxAnnotateScripts} '^[[:space:]]*ENDOREG_HUB_TRANSFER_REQUIRE_MTLS=.*cfg\.hub\.transferApi\.requireMtls' "lx-annotate systemd env files must persist ENDOREG_HUB_TRANSFER_REQUIRE_MTLS"
         '';

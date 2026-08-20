@@ -153,6 +153,9 @@ lib.foldl' lib.recursiveUpdate
       services.ollama.host = "0.0.0.0";
     }
     {
+      services.wg-lux-mcp.enable = true;
+    }
+    {
       services.luxnix.glm52.enable = true;
     }
     {
@@ -324,7 +327,7 @@ lib.foldl' lib.recursiveUpdate
       services.luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort = 5432;
     }
     {
-      services.luxnix.lxSsl.enable = false;
+      services.luxnix.lxSsl.enable = true;
     }
     {
       luxnix.dns.enable = true;

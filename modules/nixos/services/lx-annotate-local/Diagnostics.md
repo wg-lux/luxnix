@@ -80,19 +80,7 @@ sudo systemctl status lx-annotate-master-key-check.service
 sudo systemctl status lx-annotate.service
 ```
 
-Wheel mode also runs `lx-annotate-terminology-bootstrap.service` as a
-best-effort job. It registers the packaged `dgvs_reporting`, `mst_3_0`, and
-`star_upper_gi` reporting bundles. A new registry activates `star_upper_gi`;
-an existing active selection is preserved. The job is ordered after the web
-service and runs independently; no application startup
-unit wants, requires, or waits for it. Missing or invalid terminology therefore
-disables terminology features without blocking the web service, workers,
-migrations, or base-data loading.
 
-```bash
-sudo systemctl status lx-annotate-terminology-bootstrap.service
-sudo journalctl -u lx-annotate-terminology-bootstrap.service -b -n 200 --no-pager
-```
 
 ```bash
 sudo journalctl -u lx-annotate-runtime-env.service -n 200 --no-pager

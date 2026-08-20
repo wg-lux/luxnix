@@ -95,6 +95,9 @@ lib.foldl' lib.recursiveUpdate
       roles.postgres.main.enable = true;
     }
     {
+      services.wg-lux-mcp.enable = true;
+    }
+    {
       luxnix.boot-decryption-stick.enable = true;
     }
     {

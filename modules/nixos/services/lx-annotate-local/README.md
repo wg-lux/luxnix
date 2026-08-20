@@ -458,7 +458,7 @@ hostile-network workflow, so transfer enablement is no longer allowed to imply
 The module exports the corresponding runtime environment for Django:
 
 - `ENDOREG_DEPLOYMENT_ROLE`
-- `ENDOREG_ENABLE_HUB_TRANSFERS`
+- `ENDOREG_ENABLE_INCOMING_HUB_TRANSFERS`
 - `ENDOREG_HUB_TRANSFER_REQUIRE_SECURE_TRANSPORT`
 - `ENDOREG_HUB_TRANSFER_REQUIRE_MTLS`
 - `ENDOREG_HUB_TRANSFER_MTLS_META_KEY`

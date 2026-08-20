@@ -30,9 +30,18 @@ def _gc_02_tls_contract() -> dict[str, Any]:
           lib = flake.inputs.nixpkgs.lib;
           cfg = flake.nixosConfigurations.gc-02.config;
           lxCfg = cfg.services.luxnix.lxAnnotateLocal;
+          mcpNginxVhost = cfg.services.nginx.virtualHosts."wg-lux-mcp.local";
         in {
           hostname = lxCfg.django.hostname;
+          baseUrl = lxCfg.django.baseUrl;
+          httpProtocol = lxCfg.django.httpProtocol;
+          useHttps = lxCfg.django.useHttps;
           nginxVirtualHosts = builtins.attrNames cfg.services.nginx.virtualHosts;
+          mcpVhost = {
+            forceSSL = mcpNginxVhost.forceSSL;
+            certificate = toString mcpNginxVhost.sslCertificate;
+            proxyPass = mcpNginxVhost.locations."/".proxyPass;
+          };
           publicCertPath = toString cfg.services.luxnix.lxSsl.publicCertPath;
           generatorScript =
             builtins.readFile (
@@ -1373,10 +1382,20 @@ def test_lx_annotate_tls_uses_public_hostname_and_strict_acceptance() -> None:
     tls = _gc_02_tls_contract()
 
     assert tls["hostname"] == "lx-annotate.local"
+    assert tls["baseUrl"] == "https://lx-annotate.local"
+    assert tls["httpProtocol"] == "https"
+    assert tls["useHttps"] is True
     assert "lx-annotate.local" in tls["nginxVirtualHosts"]
+    assert "wg-lux-mcp.local" in tls["nginxVirtualHosts"]
     assert tls["publicCertPath"] == ("/run/lx-annotate-ssl/lx-annotate-selfsigned.crt")
     assert '-subj "/CN=lx-annotate.local"' in tls["generatorScript"]
     assert "subjectAltName=DNS:lx-annotate.local" in tls["generatorScript"]
+    assert "DNS:wg-lux-mcp.local" in tls["generatorScript"]
+    assert tls["mcpVhost"] == {
+        "forceSSL": True,
+        "certificate": "/var/lib/lx-annotate-ssl/lx-annotate-selfsigned.crt",
+        "proxyPass": "http://127.0.0.1:8765",
+    }
     assert "--cacert" in tls["acceptanceScript"]
     assert "--insecure" not in tls["acceptanceScript"]
     assert (
@@ -1591,7 +1610,7 @@ def test_lx_annotate_gs02_transfer_api_and_vault_live_contract() -> None:
         "gc-10",
         "gs-02",
     ]
-    assert "ENDOREG_ENABLE_HUB_TRANSFERS=true" in evaluated["bootEnvironment"]
+    assert "ENDOREG_ENABLE_INCOMING_HUB_TRANSFERS=true" in evaluated["bootEnvironment"]
     assert "ENDOREG_HUB_TRANSFER_REQUIRE_MTLS=true" in evaluated["bootEnvironment"]
     assert (
         "ENDOREG_HUB_TRANSFER_RECIPIENT_PRIVATE_KEY_FILES=/etc/secrets/vault/hub-pki/hub-recipient-current.pem"

@@ -134,32 +134,7 @@ let
   wheelDependencyOverrideHash = builtins.hashString "sha256" (
     lib.concatStringsSep "\n" wheelDependencyOverrides
   );
-  terminologyRegistryPath = cfg.runtime.terminology.registryPath;
-  terminologyRegistryDir = builtins.dirOf terminologyRegistryPath;
-  terminologyImportRoot = cfg.runtime.terminology.importRoot;
-  terminologyInitialBundle = cfg.runtime.terminology.initialBundle;
-  terminologyPathStaysInsideEncryptedData =
-    path:
-    lib.hasPrefix "${cfg.runtime.encryptedDataDir}/" path
-    && lib.all (segment: segment != "." && segment != "..") (lib.splitString "/" path);
-  terminologyInitialBundleArgs =
-    if terminologyInitialBundle == null then
-      ""
-    else
-      lib.escapeShellArgs (
-        [
-          "--module"
-          terminologyInitialBundle.moduleName
-          "--version"
-          terminologyInitialBundle.version
-          "--input-dir"
-          (toString terminologyInitialBundle.inputDirectory)
-        ]
-        ++ lib.optionals (terminologyInitialBundle.medicalField != null) [
-          "--medical-field"
-          terminologyInitialBundle.medicalField
-        ]
-      );
+
   wheelRuntimePackage = pkgs.runCommand "lx-annotate-wheel-runtime-${packageVersion}" { } ''
     mkdir -p "$out/bin" "$out/libexec" "$out/share/lx-annotate"
     ln -s ${lib.escapeShellArg runtimeStaticRootPath} "$out/share/lx-annotate/staticfiles"
@@ -458,7 +433,6 @@ let
     make_entrypoint lx-annotate-watch lx-annotate-watch 0
     make_entrypoint lx-annotate-export-frames lx-annotate-export-frames 0
     make_entrypoint lx-annotate-import-sap lx-annotate-import-sap 0
-    make_entrypoint lx-annotate-bootstrap-terminology lx-annotate-bootstrap-terminology 0
     make_entrypoint lx-dtypes-kb-registry lx-dtypes-kb-registry 0
     make_entrypoint lx-dtypes-prototype-kb-smoke lx-dtypes-prototype-kb-smoke 0
   '';
@@ -805,9 +779,7 @@ let
   wheelRuntimePrepareServiceUnits = lib.optionals useWheelRuntime [
     "lx-annotate-wheel-runtime.service"
   ];
-  terminologyBootstrapServiceUnits = lib.optionals useWheelRuntime [
-    "lx-annotate-terminology-bootstrap.service"
-  ];
+
   appServiceBaseAfter = [
     "network.target"
     "lx-annotate-runtime-env.service"
@@ -877,14 +849,6 @@ let
   loadBaseDataServiceScript = pkgs.writeShellScript "lx-annotate-load-base-data-service" ''
     set -euo pipefail
     exec ${effectiveRuntimePackage}/bin/lx-annotate-load-base-data
-  '';
-  terminologyBootstrapScript = pkgs.writeShellScript "lx-annotate-terminology-bootstrap" ''
-    set -euo pipefail
-
-    registry_path=${lib.escapeShellArg terminologyRegistryPath}
-    exec ${effectiveRuntimePackage}/bin/lx-annotate-bootstrap-terminology \
-      --registry "$registry_path" \
-      ${terminologyInitialBundleArgs}
   '';
   sapImportServiceScript = pkgs.writeShellScript "lx-annotate-sap-import-service" ''
     set -euo pipefail
@@ -1493,24 +1457,6 @@ in
         {
           assertion = !useWheelRuntime || packageVersion != "";
           message = "services.luxnix.lxAnnotateLocal.runtime.packageVersion must be set or inferable from the wheel filename in wheel mode.";
-        }
-        {
-          assertion = terminologyPathStaysInsideEncryptedData terminologyRegistryPath;
-          message = "services.luxnix.lxAnnotateLocal.runtime.terminology.registryPath must stay inside runtime.encryptedDataDir.";
-        }
-        {
-          assertion = terminologyPathStaysInsideEncryptedData terminologyImportRoot;
-          message = "services.luxnix.lxAnnotateLocal.runtime.terminology.importRoot must stay inside runtime.encryptedDataDir.";
-        }
-        {
-          assertion =
-            terminologyInitialBundle == null
-            || (terminologyInitialBundle.moduleName != "" && terminologyInitialBundle.version != "");
-          message = "services.luxnix.lxAnnotateLocal.runtime.terminology.initialBundle requires non-empty moduleName and version.";
-        }
-        {
-          assertion = terminologyInitialBundle == null || useWheelRuntime;
-          message = "services.luxnix.lxAnnotateLocal.runtime.terminology.initialBundle is currently supported only in wheel mode.";
         }
         {
           assertion = !cfg.runtime.clustered.enable || cfg.runtime.externalServices.redisUrl != null;
@@ -2148,10 +2094,6 @@ in
             "z ${runtimeRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
             "d ${envDataDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
             "z ${envDataDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-            "d ${terminologyRegistryDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-            "z ${terminologyRegistryDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-            "d ${terminologyImportRoot} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
-            "z ${terminologyImportRoot} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
             "d ${envConfDir} 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
             "d ${runtimeStorageRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
             "z ${runtimeStorageRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
@@ -2361,9 +2303,6 @@ in
 
           lx-annotate-migrate = mkLxAnnotateAppService {
             description = "Run LX-Annotate database migrations";
-            after = terminologyBootstrapServiceUnits;
-            wants = terminologyBootstrapServiceUnits;
-            requires = terminologyBootstrapServiceUnits;
             before = [
               "lx-annotate-load-base-data.service"
               "lx-annotate-master-key-check.service"
@@ -2376,20 +2315,6 @@ in
               TimeoutStartSec = "2h";
             };
           };
-
-          lx-annotate-terminology-bootstrap = mkIf useWheelRuntime (mkLxAnnotateAppService {
-            description = "Provision and validate LX-Annotate terminology";
-            before = [
-              "lx-annotate-migrate.service"
-              "lx-annotate.service"
-            ];
-            serviceConfig = {
-              Type = "oneshot";
-              RemainAfterExit = true;
-              ExecStart = terminologyBootstrapScript;
-              TimeoutStartSec = "10min";
-            };
-          });
 
           lx-annotate-load-base-data = mkLxAnnotateAppService {
             description = "Load LX-Annotate base data";
@@ -2595,7 +2520,6 @@ in
               "lx-annotate-load-base-data.service"
               "lx-annotate-preflight.service"
             ]
-            ++ terminologyBootstrapServiceUnits
             ++ dataRecoveryServiceUnits
             ++ hlsBackfillServiceUnits
             ++ hubNodeProvisioningServiceUnits
@@ -2611,7 +2535,6 @@ in
               "lx-annotate-master-key-check.service"
               "lx-annotate-preflight.service"
             ]
-            ++ terminologyBootstrapServiceUnits
             ++ dataRecoveryServiceUnits
             ++ hlsBackfillServiceUnits
             ++ hubNodeProvisioningServiceUnits
@@ -2626,7 +2549,6 @@ in
               "endoreg-django-setup.service"
               "systemd-tmpfiles-setup.service"
             ]
-            ++ terminologyBootstrapServiceUnits
             ++ dataRecoveryServiceUnits
             ++ hlsBackfillServiceUnits
             ++ hubNodeProvisioningServiceUnits
@@ -2999,7 +2921,6 @@ in
               "lx-annotate.service"
               "nginx.service"
             ]
-            ++ terminologyBootstrapServiceUnits
             ++ alwaysWorkerServiceUnits
             ++ encryptionServiceUnits;
             wants = [
@@ -3007,7 +2928,6 @@ in
               "lx-annotate.service"
               "nginx.service"
             ]
-            ++ terminologyBootstrapServiceUnits
             ++ alwaysWorkerServiceUnits
             ++ encryptionServiceUnits;
             requires = [
@@ -3015,7 +2935,6 @@ in
               "lx-annotate.service"
               "nginx.service"
             ]
-            ++ terminologyBootstrapServiceUnits
             ++ alwaysWorkerServiceUnits
             ++ encryptionServiceUnits;
             unitConfig = encryptedDataMountUnitConfig;

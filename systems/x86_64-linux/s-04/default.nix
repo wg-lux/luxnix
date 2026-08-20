@@ -60,7 +60,7 @@ lib.foldl' lib.recursiveUpdate
       roles.endoreg-client.api.port = 8118;
     }
     {
-      roles.endoreg-client.api.useHttps = false;
+      roles.endoreg-client.api.useHttps = true;
     }
     {
       roles.endoreg-client.centralNodes = [
@@ -136,6 +136,9 @@ lib.foldl' lib.recursiveUpdate
     }
     {
       services.redis.servers.main.bind = lib.mkForce "172.16.255.14";
+    }
+    {
+      services.wg-lux-mcp.enable = true;
     }
     {
       luxnix.boot-decryption-stick.enable = true;

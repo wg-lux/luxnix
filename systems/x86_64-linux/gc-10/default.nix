@@ -142,6 +142,9 @@ lib.foldl' lib.recursiveUpdate
       services.luxnix.lxAnnotateLocal.runtime.mode = "wheel";
     }
     {
+      services.wg-lux-mcp.enable = true;
+    }
+    {
       services.luxnix.lxAiLocal.runtime.protectedDataDir = "/var/lib/lx-annotate/data";
     }
     {

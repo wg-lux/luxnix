@@ -258,7 +258,7 @@ let
       ${escapeShellArg "HUB_STORAGE_SCHEMA_VERSION=1"} \
       ${escapeShellArg "HUB_STORAGE_DEPLOYMENT_ROLE=central_hub"} \
       ${escapeShellArg "HUB_STORAGE_NODES_FILE=${hubNodesFile}"} \
-      ${escapeShellArg "ENDOREG_ENABLE_HUB_TRANSFERS=1"} \
+      ${escapeShellArg "ENDOREG_ENABLE_INCOMING_HUB_TRANSFERS=1"} \
       ${escapeShellArg "ENDOREG_ENABLE_STORAGE_BALANCING=${if hubCfg.balancing.enable then "1" else "0"}"} \
       ${escapeShellArg "ENDOREG_STORAGE_RESIDENCY_KEY=${hubCfg.balancing.residencyKey}"} \
       ${escapeShellArg "HUB_STORAGE_STAGING_DIRECTORY=${hubCfg.balancing.stagingDirectory}"} \

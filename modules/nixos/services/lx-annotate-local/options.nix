@@ -377,8 +377,8 @@ in
           wheelPath = mkOption {
             type = types.nullOr types.path;
             default = pkgs.fetchurl {
-              url = "https://files.pythonhosted.org/packages/87/24/064523b62f3631cfc11dd2802432b6db329387f208532303d9dde002f106/lx_annotate-1.0.3-py3-none-any.whl";
-              hash = "sha256-5eCbIxF9w7/5NYpwvVydRperaZ1lDsJqKNo54cbUNrI=";
+              url = "https://files.pythonhosted.org/packages/d4/8d/d01d7edefbe3c79fdce03210a540011ee89ba989a09673d7c00a938c0c8c/lx_annotate-1.0.4-py3-none-any.whl";
+              hash = "sha256-u4zQEwAse+42Hm9Z61jaaiOxZA/H+AlAXwCMPAqfhUY=";
             };
             description = "Path to the lx-annotate wheel artifact used in wheel mode.";
           };
@@ -1035,7 +1035,7 @@ in
           defaults = {
             hostname = "lx-annotate.local";
             port = 8117;
-            useHttps = false;
+            useHttps = true;
             sslCertificatePath = null;
             sslKeyPath = null;
             djangoAllowedHosts = [
@@ -1062,8 +1062,8 @@ in
             confTemplateDir = "conf_template";
             djangoModule = "lx_annotate";
             assetDir = "tests/assets";
-            httpProtocol = "http";
-            baseUrl = null;
+            httpProtocol = "https";
+            baseUrl = "https://lx-annotate.local";
             staticUrl = "/static/";
             mediaUrl = "/media/";
             runVideoTests = false;

@@ -18,7 +18,6 @@ group_services:
     sharedSecretFile = "/etc/secrets/vault/hub-pki/source-node-secret"; }
     { nodeKey = "gs-02"; displayName = "gs-02 central hub";
     role = "central_hub"; baseUrl = "https://gs-02.intern"; } ]'
-
 group_nixos:
   # Pin Vault to the authenticated VPN route; TLS still verifies its identity.
   'networking.hosts."172.16.255.22"':

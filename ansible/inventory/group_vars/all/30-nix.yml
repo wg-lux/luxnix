@@ -6,7 +6,8 @@ group_roles:
   custom_packages.cloud: 'true'
   common.enable: 'true'
 
-group_services: {}
+group_services:
+  wg-lux-mcp.enable: 'true'
 
 group_nixos:
   xdg.menus.enable: 'true'

@@ -127,6 +127,9 @@ lib.foldl' lib.recursiveUpdate
       services.luxnix.lxAnnotateLocal.runtime.mode = "wheel";
     }
     {
+      services.wg-lux-mcp.enable = true;
+    }
+    {
       services.luxnix.lxAnnotateLocal.django.baseUrl = "https://lx-annotate.endo-reg.net";
     }
     {

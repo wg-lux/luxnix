@@ -10,8 +10,11 @@ from test_lx_annotate_nix_eval_contract import _gc_02_contract
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FILE_MOVER_SOURCE = REPO_ROOT / "modules/nixos/services/file_mover/default.nix"
-LX_ANNOTATE_SCRIPTS_SOURCE = (
-    REPO_ROOT / "modules/nixos/services/lx-annotate-local/scripts.nix"
+LX_ANNOTATE_CONFIG_SOURCE = (
+    REPO_ROOT / "modules/nixos/services/lx-annotate-local/config.nix"
+)
+LX_ANNOTATE_ENV_SOURCE = (
+    REPO_ROOT / "modules/nixos/services/lx-annotate-local/scripts/env.nix"
 )
 
 
@@ -20,13 +23,6 @@ def _environment_map(environment: list[str]) -> dict[str, str]:
         key: value
         for key, value in (entry.split("=", 1) for entry in environment if "=" in entry)
     }
-
-
-def _nix_script_body(source: str, marker: str) -> str:
-    marker_start = source.index(marker)
-    body_start = source.index("''\n", marker_start) + 3
-    body_end = source.index("\n  '';", body_start)
-    return source[body_start:body_end]
 
 
 def _tmpfiles_declares_dir(
@@ -75,6 +71,8 @@ def _file_mover_host_matrix() -> dict[str, Any]:
                 builtins.hasAttr "lx-annotate-filewatcher" cfg.systemd.services;
               hasWatcherPath =
                 builtins.hasAttr "lx-annotate-filewatcher" cfg.systemd.paths;
+              hasWatcherTimer =
+                builtins.hasAttr "lx-annotate-filewatcher" cfg.systemd.timers;
             in {
               name = hostName;
               value = {
@@ -90,7 +88,17 @@ def _file_mover_host_matrix() -> dict[str, Any]:
                   cfg.services.luxnix.fileMover.videoTranscodeFallback.command;
                 transcodeEnvironmentScript =
                   cfg.services.luxnix.fileMover.videoTranscodeFallback.environmentScript;
-                inherit hasWatcherService hasWatcherPath;
+                inherit hasWatcherService hasWatcherPath hasWatcherTimer;
+                fileWatcherAfter =
+                  if hasWatcherService then
+                    cfg.systemd.services."lx-annotate-filewatcher".after
+                  else
+                    [];
+                fileWatcherRequires =
+                  if hasWatcherService then
+                    cfg.systemd.services."lx-annotate-filewatcher".requires
+                  else
+                    [];
                 fileWatcherServiceConfig =
                   if hasWatcherService then
                     cfg.systemd.services."lx-annotate-filewatcher".serviceConfig
@@ -102,6 +110,11 @@ def _file_mover_host_matrix() -> dict[str, Any]:
                 fileWatcherPathConfig =
                   if hasWatcherPath then
                     cfg.systemd.paths."lx-annotate-filewatcher".pathConfig
+                  else
+                    {};
+                fileWatcherTimerConfig =
+                  if hasWatcherTimer then
+                    cfg.systemd.timers."lx-annotate-filewatcher".timerConfig
                   else
                     {};
                 resolvedIntakeDirs = {
@@ -163,13 +176,36 @@ def test_all_file_mover_hosts_publish_into_filewatcher_intake_contract() -> None
 
         assert contract["hasWatcherService"], host_name
         assert contract["hasWatcherPath"], host_name
+        assert contract["hasWatcherTimer"], host_name
         assert transcode_command is not None, host_name
         assert "transcode_video" in transcode_command, host_name
         assert "LD_LIBRARY_PATH=" in contract["transcodeEnvironmentScript"], host_name
 
         watcher_config = contract["fileWatcherServiceConfig"]
         watcher_path = contract["fileWatcherPathConfig"]
+        watcher_timer = contract["fileWatcherTimerConfig"]
         watcher_env = _environment_map(watcher_config["Environment"])
+
+        # file_watcher.FileWatcherService requires all three intake directories
+        # at construction time. In deployment it is deliberately invoked as a
+        # bounded drain, not as the module's resident Observer loop.
+        assert watcher_config["Type"] == "oneshot", host_name
+        assert watcher_config["Restart"] == "no", host_name
+        assert watcher_config["ExecStart"].endswith("/bin/lx-annotate-watch --once"), (
+            host_name
+        )
+        assert "lx-annotate-load-base-data.service" in contract["fileWatcherAfter"], (
+            host_name
+        )
+        assert "lx-annotate-master-key-check.service" in contract["fileWatcherAfter"], (
+            host_name
+        )
+        assert (
+            "lx-annotate-load-base-data.service" in contract["fileWatcherRequires"]
+        ), host_name
+        assert (
+            "lx-annotate-master-key-check.service" in contract["fileWatcherRequires"]
+        ), host_name
 
         assert watcher_path["PathChanged"] == [
             resolved["video"],
@@ -182,6 +218,14 @@ def test_all_file_mover_hosts_publish_into_filewatcher_intake_contract() -> None
         assert watcher_env["WATCHER_PREANONYMIZED_DIR"] == resolved["preanonymized"], (
             host_name
         )
+
+        # PathChanged handles normal arrivals. The periodic timer retries files
+        # which were incomplete, temporarily unprocessable, or already present
+        # when the path unit was activated.
+        assert watcher_timer["Unit"] == "lx-annotate-filewatcher.service", host_name
+        assert watcher_timer["Persistent"] is True, host_name
+        assert watcher_timer["OnBootSec"] == "2m", host_name
+        assert watcher_timer["OnUnitActiveSec"] == "5m", host_name
 
         assert mover_config["User"] == watcher_config["User"], host_name
         assert mover_config["Group"] == watcher_config["Group"], host_name
@@ -472,29 +516,15 @@ def test_file_mover_transcode_fallback_fails_closed_before_publish() -> None:
     )
 
 
-def test_wheel_and_repo_filewatchers_process_existing_once() -> None:
-    source = LX_ANNOTATE_SCRIPTS_SOURCE.read_text(encoding="utf-8")
-    repo_marker = (
-        'runLocalFileWatcherScript = pkgs.writeShellScriptBin "${watcherScriptName}"'
-    )
-    wheel_marker = (
-        "runLocalFileWatcherWheelScript = "
-        'pkgs.writeShellScriptBin "${watcherScriptName}"'
-    )
-    repo_body = _nix_script_body(
-        source,
-        repo_marker,
-    )
-    wheel_body = _nix_script_body(
-        source,
-        wheel_marker,
-    )
+def test_filewatcher_deployment_uses_packaged_once_entrypoint() -> None:
+    source = LX_ANNOTATE_CONFIG_SOURCE.read_text(encoding="utf-8")
 
-    assert 'export LX_ANNOTATE_FILEWATCHER_ARGS="--process-existing-once"' in repo_body
-    assert 'export LX_ANNOTATE_FILEWATCHER_ARGS="--process-existing-once"' in wheel_body
-    assert "start-watcher" in repo_body
-    assert "run-filewatcher" in repo_body
-    assert "wheelFileWatcherOnceCommand" in wheel_body
+    assert "make_entrypoint lx-annotate-watch lx-annotate-watch 0" in source
+    assert (
+        'ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-watch --once";'
+        in source
+    )
+    assert 'Type = "oneshot";' in source
 
 
 def test_no_legacy_hardcoded_watcher_destinations_bypass_intake_dirs() -> None:
@@ -512,7 +542,8 @@ def test_no_legacy_hardcoded_watcher_destinations_bypass_intake_dirs() -> None:
     module_sources = "\n".join(
         [
             FILE_MOVER_SOURCE.read_text(encoding="utf-8"),
-            LX_ANNOTATE_SCRIPTS_SOURCE.read_text(encoding="utf-8"),
+            LX_ANNOTATE_CONFIG_SOURCE.read_text(encoding="utf-8"),
+            LX_ANNOTATE_ENV_SOURCE.read_text(encoding="utf-8"),
         ]
     )
 

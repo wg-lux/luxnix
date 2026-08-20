@@ -130,6 +130,9 @@ lib.foldl' lib.recursiveUpdate
       services.luxnix.lxAnnotateLocal.runtime.mode = "wheel";
     }
     {
+      services.wg-lux-mcp.enable = true;
+    }
+    {
       services.luxnix.lxAnnotateLocal.runtime.deploymentRole = "site_node";
     }
     {
