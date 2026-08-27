@@ -196,18 +196,17 @@ directly rather than copying a mutable checkout or duplicating the bundle.
 
 | Unit | Type / trigger | Runtime role |
 | --- | --- | --- |
-| `lx-annotate-filewatcher.path` | path unit | Watches the resolved video, report, and preanonymized intake directories from `runtime.intakeDirs`. |
+| `lx-annotate-filewatcher.path` | path unit | Watches the standard video, report, and preanonymized directories derived from `runtime.intakeDirs.importRoot`. |
 | `lx-annotate-filewatcher.service` | path-triggered oneshot | Runs `lx-annotate-watch --once` after migrations/base data and the master-key check. It drains files already present in the watched intake directories instead of running a permanent watcher process. |
-| `lx-annotate-sap-import.path` | path unit | Watches `runtime.intakeDirs.sap` for `*.zip` drops. |
+| `lx-annotate-sap-import.path` | path unit | Watches the derived `sap_import` directory for `*.zip` drops. |
 | `lx-annotate-sap-import.service` | path-triggered oneshot | Waits for each SAP IS-H zip to become stable, converts it with `lx-annotate-import-sap`, writes preanonymized watcher payload into the preanonymized intake directory, and moves the original zip to processed or failed storage. |
 | `lx-annotate-export-frames.service` | manual oneshot | Runs `lx-annotate-export-frames` and writes frame export output below the protected runtime storage tree. It is not started by a boot target. |
 | `lx-annotate-video-streamable-migration.service` | manual oneshot | Backfills raw and processed streamable video artifacts into the protected streamable-video subtree according to lx-annotate's active storage policy. It is intentionally operator-started. |
 | `lx-annotate-acceptance.service` | manual oneshot | Runs Django critical checks, verifies encrypted storage, and fetches the Vite manifest through the local TLS Nginx vhost. Use it as a post-deploy smoke test. |
 
-The intake directory contract is centralized under `runtime.intakeDirs`. Defaults
-mirror lx-annotate `secretspec.toml` names such as `data/import/video_import`
-and `data/import/report_import`; Nix resolves `data/...` against
-`runtime.encryptedDataDir`.
+The intake directory contract has one setting, `runtime.intakeDirs.importRoot`.
+All standard drop and staging directories are derived from that root, and the
+application receives only the canonical `DATA_DIR` environment variable.
 
 ### Celery Worker Units
 
@@ -262,12 +261,12 @@ intake path.
 
 | Operator path | Mover behavior | Watcher contract |
 | --- | --- | --- |
-| `Video_Input` desktop link | path-triggered source, copied into mover staging, then published to `runtime.intakeDirs.video` | `lx-annotate-filewatcher.path` watches the resolved video dir and the service exports `WATCHER_VIDEO_DIR` |
-| `PDF_Input` desktop link | path-triggered source, copied into mover staging, then published to `runtime.intakeDirs.report` | `lx-annotate-filewatcher.path` watches the resolved report dir and the service exports `WATCHER_REPORT_DIR` |
-| `preanonymized_import` desktop link | direct service-user access path, not moved by `move-my-files` | `lx-annotate-filewatcher.path` watches the resolved preanonymized dir and exports `WATCHER_PREANONYMIZED_DIR` |
+| `Video_Input` desktop link | path-triggered source, copied into mover staging, then published below `runtime.intakeDirs.importRoot` | `lx-annotate-filewatcher.path` watches the derived `video_import` directory |
+| `PDF_Input` desktop link | path-triggered source, copied into mover staging, then published below `runtime.intakeDirs.importRoot` | `lx-annotate-filewatcher.path` watches the derived `report_import` directory |
+| `preanonymized_import` desktop link | direct service-user access path, not moved by `move-my-files` | `lx-annotate-filewatcher.path` watches the derived `preanonymized_import` directory |
 | `sap_import` desktop link | direct service-user access path for SAP intake | handled by SAP import services, not by the file watcher path unit |
 
-The mover staging directory is `runtime.intakeDirs.moverStaging`. It is
+The mover staging directory is `.move-my-files-staging` below the import root. It is
 intentionally not watched. `move-my-files` first copies operator input into that
 staging tree, fixes ownership and permissions, then moves top-level staged
 entries into the watched video/report intake directories. Source files are
@@ -279,7 +278,7 @@ For video entries, `move-my-files` invokes the lx-annotate/endoreg-db
 `transcode_video` management command before publishing into the watched intake
 directory. That command uses the existing `ffmpeg_wrapper` encoder selection and
 writes the standard watcher format (H.264, `yuv420p`, full color range) into
-`runtime.intakeDirs.video`. The mover does not delete the source until the
+the derived `video_import` directory. The mover does not delete the source until the
 transcode command succeeds.
 
 The watcher service runs as the same service user and group as the mover. Wheel

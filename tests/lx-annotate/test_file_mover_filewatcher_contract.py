@@ -118,13 +118,11 @@ def _file_mover_host_matrix() -> dict[str, Any]:
                   else
                     {};
                 resolvedIntakeDirs = {
-                  video = resolveRuntimeDataPath lxCfg.runtime.intakeDirs.video;
-                  report = resolveRuntimeDataPath lxCfg.runtime.intakeDirs.report;
-                  preanonymized =
-                    resolveRuntimeDataPath lxCfg.runtime.intakeDirs.preanonymized;
-                  sap = resolveRuntimeDataPath lxCfg.runtime.intakeDirs.sap;
-                  moverStaging =
-                    resolveRuntimeDataPath lxCfg.runtime.intakeDirs.moverStaging;
+                  video = "${resolveRuntimeDataPath lxCfg.runtime.intakeDirs.importRoot}/video_import";
+                  report = "${resolveRuntimeDataPath lxCfg.runtime.intakeDirs.importRoot}/report_import";
+                  preanonymized = "${resolveRuntimeDataPath lxCfg.runtime.intakeDirs.importRoot}/preanonymized_import";
+                  sap = "${resolveRuntimeDataPath lxCfg.runtime.intakeDirs.importRoot}/sap_import";
+                  moverStaging = "${resolveRuntimeDataPath lxCfg.runtime.intakeDirs.importRoot}/.move-my-files-staging";
                 };
                 tmpfiles = cfg.systemd.tmpfiles.rules;
               };
@@ -156,9 +154,8 @@ def test_file_mover_publishes_into_filewatcher_intake_contract() -> None:
         resolved["report"],
         resolved["preanonymized"],
     ]
-    assert watcher_env["WATCHER_VIDEO_DIR"] == resolved["video"]
-    assert watcher_env["WATCHER_REPORT_DIR"] == resolved["report"]
-    assert watcher_env["WATCHER_PREANONYMIZED_DIR"] == resolved["preanonymized"]
+    assert watcher_env["DATA_DIR"] == "/var/lib/lx-annotate/data"
+    assert not any(key.startswith("WATCHER_") for key in watcher_env)
     assert resolved["moverStaging"] not in watcher_path["PathChanged"]
 
 
@@ -213,11 +210,8 @@ def test_all_file_mover_hosts_publish_into_filewatcher_intake_contract() -> None
             resolved["preanonymized"],
         ], host_name
         assert resolved["moverStaging"] not in watcher_path["PathChanged"], host_name
-        assert watcher_env["WATCHER_VIDEO_DIR"] == resolved["video"], host_name
-        assert watcher_env["WATCHER_REPORT_DIR"] == resolved["report"], host_name
-        assert watcher_env["WATCHER_PREANONYMIZED_DIR"] == resolved["preanonymized"], (
-            host_name
-        )
+        assert watcher_env["DATA_DIR"].endswith("/data"), host_name
+        assert not any(key.startswith("WATCHER_") for key in watcher_env), host_name
 
         # PathChanged handles normal arrivals. The periodic timer retries files
         # which were incomplete, temporarily unprocessable, or already present
@@ -472,7 +466,7 @@ def test_file_mover_transcodes_video_before_publish() -> None:
 
     assert "transcode_video" in contract["fileMover"]["transcodeVideoCommand"]
     assert "export_video_transcode_fallback_env()" in source
-    assert "WATCHER_VIDEO_DIR" in contract["fileMover"]["transcodeEnvironmentScript"]
+    assert "DATA_DIR" in contract["fileMover"]["transcodeEnvironmentScript"]
     assert "FFMPEG_TRANSCODE_TIMEOUT_SECONDS" in source
     assert "--input-dir" in contract["fileMover"]["transcodeVideoCommand"]
     assert "--filename" in contract["fileMover"]["transcodeVideoCommand"]

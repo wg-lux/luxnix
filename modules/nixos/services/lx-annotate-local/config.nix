@@ -105,13 +105,6 @@ let
     proxy_send_timeout 21600s;
     send_timeout 21600s;
 
-    # Explicit reverse-proxy contract used by Django.
-    proxy_set_header Host $host;
-    proxy_set_header X-Forwarded-Host $host;
-    proxy_set_header X-Forwarded-Proto https;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Real-IP $remote_addr;
-
     # Never trust an incoming value for this header. Replace it with the
     # result of Nginx client-certificate verification.
     proxy_set_header X-Client-Cert-Verified $ssl_client_verify;

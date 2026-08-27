@@ -56,13 +56,13 @@ let
   # must not be treated as an independent runtime root.
   runtimeStorageRootPath = "${runtimeDataRootPath}/storage";
   runtimeIoImportRootPath = resolveRuntimeDataPath cfg.runtime.intakeDirs.importRoot;
-  runtimeWatcherVideoDirPath = resolveRuntimeDataPath cfg.runtime.intakeDirs.video;
-  runtimeWatcherReportDirPath = resolveRuntimeDataPath cfg.runtime.intakeDirs.report;
-  runtimeWatcherPreanonymizedDirPath = resolveRuntimeDataPath cfg.runtime.intakeDirs.preanonymized;
-  runtimeSapImportDirPath = resolveRuntimeDataPath cfg.runtime.intakeDirs.sap;
-  runtimeSapImportProcessedDirPath = resolveRuntimeDataPath cfg.runtime.intakeDirs.sapProcessed;
-  runtimeSapImportFailedDirPath = resolveRuntimeDataPath cfg.runtime.intakeDirs.sapFailed;
-  runtimeMoverStagingDirPath = resolveRuntimeDataPath cfg.runtime.intakeDirs.moverStaging;
+  runtimeWatcherVideoDirPath = "${runtimeIoImportRootPath}/video_import";
+  runtimeWatcherReportDirPath = "${runtimeIoImportRootPath}/report_import";
+  runtimeWatcherPreanonymizedDirPath = "${runtimeIoImportRootPath}/preanonymized_import";
+  runtimeSapImportDirPath = "${runtimeIoImportRootPath}/sap_import";
+  runtimeSapImportProcessedDirPath = "${runtimeIoImportRootPath}/sap_import_processed";
+  runtimeSapImportFailedDirPath = "${runtimeIoImportRootPath}/sap_import_failed";
+  runtimeMoverStagingDirPath = "${runtimeIoImportRootPath}/.move-my-files-staging";
   runtimeStreamableVideoRootPath = "${runtimeStorageRootPath}/streamable_videos";
   runtimeStreamableVideoRawRootPath = "${runtimeStreamableVideoRootPath}/raw";
   runtimeStreamableVideoProcessedRootPath = "${runtimeStreamableVideoRootPath}/processed";

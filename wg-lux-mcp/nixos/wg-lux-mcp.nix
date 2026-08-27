@@ -41,8 +41,6 @@ let
   };
 in
 {
-  imports = [ ../../modules/nixos/services/wg-lux-features/default.nix ];
-
   options.services.wg-lux-mcp = {
     enable = lib.mkEnableOption "wg-lux read-only MCP server";
     package = lib.mkOption {

@@ -181,6 +181,11 @@
           nix-topology.overlays.default
           (final: _prev: {
             lx-annotate = inputs.lx-annotate.packages.${final.stdenv.hostPlatform.system}.default;
+            lx-annotate-feature-specifications = final.runCommand "lx-annotate-feature-specifications" { } ''
+              mkdir -p "$out/share/lx-annotate/features"
+              cp ${inputs.lx-annotate}/feature-tracking/*.yml \
+                "$out/share/lx-annotate/features/"
+            '';
           })
         ];
 

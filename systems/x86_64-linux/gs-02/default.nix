@@ -132,6 +132,9 @@ lib.foldl' lib.recursiveUpdate
       services.luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl = "redis://172.16.255.14:6380/1";
     }
     {
+      services.luxnix.lxAnnotateLocal.runtime.llmInferenceWorker.mode = "always";
+    }
+    {
       services.luxnix.lxAnnotateLocal.runtime.trainingWorker.cudaVisibleDevices = "0";
     }
     {

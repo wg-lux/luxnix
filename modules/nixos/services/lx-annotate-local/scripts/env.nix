@@ -24,9 +24,6 @@ let
     ;
   inherit (runtime.paths)
     runtimeRootPath
-    runtimeWatcherVideoDirPath
-    runtimeWatcherReportDirPath
-    runtimeWatcherPreanonymizedDirPath
     runtimeStreamableVideoRootPath
     runtimeStreamableVideoRawRootPath
     runtimeStreamableVideoProcessedRootPath
@@ -97,10 +94,8 @@ rec {
     WORKING_DIR = runtimeWorkingDir;
     ASSET_DIR = envAssetDir;
     XDG_DATA_HOME = runtimeRootPath;
+    DATA_DIR = envDataDir;
     LX_ANNOTATE_ENCRYPTED_DATA_DIR = envDataDir;
-    WATCHER_VIDEO_DIR = runtimeWatcherVideoDirPath;
-    WATCHER_REPORT_DIR = runtimeWatcherReportDirPath;
-    WATCHER_PREANONYMIZED_DIR = runtimeWatcherPreanonymizedDirPath;
     DJANGO_HOST = "127.0.0.1";
     DJANGO_PORT = envDjangoPort;
     DJANGO_STATIC_ROOT = packageStaticRoot;
@@ -234,13 +229,11 @@ rec {
 
     lx_annotate_export_storage_env() {
       local data_root="$1"
+      export DATA_DIR="$data_root"
       export LX_ANNOTATE_ENCRYPTED_DATA_DIR="$data_root"
       export LX_ANNOTATE_STREAMABLE_VIDEO_ROOT="$data_root/storage/streamable_videos"
       export LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT="$data_root/storage/streamable_videos/raw"
       export LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT="$data_root/storage/streamable_videos/processed"
-      export WATCHER_VIDEO_DIR="${runtimeWatcherVideoDirPath}"
-      export WATCHER_REPORT_DIR="${runtimeWatcherReportDirPath}"
-      export WATCHER_PREANONYMIZED_DIR="${runtimeWatcherPreanonymizedDirPath}"
     }
 
     lx_annotate_export_encryption_env() {

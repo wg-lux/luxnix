@@ -39,7 +39,7 @@ def test_package_specification_is_semantic_and_assessment_free() -> None:
 def test_package_exporters_whitelist_only_immutable_fields() -> None:
     for path in (
         Path("/home/admin/endoreg-db/package.nix"),
-        Path("/home/admin/dev/lx-annotate/package.nix"),
+        Path("/home/admin/dev/lx-annotate/feature-package.nix"),
     ):
         source = path.read_text(encoding="utf-8")
         assert "top_keys" in source
@@ -50,11 +50,54 @@ def test_package_exporters_whitelist_only_immutable_fields() -> None:
 
 
 @pytest.mark.skipif(shutil.which("nix") is None, reason="Nix is unavailable")
+def test_lx_annotate_registry_uses_only_the_lightweight_feature_package() -> None:
+    module = (
+        ROOT / "modules/nixos/services/wg-lux-features/default.nix"
+    ).read_text(encoding="utf-8")
+    assert "package = pkgs.lx-annotate-feature-specifications;" in module
+    assert "pkgs.lx-annotate." not in module
+    assert "package = pkgs.lx-annotate;" not in module
+
+    expression = f'''let
+      basePkgs = import <nixpkgs> {{ system = "x86_64-linux"; }};
+      featurePackage = basePkgs.runCommand "feature-only" {{ }}
+        "mkdir -p $out/share/lx-annotate/features";
+      pkgs = basePkgs.extend (_final: _prev: {{
+        lx-annotate-feature-specifications = featurePackage;
+        lx-annotate = throw "the full application package must not be evaluated";
+      }});
+      evaluated = import <nixpkgs/nixos> {{
+        configuration = {{
+          nixpkgs.pkgs = pkgs;
+          imports = [ {ROOT}/modules/nixos/services/wg-lux-features/default.nix ];
+          services.wg-lux-features.enable = true;
+        }};
+      }};
+      selected =
+        evaluated.config.services.wg-lux-features.providers.lx-annotate.package;
+    in {{
+      expected = featurePackage.outPath;
+      selected = selected.outPath;
+    }}'''
+    result = subprocess.run(
+        ["nix", "eval", "--impure", "--json", "--expr", expression],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    outputs = json.loads(result.stdout)
+    assert outputs["selected"] == outputs["expected"]
+
+
+@pytest.mark.skipif(shutil.which("nix") is None, reason="Nix is unavailable")
 def test_nixos_registry_uses_exact_configured_package_outputs(tmp_path: Path) -> None:
     expression = f'''let
       pkgs = import <nixpkgs> {{ system = "x86_64-linux"; }};
-      packageA = pkgs.runCommand "provider-a" {{ }} "mkdir -p $out/share/example/features";
-      packageB = pkgs.runCommand "provider-b" {{ }} "mkdir -p $out/share/example/features";
+      packageA = pkgs.runCommand "provider-a" {{ }}
+        "mkdir -p $out/share/example/features";
+      packageB = pkgs.runCommand "provider-b" {{ }}
+        "mkdir -p $out/share/example/features";
       evaluate = package: import <nixpkgs/nixos> {{
         configuration = {{ imports = [
           {ROOT}/modules/nixos/services/wg-lux-features/default.nix
@@ -76,7 +119,8 @@ def test_nixos_registry_uses_exact_configured_package_outputs(tmp_path: Path) ->
       in {{
         package_store_path = provider.package.outPath;
         feature_root = "${{provider.package}}/${{provider.featureSubdir}}";
-        registry_source = toString config.environment.etc."wg-lux/features/providers.json".source;
+        registry_source =
+          toString config.environment.etc."wg-lux/features/providers.json".source;
       }};
     in {{ a = inspect packageA; b = inspect packageB; }}'''
     result = subprocess.run(
@@ -94,7 +138,7 @@ def test_nixos_registry_uses_exact_configured_package_outputs(tmp_path: Path) ->
     assert provider_a["registry_source"] != provider_b["registry_source"]
 
 
-def test_mcp_service_consumes_generated_registry_without_feature_checkout_fallback() -> None:
+def test_mcp_service_consumes_registry_without_checkout_fallback() -> None:
     module = (ROOT / "wg-lux-mcp/nixos/wg-lux-mcp.nix").read_text(encoding="utf-8")
     assert "WG_LUX_FEATURE_PROVIDER_REGISTRY" in module
     assert "WG_LUX_FEATURE_STATE_ROOT" in module

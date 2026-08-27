@@ -5,6 +5,7 @@ group_roles:
 group_services:
   luxnix.lxAnnotateLocal.runtime.celeryBroker.secureTransportConfirmed: "true"
   luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl: '"redis://172.16.255.14:6380/1"'
+  luxnix.lxAnnotateLocal.runtime.llmInferenceWorker.mode: '"always"'
   luxnix.lxAnnotateLocal.runtime.trainingWorker.cudaVisibleDevices: '"0"'
   luxnix.lxAnnotateLocal.runtime.trainingWorker.mode: '"manual"'
   luxnix.ollama.acceleration: '"cuda"'

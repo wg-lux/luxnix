@@ -265,41 +265,6 @@ let
         default = "data/import";
         description = "Runtime intake root below runtime.encryptedDataDir.";
       };
-      video = mkOption {
-        type = types.str;
-        default = "data/import/video_import";
-        description = "Video intake directory exported as WATCHER_VIDEO_DIR.";
-      };
-      report = mkOption {
-        type = types.str;
-        default = "data/import/report_import";
-        description = "Report intake directory exported as WATCHER_REPORT_DIR.";
-      };
-      preanonymized = mkOption {
-        type = types.str;
-        default = "data/import/preanonymized_import";
-        description = "Preanonymized intake directory exported as WATCHER_PREANONYMIZED_DIR.";
-      };
-      sap = mkOption {
-        type = types.str;
-        default = "data/import/sap_import";
-        description = "SAP IS-H ZIP drop directory.";
-      };
-      sapProcessed = mkOption {
-        type = types.str;
-        default = "data/import/sap_import_processed";
-        description = "Directory where successfully converted SAP IS-H ZIP drops are moved.";
-      };
-      sapFailed = mkOption {
-        type = types.str;
-        default = "data/import/sap_import_failed";
-        description = "Directory where failed SAP IS-H ZIP drops are moved.";
-      };
-      moverStaging = mkOption {
-        type = types.str;
-        default = "data/import/.move-my-files-staging";
-        description = "Staging directory used by move-my-files before publishing watcher drops.";
-      };
     };
   };
   managedEncryptedDataType = types.submodule {

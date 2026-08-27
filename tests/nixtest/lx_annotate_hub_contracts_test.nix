@@ -63,7 +63,10 @@ in
           assert_file_contains ${lxAnnotateConfig} 'proxy_set_header X-Client-Cert-Verified \$ssl_client_verify;' "nginx must forward client certificate verification to Django"
           assert_file_contains ${lxAnnotateConfig} 'if [(]\$ssl_client_verify != SUCCESS[)]' "nginx must enforce verified client certificates on transfer locations"
           assert_file_contains ${lxAnnotateConfig} 'return 403;' "nginx must reject unverified transfer clients before proxying"
-          assert_file_contains ${lxAnnotateConfig} 'proxy_set_header X-Forwarded-Proto https;' "nginx must provide a fixed secure transport assertion to Django"
+          assert_file_contains ${lxAnnotateConfig} 'recommendedProxySettings = true;' "nginx must provide the standard reverse-proxy headers"
+          if grep -Eq 'proxy_set_header (Host|X-Forwarded-|X-Real-IP)' ${lxAnnotateConfig}; then
+            fail "transfer-specific nginx config must not duplicate standard reverse-proxy headers"
+          fi
           assert_file_contains ${lxAnnotateConfig} 'ssl_client_certificate \$[{]toString cfg\.hub\.transferApi\.clientCaFile};' "nginx must use the configured transfer client CA bundle"
           assert_file_contains ${lxAnnotateConfig} 'ssl_verify_client optional;' "nginx must request and verify supplied client certificates when transfer API is enabled"
         '';

@@ -216,13 +216,11 @@ def _gc_02_contract() -> dict[str, Any]:
             };
             resolvedIntakeDirs = {
               importRoot = resolveRuntimeDataPath lxCfg.runtime.intakeDirs.importRoot;
-              video = resolveRuntimeDataPath lxCfg.runtime.intakeDirs.video;
-              report = resolveRuntimeDataPath lxCfg.runtime.intakeDirs.report;
-              preanonymized =
-                resolveRuntimeDataPath lxCfg.runtime.intakeDirs.preanonymized;
-              sap = resolveRuntimeDataPath lxCfg.runtime.intakeDirs.sap;
-              moverStaging =
-                resolveRuntimeDataPath lxCfg.runtime.intakeDirs.moverStaging;
+              video = "${resolveRuntimeDataPath lxCfg.runtime.intakeDirs.importRoot}/video_import";
+              report = "${resolveRuntimeDataPath lxCfg.runtime.intakeDirs.importRoot}/report_import";
+              preanonymized = "${resolveRuntimeDataPath lxCfg.runtime.intakeDirs.importRoot}/preanonymized_import";
+              sap = "${resolveRuntimeDataPath lxCfg.runtime.intakeDirs.importRoot}/sap_import";
+              moverStaging = "${resolveRuntimeDataPath lxCfg.runtime.intakeDirs.importRoot}/.move-my-files-staging";
             };
           };
           intakeDirs = lxCfg.runtime.intakeDirs;
@@ -1315,16 +1313,9 @@ def test_lx_annotate_filewatcher_service_config_uses_wheel_runtime_paths() -> No
     assert "/var/lib/lx-annotate/data" in service_config["ReadWritePaths"]
 
 
-def test_lx_annotate_intake_dirs_match_secretspec_style_defaults() -> None:
+def test_lx_annotate_intake_contract_has_one_configurable_root() -> None:
     assert _gc_02_contract()["intakeDirs"] == {
         "importRoot": "data/import",
-        "video": "data/import/video_import",
-        "report": "data/import/report_import",
-        "preanonymized": "data/import/preanonymized_import",
-        "sap": "data/import/sap_import",
-        "sapProcessed": "data/import/sap_import_processed",
-        "sapFailed": "data/import/sap_import_failed",
-        "moverStaging": "data/import/.move-my-files-staging",
     }
 
 
@@ -1337,22 +1328,11 @@ def test_lx_annotate_local_exposes_generic_runtime_env_override() -> None:
     assert "// cfg.runtime.extraEnvironment;" in env_source
 
 
-def test_lx_annotate_filewatcher_exports_central_intake_dirs() -> None:
+def test_lx_annotate_filewatcher_exports_only_canonical_data_root() -> None:
     environment = _gc_02_contract()["fileWatcherServiceConfig"]["Environment"]
 
-    assert (
-        "WATCHER_VIDEO_DIR=/var/lib/lx-annotate/data/import/video_import" in environment
-    )
-    assert (
-        "WATCHER_REPORT_DIR=/var/lib/lx-annotate/data/import/report_import"
-        in environment
-    )
-    assert (
-        "WATCHER_PREANONYMIZED_DIR=/var/lib/lx-annotate/data/import/preanonymized_import"
-        in environment
-    )
-    assert "WATCHER_VIDEO_DIR=/var/lib/lx-annotate/data/videos" not in environment
-    assert "WATCHER_REPORT_DIR=/var/lib/lx-annotate/data/report" not in environment
+    assert "DATA_DIR=/var/lib/lx-annotate/data" in environment
+    assert not any(value.startswith("WATCHER_") for value in environment)
 
 
 def test_lx_annotate_filewatcher_path_triggers_on_runtime_intake_drops() -> None:
@@ -1513,9 +1493,16 @@ def test_hub_transfer_api_extend_modules_enables_nginx_and_backup_surfaces() -> 
         "if ($ssl_client_verify != SUCCESS)" in evaluated["transferLocationExtraConfig"]
     )
     assert "return 403;" in evaluated["transferLocationExtraConfig"]
-    assert (
-        "proxy_set_header X-Forwarded-Proto https;"
-        in evaluated["transferLocationExtraConfig"]
+    standard_proxy_headers = (
+        "proxy_set_header Host ",
+        "proxy_set_header X-Forwarded-Host ",
+        "proxy_set_header X-Forwarded-Proto ",
+        "proxy_set_header X-Forwarded-For ",
+        "proxy_set_header X-Real-IP ",
+    )
+    assert not any(
+        header in evaluated["transferLocationExtraConfig"]
+        for header in standard_proxy_headers
     )
     assert (
         "proxy_set_header X-Client-Cert-Verified $ssl_client_verify;"

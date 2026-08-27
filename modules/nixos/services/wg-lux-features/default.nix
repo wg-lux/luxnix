@@ -7,23 +7,10 @@
 
 let
   cfg = config.services.wg-lux-features;
-  dependencyProviders = pkgs.lx-annotate.featureProviders or { };
   defaultProviders = {
     lx-annotate = {
-      package = pkgs.lx-annotate;
+      package = pkgs.lx-annotate-feature-specifications;
       featureSubdir = "share/lx-annotate/features";
-    };
-  }
-  // lib.optionalAttrs (dependencyProviders ? endoreg-db) {
-    endoreg-db = {
-      package = dependencyProviders.endoreg-db;
-      featureSubdir = "share/endoreg-db/features";
-    };
-  }
-  // lib.optionalAttrs (dependencyProviders ? lx-data-models) {
-    lx-data-models = {
-      package = dependencyProviders.lx-data-models;
-      featureSubdir = "share/lx-data-models/features";
     };
   };
   providerType = lib.types.submodule (
@@ -74,7 +61,7 @@ in
     providers = lib.mkOption {
       type = lib.types.attrsOf providerType;
       default = defaultProviders;
-      defaultText = lib.literalExpression "the lx-annotate closure's feature providers";
+      defaultText = lib.literalExpression "the lightweight lx-annotate feature specification package";
       description = "Deployed package outputs resolved into the canonical provider registry.";
     };
     stateRoot = lib.mkOption {

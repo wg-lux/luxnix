@@ -255,41 +255,6 @@ let
         default = "data/import";
         description = "Runtime intake root. Relative values are resolved below runtime.encryptedDataDir; secretspec-style data/... values are resolved by replacing the leading data segment.";
       };
-      video = mkOption {
-        type = types.str;
-        default = "data/import/video_import";
-        description = "Video intake directory exported as WATCHER_VIDEO_DIR.";
-      };
-      report = mkOption {
-        type = types.str;
-        default = "data/import/report_import";
-        description = "Report intake directory exported as WATCHER_REPORT_DIR.";
-      };
-      preanonymized = mkOption {
-        type = types.str;
-        default = "data/import/preanonymized_import";
-        description = "Preanonymized intake directory exported as WATCHER_PREANONYMIZED_DIR.";
-      };
-      sap = mkOption {
-        type = types.str;
-        default = "data/import/sap_import";
-        description = "SAP IS-H ZIP drop directory.";
-      };
-      sapProcessed = mkOption {
-        type = types.str;
-        default = "data/import/sap_import_processed";
-        description = "Directory where successfully converted SAP IS-H ZIP drops are moved.";
-      };
-      sapFailed = mkOption {
-        type = types.str;
-        default = "data/import/sap_import_failed";
-        description = "Directory where failed SAP IS-H ZIP drops are moved.";
-      };
-      moverStaging = mkOption {
-        type = types.str;
-        default = "data/import/.move-my-files-staging";
-        description = "Staging directory used by move-my-files before publishing drops into watcher intake directories.";
-      };
     };
   };
 in
@@ -377,8 +342,8 @@ in
           wheelPath = mkOption {
             type = types.nullOr types.path;
             default = pkgs.fetchurl {
-              url = "https://files.pythonhosted.org/packages/d4/8d/d01d7edefbe3c79fdce03210a540011ee89ba989a09673d7c00a938c0c8c/lx_annotate-1.0.4-py3-none-any.whl";
-              hash = "sha256-u4zQEwAse+42Hm9Z61jaaiOxZA/H+AlAXwCMPAqfhUY=";
+              url = "https://files.pythonhosted.org/packages/7b/dd/dba6415ffbe4f0692630766d4f8d1be6b19c439f68be45f679fbe39a3db1/lx_annotate-1.1.1-py3-none-any.whl";
+              hash = "sha256-K1OZJcQB+X8ybFQMzuj9sHZz9GZeLLqmSxTZlNINzoo=";
             };
             description = "Path to the lx-annotate wheel artifact used in wheel mode.";
           };
