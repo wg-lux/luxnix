@@ -122,35 +122,38 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    services.wg-lux-features.enable = true;
     networking.hosts."127.0.0.1" = [ cfg.hostname ];
 
-    services.luxnix.lxSsl = {
-      enable = lib.mkDefault true;
-      extraDnsNames = lib.mkAfter [ cfg.hostname ];
-    };
+    services = {
+      wg-lux-features.enable = true;
 
-    services.nginx = {
-      enable = true;
-      recommendedProxySettings = true;
-      recommendedTlsSettings = true;
-      virtualHosts.${cfg.hostname} = {
-        forceSSL = true;
-        sslCertificate = sslCfg.certPath;
-        sslCertificateKey = sslCfg.keyPath;
-        extraConfig = ''
-          ssl_stapling off;
-          ssl_stapling_verify off;
-        '';
-        locations."/" = {
-          proxyPass = "http://${cfg.host}:${toString cfg.port}";
+      luxnix.lxSsl = {
+        enable = lib.mkDefault true;
+        extraDnsNames = lib.mkAfter [ cfg.hostname ];
+      };
+
+      nginx = {
+        enable = true;
+        recommendedProxySettings = true;
+        recommendedTlsSettings = true;
+        virtualHosts.${cfg.hostname} = {
+          forceSSL = true;
+          sslCertificate = sslCfg.certPath;
+          sslCertificateKey = sslCfg.keyPath;
           extraConfig = ''
-            proxy_http_version 1.1;
-            proxy_buffering off;
-            proxy_cache off;
-            proxy_read_timeout 3600s;
-            proxy_set_header Host $host;
+            ssl_stapling off;
+            ssl_stapling_verify off;
           '';
+          locations."/" = {
+            proxyPass = "http://${cfg.host}:${toString cfg.port}";
+            extraConfig = ''
+              proxy_http_version 1.1;
+              proxy_buffering off;
+              proxy_cache off;
+              proxy_read_timeout 3600s;
+              proxy_set_header Host $host;
+            '';
+          };
         };
       };
     };
@@ -201,7 +204,8 @@ in
         ReadOnlyPaths = [
           config.services.wg-lux-features.registryPath
           config.services.wg-lux-features.stateRoot
-        ] ++ lib.mapAttrsToList (
+        ]
+        ++ lib.mapAttrsToList (
           _provider: provider: "${provider.package}/${provider.featureSubdir}"
         ) config.services.wg-lux-features.providers;
         ProtectKernelTunables = true;

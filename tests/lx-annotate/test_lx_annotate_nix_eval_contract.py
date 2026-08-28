@@ -295,6 +295,14 @@ def _live_host_contract() -> dict[str, Any]:
             requireMtls = gs02.services.luxnix.lxAnnotateLocal.hub.transferApi.requireMtls;
             clientCaFile = toString gs02.services.luxnix.lxAnnotateLocal.hub.transferApi.clientCaFile;
             recipientPrivateKeyFiles = gs02.services.luxnix.lxAnnotateLocal.hub.transferApi.recipientPrivateKeyFiles;
+            maxUploadBytes = gs02.services.luxnix.lxAnnotateLocal.hub.transferApi.maxUploadBytes;
+            httpTimeoutSeconds = gs02.services.luxnix.lxAnnotateLocal.hub.transferApi.httpTimeoutSeconds;
+            transferLocationExtraConfig = gs02.services.nginx.virtualHosts.${gs02HostName}.locations."/api/media/hub/transfers/".extraConfig;
+            redis = {
+              inherit (gs02.services.redis.servers."lx-annotate") enable port bind openFirewall appendOnly save settings;
+            };
+            celeryBrokerUrl = gs02.systemd.services.lx-annotate.environment.CELERY_BROKER_URL;
+            celeryBroker = gs02.services.luxnix.lxAnnotateLocal.runtime.celeryBroker;
             provisionedNodeKeys = map
               (node: node.nodeKey)
               gs02.services.luxnix.lxAnnotateLocal.hub.nodeProvisioning.nodes;
@@ -1634,11 +1642,38 @@ def test_lx_annotate_gs02_transfer_api_and_vault_live_contract() -> None:
     assert "publish-lx-hub-client-ca" in evaluated["caPublisherExecStart"]
 
 
+def test_lx_annotate_gs02_large_transfer_http_and_local_redis_contract() -> None:
+    evaluated = _live_host_contract()["hubTransfer"]
+
+    assert evaluated["maxUploadBytes"] == 50 * 1024 * 1024 * 1024
+    assert evaluated["httpTimeoutSeconds"] == 6 * 60 * 60
+    transfer_nginx = evaluated["transferLocationExtraConfig"]
+    assert "proxy_http_version 1.1;" in transfer_nginx
+    assert "client_max_body_size 53687091200;" in transfer_nginx
+    assert "client_body_timeout 21600s;" in transfer_nginx
+    assert "proxy_request_buffering off;" in transfer_nginx
+    assert "proxy_buffering off;" in transfer_nginx
+    assert "proxy_read_timeout 21600s;" in transfer_nginx
+    assert "proxy_send_timeout 21600s;" in transfer_nginx
+    assert evaluated["redis"]["enable"] is True
+    assert evaluated["redis"]["port"] == 6379
+    assert evaluated["redis"]["bind"] == "127.0.0.1"
+    assert evaluated["redis"]["openFirewall"] is False
+    assert evaluated["redis"]["appendOnly"] is False
+    assert evaluated["redis"]["save"] == []
+    assert evaluated["redis"]["settings"]["dir"] == "/run/redis-lx-annotate"
+    assert evaluated["celeryBrokerUrl"] == "redis://localhost:6379/1"
+    assert evaluated["celeryBroker"]["requireSecureTransport"] is False
+    assert evaluated["celeryBroker"]["secureTransportConfirmed"] is False
+
+
 def test_lx_annotate_gc02_outbound_transfer_is_vault_backed_and_fail_closed() -> None:
     evaluated = _live_host_contract()["siteTransfer"]
 
     assert evaluated["outbound"]["enable"] is True
     assert evaluated["outbound"]["requireMtls"] is True
+    assert evaluated["outbound"]["requestTimeoutSeconds"] == 6 * 60 * 60
+    assert evaluated["outbound"]["staleAfterSeconds"] == 7 * 60 * 60
     assert (
         evaluated["outbound"]["caFile"]
         == "/etc/secrets/vault/hub-pki/vault-server-ca.pem"
@@ -1662,6 +1697,14 @@ def test_lx_annotate_gc02_outbound_transfer_is_vault_backed_and_fail_closed() ->
     assert "lx-annotate-hub-envelope-key-preflight.service" in evaluated["workerRequires"]
     assert (
         "LX_ANNOTATE_HUB_EXPORT_RECIPIENT_PUBLIC_KEY_FILE=/etc/secrets/vault/hub-pki/hub-recipient-current.pub.pem"
+        in evaluated["workerEnvironment"]
+    )
+    assert (
+        "LX_ANNOTATE_HUB_EXPORT_REQUEST_TIMEOUT_SECONDS=21600"
+        in evaluated["workerEnvironment"]
+    )
+    assert (
+        "LX_ANNOTATE_HUB_EXPORT_STALE_AFTER_SECONDS=25200"
         in evaluated["workerEnvironment"]
     )
     assert "lx-annotate-celery-hub-transfer-worker.service" in evaluated["envelopePreflightBefore"]
@@ -1696,6 +1739,8 @@ def test_all_active_gc_hosts_are_ready_for_fail_closed_hub_transfer() -> None:
         assert contract["runtimeMode"] == "wheel"
         assert contract["outbound"]["enable"] is True
         assert contract["outbound"]["requireMtls"] is True
+        assert contract["outbound"]["requestTimeoutSeconds"] == 6 * 60 * 60
+        assert contract["outbound"]["staleAfterSeconds"] == 7 * 60 * 60
         assert contract["outbound"]["caFile"] == (
             "/etc/secrets/vault/hub-pki/vault-server-ca.pem"
         )
@@ -1704,6 +1749,10 @@ def test_all_active_gc_hosts_are_ready_for_fail_closed_hub_transfer() -> None:
         )
         assert (
             "LX_ANNOTATE_HUB_EXPORT_RECIPIENT_PUBLIC_KEY_FILE=/etc/secrets/vault/hub-pki/hub-recipient-current.pub.pem"
+            in contract["workerEnvironment"]
+        )
+        assert (
+            "LX_ANNOTATE_HUB_EXPORT_REQUEST_TIMEOUT_SECONDS=21600"
             in contract["workerEnvironment"]
         )
         assert contract["nodeKeys"] == [host_name, "gs-02"]

@@ -126,10 +126,10 @@ lib.foldl' lib.recursiveUpdate
       roles.nginxHost.glm52.acme.email = "hild@coloreg.de";
     }
     {
-      services.luxnix.lxAnnotateLocal.runtime.celeryBroker.secureTransportConfirmed = true;
+      services.luxnix.lxAnnotateLocal.runtime.celeryBroker.secureTransportConfirmed = lib.mkForce false;
     }
     {
-      services.luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl = "redis://172.16.255.14:6380/1";
+      services.luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl = null;
     }
     {
       services.luxnix.lxAnnotateLocal.runtime.llmInferenceWorker.mode = "always";
@@ -331,6 +331,15 @@ lib.foldl' lib.recursiveUpdate
     }
     {
       services.luxnix.lxSsl.enable = true;
+    }
+    {
+      services.redis.servers."lx-annotate".appendOnly = lib.mkForce false;
+    }
+    {
+      services.redis.servers."lx-annotate".save = lib.mkForce [ ];
+    }
+    {
+      services.redis.servers."lx-annotate".settings.dir = lib.mkForce "/run/redis-lx-annotate";
     }
     {
       luxnix.dns.enable = true;

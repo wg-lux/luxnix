@@ -12,6 +12,19 @@ host_roles:
 
 host_services:
 
+  # Keep the hub broker host-local. The former shared broker on s-04 is not
+  # reachable, and plaintext Redis must not be exposed node-to-node.
+  luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl: "null"
+  luxnix.lxAnnotateLocal.runtime.celeryBroker.secureTransportConfirmed: "lib.mkForce false"
+
+  # gs-02 has no verified encrypted filesystem for Redis persistence yet.
+  # Keep queue data in /run and rely on database-backed reconciliation after a
+  # broker/host restart. Durable AOF is permitted only after the encrypted
+  # mount prerequisite in docs/gs-02-local-redis-broker-proposal.yml.
+  'redis.servers."lx-annotate".appendOnly': "lib.mkForce false"
+  'redis.servers."lx-annotate".save': "lib.mkForce [ ]"
+  'redis.servers."lx-annotate".settings.dir': 'lib.mkForce "/run/redis-lx-annotate"'
+
   # Central hub placement contract for protected processed-artifact storage.
   luxnix.hubStorage.hubClient.enable: "true"
   luxnix.hubStorage.hubClient.balancing.enable: "false"

@@ -82,6 +82,7 @@ let
     else
       null;
   endoregDbRevision = endoregDbSource.rev or "unversioned";
+  hubTransferHttpTimeout = "${toString cfg.hub.transferApi.httpTimeoutSeconds}s";
 
   hubTransferProxyExtraConfig = ''
     # The shared virtual host also serves browser traffic, so client
@@ -95,15 +96,17 @@ let
 
     # Stream large multipart uploads to Django instead of buffering the
     # complete file in Nginx temporary storage.
+    client_max_body_size ${toString cfg.hub.transferApi.maxUploadBytes};
+    client_body_timeout ${hubTransferHttpTimeout};
     proxy_request_buffering off;
     proxy_buffering off;
 
     # A processed video transfer may take considerably longer than an
     # ordinary browser/API request.
     proxy_connect_timeout 60s;
-    proxy_read_timeout 21600s;
-    proxy_send_timeout 21600s;
-    send_timeout 21600s;
+    proxy_read_timeout ${hubTransferHttpTimeout};
+    proxy_send_timeout ${hubTransferHttpTimeout};
+    send_timeout ${hubTransferHttpTimeout};
 
     # Never trust an incoming value for this header. Replace it with the
     # result of Nginx client-certificate verification.
@@ -1639,6 +1642,12 @@ in
         }
         {
           assertion =
+            !cfg.hub.outboundTransfer.enable
+            || cfg.hub.outboundTransfer.staleAfterSeconds > cfg.hub.outboundTransfer.requestTimeoutSeconds;
+          message = "hub.outboundTransfer.staleAfterSeconds must exceed requestTimeoutSeconds so recovery cannot race an active transfer request.";
+        }
+        {
+          assertion =
             !cfg.hub.outboundTransfer.enable || cfg.hub.outboundTransfer.clientCertificateFile != null;
           message = "services.luxnix.lxAnnotateLocal.hub.outboundTransfer.enable requires an outbound client certificate file.";
         }
@@ -1967,7 +1976,7 @@ in
             sslCertificate = sslCertPath;
             sslCertificateKey = sslKeyPath;
             extraConfig = ''
-              client_max_body_size 50G;
+              client_max_body_size ${cfg.django.maxRequestSize};
               proxy_request_buffering off;
             ''
             + optionalString sslCfg.enable ''

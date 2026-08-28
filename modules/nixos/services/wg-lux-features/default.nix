@@ -40,20 +40,16 @@ let
   );
   registry = {
     schema_version = "1.0";
-    providers = lib.mapAttrs (
-      _provider: provider: {
-        kind = "nix";
-        feature_root = "${provider.package}/${provider.featureSubdir}";
-        package_store_path = "${provider.package}";
-        drv_path = provider.package.drvPath;
-        inherit (provider) revision version;
-        system_generation = cfg.deploymentId;
-      }
-    ) cfg.providers;
+    providers = lib.mapAttrs (_provider: provider: {
+      kind = "nix";
+      feature_root = "${provider.package}/${provider.featureSubdir}";
+      package_store_path = "${provider.package}";
+      drv_path = provider.package.drvPath;
+      inherit (provider) revision version;
+      system_generation = cfg.deploymentId;
+    }) cfg.providers;
   };
-  registrySource = pkgs.writeText "wg-lux-feature-providers.json" (
-    builtins.toJSON registry
-  );
+  registrySource = pkgs.writeText "wg-lux-feature-providers.json" (builtins.toJSON registry);
 in
 {
   options.services.wg-lux-features = {

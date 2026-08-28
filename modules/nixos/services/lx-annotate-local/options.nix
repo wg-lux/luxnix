@@ -342,8 +342,8 @@ in
           wheelPath = mkOption {
             type = types.nullOr types.path;
             default = pkgs.fetchurl {
-              url = "https://files.pythonhosted.org/packages/32/ab/31d029300f7071857d2e6f2ff514b3a0b8d774605b9d616a2eed337010c8/lx_annotate-1.1.3-py3-none-any.whl";
-              hash = "sha256-/AzD+lMe3+v/c0uipScmn8OrYEfsYqYa3n7ZqzdshM0=";
+              url = "https://files.pythonhosted.org/packages/46/84/2e7a6ce45fe3ad37c64ef3088a581cda78b66f93dac70d334f42208bfd6f/lx_annotate-1.1.4-py3-none-any.whl";
+              hash = "sha256-tM6TfkBfgu35Vj965JYUBxGAkxCQ2Mp7/R//DsOlZOY=";
             };
             description = "Path to the lx-annotate wheel artifact used in wheel mode.";
           };
@@ -1418,6 +1418,11 @@ in
                   default = 50 * 1024 * 1024 * 1024;
                   description = "Maximum accepted processed-media upload size in bytes.";
                 };
+                httpTimeoutSeconds = mkOption {
+                  type = types.ints.positive;
+                  default = 6 * 60 * 60;
+                  description = "Nginx client-body and upstream I/O timeout for large hub transfer requests, in seconds.";
+                };
               };
             };
             default = { };
@@ -1466,9 +1471,14 @@ in
                   default = "5m";
                   description = "Systemd interval for dispatching bounded recovery of queued, stale, and retryable outbound transfers.";
                 };
+                requestTimeoutSeconds = mkOption {
+                  type = types.ints.positive;
+                  default = 6 * 60 * 60;
+                  description = "HTTP response timeout for synchronous registration imports and encrypted media apply, in seconds.";
+                };
                 staleAfterSeconds = mkOption {
                   type = types.ints.positive;
-                  default = 1800;
+                  default = 7 * 60 * 60;
                   description = "Age in seconds after which an unchanged outbound transfer is eligible for recovery.";
                 };
                 maxRetries = mkOption {

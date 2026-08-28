@@ -145,6 +145,7 @@ rec {
     ENDOREG_HUB_TRANSFER_MAX_UPLOAD_BYTES = toString cfg.hub.transferApi.maxUploadBytes;
     LX_ANNOTATE_HUB_EXPORT_AUTO_QUEUE = boolString cfg.hub.outboundTransfer.enable;
     LX_ANNOTATE_HUB_EXPORT_REQUIRE_MTLS = boolString cfg.hub.outboundTransfer.requireMtls;
+    LX_ANNOTATE_HUB_EXPORT_REQUEST_TIMEOUT_SECONDS = toString cfg.hub.outboundTransfer.requestTimeoutSeconds;
     LX_ANNOTATE_HUB_EXPORT_STALE_AFTER_SECONDS = toString cfg.hub.outboundTransfer.staleAfterSeconds;
     LX_ANNOTATE_HUB_EXPORT_MAX_RETRIES = toString cfg.hub.outboundTransfer.maxRetries;
     CELERY_BROKER_URL = celeryBrokerUrl;
