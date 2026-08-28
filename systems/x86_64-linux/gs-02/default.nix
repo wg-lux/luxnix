@@ -126,7 +126,7 @@ lib.foldl' lib.recursiveUpdate
       roles.nginxHost.glm52.acme.email = "hild@coloreg.de";
     }
     {
-      services.luxnix.lxAnnotateLocal.runtime.celeryBroker.secureTransportConfirmed = lib.mkForce false;
+      services.luxnix.lxAnnotateLocal.runtime.celeryBroker.secureTransportConfirmed = lib.mkForce true;
     }
     {
       services.luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl = null;

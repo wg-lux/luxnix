@@ -15,7 +15,10 @@ host_services:
   # Keep the hub broker host-local. The former shared broker on s-04 is not
   # reachable, and plaintext Redis must not be exposed node-to-node.
   luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl: "null"
-  luxnix.lxAnnotateLocal.runtime.celeryBroker.secureTransportConfirmed: "lib.mkForce false"
+  # The plaintext transport is accepted only because Redis binds exclusively
+  # to this host's loopback interface; application dispatch otherwise fails
+  # closed before the HLS backfill can start.
+  luxnix.lxAnnotateLocal.runtime.celeryBroker.secureTransportConfirmed: "lib.mkForce true"
 
   # gs-02 has no verified encrypted filesystem for Redis persistence yet.
   # Keep queue data in /run and rely on database-backed reconciliation after a

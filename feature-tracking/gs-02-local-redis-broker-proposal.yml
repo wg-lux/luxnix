@@ -8,16 +8,20 @@ proposal:
     Redis instance on 127.0.0.1:6379/1.
 
 incident_findings:
-  hub_transfer_failure_caused_by_redis: false
+  hub_transfer_failure_caused_by_redis: true
   registration_failure_cause: >-
-    The first successful receiver registration synchronously materialized
-    35,786 frame annotations and exceeded the sender's 60-second HTTP read
-    timeout. The receiver committed the transfer afterward and the next retry
-    reused it successfully.
-  separate_redis_outage: >-
-    gs-02 Celery workers cannot connect to redis://172.16.255.14:6380/1, so
-    asynchronous hub work remains unavailable even though it did not cause the
-    observed registration timeout.
+    Attempt 21 on 2026-08-28 reached gs-02 through mTLS, but Nginx returned 502
+    because lx-annotate was not listening on 127.0.0.1:8117. The web service
+    remained stopped after its required lx-annotate-hls-backfill dependency
+    rejected Celery dispatch while the loopback Redis transport confirmation
+    was false.
+  excluded_causes:
+    - Hub policy rejection.
+    - mTLS failure.
+    - Large video upload failure; registration never reached the application.
+  migration_state: >-
+    lx-annotate-migrate.service completed successfully at 14:00:31 with no
+    migrations to apply.
 
 security_decision:
   topology: host_local
@@ -50,7 +54,7 @@ source_change:
     - systems/x86_64-linux/gs-02/default.nix
   add_to_host_services:
     luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl: "null"
-    luxnix.lxAnnotateLocal.runtime.celeryBroker.secureTransportConfirmed: "lib.mkForce false"
+    luxnix.lxAnnotateLocal.runtime.celeryBroker.secureTransportConfirmed: "lib.mkForce true"
     'redis.servers."lx-annotate".appendOnly': "lib.mkForce false"
     'redis.servers."lx-annotate".save': "lib.mkForce [ ]"
     'redis.servers."lx-annotate".settings.dir': 'lib.mkForce "/run/redis-lx-annotate"'
@@ -71,6 +75,7 @@ large_video_http_transport:
 
 expected_evaluation:
   celery_broker_url: redis://localhost:6379/1
+  celery_broker_secure_transport_confirmed: true
   redis_unit: redis-lx-annotate.service
   redis_bind: 127.0.0.1
   redis_port: 6379
@@ -115,6 +120,7 @@ acceptance:
     - sudo systemctl is-active redis-lx-annotate.service
     - redis-cli -h 127.0.0.1 -p 6379 PING
     - sudo grep '^CELERY_BROKER_URL=' /var/lib/lx-annotate/.env.systemd
+    - sudo grep '^CELERY_BROKER_SECURE_TRANSPORT_CONFIRMED=' /var/lib/lx-annotate/.env.systemd
     - sudo systemctl show lx-annotate.service -p Environment
     - sudo systemctl status 'lx-annotate-celery-*.service' --no-pager
     - sudo journalctl --namespace=lx-annotate --since '-10 minutes' --no-pager
@@ -122,6 +128,7 @@ acceptance:
   required_results:
     - redis-cli returns PONG.
     - CELERY_BROKER_URL is redis://localhost:6379/1.
+    - CELERY_BROKER_SECURE_TRANSPORT_CONFIRMED is true because the plaintext broker is loopback-only.
     - Redis listens only on 127.0.0.1:6379.
     - All enabled gs-02 Celery workers connect without retry loops.
     - Redis reports appendonly=no and no configured save schedule.

@@ -1664,7 +1664,7 @@ def test_lx_annotate_gs02_large_transfer_http_and_local_redis_contract() -> None
     assert evaluated["redis"]["settings"]["dir"] == "/run/redis-lx-annotate"
     assert evaluated["celeryBrokerUrl"] == "redis://localhost:6379/1"
     assert evaluated["celeryBroker"]["requireSecureTransport"] is False
-    assert evaluated["celeryBroker"]["secureTransportConfirmed"] is False
+    assert evaluated["celeryBroker"]["secureTransportConfirmed"] is True
 
 
 def test_lx_annotate_gc02_outbound_transfer_is_vault_backed_and_fail_closed() -> None:
