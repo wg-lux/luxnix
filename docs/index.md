@@ -61,7 +61,7 @@ devenv tasks run docs:toc-generator
 
 ## Implementation plans
 
-- [Vault Hub Simplification Plan](./vault-hub-simplification-plan.yml): phased plan for one registry entry, one reconciliation, and one secure handoff.
+- [Vault Hub Simplification Plan](../feature-tracking/vault-hub-simplification-plan.yml): phased plan for one registry entry, one reconciliation, and one secure handoff.
 
 ## Troubleshooting
 

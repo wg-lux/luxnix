@@ -1,0 +1,58 @@
+schema_version: "1.0"
+id: report_reader_integration
+name: ReportReader deployment integration
+description: >-
+  Deploy lx-anonymizer ReportReader with compatible lx-data-models contracts and
+  explicit OCR, PDF, NER, and optional LLM capabilities while preserving the
+  caller's attempt and publication authority.
+owners:
+  - LuxNix maintainers
+production_critical: true
+source_documents:
+  - path: docs/system-feature-tracking.md
+    disposition: reference
+    note: Defines provider identity, immutable specifications, and deployed resolution.
+  - path: modules/nixos/services/lx-annotate-local/Publishing.md
+    disposition: reference
+    note: Defines coordinated lx-dtypes, lx-anonymizer, and host-package publication.
+invariants:
+  - The deployed lx-anonymizer and lx-dtypes versions expose compatible report request, result, metadata, and anonymization contracts.
+  - Runtime capability selection is explicit; unavailable OCR, NER, or LLM dependencies cannot silently produce apparent full-fidelity extraction.
+  - LuxNix deploys the application boundary but does not own durable attempts, retries, canonical publication, or clinical identity persistence.
+definition_of_done:
+  - id: compatible_packages
+    category: requirements
+    title: ReportReader and its shared contracts deploy as a compatible set
+    acceptance:
+      - The selected lx-anonymizer package contains the public ReportReader entry point.
+      - The selected lx-dtypes package contains the report metadata and report anonymization contracts consumed by ReportReader.
+      - Package updates crossing this boundary are pinned and evaluated together before host activation.
+    required: true
+    verification:
+      kind: manual
+      instructions: Evaluate the target host closure and inspect the resolved lx-anonymizer and lx-dtypes package versions.
+      timeout_seconds: 600
+  - id: runtime_capabilities
+    category: operations
+    title: The host supplies an explicit ReportReader capability profile
+    acceptance:
+      - PDF and image decoding dependencies required by the selected package profile are present.
+      - OCR, NER, and LLM features are enabled only when their packaged dependencies and configured providers are available.
+      - Reduced-capability execution is named and observable rather than an accidental silent fallback.
+    required: true
+    verification:
+      kind: manual
+      instructions: Inspect the evaluated service environment and run the packaged ReportReader smoke check on the target host.
+      timeout_seconds: 600
+  - id: attempt_boundary
+    category: data_integrity
+    title: Deployment preserves report-attempt ownership and fail-closed publication
+    acceptance:
+      - Caller-selected immutable input and attempt-owned output paths cross the service boundary unchanged.
+      - A failed or cancelled ReportReader invocation cannot publish partial output as a canonical report.
+      - Sensitive temporary files have one owner, restrictive permissions, bounded lifetime, and deterministic cleanup.
+    required: true
+    verification:
+      kind: manual
+      instructions: Review the deployed caller integration against the report pipeline concurrency contract and its focused tests.
+      timeout_seconds: 600
