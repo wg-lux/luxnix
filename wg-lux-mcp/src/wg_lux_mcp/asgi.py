@@ -26,7 +26,7 @@ class OptionalBearerMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next):
-        expected = None if settings.oauth_enabled else settings.bearer_token
+        expected = settings.bearer_token
         if expected and request.url.path.startswith("/mcp"):
             header = request.headers.get("authorization", "")
             supplied = header.removeprefix("Bearer ") if header.startswith("Bearer ") else ""
@@ -74,7 +74,7 @@ else:
 
 app = Starlette(
     routes=[
-        Route("/healthz", health, methods=["GET"]),
+        Route("/health", health, methods=["GET"]),
         Mount("/mcp", app=mcp_app),
     ],
     middleware=[Middleware(OptionalBearerMiddleware)],
