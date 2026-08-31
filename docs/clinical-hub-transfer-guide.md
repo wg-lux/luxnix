@@ -33,14 +33,18 @@ The system is designed so that:
 - only processed media that passed the required validation gates is eligible;
 - the local and central servers authenticate each other with mTLS;
 - the connection is encrypted while data is travelling;
+- processed media is encrypted with a fresh per-transfer data-encryption key;
+- only the hub's X25519 recipient private key can unwrap that transfer key;
 - the central hub independently authenticates the sending node;
 - data stays inside encrypted storage on each server;
 - failed or inconsistent transfers stop and retain an audit trail;
 - no long-lived application master key is transmitted.
 
-The current transport protection is mTLS. The application sends the bytes over
-HTTPS. This is not the same as standalone file-level envelope encryption, which
-is a later architecture phase.
+The current transfer combines mTLS over HTTPS with payload envelope encryption.
+The sender encrypts processed media with a fresh data-encryption key, wraps that
+key to the hub's X25519 public recipient key, and requires a matching typed
+receipt from the hub. The hub recipient private key and both nodes' long-lived
+application master keys are never transmitted.
 
 ## Roles and responsibilities
 
@@ -289,11 +293,13 @@ The simplified path is:
 ```text
 validated processed resource on gc-02
   -> dedicated hub-transfer worker
-  -> Python requests streaming multipart HTTPS
+  -> per-transfer encrypted media envelope
+  -> Python requests streaming multipart HTTPS with mTLS
   -> VPN network
   -> nginx on gs-02 verifies the mTLS client certificate
   -> Django verifies the gc-02 node key and request secret
-  -> gs-02 records and applies the transfer
+  -> gs-02 unwraps the transfer key, authenticates and applies the media
+  -> sender validates the typed envelope receipt
 ```
 
 The browser does not carry the clinical payload to gs-02. It only records the

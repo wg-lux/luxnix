@@ -714,6 +714,8 @@ let
       mode ? "always",
       environment ? { },
       cudaVisibleDevices ? null,
+      taskSoftTimeLimitSeconds ? null,
+      taskHardTimeLimitSeconds ? null,
       onCalendar ? null,
       randomizedDelaySec ? null,
       persistentTimer ? null,
@@ -752,6 +754,12 @@ let
     }
     // optionalAttrs (cudaVisibleDevices != null) {
       inherit cudaVisibleDevices;
+    }
+    // optionalAttrs (taskSoftTimeLimitSeconds != null) {
+      inherit taskSoftTimeLimitSeconds;
+    }
+    // optionalAttrs (taskHardTimeLimitSeconds != null) {
+      inherit taskHardTimeLimitSeconds;
     }
     // optionalAttrs (onCalendar != null) {
       inherit onCalendar;
@@ -921,6 +929,8 @@ let
       hostname = "hub-transfer";
       queues = [ "hub_transfer" ];
       pool = cfg.runtime.workerPools.hubTransfer;
+      taskSoftTimeLimitSeconds = cfg.hub.outboundTransfer.taskSoftTimeLimitSeconds;
+      taskHardTimeLimitSeconds = cfg.hub.outboundTransfer.taskHardTimeLimitSeconds;
       mode =
         if
           cfg.hub.outboundTransfer.enable
@@ -1024,6 +1034,12 @@ let
       ]
       ++ lib.optionals (workerCfg.maxTasksPerChild != null) [
         "--max-tasks-per-child=${toString workerCfg.maxTasksPerChild}"
+      ]
+      ++ lib.optionals ((workerCfg.taskSoftTimeLimitSeconds or null) != null) [
+        "--soft-time-limit=${toString workerCfg.taskSoftTimeLimitSeconds}"
+      ]
+      ++ lib.optionals ((workerCfg.taskHardTimeLimitSeconds or null) != null) [
+        "--time-limit=${toString workerCfg.taskHardTimeLimitSeconds}"
       ];
       cudaVisibleDevices = workerCfg.cudaVisibleDevices or null;
       workerEnvironment =
@@ -1643,8 +1659,23 @@ in
         {
           assertion =
             !cfg.hub.outboundTransfer.enable
-            || cfg.hub.outboundTransfer.staleAfterSeconds > cfg.hub.outboundTransfer.requestTimeoutSeconds;
-          message = "hub.outboundTransfer.staleAfterSeconds must exceed requestTimeoutSeconds so recovery cannot race an active transfer request.";
+            || cfg.hub.outboundTransfer.taskSoftTimeLimitSeconds
+            > cfg.hub.outboundTransfer.requestTimeoutSeconds;
+          message = "hub.outboundTransfer.taskSoftTimeLimitSeconds must exceed requestTimeoutSeconds so the HTTP client can persist a bounded failure before Celery interrupts the task.";
+        }
+        {
+          assertion =
+            !cfg.hub.outboundTransfer.enable
+            || cfg.hub.outboundTransfer.taskHardTimeLimitSeconds
+            > cfg.hub.outboundTransfer.taskSoftTimeLimitSeconds;
+          message = "hub.outboundTransfer.taskHardTimeLimitSeconds must exceed taskSoftTimeLimitSeconds.";
+        }
+        {
+          assertion =
+            !cfg.hub.outboundTransfer.enable
+            || cfg.hub.outboundTransfer.staleAfterSeconds
+            > cfg.hub.outboundTransfer.taskHardTimeLimitSeconds;
+          message = "hub.outboundTransfer.staleAfterSeconds must exceed taskHardTimeLimitSeconds so recovery cannot race an active transfer task.";
         }
         {
           assertion =

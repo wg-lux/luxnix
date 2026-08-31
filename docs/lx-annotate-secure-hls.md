@@ -279,10 +279,12 @@ not be lost in a successful-path report:
    `materializing` state remain unavailable even after the dispatcher unit
    exits successfully. Every eligible raw and processed video must pass the readiness
    gate after worker completion.
-5. **Hub payload envelope encryption is deferred.** mTLS protects the current
-   inter-node channel, but it does not produce a standalone payload that stays
-   cryptographically protected after leaving that channel. This must remain an
-   explicit accepted limitation or be implemented before policy requires it.
+5. **Envelope encryption is release- and deployment-gated.** Current source
+   encrypts each processed-media payload with a fresh data-encryption key,
+   wraps that key to the hub's X25519 recipient key, and validates the hub's
+   typed receipt. Every deployed sender and receiver must run a compatible
+   release and pass the envelope-key preflight; a source-only implementation or
+   stale wheel is not production evidence.
 
 Until items 1 through 5 are resolved for the deployed release, source-level
 readiness must not be represented as deployed clinical readiness.
@@ -312,10 +314,13 @@ verification attestation to Django. Django independently checks the configured
 mTLS attestation and `NetworkNode` shared-secret authentication. Neither signal
 replaces the other.
 
-Current hub transport protection is TLS/mTLS. Payload-level envelope encryption
-is not part of the current phase. Consequently, destination storage encryption,
-certificate lifecycle, CA protection, secret rotation, request logging policy,
-and the hub's own access controls remain required controls.
+Current hub transfer uses both TLS/mTLS and payload-level envelope encryption.
+The sender creates a fresh data-encryption key per transfer, encrypts only
+eligible processed media, wraps the data key to the hub's X25519 public
+recipient key, and requires the hub's typed receipt. The corresponding private
+recipient key remains on the hub. Envelope encryption does not replace
+destination storage encryption, certificate lifecycle, CA protection, secret
+rotation, request logging policy, or the hub's own access controls.
 
 ## Deployment contract
 

@@ -88,12 +88,29 @@ in
           assert_file_contains ${lxAnnotateEnvScripts} 'CELERY_HUB_TRANSFER_QUEUE = celeryHubTransferQueueName' "hub transfer tasks must have a dedicated queue"
           assert_file_contains ${lxAnnotateEnvScripts} 'LX_ANNOTATE_HUB_EXPORT_STALE_AFTER_SECONDS' "stale recovery bounds must reach the worker environment"
           assert_file_contains ${lxAnnotateEnvScripts} 'LX_ANNOTATE_HUB_EXPORT_REQUEST_TIMEOUT_SECONDS' "long-running HTTP timeout must reach the worker environment"
-          assert_file_contains ${lxAnnotateConfig} 'staleAfterSeconds > cfg\.hub\.outboundTransfer\.requestTimeoutSeconds' "stale recovery must not race an active transfer request"
           assert_file_contains ${lxAnnotateConfig} 'unitName = "lx-annotate-celery-hub-transfer-worker"' "outbound transfer must use a dedicated worker"
           assert_file_contains ${lxAnnotateConfig} 'dispatch_hub_export_recovery' "site nodes must periodically dispatch stale transfer recovery"
           assert_file_contains ${lxAnnotateConfig} 'systemd\.timers\.lx-annotate-hub-export-recovery' "outbound recovery must be level-triggered by a persistent timer"
           assert_file_contains ${lxAnnotateConfig} 'check_hub_export_health' "site nodes must classify transfer failures without exposing request payloads"
           assert_file_contains ${lxAnnotateConfig} 'systemd\.timers\.lx-annotate-hub-export-health' "site nodes must periodically surface classified transfer health"
+        '';
+      }
+      {
+        name = "lx-annotate-large-hub-transfer-timeouts-are-ordered";
+        type = "script";
+        script = ''
+          ${ntlib.helpers.path [ pkgs.gnugrep ]}
+          ${ntlib.helpers.scriptHelpers}
+          test "$(grep -Ec 'default = 12 \* 60 \* 60;' ${lxAnnotateOptions})" -eq 2 || fail "sender and receiver HTTP defaults must both accommodate large clinical video transfers"
+          assert_file_contains ${lxAnnotateOptions} 'default = 13 \* 60 \* 60;' "the Celery soft limit must exceed the HTTP limit"
+          assert_file_contains ${lxAnnotateOptions} 'default = 14 \* 60 \* 60;' "the Celery hard limit must exceed the soft limit"
+          assert_file_contains ${lxAnnotateOptions} 'default = 15 \* 60 \* 60;' "stale recovery must start after the hard task limit"
+          assert_file_contains ${lxAnnotateConfig} 'taskSoftTimeLimitSeconds = cfg\.hub\.outboundTransfer\.taskSoftTimeLimitSeconds' "the dedicated hub worker must receive its transfer-specific Celery soft limit"
+          assert_file_contains ${lxAnnotateConfig} 'taskHardTimeLimitSeconds = cfg\.hub\.outboundTransfer\.taskHardTimeLimitSeconds' "the dedicated hub worker must receive its transfer-specific Celery hard limit"
+          assert_file_contains ${lxAnnotateConfig} '--soft-time-limit=\$[{]toString workerCfg\.taskSoftTimeLimitSeconds[}]' "the worker command must enforce the configured soft limit"
+          assert_file_contains ${lxAnnotateConfig} '--time-limit=\$[{]toString workerCfg\.taskHardTimeLimitSeconds[}]' "the worker command must enforce the configured hard limit"
+          assert_file_contains ${lxAnnotateConfig} 'taskSoftTimeLimitSeconds must exceed requestTimeoutSeconds' "Celery soft timeout must not preempt the bounded HTTP timeout"
+          assert_file_contains ${lxAnnotateConfig} 'staleAfterSeconds must exceed taskHardTimeLimitSeconds' "stale recovery must not race an active transfer task"
         '';
       }
       {

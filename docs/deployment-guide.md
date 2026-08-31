@@ -214,6 +214,23 @@ If using a boot decryption stick, continue with
 7. Run the preflight checks and deploy with `nixos-anywhere` only after they
    pass.
 
+### Study laptops that send to the central hub
+
+A study laptop is not hub-ready merely because its base NixOS configuration
+boots. After completing the host checklist, follow
+[Add a Machine to Vault-Backed Hub Transfer](./vault-hub-machine-enrollment.md)
+in full. That runbook covers both sides of the declarative `NetworkNode`
+configuration, Vault AppRole enrollment, mTLS, the per-site request secret, the
+hub X25519 envelope-recipient key, local storage master-key separation,
+deployment order, acceptance checks, a disposable transfer, and the controlled
+first Django-superuser bootstrap on `gs-02`.
+
+Do not copy credentials from another `gc-*` host. Every site has its own
+AppRole identity, mTLS private key, and request-authentication secret. Only the
+hub's public X25519 recipient key and public CA certificates are distributed;
+the hub recipient private key, Vault unseal shares, and each node's application
+master key remain inside their respective security boundaries.
+
 ## Notes on old commands in historical docs
 
 Older docs may reference scripts such as `deploy-authorized-key.sh` or `deploy-openvpn-certificates*.sh`. Those scripts are not present in this repository; use the flow above.

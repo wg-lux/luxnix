@@ -1420,7 +1420,7 @@ in
                 };
                 httpTimeoutSeconds = mkOption {
                   type = types.ints.positive;
-                  default = 6 * 60 * 60;
+                  default = 12 * 60 * 60;
                   description = "Nginx client-body and upstream I/O timeout for large hub transfer requests, in seconds.";
                 };
               };
@@ -1473,12 +1473,22 @@ in
                 };
                 requestTimeoutSeconds = mkOption {
                   type = types.ints.positive;
-                  default = 6 * 60 * 60;
+                  default = 12 * 60 * 60;
                   description = "HTTP response timeout for synchronous registration imports and encrypted media apply, in seconds.";
+                };
+                taskSoftTimeLimitSeconds = mkOption {
+                  type = types.ints.positive;
+                  default = 13 * 60 * 60;
+                  description = "Celery soft time limit for one outbound hub transfer task; this must exceed requestTimeoutSeconds so the HTTP client can persist a bounded failure first.";
+                };
+                taskHardTimeLimitSeconds = mkOption {
+                  type = types.ints.positive;
+                  default = 14 * 60 * 60;
+                  description = "Celery hard time limit for one outbound hub transfer task; this must exceed taskSoftTimeLimitSeconds.";
                 };
                 staleAfterSeconds = mkOption {
                   type = types.ints.positive;
-                  default = 7 * 60 * 60;
+                  default = 15 * 60 * 60;
                   description = "Age in seconds after which an unchanged outbound transfer is eligible for recovery.";
                 };
                 maxRetries = mkOption {
