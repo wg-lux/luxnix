@@ -10,6 +10,9 @@
   validate-admin-passwords.package = pkgs.zsh;
   validate-admin-passwords.exec = ''${pkgs.uv}/bin/uv run python scripts/validate-admin-passwords.py "$@"'';
 
+  vault-site-preflight.package = pkgs.zsh;
+  vault-site-preflight.exec = ''${pkgs.uv}/bin/uv run python scripts/vault/site_enrollment_preflight.py "$@"'';
+
   # Remote operations
   check-connectivity.package = pkgs.zsh;
   check-connectivity.exec = ''./scripts/check-connectivity.sh "$@"'';

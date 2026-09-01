@@ -55,6 +55,35 @@ has been verified, its protected storage is mounted, and `gs-02` is the intended
 central hub. The center named by `<center-key>` must already exist in both
 application databases; node provisioning fails closed for an unknown center.
 
+### Run the repository preflight
+
+From the exact durable checkout intended for deployment, validate one explicit
+site before obtaining a Vault token or creating enrollment material:
+
+```bash
+devenv shell vault-site-preflight <host>
+```
+
+Use `--json` for structured deployment evidence. The command is local and
+read-only. It refuses inventory groups and fails when the checkout is dirty,
+the configured deployment source differs, required inventory groups are
+missing, the host's Ed25519 SSH identity is not pinned for its hostname, FQDN,
+and VPN address, the temporary enrollment exception is fleet-wide, evaluated
+Vault or mTLS settings differ from the approved contract, or `gs-02` lacks one
+matching receiver node.
+
+The preflight does not connect to the site, read enrollment files, confirm
+protected storage, or prove that Vault is unsealed. After it reports `READY`,
+run the separately cataloged connectivity check and then continue with the
+trusted `gs-02` checks below:
+
+```bash
+devenv shell check-connectivity <host>
+```
+
+Do not issue credentials when either command fails. Correct the canonical YAML
+or source-state problem, regenerate when necessary, and rerun the checks.
+
 ## 1. Check and unseal Vault
 
 In this deployment, `gs-02` is configured as the central hub. On a trusted

@@ -44,6 +44,14 @@ commands:
     implementation: scripts/validate-admin-passwords.py
     documentation: docs/vault-setup.md
 
+  - id: vault-site-preflight
+    summary: Validate non-secret prerequisites for one Vault site enrollment.
+    risk: read-only
+    operator_confirmation_required: false
+    usage: devenv shell vault-site-preflight <host> [--json]
+    implementation: scripts/vault/site_enrollment_preflight.py
+    documentation: docs/vault-hub-machine-enrollment.md
+
   - id: check-connectivity
     summary: Check SSH connectivity to a selected inventory host or group.
     risk: remote-read-only
