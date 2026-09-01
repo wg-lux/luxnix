@@ -38,7 +38,12 @@ def test_each_subservice_leaf_owns_one_documented_service() -> None:
         relative_path = module.relative_to(SERVICE_DIR)
         assert source.startswith("# Purpose:"), relative_path
         assert "\n# Command:" in source, relative_path
-        assert len(re.findall(r"\bsystemd\.services\.", source)) == 1, relative_path
+        service_assignments = re.findall(
+            r"^\s+(?:systemd\.)?services\.[A-Za-z0-9_-]+(?:\.serviceConfig)?\s*=",
+            source,
+            re.MULTILINE,
+        )
+        assert len(service_assignments) == 1, relative_path
 
     aggregator_source = (SUBSERVICE_DIR / "workers.nix").read_text(encoding="utf-8")
     config_source = (SERVICE_DIR / "config.nix").read_text(encoding="utf-8")
