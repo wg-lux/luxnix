@@ -3,7 +3,6 @@
   lib,
   ...
 }:
-#CHANGEME
 with lib;
 with lib.luxnix;
 let

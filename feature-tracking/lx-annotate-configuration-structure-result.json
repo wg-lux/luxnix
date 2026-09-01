@@ -1,0 +1,18 @@
+{
+  "task_status": "complete",
+  "findings": [
+    {
+      "claim": "The public option surface can be split by top-level group without changing services.luxnix.lxAnnotateLocal paths.",
+      "source": "modules/nixos/services/lx-annotate-local/options.nix:262",
+      "confidence": "high"
+    },
+    {
+      "claim": "runtime-context.nix should remain the source of derived paths and identities during this structural refactor.",
+      "source": "modules/nixos/services/lx-annotate-local/runtime-context.nix:24",
+      "confidence": "high"
+    }
+  ],
+  "gaps": [
+    "Nested runtime and hub option groups can be split later if top-level grouping is still too large."
+  ]
+}

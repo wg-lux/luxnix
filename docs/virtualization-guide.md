@@ -9,6 +9,27 @@ The LuxNix virtualization system provides unified configuration for containeriza
 - **VFIO** - GPU passthrough for VMs
 - **Looking Glass** - Low-latency VM display
 
+## Prerequisites, validation, and recovery
+
+Before enabling KVM or VFIO, confirm that the host hardware supports the
+selected IOMMU mode, record the GPU and audio PCI IDs, ensure console or
+out-of-band access is available, and keep a known-good NixOS generation. Do
+not apply GPU passthrough settings to a host whose display or remote access
+depends on that GPU without a recovery path.
+
+After changing virtualization settings, evaluate and build the host, activate
+the reviewed generation, and verify `systemctl is-active libvirtd`, access to
+`/dev/kvm`, the intended device driver bindings, and a disposable VM or
+container. For VFIO, also verify that the host display and SSH access remain
+available.
+
+If activation, host access, or a VM fails, stop the affected VM, use console or
+out-of-band access, and boot or switch to the previous NixOS generation (for
+example `sudo nixos-rebuild switch --rollback`). Restore the prior PCI IDs and
+IOMMU/VFIO settings in the canonical host configuration, regenerate, and
+repeat validation. Do not detach a production GPU or delete VM storage while
+diagnosing a failed change.
+
 ## Configuration Structure
 
 All virtualization options are configured under `luxnix.generic-settings.virtualization` in your system configuration.
@@ -177,7 +198,6 @@ This enables Podman by default with Docker compatibility.
       # Looking Glass setup
       lookingGlass = {
         enable = true;
-        sharedMemorySize = "256M";
       };
       
       # Custom shared memory files

@@ -1,0 +1,35 @@
+# Canonical ownership and execution map for repository tests.
+schema_version: 1
+pytest_root: tests
+pytest_command: uv run pytest -q
+python_suites:
+  - id: repository
+    path: tests
+    scope: LuxNix Python unit, integration, and source-contract tests.
+    command: uv run pytest -q
+  - id: generator-contracts
+    path: tests/test_autoconf_rendering.py
+    scope: Non-evaluating Autoconf and boot-renderer contracts.
+    command: devenv tasks run nix-quality:generators
+  - id: tracker
+    path: feature-tracking/test_tracker.py
+    scope: Feature-tracking schema, lock, message, and orchestration contracts.
+    command: uv run pytest -q feature-tracking/test_tracker.py
+  - id: cuda-probes
+    path: scripts/cuda
+    scope: Optional CUDA environment probes, outside the default pytest suite.
+    command: devenv tasks run env:setup-cuda
+nix_suites:
+  - id: nixtest
+    path: tests/nixtest
+    scope: Vault, SSH reachability, and lx-annotate safety contracts.
+    command: nix run .#nixtests -- --workers 1
+  - id: configuration
+    path: tests/run-configuration-tests.sh
+    scope: Evaluation and no-link builds for every exported NixOS host.
+    command: ./tests/run-configuration-tests.sh
+independent_projects:
+  - id: wg-lux-mcp
+    path: wg-lux-mcp/tests
+    scope: Nested MCP service tests with the nested project's dependencies.
+    command: cd wg-lux-mcp && uv run pytest -q

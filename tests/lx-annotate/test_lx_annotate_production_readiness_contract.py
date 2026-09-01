@@ -20,8 +20,8 @@ def _eval_gc02(expression: str) -> dict[str, Any]:
             "--json",
             "--expr",
             (
-                'let cfg = (builtins.getFlake "git+file://'
-                f'{REPO_ROOT}").nixosConfigurations.gc-02.config; '
+                    'let cfg = (builtins.getFlake "path:'
+                    f'{REPO_ROOT}").nixosConfigurations.gc-02.config; '
                 f"in {expression}"
             ),
             "--show-trace",
@@ -124,7 +124,7 @@ def test_hub_backup_publishes_database_and_media_as_one_restore_point(
 
     expression = f"""
       let
-        flake = builtins.getFlake "git+file://{REPO_ROOT}";
+        flake = builtins.getFlake "path:{REPO_ROOT}";
         pkgs = flake.inputs.nixpkgs.legacyPackages.x86_64-linux;
         generated = import {REPO_ROOT}/modules/nixos/services/lx-annotate-local/scripts/hub-backup.nix {{
           config.networking.hostName = "hub-backup-test";

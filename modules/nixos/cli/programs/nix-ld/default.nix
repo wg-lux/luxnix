@@ -49,12 +49,17 @@ in
       ];
       description = "List of libraries to include in nix-ld.";
     };
+    extraLibraries = mkOption {
+      type = types.listOf types.package;
+      default = [ ];
+      description = "Additional nix-ld libraries supplied by opt-in package bundles.";
+    };
   };
 
   config = mkIf cfg.enable {
     programs.nix-ld = {
       enable = true;
-      inherit (cfg) libraries;
+      libraries = cfg.libraries ++ cfg.extraLibraries;
     };
 
   };

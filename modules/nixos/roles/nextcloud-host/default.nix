@@ -275,8 +275,8 @@ in
     ];
 
     services = {
-      # manually run
-      #TODO Check if actually necessary and add to docs
+      # TODO (nextcloud-host owner): verify whether MinIO bootstrap is still
+      # manual, then encode it in a oneshot service or remove these commands.
       # mc config host add minio http://localhost:9000 ${accessKey} ${secretKey} --api s3v4
       # mc mb minio/nextcloud
       minio = {
@@ -290,7 +290,8 @@ in
         enable = true;
         settings.NEXTCLOUD_URL = "http://cloud.endo-reg.net";
         secrets = [
-          #TODO Docs: Create manually, e.g.:
+          # TODO (nextcloud-host owner): move whiteboard JWT provisioning into
+          # managed-secrets and document the matching Nextcloud app settings.
           # JWT_SECRET_KEY=SUPER_SECRET_KEY_VALUE
           # configure app via terminal or console:
           # nextcloud-occ config:app:set whiteboard collabBackendUrl --value="http://localhost:3002"
@@ -409,7 +410,9 @@ in
           mail_smtpport = 465;
           mail_smtpauth = true;
           mail_smtpauthtype = "LOGIN";
-          mail_domain = "endo-reg.net"; # FIXME Move to Options
+          # TODO (nextcloud-host owner): add a mail-domain option and migrate
+          # inventory before removing this deployment-specific default.
+          mail_domain = "endo-reg.net";
 
           oidc_login_provider_url = "https://keycloak.endo-reg.net/realms/master";
           oidc_login_end_session_redirect = true;
@@ -434,7 +437,9 @@ in
         # the services.nextcloud.settings option), for example
         # {"redis":{"password":"secret"}}.
         # default is null
-        secretFile = "/etc/nextcloud-secrets.json"; # FIXME Move to options and add to ansible managed secrets
+        # TODO (nextcloud-host owner): expose this path and provision it through
+        # managed-secrets before enabling this role on another host.
+        secretFile = "/etc/nextcloud-secrets.json";
 
         # ###### Hosting ######
         https = true; # default = false;
@@ -483,7 +488,8 @@ in
           "opcache.memory_consumption" = "128";
           "opcache.revalidate_freq" = "1";
 
-          # Not required as we use http after reverse proxy ? #TODO Verify
+          # TODO (nextcloud-host owner): verify the CA file is used by an
+          # outbound TLS integration, then retain it with a test or remove it.
           "openssl.cafile" = "/etc/ssl/certs/ca-certificates.crt";
           output_buffering = "0";
           short_open_tag = "Off";
@@ -512,7 +518,8 @@ in
           dbuser = config.services.nextcloud.config.dbuser; # string
           dbtype = config.services.nextcloud.config.dbtype; # one of "sqlite", "pgsql", "mysql"
 
-          # TODO when migrating to pgsql, separate pwd provision might make sense
+          # TODO (nextcloud-host owner): split notify-push credentials only if
+          # migration to a remote PostgreSQL instance requires another identity.
           dbpassFile = config.services.nextcloud.config.dbpassFile; # path
           dbname = config.services.nextcloud.config.dbname;
 

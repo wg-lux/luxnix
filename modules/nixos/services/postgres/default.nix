@@ -4,7 +4,6 @@
   pkgs,
   ...
 }:
-#CHANGEME
 with lib;
 with lib.luxnix;
 let
@@ -116,10 +115,6 @@ in
       "d ${cfg.backupLocation} 0700 postgres postgres -"
     ];
 
-    environment.systemPackages = with pkgs; [
-      postgresql_16_jit
-    ];
-
     services = {
 
       postgresql = {
@@ -129,7 +124,7 @@ in
           shared_preload_libraries = [ "vectors.so" ];
           search_path = "\"$user\", public, vectors";
         };
-        # TODO: look at using default postgres
+        # pgvecto-rs requires the matching JIT-enabled PostgreSQL package.
         package = pkgs.postgresql_16_jit;
         extensions = ps: with ps; [ pgvecto-rs ];
         authentication = lib.mkOverride 10 auth;

@@ -3,7 +3,6 @@
   lib,
   ...
 }:
-#CHANGEME
 with lib;
 with lib.luxnix;
 let
@@ -131,7 +130,8 @@ in
           };
         };
 
-        # TODO: work out this is on a different host
+        # TODO (monitoring owner): this remote Home Assistant target is fixed;
+        # add a target option and migrate the monitoring host configuration.
         scrapeConfigs = [
           {
             job_name = "home-assistant";
@@ -230,7 +230,8 @@ in
                 max_age = "12h";
                 labels = {
                   job = "systemd-journal";
-                  # TODO: do not hardcode
+                  # TODO (monitoring owner): derive this label from networking.hostName
+                  # after confirming existing Loki dashboards do not depend on "ms01".
                   host = "ms01";
                 };
               };

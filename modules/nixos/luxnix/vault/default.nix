@@ -1015,18 +1015,6 @@ in
       description = "The path to the psk file";
     };
 
-    sslCert = mkOption {
-      default = "${cfg.dir}/ssl_cert";
-      type = types.str;
-      description = "Path to SSL certificate in vault";
-    };
-
-    sslKey = mkOption {
-      default = "${cfg.dir}/ssl_key";
-      type = types.str;
-      description = "Path to SSL key in vault";
-    };
-
     client = mkOption {
       type = types.submodule {
         options = {

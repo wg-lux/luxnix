@@ -1,0 +1,102 @@
+{
+  "schema_version": "1.0",
+  "run_id": "lx-annotate-modular-services-20260901",
+  "feature_id": "lx_annotate_environment_lifecycle_audit",
+  "orchestrator": "codex-lx-annotate-modular",
+  "topology": "independent_parallel",
+  "execution_mode": "centralized_multi_agent",
+  "agent_backend": {
+    "kind": "native_subagent",
+    "agent_profile": null
+  },
+  "max_workers": 3,
+  "total_token_budget": 18000,
+  "work_units": [
+    {
+      "id": "service_boundaries",
+      "responsibility": "Map each systemd unit to a cohesive single-service Nix module",
+      "criterion_id": "provisioning_contract_identical",
+      "depends_on": [],
+      "max_turns": 1,
+      "token_budget": 6000,
+      "status": "complete",
+      "result": {
+        "task_status": "complete",
+        "findings": [
+          {
+            "claim": "Each systemd unit can move to one named subservice module with same-name timers or paths colocated.",
+            "source": "modules/nixos/services/lx-annotate-local/config.nix:2177",
+            "confidence": "high"
+          },
+          {
+            "claim": "Worker services need individual modules while their shared factory may remain centralized.",
+            "source": "modules/nixos/services/lx-annotate-local/subservices/workers.nix:8",
+            "confidence": "high"
+          }
+        ],
+        "gaps": [
+          "The upstream lx-annotate web ExecStart remains owned by the pinned application NixOS module."
+        ]
+      }
+    },
+    {
+      "id": "configuration_structure",
+      "responsibility": "Design readable option-group boundaries for the existing public configuration contract",
+      "criterion_id": "application_contract_complete",
+      "depends_on": [],
+      "max_turns": 1,
+      "token_budget": 6000,
+      "status": "complete",
+      "result": {
+        "task_status": "complete",
+        "findings": [
+          {
+            "claim": "The public option surface can be split by top-level group without changing services.luxnix.lxAnnotateLocal paths.",
+            "source": "modules/nixos/services/lx-annotate-local/options.nix:262",
+            "confidence": "high"
+          },
+          {
+            "claim": "runtime-context.nix should remain the source of derived paths and identities during this structural refactor.",
+            "source": "modules/nixos/services/lx-annotate-local/runtime-context.nix:24",
+            "confidence": "high"
+          }
+        ],
+        "gaps": [
+          "Nested runtime and hub option groups can be split later if top-level grouping is still too large."
+        ]
+      }
+    },
+    {
+      "id": "contract_coverage",
+      "responsibility": "Identify tests plus documentation that constrain a behavior-preserving module split",
+      "criterion_id": "lifecycle_tests_close_the_contract",
+      "depends_on": [],
+      "max_turns": 1,
+      "token_budget": 6000,
+      "status": "complete",
+      "result": {
+        "task_status": "complete",
+        "findings": [
+          {
+            "claim": "The Nix evaluation contract is the primary behavior-preservation suite for service names, commands, ordering, environment, hardening, timers, and assertions.",
+            "source": "tests/lx-annotate/test_lx_annotate_nix_eval_contract.py:58",
+            "confidence": "high"
+          },
+          {
+            "claim": "Several source-text tests must read the new owning modules instead of assuming all definitions live in config.nix or options.nix.",
+            "source": "tests/lx-annotate/test_lx_annotate_encryption_defaults.py:26",
+            "confidence": "high"
+          },
+          {
+            "claim": "README.md already documents stable unit names and operational roles and should become the service-module manifest.",
+            "source": "modules/nixos/services/lx-annotate-local/README.md:153",
+            "confidence": "high"
+          }
+        ],
+        "gaps": [
+          "No existing test enforces one systemd service declaration per subservice file."
+        ]
+      }
+    }
+  ]
+}

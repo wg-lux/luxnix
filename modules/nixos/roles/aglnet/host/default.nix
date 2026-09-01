@@ -231,7 +231,9 @@ in
     };
 
     systemd.tmpfiles.rules = [
-      "d /etc/openvpn 0750 admin users -" # TODO Harden?
+      # TODO (aglnet owner): replace the broad users group after inventory
+      # declares the operators that require OpenVPN configuration access.
+      "d /etc/openvpn 0750 admin users -"
     ];
 
     # Networking

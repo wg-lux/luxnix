@@ -175,11 +175,29 @@ Optional full validation for all configured hosts:
 ./tests/run-configuration-tests.sh
 ```
 
+Record the evaluation, build, connectivity, and hardware checks before
+continuing. If any check fails, stop, correct the canonical inventory or
+template input, regenerate, and repeat the preflight; do not start an
+installer deployment from a failed or stale result.
+
 ## 5. Deploy with nixos-anywhere
 
 ```bash
 nixos-anywhere --flake ".#<host>" nixos@<target-ip>
 ```
+
+### Deployment failure and recovery
+
+If `nixos-anywhere` fails, preserve its output and do not retry blindly. Keep
+the target in the installer until the disk and boot state are understood;
+check the target console and SSH reachability, then compare the selected
+hardware and `disks.nix` inputs with the real machine. A partially installed
+target must be reinstalled from the reviewed flake or restored from the
+operator's approved host backup before it is treated as deployed. Re-run the
+evaluation, build, connectivity check, and post-install acceptance checks
+after recovery. For an already running host, use the booted previous NixOS
+generation from the boot menu or `sudo nixos-rebuild switch --rollback` and
+verify `/run/current-system` and SSH access before retrying.
 
 ## 6. Post-install on target host
 
@@ -195,6 +213,13 @@ nh home switch
 
 If using a boot decryption stick, continue with
 [Hardware Setup](./hardware-setup.md#boot-decryption-setup).
+
+Validate the active generation, SSH access, expected mounts, and critical
+services before cleanup. If activation or acceptance fails, retain the failed
+generation and logs, boot or switch to the previous known-good generation,
+restore any host-specific files from the approved backup, and repeat the
+preflight before another activation. Do not remove temporary worktrees or GC
+roots until recovery is no longer needed.
 
 ## 7. Add a new host checklist
 

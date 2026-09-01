@@ -23,7 +23,7 @@ host_services:
   # gs-02 has no verified encrypted filesystem for Redis persistence yet.
   # Keep queue data in /run and rely on database-backed reconciliation after a
   # broker/host restart. Durable AOF is permitted only after the encrypted
-  # mount prerequisite in feature-tracking/gs-02-local-redis-broker-proposal.yml.
+  # mount prerequisite in docs/operations/gs-02-local-redis-broker.md.
   'redis.servers."lx-annotate".appendOnly': "lib.mkForce false"
   'redis.servers."lx-annotate".save': "lib.mkForce [ ]"
   'redis.servers."lx-annotate".settings.dir': 'lib.mkForce "/run/redis-lx-annotate"'

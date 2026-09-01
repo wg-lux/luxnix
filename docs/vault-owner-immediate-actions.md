@@ -61,7 +61,7 @@ bootstrap implementation was executed.
 After the safe client implementation is deployed, enroll every GC site:
 
 ```bash
-for host in gc-{01..10}; do
+for host in <inventory-enrolled-host-1> <inventory-enrolled-host-2>; do
   luxnix-vault-enroll-hub-site \
     "$host.intern" "/root/vault-enrollment/$host"
 done
@@ -76,9 +76,9 @@ with trusted local `gs-02` state during installation as described in
 Install matching receiver copies on `gs-02` as:
 
 ```text
-/etc/secrets/vault/hub-pki/gc-01-source-node-secret
+/etc/secrets/vault/hub-pki/<host>-source-node-secret
 ...
-/etc/secrets/vault/hub-pki/gc-10-source-node-secret
+/etc/secrets/vault/hub-pki/<host>-source-node-secret
 ```
 
 Use owner `root:sensitiveServices` and mode `0640` for the receiver copies.

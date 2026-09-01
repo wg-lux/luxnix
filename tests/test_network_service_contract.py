@@ -86,7 +86,7 @@ def test_wg_lux_mcp_uses_a_machine_local_dns_override() -> None:
 
 def test_lx_annotate_local_advertises_its_https_vhost() -> None:
     options = (
-        REPO_ROOT / "modules/nixos/services/lx-annotate-local/options.nix"
+        REPO_ROOT / "modules/nixos/services/lx-annotate-local/options/django.nix"
     ).read_text(encoding="utf-8")
 
     assert 'hostname = "lx-annotate.local";' in options

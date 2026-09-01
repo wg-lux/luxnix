@@ -114,3 +114,36 @@ Validate and regenerate after changing inventory inputs:
 devenv tasks run autoconf:check
 devenv tasks run autoconf:generate
 ```
+
+## Repository cleanup policy
+
+Keep source inputs, deployment history, and intentionally maintained host
+files in Git. Do not commit local runtime state, generated build output,
+archives, or command transcripts. Generated NixOS and Home Manager outputs
+remain reviewable when they are part of the repository's host layout, but
+they must be regenerated from their documented inputs rather than edited as
+if they were source files.
+
+The current cleanup inventory is:
+
+| Item | Decision | Recovery or source of truth |
+| --- | --- | --- |
+| `result.txt` | Remove; local command transcript | Recoverable from Git history; no repository consumer references it |
+| `wg-lux-mcp.zip` | Remove; generated package archive | Rebuild from `wg-lux-mcp/` using the project packaging workflow |
+| `result/`, `.devenv/`, `.direnv/`, caches, logs | Ignore; local/generated state | Recreated by Nix/devenv, tests, or the relevant service |
+| `systems/x86_64-linux/`, `homes/x86_64-linux/` | Retain; active generated deployment inputs | Regenerate from inventory and templates; see [Autoconf and Local Inventory](./autoconf.md) |
+| historical documents and rollback guides | Retain when referenced; label legacy status | Their Git history and the document's stated compatibility purpose |
+
+Before opening a cleanup change, run this check from a clean checkout. It
+reports tracked generated/cache candidates and tracked repository-local
+bundles; the first command should produce no output, while the second prints
+the matching ignore rules:
+
+```bash
+git ls-files -z | while IFS= read -r -d '' path; do test -e "$path" && printf '%s\n' "$path"; done | rg '(^|/)(result|build|dist|node_modules|__pycache__|\.pytest_cache|\.mypy_cache|\.direnv|\.devenv|coverage|target|site|\.venv|venv|\.tox|\.cache)(/|$)|(^|/)(result\.txt|wg-lux-mcp\.zip|.*\.log)$'
+git check-ignore -v --no-index result/ .devenv/ .direnv/ .ruff_cache/ .pytest_cache/ result.txt wg-lux-mcp.zip
+```
+
+If the first command reports an active input, classify it before changing
+policy. Never remove secrets, host configuration, deployment inputs, or
+rollback documentation merely because they resemble generated content.

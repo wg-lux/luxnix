@@ -326,6 +326,41 @@ def test_repository_toc_matches_canonical_mkdocs_navigation() -> None:
     ).read_text(encoding="utf-8")
 
 
+def test_documentation_home_exposes_validation_and_recovery_contract() -> None:
+    home = (DOCS_DIR / "index.md").read_text(encoding="utf-8")
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+
+    for required in (
+        "## Validate, rollback, and recovery",
+        "devenv tasks run docs:check",
+        "devenv tasks run docs:toc-generator",
+        "sudo nixos-rebuild rollback",
+        "systemctl --failed",
+        "Migration and recovery",
+    ):
+        assert required in home
+
+    assert "Validate before activation" in readme
+    assert "sudo nixos-rebuild rollback" in readme
+    assert "do not delete paths directly from `/nix/store`" in readme
+
+
+def test_repository_cleanup_policy_classifies_generated_and_local_artifacts() -> None:
+    development = (DOCS_DIR / "development.md").read_text(encoding="utf-8")
+
+    for required in (
+        "## Repository cleanup policy",
+        "`result.txt` | Remove; local command transcript",
+        "`wg-lux-mcp.zip` | Remove; generated package archive",
+        "`result/`, `.devenv/`, `.direnv/`, caches, logs | Ignore",
+        "`systems/x86_64-linux/`, `homes/x86_64-linux/` | Retain",
+        "git ls-files -z",
+        "git check-ignore -v --no-index",
+        "Never remove secrets, host configuration, deployment inputs, or",
+    ):
+        assert required in development
+
+
 def test_superseded_root_guides_do_not_compete_with_canonical_documentation() -> None:
     project_map = yaml.safe_load((REPO_ROOT / "luxnix.yml").read_text())
     replacements = project_map["documentation_replacements"]

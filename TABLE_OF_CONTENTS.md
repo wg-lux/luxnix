@@ -13,6 +13,7 @@
   - [Network Architecture](docs/network-architecture.md)
   - [Network Resolution](docs/network-resolution.md)
   - [Database Ownership](docs/database-ownership.md)
+  - [System Feature Tracking](docs/system-feature-tracking.md)
   - [Access Management](docs/access-management.md)
 - **Deployment and Testing**
   - [Deployment Guide](docs/deployment-guide.md)
@@ -25,6 +26,7 @@
   - [lx-annotate Encrypted Data](docs/lx-annotate-encrypted-data.md)
   - [lx-annotate Secure HLS](docs/lx-annotate-secure-hls.md)
   - [lx-annotate Cluster Readiness](docs/lx-annotate-cluster-readiness.md)
+  - [gs-02 Local Redis Recovery](docs/operations/gs-02-local-redis-broker.md)
 - **Vault**
   - [Setup and Bootstrap](docs/vault-setup.md)
   - [Machine Enrollment](docs/vault-hub-machine-enrollment.md)

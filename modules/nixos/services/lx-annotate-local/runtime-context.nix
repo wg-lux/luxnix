@@ -165,7 +165,8 @@ let
   mkDjangoOptions = import ../../lib/django-options.nix { inherit lib; };
   dataRecoveryStateDir = "${runtimeRootPath}/state";
   dataRecoveryStateFile = "${dataRecoveryStateDir}/effective-data-dir.env";
-  # TODO These NEED to be removed after data dir change.
+  # TODO (lx-annotate-local owner): legacy data roots remain migration inputs;
+  # remove them after the data-directory migration test proves no legacy consumer.
   legacyRepoDataRootPath = "${repoDir}/data";
   legacyRepoMediaRootPath = "${repoDir}/media";
   processedReportDirName = "processed_reports_final";

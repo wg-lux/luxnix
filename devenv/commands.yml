@@ -248,6 +248,14 @@ tasks:
     implementation: devenv/tasks.nix
     documentation: docs/index.md
 
+  - id: tests:pytest
+    summary: Run the repository Python test suite with root-scoped discovery.
+    risk: read-only
+    operator_confirmation_required: false
+    usage: devenv tasks run tests:pytest
+    implementation: devenv/tasks.nix
+    documentation: docs/testing-nixtests.md
+
   - id: endoreg-db:init
     summary: Initialize the EndoReg database.
     risk: local-state

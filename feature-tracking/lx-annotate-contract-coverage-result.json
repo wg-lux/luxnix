@@ -1,0 +1,23 @@
+{
+  "task_status": "complete",
+  "findings": [
+    {
+      "claim": "The Nix evaluation contract is the primary behavior-preservation suite for service names, commands, ordering, environment, hardening, timers, and assertions.",
+      "source": "tests/lx-annotate/test_lx_annotate_nix_eval_contract.py:58",
+      "confidence": "high"
+    },
+    {
+      "claim": "Several source-text tests must read the new owning modules instead of assuming all definitions live in config.nix or options.nix.",
+      "source": "tests/lx-annotate/test_lx_annotate_encryption_defaults.py:26",
+      "confidence": "high"
+    },
+    {
+      "claim": "README.md already documents stable unit names and operational roles and should become the service-module manifest.",
+      "source": "modules/nixos/services/lx-annotate-local/README.md:153",
+      "confidence": "high"
+    }
+  ],
+  "gaps": [
+    "No existing test enforces one systemd service declaration per subservice file."
+  ]
+}

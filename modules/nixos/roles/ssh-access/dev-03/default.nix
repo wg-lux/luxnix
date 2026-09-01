@@ -25,7 +25,8 @@ in
 
   config = mkIf cfg.enable {
     services.ssh.authorizedKeys = [
-      # TODO make dedicated authorizedDevKeys option which grants access to dev user
+      # TODO (SSH-access owner): this key currently grants administrator access;
+      # add a dedicated developer-key option and migrate the inventory consumer.
       "${cfg.idEd25519}"
     ];
   };

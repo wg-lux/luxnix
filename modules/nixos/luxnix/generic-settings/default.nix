@@ -240,13 +240,6 @@ in
       '';
     };
 
-    configurationPathRelative = mkOption {
-      type = types.str;
-      default = "luxnix";
-      description = ''
-        Relative path to the luxnix directory.
-      '';
-    };
     configurationPath = mkOption {
       type = types.path;
       default = "/home/${config.user.admin.name}/luxnix";
@@ -336,7 +329,8 @@ in
 
   config = {
     # Create Sensitive Service Group
-    #TODO Migrate to groups
+    # TODO (generic-settings owner): move this identity definition into a
+    # dedicated groups module after all consumers use the group-name option.
     users.groups = {
       "${cfg.sensitiveServiceGroupName}" = {
         gid = cfg.sensitiveServiceGID;
@@ -353,7 +347,8 @@ in
     services.luxnix.postgresql.extraAuthentication = lib.mkDefault cfg.postgres.extraAuthentication;
     services.luxnix.postgresql.extraIdentMap = lib.mkDefault cfg.postgres.extraIdentMap;
 
-    # TODO Add to System summary Log
+    # TODO (generic-settings owner): expose mutable-user policy in the system
+    # summary once the summary module accepts structured security settings.
     users.mutableUsers = lib.mkDefault cfg.mutableUsers;
     system.stateVersion = cfg.systemStateVersion;
     networking.useDHCP = lib.mkDefault cfg.useDHCP;

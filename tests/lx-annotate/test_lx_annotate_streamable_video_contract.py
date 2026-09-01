@@ -9,7 +9,7 @@ SERVICE_DIR = REPO_ROOT / "modules/nixos/services/lx-annotate-local"
 RUNTIME_CONTEXT_NIX = SERVICE_DIR / "runtime-context.nix"
 CONFIG_NIX = SERVICE_DIR / "config.nix"
 SCRIPTS_NIX = SERVICE_DIR / "scripts.nix"
-OPTIONS_NIX = SERVICE_DIR / "options.nix"
+OPTIONS_NIX = SERVICE_DIR / "options/runtime.nix"
 README_MD = SERVICE_DIR / "README.md"
 
 
@@ -57,10 +57,7 @@ def test_streamable_video_directories_are_provisioned_and_migration_is_exposed()
 def test_optional_streamable_bind_mount_is_top_level_and_null_lazy():
     config_source = CONFIG_NIX.read_text(encoding="utf-8")
 
-    assert (
-        "\n      fileSystems = optionalAttrs streamableExternalStorageEnabled {"
-        in config_source
-    )
+    assert "fileSystems = optionalAttrs streamableExternalStorageEnabled {" in config_source
     assert "\n        fileSystems =" not in config_source
     assert "fileSystems = mkIf streamableExternalStorageEnabled" not in config_source
 
@@ -72,7 +69,7 @@ def test_generic_postgres_default_is_not_nested_below_services():
         "luxnix.generic-settings.postgres.enable = "
         "mkDefault (!externalPostgresConfigured);"
     )
-    assert f"\n      {assignment}" in config_source
+    assert assignment in config_source
     assert f"\n        {assignment}" not in config_source
 
 

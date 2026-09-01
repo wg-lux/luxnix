@@ -32,6 +32,7 @@ devenv tasks run docs:toc-generator
 
 - [Getting Started](./getting-started.md): canonical Day-0 onboarding path.
 - [Development](./development.md): local development environment and contributor workflow.
+- [Nix Quality](./nix-quality.md): formatting, lint, generator, and flake-quality checks.
 - [Architecture](./architecture.md): repository layout, profile/role rules, and introspection workflow.
 - [Autoconf and Local Inventory](./autoconf.md): centralized options, safe fact refresh, private reports, and configuration generation.
 - [Deployment Guide](./deployment-guide.md): deployment details and host setup reference.
@@ -41,10 +42,12 @@ devenv tasks run docs:toc-generator
 - [Network Architecture](./network-architecture.md): canonical topology sources and network boundaries.
 - [Network Resolution](./network-resolution.md): how inventory addresses become generated host mappings.
 - [Database Ownership](./database-ownership.md): current PostgreSQL ownership and legacy-name guidance.
+- [System Feature Tracking](./system-feature-tracking.md): immutable feature specifications, assessment state, migration, and recovery.
 
 ## Operations
 
 - [Hardware Setup](./hardware-setup.md): installation and hardware-specific preparation.
+- [Virtualization](./virtualization-guide.md): virtual-machine setup and host prerequisites.
 - [Vault Setup](./vault-setup.md): secret bootstrap and lifecycle.
 - [Vault Hub Machine Enrollment](./vault-hub-machine-enrollment.md): add, provision, verify, rotate, or remove a hub-transfer site node.
 - [SSH Host Identity](./ssh-host-identity.md): host-key registry, rotation, and recovery workflow.
@@ -57,11 +60,27 @@ devenv tasks run docs:toc-generator
 - [lx-annotate Encrypted Data](./lx-annotate-encrypted-data.md): hostname-scoped Vault delivery and LUKS mount flow for lx-annotate.
 - [lx-annotate Secure HLS](./lx-annotate-secure-hls.md): end-to-end encrypted video playback, deployment, hub boundary, readiness, and incident-response contract.
 - [lx-annotate Cluster Readiness](./lx-annotate-cluster-readiness.md): release flow, completed decisions, and remaining production gates.
+- [gs-02 Local Redis Broker Recovery](./operations/gs-02-local-redis-broker.md): preflight, activation, acceptance, rollback, and encrypted-persistence follow-up for the implemented but undeployed broker change.
 - [Configuration and Nixtest Suites](./testing-nixtests.md): evaluate every host and run focused safety or VM contracts.
 
 ## Implementation plans
 
-- [Vault Hub Simplification Plan](../feature-tracking/vault-hub-simplification-plan.yml): phased plan for one registry entry, one reconciliation, and one secure handoff.
+- Feature-tracking plans are maintained outside the published documentation set. For the
+  deployed feature-state model and recovery procedure, use
+  System Feature Tracking.
+
+## Validate, rollback, and recovery
+
+For documentation-only changes, run `devenv tasks run docs:check`; if
+`mkdocs.yaml` navigation changed, also run
+`devenv tasks run docs:toc-generator` and review the generated diff. For
+configuration changes, use the preflight commands in Getting Started
+before activation. If a NixOS switch is unhealthy, select a prior generation
+from the boot menu or run `sudo nixos-rebuild rollback` on the affected host,
+then validate with `systemctl --failed` and the relevant service checks. Keep
+deployment and acceptance logs; recover feature-tracking projections by
+retaining the events tree and following the Migration and recovery section in
+System Feature Tracking.
 
 ## Troubleshooting
 

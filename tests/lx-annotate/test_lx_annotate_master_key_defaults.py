@@ -5,7 +5,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SERVICE_DIR = REPO_ROOT / "modules/nixos/services/lx-annotate-local"
-OPTIONS_NIX = SERVICE_DIR / "options.nix"
+OPTIONS_NIX = SERVICE_DIR / "options/runtime.nix"
 CONFIG_NIX = SERVICE_DIR / "config.nix"
 
 

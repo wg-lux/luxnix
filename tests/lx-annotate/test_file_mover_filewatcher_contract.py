@@ -13,6 +13,10 @@ FILE_MOVER_SOURCE = REPO_ROOT / "modules/nixos/services/file_mover/default.nix"
 LX_ANNOTATE_CONFIG_SOURCE = (
     REPO_ROOT / "modules/nixos/services/lx-annotate-local/config.nix"
 )
+LX_ANNOTATE_FILEWATCHER_SOURCE = (
+    REPO_ROOT
+    / "modules/nixos/services/lx-annotate-local/subservices/lx-annotate-filewatcher.nix"
+)
 LX_ANNOTATE_ENV_SOURCE = (
     REPO_ROOT / "modules/nixos/services/lx-annotate-local/scripts/env.nix"
 )
@@ -511,7 +515,9 @@ def test_file_mover_transcode_fallback_fails_closed_before_publish() -> None:
 
 
 def test_filewatcher_deployment_uses_packaged_once_entrypoint() -> None:
-    source = LX_ANNOTATE_CONFIG_SOURCE.read_text(encoding="utf-8")
+    source = LX_ANNOTATE_CONFIG_SOURCE.read_text(
+        encoding="utf-8"
+    ) + LX_ANNOTATE_FILEWATCHER_SOURCE.read_text(encoding="utf-8")
 
     assert "make_entrypoint lx-annotate-watch lx-annotate-watch 0" in source
     assert (

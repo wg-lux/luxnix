@@ -163,11 +163,13 @@ in
 
   config = mkIf cfg.enable {
 
+    # TODO (sensitive-storage owner): administrator membership is broader than
+    # the service needs; add an explicit operator-groups option, migrate hosts,
+    # then remove the four hard-coded "admin" memberships below.
     users.groups = {
       "sensitive-storage-dropoff" = {
         gid = 3301;
         members = [
-          # TODO harden for production
           "admin"
           "${cfg.user}"
         ];
@@ -175,7 +177,6 @@ in
       "sensitive-storage-processing" = {
         gid = 3302;
         members = [
-          # TODO harden for production
           "admin"
           "${cfg.user}"
         ];
@@ -183,7 +184,6 @@ in
       "sensitive-storage-processed" = {
         gid = 3303;
         members = [
-          # TODO harden for production
           "admin"
           "${cfg.user}"
         ];
@@ -191,7 +191,6 @@ in
       "sensitive-storage-keyfiles" = {
         gid = 3304;
         members = [
-          # TODO harden for production
           "admin"
           "${cfg.user}"
         ];

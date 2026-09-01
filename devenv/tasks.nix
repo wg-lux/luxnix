@@ -55,6 +55,11 @@
     exec = "${pkgs.uv}/bin/uv run pytest -q tests/test_documentation_contract.py";
   };
 
+  "tests:pytest" = {
+    description = "Run the repository Python test suite";
+    exec = "${pkgs.uv}/bin/uv run pytest -q";
+  };
+
   # Nix quality
   "nix-quality:check" = {
     description = "Run fast Nix parse, deadnix, statix, nixfmt, and flake-checker checks";

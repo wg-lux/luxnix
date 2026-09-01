@@ -1,7 +1,7 @@
 # Add a Machine to Vault-Backed Hub Transfer
 
-This runbook enrolls a new site node, written below as `<host>` (for example
-`gc-11`), into the `gs-02` LX-Annotate hub and bootstraps the first audited
+This runbook enrolls a new site node, written below as `<host>`, into the
+`gs-02` LX-Annotate hub and bootstraps the first audited
 Django superuser on the hub when one is required. It applies to the current
 LuxNix `gpu_client`/`endoreg_client` inventory model. Run secret-handling
 commands as `root`. Never put unseal keys, Vault tokens, AppRole Secret IDs,

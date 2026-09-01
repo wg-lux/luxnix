@@ -8,8 +8,15 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SERVICE_DIR = REPO_ROOT / "modules/nixos/services/lx-annotate-local"
 SCRIPTS_NIX = SERVICE_DIR / "scripts.nix"
 CONFIG_NIX = SERVICE_DIR / "config.nix"
-OPTIONS_NIX = SERVICE_DIR / "options.nix"
+OPTIONS_NIX = SERVICE_DIR / "options/runtime.nix"
 SCRIPTS_ENV_NIX = SERVICE_DIR / "scripts/env.nix"
+
+
+def _service_source() -> str:
+    return "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in sorted((SERVICE_DIR / "subservices").rglob("*.nix"))
+    )
 
 
 def _has_assignment(source: str, name: str) -> bool:
@@ -18,7 +25,7 @@ def _has_assignment(source: str, name: str) -> bool:
 
 def test_lx_annotate_scripts_export_protected_storage_contract():
     source = SCRIPTS_NIX.read_text(encoding="utf-8")
-    config_source = CONFIG_NIX.read_text(encoding="utf-8")
+    config_source = CONFIG_NIX.read_text(encoding="utf-8") + _service_source()
     options_source = OPTIONS_NIX.read_text(encoding="utf-8")
     helper_source = SCRIPTS_ENV_NIX.read_text(encoding="utf-8")
 

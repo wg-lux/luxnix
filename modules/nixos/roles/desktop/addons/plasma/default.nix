@@ -32,7 +32,9 @@ in
       };
       xserver = {
         enable = true;
-        xkb.layout = "de"; # TODO use locale via generic settings
+        # TODO (desktop-role owner): derive the keyboard layout from the locale
+        # contract after generic-settings exports a dedicated XKB layout.
+        xkb.layout = "de";
         xkb.variant = "";
 
       };

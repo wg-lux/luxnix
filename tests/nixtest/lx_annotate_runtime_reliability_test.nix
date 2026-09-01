@@ -5,7 +5,15 @@
   ...
 }:
 let
-  lxAnnotateConfig = "${repoRoot}/modules/nixos/services/lx-annotate-local/config.nix";
+  lxAnnotateModuleRoot = "${repoRoot}/modules/nixos/services/lx-annotate-local";
+  lxAnnotateConfig = pkgs.writeText "lx-annotate-config-and-subservices.nix" (
+    builtins.concatStringsSep "\n" (
+      map builtins.readFile (
+        [ "${lxAnnotateModuleRoot}/config.nix" ]
+        ++ pkgs.lib.filesystem.listFilesRecursive "${lxAnnotateModuleRoot}/subservices"
+      )
+    )
+  );
   lxAnnotateDiagnostics = "${repoRoot}/modules/nixos/services/lx-annotate-local/Diagnostics.md";
   lxAnnotateScripts = "${repoRoot}/modules/nixos/services/lx-annotate-local/scripts.nix";
 in

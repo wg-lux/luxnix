@@ -66,7 +66,8 @@ in
       group = "users";
       linger = true; # Makes sure user services start at boot not at login
 
-      # TODO: set in modules
+      # TODO (user-role owner): this legacy aggregate grants role-specific
+      # groups eagerly; move each group contribution into its owning module.
       extraGroups = [
         "wheel"
         "audio"

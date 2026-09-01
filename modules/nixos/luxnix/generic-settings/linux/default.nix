@@ -41,11 +41,6 @@ in
       default = "intel";
       description = "Default CPU Microcode";
     };
-    processorType = mkOption {
-      type = types.str;
-      default = "x86_64";
-      description = "Default Processor Type";
-    };
     supportedFilesystems = mkOption {
       type = types.listOf types.str;
       default = [ "btrfs" ];

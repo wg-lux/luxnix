@@ -6,8 +6,10 @@ This module manages the local `lx-annotate` deployment on LuxNix hosts.
 
 - [`default.nix`](default.nix): thin wrapper that assembles the runtime context, script exports, and split submodules.
 - [`runtime-context.nix`](runtime-context.nix): canonical derived runtime paths, environment values, defaults, and helper functions shared by the module.
-- [`options.nix`](options.nix): public option surface.
-- [`config.nix`](config.nix): systemd, nginx, tmpfiles, assertions, and secret wiring.
+- [`options.nix`](options.nix): compatibility aggregator for the public option surface.
+- [`options/`](options/): one readable module per top-level configuration group; public option paths remain under `services.luxnix.lxAnnotateLocal`.
+- [`config.nix`](config.nix): centralized shared configuration, assertions, secret wiring, and the explicit context passed to subservices.
+- [`subservices/`](subservices/): one systemd service per leaf file. A matching timer or path unit stays beside the service it triggers; `workers.nix` is only an aggregator.
 - [`scripts.nix`](scripts.nix): shell-script derivations used by the service units.
 - [`scripts/env.nix`](scripts/env.nix): single source of truth for shared lx-annotate runtime environment variables.
 
@@ -67,7 +69,7 @@ Shared lx-annotate application environment variables are centralized in:
 
 The main attrset to inspect is `commonEnv`. It is the contract rendered into:
 
-- systemd service `environment` attrsets through `config.nix`
+- systemd service `environment` attrsets through the owning module in `subservices/`
 - `/var/lib/lx-annotate/.env.systemd`
 - the compatibility copy at `runtime.encryptedDataDir/.env.systemd`
 - shell wrappers through `commonShellExportText`
@@ -78,8 +80,8 @@ also lives in `scripts/env.nix`, currently `celeryWorkerResourceEnv` and
 `llmInferenceWorkerEnv`.
 
 When adding or changing a shared lx-annotate/secretspec-style variable, update
-`commonEnv` first. Do not add a parallel export block in `config.nix` or
-`scripts.nix`. Small wrapper-only variables can stay in the wrapper that owns
+`commonEnv` first. Do not add a parallel export block in `config.nix`, a
+subservice, or `scripts.nix`. Small wrapper-only variables can stay in the wrapper that owns
 them, for example `PATH`, wheel virtualenv paths, command arguments,
 `CUDA_VISIBLE_DEVICES`, and export-frame compatibility `DATA_DIR`/`STORAGE_DIR`.
 
@@ -157,6 +159,13 @@ web process, path-triggered intake jobs, queue workers, and optional maintenance
 timers. The main web unit is produced by the upstream `services.lx-annotate`
 module and then hardened/ordered here; the surrounding `lx-annotate-*` units are
 owned directly by this module.
+
+Each leaf below `subservices/` starts with two review aids: `Purpose:` names
+the unit boundary and `Command:` identifies the executable behavior. A leaf
+declares exactly one `systemd.services` attribute. Same-name `.timer` and
+`.path` triggers may be colocated because they exist solely to activate that
+service. Integrations that only refine externally owned units live under
+`subservices/integrations/` and state that ownership in their command note.
 
 Most application units share the same service contract: they run as
 `endoreg-service-user`, load `/var/lib/lx-annotate/.env.systemd`, use the

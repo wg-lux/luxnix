@@ -28,13 +28,16 @@ in
 
     flake = mkOption {
       type = with types; str;
-      default = "github:wg-lux/luxnix"; # TODO Create Production Branch and use it here
+      # TODO (maintenance owner): select a pinned production branch after the
+      # release workflow publishes and verifies that branch.
+      default = "github:wg-lux/luxnix";
       description = "The flake to upgrade";
     };
 
   };
 
-  #TODO Documentation
+  # TODO (maintenance owner): document timer inspection and rollback commands
+  # in the module runbook before enabling unattended upgrades on production hosts.
   # sudo systemctl status nixos-upgrade.timer
   # sudo systemctl status nixos-upgrade.service
 

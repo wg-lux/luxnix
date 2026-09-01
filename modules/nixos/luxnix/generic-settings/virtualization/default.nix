@@ -195,12 +195,6 @@ in
 
       lookingGlass = {
         enable = mkBoolOpt false "Enable Looking Glass support";
-
-        sharedMemorySize = mkOption {
-          type = types.str;
-          default = "128M";
-          description = "Size of shared memory for Looking Glass";
-        };
       };
     };
 

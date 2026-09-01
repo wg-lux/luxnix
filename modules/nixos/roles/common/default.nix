@@ -19,7 +19,6 @@ in
         parted
         cryptsetup
         lsof
-        e2fsprogs
         nix-prefetch-scripts
       ];
       description = "List of additional packages to install.";
@@ -54,7 +53,9 @@ in
       virtualisation.podman.enable = true;
 
       ########### MOVE TO MAINTENANCE BOOTMODE
-      #TODO limit to vpn subnet
+      # TODO (common-role owner): restrict authorized SSH keys to the VPN subnet;
+      # next action is to add the firewall/source-address option before moving
+      # this access to maintenance boot mode.
       ssh = {
         enable = true;
         authorizedKeys = [

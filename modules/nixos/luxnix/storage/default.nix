@@ -16,9 +16,6 @@ in
 
   options.luxnix.storage = {
     enable = mkEnableOption "Enable Storage related settings for LuxNix systems";
-    luxnix_storage_persisting_mountpoint = mkOption {
-      type = types.path;
-    };
   };
 
   config = mkIf cfg.enable {

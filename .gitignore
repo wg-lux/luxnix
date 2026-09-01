@@ -32,7 +32,6 @@ test_wd/
 untracked-notes.md
 node_modules/
 .vscode
-result/
 secrets/
 ansible/secrets/admin-passwords.yml
 .ruff_cache/
@@ -146,7 +145,6 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env
 .venv
 env/
 venv/
@@ -180,3 +178,11 @@ cython_debug/
 
 # PyCharm
 #.idea/
+
+# Local coordination state created by feature-tracking/tracker.py.
+/feature-tracking/.locks/
+/feature-tracking/.messages/
+
+# Repository-generated or local-only bundles and transcripts.
+/result.txt
+/wg-lux-mcp.zip

@@ -1,0 +1,162 @@
+schema_version: '1.0'
+id: luxnix_repository_cleanup
+name: LuxNix repository cleanup
+description: Remove stale, generated, duplicate, and misplaced repository content while preserving required source and operational history.
+owners:
+  - LuxNix maintainers
+production_critical: false
+tracking:
+  state: active
+  history: []
+source_documents:
+  - path: docs/development.md
+    disposition: reference
+    note: Repository maintenance and contribution guidance.
+definition_of_done:
+  - id: inventory_complete
+    category: requirements
+    title: Repository inventory is complete
+    acceptance:
+      - Tracked files, generated outputs, caches, and historical documents are classified.
+      - Every proposed removal has an owner, rationale, and recoverable source when needed.
+    required: true
+    verification:
+      kind: manual
+      instructions: Review the cleanup inventory against git status, repository conventions, and active deployment inputs.
+      timeout_seconds: 300
+    assessment:
+      status: verified
+      evidence:
+        - kind: test
+          reference: feature-tracking/test_repository_cleanup.py
+        - kind: review
+          reference: feature-tracking/FrameCleanerIntegration.yml
+        - kind: review
+          reference: feature-tracking/ReportReaderIntegration.yml
+      note: >-
+        Inventory decision: remove result.txt (local transcript, recoverable from Git commit 82330c8e); remove wg-lux-mcp.zip (generated bundle, rebuild from
+        wg-lux-mcp/); migrate the gs-02 Redis proposal to docs/operations/gs-02-local-redis-broker.md; retire the mTLS walkthrough in favor of
+        docs/vault-hub-machine-enrollment.md; retire the Vault simplification plan after its operational contracts moved into maintained guidance;
+        retain and current-schema-migrate FrameCleanerIntegration.yml and ReportReaderIntegration.yml because their LuxNix deployment criteria are distinct
+        from sibling application trackers.
+      assessed_by: codex-repo-cleanup-20260831-b1
+      assessed_at: '2026-08-31T14:13:06.770744Z'
+  - id: stale_content_removed
+    category: functionality
+    title: Stale and duplicate content is removed safely
+    acceptance:
+      - No obsolete duplicate configuration remains without an explicit compatibility reason.
+      - Generated, cache, and local-only files are excluded from source control through repository policy.
+      - The removal does not delete active host configuration, secrets, deployment inputs, or rollback documentation.
+    required: true
+    verification:
+      kind: command
+      command:
+        - git
+        - ls-files
+      timeout_seconds: 60
+    assessment:
+      status: verified
+      evidence:
+        - kind: review
+          reference: docs/development.md; stale-content check produced no output
+        - kind: test
+          reference: feature-tracking/test_repository_cleanup.py
+        - kind: review
+          reference: docs/operations/gs-02-local-redis-broker.md
+      note: Removed only classified local artifacts and migrated legacy operational YAML; active deployment trackers and canonical host/source paths
+        are retained.
+      assessed_by: codex-repo-cleanup-20260831-b1
+      assessed_at: '2026-08-31T14:13:08.041431Z'
+  - id: cleanup_is_reproducible
+    category: testing
+    title: Cleanup checks are reproducible
+    acceptance:
+      - A documented check identifies newly reintroduced stale or duplicate content.
+      - The check runs from a clean checkout without relying on machine-local state.
+    required: true
+    verification:
+      kind: command
+      command:
+        - uv
+        - run
+        - pytest
+        - -q
+        - feature-tracking/test_repository_cleanup.py
+      timeout_seconds: 300
+    assessment:
+      status: verified
+      evidence:
+        - kind: review
+          reference: docs/development.md; documented stale-content check passed
+        - kind: test
+          reference: feature-tracking/test_repository_cleanup.py
+      note: 'uv run pytest -q feature-tracking/test_repository_cleanup.py: 21 passed.'
+      assessed_by: codex-repo-cleanup-20260831-b1
+      assessed_at: '2026-08-31T14:13:09.781415Z'
+  - id: generated_outputs_are_excluded
+    category: security
+    title: Generated outputs are excluded from source control
+    acceptance:
+      - Build output, caches, editor state, and local runtime artifacts are not tracked.
+    required: true
+    verification:
+      kind: manual
+      instructions: Inspect ignore rules and git ls-files for generated and local-only paths.
+      timeout_seconds: 300
+    assessment:
+      status: verified
+      evidence:
+        - kind: review
+          reference: .gitignore; git ls-files/ignore verification passed
+        - kind: test
+          reference: feature-tracking/test_repository_cleanup.py
+        - kind: review
+          reference: .gitignore
+      note: Focused ignore checks passed for Nix/devenv/test outputs, root transcript/archive names, and tracker coordination state.
+      assessed_by: codex-repo-cleanup-20260831-b1
+      assessed_at: '2026-08-31T14:13:11.471322Z'
+  - id: historical_content_is_labeled
+    category: documentation
+    title: Historical content is clearly labeled
+    acceptance:
+      - Retained historical material identifies its status and reason for retention.
+    required: true
+    verification:
+      kind: manual
+      instructions: Review archival and migration documents for status and ownership labels.
+      timeout_seconds: 300
+    assessment:
+      status: verified
+      evidence:
+        - kind: runbook
+          reference: docs/operations/gs-02-local-redis-broker.md
+        - kind: review
+          reference: feature-tracking/FrameCleanerIntegration.yml
+        - kind: review
+          reference: feature-tracking/ReportReaderIntegration.yml
+      note: The still-relevant Redis incident, rollback, and encrypted-storage follow-up were migrated into the labeled operational runbook; active
+        FrameCleaner and ReportReader deployment trackers remain active rather than being mislabeled as history.
+      assessed_by: codex-repo-cleanup-20260831-b1
+      assessed_at: '2026-08-31T14:13:31.419429Z'
+  - id: removals_are_reviewable
+    category: operations
+    title: Cleanup removals are reviewable
+    acceptance:
+      - Each cleanup change can be traced to a documented inventory item and review decision.
+    required: true
+    verification:
+      kind: manual
+      instructions: Review cleanup commits or change records for traceable removal rationale.
+      timeout_seconds: 300
+    assessment:
+      status: verified
+      evidence:
+        - kind: test
+          reference: feature-tracking/test_repository_cleanup.py
+        - kind: review
+          reference: feature-tracking/luxnix_repository_cleanup.yml
+      note: The cleanup assessment records each removal, replacement or recovery source, and each safety-driven retention; regression tests reject
+        reintroduction and stale references.
+      assessed_by: codex-repo-cleanup-20260831-b1
+      assessed_at: '2026-08-31T14:13:15.290418Z'

@@ -9,7 +9,15 @@ let
   managedSecretsModule = "${repoRoot}/modules/nixos/roles/managed-secrets/default.nix";
   endoregClientModule = "${repoRoot}/modules/nixos/roles/endoreg-client/default.nix";
   clientUserModule = "${repoRoot}/modules/nixos/user/client/default.nix";
-  lxAnnotateConfig = "${repoRoot}/modules/nixos/services/lx-annotate-local/config.nix";
+  lxAnnotateModuleRoot = "${repoRoot}/modules/nixos/services/lx-annotate-local";
+  lxAnnotateConfig = pkgs.writeText "lx-annotate-config-and-subservices.nix" (
+    builtins.concatStringsSep "\n" (
+      map builtins.readFile (
+        [ "${lxAnnotateModuleRoot}/config.nix" ]
+        ++ pkgs.lib.filesystem.listFilesRecursive "${lxAnnotateModuleRoot}/subservices"
+      )
+    )
+  );
   lxAnnotateEnv = "${repoRoot}/modules/nixos/services/lx-annotate-local/scripts/env.nix";
 in
 {

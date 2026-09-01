@@ -4,6 +4,36 @@ LuxNix has two complementary Nix configuration entry points. Use the repository
 configuration suite for every exported host and Nixtests for focused safety and
 VM contracts.
 
+The complete test ownership map is
+[`tests/layout.yml`](https://github.com/wg-lux/luxnix/blob/main/tests/layout.yml).
+The default Python command is deliberately scoped to `tests/`; the nested
+`wg-lux-mcp` project is an independent package and must be tested from its own
+directory with its own locked dependencies.
+
+## Python contracts
+
+Run the repository Python suite from the root:
+
+```bash
+uv run pytest -q
+```
+
+This command does not discover `wg-lux-mcp/tests`. Run that project separately
+when changing it:
+
+```bash
+cd wg-lux-mcp && uv run pytest -q
+```
+
+Optional CUDA probes are not part of the default suite; use
+`devenv tasks run env:setup-cuda` when the host supports them.
+
+The same repository suite is available through the command catalog:
+
+```bash
+devenv tasks run tests:pytest
+```
+
 ## Repository configuration suite
 
 Run the full host evaluation and build loop from the repository root:
@@ -17,7 +47,9 @@ and builds it with `--no-link` without activating it. It continues after
 per-host failures, returns nonzero when any host fails, and writes diagnostic
 output below `tests/eval-logs/`. The build phase has an 80-second timeout per
 host, so a timeout can indicate a large derivation or unavailable cache rather
-than an evaluation error.
+than an evaluation error. Host discovery uses an impure flake read so local
+repository inputs can be enumerated; each host evaluation and build remains a
+non-activating per-host operation.
 
 ## Nixtest entry point
 

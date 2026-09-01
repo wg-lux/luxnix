@@ -39,9 +39,20 @@ nh os switch
 nh home switch
 ```
 
+Validate before activation with the evaluation, build, and connectivity
+commands above. If an activated generation is unhealthy, boot a previous NixOS
+generation or run `sudo nixos-rebuild rollback` on the host, then check
+`systemctl --failed` and the affected service. Keep deployment logs for review;
+do not delete paths directly from `/nix/store`.
+
 Agents and automation should read [`luxnix.yml`](luxnix.yml) first. It provides
 the same entry points as structured data and labels commands that affect local
 or remote state.
+
+For contributor checks, use [Nix Quality](docs/nix-quality.md) and
+`devenv tasks run docs:check`; generated host and home outputs must be changed
+through their inventory or template inputs. See the [documentation home](docs/index.md)
+for canonical operational and recovery guides.
 
 Alias notes:
 - `nho` = `nh os switch`

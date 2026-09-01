@@ -53,6 +53,12 @@ refresh, strict/CI behavior, and the private inventory report workflow.
 
 ## Host Overrides
 
+Autoconf-managed system entry points import
+`systems/x86_64-linux/host-common.nix` for the shared admin/Ansible baseline.
+The per-host file remains responsible for its hardware, disk, boot, network,
+and service composition; `lx-test` is intentionally outside that baseline as
+an isolated test profile.
+
 For an Autoconf-managed host, express deliberate overrides in its inventory
 input. The namespaces identify where each value is rendered:
 

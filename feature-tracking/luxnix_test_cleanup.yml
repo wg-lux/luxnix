@@ -1,0 +1,168 @@
+schema_version: '1.0'
+id: luxnix_test_cleanup
+name: LuxNix test cleanup
+description: Consolidate and prune the LuxNix test suite so retained tests have clear ownership, exercise current behavior, and run through
+  documented, reproducible checks. Tests should be AAA and avoid locking in exact string matches.
+owners:
+  - LuxNix maintainers
+production_critical: true
+tracking:
+  state: active
+  history: []
+source_documents:
+  - path: docs/testing-nixtests.md
+    disposition: reference
+    note: Configuration and Nix test execution guidance.
+  - path: docs/nix-quality.md
+    disposition: reference
+    note: Canonical quality and generator test commands.
+definition_of_done:
+  - id: test_inventory_is_complete
+    category: requirements
+    title: Test inventory and ownership are complete
+    acceptance:
+      - Every retained test directory and runner has an identified scope and canonical owner.
+      - Obsolete, duplicate, and orphaned tests are classified with a removal or retention rationale.
+    required: true
+    verification:
+      kind: manual
+      instructions: Review tests/, test manifests, runners, and contributor documentation against the current repository behavior.
+      timeout_seconds: 600
+    assessment:
+      status: verified
+      evidence:
+        - kind: document
+          reference: tests/layout.yml
+        - kind: test
+          reference: tests/test_test_layout_contract.py
+        - kind: code
+          reference: pyproject.toml
+      note: tests/layout.yml classifies four Python suites, two Nix suites, and the independent wg-lux-mcp project; pyproject.toml is the sole root
+        pytest configuration and tests/pytest.ini is removed.
+      assessed_by: codex-test-cleanup-20260831-b1
+      assessed_at: '2026-08-31T14:27:08.595382Z'
+  - id: stale_tests_are_removed
+    category: functionality
+    title: Retained tests cover current behavior
+    acceptance:
+      - Tests assert supported interfaces and current configuration contracts rather than removed implementation details.
+      - Duplicate coverage and tests for retired paths are removed or explicitly justified.
+    required: true
+    verification:
+      kind: manual
+      instructions: Compare test assertions with their production call sites, configuration contracts, and recent repository changes.
+      timeout_seconds: 600
+    assessment:
+      status: verified
+      evidence:
+        - kind: test
+          reference: feature-tracking/test_tracker.py
+        - kind: code
+          reference: lx_administration/utils/file_operations.py
+      note: 'Tracker tests use isolated current-schema fixtures and LuxNix-owned atomic file operations. Direct focused suite: 18 passed through devenv
+        shell without endoreg_db.'
+      assessed_by: codex-tracker-runtime-fix-20260831-b1
+      assessed_at: '2026-08-31T14:34:13.751080Z'
+  - id: canonical_test_suites_pass
+    category: testing
+    title: Canonical test suites pass reproducibly
+    acceptance:
+      - The documented pytest, generator, and Nix configuration test commands pass from a clean checkout.
+      - Test failures remain visible and are not hidden by broad skips, machine-local state, or stale generated output.
+    required: true
+    verification:
+      kind: manual
+      instructions: Run the canonical commands from docs/testing-nixtests.md and docs/nix-quality.md in a clean checkout and record exact results.
+      timeout_seconds: 1800
+    assessment:
+      status: blocked
+      evidence:
+        - kind: command
+          reference: 'uv run pytest -q: 544 passed, 81 failed, 1 warning in 340.13s'
+        - kind: test
+          reference: tests/test_nixtests.py
+        - kind: test
+          reference: tests/lx-annotate/test_lx_annotate_nix_eval_contract.py
+      note: 'Canonical uv run pytest -q completed: 544 passed, 81 failed, 1 warning in 340.13s. Main cascade: untracked systems/x86_64-linux/host-common.nix
+        is omitted from the flake source. Nixtest: 28/39. Additional blockers include orphan scripts/lxv-postgres-secrets.py, Nix writer behavior mismatch,
+        missing wg-lux-features assertion, and untracked flake assets. No failures were skipped or hidden.'
+      assessed_by: codex-test-cleanup-20260831-b1
+      assessed_at: '2026-08-31T14:27:11.086083Z'
+  - id: security_regressions_remain_covered
+    category: security
+    title: Security-sensitive contracts remain covered
+    acceptance:
+      - Cleanup preserves tests for secret handling, file permissions, identity checks, and deployment safety boundaries.
+      - Tests use fixtures or synthetic values and do not require or print production secrets.
+    required: true
+    verification:
+      kind: manual
+      instructions: Review removed and retained tests for security coverage, fixture isolation, secret handling, and output safety.
+      timeout_seconds: 600
+    assessment:
+      status: verified
+      evidence:
+        - kind: test
+          reference: tests/nixtest
+        - kind: test
+          reference: tests/test_vault_server_tls_rotation.py
+        - kind: test
+          reference: tests/test_shell_alias_contract.py
+      note: Retained dedicated Nixtest and Python contracts for secret permissions, Vault/AppRole handling, mTLS/identity, fail-closed startup, and
+        SSH reachability. Tests use source assertions, VM fixtures, or synthetic values and do not require production secrets.
+      assessed_by: codex-test-cleanup-20260831-b1
+      assessed_at: '2026-08-31T14:27:12.275658Z'
+  - id: test_execution_is_operationally_clear
+    category: operations
+    title: Test execution and failure handling are operationally clear
+    acceptance:
+      - Each supported test entry point documents prerequisites, generated artifacts, timeouts, and failure interpretation.
+      - Configuration tests write diagnostics only to documented local paths and do not alter deployed systems.
+    required: true
+    verification:
+      kind: manual
+      instructions: Compare test runners and CI workflows with the command catalog and operational testing documentation.
+      timeout_seconds: 600
+    assessment:
+      status: verified
+      evidence:
+        - kind: document
+          reference: tests/layout.yml
+        - kind: code
+          reference: tests/run-configuration-tests.sh
+        - kind: code
+          reference: devenv/tasks.nix
+        - kind: code
+          reference: devenv/commands.yml
+        - kind: command
+          reference: devenv shell -- ./feature-tracking/tracker.py validate
+        - kind: code
+          reference: lx_administration/utils/file_operations.py
+        - kind: test
+          reference: feature-tracking/test_tracker.py
+      note: The feature tracker now runs directly in the LuxNix Devenv environment and imports project-local atomic write/create, advisory lock, and
+        safe unlink primitives; no lx-annotate/endoreg_db PYTHONPATH is required. Exact validation command passed for 8 definitions.
+      assessed_by: codex-tracker-runtime-fix-20260831-b1
+      assessed_at: '2026-08-31T14:33:57.225503Z'
+  - id: test_documentation_matches_layout
+    category: documentation
+    title: Test layout and commands are documented
+    acceptance:
+      - Documentation points contributors to the canonical test suites and explains when each suite is appropriate.
+      - Test paths, command examples, and artifact locations match tracked files and repository workflows.
+    required: true
+    verification:
+      kind: manual
+      instructions: Review tests/ documentation, README.md, devenv/commands.yml, and CI workflow references for stale or missing test guidance.
+      timeout_seconds: 600
+    assessment:
+      status: verified
+      evidence:
+        - kind: document
+          reference: docs/testing-nixtests.md
+        - kind: test
+          reference: tests/test_test_layout_contract.py
+      note: 'docs/testing-nixtests.md matches the root pytest, independent nested project, configuration, and Nixtest commands recorded in tests/layout.yml.
+        Layout contract: 2 passed.'
+      assessed_by: codex-test-cleanup-20260831-b1
+      assessed_at: '2026-08-31T14:27:14.852445Z'

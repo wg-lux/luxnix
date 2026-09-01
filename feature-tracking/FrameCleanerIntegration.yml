@@ -4,7 +4,10 @@ name: FrameCleaner deployment integration
 description: >-
   Deploy lx-anonymizer FrameCleaner with compatible lx-data-models contracts and
   an attempt-scoped runtime boundary without transferring persistence or
-  publication authority away from endoreg-db.
+  publication authority away from endoreg-db. One deployed invocation processes
+  one immutable source into one unpublished attempt-owned candidate; LuxNix
+  supplies compatible packages and runtime capabilities but does not own
+  durable attempts, retries, publication, or cleanup.
 owners:
   - LuxNix maintainers
 production_critical: true
@@ -15,10 +18,6 @@ source_documents:
   - path: modules/nixos/services/lx-annotate-local/Publishing.md
     disposition: reference
     note: Defines coordinated lx-dtypes, lx-anonymizer, and host-package publication.
-invariants:
-  - One deployed FrameCleaner invocation processes one immutable source into one unpublished attempt-owned candidate.
-  - The deployed lx-anonymizer and lx-dtypes versions expose compatible typed video metadata contracts.
-  - LuxNix configures runtime dependencies and acceleration but does not own durable attempts, retries, publication, or cleanup.
 definition_of_done:
   - id: compatible_packages
     category: requirements
@@ -44,8 +43,30 @@ definition_of_done:
       kind: manual
       instructions: Inspect the evaluated service environment and run the packaged FrameCleaner smoke check on the target host.
       timeout_seconds: 600
+  - id: deployed_invocation
+    category: functionality
+    title: The deployed entry point preserves the attempt-scoped processing contract
+    acceptance:
+      - One deployed invocation processes one immutable source into one unpublished attempt-owned candidate.
+      - Caller-selected input and candidate paths cross the packaged application boundary unchanged.
+    required: true
+    verification:
+      kind: manual
+      instructions: Exercise the packaged FrameCleaner entry point with an immutable fixture and inspect the unpublished candidate path.
+      timeout_seconds: 600
+  - id: deployment_smoke_coverage
+    category: testing
+    title: Deployment behavior has focused reproducible coverage
+    acceptance:
+      - A focused smoke check covers the CPU deployment profile and the configured accelerated profile where enabled.
+      - The check fails when FFmpeg, FFprobe, or the typed lx-dtypes contract is unavailable.
+    required: true
+    verification:
+      kind: manual
+      instructions: Run the packaged FrameCleaner smoke checks against the evaluated target closure and record exact package versions and results.
+      timeout_seconds: 600
   - id: ownership_boundary
-    category: data_integrity
+    category: security
     title: Deployment preserves attempt ownership and fail-closed publication
     acceptance:
       - Each concurrent attempt constructs a separate FrameCleaner instance.
@@ -55,4 +76,15 @@ definition_of_done:
     verification:
       kind: manual
       instructions: Review the deployed endoreg-db invocation path against the video import concurrency contract and its focused tests.
+      timeout_seconds: 600
+  - id: deployment_contract_documented
+    category: documentation
+    title: Package compatibility and ownership boundaries are documented
+    acceptance:
+      - The deployed lx-anonymizer and lx-dtypes compatibility set is reviewable before activation.
+      - Documentation states that LuxNix supplies packages and runtime capabilities but does not own attempts, retries, publication, or cleanup.
+    required: true
+    verification:
+      kind: manual
+      instructions: Review the feature specification and publishing documentation against the evaluated deployment boundary.
       timeout_seconds: 600

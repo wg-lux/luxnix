@@ -5,8 +5,20 @@
   ...
 }:
 let
-  lxAnnotateOptions = "${repoRoot}/modules/nixos/services/lx-annotate-local/options.nix";
-  lxAnnotateConfig = "${repoRoot}/modules/nixos/services/lx-annotate-local/config.nix";
+  lxAnnotateModuleRoot = "${repoRoot}/modules/nixos/services/lx-annotate-local";
+  lxAnnotateOptions = pkgs.writeText "lx-annotate-options.nix" (
+    builtins.concatStringsSep "\n" (
+      map builtins.readFile (pkgs.lib.filesystem.listFilesRecursive "${lxAnnotateModuleRoot}/options")
+    )
+  );
+  lxAnnotateConfig = pkgs.writeText "lx-annotate-config-and-subservices.nix" (
+    builtins.concatStringsSep "\n" (
+      map builtins.readFile (
+        [ "${lxAnnotateModuleRoot}/config.nix" ]
+        ++ pkgs.lib.filesystem.listFilesRecursive "${lxAnnotateModuleRoot}/subservices"
+      )
+    )
+  );
   lxAnnotateScripts = "${repoRoot}/modules/nixos/services/lx-annotate-local/scripts.nix";
   lxAnnotateEnvScripts = "${repoRoot}/modules/nixos/services/lx-annotate-local/scripts/env.nix";
   vaultConfig = "${repoRoot}/modules/nixos/luxnix/vault/default.nix";

@@ -42,6 +42,11 @@ serialization.
    process uses it (via the generated `autoconf/inventory.yml`) to decide which
    secrets to create.
 
+Before a write, confirm the vault directory and key are the intended operator
+credentials, that the password mapping is untracked and permission-restricted,
+and that a current encrypted vault backup exists outside the checkout. Record
+the inventory revision and keep the bootstrap log free of secret values.
+
 ## Bootstrapping a fresh vault
 
 Run the helper script from the repository root through the declared development
@@ -97,6 +102,17 @@ The script is idempotent:
 - Use `--skip-sync` if you only need to import new passwords without touching
   templates or PSKs.
 
+### Bootstrap failure and recovery
+
+If bootstrap or export fails, stop before distributing generated files. Keep
+the existing vault and encrypted backup intact, inspect the non-secret error,
+and rerun only after correcting the inventory, key, or permissions. If a
+partial update is suspected, restore `~/.lxv/` and `~/.lxv.key` together from
+the same verified encrypted backup, then run `validate-admin-passwords` and a
+fresh export. Compare the resulting host bundle list with inventory before
+using it. Never recover by replacing the vault with a plaintext password file
+or by reusing an unknown key.
+
 ## Using the vault in Ansible runs
 
 - The generated `conf/ansible.cfg` is referenced automatically by helper
@@ -144,6 +160,13 @@ overriding paths, selecting the control hostname, or exporting host bundles.
      --mode password \
      --key-length 20
    ```
+
+After rotation, validate the affected secret and export before deployment. If
+rotation fails or a generated secret is inconsistent, stop distribution,
+restore the prior encrypted vault snapshot, validate it, and revoke any
+partially issued credential through the documented provider procedure. Resume
+only after the old or replacement credential is confirmed on every affected
+host.
 
 With these steps you can rebuild the Luxnix vault on a fresh workstation,
 import existing admin credentials, and keep Ansible configured to use the

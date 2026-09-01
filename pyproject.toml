@@ -46,5 +46,9 @@ requires = ["hatchling"]
 lint.ignore = []
 lint.select = ["E", "F", "W"]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = ["result", "result-*", ".git"]
+
 [tool.uv.sources]
 lx_administration = {workspace = true}

@@ -49,7 +49,8 @@ in
       "d ${cfg.rootDir}/tmp 0700 ${cfg.user} ${cfg.group} -"
     ];
 
-    # TODO Create user with correct permissions
+    # TODO (lx-anonymizer owner): convert this account to a system user after
+    # confirming the fixed UID and Home Manager consumers do not require login.
     users.users.${cfg.user} = {
       isNormalUser = true;
       home = cfg.rootDir;

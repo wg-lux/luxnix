@@ -10,7 +10,15 @@ let
   vaultServerTlsScript = "${repoRoot}/scripts/vault/maintain-server-tls.sh";
   managedSecretsModule = "${repoRoot}/modules/nixos/roles/managed-secrets/default.nix";
   localUsersModule = "${repoRoot}/modules/nixos/security/local-users/default.nix";
-  lxAnnotateConfig = "${repoRoot}/modules/nixos/services/lx-annotate-local/config.nix";
+  lxAnnotateModuleRoot = "${repoRoot}/modules/nixos/services/lx-annotate-local";
+  lxAnnotateConfig = pkgs.writeText "lx-annotate-config-and-subservices.nix" (
+    builtins.concatStringsSep "\n" (
+      map builtins.readFile (
+        [ "${lxAnnotateModuleRoot}/config.nix" ]
+        ++ pkgs.lib.filesystem.listFilesRecursive "${lxAnnotateModuleRoot}/subservices"
+      )
+    )
+  );
   lxAnnotateScripts = "${repoRoot}/modules/nixos/services/lx-annotate-local/scripts.nix";
   lxAnnotateEnvScripts = "${repoRoot}/modules/nixos/services/lx-annotate-local/scripts/env.nix";
 in
@@ -136,7 +144,7 @@ in
         script = ''
           ${ntlib.helpers.path [ pkgs.gnugrep ]}
           ${ntlib.helpers.scriptHelpers}
-          assert_file_contains ${repoRoot}/modules/nixos/services/lx-annotate-local/options.nix 'vaultPathTemplate = mkOption' "vault path template option must exist"
+          assert_file_contains ${repoRoot}/modules/nixos/services/lx-annotate-local/options/runtime.nix 'vaultPathTemplate = mkOption' "vault path template option must exist"
           assert_file_contains ${lxAnnotateConfig} 'replaceStrings' "lx-annotate Vault secret generators must transform the configured path template"
           assert_file_contains ${lxAnnotateConfig} '"{hostname}"' "lx-annotate Vault secret generators must keep the hostname placeholder contract"
           assert_file_contains ${lxAnnotateConfig} 'config.networking.hostName' "lx-annotate Vault secret generators must derive the node name from networking.hostName"

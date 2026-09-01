@@ -4,7 +4,6 @@
   pkgs,
   ...
 }:
-#CHANGEME
 with lib;
 with lib.luxnix;
 let
@@ -22,7 +21,6 @@ in
 
     environment.systemPackages = with pkgs; [
       cifs-utils
-      nfs-utils
     ];
 
     fileSystems."/mnt/share" = {

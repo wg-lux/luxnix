@@ -26,7 +26,9 @@ let
       sslCertificateKey = ssl-certificate-key-path;
 
       locations."/" = {
-        proxyPass = "http://${keycloak-host-vpn-ip}:${toString network.ports.keycloak.http}"; # TODO FIXME
+        # TODO (nginx-host owner): switch to the Keycloak HTTPS endpoint after
+        # its internal certificate trust is available to this proxy.
+        proxyPass = "http://${keycloak-host-vpn-ip}:${toString network.ports.keycloak.http}";
         extraConfig = base.all-extraConfig + intern-endoreg-net-extraConfig;
       };
     };
@@ -37,7 +39,9 @@ let
       sslCertificateKey = ssl-certificate-key-path;
 
       locations."/" = {
-        proxyPass = "http://${keycloak-host-vpn-ip}:${toString network.ports.keycloak.http}"; # TODO FIXME
+        # TODO (nginx-host owner): switch to the Keycloak HTTPS endpoint after
+        # its internal certificate trust is available to this proxy.
+        proxyPass = "http://${keycloak-host-vpn-ip}:${toString network.ports.keycloak.http}";
         extraConfig = base.all-extraConfig;
       };
     };

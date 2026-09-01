@@ -82,7 +82,6 @@ luxnix.generic-settings = {
 
 ```nix
 luxnix.generic-settings = {
-  configurationPathRelative = "lx-production";     # Relative config path
   configurationPath = "/home/admin/lx-production/"; # Full config path
   systemConfigurationPath = "/home/admin/lx-production/systems/x86_64-linux/hostname";
   
@@ -246,7 +245,6 @@ warnings = [
       remote.admin.enable = true;
     };
     
-    configurationPathRelative = "dev/luxnix";
   };
 }
 ```

@@ -3,7 +3,6 @@
   lib,
   ...
 }:
-#CHANGEME SETUP VPN
 with lib;
 let
   cfg = config.services.vpn;
@@ -27,20 +26,11 @@ in
       description = "The nameservers for the vpn";
     };
 
-    stage-1-vpn = mkOption {
-      type = types.bool;
-      default = false;
-      description = "Enabbles VPN Service at stage 1 of boot";
-    };
-
   };
 
   config = mkIf cfg.enable {
     networking.domain = cfg.main-domain;
-    networking.nameservers = [
-      "8.8.8.8"
-      "1.1.1.1"
-    ];
+    networking.nameservers = cfg.backup-nameservers;
 
   };
 }

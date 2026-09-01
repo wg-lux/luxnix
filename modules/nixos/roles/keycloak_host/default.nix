@@ -194,7 +194,6 @@ in
         database = {
           createLocally = false;
           username = cfg.dbUsername;
-          # useSSL = false; #FIXME harden
           passwordFile = "${cfg.homeDir}/db-password";
           type = "postgresql";
 
@@ -210,9 +209,7 @@ in
           https-certificate-file = "${cfg.homeDir}/tls.crt";
           https-certificate-key-file = "${cfg.homeDir}/tls.key";
           hostname = "https://${conf.domain}";
-          # hostname-admin = "https://${conf.adminDomain}"; #FIXME
           hostname-port = conf.port;
-          # hostname-admin-port = conf.port; #FIXME
           http-enabled = false;
           proxy-headers = "xforwarded";
           hostname-strict = false;
@@ -320,8 +317,8 @@ in
     };
 
     networking.firewall.allowedTCPPorts = [ conf.port ];
-    # allow port on tun0 #TODO
-    # networking.firewall.interfaces.tun0.allowedTCPPorts = [ cfg.httpPort ]; #FIXME #TODO tun0 should be automatically inferred from defined vpn
+    # TODO (keycloak-host owner): restrict this port to the configured VPN
+    # interface after generic-settings exports the interface name.
 
   };
 

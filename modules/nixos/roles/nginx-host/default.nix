@@ -136,7 +136,8 @@ let
 
 in
 {
-  #TODO MIGRATE DOMAIN SETTINGS TO GENERIC SETTINGS SO THAT THEY ARE AVAILABLE ON ALL MACHINES
+  # TODO (nginx-host owner): domain settings are split across this role and
+  # generic-settings; migrate remaining role-local domains to the network contract.
   options.roles.nginxHost = {
     enable = mkBoolOpt false "Enable NGINX";
     sslCertPath =
@@ -407,7 +408,8 @@ in
         inherit appendHttpConfig;
         virtualHosts = lib.mkMerge [
           (mkIf cfg.psqlMain.enable {
-            #TODO domain in psql config
+            # TODO (nginx-host owner): source this domain from the PostgreSQL
+            # endpoint contract once that role exports its public endpoint.
             ${psqlMainConfig.domain} = {
               forceSSL = true;
               sslCertificate = nginx_cert_path;
@@ -420,7 +422,8 @@ in
             };
           })
           (mkIf cfg.psqlTest.enable {
-            #TODO domain in psql config
+            # TODO (nginx-host owner): source this domain from the PostgreSQL
+            # endpoint contract once that role exports its public endpoint.
             ${psqlTestConfig.domain} = {
               forceSSL = true;
               sslCertificate = nginx_cert_path;

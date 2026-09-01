@@ -67,6 +67,10 @@ Notes:
    - `nh os switch` (alias: `nho`)
    - `nh home switch` (alias: `nhh`)
 
+At each boundary, record the selected host, repository commit, `flake.lock`
+revision, and command output. Do not continue when inventory generation,
+evaluation, build, connectivity, or SSH host-key verification fails.
+
 ## Preflight checklist
 
 Run these before a production deploy:
@@ -92,3 +96,12 @@ Always use canonical commands in documentation and runbooks:
 - Then review:
   - `logs/connectivity-*.log`
   - `tests/eval-logs/*.log`
+
+For an installer failure, leave the target in the installer, preserve the
+`nixos-anywhere` output, and re-check disk and hardware inputs before retrying.
+For an activation failure on an existing installation, select the previous
+NixOS generation at boot or run `sudo nixos-rebuild switch --rollback`, then
+verify SSH, `/run/current-system`, mounts, and critical services. Restore
+host-specific files from the approved backup if required, regenerate from the
+canonical inventory, and repeat all preflight checks before deployment. Treat
+the procedure as incomplete until those checks pass.

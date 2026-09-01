@@ -68,6 +68,7 @@ nav:
       - Network Architecture: network-architecture.md
       - Network Resolution: network-resolution.md
       - Database Ownership: database-ownership.md
+      - System Feature Tracking: system-feature-tracking.md
       - Access Management: access-management.md
   - Deployment and Testing:
       - Deployment Guide: deployment-guide.md
@@ -80,6 +81,7 @@ nav:
       - lx-annotate Encrypted Data: lx-annotate-encrypted-data.md
       - lx-annotate Secure HLS: lx-annotate-secure-hls.md
       - lx-annotate Cluster Readiness: lx-annotate-cluster-readiness.md
+      - gs-02 Local Redis Recovery: operations/gs-02-local-redis-broker.md
   - Vault:
       - Setup and Bootstrap: vault-setup.md
       - Machine Enrollment: vault-hub-machine-enrollment.md

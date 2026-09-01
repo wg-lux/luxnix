@@ -14,11 +14,24 @@ SERVICE_DIR = REPO_ROOT / "modules/nixos/services/lx-annotate-local"
 SCRIPTS_NIX = SERVICE_DIR / "scripts.nix"
 SCRIPTS_ENV_NIX = SERVICE_DIR / "scripts/env.nix"
 STORAGE_RELIEF_NIX = SERVICE_DIR / "scripts/storage-relief.nix"
-OPTIONS_NIX = SERVICE_DIR / "options.nix"
 CONFIG_NIX = SERVICE_DIR / "config.nix"
 DEV_OVERLOAD_GUARD_NIX = (
     REPO_ROOT / "modules/nixos/luxnix/dev-overload-guard/default.nix"
 )
+
+
+def _option_source() -> str:
+    return "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in sorted((SERVICE_DIR / "options").glob("*.nix"))
+    )
+
+
+def _service_source() -> str:
+    return CONFIG_NIX.read_text(encoding="utf-8") + "\n" + "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in sorted((SERVICE_DIR / "subservices").rglob("*.nix"))
+    )
 
 
 @lru_cache(maxsize=None)
@@ -1328,7 +1341,7 @@ def test_lx_annotate_intake_contract_has_one_configurable_root() -> None:
 
 
 def test_lx_annotate_local_exposes_generic_runtime_env_override() -> None:
-    options_source = OPTIONS_NIX.read_text(encoding="utf-8")
+    options_source = _option_source()
     env_source = SCRIPTS_ENV_NIX.read_text(encoding="utf-8")
 
     assert "extraEnvironment = mkOption" in options_source
@@ -1418,7 +1431,7 @@ def test_wheel_acceptance_script_uses_installed_django_not_manage_py() -> None:
 
 def test_all_lx_annotate_acceptance_scripts_verify_tls() -> None:
     source = SCRIPTS_NIX.read_text(encoding="utf-8")
-    service_source = CONFIG_NIX.read_text(encoding="utf-8")
+    service_source = _service_source()
 
     assert source.count('--cacert "${publicSslCertificatePath}"') == 2
     assert service_source.count('--cacert "${publicSslCertificatePath}"') == 1
@@ -1485,7 +1498,7 @@ def test_emergency_storage_relief_helper_uses_verified_archive_contract() -> Non
     assert "sha256_file" in source
     assert "staging_destination" in source
     assert "ReliefResourceKind" in source
-    options_source = OPTIONS_NIX.read_text(encoding="utf-8")
+    options_source = _option_source()
     assert "validatedExportMarkerNames" in source
     assert ".lx-annotate-export-validated.json" in options_source
     assert "lx_annotate_storage_relief_complete" in source

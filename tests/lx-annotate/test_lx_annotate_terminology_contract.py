@@ -27,7 +27,7 @@ def _nix_eval_json(expression: str) -> dict[str, Any]:
 def _gc_02_terminology_contract() -> dict[str, Any]:
     return _nix_eval_json(f'''
       let
-        flake = builtins.getFlake "git+file://{REPO_ROOT}";
+        flake = builtins.getFlake "path:{REPO_ROOT}";
         lib = flake.inputs.nixpkgs.lib;
         cfg = flake.nixosConfigurations.gc-02.config;
         lxCfg = cfg.services.luxnix.lxAnnotateLocal;
@@ -92,7 +92,7 @@ def _gc_02_terminology_contract() -> dict[str, Any]:
 def _gc_02_initial_bundle_script() -> str:
     return _nix_eval_json(f'''
       let
-        flake = builtins.getFlake "git+file://{REPO_ROOT}";
+        flake = builtins.getFlake "path:{REPO_ROOT}";
         cfg = (flake.nixosConfigurations.gc-02.extendModules {{
           modules = [
             ({{ ... }}: {{
@@ -115,7 +115,7 @@ def _gc_02_initial_bundle_script() -> str:
 def _gc_02_repo_mode_contract() -> dict[str, Any]:
     return _nix_eval_json(f'''
       let
-        flake = builtins.getFlake "git+file://{REPO_ROOT}";
+        flake = builtins.getFlake "path:{REPO_ROOT}";
         lib = flake.inputs.nixpkgs.lib;
         cfg = (flake.nixosConfigurations.gc-02.extendModules {{
           modules = [

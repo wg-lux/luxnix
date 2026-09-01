@@ -3,7 +3,6 @@
   lib,
   ...
 }:
-# CHANGEME SETUP MINIO https://min.io/
 with lib;
 with lib.luxnix;
 let

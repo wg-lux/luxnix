@@ -12,17 +12,10 @@ lib.foldl' lib.recursiveUpdate
   {
     imports = [
       (modulesPath + "/installer/scan/not-detected.nix")
+      ../host-common.nix
       ./boot-decryption-config.nix
       ./disks.nix
     ];
-
-    user = {
-      admin = {
-        name = "admin";
-      };
-      ansible.enable = true;
-      settings.mutable = false;
-    };
   }
   [
     { }

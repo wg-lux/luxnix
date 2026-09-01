@@ -263,6 +263,9 @@ def test_system_template_renders_ansible_driven_top_level_nixos(tmp_path):
     rendered = output_file.read_text()
 
     assert rendered.startswith("# node-01/default.nix")
+    assert "../host-common.nix" in rendered
+    assert "ansible.enable" not in rendered
+    assert "settings.mutable" not in rendered
     assert "./hardware-extra.nix" in rendered
     assert (
         """networking.firewall.allowedTCPPorts = [
