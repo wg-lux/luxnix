@@ -484,9 +484,6 @@ lib.foldl' lib.recursiveUpdate
       luxnix.vault.client.allowOffline = true;
     }
     {
-      luxnix.vault.client.auth.deferUntilProvisioned = true;
-    }
-    {
       luxnix.vault.client.auth.method = "approle";
     }
     {
@@ -580,6 +577,9 @@ lib.foldl' lib.recursiveUpdate
     }
     {
       luxnix.gpu-eval.enable = true;
+    }
+    {
+      luxnix.vault.client.auth.deferUntilProvisioned = true;
     }
     {
       networking.hosts."172.16.255.22" = [

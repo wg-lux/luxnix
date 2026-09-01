@@ -151,11 +151,17 @@ The node key and center key must exactly match the site configuration. The hub
 secret path is host-qualified because `gs-02` stores one independently delivered
 request-authentication secret per site. Do not put the secret value in YAML.
 
-Initial enrollment may use the existing shared
-`vault.client.auth.deferUntilProvisioned = true` gate. It permits a NixOS
-switch before AppRole files arrive, but it does not permit LX-Annotate to start
-without its required secrets. Once all active sites are enrolled, set it to
-`false` in the shared YAML so later authentication failures block activation.
+Initial enrollment may set the following temporary exception in the site's
+`ansible/inventory/host_vars/<host>.yml` under `host_luxnix`:
+
+```yaml
+vault.client.auth.deferUntilProvisioned: "true"
+```
+
+It permits that site's NixOS switch before AppRole files arrive, but it does
+not permit LX-Annotate to start without its required secrets. The value must
+not be placed in `group_vars/gpu_client.yml`: enrollment state belongs to one
+machine, and an unfinished site must not weaken the rest of the fleet.
 
 Validate and regenerate derived Nix configurations:
 
@@ -329,11 +335,11 @@ sudo systemctl start luxnix-vault-issue-hub-client-certificate.service
 sudo systemctl restart lx-annotate-hub-node-provisioning.service
 ```
 
-The enrollment status must be successful. After every active GC host has
-completed enrollment, set the temporary shared
-`vault.client.auth.deferUntilProvisioned` value to `false`, regenerate, build,
-and switch the affected sites again. From that point onward, missing credentials
-and real Vault authentication failures block activation normally.
+The enrollment status must be successful. Set this site's temporary
+`host_luxnix.vault.client.auth.deferUntilProvisioned` value to `false`, then
+regenerate, build, and switch this site again. Do not wait for another site to
+finish enrollment. From that point onward, missing credentials and real Vault
+authentication failures block activation for this site normally.
 
 Verify without displaying file contents or credential values:
 

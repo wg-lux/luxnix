@@ -26,6 +26,8 @@ host_roles:
 host_services: {}
 
 host_luxnix:
+  # Temporary bootstrap exception; set false after verified Vault enrollment.
+  vault.client.auth.deferUntilProvisioned: "true"
   maintenance.autoUpdates.enable: "false"
   # Custom packages
 

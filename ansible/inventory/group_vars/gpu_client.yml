@@ -32,7 +32,6 @@ group_luxnix:
   vault.client.auth.method: '"approle"'
   vault.client.auth.roleIdFile: '"/etc/secrets/vault/hub-pki/approle_role_id"'
   vault.client.auth.secretIdFile: '"/etc/secrets/vault/hub-pki/approle_secret_id"'
-  vault.client.auth.deferUntilProvisioned: "true"
   vault.client.hubPki.enable: "true"
 
   generic_settings.enable: "true"

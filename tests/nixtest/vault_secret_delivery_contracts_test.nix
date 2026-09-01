@@ -98,9 +98,18 @@ in
           assert_file_contains ${vaultModule} 'luxnix-vault-enrollment-status' "operators must have a non-secret enrollment status command"
           assert_file_contains ${managedSecretsModule} 'Vault runtime credentials are unavailable.*managed secrets remain fail-closed' "managed-secrets must fail clearly when vault.env is absent"
           assert_file_contains ${managedSecretsModule} '"-\$[^" ]*runtimeEnvironmentFile' "the optional systemd env load must allow the explicit fail-closed check to run"
-          assert_file_contains ${repoRoot}/ansible/inventory/host_vars/gc-02.yml 'vault\.client\.auth\.deferUntilProvisioned: "true"' "gc-02 must temporarily opt into deferred initial enrollment"
-          assert_file_contains ${repoRoot}/ansible/inventory/host_vars/gc-02.yml 'networking\.hosts\."172\.16\.255\.22"' "gc-02 must resolve Vault through the declared VPN path"
-          assert_file_contains ${repoRoot}/ansible/inventory/host_vars/gc-10.yml 'vault\.client\.auth\.deferUntilProvisioned: "true"' "gc-10 must temporarily opt into deferred initial enrollment"
+          gpu_client_vars=${repoRoot}/ansible/inventory/group_vars/gpu_client.yml
+          assert_file_contains "$gpu_client_vars" 'networking\.hosts\."172\.16\.255\.22"' "GPU clients must resolve Vault through the declared VPN path"
+          if grep -q 'vault\.client\.auth\.deferUntilProvisioned' "$gpu_client_vars"; then
+            echo "The temporary Vault enrollment gate must be host-scoped, not fleet-wide." >&2
+            exit 1
+          fi
+          for host in gc-02 gc-04 gc-05 gc-06 gc-07 gc-08 gc-09 gc-10; do
+            assert_file_contains \
+              "${repoRoot}/ansible/inventory/host_vars/$host.yml" \
+              'vault\.client\.auth\.deferUntilProvisioned: "true"' \
+              "$host must explicitly record its temporary enrollment state"
+          done
         '';
       }
       {
