@@ -21,7 +21,7 @@ host_roles:
   custom_packages.visuals: "true"
   custom_packages.hardwareAcceleration: "true"
   custom_packages.protonmail: "true"
-  endoreg_client.defaultCenterKey: '"rbk_stuttgart"'
+  endoreg_client.defaultCenterKey: '"university_hospital_wuerzburg"'
 
 host_services: {}
 
