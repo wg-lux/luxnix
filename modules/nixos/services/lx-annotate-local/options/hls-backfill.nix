@@ -10,13 +10,13 @@ in
           enable = mkOption {
             type = types.bool;
             default = true;
-            description = "Run a boot-time local encrypted-HLS backfill dispatcher after migrations, base data loading, and encrypted storage validation.";
+            description = "Mandatory compatibility option. It defaults to true and must remain true so every enabled host automatically replaces legacy raw and processed HLS after migrations, base data loading, and encrypted storage validation.";
           };
           extraArgs = mkOption {
             type = types.listOf types.str;
             default = [ ];
-            example = literalExpression ''[ "--limit" "25" ]'';
-            description = "Additional safe arguments passed to materialize_video_hls for the automatic backfill. By default the wrapper reconciles both raw and processed HLS artifacts; use --artifact-kind raw or --artifact-kind processed to limit a run. The wrapper rejects --force, --inline, and unsupported artifact kinds.";
+            example = literalExpression ''[ ]'';
+            description = "Reserved compatibility field. It must remain empty so the automatic production backfill reconciles the entire raw and processed HLS corpus without per-machine opt-in or selection. Use the separate manual materialization unit for scoped repair runs.";
           };
           timeoutStartSec = mkOption {
             type = types.str;
@@ -26,7 +26,7 @@ in
         };
       };
       default = { };
-      description = "Settings for the automatic local encrypted-HLS backfill dispatcher.";
+      description = "Settings for the mandatory automatic full-corpus local encrypted-HLS replacement dispatcher.";
     };
   };
 }

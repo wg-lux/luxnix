@@ -30,7 +30,7 @@ in
         script = ''
           ${ntlib.helpers.path [ pkgs.gnugrep ]}
           ${ntlib.helpers.scriptHelpers}
-          assert_file_contains ${vaultModule} 'systemd\.services\.vault-auth-setup' "vault auth bootstrap service must exist"
+          assert_file_contains ${vaultModule} 'services\.vault-auth-setup = mkIf vaultAuthEnabled' "vault auth bootstrap service must exist"
           assert_file_contains ${vaultModule} 'runtimeEnvironmentFile' "vault runtime env file must be defined"
           assert_file_contains ${vaultModule} 'method = mkOption' "vault auth method option must exist"
           assert_file_contains ${vaultModule} 'tokenFile' "vault tokenFile auth must exist"
@@ -49,13 +49,15 @@ in
           assert_file_contains ${vaultModule} 'luxnix-vault-enroll-hub-site' "Vault must expose bounded per-site enrollment tooling"
           assert_file_contains ${vaultModule} 'client_flag=true' "hub certificates must be client identities"
           assert_file_contains ${vaultModule} 'server_flag=false' "hub client certificates must not be valid server identities"
-          assert_file_contains ${vaultModule} 'systemd\.services\.luxnix-vault-issue-hub-client-certificate' "site client identities must be issued and renewed by a dedicated service"
+          assert_file_contains ${vaultModule} 'services\.luxnix-vault-issue-hub-client-certificate = lib\.mkIf clientHubPkiCfg\.enable' "site client identities must be issued and renewed by a dedicated service"
           assert_file_contains ${vaultModule} 'Vault returned a client certificate and private key that do not match' "issued certificate and key pairs must be verified"
           assert_file_contains ${vaultModule} 'source-node-secret' "site enrollment must provision separate request-authentication material"
+          assert_file_contains ${vaultModule} 'luxnix-vault-install-hub-site-enrollment' "site enrollment bundles must have a bounded installer"
+          assert_file_contains ${vaultModule} 'AppRole hub-site enrollment files and the recipient public key must share the node-secret directory' "site enrollment paths must preserve one protected directory boundary"
           assert_file_contains ${vaultModule} 'vault-server-ca.pem' "site enrollment must include pinned Vault server trust material"
           assert_file_contains ${vaultModule} 'kv_mount/data/nodes' "site AppRoles must read only their own request-authentication secret"
           assert_file_contains ${vaultModule} 'lx_hub_source_node_secret' "site request-authentication material must be refreshed through managed secrets"
-          assert_file_contains ${vaultModule} 'systemd\.services\.luxnix-vault-publish-hub-client-ca' "hub client CA publication must be managed"
+          assert_file_contains ${vaultModule} 'services\.luxnix-vault-publish-hub-client-ca = lib\.mkIf hubPkiCfg\.enable' "hub client CA publication must be managed"
           assert_file_contains ${vaultModule} '--cacert.*serverCfg\.caCertFile' "hub CA publication must verify a private Vault server certificate"
           assert_file_contains ${vaultModule} '--retry-connrefused' "hub CA publication must tolerate the bounded Vault listener startup race"
           assert_file_contains ${vaultModule} 'Restart = "on-failure"' "hub CA publication must retry a failed refresh"
@@ -70,11 +72,11 @@ in
           ${ntlib.helpers.path [ pkgs.gnugrep ]}
           ${ntlib.helpers.scriptHelpers}
           assert_file_contains ${vaultModule} 'lx_hub_recipient_public_key' "sites must receive the hub envelope public key through managed secrets"
-          assert_file_contains ${vaultModule} 'kv_mount/data/.*recipientPublicKeyKvPath' "site AppRoles may read the dedicated hub recipient public-key path"
+          assert_file_contains ${vaultModule} 'kv_mount/data/.*recipient_public_key_kv_path' "site AppRoles may read the dedicated hub recipient public-key path"
           assert_file_contains ${vaultModule} 'vault kv put.*public_key=-' "PKI bootstrap must publish only the hub recipient public key"
           assert_file_contains ${vaultModule} 'LUXNIX_VAULT_ALLOW_HUB_RECIPIENT_ROTATION' "recipient public-key replacement must require an explicit rotation action"
           assert_file_contains ${vaultModule} 'openssl pkey -pubin' "published and fetched recipient keys must be parsed as public keys"
-          assert_file_contains ${vaultModule} 'X25519 PEM public key' "published and fetched recipient keys must be restricted to X25519"
+          assert_file_contains ${vaultModule} 'grep -q X25519' "published and fetched recipient keys must be restricted to X25519"
           assert_file_contains ${lxAnnotateConfig} 'lx-annotate-hub-envelope-key-preflight' "hub sender and receiver services must be gated on envelope-key validation"
           assert_file_contains ${lxAnnotateConfig} 'builtins.length cfg\.hub\.transferApi\.recipientPrivateKeyFiles <= 3' "recipient rotation must permit only a bounded current-and-retiring key set"
           assert_file_contains ${lxAnnotateEnv} 'LX_ANNOTATE_HUB_EXPORT_RECIPIENT_PUBLIC_KEY_FILE' "site workers must receive only the hub recipient public-key path"

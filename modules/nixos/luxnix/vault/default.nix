@@ -18,6 +18,10 @@ let
   managedTlsCfg = serverCfg.managedTls;
   hubPkiCfg = serverCfg.hubPki;
   clientHubPkiCfg = cfg.client.hubPki;
+  clientHubPkiSecretDirectories = lib.unique [
+    (builtins.dirOf clientHubPkiCfg.nodeSecretFile)
+    (builtins.dirOf clientHubPkiCfg.recipientPublicKeyFile)
+  ];
 
   hubPkiBootstrapTool = pkgs.writeShellApplication {
     name = "luxnix-vault-bootstrap-hub-pki";
@@ -626,6 +630,108 @@ let
       trap - EXIT
       echo "Installed authenticated Vault CA with SHA-256 fingerprint $actual."
       echo "No service was restarted. Verify configuration, then start vault-auth-setup.service explicitly."
+    '';
+  };
+
+  hubSiteEnrollmentInstallTool = pkgs.writeShellApplication {
+    name = "luxnix-vault-install-hub-site-enrollment";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.gnugrep
+      pkgs.openssl
+    ];
+    text = ''
+      set -euo pipefail
+      umask 077
+
+      if [ "$#" -ne 2 ]; then
+        echo "Usage: luxnix-vault-install-hub-site-enrollment <enrollment-directory> <expected-vault-ca-sha256-fingerprint>" >&2
+        exit 2
+      fi
+      if [ "$(${pkgs.coreutils}/bin/id -u)" -ne 0 ]; then
+        echo "ERROR: enrollment installation must run as root." >&2
+        exit 1
+      fi
+
+      source_directory="$1"
+      if [ -L "$source_directory" ] || [ ! -d "$source_directory" ]; then
+        echo "ERROR: enrollment source must be a non-symlink directory." >&2
+        exit 1
+      fi
+
+      validate_source() {
+        local source_file="$source_directory/$1"
+        if [ -L "$source_file" ] || [ ! -f "$source_file" ] || [ ! -s "$source_file" ]; then
+          echo "ERROR: enrollment file must be a non-empty regular non-symlink file: $1" >&2
+          exit 1
+        fi
+      }
+      validate_source approle_role_id
+      validate_source approle_secret_id
+      validate_source vault-server-ca.pem
+      validate_source source-node-secret
+
+      expected="$(${pkgs.coreutils}/bin/printf '%s' "$2" \
+        | ${pkgs.coreutils}/bin/tr -d ':[:space:]' \
+        | ${pkgs.coreutils}/bin/tr '[:lower:]' '[:upper:]')"
+      if ! ${pkgs.gnugrep}/bin/grep -Eq '^[0-9A-F]{64}$' <<< "$expected"; then
+        echo "ERROR: expected Vault CA fingerprint must contain exactly 64 hexadecimal digits." >&2
+        exit 2
+      fi
+      actual="$(${pkgs.openssl}/bin/openssl x509 \
+        -in "$source_directory/vault-server-ca.pem" -noout -fingerprint -sha256 \
+        | ${pkgs.coreutils}/bin/cut -d= -f2 \
+        | ${pkgs.coreutils}/bin/tr -d ':[:space:]' \
+        | ${pkgs.coreutils}/bin/tr '[:lower:]' '[:upper:]')"
+      if [ "$actual" != "$expected" ]; then
+        echo "ERROR: Vault CA fingerprint mismatch; refusing enrollment installation." >&2
+        exit 1
+      fi
+      if ! ${pkgs.openssl}/bin/openssl x509 \
+        -in "$source_directory/vault-server-ca.pem" -noout -text \
+        | ${pkgs.gnugrep}/bin/grep -q 'CA:TRUE'; then
+        echo "ERROR: supplied Vault trust anchor is not a CA certificate." >&2
+        exit 1
+      fi
+
+      target_directory=${lib.escapeShellArg (builtins.dirOf clientHubPkiCfg.nodeSecretFile)}
+      ${pkgs.coreutils}/bin/install -d -m 0750 -o root \
+        -g ${lib.escapeShellArg config.luxnix.generic-settings.sensitiveServiceGroupName} \
+        "$target_directory"
+
+      temporary=""
+      cleanup() {
+        if [ -n "$temporary" ]; then
+          ${pkgs.coreutils}/bin/rm -f -- "$temporary"
+        fi
+      }
+      trap cleanup EXIT
+
+      install_enrollment_file() {
+        local source_name="$1"
+        local target="$2"
+        local mode="$3"
+        local group="$4"
+        temporary="$(${pkgs.coreutils}/bin/mktemp "$target_directory/.hub-site-enrollment.XXXXXX")"
+        ${pkgs.coreutils}/bin/install -m "$mode" -o root -g "$group" \
+          "$source_directory/$source_name" "$temporary"
+        ${pkgs.coreutils}/bin/mv -f -- "$temporary" "$target"
+        temporary=""
+      }
+
+      install_enrollment_file approle_role_id \
+        ${lib.escapeShellArg (toString cfg.client.auth.roleIdFile)} 0400 root
+      install_enrollment_file approle_secret_id \
+        ${lib.escapeShellArg (toString cfg.client.auth.secretIdFile)} 0400 root
+      install_enrollment_file vault-server-ca.pem \
+        ${lib.escapeShellArg (toString cfg.client.caCertFile)} 0644 root
+      install_enrollment_file source-node-secret \
+        ${lib.escapeShellArg clientHubPkiCfg.nodeSecretFile} 0640 \
+        ${lib.escapeShellArg config.luxnix.generic-settings.sensitiveServiceGroupName}
+      trap - EXIT
+
+      echo "Installed the authenticated hub-site enrollment bundle with protected service access."
+      echo "No service was started. Run luxnix-vault-enrollment-status before starting the enrollment chain."
     '';
   };
 
@@ -1461,6 +1567,24 @@ in
       {
         assertion =
           !clientHubPkiCfg.enable
+          || cfg.client.auth.method != "approle"
+          ||
+            lib.all
+              (
+                path:
+                path == null || builtins.dirOf (toString path) == builtins.dirOf clientHubPkiCfg.nodeSecretFile
+              )
+              [
+                cfg.client.auth.roleIdFile
+                cfg.client.auth.secretIdFile
+                cfg.client.caCertFile
+                clientHubPkiCfg.recipientPublicKeyFile
+              ];
+        message = "AppRole hub-site enrollment files and the recipient public key must share the node-secret directory.";
+      }
+      {
+        assertion =
+          !clientHubPkiCfg.enable
           || (
             let
               certificateDir = builtins.dirOf clientHubPkiCfg.certificateFile;
@@ -1550,6 +1674,9 @@ in
       ]
       ++ lib.optionals (cfg.client.enable && cfg.client.caCertFile != null) [
         vaultCaInstallTool
+      ]
+      ++ lib.optionals (clientHubPkiCfg.enable && cfg.client.auth.method == "approle") [
+        hubSiteEnrollmentInstallTool
       ]
       ++ lib.optionals vaultAuthEnabled [
         vaultEnrollmentStatusTool
@@ -1664,7 +1791,13 @@ in
       tmpfiles.rules = [
         "d ${runtimeDir} 0700 root root - -"
         "z ${runtimeDir} 0700 root root - -"
-      ];
+      ]
+      ++ lib.optionals clientHubPkiCfg.enable (
+        map (
+          directory:
+          "d ${directory} 0750 root ${config.luxnix.generic-settings.sensitiveServiceGroupName} - -"
+        ) clientHubPkiSecretDirectories
+      );
 
       services.vault-auth-setup = mkIf vaultAuthEnabled {
         description = "Bootstrap Vault client environment for LuxNix system services";

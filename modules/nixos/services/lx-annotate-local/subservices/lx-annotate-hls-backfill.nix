@@ -32,4 +32,16 @@ with ctx;
       IOSchedulingPriority = 6;
     };
   });
+
+  systemd.timers.lx-annotate-hls-backfill = mkIf cfg.hlsBackfill.enable {
+    description = "Reconcile prerequisite raw and processed HLS without operator action";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      Unit = "lx-annotate-hls-backfill.service";
+      OnBootSec = "15m";
+      OnUnitInactiveSec = "1h";
+      RandomizedDelaySec = "5m";
+      Persistent = true;
+    };
+  };
 }

@@ -11,7 +11,7 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FLAKE_URI_PLACEHOLDER = "__LUXNIX_FLAKE_URI__"
-REPO_FLAKE_URI = f"path:{REPO_ROOT}"
+REPO_FLAKE_URI = f"git+file://{REPO_ROOT}"
 
 
 def _resolve_repo_flake(expr: str) -> str:

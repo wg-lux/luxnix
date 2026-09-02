@@ -1657,6 +1657,14 @@ in
 
           assertions = [
             {
+              assertion = cfg.hlsBackfill.enable;
+              message = "services.luxnix.lxAnnotateLocal.hlsBackfill.enable must remain true because raw and processed HLS are mandatory playback prerequisites.";
+            }
+            {
+              assertion = cfg.hlsBackfill.extraArgs == [ ];
+              message = "services.luxnix.lxAnnotateLocal.hlsBackfill.extraArgs must remain empty so every enabled host automatically reconciles the complete raw and processed HLS corpus; use the manual materialization unit for scoped repairs.";
+            }
+            {
               assertion = builtins.length lxAnnotateEndoregDbDependencies == 1;
               message = "The pinned lx-annotate source must declare exactly one endoreg-db== dependency for feature-registry attestation.";
             }

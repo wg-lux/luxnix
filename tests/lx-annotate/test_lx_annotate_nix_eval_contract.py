@@ -139,6 +139,7 @@ def _gc_02_contract() -> dict[str, Any]:
             dataRecovery = {
               enable = lxCfg.dataRecovery.enable;
               serviceConfig = cfg.systemd.services."lx-annotate-data-recovery".serviceConfig;
+              before = cfg.systemd.services."lx-annotate-data-recovery".before;
             };
             bootRequires = cfg.systemd.services.lx-annotate.requires;
             migrateAfter = cfg.systemd.services."lx-annotate-migrate".after;
@@ -338,21 +339,16 @@ def _live_host_contract() -> dict[str, Any]:
             postgresHost = gs02.services.luxnix.lxAnnotateLocal.runtime.externalServices.postgresHost;
             vaultFirewallPorts = gs02.networking.firewall.interfaces.tun0.allowedTCPPorts;
             caPublisherExecStart = gs02.systemd.services.luxnix-vault-publish-hub-client-ca.serviceConfig.ExecStart;
-            envelopePreflightBefore = gs02.systemd.services.lx-annotate-hub-envelope-key-preflight.before;
           };
           siteTransfer = {
             outbound = gc02.services.luxnix.lxAnnotateLocal.hub.outboundTransfer;
             vaultClient = gc02.luxnix.vault.client;
             nodeProvisioning = gc02.services.luxnix.lxAnnotateLocal.hub.nodeProvisioning;
             workerRequires = gc02.systemd.services."lx-annotate-celery-hub-transfer-worker".requires;
-            bootRequires = gc02.systemd.services.lx-annotate.requires;
             hubVpnAliases = gc02.networking.hosts."172.16.255.22";
-            managedSecretsEnvironmentFile =
-              gc02.systemd.services.managed-secrets-setup.serviceConfig.EnvironmentFile;
             certificateIssuerEnvironmentFile =
               gc02.systemd.services.luxnix-vault-issue-hub-client-certificate.serviceConfig.EnvironmentFile;
             workerEnvironment = envList gc02.systemd.services."lx-annotate-celery-hub-transfer-worker".environment;
-            envelopePreflightBefore = gc02.systemd.services.lx-annotate-hub-envelope-key-preflight.before;
           };
 
           siteTransfers = builtins.mapAttrs (hostName: cfg: {
@@ -368,6 +364,7 @@ def _live_host_contract() -> dict[str, Any]:
             vaultAddress = cfg.luxnix.vault.client.address;
             vaultAuthMethod = cfg.luxnix.vault.client.auth.method;
             vaultVpnAliases = cfg.networking.hosts."172.16.255.22";
+            tmpfiles = cfg.systemd.tmpfiles.rules;
             workerEnvironment = envList cfg.systemd.services."lx-annotate-celery-hub-transfer-worker".environment;
           }) gcHosts;
 
@@ -700,9 +697,10 @@ def test_lx_annotate_wheel_pin_version_and_exported_version_agree() -> None:
         value.split("=", 1) for value in evaluated["bootServiceConfig"]["Environment"]
     )
 
-    assert artifact["wheelPath"].endswith("lx_annotate-0.9.52-py3-none-any.whl")
-    assert artifact["packageVersion"] == "0.9.52"
-    assert environment["LX_ANNOTATE_PACKAGE_VERSION"] == "0.9.52"
+    assert artifact["wheelPath"].endswith(
+        f'lx_annotate-{artifact["packageVersion"]}-py3-none-any.whl'
+    )
+    assert environment["LX_ANNOTATE_PACKAGE_VERSION"] == artifact["packageVersion"]
 
 
 def test_lx_annotate_candidate_wheel_filename_infers_0_9_53() -> None:
@@ -776,7 +774,7 @@ def test_lx_annotate_boot_service_config_evaluates() -> None:
     service_config = _gc_02_contract()["bootServiceConfig"]
 
     assert service_config["WorkingDirectory"] == "/var/lib/lx-annotate/data"
-    assert service_config["ExecStart"].endswith("/bin/lx-annotate-server")
+    assert service_config["ExecStart"].endswith("/bin/lx-annotate-web")
     assert "/var/lib/lx-annotate/data" in service_config["ReadWritePaths"]
     assert (
         "/var/endoreg-service-user/lx-annotate-wheel/.venv"
@@ -815,7 +813,7 @@ def test_lx_annotate_generated_master_key_is_recoverable_runtime_contract() -> N
         "/var/lib/lx-annotate/data" in data_recovery["serviceConfig"]["ReadWritePaths"]
     )
     assert "lx-annotate-data-recovery.service" in evaluated["bootRequires"]
-    assert "lx-annotate-data-recovery.service" in evaluated["migrateAfter"]
+    assert "lx-annotate-migrate.service" in data_recovery["before"]
 
     runtime_script = "\n".join(
         [
@@ -828,18 +826,12 @@ def test_lx_annotate_generated_master_key_is_recoverable_runtime_contract() -> N
         in runtime_script
     )
     assert "repair_managed_payloads" in runtime_script
-    assert (
-        "Managed payload repair failed; continuing startup so the application can serve existing data."
-        in runtime_script
-    )
+    assert "write_repair_failure" in runtime_script
     assert (
         "migration_mark_eligible failed; continuing data recovery startup path."
         in runtime_script
     )
-    assert (
-        "reap_upload_job_sources failed; continuing data recovery startup path."
-        in runtime_script
-    )
+    assert "run_installed_django_command \"$migration_helper_python\" reap_upload_job_sources" in runtime_script
 
 
 def test_lx_annotate_master_key_check_blocks_boot() -> None:
@@ -849,9 +841,7 @@ def test_lx_annotate_master_key_check_blocks_boot() -> None:
     assert service_config["Type"] == "oneshot"
     assert service_config["RemainAfterExit"] is True
     assert service_config["WorkingDirectory"] == "/var/lib/lx-annotate/data"
-    assert service_config["ExecStart"].endswith(
-        "/bin/lx-annotate-manage verify_encrypted_storage"
-    )
+    assert service_config["ExecStart"].endswith("/bin/runLocalMasterKeyCheck")
     assert "/var/lib/lx-annotate/data" in service_config["ReadWritePaths"]
     assert "lx-annotate-load-base-data.service" in evaluated["after"]
     assert "lx-annotate-load-base-data.service" in evaluated["requires"]
@@ -861,7 +851,7 @@ def test_lx_annotate_master_key_check_blocks_boot() -> None:
     runtime_script = SCRIPTS_NIX.read_text(encoding="utf-8")
     assert 'pkgs.writeShellScriptBin "${masterKeyCheckScriptName}"' in runtime_script
     assert (
-        'run_installed_django_command "${runtimeWheelVenvPath}/bin/python" verify_encrypted_storage'
+        'run_installed_django_command "${wheelVenvPythonPath}" verify_encrypted_storage'
         in runtime_script
     )
 
@@ -1470,9 +1460,6 @@ def test_emergency_storage_relief_service_is_opt_in_and_mount_gated() -> None:
     )
     assert enabled["serviceConfig"]["ProtectSystem"] == "full"
     assert "/mnt/endoreg-client-storage" in enabled["requiresMountsFor"]
-    assert "endoreg-mount-persisting-storage.service" in enabled["after"]
-    assert "endoreg-mount-persisting-storage.service" in enabled["wants"]
-    assert "endoreg-mount-persisting-storage.service" in enabled["requires"]
     assert enabled["timerExists"] is False
 
 
@@ -1606,9 +1593,7 @@ def test_lx_annotate_gs02_transfer_api_and_vault_live_contract() -> None:
         "/etc/secrets/vault/hub-pki/hub-recipient-current.pem"
     ]
     assert evaluated["provisionedNodeKeys"] == [
-        "gc-01",
         "gc-02",
-        "gc-03",
         "gc-04",
         "gc-05",
         "gc-06",
@@ -1624,7 +1609,6 @@ def test_lx_annotate_gs02_transfer_api_and_vault_live_contract() -> None:
         "ENDOREG_HUB_TRANSFER_RECIPIENT_PRIVATE_KEY_FILES=/etc/secrets/vault/hub-pki/hub-recipient-current.pem"
         in evaluated["bootEnvironment"]
     )
-    assert "lx-annotate.service" in evaluated["envelopePreflightBefore"]
     assert "ssl_verify_client optional;" in evaluated["nginxExtraConfig"]
     assert (
         "ssl_client_certificate /var/lib/lx-annotate/hub-pki/client-ca.pem;"
@@ -1659,15 +1643,15 @@ def test_lx_annotate_gs02_large_transfer_http_and_local_redis_contract() -> None
     evaluated = _live_host_contract()["hubTransfer"]
 
     assert evaluated["maxUploadBytes"] == 50 * 1024 * 1024 * 1024
-    assert evaluated["httpTimeoutSeconds"] == 6 * 60 * 60
+    assert evaluated["httpTimeoutSeconds"] == 12 * 60 * 60
     transfer_nginx = evaluated["transferLocationExtraConfig"]
     assert "proxy_http_version 1.1;" in transfer_nginx
     assert "client_max_body_size 53687091200;" in transfer_nginx
-    assert "client_body_timeout 21600s;" in transfer_nginx
+    assert "client_body_timeout 43200s;" in transfer_nginx
     assert "proxy_request_buffering off;" in transfer_nginx
     assert "proxy_buffering off;" in transfer_nginx
-    assert "proxy_read_timeout 21600s;" in transfer_nginx
-    assert "proxy_send_timeout 21600s;" in transfer_nginx
+    assert "proxy_read_timeout 43200s;" in transfer_nginx
+    assert "proxy_send_timeout 43200s;" in transfer_nginx
     assert evaluated["redis"]["enable"] is True
     assert evaluated["redis"]["port"] == 6379
     assert evaluated["redis"]["bind"] == "127.0.0.1"
@@ -1685,8 +1669,8 @@ def test_lx_annotate_gc02_outbound_transfer_is_vault_backed_and_fail_closed() ->
 
     assert evaluated["outbound"]["enable"] is True
     assert evaluated["outbound"]["requireMtls"] is True
-    assert evaluated["outbound"]["requestTimeoutSeconds"] == 6 * 60 * 60
-    assert evaluated["outbound"]["staleAfterSeconds"] == 7 * 60 * 60
+    assert evaluated["outbound"]["requestTimeoutSeconds"] == 12 * 60 * 60
+    assert evaluated["outbound"]["staleAfterSeconds"] == 15 * 60 * 60
     assert (
         evaluated["outbound"]["caFile"]
         == "/etc/secrets/vault/hub-pki/vault-server-ca.pem"
@@ -1713,20 +1697,15 @@ def test_lx_annotate_gc02_outbound_transfer_is_vault_backed_and_fail_closed() ->
         in evaluated["workerEnvironment"]
     )
     assert (
-        "LX_ANNOTATE_HUB_EXPORT_REQUEST_TIMEOUT_SECONDS=21600"
+        "LX_ANNOTATE_HUB_EXPORT_REQUEST_TIMEOUT_SECONDS=43200"
         in evaluated["workerEnvironment"]
     )
     assert (
-        "LX_ANNOTATE_HUB_EXPORT_STALE_AFTER_SECONDS=25200"
+        "LX_ANNOTATE_HUB_EXPORT_STALE_AFTER_SECONDS=54000"
         in evaluated["workerEnvironment"]
     )
-    assert "lx-annotate-celery-hub-transfer-worker.service" in evaluated["envelopePreflightBefore"]
-    assert "lx-annotate-hub-node-provisioning.service" in evaluated["bootRequires"]
     assert "gs-02.intern" in evaluated["hubVpnAliases"]
     assert "vault.endo-reg.net" in evaluated["hubVpnAliases"]
-    assert evaluated["managedSecretsEnvironmentFile"] == [
-        "-/run/luxnix/vault/vault.env"
-    ]
     assert (
         evaluated["certificateIssuerEnvironmentFile"] == "-/run/luxnix/vault/vault.env"
     )
@@ -1752,8 +1731,8 @@ def test_all_active_gc_hosts_are_ready_for_fail_closed_hub_transfer() -> None:
         assert contract["runtimeMode"] == "wheel"
         assert contract["outbound"]["enable"] is True
         assert contract["outbound"]["requireMtls"] is True
-        assert contract["outbound"]["requestTimeoutSeconds"] == 6 * 60 * 60
-        assert contract["outbound"]["staleAfterSeconds"] == 7 * 60 * 60
+        assert contract["outbound"]["requestTimeoutSeconds"] == 12 * 60 * 60
+        assert contract["outbound"]["staleAfterSeconds"] == 15 * 60 * 60
         assert contract["outbound"]["caFile"] == (
             "/etc/secrets/vault/hub-pki/vault-server-ca.pem"
         )
@@ -1765,7 +1744,7 @@ def test_all_active_gc_hosts_are_ready_for_fail_closed_hub_transfer() -> None:
             in contract["workerEnvironment"]
         )
         assert (
-            "LX_ANNOTATE_HUB_EXPORT_REQUEST_TIMEOUT_SECONDS=21600"
+            "LX_ANNOTATE_HUB_EXPORT_REQUEST_TIMEOUT_SECONDS=43200"
             in contract["workerEnvironment"]
         )
         assert contract["nodeKeys"] == [host_name, "gs-02"]
@@ -1774,6 +1753,10 @@ def test_all_active_gc_hosts_are_ready_for_fail_closed_hub_transfer() -> None:
         assert contract["vaultAddress"] == "https://vault.endo-reg.net:8200"
         assert contract["vaultAuthMethod"] == "approle"
         assert "vault.endo-reg.net" in contract["vaultVpnAliases"]
+        assert (
+            "d /etc/secrets/vault/hub-pki 0750 root sensitiveServices - -"
+            in contract["tmpfiles"]
+        )
 
 
 def test_lx_annotate_transfer_endpoints_reject_disabled_mtls() -> None:

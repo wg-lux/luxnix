@@ -47,18 +47,16 @@ in
         script = ''
           ${ntlib.helpers.path [ pkgs.gnugrep ]}
           ${ntlib.helpers.scriptHelpers}
-          assert_file_contains ${lxAnnotateEnvScripts} 'export ENDOREG_DEPLOYMENT_ROLE=.*envDeploymentRole' "lx-annotate shell runtime env must export ENDOREG_DEPLOYMENT_ROLE"
-          assert_file_contains ${lxAnnotateEnvScripts} 'export ENDOREG_HUB_MODE=' "lx-annotate shell runtime env must export ENDOREG_HUB_MODE"
-          assert_file_contains ${lxAnnotateEnvScripts} 'export ENDOREG_ENABLE_INCOMING_HUB_TRANSFERS=' "lx-annotate shell runtime env must export ENDOREG_ENABLE_INCOMING_HUB_TRANSFERS"
-          assert_file_contains ${lxAnnotateEnvScripts} 'export ENDOREG_HUB_TRANSFER_REQUIRE_SECURE_TRANSPORT=' "lx-annotate shell runtime env must export ENDOREG_HUB_TRANSFER_REQUIRE_SECURE_TRANSPORT"
-          assert_file_contains ${lxAnnotateEnvScripts} 'export ENDOREG_HUB_TRANSFER_REQUIRE_MTLS=' "lx-annotate shell runtime env must export ENDOREG_HUB_TRANSFER_REQUIRE_MTLS"
-          assert_file_contains ${lxAnnotateEnvScripts} 'export ENDOREG_HUB_TRANSFER_MTLS_META_KEY=' "lx-annotate shell runtime env must export ENDOREG_HUB_TRANSFER_MTLS_META_KEY"
-          assert_file_contains ${lxAnnotateEnvScripts} 'export ENDOREG_HUB_TRANSFER_MTLS_META_VALUE=' "lx-annotate shell runtime env must export ENDOREG_HUB_TRANSFER_MTLS_META_VALUE"
-          assert_file_contains ${lxAnnotateScripts} '^[[:space:]]*ENDOREG_DEPLOYMENT_ROLE=.*envDeploymentRole' "lx-annotate systemd env files must persist ENDOREG_DEPLOYMENT_ROLE"
-          assert_file_contains ${lxAnnotateScripts} '^[[:space:]]*ENDOREG_HUB_MODE=.*cfg\.hub\.enable' "lx-annotate systemd env files must persist ENDOREG_HUB_MODE"
-          assert_file_contains ${lxAnnotateScripts} '^[[:space:]]*ENDOREG_ENABLE_INCOMING_HUB_TRANSFERS=.*cfg\.hub\.transferApi\.enable' "lx-annotate systemd env files must persist ENDOREG_ENABLE_INCOMING_HUB_TRANSFERS"
-          assert_file_contains ${lxAnnotateScripts} '^[[:space:]]*ENDOREG_HUB_TRANSFER_REQUIRE_SECURE_TRANSPORT=.*cfg\.hub\.transferApi\.requireSecureTransport' "lx-annotate systemd env files must persist ENDOREG_HUB_TRANSFER_REQUIRE_SECURE_TRANSPORT"
-          assert_file_contains ${lxAnnotateScripts} '^[[:space:]]*ENDOREG_HUB_TRANSFER_REQUIRE_MTLS=.*cfg\.hub\.transferApi\.requireMtls' "lx-annotate systemd env files must persist ENDOREG_HUB_TRANSFER_REQUIRE_MTLS"
+          assert_file_contains ${lxAnnotateEnvScripts} 'ENDOREG_DEPLOYMENT_ROLE = envDeploymentRole' "lx-annotate runtime env must define ENDOREG_DEPLOYMENT_ROLE"
+          assert_file_contains ${lxAnnotateEnvScripts} 'ENDOREG_HUB_MODE = boolString cfg\.hub\.enable' "lx-annotate runtime env must define ENDOREG_HUB_MODE"
+          assert_file_contains ${lxAnnotateEnvScripts} 'ENDOREG_ENABLE_INCOMING_HUB_TRANSFERS = boolString cfg\.hub\.transferApi\.enable' "lx-annotate runtime env must define ENDOREG_ENABLE_INCOMING_HUB_TRANSFERS"
+          assert_file_contains ${lxAnnotateEnvScripts} 'ENDOREG_HUB_TRANSFER_REQUIRE_SECURE_TRANSPORT = boolString cfg\.hub\.transferApi\.requireSecureTransport' "lx-annotate runtime env must define ENDOREG_HUB_TRANSFER_REQUIRE_SECURE_TRANSPORT"
+          assert_file_contains ${lxAnnotateEnvScripts} 'ENDOREG_HUB_TRANSFER_REQUIRE_MTLS = boolString cfg\.hub\.transferApi\.requireMtls' "lx-annotate runtime env must define ENDOREG_HUB_TRANSFER_REQUIRE_MTLS"
+          assert_file_contains ${lxAnnotateEnvScripts} 'ENDOREG_HUB_TRANSFER_MTLS_META_KEY = cfg\.hub\.transferApi\.mtlsMetaKey' "lx-annotate runtime env must define ENDOREG_HUB_TRANSFER_MTLS_META_KEY"
+          assert_file_contains ${lxAnnotateEnvScripts} 'ENDOREG_HUB_TRANSFER_MTLS_META_VALUE = cfg\.hub\.transferApi\.mtlsMetaValue' "lx-annotate runtime env must define ENDOREG_HUB_TRANSFER_MTLS_META_VALUE"
+          assert_file_contains ${lxAnnotateScripts} 'emit_common_systemd_env' "lx-annotate systemd env files must render the canonical common environment"
+          assert_file_contains ${lxAnnotateScripts} 'commonSystemdEnvText' "lx-annotate systemd env files must use the shared serialized environment"
+          assert_file_contains ${lxAnnotateConfig} 'environment = commonExtraEnv // environment' "lx-annotate services must receive the canonical common environment"
         '';
       }
       {
@@ -131,8 +129,8 @@ in
         script = ''
           ${ntlib.helpers.path [ pkgs.gnugrep ]}
           ${ntlib.helpers.scriptHelpers}
-          assert_file_contains ${vaultConfig} 'before = \[ "vault\.service" \] \+\+ lib\.optional config\.services\.nginx\.enable "nginx\.service";' "managed TLS identity must exist before Vault and nginx start"
-          assert_file_contains ${vaultConfig} 'requiredBy = \[ "vault\.service" \] \+\+ lib\.optional config\.services\.nginx\.enable "nginx\.service";' "Vault and nginx must require their managed TLS identity"
+          assert_file_contains ${vaultConfig} 'before = \[ "vault\.service" \] ++ lib\.optional config\.services\.nginx\.enable "nginx\.service";' "managed TLS identity must exist before Vault and nginx start"
+          assert_file_contains ${vaultConfig} 'requiredBy = \[ "vault\.service" \] ++ lib\.optional config\.services\.nginx\.enable "nginx\.service";' "Vault and nginx must require their managed TLS identity"
           assert_file_contains ${vaultConfig} 'systemctl kill --kill-whom=main --signal=HUP vault\.service' "Vault must reload a rotated server identity"
           assert_file_contains ${vaultConfig} 'systemctl reload nginx\.service' "nginx must reload a rotated server identity"
         '';

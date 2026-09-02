@@ -56,7 +56,7 @@ lib.foldl' lib.recursiveUpdate
     }
     {
       roles.endoreg-client.centralNodes = [
-        "s-04"
+        "gs-02"
       ];
     }
     {

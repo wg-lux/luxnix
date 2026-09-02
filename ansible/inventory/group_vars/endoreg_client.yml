@@ -1,7 +1,7 @@
 group_roles:
   endoreg_client.enable: "true"
   endoreg_client.centralNodes:
-    - "s-04"
+    - "gs-02"
   endoreg_client.api.djangoAllowedHosts:
     - "localhost"
     - "127.0.0.1"

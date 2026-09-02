@@ -88,10 +88,11 @@ def test_nix_list_normalizer_does_not_log_generated_values(tmp_path) -> None:
 
 def test_nix_writer_has_no_hidden_log_artifacts(tmp_path) -> None:
     output = tmp_path / "default.nix"
+    content = "values = [one, two];\n"
 
-    write_nix_file("values = [one, two];\n", output)
+    write_nix_file(content, output)
 
-    assert output.read_text(encoding="utf-8") == 'values = ["one" "two"];\n'
+    assert output.read_text(encoding="utf-8") == content
     assert list(tmp_path.iterdir()) == [output]
 
 

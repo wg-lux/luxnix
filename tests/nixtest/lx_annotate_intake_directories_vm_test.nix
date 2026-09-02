@@ -35,16 +35,6 @@ in
               group = serviceGroup;
             };
 
-            fileSystems.${protectedDataRoot} = {
-              device = "tmpfs";
-              fsType = "tmpfs";
-              neededForBoot = true;
-              options = [
-                "mode=0750"
-                "size=16M"
-              ];
-            };
-
             systemd.services.lx-annotate-intake-volume-empty = {
               description = "Assert lx-annotate intake volume starts empty";
               requiredBy = [ "systemd-tmpfiles-setup.service" ];
@@ -57,6 +47,8 @@ in
                 Type = "oneshot";
                 ExecStart = pkgs.writeShellScript "assert-lx-annotate-intake-volume-empty" ''
                   set -eu
+                  mkdir -p ${protectedDataRoot}
+                  ${pkgs.util-linux}/bin/mount -t tmpfs -o mode=0750,size=16M none ${protectedDataRoot}
                   test ! -e ${intakeRoot}
                   touch /run/lx-annotate-intake-volume-was-empty
                 '';

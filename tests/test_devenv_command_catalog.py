@@ -373,14 +373,19 @@ def test_connectivity_check_forwards_arguments_and_creates_private_logs(
 ) -> None:
     repo = tmp_path / "repo"
     script_dir = repo / "scripts"
+    config_dir = repo / "conf"
     inventory_dir = repo / "ansible/inventory"
     playbook_dir = repo / "ansible/playbooks"
     fake_bin = tmp_path / "bin"
-    for directory in (script_dir, inventory_dir, playbook_dir, fake_bin):
+    for directory in (script_dir, config_dir, inventory_dir, playbook_dir, fake_bin):
         directory.mkdir(parents=True, exist_ok=True)
 
     script = script_dir / "check-connectivity.sh"
     shutil.copy2(REPO_ROOT / "scripts/check-connectivity.sh", script)
+    shutil.copy2(
+        REPO_ROOT / "conf/connectivity-ansible.cfg",
+        config_dir / "connectivity-ansible.cfg",
+    )
     (inventory_dir / "hosts.ini").write_text("[all]\nnode-01\n", encoding="utf-8")
     (playbook_dir / "connectivity-check.yml").write_text("---\n", encoding="utf-8")
 

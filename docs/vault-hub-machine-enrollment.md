@@ -108,16 +108,70 @@ Continue only when Vault reports `Initialized true` and `Sealed false`. Vault
 must be unsealed after every `gs-02` reboot or Vault restart. Never initialize
 an existing Vault again just because it is sealed.
 
-Obtain a short-lived, scoped administrative token through the approved Vault
-owner procedure. Read it at a hidden prompt; do not paste it into a command
-line or save it in a shell profile:
+### Obtain a short-lived `VAULT_TOKEN`
+
+An unseal share is not a Vault login credential and cannot be used as
+`VAULT_TOKEN`. The person creating the enrollment token must first have an
+existing Vault token that is authorized to create tokens for an approved
+enrollment-administration policy. LuxNix does not currently create a human
+authentication method or prescribe that policy's name. If no such issuer token
+and reviewed policy exist, stop and ask the Vault owner to establish them; do
+not reuse an AppRole Secret ID, site token, or unseal share.
+
+On a trusted `gs-02` root shell, set `ENROLLMENT_POLICY` to the policy name
+approved by the Vault owner. Then enter the authorized issuer token only at the
+hidden prompt. The following replaces the powerful issuer token in the shell
+immediately with a non-renewable enrollment token whose lifetime has a hard
+30-minute maximum:
 
 ```bash
-read -rsp "Temporary Vault enrollment token: " VAULT_TOKEN
+ENROLLMENT_POLICY='<approved-enrollment-administration-policy>'
+read -rsp "Authorized Vault token for issuing an enrollment token: " VAULT_TOKEN
 echo
 export VAULT_TOKEN
-vault token lookup >/dev/null
+vault policy read "$ENROLLMENT_POLICY" >/dev/null
+
+enrollment_token="$(vault token create \
+  -field=token \
+  -display-name=luxnix-hub-enrollment \
+  -policy="$ENROLLMENT_POLICY" \
+  -no-default-policy \
+  -ttl=30m \
+  -explicit-max-ttl=30m \
+  -renewable=false)"
+VAULT_TOKEN="$enrollment_token"
+unset enrollment_token
+export VAULT_TOKEN
+
+vault token lookup
 ```
+
+If policy lookup or token creation fails, immediately run
+`unset VAULT_TOKEN enrollment_token ENROLLMENT_POLICY` and stop. Do not proceed
+with an empty token or leave the issuer token exported.
+
+Review the lookup metadata before continuing. It must show the approved policy,
+a positive TTL no greater than 30 minutes, and `renewable false`. The lookup
+output does not display the token value. Token creation fails with `permission
+denied` when the issuer is not allowed to assign the requested policy; that is
+an authorization blocker, not a reason to use the initial root token casually
+or weaken the policy.
+
+Keep the token only in this shell environment. Do not pass it as a command-line
+argument, save it in `~/.vault-token`, write it to a file, paste it into chat,
+or enable shell tracing. When bootstrap or enrollment is complete, revoke it
+before closing the shell:
+
+```bash
+vault token revoke -self
+unset VAULT_TOKEN ENROLLMENT_POLICY
+```
+
+If the token expires first, subsequent Vault commands fail closed and a new
+token must be issued through the same procedure. Do not renew this token.
+The TTL, explicit maximum, policy, non-renewable, and output-field flags are
+documented in HashiCorp's
+[`vault token create` reference](https://developer.hashicorp.com/vault/docs/commands/token/create).
 
 ## 2. Bootstrap the hub engines
 
@@ -267,30 +321,22 @@ verify the stable Vault CA against the fingerprint obtained independently from
 trusted `gs-02` state, and install the delivered files:
 
 ```bash
-sudo openssl x509 -in /root/vault-enrollment/<host>/vault-server-ca.pem \
-  -noout -subject -issuer -fingerprint -sha256
-
-# Compare this output with the fingerprint read independently on gs-02.
-# Stop on any mismatch.
-sudo install -d -o root -g root -m 0700 /etc/secrets/vault/hub-pki
-sudo install -o root -g root -m 0400 \
-  /root/vault-enrollment/<host>/approle_role_id \
-  /etc/secrets/vault/hub-pki/approle_role_id
-sudo install -o root -g root -m 0400 \
-  /root/vault-enrollment/<host>/approle_secret_id \
-  /etc/secrets/vault/hub-pki/approle_secret_id
-sudo install -o root -g root -m 0644 \
-  /root/vault-enrollment/<host>/vault-server-ca.pem \
-  /etc/secrets/vault/hub-pki/vault-server-ca.pem
-sudo install -o root -g sensitiveServices -m 0640 \
-  /root/vault-enrollment/<host>/source-node-secret \
-  /etc/secrets/vault/hub-pki/source-node-secret
+sudo luxnix-vault-install-hub-site-enrollment \
+  /root/vault-enrollment/<host> \
+  '<fingerprint-obtained-independently-from-gs-02>'
+sudo luxnix-vault-enrollment-status
 ```
+
+The installer validates every required input without printing credential
+contents, rejects symlinks and empty files, verifies the independently supplied
+Vault CA fingerprint and CA constraints, then atomically installs the four
+site files with the ownership and modes below. It does not start services.
 
 The resulting static enrollment files have these contracts:
 
 | Path | Owner | Mode |
 | --- | --- | --- |
+| `/etc/secrets/vault/hub-pki/` | `root:sensitiveServices` | `0750` |
 | `/etc/secrets/vault/hub-pki/approle_role_id` | `root:root` | `0400` |
 | `/etc/secrets/vault/hub-pki/approle_secret_id` | `root:root` | `0400` |
 | `/etc/secrets/vault/hub-pki/vault-server-ca.pem` | `root:root` | `0644` |
@@ -408,12 +454,15 @@ commands print metadata and public-key digests, never private material:
 ```bash
 # Site
 sudo stat -c '%U:%G %a %n' \
+  /etc/secrets/vault/hub-pki \
   /etc/secrets/vault/hub-pki/approle_role_id \
   /etc/secrets/vault/hub-pki/approle_secret_id \
   /etc/secrets/vault/hub-pki/source-node-secret \
   /var/lib/lx-annotate/hub-pki/client.crt \
   /var/lib/lx-annotate/hub-pki/client.key \
   /etc/secrets/vault/hub-pki/hub-recipient-current.pub.pem
+sudo -u endoreg-service-user test \
+  -r /etc/secrets/vault/hub-pki/source-node-secret
 sudo openssl verify \
   -CAfile /var/lib/lx-annotate/hub-pki/client-ca.pem \
   /var/lib/lx-annotate/hub-pki/client.crt

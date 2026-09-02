@@ -113,7 +113,7 @@ def test_lx_annotate_scripts_export_protected_storage_contract():
     assert not _has_assignment(config_source, "DJANGO_ENV")
     assert not _has_assignment(config_source, "MEDIA_URL")
 
-    assert 'export DATA_DIR="$data_root"' not in helper_source
+    assert 'export DATA_DIR="$data_root"' in helper_source
     assert 'export LX_ANNOTATE_DATA_DIR="$data_root"' not in helper_source
     assert (
         'export PROTECTED_MEDIA_ROOT="${runtimeStorageRootPath}"' not in helper_source

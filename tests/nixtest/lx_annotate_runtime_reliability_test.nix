@@ -50,8 +50,8 @@ in
         script = ''
           ${ntlib.helpers.path [ pkgs.gnugrep ]}
           ${ntlib.helpers.scriptHelpers}
-          assert_file_contains ${lxAnnotateConfig} 'systemd\.paths\.lx-annotate-filewatcher' "file intake must retain event-driven triggering"
-          assert_file_contains ${lxAnnotateConfig} 'systemd\.timers\.lx-annotate-filewatcher' "file intake must periodically retry pending files"
+          assert_file_contains ${lxAnnotateConfig} 'paths\.lx-annotate-filewatcher' "file intake must retain event-driven triggering"
+          assert_file_contains ${lxAnnotateConfig} 'timers\.lx-annotate-filewatcher' "file intake must periodically retry pending files"
           assert_file_contains ${lxAnnotateConfig} 'OnUnitActiveSec = "5m"' "periodic intake reconciliation must have a bounded retry interval"
           assert_file_contains ${lxAnnotateConfig} 'Persistent = true' "missed intake retries must run after reboot"
         '';
@@ -105,6 +105,11 @@ in
           ${ntlib.helpers.scriptHelpers}
           assert_file_contains ${lxAnnotateScripts} 'for default_artifact_kind in raw processed' "default HLS reconciliation must cover both artifact kinds"
           assert_file_contains ${lxAnnotateScripts} 'run_hls_materialization "\$default_artifact_kind" "\$@"' "each default HLS artifact kind must be dispatched"
+          assert_file_contains ${lxAnnotateConfig} 'assertion = cfg\.hlsBackfill\.enable' "enabled LX-Annotate hosts must not opt out of prerequisite HLS replacement"
+          assert_file_contains ${lxAnnotateConfig} 'assertion = cfg\.hlsBackfill\.extraArgs == \[ \]' "automatic production replacement must not be limited per machine"
+          assert_file_contains ${lxAnnotateModuleRoot}/subservices/lx-annotate-hls-backfill.nix 'systemd\.timers\.lx-annotate-hls-backfill' "orphan reconciliation must recur without a reboot or user request"
+          assert_file_contains ${lxAnnotateModuleRoot}/subservices/lx-annotate-hls-backfill.nix 'OnUnitInactiveSec = "1h"' "automatic HLS reconciliation must have a bounded recurrence interval"
+          assert_file_contains ${lxAnnotateModuleRoot}/subservices/lx-annotate-hls-backfill.nix 'Persistent = true' "missed automatic HLS reconciliation must run after downtime"
           assert_file_contains ${lxAnnotateScripts} 'if \[ "\$explicit_artifact_kind" = "true" \]' "explicit raw-only or processed-only repair runs must remain supported"
           if grep -q 'artifact_kind_args=(--artifact-kind processed)' ${lxAnnotateScripts}; then
             fail "HLS reconciliation must not silently default to processed-only"

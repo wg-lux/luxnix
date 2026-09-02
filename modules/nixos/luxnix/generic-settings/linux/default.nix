@@ -29,6 +29,7 @@ in
     };
     kernelModules = mkOption {
       type = types.listOf types.str;
+      default = [ ];
       description = "Default Kernel Modules";
     };
     extraModulePackages = mkOption {

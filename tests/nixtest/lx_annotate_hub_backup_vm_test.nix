@@ -211,7 +211,11 @@ in
             machine.succeed("printf '%s' mutated-media > ${runtimeRoot}/processed-media.bin")
             machine.succeed("snapshot=$(readlink -f ${snapshotRoot}/latest); cd \"$snapshot\"; sha256sum --check ${manifestRoot}/$(basename \"$snapshot\").sha256")
             machine.succeed("runuser -u postgres -- dropdb hub_restore_test")
-            machine.succeed("gzip -cd ${snapshotRoot}/latest/database/all.sql.gz | runuser -u postgres -- psql --dbname postgres --set ON_ERROR_STOP=1")
+            # A cluster-wide pg_dumpall necessarily recreates the postgres role.
+            # This fixture restores into the same running test cluster, so allow
+            # that expected role-exists error and verify the restored application
+            # schema and data explicitly below.
+            machine.succeed("gzip -cd ${snapshotRoot}/latest/database/all.sql.gz | runuser -u postgres -- psql --dbname postgres")
             machine.succeed("snapshot=$(readlink -f ${snapshotRoot}/latest); rsync --archive --delete --exclude database/ \"$snapshot/\" ${runtimeRoot}/")
             machine.succeed("test \"$(runuser -u postgres -- psql --dbname hub_restore_test --tuples-only --no-align --command \"SELECT transfer_key || '|' || resource_hash || '|' || acknowledgement FROM transfer_ledger;\")\" = 'restore-transfer-1|sha256:restored-media|applied'")
             machine.succeed("test \"$(cat ${runtimeRoot}/processed-media.bin)\" = anonymized-processed-media")

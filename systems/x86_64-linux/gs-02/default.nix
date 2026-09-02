@@ -58,7 +58,7 @@ lib.foldl' lib.recursiveUpdate
     }
     {
       roles.endoreg-client.centralNodes = [
-        "s-04"
+        "gs-02"
       ];
     }
     {
@@ -120,6 +120,12 @@ lib.foldl' lib.recursiveUpdate
     }
     {
       services.luxnix.lxAnnotateLocal.runtime.celeryBroker.secureTransportConfirmed = lib.mkForce true;
+    }
+    {
+      services.luxnix.lxAnnotateLocal.runtime.externalServices.postgresHost = "127.0.0.1";
+    }
+    {
+      services.luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort = 5432;
     }
     {
       services.luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl = null;
@@ -315,12 +321,6 @@ lib.foldl' lib.recursiveUpdate
     }
     {
       services.luxnix.lxAnnotateLocal.runtime.deploymentRole = "central_hub";
-    }
-    {
-      services.luxnix.lxAnnotateLocal.runtime.externalServices.postgresHost = "127.0.0.1";
-    }
-    {
-      services.luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort = 5432;
     }
     {
       services.luxnix.lxSsl.enable = true;

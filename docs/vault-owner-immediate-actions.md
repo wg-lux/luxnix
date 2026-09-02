@@ -29,14 +29,15 @@ would not recover the existing Raft-encrypted data.
 
 ## 2. Bootstrap and publish the hub CA
 
-Using a short-lived administrative token, run:
+Obtain a short-lived administrative token using the issuer and revocation
+procedure in
+[`vault-hub-machine-enrollment.md`](./vault-hub-machine-enrollment.md#obtain-a-short-lived-vault_token),
+then run:
 
 ```bash
-read -rsp "Temporary Vault admin token: " VAULT_TOKEN
-echo
-export VAULT_TOKEN
 luxnix-vault-bootstrap-hub-pki
-unset VAULT_TOKEN
+vault token revoke -self
+unset VAULT_TOKEN ENROLLMENT_POLICY
 
 systemctl restart luxnix-vault-publish-hub-client-ca.service
 systemctl is-active vault.service \

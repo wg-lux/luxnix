@@ -77,7 +77,7 @@ def test_wg_lux_mcp_uses_a_machine_local_dns_override() -> None:
     assert 'default = [ "openid" ];' in module
     assert "WG_LUX_MCP_OAUTH_ENABLED" in module
     assert "WG_LUX_MCP_OAUTH_ISSUER_URL" in module
-    assert "services.wg-lux-features.enable = true;" in module
+    assert "wg-lux-features.enable = true;" in module
     assert "WG_LUX_FEATURE_PROVIDER_REGISTRY" in module
     assert "WG_LUX_FEATURE_STATE_ROOT" in module
     assert "config.services.wg-lux-features.registryPath" in module

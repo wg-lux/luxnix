@@ -39,10 +39,14 @@ def test_preflight_blocks_web_and_always_on_workers() -> None:
     evaluated = _eval_gc02(
         """
         {
-          preflight = cfg.systemd.services.lx-annotate-preflight;
-          web = cfg.systemd.services.lx-annotate;
+          preflight = {
+            inherit (cfg.systemd.services.lx-annotate-preflight) before requires;
+          };
+          web = {
+            inherit (cfg.systemd.services.lx-annotate) requires;
+          };
           workers = builtins.map
-            (name: cfg.systemd.services.${name})
+            (name: { inherit (cfg.systemd.services.${name}) requires; })
             [
               "lx-annotate-celery-worker"
               "lx-annotate-celery-pipeline-worker"
@@ -64,7 +68,9 @@ def test_preflight_blocks_web_and_always_on_workers() -> None:
 
 
 def test_live_acceptance_requires_preflight_web_nginx_and_workers() -> None:
-    acceptance = _eval_gc02("cfg.systemd.services.lx-annotate-acceptance")
+    acceptance = _eval_gc02(
+        "{ inherit (cfg.systemd.services.lx-annotate-acceptance) requires; }"
+    )
     required = set(acceptance["requires"])
 
     assert {
@@ -160,6 +166,7 @@ def test_hub_backup_publishes_database_and_media_as_one_restore_point(
     assert built.returncode == 0, built.stderr
     backup_command = Path(built.stdout.strip()) / "bin/runLxAnnotateHubBackup"
     environment = os.environ | {"CREDENTIALS_DIRECTORY": str(credential_root)}
+    environment.pop("LD_LIBRARY_PATH", None)
 
     completed = subprocess.run(
         [str(backup_command)],
