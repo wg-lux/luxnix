@@ -467,6 +467,15 @@ let
     "hubPki"
     "enable"
   ] false config;
+  vaultClientHubPkiDeferred =
+    vaultClientHubPkiEnabled
+    && lib.attrByPath [
+      "luxnix"
+      "vault"
+      "client"
+      "auth"
+      "deferUntilProvisioned"
+    ] false config;
   externalPostgresConfigured = cfg.runtime.externalServices.postgresHost != null;
   externalRedisConfigured = cfg.runtime.externalServices.redisUrl != null;
   localPostgresSetupUnits = lib.optionals (!externalPostgresConfigured) [
@@ -933,7 +942,7 @@ let
       taskHardTimeLimitSeconds = cfg.hub.outboundTransfer.taskHardTimeLimitSeconds;
       mode =
         if
-          cfg.hub.outboundTransfer.enable
+          (cfg.hub.outboundTransfer.enable && !vaultClientHubPkiDeferred)
           || lib.attrByPath [
             "services"
             "luxnix"
@@ -1592,6 +1601,7 @@ let
       trainingWorkerEnv
       useWheelRuntime
       vaultClientHubPkiEnabled
+      vaultClientHubPkiDeferred
       videoStreamProxyExtraConfig
       wheelDependencyOverrideArgs
       wheelDependencyOverrideHash

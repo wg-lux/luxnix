@@ -37,6 +37,7 @@ project_root="$(cd -- "${script_dir}/.." && pwd)"
 inventory_file="${project_root}/ansible/inventory/hosts.ini"
 playbook_file="${project_root}/ansible/playbooks/connectivity-check.yml"
 logs_dir="${project_root}/logs"
+ansible_config="${project_root}/conf/connectivity-ansible.cfg"
 
 if [[ ! -f "${playbook_file}" ]]; then
   echo "Playbook not found at ${playbook_file}" >&2
@@ -48,19 +49,13 @@ if [[ ! -f "${inventory_file}" ]]; then
   exit 1
 fi
 
+if [[ ! -f "${ansible_config}" ]]; then
+  echo "Connectivity Ansible config not found at ${ansible_config}" >&2
+  exit 1
+fi
+
 install -d -m 0700 "${logs_dir}"
 log_file="${logs_dir}/connectivity-$(date +%Y%m%d-%H%M%S)-$$.log"
-
-ansible_config="${project_root}/ansible.cfg"
-if [[ -L "${ansible_config}" && ! -e "${ansible_config}" ]]; then
-  # Fallback to template if the ansible.cfg symlink isn't resolved.
-  fallback_cfg="${project_root}/conf/TEMPLATE_ansible.cfg"
-  if [[ -f "${fallback_cfg}" ]]; then
-    ansible_config="${fallback_cfg}"
-  else
-    ansible_config=""
-  fi
-fi
 
 cmd=(ansible-playbook "${playbook_file}" -i "${inventory_file}" --limit "${target}")
 if [[ $# -gt 0 ]]; then
@@ -71,13 +66,10 @@ echo "Running connectivity check for inventory target: ${target}"
 printf 'Connectivity check target: %s\n\n' "${target}" > "${log_file}"
 
 set +e
-if [[ -n "${ansible_config}" && -f "${ansible_config}" ]]; then
-  ANSIBLE_CONFIG="${ansible_config}" "${cmd[@]}" 2>&1 | tee -a "${log_file}"
-  status=${PIPESTATUS[0]}
-else
+ANSIBLE_CONFIG="${ansible_config}" \
+  ANSIBLE_LOG_PATH="${log_file}" \
   "${cmd[@]}" 2>&1 | tee -a "${log_file}"
-  status=${PIPESTATUS[0]}
-fi
+status=${PIPESTATUS[0]}
 set -e
 
 echo "Log written to ${log_file}"

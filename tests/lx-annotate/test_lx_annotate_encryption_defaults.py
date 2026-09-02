@@ -72,10 +72,20 @@ def test_lx_annotate_scripts_export_protected_storage_contract():
         in config_source
     )
     assert (
-        'ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-manage '
-        'migrate --noinput";'
+        'pkgs.writeShellScript "lx-annotate-migrate-with-legacy-history-fallback"'
         in config_source
     )
+    assert (
+        "if ${effectiveRuntimePackage}/bin/lx-annotate-manage migrate --noinput; then"
+        in config_source
+    )
+    assert "lx-annotate-manage shell --command" in config_source
+    assert 'call_command("repair_legacy_migration_history", apply=True)' in config_source
+    assert (
+        "exec ${effectiveRuntimePackage}/bin/lx-annotate-manage migrate --noinput"
+        in config_source
+    )
+    assert "ExecStartPre" not in config_source
     assert 'TimeoutStartSec = "2h";' in config_source
     assert (
         'ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-watch --once";'

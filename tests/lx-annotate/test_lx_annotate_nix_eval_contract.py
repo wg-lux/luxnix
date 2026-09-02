@@ -1082,7 +1082,7 @@ def test_wheel_migrate_and_load_base_data_services_run_before_web() -> None:
 
     assert evaluated["migrate"]["Type"] == "oneshot"
     assert evaluated["migrate"]["ExecStart"].endswith(
-        "/bin/lx-annotate-manage migrate --noinput"
+        "lx-annotate-migrate-with-legacy-history-fallback"
     )
     assert evaluated["loadBaseData"]["Type"] == "oneshot"
     assert (

@@ -13,8 +13,6 @@ with ctx;
     ]
     ++ dataRecoveryServiceUnits
     ++ hlsBackfillServiceUnits
-    ++ hubNodeProvisioningServiceUnits
-    ++ hubEnvelopePreflightServiceUnits
     ++ localRedisServiceUnits
     ++ localPostgresServiceUnits
     ++ localPostgresSetupUnits
@@ -28,8 +26,6 @@ with ctx;
     ]
     ++ dataRecoveryServiceUnits
     ++ hlsBackfillServiceUnits
-    ++ hubNodeProvisioningServiceUnits
-    ++ hubEnvelopePreflightServiceUnits
     ++ managedSecretsSetupUnits
     ++ encryptionServiceUnits;
     after = [
@@ -42,8 +38,6 @@ with ctx;
     ]
     ++ dataRecoveryServiceUnits
     ++ hlsBackfillServiceUnits
-    ++ hubNodeProvisioningServiceUnits
-    ++ hubEnvelopePreflightServiceUnits
     ++ localRedisServiceUnits
     ++ localPostgresServiceUnits
     ++ localPostgresSetupUnits

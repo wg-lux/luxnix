@@ -1497,45 +1497,49 @@ in
       ++ lib.optional config.services.nginx.enable "nginx";
     };
 
-    roles.managed-secrets.customSecrets.lx_hub_source_node_secret = lib.mkIf clientHubPkiCfg.enable {
-      path = clientHubPkiCfg.nodeSecretFile;
-      owner = "root";
-      group = config.luxnix.generic-settings.sensitiveServiceGroupName;
-      permissions = "640";
-      description = "Vault-backed LX-Annotate NetworkNode request-authentication secret";
-      customScript = true;
-      refreshOnBoot = true;
-      generator = ''
-        ${pkgs.vault}/bin/vault kv get -field=shared_secret \
-          ${lib.escapeShellArg "${clientHubPkiCfg.kvMountPath}/nodes/${clientHubPkiCfg.commonName}"} \
-          | ${pkgs.coreutils}/bin/tr -d '\n' > "$TARGET_FILE"
-        if [ ! -s "$TARGET_FILE" ]; then
-          echo "ERROR: Vault returned an empty hub source-node secret." >&2
-          exit 1
-        fi
-      '';
-    };
+    roles.managed-secrets.customSecrets.lx_hub_source_node_secret =
+      lib.mkIf (clientHubPkiCfg.enable && !cfg.client.auth.deferUntilProvisioned)
+        {
+          path = clientHubPkiCfg.nodeSecretFile;
+          owner = "root";
+          group = config.luxnix.generic-settings.sensitiveServiceGroupName;
+          permissions = "640";
+          description = "Vault-backed LX-Annotate NetworkNode request-authentication secret";
+          customScript = true;
+          refreshOnBoot = true;
+          generator = ''
+            ${pkgs.vault}/bin/vault kv get -field=shared_secret \
+              ${lib.escapeShellArg "${clientHubPkiCfg.kvMountPath}/nodes/${clientHubPkiCfg.commonName}"} \
+              | ${pkgs.coreutils}/bin/tr -d '\n' > "$TARGET_FILE"
+            if [ ! -s "$TARGET_FILE" ]; then
+              echo "ERROR: Vault returned an empty hub source-node secret." >&2
+              exit 1
+            fi
+          '';
+        };
 
-    roles.managed-secrets.customSecrets.lx_hub_recipient_public_key = lib.mkIf clientHubPkiCfg.enable {
-      path = clientHubPkiCfg.recipientPublicKeyFile;
-      owner = "root";
-      group = config.luxnix.generic-settings.sensitiveServiceGroupName;
-      permissions = "640";
-      description = "Vault-authenticated central-hub X25519 envelope recipient public key";
-      customScript = true;
-      refreshOnBoot = true;
-      generator = ''
-        ${pkgs.vault}/bin/vault kv get -field=public_key \
-          ${lib.escapeShellArg "${clientHubPkiCfg.kvMountPath}/${clientHubPkiCfg.recipientPublicKeyKvPath}"} \
-          > "$TARGET_FILE"
-        if [ ! -s "$TARGET_FILE" ] \
-          || ! ${pkgs.openssl}/bin/openssl pkey -pubin -in "$TARGET_FILE" -text_pub -noout 2>/dev/null \
-            | ${pkgs.gnugrep}/bin/grep -q X25519; then
-          echo "ERROR: Vault returned an invalid central-hub X25519 recipient public key." >&2
-          exit 1
-        fi
-      '';
-    };
+    roles.managed-secrets.customSecrets.lx_hub_recipient_public_key =
+      lib.mkIf (clientHubPkiCfg.enable && !cfg.client.auth.deferUntilProvisioned)
+        {
+          path = clientHubPkiCfg.recipientPublicKeyFile;
+          owner = "root";
+          group = config.luxnix.generic-settings.sensitiveServiceGroupName;
+          permissions = "640";
+          description = "Vault-authenticated central-hub X25519 envelope recipient public key";
+          customScript = true;
+          refreshOnBoot = true;
+          generator = ''
+            ${pkgs.vault}/bin/vault kv get -field=public_key \
+              ${lib.escapeShellArg "${clientHubPkiCfg.kvMountPath}/${clientHubPkiCfg.recipientPublicKeyKvPath}"} \
+              > "$TARGET_FILE"
+            if [ ! -s "$TARGET_FILE" ] \
+              || ! ${pkgs.openssl}/bin/openssl pkey -pubin -in "$TARGET_FILE" -text_pub -noout 2>/dev/null \
+                | ${pkgs.gnugrep}/bin/grep -q X25519; then
+              echo "ERROR: Vault returned an invalid central-hub X25519 recipient public key." >&2
+              exit 1
+            fi
+          '';
+        };
 
     environment.systemPackages =
       lib.optionals hubPkiCfg.enable [
@@ -1605,7 +1609,7 @@ in
 
       services.luxnix-vault-issue-hub-client-certificate = lib.mkIf clientHubPkiCfg.enable {
         description = "Issue or renew the LX-Annotate hub-transfer client certificate";
-        wantedBy = [ "multi-user.target" ];
+        wantedBy = lib.optionals (!cfg.client.auth.deferUntilProvisioned) [ "multi-user.target" ];
         before = [ "lx-annotate-celery-hub-transfer-worker.service" ];
         after = [
           "vault-auth-setup.service"
@@ -1626,7 +1630,7 @@ in
 
       timers.luxnix-vault-issue-hub-client-certificate = lib.mkIf clientHubPkiCfg.enable {
         description = "Renew the LX-Annotate hub-transfer client certificate";
-        wantedBy = [ "timers.target" ];
+        wantedBy = lib.optionals (!cfg.client.auth.deferUntilProvisioned) [ "timers.target" ];
         timerConfig = {
           OnBootSec = "2m";
           OnUnitActiveSec = "12h";

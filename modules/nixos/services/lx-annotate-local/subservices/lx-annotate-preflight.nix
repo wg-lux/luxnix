@@ -13,7 +13,6 @@ with ctx;
     ]
     ++ dataRecoveryServiceUnits
     ++ hlsBackfillServiceUnits
-    ++ hubNodeProvisioningServiceUnits
     ++ localPostgresServiceUnits
     ++ localPostgresSetupUnits
     ++ managedSecretsSetupUnits
@@ -24,7 +23,6 @@ with ctx;
     ]
     ++ dataRecoveryServiceUnits
     ++ hlsBackfillServiceUnits
-    ++ hubNodeProvisioningServiceUnits
     ++ localPostgresServiceUnits
     ++ managedSecretsSetupUnits
     ++ encryptionServiceUnits;
@@ -35,7 +33,6 @@ with ctx;
     ]
     ++ dataRecoveryServiceUnits
     ++ hlsBackfillServiceUnits
-    ++ hubNodeProvisioningServiceUnits
     ++ managedSecretsSetupUnits
     ++ encryptionServiceUnits;
     restartTriggers = [ effectiveRuntimePackage ];

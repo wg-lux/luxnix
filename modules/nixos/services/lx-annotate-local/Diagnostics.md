@@ -115,10 +115,13 @@ installation fails, repair and restart the wheel-runtime unit before retrying
 `lx-annotate-migrate.service`; do not run `pip` concurrently with application
 units.
 
-`lx-annotate-migrate.service` can be changed to run
-`repair_legacy_migration_history --apply` before Django's `migrate` command.
-The repair is additive and records only the reviewed canonical prefix for a
-recognized legacy leaf. Inspect the automatic repair result with:
+If the initial Django migration fails, `lx-annotate-migrate.service` runs
+the `repair_legacy_migration_history` command through Django's migration-safe
+shell entrypoint and retries the migration. The shell entrypoint avoids the
+normal runtime schema gate, which an incomplete legacy schema cannot pass. The
+repair is additive and records only the reviewed canonical prefix for a
+recognized legacy leaf. An unrecognized history or unrelated migration failure
+still fails the unit. Inspect the automatic repair result with:
 
 ```bash
 sudo journalctl -u lx-annotate-migrate.service -b --no-pager \

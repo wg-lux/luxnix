@@ -11,11 +11,12 @@ let
   vaultCfg = config.luxnix.vault;
   vaultAuthEnabled =
     vaultCfg.enable && vaultCfg.client.enable && vaultCfg.client.auth.method != "none";
+  vaultAuthRequired = vaultAuthEnabled && !vaultCfg.client.auth.deferUntilProvisioned;
   managedSecretsVaultEnvironmentFiles =
     lib.optionals (vaultCfg.enable && vaultCfg.client.environmentFile != null) [
       (toString vaultCfg.client.environmentFile)
     ]
-    ++ lib.optionals vaultAuthEnabled [
+    ++ lib.optionals vaultAuthRequired [
       "-${vaultCfg.client.runtimeEnvironmentFile}"
     ];
   humanFacingSecretNames = [
@@ -517,12 +518,12 @@ in
         "local-fs.target"
         "systemd-tmpfiles-setup.service"
       ]
-      ++ lib.optionals vaultAuthEnabled [ "vault-auth-setup.service" ];
+      ++ lib.optionals vaultAuthRequired [ "vault-auth-setup.service" ];
       wants = [ "local-fs.target" ];
       requires = [
         "systemd-tmpfiles-setup.service"
       ]
-      ++ lib.optionals vaultAuthEnabled [ "vault-auth-setup.service" ];
+      ++ lib.optionals vaultAuthRequired [ "vault-auth-setup.service" ];
 
       serviceConfig = {
         Type = "oneshot";

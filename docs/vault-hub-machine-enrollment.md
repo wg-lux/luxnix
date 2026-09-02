@@ -187,10 +187,14 @@ Initial enrollment may set the following temporary exception in the site's
 vault.client.auth.deferUntilProvisioned: "true"
 ```
 
-It permits that site's NixOS switch before AppRole files arrive, but it does
-not permit LX-Annotate to start without its required secrets. The value must
-not be placed in `group_vars/gpu_client.yml`: enrollment state belongs to one
-machine, and an unfinished site must not weaken the rest of the fleet.
+It permits that site's NixOS switch before AppRole files arrive. When
+LX-Annotate uses its preserved local application master key rather than
+Vault-managed encrypted storage, the base application may start, but the
+certificate issuer, transfer worker, node provisioning, and envelope-key
+preflight remain inactive until enrollment. It never permits hub transfer
+without its required secrets. The value must not be placed in
+`group_vars/gpu_client.yml`: enrollment state belongs to one machine, and an
+unfinished site must not weaken the rest of the fleet.
 
 Validate and regenerate derived Nix configurations:
 
@@ -343,7 +347,9 @@ systemctl restart vault-auth-setup.service
 
 If a site configuration was deliberately switched before its enrollment files
 arrived, `vault.client.auth.deferUntilProvisioned = true` makes the missing-file
-case a non-failing systemd condition, but LX-Annotate still remains fail-closed.
+case a non-failing systemd condition. The base application may run when its
+local secret and storage contracts are satisfied, but hub transfer remains
+fail-closed.
 `luxnix-vault-enrollment-status` distinguishes `enrollment-pending`,
 `tls-trust-failed`, `vault-sealed`, `vault-unreachable`, `auth-rejected`, and
 `vault-error`. Never create an empty `vault.env` or weaken TLS to move past one
