@@ -575,7 +575,7 @@ lib.foldl' lib.recursiveUpdate
       luxnix.generic-settings.systemStateVersion = "23.11";
     }
     {
-      luxnix.vault.client.auth.deferUntilProvisioned = true;
+      luxnix.vault.client.auth.deferUntilProvisioned = false;
     }
     {
       networking.hosts."172.16.255.22" = [
