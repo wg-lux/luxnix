@@ -135,6 +135,13 @@ lib.foldl' lib.recursiveUpdate
       services.wg-lux-mcp.enable = true;
     }
     {
+      services.luxnix.lxAnnotateLocal.runtime.packageVersion = "1.2.2";
+    }
+    {
+      services.luxnix.lxAnnotateLocal.runtime.wheelPath =
+        ../../../release-artifacts/lx-annotate/1.2.2/lx_annotate-1.2.2-py3-none-any.whl;
+    }
+    {
       luxnix.boot-decryption-stick.enable = true;
     }
     {
@@ -564,7 +571,7 @@ lib.foldl' lib.recursiveUpdate
       luxnix.generic-settings.systemStateVersion = "23.11";
     }
     {
-      luxnix.vault.client.auth.deferUntilProvisioned = true;
+      luxnix.vault.client.auth.deferUntilProvisioned = false;
     }
     {
       networking.hosts."172.16.255.22" = [

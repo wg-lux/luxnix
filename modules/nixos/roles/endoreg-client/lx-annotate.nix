@@ -203,6 +203,12 @@ let
   };
   celeryBrokerType = types.submodule {
     options = {
+      visibilityTimeoutSeconds = mkOption {
+        type = types.ints.positive;
+        default = 90000;
+        description = "Redis delivery visibility timeout; must remain at least one hour longer than every late-ack task and FFmpeg execution window.";
+      };
+
       requireSecureTransport = mkOption {
         type = types.bool;
         default = false;
@@ -948,6 +954,7 @@ let
         llmInferenceWorker = lib.mkDefault runtimeCfg.llmInferenceWorker;
         externalServices = lib.mkDefault runtimeCfg.externalServices;
         celeryBroker = {
+          visibilityTimeoutSeconds = lib.mkDefault runtimeCfg.celeryBroker.visibilityTimeoutSeconds;
           requireSecureTransport = lib.mkIf runtimeCfg.celeryBroker.requireSecureTransport (
             lib.mkDefault true
           );
