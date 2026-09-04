@@ -541,6 +541,7 @@ let
     celeryBrokerUrl
     celeryWorkerResourceEnv
     commonEnv
+    ffmpegTranscodeTimeoutSeconds
     llmInferenceWorkerEnv
     ;
   hubOidcMiddlewarePolicy = pkgs.writeTextDir "sitecustomize.py" ''
@@ -1690,6 +1691,21 @@ in
                 || cfg.runtime.celeryBroker.secureTransportConfirmed
                 || brokerUrlUsesSecureTransport celeryBrokerUrl;
               message = "services.luxnix.lxAnnotateLocal.runtime.celeryBroker.requireSecureTransport requires a rediss:// or amqps:// broker URL, or runtime.celeryBroker.secureTransportConfirmed = true.";
+            }
+            {
+              assertion =
+                cfg.runtime.celeryBroker.visibilityTimeoutSeconds >= ffmpegTranscodeTimeoutSeconds + 3600;
+              message = "services.luxnix.lxAnnotateLocal.runtime.celeryBroker.visibilityTimeoutSeconds must be at least one hour longer than the 86400-second FFmpeg and late-ack task ceiling.";
+            }
+            {
+              assertion =
+                !cfg.hub.outboundTransfer.enable
+                || cfg.runtime.celeryBroker.visibilityTimeoutSeconds > cfg.hub.outboundTransfer.staleAfterSeconds;
+              message = "services.luxnix.lxAnnotateLocal.runtime.celeryBroker.visibilityTimeoutSeconds must exceed hub.outboundTransfer.staleAfterSeconds.";
+            }
+            {
+              assertion = !(builtins.hasAttr "CELERY_VISIBILITY_TIMEOUT_SECONDS" cfg.runtime.extraEnvironment);
+              message = "Set runtime.celeryBroker.visibilityTimeoutSeconds instead of overriding CELERY_VISIBILITY_TIMEOUT_SECONDS through runtime.extraEnvironment.";
             }
             {
               assertion = cfg.runtime.deploymentRole != "central_hub" || cfg.hub.enable;

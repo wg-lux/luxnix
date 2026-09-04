@@ -83,7 +83,7 @@ rec {
   celeryLlmInferenceQueueName = "llm_inference";
   celeryMaintenanceQueueName = "maintenance";
   celeryHubTransferQueueName = "hub_transfer";
-  ffmpegTranscodeTimeoutSeconds = "86400";
+  ffmpegTranscodeTimeoutSeconds = 86400;
 
   # This is the lx-annotate environment contract. Config modules, systemd
   # EnvironmentFiles, and shell wrappers render from this attrset.
@@ -127,7 +127,7 @@ rec {
     TIME_ZONE = cfg.django.timeZone;
     RUN_VIDEO_TESTS = envRunVideoTests;
     SKIP_EXPENSIVE_TESTS = envSkipExpensiveTests;
-    FFMPEG_TRANSCODE_TIMEOUT_SECONDS = ffmpegTranscodeTimeoutSeconds;
+    FFMPEG_TRANSCODE_TIMEOUT_SECONDS = toString ffmpegTranscodeTimeoutSeconds;
     MEDIA_OPERATION_STREAM_LEASE_SECONDS = "300";
     SERVE_WITH_NGINX = boolString cfg.runtime.streamableServing.nginxOffload;
     NGINX_PROTECTED_MEDIA_URL = cfg.runtime.streamableServing.protectedMediaUrl;
@@ -149,6 +149,7 @@ rec {
     LX_ANNOTATE_HUB_EXPORT_STALE_AFTER_SECONDS = toString cfg.hub.outboundTransfer.staleAfterSeconds;
     LX_ANNOTATE_HUB_EXPORT_MAX_RETRIES = toString cfg.hub.outboundTransfer.maxRetries;
     CELERY_BROKER_URL = celeryBrokerUrl;
+    CELERY_VISIBILITY_TIMEOUT_SECONDS = toString cfg.runtime.celeryBroker.visibilityTimeoutSeconds;
     CELERY_DEFAULT_QUEUE = celeryDefaultQueueName;
     CELERY_PIPELINE_QUEUE = celeryPipelineQueueName;
     CELERY_FRAME_EXTRACTION_QUEUE = celeryFrameExtractionQueueName;

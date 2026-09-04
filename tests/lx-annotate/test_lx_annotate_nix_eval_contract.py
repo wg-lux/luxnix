@@ -1216,6 +1216,88 @@ def test_lx_annotate_ffmpeg_worker_allows_warm_task_shutdown() -> None:
     assert service_config["TimeoutStopSec"] == "6h15min"
 
 
+def test_lx_annotate_celery_visibility_timeout_reaches_gc_05_consumers() -> None:
+    evaluated = _nix_eval_expr_json(
+        """
+        let
+          flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
+          lib = flake.inputs.nixpkgs.lib;
+          base = flake.nixosConfigurations.gc-05;
+          cfg = (base.extendModules {
+            modules = [
+              ({ ... }: {
+                roles.endoreg-client.lxAnnotate.runtime.celeryBroker.visibilityTimeoutSeconds =
+                  lib.mkForce 93600;
+              })
+            ];
+          }).config;
+        in {
+          defaultServiceValue = base.config.services.luxnix.lxAnnotateLocal.runtime.celeryBroker.visibilityTimeoutSeconds;
+          roleValue = cfg.roles.endoreg-client.lxAnnotate.runtime.celeryBroker.visibilityTimeoutSeconds;
+          serviceValue = cfg.services.luxnix.lxAnnotateLocal.runtime.celeryBroker.visibilityTimeoutSeconds;
+          web = cfg.systemd.services.lx-annotate.environment.CELERY_VISIBILITY_TIMEOUT_SECONDS;
+          pipeline = cfg.systemd.services."lx-annotate-celery-pipeline-worker".environment.CELERY_VISIBILITY_TIMEOUT_SECONDS;
+          ffmpeg = cfg.systemd.services."lx-annotate-celery-ffmpeg-worker".environment.CELERY_VISIBILITY_TIMEOUT_SECONDS;
+        }
+        """
+    )
+
+    assert evaluated == {
+        "defaultServiceValue": 90000,
+        "roleValue": 93600,
+        "serviceValue": 93600,
+        "web": "93600",
+        "pipeline": "93600",
+        "ffmpeg": "93600",
+    }
+
+
+def test_lx_annotate_rejects_visibility_timeout_without_safety_margin() -> None:
+    result = _nix_eval_expr_result(
+        """
+        let
+          flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
+          lib = flake.inputs.nixpkgs.lib;
+          cfg = (flake.nixosConfigurations.gc-05.extendModules {
+            modules = [
+              ({ ... }: {
+                services.luxnix.lxAnnotateLocal.runtime.celeryBroker.visibilityTimeoutSeconds =
+                  lib.mkForce 86400;
+              })
+            ];
+          }).config;
+        in cfg.system.build.toplevel.drvPath
+        """
+    )
+
+    assert result.returncode != 0
+    assert "must be at least one hour longer" in result.stderr
+
+
+def test_lx_annotate_hls_backfill_defers_during_active_imports() -> None:
+    exec_condition = _nix_eval_expr_json(
+        """
+        let
+          flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
+          cfg = flake.nixosConfigurations.gc-05.config;
+        in
+          cfg.systemd.services."lx-annotate-hls-backfill".serviceConfig.ExecCondition
+        """
+    )
+
+    assert "\n" not in exec_condition
+    assert exec_condition.endswith("-lx-annotate-hls-backfill-allowed")
+
+    module_source = (
+        REPO_ROOT
+        / "modules/nixos/services/lx-annotate-local/subservices"
+        / "lx-annotate-hls-backfill.nix"
+    ).read_text(encoding="utf-8")
+    assert "UploadJob.objects.filter" in module_source
+    for status in ("pending", "processing", "retrying"):
+        assert status in module_source
+
+
 def test_lx_annotate_frame_extraction_worker_defaults_to_always_on() -> None:
     evaluated = _gc_02_contract()["frameExtractionWorkerDefault"]
 
