@@ -51,11 +51,11 @@ MAX_RECOMMENDED_INPUT_AGE_DAYS = 30
 
 
 def run(
-    command: list[str], *, timeout: int | None = None
+    command: list[str], *, timeout: int | None = None, cwd: Path | None = None
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         command,
-        cwd=REPO_ROOT,
+        cwd=cwd or REPO_ROOT,
         capture_output=True,
         text=True,
         check=False,
@@ -165,11 +165,18 @@ def flake_checker_issue_count() -> int | None:
     return None
 
 
-def check(name: str, category: str, command: list[str], timeout: int | None) -> dict[str, Any]:
-    print(f"  → {name}: {' '.join(command)}", flush=True)
+def check(
+    name: str,
+    category: str,
+    command: list[str],
+    timeout: int | None,
+    cwd: Path | None = None,
+) -> dict[str, Any]:
+    location = f" (in {cwd.relative_to(REPO_ROOT)})" if cwd else ""
+    print(f"  → {name}: {' '.join(command)}{location}", flush=True)
     started = time.monotonic()
     try:
-        completed = run(command, timeout=timeout)
+        completed = run(command, timeout=timeout, cwd=cwd)
         returncode = completed.returncode
         output = completed.stdout + completed.stderr
     except subprocess.TimeoutExpired as exc:
@@ -191,11 +198,26 @@ def check(name: str, category: str, command: list[str], timeout: int | None) -> 
     return result
 
 
-def planned_checks(
-    categories: list[str], host_timeout: int
-) -> list[tuple[str, str, list[str], int | None]]:
+def _step(
+    name: str,
+    category: str,
+    command: list[str],
+    *,
+    timeout: int | None = None,
+    cwd: Path | None = None,
+) -> dict[str, Any]:
+    return {
+        "name": name,
+        "category": category,
+        "command": command,
+        "timeout": timeout,
+        "cwd": cwd,
+    }
+
+
+def planned_checks(categories: list[str], host_timeout: int) -> list[dict[str, Any]]:
     uv = ["uv", "run", "--no-sync"]
-    plan: list[tuple[str, str, list[str], int | None]] = []
+    plan: list[dict[str, Any]] = []
 
     if "python-tests" in categories:
         layout = yaml.safe_load(LAYOUT_PATH.read_text(encoding="utf-8"))
@@ -203,20 +225,22 @@ def planned_checks(
             if suite["id"] == "cuda-probes":
                 continue  # optional hardware probe, not a pass/fail suite
             plan.append(
-                (
+                _step(
                     f"python:{suite['id']}",
                     "python-tests",
                     [*uv, "pytest", "-q", suite["path"]],
-                    None,
                 )
             )
         for project in layout.get("independent_projects", []):
+            # A nested project resolves its own dependencies, so run pytest from
+            # its own root with a plain `uv run` (no --no-sync).
+            project_dir = REPO_ROOT / Path(project["path"]).parts[0]
             plan.append(
-                (
+                _step(
                     f"python:{project['id']}",
                     "python-tests",
-                    [*uv, "pytest", "-q", project["path"]],
-                    None,
+                    ["uv", "run", "pytest", "-q"],
+                    cwd=project_dir,
                 )
             )
 
@@ -224,22 +248,12 @@ def planned_checks(
         # Fast mode only: the ratcheted parse/lint/lockfile gate. Full flake
         # evaluation is the separate `flake-check` category.
         plan.append(
-            (
-                "nix-quality",
-                "nix-quality",
-                [*uv, "python", "scripts/nix-quality.py"],
-                None,
-            )
+            _step("nix-quality", "nix-quality", [*uv, "python", "scripts/nix-quality.py"])
         )
 
     if "nixtests" in categories:
         plan.append(
-            (
-                "nixtests",
-                "nixtests",
-                ["nix", "run", ".#nixtests", "--", "--workers", "1"],
-                None,
-            )
+            _step("nixtests", "nixtests", ["nix", "run", ".#nixtests", "--", "--workers", "1"])
         )
 
     if "host-eval" in categories or "host-build" in categories:
@@ -251,31 +265,26 @@ def planned_checks(
             attr = f".#nixosConfigurations.{host}.config.system.build.toplevel"
             if "host-eval" in categories:
                 plan.append(
-                    (
+                    _step(
                         f"host-eval:{host}",
                         "host-eval",
                         ["nix", "eval", "--raw", f"{attr}.drvPath"],
-                        host_timeout,
+                        timeout=host_timeout,
                     )
                 )
             if "host-build" in categories:
                 plan.append(
-                    (
+                    _step(
                         f"host-build:{host}",
                         "host-build",
                         ["nix", "build", "--no-link", attr],
-                        host_timeout,
+                        timeout=host_timeout,
                     )
                 )
 
     if "flake-check" in categories:
         plan.append(
-            (
-                "flake-check",
-                "flake-check",
-                ["nix", "flake", "check", "--no-build"],
-                None,
-            )
+            _step("flake-check", "flake-check", ["nix", "flake", "check", "--no-build"])
         )
 
     return plan
@@ -340,10 +349,14 @@ def main(argv: list[str] | None = None) -> int:
 
     print("Running checks ...")
     results = [
-        check(name, category, command, timeout)
-        for name, category, command, timeout in planned_checks(
-            categories, args.host_timeout
+        check(
+            step["name"],
+            step["category"],
+            step["command"],
+            step["timeout"],
+            step["cwd"],
         )
+        for step in planned_checks(categories, args.host_timeout)
     ]
 
     failed = [r for r in results if r["status"] == "failed"]

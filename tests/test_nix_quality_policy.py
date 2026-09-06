@@ -243,7 +243,9 @@ def test_precommit_fast_gate_includes_flake_lock() -> None:
 
     assert '^flake\\\\.lock$' in hook
     assert "|modules|" in hook
-    assert "scripts/nix-quality.py" in hook
+    # The hook entry runs scripts/nix-quality.py, either directly or through a
+    # wrapper defined elsewhere in devenv.nix that puts the quality tools on PATH.
+    assert "scripts/nix-quality.py" in devenv_source
 
 
 def test_flake_checker_report_exposes_outdated_inputs(monkeypatch) -> None:
