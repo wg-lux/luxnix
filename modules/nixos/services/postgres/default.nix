@@ -121,12 +121,13 @@ in
         enable = true;
         settings = {
           listen_addresses = lib.mkForce cfg.listen_addresses;
-          shared_preload_libraries = [ "vectors.so" ];
-          search_path = "\"$user\", public, vectors";
         };
-        # pgvecto-rs requires the matching JIT-enabled PostgreSQL package.
+        # The pgvecto-rs extension (preloaded `vectors.so`, `vectors` schema) was
+        # never consumed - endoreg-db and lx-annotate use plain PostgreSQL, and
+        # `CREATE EXTENSION vectors` is not run anywhere - and pgvecto-rs was
+        # removed from nixpkgs in 26.05. Dropped entirely. JIT stays on; it is
+        # harmless and helps analytic queries.
         package = pkgs.postgresql_16_jit;
-        extensions = ps: with ps; [ pgvecto-rs ];
         authentication = lib.mkOverride 10 auth;
         identMap = lib.mkOverride 10 identMap;
       };

@@ -32,29 +32,32 @@ Do not deploy a bump straight to the fleet. Evaluate, build, and canary first.
 > channel bump to `nixos-26.05`; until then, keep refreshing within `25.11`
 > for security patches.
 
-## 26.05 upgrade status (paused)
+## 26.05 upgrade status
 
 The `lx/nixos-26.05` branch carries the channel bump (`nixpkgs`,
-`home-manager`, `nixvim` → `nixos-26.05` / `release-26.05`) and the mechanical
-module fixes it needs. It is **paused on two upstream abandonments** that are
-application- and data-migration projects, not config edits:
+`home-manager`, `nixvim` → `nixos-26.05` / `release-26.05`) and the module
+fixes 26.05 requires.
 
-| Blocker | Impact | 26.05 options |
-| --- | --- | --- |
-| `pgvecto-rs` removed (abandoned upstream) | every host's PostgreSQL — endoreg-db vector embeddings use its `vectors` schema, indexes, and query operators | `vectorchord` (official successor), `pgvector`, `pgvectorscale` — each needs a schema migration, data re-index, and endoreg-db query changes |
-| `minio` marked insecure (abandoned upstream, 6 unpatched CVEs) | `s-03` Nextcloud primary object store | migrate to Garage / SeaweedFS / Ceph: object-store swap, data copy, Nextcloud storage reconfiguration |
-
-Mechanical fixes already on the branch:
+Module fixes on the branch:
 
 - `kwalletcli` removed (Plasma 5 EOL) → dropped; `kdePackages.kwallet` covers it.
 - `hardware.nvidia.package` is strictly unique in 26.05 → `luxnix.nvidia-default`
   now sets it with `mkDefault` so `luxnix.nvidia-prime` wins cleanly.
 - `services.ollama.acceleration` removed → dropped; the wrapper already selects
   `ollama-<backend>` through `services.ollama.package`.
+- `pgvecto-rs` removed (abandoned upstream). It was dead config: neither
+  endoreg-db nor lx-annotate uses a PostgreSQL vector extension (no dependency,
+  no vector columns, no `CREATE EXTENSION`), so the preloaded `vectors.so`, the
+  `vectors` schema, and the extension were dropped from
+  `modules/nixos/services/postgres/default.nix`.
 
-With the two blockers stubbed, all 16 hosts evaluate on 26.05. Resume by
-planning each migration with its owning team, then run this runbook's
-capture / change / compare / gate sequence on `lx/nixos-26.05`.
+Remaining blocker:
+
+| Blocker | Impact | Options |
+| --- | --- | --- |
+| `minio` marked insecure (abandoned upstream, 6 unpatched CVEs) | `s-03` Nextcloud object store (bound to `127.0.0.1`, behind nginx) | drop the object store for local disk storage; migrate to `services.garage` (S3-compatible); or `permittedInsecurePackages` short-term. `s-03` is not running, so there is no data to migrate. |
+
+Every host except `s-03` evaluates on 26.05 with the fixes above.
 
 ## 1. Capture the baseline
 
