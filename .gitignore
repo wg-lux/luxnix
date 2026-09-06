@@ -36,6 +36,9 @@ secrets/
 ansible/secrets/admin-passwords.yml
 .ruff_cache/
 .devenv
+# devenv writes suffixed session-state dirs (.devenv.<rand>/) when the primary
+# .devenv/ is already held by another run; ignore every .devenv.* sibling.
+.devenv.*
 untracked_notes.md
 tests/sensitive/
 erc_data/
