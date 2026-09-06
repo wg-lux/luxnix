@@ -30,7 +30,6 @@ let
     kdePackages.systemsettings
     kdePackages.kwallet
     kdePackages.kwalletmanager
-    kwalletcli
   ];
 
   baseDevelopment = with pkgs; [
