@@ -12,7 +12,8 @@ result/
 utils/secrets/
 *keyfile.bin
 luxnix.code-workspace
-/cmdb/
+/cmdb/*
+!/cmdb/.gitkeep
 /conf/hostinfo.json
 /conf/hostinfos/
 /docs/hostinfo/
