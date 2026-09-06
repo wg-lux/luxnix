@@ -77,6 +77,7 @@ nav:
       - Virtualization: virtualization-guide.md
       - SSH Host Identity: ssh-host-identity.md
       - Configuration Tests: testing-nixtests.md
+      - NixOS Version Bump: nixos-version-bump.md
   - Services:
       - Service Module Pattern: deploying-services-lx-annotate-style.md
       - lx-annotate Encrypted Data: lx-annotate-encrypted-data.md

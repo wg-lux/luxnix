@@ -264,6 +264,14 @@ tasks:
     implementation: devenv/tasks.nix
     documentation: docs/testing-nixtests.md
 
+  - id: repo:state-summary
+    summary: Run the repository checks and write a JSON state snapshot for before/after comparison.
+    risk: local-state
+    operator_confirmation_required: false
+    usage: devenv tasks run repo:state-summary
+    implementation: scripts/repo-state-summary.py
+    documentation: docs/nixos-version-bump.md
+
   - id: endoreg-db:init
     summary: Initialize the EndoReg database.
     risk: local-state

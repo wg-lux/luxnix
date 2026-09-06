@@ -168,6 +168,9 @@ venv.bak/
 # Private, dated Vault incident evidence (not release documentation)
 /docs/vault-rebuild-ceremony-2026-08-11.md
 
+# Local repo-state snapshots from `devenv tasks run repo:state-summary`
+/repo-state/
+
 # mypy
 .mypy_cache/
 .dmypy.json

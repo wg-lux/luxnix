@@ -72,6 +72,11 @@
     exec = "${pkgs.uv}/bin/uv run pytest -q";
   };
 
+  "repo:state-summary" = {
+    description = "Run the repository checks and write a state snapshot for before/after comparison";
+    exec = ''${pkgs.uv}/bin/uv run python scripts/repo-state-summary.py "$@"'';
+  };
+
   # Nix quality
   "nix-quality:check" = {
     description = "Run fast Nix parse, deadnix, statix, nixfmt, and flake-checker checks";

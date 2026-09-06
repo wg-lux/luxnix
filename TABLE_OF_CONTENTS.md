@@ -21,6 +21,7 @@
   - [Virtualization](docs/virtualization-guide.md)
   - [SSH Host Identity](docs/ssh-host-identity.md)
   - [Configuration Tests](docs/testing-nixtests.md)
+  - [NixOS Version Bump](docs/nixos-version-bump.md)
 - **Services**
   - [Service Module Pattern](docs/deploying-services-lx-annotate-style.md)
   - [lx-annotate Encrypted Data](docs/lx-annotate-encrypted-data.md)
