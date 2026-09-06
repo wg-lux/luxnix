@@ -46,7 +46,7 @@ lib.foldl' lib.recursiveUpdate
       roles.nextcloudHost.minioCredentialsFilePath = "/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_minio_credentials";
     }
     {
-      roles.nextcloudHost.package = pkgs.nextcloud31;
+      roles.nextcloudHost.package = pkgs.nextcloud32;
     }
     {
       roles.nextcloudHost.passwordFilePath = "/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_password";
