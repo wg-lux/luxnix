@@ -15,7 +15,7 @@ in
           extraArgs = mkOption {
             type = types.listOf types.str;
             default = [ ];
-            example = literalExpression ''[ ]'';
+            example = literalExpression "[ ]";
             description = "Reserved compatibility field. It must remain empty so the automatic production backfill reconciles the entire raw and processed HLS corpus without per-machine opt-in or selection. Use the separate manual materialization unit for scoped repair runs.";
           };
           timeoutStartSec = mkOption {

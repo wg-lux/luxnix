@@ -22,6 +22,26 @@ let
     inherit pkgs uvPackage;
   };
   devenvPackages = devenvUtils.packages;
+
+  # The nix-quality git hook runs on `git commit`, outside the devenv shell,
+  # so its PATH does not carry the Nix quality tools. Wrap the entry point so
+  # deadnix/statix/nixfmt/flake-checker/nix resolve regardless of the caller's
+  # environment, using the same packages the shell provides.
+  nixQualityHook = pkgs.writeShellApplication {
+    name = "nix-quality-hook";
+    runtimeInputs = [
+      uvPackage
+      pkgs.nix
+      pkgs.git
+      pkgs.deadnix
+      pkgs.statix
+      pkgs.nixfmt
+      pkgs.flake-checker
+    ];
+    text = ''
+      exec uv run python scripts/nix-quality.py "$@"
+    '';
+  };
 in
 {
   dotenv.enable = false;
@@ -64,7 +84,7 @@ in
     nix-quality = {
       enable = true;
       name = "nix-quality";
-      entry = "${pkgs.uv}/bin/uv run python scripts/nix-quality.py";
+      entry = "${nixQualityHook}/bin/nix-quality-hook";
       files = "\\.nix$|^flake\\.lock$|^nix-quality\\.yml$|^scripts/nix-quality\\.py$|^(homes|lib|modules|overlays|packages|shells|systems|tests/nixtest|topology)/";
       pass_filenames = false;
     };
