@@ -165,6 +165,9 @@ venv.bak/
 # mkdocs documentation
 /site
 
+# Private, dated Vault incident evidence (not release documentation)
+/docs/vault-rebuild-ceremony-2026-08-11.md
+
 # mypy
 .mypy_cache/
 .dmypy.json

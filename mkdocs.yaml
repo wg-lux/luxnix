@@ -37,6 +37,7 @@ docs_dir: ./docs
 exclude_docs: |
   Luxnix_Setup.excalidraw.md
   Nixicle reference/
+  vault-rebuild-ceremony-2026-08-11.md
 
 plugins:
   - search:
@@ -84,7 +85,9 @@ nav:
       - gs-02 Local Redis Recovery: operations/gs-02-local-redis-broker.md
   - Vault:
       - Setup and Bootstrap: vault-setup.md
+      - Maintainer Notes: vault-maintainer-operations.md
       - Machine Enrollment: vault-hub-machine-enrollment.md
-      - Owner Actions: vault-owner-immediate-actions.md
+      - Owner Operations: vault-owner-immediate-actions.md
+      - Server Rebuild: vault-server-rebuild.md
   - Clinical Operations:
       - Central Hub Transfer: clinical-hub-transfer-guide.md
