@@ -26,11 +26,12 @@ Do not deploy a bump straight to the fleet. Evaluate, build, and canary first.
   warnings persist until a channel bump - a refresh cannot clear them.
 - A security advisory affects a pinned package.
 
-> **Current state:** `nixpkgs` tracks `nixos-25.11`, which has reached end of
-> support. `nix-quality.yml` carries a flake-checker baseline of 2 to
-> accommodate the resulting permanent warnings. Clearing them requires a
-> channel bump to `nixos-26.05`; until then, keep refreshing within `25.11`
-> for security patches.
+> **Current state:** `main` tracks `nixos-25.11`, which has reached end of
+> support, so `nix-quality.yml` carries a flake-checker baseline of 2 for the
+> resulting permanent warnings. The `nixos-26.05` channel bump is prepared on
+> `lx/nixos-26.05` (see the status section below); until it merges, keep
+> refreshing within `25.11` for security patches and drop the baseline to 0
+> when 26.05 lands.
 
 ## 26.05 upgrade status
 
@@ -50,14 +51,33 @@ Module fixes on the branch:
   no vector columns, no `CREATE EXTENSION`), so the preloaded `vectors.so`, the
   `vectors` schema, and the extension were dropped from
   `modules/nixos/services/postgres/default.nix`.
+- `minio` marked insecure (abandoned upstream). `s-03`'s Nextcloud object store
+  moved to a local single-node `services.garage` instance. `s-03` is not
+  running, so there is no object data to migrate.
 
-Remaining blocker:
+All 16 hosts evaluate on 26.05.
 
-| Blocker | Impact | Options |
-| --- | --- | --- |
-| `minio` marked insecure (abandoned upstream, 6 unpatched CVEs) | `s-03` Nextcloud object store (bound to `127.0.0.1`, behind nginx) | drop the object store for local disk storage; migrate to `services.garage` (S3-compatible); or `permittedInsecurePackages` short-term. `s-03` is not running, so there is no data to migrate. |
+### s-03 Garage deploy prerequisites
 
-Every host except `s-03` evaluates on 26.05 with the fixes above.
+Before deploying `s-03`, provision the Vault file
+`SCRT_roles_system_password_nextcloud_host_garage_credentials` (env-style,
+one value per line):
+
+```
+NEXTCLOUD_S3_SECRET_KEY=<openssl rand -hex 32>
+GARAGE_RPC_SECRET=<openssl rand -hex 32>
+GARAGE_ADMIN_TOKEN=<openssl rand -hex 32>
+```
+
+`NEXTCLOUD_S3_SECRET_KEY` is the secret half of the access key whose public ID
+is `nextcloudHost.s3AccessKeyId` in `ansible/roles/nextcloud_host/vars/main.yml`
+(`GK` + 24 hex). `garage-bootstrap.service` applies the single-node layout,
+imports that key, and creates the `nextcloud` bucket on first boot. The Garage
+CLI is available on the host as `garage`; layout/key/bucket steps are all
+idempotent and re-run cleanly after `nextcloud-maintenance --reset-garage`.
+
+The module changes are evaluation-verified only; the Garage bootstrap
+sequence needs a real `s-03` deploy to confirm.
 
 ## 1. Capture the baseline
 
