@@ -4,13 +4,13 @@
 from __future__ import annotations
 
 import argparse
-import subprocess
 import sys
 from pathlib import Path
 
 from lx_administration.logging import get_logger
 from lx_administration.models.vault import Vault, load_admin_passwords
 from lx_administration.password import PasswordGenerator
+from lx_administration.models.vault.secret import MASTER_VAULT_ID, decrypt_secret
 
 LOGGER = get_logger("validate-admin-passwords", reset=True)
 
@@ -36,11 +36,9 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--vault-id",
-        default=None,
-        help=(
-            "Vault identity to use when decrypting secrets (defaults to the value "
-            "saved in the vault or the current hostname)."
-        ),
+        default=MASTER_VAULT_ID,
+        choices=[MASTER_VAULT_ID],
+        help="Explicit master identity; migrate legacy ciphertext before validation.",
     )
     return parser.parse_args()
 
@@ -53,41 +51,30 @@ def _secret_paths(vault_dir: Path, hostname: str) -> tuple[Path, Path]:
 
 
 def _decrypt_secret(file_path: Path, vault_id: str, key_path: Path) -> str:
-    if not file_path.exists():
-        raise FileNotFoundError(file_path)
-
-    cmd = [
-        "ansible-vault",
-        "view",
-        f"--vault-id={vault_id}@{key_path.as_posix()}",
-        file_path.as_posix(),
-    ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    if proc.returncode != 0:
+    try:
+        return decrypt_secret(file_path, key_path, vault_id).decode("utf-8")
+    except ValueError:
         raise RuntimeError(
-            f"Failed to decrypt {file_path} (ansible-vault exit {proc.returncode})"
-        )
-    return proc.stdout.strip()
+            "Failed to decrypt secret with the declared master key"
+        ) from None
 
 
 def main() -> None:
     args = _parse_args()
 
     vault_dir = Path(args.vault_dir).expanduser().resolve()
-    vault_key = Path(args.vault_key).expanduser().resolve()
-    admin_file = Path(args.admin_passwords).expanduser().resolve()
+    vault_key = Path(args.vault_key).expanduser().absolute()
+    admin_file = Path(args.admin_passwords).expanduser().absolute()
 
     vault = Vault.load_dir(vault_dir.as_posix(), vault_key.as_posix())
     vault.dir = vault_dir.as_posix()
     vault.key = vault_key.as_posix()
 
-    vault_id = (
-        args.vault_id or vault.local_hostname_override or vault.get_local_hostname()
-    )
+    vault_id = args.vault_id
 
     LOGGER.info("Using vault id '%s' with key %s", vault_id, vault_key)
 
-    passwords = load_admin_passwords(admin_file)
+    passwords = load_admin_passwords(admin_file, strict=True)
     if not passwords:
         LOGGER.warning("No admin passwords found in %s", admin_file)
         sys.exit(0)

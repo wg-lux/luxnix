@@ -84,37 +84,46 @@ definition_of_done:
     status: blocked
     evidence:
     - kind: command
+      reference: 'uv run pytest -q: 629 passed, 1 warning in 357.75s'
+    - kind: command
+      reference: 'uv run pytest -q tests/lx-annotate: 127 passed in 1224.98s'
+    - kind: command
+      reference: 'nix run .#nixtests -- --workers 1 --no-color: 39/39 passed'
+    - kind: command
       reference: 'devenv tasks run nix-quality:generators: passed'
     - kind: command
       reference: 'uv run pytest -q tests/test_test_layout_contract.py feature-tracking/test_tracker.py:
-        20 passed in 0.85s'
+        20 passed in 0.77s'
     - kind: command
-      reference: 'uv run pytest -q --ignore=tests/lx-annotate: 497 passed, 5 failed, 1 warning in 140.58s'
+      reference: 'devenv tasks run autoconf:check: passed'
     - kind: command
-      reference: 'nix run .#nixtests -- --workers 1 (via tests/test_nixtests.py): 31/39 successful'
+      reference: 'devenv tasks run autoconf:generate: passed after isolated external render comparison'
     - kind: command
-      reference: 'uv run pytest -q interrupted diagnostic: 99 passed, 11 failed, 1 warning in 919.19s;
-        all observed direct failures under tests/lx-annotate'
+      reference: 'nix eval .#nixosConfigurations.lx-test.config.system.build.toplevel.drvPath: passed'
+    - kind: command
+      reference: 'nix build .#nixosConfigurations.lx-test.config.system.build.toplevel --no-link: passed'
+    - kind: command
+      reference: 'nix build .#nixosConfigurations.gc-06.config.system.build.toplevel --no-link: passed'
+    - kind: command
+      reference: './tests/run-configuration-tests.sh warmed rerun: all hosts evaluated; 4 builds timed
+        out at 80s (gc-06, gs-01, gs-02, s-02), all other builds passed'
     - kind: test
-      reference: tests/test_devenv_command_catalog.py
+      reference: tests/lx-annotate/nix_eval_helpers.py
     - kind: test
-      reference: tests/test_logging.py
-    - kind: test
-      reference: tests/test_network_service_contract.py
-    - kind: test
-      reference: tests/test_nixtests.py
-    - kind: test
-      reference: tests/lx-annotate/test_lx_annotate_nix_eval_contract.py
-    note: 'Generator, tracker, and layout gates pass. The non-LX diagnostic suite now has 497 passes and
-      five failures: orphan scripts/lxv-postgres-secrets.py, a connectivity fixture missing conf/connectivity-ansible.cfg,
-      Nix writer expectation mismatch, missing wg-lux-features assertion, and the aggregate Nixtest failure.
-      Nixtest improved from 28/39 to 31/39 but eight contracts remain failing. A full canonical run was
-      interrupted after 919.19s at 99 passed/11 failed because current LX-Annotate Nix evaluations were
-      unusually slow; every direct failure observed in that partial run was under tests/lx-annotate, including
-      contracts overlapping the existing HLS worktree changes. No failure was skipped or hidden, and the
-      interrupted run is diagnostic rather than pass evidence.'
+      reference: tests/nixtest
+    - kind: code
+      reference: ansible/inventory/group_vars/gpu_server.yml
+    - kind: code
+      reference: modules/nixos/luxnix/generic-settings/linux/default.nix
+    note: Canonical pytest, LX-Annotate, Nixtest, generator, tracker/layout, and Autoconf gates pass.
+      Configuration coverage advanced from 10 failures (9 cold-build timeouts plus an lx-test missing
+      kernelModules default) to successful evaluation of every host and only four 80-second cold-build
+      timeouts. The lx-test option defect was fixed and both lx-test and gc-06 build uncapped. An uncapped
+      gs-01 build was interrupted after more than 70 minutes while actively compiling Ollama CUDA kernels
+      across nine architectures; no derivation error occurred. The criterion remains blocked because the
+      documented configuration command has not returned zero and the acceptance requires a clean checkout.
     assessed_by: codex-luxnix-tests-20260902
-    assessed_at: '2026-09-02T11:45:54.930246Z'
+    assessed_at: '2026-09-02T17:14:36.989125Z'
 - id: security_regressions_remain_covered
   category: security
   title: Security-sensitive contracts remain covered

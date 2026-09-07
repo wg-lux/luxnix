@@ -28,13 +28,13 @@ with lib;
   passwordFile = mkOption {
     type = types.path;
     default = "/etc/secrets/vault/SCRT_local_password_maintenance_password";
-    description = "Path to file containing database password";
+    description = "Deprecated legacy maintenance-password path; not used for the local application role";
   };
 
   endoregLocalUserPasswordFile = mkOption {
     type = types.path;
     default = "/var/lib/postgresql/endoregDbLocal.password";
-    description = "Path to file containing endoregDbLocal user password";
+    description = "Canonical protected file containing the endoregDbLocal application password";
   };
 
   sslMode = mkOption {

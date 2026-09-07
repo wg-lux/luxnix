@@ -116,6 +116,9 @@ lib.foldl' lib.recursiveUpdate
       roles.nginxHost.settings.recommendedTlsSettings = true;
     }
     {
+      roles.endoreg-client.lxAi = true;
+    }
+    {
       roles.nginxHost.glm52.acme.email = "hild@coloreg.de";
     }
     {
@@ -204,6 +207,9 @@ lib.foldl' lib.recursiveUpdate
           recipientPublicKeyFile = "/etc/secrets/vault/hub-storage/gs-01-recipient-current.pub.pem";
         }
       ];
+    }
+    {
+      services.luxnix.lxAiLocal.runtime.protectedDataDir = "/var/lib/lx-annotate/data";
     }
     {
       services.luxnix.lxAnnotateLocal.database.port = 5432;

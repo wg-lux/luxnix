@@ -90,7 +90,7 @@ lib.foldl' lib.recursiveUpdate
       roles.custom-packages.visuals = true;
     }
     {
-      roles.endoreg-client.defaultCenterKey = "rbk_stuttgart";
+      roles.endoreg-client.defaultCenterKey = "university_hospital_wuerzburg";
     }
     {
       services.luxnix.lxAnnotateLocal.hub.nodeProvisioning.enable = true;

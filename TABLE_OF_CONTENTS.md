@@ -28,7 +28,8 @@
   - [lx-annotate Cluster Readiness](docs/lx-annotate-cluster-readiness.md)
   - [gs-02 Local Redis Recovery](docs/operations/gs-02-local-redis-broker.md)
 - **Vault**
-  - [Setup and Bootstrap](docs/vault-setup.md)
+  - [Admin Password Creation and Rotation](docs/admin-passwords.md)
+  - [Storage and Key Migration](docs/vault-setup.md)
   - [Machine Enrollment](docs/vault-hub-machine-enrollment.md)
   - [Owner Actions](docs/vault-owner-immediate-actions.md)
 - **Clinical Operations**

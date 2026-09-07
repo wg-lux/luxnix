@@ -3,10 +3,10 @@
   entrypoint =
     {
       cfg,
-      config,
       pkgs,
       adminUserName,
       storagePersistingMountPoint,
+      ...
     }:
     {
       config = {
@@ -29,7 +29,7 @@
         systemd.services.endoreg-mount-persisting-storage =
           lib.mkIf (cfg.paths.storagePersistingEnable && cfg.paths.storagePersistingIsExternalDrive)
             {
-              description = "Mount endoreg persisting storage via devenv";
+              description = "Mount verified host-owned endoreg persisting storage";
               serviceConfig = {
                 Type = "oneshot";
                 User = "root";
@@ -39,11 +39,9 @@
                   }"
                   "STORAGE_PERSISTING_MOUNT_POINT=${toString storagePersistingMountPoint}"
                   "STORAGE_PERSISTING_HDD_ID=${
-                    lib.attrByPath [ "secretspec" "secrets" "STORAGE_PERSISTING_HDD_ID" ] "" config
+                    if cfg.paths.storagePersistingDeviceId == null then "" else cfg.paths.storagePersistingDeviceId
                   }"
-                  "STORAGE_PERSISTING_HDD_PART=${
-                    lib.attrByPath [ "secretspec" "secrets" "STORAGE_PERSISTING_HDD_PART" ] "part1" config
-                  }"
+                  "STORAGE_PERSISTING_HDD_PART=${cfg.paths.storagePersistingDevicePart}"
                 ];
                 ExecStartPre = [ ];
                 ExecStart = pkgs.writeShellScript "mount-persisting-storage-service" ''
@@ -71,30 +69,29 @@
                     exit 1
                   fi
 
-                  # Check if already mounted
-                  if mountpoint -q "$storage_persisting_mount_point"; then
-                    echo "Persisting storage already mounted at $storage_persisting_mount_point"
-                    exit 0
-
-                  fi
-
-                  # attempt to mount drive by ID; prefer first partition if present
+                  # Always verify the configured device, including an existing
+                  # mount: a USB reconnect can leave a stale device number mounted.
                   DEV_BASE="/dev/disk/by-id/$storage_persisting_hdd_id"
                   DEV_PATH="$DEV_BASE-$storage_persisting_hdd_part"
-
-
-                  echo "Mounting persisting storage drive $DEV_PATH to $storage_persisting_mount_point"
-                  if [ ! -e "$DEV_PATH" ]; then
-                    echo "WARNING: Device path $DEV_PATH does not exist; leaving persisting storage unmounted"
-                    exit 0
+                  if [ ! -b "$DEV_PATH" ]; then
+                    echo "ERROR: Configured storage block device $DEV_PATH is unavailable"
+                    exit 1
                   fi
-
-                  if ! mount "$DEV_PATH" "$storage_persisting_mount_point"; then
-                    echo "WARNING: Failed to mount persisting storage drive $DEV_PATH; leaving it unmounted"
-                    exit 0
+                  expected_device_number=$(lsblk -dnro MAJ:MIN "$DEV_PATH")
+                  if [ -z "$expected_device_number" ]; then
+                    echo "ERROR: Cannot determine configured storage device identity"
+                    exit 1
                   fi
-                  echo "Mounted persisting storage successfully" 
-
+                  if ! mountpoint -q "$storage_persisting_mount_point"; then
+                    echo "Mounting persisting storage drive $DEV_PATH to $storage_persisting_mount_point"
+                    mount "$DEV_PATH" "$storage_persisting_mount_point"
+                  fi
+                  mounted_device_number=$(findmnt -n -o MAJ:MIN --mountpoint "$storage_persisting_mount_point")
+                  if [ "$mounted_device_number" != "$expected_device_number" ]; then
+                    echo "ERROR: Persisting storage mount does not match the configured block device; preserve the mount for operator inspection"
+                    exit 1
+                  fi
+                  echo "Verified persisting storage mount successfully"
                 '';
               };
               path = [

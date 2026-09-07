@@ -6,11 +6,13 @@ let
   migrateWithLegacyHistoryFallback = pkgs.writeShellScript "lx-annotate-migrate-with-legacy-history-fallback" ''
     set -euo pipefail
 
+    ${effectiveRuntimePackage}/bin/lx-annotate-manage check_migration_compatibility
     if ${effectiveRuntimePackage}/bin/lx-annotate-manage migrate --noinput; then
       exit 0
     fi
 
     echo "Initial migration failed; attempting reviewed legacy migration-history repair." >&2
+    ${effectiveRuntimePackage}/bin/lx-annotate-manage check_migration_compatibility
     ${effectiveRuntimePackage}/bin/lx-annotate-manage shell --command \
       'from django.core.management import call_command; call_command("repair_legacy_migration_history", apply=True)'
     exec ${effectiveRuntimePackage}/bin/lx-annotate-manage migrate --noinput

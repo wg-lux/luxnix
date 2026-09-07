@@ -397,7 +397,7 @@ def test_superseded_root_guides_do_not_compete_with_canonical_documentation() ->
             "## Required Release Flow",
             "## Remaining Gates",
         ),
-        "docs/vault-setup.md": (
+        "docs/admin-passwords.md": (
             "vault-bootstrap",
             "validate-admin-passwords",
         ),
@@ -435,9 +435,8 @@ def test_documented_devenv_commands_use_current_cli_entry_points() -> None:
     ]
 
     assert not stale_commands
-    assert "devenv shell vault-bootstrap" in (DOCS_DIR / "vault-setup.md").read_text(
-        encoding="utf-8"
-    )
+    admin_guide = (DOCS_DIR / "admin-passwords.md").read_text(encoding="utf-8")
+    assert "devenv shell vault-bootstrap" in admin_guide
     project_map = (REPO_ROOT / "luxnix.yml").read_text(encoding="utf-8")
     assert "devenv run " not in project_map
     assert "devenv shell vault-bootstrap" in project_map
@@ -537,21 +536,24 @@ def test_day_zero_guides_generate_from_inventory_before_preflight() -> None:
             assert stale_instruction not in guide
 
 
-def test_secret_bootstrap_creates_its_gitignored_parent_directory() -> None:
-    getting_started = (DOCS_DIR / "getting-started.md").read_text(encoding="utf-8")
-    deployment = (DOCS_DIR / "deployment-guide.md").read_text(encoding="utf-8")
-    example = (REPO_ROOT / "ansible/admin-passwords.example.yml").read_text(
-        encoding="utf-8"
-    )
-
-    assert "mkdir -p ansible/secrets" in getting_started
-    assert "mkdir -p ansible/secrets" in deployment
-    assert "mkdir -p ansible/secrets" in example
+def test_admin_password_workflow_has_one_canonical_private_input_procedure() -> None:
+    guide = (DOCS_DIR / "admin-passwords.md").read_text(encoding="utf-8")
+    for name in ("getting-started.md", "deployment-guide.md", "vault-setup.md"):
+        content = (DOCS_DIR / name).read_text(encoding="utf-8")
+        assert "admin-passwords.md" in content
+        assert "cp ansible/admin-passwords.example.yml" not in content
+    assert 'tempfile.mkstemp(' in guide
+    assert 'getpass.getpass(' in guide
+    assert 'getpass.GetPassWarning' in guide
+    assert '!= "tmpfs"' in guide
+    assert "--skip-sync --export" in guide
+    assert "devenv shell rotate-admin-passwords --limit <host>" in guide
+    assert "--extra-files" in guide
 
 
 def test_secret_rotation_uses_the_canonical_vault_key_path() -> None:
     script = (REPO_ROOT / "scripts/update_secret.py").read_text(encoding="utf-8")
-    guide = (DOCS_DIR / "vault-setup.md").read_text(encoding="utf-8")
+    guide = (DOCS_DIR / "admin-passwords.md").read_text(encoding="utf-8")
 
     assert 'default="~/.lxv.key"' in script
     assert "~/.lsv.key" not in script

@@ -143,7 +143,7 @@ VAULT_TOKEN="$enrollment_token"
 unset enrollment_token
 export VAULT_TOKEN
 
-vault token lookup
+vault token lookup -format=json | jq '.data | {policies, ttl, renewable, explicit_max_ttl}'
 ```
 
 If policy lookup or token creation fails, immediately run
@@ -152,7 +152,10 @@ with an empty token or leave the issuer token exported.
 
 Review the lookup metadata before continuing. It must show the approved policy,
 a positive TTL no greater than 30 minutes, and `renewable false`. The lookup
-output does not display the token value. Token creation fails with `permission
+projection excludes the token ID; never print the full token lookup response.
+The approved enrollment policy must explicitly permit `auth/token/lookup-self`
+and `auth/token/revoke-self`, since this token excludes the default policy.
+Token creation fails with `permission
 denied` when the issuer is not allowed to assign the requested policy; that is
 an authorization blocker, not a reason to use the initial root token casually
 or weaken the policy.
@@ -274,13 +277,14 @@ strategy.
 
 ## 4. Enroll the site
 
-Back on `gs-02`, obtain a short-lived administrative token as in step 2, then:
+Back on `gs-02`, obtain a short-lived administrative token as in step 1, then:
 
 ```bash
 install -d -m 0700 /root/vault-enrollment
 luxnix-vault-enroll-hub-site \
   <host>.intern /root/vault-enrollment/<host>
-unset VAULT_TOKEN
+vault token revoke -self
+unset VAULT_TOKEN ENROLLMENT_POLICY
 ```
 
 The output contains:
@@ -299,7 +303,38 @@ Verify the fingerprint printed by the enrollment command against trusted
 The AppRole login implementation that hides credentials from process arguments
 must be deployed before issuing and activating replacement Secret IDs.
 
-Before delivering the bundle, install the receiver copy of the node secret on
+The repository now provides a concrete delivery workflow from the trusted hub
+staging directory to one site:
+
+```bash
+devenv shell check-connectivity gs-02
+devenv shell check-connectivity <host>
+devenv shell deliver-hub-enrollment --limit <host> \
+  -e enrollment_expected_ca_sha256=<independently-verified-fingerprint>
+```
+
+Run from the exact clean, reviewed deployment checkout after recording operator
+approval. The bundle must be in `/root/vault-enrollment/<host>` on `gs-02` and
+the fingerprint must come independently from trusted hub state. The playbook
+reruns local site preflight, requires pinned SSH identities for both connections,
+reads protected hub files through SSH, relays the bundle through private tmpfs,
+installs it with the fingerprint-pinned site installer, and installs the matching
+hub node secret. It suppresses secret logs/diffs and removes ephemeral site
+staging even after failure. Ansible's copy action creates plaintext temporary
+files: the wrapper confines controller temporaries to an owner-only mode-`0700`
+tmpfs directory and cleans them after success or failure. It refuses a missing,
+shared or disk-backed runtime directory. The controller must be trusted, and
+swap must remain encrypted or disabled under the existing host storage policy.
+After an uncatchable process crash, remove any retained private runtime staging
+before ending the incident. This replaces the manual copy/install steps below when
+used successfully; continue with activation and acceptance in step 6.
+
+The hub source directory is retained for operator-controlled recovery and must
+be removed after acceptance under the credential-retention procedure. Delivery
+does not restore a contained identity or start consumers. If delivery fails
+partway, keep transfers contained and rerun before any consumer activation.
+
+For manual delivery instead of the automated playbook, install the receiver copy of the node secret on
 `gs-02`. The source path remains in the root-only enrollment directory and the
 destination name must use the exact site node key:
 
@@ -651,6 +686,108 @@ the TLS evidence is certificate verification under the configured CA, SAN
 validation, and the explicit Vault client state reported above.
 
 ## 10. Rotation or removal
+
+Use the incident checklist in
+`secrets-management.yml` at the repository root to distinguish routine
+replacement from breach containment. Re-enrollment is not a complete breach
+rotation: it creates another Secret ID, preserves an existing node shared
+secret, and does not invalidate previously issued tokens or certificates.
+Secret IDs currently have unlimited lifetime and reuse; the custodian must
+retain a restricted accessor inventory and explicitly destroy superseded IDs.
+Vault documents separate
+[Secret ID accessor destruction](https://developer.hashicorp.com/vault/api-docs/auth/approle#destroy-approle-secret-id-accessor)
+and [token revocation](https://developer.hashicorp.com/vault/docs/commands/token/revoke)
+operations. Neither should expose the credential value in command arguments.
+
+Certificate issuance now obtains a fresh AppRole token directly from the
+protected enrollment files whenever issuance is needed; it does not reuse the
+cached bootstrap token. Token lifetimes remain bounded. Offline retention accepts
+only an unexpired certificate matching its private key. When replacing AppRole
+files, explicitly restart bootstrap authentication and the dependent enrollment
+chain under the approved maintenance procedure so other Vault consumers also
+adopt the replacement; a plain start of an already-active unit is insufficient.
+
+During an incident, isolate the affected site at trusted network and receiver
+boundaries before issuing replacements. Stopping a worker on a compromised
+machine is insufficient containment. Prevent new Vault issuance, revoke issued
+tokens, replace the node secret in Vault and both local copies, and verify that
+the receiver rejects old credentials before restoring transfer access. Do not
+reconcile/re-enroll an identity while its containment depends on a disabled
+policy that reconciliation would restore.
+
+The receiver now requires an authenticated
+[client CRL](https://nginx.org/en/docs/http/ngx_http_ssl_module.html#ssl_crl).
+`luxnix-hub-crl-bootstrap.service` must publish a complete signed CRL set before
+Nginx starts. `luxnix-hub-crl.timer` refreshes every 60 seconds; successful refresh
+reloads Nginx, while fetch, validation or reload failure closes the transfer gate
+with HTTP 503. Browser traffic on an already-running Nginx remains available.
+Initial rollout requires unsealed Vault, provisioned trust and reachable CRL
+endpoints; otherwise Nginx startup fails closed.
+
+Defaults use the direct authenticated Vault VPN endpoint and existing server CA.
+If the pinned client chain has multiple issuers, configure every complete CRL
+endpoint under `hub.transferApi.crlUrls` in canonical YAML. Signatures, issuer
+coverage, CRL numbers and freshness are checked before atomic publication.
+The default maximum CRL age is 72 hours; `nextUpdate` is also enforced. For a
+shorter hard bound, have the custodian configure shorter Vault CRL expiry and
+automatic rebuild, then lower `crlMaxAgeSeconds`. Do not merely shorten the
+client limit against an unchanged publisher. A stopped timer is an operational
+fault; certificate expiry/CRL expiry remain the final bound until it is repaired.
+TLS resumption is disabled on the transfer virtual host and transfer keepalive
+is restricted. Graceful reload does not terminate in-flight requests, so retain
+trusted network/application containment during an incident.
+
+### Scoped breach containment and replacement
+
+After trusted receiver/network containment, use an authorized short-lived
+custodian token on the authoritative hub:
+
+```bash
+luxnix-vault-site-lifecycle contain <host>.intern
+luxnix-vault-site-lifecycle rotate <host>.intern \
+  --output-directory /root/vault-enrollment/<host>
+```
+
+The output directory must not already exist. Preserve prior incident evidence
+under a separate protected name before preparing the canonical delivery path.
+Containment first denies the site's Vault policy, destroys its Secret IDs and
+revokes matching service-token accessors. It records durable state under
+`/var/lib/luxnix-vault-site-lifecycle`; ordinary enrollment/reconciliation refuses
+to undo it. Rotation uses KV compare-and-set and creates a new complete bundle
+while the policy remains denied. On partial failure, contain again and generate
+another fresh bundle. Serialize other direct Vault administration sessions;
+they do not participate in the helper's lock.
+
+The custodian policy needs scoped PKI/AppRole/KV mutations plus token-accessor
+list, lookup and revocation rights. This is more privileged than routine
+enrollment, so do not grant it to site AppRoles. Existing batch tokens are not
+accessor-enumerable: establish their absence or bounded expiry before restoring
+the policy. The helper configures new site tokens as service tokens but cannot
+retroactively change old token types.
+
+Revoke each affected public certificate serial through the Vault PKI revoke
+endpoint (`vault write lx-hub-pki/revoke serial_number=<serial>`), refresh the hub
+CRL service, and verify that the old certificate fails at the receiver. Deliver
+the new bundle with the command above and explicitly restart
+`lx-annotate-hub-node-provisioning.service` on both hosts to reprovision both
+node records. Verify old credentials fail while
+trusted receiver/network containment remains in place. Then explicitly release
+the Vault containment marker and restore that one policy:
+
+```bash
+luxnix-vault-site-lifecycle resume <host>.intern --accept-consumer-verification
+luxnix-vault-reconcile-hub-sites <host>.intern
+```
+
+Now restart site authentication and managed secrets, then run
+`sudo luxnix-vault-reissue-hub-client-certificate` on that site. This explicit
+root-only command bypasses a still-valid cached certificate and forces fresh
+authentication and issuance. Its runtime marker remains after failure and is
+removed only after the new files are installed; after a reboot, rerun the command
+while containment remains. Verify new identity acceptance and a disposable transfer before
+removing receiver/network containment. Revoke the operator token afterward.
+These steps do not revoke application/database sessions or rotate encryption
+master keys. Record containment and recovery timestamps in the incident record.
 
 Normal Vault TLS renewal changes only the server leaf and key while preserving
 the CA. Re-enrollment creates replacement AppRole material while preserving the

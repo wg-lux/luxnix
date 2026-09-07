@@ -5,13 +5,17 @@ Vault manager module for handling vault operations, secrets, and configuration.
 import logging
 import shutil
 import socket
+import tempfile
 from collections.abc import Collection
+from datetime import datetime
 from pathlib import Path
 from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from lx_administration.logging import get_logger
+from lx_administration.permissions import ensure_private_directory
+from lx_administration.utils.file_operations import advisory_file_lock
 from lx_administration.yaml import (
     ansible_lint,
     dump_yaml,
@@ -88,7 +92,7 @@ class Vault(BaseModel):
         This resolves the directory, key file, and vault file paths used by
         vault operations.
         """
-        key_path = Path(vault_key).expanduser().resolve()
+        key_path = Path(vault_key).expanduser().absolute()
         dir_path = Path(vault_dir).expanduser().resolve()
         vault_path = dir_path / "vault.yml"
 
@@ -117,6 +121,8 @@ class Vault(BaseModel):
             raise ValueError(f"Expected a YAML mapping in {vault_file_p}")
 
         vault = cls.model_validate(raw)
+        vault.dir = vault_dir_p.as_posix()
+        vault.key = cls._get_vault_paths(vault_dir, vault_key_path)[1].as_posix()
 
         logger.info(
             "Loaded vault metadata: secrets=%d, templates=%d, pre_shared_keys=%d",
@@ -204,7 +210,7 @@ class Vault(BaseModel):
         name: str,
         owner_type: str,
         secret_type: str = "password",
-        vault_dir: str = "~/.lxv/",
+        vault_dir: str | None = None,
     ) -> tuple[SecretTemplate, bool]:
         """Get a secret template by name or create one if it doesn't exist."""
         template = self.get_secret_template_by_name(name)
@@ -215,7 +221,7 @@ class Vault(BaseModel):
                 name=name,
                 owner_type=owner_type,
                 secret_type=secret_type,
-                vault_dir=vault_dir,
+                vault_dir=vault_dir or self.dir,
             )
             self.secret_templates.append(template)
             created = True
@@ -227,7 +233,7 @@ class Vault(BaseModel):
         names: list[str],
         owner_type: str,
         secret_type: str = "password",
-        vault_dir: str = "~/.lxv/",
+        vault_dir: str | None = None,
     ) -> tuple[list[SecretTemplate], list[SecretTemplate]]:
         """Get or create multiple secret templates based on provided names."""
         templates: list[SecretTemplate] = []
@@ -424,39 +430,84 @@ class Vault(BaseModel):
             logger = get_logger("Vaults-export_secrets_by_client", reset=True)
 
         inventory = self._require_inventory()
-        deploy_dir = Path(self.dir).expanduser().resolve() / "deploy"
-        if deploy_dir.exists():
-            shutil.rmtree(deploy_dir)
-        deploy_dir.mkdir(parents=True, exist_ok=True)
+        vault_dir = Path(self.dir).expanduser().resolve()
+        ensure_private_directory(vault_dir)
+        with advisory_file_lock(
+            lock_path=vault_dir / ".export.lock", timeout_seconds=0
+        ):
+            self._export_secrets_locked(vault_dir, inventory, logger)
 
+    def _export_secrets_locked(self, vault_dir, inventory, logger) -> None:
+        deploy_dir = vault_dir / "deploy"
+        previous = vault_dir / ".deploy-previous"
+        if previous.exists() or previous.is_symlink():
+            raise ValueError(
+                "Interrupted export recovery required: .deploy-previous exists"
+            )
+        if deploy_dir.is_symlink() or (deploy_dir.exists() and not deploy_dir.is_dir()):
+            raise ValueError("Export destination must be a regular directory")
+        # Keep the last complete export until every replacement has encrypted.
+        with tempfile.TemporaryDirectory(prefix=".export-", dir=vault_dir) as temporary:
+            stage = Path(temporary) / "deploy"
+            stage.mkdir(mode=0o700)
+            self._render_client_exports(stage, inventory, logger)
+            if deploy_dir.exists():
+                deploy_dir.rename(previous)
+            try:
+                stage.rename(deploy_dir)
+            except OSError:
+                if previous.exists():
+                    previous.rename(deploy_dir)
+                raise
+            if previous.exists():
+                shutil.rmtree(previous)
+
+    def _render_client_exports(self, deploy_dir, inventory, logger) -> None:
         hostnames = [h for h in inventory.get_hostnames() if h is not None]
         for hostname in hostnames:
+            if (
+                not hostname
+                or Path(hostname).name != hostname
+                or hostname in (".", "..")
+            ):
+                raise ValueError("Invalid export hostname")
             logger.info("Exporting secrets for client: %s", hostname)
 
             psk = self.get_client_psk(hostname, logger)
             if not psk:
-                logger.error("No valid PSK found for host %s; skipping", hostname)
-                continue
+                raise ValueError(f"No valid PSK found for host {hostname}")
 
             psk_file = Path(psk.file)
-            if not psk_file.exists():
-                logger.error("PSK file not found: %s; skipping", psk_file)
-                continue
+            if not psk_file.is_file() or psk_file.stat().st_size == 0:
+                raise ValueError(f"Missing or empty PSK for host {hostname}")
 
             host_secrets = self.get_host_secrets(hostname, logger)
             logger.info("Found %d secret(s) for host %s", len(host_secrets), hostname)
 
             host_secret_dir = deploy_dir / hostname
-            host_secret_dir.mkdir(parents=True, exist_ok=True)
+            host_secret_dir.mkdir(mode=0o700)
 
+            targets = set()
             for secret in host_secrets:
+                if (
+                    not secret.target_name
+                    or Path(secret.target_name).name != secret.target_name
+                    or secret.target_name in (".", "..")
+                    or secret.target_name in targets
+                ):
+                    raise ValueError(
+                        f"Invalid or duplicate secret export target for {hostname}"
+                    )
+                targets.add(secret.target_name)
                 target_path = host_secret_dir / secret.target_name
                 try:
                     secret.create_re_encrypted_file(
                         target_path.as_posix(), psk_file.as_posix(), self
                     )
                 except Exception:
-                    logger.exception("Failed to re-encrypt secret %s", secret.name)
+                    raise RuntimeError(
+                        f"Secret export failed for host {hostname}"
+                    ) from None
 
     def get_local_hostname(self) -> str:
         if self.local_hostname_override:
@@ -465,6 +516,19 @@ class Vault(BaseModel):
 
     def get_vault_id_for_hostname(self, hostname: str) -> str:
         return hostname
+
+    def get_master_vault_id(self) -> str:
+        from .secret import MASTER_VAULT_ID
+
+        return MASTER_VAULT_ID
+
+    def validate_local_key(self) -> None:
+        """Fail before writes when any stored secret cannot use the declared key."""
+        from .secret import _read_key, decrypt_secret
+
+        _read_key(self.key)
+        for secret in self.secrets:
+            decrypt_secret(secret.file, self.key)
 
     def get_local_vault_id(self) -> str:
         return self.get_vault_id_for_hostname(self.get_local_hostname())
@@ -568,7 +632,22 @@ class Vault(BaseModel):
             )
 
         for sec in matching_secrets:
+            if sec.secret_type in ("password", "system_password") and any(
+                s.template_name == sec.template_name
+                and s.name.endswith("_password_hash")
+                for s in self.secrets
+            ):
+                raise ValueError(
+                    "Paired password/hash secrets require coordinated rotation; "
+                    "use the admin-password import workflow for admin accounts"
+                )
+
+        for sec in matching_secrets:
             sec.value = new_value
-            sec.update_file_encryption(self)
+            try:
+                sec.update_file_encryption(self)
+                sec.updated = datetime.now()
+            finally:
+                sec.value = None
 
         self.save_to_file()

@@ -104,10 +104,10 @@ homes/
 ### Password Management
 - Passwords are configured as password hashes, not plaintext Nix values.
 - GPU client (`gc-*`) machines enable `security.luxnix.local-users` by default.
-- GC machines use the vault hash file as the primary admin password source and
-  install a known local fallback hash if that file is missing. The fallback is
-  deliberately static and precomputed so activation never generates an unknown
-  password that could lock the machine.
+- GC machines use a protected runtime hash file. Missing, malformed or retired
+  shared hashes stop account activation; shared fallback settings are rejected.
+- [Admin Password Creation and Rotation](admin-passwords.md) is the canonical
+  lifecycle guide, including recovery prerequisites and SOPS workflow limits.
 - Optional SOPS integration can provide the admin password hash with
   `neededForUsers = true`.
 - The client-user login hash can also come from SOPS. Generated client-user
@@ -130,14 +130,14 @@ security.luxnix.local-users = {
   adminPassword = {
     source = "vault-file";
     hashedFile = "/etc/secrets/vault/SCRT_local_password_admin_password_hash";
-    fallback.enable = true;
+    fallback.enable = false;
   };
   firmwarePassword.manage = false;
 };
 ```
 
 To use SOPS for the admin password hash on a GC host, store only the hashed
-password in the SOPS file and disable the local fallback for that source:
+password in the SOPS file. The shared fallback remains disabled:
 
 ```nix
 security.luxnix.local-users.adminPassword = {

@@ -48,7 +48,8 @@ devenv tasks run docs:toc-generator
 
 - [Hardware Setup](./hardware-setup.md): installation and hardware-specific preparation.
 - [Virtualization](./virtualization-guide.md): virtual-machine setup and host prerequisites.
-- [Vault Setup](./vault-setup.md): secret bootstrap and lifecycle.
+- [Admin Password Creation and Rotation](./admin-passwords.md): canonical admin credential lifecycle.
+- [Vault Setup](./vault-setup.md): vault architecture and legacy key migration.
 - [Vault Hub Machine Enrollment](./vault-hub-machine-enrollment.md): add, provision, verify, rotate, or remove a hub-transfer site node.
 - [SSH Host Identity](./ssh-host-identity.md): host-key registry, rotation, and recovery workflow.
 - [Access Management](./access-management.md): accounts, authentication, and access boundaries.

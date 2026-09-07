@@ -33,6 +33,21 @@
       ansible/playbooks/deploy_secrets.yml "$@"
   '';
 
+  rotate-admin-passwords.package = pkgs.zsh;
+  rotate-admin-passwords.exec = ''
+    ANSIBLE_HOST_KEY_CHECKING=True LUXNIX_UV_BIN=${pkgs.uv}/bin/uv \
+      bash scripts/run-secret-playbook.sh ansible/playbooks/rotate_admin_passwords.yml "$@"
+  '';
+
+  deliver-hub-enrollment.package = pkgs.zsh;
+  deliver-hub-enrollment.exec = ''
+    ANSIBLE_HOST_KEY_CHECKING=True LUXNIX_UV_BIN=${pkgs.uv}/bin/uv \
+      bash scripts/run-secret-playbook.sh ansible/playbooks/deliver_hub_enrollment.yml "$@"
+  '';
+
+  vault-migrate-local-key.package = pkgs.zsh;
+  vault-migrate-local-key.exec = ''${pkgs.uv}/bin/uv run python scripts/vault/migrate_local_key.py "$@"'';
+
   # SSH session management
   ssh-all.package = pkgs.zsh;
   ssh-all.exec = ''${pkgs.uv}/bin/uv run python scripts/tmux-inventory-session.py workspace "$@"'';

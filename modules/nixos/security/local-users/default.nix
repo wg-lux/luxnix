@@ -10,7 +10,6 @@ let
   hostname = config.networking.hostName;
   isGcHost = hasPrefix "gc-" hostname;
   inherit (cfg) adminPassword clientPassword;
-  fallbackHash = "$6$yC9hyVoZEYLlzjbZ$pILBYLOZBlplgoYL9L.dyIKPGPrcW2ifd1I3ffRAYIwsv8B.pA76Eo6OUq71gJJKl8kGyBsmlbKwnGcKQEpoa.";
   adminPasswordFile =
     if adminPassword.source == "sops" then
       config.sops.secrets.${adminPassword.sops.secretName}.path
@@ -21,7 +20,6 @@ let
       config.sops.secrets.${clientPassword.sops.secretName}.path
     else
       clientPassword.hashedFile;
-  fallbackCanInstall = adminPassword.source == "vault-file" && adminPassword.fallback.enable;
 in
 {
   options.security.luxnix.local-users = {
@@ -49,18 +47,14 @@ in
 
       allowGenerated = mkBoolOpt false "Permit generated admin passwords during activation. This is intentionally refused.";
 
-      requireUsableFile = mkBoolOpt true "Refuse activation when a non-fallback password file source is missing or empty.";
+      requireUsableFile = mkBoolOpt true "Require a valid root-only admin hash file before account activation. Disabling this check is refused.";
 
       fallback = {
-        enable = mkBoolOpt isGcHost "Install a known local fallback hash if the vault-file hash is missing.";
+        enable = mkBoolOpt false "Legacy shared password fallback; enabling it is refused.";
         hashedPassword = mkOption {
           type = str;
-          default = fallbackHash;
-          description = ''
-            Known SHA-512 crypt hash used as the emergency local fallback on GC
-            workstations. This is intentionally static and precomputed; activation
-            must never generate a new password.
-          '';
+          default = "";
+          description = "Removed inline fallback hash. Provision a unique root-only runtime hash file instead.";
         };
       };
 
@@ -138,6 +132,10 @@ in
     {
       assertions = [
         {
+          assertion = adminPassword.requireUsableFile;
+          message = "Admin password file validation cannot be disabled.";
+        }
+        {
           assertion = !adminPassword.allowGenerated;
           message = "LuxNix refuses generated admin passwords. Provide a known hashed file or a SOPS-managed hash.";
         }
@@ -146,8 +144,8 @@ in
           message = "security.luxnix.local-users.adminPassword.sops.sopsFile must be set when source = \"sops\".";
         }
         {
-          assertion = adminPassword.source != "sops" || !adminPassword.fallback.enable;
-          message = "Admin password fallback writes only to vault-file sources. Disable fallback when source = \"sops\".";
+          assertion = !adminPassword.fallback.enable && adminPassword.fallback.hashedPassword == "";
+          message = "Shared admin password fallback is removed. Provision a unique root-only runtime hash file.";
         }
         {
           assertion = clientPassword.source != "sops" || clientPassword.sops.sopsFile != null;
@@ -167,10 +165,6 @@ in
 
       user.admin = {
         passwordFile = adminPasswordFile;
-        passwordFallback = {
-          enable = fallbackCanInstall;
-          hashedPassword = adminPassword.fallback.hashedPassword;
-        };
       };
 
       user.client = mkIf config.user.client.enable {
@@ -181,22 +175,6 @@ in
             mkDefault clientPasswordFile;
         requireUsablePasswordFile = clientPassword.requireUsableFile;
       };
-
-      system.activationScripts.luxnixValidateAdminPasswordFile =
-        mkIf
-          (adminPassword.requireUsableFile && !fallbackCanInstall && adminPassword.source == "vault-file")
-          {
-            deps = [ "etc" ];
-            text = ''
-              set -euo pipefail
-              admin_password_file=${lib.escapeShellArg adminPasswordFile}
-              if [ ! -s "$admin_password_file" ]; then
-                echo "ERROR: admin password hash file is missing or empty: $admin_password_file" >&2
-                echo "Refusing activation to avoid switching into a generation with an unusable admin password." >&2
-                exit 1
-              fi
-            '';
-          };
     }
 
     (mkIf (adminPassword.source == "sops") {

@@ -45,16 +45,12 @@ in
           };
           expectedDeviceId = mkOption {
             type = types.nullOr types.str;
-            default =
-              let
-                value = lib.attrByPath [ "secretspec" "secrets" "STORAGE_PERSISTING_HDD_ID" ] "" config;
-              in
-              if value == "" then null else value;
+            default = config.roles.endoreg-client.paths.storagePersistingDeviceId;
             description = "Expected /dev/disk/by-id basename for the external relief volume. Required when expectedFsUuid is unset.";
           };
           expectedDevicePart = mkOption {
             type = types.str;
-            default = lib.attrByPath [ "secretspec" "secrets" "STORAGE_PERSISTING_HDD_PART" ] "part1" config;
+            default = config.roles.endoreg-client.paths.storagePersistingDevicePart;
             description = "Partition suffix appended to expectedDeviceId when checking the mounted device.";
           };
           expectedFsUuid = mkOption {

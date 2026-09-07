@@ -1,15 +1,18 @@
 # Luxnix Vault Overview and Bootstrap Guide
 
-This guide explains how the Luxnix vault tooling works and how to initialise a
-fresh password store on a new control host.
+This page describes local vault storage and legacy encryption-key migration.
+For the complete operator procedure, use the canonical
+[Admin Password Creation and Rotation](admin-passwords.md) guide. It owns password
+input creation, bootstrap/import, validation, export, installation and rotation.
 
 ## Vault building blocks
 
 - **Vault directory (`~/.lxv/`)** – Stores encrypted secrets under
   `secrets/<secret_type>/<owner_type>/` and host-specific pre-shared keys in
   `psk/`.
-- **Vault key (`~/.lxv.key`)** – Local passphrase used with Ansible Vault to
-  encrypt newly created or rotated secrets.
+- **Vault key (`~/.lxv.key`)** – Explicit master key for local ciphertext, labeled
+  `luxnix-master`. Encryption and validation use this key directly, independent
+  of Ansible configuration. A missing or incorrect key blocks an existing vault.
 - **Pre-shared keys (PSKs)** – One file per inventory host. When present,
   secrets can be re-encrypted so they can be deployed to that host. The
   `Vault.get_or_create_psk()` helper maintains these files and wires them into
@@ -29,162 +32,51 @@ All helper scripts ultimately use `lx_administration.models.vault.Vault`, which
 handles inventory discovery, template generation, PSK creation, and secret
 serialization.
 
-## Bootstrap prerequisites
+## Legacy encryption-key migration
 
-1. Ensure password-less SSH access from the current control host to each
-   managed node using `~/.ssh/id_ed25519`.
-2. Collect the admin user passwords for every host defined in
-   `systems/<arch>/*/default.nix`. Use
-   `ansible/admin-passwords.example.yml` as a template and save the
-   populated file as `ansible/secrets/admin-passwords.yml` (keep it
-   untracked).
-3. Verify that `ansible/inventory/hosts.ini` is up to date – the bootstrap
-   process uses it (via the generated `autoconf/inventory.yml`) to decide which
-   secrets to create.
+### Migrate legacy ciphertext before running the updated bootstrap
 
-Before a write, confirm the vault directory and key are the intended operator
-credentials, that the password mapping is untracked and permission-restricted,
-and that a current encrypted vault backup exists outside the checkout. Record
-the inventory revision and keep the bootstrap log free of secret values.
+Older local vaults selected a hostname-labeled identity from ambient Ansible
+configuration. Their key may be that control host's PSK rather than `.lxv.key`.
+The updated tooling refuses those labels: it does not guess keys or rewrite old
+ciphertext automatically. Keep the original encrypted store, metadata, PSKs and
+keys together in the custodian backup before migration.
 
-## Bootstrapping a fresh vault
-
-Run the helper script from the repository root through the declared development
-environment:
+For each encrypted file, identify its old public header label and corresponding
+private key file from the reviewed historical configuration. With operator
+approval, create a separate encrypted copy through the cataloged helper:
 
 ```bash
-devenv shell vault-bootstrap \
-  --vault-dir ~/.lxv \
-  --vault-key ~/.lxv.key \
-  --local-hostname <control-host> \
-  --admin-passwords <admin-passwords-file> \
-  --export
+devenv shell vault-migrate-local-key \
+  --source <legacy-encrypted-file> --output <new-encrypted-file> \
+  --legacy-key <actual-legacy-key-file> --legacy-id <old-label> \
+  --master-key <private-master-key-file> --confirm-migration
 ```
 
-Outside of the dev shell you can call the script directly:
+For old Ansible 1.1 files without a label, use `--legacy-id default`. The helper
+authenticates with exactly the supplied legacy key, writes only master-encrypted
+bytes, verifies the new ciphertext and refuses an existing output. It never
+replaces the original, removes keys or edits metadata. Stage a complete new vault
+directory, update copied `vault.yml` secret/template paths to that directory,
+and validate all secrets with `Vault.validate_local_key()` before switching to
+it as a unit. Validate the admin mapping and create fresh host exports, then
+perform a backup/restore exercise. Do not distribute a partially migrated vault
+or delete old keys before recovery acceptance. This is a migration procedure,
+not an emergency rollback to a compromised credential.
 
-```bash
-python scripts/bootstrap-lx-vault.py \
-  --vault-dir ~/.lxv \
-  --vault-key ~/.lxv.key \
-  --local-hostname <control-host> \
-  --admin-passwords <admin-passwords-file> \
-  --export
-```
+## Operator workflows
 
-The inventory defaults to the generated path declared by
-`autoconf/config.yml`. Use `--inventory <path>` for a one-off override or
-`--autoconf-config <path>` when the complete Autoconf layout differs.
+- [Admin password creation and rotation](admin-passwords.md): the canonical
+  paired-password workflow, including first installation and failure recovery.
+- [Hub machine enrollment](vault-hub-machine-enrollment.md): HashiCorp Vault
+  AppRole, PKI and hub node-secret lifecycle.
 
-What the script does:
+For standalone secrets, `scripts/update_secret.py` updates local ciphertext and
+metadata only. It refuses paired login credentials. Use `--prompt-value` for a
+hidden custom-value prompt; never put a secret value in command arguments.
+Export and consumer-specific adoption are separate operations. `sync-secrets`
+copies files; it does not change live accounts, PostgreSQL roles or sessions.
 
-1. Creates `~/.lxv/` (if missing) and generates `~/.lxv.key` with a secure
-   passphrase.
-2. Copies `conf/TEMPLATE_ansible.cfg` to `conf/ansible.cfg`, updates the log
-   location to `./logs/ansible.log`, and pins the SSH private key to
-   `~/.ssh/id_ed25519`.
-3. Loads or creates `~/.lxv/vault.yml`.
-4. Syncs the inventory to generate/update secret templates and PSKs. Each PSK
-   entry is wired into `ansible.cfg` automatically.
-5. Imports the provided admin passwords, storing both the plaintext and hashed
-   versions in the vault under predictable target names such as
-   `SCRT_local_password_admin_password`.
-6. Optionally (`--export`) re-encrypts secrets per host into
-   `~/.lxv/deploy/<hostname>/` for distribution.
-
-### Re-running the bootstrap
-
-The script is idempotent:
-
-- Existing PSKs are reused and `ansible.cfg` is kept in sync.
-- Admin passwords are rotated in place—both plaintext and hash secrets are
-  re-encrypted.
-- Use `--skip-sync` if you only need to import new passwords without touching
-  templates or PSKs.
-
-### Bootstrap failure and recovery
-
-If bootstrap or export fails, stop before distributing generated files. Keep
-the existing vault and encrypted backup intact, inspect the non-secret error,
-and rerun only after correcting the inventory, key, or permissions. If a
-partial update is suspected, restore `~/.lxv/` and `~/.lxv.key` together from
-the same verified encrypted backup, then run `validate-admin-passwords` and a
-fresh export. Compare the resulting host bundle list with inventory before
-using it. Never recover by replacing the vault with a plaintext password file
-or by reusing an unknown key.
-
-## Using the vault in Ansible runs
-
-- The generated `conf/ansible.cfg` is referenced automatically by helper
-  scripts such as `scripts/check-connectivity.sh`.
-- To inject the admin password mapping during ad-hoc runs, pass
-  `--extra-vars @ansible/secrets/admin-passwords.yml` to `ansible-playbook`.
-- Logs are written to `./logs/ansible.log`; make sure the `logs/` directory
-  exists (`git` ignores it, so create it locally if needed).
-
-Common helper wrappers available via `devenv shell`:
-
-- `devenv shell vault-bootstrap …` – run the bootstrapper with custom flags.
-- `devenv shell validate-admin-passwords …` – verify that the vault matches
-  the source password file.
-- `devenv shell check-connectivity <target>` – execute the connectivity check
-  playbook and write the log into `./logs/`.
-
-For local setup using the bootstrap script's default paths and no extra
-arguments, automation can invoke the underlying cataloged task:
-
-```bash
-devenv tasks run autoconf:initialize-vault
-```
-
-Use `devenv shell vault-bootstrap …` when supplying an admin-password file,
-overriding paths, selecting the control hostname, or exporting host bundles.
-
-## Rotating secrets or adding new hosts
-
-1. Update `ansible/inventory/hosts.ini` and regenerate `autoconf/inventory.yml`
-   if new hosts or roles are introduced.
-2. Re-run `bootstrap-lx-vault.py` to create PSKs and baseline secrets for the
-   new entries.
-3. Use `scripts/update_secret.py` for ad-hoc secret rotation. The helper uses
-   the same vault metadata and encrypts updates with the local key.
-
-   For example, rotate one generated password without exposing its value in
-   the command line:
-
-   ```bash
-   python scripts/update_secret.py \
-     --vault-dir ~/.lxv \
-     --vault-key ~/.lxv.key \
-     --secret-name <secret-name> \
-     --mode password \
-     --key-length 20
-   ```
-
-After rotation, validate the affected secret and export before deployment. If
-rotation fails or a generated secret is inconsistent, stop distribution,
-restore the prior encrypted vault snapshot, validate it, and revoke any
-partially issued credential through the documented provider procedure. Resume
-only after the old or replacement credential is confirmed on every affected
-host.
-
-With these steps you can rebuild the Luxnix vault on a fresh workstation,
-import existing admin credentials, and keep Ansible configured to use the
-trusted control-host SSH identity.
-
-## Validating stored admin passwords
-
-After bootstrapping (or whenever passwords change) you can validate that the
-vault contents match the source file:
-
-```bash
-devenv shell validate-admin-passwords \
-  --vault-dir ~/.lxv \
-  --vault-key ~/.lxv.key \
-  --admin-passwords ansible/secrets/admin-passwords.yml \
-  --vault-id <control-hostname>
-```
-
-The command verifies both the plaintext password and the stored hash for every
-hostname in the YAML file. A non-zero exit code indicates missing secrets or a
-mismatch.
+Generated `conf/ansible.cfg` supplies inventory and registered PSK identities to
+the supported wrappers. Keep its paths consistent with the selected vault.
+Never inject plaintext admin mappings into ad-hoc Ansible extra variables.

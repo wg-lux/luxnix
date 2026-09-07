@@ -726,6 +726,26 @@ That keeps startup offline and avoids slow dependency resolution/downloads from 
 
 Without `wheelhousePath`, the first install of a new wheel version can still be slow for large Python stacks because `pip` must resolve and fetch transitive dependencies.
 
+Before changing packages in the shared virtualenv, the installer verifies the
+application wheel metadata and resolves both the application and dependency
+override plans. It rejects PEP 440 version decreases for `lx-annotate`,
+`endoreg-db`, and `lx-dtypes`, including local candidate versions and overrides
+that would undo an intermediate upgrade. Failed or malformed resolver reports
+are admission failures. Actual installs use exact protected-package constraints
+from the admitted plans, so later index changes cannot select lower versions.
+This does not provide an atomic virtualenv replacement: an unrelated installation
+failure can still require operator recovery.
+
+Migrations, legacy-history repair, data-recovery migrations, and runtime preflight
+require `lx-annotate-manage check_migration_compatibility` from the selected
+application release. Missing commands or histories from a newer/incompatible
+release fail explicitly. Keep the modules and application wheel coherent.
+Rolling back NixOS does not roll back this shared virtualenv or the database.
+Previously built generations lack these guards and remain unsafe rollback
+targets until separately reviewed. There is no automatic downgrade exemption;
+rollback requires an independently provisioned compatible application/database
+pair and an explicit recovery procedure.
+
 ## How To Apply
 
 After setting the host options, apply the system with:

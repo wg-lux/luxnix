@@ -121,17 +121,40 @@ def main() -> None:
     args = _parse_args()
 
     vault_dir = Path(args.vault_dir).expanduser().resolve()
-    vault_key = Path(args.vault_key).expanduser().resolve()
+    vault_key = Path(args.vault_key).expanduser().absolute()
     ansible_cfg_path = Path(args.ansible_cfg).expanduser().resolve()
     inventory_path = _resolve_inventory_path(args.inventory, args.autoconf_config)
 
-    vault_dir.mkdir(parents=True, exist_ok=True)
-    ensure_local_vault_key(vault_key)
-    _ensure_ansible_cfg(ansible_cfg_path, private_key_file="~/.ssh/id_ed25519")
+    # Never create a replacement encryption key beside existing ciphertext.
+    existing_vault = vault_dir.exists() and any(vault_dir.iterdir())
+    if existing_vault and not (vault_dir / "vault.yml").is_file():
+        raise ValueError(
+            "Non-empty vault directory has no metadata; recover it before bootstrap"
+        )
+    if existing_vault and not vault_key.is_file():
+        raise ValueError(
+            "Existing vault has no master key; "
+            "restore the verified key before bootstrap"
+        )
+    passwords = None
+    if args.admin_passwords:
+        passwords = load_admin_passwords(
+            Path(args.admin_passwords).expanduser(), strict=True
+        )
+    if not args.skip_sync and not inventory_path.is_file():
+        raise FileNotFoundError(f"Inventory file not found: {inventory_path}")
+
+    if vault_key.exists() or vault_key.is_symlink():
+        Vault(key=vault_key.as_posix()).validate_local_key()
+    vault_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if not existing_vault:
+        ensure_local_vault_key(vault_key)
 
     vault = Vault.load_or_create(vault_dir.as_posix(), vault_key.as_posix())
     vault.dir = vault_dir.as_posix()
     vault.key = vault_key.as_posix()
+    vault.validate_local_key()
+    _ensure_ansible_cfg(ansible_cfg_path, private_key_file="~/.ssh/id_ed25519")
     vault.ansible_cfg_path = ansible_cfg_path.as_posix()
 
     if args.local_hostname:
@@ -153,9 +176,7 @@ def main() -> None:
     LOGGER.info("Ensuring PSK for local host: %s", local_host)
     vault.get_or_create_psk(local_host, logger=LOGGER)
 
-    if args.admin_passwords:
-        passwords_path = Path(args.admin_passwords).expanduser().resolve()
-        passwords = load_admin_passwords(passwords_path)
+    if passwords is not None:
         import_admin_passwords(vault, passwords, logger=LOGGER)
 
     vault.validate_vault()

@@ -88,9 +88,9 @@ backfill them through the dedicated `ffmpeg_media` Celery queue:
 - `lx-annotate-hls-materialization.service` is the manual dispatcher
 - `lx-annotate-celery-ffmpeg-worker.service` performs the actual transcoding
 
-Both dispatcher units default to `materialize_video_hls --artifact-kind
-processed --apply --json`. The wrapper accepts an explicit `--artifact-kind
-raw` for the local raw backlog, but rejects unsupported artifact kinds,
+Both dispatcher units run `materialize_video_hls --apply --json` for raw and
+processed artifacts by default. The wrapper accepts an explicit `--artifact-kind
+raw`, `processed`, or `both`, but rejects unsupported artifact kinds,
 `--force`, and `--inline`. Force and inline repair runs require an explicit,
 audited management command outside the normal service path.
 
@@ -104,9 +104,27 @@ audited management command outside the normal service path.
 | `failed` | Transcoding, source decryption, validation, publication, or cleanup failed. | Not playable; inspect `last_error` and the worker journal. |
 | systemd oneshot `Finished` | Selection and dispatch completed successfully. | It does **not** mean queued Celery tasks completed. |
 
-The automatic backfill is ordered before the web unit, but it dispatches
-asynchronous jobs. Web startup therefore does not prove that the legacy backlog
-has drained. The production readiness check remains the launch gate.
+The automatic backfill starts after the web unit, encrypted-storage preflight,
+and FFmpeg worker, with the local Redis service required when configured.
+Neither the web unit nor preflight depends on the corpus scan: slow or failed
+reconciliation must not hold the frontend offline. The recurring timer retries
+deferred scans, including scans skipped while imports are active. A database or
+runtime error in that check fails the unit instead of silently skipping it. Systemd worker
+startup ordering does not prove broker connectivity or task completion; web
+startup does not prove that the legacy backlog has drained. The production
+readiness check remains the launch gate.
+
+External archive storage uses the host-owned
+`roles.endoreg-client.paths.storagePersistingDeviceId` (the verified
+`/dev/disk/by-id` basename without partition suffix) and
+`storagePersistingDevicePart` options. These propagate the same identity to the
+mount unit and emergency-relief verifier. Development `secretspec` values are
+compatibility defaults, not a production provisioning mechanism. Missing device
+identity, an unavailable disk, a mount failure, or a mounted device-number
+mismatch fails the mount unit. A stale mount after USB reconnection must remain
+untouched for operator inspection; never repair, replace, or relocate data onto
+it automatically. Configure a host identity only from verified device evidence
+and retain the encrypted-at-rest archive requirements.
 
 ## Artifact and encryption design
 

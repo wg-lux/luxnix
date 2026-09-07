@@ -169,6 +169,36 @@ workflows:
     command: >-
       nix eval --json '.#nixosConfigurations' --apply builtins.attrNames
 
+  - id: inspect-admin-name
+    summary: Read the configured admin account name for a selected host.
+    risk: read-only
+    documentation: docs/admin-passwords.md
+    prerequisites:
+      - nix
+    arguments:
+      host:
+        required: true
+        source: discover-hosts
+    command: >-
+      nix eval --raw '.#nixosConfigurations.<host>.config.user.admin.name'
+    example: >-
+      nix eval --raw '.#nixosConfigurations.gc-05.config.user.admin.name'
+
+  - id: inspect-admin-password-file
+    summary: Read the configured admin hash file path without reading its contents.
+    risk: read-only
+    documentation: docs/admin-passwords.md
+    prerequisites:
+      - nix
+    arguments:
+      host:
+        required: true
+        source: discover-hosts
+    command: >-
+      nix eval --raw '.#nixosConfigurations.<host>.config.user.admin.passwordFile'
+    example: >-
+      nix eval --raw '.#nixosConfigurations.gc-05.config.user.admin.passwordFile'
+
   - id: enter-development-shell
     summary: Enter the repository development environment.
     risk: local-state
@@ -267,10 +297,10 @@ workflows:
       - Excludes addresses, serials, environment values, inventory variables, and full facts.
 
   - id: bootstrap-vault
-    summary: Create or update the local encrypted LuxNix vault and host exports.
-    risk: local-state
+    summary: Create or update the local encrypted LuxNix vault before validation and export.
+    risk: sensitive-local-state
     confirmation_required: true
-    documentation: docs/vault-setup.md
+    documentation: docs/admin-passwords.md
     prerequisites:
       - devenv
     arguments:
@@ -287,11 +317,10 @@ workflows:
       --vault-key ~/.lxv.key
       --local-hostname <control-host>
       --admin-passwords <admin-passwords-file>
-      --export
     effects:
       - Creates or updates encrypted vault state under ~/.lxv.
       - Creates or reuses the local encryption key at ~/.lxv.key.
-      - Generates host-specific encrypted exports under ~/.lxv/deploy.
+      - Imports paired admin credentials; validate before the separate export step.
 
   - id: check-connectivity
     summary: Check SSH connectivity to a configured host.
@@ -322,7 +351,11 @@ workflows:
       target-ip:
         required: true
         source: operator
-    command: nixos-anywhere --flake '.#<host>' nixos@<target-ip>
+      staging-root:
+        required: true
+        source: operator
+        sensitive: true
+    command: nixos-anywhere --extra-files <staging-root> --flake '.#<host>' nixos@<target-ip>
     effects:
       - Can repartition and install the target machine according to the host configuration.
 
@@ -343,6 +376,7 @@ support:
   network_resolution: docs/network-resolution.md
   service_deployment: docs/deploying-services-lx-annotate-style.md
   tmux_sessions: tmux/README.md
+  admin_passwords: docs/admin-passwords.md
   vault: docs/vault-setup.md
   vault_hub_enrollment: docs/vault-hub-machine-enrollment.md
 

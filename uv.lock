@@ -710,6 +710,7 @@ dependencies = [
     { name = "obsidian" },
     { name = "passlib" },
     { name = "pexpect" },
+    { name = "pip" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic" },
     { name = "pyopenssl" },
@@ -739,6 +740,7 @@ requires-dist = [
     { name = "obsidian", specifier = ">=1.2" },
     { name = "passlib", specifier = ">=1.7.4" },
     { name = "pexpect", specifier = ">=4.9.0" },
+    { name = "pip", specifier = ">=22.2" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2.4" },
     { name = "pydantic", specifier = ">=2.10.4" },
     { name = "pyopenssl", specifier = ">=24.3.0" },
@@ -1053,6 +1055,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/42/92/cc564bf6381ff43ce1f4d06852fc19a2f11d180f23dc32d9588bee2f149d/pexpect-4.9.0.tar.gz", hash = "sha256:ee7d41123f3c9911050ea2c2dac107568dc43b2d3b0c7557a33212c398ead30f", size = 166450, upload-time = "2023-11-25T09:07:26.339Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9e/c3/059298687310d527a58bb01f3b1965787ee3b40dce76752eda8b44e9a2c5/pexpect-4.9.0-py2.py3-none-any.whl", hash = "sha256:7236d1e080e4936be2dc3e326cec0af72acf9212a7e1d060210e70a47e253523", size = 63772, upload-time = "2023-11-25T06:56:14.81Z" },
+]
+
+[[package]]
+name = "pip"
+version = "26.2.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ae/15/4500e320e6b101ec3b719ae85b697d9940b6cda672bc555bd6016fc60c6f/pip-26.2.1.tar.gz", hash = "sha256:f6ad667e89a1fe78046c8f13232b247200f5258d7828f3f7883d660878e0813f", size = 1848877, upload-time = "2026-08-04T22:51:14.148Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f3/6e/1736e5b4ae2b778ef2f81c47d797de9f891d4d8acb047a24ca37a60294dd/pip-26.2.1-py3-none-any.whl", hash = "sha256:71138adf1f4ca900cdb7d289c21b7494329f2332b6d85f0e1c42108c0384ed3e", size = 1816632, upload-time = "2026-08-04T22:51:12.472Z" },
 ]
 
 [[package]]

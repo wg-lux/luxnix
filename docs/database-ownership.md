@@ -14,7 +14,6 @@ roles.endoreg-client.database = {
   port = 5432;
   name = "endoregDbLocal";
   user = "endoregDbLocal";
-  passwordFile = "/etc/secrets/vault/SCRT_local_password_maintenance_password";
   endoregLocalUserPasswordFile = "/var/lib/postgresql/endoregDbLocal.password";
   sslMode = "prefer";
 };
@@ -40,7 +39,10 @@ Important implementation points:
 - `modules/nixos/roles/postgres-default/default.nix` defines `defaultDbName = "endoregDbLocal"`.
 - The role adds `endoregDbLocal` to `services.postgresql.ensureDatabases`.
 - The role adds `endoregDbLocal` to `services.postgresql.ensureUsers`.
-- The `postgres-endoreg-setup.service` systemd unit syncs the password from the LuxNix vault secret into PostgreSQL.
+- The `postgres-endoreg-setup.service` systemd unit owns the protected application password file and synchronizes
+  PostgreSQL from that file.
+- The legacy `SCRT_local_password_maintenance_password` path is not an authority for this role and must not be used
+  to test or reset `endoregDbLocal`.
 
 Operational checks:
 
@@ -49,7 +51,12 @@ systemctl status postgresql.service
 systemctl status postgres-endoreg-setup.service
 sudo -u postgres psql -l
 sudo -u postgres psql -c '\du'
+sudo postgres-maintenance --check-endoreg-auth
 ```
+
+The last check deliberately uses TCP and password authentication as
+`endoregDbLocal`, using the canonical protected file. It does not test peer
+authentication as the `postgres` operating-system user.
 
 ## Direct `lxAnnotateLocal` Use
 
@@ -72,5 +79,7 @@ Use these terms consistently:
 
 - `endoregDbLocal`: the local PostgreSQL database/user used by EndoReg client services.
 - `postgres-endoreg-setup.service`: systemd unit that ensures the local PostgreSQL user password.
+- `/var/lib/postgresql/endoregDbLocal.password`: canonical protected application credential; preserve it during
+  activation and use it for password-authenticated diagnostics.
 - `lx-annotate-local`: the current lx-annotate service implementation.
 - `local_endoreg_db`: deprecated Ansible role name; do not use for current configuration.

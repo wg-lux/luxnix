@@ -6,6 +6,10 @@ template_name: "main"
 host_roles:
   custom_packages.baseDevelopment: "true"
   endoreg_client.defaultCenterKey: '"rbk_stuttgart"'
+  # Verified on gc-05: UUID 96c09eae-57cb-4e5c-95e1-9050a32abcc4, device 8:19.
+  # A stale 8:3 mount remains an operator recovery blocker; never auto-remount it.
+  endoreg_client.paths.storagePersistingDeviceId: '"usb-Seagate_Expansion_HDD_00000000NT197WLC-0:0"'
+  endoreg_client.paths.storagePersistingDevicePart: '"part3"'
 
 host_services:
   # Host-scoped emergency release; immutable artifact identity is recorded

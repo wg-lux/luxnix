@@ -99,6 +99,12 @@ lib.foldl' lib.recursiveUpdate
       roles.endoreg-client.defaultCenterKey = "rbk_stuttgart";
     }
     {
+      roles.endoreg-client.paths.storagePersistingDeviceId = "usb-Seagate_Expansion_HDD_00000000NT197WLC-0:0";
+    }
+    {
+      roles.endoreg-client.paths.storagePersistingDevicePart = "part3";
+    }
+    {
       services.luxnix.lxAnnotateLocal.hub.nodeProvisioning.enable = true;
     }
     {

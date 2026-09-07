@@ -274,6 +274,7 @@ let
         }
 
         repair_known_wheel_schema_drift() {
+          run_installed_django_command "${wheelVenvPythonPath}" check_migration_compatibility
           "${wheelVenvPythonPath}" - <<'PY'
     import django
     from django.apps import apps
@@ -700,6 +701,7 @@ let
     lx_annotate_activate_runtime
 
     log "Running database migrations..."
+    run_repo_django_command check_migration_compatibility
     run_repo_django_command migrate --noinput
 
     bootstrap_stamp_file="${envConfDir}/.bootstrap-revision"
@@ -881,6 +883,7 @@ let
     export LX_ANNOTATE_WHEEL_APP_ROOT="${runtimeWheelRootPath}"
 
     log "Applying Django migrations for wheel runtime."
+    run_installed_django_command "${wheelVenvPythonPath}" check_migration_compatibility
     "${pkgs.bash}/bin/bash" -lc ${lib.escapeShellArg wheelMigrateCommand}
     repair_known_wheel_schema_drift
   '';
@@ -1513,6 +1516,7 @@ let
           ensure_wheel_runtime_installed
           if [ -x "${wheelVenvPythonPath}" ]; then
             echo "Applying Django migrations before data recovery helper commands."
+            run_installed_django_command "${wheelVenvPythonPath}" check_migration_compatibility
             run_installed_django_command "${wheelVenvPythonPath}" migrate --noinput
           fi
         fi

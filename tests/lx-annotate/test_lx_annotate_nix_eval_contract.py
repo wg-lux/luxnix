@@ -1296,8 +1296,6 @@ def test_lx_annotate_hls_backfill_defers_during_active_imports() -> None:
     assert "UploadJob.objects.filter" in module_source
     for status in ("pending", "processing", "retrying"):
         assert status in module_source
-
-
 def test_lx_annotate_frame_extraction_worker_defaults_to_always_on() -> None:
     evaluated = _gc_02_contract()["frameExtractionWorkerDefault"]
 

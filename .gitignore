@@ -28,7 +28,7 @@ test_wd/
 
 # pre-commit
 .pre-commit-config.yaml
-
+feature-tracking/
 untracked-notes.md
 node_modules/
 .vscode

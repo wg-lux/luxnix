@@ -13,6 +13,7 @@ let
   runtimeEnvironmentFile = "${runtimeDir}/vault.env";
   runtimeTokenFile = "${runtimeDir}/vault.token";
   runtimeStatusFile = "${runtimeDir}/enrollment-status";
+  clientReissueMarker = "${runtimeDir}/force-client-reissue";
   vaultAuthEnabled = cfg.enable && cfg.client.enable && cfg.client.auth.method != "none";
   serverCfg = cfg.server;
   managedTlsCfg = serverCfg.managedTls;
@@ -314,10 +315,14 @@ let
       pkgs.coreutils
       pkgs.jq
       pkgs.vault
+      pkgs.util-linux
     ];
     text = ''
       set -euo pipefail
       umask 077
+      install -d -m 0700 /var/lib/luxnix-vault-site-lifecycle
+      exec 9>/var/lib/luxnix-vault-site-lifecycle/lock
+      flock -x 9
 
       if [ "$#" -lt 1 ]; then
         echo "Usage: luxnix-vault-reconcile-hub-sites <site-node-fqdn>..." >&2
@@ -365,7 +370,7 @@ let
         local policy=""
 
         case "$node_fqdn" in
-          *[!A-Za-z0-9.-]*|.*|*..*|*.)
+          ""|*[!a-z0-9.-]*|.*|*..*|*.)
             echo "site-node-fqdn must be a valid DNS name: $node_fqdn" >&2
             return 2
             ;;
@@ -373,6 +378,10 @@ let
 
         role="site-$(${pkgs.coreutils}/bin/printf '%s' "$node_fqdn" | ${pkgs.coreutils}/bin/tr '.-' '__')"
         policy="lx-hub-$role"
+        if [ -e "/var/lib/luxnix-vault-site-lifecycle/$role" ]; then
+          echo "ERROR: site is contained; reconciliation cannot restore access." >&2
+          return 1
+        fi
 
         vault write "$mount/roles/$role" \
           allowed_domains="$node_fqdn" \
@@ -405,6 +414,7 @@ let
 
         vault write "auth/approle/role/$role" \
           token_policies="$policy" \
+          token_type=service \
           token_ttl=1h \
           token_max_ttl=4h \
           secret_id_ttl=0 \
@@ -426,10 +436,25 @@ let
     '';
   };
 
+  hubSiteLifecycleTool = pkgs.writeShellApplication {
+    name = "luxnix-vault-site-lifecycle";
+    runtimeInputs = [
+      pkgs.vault
+      pkgs.python3
+    ];
+    text = ''
+      export LUXNIX_VAULT_KV_MOUNT=${lib.escapeShellArg hubPkiCfg.kvMountPath}
+      export LUXNIX_VAULT_PKI_MOUNT=${lib.escapeShellArg hubPkiCfg.mountPath}
+      export LUXNIX_VAULT_SERVER_CA=${lib.escapeShellArg (toString serverCfg.caCertFile)}
+      exec python3 ${../../../../scripts/vault/site_lifecycle.py} "$@"
+    '';
+  };
+
   hubSiteEnrollmentTool = pkgs.writeShellApplication {
     name = "luxnix-vault-enroll-hub-site";
     runtimeInputs = [
       hubSitesReconcileTool
+      pkgs.util-linux
       pkgs.coreutils
       pkgs.gnugrep
       pkgs.jq
@@ -452,7 +477,7 @@ let
       node_fqdn="$1"
       output_directory="$2"
       case "$node_fqdn" in
-        *[!A-Za-z0-9.-]*|.*|*..*|*.)
+        ""|*[!a-z0-9.-]*|.*|*..*|*.)
           echo "site-node-fqdn must be a valid DNS name" >&2
           exit 2
           ;;
@@ -469,6 +494,12 @@ let
       # Reconcile policy, PKI role, and AppRole without issuing credentials.
       # Credential issuance remains explicit and happens only below.
       luxnix-vault-reconcile-hub-sites "$node_fqdn" >/dev/null
+      exec 9>/var/lib/luxnix-vault-site-lifecycle/lock
+      flock -x 9
+      if [ -e "/var/lib/luxnix-vault-site-lifecycle/$role" ]; then
+        echo "ERROR: site is contained; enrollment cannot restore access." >&2
+        exit 1
+      fi
 
       ${pkgs.coreutils}/bin/install -d -m 0700 "$output_directory"
       role_id_tmp="$(${pkgs.coreutils}/bin/mktemp "$output_directory/.role-id.XXXXXX")"
@@ -735,6 +766,29 @@ let
     '';
   };
 
+  forceHubClientReissueTool = pkgs.writeShellApplication {
+    name = "luxnix-vault-reissue-hub-client-certificate";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.systemd
+    ];
+    text = ''
+      if [ "$#" -ne 0 ] || [ "$(id -u)" -ne 0 ]; then
+        echo "Run as root on the explicitly selected site without arguments." >&2
+        exit 2
+      fi
+      install -d -m 0700 ${lib.escapeShellArg runtimeDir}
+      touch ${lib.escapeShellArg clientReissueMarker}
+      chmod 0600 ${lib.escapeShellArg clientReissueMarker}
+      systemctl restart luxnix-vault-issue-hub-client-certificate.service
+      if [ -e ${lib.escapeShellArg clientReissueMarker} ]; then
+        echo "ERROR: forced certificate replacement is incomplete; retain containment." >&2
+        exit 1
+      fi
+      echo "A replacement certificate was published; verify receiver acceptance before restoring transfer access."
+    '';
+  };
+
   issueHubClientCertificateScript = pkgs.writeShellScript "issue-lx-hub-client-certificate" ''
     set -euo pipefail
     umask 077
@@ -756,20 +810,54 @@ let
       [ "$certificate_public" = "$key_public" ]
     }
 
-    if [ -s "$certificate" ] && [ -s "$private_key" ] \
+    force_reissue=0
+    if [ -e ${lib.escapeShellArg clientReissueMarker} ]; then
+      force_reissue=1
+    fi
+
+    if [ "$force_reissue" = 0 ] && [ -s "$certificate" ] && [ -s "$private_key" ] \
       && ${pkgs.openssl}/bin/openssl x509 -in "$certificate" -noout \
         -checkend ${toString clientHubPkiCfg.renewBeforeSeconds} \
       && certificate_matches_key; then
       exit 0
     fi
 
-    if [ ! -s ${lib.escapeShellArg runtimeEnvironmentFile} ]; then
+    ${optionalString (cfg.client.auth.method == "approle") ''
+      export PATH=${
+        lib.makeBinPath [
+          pkgs.jq
+          pkgs.vault
+        ]
+      }:"$PATH"
+      ${optionalString (cfg.client.address != null) ''
+        export VAULT_ADDR=${lib.escapeShellArg cfg.client.address}
+      ''}
+      ${optionalString (cfg.client.caCertFile != null) ''
+        export VAULT_CACERT=${lib.escapeShellArg (toString cfg.client.caCertFile)}
+      ''}
+      ROLE_ID_FILE=${lib.escapeShellArg (toString cfg.client.auth.roleIdFile)}
+      SECRET_ID_FILE=${lib.escapeShellArg (toString cfg.client.auth.secretIdFile)}
+      source ${../../../../scripts/vault/refresh-client-auth.sh}
+      if ! refresh_client_auth; then
+        ${optionalString cfg.client.allowOffline ''
+          if [ "$force_reissue" = 0 ] && [ -s "$certificate" ] && [ -s "$client_ca" ] \
+            && ${pkgs.openssl}/bin/openssl x509 -in "$certificate" -noout -checkend 0 \
+            && certificate_matches_key; then
+            echo "WARNING: fresh authentication unavailable; retaining still-valid cached certificate." >&2
+            exit 0
+          fi
+        ''}
+        exit 1
+      fi
+    ''}
+
+    if [ ! -s ${lib.escapeShellArg runtimeEnvironmentFile} ] && [ -z "''${VAULT_TOKEN:-}" ]; then
       state="enrollment-pending"
       if [ -s ${lib.escapeShellArg runtimeStatusFile} ]; then
         state="$(${pkgs.coreutils}/bin/cat ${lib.escapeShellArg runtimeStatusFile})"
       fi
       ${optionalString cfg.client.allowOffline ''
-        if [ -s "$certificate" ] && [ -s "$private_key" ] && [ -s "$client_ca" ]; then
+        if [ "$force_reissue" = 0 ] && [ -s "$certificate" ] && [ -s "$private_key" ] && [ -s "$client_ca" ]; then
           echo "WARNING: Vault runtime credentials are unavailable (state: $state); retaining cached hub PKI files." >&2
           exit 0
         fi
@@ -793,7 +881,7 @@ let
       common_name=${lib.escapeShellArg clientHubPkiCfg.commonName} \
       ttl=${lib.escapeShellArg clientHubPkiCfg.ttl} > "$response"; then
       ${optionalString cfg.client.allowOffline ''
-        if [ -s "$certificate" ] && [ -s "$private_key" ] && [ -s "$client_ca" ]; then
+        if [ "$force_reissue" = 0 ] && [ -s "$certificate" ] && [ -s "$private_key" ] && [ -s "$client_ca" ]; then
           echo "WARNING: Vault certificate renewal failed; continuing with cached hub PKI files." >&2
           exit 0
         fi
@@ -823,6 +911,7 @@ let
     ${pkgs.coreutils}/bin/mv -f "$cert_tmp" "$certificate"
     ${pkgs.coreutils}/bin/mv -f "$key_tmp" "$private_key"
     ${pkgs.coreutils}/bin/mv -f "$ca_tmp" "$client_ca"
+    ${pkgs.coreutils}/bin/rm -f "$response" ${lib.escapeShellArg clientReissueMarker}
     trap - EXIT
   '';
 
@@ -1670,11 +1759,13 @@ in
         hubPkiBootstrapTool
         hubSitesReconcileTool
         hubSiteEnrollmentTool
+        hubSiteLifecycleTool
         pkgs.vault
       ]
       ++ lib.optionals (cfg.client.enable && cfg.client.caCertFile != null) [
         vaultCaInstallTool
       ]
+      ++ lib.optionals clientHubPkiCfg.enable [ forceHubClientReissueTool ]
       ++ lib.optionals (clientHubPkiCfg.enable && cfg.client.auth.method == "approle") [
         hubSiteEnrollmentInstallTool
       ]

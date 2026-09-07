@@ -26,6 +26,7 @@ in
           passwordFile = mkOption {
             type = types.path;
             default = "/etc/secrets/vault/SCRT_local_password_maintenance_password";
+            description = "Deprecated legacy maintenance-password path; not used for the local application role";
           };
           sslMode = mkOption {
             type = types.str;
@@ -34,7 +35,7 @@ in
           endoregLocalUserPasswordFile = mkOption {
             type = types.path;
             default = "/var/lib/postgresql/endoregDbLocal.password";
-            description = "Path to file containing endoregDbLocal user password";
+            description = "Canonical protected file containing the endoregDbLocal application password";
           };
         };
       };

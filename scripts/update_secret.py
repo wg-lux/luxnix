@@ -1,4 +1,7 @@
 import argparse
+import getpass
+import sys
+import warnings
 from lx_administration.models.vault import Vault
 from lx_administration.password import PasswordGenerator
 
@@ -6,17 +9,28 @@ from lx_administration.password import PasswordGenerator
 # Lets say you named postgres_host_main_password
 # change export SECRET_NAME=postgres_host_main_password as required
 
+
 def parse_bool(value):
     return str(value).lower() in ("true", "1", "yes")
 
 
-def parse_args():
+def parse_args(argv=None):
     """Parse and return command line arguments for secret management.
 
     Returns:
         argparse.Namespace: Parsed command line arguments
     """
-    parser = argparse.ArgumentParser(description="Update a secret in the vault.")
+    parser = argparse.ArgumentParser(
+        description="Update a secret in the vault.", allow_abbrev=False
+    )
+    arguments = sys.argv[1:] if argv is None else argv
+    if any(
+        arg == "--custom-value" or arg.startswith("--custom-value=")
+        for arg in arguments
+    ):
+        parser.error(
+            "--custom-value is unsafe and no longer accepted; use --prompt-value"
+        )
     parser.add_argument(
         "--vault-dir", default="~/.lxv/", help="Path to vault directory"
     )
@@ -47,19 +61,19 @@ def parse_args():
     parser.add_argument(
         "--require-upper",
         type=parse_bool,
-        default=False,
+        default=True,
         help="Require uppercase characters",
     )
     parser.add_argument(
         "--require-lower",
         type=parse_bool,
-        default=False,
+        default=True,
         help="Require lowercase characters",
     )
     parser.add_argument(
         "--require-digits",
         type=parse_bool,
-        default=False,
+        default=True,
         help="Require digits",
     )
     parser.add_argument(
@@ -69,17 +83,24 @@ def parse_args():
         help="Require special characters",
     )
     parser.add_argument(
-        "--custom-value", help="Use this value instead of generating one"
+        "--prompt-value",
+        action="store_true",
+        help="Read a replacement value at a hidden terminal prompt",
     )
-    return parser.parse_args()
+    return parser.parse_args(arguments)
 
 
 def main():
     args = parse_args()
     vault = Vault.load_dir(args.vault_dir, args.vault_key)
 
-    if args.custom_value:
-        new_value = args.custom_value
+    if args.prompt_value:
+        # Never fall back to an echoed prompt when no terminal is available.
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", getpass.GetPassWarning)
+            new_value = getpass.getpass("Replacement secret: ")
+        if not new_value:
+            raise ValueError("Replacement secret must not be empty")
     else:
         pg = PasswordGenerator(
             mode=args.mode,

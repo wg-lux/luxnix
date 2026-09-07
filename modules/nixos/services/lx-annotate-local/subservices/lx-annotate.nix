@@ -12,7 +12,6 @@ with ctx;
       "lx-annotate-preflight.service"
     ]
     ++ dataRecoveryServiceUnits
-    ++ hlsBackfillServiceUnits
     ++ localRedisServiceUnits
     ++ localPostgresServiceUnits
     ++ localPostgresSetupUnits
@@ -25,7 +24,6 @@ with ctx;
       "lx-annotate-preflight.service"
     ]
     ++ dataRecoveryServiceUnits
-    ++ hlsBackfillServiceUnits
     ++ managedSecretsSetupUnits
     ++ encryptionServiceUnits;
     after = [
@@ -37,7 +35,6 @@ with ctx;
       "systemd-tmpfiles-setup.service"
     ]
     ++ dataRecoveryServiceUnits
-    ++ hlsBackfillServiceUnits
     ++ localRedisServiceUnits
     ++ localPostgresServiceUnits
     ++ localPostgresSetupUnits

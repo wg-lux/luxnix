@@ -12,7 +12,6 @@ with ctx;
       "lx-annotate-master-key-check.service"
     ]
     ++ dataRecoveryServiceUnits
-    ++ hlsBackfillServiceUnits
     ++ localPostgresServiceUnits
     ++ localPostgresSetupUnits
     ++ managedSecretsSetupUnits
@@ -22,7 +21,6 @@ with ctx;
       "lx-annotate-master-key-check.service"
     ]
     ++ dataRecoveryServiceUnits
-    ++ hlsBackfillServiceUnits
     ++ localPostgresServiceUnits
     ++ managedSecretsSetupUnits
     ++ encryptionServiceUnits;
@@ -32,7 +30,6 @@ with ctx;
       "lx-annotate-master-key-check.service"
     ]
     ++ dataRecoveryServiceUnits
-    ++ hlsBackfillServiceUnits
     ++ managedSecretsSetupUnits
     ++ encryptionServiceUnits;
     restartTriggers = [ effectiveRuntimePackage ];
@@ -49,6 +46,7 @@ with ctx;
       LogNamespace = lxAnnotateJournalNamespace;
       ExecStart = pkgs.writeShellScript "lx-annotate-preflight" ''
         set -euo pipefail
+        ${effectiveRuntimePackage}/bin/lx-annotate-manage check_migration_compatibility
         ${effectiveRuntimePackage}/bin/lx-annotate-manage check --fail-level CRITICAL
         ${effectiveRuntimePackage}/bin/lx-annotate-manage verify_encrypted_storage
         test -s ${lib.escapeShellArg "${packageStaticRoot}/.vite/manifest.json"}

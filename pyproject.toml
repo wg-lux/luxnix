@@ -24,6 +24,8 @@ dependencies = [
   "mypy>=1.16.0",
   "types-pyyaml>=6.0.12.20250516",
   "pytest>=8.4.1",
+  # Wheel installer tests use pip's vendored PEP 440 parser and report contract.
+  "pip>=22.2",
   "django-ninja>=1.6.2",
 ]
 description = "Utilities for Luxnix Administration"
