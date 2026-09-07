@@ -370,6 +370,12 @@ in
         redirectURL = cfg.glm52.oauth2.redirectURL;
         httpAddress = cfg.glm52.oauth2.httpAddress;
         reverseProxy = true;
+        # oauth2-proxy is reached only through the local nginx on this host;
+        # trust X-Forwarded-* from loopback only (26.05 warns when unset).
+        trustedProxyIP = [
+          "127.0.0.1/32"
+          "::1/128"
+        ];
         setXauthrequest = true;
         passAccessToken = true;
         passBasicAuth = false;

@@ -25,6 +25,9 @@ in
 
     programs.firefox = {
       enable = true;
+      # home-manager 26.05 moved the default profile path under XDG_CONFIG_HOME.
+      # Keep the classic ~/.mozilla/firefox location; no data move needed.
+      configPath = ".mozilla/firefox";
       profiles.default = {
         name = "Default";
         # extraConfig = ''

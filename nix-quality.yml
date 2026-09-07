@@ -123,7 +123,7 @@ checks:
       - flake.lock
     accepted_exit_codes: [0]
     baseline:
-      max_issues: 2
+      max_issues: 0
   flake_evaluation:
     command: [nix, flake, check, --no-build]
     accepted_exit_codes: [0]
@@ -583,3 +583,18 @@ progress:
       - Reached zero deadnix, statix, and nixfmt findings across all 265 Nix files.
       - Restored fileSystems and generic PostgreSQL defaults to module scope and kept the nullable storage branch lazy.
       - Added a fast gate for untracked files below every Git-backed flake source root.
+  - date: 2026-09-07
+    id: nixos-26-05-channel-bump
+    metrics:
+      deadnix_findings: 0
+      deadnix_non_generated_findings: 0
+      statix_findings: 0
+      statix_non_generated_findings: 0
+      nixfmt_unformatted_files: 0
+      nixfmt_non_generated_unformatted_files: 0
+      flake_checker_issues: 0
+      flake_source_untracked_files: 0
+    changes:
+      - Bumped nixpkgs, home-manager, and nixvim to the nixos-26.05 release branch.
+      - Cleared the flake-checker debt: 25.11 was end-of-support, 26.05 is current and fresh.
+      - Lowered the flake-checker baseline from 2 to 0 now that both warnings are gone.

@@ -49,6 +49,25 @@ def _matches_exclude_pattern(target: str, pattern: str) -> bool:
     return target.startswith(pattern) if pattern.endswith("/") else target == pattern
 
 
+def _tracked_root_markdown() -> set[str]:
+    """Repository-root Markdown files that are committed to Git.
+
+    The contract is about guides that ship in the repository, so local,
+    git-ignored scratch files (for example ``untracked-notes.md``) are not
+    considered.
+    """
+    result = subprocess.run(
+        ["git", "ls-files", "-z", "--", "*.md"],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return {
+        entry for entry in result.stdout.split("\0") if entry and "/" not in entry
+    }
+
+
 def _normalized_markdown_commands(content: str) -> str:
     """Flatten prose and shell continuations for command contract checks."""
     return " ".join(content.replace("\\\n", " ").split())
@@ -417,7 +436,7 @@ def test_superseded_root_guides_do_not_compete_with_canonical_documentation() ->
         "README.md",
         "TABLE_OF_CONTENTS.md",
     }
-    assert {path.name for path in REPO_ROOT.glob("*.md")} == allowed_root_markdown
+    assert _tracked_root_markdown() == allowed_root_markdown
 
 
 def test_documented_devenv_commands_use_current_cli_entry_points() -> None:

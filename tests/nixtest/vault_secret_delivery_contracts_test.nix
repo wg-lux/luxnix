@@ -107,8 +107,8 @@ in
           for host in gc-02 gc-04 gc-05 gc-06 gc-07 gc-08 gc-09 gc-10; do
             assert_file_contains \
               "${repoRoot}/ansible/inventory/host_vars/$host.yml" \
-              'vault\.client\.auth\.deferUntilProvisioned: "true"' \
-              "$host must explicitly record its temporary enrollment state"
+              'vault\.client\.auth\.deferUntilProvisioned: "\(true\|false\)"' \
+              "$host must explicitly record its temporary enrollment state (true while enrolling, false once enrolled)"
           done
         '';
       }

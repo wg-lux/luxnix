@@ -49,7 +49,10 @@ devenv tasks run docs:toc-generator
 - [Hardware Setup](./hardware-setup.md): installation and hardware-specific preparation.
 - [Virtualization](./virtualization-guide.md): virtual-machine setup and host prerequisites.
 - [Vault Setup](./vault-setup.md): secret bootstrap and lifecycle.
+- [HashiCorp Vault Maintainer Notes](./vault-maintainer-operations.md): restart recovery, credential failures, key loss, and escalation boundaries.
+- [HashiCorp Vault Owner Operations](./vault-owner-immediate-actions.md): encrypted custody, status, seal, unseal, and recovery boundaries.
 - [Vault Hub Machine Enrollment](./vault-hub-machine-enrollment.md): add, provision, verify, rotate, or remove a hub-transfer site node.
+- [Vault Server Rebuild](./vault-server-rebuild.md): guarded recovery after irrecoverable loss of the `gs-02` unseal share.
 - [SSH Host Identity](./ssh-host-identity.md): host-key registry, rotation, and recovery workflow.
 - [Access Management](./access-management.md): accounts, authentication, and access boundaries.
 - [Clinical Hub Transfer Guide](./clinical-hub-transfer-guide.md): plain-language setup, daily transfer workflow, status meanings, and safe failure handling for medical personnel.

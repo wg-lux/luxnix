@@ -22,19 +22,38 @@ let
     inherit pkgs uvPackage;
   };
   devenvPackages = devenvUtils.packages;
+
+  # The nix-quality git hook runs on `git commit`, outside the devenv shell,
+  # so its PATH does not carry the Nix quality tools. Wrap the entry point so
+  # deadnix/statix/nixfmt/flake-checker/nix resolve regardless of the caller's
+  # environment, using the same packages the shell provides.
+  nixQualityHook = pkgs.writeShellApplication {
+    name = "nix-quality-hook";
+    runtimeInputs = [
+      uvPackage
+      pkgs.nix
+      pkgs.git
+      pkgs.deadnix
+      pkgs.statix
+      pkgs.nixfmt
+      pkgs.flake-checker
+    ];
+    text = ''
+      exec uv run python scripts/nix-quality.py "$@"
+    '';
+  };
 in
 {
   dotenv.enable = false;
   dotenv.disableHint = true;
   packages = devenvPackages;
-  env = baseEnv // {
-    LD_LIBRARY_PATH =
-      lib.makeLibraryPath devenvPackages
-      + ":/run/opengl-driver/lib:/run/opengl-driver-32/lib"
-      + ":/usr/lib/wsl/lib"
-      + ":/usr/lib/x86_64-linux-gnu"
-      + ":/usr/lib";
-  };
+  # Do not set a shell-wide LD_LIBRARY_PATH here. Nix executables carry the
+  # exact runtime paths of the libraries they were built against. Prepending
+  # the development package closure can make host tools load a newer libmount
+  # or libselinux alongside the host's older glibc, causing ABI errors before
+  # the program reaches main(). Tools that genuinely need an additional
+  # runtime library should be wrapped individually instead.
+  env = baseEnv;
 
   languages.python = {
     enable = true;
@@ -50,7 +69,12 @@ in
     enable = true;
     package = pkgs.nodejs_22;
     npm.enable = true;
-    npm.install.enable = true;
+    # npm.install.enable runs `npm clean-install` on every shell entry and then
+    # writes node_modules/package-lock.json.checksum. Our package-lock.json has
+    # zero dependencies, so `npm ci` succeeds without creating node_modules and
+    # the checksum write fails with "No such file or directory", hanging shell
+    # startup. Re-enable once package.json declares real dependencies.
+    npm.install.enable = false;
   };
 
   inherit (devenvUtils) processes tasks;
@@ -60,7 +84,7 @@ in
     nix-quality = {
       enable = true;
       name = "nix-quality";
-      entry = "${pkgs.uv}/bin/uv run python scripts/nix-quality.py";
+      entry = "${nixQualityHook}/bin/nix-quality-hook";
       files = "\\.nix$|^flake\\.lock$|^nix-quality\\.yml$|^scripts/nix-quality\\.py$|^(homes|lib|modules|overlays|packages|shells|systems|tests/nixtest|topology)/";
       pass_filenames = false;
     };
