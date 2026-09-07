@@ -1,62 +1,28 @@
-# This file consolidates all management tasks, scripts, and container operations
-# into a unified DevEnv-based approach using the centralized configuration.
+# Central composition point for Devenv tasks, scripts, and processes.
 
-{
-  pkgs,
-  lib,
-  env,
-  isDev ? false,
-}:
+{ pkgs, ... }:
 let
-  # Utility functions (legacy placeholders; kept for future use)
-  containerName = mode: "${env.app.name}-${mode}-test";
-  commonContainerArgs = mode: [ ];
-  gpuArgs = ''
-    : # GPU args placeholder
-  '';
-  customScripts = import ./scripts.nix {
-    inherit
-      pkgs
-      lib
-      env
-      isDev
-      ;
-  };
-  processes = import ./processes.nix {
-    inherit
-      pkgs
-      lib
-      env
-      isDev
-      ;
-  };
+  customScripts = import ./scripts.nix { inherit pkgs; };
+  customProcesses = import ./processes.nix { };
+  customTasks = import ./tasks.nix { inherit pkgs; };
 in
 {
-  # =============================================================================
-  # UNIFIED TASK DEFINITIONS
-  # =============================================================================
-
-  tasks = {
-    # Environment Management
+  # Environment setup tasks supplement the repository tasks from tasks.nix.
+  tasks = customTasks // {
     "env:setup" = {
-      description = "Complete environment setup (replaces multiple scripts)";
+      description = "Prepare the development shell and probe optional CUDA support";
       exec = ''
-        echo "🔧 Setting up Luxnix DevEnv"
+        echo "🔧 Setting up the LuxNix development environment"
 
-
-        # Step 1: Ensure directories
         export WORKING_DIR="''${WORKING_DIR:-$(pwd)}"
-
-        # Step 2: CUDA environment setup (optional)
         devenv tasks run env:setup-cuda || true
 
         echo "✅ Environment setup complete!"
       '';
     };
 
-    # CUDA setup (non-fatal)
     "env:setup-cuda" = {
-      description = "Setup CUDA environment for PyTorch";
+      description = "Probe optional CUDA support without blocking shell setup";
       exec = ''
         echo "🧪 Checking CUDA environment..."
         ${pkgs.uv}/bin/uv run python scripts/cuda/test_cuda_paths.py || true
@@ -66,16 +32,14 @@ in
     };
   };
 
-  # =============================================================================
-  # UNIFIED SCRIPT DEFINITIONS
-  # =============================================================================
-
+  # Interactive convenience wrapper for local environment management.
   scripts = customScripts // {
-    "manage".exec = ''
+    manage.package = pkgs.zsh;
+    manage.exec = ''
       subcmd="''${1:-help}"
       case "$subcmd" in
         "setup")
-          echo "🔧 Setting up Lx Annotate..."
+          echo "🔧 Setting up LuxNix..."
           devenv tasks run env:setup
           ;;
         "dev")
@@ -89,33 +53,34 @@ in
           devenv tasks run env:setup
           ;;
         "deploy")
-          devenv tasks run deploy:full
+          echo "No generic deployment task is defined because deployment requires an explicit host and target." >&2
+          echo "See docs/deployment-guide.md or the deploy-new-host workflow in luxnix.yml." >&2
+          exit 2
           ;;
-
-        "help"|*)
-          echo "Lx Management Commands"
-          echo "============================"
+        "help")
+          echo "LuxNix management commands"
+          echo "==========================="
           echo ""
           echo "Environment:"
-          echo "  manage setup              - Complete environment setup"
-          echo "  manage dev                - Switch to development mode"
-          echo "  manage prod               - Switch to production mode"
+          echo "  manage setup   Prepare the development environment"
+          echo "  manage dev     Switch to development mode"
+          echo "  manage prod    Switch to production mode"
+          echo "  manage deploy  Show the canonical deployment guidance"
           echo ""
+          echo "All wrappers, tasks, usage, and risk labels:"
+          echo "  devenv/commands.yml"
+          echo "Machine-readable project workflows:"
+          echo "  luxnix.yml"
+          echo ""
+          ;;
+        *)
+          echo "Unknown manage command: $subcmd" >&2
+          echo "Run 'manage help' to list supported commands." >&2
+          exit 2
           ;;
       esac
     '';
-
-    # "run-server".exec =
-    #   ''
-
-    #     secretspec run --provider env uv run daphne -b "${env.DJANGO_HOST}" -p "${env.DJANGO_PORT}" lx_annotate.asgi:application    '';
-
-    # "start-filewatcher".exec = ''
-    #   echo "👀 Starting file watcher for auto-import..."
-    #   secretspec run --provider env python manage.py start_filewatcher
-    # '';
-
   };
 
-  processes = processes;
+  processes = customProcesses;
 }

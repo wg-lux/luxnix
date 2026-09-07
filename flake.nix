@@ -3,13 +3,17 @@
   nixConfig = {
     extra-substituters = [
       "https://nix-community.cachix.org"
+      "https://cuda-maintainers.cachix.org"
     ];
     extra-trusted-public-keys = [
       "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
+      "cuda-maintainers.cachix.org-1:0dq3bujKpuEPMCX6U4WylrUDZ9JyUG0VpVZa7CNfq5E="
     ];
   };
+
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-25.11";
+    nixpkgs-unstable.url = "github:nixos/nixpkgs/nixos-unstable";
     devenv.url = "github:cachix/devenv";
     home-manager = {
       url = "github:nix-community/home-manager/release-25.11";
@@ -41,8 +45,6 @@
 
     impermanence.url = "github:nix-community/impermanence";
     # lanzaboote.url = "github:nix-community/lanzaboote";
-
-    nixgl.url = "github:nix-community/nixGL";
     # stylix.url = "github:danth/stylix";
     catppuccin.url = "github:catppuccin/nix";
     nix-index-database.url = "github:nix-community/nix-index-database";
@@ -60,6 +62,20 @@
       url = "github:numtide/nixos-anywhere";
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.disko.follows = "disko";
+    };
+
+    nixtest = {
+      url = "gitlab:TECHNOFAB/nixtest?dir=lib";
+    };
+
+    lx-annotate = {
+      url = "github:wg-lux/lx-annotate";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    endoreg-db = {
+      url = "git+https://github.com/wg-lux/endoreg-db.git?ref=prototype";
+      flake = false;
     };
 
     nixos-generators = {
@@ -139,67 +155,89 @@
         };
       };
 
-    in
-    lib.mkFlake {
-      channels-config = {
-        allowUnfree = true;
+      base = lib.mkFlake {
+        channels-config = {
+          allowUnfree = true;
+        };
+
+        # Add modules to all homes
+        homes.modules = with inputs; [
+          plasma-manager.homeModules.plasma-manager
+          nixvim.homeModules.nixvim
+        ];
+
+        systems.modules.nixos = with inputs; [
+          home-manager.nixosModules.home-manager
+          disko.nixosModules.disko
+          impermanence.nixosModules.impermanence
+          sops-nix.nixosModules.sops
+          nix-topology.nixosModules.default
+          inputs.lx-annotate.nixosModules.default
+        ];
+
+        overlays = with inputs; [
+
+          nur.overlays.default
+          nix-topology.overlays.default
+          (final: _prev: {
+            lx-annotate = inputs.lx-annotate.packages.${final.stdenv.hostPlatform.system}.default;
+            lx-annotate-feature-specifications = final.runCommand "lx-annotate-feature-specifications" { } ''
+              mkdir -p "$out/share/lx-annotate/features"
+              cp ${inputs.lx-annotate}/feature-tracking/*.yml \
+                "$out/share/lx-annotate/features/"
+            '';
+          })
+        ];
+
+        deploy = lib.mkDeploy { inherit (inputs) self; };
+
+        checks = builtins.mapAttrs (
+          _system: deploy-lib: deploy-lib.deployChecks inputs.self.deploy
+        ) inputs.deploy-rs.lib;
+
+        topology =
+          with inputs;
+          let
+            host = self.nixosConfigurations.${builtins.head (builtins.attrNames self.nixosConfigurations)};
+          in
+          import nix-topology {
+            inherit (host) pkgs;
+            modules = [
+              (import ./topology {
+                inherit (host) config;
+              })
+              { inherit (self) nixosConfigurations; }
+            ];
+          };
       };
 
-      # Add modules to all homes
-      homes.modules = with inputs; [
-        # plasma-manager.homeModules.plasma-manager
-        # nixvim.homeModules.nixvim
-        plasma-manager.homeModules.plasma-manager
-        nixvim.homeModules.nixvim
-      ];
-
-      # stdenv."x86_64-linux".system.modules.nixos = with inputs; [
-        systems.modules.nixos = with inputs; [
-        # nix-ld.nixosModules.nix-ld
-        # stylix.nixosModules.stylix
-        home-manager.nixosModules.home-manager
-        disko.nixosModules.disko
-        # lanzaboote.nixosModules.lanzaboote
-        impermanence.nixosModules.impermanence
-        sops-nix.nixosModules.sops
-        nix-topology.nixosModules.default
-
-        # authentik-nix.nixosModules.default
-      ];
-
-      # systems.hosts.framework.modules = with inputs; [
-      #   nixos-hardware.nixosModules.framework-13-7040-amd
-      # ];
-
-      # homes.modules = with inputs; [
-      #   impermanence.nixosModules.home-manager.impermanence
-      # ];
-
-      overlays = with inputs; [
-        nixgl.overlay
-        nur.overlays.default
-        nix-topology.overlays.default
-      ];
-
-      deploy = lib.mkDeploy { inherit (inputs) self; };
-
-      checks = builtins.mapAttrs (
-        system: deploy-lib: deploy-lib.deployChecks inputs.self.deploy
-      ) inputs.deploy-rs.lib;
-
-      topology =
-        with inputs;
+      nixtestPackages = builtins.mapAttrs (
+        system: _:
         let
-          host = self.nixosConfigurations.${builtins.head (builtins.attrNames self.nixosConfigurations)};
+          pkgs = import inputs.nixpkgs {
+            inherit system;
+            config.allowUnfree = true;
+          };
+          ntlib = inputs.nixtest.lib { inherit pkgs; };
         in
-        import nix-topology {
-          inherit (host) pkgs; # Only this package set must include nix-topology.overlays.default
-          modules = [
-            (import ./topology {
-              inherit (host) config;
-            })
-            { inherit (self) nixosConfigurations; }
-          ];
-        };
+        {
+          nixtests = ntlib.mkNixtest {
+            modules = ntlib.autodiscover {
+              dir = ./tests/nixtest;
+            };
+            args = {
+              inherit pkgs ntlib;
+              repoRoot = ./.;
+            };
+          };
+        }
+      ) base.packages;
+
+      nixtestChecks = builtins.mapAttrs (_: packages: { inherit (packages) nixtests; }) nixtestPackages;
+
+    in
+    inputs.nixpkgs.lib.recursiveUpdate base {
+      packages = nixtestPackages;
+      checks = nixtestChecks;
     };
 }

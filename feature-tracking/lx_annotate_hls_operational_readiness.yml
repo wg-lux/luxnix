@@ -1,0 +1,232 @@
+schema_version: '1.0'
+id: lx_annotate_hls_operational_readiness
+name: LX-Annotate HLS operational readiness
+description: Make HTTP Live Streaming materialization on LuxNix hosts recoverable, observable, provenance-bound,
+  and a truthful deployment gate across Endoreg, LX-Annotate, Celery, Redis, systemd, encrypted storage,
+  and Nginx.
+owners:
+- LuxNix maintainers
+- LX-Annotate maintainers
+- endoreg-db maintainers
+production_critical: true
+tracking:
+  state: active
+  history: []
+source_documents:
+- path: modules/nixos/services/lx-annotate-local/README.md
+  disposition: reference
+  note: Canonical service ownership, runtime layout, and deployment contract.
+- path: modules/nixos/services/lx-annotate-local/Diagnostics.md
+  disposition: reference
+  note: Canonical host diagnostics and privacy-safe operational procedures.
+definition_of_done:
+- id: hls_cross_repository_contract
+  category: requirements
+  title: WP-LN-01 Deployment dependencies and ownership are explicit
+  acceptance:
+  - Endoreg owns durable attempts, fencing, source-generation identity, validation, and terminal results.
+  - LX-Annotate owns production Celery settings, task discovery and routing, and the installed Python
+    dependency set.
+  - LuxNix owns service ordering, runtime timeouts, immutable artifact selection, readiness gates, and
+    host diagnostics.
+  - One compatibility matrix names the required Endoreg and LX-Annotate work-package revisions, queue
+    contract, timeout relationship, database schema, and rollback boundary for each deployable LuxNix
+    generation.
+  required: true
+  verification:
+    kind: manual
+    instructions: Review the three feature YAML files and the evaluated module contract for gaps, duplication,
+      or incompatible deployment sequencing before implementation begins.
+    timeout_seconds: 600
+  assessment:
+    status: blocked
+    evidence:
+    - kind: review
+      reference: /home/admin/endoreg-db/feature-tracking/VideoStorageNormalization.yml; /home/admin/dev/lx-annotate/feature-tracking/StorageOptimization.yml
+      note: Repository-owned remediation packages are defined, but no deployed compatibility matrix exists
+        yet.
+    note: This requirement defines the sequencing boundary for all later LuxNix work packages.
+    assessed_by: codex-gc10-hls-investigate
+    assessed_at: '2026-09-02T09:00:00Z'
+- id: hls_service_ordering_and_dispatch
+  category: functionality
+  title: WP-LN-02 Boot dispatch requires a viable worker and truthful completion semantics
+  acceptance:
+  - Boot-time HLS dispatch cannot run before Redis and the FFmpeg queue worker are ready to accept work.
+  - A dispatcher exit code means only dispatch success and is not used as evidence that artifacts became
+    READY.
+  - Web readiness does not confuse successful task submission with materialization completion.
+  - Worker stop timeouts permit the supported task lifecycle and are aligned with LX-Annotate WP-LX-01.
+  required: true
+  verification:
+    kind: manual
+    instructions: After Endoreg WP-ER-01 and LX-Annotate WP-LX-01 land, evaluate the systemd dependency
+      graph and exercise cold boot with Redis unavailable, worker unavailable, slow materialization, and
+      broker recovery.
+    timeout_seconds: 1800
+  assessment:
+    status: blocked
+    evidence:
+    - kind: code
+      reference: modules/nixos/services/lx-annotate-local/subservices/lx-annotate-hls-backfill.nix:6-34;
+        modules/nixos/services/lx-annotate-local/subservices/lx-annotate-preflight.nix:8-37; modules/nixos/services/lx-annotate-local/scripts.nix:786-801
+      note: The boot oneshot completes after enqueueing and precedes the worker startup chain.
+    note: Current systemd ordering allows an entirely green boot while dispatched HLS work later fails.
+    assessed_by: codex-gc10-hls-investigate
+    assessed_at: '2026-09-02T09:00:00Z'
+- id: hls_reconciliation_and_acceptance_gate
+  category: operations
+  title: WP-LN-03 Hosts reconcile HLS state and gate readiness on terminal evidence
+  acceptance:
+  - A bounded recurring reconciliation path compares active database attempts with broker and worker liveness
+    and invokes the Endoreg-owned safe recovery contract.
+  - Acceptance distinguishes READY, live active, stale active, terminal failure, missing source, and absent
+    artifact for both raw and processed HLS.
+  - Required playback artifacts must reach READY before deployment acceptance succeeds; optional backlog
+    is reported explicitly and cannot be mistaken for readiness.
+  - Operators have an idempotent repair command with dry-run, bounded scope, stable reason codes, and
+    no destructive fallback.
+  required: true
+  verification:
+    kind: manual
+    instructions: Complete WP-LN-02 and Endoreg WP-ER-04, then exercise boot, recurring reconciliation,
+      manual repair, and acceptance against ready, failed, stale, missing-source, and broker-loss fixtures.
+    timeout_seconds: 1800
+  assessment:
+    status: in_progress
+    evidence:
+    - kind: code
+      reference: modules/nixos/services/lx-annotate-local/subservices/lx-annotate-acceptance.nix:37-49;
+        modules/nixos/services/lx-annotate-local/scripts.nix:970-990,1221-1240
+      note: The active acceptance unit omits HLS readiness; relevant helper commands exist but are not
+        wired into it.
+    - kind: code
+      reference: modules/nixos/services/lx-annotate-local/config.nix; modules/nixos/services/lx-annotate-local/options/hls-backfill.nix;
+        modules/nixos/services/lx-annotate-local/scripts.nix
+    - kind: test
+      reference: nix build .#checks.x86_64-linux.nixtests --no-link passed
+    - kind: command
+      reference: 'gc-10 eval: hlsBackfill.enable=true, extraArgs=[], timeoutStartSec=1h; system drv evaluation
+        passed'
+    - kind: code
+      reference: modules/nixos/services/lx-annotate-local/subservices/lx-annotate-hls-backfill.nix persistent
+        hourly reconciliation timer
+    note: Every enabled host runs an unrestricted full raw and processed pass at startup and repeats it
+      hourly through a persistent timer, so legacy replacement and stale orphan redispatch require no
+      user action or reboot. Terminal READY deployment acceptance remains open under this broader criterion.
+    assessed_by: codex-gc10-hls-investigate
+    assessed_at: '2026-09-02T09:53:29.196174Z'
+- id: hls_runtime_artifact_provenance
+  category: security
+  title: WP-LN-04 Evaluated provenance identifies the HLS code actually imported
+  acceptance:
+  - The selected LX-Annotate artifact, its Endoreg dependency, immutable digests, import paths, source
+    revisions, and locked inputs agree before activation.
+  - Wheel installation is offline or constrained to an approved wheelhouse and performs dependency-consistency
+    checks.
+  - Preflight fails on missing, duplicate, incompatible, or unexpectedly resolved Endoreg distributions.
+  - Runtime attestation is derived from the installed artifacts rather than an unrelated flake input or
+    source checkout.
+  required: true
+  verification:
+    kind: manual
+    instructions: After LX-Annotate WP-LX-02 lands, evaluate gc-10, build without activation, inspect
+      wheel metadata and the runtime import, and prove that intentional version or digest drift fails
+      preflight.
+    timeout_seconds: 1800
+  assessment:
+    status: blocked
+    evidence:
+    - kind: code
+      reference: modules/nixos/services/lx-annotate-local/config.nix:69-84,237-345,570-576
+      note: Current attestation combines independent source metadata while installer validation checks
+        only the LX-Annotate package version.
+    note: The evaluated gc-10 environment identifies older Endoreg source/dependency versions than the
+      1.1.5 distribution required by its selected LX-Annotate 1.2.0 wheel.
+    assessed_by: codex-gc10-hls-investigate
+    assessed_at: '2026-09-02T09:00:00Z'
+- id: hls_privacy_safe_host_diagnostics
+  category: security
+  title: WP-LN-05 Host diagnostics are useful without disclosing media identity
+  acceptance:
+  - Diagnostics report counts, artifact identifiers, attempt ages, queue depth, worker state, and stable
+    reason codes without source filenames, absolute protected-storage paths, secret values, or clinical
+    metadata.
+  - Journald and systemd status output do not reproduce unsanitized Endoreg exception strings.
+  - Diagnostic commands are read-only, bounded, and document the distinction between database reservations,
+    broker deliveries, worker execution, filesystem publication, and playable READY state.
+  - Missing-source and corruption incidents preserve encrypted-storage and least-privilege boundaries
+    during investigation.
+  required: true
+  verification:
+    kind: manual
+    instructions: After Endoreg WP-ER-05, inject representative failures on a disposable host and review
+      all journal, command, database-summary, and acceptance output for both diagnostic completeness and
+      disclosure.
+    timeout_seconds: 1200
+  assessment:
+    status: blocked
+    evidence:
+    - kind: review
+      reference: modules/nixos/services/lx-annotate-local/Diagnostics.md; /home/admin/endoreg-db/endoreg_db/services/hls_media.py:2196-2226
+      note: Host diagnostics do not yet define the HLS state correlation, and application errors may include
+        absolute source paths.
+    note: Prior gc-10 worker output exposed the missing source path through an unsanitized exception.
+    assessed_by: codex-gc10-hls-investigate
+    assessed_at: '2026-09-02T09:00:00Z'
+- id: hls_deployment_failure_injection
+  category: testing
+  title: WP-LN-06 NixOS tests cover dispatch-to-playback convergence
+  acceptance:
+  - NixOS tests exercise cold boot, Redis interruption, publication loss, worker kill, redelivery, stale
+    reconciliation, missing source, validation failure, corrupt segment, slow task, and restart recovery.
+  - Tests assert database, Redis, worker, systemd, encrypted filesystem, readiness command, and authenticated
+    playback outcomes.
+  - The evaluated test closure records and verifies the same LX-Annotate and Endoreg artifact identity
+    used by production.
+  - A green test requires terminal READY or the explicitly expected terminal failure; command dispatch
+    alone cannot pass.
+  required: true
+  verification:
+    kind: manual
+    instructions: Complete WP-LN-02 through WP-LN-05 and the Endoreg/LX packaged-runtime gates, then run
+      the focused NixOS test and representative gc-10 derivation build without activation.
+    timeout_seconds: 3600
+  assessment:
+    status: blocked
+    evidence:
+    - kind: test
+      reference: tests/nixtest/lx_annotate_runtime_reliability_test.nix:101-112
+      note: Existing HLS coverage checks source structure and does not execute dispatch, failure, recovery,
+        publication, or playback transitions.
+    note: This is the automated LuxNix release gate and depends on all implementation work packages above.
+    assessed_by: codex-gc10-hls-investigate
+    assessed_at: '2026-09-02T09:00:00Z'
+- id: hls_rollout_recovery_documentation
+  category: documentation
+  title: WP-LN-07 Rollout, repair, rollback, and evidence collection are documented
+  acceptance:
+  - The runbook defines compatibility prerequisites, canary scope, readiness thresholds, pause conditions,
+    repair order, rollback boundaries, and escalation ownership.
+  - Procedures distinguish safe reconciliation from destructive media replacement and require operator
+    confirmation for any remote-state or cleanup action.
+  - Evidence collection records target, active generation, artifact digests, package versions, queue and
+    worker state, HLS status counts, playback results, and residual failed or missing-source artifacts.
+  - gc-10 is not declared remediated until a reviewed post-deployment exercise proves new materialization,
+    stale-attempt recovery, restart convergence, and authenticated playback.
+  required: true
+  verification:
+    kind: manual
+    instructions: Review README and Diagnostics updates, perform the documented canary and rollback exercise
+      on an explicitly approved target, and attach privacy-safe evidence to this tracker.
+    timeout_seconds: 3600
+  assessment:
+    status: blocked
+    evidence:
+    - kind: document
+      reference: modules/nixos/services/lx-annotate-local/README.md; modules/nixos/services/lx-annotate-local/Diagnostics.md
+      note: Existing guidance does not yet define end-to-end HLS dispatch/reconciliation readiness or
+        the new cross-repository release sequence.
+    note: Complete only after WP-LN-06 passes and an operator authorizes the production-like exercise.
+    assessed_by: codex-gc10-hls-investigate
+    assessed_at: '2026-09-02T09:00:00Z'

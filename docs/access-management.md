@@ -12,7 +12,7 @@ In the LuxNix system, there's an important distinction between roles and users. 
 ```nix
 user.admin = {
     name = "admin";
-    initialPassword = "1";
+    passwordFile = "/etc/secrets/vault/SCRT_local_password_admin_password_hash";
 };
 ```
 
@@ -102,9 +102,74 @@ homes/
 ## Security Considerations
 
 ### Password Management
-- Initial passwords must be changed on first login
-- Password policies enforced
-- Optional SOPS integration for secret management
+- Passwords are configured as password hashes, not plaintext Nix values.
+- GPU client (`gc-*`) machines enable `security.luxnix.local-users` by default.
+- GC machines use the vault hash file as the primary admin password source and
+  install a known local fallback hash if that file is missing. The fallback is
+  deliberately static and precomputed so activation never generates an unknown
+  password that could lock the machine.
+- Optional SOPS integration can provide the admin password hash with
+  `neededForUsers = true`.
+- The client-user login hash can also come from SOPS. Generated client-user
+  passwords are disabled in `roles.managed-secrets` by default because they are
+  human-facing credentials.
+- `roles.managed-secrets` refuses to share an output path with `sops.secrets`.
+  When SOPS owns a deployed password file, disable the corresponding generated
+  managed secret.
+- LuxNix intentionally refuses to manage BIOS/UEFI firmware passwords. Keep
+  firmware passwords in an out-of-band recovery record; do not generate them at
+  activation time.
+
+### GC Admin Password Safety Defaults
+
+The default policy on hosts whose `networking.hostName` starts with `gc-` is:
+
+```nix
+security.luxnix.local-users = {
+  enable = true;
+  adminPassword = {
+    source = "vault-file";
+    hashedFile = "/etc/secrets/vault/SCRT_local_password_admin_password_hash";
+    fallback.enable = true;
+  };
+  firmwarePassword.manage = false;
+};
+```
+
+To use SOPS for the admin password hash on a GC host, store only the hashed
+password in the SOPS file and disable the local fallback for that source:
+
+```nix
+security.luxnix.local-users.adminPassword = {
+  source = "sops";
+  fallback.enable = false;
+  sops = {
+    sopsFile = ./secrets.yaml;
+    secretName = "admin-password-hash";
+  };
+};
+```
+
+To use SOPS for the client-user password hash on a GC host:
+
+```nix
+security.luxnix.local-users.clientPassword = {
+  source = "sops";
+  sops = {
+    sopsFile = ./secrets.yaml;
+    secretName = "client-user-password-hash";
+  };
+};
+
+roles.managed-secrets.secrets.client_user_password.enable = false;
+roles.managed-secrets.secrets.client_user_password_hash.enable = false;
+```
+
+Generate the hash outside Nix, then encrypt the hash:
+
+```bash
+mkpasswd -m sha-512
+```
 
 ### Access Control
 - Role-based file permissions
@@ -124,6 +189,22 @@ graph TD
 ```
 
 ## Implementation Guidelines
+
+### Change prerequisites and recovery
+
+Before changing a role, password source, group, sudo rule, or service access,
+identify the affected hosts and keep a second administrative session or
+console path open. Confirm the encrypted secret source exists, run the
+configuration evaluation/build, and record the current access policy. Never
+test a new policy by removing the only known administrator.
+
+After deployment, validate login with the intended account, `sudo -l`, group
+membership, file ownership/modes, and the relevant service access from an
+independent session. If access is lost or a password source is invalid, use
+the preserved console or second administrator to boot/switch the previous
+NixOS generation, restore the prior encrypted secret/configuration, and
+revalidate access before attempting the change again. Do not replace encrypted
+secrets with plaintext values during recovery.
 
 ### Creating New Users
 1. Define user in appropriate role configuration

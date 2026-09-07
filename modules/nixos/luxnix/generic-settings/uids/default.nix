@@ -1,11 +1,11 @@
 {
   lib,
   config,
-  pkgs,
   ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.luxnix.generic-settings.uids;
 
   userConfigs = [
@@ -22,12 +22,15 @@ with lib.luxnix; let
     # }
   ];
 
-  generateUserConfig = userConfig: mkIf userConfig.condition {
-    users.users.${userConfig.user}.uid = userConfig.uid;
-  };
+  generateUserConfig =
+    userConfig:
+    mkIf userConfig.condition {
+      users.users.${userConfig.user}.uid = userConfig.uid;
+    };
 
-in {
-  options.luxnix.generic-settings.uids = { 
+in
+{
+  options.luxnix.generic-settings.uids = {
     lxAnonymizer = mkOption {
       type = types.int;
       default = 731;
@@ -41,6 +44,5 @@ in {
     # };
   };
 
-  config = foldl' (acc: userConfig: acc // generateUserConfig userConfig) {} userConfigs;
+  config = foldl' (acc: userConfig: acc // generateUserConfig userConfig) { } userConfigs;
 }
-

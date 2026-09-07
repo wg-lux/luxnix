@@ -1,17 +1,21 @@
 {
   config,
-  pkgs,
   lib,
   ...
 }:
-with lib; let
+with lib;
+let
   cfg = config.luxnix.generic-settings;
-in {
+in
+{
   options.luxnix.generic-settings = {
     enable = mkEnableOption "Enable generic luxnix home settings";
 
     language = mkOption {
-      type = types.enum [ "english" "german" ];
+      type = types.enum [
+        "english"
+        "german"
+      ];
       default = "german";
       description = ''
         Choose system language (e.g. "english", "german").
@@ -28,7 +32,7 @@ in {
 
     configurationPath = mkOption {
       type = types.str;
-      default = "lx-production";
+      default = "luxnix";
       description = "The directory where the luxnix repository is located";
     };
   };
@@ -36,6 +40,7 @@ in {
   config = mkIf cfg.enable {
     home.sessionVariables = {
       FLAKE = "/home/${config.luxnix.user.admin.name}/${cfg.configurationPath}";
+      LUXNIX_FLAKE = "/home/${config.luxnix.user.admin.name}/${cfg.configurationPath}";
     };
   };
 }

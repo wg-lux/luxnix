@@ -1,0 +1,8 @@
+nodes:
+  - gc_02
+  - gc_03
+policy:
+  environment: intern
+  prefix: lx-hub-site
+  pki_mount: lx-hub-pki
+  secrets_mount: lx-hub-secrets

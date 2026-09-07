@@ -1,82 +1,55 @@
+{ pkgs, ... }:
 {
-  pkgs,
-  lib,
-  env,
-  isDev ? false,
-}:
-{
-  hello.package = pkgs.zsh;
+  # Configuration and validation
   bnsc.package = pkgs.zsh;
-  blxv.package = pkgs.zsh;
-  run-ansible.package = pkgs.zsh;
-  ssh-all.package = pkgs.zsh;
-  init-server-ssh.package = pkgs.zsh;
-  kill-server-ssh.package = pkgs.zsh;
-  conn-server-ssh.package = pkgs.zsh;
-  sync-secrets.package = pkgs.zsh;
-  create-ed25519-keypair.package = pkgs.zsh;
-  hello.exec = "${pkgs.uv}/bin/uv run python hello.py";
-  ac.package = pkgs.zsh;
-  ensure-ansible-config.package = pkgs.zsh;
+  bnsc.exec = "devenv tasks run autoconf:generate";
 
-  utest.package = pkgs.zsh;
-  utest.exec = "${pkgs.uv}/bin/uv run python -m unittest";
-  initialize-luxnix-repo.exec = ''
-    direnv allow
-    touch .repo_initialized
-  '';
-
-  # Make sure ./conf/ansible.cfg exists, if not, create it by copying .conf/TEMPLATE_ansible.cfg
-
-  ensure-ansible-config.exec = "cp -n ./conf/TEMPLATE_ansible.cfg ./conf/ansible.cfg";
-
-  ac.exec = "devenv tasks run autoconf:finished";
-
-  # hi.exec = "${pkgs.uv}/bin/uv run python lx_administration/ansible/hostinfo.py";
-
-  bnsc.exec = "${pkgs.uv}/bin/uv run python scripts/autoconf-pipeline.py";
-  blxv.exec = ''${pkgs.uv}/bin/uv run python scripts/bootstrap-lx-vault.py "$@"'';
   vault-bootstrap.package = pkgs.zsh;
   vault-bootstrap.exec = ''${pkgs.uv}/bin/uv run python scripts/bootstrap-lx-vault.py "$@"'';
+
   validate-admin-passwords.package = pkgs.zsh;
   validate-admin-passwords.exec = ''${pkgs.uv}/bin/uv run python scripts/validate-admin-passwords.py "$@"'';
+
+  vault-site-preflight.package = pkgs.zsh;
+  vault-site-preflight.exec = ''${pkgs.uv}/bin/uv run python scripts/vault/site_enrollment_preflight.py "$@"'';
+
+  # Remote operations
   check-connectivity.package = pkgs.zsh;
   check-connectivity.exec = ''./scripts/check-connectivity.sh "$@"'';
 
-  run-ansible.exec = "${pkgs.uv}/bin/uv run ansible-playbook ansible/site.yml";
+  lx-annotate-streamable-migration.package = pkgs.zsh;
+  lx-annotate-streamable-migration.exec = ''./scripts/lx-annotate-streamable-migration.sh "$@"'';
 
-  ssh-all.exec = "./tmux/all-luxnix-dir.sh";
-
-  init-server-ssh.exec = "./tmux/init-server-ssh.sh";
-  kill-server-ssh.exec = "tmux kill-session -t ssh-servers";
-  conn-server-ssh.exec = "tmux attach-session -t ssh-servers";
-
-  sync-secrets.exec = "ansible-playbook ./ansible/playbooks/deploy_secrets.yml";
-
-  #WARNING: This will overwrite the existing ssh keys
-  create-ed25519-keypair.exec = ''
-    # warn user and ask whether to proceed
-    echo "This will overwrite the existing ssh keys. Do you want to proceed? (y/n)"
-    read proceed
-    if [ "$proceed" != "y" ]; then
-      echo "Aborted"
-      exit 1
-    fi
-    # get hostname from env var
-    ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -C "admin@$hostname"
-
-    chmod 600 ~/.ssh/id_ed25519
-    chmod 644 ~/.ssh/id_ed25519.pub
+  run-ansible.package = pkgs.zsh;
+  run-ansible.exec = ''
+    LUXNIX_UV_BIN=${pkgs.uv}/bin/uv \
+      bash scripts/run-ansible-playbook.sh ansible/site.yml "$@"
   '';
 
-  # Mounting scripts
+  sync-secrets.package = pkgs.zsh;
+  sync-secrets.exec = ''
+    LUXNIX_UV_BIN=${pkgs.uv}/bin/uv \
+      bash scripts/run-ansible-playbook.sh \
+      ansible/playbooks/deploy_secrets.yml "$@"
+  '';
+
+  # SSH session management
+  ssh-all.package = pkgs.zsh;
+  ssh-all.exec = ''${pkgs.uv}/bin/uv run python scripts/tmux-inventory-session.py workspace "$@"'';
+
+  init-server-ssh.package = pkgs.zsh;
+  init-server-ssh.exec = ''${pkgs.uv}/bin/uv run python scripts/tmux-inventory-session.py monitor "$@"'';
+
+  kill-server-ssh.package = pkgs.zsh;
+  kill-server-ssh.exec = "tmux kill-session -t ssh-servers";
+
+  conn-server-ssh.package = pkgs.zsh;
+  conn-server-ssh.exec = "tmux attach-session -t ssh-servers";
+
+  # Local storage
   mount-persisting-storage.package = pkgs.zsh;
   mount-persisting-storage.exec = ''
     secretspec run --provider dotenv \
       uv run python scripts/storage/mount_persisting_storage.py
-    
   '';
-
-
-
 }

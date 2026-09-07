@@ -1,31 +1,184 @@
-# inventory/host_vars/gs-01.yml
+# inventory/host_vars/gs-02.yml
 ---
 template_name: "main"
 
-host_roles: {}
+host_roles:
+  endoreg-client.lxAi: "true"
 
-host_services: {}
+host_services:
+  luxnix.lxAiLocal.runtime.protectedDataDir: '"/var/lib/lx-annotate/data"'
+  endoreg-client.enable: "true"
+  nginxHost.enable: "true"
+  nginxHost.glm52.enable: "true"
+  nginxHost.glm52.acme.email: '"hild@coloreg.de"'
+  nginxHost.keycloak.enable: "false"
+  nginxHost.nextcloud.enable: "false"
+
+host_services:
+
+  # Keep the hub broker host-local. The former shared broker on s-04 is not
+  # reachable, and plaintext Redis must not be exposed node-to-node.
+  luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl: "null"
+  # The plaintext transport is accepted only because Redis binds exclusively
+  # to this host's loopback interface; application dispatch otherwise fails
+  # closed before the HLS backfill can start.
+  luxnix.lxAnnotateLocal.runtime.celeryBroker.secureTransportConfirmed: "lib.mkForce true"
+
+  # gs-02 has no verified encrypted filesystem for Redis persistence yet.
+  # Keep queue data in /run and rely on database-backed reconciliation after a
+  # broker/host restart. Durable AOF is permitted only after the encrypted
+  # mount prerequisite in docs/operations/gs-02-local-redis-broker.md.
+  'redis.servers."lx-annotate".appendOnly': "lib.mkForce false"
+  'redis.servers."lx-annotate".save': "lib.mkForce [ ]"
+  'redis.servers."lx-annotate".settings.dir': 'lib.mkForce "/run/redis-lx-annotate"'
+
+  # Central hub placement contract for protected processed-artifact storage.
+  luxnix.hubStorage.hubClient.enable: "true"
+  luxnix.hubStorage.hubClient.balancing.enable: "false"
+  luxnix.hubStorage.hubClient.balancing.residencyKey: '"de"'
+  luxnix.hubStorage.hubClient.nodes: '[ { identity = "gs-01";
+    displayName = "gs-01 protected storage"; failureDomain = "gs-01";
+    residencyKey = "de"; placementWeight = 100;
+    artifactKinds = [ "anonymized_video" "processed_report" "video_hls"
+      "streamable_video" "sidecar" "manifest" ];
+    endpoint = "https://gs-01.intern:9443";
+    caCertificateFile = "/etc/secrets/vault/hub-storage/ca.pem";
+    clientCertificateFile = "/etc/secrets/vault/hub-storage/gs-02-client.crt";
+    clientKeyFile = "/etc/secrets/vault/hub-storage/gs-02-client.key";
+    recipientPublicKeyFile = "/etc/secrets/vault/hub-storage/gs-01-recipient-current.pub.pem";
+    } ]'
+
+  # Ollama service
+  luxnix.ollama.enable: "true"
+  luxnix.ollama.acceleration: '"cuda"'
+  luxnix.ollama.enableModelBootstrap: "false"
+
+  luxnix.lxAnnotateLocal.database.port: "5432"
+  luxnix.lxAnnotateLocal.runtime.externalServices.postgresHost: '"127.0.0.1"'
+  luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort: "5432"
+
+  # Raw Nix list expression.
+  # A normal YAML list currently generates invalid Nix single quotes.
+  # luxnix.ollama.models: '[ "gemma4:e2b" ]'
+  # ollama.host: '"0.0.0.0"'
+
+  # GLM service
+  luxnix.glm52.enable: "true"
+  luxnix.glm52.gpuLayers: "999"
+  luxnix.glm52.host: '"0.0.0.0"'
+  luxnix.glm52.port: "8088"
+  luxnix.glm52.quant: '"UD-IQ2_M"'
+
+  # LX-Annotate receiver application
+  luxnix.lxAnnotateLocal.enable: "true"
+  luxnix.lxAnnotateLocal.django.hostname: '"gs-02.intern"'
+  # Reuse the stable-CA-signed server identity distributed during site
+  # enrollment so outbound caFile verification matches this endpoint.
+  luxnix.lxAnnotateLocal.django.sslCertificatePath: '"/var/lib/luxnix-vault-pki/server.crt"'
+  luxnix.lxAnnotateLocal.django.sslKeyPath: '"/var/lib/luxnix-vault-pki/server.key"'
+  # Also issue the machine-local certificate used by wg-lux-mcp.local. The
+  # explicit CA-signed LX-Annotate certificate paths above remain authoritative
+  # for the central-hub vhost.
+  luxnix.lxSsl.enable: "true"
+  luxnix.lxAnnotateLocal.runtime.deploymentRole: '"central_hub"'
+  luxnix.lxAnnotateLocal.hub.enable: "true"
+  luxnix.lxAnnotateLocal.hub.backup.enable: "true"
+
+  # Use PostgreSQL running locally on gs-02.
+  # Secure hub-transfer receiver through Nginx and mTLS
+  luxnix.lxAnnotateLocal.hub.transferApi.enable: "true"
+  luxnix.lxAnnotateLocal.hub.transferApi.requireSecureTransport: "true"
+  luxnix.lxAnnotateLocal.hub.transferApi.requireMtls: "true"
+  luxnix.lxAnnotateLocal.hub.transferApi.mtlsMetaKey: '"HTTP_X_CLIENT_CERT_VERIFIED"'
+  luxnix.lxAnnotateLocal.hub.transferApi.mtlsMetaValue: '"SUCCESS"'
+  luxnix.lxAnnotateLocal.hub.transferApi.clientCaFile: '"/var/lib/lx-annotate/hub-pki/client-ca.pem"'
+  # Current key first; retain retiring identities here until all persisted and
+  # in-flight envelopes using their recipient key IDs have drained.
+  luxnix.lxAnnotateLocal.hub.transferApi.recipientPrivateKeyFiles: '[
+    "/etc/secrets/vault/hub-pki/hub-recipient-current.pem"
+    ]'
+
+  # Provision the receiver-side node ledger from the separately delivered
+  # request secret. The plaintext secret is hashed by the application model.
+  luxnix.lxAnnotateLocal.hub.nodeProvisioning.enable: "true"
+  luxnix.lxAnnotateLocal.hub.nodeProvisioning.nodes: '[
+    { nodeKey = "gc-02"; displayName = "gc-02 site node"; role = "site_node";
+      centerKey = "university_hospital_wuerzburg";
+      sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-02-source-node-secret"; }
+    { nodeKey = "gc-04"; displayName = "gc-04 site node"; role = "site_node";
+      sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-04-source-node-secret"; }
+    { nodeKey = "gc-05"; displayName = "gc-05 site node"; role = "site_node";
+      centerKey = "rbk_stuttgart";
+      sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-05-source-node-secret"; }
+    { nodeKey = "gc-06"; displayName = "gc-06 site node"; role = "site_node";
+      centerKey = "rbk_stuttgart";
+      sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-06-source-node-secret"; }
+    { nodeKey = "gc-07"; displayName = "gc-07 site node"; role = "site_node";
+      sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-07-source-node-secret"; }
+    { nodeKey = "gc-08"; displayName = "gc-08 site node"; role = "site_node";
+      sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-08-source-node-secret"; }
+    { nodeKey = "gc-09"; displayName = "gc-09 site node"; role = "site_node";
+      centerKey = "university_hospital_wuerzburg";
+      sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-09-source-node-secret"; }
+    { nodeKey = "gc-10"; displayName = "gc-10 site node"; role = "site_node";
+      centerKey = "university_hospital_wuerzburg";
+      sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-10-source-node-secret"; }
+    { nodeKey = "gs-02"; displayName = "gs-02 central hub";
+    role = "central_hub"; baseUrl = "https://gs-02.intern"; } ]'
+    # { nodeKey = "gc-01"; displayName = "gc-01 site node"; role = "site_node";
+    # sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-01-source-node-secret"; }
+    # { nodeKey = "gc-03"; displayName = "gc-03 site node"; role = "site_node";
+    # sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-03-source-node-secret"; }
+  # Explicit Django central-node setting
+  'luxnix.lxAnnotateLocal.django.extraSettings."IS_CENTRAL_NODE"': "lib.mkForce true"
 
 ansible_roles:
   - "dev_access"
+  - "nginx_host"
 
 host_luxnix:
+  # Keep system upgrades manual on this host.
+  maintenance.autoUpdates.enable: "false"
+
+  # Production Vault server for the transfer PKI. Initialization and unseal
+  # remain an explicit offline-custodian ceremony.
+  vault.server.enable: "true"
+  vault.server.bindAddress: '"172.16.255.22:8200"'
+  vault.server.apiAddress: '"https://172.16.255.22:8200"'
+  vault.server.clusterAddress: '"https://172.16.255.22:8201"' # CLUSTER NEEDS TO BE DIFFERENT
+  # Vault owns a persistent CA. Renewal rotates only its CA-signed server leaf;
+  # LX-Annotate's unrelated self-signed certificate is never a trust anchor.
+  vault.server.tlsCertFile: '"/var/lib/luxnix-vault-pki/server.crt"'
+  vault.server.tlsKeyFile: '"/var/lib/luxnix-vault-pki/server.key"'
+  vault.server.caCertFile: '"/var/lib/luxnix-vault-pki/ca.crt"'
+  vault.server.managedTls.enable: "true"
+  vault.server.managedTls.serverCommonName: '"vault.endo-reg.net"'
+  vault.server.managedTls.dnsNames:
+    - '"vault.endo-reg.net"'
+    - '"gs-02.intern"'
+  vault.server.managedTls.ipAddresses:
+    - '"172.16.255.22"'
+  vault.server.hubPki.enable: "true"
+  vault.server.hubPki.caCertificateFile: '"/var/lib/lx-annotate/hub-pki/client-ca.pem"'
+
   boot_decryption_stick_gs_01.enable: "true"
 
   generic_settings.hostPlatform: '"x86_64-linux"'
   generic_settings.systemStateVersion: '"23.11"'
-
   generic_settings.linux.cpuMicrocode: '"amd"'
 
   generic_settings.linux.kernelModules:
     - "kvm-amd"
+
   generic_settings.linux.initrd.supportedFilesystems:
     - "nfs"
     - "btrfs"
+
   generic_settings.linux.initrd.kernelModules:
     - "nfs"
     - "btrfs"
     - "dm-snapshot"
+
   generic_settings.linux.initrd.availableKernelModules:
     - "xhci_pci"
     - "ahci"
@@ -38,6 +191,10 @@ host_luxnix:
   generic_settings.linux.supportedFilesystems:
     - "nfs"
     - "btrfs"
+
   generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
   generic_settings.linux.kernelParams: []
   generic_settings.linux.kernelModulesBlacklist: []
+
+host_nixos:
+  networking.firewall.interfaces.tun0.allowedTCPPorts: "lib.mkAfter [ 11434 8088 8200 ]"

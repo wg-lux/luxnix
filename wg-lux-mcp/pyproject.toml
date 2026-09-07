@@ -1,0 +1,46 @@
+[project]
+name = "wg-lux-mcp"
+version = "0.1.0"
+description = "Read-only MCP server for wg-lux development repositories"
+requires-python = ">=3.12"
+dependencies = [
+  "mcp>=1.15,<3",
+  "pyjwt[crypto]>=2.10,<3",
+  "pydantic-settings>=2.10,<3",
+  "pyyaml>=6.0,<7",
+  "starlette>=0.47,<1",
+  "uvicorn[standard]>=0.35,<1",
+]
+
+[project.scripts]
+wg-lux-mcp = "wg_lux_mcp.asgi:main"
+wg-lux-feature-migrate = "wg_lux_mcp.feature_migrate:main"
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.4,<9",
+  "pytest-anyio>=0.0.0",
+  "ruff>=0.12,<1",
+  "pyright>=1.1.403,<2",
+]
+
+[tool.uv]
+package = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/wg_lux_mcp"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"AGENT.md" = "wg_lux_mcp/context/AGENT.md"
+"context/architecture.md" = "wg_lux_mcp/context/architecture.md"
+"context/decisions.md" = "wg_lux_mcp/context/decisions.md"
+"context/current-work.md" = "wg_lux_mcp/context/current-work.md"
+"context/references.md" = "wg_lux_mcp/context/references.md"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

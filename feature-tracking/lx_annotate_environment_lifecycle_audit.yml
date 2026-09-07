@@ -1,0 +1,203 @@
+schema_version: '1.0'
+id: lx_annotate_environment_lifecycle_audit
+name: LX-Annotate environment lifecycle audit
+description: >-
+  Track the production environment contract from Secretspec through LuxNix,
+  Django settings conversion, endoreg_db consumption, and runtime secret/key
+  verification.
+owners:
+  - LX-Annotate and LuxNix maintainers
+production_critical: true
+tracking:
+  state: active
+  history: []
+source_documents:
+  - path: modules/nixos/services/lx-annotate-local/README.md
+    disposition: reference
+    note: LuxNix environment ownership and rendering contract.
+  - path: modules/nixos/services/lx-annotate-local/Diagnostics.md
+    disposition: reference
+    note: Operational environment and secret-file diagnostics.
+  - path: AGENTS.md
+    disposition: reference
+    note: Repository-level contribution and package ownership policy.
+definition_of_done:
+  - id: application_contract_complete
+    category: requirements
+    title: Secretspec declares every application-facing input
+    acceptance:
+      - Every externally configurable application variable has a name, description, type-compatible safe default, and ownership classification.
+      - Production secrets are represented only by file handles; infrastructure-only variables are explicitly documented as exclusions.
+      - Compatibility aliases have a named canonical variable and a retirement rationale.
+    required: true
+    verification:
+      kind: manual
+      instructions: Compare lx-annotate secretspec.toml with LuxNix commonEnv and all Python environment reads.
+      timeout_seconds: 600
+    assessment:
+      status: blocked
+      evidence:
+        - kind: review
+          reference: /home/admin/dev/lx-annotate/secretspec.toml versus modules/nixos/services/lx-annotate-local/scripts/env.nix commonEnv
+          note: 94 commonEnv keys were inventoried; 34 are absent from Secretspec, including 23 clear application/runtime inputs that require
+            declaration or an explicit exclusion decision.
+      note: The application contract and provisioned commonEnv are not closed over the same variable set.
+      assessed_by: codex-lx-env-audit-20260831
+      assessed_at: '2026-08-31T16:00:00+02:00'
+  - id: provisioning_contract_identical
+    category: operations
+    title: Systemd and interactive maintenance receive one contract
+    acceptance:
+      - commonEnv is rendered atomically to /var/lib/lx-annotate/.env.systemd and copied below the protected data root with root/service-group
+        ownership and mode 0640.
+      - Service-only process controls are distinguished from application configuration.
+      - Interactive maintenance wrappers and systemd services receive identical application values and file handles.
+    required: true
+    verification:
+      kind: manual
+      instructions: Compare commonEnv, commonExtraEnv, EnvironmentFile usage, and every maintenance wrapper export helper.
+      timeout_seconds: 600
+    assessment:
+      status: blocked
+      evidence:
+        - kind: code
+          reference: modules/nixos/services/lx-annotate-local/config.nix runtimeEnvScript and commonExtraEnv
+          note: The two .env.systemd copies are mode 0640 and aligned, but three ENDOREG feature-registry values are added only to systemd service
+            environments.
+        - kind: code
+          reference: modules/nixos/services/lx-annotate-local/scripts/env.nix lxAnnotateEnvHelpers
+          note: Maintenance wrappers additionally materialize database, Django, and OIDC secrets as inline process variables instead of retaining the
+            file-handle-only contract.
+      note: The rendered file and systemd unit environment are similar but not identical, and wrapper compatibility exports create a second effective
+        contract.
+      assessed_by: codex-lx-env-audit-20260831
+      assessed_at: '2026-08-31T16:00:00+02:00'
+  - id: django_conversion_complete
+    category: functionality
+    title: Every application value becomes a typed Django setting
+    acceptance:
+      - settings_base parses every value consumed through django.conf.settings and exports an uppercase typed setting.
+      - settings_prod re-exports the complete base contract without ambient os.environ fallbacks in application code.
+      - Invalid booleans, integers, lists, roles, paths, and security relationships fail closed at settings import.
+    required: true
+    verification:
+      kind: manual
+      instructions: Run an isolated production-settings probe with non-default values and compare Django settings with endoreg_db consumers.
+      timeout_seconds: 600
+    assessment:
+      status: blocked
+      evidence:
+        - kind: command
+          reference: isolated settings_prod probe using tests/system/test_production_celery_routing.py::_production_settings_environment
+          note: MODEL_TRAINING_JOB_MODE, MODEL_TRAINING_STAGING_ROOT, LX_DTYPES_KB_REGISTRY, LX_ANNOTATE_DEFAULT_CENTER, and
+            LX_ANNOTATE_HUB_SOURCE_NODE_SECRET_FILE were all absent from settings_prod despite being supplied.
+        - kind: code
+          reference: /home/admin/dev/lx-annotate/.devenv/state/venv/lib/python3.12/site-packages/endoreg_db/services/jobs/model_training_jobs.py
+          note: Installed endoreg-db 1.1.2 reads MODEL_TRAINING_JOB_MODE and MODEL_TRAINING_STAGING_ROOT from django.conf.settings, so the LuxNix
+            staging root is ineffective and falls back to the package default.
+        - kind: code
+          reference: /home/admin/dev/lx-annotate/lx_annotate/checks.py and lx_annotate/file_watcher.py
+          note: LX_DTYPES_KB_REGISTRY and LX_ANNOTATE_DEFAULT_CENTER retain direct os.environ fallbacks instead of an explicit settings conversion.
+      note: At least one production path value, MODEL_TRAINING_STAGING_ROOT, is provisioned but ignored by its Django consumer.
+      assessed_by: codex-lx-env-audit-20260831
+      assessed_at: '2026-08-31T16:00:00+02:00'
+  - id: runtime_secret_verification_complete
+    category: security
+    title: Runtime initialization verifies secret material and identity
+    acceptance:
+      - Each secret handle is checked for a regular non-symlink file, readability, non-empty content, owner, group, and restrictive mode.
+      - Cryptographic keys and certificates are parsed, constrained to the required algorithm, checked for validity, and checked for matching identity
+        where a pair is required.
+      - The application master key is verified against existing ciphertext without rotation or regeneration during normal startup.
+    required: true
+    verification:
+      kind: manual
+      instructions: Review initialization units and application loaders for every file-backed secret, certificate, and key.
+      timeout_seconds: 900
+    assessment:
+      status: blocked
+      evidence:
+        - kind: code
+          reference: modules/nixos/services/lx-annotate-local/scripts.nix require_file_backed_master_key and runLocalMasterKeyCheckScript
+          note: Master-key existence, ownership, mode, base64 format, decoded length, and encrypted-storage identity are checked before application
+            startup.
+        - kind: code
+          reference: modules/nixos/services/lx-annotate-local/config.nix hubEnvelopeKeyPreflightScript
+          note: X25519 envelope public/private keys receive regular-file, type, and private-key permission checks.
+        - kind: code
+          reference: /home/admin/dev/lx-annotate/lx_annotate/hub/hub_export_worker.py resolve_hub_transport_config
+          note: mTLS certificate, private key, CA, and source-node secret are checked only for readability when a transfer runs; initialization does
+            not validate PEM format, certificate validity, cert/key identity, ownership, or mode.
+      note: Runtime verification is strong for the master key and envelope keys but incomplete for Django, database, OIDC, source-node, CA, and mTLS
+        materials.
+      assessed_by: codex-lx-env-audit-20260831
+      assessed_at: '2026-08-31T16:00:00+02:00'
+  - id: lifecycle_tests_close_the_contract
+    category: testing
+    title: Automated tests catch cross-layer omissions
+    acceptance:
+      - Tests compare Secretspec, LuxNix commonEnv, Django uppercase settings, and installed endoreg_db consumers bidirectionally.
+      - Production probes use non-default sentinels so a package fallback cannot accidentally pass.
+      - Runtime preflight tests cover missing files, symlinks, ownership, permissions, malformed material, expired certificates, mismatched
+        identities, and wrong master-key identity.
+    required: true
+    verification:
+      kind: command
+      command:
+        - uv
+        - run
+        - pytest
+        - -q
+        - tests/system/test_secretspec_environment_contract.py
+        - tests/system/test_production_celery_routing.py
+      timeout_seconds: 300
+    assessment:
+      status: blocked
+      evidence:
+        - kind: test
+          reference: uv run pytest -q tests/system/test_secretspec_environment_contract.py tests/system/test_production_celery_routing.py
+          note: 7 passed in 33.36 seconds on 2026-08-31.
+        - kind: review
+          reference: /home/admin/dev/lx-annotate/tests/system/test_secretspec_environment_contract.py
+          note: Current tests classify Python environment reads and require selected host keys, but do not prove commonEnv-to-Secretspec parity or
+            that provisioned values become Django settings.
+        - kind: test
+          reference: uv run pytest -q tests/lx-annotate/test_lx_annotate_encryption_defaults.py
+            tests/lx-annotate/test_lx_annotate_filewatcher_wheel_key_env.py
+          note: 3 passed and 1 failed; the failure detects that the helper still exports the DATA_DIR compatibility alias contrary to the canonical
+            protected-root contract.
+        - kind: test
+          reference: uv run pytest -q tests/lx-annotate/test_lx_annotate_nix_eval_contract.py -k 'environment or master_key or hub_transfer or
+            package_version'
+          note: 1 passed, 8 failed, and 59 were deselected; all eight Nix evaluations were blocked because the concurrently added
+            systems/x86_64-linux/host-common.nix is untracked and therefore absent from the flake source.
+      note: The application narrow suite passes while the isolated sentinel probe demonstrates five missing production settings; LuxNix also has one
+        direct contract-test failure, and Nix evaluation is currently blocked by an unrelated untracked import.
+      assessed_by: codex-lx-env-audit-20260831
+      assessed_at: '2026-08-31T16:00:00+02:00'
+  - id: variable_matrix_documented
+    category: documentation
+    title: The variable lifecycle matrix is maintained
+    acceptance:
+      - A maintained matrix records each variable's owner, type, default, secret classification, aliases, Django setting name, consumer, runtime
+        check, and deployment scope.
+      - Documentation distinguishes public VITE values, process controls, compatibility aliases, and file-backed secrets.
+      - Operational diagnostics verify presence and metadata without printing secret values.
+    required: true
+    verification:
+      kind: manual
+      instructions: Review the service README and Diagnostics guide against the generated lifecycle inventory.
+      timeout_seconds: 600
+    assessment:
+      status: in_progress
+      evidence:
+        - kind: document
+          reference: modules/nixos/services/lx-annotate-local/README.md
+          note: Documents commonEnv, both .env.systemd paths, and file-backed secret handles, but does not contain a complete per-variable lifecycle
+            matrix.
+        - kind: document
+          reference: modules/nixos/services/lx-annotate-local/Diagnostics.md
+          note: Correctly warns against printing .env.systemd and provides metadata-only inspection commands.
+      note: The documentation captures the architecture but not the systematic variable-by-variable closure needed to prevent drift.
+      assessed_by: codex-lx-env-audit-20260831
+      assessed_at: '2026-08-31T16:00:00+02:00'

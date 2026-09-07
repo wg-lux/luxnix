@@ -1,10 +1,11 @@
-{ pkgs
-, lib
-, config
-, ...
+{
+  lib,
+  config,
+  ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.roles.ssh-access.dev-03;
 in
 {
@@ -15,7 +16,7 @@ in
 
     idEd25519 = mkOption {
       type = types.str;
-      default = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDBJcYjGNIwOUs+KG8TbBxPWtJFEqni0p+1J5Yz++Aos";
+      default = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAVt7FP3BCARMRyL791VauxIPd3t8nVm4A49VVpL9FUj";
       description = ''
         Access key for user HZ
       '';
@@ -24,7 +25,8 @@ in
 
   config = mkIf cfg.enable {
     services.ssh.authorizedKeys = [
-      # TODO make dedicated authorizedDevKeys option which grants access to dev user
+      # TODO (SSH-access owner): this key currently grants administrator access;
+      # add a dedicated developer-key option and migrate the inventory consumer.
       "${cfg.idEd25519}"
     ];
   };

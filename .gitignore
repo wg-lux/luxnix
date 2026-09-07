@@ -1,8 +1,9 @@
-.repo_initialized
 .ansible/.lock
 conf/ansible.cfg
 result
-autoconf/
+result/
+/autoconf/*
+!/autoconf/config.yml
 # direnv
 .direnv
 .devenv_built
@@ -11,22 +12,26 @@ autoconf/
 utils/secrets/
 *keyfile.bin
 luxnix.code-workspace
-docs/hostinfo/
-docs/luxnix-hostinfo.md
-conf/hostinfo.json
+/cmdb/
+/conf/hostinfo.json
+/conf/hostinfos/
+/docs/hostinfo/
+/docs/luxnix-hostinfo.md
+/ansible/cmdb/*
+!/ansible/cmdb/.gitkeep
+/ansible/.cmdb-refresh.*/
 logs/
 **.env
 test_wd/
-
+.codex
 *.key
 
 # pre-commit
 .pre-commit-config.yaml
 
 untracked-notes.md
-
+node_modules/
 .vscode
-result/
 secrets/
 ansible/secrets/admin-passwords.yml
 .ruff_cache/
@@ -140,7 +145,6 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env
 .venv
 env/
 venv/
@@ -174,3 +178,11 @@ cython_debug/
 
 # PyCharm
 #.idea/
+
+# Local coordination state created by feature-tracking/tracker.py.
+/feature-tracking/.locks/
+/feature-tracking/.messages/
+
+# Repository-generated or local-only bundles and transcripts.
+/result.txt
+/wg-lux-mcp.zip

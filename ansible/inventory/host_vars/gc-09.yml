@@ -1,20 +1,23 @@
 # inventory/host_vars/gc-09.yml
 ---
-ansible_python_interpreter: "{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python"
 luxnix_dev_repo: "/home/admin/luxnix"
 template_name: "main"
 
 host_roles:
   custom_packages.baseDevelopment: "true"
+  endoreg-client.defaultCenterKey: "university_hospital_wuerzburg"
 
 host_services: {}
+
+host_nixos:
+  nix.settings.max_jobs: 1
+  nix.settings.cores: 4
 
 extra_secret_names: []
 
 host_luxnix:
-  generic_settings.configurationPathRelative: '"luxnix"'
-  generic_settings.configurationPath: 'lib.mkForce "/home/admin/luxnix"'
-
+  # Temporary bootstrap exception; set false after verified Vault enrollment.
+  vault.client.auth.deferUntilProvisioned: "true"
   generic_settings.hostPlatform: '"x86_64-linux"'
   generic_settings.systemStateVersion: '"23.11"'
 

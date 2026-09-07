@@ -1,18 +1,16 @@
 {
   config,
-  inputs,
   pkgs,
   lib,
   ...
 }:
 
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.luxnix.python.sw;
-  # we need to find out what system we are working on (eg linux, darwin, ...)
-  system = config.system.build.host.system;
-  
-in {
+in
+{
   options.luxnix.python.sw = with types; {
     enable = mkBoolOpt false "Enable or disable sw python";
 
@@ -29,7 +27,7 @@ in {
     };
 
     pythonPackages = mkOption {
-      default = with pkgs."python${cfg.pythonVersion}Packages" ; [
+      default = with pkgs."python${cfg.pythonVersion}Packages"; [
         ansible
         pexpect
       ];
@@ -42,6 +40,7 @@ in {
     environment.systemPackages = [
       cfg.pythonPackage
       pkgs.ansible
-    ] ++ cfg.pythonPackages;
+    ]
+    ++ cfg.pythonPackages;
   };
 }

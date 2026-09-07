@@ -1,9 +1,11 @@
-{ lib
-, pkgs
-, config
-, ...
+{
+  lib,
+  pkgs,
+  config,
+  ...
 }:
-with lib; let
+with lib;
+let
   cfg = config.roles.postgres.default;
 
   # Password file paths
@@ -99,7 +101,7 @@ with lib; let
   # Script to set up endoregDbLocal user password
   setupEndoregDbLocalUser = pkgs.writeShellScript "setup-endoreg-db-local-user" ''
     set -euo pipefail
-    
+
     # Wait for PostgreSQL to be ready
     echo "Waiting for PostgreSQL to be ready..."
     for i in {1..30}; do
@@ -114,7 +116,7 @@ with lib; let
       echo "Attempt $i: PostgreSQL not ready, waiting 2 seconds..."
       sleep 2
     done
-    
+
     # Create password if it doesn't exist
     if [ ! -f ${maintenancePasswordFile} ]; then
       echo "Generating password for endoregDbLocal user..."
@@ -123,26 +125,41 @@ with lib; let
       chmod 640 ${maintenancePasswordFile}
       chown root:${config.luxnix.generic-settings.sensitiveServiceGroupName} ${maintenancePasswordFile}
     fi
-    
+
     # Ensure correct permissions on existing file
     chmod 640 ${maintenancePasswordFile}
     chown root:${config.luxnix.generic-settings.sensitiveServiceGroupName} ${maintenancePasswordFile}
-    
+
     # Copy password for PostgreSQL access
     cp ${maintenancePasswordFile} ${endoregDbLocalPasswordFile}
     chown postgres:postgres ${endoregDbLocalPasswordFile}
     chmod 600 ${endoregDbLocalPasswordFile}
-    
+
     # Set the password in PostgreSQL safely using dollar-quoted strings
     # Dollar-quoting prevents SQL injection by treating the content as a literal string
     echo "Setting password for user ${cfg.defaultDbName}..."
-    
+
     PASSWORD=$(cat ${endoregDbLocalPasswordFile})
-    
+
     # Use dollar-quoted strings ($tag$...$tag$) which safely handle any special characters
     # including single quotes, backslashes, and other SQL metacharacters
     ${config.services.postgresql.package}/bin/psql -U postgres -d postgres -c \
       "ALTER USER \"${cfg.defaultDbName}\" WITH PASSWORD \$securepass\$''${PASSWORD}\$securepass\$;"
+
+    echo "Granting application database privileges for ${cfg.defaultDbName}..."
+    ${config.services.postgresql.package}/bin/psql -U postgres -d "${cfg.defaultDbName}" -v ON_ERROR_STOP=1 <<'SQL'
+    GRANT USAGE, CREATE ON SCHEMA public TO "${cfg.defaultDbName}";
+    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "${cfg.defaultDbName}";
+    GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO "${cfg.defaultDbName}";
+    ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+      GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "${cfg.defaultDbName}";
+    ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+      GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO "${cfg.defaultDbName}";
+    ALTER DEFAULT PRIVILEGES FOR ROLE "${cfg.defaultDbName}" IN SCHEMA public
+      GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "${cfg.defaultDbName}";
+    ALTER DEFAULT PRIVILEGES FOR ROLE "${cfg.defaultDbName}" IN SCHEMA public
+      GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO "${cfg.defaultDbName}";
+    SQL
       
     echo "endoregDbLocal user password configured successfully"
   '';
@@ -205,7 +222,6 @@ in
 
   };
 
-
   config = mkIf cfg.enable {
     # Add maintenance script to system packages
     environment.systemPackages = [ postgresMaintenanceScript ];
@@ -215,8 +231,14 @@ in
     # Create systemd service to set up endoregDbLocal user password
     systemd.services.postgres-endoreg-setup = {
       description = "Set up endoregDbLocal PostgreSQL user password";
-      after = [ "postgresql.service" "managed-secrets-setup.service" ];
-      requires = [ "postgresql.service" "managed-secrets-setup.service" ];
+      after = [
+        "postgresql.service"
+        "managed-secrets-setup.service"
+      ];
+      requires = [
+        "postgresql.service"
+        "managed-secrets-setup.service"
+      ];
       wantedBy = [ "multi-user.target" ];
       serviceConfig = {
         Type = "oneshot";
@@ -261,6 +283,7 @@ in
           max_wal_senders = lib.mkDefault 5;
           wal_keep_size = lib.mkDefault "512MB";
           password_encryption = "scram-sha-256";
+          max_connections = "200";
           # hot_standby = true;
           # log_connections = true;
           # log_statement = "all";
@@ -302,12 +325,11 @@ in
           (mkDefaultUser cfg.lxClientUser)
           (mkDefaultUser cfg.stagingUser)
           (mkDefaultUser cfg.productionUser)
+
         ];
 
       };
     };
-
-
 
   };
 }

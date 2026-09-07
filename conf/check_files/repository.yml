@@ -1,0 +1,7 @@
+- path: ./conf
+  exists: true
+  directory: true
+
+- path: ./ansible.cfg
+  exists: true
+  symlink: true

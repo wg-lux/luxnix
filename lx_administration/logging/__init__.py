@@ -1,68 +1,64 @@
 import logging
 from pathlib import Path
 
+from ..permissions import PRIVATE_FILE_MODE, ensure_private_directory
 
-def log_heading(logger, heading):
+
+DEFAULT_LOG_DIR = Path(__file__).resolve().parents[2] / "autoconf" / "logs"
+
+
+def log_heading(logger: logging.Logger, heading: str) -> None:
     logger.info("\n")
     logger.info("-" * 80)
-    logger.info(f"{heading}")
+    logger.info(heading)
     logger.info("-" * 80)
 
 
 def _default_formatter() -> logging.Formatter:
-    return logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
+    return logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
 
 def get_logger(
     name: str,
-    log_dir: Path = Path("./autoconf/logs"),
+    log_dir: Path = DEFAULT_LOG_DIR,
     reset: bool = False,
     log_level: int = logging.INFO,
 ) -> logging.Logger:
-    """
-    Create or retrieve a logger that logs to a dedicated file in log_dir.
+    """Create or retrieve one file logger in ``log_dir``.
 
-    This function is idempotent and will not leak file descriptors when
-    called repeatedly with the same name. Existing FileHandlers targeting
-    the same logfile are reused and updated instead of adding duplicates.
-
-    - When reset=True, the logfile is truncated but handlers are reused.
-    - logger.propagate is disabled to avoid duplicate console logging.
+    Repeated calls reuse the matching handler. Moving a named logger to another
+    directory closes its previous file handler instead of duplicating output.
     """
-    log_dir.mkdir(parents=True, exist_ok=True)
+    if not name or Path(name).name != name:
+        raise ValueError("Logger name must be a non-empty filename component")
+
+    log_dir = ensure_private_directory(log_dir.expanduser().resolve())
     logfile = log_dir / f"{name}.log"
 
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
     logger.propagate = False
 
-    # Truncate existing log if requested
+    file_handler = None
+    for handler in list(logger.handlers):
+        if not isinstance(handler, logging.FileHandler):
+            continue
+        if Path(handler.baseFilename) == logfile:
+            file_handler = handler
+            continue
+        logger.removeHandler(handler)
+        handler.close()
+
     if reset:
-        logfile.parent.mkdir(parents=True, exist_ok=True)
-        # Ensure file exists, then truncate
-        logfile.touch(exist_ok=True)
-        with open(logfile, "w", encoding="utf-8"):
-            pass
+        logfile.write_text("", encoding="utf-8")
 
-    # Try to find an existing FileHandler for this logfile
-    for handler in logger.handlers:
-        if isinstance(handler, logging.FileHandler):
-            base = getattr(handler, "baseFilename", None)
-            if base == str(logfile):
-                # Reuse existing handler; just update config
-                handler.setLevel(log_level)
-                # Ensure formatter is set
-                if not isinstance(handler.formatter, logging.Formatter):
-                    handler.setFormatter(_default_formatter())
-                return logger
-
-    # No matching handler found; create one
-    file_handler = logging.FileHandler(logfile, encoding="utf-8")
+    if file_handler is None:
+        file_handler = logging.FileHandler(logfile, encoding="utf-8")
+    logfile.chmod(PRIVATE_FILE_MODE)
     file_handler.setLevel(log_level)
     file_handler.setFormatter(_default_formatter())
-    logger.addHandler(file_handler)
+    if file_handler not in logger.handlers:
+        logger.addHandler(file_handler)
 
     return logger
 

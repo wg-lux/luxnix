@@ -1,318 +1,99 @@
 # Network Architecture
 
-## Overview
-This document describes the network architecture of the LuxNix system, detailing how different components interact and how the network is structured for security and efficiency.
+LuxNix keeps network inputs declarative and derives host resolution from the
+same inventory used by Autoconf. This page explains ownership and data flow;
+it does not duplicate the current host/address table.
 
-## OpenVPN Service
+For exact name-resolution behavior and troubleshooting, use
+[Network Resolution](./network-resolution.md). Agents can inspect the compact
+[network source map](./network-topology.yaml).
 
-The OpenVPN Service is used for accessing the devices in the Network through SSH.
+## Source ownership
 
-The command for running the OpenVPN service is 
+| Information | Canonical source |
+| --- | --- |
+| Managed hosts, groups, and VPN addresses | `ansible/inventory/hosts.ini` |
+| OpenVPN metadata not derived from inventory | `ansible/inventory/group_vars/all/20-network.yml` |
+| Shared aliases, clusters, and service-host mappings | `ansible/inventory/group_vars/all/30-nix.yml` |
+| Host-specific network overrides | `ansible/inventory/host_vars` |
+| Autoconf path and subnet options | `autoconf/config.yml` |
+| Generated `/etc/hosts` policy | `modules/nixos/luxnix/generic-settings/network/default.nix` |
+| Public and local-only name policy | `docs/network-resolution.md` |
 
-```
-bash
-❯ sudo systemctl restart openvpn-aglnet.service
-```
+Generated files below `systems/x86_64-linux/` consume these inputs but are not
+the place to maintain the shared topology.
 
-After the setup, the service should be up and running.
+## Data flow
 
-```
-bash
-❯ sudo systemctl status openvpn-aglnet.service
-```
-## Network Topology
-
-### Basic Structure
-- Primary network segment: 192.168.1.1/24 (Home network)
-- System types:
-  - Development workstations (gc-* series)
-  - Server systems (s-* series)
-  - Network services
-
-### Core Components
-
-#### Service Discovery
-The system uses Avahi for local service discovery with the following features:
-- mDNS/DNS-SD support enabled
-- Workstation and service advertisement
-- Address and domain publishing
-- Hardware information broadcasting
-- User service discovery
-
-#### Network Optimization
-Server configurations include several performance optimizations:
-```nix
-# TCP BBR for improved throughput and latency
-boot.kernel.sysctl = {
-  "net.core.default_qdisc" = "fq";
-  "net.ipv4.tcp_congestion_control" = "bbr";
-};
+```text
+ansible/inventory/hosts.ini
+  + group_vars and host_vars
+  -> Autoconf validation and generation
+  -> luxnix.generic-settings.network.hosts
+  -> networking.hosts on each NixOS host
 ```
 
-These settings provide:
-- Improved congestion control using BBR
-- Better throughput on high-latency networks
-- Reduced bufferbloat through fair queuing
+Autoconf derives each host's `ip-vpn` from its inventory `ansible_host` value.
+The group and host variables add metadata that cannot be inferred from the
+inventory, such as internal aliases, local addresses, and network clusters.
 
-#### System Reliability
-Network-critical systems implement watchdog services:
-- Runtime watchdog: 20-second interval
-- Reboot watchdog: 30-second timeout
-- Automatic recovery from network-related failures
+## Flake topology visualization
 
-#### DNS Configuration
-- Local DNS resolution through Avahi (nssmdns4)
-- DNS utilities available on server systems
-- Integrated with service discovery
+The `topology` flake output passes the exported `nixosConfigurations` into
+`nix-topology`. Its local module, `topology/default.nix`, intentionally contains
+no static hosts or networks. Add durable network data to inventory-backed NixOS
+configuration rather than maintaining a second diagram-only topology.
 
-## Security Considerations
+## VPN overlay
 
-### Server Hardening
-Servers implement several security measures:
-- Disabled password-based sudo access for wheel group
-- Restricted sudo execution to wheel group members
-- Minimal system with disabled documentation
-- Immutable user configuration by default
+The `aglnet` roles own the OpenVPN overlay:
 
-### Network Service Protection
-- Systematic service isolation
-- Controlled service advertisement
-- Protected local name resolution
+- `roles.aglnet.host` provides the VPN host role.
+- `roles.aglnet.client` provides the client role.
+- Inventory groups decide which machines receive those roles.
 
-## Deployment Configurations
+The current service host is selected declaratively in the inventory. Do not
+copy a host address into documentation or a second topology file; inspect the
+inventory instead.
 
-### Server Role
-Server systems are configured with:
-- NFS utilities
-- iSCSI support
-- DNS tools
-- Headless operation optimizations
-- UTC timezone standardization
+## Resolution boundaries
 
-### Service Availability
-- Network-dependent services have wait-online disabled
-- Watchdog services ensure system availability
-- Emergency mode disabled in favor of remote accessibility
+The network module chooses a local address only when both hosts share an
+explicit network cluster and that local address exists. Otherwise it uses the
+VPN address.
 
-## Network Interfaces
+Two additional rules prevent ambiguous or unsafe aliases:
 
-### Tailscale Integration
-- Supported on various nodes (server-03, etc.)
-- Integrated with home network segment
-- Provides secure overlay networking
+- public suffixes such as `.endo-reg.net` remain DNS-owned and are excluded
+  from generated `/etc/hosts` entries;
+- aliases listed in `localOnlyDomains`, such as `lx-annotate.local`, are emitted
+  only for the current host.
 
-## Future Expansion
-The current topology supports expansion through:
-- Additional network segments
-- New server nodes
-- Extended service discovery
-- Enhanced monitoring capabilities
+A reviewed service-specific override may intentionally pin a public hostname
+to a private or loopback address. Keep such exceptions next to the service or
+host that requires them and continue to authenticate TLS independently.
 
-## Monitoring Infrastructure
+## Change and verification workflow
 
-### Core Components
-- **Prometheus**: Primary metrics collection and storage
-  - Port: 3020
-  - Node exporter enabled (Port: 3021)
-  - System metrics collection
-  - Home Assistant integration
+1. Change `ansible/inventory/hosts.ini` for host membership or VPN addresses.
+2. Change group or host variables for aliases, clusters, and service metadata.
+3. Validate and regenerate:
 
-- **Loki**: Log aggregation system
-  - HTTP port: 3030
-  - Local file storage configuration
-  - Journal log collection
+   ```bash
+   devenv tasks run autoconf:check
+   devenv tasks run autoconf:generate
+   ```
 
-- **Grafana**: Visualization and dashboarding
-  - Port: 3010
-  - PostgreSQL backend
-  - OAuth2 authentication integration
-  - Automated datasource provisioning
+4. Evaluate the affected host before deployment:
 
-- **Promtail**: Log forwarding agent
-  - Port: 3031
-  - Systemd journal integration
-  - Automatic labeling
+   ```bash
+   nix eval ".#nixosConfigurations.<host>.config.networking.hosts" --json
+   ```
 
-### Alerting System
-- **AlertManager**: Alert handling and routing
-  - Port: 9093
-  - Webhook integration
-  - Gotify notification support
-  - Configurable grouping and timing
+5. After an authorized deployment, compare NSS and DNS results as described in
+   [Network Resolution](./network-resolution.md#verification).
 
-### Service Discovery and Access
-All monitoring services are exposed through Traefik with:
-- HTTPS enforcement
-- Let's Encrypt certification
-- Domain-based routing
-- Load balancing configuration
-
-### Data Flow
-1. Metrics Collection:
-   - Node exporter collects system metrics
-   - Home Assistant provides application metrics
-   - Prometheus scrapes and stores metrics
-
-2. Log Collection:
-   - Promtail collects system logs
-   - Forwards to Loki for storage
-   - Structured metadata support
-
-3. Visualization:
-   - Grafana connects to both Prometheus and Loki
-   - Automated dashboard provisioning
-   - Role-based access control
-
-## VPN Infrastructure
-
-### Core Configuration
-- Main Domain: vpn.luxnix.org
-- Backup DNS Servers:
-  - 8.8.8.8 (Google)
-  - 1.1.1.1 (Cloudflare)
-
-### Features
-- Optional Stage 1 Boot Integration
-- Domain-based routing
-- Redundant DNS configuration
-
-### Network Integration
-- Custom domain configuration
-- Fallback name resolution
-- Early boot availability option
-
-## Security Considerations
-
-### Authentication
-- OAuth2 integration for Grafana
-- Role-based access control
-- Secure credential management through SOPS
-
-### Network Security
-- TLS encryption for all services
-- VPN segregation
-- Secure metrics collection
-
-### Access Control
-- Role-based authorization in Grafana
-- Service-specific access controls
-- Protected metrics endpoints
-
-## Service Endpoints
-
-### Monitoring Stack
-```
-grafana.homelab.haseebmajid.dev      -> Port 3010
-prometheus.homelab.haseebmajid.dev    -> Port 3020
-promtail.homelab.haseebmajid.dev     -> Port 3031
-alertmanager.homelab.haseebmajid.dev  -> Port 9093
-```
-
-### VPN Services
-```
-vpn.luxnix.org    -> Primary VPN endpoint
-```
-
-## Deployment Guidelines
-
-### Monitoring Stack Deployment
-1. Ensure PostgreSQL database is configured
-2. Configure SOPS secrets for:
-   - Home Assistant token
-   - OAuth2 credentials
-3. Verify Traefik configuration
-4. Deploy services in order:
-   - Prometheus and exporters
-   - Loki and Promtail
-   - Grafana
-   - AlertManager
-
-### VPN Deployment
-1. Configure domain settings
-2. Verify DNS resolver configuration
-3. Optional: Enable stage-1 boot integration
-4. Validate network connectivity
-
-## Troubleshooting
-
-### Monitoring Issues
-1. Metrics Collection
-   - Verify Prometheus targets
-   - Check node exporter status
-   - Validate scrape configurations
-
-2. Log Collection
-   - Check Promtail status
-   - Verify Loki ingestion
-   - Review journal collection
-
-3. Visualization
-   - Verify Grafana datasource connectivity
-   - Check OAuth2 configuration
-   - Validate role mappings
-
-### VPN Issues
-1. Connection Problems
-   - Verify DNS resolution
-   - Check nameserver availability
-   - Validate domain configuration
-
-2. Boot Integration
-   - Verify stage-1 configuration
-   - Check network availability
-   - Validate DNS settings
-
-## Best Practices
-
-### Monitoring
-1. Regular backup of Grafana dashboards
-2. Monitor alert notification channels
-3. Regular review of log retention policies
-4. Performance optimization of metrics collection
-
-### VPN
-1. Maintain backup DNS servers
-2. Regular connectivity testing
-3. Monitor VPN service logs
-4. Review access patterns
-
-
-## Troubleshooting
-
-### Common Issues
-1. Service Discovery Problems
-   - Verify Avahi service status
-   - Check mDNS resolution
-   - Confirm network segment connectivity
-
-2. Network Performance
-   - Verify BBR configuration
-   - Check network interface status
-   - Monitor system watchdog logs
-
-3. System Availability
-   - Review watchdog logs
-   - Check network service status
-   - Verify DNS resolution
-
-## Technical Reference
-
-### Key Configuration Files
-- `/modules/nixos/services/avahi/default.nix`: Service discovery
-- `topology.nix`: Network topology definition
-- Server role configuration: Network optimization and security settings
-
-### Required Packages
-```nix
-environment.systemPackages = [
-  pkgs.nfs-utils
-  pkgs.openiscsi
-  pkgs.dnsutils
-];
-```
-
-### Network Parameters
-- Default network: 192.168.1.1/24
-- Service discovery: Enabled
-- TCP congestion control: BBR
-- Queue discipline: FQ (Fair Queuing)
+Optional services such as monitoring or reverse proxies have their own module
+options. Their presence in `modules/nixos/services/` does not mean they are
+enabled on every host; inspect the selected host configuration before relying
+on an endpoint.

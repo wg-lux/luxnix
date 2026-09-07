@@ -3,10 +3,13 @@
   config,
   ...
 }:
-with lib; 
-with lib.luxnix; let
+let
+  inherit (lib) mkIf;
+  inherit (lib.luxnix) mkBoolOpt;
+
   cfg = config.services.luxnix.avahi;
-in {
+in
+{
   # Direct file transfer between devices
   options.services.luxnix.avahi = {
     enable = mkBoolOpt false "Enable The avahi service";

@@ -1,6 +1,4 @@
 {
-  config,
-  lib,
   pkgs,
   partitionConfiguration,
   ...
@@ -12,11 +10,10 @@ let
 
   # endoreg-sensitive-hdd = network-config.hardware.${hostname}.endoreg-sensitive;
 
-  label = partitionConfiguration.label;
+  inherit (partitionConfiguration) label;
 
   partition-luks-uuid = partitionConfiguration.luks-uuid;
   mountpoint = conf.mountPoint;
-  filemode-secret = conf.filemodeSecret;
   filemode-mountpoint = conf.filemodeMountpoint;
 
   mount-script-name = conf.mountScriptName;
@@ -28,8 +25,7 @@ let
   # Requires sops.sercrets. .... to be defined, happens after "in"
   key-file = conf.keyFile;
 
-  user = conf.user;
-  group = conf.group;
+  inherit (conf) user group;
 
   ############ MOUNT SCRIPT ############
   mount-script-path = pkgs.writeShellScriptBin "${mount-script-name}" ''
@@ -179,7 +175,7 @@ in
 
   ####### POLKIT RULES #########
   security.polkit.extraConfig = ''
-    ####### POLKIT RULES MOUNT SERVICE #########
+    // POLKIT RULES MOUNT SERVICE
     polkit.addRule(function(action, subject) {
       if (action.id == "org.freedesktop.systemd1.manage-units" &&
           subject.isInGroup("${group}") &&
@@ -189,7 +185,7 @@ in
       }
     });
 
-    ####### POLKIT RULES UMOUNT SERVICE #########
+    // POLKIT RULES UMOUNT SERVICE
     polkit.addRule(function(action, subject) {
       if (action.id == "org.freedesktop.systemd1.manage-units" &&
           subject.isInGroup("${group}") &&

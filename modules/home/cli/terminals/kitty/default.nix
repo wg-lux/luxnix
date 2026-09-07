@@ -4,9 +4,11 @@
   ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.cli.terminals.kitty;
-in {
+in
+{
   options.cli.terminals.kitty = with types; {
     enable = mkBoolOpt false "enable kitty terminal emulator";
   };

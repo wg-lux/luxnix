@@ -3,7 +3,6 @@
   hosts: all
   gather_facts: false
   serial: 1
-  ignore_unreachable: true
 
   tasks:
     - name: Initialize connectivity status fact

@@ -1,34 +1,33 @@
-from typing import Optional, List, TYPE_CHECKING
-from pydantic import BaseModel, Field
-from pydantic import ConfigDict
+import logging
+from datetime import datetime
 from pathlib import Path
-from datetime import datetime as dt
-from .config import OWNER_TYPES, SECRET_TYPES
-from ...password import PasswordGenerator
-from .manager_utils import (
-    generate_secret_dir_path,
-)
-from .secret import Secret
+from typing import TYPE_CHECKING, Self
+
+from pydantic import BaseModel, ConfigDict, Field
+
 from lx_administration.logging import get_logger
+
+from ...password import PasswordGenerator
+from .config import OWNER_TYPES, SECRET_TYPES
+from .manager_utils import generate_secret_dir_path
+from .secret import Secret
 
 if TYPE_CHECKING:
     from .manager import Vault
 
 
 class SecretTemplate(BaseModel):
-    """
-    Template for generating multiple secrets of the same type/owner.
-    """
+    """Template for generating secrets of one owner and type."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     name: str
     owner_type: str
     secret_type: str = "password"
-    directory: Optional[str] = None
-    secret_names: List[str] = Field(default_factory=list)
-    generator: Optional[PasswordGenerator] = None
-    local_vault_key: Optional[str] = "~/.lxv.key"
+    directory: str | None = None
+    secret_names: list[str] = Field(default_factory=list)
+    generator: PasswordGenerator | None = None
+    local_vault_key: str | None = "~/.lxv.key"
 
     @classmethod
     def create_secret_template(
@@ -36,147 +35,105 @@ class SecretTemplate(BaseModel):
         name: str,
         owner_type: str,
         secret_type: str = "password",
-        vault_dir: str = "~/.lxv/",
-    ):
+        vault_dir: str | Path = "~/.lxv/",
+    ) -> Self:
         template = cls(name=name, owner_type=owner_type, secret_type=secret_type)
-
-        if not template.directory:
-            template.directory = template.get_secret_dir(Path(vault_dir)).as_posix()
-
-        if not template.generator:
-            template.generator = template.get_secret_generator()
+        template.directory = template.get_secret_dir(Path(vault_dir)).as_posix()
+        template.generator = template.get_secret_generator()
 
         return template
 
     def get_secret_generator(self) -> PasswordGenerator:
-        """
-        Retrieve a configured secret generator based on the secret_type.
-
-        Returns:
-            PasswordGenerator: An instance of PasswordGenerator if secret_type is "password".
-        """
-        assert (
-            self.secret_type in SECRET_TYPES
-        ), f"Invalid secret_type: {self.secret_type}"
+        """Return the generator configured for this secret type."""
+        if self.secret_type not in SECRET_TYPES:
+            raise ValueError(f"Invalid secret_type: {self.secret_type}")
         if self.secret_type == "password":
             return PasswordGenerator(mode="passphrase", num_words=4)
-        if self.secret_type == "system_password":
-            return PasswordGenerator(mode="password", key_length=32)
-        # Fallback (shouldn't happen due to assert above)
         return PasswordGenerator(mode="password", key_length=32)
 
     def assert_valid(self) -> None:
-        """
-        Validate the template's owner_type, secret_type, and directory existence.
+        """Validate the owner, secret type, and output directory."""
+        if self.owner_type not in OWNER_TYPES:
+            raise ValueError(f"Invalid owner_type: {self.owner_type}")
+        if self.secret_type not in SECRET_TYPES:
+            raise ValueError(f"Invalid secret_type: {self.secret_type}")
+        if self.directory is None:
+            raise ValueError("directory must be set on SecretTemplate")
+        if not Path(self.directory).is_dir():
+            raise ValueError(f"Directory {self.directory} does not exist")
 
-        Raises:
-            AssertionError: If owner_type or secret_type is invalid or directory does not exist.
-        """
-        assert self.owner_type in OWNER_TYPES, f"Invalid owner_type: {self.owner_type}"
-        assert (
-            self.secret_type in SECRET_TYPES
-        ), f"Invalid secret_type: {self.secret_type}"
-
-        assert self.directory is not None, "directory must be set on SecretTemplate"
-        assert Path(
-            self.directory
-        ).exists(), f"Directory {self.directory} does not exist!"
-
-    def get_secret_dir(self, vault_dir: Path) -> Path:
-        """
-        Generate and return the secret directory path.
-
-        Args:
-            vault_dir (Path): Base path to the vault directory.
-
-        Returns:
-            Path: The generated secret directory path.
-        """
-        secret_dir = generate_secret_dir_path(
+    def get_secret_dir(self, vault_dir: str | Path) -> Path:
+        """Create and return this template's secret directory."""
+        return generate_secret_dir_path(
             self.name,
-            vault_dir.expanduser().resolve(),
+            Path(vault_dir).expanduser().resolve(),
             self.owner_type,
             self.secret_type,
         )
-        return secret_dir
 
-    def create_or_update_secrets(self, vault: "Vault", logger=None) -> bool:
-        """
-        Create or update secrets within the specified vault using the stored generator.
-
-        Args:
-            vault (Vault): The vault object where secrets are stored or updated.
-
-        Returns:
-            bool: True if secrets were created or updated, False otherwise.
-        """
-        from .manager import Vault
-
-        _vault: Vault = vault
-        if not logger:
-            logger = get_logger("lx_vault__create_or_update_secrets")
-        if not self.generator:
+    def create_or_update_secrets(
+        self,
+        vault: "Vault",
+        logger: logging.Logger | None = None,
+    ) -> bool:
+        """Materialize missing secrets and report whether the vault changed."""
+        logger = logger or get_logger("lx_vault__create_or_update_secrets")
+        if self.generator is None:
             raise ValueError(f"SecretTemplate.generator is not set for {self.name}")
 
-        if _vault.inventory is None:
-            raise ValueError("Vault.inventory is not loaded")
-
-        hostnames = [host.hostname for host in _vault.inventory.all]
-
+        inventory = vault._require_inventory()
+        hostnames = [host.hostname for host in inventory.all if host.hostname]
         results = self.generator.pipe()
 
-        # Resolve secret directory, computing if not set
         if self.directory is None:
-            secret_dir = self.get_secret_dir(Path(_vault.dir)).expanduser().resolve()
+            secret_dir = self.get_secret_dir(Path(vault.dir)).expanduser().resolve()
         else:
             secret_dir = Path(self.directory).expanduser().resolve()
 
-        self.secret_names = [f"{self.name}_{suffix}" for suffix, secret in results]
-        _secrets = [secret for suffix, secret in results]
+        generated_secrets = [
+            (f"{self.name}_{suffix}", secret_value) for suffix, secret_value in results
+        ]
+        self.secret_names = [name for name, _ in generated_secrets]
+        changed = False
 
-        for i, secret_name in enumerate(self.secret_names):
-            _secret = _secrets[i]
+        for secret_name, secret_value in generated_secrets:
             secret_file = secret_dir / secret_name
+            if Secret.check_exists(secret_name, str(secret_file), vault):
+                continue
 
-            _exists = Secret.check_exists(secret_name, str(secret_file), _vault)
+            Secret.create_secret(
+                secret=secret_value,
+                file=str(secret_file),
+                vault=vault,
+            )
 
-            if not _exists:
-                # Create the encrypted secret file
-                Secret.create_secret(
-                    secret=_secret,
-                    file=str(secret_file),
-                    vault=_vault,
+            target_secret_name = secret_name
+            for hostname in hostnames:
+                target_secret_name = target_secret_name.replace(f"@{hostname}", "")
+
+            if target_secret_name != secret_name:
+                logger.info(
+                    "Removed inventory hostname from secret target: %s -> %s",
+                    secret_name,
+                    target_secret_name,
                 )
-
-                # Create and store the Secret object
-
-                # Some secret names the hostnames which should not be present
-                # in the secret_target variable
-                pseudo_secret_name = secret_name
-                for hostname in hostnames:
-                    rm_str = f"@{hostname}"
-                    pseudo_secret_name = pseudo_secret_name.replace(rm_str, "")
-
-                if pseudo_secret_name != secret_name:
-                    logger.info(
-                        f"Replaced occuring hostname in secret_target:\
-                             {pseudo_secret_name} != {secret_name}"
-                    )
-                secret_target = (
-                    f"SCRT_{self.owner_type}_{self.secret_type}_{pseudo_secret_name}"
-                )
-
-                secret = Secret(
+            target_name = (
+                f"SCRT_{self.owner_type}_{self.secret_type}_{target_secret_name}"
+            )
+            timestamp = datetime.now()
+            vault.secrets.append(
+                Secret(
                     name=secret_name,
                     template_name=self.name,
                     file=str(secret_file),
-                    target_name=secret_target,
+                    target_name=target_name,
                     owner_type=self.owner_type,
                     secret_type=self.secret_type,
                     local_vault_key=self.local_vault_key,
-                    created=dt.now(),
-                    updated=dt.now(),
+                    created=timestamp,
+                    updated=timestamp,
                 )
-                vault.secrets.append(secret)
+            )
+            changed = True
 
-        return True
+        return changed

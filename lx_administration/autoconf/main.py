@@ -1,37 +1,41 @@
+import logging
 from pathlib import Path
 
-from .imports.main import pipe as etl_pipe, home_etl
-from .nix.main import pipe as nix_pipe
-from lx_administration.logging import get_logger
-from lx_administration.logging import shutdown_logging
+from lx_administration.logging import get_logger, shutdown_logging
+
+from .config import AutoconfConfig
+from .imports import build_home_merged_variables, import_source_data
+from .nix import render_configurations
+from .nix.main import render_isolated_configurations
 
 
-def pipe(
-    ansible_root: Path,
-    autoconf_out: Path,
-    nix_out: Path,
-    conf_parent: Path = Path("./conf"),
-):
-    logger = get_logger("autoconf_main_pipe", reset=True)
+def run_pipeline(config: AutoconfConfig) -> None:
+    """Run all import and rendering stages for an already validated config."""
+    logger = get_logger("autoconf_pipeline", log_dir=config.log_dir, reset=True)
     try:
-        _inventory, home_only_hosts = etl_pipe(
-            ansible_root, autoconf_out, subnet="172.16.255.0", logger=logger,
-        )
-        """ for # home system issue,added home_only_hosts
-         _inventory  = etl_pipe(
-            ansible_root, autoconf_out, subnet="172.16.255.0", logger=logger,
-        )
-        """
-        # NEW: Home ETL
-        home_etl(ansible_root, autoconf_out, logger)
-
-        nix_pipe(
-            autoconf_out=autoconf_out,
-            nix_template_dir=conf_parent / "nix-templates",
-            nix_out=nix_out,
+        import_source_data(
+            config.ansible_root,
+            config.output,
+            subnet=config.inventory_subnet,
+            system_group=config.inventory_system_group,
             logger=logger,
-            home_only_hosts=home_only_hosts,  # home system issue,added home_only_hosts
         )
+        build_home_merged_variables(config.ansible_root, config.output, logger)
+
+        render_configurations(config, logger=logger)
     finally:
         # Ensure all logging handlers are closed to avoid leaking file descriptors
         shutdown_logging()
+
+
+def run_from_config(config: AutoconfConfig) -> None:
+    """Run the pipeline using only options from the central YAML config."""
+    config.require_valid()
+    run_pipeline(config)
+
+
+def run_isolated_nix_render(config: AutoconfConfig, nix_output: Path) -> None:
+    """Render existing merged data without importing or replacing configured output."""
+    logger = logging.Logger("autoconf_isolated_nix_render")
+    logger.addHandler(logging.NullHandler())
+    render_isolated_configurations(config, nix_output=nix_output, logger=logger)

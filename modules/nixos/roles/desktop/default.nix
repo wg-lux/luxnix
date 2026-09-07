@@ -1,13 +1,14 @@
 {
-  pkgs,
   lib,
   config,
   ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.roles.desktop;
-in {
+in
+{
   options.roles.desktop = {
     enable = mkEnableOption "Enable desktop configuration";
   };
@@ -22,9 +23,11 @@ in {
       desktop.addons = {
         plasma.enable = true;
       };
-      custom-packages.baseDevelopment = true;
-      custom-packages.kdePlasma = true;
-      custom-packages.office = true;
+      custom-packages = {
+        baseDevelopment = true;
+        kdePlasma = true;
+        office = true;
+      };
     };
 
     hardware = {

@@ -1,47 +1,10 @@
 import argparse
-from lx_administration.models.vault.manager import Vault
-from lx_administration.password.generator import PasswordGenerator
+from lx_administration.models.vault import Vault
+from lx_administration.password import PasswordGenerator
 
 # example usage:
 # Lets say you named postgres_host_main_password
-# TODO @hamza: Add the following to the docs
-
 # change export SECRET_NAME=postgres_host_main_password as required
-
-_bash = """
-## CHANGE THIS AS REQUIRED
-export SECRET_TEMPLATE_NAME=nextcloud_host
-export SECRET_NAME=nextcloud_host_password
-
-
-export VAULT_DIR=~/.lxv
-export VAULT_KEY=~/.lsv.key
-export MODE=password
-export KEY_LENGTH=20
-export MIN_LENGTH=12
-export NUM_WORDS=5
-export REQUIRE_UPPER=true
-export REQUIRE_LOWER=true
-export REQUIRE_DIGITS=true
-export REQUIRE_SPECIAL=false
-
-# Look up the secret in VAULT_DIR/vault.yml 
-# (Secret with this name must exist)
-# (Secret with this name has a path and an existing encrypted file)
-export SECRET_PATH=~/.lxv/secrets/system_password/roles/$SECRET_TEMPLATE_NAME/$SECRET_NAME
-ansible-vault view $SECRET_PATH
-
-# run script
-python scripts/update_secret.py --secret-name $SECRET_NAME --mode $MODE --key-length $KEY_LENGTH --min-length $MIN_LENGTH --num-words $NUM_WORDS --require-upper $REQUIRE_UPPER --require-lower $REQUIRE_LOWER --require-digits $REQUIRE_DIGITS --require-special $REQUIRE_SPECIAL
-
-# verify the secret has been updated
-ansible-vault view $SECRET_PATH
-"""
-
-# python update_secret.py --secret-name myapp_password --mode password --key-length 20
-# python update_secret.py --secret-name myapp_passphrase --mode passphrase --num-words 5
-# python update_secret.py --secret-name custom_secret --custom-value "my-custom-value"
-
 
 def parse_bool(value):
     return str(value).lower() in ("true", "1", "yes")
@@ -58,7 +21,7 @@ def parse_args():
         "--vault-dir", default="~/.lxv/", help="Path to vault directory"
     )
     parser.add_argument(
-        "--vault-key", default="~/.lsv.key", help="Path to vault key file"
+        "--vault-key", default="~/.lxv.key", help="Path to vault key file"
     )
     parser.add_argument(
         "--secret-name", required=True, help="Name of the secret to update"
@@ -135,9 +98,8 @@ def main():
         )
 
     vault.update_secret_value(args.secret_name, new_value)
-    print(
-        f"Updated secret '{args.secret_name}' with new {'password' if args.mode=='password' else 'passphrase'}."
-    )
+    generated_kind = "password" if args.mode == "password" else "passphrase"
+    print(f"Updated secret '{args.secret_name}' with new {generated_kind}.")
 
 
 if __name__ == "__main__":

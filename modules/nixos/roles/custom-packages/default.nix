@@ -1,18 +1,24 @@
-{ lib
-, pkgs
-, config
-, ...
+{
+  lib,
+  pkgs,
+  config,
+  ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.roles.custom-packages;
 
-  # Check if both podman and nvidia are enabled  
-  podmanEnabled = config.services.luxnix.podman.enable or config.services.virtualisation.podman.enable or config.luxnix.generic-settings.virtualization.enable or false;
-  nvidiaEnabled = (config.luxnix.nvidia-default.enable or false) || (config.luxnix.nvidia-prime.enable or false) || (config.luxnix.generic-settings.gpu.nvidia.enable or false);
+  # Check if both podman and nvidia are enabled
+  podmanEnabled =
+    (config.services.luxnix.podman.enable or false)
+    || (config.services.virtualisation.podman.enable or false)
+    || (config.luxnix.generic-settings.virtualization.enable or false);
+  nvidiaEnabled =
+    (config.luxnix.nvidia-default.enable or false)
+    || (config.luxnix.nvidia-prime.enable or false)
+    || (config.luxnix.generic-settings.gpu.nvidia.enable or false);
 
-  dev01 = [ ];
-  dev02 = [ ];
   dev03 = with pkgs; [
     obsidian
     balena-cli
@@ -29,7 +35,8 @@ with lib.luxnix; let
 
   baseDevelopment = with pkgs; [
     # vscode-fhs
-    nixfmt-rfc-style
+    nixfmt
+    ripgrep
     cacert
     openssl
     vscode
@@ -47,6 +54,9 @@ with lib.luxnix; let
     dust
     dysk
     ncdu
+    nix-tree
+    nixos-shell
+    nix-output-monitor
   ];
 
   visuals = with pkgs; [
@@ -62,33 +72,6 @@ with lib.luxnix; let
     obsidian
     spotify
     zotero
-  ];
-
-  cuda = with pkgs; [
-    autoAddDriverRunpath
-  ];
-
-  ldBase = with pkgs; [
-    stdenv.cc.cc
-    zlib
-    fuse3
-    icu
-    nss
-    openssl
-    curl
-    expat
-    libGLU
-    libGL
-    git
-    gitRepo
-    gnupg
-    autoconf
-    procps
-    gnumake
-    util-linux
-    m4
-    gperf
-    unzip
   ];
 
   cloud = with pkgs; [
@@ -127,40 +110,36 @@ with lib.luxnix; let
     nvidia-container-toolkit
   ];
 
-  customPackages = [
-    pkgs.bash
-    pkgs.bashInteractive
-    pkgs.iftop
-    pkgs.bmon
-    pkgs.nload
-  ]
-  ++ (if cfg.kdePlasma then kdePlasma else [ ])
-  ++ (if cfg.baseDevelopment then baseDevelopment else [ ])
-  ++ (if cfg.office then office else [ ])
-  ++ (if cfg.visuals then visuals else [ ])
-  ++ (if cfg.dev01 then dev01 else [ ])
-  ++ (if cfg.dev02 then dev02 else [ ])
-  ++ (if cfg.dev03 then dev03 else [ ])
-  ++ (if cfg.cloud then cloud else [ ])
-  ++ (if cfg.protonmail then [
-    pkgs.protonmail-bridge-gui
-    pkgs.protonmail-desktop
-    pkgs.proton-pass
-    pkgs.planify
-  ] else [ ])
-  ++ (if cfg.hardwareAcceleration then [
-    pkgs.pciutils
-    pkgs.libva
+  customPackages =
+    with pkgs;
+    [
+      bash
+      bashInteractive
+      iftop
+      bmon
+      nload
+    ]
+    ++ optionals cfg.kdePlasma kdePlasma
+    ++ optionals cfg.baseDevelopment baseDevelopment
+    ++ optionals cfg.office office
+    ++ optionals cfg.visuals visuals
+    ++ optionals cfg.dev03 dev03
+    ++ optionals cfg.cloud cloud
+    ++ optionals cfg.protonmail [
+      protonmail-bridge-gui
+      protonmail-desktop
+      proton-pass
+      planify
+    ]
+    ++ optionals cfg.hardwareAcceleration [
+      pciutils
+      libva
 
-    pkgs.vdpauinfo # sudo vainfo
-    pkgs.libva-utils # sudo vainfo
-  ] else [ ])
-  ++ (if (podmanEnabled && nvidiaEnabled) then podmanNvidia else [ ])
-  ;
+      vdpauinfo # sudo vainfo
+      libva-utils # sudo vainfo
+    ]
+    ++ optionals (podmanEnabled && nvidiaEnabled) podmanNvidia;
 
-  ldPackages = lib.mkIf cfg.ld.enable (
-    ldBase ++ (if cfg.cuda then ldCuda else [ ])
-  );
 in
 {
   options.roles.custom-packages = {
@@ -171,8 +150,6 @@ in
     cuda = mkBoolOpt false "Add CUDA packages to custom packages";
     videoEditing = mkBoolOpt false "Add Video Editing packages to custom packages";
     visuals = mkBoolOpt false "Add Visuals packages to custom packages";
-    dev01 = mkBoolOpt false "Add dev01 packages to custom packages";
-    dev02 = mkBoolOpt false "Add dev02 packages to custom packages";
     dev03 = mkBoolOpt false "Add dev03 packages to custom packages";
     protonmail = mkBoolOpt false "Add Protonmail packages to custom packages";
     ld = {
@@ -182,13 +159,12 @@ in
     hardwareAcceleration = mkBoolOpt false "Add Hardware Acceleration packages to custom packages";
   };
 
-
   config = mkIf cfg.enable {
     environment.systemPackages = customPackages;
 
     cli.programs.nix-ld = {
       enable = lib.mkForce cfg.ld.enable;
-      libraries = ldPackages;
+      extraLibraries = optionals cfg.cuda ldCuda;
     };
 
     programs.obs-studio.enable = cfg.videoEditing;
@@ -197,12 +173,10 @@ in
 
     hardware.graphics = {
       enable = lib.mkDefault cfg.hardwareAcceleration;
-      extraPackages = with pkgs; (if cfg.hardwareAcceleration then [
-        intel-media-driver
-      ] else [ ]);
+      extraPackages = optionals cfg.hardwareAcceleration [
+        pkgs.intel-media-driver
+      ];
     };
-
-    environment.variables = { };
 
   };
 }
