@@ -4,11 +4,14 @@ This module manages the local `lx-annotate` deployment on LuxNix hosts.
 
 ## Structure
 
-- [`default.nix`](/home/admin/luxnix/modules/nixos/services/lx-annotate-local/default.nix): thin wrapper that assembles the runtime context, script exports, and split submodules.
-- [`runtime-context.nix`](/home/admin/luxnix/modules/nixos/services/lx-annotate-local/runtime-context.nix): canonical derived runtime paths, environment values, defaults, and helper functions shared by the module.
-- [`options.nix`](/home/admin/luxnix/modules/nixos/services/lx-annotate-local/options.nix): public option surface.
-- [`config.nix`](/home/admin/luxnix/modules/nixos/services/lx-annotate-local/config.nix): systemd, nginx, tmpfiles, assertions, and secret wiring.
-- [`scripts.nix`](/home/admin/luxnix/modules/nixos/services/lx-annotate-local/scripts.nix): shell-script derivations used by the service units.
+- [`default.nix`](default.nix): thin wrapper that assembles the runtime context, script exports, and split submodules.
+- [`runtime-context.nix`](runtime-context.nix): canonical derived runtime paths, environment values, defaults, and helper functions shared by the module.
+- [`options.nix`](options.nix): compatibility aggregator for the public option surface.
+- [`options/`](options/): one readable module per top-level configuration group; public option paths remain under `services.luxnix.lxAnnotateLocal`.
+- [`config.nix`](config.nix): centralized shared configuration, assertions, secret wiring, and the explicit context passed to subservices.
+- [`subservices/`](subservices/): one systemd service per leaf file. A matching timer or path unit stays beside the service it triggers; `workers.nix` is only an aggregator.
+- [`scripts.nix`](scripts.nix): shell-script derivations used by the service units.
+- [`scripts/env.nix`](scripts/env.nix): single source of truth for shared lx-annotate runtime environment variables.
 
 ## Encrypted Data Flow
 
@@ -58,7 +61,66 @@ When changing LuxNix or lx-annotate integration code, keep these rules:
 4. Any path under the service-user home is an access path only unless the
    contract is explicitly redesigned.
 
+## Environment Contract
+
+Shared lx-annotate application environment variables are centralized in:
+
+- [`scripts/env.nix`](scripts/env.nix)
+
+The main attrset to inspect is `commonEnv`. It is the contract rendered into:
+
+- systemd service `environment` attrsets through the owning module in `subservices/`
+- `/var/lib/lx-annotate/.env.systemd`
+- the compatibility copy at `runtime.encryptedDataDir/.env.systemd`
+- shell wrappers through `commonShellExportText`
+- file-mover transcode fallback environment
+
+Worker-specific env that is still shared across generated service/script paths
+also lives in `scripts/env.nix`, currently `celeryWorkerResourceEnv` and
+`llmInferenceWorkerEnv`.
+
+When adding or changing a shared lx-annotate/secretspec-style variable, update
+`commonEnv` first. Do not add a parallel export block in `config.nix`, a
+subservice, or `scripts.nix`. Small wrapper-only variables can stay in the wrapper that owns
+them, for example `PATH`, wheel virtualenv paths, command arguments,
+`CUDA_VISIBLE_DEVICES`, and export-frame compatibility `DATA_DIR`/`STORAGE_DIR`.
+
+Host-specific env overrides that do not need a dedicated LuxNix option can be
+set with:
+
+```nix
+services.luxnix.lxAnnotateLocal.runtime.extraEnvironment = {
+  LOG_LEVEL = "INFO";
+  SOME_SECRETSPEC_FLAG = "true";
+};
+```
+
+`runtime.extraEnvironment` is merged last, so it can also override a value from
+`commonEnv` when a host needs an escape hatch. Prefer a typed option for values
+that affect systemd ordering, nginx config, storage paths, or security policy.
+
+For streamable media offload, the exported variable name is
+`SERVE_WITH_NGINX`. The older-looking name `SERVE_FROM_NGINX` is not exported
+by this module. `NGINX_PROTECTED_MEDIA_URL` is exported alongside it.
+
+Secret values are still read from files at runtime where the application expects
+process secrets. The shared env contract exports the file/path variables such as
+`DJANGO_SECRET_KEY_FILE`, `DJANGO_DB_PASSWORD_FILE`,
+`DJANGO_KEYCLOAK_CLIENT_SECRET_FILE`, `LX_ANNOTATE_MASTER_KEY_FILE`, and
+`OIDC_RP_CLIENT_ID`; shell helpers derive process-only secret values when
+needed.
+
 ## Streamable Video Migration
+
+The full cross-repository production contract, including encrypted HLS
+materialization, authenticated browser playback, deployment, hub separation,
+readiness, and incident response, is documented in
+[`docs/lx-annotate-secure-hls.md`](../../../../docs/lx-annotate-secure-hls.md).
+
+The essential operational distinction is that HLS systemd oneshots are
+dispatchers. A successful exit confirms that eligible work was selected and
+queued; only a terminal worker result and a `ready` artifact establish that the
+video is playable.
 
 The module exposes a manual migration unit for backfilling existing videos into
 the streamable protected subtree:
@@ -78,6 +140,13 @@ policy. It is intentionally not
 timer-driven or wanted by a boot target so operators can control rollout pace and
 observe I/O.
 
+For bounded runs with command arguments from the admin machine, use the Devenv
+entry point. It invokes the same deployed helper as the systemd unit:
+
+```console
+devenv shell lx-annotate-streamable-migration <host> --video-id 34 --processed-only
+```
+
 `lx-annotate-acceptance.service` runs the deployed Django system checks with the
 real LuxNix environment, verifies encrypted storage round-trips without
 plaintext on disk, and fetches the Vite manifest through the local Nginx TLS
@@ -91,14 +160,22 @@ timers. The main web unit is produced by the upstream `services.lx-annotate`
 module and then hardened/ordered here; the surrounding `lx-annotate-*` units are
 owned directly by this module.
 
+Each leaf below `subservices/` starts with two review aids: `Purpose:` names
+the unit boundary and `Command:` identifies the executable behavior. A leaf
+declares exactly one `systemd.services` attribute. Same-name `.timer` and
+`.path` triggers may be colocated because they exist solely to activate that
+service. Integrations that only refine externally owned units live under
+`subservices/integrations/` and state that ownership in their command note.
+
 Most application units share the same service contract: they run as
 `endoreg-service-user`, load `/var/lib/lx-annotate/.env.systemd`, use the
 protected runtime data root as their working directory, get the same Django,
-database, Celery, storage, and encryption environment, and run with
-`ProtectSystem=full`, `PrivateTmp=true`, and `NoNewPrivileges=true`. Their write
-access is limited to the lx-annotate runtime, wheel, static, config, storage, and
-model-training staging paths. The root-run exceptions are the environment writer
-and the optional encrypted-data mount unit.
+database, Celery, storage, and encryption environment from `scripts/env.nix`,
+and run with `ProtectSystem=full`, `PrivateTmp=true`, and
+`NoNewPrivileges=true`. Their write access is limited to the lx-annotate
+runtime, wheel, static, config, storage, and model-training staging paths. The
+root-run exceptions are the environment writer and the optional encrypted-data
+mount unit.
 
 ### Core Boot Units
 
@@ -107,9 +184,11 @@ and the optional encrypted-data mount unit.
 | `lx-annotate-runtime-env.service` | root oneshot, remains active | Creates the runtime/config/data directories, copies the database password into the runtime config directory, normalizes Keycloak secret permissions, and writes `/var/lib/lx-annotate/.env.systemd` plus the compatibility copy under the data root. |
 | `lx-annotate-encrypted-data.service` | optional root oneshot, remains active | Opens the configured LUKS device, mounts it at `runtime.encryptedDataDir`, fixes owner/mode on the mount point, and closes it again on stop. Enabled by `runtime.managedEncryptedData.enable`. |
 | `lx-annotate-data-recovery.service` | oneshot, enabled by default | Runs before migrations when `dataRecovery.enable` is true. It moves or overlays legacy data/media into the current protected data root, repairs managed payloads when possible, and records recovery state so heavy recovery is not repeated unnecessarily. |
-| `lx-annotate-migrate.service` | oneshot | Runs `lx-annotate-manage migrate --noinput` against the effective runtime package. It is ordered before base-data loading, encrypted-storage validation, and the web service. |
+| `lx-annotate-migrate.service` | oneshot | Runs `lx-annotate-manage migrate --noinput` against the effective runtime package. On failure it applies the reviewed legacy-history repair and retries once; unrelated or unrepaired failures remain fatal. It is ordered before base-data loading, encrypted-storage validation, and the web service. |
+| `lx-annotate-terminology-bootstrap.service` | best-effort oneshot in wheel mode | After the web service starts, independently registers the packaged `dgvs_reporting`, `mst_3_0`, and `star_upper_gi` bundles. A new registry activates `star_upper_gi`; an existing active selection is preserved. No LX-Annotate startup unit wants, requires, or waits for this attempt. |
 | `lx-annotate-load-base-data.service` | oneshot | Runs `lx-annotate-load-base-data` after successful migrations. The script logs a failed base-data load but exits successfully so schema-correct deployments can still boot. |
 | `lx-annotate-master-key-check.service` | oneshot, remains active | Runs `lx-annotate-manage verify_encrypted_storage` with the deployed environment. The web service and workers require this check so a wrong or missing application master key fails closed before user traffic or background processing starts. |
+| `lx-annotate-center-admin-bootstrap.service` | temporary oneshot | When `centerAdminBootstrap.username` is set, runs the audited `bootstrap_center_admin` command after migrations, base-data loading, and encrypted-storage validation. It refuses users without the exact synchronized `center_scope:admin` group. Clear the option after a successful bootstrap deployment. |
 | `lx-annotate.service` / `lx-annotate-boot.service` | long-running web service | Starts the ASGI/web entrypoint on `127.0.0.1:${django.port}`. It requires the runtime env, base data, master-key check, managed secrets, encrypted data, and local Redis/PostgreSQL units when those local services are in use. |
 
 In wheel mode, the effective runtime package is a wrapper around
@@ -118,23 +197,25 @@ host-local virtualenv under the service-user home, installs the wheel and any
 configured wheelhouse/override packages, exports secrets from files into the
 process environment, and then execs the wheel console script. The web wrapper
 also syncs packaged static assets into `/var/lib/lx-annotate/staticfiles`.
+The installed `lx-dtypes` dependency supplies the default terminology data
+under its `site-packages/lx_dtypes/data` directory; LuxNix registers that path
+directly rather than copying a mutable checkout or duplicating the bundle.
 
 ### Intake And Manual Jobs
 
 | Unit | Type / trigger | Runtime role |
 | --- | --- | --- |
-| `lx-annotate-filewatcher.path` | path unit | Watches the resolved video, report, and preanonymized intake directories from `runtime.intakeDirs`. |
+| `lx-annotate-filewatcher.path` | path unit | Watches the standard video, report, and preanonymized directories derived from `runtime.intakeDirs.importRoot`. |
 | `lx-annotate-filewatcher.service` | path-triggered oneshot | Runs `lx-annotate-watch --once` after migrations/base data and the master-key check. It drains files already present in the watched intake directories instead of running a permanent watcher process. |
-| `lx-annotate-sap-import.path` | path unit | Watches `runtime.intakeDirs.sap` for `*.zip` drops. |
+| `lx-annotate-sap-import.path` | path unit | Watches the derived `sap_import` directory for `*.zip` drops. |
 | `lx-annotate-sap-import.service` | path-triggered oneshot | Waits for each SAP IS-H zip to become stable, converts it with `lx-annotate-import-sap`, writes preanonymized watcher payload into the preanonymized intake directory, and moves the original zip to processed or failed storage. |
 | `lx-annotate-export-frames.service` | manual oneshot | Runs `lx-annotate-export-frames` and writes frame export output below the protected runtime storage tree. It is not started by a boot target. |
 | `lx-annotate-video-streamable-migration.service` | manual oneshot | Backfills raw and processed streamable video artifacts into the protected streamable-video subtree according to lx-annotate's active storage policy. It is intentionally operator-started. |
 | `lx-annotate-acceptance.service` | manual oneshot | Runs Django critical checks, verifies encrypted storage, and fetches the Vite manifest through the local TLS Nginx vhost. Use it as a post-deploy smoke test. |
 
-The intake directory contract is centralized under `runtime.intakeDirs`. Defaults
-mirror lx-annotate `secretspec.toml` names such as `data/import/video_import`
-and `data/import/report_import`; Nix resolves `data/...` against
-`runtime.encryptedDataDir`.
+The intake directory contract has one setting, `runtime.intakeDirs.importRoot`.
+All standard drop and staging directories are derived from that root, and the
+application receives only the canonical `DATA_DIR` environment variable.
 
 ### Celery Worker Units
 
@@ -189,12 +270,12 @@ intake path.
 
 | Operator path | Mover behavior | Watcher contract |
 | --- | --- | --- |
-| `Video_Input` desktop link | path-triggered source, copied into mover staging, then published to `runtime.intakeDirs.video` | `lx-annotate-filewatcher.path` watches the resolved video dir and the service exports `WATCHER_VIDEO_DIR` |
-| `PDF_Input` desktop link | path-triggered source, copied into mover staging, then published to `runtime.intakeDirs.report` | `lx-annotate-filewatcher.path` watches the resolved report dir and the service exports `WATCHER_REPORT_DIR` |
-| `preanonymized_import` desktop link | direct service-user access path, not moved by `move-my-files` | `lx-annotate-filewatcher.path` watches the resolved preanonymized dir and exports `WATCHER_PREANONYMIZED_DIR` |
+| `Video_Input` desktop link | path-triggered source, copied into mover staging, then published below `runtime.intakeDirs.importRoot` | `lx-annotate-filewatcher.path` watches the derived `video_import` directory |
+| `PDF_Input` desktop link | path-triggered source, copied into mover staging, then published below `runtime.intakeDirs.importRoot` | `lx-annotate-filewatcher.path` watches the derived `report_import` directory |
+| `preanonymized_import` desktop link | direct service-user access path, not moved by `move-my-files` | `lx-annotate-filewatcher.path` watches the derived `preanonymized_import` directory |
 | `sap_import` desktop link | direct service-user access path for SAP intake | handled by SAP import services, not by the file watcher path unit |
 
-The mover staging directory is `runtime.intakeDirs.moverStaging`. It is
+The mover staging directory is `.move-my-files-staging` below the import root. It is
 intentionally not watched. `move-my-files` first copies operator input into that
 staging tree, fixes ownership and permissions, then moves top-level staged
 entries into the watched video/report intake directories. Source files are
@@ -206,7 +287,7 @@ For video entries, `move-my-files` invokes the lx-annotate/endoreg-db
 `transcode_video` management command before publishing into the watched intake
 directory. That command uses the existing `ffmpeg_wrapper` encoder selection and
 writes the standard watcher format (H.264, `yuv420p`, full color range) into
-`runtime.intakeDirs.video`. The mover does not delete the source until the
+the derived `video_import` directory. The mover does not delete the source until the
 transcode command succeeds.
 
 The watcher service runs as the same service user and group as the mover. Wheel
@@ -273,7 +354,7 @@ worker replicas.
 
 The first Kubernetes package lives at:
 
-- [`kubernetes/lx-annotate`](/home/admin/luxnix/kubernetes/lx-annotate)
+- [`kubernetes/lx-annotate`](../../../../kubernetes/lx-annotate)
 
 It contains plain Kustomize-managed YAML for web, worker, Service, Ingress,
 ConfigMap, Secret references, a shared PVC, and singleton CronJobs with
@@ -360,6 +441,10 @@ remote authentication, replication policy, or restore orchestration.
 The module now has an explicit Phase 1 secure-transfer contract for the
 optional node-to-node hub transfer API.
 
+For the non-technical clinical workflow, onboarding checklist, status meanings,
+and failure procedure, see the
+[Clinical Hub Transfer Guide](../../../../docs/clinical-hub-transfer-guide.md).
+
 Enable transfer intake with:
 
 - `hub.transferApi.enable = true`
@@ -381,7 +466,7 @@ hostile-network workflow, so transfer enablement is no longer allowed to imply
 The module exports the corresponding runtime environment for Django:
 
 - `ENDOREG_DEPLOYMENT_ROLE`
-- `ENDOREG_ENABLE_HUB_TRANSFERS`
+- `ENDOREG_ENABLE_INCOMING_HUB_TRANSFERS`
 - `ENDOREG_HUB_TRANSFER_REQUIRE_SECURE_TRANSPORT`
 - `ENDOREG_HUB_TRANSFER_REQUIRE_MTLS`
 - `ENDOREG_HUB_TRANSFER_MTLS_META_KEY`
@@ -413,11 +498,101 @@ Current scope:
 - it does not replace the separate shared-secret request authentication used by
   `NetworkNode`
 
+Site-node sending is configured separately with
+`hub.outboundTransfer.enable = true`. LuxNix fails evaluation unless the node
+uses the `site_node` deployment role and supplies all of the following:
+
+- `hub.outboundTransfer.clientCertificateFile`
+- `hub.outboundTransfer.clientKeyFile`
+- `hub.outboundTransfer.sourceNodeSecretFile`
+- `hub.outboundTransfer.requireMtls = true`
+
+`hub.outboundTransfer.caFile` may additionally pin a private CA for the hub's
+server certificate. When outbound transfer is enabled, eligible marked jobs are
+dispatched to the maintenance worker, which presents the client certificate,
+verifies the hub certificate, refuses redirects, authenticates with the
+separate node secret, and uploads only processed anonymized media. The private
+key and node secret paths should refer to runtime-managed files outside the Nix
+store.
+
 In other words:
 
 - TLS and mTLS protect the channel and node identity
 - `NetworkNode.shared_secret` still authenticates the request
 - payload encryption beyond TLS is a later phase, not part of this module yet
+
+### Vault-backed transfer PKI
+
+`gs-02` is the declared central hub and runs the production HashiCorp Vault
+service on the VPN address `172.16.255.22:8200`. Vault uses integrated Raft
+storage and its cryptographic barrier; it is never configured in development
+mode. Only TCP port 8200 is opened on `tun0`.
+
+The canonical transfer endpoint is `https://gs-02.intern`. Both
+`gs-02.intern` and `vault.endo-reg.net` resolve to `172.16.255.22` inside the
+LuxNix VPN. The hub generates one pinned server certificate containing both DNS
+names; enrollment distributes only its public certificate to the site node.
+
+Vault initialization and unsealing are deliberately not zero-touch. Store the
+Shamir unseal shares and initial root token offline with separate custodians.
+Writing an unseal key beside the Raft data would make physical disk access
+sufficient to decrypt Vault and is therefore prohibited.
+
+After the first deployment, initialize and unseal Vault through the documented
+operator ceremony, then use a short-lived administrative token to configure the
+dedicated transfer PKI:
+
+```bash
+export VAULT_ADDR=https://vault.endo-reg.net:8200
+export VAULT_TOKEN='<short-lived-admin-token>'
+luxnix-vault-bootstrap-hub-pki
+sudo systemctl restart luxnix-vault-publish-hub-client-ca.service
+sudo systemctl restart nginx.service
+```
+
+The bootstrap command creates an internal, Vault-held client CA, a dedicated
+PKI mount, a KV v2 mount for request-authentication secrets, and client-only
+certificate roles. It is idempotent and refuses to run while Vault is sealed.
+
+Enroll a site node into a root-only temporary directory:
+
+```bash
+luxnix-vault-enroll-hub-site gc-02.intern /run/luxnix/gc-02-enrollment
+```
+
+The enrollment directory contains an AppRole role ID, AppRole secret ID, the
+public client CA, the pinned Vault server certificate, and a separate
+`NetworkNode` request secret. Install the role ID, secret ID, and server
+certificate under `/etc/secrets/vault/hub-pki/` on the site node. Install a copy
+of the request secret as
+`/etc/secrets/vault/hub-pki/gc-02-source-node-secret` on the hub for the
+idempotent database provisioner. Move this material only through the approved
+secret-delivery channel and remove temporary copies. Do not place it in the Nix
+store or version control.
+
+On the site node, configure the Vault client with the delivered AppRole files
+and enable `luxnix.vault.client.hubPki`. The
+`luxnix-vault-issue-hub-client-certificate` service then issues short-lived,
+client-only certificates, validates that each certificate matches its private
+key, writes the files atomically, and checks twice daily whether renewal is
+needed. LX-Annotate automatically takes the resulting certificate and key paths
+when the Vault client PKI is enabled.
+
+The AppRole can issue only its exact client identity, read the transfer CA, and
+read its own KV request secret. The managed-secrets service installs that
+request secret locally, and `lx-annotate-hub-node-provisioning` creates or
+updates the matching `NetworkNode` rows through Django's model API. The hub
+hashes the secret with `NetworkNode.set_shared_secret`; plaintext is never
+stored in the database.
+
+The application-level `NetworkNode` records must still use the separately
+generated request secret. The Vault certificate is transport identity and must
+not replace that authentication check.
+
+On transfer API hubs, LuxNix exempts only `/api/media/hub/transfers/` from the
+browser-oriented Keycloak redirect middleware. The transfer views remain
+protected by Nginx client-certificate verification and their independent
+`NetworkNode` key/secret authentication; global API authentication is unchanged.
 
 ## Current Security Posture
 
@@ -461,8 +636,8 @@ services still require the same runtime environment, base-data, master-key, and
 encrypted-data gates before doing application work.
 
 That is the intended fail-closed behavior. If Vault lookup, secret delivery,
-LUKS unlock, or encrypted-storage validation fails, the app services do not
-start.
+LUKS unlock, feature-registry attestation, or encrypted-storage validation
+fails, the app services do not start.
 
 ## Rotation Behavior
 

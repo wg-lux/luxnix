@@ -10,8 +10,10 @@
       "cuda-maintainers.cachix.org-1:0dq3bujKpuEPMCX6U4WylrUDZ9JyUG0VpVZa7CNfq5E="
     ];
   };
+
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-25.11";
+    nixpkgs-unstable.url = "github:nixos/nixpkgs/nixos-unstable";
     devenv.url = "github:cachix/devenv";
     home-manager = {
       url = "github:nix-community/home-manager/release-25.11";
@@ -43,8 +45,6 @@
 
     impermanence.url = "github:nix-community/impermanence";
     # lanzaboote.url = "github:nix-community/lanzaboote";
-
-    nixgl.url = "github:nix-community/nixGL";
     # stylix.url = "github:danth/stylix";
     catppuccin.url = "github:catppuccin/nix";
     nix-index-database.url = "github:nix-community/nix-index-database";
@@ -71,6 +71,11 @@
     lx-annotate = {
       url = "github:wg-lux/lx-annotate";
       inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    endoreg-db = {
+      url = "git+https://github.com/wg-lux/endoreg-db.git?ref=prototype";
+      flake = false;
     };
 
     nixos-generators = {
@@ -171,29 +176,23 @@
         ];
 
         overlays = with inputs; [
-          (final: _prev:
-            let
-              isIntelX86Platform = final.stdenv.hostPlatform.system == "x86_64-linux";
-            in
-            {
-              nixgl = import (nixgl.outPath + "/default.nix") {
-                pkgs = final;
-                enable32bits = isIntelX86Platform;
-                enableIntelX86Extensions = isIntelX86Platform;
-              };
-            }
-          )
+
           nur.overlays.default
           nix-topology.overlays.default
           (final: _prev: {
             lx-annotate = inputs.lx-annotate.packages.${final.stdenv.hostPlatform.system}.default;
+            lx-annotate-feature-specifications = final.runCommand "lx-annotate-feature-specifications" { } ''
+              mkdir -p "$out/share/lx-annotate/features"
+              cp ${inputs.lx-annotate}/feature-tracking/*.yml \
+                "$out/share/lx-annotate/features/"
+            '';
           })
         ];
 
         deploy = lib.mkDeploy { inherit (inputs) self; };
 
         checks = builtins.mapAttrs (
-          system: deploy-lib: deploy-lib.deployChecks inputs.self.deploy
+          _system: deploy-lib: deploy-lib.deployChecks inputs.self.deploy
         ) inputs.deploy-rs.lib;
 
         topology =

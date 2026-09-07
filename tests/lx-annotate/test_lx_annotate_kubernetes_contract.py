@@ -3,7 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 
-K8S_DIR = Path("/home/admin/luxnix/kubernetes/lx-annotate")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+K8S_DIR = REPO_ROOT / "kubernetes/lx-annotate"
 
 
 def _read(name: str) -> str:
@@ -11,7 +12,9 @@ def _read(name: str) -> str:
 
 
 def _all_yaml() -> str:
-    return "\n---\n".join(path.read_text(encoding="utf-8") for path in sorted(K8S_DIR.glob("*.yaml")))
+    return "\n---\n".join(
+        path.read_text(encoding="utf-8") for path in sorted(K8S_DIR.glob("*.yaml"))
+    )
 
 
 def test_lx_annotate_kustomization_lists_cluster_runtime_artifacts() -> None:

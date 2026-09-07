@@ -42,18 +42,22 @@ serialization.
    process uses it (via the generated `autoconf/inventory.yml`) to decide which
    secrets to create.
 
+Before a write, confirm the vault directory and key are the intended operator
+credentials, that the password mapping is untracked and permission-restricted,
+and that a current encrypted vault backup exists outside the checkout. Record
+the inventory revision and keep the bootstrap log free of secret values.
+
 ## Bootstrapping a fresh vault
 
-Run the helper script from the repository root. If you are inside the dev
-environment you can use the wrapper command `devenv run vault-bootstrap -- …`.
+Run the helper script from the repository root through the declared development
+environment:
 
 ```bash
-devenv run vault-bootstrap -- \
+devenv shell vault-bootstrap \
   --vault-dir ~/.lxv \
   --vault-key ~/.lxv.key \
-  --inventory ./autoconf/inventory.yml \
-  --local-hostname <control-hostname> \
-  --admin-passwords ansible/secrets/admin-passwords.yml \
+  --local-hostname <control-host> \
+  --admin-passwords <admin-passwords-file> \
   --export
 ```
 
@@ -63,11 +67,14 @@ Outside of the dev shell you can call the script directly:
 python scripts/bootstrap-lx-vault.py \
   --vault-dir ~/.lxv \
   --vault-key ~/.lxv.key \
-  --inventory ./autoconf/inventory.yml \
-  --local-hostname <control-hostname> \
-  --admin-passwords ansible/secrets/admin-passwords.yml \
+  --local-hostname <control-host> \
+  --admin-passwords <admin-passwords-file> \
   --export
 ```
+
+The inventory defaults to the generated path declared by
+`autoconf/config.yml`. Use `--inventory <path>` for a one-off override or
+`--autoconf-config <path>` when the complete Autoconf layout differs.
 
 What the script does:
 
@@ -95,6 +102,17 @@ The script is idempotent:
 - Use `--skip-sync` if you only need to import new passwords without touching
   templates or PSKs.
 
+### Bootstrap failure and recovery
+
+If bootstrap or export fails, stop before distributing generated files. Keep
+the existing vault and encrypted backup intact, inspect the non-secret error,
+and rerun only after correcting the inventory, key, or permissions. If a
+partial update is suspected, restore `~/.lxv/` and `~/.lxv.key` together from
+the same verified encrypted backup, then run `validate-admin-passwords` and a
+fresh export. Compare the resulting host bundle list with inventory before
+using it. Never recover by replacing the vault with a plaintext password file
+or by reusing an unknown key.
+
 ## Using the vault in Ansible runs
 
 - The generated `conf/ansible.cfg` is referenced automatically by helper
@@ -104,13 +122,23 @@ The script is idempotent:
 - Logs are written to `./logs/ansible.log`; make sure the `logs/` directory
   exists (`git` ignores it, so create it locally if needed).
 
-Common helper wrappers available via `devenv run`:
+Common helper wrappers available via `devenv shell`:
 
-- `devenv run vault-bootstrap -- …` – run the bootstrapper with custom flags.
-- `devenv run validate-admin-passwords -- …` – verify that the vault matches
+- `devenv shell vault-bootstrap …` – run the bootstrapper with custom flags.
+- `devenv shell validate-admin-passwords …` – verify that the vault matches
   the source password file.
-- `devenv run check-connectivity -- <target>` – execute the connectivity check
+- `devenv shell check-connectivity <target>` – execute the connectivity check
   playbook and write the log into `./logs/`.
+
+For local setup using the bootstrap script's default paths and no extra
+arguments, automation can invoke the underlying cataloged task:
+
+```bash
+devenv tasks run autoconf:initialize-vault
+```
+
+Use `devenv shell vault-bootstrap …` when supplying an admin-password file,
+overriding paths, selecting the control hostname, or exporting host bundles.
 
 ## Rotating secrets or adding new hosts
 
@@ -120,6 +148,25 @@ Common helper wrappers available via `devenv run`:
    new entries.
 3. Use `scripts/update_secret.py` for ad-hoc secret rotation. The helper uses
    the same vault metadata and encrypts updates with the local key.
+
+   For example, rotate one generated password without exposing its value in
+   the command line:
+
+   ```bash
+   python scripts/update_secret.py \
+     --vault-dir ~/.lxv \
+     --vault-key ~/.lxv.key \
+     --secret-name <secret-name> \
+     --mode password \
+     --key-length 20
+   ```
+
+After rotation, validate the affected secret and export before deployment. If
+rotation fails or a generated secret is inconsistent, stop distribution,
+restore the prior encrypted vault snapshot, validate it, and revoke any
+partially issued credential through the documented provider procedure. Resume
+only after the old or replacement credential is confirmed on every affected
+host.
 
 With these steps you can rebuild the Luxnix vault on a fresh workstation,
 import existing admin credentials, and keep Ansible configured to use the
@@ -131,7 +178,7 @@ After bootstrapping (or whenever passwords change) you can validate that the
 vault contents match the source file:
 
 ```bash
-devenv run validate-admin-passwords -- \
+devenv shell validate-admin-passwords \
   --vault-dir ~/.lxv \
   --vault-key ~/.lxv.key \
   --admin-passwords ansible/secrets/admin-passwords.yml \

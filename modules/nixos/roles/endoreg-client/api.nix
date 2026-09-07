@@ -6,7 +6,7 @@ mkDjangoOptions {
   defaults = {
     hostname = "localhost";
     port = 8118;
-    useHttps = false;
+    useHttps = true;
     sslCertificatePath = null;
     sslKeyPath = null;
     djangoAllowedHosts = [
@@ -30,7 +30,7 @@ mkDjangoOptions {
     dataDir = "data";
     confDir = "conf";
     confTemplateDir = "conf_template";
-    djangoModule = "endo_api";
+    djangoModule = "lx_annotate";
     assetDir = "tests/assets";
     httpProtocol = "https";
     baseUrl = null;

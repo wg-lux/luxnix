@@ -1,13 +1,14 @@
 {
   config,
-  pkgs,
   lib,
   ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.roles.gpu;
-in {
+in
+{
   options.roles.gpu = with types; {
     enable = mkBoolOpt false "Whether or not to manage gpu configuration";
   };

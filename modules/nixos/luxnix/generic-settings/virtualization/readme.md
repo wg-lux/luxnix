@@ -135,7 +135,6 @@ luxnix.generic-settings.virtualization.vfio = {
   # Looking Glass for seamless GPU sharing
   lookingGlass = {
     enable = true;
-    sharedMemorySize = "128M";
   };
   
   # Custom shared memory files

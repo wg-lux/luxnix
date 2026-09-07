@@ -5,9 +5,11 @@
   ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.cli.programs.db;
-in {
+in
+{
   options.cli.programs.db = with types; {
     enable = mkBoolOpt false "Whether or not to manage db";
   };

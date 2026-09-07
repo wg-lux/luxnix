@@ -4,14 +4,24 @@ group_roles:
   gpu_server.enable: "true"
 group_services:
   luxnix.lxAnnotateLocal.runtime.celeryBroker.secureTransportConfirmed: "true"
-  luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl: '"redis://172.16.255.14:6380/1"'
   luxnix.lxAnnotateLocal.runtime.externalServices.postgresHost: '"172.16.255.22"'
   luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort: 5432
+  luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl: '"redis://172.16.255.14:6380/1"'
+  luxnix.lxAnnotateLocal.runtime.llmInferenceWorker.mode: '"always"'
   luxnix.lxAnnotateLocal.runtime.trainingWorker.cudaVisibleDevices: '"0"'
   luxnix.lxAnnotateLocal.runtime.trainingWorker.mode: '"manual"'
+  luxnix.ollama.acceleration: '"cuda"'
+  luxnix.ollama.enable: "true"
+  luxnix.ollama.enableModelBootstrap: "false"
+  luxnix.ollama.models: '[ "gemma4:e2b" ]'
+  ollama.host: '"0.0.0.0"'
 group_luxnix:
   # GPU Configuration (New Unified System)
   generic_settings.gpu.nvidia.enable: "true"
   generic_settings.gpu.nvidia.driver: '"production"'
   # Note: Servers typically don't need PRIME hybrid graphics
-  maintenance.autoUpdates.enable: "true"
+  # maintenance.autoUpdates.enable: "true"
+
+group_nixos:
+  hardware.nvidia.powerManagement.enable: "true"
+  hardware.nvidia.powerManagement.finegrained: "false"

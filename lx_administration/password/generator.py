@@ -1,73 +1,78 @@
-import string
+from datetime import datetime
 import os
 import secrets
-from faker import Faker
-from datetime import datetime
 import shutil
-from pydantic import BaseModel, model_validator
-from typing import Union, Tuple, List, Literal, Callable
+import string
+
+from faker import Faker
 from passlib.hash import sha512_crypt  # type: ignore[import-untyped]
+from pydantic import BaseModel, model_validator
+from typing import Literal
+
+from ..permissions import PRIVATE_FILE_MODE, ensure_private_directory
+from .files import write_private_text
 
 
 class PasswordGenerator(BaseModel):
     """Password and passphrase generator with configurable settings."""
 
-    mode: Union[Literal["password"], Literal["passphrase"]] = "passphrase"
-    key_length: int = 32  # Default length for passwords
-    min_length: int = 12  # Minimum length for passwords
-    num_words: int = 4  # Default number of words for passphrases
+    mode: Literal["password", "passphrase"] = "passphrase"
+    key_length: int = 32
+    min_length: int = 12
+    num_words: int = 4
     require_upper: bool = True
     require_lower: bool = True
     require_digits: bool = True
     require_special: bool = False
 
     @model_validator(mode="after")
-    def validate_length(self) -> "PasswordGenerator":
-        """Ensure password length meets minimum requirements."""
-        if self.mode == "password" and self.key_length < self.min_length:
-            raise ValueError(f"Password length must be at least {self.min_length}")
+    def validate_configuration(self) -> "PasswordGenerator":
+        """Reject configurations that cannot produce the requested secret."""
+        if self.mode == "password":
+            character_sets = self._password_character_sets()
+            if not character_sets:
+                raise ValueError("Password generation requires a character class")
+            minimum_length = max(self.min_length, len(character_sets))
+            if self.key_length < minimum_length:
+                raise ValueError(
+                    f"Password length must be at least {minimum_length}"
+                )
+        else:
+            required_elements = int(self.require_digits) + int(self.require_special)
+            minimum_words = max(1, required_elements)
+            if self.num_words < minimum_words:
+                raise ValueError(
+                    f"Passphrase word count must be at least {minimum_words}"
+                )
         return self
+
+    def _password_character_sets(self) -> tuple[str, ...]:
+        """Return the enabled character sets in a stable order."""
+        character_sets = (
+            (self.require_upper, string.ascii_uppercase),
+            (self.require_lower, string.ascii_lowercase),
+            (self.require_digits, string.digits),
+            (self.require_special, string.punctuation),
+        )
+        return tuple(characters for enabled, characters in character_sets if enabled)
 
     def generate_random_password(self) -> str:
         """Generate a random password with required complexity."""
-        characters = ""
-        if self.require_upper:
-            characters += string.ascii_uppercase
-        if self.require_lower:
-            characters += string.ascii_lowercase
-        if self.require_digits:
-            characters += string.digits
-        if self.require_special:
-            characters += string.punctuation
+        character_sets = self._password_character_sets()
+        all_characters = "".join(character_sets)
 
-        # Generate initial password
-        password = [secrets.choice(characters) for _ in range(self.key_length)]
-
-        # Ensure all required character types are included
-        requirements: List[Tuple[str, Callable[[List[str]], bool]]] = []
-        if self.require_upper:
-            requirements.append((string.ascii_uppercase, lambda pw: any(c in string.ascii_uppercase for c in pw)))
-        if self.require_lower:
-            requirements.append((string.ascii_lowercase, lambda pw: any(c in string.ascii_lowercase for c in pw)))
-        if self.require_digits:
-            requirements.append((string.digits, lambda pw: any(c in string.digits for c in pw)))
-        if self.require_special:
-            requirements.append((string.punctuation, lambda pw: any(c in string.punctuation for c in pw)))
-
-        # Replace characters if requirements not met
-        for char_set, check_func in requirements:
-            if not check_func(password):
-                pos = secrets.randbelow(self.key_length)
-                password[pos] = secrets.choice(char_set)
-
-        # Shuffle the final password
+        password = [secrets.choice(characters) for characters in character_sets]
+        password.extend(
+            secrets.choice(all_characters)
+            for _ in range(self.key_length - len(password))
+        )
         secrets.SystemRandom().shuffle(password)
         return "".join(password)
 
     def generate_random_passphrase(self) -> str:
         """Generate a random passphrase with improved word selection."""
         fake = Faker()
-        words: List[str] = []
+        words: list[str] = []
         total_words = self.num_words
 
         # Reduce word count if we need to add digits/special chars
@@ -99,9 +104,15 @@ class PasswordGenerator(BaseModel):
         """
         return sha512_crypt.hash(password)
 
-    def create_user_passphrase_file(self, username, hostname, n_words=4):
-        # TODO rm n_words
-        passphrase = self.generate_random_passphrase()
+    def create_user_passphrase_file(
+        self, username: str, hostname: str, n_words: int | None = None
+    ) -> None:
+        generator = self
+        if n_words is not None:
+            settings = self.model_dump() | {"num_words": n_words}
+            generator = type(self).model_validate(settings)
+
+        passphrase = generator.generate_random_passphrase()
         hashed = self.create_password_hash(passphrase)
 
         timestamp = datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
@@ -112,15 +123,13 @@ class PasswordGenerator(BaseModel):
 
         for src, dest in [(raw_path, archived_raw), (hashed_path, archived_hashed)]:
             if os.path.exists(src):
-                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                ensure_private_directory(os.path.dirname(dest))
                 shutil.move(src, dest)
+                os.chmod(dest, PRIVATE_FILE_MODE)
 
-        os.makedirs(os.path.dirname(raw_path), exist_ok=True)
-        with open(raw_path, "w", encoding="utf-8") as raw_file:
-            raw_file.write(passphrase)
-
-        with open(hashed_path, "w", encoding="utf-8") as hashed_file:
-            hashed_file.write(hashed)  #
+        ensure_private_directory(os.path.dirname(raw_path))
+        write_private_text(raw_path, passphrase)
+        write_private_text(hashed_path, hashed)
 
     def verify_password_hash(self, password: str, password_hash: str) -> bool:
         """
@@ -128,7 +137,7 @@ class PasswordGenerator(BaseModel):
         """
         return sha512_crypt.verify(password, password_hash)
 
-    def pipe(self) -> List[Tuple[str, str]]:
+    def pipe(self) -> list[tuple[str, str]]:
         """Generate password/passphrase and its hash."""
         if self.mode == "password":
             result = self.generate_random_password()

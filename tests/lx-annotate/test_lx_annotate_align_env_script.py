@@ -8,7 +8,7 @@ import textwrap
 from pathlib import Path
 
 
-REPO_ROOT = Path("/home/admin/luxnix")
+REPO_ROOT = Path(__file__).resolve().parents[2]
 FRONTEND_ASSETS_NIX = (
     REPO_ROOT
     / "modules"

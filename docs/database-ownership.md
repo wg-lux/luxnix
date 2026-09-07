@@ -51,19 +51,6 @@ sudo -u postgres psql -l
 sudo -u postgres psql -c '\du'
 ```
 
-## What `endoreg-db-api-local` Means
-
-`services.luxnix.endoregDbApiLocal` is the legacy/local EndoReg DB API service module.
-
-It is not the PostgreSQL database itself. It is an application service that consumes a database config. It is disabled for normal EndoReg clients by the current `roles.endoreg-client` role:
-
-```nix
-services.luxnix.endoregDbApiLocal.enable =
-  mkIf (!config.roles.endoreg-db-central-01.enable) (mkForce false);
-```
-
-Central-node roles may still configure it intentionally. Do not remove the module just because the old Ansible `local_endoreg_db` role was removed.
-
 ## Direct `lxAnnotateLocal` Use
 
 If `services.luxnix.lxAnnotateLocal` is enabled directly, without `roles.endoreg-client`, its service-level database defaults are different:
@@ -86,5 +73,4 @@ Use these terms consistently:
 - `endoregDbLocal`: the local PostgreSQL database/user used by EndoReg client services.
 - `postgres-endoreg-setup.service`: systemd unit that ensures the local PostgreSQL user password.
 - `lx-annotate-local`: the current lx-annotate service implementation.
-- `endoreg-db-api-local`: legacy/local EndoReg DB API application service.
 - `local_endoreg_db`: deprecated Ansible role name; do not use for current configuration.

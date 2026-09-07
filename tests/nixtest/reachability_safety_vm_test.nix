@@ -1,6 +1,4 @@
-{
-  ...
-}: {
+_: {
   suites."reachability safety" = {
     pos = __curPos;
     tests = [
@@ -9,38 +7,42 @@
         type = "vm";
         vmConfig = {
           nodes.machine = {
-            services.openssh.enable = true;
-            services.openssh.settings.PasswordAuthentication = false;
+            services.openssh = {
+              enable = true;
+              settings.PasswordAuthentication = false;
+            };
             networking.firewall.allowedTCPPorts = [ 22 ];
 
-            systemd.services.vault-auth-setup = {
-              description = "Intentionally failing vault bootstrap";
-              wantedBy = [ "multi-user.target" ];
-              serviceConfig = {
-                Type = "oneshot";
-                ExecStart = "/bin/sh -c 'exit 1'";
+            systemd.services = {
+              vault-auth-setup = {
+                description = "Intentionally failing vault bootstrap";
+                wantedBy = [ "multi-user.target" ];
+                serviceConfig = {
+                  Type = "oneshot";
+                  ExecStart = "/bin/sh -c 'exit 1'";
+                };
               };
-            };
 
-            systemd.services.managed-secrets-setup = {
-              description = "Service blocked by failed vault bootstrap";
-              wantedBy = [ "multi-user.target" ];
-              after = [ "vault-auth-setup.service" ];
-              requires = [ "vault-auth-setup.service" ];
-              serviceConfig = {
-                Type = "oneshot";
-                ExecStart = "/bin/sh -c 'echo should-not-run > /run/managed-secrets-ran'";
+              managed-secrets-setup = {
+                description = "Service blocked by failed vault bootstrap";
+                wantedBy = [ "multi-user.target" ];
+                after = [ "vault-auth-setup.service" ];
+                requires = [ "vault-auth-setup.service" ];
+                serviceConfig = {
+                  Type = "oneshot";
+                  ExecStart = "/bin/sh -c 'echo should-not-run > /run/managed-secrets-ran'";
+                };
               };
-            };
 
-            systemd.services.fake-app = {
-              description = "App that should never make the host unreachable";
-              wantedBy = [ "multi-user.target" ];
-              after = [ "managed-secrets-setup.service" ];
-              requires = [ "managed-secrets-setup.service" ];
-              serviceConfig = {
-                Type = "oneshot";
-                ExecStart = "/bin/sh -c 'exit 1'";
+              fake-app = {
+                description = "App that should never make the host unreachable";
+                wantedBy = [ "multi-user.target" ];
+                after = [ "managed-secrets-setup.service" ];
+                requires = [ "managed-secrets-setup.service" ];
+                serviceConfig = {
+                  Type = "oneshot";
+                  ExecStart = "/bin/sh -c 'exit 1'";
+                };
               };
             };
           };
@@ -60,8 +62,10 @@
         type = "vm";
         vmConfig = {
           nodes.machine = {
-            services.openssh.enable = true;
-            services.openssh.settings.PasswordAuthentication = false;
+            services.openssh = {
+              enable = true;
+              settings.PasswordAuthentication = false;
+            };
             networking.firewall.allowedTCPPorts = [ 22 ];
 
             systemd.services.fake-critical-app = {

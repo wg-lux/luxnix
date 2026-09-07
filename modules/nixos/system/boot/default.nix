@@ -3,12 +3,13 @@
   lib,
   pkgs,
   ...
-}: let
+}:
+let
   inherit (lib) mkIf;
   inherit (lib.luxnix) mkBoolOpt;
-  #CHANGEME Dafuq is this?
   cfg = config.system.boot;
-in {
+in
+{
   options.system.boot = {
     enable = mkBoolOpt false "Whether or not to enable booting.";
     plymouth = mkBoolOpt false "Whether or not to enable plymouth boot splash.";
@@ -18,20 +19,22 @@ in {
 
   config = mkIf cfg.enable {
 
-    boot.kernel.sysctl."net.core.rmem_max" = config.luxnix.generic-settings.linux.rmemMax;
-    boot.kernel.sysctl."net.core.wmem_max" = config.luxnix.generic-settings.linux.wmemMax;
-
-    environment.systemPackages = with pkgs;
+    environment.systemPackages =
+      with pkgs;
       [
         efibootmgr
         efitools
         efivar
         fwupd
       ]
-      ++ lib.optionals cfg.secureBoot [sbctl];
+      ++ lib.optionals cfg.secureBoot [ sbctl ];
 
     boot = {
-      # TODO: if plymouth on
+      kernel.sysctl = {
+        "net.core.rmem_max" = config.luxnix.generic-settings.linux.rmemMax;
+        "net.core.wmem_max" = config.luxnix.generic-settings.linux.wmemMax;
+      };
+
       kernelParams = lib.optionals cfg.plymouth [
         "quiet"
         "splash"
@@ -68,74 +71,11 @@ in {
     nix = mkIf cfg.spaceManagement {
       #gc = {
       #  automatic = true;
-       # dates = "weekly";
+      # dates = "weekly";
       #  options = "--delete-older-than 30d";
       #  persistent = true;
       #};
       settings.auto-optimise-store = true;
-    };
-
-    #TODO @Hamzaukw add to documentation
-    systemd.services.boot-space-monitor = mkIf false { # cfg.spaceManagement {
-      description = "Monitor and clean boot partition space";
-      serviceConfig = {
-        Type = "oneshot";
-        User = "root";
-      };
-      path = with pkgs; [ coreutils gawk util-linux ];
-      script = ''
-        BOOT_PATH="/boot"
-        AVAILABLE=$(df "$BOOT_PATH" | ${pkgs.gawk}/bin/awk 'NR==2 {print $4}')
-        AVAILABLE_MB=$((AVAILABLE / 1024))
-        
-        echo "Boot partition status: $AVAILABLE_MB MB available"
-        
-        if [ "$AVAILABLE_MB" -lt 200 ]; then
-          echo "Warning: Boot partition space is low ($AVAILABLE_MB MB available)"
-          
-          # Clean up old boot files more aggressively
-          if [ "$AVAILABLE_MB" -lt 150 ]; then
-            echo "Critical: Performing aggressive cleanup of old boot files"
-            cd "$BOOT_PATH/EFI/nixos" 2>/dev/null || exit 0
-            
-            # Keep only 1 newest file of each type (more aggressive)
-            echo "Cleaning kernel files..."
-            ls -t kernel-* 2>/dev/null | tail -n +2 | ${pkgs.findutils}/bin/xargs rm -f || true
-            
-            echo "Cleaning initrd files..."
-            ls -t initrd-* 2>/dev/null | tail -n +2 | ${pkgs.findutils}/bin/xargs rm -f || true
-            
-            echo "Cleaning EFI files..."
-            ls -t *.efi 2>/dev/null | tail -n +2 | ${pkgs.findutils}/bin/xargs rm -f || true
-            
-            # Also clean up any systemd-boot entries directory
-            if [ -d "$BOOT_PATH/loader/entries" ]; then
-              echo "Cleaning old boot entries..."
-              cd "$BOOT_PATH/loader/entries"
-              ls -t nixos-*.conf 2>/dev/null | tail -n +2 | ${pkgs.findutils}/bin/xargs rm -f || true
-            fi
-            
-            echo "Emergency cleanup completed"
-            df -h "$BOOT_PATH"
-            
-            # Check if we have enough space now
-            AVAILABLE_AFTER=$(df "$BOOT_PATH" | ${pkgs.gawk}/bin/awk 'NR==2 {print $4}')
-            AVAILABLE_AFTER_MB=$((AVAILABLE_AFTER / 1024))
-            echo "Space after cleanup: $AVAILABLE_AFTER_MB MB available"
-            
-          fi
-        else
-          echo "Boot partition space OK ($AVAILABLE_MB MB available)"
-        fi
-      '';
-    };
-
-    systemd.timers.boot-space-monitor = mkIf false { #cfg.spaceManagement {
-      wantedBy = [ "timers.target" ];
-      timerConfig = {
-        OnCalendar = "daily";
-        Persistent = true;
-      };
     };
 
     # services.fwupd.enable = true;

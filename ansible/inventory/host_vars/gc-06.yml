@@ -1,7 +1,6 @@
 # inventory/host_vars/gc-06.yml
 ---
 template_name: "main"
-ansible_python_interpreter: "{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python"
 luxnix_dev_repo: "/home/admin/dev/luxnix"
 luxnix_repo: "https://github.com/wg-lux/luxnix.git"
 luxnix_dest: "/home/admin/dev/luxnix-production"
@@ -22,11 +21,13 @@ host_roles:
   custom_packages.visuals: "true"
   custom_packages.hardwareAcceleration: "true"
   custom_packages.protonmail: "true"
-  endoreg_client.defaultCenterKey: '"rbk_stuttgart"'
+  endoreg_client.defaultCenterKey: '"university_hospital_wuerzburg"'
 
 host_services: {}
 
 host_luxnix:
+  # Temporary bootstrap exception; set false after verified Vault enrollment.
+  vault.client.auth.deferUntilProvisioned: "true"
   maintenance.autoUpdates.enable: "false"
   # Custom packages
 

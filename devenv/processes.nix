@@ -1,11 +1,3 @@
-{
-  pkgs,
-  lib,
-  env,
-  isDev ? false,
-}:
-{
-
+_: {
   ping.exec = "ping localhost";
-
 }

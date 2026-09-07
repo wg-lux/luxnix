@@ -76,7 +76,7 @@ This gives you:
 
 Use:
 
-- the `nixtest` suite in [tests/nixtest](/home/admin/luxnix/tests/nixtest)
+- the [`nixtest` suite](https://github.com/wg-lux/luxnix/tree/main/tests/nixtest)
 
 This already checks the common Vault and reachability contracts and should be extended whenever a new service adopts this pattern.
 
@@ -354,7 +354,7 @@ We are not fully there yet, but `lx-annotate` is now the reference implementatio
 
 ## Related Docs
 
-- [lx-annotate Encrypted Data](/home/admin/luxnix/docs/lx-annotate-encrypted-data.md)
-- [Nixtest Safety Suite](/home/admin/luxnix/docs/testing-nixtests.md)
-- [Managed Secrets Role](/home/admin/luxnix/modules/nixos/roles/managed-secrets/README.md)
-- [lx-annotate Service Module](/home/admin/luxnix/modules/nixos/services/lx-annotate-local/README.md)
+- [lx-annotate Encrypted Data](lx-annotate-encrypted-data.md)
+- [Nixtest Safety Suite](testing-nixtests.md)
+- [Managed Secrets Role](https://github.com/wg-lux/luxnix/blob/main/modules/nixos/roles/managed-secrets/README.md)
+- [lx-annotate Service Module](https://github.com/wg-lux/luxnix/blob/main/modules/nixos/services/lx-annotate-local/README.md)

@@ -1,15 +1,33 @@
 # /default.nix
-{ pkgs, ... }: {
+_: {
+  cli = {
+    programs = {
+      git = {
+        allowedSigners = "";
+        enable = true;
+      };
+    };
+  };
+  desktops = {
+    plasma = {
+      enable = true;
+    };
+  };
+  luxnix = {
+    generic-settings = {
+      language = "english";
+      enable = true;
+      hostPlatform = "x86_64-linux";
+    };
+  };
+  roles = {
+    development = {
+      enable = true;
+    };
+    video = {
+      enable = true;
+    };
+  };
 
-cli.programs.git.allowedSigners = "";
-cli.programs.git.enable = true;
-desktops.plasma.enable = true;
-luxnix.generic-settings.language = "english";
-luxnix.generic-settings.enable = true;
-luxnix.generic-settings.hostPlatform = "x86_64-linux";
-roles.development.enable = true;
-roles.video.enable = true;
-
-home.stateVersion = "23.11";
-
+  home.stateVersion = "23.11";
 }

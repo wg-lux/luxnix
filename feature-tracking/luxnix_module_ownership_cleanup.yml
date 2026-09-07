@@ -1,0 +1,146 @@
+schema_version: '1.0'
+id: luxnix_module_ownership_cleanup
+name: Nix module ownership cleanup
+description: Consolidate scattered Nix configuration and make module ownership explicit.
+owners:
+  - LuxNix maintainers
+production_critical: false
+tracking:
+  state: active
+  history: []
+source_documents:
+  - path: AGENTS.md
+    disposition: reference
+    note: Package ownership and validation policy.
+definition_of_done:
+  - id: duplicate_definitions_removed
+    category: requirements
+    title: Duplicate definitions are removed or justified
+    acceptance:
+      - Shared behavior has one canonical module owner.
+      - Host-only and service-only settings are not duplicated across unrelated roles.
+      - Intentional compatibility definitions carry an explanatory comment.
+    required: true
+    verification:
+      kind: manual
+      instructions: Review module and host definitions for repeated options, package declarations, and service settings.
+      timeout_seconds: 300
+    assessment:
+      status: verified
+      evidence:
+        - kind: review
+          reference: modules/nixos/roles/base-server/default.nix; common/default.nix; duplicate ownership search passed
+        - kind: test
+          reference: tests/test_repository_architecture_contract.py
+        - kind: review
+          reference: modules/nixos/cli/programs/nix-ld/default.nix; modules/nixos/roles/custom-packages/default.nix;
+            modules/nixos/roles/base-server/default.nix
+      assessed_by: codex-module-cleanup-20260831-b1
+      assessed_at: '2026-08-31T14:18:00.108012Z'
+  - id: todos_are_actionable
+    category: functionality
+    title: Outstanding TODOs have actionable ownership
+    acceptance:
+      - Each retained TODO states the reason, intended owner, and next action.
+      - Completed or obsolete TODOs are removed.
+    required: true
+    verification:
+      kind: command
+      command:
+        - rg
+        - --line-number
+        - TODO|FIXME
+        - --glob
+        - '*.nix'
+      timeout_seconds: 60
+    assessment:
+      status: in_progress
+      evidence:
+        - kind: command
+          reference: rg -n 'TODO|FIXME|CHANGEME' modules/nixos -g '*.nix'
+      note: All retained modules/nixos TODOs now name an owner and next action; TODOs outside this worker scope still require review.
+      assessed_by: codex-module-cleanup-20260831-b1
+      assessed_at: '2026-08-31T14:18:02.855455Z'
+  - id: package_ownership_is_centralized
+    category: security
+    title: Package ownership is centralized
+    acceptance:
+      - Shared development packages have one canonical definition.
+      - Service modules declare only hard runtime dependencies.
+    required: true
+    verification:
+      kind: manual
+      instructions: Review package declarations against AGENTS.md and custom-packages ownership rules.
+      timeout_seconds: 300
+    assessment:
+      status: verified
+      evidence:
+        - kind: review
+          reference: modules/nixos/roles/custom-packages/README.md; canonical package search passed
+        - kind: test
+          reference: tests/test_repository_architecture_contract.py
+        - kind: document
+          reference: modules/nixos/roles/custom-packages/README.md
+      assessed_by: codex-module-cleanup-20260831-b1
+      assessed_at: '2026-08-31T14:18:01.038908Z'
+  - id: module_boundaries_are_documented
+    category: documentation
+    title: Module boundaries are documented
+    acceptance:
+      - Shared, host-only, and service-specific module responsibilities are documented.
+    required: true
+    verification:
+      kind: manual
+      instructions: Review module README files and architecture documentation for ownership boundaries.
+      timeout_seconds: 300
+    assessment:
+      status: verified
+      evidence:
+        - kind: document
+          reference: modules/nixos/roles/custom-packages/README.md
+      assessed_by: codex-cleanup-20260831-a7
+      assessed_at: '2026-08-31T13:59:13.368306Z'
+  - id: dead_options_are_removed
+    category: operations
+    title: Dead options and compatibility shims are removed
+    acceptance:
+      - Unused options and obsolete compatibility aliases are removed or have a documented consumer.
+    required: true
+    verification:
+      kind: manual
+      instructions: Search option declarations and references for unused or obsolete interfaces.
+      timeout_seconds: 300
+    assessment:
+      status: in_progress
+      evidence:
+        - kind: test
+          reference: tests/test_repository_architecture_contract.py
+      note: Removed empty dev01/dev02 bundles, unused VPN stage-1 option, disabled boot monitor, obsolete SOPS stubs and comment-only service modules;
+        a complete public-option consumer audit remains.
+      assessed_by: codex-module-cleanup-20260831-b1
+      assessed_at: '2026-08-31T14:18:03.860275Z'
+  - id: evaluation_remains_stable
+    category: testing
+    title: Module cleanup preserves evaluation
+    acceptance:
+      - Flake checks and representative host evaluations pass after ownership changes.
+    required: true
+    verification:
+      kind: command
+      command:
+        - nix
+        - flake
+        - check
+      timeout_seconds: 1800
+    assessment:
+      status: blocked
+      evidence:
+        - kind: command
+          reference: nix-instantiate --parse changed modules/nixos files
+        - kind: test
+          reference: tests/test_repository_architecture_contract.py
+      note: Changed Nix parses and 11 architecture tests pass; full git-flake checks cannot include untracked
+        modules/nixos/roles/custom-packages/README.md and systems/x86_64-linux/host-common.nix. Four representative evaluations were stopped after
+        prolonged shared Nix-cache contention/downloads.
+      assessed_by: codex-module-cleanup-20260831-b1
+      assessed_at: '2026-08-31T14:18:05.066654Z'

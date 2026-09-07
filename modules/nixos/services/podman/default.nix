@@ -1,14 +1,16 @@
-{config, lib, pkgs, ...}: 
+{ config, lib, ... }:
 
-with lib; 
-with lib.luxnix; let
+with lib;
+with lib.luxnix;
+let
   cfg = config.services.luxnix.podman;
-  adminUser = config.user.admin.name;
   # Use comprehensive NVIDIA detection logic
-  cudaSupport = (config.luxnix.nvidia-default.enable or false) || 
-                (config.luxnix.nvidia-prime.enable or false) || 
-                (config.luxnix.generic-settings.gpu.nvidia.enable or false);
-in {
+  cudaSupport =
+    (config.luxnix.nvidia-default.enable or false)
+    || (config.luxnix.nvidia-prime.enable or false)
+    || (config.luxnix.generic-settings.gpu.nvidia.enable or false);
+in
+{
   options.services.luxnix.podman = {
     enable = mkBoolOpt false "Enable Podman";
     # Enable podman-compose
@@ -17,9 +19,9 @@ in {
     dockerDropIn = mkBoolOpt true "Enable podman as docker drop-in replacement";
     nvidia = mkBoolOpt cudaSupport "Enable NVIDIA support";
     networkSocket = mkBoolOpt false "Enable network socket";
-    extraPackages = mkOpt (types.listOf types.package) [] "Additional packages to install";
+    extraPackages = mkOpt (types.listOf types.package) [ ] "Additional packages to install";
     autoPrune = mkBoolOpt true "Enable auto-prune";
-    autoPruneFlags = mkOpt (types.listOf types.str) ["--all"] "Flags for auto-prune";
+    autoPruneFlags = mkOpt (types.listOf types.str) [ "--all" ] "Flags for auto-prune";
   };
 
   config = mkIf cfg.enable {
@@ -29,14 +31,14 @@ in {
     };
 
     hardware.nvidia-container-toolkit.enable = cfg.nvidia;
-    
+
     # Enable common container config files in /etc/containers
     virtualisation.containers.enable = true;
     virtualisation = {
       podman = {
-        enable = cfg.enable;
+        inherit (cfg) enable;
         # Create a `docker` alias for podman, to use it as a drop-in replacement
-        extraPackages = [] ++ cfg.extraPackages;
+        inherit (cfg) extraPackages;
         dockerSocket.enable = cfg.dockerDropIn;
         dockerCompat = cfg.dockerDropIn;
         autoPrune = {

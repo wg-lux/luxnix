@@ -5,9 +5,11 @@
   ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.cli.programs.modern-unix;
-in {
+in
+{
   options.cli.programs.modern-unix = with types; {
     enable = mkBoolOpt false "Whether or not to enable modern unix tools";
   };

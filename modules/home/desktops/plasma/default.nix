@@ -1,7 +1,8 @@
-{ config
-, pkgs
-, lib
-, ...
+{
+  config,
+  pkgs,
+  lib,
+  ...
 }:
 with lib;
 with lib.luxnix;
@@ -24,9 +25,9 @@ in
       # Some high-level settings:
 
       # Run to get options
-      # plasma-apply-colorscheme     plasma-apply-lookandfeel   
+      # plasma-apply-colorscheme     plasma-apply-lookandfeel
       # plasma-apply-cursortheme     plasma-apply-wallpaperimage
-      # plasma-apply-desktoptheme  
+      # plasma-apply-desktoptheme
 
       workspace = {
         clickItemTo = "select";
@@ -110,7 +111,7 @@ in
             }
             {
               systemTray.items = {
-                # We explicitly show 
+                # We explicitly show
                 shown = [
                   "org.kde.plasma.battery"
                   "org.kde.plasma.networkmanagement"
@@ -202,10 +203,10 @@ in
           };
           dimDisplay = {
             enable = true;
-            idleTimeout = (15 * 60);
+            idleTimeout = 15 * 60;
           };
           turnOffDisplay = {
-            idleTimeout = (20 * 60);
+            idleTimeout = 20 * 60;
             idleTimeoutWhenLocked = "immediately";
           };
           displayBrightness = 100;
@@ -225,7 +226,6 @@ in
         edgeBarrier = 0; # Disables the edge-barriers introduced in plasma 6.1
         cornerBarrier = true; # When enabled, prevents the cursor from crossing at screen-corners.
 
-
         nightLight = {
           mode = "location";
           # Set Würzburg, Germany
@@ -236,8 +236,15 @@ in
           };
         };
         titlebarButtons = {
-          left = [ "help" "application-menu" ];
-          right = [ "minimize" "maximize" "close" ];
+          left = [
+            "help"
+            "application-menu"
+          ];
+          right = [
+            "minimize"
+            "maximize"
+            "close"
+          ];
         };
 
       };
@@ -246,7 +253,7 @@ in
         appearance = {
           alwaysShowClock = true;
           #wallpaperPictureOfTheDay = {
-            # null or one of “apod”, “bing”, “flickr”, “natgeo”, “noaa”, “wcpotd”, “epod”, “simonstalenhag”
+          # null or one of “apod”, “bing”, “flickr”, “natgeo”, “noaa”, “wcpotd”, “epod”, “simonstalenhag”
           #  provider = "bing";
           #};
           wallpaper = "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Kay/contents/images/1080x1920.png";
@@ -258,7 +265,6 @@ in
         lockOnStartup = false;
         passwordRequired = true;
         passwordRequiredDelay = 10; # The time it takes in seconds for the password to be required after the screen is locked.
-
 
       };
 

@@ -15,6 +15,8 @@ pkgs.mkShell {
     statix
     deadnix
     alejandra
+    nixfmt
+    flake-checker
     home-manager
     git
     sops

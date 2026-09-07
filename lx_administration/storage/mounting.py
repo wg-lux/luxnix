@@ -22,7 +22,7 @@ def external_drive_requires_mount(storage: StorageManager) -> bool:
 def find_device_by_serial(
     serial: str, by_id_path: Path = DEFAULT_BY_ID_PATH
 ) -> Path | None:
-    """Find the block device symlink that contains the given serial in /dev/disk/by-id."""
+    """Find a block-device symlink containing the serial in /dev/disk/by-id."""
 
     if not serial:
         return None
@@ -41,7 +41,7 @@ def find_device_by_serial(
 def drive_with_serial_available(
     storage: StorageManager, by_id_path: Path = DEFAULT_BY_ID_PATH
 ) -> Path | None:
-    """Return the block device Path if the configured serial is present and not mounted."""
+    """Return the configured block device when present and not mounted."""
 
     serial = storage.storage_persisting_hdd_id
     if serial is None:

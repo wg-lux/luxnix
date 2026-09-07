@@ -1,9 +1,11 @@
-{ lib
-, pkgs
-, config
-, ...
+{
+  lib,
+  pkgs,
+  config,
+  ...
 }:
-with lib; let
+with lib;
+let
   cfg = config.roles.postgres.default;
 
   # Password file paths
@@ -162,7 +164,6 @@ with lib; let
     echo "endoregDbLocal user password configured successfully"
   '';
 
-
 in
 {
   options.roles.postgres.default = {
@@ -230,8 +231,14 @@ in
     # Create systemd service to set up endoregDbLocal user password
     systemd.services.postgres-endoreg-setup = {
       description = "Set up endoregDbLocal PostgreSQL user password";
-      after = [ "postgresql.service" "managed-secrets-setup.service" ];
-      requires = [ "postgresql.service" "managed-secrets-setup.service" ];
+      after = [
+        "postgresql.service"
+        "managed-secrets-setup.service"
+      ];
+      requires = [
+        "postgresql.service"
+        "managed-secrets-setup.service"
+      ];
       wantedBy = [ "multi-user.target" ];
       serviceConfig = {
         Type = "oneshot";

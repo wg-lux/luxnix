@@ -13,6 +13,11 @@ uses `/etc/ssh/ssh_host_ed25519_key` as the SOPS age identity.
 
 ## Verify A Host
 
+Prerequisites: use a trusted console or already authenticated VPN path,
+confirm the target hostname and address, and compare against the repository
+registry before accepting any changed key. Keep the current known-good host
+key and an operator-controlled encrypted backup available.
+
 Collect the current host fingerprint:
 
 ```bash
@@ -40,6 +45,16 @@ for name in gc-05 gc-05.intern 172.16.255.105; do
 done
 ssh-keyscan -T 5 -t ed25519,rsa gc-05 gc-05.intern 172.16.255.105 >> ~/.ssh/known_hosts
 ```
+
+Validate the rotation from a fresh connection: confirm the fingerprint of the
+new key, verify the expected host identity and SSH service, and check that
+SOPS secrets decrypt with the rekeyed identity where applicable. If the new
+key is wrong or the host becomes unreachable, stop accepting connections,
+restore the backed-up private/public host keys with root ownership and the
+modes below, restart `sshd`, and remove/re-add the client entry only after the
+fingerprint matches the trusted backup. If the host configuration itself
+caused the outage, boot or switch the previous NixOS generation before
+repeating the rotation.
 
 ## Backup Private Host Keys
 

@@ -85,7 +85,10 @@ uv remove endoreg-db && uv remove lx-anonymizer && uv add lx-dtypes=="your-versi
 
 ## Luxnix
 
-In luxnix, a wheel based deployment of lx-annotate is used. This is managed in this folder, the path option sits in /home/admin/luxnix/modules/nixos/services/lx-annotate-local/options.nix (around line 370). If updated, go to pypi.org https://pypi.org/project/lx-annotate/#history and right click on the latest versions .whl path link.
+LuxNix uses a wheel-based deployment of lx-annotate. This is managed in this
+folder; the path option lives in `options/runtime.nix`. To update it, open the
+[lx-annotate release history](https://pypi.org/project/lx-annotate/#history) and
+copy the link for the latest `.whl` file.
 ```
 bash
 nix hash convert --hash-algo sha256 --to sri \
@@ -94,7 +97,7 @@ nix hash convert --hash-algo sha256 --to sri \
 # OUTPUT OF SHA HASH WILL BE HERE
 ```
 
-update the wheel-path option in /home/admin/luxnix/modules/nixos/services/lx-annotate-local/options.nix
+Update the wheel-path option in `options/runtime.nix`.
 ```
 nix
             default = pkgs.fetchurl {

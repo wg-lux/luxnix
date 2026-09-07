@@ -19,9 +19,24 @@ in
     mount_point="${envDataDir}"
     mapper_name="${cfg.runtime.managedEncryptedData.mapperName}"
     mapper_path="/dev/mapper/$mapper_name"
-    luks_uuid="${if cfg.runtime.managedEncryptedData.luksUuid == null then "" else cfg.runtime.managedEncryptedData.luksUuid}"
-    luks_uuid_file="${if cfg.runtime.managedEncryptedData.luksUuidFile == null then "" else toString cfg.runtime.managedEncryptedData.luksUuidFile}"
-    key_file="${if cfg.runtime.managedEncryptedData.keyFile == null then "" else toString cfg.runtime.managedEncryptedData.keyFile}"
+    luks_uuid="${
+      if cfg.runtime.managedEncryptedData.luksUuid == null then
+        ""
+      else
+        cfg.runtime.managedEncryptedData.luksUuid
+    }"
+    luks_uuid_file="${
+      if cfg.runtime.managedEncryptedData.luksUuidFile == null then
+        ""
+      else
+        toString cfg.runtime.managedEncryptedData.luksUuidFile
+    }"
+    key_file="${
+      if cfg.runtime.managedEncryptedData.keyFile == null then
+        ""
+      else
+        toString cfg.runtime.managedEncryptedData.keyFile
+    }"
 
     if [ -z "$luks_uuid" ] && [ -n "$luks_uuid_file" ] && [ -f "$luks_uuid_file" ]; then
       luks_uuid="$(tr -d '\n' < "$luks_uuid_file")"
@@ -57,11 +72,9 @@ in
     if [ -n "${cfg.runtime.managedEncryptedData.fsType}" ]; then
       mount_cmd+=(-t "${cfg.runtime.managedEncryptedData.fsType}")
     fi
-    ${
-      optionalString (encryptedDataMountOptions != "") ''
-        mount_cmd+=(-o "${encryptedDataMountOptions}")
-      ''
-    }
+    ${optionalString (encryptedDataMountOptions != "") ''
+      mount_cmd+=(-o "${encryptedDataMountOptions}")
+    ''}
     mount_cmd+=("$mapper_path" "$mount_point")
     "''${mount_cmd[@]}"
 

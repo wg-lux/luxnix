@@ -61,11 +61,9 @@ def test_runtime_exports_ffmpeg_transcode_timeout_to_wheel_services():
     )
 
     assert 'ffmpegTranscodeTimeoutSeconds = "86400";' in source
-    assert (
-        'export FFMPEG_TRANSCODE_TIMEOUT_SECONDS="${ffmpegTranscodeTimeoutSeconds}"'
-        in source
-    )
-    assert "FFMPEG_TRANSCODE_TIMEOUT_SECONDS=${ffmpegTranscodeTimeoutSeconds}" in source
+    assert "FFMPEG_TRANSCODE_TIMEOUT_SECONDS = ffmpegTranscodeTimeoutSeconds;" in source
+    assert "commonShellExportText" in source
+    assert "commonSystemdEnvText" in source
     assert "FFMPEG_TRANSCODE_TIMEOUT_SECONDS=1000000" not in source
 
 
@@ -125,6 +123,7 @@ def test_wheel_filewatcher_passes_master_key_file_to_child_process(tmp_path: Pat
         '${cfg.runtime.tessdataPrefix}': "",
         '${cfg.runtime.pytorchAllocConf}': "",
         '${runtimeWheelVenvPath}': str(runtime_venv),
+        '${wheelVenvPythonPath}': str(runtime_venv / "bin" / "python"),
         '${runtimeWheelRootPath}': str(runtime_wheel_root),
         '${cfg.runtime.commands.fileWatcher or ""}': filewatcher_command,
         '${lib.escapeShellArg wheelFileWatcherOnceCommand}': f'"{filewatcher_command}"',

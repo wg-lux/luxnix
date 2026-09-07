@@ -1,0 +1,72 @@
+name: Nix quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nix-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fast:
+    name: Ratcheted source checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/determinate-nix-action@v3
+      - name: Run fast Nix quality checks
+        run: nix develop .#default --command python3 scripts/nix-quality.py --json > nix-quality-report.json
+      - name: Upload quality report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nix-quality-fast
+          path: nix-quality-report.json
+          if-no-files-found: ignore
+
+  generators:
+    name: Generated Nix renderer contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/determinate-nix-action@v3
+      - name: Run non-evaluating generator contracts
+        run: >-
+          nix develop .#default --command uv run pytest -q
+          --junitxml=nix-quality-generators-junit.xml
+          tests/test_autoconf_rendering.py
+          tests/test_ansible_autoconf_nixos_config.py
+          tests/test_autoconf_cli.py
+          tests/test_boot_decryption_renderer.py
+      - name: Upload generator JUnit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nix-quality-generators-junit
+          path: nix-quality-generators-junit.xml
+          if-no-files-found: warn
+
+  full:
+    name: Full flake evaluation
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/determinate-nix-action@v3
+      - name: Run full Nix quality checks
+        run: nix develop .#default --command python3 scripts/nix-quality.py --full --json > nix-quality-report.json
+      - name: Upload quality report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nix-quality-full
+          path: nix-quality-report.json
+          if-no-files-found: ignore

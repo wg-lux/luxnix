@@ -2,6 +2,12 @@
 
 LuxNix generates `/etc/hosts` entries from `luxnix.generic-settings.network.hosts`.
 
+VPN addresses have one source of truth: each host's `ansible_host` value in
+`ansible/inventory/hosts.ini`. Autoconf derives the corresponding
+`generic-settings.network.hosts.<host>.ip-vpn` option automatically. Keep only
+additional metadata such as domains, local addresses, clusters, and Syncthing
+IDs under `ansible/inventory/group_vars/all/30-nix.yml`.
+
 This is useful for stable internal names such as `s-02` or `s-02.intern`, but it must not override public service domains such as `keycloak.endo-reg.net`.
 
 ## Why `ping` and `dig` Can Disagree
@@ -33,19 +39,17 @@ networking.hosts."172.16.255.12" = [
 ];
 ```
 
-Public DNS names are filtered out of generated `/etc/hosts` by:
+Public DNS names are filtered out of generated `/etc/hosts` by the configured
+suffix list:
 
 ```nix
-luxnix.generic-settings.network.publicDnsDomains = [
-  "adminKeycloak.endo-reg.net"
-  "cloud.endo-reg.net"
-  "keycloak-admin.endo-reg.net"
-  "keycloak.endo-reg.net"
-  "nginx.endo-reg.net"
+luxnix.generic-settings.network.publicDomainSuffixes = [
+  ".endo-reg.net"
 ];
 ```
 
-This prevents `keycloak.endo-reg.net`, `cloud.endo-reg.net`, and `nginx.endo-reg.net` from being pinned to `172.16.255.12` in generated host files.
+This prevents `keycloak.endo-reg.net`, `cloud.endo-reg.net`, and other names
+under that suffix from being pinned to `172.16.255.12` in generated host files.
 
 ## Local-Only Domains
 
@@ -73,10 +77,15 @@ Use this only on the host that owns the service. Do not apply it globally.
 
 ## Verification
 
+Prerequisites: make the change in the canonical inventory or host/module
+configuration, ensure the target host is unambiguous, and complete evaluation,
+build, and SSH/connectivity checks before activation. Keep the previous NixOS
+generation available until resolution has been tested.
+
 After rebuilding:
 
 ```bash
-sudo nixos-rebuild switch --flake /home/admin/luxnix#<host>
+sudo nixos-rebuild switch --flake .#<host>
 ```
 
 Check NSS resolution:
@@ -98,3 +107,10 @@ Expected result:
 - `dig` and `nslookup` return the public DNS record.
 - `getent hosts keycloak.endo-reg.net` should not return `172.16.255.12` from generated `/etc/hosts`.
 - `getent hosts s-02` and `getent hosts s-02.intern` may still return `172.16.255.12`.
+
+If activation or resolution is wrong, stop dependent services, collect the
+`getent`, `dig`, and journal output, and roll back with the previous boot
+generation or `sudo nixos-rebuild switch --rollback`. Restore the prior
+inventory/template input if needed, regenerate, and repeat the checks. Do not
+fix a generated `/etc/hosts` file by hand; recovery is complete only when the
+expected NSS and DNS results are restored.

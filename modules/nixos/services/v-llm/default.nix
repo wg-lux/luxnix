@@ -47,7 +47,10 @@ in
 
     group = mkOpt types.str "vllm" "System group used to run the vLLM service.";
 
-    supplementaryGroups = mkOpt (types.listOf types.str) [ "video" "render" ] "Supplementary groups for GPU access.";
+    supplementaryGroups = mkOpt (types.listOf types.str) [
+      "video"
+      "render"
+    ] "Supplementary groups for GPU access.";
 
     stateDir = mkOpt types.str "/var/lib/vllm" "Persistent state directory for the service.";
 
@@ -55,15 +58,21 @@ in
 
     downloadDir = mkOpt types.str "/var/cache/vllm/models" "Model download directory passed to vLLM.";
 
-    environment = mkOpt (types.attrsOf types.str) { } "Additional environment variables for the vLLM service.";
+    environment =
+      mkOpt (types.attrsOf types.str) { }
+        "Additional environment variables for the vLLM service.";
 
-    environmentFile = mkOpt (types.nullOr types.path) null "Optional environment file for secrets like HF_TOKEN.";
+    environmentFile =
+      mkOpt (types.nullOr types.path) null
+        "Optional environment file for secrets like HF_TOKEN.";
 
     tensorParallelSize = mkOpt (types.nullOr types.int) null "Optional tensor parallel size.";
 
     maxModelLen = mkOpt (types.nullOr types.int) 262144 "Optional `--max-model-len` value.";
 
-    gpuMemoryUtilization = mkOpt (types.nullOr types.float) 0.9 "Optional `--gpu-memory-utilization` value.";
+    gpuMemoryUtilization =
+      mkOpt (types.nullOr types.float) 0.9
+        "Optional `--gpu-memory-utilization` value.";
 
     extraArgs = mkOpt (types.listOf types.str) [ ] "Additional CLI arguments appended to `vllm serve`.";
   };
@@ -73,7 +82,7 @@ in
 
     users.users.${cfg.user} = {
       isSystemUser = true;
-      group = cfg.group;
+      inherit (cfg) group;
       home = cfg.stateDir;
       createHome = false;
       extraGroups = cfg.supplementaryGroups;
@@ -98,7 +107,8 @@ in
         VLLM_CONFIG_ROOT = cfg.cacheDir;
         VLLM_CACHE_ROOT = cfg.cacheDir;
         XDG_CACHE_HOME = cfg.cacheDir;
-      } // cfg.environment;
+      }
+      // cfg.environment;
 
       serviceConfig = {
         Type = "simple";
@@ -119,7 +129,8 @@ in
           cfg.downloadDir
         ];
         LimitNOFILE = 1048576;
-      } // optionalAttrs (cfg.environmentFile != null) {
+      }
+      // optionalAttrs (cfg.environmentFile != null) {
         EnvironmentFile = cfg.environmentFile;
       };
     };

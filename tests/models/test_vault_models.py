@@ -4,6 +4,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import yaml
+
 from lx_administration.models import Vault
 from lx_administration.models.ansible import AnsibleInventory
 from lx_administration.models.vault import (
@@ -86,15 +88,17 @@ class TestVaultModel(unittest.TestCase):
         mock_generate.return_value = mock_psk
 
         # Test creating new PSK
-        psk, created = self.vault.get_or_create_psk("test-host")
+        logger = MagicMock()
+        psk, created = self.vault.get_or_create_psk("test-host", logger=logger)
         self.assertTrue(created)
         self.assertEqual(psk.name, "test-host")
         self.assertIn(psk, self.vault.pre_shared_keys)
 
         # Test retrieving existing PSK
-        psk2, created = self.vault.get_or_create_psk("test-host")
+        psk2, created = self.vault.get_or_create_psk("test-host", logger=logger)
         self.assertFalse(created)
         self.assertEqual(psk2, psk)
+        self.assertNotIn("PSK:", " ".join(str(call) for call in logger.mock_calls))
 
     def test_get_host_secrets(self):
         """Test get_host_secrets method."""
@@ -121,6 +125,7 @@ class TestVaultModel(unittest.TestCase):
             owner_type="roles",
             template_name="role1",
             target_name="role1_target",
+            value="TOP_SECRET_ROLE",
         )
 
         local_template = SecretTemplate(
@@ -135,29 +140,27 @@ class TestVaultModel(unittest.TestCase):
             owner_type="local",
             template_name="user@test-host",
             target_name="local_target",
+            value="TOP_SECRET_LOCAL",
         )
 
         self.vault.secret_templates.extend([role_template, local_template])
         self.vault.secrets.extend([role_secret, local_secret])
 
         # Test getting host secrets
-        host_secrets = self.vault.get_host_secrets("test-host")
+        logger = MagicMock()
+        host_secrets = self.vault.get_host_secrets("test-host", logger=logger)
         self.assertEqual(len(host_secrets), 2)
         self.assertIn(role_secret, host_secrets)
         self.assertIn(local_secret, host_secrets)
+        log_calls = " ".join(str(call) for call in logger.mock_calls)
+        self.assertNotIn("TOP_SECRET_ROLE", log_calls)
+        self.assertNotIn("TOP_SECRET_LOCAL", log_calls)
 
-    @patch("pathlib.Path.exists")
-    @patch("builtins.open")
-    @patch("yaml.safe_load")
-    def test_load_dir(self, mock_yaml_load, mock_open, mock_exists):
-        """Test load_dir method with mocked file operations."""
-        # Setup mocks
-        mock_exists.return_value = True
-
-        # Create a minimal valid vault data structure
+    @patch("lx_administration.models.vault.manager.get_logger")
+    def test_load_dir(self, mock_get_logger):
+        """Load real YAML without writing vault values to logs."""
         mock_vault_data = {
             "secrets": [],
-            "access_keys": [],
             "secret_templates": [],
             "pre_shared_keys": [],
             "dir": self.test_dir,
@@ -166,18 +169,43 @@ class TestVaultModel(unittest.TestCase):
             "secret_types": ["password", "key", "certificate"],
             "default_system_users": ["admin"],
             "subnet": "172.16.255.",
+            "private_marker": "TOP_SECRET_MARKER",
         }
+        vault_file = Path(self.test_dir) / "vault.yml"
+        vault_file.write_text(yaml.safe_dump(mock_vault_data), encoding="utf-8")
 
-        mock_yaml_load.return_value = mock_vault_data
-
-        # Now test the load_dir method
         vault = Vault.load_dir(self.test_dir, self.test_key)
 
         self.assertIsInstance(vault, Vault)
         self.assertEqual(len(vault.secrets), 0)
-        # access_keys removed from model
         self.assertEqual(vault.dir, self.test_dir)
         self.assertEqual(vault.key, self.test_key)
+        log_calls = " ".join(
+            str(call) for call in mock_get_logger.return_value.mock_calls
+        )
+        self.assertNotIn("TOP_SECRET_MARKER", log_calls)
+        mock_get_logger.return_value.info.assert_called_once_with(
+            "Loaded vault metadata: secrets=%d, templates=%d, pre_shared_keys=%d",
+            0,
+            0,
+            0,
+        )
+
+    def test_load_dir_rejects_duplicate_keys_with_path(self):
+        vault_file = Path(self.test_dir) / "vault.yml"
+        vault_file.write_text("secrets: []\nsecrets: []\n", encoding="utf-8")
+
+        with self.assertRaisesRegex(yaml.YAMLError, "duplicate key 'secrets'") as error:
+            Vault.load_dir(self.test_dir, self.test_key)
+
+        self.assertIn(str(vault_file), str(error.exception))
+
+    def test_load_dir_rejects_non_mapping_yaml(self):
+        vault_file = Path(self.test_dir) / "vault.yml"
+        vault_file.write_text("- not\n- a\n- vault\n", encoding="utf-8")
+
+        with self.assertRaisesRegex(ValueError, "Expected a YAML mapping"):
+            Vault.load_dir(self.test_dir, self.test_key)
 
     @patch("pathlib.Path.exists")
     def test_load_dir_file_not_found(self, mock_exists):
@@ -219,10 +247,12 @@ class TestVaultModel(unittest.TestCase):
         }
 
         # Call the method under test
-        self.vault.save_to_file()
+        logger = MagicMock()
+        self.vault.save_to_file(logger=logger)
 
         # Verify dump_yaml was called correctly
         mock_dump_yaml.assert_called_once()
+        logger.debug.assert_not_called()
         actual_data = mock_dump_yaml.call_args[0][0]  # First positional argument
         self.assertEqual(actual_data, expected_data)
 
@@ -273,7 +303,7 @@ class TestVaultModel(unittest.TestCase):
         )
         self.vault.secret_templates.append(template)
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             self.vault.validate_vault()
 
     @patch("lx_administration.models.ansible.AnsibleInventory.from_file")

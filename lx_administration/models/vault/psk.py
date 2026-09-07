@@ -1,152 +1,86 @@
-from pathlib import Path
-from pydantic import BaseModel, model_validator
-from pydantic import ConfigDict
-from typing import Optional
-from datetime import datetime as dt, timedelta as td
-from ...password import PasswordGenerator
 import warnings
-from ...logging import get_logger
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Self
+
+from pydantic import BaseModel, field_validator, model_validator
+
+from ...password import PasswordGenerator
+from ...password.files import write_private_text
+from ...permissions import ensure_private_directory
+
+DEFAULT_VALIDITY = timedelta(days=30)
 
 
 class PreSharedKey(BaseModel):
-    """
-    Pre-shared key used for secure distribution of other secrets.
-    """
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    """Pre-shared key used to distribute secrets to one client."""
 
     name: str
-    file: str  # Changed from Path to str for YAML serialization
-    created: Optional[dt] = None
-    updated: Optional[dt] = None
-    validity: Optional[td] = td(days=30)  # PSKs are shorter-lived than regular keys
-    vault_id_prefix: Optional[str] = None
+    file: str
+    created: datetime | None = None
+    updated: datetime | None = None
+    validity: timedelta | None = DEFAULT_VALIDITY
+    vault_id_prefix: str | None = None
 
-    @model_validator(mode="before")
+    @field_validator("file", mode="before")
     @classmethod
-    def validate_data(cls, data):
-        if isinstance(data, (str, bytes)):
-            return data
+    def serialize_file_path(cls, value: object) -> object:
+        return str(value) if isinstance(value, Path) else value
 
-        if not isinstance(data, dict):
-            return data
-
-        # Work with a copy
-        data = dict(data)
-
-        # Convert file Path to string
-        if isinstance(data.get("file"), Path):
-            data["file"] = str(data["file"])
-
-        # Handle datetime fields
-        for field in ["created", "updated"]:
-            if field in data and isinstance(data[field], str):
-                try:
-                    data[field] = dt.fromisoformat(data[field].replace("Z", "+00:00"))
-                except (ValueError, AttributeError):
-                    data[field] = None
-
-        # Handle validity duration
-        if "validity" in data and isinstance(data["validity"], str):
+    @field_validator("created", "updated", mode="before")
+    @classmethod
+    def parse_timestamp(cls, value: object) -> object:
+        if isinstance(value, str):
             try:
-                if data["validity"].startswith("P") and data["validity"].endswith("D"):
-                    days = int(data["validity"][1:-1])
-                else:
-                    days = int(data["validity"].split()[0])
-                data["validity"] = td(days=days)
-            except (ValueError, IndexError):
-                data["validity"] = td(days=30)
+                return datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError:
+                return None
+        return value
 
-        _vid_prefix = data.get("vault_id_prefix", data["name"])
-        data["vault_id_prefix"] = _vid_prefix.replace("@", "--")
+    @field_validator("validity", mode="before")
+    @classmethod
+    def parse_validity(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
 
-        return data
+        try:
+            if value.startswith("P") and value.endswith("D"):
+                days = int(value[1:-1])
+            else:
+                days = int(value.split()[0])
+            return timedelta(days=days)
+        except (ValueError, IndexError):
+            return DEFAULT_VALIDITY
 
-    def get_vid(self):
-        vid = f"{self.vault_id_prefix}@{self.file}"
-        return vid
+    @model_validator(mode="after")
+    def normalize_vault_id_prefix(self) -> Self:
+        prefix = self.vault_id_prefix or self.name
+        self.vault_id_prefix = prefix.replace("@", "--")
+        return self
 
-    def model_dump(self, **kwargs):
-        """Custom serialization for YAML dumping"""
-        data = super().model_dump(**kwargs)
-        # Convert validity to ISO format
-        if "validity" in data and isinstance(data["validity"], td):
-            data["validity"] = f"P{data['validity'].days}D"
-        return data
+    def get_vid(self) -> str:
+        return f"{self.vault_id_prefix}@{self.file}"
 
     @property
     def file_path(self) -> Path:
-        """Get file path as Path object"""
+        """Return the expanded absolute PSK path."""
         return Path(self.file).expanduser().resolve()
 
     @classmethod
-    def generate(cls, name: str, psk_dir: Path, logger=None):
-        # FIXME
-        """Generate a new pre-shared key"""
-        if not logger:
-            logger = get_logger("lx_vault__generate_psk")
-        psk_dir = psk_dir.expanduser().resolve()
-        psk_dir.mkdir(parents=True, exist_ok=True)
+    def generate(cls, name: str, psk_dir: str | Path) -> Self:
+        """Generate and persist a new pre-shared key."""
+        psk_dir = Path(psk_dir).expanduser().resolve()
+        ensure_private_directory(psk_dir)
 
         psk_file = psk_dir / f"{name}.psk"
         if psk_file.exists():
-            warnings.warn(f"PSK file already exists: {psk_file}")
+            warnings.warn(f"PSK file already exists: {psk_file}", stacklevel=2)
 
-        # Generate PSK using PasswordGenerator
-        pg = PasswordGenerator(
-            mode="passphrase", num_words=6
-        )  # Longer passphrase for PSK
+        pg = PasswordGenerator(mode="passphrase", num_words=6)
         results = pg.pipe()
         psk = results[0][1]
 
-        # Write PSK to file with tight permissions
-        with open(psk_file, "w") as f:
-            f.write(psk)
-        psk_file.chmod(0o600)
+        write_private_text(psk_file, psk)
 
-        return cls(name=name, file=str(psk_file), created=dt.now(), updated=dt.now())
-
-    def encrypt_access_key(self, access_key_path: Path, target_path: Path):
-        """Encrypt an access key using this PSK"""
-        from cryptography.fernet import Fernet
-        import base64
-
-        # Derive Fernet key from PSK
-        with open(self.file_path, "r") as f:
-            psk = f.read().encode()
-        key = base64.urlsafe_b64encode(psk[:32].ljust(32, b"\0"))
-        fernet = Fernet(key)
-
-        # Encrypt access key
-        with open(access_key_path, "rb") as f_in:
-            data = f_in.read()
-        encrypted = fernet.encrypt(data)
-
-        # Write encrypted data
-        with open(target_path, "wb") as f_out:
-            f_out.write(encrypted)
-
-    def decrypt_access_key(self, encrypted_path: Path, target_path: Path):
-        """Decrypt an access key using this PSK"""
-        from cryptography.fernet import Fernet
-        import base64
-
-        # Derive Fernet key from PSK
-        with open(self.file_path, "r") as f:
-            psk = f.read().encode()
-        key = base64.urlsafe_b64encode(psk[:32].ljust(32, b"\0"))
-        fernet = Fernet(key)
-
-        # Decrypt access key
-        with open(encrypted_path, "rb") as f_in:
-            encrypted = f_in.read()
-        decrypted = fernet.decrypt(encrypted)
-
-        # Write decrypted data
-        with open(target_path, "wb") as f_out:
-            f_out.write(decrypted)
-
-
-# If needed, migrate logic from AccessKey here:
-# def some_replacement_method(...):
-#     # ...migrated logic from AccessKey...
+        now = datetime.now()
+        return cls(name=name, file=str(psk_file), created=now, updated=now)

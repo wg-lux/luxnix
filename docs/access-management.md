@@ -190,6 +190,22 @@ graph TD
 
 ## Implementation Guidelines
 
+### Change prerequisites and recovery
+
+Before changing a role, password source, group, sudo rule, or service access,
+identify the affected hosts and keep a second administrative session or
+console path open. Confirm the encrypted secret source exists, run the
+configuration evaluation/build, and record the current access policy. Never
+test a new policy by removing the only known administrator.
+
+After deployment, validate login with the intended account, `sudo -l`, group
+membership, file ownership/modes, and the relevant service access from an
+independent session. If access is lost or a password source is invalid, use
+the preserved console or second administrator to boot/switch the previous
+NixOS generation, restore the prior encrypted secret/configuration, and
+revalidate access before attempting the change again. Do not replace encrypted
+secrets with plaintext values during recovery.
+
 ### Creating New Users
 1. Define user in appropriate role configuration
 2. Set initial password

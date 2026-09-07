@@ -10,7 +10,8 @@ in
 {
   disko.devices = {
     disk = {
-      system_disk = { # Renamed from nvme0n1 for clarity
+      system_disk = {
+        # Renamed from nvme0n1 for clarity
         type = "disk";
         device = systemDiskId; # Updated to use stable ID
         content = {
@@ -30,7 +31,8 @@ in
                 ];
               };
             };
-            swap = { # Added swap partition
+            swap = {
+              # Added swap partition
               label = "swap";
               name = "swap";
               size = swapSize;
@@ -39,33 +41,58 @@ in
                 type = "swap";
               };
             };
-            root_os = { # Replaces 'luks' partition, directly Btrfs
+            root_os = {
+              # Replaces 'luks' partition, directly Btrfs
               label = "nixos_root";
               name = "root_os";
               size = "100%"; # Remaining space
               content = {
                 type = "btrfs";
-                extraArgs = [ "-L" "nixos" "-f" ];
+                extraArgs = [
+                  "-L"
+                  "nixos"
+                  "-f"
+                ];
                 subvolumes = {
                   "/root" = {
                     mountpoint = "/";
-                    mountOptions = [ "subvol=root" "compress=zstd" "noatime" ];
+                    mountOptions = [
+                      "subvol=root"
+                      "compress=zstd"
+                      "noatime"
+                    ];
                   };
                   "/home" = {
                     mountpoint = "/home";
-                    mountOptions = [ "subvol=home" "compress=zstd" "noatime" ];
+                    mountOptions = [
+                      "subvol=home"
+                      "compress=zstd"
+                      "noatime"
+                    ];
                   };
                   "/nix" = {
                     mountpoint = "/nix";
-                    mountOptions = [ "subvol=nix" "compress=zstd" "noatime" ];
+                    mountOptions = [
+                      "subvol=nix"
+                      "compress=zstd"
+                      "noatime"
+                    ];
                   };
                   "/persist" = {
                     mountpoint = "/persist";
-                    mountOptions = [ "subvol=persist" "compress=zstd" "noatime" ];
+                    mountOptions = [
+                      "subvol=persist"
+                      "compress=zstd"
+                      "noatime"
+                    ];
                   };
                   "/log" = {
                     mountpoint = "/var/log";
-                    mountOptions = [ "subvol=log" "compress=zstd" "noatime" ];
+                    mountOptions = [
+                      "subvol=log"
+                      "compress=zstd"
+                      "noatime"
+                    ];
                   };
                   # Removed "/swap" subvolume and swapfile config
                 };
@@ -112,6 +139,6 @@ in
   zramSwap = {
     enable = true;
     memoryPercent = 20; # Use 20% of RAM for compressed swap
-    priority = 100;     # Higher priority than disk-based swap partition
+    priority = 100; # Higher priority than disk-based swap partition
   };
 }

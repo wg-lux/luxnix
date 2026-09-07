@@ -1,3 +1,7 @@
+system_users:
+  - admin
+  - client-user
+
 host_home_luxnix:
   luxnix.generic-settings.enable: true
   luxnix.generic-settings.hostPlatform: '"x86_64-linux"'

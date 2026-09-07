@@ -27,12 +27,6 @@ in
 
       endoreg-client = {
         enable = mkDefault true;
-        repository.branch = mkDefault "container";
-      };
-
-      endoreg-db-central-01 = {
-        enable = mkDefault true;
-
         api = {
           djangoDebug = mkDefault false;
           hostname = mkDefault "0.0.0.0";
@@ -47,11 +41,12 @@ in
           user = mkDefault "endoregDbCentral";
         };
 
-        service = {
-          maxRequests = mkDefault 5000;
-          workers = mkDefault 4;
-        };
       };
+    };
+
+    services.luxnix.lxAnnotateLocal = {
+      hub.enable = mkDefault true;
+      runtime.deploymentRole = mkDefault "central_hub";
     };
   };
 }

@@ -146,6 +146,11 @@ let
         default = "always";
         description = "Scheduling mode for the low-priority FFmpeg media Celery worker.";
       };
+      timeoutStopSec = mkOption {
+        type = types.str;
+        default = "6h15min";
+        description = "Warm-shutdown grace period for an active FFmpeg media task before systemd may send a final kill signal.";
+      };
     };
   };
   inferenceWorkerType = types.submodule {
@@ -198,6 +203,12 @@ let
   };
   celeryBrokerType = types.submodule {
     options = {
+      visibilityTimeoutSeconds = mkOption {
+        type = types.ints.positive;
+        default = 90000;
+        description = "Redis delivery visibility timeout; must remain at least one hour longer than every late-ack task and FFmpeg execution window.";
+      };
+
       requireSecureTransport = mkOption {
         type = types.bool;
         default = false;
@@ -259,41 +270,6 @@ let
         type = types.str;
         default = "data/import";
         description = "Runtime intake root below runtime.encryptedDataDir.";
-      };
-      video = mkOption {
-        type = types.str;
-        default = "data/import/video_import";
-        description = "Video intake directory exported as WATCHER_VIDEO_DIR.";
-      };
-      report = mkOption {
-        type = types.str;
-        default = "data/import/report_import";
-        description = "Report intake directory exported as WATCHER_REPORT_DIR.";
-      };
-      preanonymized = mkOption {
-        type = types.str;
-        default = "data/import/preanonymized_import";
-        description = "Preanonymized intake directory exported as WATCHER_PREANONYMIZED_DIR.";
-      };
-      sap = mkOption {
-        type = types.str;
-        default = "data/import/sap_import";
-        description = "SAP IS-H ZIP drop directory.";
-      };
-      sapProcessed = mkOption {
-        type = types.str;
-        default = "data/import/sap_import_processed";
-        description = "Directory where successfully converted SAP IS-H ZIP drops are moved.";
-      };
-      sapFailed = mkOption {
-        type = types.str;
-        default = "data/import/sap_import_failed";
-        description = "Directory where failed SAP IS-H ZIP drops are moved.";
-      };
-      moverStaging = mkOption {
-        type = types.str;
-        default = "data/import/.move-my-files-staging";
-        description = "Staging directory used by move-my-files before publishing watcher drops.";
       };
     };
   };
@@ -706,7 +682,7 @@ let
                 maxTasksPerChild = 1;
                 memoryHigh = "10G";
                 memoryMax = "12G";
-                cpuQuota = "200%";
+                cpuQuota = "600%";
                 cpuWeight = 100;
                 ioWeight = 100;
                 nice = 0;
@@ -913,9 +889,10 @@ let
 
       djangoOverrides = {
         djangoModule = roleCfg.django.djangoModule;
+        hostname = roleCfg.django.hostname;
         assetDir = if roleCfg.django.assetDir != null then roleCfg.django.assetDir else cfg.api.assetDir;
         port = 8117;
-        djangoAllowedHosts = lib.unique (cfg.api.djangoAllowedHosts ++ [ "lx-annotate.local" ]);
+        djangoAllowedHosts = lib.unique (cfg.api.djangoAllowedHosts ++ [ roleCfg.django.hostname ]);
         keycloakClientId = "endoregdb-api";
       };
 
@@ -935,10 +912,15 @@ let
           extraSettings = djangoExtraSettings;
         }
       );
-      serviceDjango = (lib.mapAttrs (_: value: lib.mkDefault value) django) // {
-        extraSettings = lib.mapAttrs (_: value: lib.mkDefault value) djangoExtraSettings;
-        port = lib.mkForce 8117;
-      };
+      # A null role value means "let the service choose its fallback". Passing
+      # it through as mkDefault would conflict with a non-null mkDefault in the
+      # service module at the same priority (notably for the TLS paths).
+      serviceDjango =
+        (lib.mapAttrs (_: value: lib.mkDefault value) (lib.filterAttrs (_: value: value != null) django))
+        // {
+          extraSettings = lib.mapAttrs (_: value: lib.mkDefault value) djangoExtraSettings;
+          port = lib.mkForce 8117;
+        };
 
       serviceRuntime = {
         mode = lib.mkDefault runtimeCfg.mode;
@@ -972,6 +954,7 @@ let
         llmInferenceWorker = lib.mkDefault runtimeCfg.llmInferenceWorker;
         externalServices = lib.mkDefault runtimeCfg.externalServices;
         celeryBroker = {
+          visibilityTimeoutSeconds = lib.mkDefault runtimeCfg.celeryBroker.visibilityTimeoutSeconds;
           requireSecureTransport = lib.mkIf runtimeCfg.celeryBroker.requireSecureTransport (
             lib.mkDefault true
           );
@@ -984,7 +967,7 @@ let
       };
     in
     {
-      enable = roleCfg.enable;
+      inherit (roleCfg) enable;
       environment = {
         values = environment;
         extraEnv = {
@@ -999,11 +982,10 @@ let
         };
       };
       service = {
-        enable = roleCfg.enable;
+        inherit (roleCfg) enable source;
         debug.enable = roleCfg.debug.enable;
-        source = roleCfg.source;
         django = serviceDjango;
-        database = cfg.database;
+        inherit (cfg) database;
         runtime = serviceRuntime;
       };
     };
@@ -1059,6 +1041,12 @@ in
     django = mkOption {
       type = types.submodule {
         options = {
+          hostname = mkOption {
+            type = types.str;
+            default = "lx-annotate.local";
+            description = "Public DNS hostname used by LX-Annotate, Nginx, and its TLS certificate.";
+          };
+
           djangoModule = mkOption {
             type = types.str;
             default = "lx_annotate";

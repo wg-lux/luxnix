@@ -28,7 +28,6 @@ in
       endoreg-client = {
         enable = mkDefault true;
         centralNodes = mkDefault [ "s-04" ];
-        dbApiLocal = mkDefault true;
 
         api = {
           djangoAllowedHosts = mkDefault [
@@ -44,8 +43,6 @@ in
           maxRequestSize = mkDefault "50G";
           settingsProfile = mkDefault "prod";
         };
-
-        repository.branch = mkDefault "container";
       };
     };
   };

@@ -1,6 +1,5 @@
 # inventory/host_vars/gc-05.yml
 ---
-ansible_python_interpreter: "{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python"
 luxnix_dev_repo: "/home/admin/luxnix"
 template_name: "main"
 
@@ -8,7 +7,11 @@ host_roles:
   custom_packages.baseDevelopment: "true"
   endoreg_client.defaultCenterKey: '"rbk_stuttgart"'
 
-host_services: {}
+host_services:
+  # Host-scoped emergency release; immutable artifact identity is recorded
+  # alongside the wheel under release-artifacts/lx-annotate/1.2.2/.
+  luxnix.lxAnnotateLocal.runtime.wheelPath: '../../../release-artifacts/lx-annotate/1.2.2/lx_annotate-1.2.2-py3-none-any.whl'
+  luxnix.lxAnnotateLocal.runtime.packageVersion: '"1.2.2"'
 
 host_nixos:
   nix.settings.max_jobs: 1
@@ -21,6 +24,8 @@ extra_secret_names:
   - "SCRT_roles_system_password_postgres_host_test_password"
 
 host_luxnix:
+  # gc-05 is enrolled and must retain fail-closed Vault authentication.
+  vault.client.auth.deferUntilProvisioned: "false"
 
   generic_settings.hostPlatform: '"x86_64-linux"'
   generic_settings.systemStateVersion: '"23.11"'

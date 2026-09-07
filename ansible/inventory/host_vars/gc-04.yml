@@ -1,6 +1,5 @@
 # inventory/host_vars/gc-04.yml
 ---
-ansible_python_interpreter: "{{ luxnix_dev_repo }}/.devenv/state/venv/bin/python"
 luxnix_dev_repo: "/home/admin/dev/luxnix"
 template_name: "main"
 
@@ -30,6 +29,8 @@ host_nixos:
 extra_secret_names: []
 
 host_luxnix:
+  # Temporary bootstrap exception; set false after verified Vault enrollment.
+  vault.client.auth.deferUntilProvisioned: "true"
 
   generic_settings.hostPlatform: '"x86_64-linux"'
   generic_settings.systemStateVersion: '"23.11"'

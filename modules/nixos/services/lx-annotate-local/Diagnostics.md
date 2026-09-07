@@ -61,16 +61,30 @@ sudo journalctl -b -u nginx.service -u redis-lx-annotate.service -u postgresql.s
 
 ## Startup chain
 
+The startup-critical LX-Annotate units log to the `lx-annotate` journal
+namespace. Read it as a single boot-ordered stream to find the first unit that
+failed or delayed startup:
+
+```bash
+sudo journalctl --namespace=lx-annotate -b --no-pager
+sudo journalctl --namespace=lx-annotate -b -p warning..alert --no-pager
+sudo journalctl --namespace=lx-annotate -f
+```
+
 ```bash
 sudo systemctl status lx-annotate-runtime-env.service
+sudo systemctl status lx-annotate-wheel-runtime.service
 sudo systemctl status lx-annotate-migrate.service
 sudo systemctl status lx-annotate-load-base-data.service
 sudo systemctl status lx-annotate-master-key-check.service
 sudo systemctl status lx-annotate.service
 ```
 
+
+
 ```bash
 sudo journalctl -u lx-annotate-runtime-env.service -n 200 --no-pager
+sudo journalctl -u lx-annotate-wheel-runtime.service -n 200 --no-pager
 sudo journalctl -u lx-annotate-migrate.service -n 200 --no-pager
 sudo journalctl -u lx-annotate-load-base-data.service -n 200 --no-pager
 sudo journalctl -u lx-annotate-master-key-check.service -n 200 --no-pager
@@ -80,12 +94,54 @@ Manually rerun one-shot checks:
 
 ```bash
 sudo systemctl start lx-annotate-runtime-env.service
+sudo systemctl start lx-annotate-wheel-runtime.service
 sudo systemctl start lx-annotate-migrate.service
 sudo systemctl start lx-annotate-load-base-data.service
 sudo systemctl start lx-annotate-master-key-check.service
+sudo systemctl restart lx-annotate-terminology-bootstrap.service
 sudo systemctl start lx-annotate-acceptance.service
 sudo journalctl -u lx-annotate-acceptance.service -n 200 --no-pager
 ```
+
+In wheel mode, `lx-annotate-wheel-runtime.service` is the only startup unit
+permitted to install or upgrade packages in the shared virtual environment.
+It is intentionally inactive after a successful run so every application-start
+transaction rechecks the currently selected wheel instead of accepting a
+successful run retained from an older release. The wheel hash stamp makes an
+already prepared runtime a no-op.
+Migration, web, worker, and maintenance entrypoints validate the prepared
+runtime and fail closed if its release stamp is absent or stale. If package
+installation fails, repair and restart the wheel-runtime unit before retrying
+`lx-annotate-migrate.service`; do not run `pip` concurrently with application
+units.
+
+If the initial Django migration fails, `lx-annotate-migrate.service` runs
+the `repair_legacy_migration_history` command through Django's migration-safe
+shell entrypoint and retries the migration. The shell entrypoint avoids the
+normal runtime schema gate, which an incomplete legacy schema cannot pass. The
+repair is additive and records only the reviewed canonical prefix for a
+recognized legacy leaf. An unrecognized history or unrelated migration failure
+still fails the unit. Inspect the automatic repair result with:
+
+```bash
+sudo journalctl -u lx-annotate-migrate.service -b --no-pager \
+  | grep lx_annotate.legacy_migration_history_repair
+```
+
+If automatic terminology provisioning warns, inspect the packaged data and
+registry without copying data from a checkout:
+
+```bash
+sudo -u endoreg-service-user find \
+  /var/endoreg-service-user/lx-annotate-wheel/.venv/lib/python3.12/site-packages/lx_dtypes/data \
+  -maxdepth 2 -name config.yaml -print
+sudo -u endoreg-service-user \
+  /var/endoreg-service-user/lx-annotate-wheel/.venv/bin/lx-dtypes-kb-registry \
+  show /var/lib/lx-annotate/data/terminology/registry.json
+```
+
+Do not replace an existing registry during diagnostics. An authorized user can
+import and activate a different validated bundle after startup.
 
 ## Web and nginx
 
@@ -98,8 +154,8 @@ sudo journalctl -u nginx.service -n 200 --no-pager
 sudo journalctl -u nginx.service -f
 ss -ltnp | grep -E ':(443|80|8117)\b'
 curl --fail --silent --show-error http://127.0.0.1:8117/ >/dev/null
-curl --fail --silent --show-error --insecure --resolve lx-annotate.local:443:127.0.0.1 https://lx-annotate.local/ >/dev/null
-curl --fail --silent --show-error --insecure --resolve lx-annotate.local:443:127.0.0.1 https://lx-annotate.local/static/.vite/manifest.json >/dev/null
+curl --fail --silent --show-error --cacert /run/lx-annotate-ssl/lx-annotate-selfsigned.crt --resolve lx-annotate.local:443:127.0.0.1 https://lx-annotate.local/ >/dev/null
+curl --fail --silent --show-error --cacert /run/lx-annotate-ssl/lx-annotate-selfsigned.crt --resolve lx-annotate.local:443:127.0.0.1 https://lx-annotate.local/static/.vite/manifest.json >/dev/null
 ```
 
 Inspect nginx's generated vhost:
@@ -253,6 +309,100 @@ sudo -u postgres psql -p 5433 -d endoregDbLocal -c "select pid, usename, applica
 sudo -u postgres psql -p 5433 -d endoregDbLocal -c "select relname, n_live_tup, n_dead_tup, last_vacuum, last_autovacuum, last_analyze, last_autoanalyze from pg_stat_user_tables order by n_dead_tup desc limit 20;"
 ```
 
+### Repeated endoreg_db introspection failures
+
+The following critical identifiers mean that Django could not inspect the live
+database:
+
+- `lx_annotate.endoreg_db_schema_introspection_failed`
+- `lx_annotate.endoreg_db_constraint_introspection_failed`
+
+They do not, by themselves, mean that the installed `endoreg_db` package or its
+feature tracker is out of sync. The checker queries each required table and
+constraint separately, so one connection or permission problem can produce
+many copies of these messages.
+
+LuxNix handles the database boundary through one shared environment contract:
+
+- `scripts/env.nix` renders the selected `database.*` options, including
+  `database.sslMode`, into `DJANGO_DB_*`
+- `lx-annotate-runtime-env.service` writes those values to
+  `/var/lib/lx-annotate/.env.systemd`
+- the password remains file-backed in the application configuration directory
+- `lx-annotate-migrate.service` runs before base-data loading, the master-key
+  check, and the web service
+- local PostgreSQL and its setup unit are ordered before application units when
+  `runtime.externalServices.postgresHost` is unset
+
+First inspect non-secret connection metadata and confirm that the service user
+can read the password file:
+
+```bash
+sudo sed -n -E '/^DJANGO_DB_(ENGINE|NAME|USER|HOST|PORT|SSLMODE|PASSWORD_FILE)=/p' \
+  /var/lib/lx-annotate/.env.systemd
+sudo -u endoreg-service-user bash -c '
+  set -a
+  . /var/lib/lx-annotate/.env.systemd
+  set +a
+  test -n "$DJANGO_DB_PASSWORD_FILE"
+  test -r "$DJANGO_DB_PASSWORD_FILE"
+  test -s "$DJANGO_DB_PASSWORD_FILE"
+  printf "database password file is readable and non-empty\n"
+'
+```
+
+Then find the first failed unit in the ordered startup chain:
+
+```bash
+sudo systemctl status \
+  postgresql.service \
+  postgres-endoreg-setup.service \
+  lx-annotate-runtime-env.service \
+  lx-annotate-migrate.service \
+  lx-annotate-load-base-data.service \
+  lx-annotate-master-key-check.service \
+  lx-annotate.service
+sudo journalctl --namespace=lx-annotate -b -p warning..alert --no-pager
+sudo journalctl -u postgresql.service -u postgres-endoreg-setup.service -b --no-pager
+sudo journalctl -u lx-annotate-migrate.service -b --no-pager
+```
+
+Use the underlying database error from the migration or PostgreSQL journal to
+classify the failure:
+
+- `server does not support SSL, but SSL was required`: the configured
+  `DJANGO_DB_SSLMODE` does not match the endpoint's TLS capability
+- `password authentication failed`: the provisioned database password and the
+  application password file disagree
+- connection refused or timeout: host, port, listener, firewall, or unit
+  ordering is wrong
+- permission denied while reading schema metadata or tables: the application
+  database role lacks the required query or introspection permissions
+- a specific missing-table, missing-column, missing-constraint, or
+  constraint-violation identifier: connectivity works and the live schema or
+  data is genuinely behind the deployed migration contract
+
+For the module's local PostgreSQL topology, the default SSL mode is `prefer`,
+which can connect to the local non-TLS listener. For an external PostgreSQL
+host, configure fail-closed TLS and its trust material explicitly; do not use
+the fallback behavior of `prefer` across a node-to-node network. The module
+exports the chosen mode but does not currently enforce a secure external value.
+
+After correcting environment, TLS, credentials, or permissions, rerun the
+ordered gates instead of invoking Django from an unrelated checkout shell:
+
+```bash
+sudo systemctl restart lx-annotate-runtime-env.service
+sudo systemctl restart lx-annotate-migrate.service
+sudo systemctl restart lx-annotate-load-base-data.service
+sudo systemctl restart lx-annotate-master-key-check.service
+sudo systemctl restart lx-annotate.service
+sudo systemctl start lx-annotate-acceptance.service
+sudo journalctl -u lx-annotate-acceptance.service -n 200 --no-pager
+```
+
+`lx-annotate-acceptance.service` is the final host-level check.
+
 ## Intake and file triggers
 
 ```bash
@@ -359,7 +509,7 @@ sudo journalctl -u lx-annotate-hub-backup.service -n 200 --no-pager
 
 ## NixOS evaluation and rebuild checks
 
-From `/home/admin/luxnix`:
+From the LuxNix repository root:
 
 ```bash
 nix flake check

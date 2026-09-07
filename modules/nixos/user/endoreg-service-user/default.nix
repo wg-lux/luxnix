@@ -53,7 +53,8 @@ in
       homeMode = "0750";
       uid = 400;
 
-      # TODO: set in modules
+      # TODO (endoreg-service-user owner): the sensitive-service membership is
+      # still implicit; expose it as a role contribution before removing this list.
       extraGroups = [
         config.luxnix.generic-settings.sensitiveServiceGroupName
       ]

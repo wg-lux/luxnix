@@ -1,9 +1,11 @@
 # /default.nix
-{ pkgs, ... }: {
+_: {
+  luxnix = {
+    generic-settings = {
+      enable = true;
+      hostPlatform = "x86_64-linux";
+    };
+  };
 
-luxnix.generic-settings.enable = true;
-luxnix.generic-settings.hostPlatform = "x86_64-linux";
-
-home.stateVersion = "23.11";
-
+  home.stateVersion = "23.11";
 }

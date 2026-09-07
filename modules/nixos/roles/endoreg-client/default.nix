@@ -13,9 +13,7 @@ let
   sensitiveServiceGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
   endoregServiceGroupName = config.luxnix.generic-settings.endoregServiceGroupName;
   fileMoverDefinition = import ./file-mover.nix { inherit lib; };
-  endoregDbApiLocalDefinition = import ./endoreg-db-api-local.nix { inherit lib; };
   lxAiDefinition = import ./lx-ai.nix { };
-  endoAiDefinition = import ./endo-ai.nix { };
   persistingStorageDefinition = import ./persisting-storage.nix { inherit lib; };
   lxAnnotateDefinition = import ./lx-annotate.nix { inherit lib; };
 
@@ -26,8 +24,6 @@ in
       pathOptions = import ./paths.nix { inherit lib config; };
       apiOptions = import ./api.nix { inherit lib; };
       databaseOptions = import ./database.nix { inherit lib; };
-      serviceOptions = import ./service.nix { inherit lib; };
-      repositoryOptions = import ./repository.nix { inherit lib; };
       environmentDefaultsOptions = import ./environment-details.nix { inherit lib; };
     in
     {
@@ -44,18 +40,6 @@ in
           "s-04.local"
           "backup-central.local"
         ];
-      };
-
-      dbApiLocal = mkOption {
-        type = types.bool;
-        default = false;
-        description = "Deprecated no-op. The endoreg-client role no longer manages a local endo-api service.";
-      };
-
-      endoAi = mkOption {
-        type = types.bool;
-        default = false;
-        description = "Enable endoAi service";
       };
 
       lxAi = mkOption {
@@ -77,12 +61,6 @@ in
       # Database Configuration Options
       database = databaseOptions;
 
-      # Service Configuration Options
-      service = serviceOptions;
-
-      # Git Repository Options
-      repository = repositoryOptions;
-
       environmentDefaults = environmentDefaultsOptions;
 
       lxAnnotate = lxAnnotateDefinition.options;
@@ -95,30 +73,11 @@ in
           config.user.admin.name
         else
           "admin";
-      adminUid = config.users.users.${adminUserName}.uid or 1000;
-      configurationPath =
-        if
-          config ? luxnix
-          && config.luxnix ? "generic-settings"
-          && config.luxnix."generic-settings" ? configurationPath
-        then
-          config.luxnix."generic-settings".configurationPath
-        else
-          "/home/${adminUserName}/luxnix";
       clientUserName =
         if config ? user && config.user ? client && config.user.client ? name then
           config.user.client.name
         else
           "client-user";
-      clientUserHome =
-        let
-          maybeHome =
-            if config ? user && config.user ? client && config.user.client ? home then
-              config.user.client.home
-            else
-              null;
-        in
-        if maybeHome != null then maybeHome else "/home/${clientUserName}";
       clientHomeStateVersion =
         if config ? user && config.user ? client && config.user.client ? homeStateVersion then
           config.user.client.homeStateVersion
@@ -127,16 +86,12 @@ in
       storageBaseDir = cfg.paths.storageBaseDir;
       videoInputDir = cfg.paths.videoInputDir;
       pdfInputDir = cfg.paths.pdfInputDir;
-      desktopDirName = cfg.paths.desktopDirName;
-      processingRepo = cfg.paths.processingRepo;
       storagePersistingMountPoint = cfg.paths.storagePersistingMountPoint;
 
       normalUsers = lib.filterAttrs (_: user: (user.isNormalUser or false)) config.users.users;
       normalUserNames = lib.attrNames normalUsers;
 
       firstNonNull = values: lib.foldl' (acc: val: if acc != null then acc else val) null values;
-      services.nginx.enable = lib.mkForce true;
-
       endoregServiceUserName =
         if
           config ? user && config.user ? endoreg-service-user && config.user.endoreg-service-user ? name
@@ -162,13 +117,9 @@ in
       fileMoverRole = fileMoverDefinition.entrypoint {
         inherit lxAnnotateRole;
       };
-      endoregDbApiLocalRole = endoregDbApiLocalDefinition.entrypoint {
-        inherit config;
-      };
       lxAiRole = lxAiDefinition.entrypoint {
         inherit cfg;
       };
-      endoAiRole = endoAiDefinition.entrypoint { };
       persistingStorageRole = persistingStorageDefinition.entrypoint {
         inherit
           cfg
@@ -181,8 +132,16 @@ in
     in
     mkMerge [
       {
-        # Storage settings
-        luxnix.storage.enable = mkDefault true;
+        luxnix = {
+          # Storage settings
+          storage.enable = mkDefault true;
+          nvidia-prime.enable = true;
+
+          # Development clients must remain usable while the central Vault host is
+          # being rebuilt. Existing local secrets are reused; first provisioning
+          # still fails closed if a required secret has never been deployed.
+          vault.client.allowOffline = mkDefault true;
+        };
 
         user.client.enable = mkDefault true;
         user.endoreg-service-user.enable = true;
@@ -195,8 +154,6 @@ in
           aglnet.client.enable = true;
           managed-secrets.enable = mkDefault true;
         };
-
-        luxnix.nvidia-prime.enable = true;
 
         services.luxnix.lxAnnotateLocal = lxAnnotateRole.service;
 
@@ -221,19 +178,15 @@ in
         ];
 
         # Update Home Manager configuration to use XDG User Dirs and OutOfStore symlinks
-        home-manager.users.${clientUserName} =
-          { ... }:
-          {
-            home.username = mkDefault clientUserName;
-            home.stateVersion = mkDefault clientHomeStateVersion;
+        home-manager.users.${clientUserName} = _: {
+          home.username = mkDefault clientUserName;
+          home.stateVersion = mkDefault clientHomeStateVersion;
 
-            roles.desktop.enable = mkDefault true;
-          };
+          roles.desktop.enable = mkDefault true;
+        };
       }
       fileMoverRole.config
-      endoregDbApiLocalRole.config
       lxAiRole.config
-      endoAiRole.config
       persistingStorageRole.config
     ]
   );

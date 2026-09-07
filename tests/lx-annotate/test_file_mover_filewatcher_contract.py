@@ -4,13 +4,21 @@ import json
 from pathlib import Path
 from typing import Any
 
-from test_lx_annotate_nix_eval_contract import _gc_02_contract, _nix_eval_expr_json
+from nix_eval_helpers import eval_json as _nix_eval_expr_json
+from test_lx_annotate_nix_eval_contract import _gc_02_contract
 
 
-REPO_ROOT = Path("/home/admin/luxnix")
+REPO_ROOT = Path(__file__).resolve().parents[2]
 FILE_MOVER_SOURCE = REPO_ROOT / "modules/nixos/services/file_mover/default.nix"
-LX_ANNOTATE_SCRIPTS_SOURCE = (
-    REPO_ROOT / "modules/nixos/services/lx-annotate-local/scripts.nix"
+LX_ANNOTATE_CONFIG_SOURCE = (
+    REPO_ROOT / "modules/nixos/services/lx-annotate-local/config.nix"
+)
+LX_ANNOTATE_FILEWATCHER_SOURCE = (
+    REPO_ROOT
+    / "modules/nixos/services/lx-annotate-local/subservices/lx-annotate-filewatcher.nix"
+)
+LX_ANNOTATE_ENV_SOURCE = (
+    REPO_ROOT / "modules/nixos/services/lx-annotate-local/scripts/env.nix"
 )
 
 
@@ -19,13 +27,6 @@ def _environment_map(environment: list[str]) -> dict[str, str]:
         key: value
         for key, value in (entry.split("=", 1) for entry in environment if "=" in entry)
     }
-
-
-def _nix_script_body(source: str, marker: str) -> str:
-    marker_start = source.index(marker)
-    body_start = source.index("''\n", marker_start) + 3
-    body_end = source.index("\n  '';", body_start)
-    return source[body_start:body_end]
 
 
 def _tmpfiles_declares_dir(
@@ -44,7 +45,7 @@ def _file_mover_host_matrix() -> dict[str, Any]:
     return _nix_eval_expr_json(
         """
         let
-          flake = builtins.getFlake "git+file:///home/admin/luxnix";
+          flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
           lib = flake.inputs.nixpkgs.lib;
           envList = env: lib.mapAttrsToList (name: value: "${name}=${toString value}") env;
           hostNames = builtins.attrNames flake.nixosConfigurations;
@@ -74,6 +75,8 @@ def _file_mover_host_matrix() -> dict[str, Any]:
                 builtins.hasAttr "lx-annotate-filewatcher" cfg.systemd.services;
               hasWatcherPath =
                 builtins.hasAttr "lx-annotate-filewatcher" cfg.systemd.paths;
+              hasWatcherTimer =
+                builtins.hasAttr "lx-annotate-filewatcher" cfg.systemd.timers;
             in {
               name = hostName;
               value = {
@@ -89,7 +92,17 @@ def _file_mover_host_matrix() -> dict[str, Any]:
                   cfg.services.luxnix.fileMover.videoTranscodeFallback.command;
                 transcodeEnvironmentScript =
                   cfg.services.luxnix.fileMover.videoTranscodeFallback.environmentScript;
-                inherit hasWatcherService hasWatcherPath;
+                inherit hasWatcherService hasWatcherPath hasWatcherTimer;
+                fileWatcherAfter =
+                  if hasWatcherService then
+                    cfg.systemd.services."lx-annotate-filewatcher".after
+                  else
+                    [];
+                fileWatcherRequires =
+                  if hasWatcherService then
+                    cfg.systemd.services."lx-annotate-filewatcher".requires
+                  else
+                    [];
                 fileWatcherServiceConfig =
                   if hasWatcherService then
                     cfg.systemd.services."lx-annotate-filewatcher".serviceConfig
@@ -103,14 +116,17 @@ def _file_mover_host_matrix() -> dict[str, Any]:
                     cfg.systemd.paths."lx-annotate-filewatcher".pathConfig
                   else
                     {};
+                fileWatcherTimerConfig =
+                  if hasWatcherTimer then
+                    cfg.systemd.timers."lx-annotate-filewatcher".timerConfig
+                  else
+                    {};
                 resolvedIntakeDirs = {
-                  video = resolveRuntimeDataPath lxCfg.runtime.intakeDirs.video;
-                  report = resolveRuntimeDataPath lxCfg.runtime.intakeDirs.report;
-                  preanonymized =
-                    resolveRuntimeDataPath lxCfg.runtime.intakeDirs.preanonymized;
-                  sap = resolveRuntimeDataPath lxCfg.runtime.intakeDirs.sap;
-                  moverStaging =
-                    resolveRuntimeDataPath lxCfg.runtime.intakeDirs.moverStaging;
+                  video = "${resolveRuntimeDataPath lxCfg.runtime.intakeDirs.importRoot}/video_import";
+                  report = "${resolveRuntimeDataPath lxCfg.runtime.intakeDirs.importRoot}/report_import";
+                  preanonymized = "${resolveRuntimeDataPath lxCfg.runtime.intakeDirs.importRoot}/preanonymized_import";
+                  sap = "${resolveRuntimeDataPath lxCfg.runtime.intakeDirs.importRoot}/sap_import";
+                  moverStaging = "${resolveRuntimeDataPath lxCfg.runtime.intakeDirs.importRoot}/.move-my-files-staging";
                 };
                 tmpfiles = cfg.systemd.tmpfiles.rules;
               };
@@ -142,9 +158,8 @@ def test_file_mover_publishes_into_filewatcher_intake_contract() -> None:
         resolved["report"],
         resolved["preanonymized"],
     ]
-    assert watcher_env["WATCHER_VIDEO_DIR"] == resolved["video"]
-    assert watcher_env["WATCHER_REPORT_DIR"] == resolved["report"]
-    assert watcher_env["WATCHER_PREANONYMIZED_DIR"] == resolved["preanonymized"]
+    assert watcher_env["DATA_DIR"] == "/var/lib/lx-annotate/data"
+    assert not any(key.startswith("WATCHER_") for key in watcher_env)
     assert resolved["moverStaging"] not in watcher_path["PathChanged"]
 
 
@@ -162,13 +177,36 @@ def test_all_file_mover_hosts_publish_into_filewatcher_intake_contract() -> None
 
         assert contract["hasWatcherService"], host_name
         assert contract["hasWatcherPath"], host_name
+        assert contract["hasWatcherTimer"], host_name
         assert transcode_command is not None, host_name
         assert "transcode_video" in transcode_command, host_name
         assert "LD_LIBRARY_PATH=" in contract["transcodeEnvironmentScript"], host_name
 
         watcher_config = contract["fileWatcherServiceConfig"]
         watcher_path = contract["fileWatcherPathConfig"]
+        watcher_timer = contract["fileWatcherTimerConfig"]
         watcher_env = _environment_map(watcher_config["Environment"])
+
+        # file_watcher.FileWatcherService requires all three intake directories
+        # at construction time. In deployment it is deliberately invoked as a
+        # bounded drain, not as the module's resident Observer loop.
+        assert watcher_config["Type"] == "oneshot", host_name
+        assert watcher_config["Restart"] == "no", host_name
+        assert watcher_config["ExecStart"].endswith("/bin/lx-annotate-watch --once"), (
+            host_name
+        )
+        assert "lx-annotate-load-base-data.service" in contract["fileWatcherAfter"], (
+            host_name
+        )
+        assert "lx-annotate-master-key-check.service" in contract["fileWatcherAfter"], (
+            host_name
+        )
+        assert (
+            "lx-annotate-load-base-data.service" in contract["fileWatcherRequires"]
+        ), host_name
+        assert (
+            "lx-annotate-master-key-check.service" in contract["fileWatcherRequires"]
+        ), host_name
 
         assert watcher_path["PathChanged"] == [
             resolved["video"],
@@ -176,11 +214,16 @@ def test_all_file_mover_hosts_publish_into_filewatcher_intake_contract() -> None
             resolved["preanonymized"],
         ], host_name
         assert resolved["moverStaging"] not in watcher_path["PathChanged"], host_name
-        assert watcher_env["WATCHER_VIDEO_DIR"] == resolved["video"], host_name
-        assert watcher_env["WATCHER_REPORT_DIR"] == resolved["report"], host_name
-        assert (
-            watcher_env["WATCHER_PREANONYMIZED_DIR"] == resolved["preanonymized"]
-        ), host_name
+        assert watcher_env["DATA_DIR"].endswith("/data"), host_name
+        assert not any(key.startswith("WATCHER_") for key in watcher_env), host_name
+
+        # PathChanged handles normal arrivals. The periodic timer retries files
+        # which were incomplete, temporarily unprocessable, or already present
+        # when the path unit was activated.
+        assert watcher_timer["Unit"] == "lx-annotate-filewatcher.service", host_name
+        assert watcher_timer["Persistent"] is True, host_name
+        assert watcher_timer["OnBootSec"] == "2m", host_name
+        assert watcher_timer["OnUnitActiveSec"] == "5m", host_name
 
         assert mover_config["User"] == watcher_config["User"], host_name
         assert mover_config["Group"] == watcher_config["Group"], host_name
@@ -203,7 +246,9 @@ def test_all_file_mover_hosts_publish_into_filewatcher_intake_contract() -> None
             resolved["preanonymized"],
             resolved["sap"],
         ):
-            assert _tmpfiles_declares_dir(tmpfiles, path, "0770", user, group), host_name
+            assert _tmpfiles_declares_dir(tmpfiles, path, "0770", user, group), (
+                host_name
+            )
 
 
 def test_file_mover_path_triggers_only_on_operator_source_dirs() -> None:
@@ -237,21 +282,22 @@ def test_file_mover_can_repair_late_arriving_source_permissions() -> None:
     mover_config = contract["fileMover"]["serviceConfig"]
     source = FILE_MOVER_SOURCE.read_text(encoding="utf-8")
     wait_body = source[
-        source.index("        wait_for_input_ready() {") :
-        source.index("        quarantine_unreadable_files() {")
+        source.index("        wait_for_input_ready() {") : source.index(
+            "        quarantine_unreadable_files() {"
+        )
     ]
     process_body = source[
-        source.index("        process_input_dir() {") :
-        source.index("        # Rsync with retry logic is not needed here")
+        source.index("        process_input_dir() {") : source.index(
+            "        # Rsync with retry logic is not needed here"
+        )
     ]
 
     assert mover_config["CapabilityBoundingSet"] == ["CAP_CHOWN", "CAP_FOWNER"]
     assert mover_config["AmbientCapabilities"] == ["CAP_CHOWN", "CAP_FOWNER"]
     assert "normalize_source_permissions()" in source
-    assert (
-        wait_body.index('normalize_source_permissions "$source_dir"')
-        < wait_body.index('source_has_files "$source_dir"')
-    )
+    assert wait_body.index(
+        'normalize_source_permissions "$source_dir"'
+    ) < wait_body.index('source_has_files "$source_dir"')
     assert 'normalize_source_permissions "$source_dir"' in process_body
     assert "still unreadable after permission normalization" in wait_body
 
@@ -282,7 +328,7 @@ def test_gc10_file_mover_transcode_fallback_exports_runtime_library_path() -> No
     env_script = _nix_eval_expr_json(
         """
         let
-          flake = builtins.getFlake "git+file:///home/admin/luxnix";
+          flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
           cfg = flake.nixosConfigurations.gc-10.config;
         in
           cfg.services.luxnix.fileMover.videoTranscodeFallback.environmentScript
@@ -297,20 +343,21 @@ def test_gc10_file_mover_transcode_fallback_exports_runtime_library_path() -> No
 def test_file_mover_stages_before_publishing_and_deletes_only_after_success() -> None:
     source = FILE_MOVER_SOURCE.read_text(encoding="utf-8")
     process_body = source[
-        source.index("        process_input_dir() {") :
-        source.index("        # Rsync with retry logic is not needed here")
+        source.index("        process_input_dir() {") : source.index(
+            "        # Rsync with retry logic is not needed here"
+        )
     ]
 
     staging_index = process_body.index('staging_dir="${runtimeMoverStagingDir}/')
     rsync_index = process_body.index("/bin/rsync -av")
     publish_index = process_body.index("/bin/mv -f")
     publish_success_index = process_body.index('if [ "$publish_status" -eq 0 ]; then')
-    source_delete_index = process_body.index('/bin/rm -f "\'\'${source_dir}/')
+    source_delete_index = process_body.index("/bin/rm -f \"''${source_dir}/")
 
     assert staging_index < rsync_index < publish_index < publish_success_index
     assert publish_success_index < source_delete_index
-    assert '"\'\'${source_dir}/" "\'\'${staging_dir}/"' in process_body
-    assert '"\'\'${dest_dir}/\'\'${entry_name}"' in process_body
+    assert "\"''${source_dir}/\" \"''${staging_dir}/\"" in process_body
+    assert "\"''${dest_dir}/''${entry_name}\"" in process_body
 
 
 def test_file_mover_quarantines_unreadable_inputs_in_failed_input_dirs() -> None:
@@ -322,7 +369,7 @@ def test_file_mover_quarantines_unreadable_inputs_in_failed_input_dirs() -> None
     assert 'default = "${endoregPaths.storageBaseDir}/failed_input/video";' in source
     assert 'default = "${endoregPaths.storageBaseDir}/failed_input/pdf";' in source
     assert "quarantine_unreadable_files()" in source
-    assert 'quarantine_target="\'\'${quarantine_dir}/' in source
+    assert "quarantine_target=\"''${quarantine_dir}/" in source
     assert '/bin/mv -f "$unreadable_file" "$quarantine_target"' in source
     assert quarantine_call in source
 
@@ -330,12 +377,11 @@ def test_file_mover_quarantines_unreadable_inputs_in_failed_input_dirs() -> None
 def test_file_mover_quarantines_symlink_inputs_without_dereferencing() -> None:
     source = FILE_MOVER_SOURCE.read_text(encoding="utf-8")
     process_body = source[
-        source.index("        process_input_dir() {") :
-        source.index("        # Rsync with retry logic is not needed here")
+        source.index("        process_input_dir() {") : source.index(
+            "        # Rsync with retry logic is not needed here"
+        )
     ]
-    symlink_call = (
-        'quarantine_symlink_entries "$source_dir" "$quarantine_dir" "$label"'
-    )
+    symlink_call = 'quarantine_symlink_entries "$source_dir" "$quarantine_dir" "$label"'
     unreadable_call = (
         'quarantine_unreadable_files "$source_dir" "$quarantine_dir" "$label"'
     )
@@ -344,15 +390,16 @@ def test_file_mover_quarantines_symlink_inputs_without_dereferencing() -> None:
     assert "-type l -exec ${pkgs.coreutils}/bin/chgrp -h" in source
     assert 'find "$source_dir" -mindepth 1 ! -type l ! -group' in source
     assert "Quarantining instead of dereferencing" in source
-    assert "/bin/mv -f \"$symlink_entry\" \"$quarantine_target\"" in source
+    assert '/bin/mv -f "$symlink_entry" "$quarantine_target"' in source
     assert process_body.index(symlink_call) < process_body.index(unreadable_call)
 
 
 def test_file_mover_video_validation_reports_permission_and_ffprobe_failures() -> None:
     source = FILE_MOVER_SOURCE.read_text(encoding="utf-8")
     validation_body = source[
-        source.index("        validate_video_sources() {") :
-        source.index("        export_video_transcode_fallback_env() {")
+        source.index("        validate_video_sources() {") : source.index(
+            "        export_video_transcode_fallback_env() {"
+        )
     ]
 
     assert '[ ! -r "$video_file" ]' in validation_body
@@ -367,16 +414,19 @@ def test_file_mover_video_validation_reports_permission_and_ffprobe_failures() -
 def test_file_mover_quarantines_stale_ffprobe_rejected_videos() -> None:
     source = FILE_MOVER_SOURCE.read_text(encoding="utf-8")
     validation_body = source[
-        source.index("        validate_video_sources() {") :
-        source.index("        export_video_transcode_fallback_env() {")
+        source.index("        validate_video_sources() {") : source.index(
+            "        export_video_transcode_fallback_env() {"
+        )
     ]
     wait_body = source[
-        source.index("        wait_for_input_ready() {") :
-        source.index("        quarantine_unreadable_files() {")
+        source.index("        wait_for_input_ready() {") : source.index(
+            "        quarantine_unreadable_files() {"
+        )
     ]
     process_body = source[
-        source.index("        process_input_dir() {") :
-        source.index("        # Rsync with retry logic is not needed here")
+        source.index("        process_input_dir() {") : source.index(
+            "        # Rsync with retry logic is not needed here"
+        )
     ]
 
     assert "ffprobe_reject_grace_seconds=1800" in wait_body
@@ -386,10 +436,15 @@ def test_file_mover_quarantines_stale_ffprobe_rejected_videos() -> None:
         'validate_video_sources "$source_dir" "$quarantine_dir" '
         '"$ffprobe_reject_grace_seconds"'
     ) in wait_body
-    assert 'wait_for_input_ready "$source_dir" "$quarantine_dir" "$label"' in process_body
-    assert 'file_age=$((now_epoch - file_ctime))' in validation_body
-    assert 'if [ "$file_age" -ge "$ffprobe_reject_grace_seconds" ]; then' in validation_body
-    assert 'quarantine_target="\'\'${quarantine_dir}/' in validation_body
+    assert (
+        'wait_for_input_ready "$source_dir" "$quarantine_dir" "$label"' in process_body
+    )
+    assert "file_age=$((now_epoch - file_ctime))" in validation_body
+    assert (
+        'if [ "$file_age" -ge "$ffprobe_reject_grace_seconds" ]; then'
+        in validation_body
+    )
+    assert "quarantine_target=\"''${quarantine_dir}/" in validation_body
     assert '/bin/mv -f "$video_file" "$quarantine_target"' in validation_body
     assert "Failed to quarantine ffprobe-rejected video input" in validation_body
     assert validation_body.index(
@@ -403,17 +458,19 @@ def test_file_mover_transcodes_video_before_publish() -> None:
     contract = _gc_02_contract()
     source = FILE_MOVER_SOURCE.read_text(encoding="utf-8")
     process_body = source[
-        source.index("        process_input_dir() {") :
-        source.index("        # Rsync with retry logic is not needed here")
+        source.index("        process_input_dir() {") : source.index(
+            "        # Rsync with retry logic is not needed here"
+        )
     ]
     transcode_body = source[
-        source.index("        transcode_video_entry() {") :
-        source.index("        wait_for_input_ready() {")
+        source.index("        transcode_video_entry() {") : source.index(
+            "        wait_for_input_ready() {"
+        )
     ]
 
     assert "transcode_video" in contract["fileMover"]["transcodeVideoCommand"]
     assert "export_video_transcode_fallback_env()" in source
-    assert "WATCHER_VIDEO_DIR" in contract["fileMover"]["transcodeEnvironmentScript"]
+    assert "DATA_DIR" in contract["fileMover"]["transcodeEnvironmentScript"]
     assert "FFMPEG_TRANSCODE_TIMEOUT_SECONDS" in source
     assert "--input-dir" in contract["fileMover"]["transcodeVideoCommand"]
     assert "--filename" in contract["fileMover"]["transcodeVideoCommand"]
@@ -435,8 +492,9 @@ def test_file_mover_transcodes_video_before_publish() -> None:
 def test_file_mover_transcode_fallback_fails_closed_before_publish() -> None:
     source = FILE_MOVER_SOURCE.read_text(encoding="utf-8")
     transcode_body = source[
-        source.index("        transcode_video_entry() {") :
-        source.index("        wait_for_input_ready() {")
+        source.index("        transcode_video_entry() {") : source.index(
+            "        wait_for_input_ready() {"
+        )
     ]
 
     assert "video transcode command failed" in transcode_body
@@ -456,30 +514,17 @@ def test_file_mover_transcode_fallback_fails_closed_before_publish() -> None:
     )
 
 
-def test_wheel_and_repo_filewatchers_process_existing_once() -> None:
-    source = LX_ANNOTATE_SCRIPTS_SOURCE.read_text(encoding="utf-8")
-    repo_marker = (
-        'runLocalFileWatcherScript = '
-        'pkgs.writeShellScriptBin "${watcherScriptName}"'
-    )
-    wheel_marker = (
-        'runLocalFileWatcherWheelScript = '
-        'pkgs.writeShellScriptBin "${watcherScriptName}"'
-    )
-    repo_body = _nix_script_body(
-        source,
-        repo_marker,
-    )
-    wheel_body = _nix_script_body(
-        source,
-        wheel_marker,
-    )
+def test_filewatcher_deployment_uses_packaged_once_entrypoint() -> None:
+    source = LX_ANNOTATE_CONFIG_SOURCE.read_text(
+        encoding="utf-8"
+    ) + LX_ANNOTATE_FILEWATCHER_SOURCE.read_text(encoding="utf-8")
 
-    assert 'export LX_ANNOTATE_FILEWATCHER_ARGS="--process-existing-once"' in repo_body
-    assert 'export LX_ANNOTATE_FILEWATCHER_ARGS="--process-existing-once"' in wheel_body
-    assert "start-watcher" in repo_body
-    assert "run-filewatcher" in repo_body
-    assert "wheelFileWatcherOnceCommand" in wheel_body
+    assert "make_entrypoint lx-annotate-watch lx-annotate-watch 0" in source
+    assert (
+        'ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-watch --once";'
+        in source
+    )
+    assert 'Type = "oneshot";' in source
 
 
 def test_no_legacy_hardcoded_watcher_destinations_bypass_intake_dirs() -> None:
@@ -497,7 +542,8 @@ def test_no_legacy_hardcoded_watcher_destinations_bypass_intake_dirs() -> None:
     module_sources = "\n".join(
         [
             FILE_MOVER_SOURCE.read_text(encoding="utf-8"),
-            LX_ANNOTATE_SCRIPTS_SOURCE.read_text(encoding="utf-8"),
+            LX_ANNOTATE_CONFIG_SOURCE.read_text(encoding="utf-8"),
+            LX_ANNOTATE_ENV_SOURCE.read_text(encoding="utf-8"),
         ]
     )
 

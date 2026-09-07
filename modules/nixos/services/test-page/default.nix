@@ -1,11 +1,12 @@
-{config, lib, pkgs, ...}: 
+{ config, lib, ... }:
 
-with lib; 
-with lib.luxnix; let
+with lib;
+with lib.luxnix;
+let
   cfg = config.services.luxnix.testPage;
 
-  vpnIp = config.luxnix.generic-settings.vpnIp;
-in {
+in
+{
   options.services.luxnix.testPage = {
     enable = mkBoolOpt false "Enable httpd test page";
     port = mkOption {
