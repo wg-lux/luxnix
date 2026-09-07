@@ -72,6 +72,13 @@ Cleared (legacy behavior kept explicitly - no functional change until
   `modules/nixos/roles/nginx-host/default.nix` (real hardening: only the
   local nginx may supply `X-Forwarded-*`).
 
+Build fix:
+
+- `python3.12` `doc` output fails to build on 26.05 (upstream Sphinx/docutils
+  bug). `documentation.doc.enable = false` in `systems/x86_64-linux/host-common.nix`
+  (and mirrored in the isolated `lx-test` host) stops the system profile from
+  pulling every package's `doc` output; man pages and `info` are unaffected.
+
 Left in place (expected):
 
 - `s-03`: "A legacy Nextcloud install ... may be installed" - Nextcloud's

@@ -14,6 +14,9 @@
   };
   boot.loader.systemd-boot.enable = true;
 
+  # Mirror the shared host-common baseline choice (this host cannot import it).
+  documentation.doc.enable = false;
+
   user = {
     admin.name = "admin";
     ansible.enable = true;
