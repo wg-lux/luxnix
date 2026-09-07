@@ -3,6 +3,10 @@
 template_name: "main"
 
 host_roles:
+  endoreg-client.lxAi: "true"
+
+host_services:
+  luxnix.lxAiLocal.runtime.protectedDataDir: '"/var/lib/lx-annotate/data"'
   endoreg-client.enable: "true"
   nginxHost.enable: "true"
   nginxHost.glm52.enable: "true"
