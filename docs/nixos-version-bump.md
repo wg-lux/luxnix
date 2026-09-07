@@ -57,6 +57,30 @@ Module fixes on the branch:
 
 All 16 hosts evaluate on 26.05.
 
+### Evaluation warnings
+
+Cleared (legacy behavior kept explicitly - no functional change until
+`home.stateVersion` is bumped to 26.05):
+
+- `xdg.userDirs` deprecated `XDG_*_DIR` keys and the `setSessionVariables`
+  default flip → fixed in `modules/nixos/services/file_mover/default.nix`.
+- `programs.yazi.shellWrapperName` (`yy` → `y`) → pinned to `yy`.
+- `programs.firefox.configPath` (moved under `XDG_CONFIG_HOME`) → pinned to
+  `.mozilla/firefox`; no data move.
+- `xorg.libX*` → top-level `libx*` in `nix-ld` and `custom-packages`.
+- `services.oauth2-proxy.trustedProxyIP` unset → set to loopback in
+  `modules/nixos/roles/nginx-host/default.nix` (real hardening: only the
+  local nginx may supply `X-Forwarded-*`).
+
+Left in place (expected):
+
+- `s-03`: "A legacy Nextcloud install ... may be installed" - Nextcloud's
+  standard advisory that 32 is not the latest. Step to `nextcloud33` in a
+  follow-up deploy; majors cannot be skipped.
+- `Luxnix SSH host-key guard for <host>` - the host's ed25519 key is not yet
+  in `conf/ssh-host-keys/known_hosts`; a separate registration task, not a
+  26.05 issue.
+
 ### s-03 Garage deploy prerequisites
 
 Before deploying `s-03`, provision the Vault file

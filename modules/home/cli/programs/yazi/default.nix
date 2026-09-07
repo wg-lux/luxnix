@@ -18,6 +18,8 @@ in
     programs.yazi = {
       enable = true;
       enableFishIntegration = true;
+      # home-manager 26.05 changed the default from "yy" to "y"; keep "yy".
+      shellWrapperName = "yy";
     };
 
     home.packages = with pkgs; [
