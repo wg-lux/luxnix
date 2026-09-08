@@ -935,10 +935,11 @@ let
         write_wheel_systemd_env_file
 
         package_static_dir="$("${runtimeWheelVenvPath}/bin/python" - <<'PY'
+    from importlib.metadata import distribution
     from pathlib import Path
-    import lx_annotate
 
-    package_root = Path(lx_annotate.__file__).resolve().parent
+    # Importing lx_annotate initializes Django and prints startup messages.
+    package_root = Path(distribution("lx-annotate").locate_file("lx_annotate")).resolve()
     for candidate in (package_root / "staticfiles", package_root / "static"):
         if candidate.exists():
             print(candidate)
