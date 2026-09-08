@@ -23,7 +23,7 @@ with lib;
         legacy = lib.attrByPath [ "secretspec" "secrets" "STORAGE_PERSISTING_HDD_ID" ] "" config;
       in
       if legacy == "" then null else legacy;
-    description = "Host-owned /dev/disk/by-id basename for persistent external storage, without its partition suffix. Null makes the mount service fail closed; never discover or select a replacement disk automatically.";
+    description = "Host-owned /dev/disk/by-id basename for persistent external storage, without its partition suffix. Null enables discovery-only reporting: disconnected storage is normal, connected devices require enrollment before mounting. Never select a replacement disk automatically.";
   };
   storagePersistingDevicePart = mkOption {
     type = types.strMatching "part[0-9]+";
