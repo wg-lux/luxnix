@@ -798,9 +798,9 @@ let
       exec ${effectiveRuntimePackage}/bin/lx-annotate-manage materialize_video_hls --apply --json "$@"
     fi
 
-    for default_artifact_kind in raw processed; do
-      run_hls_materialization "$default_artifact_kind" "$@"
-    done
+    # Let the application finish its prioritized processed pass before raw HLS.
+    # Separate invocations bypass its cross-artifact ordering and hash cache.
+    run_hls_materialization both "$@"
   '';
 
   lxAnnotateBootstrapScript = pkgs.writeShellScriptBin "${bootstrapScriptName}" ''

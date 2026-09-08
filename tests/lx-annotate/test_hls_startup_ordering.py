@@ -61,3 +61,30 @@ def test_backfill_condition_preserves_runtime_failures(command_status: int, expe
     assert "${" not in shell
     result = subprocess.run(["bash", "-c", shell], check=False, capture_output=True, text=True)
     assert result.returncode == expected, result.stderr
+
+
+@pytest.mark.parametrize(
+    "arguments, expected",
+    [
+        ([], ["--artifact-kind", "both", "--apply", "--json"]),
+        (["--video-id", "54"], ["--artifact-kind", "both", "--apply", "--json", "--video-id", "54"]),
+        (["--artifact-kind", "processed"], ["--apply", "--json", "--artifact-kind", "processed"]),
+        (["--artifact-kind=raw"], ["--apply", "--json", "--artifact-kind=raw"]),
+    ],
+)
+def test_hls_dispatch_preserves_application_priority(arguments: list[str], expected: list[str]) -> None:
+    source = (REPO_ROOT / "modules/nixos/services/lx-annotate-local/scripts.nix").read_text()
+    script = source.split('explicit_artifact_kind="false"', 1)[1].split("\n  '';", 1)[0]
+    script = 'explicit_artifact_kind="false"' + script
+    # Execute the real argument handling and dispatch, excluding runtime setup.
+    start = script.index('    if [ "${if useWheelRuntime')
+    end = script.index("    run_hls_materialization()", start)
+    script = script[:start] + script[end:]
+    script = script.replace('${effectiveRuntimePackage}/bin/lx-annotate-manage', 'dispatch')
+    # A shell function models the command boundary; explicit exec has identical argv.
+    script = script.replace('exec dispatch materialize_video_hls --apply --json "$@"',
+                            'dispatch materialize_video_hls --apply --json "$@"; exit $?')
+    probes = 'set -euo pipefail\nlog() { :; }\ndie() { exit 1; }\ndispatch() { printf "%s\\n" "$@"; }\n'
+    result = subprocess.run(["bash", "-c", probes + script, "dispatch-test", *arguments], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == ["materialize_video_hls", *expected]
