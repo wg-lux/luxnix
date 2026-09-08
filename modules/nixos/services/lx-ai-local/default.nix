@@ -130,7 +130,7 @@ let
 
           rm -rf "''${LX_MODELS_DIR}"
 
-          git clone --branch report_template --single-branch \
+          git clone --branch contracts --single-branch \
             https://github.com/wg-lux/lx-data-models \
             "''${LX_MODELS_DIR}" || {
               echo "ERROR: Failed to clone lx-data-models"
