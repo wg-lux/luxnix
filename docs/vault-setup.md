@@ -66,6 +66,11 @@ not an emergency rollback to a compromised credential.
 
 ## Operator workflows
 
+`devenv tasks run autoconf:initialize-vault` invokes the local vault bootstrap
+script with its default arguments. It changes encrypted local state and requires
+operator confirmation; complete the input preparation and bootstrap procedure
+in [Admin password creation and rotation](admin-passwords.md) before using it.
+
 - [Admin password creation and rotation](admin-passwords.md): the canonical
   paired-password workflow, including first installation and failure recovery.
 - [Hub machine enrollment](vault-hub-machine-enrollment.md): HashiCorp Vault

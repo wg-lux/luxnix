@@ -103,8 +103,7 @@ in
         script = ''
           ${ntlib.helpers.path [ pkgs.gnugrep ]}
           ${ntlib.helpers.scriptHelpers}
-          assert_file_contains ${lxAnnotateScripts} 'for default_artifact_kind in raw processed' "default HLS reconciliation must cover both artifact kinds"
-          assert_file_contains ${lxAnnotateScripts} 'run_hls_materialization "\$default_artifact_kind" "\$@"' "each default HLS artifact kind must be dispatched"
+          assert_file_contains ${lxAnnotateScripts} 'run_hls_materialization both "\$@"' "default HLS reconciliation must delegate cross-artifact priority to the application"
           assert_file_contains ${lxAnnotateConfig} 'assertion = cfg\.hlsBackfill\.enable' "enabled LX-Annotate hosts must not opt out of prerequisite HLS replacement"
           assert_file_contains ${lxAnnotateConfig} 'assertion = cfg\.hlsBackfill\.extraArgs == \[ \]' "automatic production replacement must not be limited per machine"
           assert_file_contains ${lxAnnotateModuleRoot}/subservices/lx-annotate-hls-backfill.nix 'systemd\.timers\.lx-annotate-hls-backfill' "orphan reconciliation must recur without a reboot or user request"
@@ -114,6 +113,32 @@ in
           if grep -q 'artifact_kind_args=(--artifact-kind processed)' ${lxAnnotateScripts}; then
             fail "HLS reconciliation must not silently default to processed-only"
           fi
+        '';
+      }
+      {
+        name = "lx-annotate-nvenc-hls-has-an-isolated-worker-device";
+        type = "script";
+        script = ''
+          ${ntlib.helpers.path [ pkgs.gnugrep ]}
+          ${ntlib.helpers.scriptHelpers}
+          assert_file_contains ${lxAnnotateModuleRoot}/options/runtime.nix 'hlsEncodingProfile = mkOption' "HLS profile selection must be a typed runtime option"
+          assert_file_contains ${lxAnnotateModuleRoot}/scripts/env.nix 'ENDOREG_HLS_ENCODING_PROFILE = cfg\.runtime\.hlsEncodingProfile' "the selected HLS profile must reach endoreg-db"
+          assert_file_contains ${lxAnnotateConfig} 'cudaVisibleDevices = cfg\.runtime\.ffmpegWorker\.cudaVisibleDevices' "the FFmpeg worker must receive its isolated CUDA selector"
+          assert_file_contains ${lxAnnotateConfig} 'hlsEncodingProfile != "clinical_h264_nvenc_cq_v1"' "NVENC selection must require an isolated worker GPU"
+        '';
+      }
+      {
+        name = "lx-annotate-monitoring-config-is-immutable-and-bounded";
+        type = "script";
+        script = ''
+          ${ntlib.helpers.path [ pkgs.gnugrep ]}
+          ${ntlib.helpers.scriptHelpers}
+          assert_file_contains ${lxAnnotateModuleRoot}/options.nix 'options/monitoring\.nix' "the typed monitoring option module must be imported"
+          assert_file_contains ${lxAnnotateConfig} 'lx-annotate-monitoring-config-v1\.json' "the monitoring inventory must be generated immutably"
+          assert_file_contains ${lxAnnotateConfig} 'systemctl_path = "\$[{]pkgs\.systemd[}]/bin/systemctl"' "systemctl must be an absolute Nix store path"
+          assert_file_contains ${lxAnnotateConfig} '< cfg\.runtime\.monitoring\.diskWarningFreePercent' "disk thresholds must be ordered"
+          assert_file_contains ${lxAnnotateModuleRoot}/scripts/env.nix 'LX_ANNOTATE_MONITORING_CONFIG_FILE = monitoringConfigFile' "application services must receive the generated monitoring contract"
+          assert_file_contains ${lxAnnotateConfig} 'LX_ANNOTATE_MONITORING_CONFIG_FILE.*cannot be overridden' "arbitrary monitoring config overrides must be rejected"
         '';
       }
     ];

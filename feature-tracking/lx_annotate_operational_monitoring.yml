@@ -1,0 +1,133 @@
+schema_version: '1.0'
+id: lx_annotate_operational_monitoring
+name: LX-Annotate operational timing and monitoring
+description: >-
+  Provide privacy-safe, bounded operational timing for imports, HLS and frame
+  materialization, Celery workloads, service health, and protected-storage
+  capacity across LX-Annotate hosts.
+owners:
+  - LuxNix maintainers
+  - LX-Annotate maintainers
+  - endoreg-db maintainers
+production_critical: true
+tracking:
+  state: active
+  history: []
+source_documents:
+  - path: modules/nixos/services/lx-annotate-local/Diagnostics.md
+    disposition: reference
+    note: Existing operator diagnostics complemented by the structured monitoring YAML runbook.
+definition_of_done:
+  - id: bounded_timing_contract
+    category: requirements
+    title: Long-running workflows expose bounded phase and end-to-end durations
+    acceptance:
+      - Import, HLS materialization, frame materialization and extraction, anonymization, validation, cleanup, and other registered Celery task families expose queue-wait and execution durations where those phases exist.
+      - Duration observations use monotonic clocks inside a process and stable UTC timestamps across process boundaries.
+      - Every observation has a terminal outcome and cannot be mistaken for successful publication or readiness.
+    required: true
+    verification:
+      kind: manual
+      instructions: Review the typed application timing contract and exercise representative success, failure, retry, deferred, and cancellation paths.
+      timeout_seconds: 900
+    assessment:
+      status: in_progress
+      evidence: []
+      note: Cross-repository implementation is being coordinated with the application monitoring work.
+      assessed_by: codex-nvenc-gc10
+      assessed_at: '2026-09-09T12:00:00Z'
+  - id: privacy_and_cardinality
+    category: security
+    title: Metrics contain only bounded non-clinical labels
+    acceptance:
+      - Metric labels are allowlisted enums such as task family, phase, outcome, artifact kind, and encoder backend.
+      - Video IDs, upload-job IDs, task IDs, filenames, paths, hashes, exception strings, users, centers, and clinical values never become metric labels.
+      - Detailed correlation remains only in access-controlled structured logs and protected receipts.
+    required: true
+    verification:
+      kind: manual
+      instructions: Review every metric label and scrape payload for cardinality and disclosure before enabling remote collection.
+      timeout_seconds: 600
+    assessment:
+      status: not_assessed
+      evidence: []
+  - id: declarative_host_contract
+    category: functionality
+    title: Hosts receive one typed monitoring configuration
+    acceptance:
+      - LuxNix generates a schema-versioned immutable JSON configuration from evaluated service units and protected-storage paths.
+      - The configuration fixes thresholds, deployment revision, and the absolute systemctl executable without accepting browser-provided units or paths.
+      - Application services receive the configuration only through LX_ANNOTATE_MONITORING_CONFIG_FILE and cannot override it through runtime.extraEnvironment.
+    required: true
+    verification:
+      kind: command
+      command:
+        - nix
+        - eval
+        - .#nixosConfigurations.gc-10.config.system.build.toplevel.drvPath
+      timeout_seconds: 900
+    assessment:
+      status: in_progress
+      evidence: []
+      assessed_by: codex-nvenc-gc10
+      assessed_at: '2026-09-09T12:00:00Z'
+  - id: collection_and_retention
+    category: operations
+    title: Collection survives worker recycling without losing bounded history
+    acceptance:
+      - Collection covers every configured worker without requiring application processes to share writable in-process metric state.
+      - Scrape failure, process restart, clock skew, and stale observations are explicit and do not fabricate zero latency or success.
+      - Retention and aggregation preserve useful percentiles while bounding local disk and time-series cardinality.
+    required: true
+    verification:
+      kind: manual
+      instructions: Restart and recycle workers during representative tasks, interrupt collection, and verify recovery, stale-series behavior, and bounded disk use.
+      timeout_seconds: 1200
+    assessment:
+      status: not_assessed
+      evidence: []
+  - id: dashboards_and_alerts
+    category: functionality
+    title: Operators can see latency, throughput, saturation, backlog, and failures
+    acceptance:
+      - Provisioned dashboards show queue wait, execution percentiles, throughput, active tasks, retries, terminal failures, worker CPU throttling, memory, input-output pressure, GPU utilization, and protected-storage capacity.
+      - Alerts define reviewable thresholds for stuck tasks, growing queues, sustained CPU throttling, encoder failures, storage pressure, unavailable workers, and stale telemetry.
+      - Import, HLS, and frame workflows can be compared without exposing per-video identity.
+    required: true
+    verification:
+      kind: manual
+      instructions: Inject synthetic bounded test events and review every dashboard and alert transition with an operator.
+      timeout_seconds: 1200
+    assessment:
+      status: not_assessed
+      evidence: []
+  - id: monitoring_regression_tests
+    category: testing
+    title: Timing and monitoring behavior is regression-tested
+    acceptance:
+      - Tests cover successful, failed, retried, deferred, cancelled, unknown, and stale timing states.
+      - Tests reject unregistered task names, sensitive labels, negative or non-finite durations, arbitrary units and paths, and schema drift.
+      - Nix evaluation proves the same monitored service and storage inventory selected for gc-10.
+    required: true
+    verification:
+      kind: manual
+      instructions: Run focused application type/tests, LuxNix contract tests, gc-10 evaluation, and failure-injection checks.
+      timeout_seconds: 1800
+    assessment:
+      status: not_assessed
+      evidence: []
+  - id: operator_runbook
+    category: documentation
+    title: Operators can interpret and troubleshoot timing signals safely
+    acceptance:
+      - The runbook defines metric semantics, units, label bounds, expected workflow phases, query examples, alert response, and the difference between task completion and artifact readiness.
+      - The runbook documents rollout, rollback, privacy review, and a canary exercise without requiring access to media payloads.
+      - Source instrumentation, collection, dashboards, and deployment ownership are explicit across repositories.
+    required: true
+    verification:
+      kind: manual
+      instructions: Review the YAML runbook with application, infrastructure, security, and operations owners.
+      timeout_seconds: 900
+    assessment:
+      status: not_assessed
+      evidence: []

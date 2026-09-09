@@ -32,6 +32,9 @@ definition_of_done:
   - One compatibility matrix names the required Endoreg and LX-Annotate work-package revisions, queue
     contract, timeout relationship, database schema, and rollback boundary for each deployable LuxNix
     generation.
+  - NVIDIA-capable deployment roles select the versioned NVENC HLS profile for new HLS reservations,
+    expose exactly one GPU to the FFmpeg worker, and retain fail-closed encoder preflight without changing
+    HLS encryption, frame timing, or already-valid CPU-encoded generations.
   required: true
   verification:
     kind: manual

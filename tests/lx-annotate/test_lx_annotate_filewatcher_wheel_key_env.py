@@ -5,6 +5,8 @@ import subprocess
 import textwrap
 from pathlib import Path
 
+from nix_eval_helpers import eval_json
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS_NIX = (
@@ -53,18 +55,24 @@ def test_wheel_filewatcher_exports_encryption_env_before_start():
 
 
 def test_runtime_exports_ffmpeg_transcode_timeout_to_wheel_services():
-    source = "\n".join(
-        [
-            SCRIPTS_NIX.read_text(encoding="utf-8"),
-            ENV_NIX.read_text(encoding="utf-8"),
-        ]
+    timeouts = eval_json(
+        """
+        let
+          flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
+          services = flake.nixosConfigurations.gc-05.config.systemd.services;
+        in builtins.map
+          (name: services.${name}.environment.FFMPEG_TRANSCODE_TIMEOUT_SECONDS)
+          [ "lx-annotate" "lx-annotate-celery-pipeline-worker"
+            "lx-annotate-celery-ffmpeg-worker" ]
+        """
     )
+    assert timeouts == ["86400", "86400", "86400"]
 
-    assert 'ffmpegTranscodeTimeoutSeconds = "86400";' in source
-    assert "FFMPEG_TRANSCODE_TIMEOUT_SECONDS = ffmpegTranscodeTimeoutSeconds;" in source
-    assert "commonShellExportText" in source
-    assert "commonSystemdEnvText" in source
-    assert "FFMPEG_TRANSCODE_TIMEOUT_SECONDS=1000000" not in source
+
+def test_runtime_exports_versioned_hls_encoding_profile():
+    source = ENV_NIX.read_text(encoding="utf-8")
+
+    assert "ENDOREG_HLS_ENCODING_PROFILE = cfg.runtime.hlsEncodingProfile;" in source
 
 
 def test_wheel_filewatcher_passes_master_key_file_to_child_process(tmp_path: Path):

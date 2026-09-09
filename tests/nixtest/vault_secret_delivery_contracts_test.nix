@@ -104,11 +104,17 @@ in
             echo "The temporary Vault enrollment gate must be host-scoped, not fleet-wide." >&2
             exit 1
           fi
-          for host in gc-02 gc-04 gc-05 gc-06 gc-07 gc-08 gc-09 gc-10; do
+          for host in gc-02 gc-04 gc-06 gc-07 gc-08 gc-09; do
             assert_file_contains \
               "${repoRoot}/ansible/inventory/host_vars/$host.yml" \
               'vault\.client\.auth\.deferUntilProvisioned: "true"' \
               "$host must explicitly record its temporary enrollment state"
+          done
+          for host in gc-05 gc-10; do
+            assert_file_contains \
+              "${repoRoot}/ansible/inventory/host_vars/$host.yml" \
+              'vault\.client\.auth\.deferUntilProvisioned: "false"' \
+              "$host is enrolled and must retain fail-closed Vault authentication"
           done
         '';
       }

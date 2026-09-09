@@ -115,15 +115,51 @@ definition_of_done:
       reference: ansible/inventory/group_vars/gpu_server.yml
     - kind: code
       reference: modules/nixos/luxnix/generic-settings/linux/default.nix
-    note: Canonical pytest, LX-Annotate, Nixtest, generator, tracker/layout, and Autoconf gates pass.
-      Configuration coverage advanced from 10 failures (9 cold-build timeouts plus an lx-test missing
-      kernelModules default) to successful evaluation of every host and only four 80-second cold-build
-      timeouts. The lx-test option defect was fixed and both lx-test and gc-06 build uncapped. An uncapped
-      gs-01 build was interrupted after more than 70 minutes while actively compiling Ollama CUDA kernels
-      across nine architectures; no derivation error occurred. The criterion remains blocked because the
-      documented configuration command has not returned zero and the acceptance requires a clean checkout.
-    assessed_by: codex-luxnix-tests-20260902
-    assessed_at: '2026-09-02T17:14:36.989125Z'
+    - kind: command
+      reference: '2026-09-09: uv run --locked pytest -q tests/test_test_layout_contract.py tests/test_project_map_contract.py
+        tests/test_yaml_checkfiles.py feature-tracking/test_repository_cleanup.py feature-tracking/test_tracker.py:
+        63 passed'
+    - kind: command
+      reference: '2026-09-09: devenv tasks run nix-quality:check: passed'
+    - kind: command
+      reference: '2026-09-09: devenv tasks run nix-quality:generators: passed'
+    - kind: command
+      reference: '2026-09-09: devenv tasks run docs:check: passed'
+    - kind: command
+      reference: '2026-09-09: cd wg-lux-mcp && uv run --locked --extra dev pytest -q: 20 passed'
+    - kind: command
+      reference: 'Final shared tree: uv run --locked pytest -q tests feature-tracking/test_tracker.py
+        feature-tracking/test_repository_cleanup.py --tb=short: 865 passed; one stale assertion and 21
+        interrupted recovery errors subsequently fixed'
+    - kind: command
+      reference: 'Final shared tree: uv run --locked pytest -q tests feature-tracking/test_tracker.py
+        feature-tracking/test_repository_cleanup.py --lf --tb=short: 22 passed in 30.20s'
+    - kind: command
+      reference: 'Final shared tree: nix eval --raw .#nixosConfigurations.gc-02.config.system.build.toplevel.drvPath:
+        exit 0'
+    - kind: command
+      reference: 'Final shared tree: nix eval --raw .#nixosConfigurations.gs-02.config.system.build.toplevel.drvPath:
+        exit 0'
+    - kind: command
+      reference: 'Final shared tree: devenv tasks run nix-quality:check: passed; git diff --check: exit
+        0'
+    - kind: code
+      reference: tests/test_local_user_recovery.py
+    note: '2026-09-09 final shared-workspace implementation: confirmed handoff completed. Fixed Snowfall
+      self-reference recursion, denied direct /media/ access while preserving protected media/API routes,
+      and corrected HLS/monitoring Nixtest assertions. Preserved integrated runtime.llm changes. Replaced
+      stale environment-merge punctuation assertion with evaluated propagation; recovery evaluation now
+      uses Git-filtered source. Combined tests plus both tracker suites: 865 passed, one stale assertion
+      failed, and 21 recovery errors followed an intentionally interrupted unfiltered evaluation. After
+      fixes, the exact failed-test rerun passed 22/22: all 887 cases verified across the full and focused
+      runs, including the Nixtest wrapper. Fast Nix quality and whitespace checks pass; tracker schema
+      validates. Shared gc-02 and gs-02 toplevel drvPath evaluations both exit 0. No handoff blockers
+      remain. Criterion remains blocked only because full-flake and all-host build acceptance is incomplete:
+      earlier full evaluation stopped under memory/swap pressure and cold builds exceeded the 80-second
+      runner timeout. No deployments or secret operations. Historical evidence below is retained with
+      its original scope.'
+    assessed_by: codex-tests-20260909
+    assessed_at: '2026-09-09T12:24:26.376654Z'
 - id: security_regressions_remain_covered
   category: security
   title: Security-sensitive contracts remain covered

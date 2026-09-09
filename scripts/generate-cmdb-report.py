@@ -5,8 +5,10 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from html import escape
 import json
+import math
 import os
 from pathlib import Path
 import sys
@@ -33,18 +35,75 @@ class HostSummary:
     virtualization: str
     vcpus: str
     ram_gib: str
+    observed_at: str
+    observation_age: str
 
 
 def _text(value: JsonValue, fallback: str = "unknown") -> str:
     if value is None or value == "":
         return fallback
-    return str(value)
+    if not isinstance(value, str):
+        raise ReportError("invalid fact field: expected text")
+    return value
+
+
+def _positive_number(value: JsonValue, *, integer: bool = False) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        raise ReportError("invalid numeric fact field")
+    try:
+        number = float(value)
+    except (ValueError, OverflowError) as exc:
+        raise ReportError("invalid numeric fact field") from exc
+    if (
+        not math.isfinite(number)
+        or number <= 0
+        or (integer and not number.is_integer())
+    ):
+        raise ReportError("invalid numeric fact field")
+    return number
+
+
+def _observation(facts: JsonObject, now: datetime) -> tuple[str, str]:
+    date_time = facts.get("ansible_date_time")
+    if date_time is None:
+        return "unknown", "unknown"
+    if not isinstance(date_time, dict):
+        raise ReportError("invalid observation timestamp")
+    epoch = _positive_number(date_time.get("epoch"))
+    if epoch is None:
+        return "unknown", "unknown"
+    try:
+        observed = datetime.fromtimestamp(epoch, tz=timezone.utc)
+    except (ValueError, OverflowError, OSError) as exc:
+        raise ReportError("invalid observation timestamp") from exc
+    age = (now - observed).total_seconds()
+    age_text = (
+        f"{int(age)} seconds at generation"
+        if age >= 0
+        else "clock skew: observation is in the future"
+    )
+    return observed.isoformat(), age_text
+
+
+def _valid_result(result: JsonObject) -> JsonObject | None:
+    if any(
+        key in result and result[key] is not False for key in ("failed", "unreachable")
+    ):
+        return None
+    facts = result.get("ansible_facts")
+    return facts if isinstance(facts, dict) and facts else None
 
 
 def _facts_for_host(data: JsonValue, host_name: str) -> JsonObject:
     if isinstance(data, dict):
-        direct_facts = data.get("ansible_facts")
-        if isinstance(direct_facts, dict):
+        if any(
+            key in data and data[key] is not False for key in ("failed", "unreachable")
+        ):
+            raise ReportError(f"invalid local fact snapshot: {host_name}")
+        direct_facts = _valid_result(data)
+        if direct_facts is not None:
             return direct_facts
 
         results = data.get(host_name)
@@ -53,14 +112,14 @@ def _facts_for_host(data: JsonValue, host_name: str) -> JsonObject:
             and len(results) == 1
             and isinstance(results[0], dict)
         ):
-            wrapped_facts = results[0].get("ansible_facts")
-            if isinstance(wrapped_facts, dict):
+            wrapped_facts = _valid_result(results[0])
+            if wrapped_facts is not None:
                 return wrapped_facts
 
     raise ReportError(f"invalid local fact snapshot: {host_name}")
 
 
-def _summary(path: Path) -> HostSummary:
+def _summary(path: Path, now: datetime) -> HostSummary:
     host_name = path.stem
     try:
         data = cast("JsonValue", json.loads(path.read_text(encoding="utf-8")))
@@ -102,37 +161,36 @@ def _summary(path: Path) -> HostSummary:
         or "unknown"
     )
 
-    ram_mb = facts.get("ansible_memtotal_mb")
-    if isinstance(ram_mb, (int, float, str)) and not isinstance(ram_mb, bool):
-        try:
-            ram_gib = f"{float(ram_mb) / 1024:.1f}"
-        except ValueError:
-            ram_gib = "unknown"
-    else:
-        ram_gib = "unknown"
+    ram_mb = _positive_number(facts.get("ansible_memtotal_mb"))
+    ram_gib = f"{ram_mb / 1024:.1f}" if ram_mb is not None else "unknown"
+    vcpus = _positive_number(
+        facts.get("ansible_processor_vcpus", facts.get("ansible_processor_cores")),
+        integer=True,
+    )
+    observed_at, observation_age = _observation(facts, now)
 
     return HostSummary(
         name=host_name,
         operating_system=distribution,
         architecture=architecture,
         virtualization=virtualization,
-        vcpus=_text(
-            facts.get("ansible_processor_vcpus", facts.get("ansible_processor_cores"))
-        ),
+        vcpus=str(int(vcpus)) if vcpus is not None else "unknown",
         ram_gib=ram_gib,
+        observed_at=observed_at,
+        observation_age=observation_age,
     )
 
 
-def load_summaries(facts_dir: Path) -> list[HostSummary]:
+def load_summaries(facts_dir: Path, now: datetime) -> list[HostSummary]:
     fact_files = sorted(facts_dir.glob("*.json"))
     if not fact_files:
         raise ReportError(
             "no local facts found; run: devenv tasks run autoconf:refresh-facts"
         )
-    return [_summary(path) for path in fact_files]
+    return [_summary(path, now) for path in fact_files]
 
 
-def render_html(hosts: list[HostSummary]) -> str:
+def render_html(hosts: list[HostSummary], now: datetime) -> str:
     rows = "\n".join(
         "<tr>"
         + "".join(
@@ -144,6 +202,8 @@ def render_html(hosts: list[HostSummary]) -> str:
                 host.virtualization,
                 host.vcpus,
                 host.ram_gib,
+                host.observed_at,
+                host.observation_age,
             )
         )
         + "</tr>"
@@ -170,12 +230,20 @@ def render_html(hosts: list[HostSummary]) -> str:
   </style>
 </head>
 <body>
+  <p>Generated at {escape(now.isoformat())}.</p>
+  <p class="note">Static inventory snapshot, not live health or availability.
+    Failed refreshes retain last-known-good observations. Ages are measured at report
+    generation and do not update while viewing. Observation timestamps come from
+    host-reported facts; unknown timestamps cannot establish freshness. No clinical
+    freshness threshold is inferred. Hosts without snapshots are absent from
+    this report.</p>
   <table>
     <caption>LuxNix inventory</caption>
     <thead>
       <tr>
         <th>Host</th><th>Operating system</th><th>Architecture</th>
         <th>Virtualization</th><th>vCPUs</th><th>RAM (GiB)</th>
+        <th>Observed at (UTC)</th><th>Observation age</th>
       </tr>
     </thead>
     <tbody>
@@ -255,8 +323,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
         facts_dir, output = resolve_report_paths(args)
-        hosts = load_summaries(facts_dir)
-        write_private_report(output, render_html(hosts))
+        now = datetime.now(timezone.utc)
+        hosts = load_summaries(facts_dir, now)
+        write_private_report(output, render_html(hosts, now))
     except ReportError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

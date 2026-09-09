@@ -56,6 +56,11 @@ let
     processedVideoDirName
     ;
   makeBin = "${pkgs.gnumake}/bin/make";
+  staticAcceptanceCheck = import ./scripts/acceptance-static.nix {
+    inherit pkgs lib;
+    hostname = cfg.django.hostname;
+    certificatePath = publicSslCertificatePath;
+  };
   envScripts = args.envContract or (import ./scripts/env.nix args);
   inherit (envScripts)
     celeryDefaultQueueName
@@ -985,10 +990,7 @@ let
     run_repo_django_command check --fail-level CRITICAL
     run_repo_django_command verify_encrypted_storage
     run_repo_django_command check_production_hls_readiness
-    ${pkgs.curl}/bin/curl --fail --silent --show-error \
-      --cacert "${publicSslCertificatePath}" \
-      --resolve "${cfg.django.hostname}:443:127.0.0.1" \
-      "https://${cfg.django.hostname}/static/.vite/manifest.json" >/dev/null
+    ${staticAcceptanceCheck}
 
     log "lx-annotate acceptance checks passed."
   '';
@@ -1236,10 +1238,7 @@ let
     run_installed_django_command "${wheelVenvPythonPath}" check --fail-level CRITICAL
     run_installed_django_command "${wheelVenvPythonPath}" verify_encrypted_storage
     run_installed_django_command "${wheelVenvPythonPath}" check_production_hls_readiness
-    ${pkgs.curl}/bin/curl --fail --silent --show-error \
-      --cacert "${publicSslCertificatePath}" \
-      --resolve "${cfg.django.hostname}:443:127.0.0.1" \
-      "https://${cfg.django.hostname}/static/.vite/manifest.json" >/dev/null
+    ${staticAcceptanceCheck}
 
     log "lx-annotate acceptance checks passed."
   '';

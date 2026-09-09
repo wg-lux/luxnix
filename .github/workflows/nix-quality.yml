@@ -19,6 +19,7 @@ jobs:
   fast:
     name: Ratcheted source checks
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/determinate-nix-action@v3
@@ -35,6 +36,7 @@ jobs:
   generators:
     name: Generated Nix renderer contracts
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/determinate-nix-action@v3
@@ -56,8 +58,8 @@ jobs:
 
   full:
     name: Full flake evaluation
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/determinate-nix-action@v3
@@ -70,3 +72,43 @@ jobs:
           name: nix-quality-full
           path: nix-quality-report.json
           if-no-files-found: ignore
+
+  python:
+    name: Python correctness and security contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/determinate-nix-action@v3
+      - name: Run repository and tracker contracts with locked dependencies
+        run: >-
+          nix develop .#default --command uv run --locked pytest -q
+          tests feature-tracking/test_tracker.py
+          --junitxml=luxnix-python-junit.xml
+      - name: Upload Python JUnit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: luxnix-python-junit
+          path: luxnix-python-junit.xml
+          if-no-files-found: warn
+
+  mcp:
+    name: MCP integration and provenance contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/determinate-nix-action@v3
+      - name: Run the independent MCP suite with its own dependency lock
+        working-directory: wg-lux-mcp
+        run: >-
+          nix develop ..#default --command uv run --locked --extra dev pytest -q
+          --junitxml=mcp-junit.xml
+      - name: Upload MCP JUnit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: luxnix-mcp-junit
+          path: wg-lux-mcp/mcp-junit.xml
+          if-no-files-found: warn

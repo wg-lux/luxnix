@@ -83,6 +83,9 @@ def test_removed_tracker_documents_have_no_retained_references() -> None:
         candidate = REPOSITORY_ROOT / relative_path
         if not relative_path or not candidate.is_file():
             continue
+        # This test intentionally names the removed paths as regression fixtures.
+        if candidate == Path(__file__).resolve():
+            continue
         try:
             content = candidate.read_text(encoding="utf-8")
         except UnicodeDecodeError:

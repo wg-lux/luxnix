@@ -5,13 +5,20 @@ import fcntl
 import hashlib
 import io
 import os
+import socket
+import ssl
 import threading
+import time
+from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from cryptography.hazmat.primitives import serialization
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 
 from lx_administration.storage.data_plane import (
@@ -34,6 +41,87 @@ from lx_administration.storage.envelope import (
     recipient_key_id,
 )
 from lx_administration.storage.manager import StorageNodeContract
+
+
+def test_idle_tls_peer_does_not_block_other_clients_and_times_out(
+    tmp_path: Path,
+) -> None:
+    """Exercise real TLS sockets; no remote host or production identity is used."""
+    key = ec.generate_private_key(ec.SECP256R1())
+    name = x509.Name([x509.NameAttribute(x509.NameOID.COMMON_NAME, "localhost")])
+    now = datetime.now(timezone.utc)
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - timedelta(minutes=1))
+        .not_valid_after(now + timedelta(hours=1))
+        .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
+        .add_extension(
+            x509.SubjectAlternativeName([x509.DNSName("localhost")]), critical=False
+        )
+        .sign(key, hashes.SHA256())
+    )
+    cert_path = tmp_path / "test-cert.pem"
+    key_path = tmp_path / "test-key.pem"
+    cert_path.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
+    key_path.write_bytes(
+        key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        )
+    )
+    store = _store(
+        tmp_path,
+        tls_ca_file=cert_path,
+        tls_cert_file=cert_path,
+        tls_key_file=key_path,
+        request_timeout_seconds=2,
+        max_concurrent_requests=2,
+    )
+    # Production deliberately disallows loopback listeners. Use an ephemeral
+    # loopback endpoint only for this isolated socket regression.
+    contract = store.contract.model_copy(update={
+        "port": 0,
+        "listen_address": "127.0.0.1",
+        "allowed_hub_addresses": ["127.0.0.1"],
+    })
+    server = StorageHTTPServer(
+        contract, store, tls_context=_build_tls_context(contract)
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    idle = socket.create_connection(server.server_address, timeout=4)
+    try:
+        deadline = time.monotonic() + 1
+        while server._request_slots._value == 2 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert server._request_slots._value == 1
+        client_context = ssl.create_default_context(cafile=str(cert_path))
+        client_context.load_cert_chain(certfile=cert_path, keyfile=key_path)
+        with socket.create_connection(server.server_address, timeout=1) as raw:
+            with client_context.wrap_socket(raw, server_hostname="localhost") as client:
+                client.sendall(
+                    b"GET /v1/health HTTP/1.1\r\n"
+                    b"Host: localhost\r\nConnection: close\r\n\r\n"
+                )
+                # TLS succeeds while the first peer is idle, but the synthetic
+                # identity still fails the service's application authorization.
+                assert client.recv(4096).startswith(b"HTTP/1.1 403")
+        assert idle.recv(1) == b""
+        deadline = time.monotonic() + 1
+        while server._request_slots._value != 2 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert server._request_slots._value == 2
+    finally:
+        idle.close()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+    assert not thread.is_alive()
 
 
 def _contract(root: Path, **overrides: object) -> StorageNodeContract:
@@ -792,6 +880,33 @@ def test_request_setup_applies_contract_timeout(
     handler.setup()
 
     assert connection.timeout == 17
+
+
+def test_failed_tls_handshake_closes_socket_and_releases_slot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = object.__new__(StorageHTTPServer)
+    server.contract = SimpleNamespace(request_timeout_seconds=3)
+    server._request_slots = threading.BoundedSemaphore(1)
+    assert server._request_slots.acquire(blocking=False)
+    closed = []
+
+    class FailedTLS:
+        timeout = None
+
+        def settimeout(self, value: int) -> None:
+            self.timeout = value
+
+        def do_handshake(self) -> None:
+            assert self.timeout == 3
+            raise ssl.SSLError("invalid test TLS record")
+
+    request = FailedTLS()
+    monkeypatch.setattr(server, "shutdown_request", closed.append)
+    server.process_request_thread(request, ("127.0.0.1", 12345))
+    assert closed == [request]
+    assert server._request_slots.acquire(blocking=False)
+    assert not server._request_slots.acquire(blocking=False)
 
 
 def test_object_size_limit_is_enforced_before_reading(tmp_path: Path) -> None:

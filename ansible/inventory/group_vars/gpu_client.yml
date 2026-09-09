@@ -6,6 +6,14 @@ group_services:
   # Shared fail-closed transfer contract for every gc-* node. Host identity and
   # owning Center come from the evaluated host configuration.
   luxnix.lxAnnotateLocal.runtime.mode: '"wheel"'
+  # Every GPU client receives the immutable application monitoring contract.
+  luxnix.lxAnnotateLocal.runtime.monitoring.enable: "true"
+  # New HLS reservations on NVIDIA-capable clients use the versioned hardware
+  # profile. Existing valid generations remain playable. The worker sees one
+  # physical GPU as logical device zero; endoreg-db preflights NVENC before
+  # publishing and fails closed when the encoder is unavailable.
+  luxnix.lxAnnotateLocal.runtime.hlsEncodingProfile: '"clinical_h264_nvenc_cq_v1"'
+  luxnix.lxAnnotateLocal.runtime.ffmpegWorker.cudaVisibleDevices: '"0"'
   luxnix.lxAnnotateLocal.hub.outboundTransfer.enable: "true"
   luxnix.lxAnnotateLocal.hub.outboundTransfer.requireMtls: "true"
   luxnix.lxAnnotateLocal.hub.outboundTransfer.caFile: '"/etc/secrets/vault/hub-pki/vault-server-ca.pem"'

@@ -154,7 +154,9 @@ def _decode_inventory_cursor(cursor: str) -> str:
             validate=True,
         )
     except (binascii.Error, ValueError, TypeError) as exc:
-        raise DataPlaneError(HTTPStatus.BAD_REQUEST, "invalid inventory cursor") from exc
+        raise DataPlaneError(
+            HTTPStatus.BAD_REQUEST, "invalid inventory cursor"
+        ) from exc
     if len(raw) != 32:
         raise DataPlaneError(HTTPStatus.BAD_REQUEST, "invalid inventory cursor")
     return raw.hex()
@@ -441,7 +443,7 @@ class BlobStore:
         )
 
     def inventory(self, *, cursor: str | None, limit: int) -> InventoryPage:
-        """Return one page while excluding concurrent object mutations and janitor work."""
+        """Return one page while excluding concurrent mutations and janitor work."""
         with self._exclusive_operations():
             return self._inventory_locked(cursor=cursor, limit=limit)
 
@@ -922,7 +924,13 @@ def _peer_identities(certificate: Mapping[str, Any]) -> set[str]:
 class StorageHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, contract: StorageNodeContract, store: BlobStore) -> None:
+    def __init__(
+        self,
+        contract: StorageNodeContract,
+        store: BlobStore,
+        *,
+        tls_context: ssl.SSLContext,
+    ) -> None:
         self.contract = contract
         self.store = store
         self._request_slots = threading.BoundedSemaphore(
@@ -931,6 +939,11 @@ class StorageHTTPServer(ThreadingHTTPServer):
         self.request_queue_size = contract.max_concurrent_requests
         super().__init__(
             (contract.listen_address, contract.port), StorageRequestHandler
+        )
+        # accept() must never wait for a peer's TLS bytes. Handshakes belong in
+        # the bounded request workers, after their socket timeout is applied.
+        self.socket = tls_context.wrap_socket(
+            self.socket, server_side=True, do_handshake_on_connect=False
         )
 
     def process_request(self, request: Any, client_address: Any) -> None:
@@ -945,6 +958,12 @@ class StorageHTTPServer(ThreadingHTTPServer):
 
     def process_request_thread(self, request: Any, client_address: Any) -> None:
         try:
+            request.settimeout(self.contract.request_timeout_seconds)
+            try:
+                request.do_handshake()
+            except (OSError, ssl.SSLError):
+                self.shutdown_request(request)
+                return
             super().process_request_thread(request, client_address)
         finally:
             self._request_slots.release()
@@ -1238,8 +1257,7 @@ def serve(contract: StorageNodeContract) -> None:
     _validate_identity_files(contract)
     context = _build_tls_context(contract)
     store = BlobStore(contract)
-    server = StorageHTTPServer(contract, store)
-    server.socket = context.wrap_socket(server.socket, server_side=True)
+    server = StorageHTTPServer(contract, store, tls_context=context)
     server.serve_forever()
 
 

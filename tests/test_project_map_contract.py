@@ -31,9 +31,9 @@ def test_project_map_points_to_live_or_explicitly_local_paths() -> None:
         if metadata is None:
             assert artifact.exists(), f"paths.{path_id} is missing: {relative_path}"
         elif metadata.get("may_be_missing"):
-            assert (
-                artifact.parent.is_dir()
-            ), f"paths.{path_id} parent is missing: {artifact.parent}"
+            # Generated local reports and their directories may both be absent
+            # in a clean checkout; when present, the report must be a file.
+            assert not artifact.exists() or artifact.is_file(), relative_path
         else:
             assert artifact.exists(), f"paths.{path_id} is missing: {relative_path}"
 

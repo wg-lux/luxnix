@@ -18,7 +18,7 @@ def recovery_policy():
         pytest.skip("Nix is required for real host recovery policy evaluation")
     expression = r"""
       let
-        flake = builtins.getFlake (toString ./.);
+        flake = builtins.getFlake __REPO_FLAKE_URI__;
         host = flake.nixosConfigurations.gc-05;
         lib = flake.inputs.nixpkgs.lib;
         summarize = c: {
@@ -62,6 +62,9 @@ def recovery_policy():
         };
       }
     """
+    expression = expression.replace(
+        "__REPO_FLAKE_URI__", json.dumps(f"git+file://{ROOT}")
+    )
     result = subprocess.run(
         ["nix", "eval", "--impure", "--json", "--expr", expression],
         cwd=ROOT,

@@ -7,6 +7,7 @@
   effectivePackageVersion ? lxAnnotateRuntime.runtime.packageVersion,
   packageStaticRoot ? lxAnnotateRuntime.paths.djangoStaticRootPath,
   runtimeLdLibraryPath ? "",
+  monitoringConfigFile,
   ...
 }:
 let
@@ -87,6 +88,19 @@ rec {
 
   # This is the lx-annotate environment contract. Config modules, systemd
   # EnvironmentFiles, and shell wrappers render from this attrset.
+  llmEnv = {
+    LLM_ENABLED = boolString cfg.runtime.llm.enable;
+    LLM_PROVIDER = cfg.runtime.llm.provider;
+    LLM_MODEL = cfg.runtime.llm.model;
+    LLM_BASE_URL = cfg.runtime.llm.baseUrl;
+    LLM_TIMEOUT = toString cfg.runtime.llm.timeoutSeconds;
+    LLM_CA_FILE = if cfg.runtime.llm.caFile == null then "" else cfg.runtime.llm.caFile;
+    LLM_CLIENT_CERT_FILE =
+      if cfg.runtime.llm.clientCertificateFile == null then "" else cfg.runtime.llm.clientCertificateFile;
+    LLM_CLIENT_KEY_FILE =
+      if cfg.runtime.llm.clientKeyFile == null then "" else cfg.runtime.llm.clientKeyFile;
+  };
+
   commonEnv = {
     HOME_DIR = endoreg-service-user-home;
     CONF_DIR = envConfDir;
@@ -128,6 +142,7 @@ rec {
     RUN_VIDEO_TESTS = envRunVideoTests;
     SKIP_EXPENSIVE_TESTS = envSkipExpensiveTests;
     FFMPEG_TRANSCODE_TIMEOUT_SECONDS = toString ffmpegTranscodeTimeoutSeconds;
+    ENDOREG_HLS_ENCODING_PROFILE = cfg.runtime.hlsEncodingProfile;
     MEDIA_OPERATION_STREAM_LEASE_SECONDS = "300";
     SERVE_WITH_NGINX = boolString cfg.runtime.streamableServing.nginxOffload;
     NGINX_PROTECTED_MEDIA_URL = cfg.runtime.streamableServing.protectedMediaUrl;
@@ -180,6 +195,9 @@ rec {
   // optionalAttrs (cfg.runtime.masterKeyFile != null) {
     LX_ANNOTATE_MASTER_KEY_FILE = toString cfg.runtime.masterKeyFile;
   }
+  // optionalAttrs cfg.runtime.monitoring.enable {
+    LX_ANNOTATE_MONITORING_CONFIG_FILE = monitoringConfigFile;
+  }
   // optionalAttrs (cfg.hub.outboundTransfer.clientCertificateFile != null) {
     LX_ANNOTATE_HUB_EXPORT_CLIENT_CERT_FILE = toString cfg.hub.outboundTransfer.clientCertificateFile;
   }
@@ -198,7 +216,8 @@ rec {
   // optionalAttrs (cfg.hub.transferApi.recipientPrivateKeyFiles != [ ]) {
     ENDOREG_HUB_TRANSFER_RECIPIENT_PRIVATE_KEY_FILES = lib.concatStringsSep "," cfg.hub.transferApi.recipientPrivateKeyFiles;
   }
-  // cfg.runtime.extraEnvironment;
+  // cfg.runtime.extraEnvironment
+  // llmEnv;
 
   commonSystemdEnvText = concatStringsSep "\n" (mapAttrsToList renderSystemdEnvLine commonEnv);
   commonShellExportText = renderShellExports commonEnv;
@@ -213,13 +232,8 @@ rec {
   };
   celeryWorkerResourceShellExportText = renderShellExports celeryWorkerResourceEnv;
 
-  llmInferenceWorkerEnv = {
+  llmInferenceWorkerEnv = llmEnv // {
     REPORT_LLM_JOB_MODE = "celery";
-    LLM_ENABLED = "true";
-    LLM_PROVIDER = "ollama";
-    LLM_MODEL = "lx-gemma4-e2b-json";
-    LLM_BASE_URL = "http://127.0.0.1:11434";
-    LLM_TIMEOUT = "120";
   };
 
   lxAnnotateEnvHelpers = pkgs.writeShellScript "lx-annotate-env-helpers.sh" ''

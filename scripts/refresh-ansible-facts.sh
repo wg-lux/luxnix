@@ -144,15 +144,20 @@ for host_name in "${expected_hosts[@]}"; do
   raw_file="$raw_dir/$host_name"
   [[ -f "$raw_file" ]] || raw_file="$raw_dir/$host_name.json"
 
-  if [[ ! -f "$raw_file" ]] || ! jq --arg host "$host_name" '
+  if [[ ! -f "$raw_file" ]] || ! jq --slurp --arg host "$host_name" '
     def valid_result:
       type == "object"
       and (.ansible_facts | type == "object")
-      and ((.failed // false) | not);
+      and (.ansible_facts | length > 0)
+      and ((has("failed") | not) or .failed == false)
+      and ((has("unreachable") | not) or .unreachable == false);
 
-    if valid_result then
+    if length != 1 then error("expected one Ansible setup response") else .[0] end
+    | if valid_result then
       {($host): [.]}
     elif type == "object"
+      and ((has("failed") | not) or .failed == false)
+      and ((has("unreachable") | not) or .unreachable == false)
       and (.[$host] | type == "array")
       and (.[$host] | length == 1)
       and (.[$host][0] | valid_result)

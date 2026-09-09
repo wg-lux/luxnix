@@ -19,6 +19,12 @@ host_services:
   luxnix.vllm.port: 8000
 
 host_nixos:
+  # Daily desktop stalls showed sustained memory pressure without oomd coverage.
+  # Recovery can kill a whole session if its applications share one cgroup.
+  # Policy and post-activation checks: docs/guides/gc-02-memory-protection.yml
+  systemd.oomd.enable: "true"
+  systemd.oomd.enableUserSlices: "true"
+  systemd.slices.user.sliceConfig.ManagedOOMSwap: '"kill"'
   nix.settings.max_jobs: 1
   nix.settings.cores: 4
   nixpkgs.config.cudaCapabilities:

@@ -120,7 +120,16 @@ lib.foldl' lib.recursiveUpdate
       services.luxnix.lxAnnotateLocal.hub.outboundTransfer.requireMtls = true;
     }
     {
+      services.luxnix.lxAnnotateLocal.runtime.ffmpegWorker.cudaVisibleDevices = "0";
+    }
+    {
+      services.luxnix.lxAnnotateLocal.runtime.hlsEncodingProfile = "clinical_h264_nvenc_cq_v1";
+    }
+    {
       services.luxnix.lxAnnotateLocal.runtime.mode = "wheel";
+    }
+    {
+      services.luxnix.lxAnnotateLocal.runtime.monitoring.enable = true;
     }
     {
       services.wg-lux-mcp.enable = true;
@@ -599,5 +608,14 @@ lib.foldl' lib.recursiveUpdate
       nixpkgs.config.cudaCapabilities = [
         "8.6"
       ];
+    }
+    {
+      systemd.oomd.enable = true;
+    }
+    {
+      systemd.oomd.enableUserSlices = true;
+    }
+    {
+      systemd.slices.user.sliceConfig.ManagedOOMSwap = "kill";
     }
   ]

@@ -14,7 +14,6 @@ from typing import Any
 
 import yaml
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -52,8 +51,7 @@ def is_generated(path: str, policy: dict[str, Any]) -> bool:
         for pattern in scope.get("generated_exclude_patterns", [])
     )
     return not excluded_from_generated and any(
-        fnmatch.fnmatch(path, pattern)
-        for pattern in scope["generated_patterns"]
+        fnmatch.fnmatch(path, pattern) for pattern in scope["generated_patterns"]
     )
 
 
@@ -189,10 +187,17 @@ def count_nixfmt(policy: dict[str, Any], files: list[Path]) -> dict[str, Any]:
 
 def count_flake_checker(policy: dict[str, Any]) -> dict[str, Any]:
     definition = policy["checks"]["flake_checker"]
-    result = run(definition["command"])
+    # GitHub Actions switches the tool to annotation-only output without the
+    # summary count. Use the same parseable text contract locally and in CI.
+    result = run(["env", "-u", "GITHUB_ACTIONS", *definition["command"]])
     combined = f"{result.stdout}\n{result.stderr}"
-    match = re.search(r"discovered (\d+) issue", combined)
-    issues = int(match.group(1)) if match else 0
+    counts = re.findall(r"discovered (\d+) issues?\b", combined)
+    clean = (
+        "The flake checker scanned your flake.lock and didn't identify any issues."
+        in combined
+    )
+    parse_ok = (len(counts) == 1 and not clean) or (not counts and clean)
+    issues = (int(counts[0]) if counts else 0) if parse_ok else None
     outdated_inputs = [
         {"input": input_name, "age_days": int(age_days)}
         for input_name, age_days in re.findall(
@@ -200,9 +205,12 @@ def count_flake_checker(policy: dict[str, Any]) -> dict[str, Any]:
         )
     ]
     return {
-        "command_ok": accepted(result, definition),
+        "command_ok": accepted(result, definition) and parse_ok,
         "exit_code": result.returncode,
         "issues": issues,
+        "parse_error": (
+            None if parse_ok else "Missing or ambiguous flake-checker summary"
+        ),
         "outdated_inputs": outdated_inputs,
         "output": combined.strip(),
     }
@@ -244,7 +252,9 @@ def evaluate_baselines(
     for check_name, metric, baseline_name in comparisons:
         actual = report[check_name][metric]
         maximum = checks[check_name]["baseline"][baseline_name]
-        if actual > maximum:
+        if actual is None:
+            failures.append(f"{check_name}.{metric} has no validated result")
+        elif actual > maximum:
             failures.append(
                 f"{check_name}.{metric}={actual} exceeds baseline {maximum}"
             )
@@ -255,7 +265,9 @@ def evaluate_baselines(
             and not result["command_ok"]
         ):
             failures.append(
-                f"{check_name} exited unexpectedly with {result['exit_code']}"
+                f"{check_name}: {result['parse_error']}"
+                if result.get("parse_error")
+                else f"{check_name} exited unexpectedly with {result['exit_code']}"
             )
     return failures
 
@@ -309,9 +321,7 @@ def print_human(report: dict[str, Any], failures: list[str], full: bool) -> None
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=REPO_ROOT / "nix-quality.yml")
-    parser.add_argument(
-        "--full", action="store_true", help="also run nix flake check"
-    )
+    parser.add_argument("--full", action="store_true", help="also run nix flake check")
     parser.add_argument(
         "--json", action="store_true", help="emit the complete report as JSON"
     )

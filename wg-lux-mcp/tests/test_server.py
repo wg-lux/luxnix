@@ -186,7 +186,13 @@ definition_of_done:
     ledger = AssessmentLedger(state_root)
     identity = FeatureIdentity(provider="lx-annotate", id="example_feature")
     subject = DeployedSubject(
-        provider="lx-annotate", feature_id="example_feature", nix_store_path=package
+        provider="lx-annotate",
+        feature_id="example_feature",
+        nix_store_path=package,
+        drv_path=Path(f"{package}.drv"),
+        revision="test-revision",
+        version="1.0.0",
+        system_generation="test-generation",
     )
     assessed_at = datetime(2026, 8, 20, 10, 0, tzinfo=UTC)
     ledger.append(

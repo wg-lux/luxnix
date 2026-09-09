@@ -128,6 +128,12 @@ let
         default = "6h15min";
         description = "Warm-shutdown grace period for an active FFmpeg media task before systemd may send a final kill signal.";
       };
+      cudaVisibleDevices = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        example = "0";
+        description = "Optional single CUDA device selector exported only to the FFmpeg media worker. Required by the NVENC HLS profile.";
+      };
     };
   };
   ffmpegStreamThrottleProfileType = types.submodule {
@@ -211,6 +217,55 @@ let
       };
     };
   };
+  llmType = types.submodule (
+    { config, ... }: {
+      options = {
+        enable = mkOption {
+          type = types.bool;
+          default = true;
+          description = "Allow LLM functionality in the web application, workers and lx-anonymizer. Availability is still checked at runtime.";
+        };
+        provider = mkOption {
+          type = types.enum [
+            "ollama"
+            "vllm"
+          ];
+          default = "ollama";
+          description = "LLM API protocol; vllm also supports compatible llama.cpp GLM servers.";
+        };
+        baseUrl = mkOption {
+          type = types.str;
+          default = if config.provider == "ollama" then "http://127.0.0.1:11434" else "http://127.0.0.1:8000";
+          description = "Default LLM server root URL, without /v1. Remote servers require HTTPS and mTLS.";
+        };
+        model = mkOption {
+          type = types.str;
+          default = "lx-gemma4-e2b-json";
+          description = "Installed model name or served alias. Consumers must not replace an unavailable configured model silently.";
+        };
+        timeoutSeconds = mkOption {
+          type = types.ints.between 1 120;
+          default = 120;
+          description = "LLM generation read timeout in seconds.";
+        };
+        caFile = mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          description = "Runtime CA certificate file for a remote LLM endpoint.";
+        };
+        clientCertificateFile = mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          description = "Runtime mTLS client certificate file for a remote LLM endpoint.";
+        };
+        clientKeyFile = mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          description = "Runtime mTLS private key file for a remote LLM endpoint; never a Nix store secret.";
+        };
+      };
+    }
+  );
   celeryBrokerType = types.submodule {
     options = {
       visibilityTimeoutSeconds = mkOption {
@@ -281,8 +336,8 @@ in
           wheelPath = mkOption {
             type = types.nullOr types.path;
             default = pkgs.fetchurl {
-              url = "https://files.pythonhosted.org/packages/f1/da/f6f5ca1d6d62e6dd9aeae797b9718402b883bd20ab657160c8bfaa7f814a/lx_annotate-1.2.3-py3-none-any.whl";
-              hash = "sha256-5UkRdJDjc2jhZlM56CmuD+moyr1muE0cTCjhMdANM6Q=";
+              url = "https://files.pythonhosted.org/packages/05/c6/1a75bb211b127c1ef42277617a0eab1dc136c0928ee078705e9bd3baa8d0/lx_annotate-1.2.4-py3-none-any.whl";
+              hash = "sha256-Fasjyii5IfKjlIh+N8uDhlQ98OKnS++18Cqj7NNplqU=";
             };
             description = "Path to the lx-annotate wheel artifact used in wheel mode.";
           };
@@ -291,6 +346,19 @@ in
             default = inferWheelPackageVersion cfg.runtime.wheelPath;
             defaultText = literalExpression "version parsed from runtime.wheelPath";
             description = "lx-annotate Python package version exported as LX_ANNOTATE_PACKAGE_VERSION.";
+          };
+          hlsEncodingProfile = mkOption {
+            type = types.enum [
+              "clinical_h264_libx264_crf_v1"
+              "clinical_h264_nvenc_cq_v1"
+            ];
+            default = "clinical_h264_libx264_crf_v1";
+            description = ''
+              Versioned endoreg-db HLS encoding profile. Select the NVENC
+              profile only for a worker with one explicitly isolated CUDA
+              device; encoder preflight then fails closed if NVENC is
+              unavailable.
+            '';
           };
           extraEnvironment = mkOption {
             type = types.attrsOf types.str;
@@ -812,6 +880,11 @@ in
             type = llmInferenceWorkerType;
             default = { };
             description = "Scheduling policy for the dedicated Ollama-backed LLM inference Celery worker.";
+          };
+          llm = mkOption {
+            type = llmType;
+            default = { };
+            description = "Shared LLM configuration for LX-Annotate and lx-anonymizer consumers.";
           };
           externalServices = mkOption {
             type = types.submodule {

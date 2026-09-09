@@ -21,6 +21,16 @@ let
     ;
 
   runtime = lxAnnotateRuntime;
+  llmWorkerMode = if cfg.runtime.llm.enable then cfg.runtime.llmInferenceWorker.mode else "manual";
+  useLocalOllama =
+    cfg.runtime.llm.enable
+    && cfg.runtime.llm.provider == "ollama"
+    && builtins.elem cfg.runtime.llm.baseUrl [
+      "http://127.0.0.1:11434"
+      "http://127.0.0.1:11434/"
+      "http://[::1]:11434"
+      "http://[::1]:11434/"
+    ];
   inherit (runtime.identities)
     endoreg-service-user-name
     endoreg-service-user-home
@@ -572,6 +582,136 @@ let
       (lib.makeLibraryPath (runtimeLibraryPackages ++ [ pkgs.ffmpeg ]))
     ]
   );
+  monitoringDeploymentRevision =
+    if cfg.runtime.monitoring.deploymentRevision != null then
+      cfg.runtime.monitoring.deploymentRevision
+    else
+      lxAnnotateSource.rev or null;
+  monitoringConfig = pkgs.writeText "lx-annotate-monitoring-config-v1.json" (
+    builtins.toJSON {
+      schema_version = 1;
+      deployment_revision = monitoringDeploymentRevision;
+      systemctl_path = "${pkgs.systemd}/bin/systemctl";
+      systemctl_timeout_seconds = cfg.runtime.monitoring.systemctlTimeoutSeconds;
+      disk_warning_free_percent = cfg.runtime.monitoring.diskWarningFreePercent;
+      disk_error_free_percent = cfg.runtime.monitoring.diskErrorFreePercent;
+      pending_warning_seconds = cfg.runtime.monitoring.pendingWarningSeconds;
+      recent_failure_window_seconds = cfg.runtime.monitoring.recentFailureWindowSeconds;
+      services = [
+        {
+          key = "web";
+          unit = "lx-annotate.service";
+          required = true;
+        }
+        {
+          key = "worker_default";
+          unit = "lx-annotate-celery-worker.service";
+          required = true;
+        }
+        {
+          key = "worker_pipeline";
+          unit = "lx-annotate-celery-pipeline-worker.service";
+          required = true;
+        }
+        {
+          key = "scheduler";
+          unit = "lx-annotate-celery-beat.service";
+          required = true;
+        }
+        {
+          key = "reverse_proxy";
+          unit = "nginx.service";
+          required = true;
+        }
+      ]
+      ++ lib.optionals (cfg.runtime.ffmpegWorker.mode == "always") [
+        {
+          key = "worker_ffmpeg";
+          unit = "lx-annotate-celery-ffmpeg-worker.service";
+          required = true;
+        }
+      ]
+      ++ lib.optionals (cfg.runtime.frameExtractionWorker.mode != "manual") [
+        {
+          key = "worker_frame_extraction";
+          unit =
+            if cfg.runtime.frameExtractionWorker.mode == "always" then
+              "lx-annotate-celery-frame-extraction-worker.service"
+            else
+              "lx-annotate-celery-frame-extraction-worker.timer";
+          required = true;
+        }
+      ]
+      ++ lib.optionals (cfg.runtime.inferenceWorker.mode == "always") [
+        {
+          key = "worker_inference";
+          unit = "lx-annotate-celery-inference-worker.service";
+          required = true;
+        }
+      ]
+      ++ lib.optionals (cfg.runtime.trainingWorker.mode == "always") [
+        {
+          key = "worker_training";
+          unit = "lx-annotate-celery-training-worker.service";
+          required = true;
+        }
+      ]
+      ++ lib.optionals (llmWorkerMode == "always") [
+        {
+          key = "worker_llm_inference";
+          unit = "lx-annotate-celery-llm-inference-worker.service";
+          required = true;
+        }
+      ]
+      ++ lib.optionals (!externalRedisConfigured) [
+        {
+          key = "broker";
+          unit = "redis-lx-annotate.service";
+          required = true;
+        }
+      ]
+      ++ lib.optionals (!externalPostgresConfigured) [
+        {
+          key = "database";
+          unit = "postgresql.service";
+          required = true;
+        }
+      ];
+      storage = [
+        {
+          key = "protected_data";
+          path = envDataDir;
+          required = true;
+          writable = true;
+        }
+        {
+          key = "application_storage";
+          path = runtimeStorageRootPath;
+          required = true;
+          writable = true;
+        }
+        {
+          key = "import_intake";
+          path = runtimeIoImportRootPath;
+          required = true;
+          writable = true;
+        }
+        {
+          key = "hls_raw";
+          path = runtimeStreamableVideoRawRootPath;
+          required = true;
+          writable = true;
+        }
+        {
+          key = "hls_processed";
+          path = runtimeStreamableVideoProcessedRootPath;
+          required = true;
+          writable = true;
+        }
+      ];
+    }
+  );
+  monitoringConfigFile = "/etc/lx-annotate/monitoring.json";
   envContract = import ./scripts/env.nix (
     args
     // {
@@ -579,6 +719,7 @@ let
         effectivePackageVersion
         packageStaticRoot
         runtimeLdLibraryPath
+        monitoringConfigFile
         ;
     }
   );
@@ -1043,6 +1184,7 @@ let
       mode = cfg.runtime.ffmpegWorker.mode;
       timeoutStopSec = cfg.runtime.ffmpegWorker.timeoutStopSec;
       environment = postValidationWorkerEnv;
+      cudaVisibleDevices = cfg.runtime.ffmpegWorker.cudaVisibleDevices;
     };
     inference = mkWorker {
       unitName = "lx-annotate-celery-inference-worker";
@@ -1067,11 +1209,11 @@ let
       hostname = "llm-inference";
       queues = [ "llm_inference" ];
       pool = cfg.runtime.workerPools.llmInference;
-      mode = cfg.runtime.llmInferenceWorker.mode;
+      mode = llmWorkerMode;
       environment = llmInferenceWorkerEnv;
-      after = [ "ollama.service" ];
-      wants = [ "ollama.service" ];
-      requires = [ "ollama.service" ];
+      after = lib.optional useLocalOllama "ollama.service";
+      wants = lib.optional useLocalOllama "ollama.service";
+      requires = lib.optional useLocalOllama "ollama.service";
     };
   };
   alwaysWorkerServiceUnits = lib.mapAttrsToList (_: workerCfg: "${workerCfg.unitName}.service") (
@@ -1701,6 +1843,11 @@ in
         {
           environment.systemPackages = [ lxAnnotateMigrateVideoStreamableStorageScript ];
 
+          environment.etc."lx-annotate/monitoring.json" = mkIf cfg.runtime.monitoring.enable {
+            source = monitoringConfig;
+            mode = "0444";
+          };
+
           assertions = [
             {
               assertion =
@@ -1737,8 +1884,8 @@ in
               message = "services.luxnix.lxAnnotateLocal.runtime.clustered.enable requires runtime.externalServices.redisUrl.";
             }
             {
-              assertion = cfg.runtime.llmInferenceWorker.mode != "always" || config.services.luxnix.ollama.enable;
-              message = "services.luxnix.lxAnnotateLocal.runtime.llmInferenceWorker.mode = \"always\" requires services.luxnix.ollama.enable = true.";
+              assertion = llmWorkerMode != "always" || !useLocalOllama || config.services.luxnix.ollama.enable;
+              message = "services.luxnix.lxAnnotateLocal.runtime.llmInferenceWorker.mode = \"always\" requires services.luxnix.ollama.enable = true when using local Ollama.";
             }
             {
               assertion =
@@ -1761,6 +1908,25 @@ in
             {
               assertion = !(builtins.hasAttr "CELERY_VISIBILITY_TIMEOUT_SECONDS" cfg.runtime.extraEnvironment);
               message = "Set runtime.celeryBroker.visibilityTimeoutSeconds instead of overriding CELERY_VISIBILITY_TIMEOUT_SECONDS through runtime.extraEnvironment.";
+            }
+            {
+              assertion = !(builtins.hasAttr "ENDOREG_HLS_ENCODING_PROFILE" cfg.runtime.extraEnvironment);
+              message = "Set runtime.hlsEncodingProfile instead of overriding ENDOREG_HLS_ENCODING_PROFILE through runtime.extraEnvironment.";
+            }
+            {
+              assertion = !(builtins.hasAttr "LX_ANNOTATE_MONITORING_CONFIG_FILE" cfg.runtime.extraEnvironment);
+              message = "LX_ANNOTATE_MONITORING_CONFIG_FILE is generated from runtime.monitoring and cannot be overridden through runtime.extraEnvironment.";
+            }
+            {
+              assertion =
+                cfg.runtime.monitoring.diskErrorFreePercent < cfg.runtime.monitoring.diskWarningFreePercent;
+              message = "runtime.monitoring.diskErrorFreePercent must be lower than diskWarningFreePercent.";
+            }
+            {
+              assertion =
+                cfg.runtime.hlsEncodingProfile != "clinical_h264_nvenc_cq_v1"
+                || cfg.runtime.ffmpegWorker.cudaVisibleDevices != null;
+              message = "services.luxnix.lxAnnotateLocal.runtime.hlsEncodingProfile = \"clinical_h264_nvenc_cq_v1\" requires runtime.ffmpegWorker.cudaVisibleDevices to isolate one GPU.";
             }
             {
               assertion = cfg.runtime.deploymentRole != "central_hub" || cfg.hub.enable;
@@ -2234,7 +2400,7 @@ in
                   );
                 };
               };
-              ollama.enable = mkIf (cfg.runtime.llmInferenceWorker.mode == "always") (mkDefault true);
+              ollama.enable = mkIf (llmWorkerMode == "always" && useLocalOllama) (mkDefault true);
               fileMover = {
                 serviceDependencies = {
                   after = mkAfter fileMoverAfter;
@@ -2306,8 +2472,7 @@ in
                     extraConfig = "expires 30d; add_header Cache-Control 'public';";
                   };
                   "/media/" = {
-                    alias = "${envDataDir}/";
-                    extraConfig = "sendfile on; tcp_nopush on;";
+                    extraConfig = "return 404;";
                   };
                   "/protected_media/" = {
                     alias = "${runtimeStorageRootPath}/";

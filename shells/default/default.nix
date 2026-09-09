@@ -18,6 +18,10 @@ pkgs.mkShell {
     nixfmt
     flake-checker
     home-manager
+    # CI must not depend on a runner-global Python dependency manager.
+    uv
+    jq
+    openssl
     git
     sops
     ssh-to-age

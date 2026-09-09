@@ -3,5 +3,6 @@
   directory: true
 
 - path: ./ansible.cfg
-  exists: true
+  # The tracked link exists before vault bootstrap generates its local target.
+  exists: false
   symlink: true
