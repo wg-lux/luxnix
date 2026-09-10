@@ -282,7 +282,7 @@ in
             type = types.nullOr types.path;
             default = pkgs.fetchurl {
               url = "https://files.pythonhosted.org/packages/b6/51/9d67e32abe45ad978ba7faae44211e00a7fe2b22a54695a8bb4e92590535/lx_annotate-1.2.1-py3-none-any.whl";
-              hash = "sha256-1NsxkGY5Jld9sLJ7HA6ekDNGYWLbrgR4sL+V7RFYIv8=";
+              hash = "sha256-shZ7t23ivQfvOl38NvJD9ahukKvX1tE4ZG/vM3qbVG0=";
             };
             description = "Path to the lx-annotate wheel artifact used in wheel mode.";
           };
