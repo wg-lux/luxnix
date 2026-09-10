@@ -164,7 +164,7 @@ let
         else
           echo "endoreg-db already present"
         
-          cd "${ENDOREG_DB_DIR}"
+          cd "''${ENDOREG_DB_DIR}"
         
           git fetch origin lx-ai-service
         
