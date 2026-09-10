@@ -1,19 +1,19 @@
-{ config
-, inputs
-, pkgs
-, lib
-, ...
+{
+  config,
+  pkgs,
+  lib,
+  ...
 }:
 
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.luxnix.nvidia-default;
 
   nvidiaDrivers = {
     "stable" = config.boot.kernelPackages.nvidiaPackages.stable;
     "beta" = config.boot.kernelPackages.nvidiaPackages.beta;
     "production" = config.boot.kernelPackages.nvidiaPackages.production;
-
 
     # Custom imports
     "555_58" = {
@@ -26,20 +26,17 @@ with lib.luxnix; let
     };
   };
 
-  # we need to find out what system we are working on (eg linux, darwin, ...)
-  system = config.system.build.host.system;
-
 in
 {
   options.luxnix.nvidia-default = with types; {
     enable = mkBoolOpt false "Enable or disable the Nvidia GPU Support";
 
     # Other bool options are: enable cuda support for nix packages, add xserver driver, add initrd-kernel-module, addd autoadddriverrunpath
-    # enable prime sync, enable modesetting, 
+    # enable prime sync, enable modesetting,
 
     nvidiaDriver = mkOption {
       type = types.str;
-      default = "beta";
+      default = "production";
       description = "The nvidia driver to use";
     };
   };
@@ -49,6 +46,8 @@ in
     hardware.graphics = {
       enable = true;
       extraPackages = with pkgs; [
+        triton-llvm
+        nvidia-vaapi-driver
       ];
     };
 
@@ -56,14 +55,14 @@ in
 
     services.xserver.videoDrivers = [ "nvidia" ];
     boot.initrd.kernelModules = [ "nvidia" ];
-
     hardware.nvidia = {
       modesetting.enable = true;
       powerManagement.enable = true;
       powerManagement.finegrained = false;
-      open = false;
+      open = true;
       nvidiaSettings = true;
-      package = nvidiaDrivers."${cfg.nvidiaDriver}";
+      package = nvidiaDrivers.${cfg.nvidiaDriver};
+      nvidiaPersistenced = true;
     };
   };
 

@@ -1,13 +1,14 @@
 {
-  pkgs,
   lib,
   config,
   ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.roles.lx-anonymizer;
-in {
+in
+{
   options.roles.lx-anonymizer = {
     enable = mkBoolOpt false ''
       Enable LX-Anonymizer installation / setup / configuration.
@@ -20,7 +21,7 @@ in {
         The root directory for the LX-Anonymizer installation.
       '';
     };
-    
+
     user = mkOption {
       type = types.str;
       default = "lxAnonymizer";
@@ -48,11 +49,12 @@ in {
       "d ${cfg.rootDir}/tmp 0700 ${cfg.user} ${cfg.group} -"
     ];
 
-    # TODO Create user with correct permissions
+    # TODO (lx-anonymizer owner): convert this account to a system user after
+    # confirming the fixed UID and Home Manager consumers do not require login.
     users.users.${cfg.user} = {
       isNormalUser = true;
       home = cfg.rootDir;
-      group = cfg.group;
+      inherit (cfg) group;
       createHome = false;
       uid = config.luxnix.generic-settings.uids.lxAnonymizer;
     };

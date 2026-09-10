@@ -2,16 +2,44 @@ group_roles:
   endoreg_client.enable: "true"
   aglnet.client.enable: "true"
   nextcloudClient.enable: "true"
-group_services: {}
-group_luxnix:
-  generic_settings.enable: "true"
-  nvidia_prime.nvidiaDriver: '"beta"'
-  nvidia_prime.enable: "true"
-  gpu_eval.enable: "true"
-  boot_decryption_stick.enable: "true"
-  generic_settings.configurationPathRelative: '"lx-production"'
+group_services:
+  # Shared fail-closed transfer contract for every gc-* node. Host identity and
+  # owning Center come from the evaluated host configuration.
+  luxnix.lxAnnotateLocal.runtime.mode: '"wheel"'
+  luxnix.lxAnnotateLocal.hub.outboundTransfer.enable: "true"
+  luxnix.lxAnnotateLocal.hub.outboundTransfer.requireMtls: "true"
+  luxnix.lxAnnotateLocal.hub.outboundTransfer.caFile: '"/etc/secrets/vault/hub-pki/vault-server-ca.pem"'
+  luxnix.lxAnnotateLocal.hub.nodeProvisioning.enable: "true"
+  luxnix.lxAnnotateLocal.hub.nodeProvisioning.nodes: '[ {
+    nodeKey = config.networking.hostName;
+    displayName = "${config.networking.hostName} site node";
+    role = "site_node";
+    centerKey = config.roles.endoreg-client.defaultCenterKey;
+    sharedSecretFile = "/etc/secrets/vault/hub-pki/source-node-secret"; }
+    { nodeKey = "gs-02"; displayName = "gs-02 central hub";
+    role = "central_hub"; baseUrl = "https://gs-02.intern"; } ]'
+group_nixos:
+  # Pin Vault to the authenticated VPN route; TLS still verifies its identity.
+  'networking.hosts."172.16.255.22"':
+    - "vault.endo-reg.net"
 
-  maintenance.autoUpdates.enable: "true"
-  maintenance.autoUpdates.operation: '"switch"'
-  maintenance.autoUpdates.flake: '"github:wg-lux/luxnix"'
-  maintenance.autoUpdates.dates: '"09:00"'
+group_luxnix:
+  # AppRole enrollment material is delivered out of band and never enters the
+  # generated Nix store. Transfer services remain stopped until it is present.
+  vault.client.allowOffline: "true"
+  vault.client.address: '"https://vault.endo-reg.net:8200"'
+  vault.client.caCertFile: '"/etc/secrets/vault/hub-pki/vault-server-ca.pem"'
+  vault.client.auth.method: '"approle"'
+  vault.client.auth.roleIdFile: '"/etc/secrets/vault/hub-pki/approle_role_id"'
+  vault.client.auth.secretIdFile: '"/etc/secrets/vault/hub-pki/approle_secret_id"'
+  vault.client.hubPki.enable: "true"
+
+  generic_settings.enable: "true"
+  # GPU Configuration (New Unified System)
+  generic_settings.gpu.autoDetect: "true"
+  generic_settings.gpu.nvidia.enable: "true"
+  generic_settings.gpu.nvidia.prime.enable: "true"
+  generic_settings.gpu.nvidia.driver: '"production"'
+  boot_decryption_stick.enable: "true"
+
+  maintenance.autoUpdates.enable: "false"

@@ -1,18 +1,40 @@
 # /default.nix
-{ pkgs, ... }: {
+_: {
+  cli = {
+    programs = {
+      git = {
+        allowedSigners = " SHA256:nN5Ha+k2duMh/XZnKqa3Bs7jkUorUpsKzF+aqhTMMGg ";
+        enable = true;
+        email = "hamza.ukw@gmail.com";
+        userName = "Hamzaukw";
+      };
+    };
+  };
+  desktops = {
+    plasma = {
+      enable = true;
+    };
+  };
+  luxnix = {
+    generic-settings = {
+      language = "english";
+      hostPlatform = "x86_64-linux";
+    };
+  };
+  roles = {
+    development = {
+      enable = true;
+    };
+    video = {
+      enable = true;
+    };
+    gpu = {
+      enable = true;
+    };
+    social = {
+      enable = true;
+    };
+  };
 
-cli.programs.git.allowedSigners = "";
-cli.programs.git.enable = true;
-cli.programs.git.email = "hamza.ukw@gmail.com";
-desktops.plasma.enable = true;
-luxnix.generic-settings.configurationPath = "dev/luxnix";
-luxnix.generic-settings.language = "english";
-luxnix.generic-settings.hostPlatform = "x86_64-linux";
-roles.development.enable = true;
-roles.video.enable = true;
-roles.gpu.enable = true;
-roles.social.enable = true;
-
-home.stateVersion = "23.11";
-
+  home.stateVersion = "23.11";
 }

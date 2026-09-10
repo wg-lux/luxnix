@@ -1,11 +1,26 @@
 # inventory/host_vars/gc-05.yml
 ---
+luxnix_dev_repo: "/home/admin/luxnix"
 template_name: "main"
 
 host_roles:
   custom_packages.baseDevelopment: "true"
+  endoreg_client.defaultCenterKey: '"rbk_stuttgart"'
+  # Verified on gc-05: UUID 96c09eae-57cb-4e5c-95e1-9050a32abcc4, device 8:19.
+  # A stale 8:3 mount remains an operator recovery blocker; never auto-remount it.
+  endoreg_client.paths.storagePersistingDeviceId: '"usb-Seagate_Expansion_HDD_00000000NT197WLC-0:0"'
+  endoreg_client.paths.storagePersistingDevicePart: '"part3"'
 
-host_services: {}
+host_services:
+  # Host-scoped emergency release; immutable artifact identity is recorded
+  # alongside the wheel under release-artifacts/lx-annotate/1.2.2/.
+  luxnix.lxAnnotateLocal.runtime.wheelPath: '../../../release-artifacts/lx-annotate/1.2.2/lx_annotate-1.2.2-py3-none-any.whl'
+  luxnix.lxAnnotateLocal.runtime.packageVersion: '"1.2.2"'
+
+host_nixos:
+  nix.settings.max_jobs: 1
+  nix.settings.cores: 4
+
 ansible_roles:
   - "dev_access"
 
@@ -13,8 +28,8 @@ extra_secret_names:
   - "SCRT_roles_system_password_postgres_host_test_password"
 
 host_luxnix:
-  generic_settings.configurationPathRelative: '"luxnix"'
-  generic_settings.configurationPath: 'lib.mkForce "/home/admin/luxnix"'
+  # gc-05 is enrolled and must retain fail-closed Vault authentication.
+  vault.client.auth.deferUntilProvisioned: "false"
 
   generic_settings.hostPlatform: '"x86_64-linux"'
   generic_settings.systemStateVersion: '"23.11"'
@@ -38,6 +53,10 @@ host_luxnix:
   generic_settings.linux.kernelParams: []
   generic_settings.linux.kernelModulesBlacklist: []
 
-  nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
-  nvidia_prime.onboardBusId: '"PCI:0:2:0"'
-  nvidia_prime.onboardGpuType: '"intel"'
+  # GPU Configuration (New Unified System)
+  generic_settings.gpu.nvidia.enable: "true"
+  generic_settings.gpu.nvidia.prime.enable: "true"
+  generic_settings.gpu.nvidia.prime.nvidiaBusId: '"PCI:1:0:0"'
+  generic_settings.gpu.nvidia.prime.onboardBusId: '"PCI:0:2:0"'
+  generic_settings.gpu.nvidia.prime.onboardType: '"intel"'
+  generic_settings.gpu.nvidia.driver: '"production"'

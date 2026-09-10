@@ -1,7 +1,11 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
-
-# Useful documentation: 
+# Useful documentation:
 # https://github.com/helsinki-systems/nc4nix (Nextcloud4Nix)
 # https://nixos.wiki/wiki/Nextcloud
 
@@ -9,23 +13,12 @@
 # Use 'nextcloud-maintenance' script for safe data reset operations
 
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.roles.nextcloudHost;
 
-
-  ncApps = config.services.nextcloud.package.packages.apps;
-
-  sslCertFile = config.luxnix.generic-settings.sslCertificatePath;
-  sslKeyFile = config.luxnix.generic-settings.sslCertificateKeyPath;
-  sslCertGroupName = config.users.groups.sslCert.name;
-
-  nginx_cert_path = "/etc/nginx-host/ssl_cert";
-  nginx_key_path = "/etc/nginx-host/ssl_key";
-
-  networkSettings = config.luxnix.generic-settings.network;
-  serviceHosts = networkSettings.hosts;
-
-  lxVaultDir = config.luxnix.vault.dir;
+  sensitiveServicesGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
+  sslCertGroupName = sensitiveServicesGroupName;
 
   nextcloudPwdFile = "/etc/nextcloud-admin-pass";
   minioSecretFile = "/etc/minio-secret";
@@ -34,16 +27,6 @@ with lib.luxnix; let
   rootCredentialsFile = "/etc/minio-credentials";
 
   accessKey = "nextcloud";
-
-
-  nginxPrepareScript = pkgs.writeShellScript "nginx-prepare-files_nxtcld.sh" ''
-    #!${pkgs.zsh}/bin/zsh
-    set -e
-    cp ${sslCertFile} ${nginx_cert_path}
-    cp ${sslKeyFile} ${nginx_key_path}
-    chown nginx:${sslCertGroupName} ${nginx_cert_path} ${nginx_key_path}
-    chmod 600 ${nginx_cert_path} ${nginx_key_path}
-  '';
 
   # Safe maintenance script for resetting Nextcloud services
   nextcloudMaintenanceScript = pkgs.writeScriptBin "nextcloud-maintenance" ''
@@ -176,29 +159,27 @@ with lib.luxnix; let
   nextcloudPrepareScript = pkgs.writeShellScript "nextcloud-prepare-files_nxtcld.sh" ''
     #!${pkgs.zsh}/bin/zsh
     set -e
-    
+
     # Copy admin password
     cp ${cfg.passwordFilePath} ${nextcloudPwdFile}
     chown nextcloud:nextcloud ${nextcloudPwdFile}
     chmod 640 ${nextcloudPwdFile}
-    
+
     # Copy minio credentials
     cp ${cfg.minioCredentialsFilePath} ${rootCredentialsFile}
     chown minio:minio ${rootCredentialsFile}
     chmod 600 ${rootCredentialsFile}
-    
+
     # Extract and store the minio secret separately for nextcloud
     # Use a more reliable method to extract the password
     cat ${rootCredentialsFile} | grep MINIO_ROOT_PASSWORD | cut -d'=' -f2 > ${minioSecretFile}
     chown nextcloud:nextcloud ${minioSecretFile}
     chmod 600 ${minioSecretFile}
-    
+
     echo "Credentials prepared successfully" > /tmp/nextcloud-prepare-log
   '';
 
   conf = config.luxnix.generic-settings.network.nextcloud;
-
-
 
 in
 {
@@ -243,73 +224,74 @@ in
     };
   };
 
+  config = mkIf cfg.enable {
+    roles.postgres.default.enable = mkForce false;
+    roles.postgres.main.enable = mkForce false;
+    # services.postgresql.enable = true;
+    # add user nginx to nextcloud group
+    users.users.nginx.extraGroups = [
+      "nextcloud"
+      sslCertGroupName
+    ];
+    # users.users.nextcloud.extraGroups = [ sslCertGroupName ];
+    # users.groups.nextcloudutils.members = [ "nextcloud" "nginx" ];
+    users.users.nextcloud = {
+      isSystemUser = true;
+      group = "nextcloud";
+      extraGroups = [ sslCertGroupName ];
+      home = cfg.customDir;
+    };
+    programs.zsh.shellAliases = {
+      # Safe maintenance aliases that use the interactive maintenance script
+      show-psql-conf = "nextcloud-maintenance --show-psql-conf";
+      nextcloud-maintenance = "nextcloud-maintenance";
+      # Interactive reset commands with confirmation prompts
+      reset-psql-safe = "nextcloud-maintenance --reset-psql";
+      reset-minio-safe = "nextcloud-maintenance --reset-minio";
+      reset-nextcloud-all = "nextcloud-maintenance --reset-all";
+    };
 
-  config = mkIf cfg.enable
-    {
-      roles.postgres.default.enable = mkForce false;
-      roles.postgres.main.enable = mkForce false;
-      # services.postgresql.enable = true;
-      # add user nginx to nextcloud group
-      users.users.nginx.extraGroups = [ "nextcloud" sslCertGroupName ];
-      # users.users.nextcloud.extraGroups = [ sslCertGroupName ];
-      # users.groups.nextcloudutils.members = [ "nextcloud" "nginx" ];
-      users.users.nextcloud = {
-        isSystemUser = true;
-        group = "nextcloud";
-        extraGroups = [ sslCertGroupName ];
-        home = cfg.customDir;
-      };
-      programs.zsh.shellAliases = {
-        # Safe maintenance aliases that use the interactive maintenance script
-        show-psql-conf = "nextcloud-maintenance --show-psql-conf";
-        nextcloud-maintenance = "nextcloud-maintenance";
-        # Interactive reset commands with confirmation prompts
-        reset-psql-safe = "nextcloud-maintenance --reset-psql";
-        reset-minio-safe = "nextcloud-maintenance --reset-minio";
-        reset-nextcloud-all = "nextcloud-maintenance --reset-all";
-      };
+    networking.hosts = {
+      "127.0.0.1" = [
+        "cloud.endo-reg.net"
+        "collabora.endo-reg.net"
+      ];
+      "::1" = [
+        "cloud.endo-reg.net"
+        "collabora.endo-reg.net"
+      ];
+    };
 
-      # manually run 
-      #TODO Check if actually necessary and add to docs
+    environment.systemPackages = [
+      pkgs.minio-client
+      cfg.package
+      pkgs.clamav
+      nextcloudMaintenanceScript
+    ];
+    networking.firewall.allowedTCPPorts = [
+      80
+      443
+      3002
+    ];
+
+    services = {
+      # TODO (nextcloud-host owner): verify whether MinIO bootstrap is still
+      # manual, then encode it in a oneshot service or remove these commands.
       # mc config host add minio http://localhost:9000 ${accessKey} ${secretKey} --api s3v4
       # mc mb minio/nextcloud
-      services.minio = {
+      minio = {
         enable = true;
         listenAddress = "127.0.0.1:9000";
         consoleAddress = "127.0.0.1:9001";
         inherit rootCredentialsFile;
       };
 
-      environment.systemPackages = [ 
-        pkgs.minio-client 
-        cfg.package 
-        pkgs.clamav 
-        nextcloudMaintenanceScript
-      ];
-      networking.firewall.allowedTCPPorts = [ 80 443 3002 ];
-
-      # systemd.tmpfiles.rules = [
-      #   "d /etc/nextcloud 0770 nextcloud nextcloud -"
-      #   "d /var/lib/nextcloud 0770 nextcloud nextcloud -"
-      #   "d /var/lib/nextcloud/config 0770 nextcloud nextcloud -"
-      # ];
-
-      systemd.tmpfiles.rules = map (dir: "d ${dir} 0750 nextcloud nextcloud - -") [
-        "${cfg.customDir}"
-        "${cfg.customDir}/config"
-        "${cfg.customDir}/data"
-        "${cfg.customDir}/store-apps"
-      ] ++ [
-        "d /var/lib/minio 0750 minio minio - -"
-        "d /var/lib/minio/data 0750 minio minio - -"
-        "d /var/lib/minio/config 0750 minio minio - -"
-      ];
-
-      services.nextcloud-whiteboard-server = {
+      nextcloud-whiteboard-server = {
         enable = true;
         settings.NEXTCLOUD_URL = "http://cloud.endo-reg.net";
         secrets = [
-          #TODO Docs: Create manually, e.g.:
+          # TODO (nextcloud-host owner): move whiteboard JWT provisioning into
+          # managed-secrets and document the matching Nextcloud app settings.
           # JWT_SECRET_KEY=SUPER_SECRET_KEY_VALUE
           # configure app via terminal or console:
           # nextcloud-occ config:app:set whiteboard collabBackendUrl --value="http://localhost:3002"
@@ -318,9 +300,9 @@ in
         ];
       };
 
-      services.nextcloud = {
+      nextcloud = {
         enable = true;
-        package = cfg.package;
+        inherit (cfg) package;
 
         config = {
           dbuser = "nextcloud"; # default = "nextcloud";
@@ -328,24 +310,24 @@ in
           dbname = "nextcloud"; # default = "nextcloud";
 
           # Username for the admin account.
-          # The username is only set during the initial setup of Nextcloud! 
-          # Since the username also acts as unique ID internally, it 
+          # The username is only set during the initial setup of Nextcloud!
+          # Since the username also acts as unique ID internally, it
           # cannot be changed later!
           adminuser = "agl-admin"; # default = "root";
 
-          # The full path to a file that contains the admin’s password. 
-          # Must be readable by user nextcloud. The password is set only in the 
-          # initial setup of Nextcloud by the 
+          # The full path to a file that contains the admin’s password.
+          # Must be readable by user nextcloud. The password is set only in the
+          # initial setup of Nextcloud by the
           # systemd service nextcloud-setup.service.
           adminpassFile = nextcloudPwdFile; # default = "/etc/nextcloud-admin-pass";
 
           ## defaults to socket for sqlite and pgsql if createLocally is true
-          # dbhost = "localhost"; # default = "localhost"; 
+          # dbhost = "localhost"; # default = "localhost";
           # dbpassFile = ; # defualt is null
           objectstore.s3 = {
             enable = true;
             bucket = "nextcloud";
-            autocreate = true;
+            verify_bucket_exists = true;
             key = accessKey;
             secretFile = minioSecretFile;
             hostname = "localhost";
@@ -359,43 +341,45 @@ in
           # "files_antivirus.clamscan_path" = "${pkgs.clamav}/bin/clamscan";
           # Add ClamAV daemon socket setting:
           # Set manually in UI:
-          # "files_antivirus.clamd_socket" = "/run/clamav/clamd.ctl"; 
+          # "files_antivirus.clamd_socket" = "/run/clamav/clamd.ctl";
         };
 
-        # Extra options which should be appended to 
+        # Extra options which should be appended to
         # Nextcloud’s config.php file.
         settings = {
           trusted_proxies = [
             config.luxnix.generic-settings.network.nginx.vpnIp
             config.luxnix.generic-settings.vpnIp
           ];
-          trusted_domains = [ "localhost" conf.domain ];
+          trusted_domains = [
+            "localhost"
+            conf.domain
+          ];
 
-          # The directory where the skeleton files are located. 
-          # These files will be copied to the data directory of new users. 
+          # The directory where the skeleton files are located.
+          # These files will be copied to the data directory of new users.
           # Leave empty to not copy any skeleton files.
           skeleton_directory = "";
 
-          # Force Nextcloud to always use HTTP or HTTPS i.e. for link generation. 
-          # Nextcloud uses the currently used protocol by default, 
+          # Force Nextcloud to always use HTTP or HTTPS i.e. for link generation.
+          # Nextcloud uses the currently used protocol by default,
           # but when behind a reverse-proxy, it may use http for everything
           # although Nextcloud may be served via HTTPS.
-          overwriteprotocol = "https"; # default = "" 
+          overwriteprotocol = "https"; # default = ""
           overwritehost = conf.domain; # default = "";
 
-          # 1 (info): Log activity such as user logins and file activities, 
+          # 1 (info): Log activity such as user logins and file activities,
           # plus warnings, errors, and fatal errors.
           loglevel = 1; # default = 2;
           log_type = "file"; # default = "file";
 
-          # An ISO 3166-1 country code which replaces automatic 
+          # An ISO 3166-1 country code which replaces automatic
           # phone-number detection without a country code.
           # As an example, with DE set as the default phone region,
           # the +49 prefix can be omitted for phone numbers.
           default_phone_region = cfg.defaultPhoneRegion; # default = "";
 
-
-          # By default, the following properties are set to 
+          # By default, the following properties are set to
           # “Show to everyone” if this flag is enabled:
           # About
           # Full name
@@ -423,10 +407,12 @@ in
           mail_smtpmode = "smtp";
           mail_smtpsecure = "ssl";
           mail_sendmailmode = "smtp";
-          mail_smtpport = "465";
-          mail_smtpauth = "1";
+          mail_smtpport = 465;
+          mail_smtpauth = true;
           mail_smtpauthtype = "LOGIN";
-          mail_domain = "endo-reg.net"; #FIXME Move to Options
+          # TODO (nextcloud-host owner): add a mail-domain option and migrate
+          # inventory before removing this deployment-specific default.
+          mail_domain = "endo-reg.net";
 
           oidc_login_provider_url = "https://keycloak.endo-reg.net/realms/master";
           oidc_login_end_session_redirect = true;
@@ -447,17 +433,19 @@ in
 
         };
 
-        # Secret options which will be appended to Nextcloud’s config.php file (written as JSON, in the same form as 
-        # the services.nextcloud.settings option), for example 
+        # Secret options which will be appended to Nextcloud’s config.php file (written as JSON, in the same form as
+        # the services.nextcloud.settings option), for example
         # {"redis":{"password":"secret"}}.
         # default is null
-        secretFile = "/etc/nextcloud-secrets.json"; #FIXME Move to options and add to ansible managed secrets
+        # TODO (nextcloud-host owner): expose this path and provision it through
+        # managed-secrets before enabling this role on another host.
+        secretFile = "/etc/nextcloud-secrets.json";
 
         # ###### Hosting ######
         https = true; # default = false;
         hostName = conf.domain; # "localhost"
         nginx = {
-          recommendedHttpHeaders = true; # default = true
+          # recommendedHttpHeaders = true; # default = true
           hstsMaxAge = 15552000; # default = 15552000;
         };
 
@@ -465,7 +453,7 @@ in
         database.createLocally = true;
 
         # Other relevant options
-        maxUploadSize = cfg.maxUploadSize; # default = "2G"; (nextcloud default is 512M)
+        inherit (cfg) maxUploadSize; # default = "2G"; (nextcloud default is 512M)
         home = cfg.customDir; # default = "/var/lib/nextcloud";
         # datadir = config.services.nextcloud.home; # default
         enableImagemagick = true; # default = true;
@@ -480,8 +468,8 @@ in
         };
 
         # Automatically enable the apps in services.nextcloud.extraApps
-        # every time Nextcloud starts. If set to false, 
-        # apps need to be enabled in the Nextcloud web user interface 
+        # every time Nextcloud starts. If set to false,
+        # apps need to be enabled in the Nextcloud web user interface
         # or with nextcloud-occ app:enable.
         appstoreEnable = true;
         extraAppsEnable = false; # default = true;
@@ -500,26 +488,26 @@ in
           "opcache.memory_consumption" = "128";
           "opcache.revalidate_freq" = "1";
 
-          # Not required as we use http after reverse proxy ? #TODO Verify
+          # TODO (nextcloud-host owner): verify the CA file is used by an
+          # outbound TLS integration, then retain it with a test or remove it.
           "openssl.cafile" = "/etc/ssl/certs/ca-certificates.crt";
           output_buffering = "0";
           short_open_tag = "Off";
         };
 
-        # Secret options which will be appended to Nextcloud’s config.php file (written as JSON, in the same form as 
-        # the services.nextcloud.settings option), for example 
+        # Secret options which will be appended to Nextcloud’s config.php file (written as JSON, in the same form as
+        # the services.nextcloud.settings option), for example
         # {"redis":{"password":"secret"}}.
         # default is null
         # secretFile = ;
 
-        # Options for nextcloud’s PHP pool. See the documentation on 
+        # Options for nextcloud’s PHP pool. See the documentation on
         # php-fpm.conf for details on configuration directives
         # poolSettings = ;
 
-        # Options for Nextcloud’s PHP pool. See the documentation on 
+        # Options for Nextcloud’s PHP pool. See the documentation on
         # php-fpm.conf for details on configuration directives
         # poolConfig = ;
-
 
         ### Notify Push
         notify_push = {
@@ -530,21 +518,22 @@ in
           dbuser = config.services.nextcloud.config.dbuser; # string
           dbtype = config.services.nextcloud.config.dbtype; # one of "sqlite", "pgsql", "mysql"
 
-          # TODO when migrating to pgsql, separate pwd provision might make sense
+          # TODO (nextcloud-host owner): split notify-push credentials only if
+          # migration to a remote PostgreSQL instance requires another identity.
           dbpassFile = config.services.nextcloud.config.dbpassFile; # path
           dbname = config.services.nextcloud.config.dbname;
 
-          # Database host (+port) or socket path. 
+          # Database host (+port) or socket path.
           # If services.nextcloud.database.createLocally is true and
           # services.nextcloud.config.dbtype is either pgsql or mysql,
           # defaults to the correct Unix socket instead.
           # dbhost = config.services.nextcloud.config.dbhost;
 
-          # Whether to add an entry to /etc/hosts for 
-          # the configured nextcloud domain to point to 
-          # localhost and add localhost to nextcloud’s trusted_proxies 
+          # Whether to add an entry to /etc/hosts for
+          # the configured nextcloud domain to point to
+          # localhost and add localhost to nextcloud’s trusted_proxies
           # config option.
-          # This is useful when nextcloud’s domain is not a 
+          # This is useful when nextcloud’s domain is not a
           # static IP address and when the reverse proxy cannot
           # be bypassed because the backend connection is done via
           # unix socket.
@@ -555,48 +544,10 @@ in
         #### Other Options ####
         fastcgiTimeout = 120; # default = 120;
 
-
       };
 
-      ########################### COLLABORA ############################
-      # Set in UI:
-      #   wopi_url = "http://[::1]:${toString config.services.collabora-online.port}";
-      # public_wopi_url = "https://collabora.example.com";
-      # wopi_allowlist = lib.concatStringsSep "," [
-      #   "127.0.0.1"
-      #   "::1"
-      # ];
-
-      # services.collabora-online = {
-      #   enable = true;
-      #   port = 9980; # default
-      #   settings = {
-      #     # Rely on reverse proxy for SSL
-      #     ssl = {
-      #       enable = false;
-      #       termination = true;
-      #     };
-
-      #     # Listen on loopback interface only, and accept requests from ::1
-      #     net = {
-      #       listen = "loopback";
-      #       post_allow.host = [ "::1" ];
-      #     };
-
-      #     # Restrict loading documents from WOPI Host nextcloud.example.com
-      #     storage.wopi = {
-      #       "@allow" = true;
-      #       host = [ "cloud.endo-reg.net" ];
-      #     };
-
-      #     # Set FQDN of server
-      #     server_name = "collabora.endo-reg.net";
-      #   };
-      # };
-
-      services.nginx = {
+      nginx = {
         enable = true;
-        # I recommend these, but it's up to you
         recommendedProxySettings = true;
         recommendedTlsSettings = true;
 
@@ -608,12 +559,6 @@ in
         };
       };
 
-      networking.hosts = {
-        "127.0.0.1" = [ "cloud.endo-reg.net" "collabora.endo-reg.net" ];
-        "::1" = [ "cloud.endo-reg.net" "collabora.endo-reg.net" ];
-      };
-
-
       # Add a post-install hook to fix permissions
       # systemd.services.nextcloud-setup = {
       #   serviceConfig = {
@@ -621,7 +566,7 @@ in
       #   };
       # };
 
-      services.clamav = {
+      clamav = {
         daemon.enable = true;
         daemon.settings = {
           DatabaseDirectory = "/var/lib/clamav";
@@ -632,36 +577,59 @@ in
         };
         updater.enable = true;
         updater.interval = "hourly";
-        scanner.enable = true;
-        scanner.scanDirectories = [
-          "/home"
-          "/var/lib"
-          "/tmp"
-          "/etc"
-          "/var/tmp"
-        ];
-        scanner.interval = "*-*-* 04:00:00";
-      };
-
-      # Add systemd service to prepare files
-      systemd.services.nextcloud-prepare-files = {
-        description = "Prepare files for Nextcloud";
-        wantedBy = [ "multi-user.target" ];
-        before = [ "nextcloud-setup.service" "minio.service" ];
-        after = [ "managed-secrets-setup.service" ];
-        requires = [ "managed-secrets-setup.service" ];
-        serviceConfig = {
-          Type = "oneshot";
-          RemainAfterExit = true;
-          ExecStart = "${nextcloudPrepareScript}";
+        scanner = {
+          enable = true;
+          scanDirectories = [
+            "/home"
+            "/var/lib"
+            "/tmp"
+            "/etc"
+            "/var/tmp"
+          ];
+          interval = "*-*-* 04:00:00";
         };
       };
-
-      # Add post-install hook for minio
-      systemd.services.minio = {
-        after = [ "nextcloud-prepare-files.service" ];
-        requires = [ "nextcloud-prepare-files.service" ];
-      };
-
     };
+
+    systemd = {
+      tmpfiles.rules =
+        map (dir: "d ${dir} 0750 nextcloud nextcloud - -") [
+          "${cfg.customDir}"
+          "${cfg.customDir}/config"
+          "${cfg.customDir}/data"
+          "${cfg.customDir}/store-apps"
+        ]
+        ++ [
+          "d /var/lib/minio 0750 minio minio - -"
+          "d /var/lib/minio/data 0750 minio minio - -"
+          "d /var/lib/minio/config 0750 minio minio - -"
+        ];
+
+      services = {
+        # Add systemd service to prepare files
+        nextcloud-prepare-files = {
+          description = "Prepare files for Nextcloud";
+          wantedBy = [ "multi-user.target" ];
+          before = [
+            "nextcloud-setup.service"
+            "minio.service"
+          ];
+          after = [ "managed-secrets-setup.service" ];
+          requires = [ "managed-secrets-setup.service" ];
+          serviceConfig = {
+            Type = "oneshot";
+            RemainAfterExit = true;
+            ExecStart = "${nextcloudPrepareScript}";
+          };
+        };
+
+        # Add post-install hook for minio
+        minio = {
+          after = [ "nextcloud-prepare-files.service" ];
+          requires = [ "nextcloud-prepare-files.service" ];
+        };
+      };
+    };
+
+  };
 }

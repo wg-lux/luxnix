@@ -1,184 +1,199 @@
-from typing import Optional
-from pydantic import BaseModel
-from datetime import datetime as dt, timedelta as td
-from pathlib import Path
+import os
+import tempfile
 import warnings
-from lx_administration.logging import get_logger
-from lx_administration.utils.paths import str2path
-from .manager_utils import _is_valid, _get_by_name
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+from ansible.errors import AnsibleError
+from ansible.parsing.vault import VaultLib, VaultSecret
+from pydantic import BaseModel, ConfigDict
+
+from ...permissions import PRIVATE_FILE_MODE, ensure_private_directory
+from .manager_utils import _get_by_name, _is_valid
+
+if TYPE_CHECKING:
+    from .manager import Vault
+
+
+DEFAULT_VALIDITY = timedelta(days=180)
+
+
+def _absolute_path(path: str | Path) -> Path:
+    """Expand a path without resolving and following its final symlink."""
+    return Path(path).expanduser().absolute()
+
+
+MASTER_VAULT_ID = "luxnix-master"
+
+
+def _read_key(path: str | Path) -> VaultSecret:
+    """Read a private, nonempty key; never discover identities from Ansible config."""
+    key_path = _absolute_path(path)
+    if key_path.is_symlink() or not key_path.is_file():
+        raise ValueError("Vault key must be an existing regular, non-symlink file")
+    if key_path.stat().st_mode & 0o077:
+        raise ValueError("Vault key must not grant group or other permissions")
+    key = key_path.read_bytes().strip()
+    if not key:
+        raise ValueError("Vault key must not be empty")
+    return VaultSecret(key)
+
+
+def decrypt_secret(
+    file: str | Path, key: str | Path, vault_id: str = MASTER_VAULT_ID
+) -> bytes:
+    """Decrypt with exactly the declared key and identity, without CLI defaults."""
+    source = _absolute_path(file)
+    if source.is_symlink() or not source.is_file():
+        raise FileNotFoundError("Secret must be an existing regular, non-symlink file")
+    data = source.read_bytes()
+    header = data.split(b"\n", 1)[0]
+    # Labels are a format boundary, not cryptographic authentication. VaultLib
+    # verifies the ciphertext using the one explicitly supplied key below.
+    expected = f"$ANSIBLE_VAULT;1.2;AES256;{vault_id}".encode()
+    legacy_default = vault_id == "default" and header == b"$ANSIBLE_VAULT;1.1;AES256"
+    if header != expected and not legacy_default:
+        raise ValueError(
+            "Unexpected vault identity; explicit legacy migration required"
+        )
+    secret = _read_key(key)
+    try:
+        return VaultLib([(vault_id, secret)]).decrypt(data)
+    except AnsibleError:
+        raise ValueError(
+            "Secret decryption failed with the declared vault key"
+        ) from None
+
+
+def _encrypt_bytes(value: bytes, key: str | Path, vault_id: str) -> bytes:
+    secret = _read_key(key)
+    try:
+        return VaultLib([(vault_id, secret)]).encrypt(
+            value, secret=secret, vault_id=vault_id
+        )
+    except AnsibleError:
+        raise ValueError(
+            "Secret encryption failed with the declared vault key"
+        ) from None
+
+
+def _publish_ciphertext(data: bytes, target: Path, *, replace: bool = True) -> None:
+    """Publish only encrypted bytes; migration uses an exclusive new destination."""
+    ensure_private_directory(target.parent)
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=target.parent, prefix=f".{target.name}."
+    )
+    temporary = Path(temporary_name)
+    try:
+        os.fchmod(descriptor, PRIVATE_FILE_MODE)
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        if replace:
+            os.replace(temporary, target)
+        else:
+            os.link(temporary, target)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _encrypt_value_atomically(value: str, target: Path, key: str | Path) -> None:
+    """Validate old ciphertext before replacing it using the explicit master key."""
+    if target.exists() or target.is_symlink():
+        decrypt_secret(target, key)
+    encrypted = _encrypt_bytes(value.encode("utf-8"), key, MASTER_VAULT_ID)
+    _publish_ciphertext(encrypted, target)
 
 
 class Secret(BaseModel):
-    """
-    Stores an individual encrypted secret and references its AccessKey.
-    """
+    """Metadata and lifecycle operations for an encrypted secret."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     name: str
     file: str
     owner_type: str
     template_name: str
     secret_type: str = "password"
-    local_vault_key: Optional[str] = "~/.lxv.key"
+    local_vault_key: str | None = "~/.lxv.key"
     target_name: str
-    created: Optional[dt] = None
-    updated: Optional[dt] = None
-    validity: Optional[td] = td(days=180)
-    value: Optional[str] = None
+    created: datetime | None = None
+    updated: datetime | None = None
+    validity: timedelta | None = DEFAULT_VALIDITY
+    value: str | None = None
 
-    class Config:
-        arbitrary_types_allowed = True
-
-    @classmethod
+    @staticmethod
     def create_secret(
-        cls,
         secret: str,
-        file: str,
-        vault: "Vault",  # noqa: F821
-    ):
-        import subprocess
-        from lx_administration.models import Vault
-
-        _vault: Vault = vault
-
-        file_path = Path(file).expanduser().resolve()
-        with open(file_path, "w") as f:
-            f.write(secret)
-
-        vault_id = _vault.get_local_vault_id()
-        assert vault_id, "Vault ID not found for local hostname"
-
-        encrypt_args = [
-            "ansible-vault",
-            "encrypt",
-            f"--encrypt-vault-id={vault_id}",
-            file_path.as_posix(),
-        ]
-
-        subprocess.run(
-            encrypt_args,
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-
+        file: str | Path,
+        vault: "Vault",
+    ) -> str:
+        """Create an encrypted secret without exposing a partial target file."""
+        _encrypt_value_atomically(secret, _absolute_path(file), vault.key)
         return secret
 
-    @classmethod
-    def check_exists(cls, name: str, file: str, vault: "Vault"):  # noqa: F821
-        fp = Path(file)
-        if not fp.exists() and not _get_by_name(vault.secrets, name):
-            return False
+    @staticmethod
+    def check_exists(name: str, file: str | Path, vault: "Vault") -> bool:
+        """Return whether both the secret metadata and encrypted file exist."""
+        file_exists = Path(file).exists()
+        metadata_exists = _get_by_name(vault.secrets, name) is not None
+        if file_exists == metadata_exists:
+            return file_exists
 
-        elif fp.exists() and _get_by_name(vault.secrets, name):
-            return True
-
-        else:
-            warnings.warn(f"Secret.check_exists(): exists: {fp.exists()}, ")
-            warnings.warn(
-                f"File {file} exists but secret {name} does not exist in vault or vice versa"
-            )
+        warnings.warn(
+            f"Secret file/metadata mismatch for {name}: file={file_exists}, "
+            f"metadata={metadata_exists}",
+            stacklevel=2,
+        )
+        return False
 
     def create_re_encrypted_file(
         self,
-        target_file: str,
-        pre_shared_key_file: str,
-        vault: "Vault",  # noqa: F821
-    ):
-        """Create a copy of the encrypted file with a new key."""
-        import subprocess
-        import shutil
-        import warnings
-
-        source_path = Path(self.file).expanduser().resolve()
-        target_path = Path(target_file).expanduser().resolve()
-        pre_shared_key_path = Path(pre_shared_key_file).expanduser().resolve()
-
-        if not source_path.exists():
-            raise FileNotFoundError(f"Source file not found: {source_path}")
-
-        if not pre_shared_key_path.exists():
-            raise FileNotFoundError(f"PSK file not found: {pre_shared_key_path}")
-
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-        if target_path.exists():
-            warnings.warn(f"Target file {target_path} exists and will be overwritten")
-
-        # Copy the source file to target location
-        shutil.copy2(source_path, target_path)
-
-        vault_id = vault.get_local_vault_id() if vault else None
-
-        try:
-            # if vault_id:
-            #     rekey_args = [
-            #         "ansible-vault",
-            #         "rekey",
-            #         "--encrypt-vault-id",
-            #         vault_id,
-            #         target_path.as_posix(),
-            #     ]
-            # # else:
-            rekey_args = [
-                "ansible-vault",
-                "rekey",
-                "--new-vault-password-file",
-                pre_shared_key_path.as_posix(),
-                target_path.as_posix(),
-            ]
-
-            _result = subprocess.run(
-                rekey_args,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                check=True,
-                text=True,
+        target_file: str | Path,
+        pre_shared_key_file: str | Path,
+        vault: "Vault",
+    ) -> Path:
+        """Atomically create a private client-encrypted copy of this secret."""
+        target_path = _absolute_path(target_file)
+        plaintext = decrypt_secret(self.file, vault.key)
+        key_path = _absolute_path(pre_shared_key_file)
+        identities = [
+            psk.vault_id_prefix
+            for psk in vault.pre_shared_keys
+            if _absolute_path(psk.file) == key_path
+        ]
+        if len(identities) != 1 or not identities[0]:
+            raise ValueError("Export PSK must have exactly one registered identity")
+        if identities[0] == MASTER_VAULT_ID:
+            raise ValueError(
+                "Host export identity must differ from the master identity"
             )
-            # if result.stderr:
-            #     warnings.warn(f"Rekey warning: {result.stderr}")
+        encrypted = _encrypt_bytes(plaintext, key_path, identities[0])
+        if target_path.exists():
+            warnings.warn(
+                f"Target file {target_path} exists and will be overwritten",
+                stacklevel=2,
+            )
+        _publish_ciphertext(encrypted, target_path)
+        return target_path
 
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Failed to rekey file: {e.stderr}")
+    def update_file_encryption(self, vault: "Vault") -> None:
+        """Atomically replace the encrypted file with the current value."""
+        if self.value is None:
+            raise ValueError(f"Secret.value is not set for {self.name}")
+        _encrypt_value_atomically(self.value, _absolute_path(self.file), vault.key)
 
-    def update_file_encryption(self, vault: "Vault"):
-        """
-        Overwrite the existing secret file with self.value, then encrypt it.
-        Preserves original file permissions.
-        """
-        import subprocess
-        import os
-        from lx_administration.models import Vault
+    def validate_secret(self, *, now: datetime | None = None) -> None:
+        """Validate timestamps and require an existing encrypted secret file."""
+        if self.created is None:
+            raise ValueError(f"Secret.created is not set for {self.name}")
 
-        vault: Vault = vault
-        file_path = Path(self.file).expanduser().resolve()
-        file_path.parent.mkdir(parents=True, exist_ok=True)
+        validity = self.validity or DEFAULT_VALIDITY
+        if not _is_valid(validity, self.created, self.updated, now):
+            raise ValueError(f"Secret {self.name} is outside its validity window")
 
-        # Store original permissions if file exists
-        orig_mode = None
-        if file_path.exists():
-            orig_mode = file_path.stat().st_mode
-
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.write(self.value or "")
-
-        # Set default permissions (700) or restore original
-        os.chmod(file_path, orig_mode if orig_mode else 0o700)
-        os.chown(file_path, os.getuid(), os.getgid())
-
-        vault_id = vault.get_local_vault_id()
-        subprocess.run(
-            [
-                "ansible-vault",
-                "encrypt",
-                f"--encrypt-vault-id={vault_id}",
-                file_path.as_posix(),
-            ],
-            check=True,
-        )
-
-    def validate(self):
-        logger = get_logger("Secret-validate")
-        _validity_status = _is_valid(self.validity, self.created, self.updated, logger)
-
-        directory = str2path(self.file, expanduser=True, resolve=True)
-        if not directory.exists():
-            directory.mkdir(mode=755, parents=True, exist_ok=True)
+        secret_file = Path(self.file).expanduser().resolve()
+        if not secret_file.is_file():
+            raise FileNotFoundError(f"Encrypted secret file not found: {secret_file}")

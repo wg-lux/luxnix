@@ -2,30 +2,58 @@
 Vault manager module for handling vault operations, secrets, and configuration.
 """
 
-from configparser import ConfigParser
-from datetime import timedelta as td
-from pathlib import Path
+import logging
+import shutil
 import socket
-from typing import Optional, List, Union, Tuple
+import tempfile
+from collections.abc import Collection
+from datetime import datetime
+from pathlib import Path
+from typing import Self
 
-from icecream import ic
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from lx_administration.logging import get_logger
-from lx_administration.yaml import dump_yaml, format_yaml, ansible_lint
+from lx_administration.permissions import ensure_private_directory
+from lx_administration.utils.file_operations import advisory_file_lock
+from lx_administration.yaml import (
+    ansible_lint,
+    dump_yaml,
+    format_yaml,
+    load_unique_yaml_file,
+)
+
 from ..ansible import AnsibleInventory
+from .ansible_cfg import AnsibleCfg
 from .config import (
-    OWNER_TYPES,
-    SECRET_TYPES,
     BASE_CLIENT_SECRET_TYPES,
     LOCAL_USER_SECRET_TYPES,
-    yaml,
+    OWNER_TYPES,
+    SECRET_TYPES,
 )
+from .manager_utils import _assert_unique_list, _get_by_name, _get_by_target_name
 from .psk import PreSharedKey
 from .secret import Secret
 from .secret_template import SecretTemplate
-from .manager_utils import _get_by_name, _assert_unique_list, _get_by_target_name
-from .ansible_cfg import AnsibleCfg, AnsibleCfgDefaults, AnsibleCfgPrivilegeEscalation
+
+
+def _template_applies_to_host(
+    template: SecretTemplate,
+    *,
+    hostname: str,
+    role_names: Collection[str],
+    group_names: Collection[str],
+) -> bool:
+    """Return whether a host-scoped template applies to one host."""
+    match template.owner_type:
+        case "roles":
+            return template.name in role_names
+        case "groups":
+            return template.name in group_names
+        case "local" | "clients":
+            return template.name.endswith(f"@{hostname}")
+        case owner_type:
+            raise ValueError(f"Cannot match owner_type '{owner_type}' to a host")
 
 
 class Vault(BaseModel):
@@ -33,78 +61,54 @@ class Vault(BaseModel):
     Primary Vault model, orchestrating secrets, keys, and inventory integration.
     """
 
-    secrets: List[Secret] = []
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="allow")
+
+    secrets: list[Secret] = Field(default_factory=list)
     dir: str = "~/.lxv/"
     key: str = "~/.lxv.key"
     ansible_cfg_path: str = "./conf/ansible.cfg"
-    owner_types: List[str] = OWNER_TYPES.copy()
-    secret_types: List[str] = SECRET_TYPES.copy()
-    default_client_secret_types: List[str] = BASE_CLIENT_SECRET_TYPES.copy()
-    default_local_secret_types: List[str] = LOCAL_USER_SECRET_TYPES.copy()
+    owner_types: list[str] = Field(default_factory=lambda: OWNER_TYPES.copy())
+    secret_types: list[str] = Field(default_factory=lambda: SECRET_TYPES.copy())
+    default_client_secret_types: list[str] = Field(
+        default_factory=lambda: BASE_CLIENT_SECRET_TYPES.copy()
+    )
+    default_local_secret_types: list[str] = Field(
+        default_factory=lambda: LOCAL_USER_SECRET_TYPES.copy()
+    )
 
-    inventory: Optional[AnsibleInventory] = None
-    default_system_users: List[str] = ["admin"]
+    inventory: AnsibleInventory | None = None
+    default_system_users: list[str] = Field(default_factory=lambda: ["admin"])
     subnet: str = "172.16.255."
-    secret_templates: List[SecretTemplate] = []
-    pre_shared_keys: List[PreSharedKey] = []
-
-    class Config:
-        arbitrary_types_allowed = True
-        extra = "allow"
+    secret_templates: list[SecretTemplate] = Field(default_factory=list)
+    pre_shared_keys: list[PreSharedKey] = Field(default_factory=list)
+    local_hostname_override: str | None = None
 
     @classmethod
-    def _get_vault_paths(cls, dir: str, key: str) -> Union[Tuple[Path, Path, Path]]:
+    def _get_vault_paths(
+        cls, vault_dir: str, vault_key: str
+    ) -> tuple[Path, Path, Path]:
         """Get paths for vault configuration.
 
-        This private method resolves and returns the necessary paths for vault operations:
-        the directory path, key file path, and vault file path.
-
-        Args:
-            dir (str): Directory path where vault.yml will be located
-            key (str): Path to the key file for encryption/decryption
-
-        Returns:
-            Union[Tuple[Path, Path, Path]]: A tuple containing:
-                - dir (Path): Resolved directory path
-                - key (Path): Resolved key file path
-                - vault (Path): Path to vault.yml file
-
-        Example:
-            dir, key, vault = _get_vault_paths("~/vaults", "~/.ssh/id_rsa")
+        This resolves the directory, key file, and vault file paths used by
+        vault operations.
         """
-        key = Path(key).expanduser().resolve()
-        dir = Path(dir).expanduser().resolve()
-        vault = dir / "vault.yml"
+        key_path = Path(vault_key).expanduser().absolute()
+        dir_path = Path(vault_dir).expanduser().resolve()
+        vault_path = dir_path / "vault.yml"
 
-        return dir, key, vault
+        return dir_path, key_path, vault_path
 
     @classmethod
-    def load_dir(cls, vault_dir: str = "~/.lxv/", vault_key_path: str = "~/.lxv.key"):
-        """
-        Load a vault from a directory.
-
-        This class method reads and validates vault data from a YAML file in the specified directory.
-
-        Args:
-            dir (str, optional): Path to the vault directory. Defaults to "~/.lxv/".
-            key (str, optional): Path to the vault key file. Defaults to "~/.lxv.key".
-
-        Returns:
-            Vault: A validated Vault instance containing the loaded data.
-
-        Raises:
-            FileNotFoundError: If either the specified directory or vault file does not exist.
-
-        Example:
-            >>> vault = Vault.load_dir()
-            >>> vault = Vault.load_dir("/custom/path/", "/custom/key.file")
-        """
+    def load_dir(
+        cls,
+        vault_dir: str = "~/.lxv/",
+        vault_key_path: str = "~/.lxv.key",
+    ) -> Self:
+        """Load a vault from a directory."""
 
         logger = get_logger("Vaults-load_dir", reset=True)
 
-        vault_dir_p, vault_key_path_p, vault_file_p = cls._get_vault_paths(
-            vault_dir, vault_key_path
-        )
+        vault_dir_p, _, vault_file_p = cls._get_vault_paths(vault_dir, vault_key_path)
 
         if not vault_dir_p.exists():
             raise FileNotFoundError(f"Directory {vault_dir} does not exist!")
@@ -112,69 +116,45 @@ class Vault(BaseModel):
         if not vault_file_p.exists():
             raise FileNotFoundError(f"File {vault_file_p} does not exist!")
 
-        with open(vault_file_p, "r") as f:
-            data = yaml.safe_load(f)
+        raw: object = load_unique_yaml_file(vault_file_p)
+        if not isinstance(raw, dict):
+            raise ValueError(f"Expected a YAML mapping in {vault_file_p}")
 
-        if "secret_templates" in data and data["secret_templates"]:
-            secret_templates = [
-                SecretTemplate.model_validate(template)
-                for template in data["secret_templates"]
-            ]
-            data["secret_templates"] = secret_templates
+        vault = cls.model_validate(raw)
+        vault.dir = vault_dir_p.as_posix()
+        vault.key = cls._get_vault_paths(vault_dir, vault_key_path)[1].as_posix()
 
-        if "pre_shared_keys" in data and data["pre_shared_keys"]:
-            pre_shared_keys = [
-                PreSharedKey.model_validate(psk) for psk in data["pre_shared_keys"]
-            ]
-            data["pre_shared_keys"] = pre_shared_keys
+        logger.info(
+            "Loaded vault metadata: secrets=%d, templates=%d, pre_shared_keys=%d",
+            len(vault.secrets),
+            len(vault.secret_templates),
+            len(vault.pre_shared_keys),
+        )
 
-        if "secrets" in data and data["secrets"]:
-            secrets = [Secret.model_validate(secret) for secret in data["secrets"]]
-            data["secrets"] = secrets
-
-        for key, value in data.items():
-            logger.info(f"Loaded {key}:")
-            if isinstance(value, list):
-                for item in value:
-                    logger.info(f"  - {item}")
-            else:
-                logger.info(f"  - {value}")
-
-        # Let the model validator handle the conversion
-        vault = cls(**data)
         return vault
 
     @classmethod
-    def load_or_create(cls, dir: str = "~/.lxv/", key: str = "~/.lxv.key"):
-        """
-        Load an existing vault from disk or create a new one if not found.
-
-        Args:
-            dir (str): The directory path where the vault is stored.
-            key (str): Path to the key file for decrypting the vault.
-
-        Returns:
-            Vault: The loaded or newly created vault.
-        """
-        dir, key, vault_file = cls._get_vault_paths(dir, key)
+    def load_or_create(
+        cls,
+        dir: str = "~/.lxv/",
+        key: str = "~/.lxv.key",
+    ) -> Self:
+        """Load an existing vault or create one with the requested paths."""
+        dir_path, key_path, vault_file = cls._get_vault_paths(dir, key)
 
         if not vault_file.exists():
-            ic("No vault file found. Creating new vault.")
-            vault = cls()
-            vault.save_to_file(vault_file)
+            logger = get_logger("Vaults-load_or_create", reset=True)
+            logger.info("No vault file found. Creating new vault.")
+            vault = cls(dir=dir_path.as_posix(), key=key_path.as_posix())
+            vault.save_to_file(vault_file.as_posix())
 
         else:
             vault = cls.load_dir(dir, key)
 
         return vault
 
-    def summary(self):
-        """
-        Generate a summary of the vault's contents.
-
-        Returns:
-            str: A formatted summary string containing the number of secrets, access keys, and templates.
-        """
+    def summary(self) -> str:
+        """Generate a summary of the vault's contents."""
         return (
             "\n-------\n"
             f"Vault Summary:\n"
@@ -184,105 +164,55 @@ class Vault(BaseModel):
             "-------\n"
         )
 
-    def _validate_secret_templates(self):
-        """
-        Ensure all secret templates are unique by (name, owner_type) and then validate them.
-
-        Raises:
-            AssertionError: If duplicate templates or invalid fields are found.
-        """
-        name_owner_type_tuples = [
-            (template.name, template.owner_type) for template in self.secret_templates
+    def _validate_secret_templates(self) -> None:
+        """Validate templates uniquely by name and owner type."""
+        # Use a list of strings to satisfy Sequence[Hashable] for type checkers
+        unique_keys = [
+            f"{template.name}|{template.owner_type}"
+            for template in self.secret_templates
         ]
-        _assert_unique_list(name_owner_type_tuples)
+        _assert_unique_list(unique_keys)
 
         for template in self.secret_templates:
-            template.validate()
+            template.assert_valid()
 
-    def _validate_secrets(self):
-        """
-        Validate all secrets within the vault.
-
-        Raises:
-            AssertionError: If any secret is invalid.
-        """
+    def _validate_secrets(self) -> None:
+        """Validate all secrets within the vault."""
         for secret in self.secrets:
-            secret.validate()
+            secret.validate_secret()
 
-    def validate(self):
-        """
-        Validate the vault by verifying secret templates and secrets.
-
-        Raises:
-            AssertionError: If any template or secret is invalid.
-        """
+    def validate_vault(self) -> None:
+        """Validate the vault by verifying secret templates and secrets."""
         self._validate_secret_templates()
         self._validate_secrets()
 
-    def load_inventory(self, inventory_file: str):
-        """
-        Load Ansible inventory from a file.
+    def load_inventory(self, inventory_file: str | Path) -> AnsibleInventory:
+        """Load Ansible inventory from a file."""
+        inventory_path = Path(inventory_file).expanduser().resolve()
+        if not inventory_path.exists():
+            raise FileNotFoundError(f"Inventory file does not exist: {inventory_path}")
 
-        This method loads an Ansible inventory from the specified file path and assigns it
-        to the instance's inventory attribute.
-
-        Args:
-            inventory_file (str): Path to the Ansible inventory file.
-
-        Returns:
-            AnsibleInventory: The loaded inventory object.
-
-        Raises:
-            AssertionError: If the specified inventory file does not exist.
-
-        Example:
-            inventory = manager.load_inventory("/path/to/inventory.yml")
-        """
-        assert Path(inventory_file).exists(), f"File {inventory_file} does not exist!"
-        self.inventory = AnsibleInventory.from_file(inventory_file)
+        self.inventory = AnsibleInventory.from_file(inventory_path.as_posix())
         return self.inventory
 
-    def get_secret_template_by_name(self, name: str) -> Optional[SecretTemplate]:
-        """
-        Retrieves a secret template by its name from the available secret templates.
+    def _require_inventory(self) -> AnsibleInventory:
+        """Return the loaded inventory or raise a stable configuration error."""
+        if self.inventory is None:
+            raise ValueError("Inventory must be loaded")
+        return self.inventory
 
-        Args:
-            name (str): The name of the secret template to retrieve.
-
-        Returns:
-            SecretTemplate: The secret template object if found.
-            None: If no template with the given name exists.
-
-        Example:
-            >>> manager.get_secret_template_by_name("ssh-key")
-            <SecretTemplate: ssh-key>
-        """
+    def get_secret_template_by_name(self, name: str) -> SecretTemplate | None:
+        """Retrieve a secret template by its name."""
         return _get_by_name(self.secret_templates, name)
 
     def get_or_create_secret_template(
         self,
         name: str,
         owner_type: str,
-        secret_type="password",
-        vault_dir: str = "~/.lxv/",
-    ) -> Tuple[SecretTemplate, bool]:
-        """Get a secret template by name or create one if it doesn't exist.
-
-        Args:
-            name (str): Name of the secret template
-            owner_type (str): Type of the owner for the template
-            secret_type (str, optional): Type of secret. Defaults to "password"
-            vault_dir (str, optional): Directory path for the vault. Defaults to "~/.lxv/"
-
-        Returns:
-            Tuple[SecretTemplate, bool]: A tuple containing:
-                - SecretTemplate: The retrieved or newly created secret template
-                - bool: True if a new template was created, False if existing template was found
-
-        Example:
-            >>> template, created = manager.get_or_create_secret_template("mysql", "database")
-            >>> print(created)  # True if new template was created
-        """
+        secret_type: str = "password",
+        vault_dir: str | None = None,
+    ) -> tuple[SecretTemplate, bool]:
+        """Get a secret template by name or create one if it doesn't exist."""
         template = self.get_secret_template_by_name(name)
 
         created = False
@@ -291,7 +221,7 @@ class Vault(BaseModel):
                 name=name,
                 owner_type=owner_type,
                 secret_type=secret_type,
-                vault_dir=vault_dir,
+                vault_dir=vault_dir or self.dir,
             )
             self.secret_templates.append(template)
             created = True
@@ -300,36 +230,14 @@ class Vault(BaseModel):
 
     def get_or_create_secret_templates(
         self,
-        names: List[str],
+        names: list[str],
         owner_type: str,
         secret_type: str = "password",
-        vault_dir: str = "~/.lxv/",
-    ) -> Tuple[List[SecretTemplate], List[SecretTemplate]]:
-        """
-        Get or create multiple secret templates based on provided names.
-
-        This method processes a list of template names and either retrieves existing templates
-        or creates new ones if they don't exist.
-
-        Args:
-            names (List[str]): List of template names to get or create
-            owner_type (str): Type of the owner for the templates
-            secret_type (str, optional): Type of secret. Defaults to "password"
-            vault_dir (str, optional): Directory path for the vault. Defaults to "~/.lxv/"
-
-        Returns:
-            Tuple[List[SecretTemplate], List[SecretTemplate]]: A tuple containing:
-                - First list: All templates (both existing and newly created)
-                - Second list: Only newly created templates
-
-        Example:
-            >>> templates, new_templates = get_or_create_secret_templates(
-            ...     names=['template1', 'template2'],
-            ...     owner_type='user'
-            ... )
-        """
-        templates = []
-        created_templates = []
+        vault_dir: str | None = None,
+    ) -> tuple[list[SecretTemplate], list[SecretTemplate]]:
+        """Get or create multiple secret templates based on provided names."""
+        templates: list[SecretTemplate] = []
+        created_templates: list[SecretTemplate] = []
         for name in names:
             template, created = self.get_or_create_secret_template(
                 name, owner_type, secret_type, vault_dir
@@ -340,481 +248,378 @@ class Vault(BaseModel):
 
         return templates, created_templates
 
-    def _sync_role_secret_templates(
-        self,
-    ) -> Tuple[List[SecretTemplate], List[SecretTemplate]]:
-        """
-        Synchronize and manage secret templates for roles.
-        This method retrieves role names from inventory and creates or gets existing secret
-        templates associated with those roles.
-        Returns:
-            Tuple[List[SecretTemplate], List[SecretTemplate]]: A tuple containing:
-                - First list: All secret templates for roles (both existing and new)
-                - Second list: Only newly created secret templates
-        """
-        # We Use password
+    def _sync_role_secret_templates(self) -> None:
+        """Ensure a system-password template exists for every role."""
         secret_type = "system_password"
-        role_names = self.inventory.get_role_names()
+        inventory = self._require_inventory()
+        role_names = inventory.get_role_names()
         owner_type = "roles"
-        _secret_templates, _created_secret_templates = (
-            self.get_or_create_secret_templates(
-                role_names, owner_type, secret_type=secret_type
-            )
+        self.get_or_create_secret_templates(
+            role_names, owner_type, secret_type=secret_type
         )
 
-        return _secret_templates, _created_secret_templates
-
-    def _build_local_user_secret_templates(self, logger=None):
-        """
-        Builds secret templates for local users across all hosts in the inventory.
-
-        This method creates or retrieves secret templates for both default system users and
-        extra users defined per host. Templates are created for each combination of:
-        - User (default system users + host-specific extra users)
-        - Host (all hosts in inventory)
-        - Secret type (defined in LOCAL_USER_SECRET_TYPES)
-
-        Returns:
-            tuple: A tuple containing two lists:
-                - List of all secret templates (both existing and newly created)
-                - List of only the newly created secret templates
-
-        Templates are created with owner_type="local" and follow the naming pattern:
-        "{username}@{hostname}"
-        """
-        if not logger:
-            logger = get_logger("Vaults-build_local_user_secret_templates", reset=True)
-        # make sure we fail if hardcoded owner_type is invalid due to other changes
+    def _build_local_user_secret_templates(self) -> None:
+        """Ensure local-user templates exist for every client."""
         owner_type = "local"
-        assert owner_type in OWNER_TYPES, f"Invalid owner_type: {owner_type}"
 
-        secret_templates, created_secret_templates = [], []
-        client_names = self.inventory.get_hostnames()
+        inventory = self._require_inventory()
+        client_names = [h for h in inventory.get_hostnames() if h is not None]
         default_users = self.default_system_users.copy()
         secret_types = LOCAL_USER_SECRET_TYPES
 
         for secret_type in secret_types:
             for client_name in client_names:
-                client = self.inventory.get_host_by_name(client_name)
+                client = inventory.get_host_by_name(client_name)
+                if client is None:
+                    raise ValueError(f"Unknown client {client_name}")
                 extra_users = client.get_extra_user_names()
 
                 users = extra_users + default_users
                 user_secret_names = [f"{user}@{client_name}" for user in users]
 
-                _secret_templates, _created_secret_templates = (
-                    self.get_or_create_secret_templates(
-                        user_secret_names, owner_type, secret_type
-                    )
-                )
-                secret_templates.extend(_secret_templates)
-                created_secret_templates.extend(_created_secret_templates)
-
-        return secret_templates, created_secret_templates
-
-    def _build_client_secret_templates(self):
-        """
-        Build secret templates for clients based on inventory hostnames and base client secret types.
-
-        This method creates or retrieves secret templates for each combination of hostname and
-        secret type defined in BASE_CLIENT_SECRET_TYPES for the 'clients' owner type.
-
-        Returns:
-            tuple: A tuple containing two lists:
-                - secret_templates (list): All secret templates (existing and newly created)
-                - created_secret_templates (list): Only newly created secret templates
-
-        Raises:
-            AssertionError: If owner_type is not in OWNER_TYPES
-
-        Example:
-            secret_templates, created_templates = vault._build_client_secret_templates()
-        """
-        secret_templates, created_secret_templates = [], []
-        owner_type = "clients"
-        secret_names = self.inventory.get_hostnames()
-        secret_types = BASE_CLIENT_SECRET_TYPES
-
-        assert owner_type in OWNER_TYPES, f"Invalid owner_type: {owner_type}"
-        for secret_type in secret_types:
-            _secret_templates, _created_secret_templates = (
                 self.get_or_create_secret_templates(
-                    secret_names, owner_type, secret_type
+                    user_secret_names, owner_type, secret_type
                 )
-            )
-            secret_templates.extend(_secret_templates)
-            created_secret_templates.extend(_created_secret_templates)
 
-        return secret_templates, created_secret_templates
-
-    def _sync_group_secret_templates(
-        self,
-    ) -> Tuple[List[SecretTemplate], List[SecretTemplate]]:
-        """
-        Synchronize and manage secret templates for groups.
-
-        Returns:
-            Tuple[List[SecretTemplate], List[SecretTemplate]]:
-            - First list: All secret templates for groups (existing and new)
-            - Second list: Only newly created secret templates
-        """
+    def _sync_group_secret_templates(self) -> None:
+        """Ensure a system-password template exists for every group."""
         secret_type = "system_password"
-        group_names = self.inventory.get_group_names()
+        inventory = self._require_inventory()
+        group_names = inventory.get_group_names()
         owner_type = "groups"
-        _secret_templates, _created_secret_templates = (
-            self.get_or_create_secret_templates(
-                group_names, owner_type, secret_type=secret_type
-            )
+        self.get_or_create_secret_templates(
+            group_names, owner_type, secret_type=secret_type
         )
 
-        return _secret_templates, _created_secret_templates
-
-    def sync_secret_templates(self, logger=None):
+    def sync_secret_templates(self, logger: logging.Logger | None = None) -> None:
+        """Synchronize template metadata and materialize its secrets."""
         if not logger:
             logger = get_logger("Vaults-sync_secret_templates", reset=True)
 
-        secret_templates = []
-        created_secret_templates = []
-
-        # Get or create secret templates for roles
-        _secret_templates, _created_secret_templates = (
-            self._sync_role_secret_templates()
-        )
-        secret_templates.extend(_secret_templates)
-        created_secret_templates.extend(_created_secret_templates)
-
-        # Get or create secret templates for groups
-        _secret_templates, _created_secret_templates = (
-            self._sync_group_secret_templates()
-        )
-        secret_templates.extend(_secret_templates)
-        created_secret_templates.extend(_created_secret_templates)
-
-        # Get or create secret templates for local users
-        _secret_templates, _created_secret_templates = (
-            self._build_local_user_secret_templates()
-        )
-        secret_templates.extend(_secret_templates)
-        created_secret_templates.extend(_created_secret_templates)
+        self._sync_role_secret_templates()
+        self._sync_group_secret_templates()
+        self._build_local_user_secret_templates()
 
         for template in self.secret_templates:
-            template.validate()
-            _success = template.create_or_update_secrets(vault=self, logger=logger)
+            template.assert_valid()
+            template.create_or_update_secrets(vault=self, logger=logger)
 
-    def _sync_client_psk(self, logger=None) -> List[PreSharedKey]:
-        """Create PSKs for all clients in inventory"""
+    def _sync_client_psk(
+        self, logger: logging.Logger | None = None
+    ) -> list[PreSharedKey]:
+        """Create PSKs for all clients in inventory."""
         if not logger:
             logger = get_logger("Vaults-sync_client_psk")
-        created_psks = []
+        created_psks: list[PreSharedKey] = []
 
-        # Get all client hostnames from inventory
-        client_names = self.inventory.get_hostnames()
+        inventory = self._require_inventory()
+        client_names = [h for h in inventory.get_hostnames() if h is not None]
 
         for client_name in client_names:
             psk, created = self.get_or_create_psk(client_name, logger)
             if created:
                 created_psks.append(psk)
-                # self.pre_shared_keys.append(psk)
-                logger.info(f"Created new PSK for client {client_name}")
+                logger.info("Created new PSK for client %s", client_name)
 
         return created_psks
 
-    def sync_inventory(self, inventory_file: str, logger=None):
-        """load inventory from file and sync templates and PSKs"""
+    def sync_inventory(
+        self,
+        inventory_file: str | Path,
+        logger: logging.Logger | None = None,
+    ) -> None:
+        """Load inventory, then synchronize PSKs, templates, and secrets."""
         if not logger:
             logger = get_logger("Vaults-sync_inventory", reset=True)
-        inventory_file: Path = Path(inventory_file)
-        assert inventory_file.exists(), f"File {inventory_file} does not exist!"
 
-        logger.info(f"Loading inventory from {inventory_file}")
-        _inventory = self.load_inventory(inventory_file.resolve().as_posix())
+        logger.info("Loading inventory from %s", inventory_file)
+        self.load_inventory(inventory_file)
 
-        # First sync PSKs for all clients (hostnames)
-        # TODO implement validity check and automated update
-        # TODO implement archive of old PSKs
         created_psks = self._sync_client_psk(logger=logger)
 
-        logger.info(f"Created {len(created_psks)} new pre-shared keys")
+        logger.info("Created %d new pre-shared key(s)", len(created_psks))
         for psk in created_psks:
-            logger.info(f"Client PSK: {psk.name}")
+            logger.info("Client PSK: %s", psk.name)
 
-        # # Then sync secret templates
         self.sync_secret_templates(logger=logger)
 
         self.save_to_file(logger=logger)
 
-    def get_client_psk(self, client_name: str, logger=None) -> Optional[PreSharedKey]:
-        """Get PSK for a specific client"""
+    def get_client_psk(
+        self,
+        client_name: str,
+        logger: logging.Logger | None = None,
+    ) -> PreSharedKey | None:
+        """Return a client's PSK when its file exists."""
         if not logger:
             logger = get_logger("Vaults-get_client_psk", reset=True)
 
-        # First check in memory
         psk = _get_by_name(self.pre_shared_keys, client_name)
         if not psk:
             return None
 
-        # Then verify file exists
         psk_path = Path(psk.file).expanduser().resolve()
         if not psk_path.exists():
-            logger.warning(f"PSK file not found: {psk_path}")
+            logger.warning("PSK file not found: %s", psk_path)
             return None
 
         return psk
 
-    def get_paths(self):
-        """
-        Retrieve the vault directory path, the key path, and the vault file path.
-
-        Returns:
-            Tuple[Path, Path, Path]: A tuple containing the directory path, key path, and vault file path.
-        """
+    def get_paths(self) -> tuple[Path, Path, Path]:
+        """Retrieve the vault directory path, the key path, and the vault file path."""
         return self._get_vault_paths(self.dir, self.key)
 
-    def save_to_file(self, file: str = None, logger=None):
-        """dump as yml"""
+    def save_to_file(
+        self,
+        file: str | None = None,
+        logger: logging.Logger | None = None,
+    ) -> None:
+        """Save public vault metadata as YAML."""
         if not logger:
             logger = get_logger("Vaults-save_to_file", reset=True)
 
         if not file:
-            vault_dir, _vault_key, vault_file = self.get_paths()
+            vault_file = self.get_paths()[2]
         else:
             vault_file = Path(file).expanduser().resolve()
-            vault_dir = vault_file.parent
 
-        # Ensure all parent directories exist
         vault_file.parent.mkdir(parents=True, exist_ok=True)
 
         logger.info("Saving vault to %s", vault_file)
 
-        # Convert model to dict with explicit path string conversion
         raw = self.model_dump(
             mode="json",
             exclude={"secrets": {"__all__": {"value"}}},
             exclude_none=True,
         )
 
-        # Handle PSK serialization
-        if "pre_shared_keys" in raw and raw["pre_shared_keys"]:
-            raw["pre_shared_keys"] = [
-                psk.model_dump(mode="json", exclude_none=True)
-                for psk in self.pre_shared_keys
-            ]
-            for psk in raw["pre_shared_keys"]:
-                if "validity" in psk and isinstance(psk["validity"], (str, td)):
-                    if isinstance(psk["validity"], td):
-                        psk["validity"] = f"P{psk['validity'].days}D"
-
-        logger.debug(raw.__repr__())
-
-        # Use the dump_yaml function which now handles directory creation
         dump_yaml(raw, vault_file, format_yaml, ansible_lint)
 
-    def ensure_vault_id(self, obj: PreSharedKey):
+    def ensure_vault_id(self, obj: PreSharedKey) -> None:
         conf_file = self.ansible_cfg_path
-        host = obj.vault_id_prefix
+        host = obj.vault_id_prefix or obj.name
         path = obj.file
         AnsibleCfg.ensure_vault_id_pwdfile(cfg_path=conf_file, host=host, path=path)
 
-    def get_or_create_psk(self, name: str, logger=None) -> Tuple[PreSharedKey, bool]:
-        """Get existing PSK or create new one"""
+    def get_or_create_psk(
+        self,
+        name: str,
+        logger: logging.Logger | None = None,
+    ) -> tuple[PreSharedKey, bool]:
+        """Return an existing PSK or create one."""
         if not logger:
             logger = get_logger("Vaults-get_or_create_psk", reset=True)
 
         existing_key = self.get_client_psk(name, logger)
         if existing_key:
-            logger.info(f"Found existing PSK for client {name}")
-            logger.info(f"PSK: {existing_key}")
+            logger.info("Found existing PSK for client %s", name)
             self.ensure_vault_id(existing_key)
             return existing_key, False
 
-        logger.info(f"Creating new PSK for client {name}")
+        logger.info("Creating new PSK for client %s", name)
         psk_dir = Path(self.dir).expanduser().resolve() / "psk"
         psk_dir.mkdir(parents=True, exist_ok=True)
-        psk = PreSharedKey.generate(name, psk_dir, logger)
+        psk = PreSharedKey.generate(name, psk_dir)
         self.ensure_vault_id(psk)
         self.pre_shared_keys.append(psk)
         return psk, True
 
-    def export_secrets_by_client(self, logger=None):
-        """Export access keys for all hosts in the inventory."""
-        from tqdm import tqdm
-        import shutil
-
+    def export_secrets_by_client(self, logger: logging.Logger | None = None) -> None:
+        """Re-encrypt each host's secrets with that host's PSK."""
         if not logger:
             logger = get_logger("Vaults-export_secrets_by_client", reset=True)
 
-        # Create deploy directory
-        deploy_dir = Path(self.dir).expanduser().resolve() / "deploy"
-        if deploy_dir.exists():
-            shutil.rmtree(deploy_dir)
-        deploy_dir.mkdir(parents=True, exist_ok=True)
+        inventory = self._require_inventory()
+        vault_dir = Path(self.dir).expanduser().resolve()
+        ensure_private_directory(vault_dir)
+        with advisory_file_lock(
+            lock_path=vault_dir / ".export.lock", timeout_seconds=0
+        ):
+            self._export_secrets_locked(vault_dir, inventory, logger)
 
-        hostnames = self.inventory.get_hostnames()
-        for hostname in tqdm(hostnames):
-            logger.info(f"Exporting secrets for client: {hostname}")
+    def _export_secrets_locked(self, vault_dir, inventory, logger) -> None:
+        deploy_dir = vault_dir / "deploy"
+        previous = vault_dir / ".deploy-previous"
+        if previous.exists() or previous.is_symlink():
+            raise ValueError(
+                "Interrupted export recovery required: .deploy-previous exists"
+            )
+        if deploy_dir.is_symlink() or (deploy_dir.exists() and not deploy_dir.is_dir()):
+            raise ValueError("Export destination must be a regular directory")
+        # Keep the last complete export until every replacement has encrypted.
+        with tempfile.TemporaryDirectory(prefix=".export-", dir=vault_dir) as temporary:
+            stage = Path(temporary) / "deploy"
+            stage.mkdir(mode=0o700)
+            self._render_client_exports(stage, inventory, logger)
+            if deploy_dir.exists():
+                deploy_dir.rename(previous)
+            try:
+                stage.rename(deploy_dir)
+            except OSError:
+                if previous.exists():
+                    previous.rename(deploy_dir)
+                raise
+            if previous.exists():
+                shutil.rmtree(previous)
 
-            # Get PSK first and verify it exists
-            psk = self.get_client_psk(hostname)
+    def _render_client_exports(self, deploy_dir, inventory, logger) -> None:
+        hostnames = [h for h in inventory.get_hostnames() if h is not None]
+        for hostname in hostnames:
+            if (
+                not hostname
+                or Path(hostname).name != hostname
+                or hostname in (".", "..")
+            ):
+                raise ValueError("Invalid export hostname")
+            logger.info("Exporting secrets for client: %s", hostname)
+
+            psk = self.get_client_psk(hostname, logger)
             if not psk:
-                logger.error(f"No valid PSK found for host {hostname}, skipping...")
-                continue
+                raise ValueError(f"No valid PSK found for host {hostname}")
 
             psk_file = Path(psk.file)
-            if not psk_file.exists():
-                logger.error(f"PSK file not found: {psk_file}, skipping...")
-                continue
+            if not psk_file.is_file() or psk_file.stat().st_size == 0:
+                raise ValueError(f"Missing or empty PSK for host {hostname}")
 
-            # Export keys for this host
-            host_secrets = self.get_host_secrets(hostname)
-            logger.info(f"Found {len(host_secrets)} secrets for host {hostname}")
+            host_secrets = self.get_host_secrets(hostname, logger)
+            logger.info("Found %d secret(s) for host %s", len(host_secrets), hostname)
 
             host_secret_dir = deploy_dir / hostname
-            host_secret_dir.mkdir(parents=True, exist_ok=True)
+            host_secret_dir.mkdir(mode=0o700)
 
-            # Re-encrypt secrets using host's PSK
-            for secret in tqdm(host_secrets):
-                target_filename = secret.target_name
-                target_path = host_secret_dir / target_filename
+            targets = set()
+            for secret in host_secrets:
+                if (
+                    not secret.target_name
+                    or Path(secret.target_name).name != secret.target_name
+                    or secret.target_name in (".", "..")
+                    or secret.target_name in targets
+                ):
+                    raise ValueError(
+                        f"Invalid or duplicate secret export target for {hostname}"
+                    )
+                targets.add(secret.target_name)
+                target_path = host_secret_dir / secret.target_name
                 try:
                     secret.create_re_encrypted_file(
                         target_path.as_posix(), psk_file.as_posix(), self
                     )
-                except Exception as e:
-                    logger.error(f"Failed to re-encrypt secret {secret.name}: {str(e)}")
+                except Exception:
+                    raise RuntimeError(
+                        f"Secret export failed for host {hostname}"
+                    ) from None
 
     def get_local_hostname(self) -> str:
+        if self.local_hostname_override:
+            return self.local_hostname_override
         return socket.gethostname()
 
     def get_vault_id_for_hostname(self, hostname: str) -> str:
-        # Optionally parse self.ansible_cfg to find matching vault ID
-        # For now, just return the hostname
         return hostname
+
+    def get_master_vault_id(self) -> str:
+        from .secret import MASTER_VAULT_ID
+
+        return MASTER_VAULT_ID
+
+    def validate_local_key(self) -> None:
+        """Fail before writes when any stored secret cannot use the declared key."""
+        from .secret import _read_key, decrypt_secret
+
+        _read_key(self.key)
+        for secret in self.secrets:
+            decrypt_secret(secret.file, self.key)
 
     def get_local_vault_id(self) -> str:
         return self.get_vault_id_for_hostname(self.get_local_hostname())
 
-    def get_local_psk(self) -> Optional[PreSharedKey]:
+    def get_local_psk(self) -> PreSharedKey | None:
         return self.get_client_psk(self.get_local_hostname())
 
     def get_local_vault_id_with_path(self) -> str:
-        return f"{self.get_local_hostname()}@{self.get_local_psk().file}"
+        psk = self.get_local_psk()
+        if psk is None:
+            raise ValueError("Local PSK not found")
+        return f"{self.get_local_hostname()}@{psk.file}"
 
-    def _get_template_secrets(self, template_name: str) -> List[Secret]:
-        """
-        Get all secrets associated with a template by name.
-
-        Args:
-            template_name (str): Name of the template
-
-        Returns:
-            List[Secret]: List of secrets associated with the template
-
-        Raises:
-            ValueError: If any secret referenced by the template is not found
-        """
-
+    def _get_template_secrets(self, template_name: str) -> list[Secret]:
+        """Get all secrets associated with a template by name."""
         template = self.get_secret_template_by_name(template_name)
-        assert template, f"Template '{template_name}' not found"
+        if template is None:
+            raise ValueError(f"Template '{template_name}' not found")
 
-        secrets = []
+        secrets: list[Secret] = []
         for secret_name in template.secret_names:
             secret = next((s for s in self.secrets if s.name == secret_name), None)
-            if not secret:
+            if secret is None:
                 raise ValueError(
-                    f"Secret '{secret_name}' referenced by template '{template_name}' not found"
+                    f"Secret '{secret_name}' referenced by template "
+                    f"'{template_name}' not found"
                 )
             secrets.append(secret)
         return secrets
 
-    def get_secret_by_target_name(self, name: str) -> Optional[Secret]:
-        """
-        Retrieve a secret by its target name from the vault's secrets.
-
-        Args:
-            name (str): The target name of the secret to retrieve.
-
-        Returns:
-            Optional[Secret]: The secret with the matching target name if found.
-
-        Raises:
-            AssertionError: If no secret with the given target name is found.
-        """
+    def get_secret_by_target_name(self, name: str) -> Secret:
+        """Return the secret with the requested target name."""
         secret = _get_by_target_name(self.secrets, name)
-        assert secret, f"Secret '{name}' not found"
-
+        if secret is None:
+            raise ValueError(f"Secret '{name}' not found")
         return secret
 
-    def get_host_secrets(self, hostname: str, logger=None) -> List[Secret]:
-        """
-        Determine which secrets belong to this host by checking roles, groups,
-        or matching local/clients secrets with hostname.
-        """
+    def get_host_secrets(
+        self,
+        hostname: str,
+        logger: logging.Logger | None = None,
+    ) -> list[Secret]:
+        """Find host secrets through role, group, local, and client templates."""
         if not logger:
             logger = get_logger("Vaults-get_host_secrets", reset=True)
 
-        host = self.inventory.get_host_by_name(hostname)
+        inventory = self._require_inventory()
+        host = inventory.get_host_by_name(hostname)
+        if host is None:
+            raise ValueError(f"Unknown host {hostname}")
 
-        host_roles = host.ansible_role_names
-        host_groups = host.ansible_group_names
-        hostname = host.hostname
+        role_names = host.ansible_role_names
+        group_names = host.ansible_group_names
+        hostname = host.hostname or hostname
 
-        logger.info("---------get_host_secrets---------")
-        logger.info("Checking secrets for host: %s", hostname)
-        logger.info("Host roles: %s", host_roles)
-        logger.info("Host groups: %s", host_groups)
+        logger.info(
+            "Checking secrets for host %s (roles=%s, groups=%s)",
+            hostname,
+            role_names,
+            group_names,
+        )
 
-        matched_secrets = []
+        matched_secrets: list[Secret] = []
 
-        for st in self.secret_templates:
-            logger.info("Checking template: %s", st.name)
-            logger.info("Owner type: %s", st.owner_type)
-            # logger.info(st.model_dump().__repr__())
-            should_include = False
-            if st.owner_type == "roles":
-                # logger.info("Checking roles in roles for: %s", st.name)
-                if st.name in host_roles:
-                    logger.info("Matched role: %s", st.name)
-                    should_include = True
-            elif st.owner_type == "groups":
-                logger.info("Checking groups in groups for: %s", st.name)
-                if st.name in host_groups:
-                    logger.info("Matched group: %s", st.name)
-                    should_include = True
-            elif st.owner_type in ("local", "clients"):
-                logger.info("Checking local/client for: %s", st.name)
-                if st.name.endswith(f"@{hostname}"):
-                    logger.info("Matched local/client: %s", st.name)
-                    should_include = True
+        for template in self.secret_templates:
+            if not _template_applies_to_host(
+                template,
+                hostname=hostname,
+                role_names=role_names,
+                group_names=group_names,
+            ):
+                continue
 
-            else:
-                raise ValueError(f"Unknown owner_type: {st.owner_type}")
+            template_secrets = self._get_template_secrets(template.name)
+            logger.info(
+                "Matched template %s with %d secret(s)",
+                template.name,
+                len(template_secrets),
+            )
+            matched_secrets.extend(template_secrets)
 
-            if should_include:
-                _secrets = self._get_template_secrets(st.name)
-                logger.info("Matched secrets: %s", _secrets)
-                matched_secrets.extend(_secrets)
-
-        # fetch hosts extra secrets
-        extra_secret_names = host.extra_secret_names
-        secrets = [self.get_secret_by_target_name(name) for name in extra_secret_names]
-
-        matched_secrets.extend(secrets)
+        for target_name in host.extra_secret_names:
+            secret = self.get_secret_by_target_name(target_name)
+            matched_secrets.append(secret)
 
         return matched_secrets
 
     def update_secret_value(
         self, secret_name: str, new_value: str, save_multiple: bool = False
-    ):
-        """
-        Update the value of an existing secret and save the vault.
-
-        Args:
-            secret_name (str): Name of the secret to update
-            new_value (str): New value to set
-            save_multiple (bool, optional): If True, updates all matching secrets. If False, raises error if multiple secrets found. Defaults to False.
-
-        Raises:
-            ValueError: If secret not found or if multiple secrets found and save_multiple=False
-        """
+    ) -> None:
+        """Update the value of an existing secret and save the vault."""
         matching_secrets = [s for s in self.secrets if s.name == secret_name]
 
         if not matching_secrets:
@@ -822,12 +627,27 @@ class Vault(BaseModel):
 
         if len(matching_secrets) > 1 and not save_multiple:
             raise ValueError(
-                f"Multiple secrets found with name '{secret_name}'. Set save_multiple=True to update all."
+                f"Multiple secrets found with name '{secret_name}'. "
+                "Set save_multiple=True to update all."
             )
 
-        for secret in matching_secrets:
-            secret: Secret
-            secret.value = new_value
-            secret.update_file_encryption(self)
+        for sec in matching_secrets:
+            if sec.secret_type in ("password", "system_password") and any(
+                s.template_name == sec.template_name
+                and s.name.endswith("_password_hash")
+                for s in self.secrets
+            ):
+                raise ValueError(
+                    "Paired password/hash secrets require coordinated rotation; "
+                    "use the admin-password import workflow for admin accounts"
+                )
+
+        for sec in matching_secrets:
+            sec.value = new_value
+            try:
+                sec.update_file_encryption(self)
+                sec.updated = datetime.now()
+            finally:
+                sec.value = None
 
         self.save_to_file()

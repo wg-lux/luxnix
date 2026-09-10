@@ -7,7 +7,7 @@
   become: true
   become_user: "{{ ansible_become_user }}"
   vars:
-    ansible_sudo_pass: "{{ user_password.content | b64decode }}"
+    ansible_sudo_pass: "{{ managed_user_password.content | b64decode }}"
   async: 900 # 15 minutes
   poll: 5
 
@@ -20,6 +20,6 @@
   become: true
   become_user: "{{ ansible_become_user }}"
   vars:
-    ansible_sudo_pass: "{{ user_password.content | b64decode }}"
+    ansible_sudo_pass: "{{ managed_user_password.content | b64decode }}"
   async: 900 # 15 minutes
   poll: 5

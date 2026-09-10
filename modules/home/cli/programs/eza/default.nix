@@ -1,13 +1,14 @@
 {
-  pkgs,
   config,
   lib,
   ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.cli.programs.eza;
-in {
+in
+{
   options.cli.programs.eza = with types; {
     enable = mkBoolOpt false "Whether or not to enable eza";
   };

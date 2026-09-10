@@ -1,14 +1,14 @@
 {
-  inputs,
   lib,
-  host,
   pkgs,
   config,
   ...
 }:
-with lib; let
+with lib;
+let
   cfg = config.browsers.firefox;
-in {
+in
+{
   options.browsers.firefox = {
     enable = mkEnableOption "enable firefox browser";
   };
@@ -17,10 +17,10 @@ in {
     # home.file.".mozilla/firefox/default/chrome/firefox-gnome-theme".source = inputs.firefox-gnome-theme;
 
     xdg.mimeApps.defaultApplications = {
-      "text/html" = ["firefox.desktop"];
-      "text/xml" = ["firefox.desktop"];
-      "x-scheme-handler/http" = ["firefox.desktop"];
-      "x-scheme-handler/https" = ["firefox.desktop"];
+      "text/html" = [ "firefox.desktop" ];
+      "text/xml" = [ "firefox.desktop" ];
+      "x-scheme-handler/http" = [ "firefox.desktop" ];
+      "x-scheme-handler/https" = [ "firefox.desktop" ];
     };
 
     programs.firefox = {

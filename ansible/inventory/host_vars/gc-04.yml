@@ -1,17 +1,36 @@
-# inventory/host_vars/gc-10.yml
+# inventory/host_vars/gc-04.yml
 ---
+luxnix_dev_repo: "/home/admin/dev/luxnix"
 template_name: "main"
 
 host_roles:
   custom_packages.baseDevelopment: "true"
 
-host_services: {}
+host_services:
+  luxnix.lxAnnotateLocal.django.baseUrl: '"https://lx-annotate.endo-reg.net"'
+  luxnix.lxAnnotateLocal.django.djangoAllowedHosts:
+    - "lx-annotate.endo-reg.net"
+    - "localhost"
+    - "127.0.0.1"
+  luxnix.lxAnnotateLocal.django.hostname: '"lx-annotate.endo-reg.net"'
+  luxnix.lxAnnotateLocal.django.httpProtocol: '"https"'
+  luxnix.lxAnnotateLocal.django.useHttps: "true"
+  nginx.enable: "true"
+  nginx.recommendedGzipSettings: "true"
+  nginx.recommendedOptimisation: "true"
+  nginx.recommendedProxySettings: "true"
+  nginx.recommendedTlsSettings: "true"
+
+host_nixos:
+  networking.firewall.allowedTCPPorts: "lib.mkAfter [ 80 443 ]"
+  'networking.hosts."127.0.0.1"':
+    - "lx-annotate.endo-reg.net"
 
 extra_secret_names: []
 
 host_luxnix:
-  generic_settings.configurationPathRelative: '"luxnix"'
-  generic_settings.configurationPath: 'lib.mkForce "/home/admin/luxnix"'
+  # Temporary bootstrap exception; set false after verified Vault enrollment.
+  vault.client.auth.deferUntilProvisioned: "true"
 
   generic_settings.hostPlatform: '"x86_64-linux"'
   generic_settings.systemStateVersion: '"23.11"'
@@ -37,6 +56,10 @@ host_luxnix:
   generic_settings.linux.kernelParams: []
   generic_settings.linux.kernelModulesBlacklist: []
 
-  nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
-  nvidia_prime.onboardBusId: '"PCI:0:2:0"'
-  nvidia_prime.onboardGpuType: '"intel"'
+  # GPU Configuration (New Unified System)
+  generic_settings.gpu.nvidia.enable: "true"
+  generic_settings.gpu.nvidia.prime.enable: "true"
+  generic_settings.gpu.nvidia.prime.nvidiaBusId: '"PCI:1:0:0"'
+  generic_settings.gpu.nvidia.prime.onboardBusId: '"PCI:0:2:0"'
+  generic_settings.gpu.nvidia.prime.onboardType: '"intel"'
+  generic_settings.gpu.nvidia.driver: '"production"'

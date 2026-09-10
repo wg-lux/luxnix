@@ -1,15 +1,16 @@
-{ lib
-, pkgs
-, config
-, ...
+{
+  lib,
+  pkgs,
+  config,
+  ...
 }:
-with lib; let
+with lib;
+let
   cfg = config.roles.postgres.default;
 
-  # Password file paths
-  endoregDbLocalPasswordFile = "/var/lib/postgresql/endoregDbLocal.password";
-  maintenancePasswordFile = "/etc/secrets/vault/SCRT_local_password_maintenance_password";
-
+  # The application password file is the canonical credential for the local
+  # EndoReg role.  It is intentionally separate from human/admin secrets.
+  endoregDbLocalPasswordFile = config.roles.endoreg-client.database.endoregLocalUserPasswordFile;
 
   # Utility function to create attributes for a user
   mkDefaultUser = user: {
@@ -30,6 +31,7 @@ with lib; let
       echo "Options:"
       echo "  --reset-psql       Reset PostgreSQL data (interactive confirmation required)"
       echo "  --show-psql-conf   Show PostgreSQL configuration"
+      echo "  --check-endoreg-auth  Verify password authentication as endoregDbLocal"
       echo "  --help             Show this help message"
       echo ""
       echo "WARNING: Reset operations will permanently delete data!"
@@ -79,12 +81,28 @@ with lib; let
       fi
     }
 
+    check_endoreg_auth() {
+      if [ ! -s ${endoregDbLocalPasswordFile} ]; then
+        echo "ERROR: application password file is missing or empty: ${endoregDbLocalPasswordFile}" >&2
+        return 1
+      fi
+
+      echo "Checking password authentication as ${cfg.defaultDbName}..."
+      sudo env PGPASSWORD="$(${pkgs.coreutils}/bin/cat ${endoregDbLocalPasswordFile})" \
+        ${config.services.postgresql.package}/bin/psql \
+        -h 127.0.0.1 -U "${cfg.defaultDbName}" -d "${cfg.defaultDbName}" \
+        -v ON_ERROR_STOP=1 -c 'select current_user, current_database();'
+    }
+
     case "''${1:-}" in
       --reset-psql)
         reset_postgresql
         ;;
       --show-psql-conf)
         show_psql_conf
+        ;;
+      --check-endoreg-auth)
+        check_endoreg_auth
         ;;
       --help|"")
         show_help
@@ -100,7 +118,7 @@ with lib; let
   # Script to set up endoregDbLocal user password
   setupEndoregDbLocalUser = pkgs.writeShellScript "setup-endoreg-db-local-user" ''
     set -euo pipefail
-    
+
     # Wait for PostgreSQL to be ready
     echo "Waiting for PostgreSQL to be ready..."
     for i in {1..30}; do
@@ -115,39 +133,57 @@ with lib; let
       echo "Attempt $i: PostgreSQL not ready, waiting 2 seconds..."
       sleep 2
     done
-    
-    # Create password if it doesn't exist
-    if [ ! -f ${maintenancePasswordFile} ]; then
+
+    # Create the application credential only when it does not exist.  Existing
+    # credentials must survive activation; a legacy maintenance secret must
+    # never silently replace the password used by the application.
+    if [ ! -s ${endoregDbLocalPasswordFile} ]; then
       echo "Generating password for endoregDbLocal user..."
-      mkdir -p $(dirname ${maintenancePasswordFile})
-      ${pkgs.openssl}/bin/openssl rand -base64 32 > ${maintenancePasswordFile}
-      chmod 640 ${maintenancePasswordFile}
-      chown root:${config.luxnix.generic-settings.sensitiveServiceGroupName} ${maintenancePasswordFile}
+      ${pkgs.coreutils}/bin/install -d -o postgres -g postgres -m 0700 \
+        "$(dirname ${endoregDbLocalPasswordFile})"
+      temporary_password_file="$(${pkgs.coreutils}/bin/mktemp \
+        "${endoregDbLocalPasswordFile}.tmp.XXXXXX")"
+      trap 'rm -f "$temporary_password_file"' EXIT
+      ${pkgs.openssl}/bin/openssl rand -base64 32 > "$temporary_password_file"
+      chown postgres:postgres "$temporary_password_file"
+      chmod 600 "$temporary_password_file"
+      mv -f "$temporary_password_file" ${endoregDbLocalPasswordFile}
+      trap - EXIT
     fi
-    
-    # Ensure correct permissions on existing file
-    chmod 640 ${maintenancePasswordFile}
-    chown root:${config.luxnix.generic-settings.sensitiveServiceGroupName} ${maintenancePasswordFile}
-    
-    # Copy password for PostgreSQL access
-    cp ${maintenancePasswordFile} ${endoregDbLocalPasswordFile}
+
+    # Ensure the protected application credential remains readable only by
+    # PostgreSQL and is never exposed through the legacy secret path.
     chown postgres:postgres ${endoregDbLocalPasswordFile}
     chmod 600 ${endoregDbLocalPasswordFile}
-    
+
     # Set the password in PostgreSQL safely using dollar-quoted strings
     # Dollar-quoting prevents SQL injection by treating the content as a literal string
     echo "Setting password for user ${cfg.defaultDbName}..."
-    
+
     PASSWORD=$(cat ${endoregDbLocalPasswordFile})
-    
+
     # Use dollar-quoted strings ($tag$...$tag$) which safely handle any special characters
     # including single quotes, backslashes, and other SQL metacharacters
     ${config.services.postgresql.package}/bin/psql -U postgres -d postgres -c \
       "ALTER USER \"${cfg.defaultDbName}\" WITH PASSWORD \$securepass\$''${PASSWORD}\$securepass\$;"
+
+    echo "Granting application database privileges for ${cfg.defaultDbName}..."
+    ${config.services.postgresql.package}/bin/psql -U postgres -d "${cfg.defaultDbName}" -v ON_ERROR_STOP=1 <<'SQL'
+    GRANT USAGE, CREATE ON SCHEMA public TO "${cfg.defaultDbName}";
+    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "${cfg.defaultDbName}";
+    GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO "${cfg.defaultDbName}";
+    ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+      GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "${cfg.defaultDbName}";
+    ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+      GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO "${cfg.defaultDbName}";
+    ALTER DEFAULT PRIVILEGES FOR ROLE "${cfg.defaultDbName}" IN SCHEMA public
+      GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "${cfg.defaultDbName}";
+    ALTER DEFAULT PRIVILEGES FOR ROLE "${cfg.defaultDbName}" IN SCHEMA public
+      GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO "${cfg.defaultDbName}";
+    SQL
       
     echo "endoregDbLocal user password configured successfully"
   '';
-
 
 in
 {
@@ -207,7 +243,6 @@ in
 
   };
 
-
   config = mkIf cfg.enable {
     # Add maintenance script to system packages
     environment.systemPackages = [ postgresMaintenanceScript ];
@@ -217,8 +252,12 @@ in
     # Create systemd service to set up endoregDbLocal user password
     systemd.services.postgres-endoreg-setup = {
       description = "Set up endoregDbLocal PostgreSQL user password";
-      after = [ "postgresql.service" "managed-secrets-setup.service" ];
-      requires = [ "postgresql.service" "managed-secrets-setup.service" ];
+      after = [
+        "postgresql.service"
+      ];
+      requires = [
+        "postgresql.service"
+      ];
       wantedBy = [ "multi-user.target" ];
       serviceConfig = {
         Type = "oneshot";
@@ -263,6 +302,7 @@ in
           max_wal_senders = lib.mkDefault 5;
           wal_keep_size = lib.mkDefault "512MB";
           password_encryption = "scram-sha-256";
+          max_connections = "200";
           # hot_standby = true;
           # log_connections = true;
           # log_statement = "all";
@@ -309,8 +349,6 @@ in
 
       };
     };
-
-
 
   };
 }

@@ -1,0 +1,314 @@
+# Human- and machine-readable catalog for Devenv shell wrappers and tasks.
+# Run these from the repository root. Inside an active shell, shell-wrapper
+# names can be used directly; tasks keep their explicit `devenv tasks run`
+# prefix so their execution mode remains unambiguous.
+schema_version: 1
+canonical_invocation: devenv shell <command> [arguments...]
+task_invocation: devenv tasks run <task> [arguments...]
+risk_levels_source: ../luxnix.yml#risk_levels
+
+# Frontends should require an explicit operator confirmation before entries
+# marked operator_confirmation_required. The field does not imply that the
+# underlying wrapper implements its own prompt.
+commands:
+  - id: rotate-admin-passwords
+    summary: Show one validated admin replacement on the terminal and require y/n before live activation.
+    risk: sensitive-remote-state
+    operator_confirmation_required: true
+    usage: >-
+      devenv shell rotate-admin-passwords --limit <host>
+      -e admin_rotation_recovery_confirmed=true [ansible-playbook arguments...]
+    implementation: scripts/run-secret-playbook.sh
+    playbook: ansible/playbooks/rotate_admin_passwords.yml
+    documentation: docs/admin-passwords.md
+
+  - id: deliver-hub-enrollment
+    summary: Deliver one gs-02 enrollment bundle using private controller tmpfs and pinned SSH.
+    risk: sensitive-remote-state
+    operator_confirmation_required: true
+    usage: >-
+      devenv shell deliver-hub-enrollment --limit <host>
+      -e enrollment_expected_ca_sha256=<independently-verified-fingerprint>
+    implementation: scripts/run-secret-playbook.sh
+    playbook: ansible/playbooks/deliver_hub_enrollment.yml
+    documentation: docs/vault-hub-machine-enrollment.md
+
+  - id: vault-migrate-local-key
+    summary: Create one explicitly migrated master-encrypted copy without replacing the legacy source.
+    risk: sensitive-local-state
+    operator_confirmation_required: true
+    usage: >-
+      devenv shell vault-migrate-local-key --source <old> --output <new>
+      --legacy-key <key-file> --legacy-id <label>
+      --master-key <key-file> --confirm-migration
+    implementation: scripts/vault/migrate_local_key.py
+    documentation: docs/vault-setup.md
+
+  - id: manage
+    summary: Prepare the local environment or select its development mode.
+    risk: local-state
+    operator_confirmation_required: false
+    usage: devenv shell manage [setup|dev|prod|deploy|help]
+    implementation: devenv/management.nix
+    documentation: docs/development.md
+
+  - id: bnsc
+    summary: Generate canonical Autoconf outputs.
+    risk: local-state
+    operator_confirmation_required: false
+    usage: devenv shell bnsc
+    alias_for: autoconf:generate
+    implementation: devenv/tasks.nix
+    documentation: docs/autoconf.md
+
+  - id: vault-bootstrap
+    summary: Create or update the encrypted LuxNix vault and host exports.
+    risk: sensitive-local-state
+    operator_confirmation_required: true
+    usage: devenv shell vault-bootstrap [bootstrap arguments...]
+    implementation: scripts/bootstrap-lx-vault.py
+    documentation: docs/admin-passwords.md
+
+  - id: validate-admin-passwords
+    summary: Validate inventory admin passwords against the encrypted vault.
+    risk: sensitive-read-only
+    operator_confirmation_required: false
+    usage: devenv shell validate-admin-passwords [validation arguments...]
+    implementation: scripts/validate-admin-passwords.py
+    documentation: docs/admin-passwords.md
+
+  - id: vault-site-preflight
+    summary: Validate non-secret prerequisites for one Vault site enrollment.
+    risk: read-only
+    operator_confirmation_required: false
+    usage: devenv shell vault-site-preflight <host> [--json]
+    implementation: scripts/vault/site_enrollment_preflight.py
+    documentation: docs/vault-hub-machine-enrollment.md
+
+  - id: check-connectivity
+    summary: Check SSH connectivity to a selected inventory host or group.
+    risk: remote-read-only
+    operator_confirmation_required: false
+    usage: devenv shell check-connectivity <host-or-group>
+    implementation: scripts/check-connectivity.sh
+    documentation: ansible/playbooks/readme.md
+
+  - id: lx-annotate-streamable-migration
+    summary: Run the deployed LX-Annotate streamable-storage migration helper.
+    risk: remote-state
+    operator_confirmation_required: true
+    usage: devenv shell lx-annotate-streamable-migration <host> [migration arguments...]
+    implementation: scripts/lx-annotate-streamable-migration.sh
+    documentation: modules/nixos/services/lx-annotate-local/README.md
+
+  - id: run-ansible
+    summary: Apply the main Ansible playbook to configured hosts.
+    risk: remote-state
+    operator_confirmation_required: true
+    usage: >-
+      devenv shell run-ansible --limit <host-or-group>
+      [ansible-playbook arguments...]
+    implementation: scripts/run-ansible-playbook.sh
+    playbook: ansible/site.yml
+    documentation: ansible/playbooks/readme.md
+
+  - id: ssh-all
+    summary: Open inventory-selected hosts in repository shells within Tmux.
+    risk: remote-read-only
+    operator_confirmation_required: false
+    usage: devenv shell ssh-all [--group <inventory-group>] [--dry-run]
+    implementation: scripts/tmux-inventory-session.py
+    documentation: tmux/README.md
+
+  - id: init-server-ssh
+    summary: Open inventory-selected hosts with htop within Tmux.
+    risk: remote-read-only
+    operator_confirmation_required: false
+    usage: devenv shell init-server-ssh [--group <inventory-group>] [--dry-run]
+    implementation: scripts/tmux-inventory-session.py
+    documentation: tmux/README.md
+
+  - id: kill-server-ssh
+    summary: Stop the local ssh-servers tmux session.
+    risk: local-state
+    operator_confirmation_required: false
+    usage: devenv shell kill-server-ssh
+    implementation: devenv/scripts.nix
+    documentation: tmux/README.md
+
+  - id: conn-server-ssh
+    summary: Attach to the local ssh-servers tmux session.
+    risk: local-state
+    operator_confirmation_required: false
+    usage: devenv shell conn-server-ssh
+    implementation: devenv/scripts.nix
+    documentation: tmux/README.md
+
+  - id: sync-secrets
+    summary: Deploy managed secrets with the dedicated Ansible playbook.
+    risk: sensitive-remote-state
+    operator_confirmation_required: true
+    usage: >-
+      devenv shell sync-secrets --limit <host-or-group>
+      [ansible-playbook arguments...]
+    implementation: scripts/run-ansible-playbook.sh
+    playbook: ansible/playbooks/deploy_secrets.yml
+    documentation: ansible/playbooks/readme.md
+
+  - id: mount-persisting-storage
+    summary: Mount persistent storage using secrets from the configured provider.
+    risk: sensitive-local-state
+    operator_confirmation_required: true
+    usage: devenv shell mount-persisting-storage
+    implementation: scripts/storage/mount_persisting_storage.py
+    documentation: docs/hardware-setup.md
+
+# Tasks are listed separately because they are invoked through `devenv tasks`
+# rather than the shell-wrapper namespace above.
+tasks:
+  - id: nix-quality:check
+    summary: Run ratcheted parse, deadnix, statix, nixfmt, and flake-checker checks without modifying files.
+    risk: read-only
+    operator_confirmation_required: false
+    usage: devenv tasks run nix-quality:check
+    implementation: scripts/nix-quality.py
+    policy: nix-quality.yml
+    documentation: docs/nix-quality.md
+
+  - id: nix-quality:generators
+    summary: Run 61 non-evaluating Autoconf render, isolated-output, and boot-renderer contracts.
+    risk: read-only
+    operator_confirmation_required: false
+    usage: devenv tasks run nix-quality:generators
+    implementation: devenv/tasks.nix
+    policy: nix-quality.yml
+    documentation: docs/nix-quality.md
+
+  - id: nix-quality:full
+    summary: Add full flake evaluation to the Nix quality checks.
+    risk: read-only
+    operator_confirmation_required: false
+    usage: devenv tasks run nix-quality:full
+    implementation: scripts/nix-quality.py
+    policy: nix-quality.yml
+    documentation: docs/nix-quality.md
+
+  - id: env:setup
+    summary: Prepare the development shell and probe optional CUDA support.
+    risk: local-state
+    operator_confirmation_required: false
+    usage: devenv tasks run env:setup
+    implementation: devenv/management.nix
+    documentation: docs/development.md
+
+  - id: env:setup-cuda
+    summary: Probe optional CUDA support without blocking shell setup.
+    risk: read-only
+    operator_confirmation_required: false
+    usage: devenv tasks run env:setup-cuda
+    implementation: devenv/management.nix
+    documentation: docs/development.md
+
+  - id: initialize-environment:endoreg-db
+    summary: Initialize and migrate the EndoReg database.
+    risk: local-state
+    operator_confirmation_required: true
+    usage: devenv tasks run initialize-environment:endoreg-db
+    implementation: devenv/management.nix
+    documentation: docs/development.md
+
+  - id: initialize-environment:finished
+    summary: Confirm that development environment initialization finished.
+    risk: read-only
+    operator_confirmation_required: false
+    usage: devenv tasks run initialize-environment:finished
+    implementation: devenv/management.nix
+    documentation: docs/development.md
+
+  - id: autoconf:check
+    summary: Validate and show resolved Autoconf options without generating files.
+    risk: read-only
+    operator_confirmation_required: false
+    usage: devenv tasks run autoconf:check
+    implementation: devenv/tasks.nix
+    documentation: docs/autoconf.md
+
+  - id: autoconf:refresh-facts
+    summary: Refresh local facts while retaining last-known-good snapshots for failures.
+    risk: remote-read-only
+    operator_confirmation_required: false
+    usage: devenv tasks run autoconf:refresh-facts
+    implementation: devenv/tasks.nix
+    documentation: docs/autoconf.md
+
+  - id: autoconf:refresh-facts-strict
+    summary: Refresh local facts and fail if any inventory host remains stale.
+    risk: remote-read-only
+    operator_confirmation_required: false
+    usage: devenv tasks run autoconf:refresh-facts-strict
+    implementation: devenv/tasks.nix
+    documentation: docs/autoconf.md
+
+  - id: autoconf:generate-report
+    summary: Generate a private, redacted HTML inventory report from local facts.
+    risk: local-state
+    operator_confirmation_required: false
+    usage: devenv tasks run autoconf:generate-report
+    implementation: devenv/tasks.nix
+    documentation: docs/autoconf.md
+
+  - id: autoconf:initialize-vault
+    summary: Initialize the Autoconf vault.
+    risk: sensitive-local-state
+    operator_confirmation_required: true
+    usage: devenv tasks run autoconf:initialize-vault
+    implementation: devenv/tasks.nix
+    documentation: docs/vault-setup.md
+
+  - id: autoconf:generate
+    summary: Validate Autoconf options and generate NixOS and Home Manager configs.
+    risk: local-state
+    operator_confirmation_required: false
+    usage: devenv tasks run autoconf:generate
+    implementation: devenv/tasks.nix
+    documentation: docs/autoconf.md
+
+  - id: docs:toc-generator
+    summary: Regenerate the documentation table of contents.
+    risk: local-state
+    operator_confirmation_required: false
+    usage: devenv tasks run docs:toc-generator
+    implementation: devenv/tasks.nix
+    documentation: docs/index.md
+
+  - id: docs:check
+    summary: Validate documentation navigation and portable local links.
+    risk: read-only
+    operator_confirmation_required: false
+    usage: devenv tasks run docs:check
+    implementation: devenv/tasks.nix
+    documentation: docs/index.md
+
+  - id: tests:pytest
+    summary: Run the repository Python test suite with root-scoped discovery.
+    risk: read-only
+    operator_confirmation_required: false
+    usage: devenv tasks run tests:pytest
+    implementation: devenv/tasks.nix
+    documentation: docs/testing-nixtests.md
+
+  - id: endoreg-db:init
+    summary: Initialize the EndoReg database.
+    risk: local-state
+    operator_confirmation_required: true
+    usage: devenv tasks run endoreg-db:init
+    implementation: devenv/tasks.nix
+    documentation: docs/development.md
+
+  - id: endoreg-db:migrate
+    summary: Apply EndoReg database migrations.
+    risk: local-state
+    operator_confirmation_required: true
+    usage: devenv tasks run endoreg-db:migrate
+    implementation: devenv/tasks.nix
+    documentation: docs/development.md

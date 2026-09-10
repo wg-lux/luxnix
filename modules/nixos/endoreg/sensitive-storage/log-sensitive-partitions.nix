@@ -1,13 +1,17 @@
-{ config, lib, pkgs, partitionConfiguration, ... }:
+{
+  config,
+  pkgs,
+  partitionConfiguration,
+  ...
+}:
 
 let
   hostname = config.networking.hostName;
 
   # Partition-specific configuration
   conf = partitionConfiguration;
-  label = partitionConfiguration.label;
+  inherit (partitionConfiguration) label uuid;
   luksUuid = partitionConfiguration.luks-uuid;
-  uuid = partitionConfiguration.uuid;
 
   # Mountpoint and service configuration
   mountpoint = conf.mountPoint;
@@ -17,16 +21,20 @@ let
   timerOnCalendar = conf.logTimerOnCalendar;
 
   # Keyfile path for encryption
-  keyFile = conf.keyFile;
+  inherit (conf) keyFile;
 
   # Logging configuration
-  user = conf.user;
-  group = conf.group;
-  logDir = conf.logDir;
+  inherit (conf) group logDir;
 
   # Create a state-checking script
   scriptPath = pkgs.writeShellScriptBin "${scriptName}" ''
     #!/bin/sh
+
+    # Ensure the log target exists even if timers fire before tmpfiles setup.
+    if ! ${pkgs.coreutils}/bin/mkdir -p "${logDir}"; then
+      echo "Failed to create log directory: ${logDir}" >&2
+      exit 1
+    fi
 
     # Set timestamp
     timestamp=$(date +%Y-%m-%d_%H-%M-%S)
@@ -104,7 +112,14 @@ in
       User = "root";
       Group = "root";
     };
-    path = [ pkgs.sudo pkgs.cryptsetup pkgs.util-linux pkgs.coreutils pkgs.gnugrep pkgs.jq ];
+    path = [
+      pkgs.sudo
+      pkgs.cryptsetup
+      pkgs.util-linux
+      pkgs.coreutils
+      pkgs.gnugrep
+      pkgs.jq
+    ];
   };
 
   ########## SYSTEMD TIMER ##########
@@ -115,7 +130,7 @@ in
       OnCalendar = timerOnCalendar; # Runs based on provided calendar, e.g., hourly
       Persistent = true; # Ensures it runs even if the system was off at the scheduled time
     };
-    unitConfig = {};
+    unitConfig = { };
   };
 
   ########## POLKIT RULES ##########

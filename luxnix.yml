@@ -1,0 +1,390 @@
+# Canonical, machine-readable entry point for contributors and automation.
+# Keep commands here aligned with README.md and docs/getting-started.md.
+schema_version: 1
+
+project:
+  name: luxnix
+  purpose: Reproducible, security-focused NixOS configuration for multiple hosts.
+  start_here: docs/getting-started.md
+  contributor_guidance: AGENTS.md
+
+prerequisites:
+  inspect_and_validate:
+    - git
+    - nix with flakes enabled
+  development:
+    - devenv
+  deploy:
+    - nixos-anywhere
+    - ssh
+
+# Shared vocabulary for workflows here and wrappers in devenv/commands.yml.
+risk_levels:
+  read-only: Reads public configuration without intentionally changing state.
+  sensitive-read-only: Reads secret material without intentionally changing state.
+  local-state: Changes local files, sessions, mounts, or generated configuration.
+  sensitive-local-state: Reads secrets while changing local state.
+  remote-read-only: Connects to remote hosts without intentionally changing them.
+  remote-state: May change one or more remote hosts.
+  sensitive-remote-state: Deploys or changes secret material on remote hosts.
+  destructive-local: May overwrite or delete important local data.
+  destructive-remote: May overwrite, delete, or repartition data on remote hosts.
+
+paths:
+  flake: flake.nix
+  host_configurations: systems/x86_64-linux
+  home_configurations: homes/x86_64-linux
+  nixos_modules: modules/nixos
+  home_manager_modules: modules/home
+  python_package: lx_administration
+  snowfall_library: lib
+  nix_packages: packages
+  nix_overlays: overlays
+  development_shells: shells
+  kubernetes_manifests: kubernetes
+  topology_module: topology/default.nix
+  tmux_configuration: tmux
+  legacy_autodocs: autodocs
+  documentation: docs
+  documentation_home: docs/index.md
+  documentation_index: TABLE_OF_CONTENTS.md
+  tests: tests
+  autoconf_test_map: tests/autoconf.yml
+  operational_scripts: scripts
+  manual_operation_catalog: scripts/manual-operations.yml
+  ansible: ansible
+  remote_inventory: ansible/inventory/hosts.ini
+  home_inventory: ansible/inventory/home-hosts.yml
+  inventory_variable_guide: ansible/inventory/group_vars/README.md
+  local_ansible_facts: ansible/cmdb
+  local_inventory_report: cmdb/index.html
+  autoconf_config: autoconf/config.yml
+  nix_generation_templates: conf/nix-templates
+  nix_generation_template_guide: conf/nix-templates/readme.md
+  development_packages: devenv/packages.nix
+  development_tasks: devenv/tasks.nix
+  development_scripts: devenv/scripts.nix
+  development_command_catalog: devenv/commands.yml
+  nix_quality_policy: nix-quality.yml
+  nix_quality_runner: scripts/nix-quality.py
+  network_topology_map: docs/network-topology.yaml
+
+quality:
+  generator_tests:
+    - tests/test_autoconf_rendering.py
+    - tests/test_ansible_autoconf_nixos_config.py
+    - tests/test_autoconf_cli.py
+    - tests/test_boot_decryption_renderer.py
+
+# Paths are durable and expected to exist unless their lifecycle is declared here.
+path_lifecycle:
+  legacy_autodocs:
+    state: inactive-preserved
+    canonical: false
+    status_file: autodocs/status.yml
+  local_ansible_facts:
+    state: local-sensitive
+    gitignored: true
+    may_be_empty: true
+    refresh_command: devenv tasks run autoconf:refresh-facts
+  local_inventory_report:
+    state: generated-local
+    gitignored: true
+    may_be_missing: true
+    generate_command: devenv tasks run autoconf:generate-report
+
+# Ownership is explicit so tools edit durable inputs instead of derived files.
+artifact_ownership:
+  autoconf:
+    canonical_sources:
+      - ansible/inventory/hosts.ini
+      - ansible/inventory/home-hosts.yml
+      - ansible/inventory/group_vars
+      - ansible/inventory/host_vars
+      - autoconf/config.yml
+      - conf/nix-templates
+    local_sensitive_inputs:
+      - ansible/cmdb/*.json
+    generated_outputs:
+      - autoconf/inventory.yml
+      - systems/x86_64-linux/<host>/default.nix
+      - homes/x86_64-linux/<user>@<host>/default.nix
+    edit_rule: >-
+      Change inventory variables, templates, or centralized Autoconf options;
+      then regenerate instead of hand-editing derived output.
+    validate_command: devenv tasks run autoconf:check
+    generate_command: devenv tasks run autoconf:generate
+
+host_conventions:
+  architecture: x86_64-linux
+  system_path: systems/x86_64-linux/<host>
+  home_path: homes/x86_64-linux/<user>@<host>
+  prefixes:
+    gc: development workstation
+    gs: GPU server
+    s: base or service server
+    c: client host
+  required_system_files:
+    - default.nix
+  conditional_system_files:
+    disks.nix: Required when the host entry point imports it for a disko-based installation.
+    hardware-configuration.nix: Required only when the host entry point imports generated hardware configuration.
+  conditional_generated_outputs:
+    homes/x86_64-linux/<user>@<host>/default.nix: Required only when the host has a Home Manager configuration.
+
+# Risk is intentionally explicit so tools can distinguish inspection from mutation.
+# Commands containing <host> or <target-ip> require those values to be substituted.
+workflows:
+  - id: check-nix-quality
+    summary: Run fast, ratcheted source and lockfile quality checks without modifying files.
+    risk: read-only
+    documentation: docs/nix-quality.md
+    prerequisites:
+      - devenv
+    command: devenv tasks run nix-quality:check
+
+  - id: check-nix-quality-generators
+    summary: Run 61 non-evaluating Autoconf and boot-decryption renderer contracts.
+    risk: read-only
+    documentation: docs/nix-quality.md
+    prerequisites:
+      - devenv
+    command: devenv tasks run nix-quality:generators
+
+  - id: check-nix-quality-full
+    summary: Run all Nix quality checks plus full flake evaluation.
+    risk: read-only
+    documentation: docs/nix-quality.md
+    prerequisites:
+      - devenv
+      - nix
+    command: devenv tasks run nix-quality:full
+
+  - id: discover-hosts
+    summary: List host configurations exported by the flake.
+    risk: read-only
+    documentation: docs/getting-started.md
+    prerequisites:
+      - nix
+    command: >-
+      nix eval --json '.#nixosConfigurations' --apply builtins.attrNames
+
+  - id: inspect-admin-name
+    summary: Read the configured admin account name for a selected host.
+    risk: read-only
+    documentation: docs/admin-passwords.md
+    prerequisites:
+      - nix
+    arguments:
+      host:
+        required: true
+        source: discover-hosts
+    command: >-
+      nix eval --raw '.#nixosConfigurations.<host>.config.user.admin.name'
+    example: >-
+      nix eval --raw '.#nixosConfigurations.gc-05.config.user.admin.name'
+
+  - id: inspect-admin-password-file
+    summary: Read the configured admin hash file path without reading its contents.
+    risk: read-only
+    documentation: docs/admin-passwords.md
+    prerequisites:
+      - nix
+    arguments:
+      host:
+        required: true
+        source: discover-hosts
+    command: >-
+      nix eval --raw '.#nixosConfigurations.<host>.config.user.admin.passwordFile'
+    example: >-
+      nix eval --raw '.#nixosConfigurations.gc-05.config.user.admin.passwordFile'
+
+  - id: enter-development-shell
+    summary: Enter the repository development environment.
+    risk: local-state
+    documentation: docs/development.md
+    prerequisites:
+      - devenv
+    command: devenv shell
+    effects:
+      - May download dependencies.
+      - May update local development-environment state under .devenv.
+
+  - id: validate-host
+    summary: Evaluate a host without building or activating it.
+    risk: read-only
+    documentation: docs/getting-started.md
+    arguments:
+      host:
+        required: true
+        source: discover-hosts
+    command: >-
+      nix eval
+      '.#nixosConfigurations.<host>.config.system.build.toplevel.drvPath'
+
+  - id: build-host
+    summary: Build a host configuration without creating a result symlink or activating it.
+    risk: local-state
+    documentation: docs/getting-started.md
+    arguments:
+      host:
+        required: true
+        source: discover-hosts
+    command: >-
+      nix build
+      '.#nixosConfigurations.<host>.config.system.build.toplevel'
+      --no-link
+    effects:
+      - May download dependencies and add paths to the local Nix store.
+
+  - id: test-configurations
+    summary: Run the repository configuration test suite.
+    risk: local-state
+    documentation: docs/testing-nixtests.md
+    prerequisites:
+      - bash
+      - jq
+      - nix
+      - timeout
+    command: ./tests/run-configuration-tests.sh
+    effects:
+      - Writes evaluation logs under tests/eval-logs.
+
+  - id: check-autoconf
+    summary: Validate and display centralized Autoconf options without generating files.
+    risk: read-only
+    documentation: docs/autoconf.md
+    prerequisites:
+      - devenv
+    command: devenv tasks run autoconf:check
+
+  - id: generate-autoconf
+    summary: Generate NixOS and Home Manager configurations from Ansible inputs.
+    risk: local-state
+    documentation: docs/autoconf.md
+    prerequisites:
+      - devenv
+    command: devenv tasks run autoconf:generate
+    effects:
+      - Updates generated inventory, merged variables, system configs, and home configs.
+
+  - id: refresh-autoconf-facts
+    summary: Refresh local facts without discarding last-known-good data for unreachable hosts.
+    risk: remote-read-only
+    documentation: docs/autoconf.md
+    prerequisites:
+      - devenv
+      - ansible
+      - jq
+    command: devenv tasks run autoconf:refresh-facts
+    strict_command: devenv tasks run autoconf:refresh-facts-strict
+    effects:
+      - Connects to every inventory host over SSH and gathers system facts.
+      - Atomically updates successful snapshots under ansible/cmdb.
+      - Retains and reports last-known-good snapshots for failed hosts.
+      - Keeps sensitive snapshots local and excluded from Git.
+
+  - id: generate-inventory-report
+    summary: Generate a private, redacted HTML report from local snapshots.
+    risk: local-state
+    documentation: docs/autoconf.md
+    prerequisites:
+      - devenv
+    command: devenv tasks run autoconf:generate-report
+    effects:
+      - Does not contact managed hosts.
+      - Writes a mode-0600 report to the gitignored cmdb/index.html.
+      - Excludes addresses, serials, environment values, inventory variables, and full facts.
+
+  - id: bootstrap-vault
+    summary: Create or update the local encrypted LuxNix vault before validation and export.
+    risk: sensitive-local-state
+    confirmation_required: true
+    documentation: docs/admin-passwords.md
+    prerequisites:
+      - devenv
+    arguments:
+      control-host:
+        required: true
+        source: operator
+      admin-passwords-file:
+        required: true
+        source: operator
+        sensitive: true
+    command: >-
+      devenv shell vault-bootstrap
+      --vault-dir ~/.lxv
+      --vault-key ~/.lxv.key
+      --local-hostname <control-host>
+      --admin-passwords <admin-passwords-file>
+    effects:
+      - Creates or updates encrypted vault state under ~/.lxv.
+      - Creates or reuses the local encryption key at ~/.lxv.key.
+      - Imports paired admin credentials; validate before the separate export step.
+
+  - id: check-connectivity
+    summary: Check SSH connectivity to a configured host.
+    risk: remote-read-only
+    documentation: docs/getting-started.md
+    prerequisites:
+      - devenv
+      - ansible-playbook
+      - ssh
+    arguments:
+      host:
+        required: true
+        source: discover-hosts
+    command: devenv shell check-connectivity <host>
+    effects:
+      - Connects to the selected host over SSH.
+      - Writes connectivity logs under logs.
+
+  - id: deploy-new-host
+    summary: Install the selected configuration on a target machine.
+    risk: destructive-remote
+    confirmation_required: true
+    documentation: docs/getting-started.md
+    arguments:
+      host:
+        required: true
+        source: discover-hosts
+      target-ip:
+        required: true
+        source: operator
+      staging-root:
+        required: true
+        source: operator
+        sensitive: true
+    command: nixos-anywhere --extra-files <staging-root> --flake '.#<host>' nixos@<target-ip>
+    effects:
+      - Can repartition and install the target machine according to the host configuration.
+
+support:
+  documentation_home: docs/index.md
+  command_catalog: devenv/commands.yml
+  manual_operations: scripts/manual-operations.yml
+  autoconf: docs/autoconf.md
+  inventory_variables: ansible/inventory/group_vars/README.md
+  nix_generation_templates: conf/nix-templates/readme.md
+  cluster_readiness: docs/lx-annotate-cluster-readiness.md
+  common_errors: CommonErrors.md
+  command_cheatsheet: LxCheatsheet.md
+  architecture: docs/architecture.md
+  database_ownership: docs/database-ownership.md
+  deployment: docs/deployment-guide.md
+  network_architecture: docs/network-architecture.md
+  network_resolution: docs/network-resolution.md
+  service_deployment: docs/deploying-services-lx-annotate-style.md
+  tmux_sessions: tmux/README.md
+  admin_passwords: docs/admin-passwords.md
+  vault: docs/vault-setup.md
+  vault_hub_enrollment: docs/vault-hub-machine-enrollment.md
+
+# Historical entry points are removed only when their operator-facing content
+# has a canonical home. Tools can use this map to redirect old references.
+documentation_replacements:
+  cluster.md: docs/lx-annotate-cluster-readiness.md
+  luxnix-services.md: docs/deploying-services-lx-annotate-style.md
+  lx-vault-readme.md: docs/vault-setup.md
+  postgres-lx-annotate-setup.md: docs/database-ownership.md
+  scripts/autoconf-pipeline.md: docs/autoconf.md

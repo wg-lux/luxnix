@@ -1,3 +1,3 @@
-{inputs, ...}: final: prev: {
-  # hyprpanel = inputs.hyprpanel.packages.${prev.system}.default;
+_: _final: _prev: {
+  # hyprpanel = inputs.hyprpanel.packages.${prev.stdenv.hostPlatform.system}.default;
 }
