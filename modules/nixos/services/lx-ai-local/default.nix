@@ -163,6 +163,16 @@ let
           echo "endoreg-db cloned successfully"
         else
           echo "endoreg-db already present"
+        
+          cd "${ENDOREG_DB_DIR}"
+        
+          git fetch origin lx-ai-service
+        
+          git checkout lx-ai-service
+        
+          git reset --hard origin/lx-ai-service
+        
+          cd "${repoDir}"
         fi
 
         echo "endoreg-db dependency is present for uv workspace sync"
