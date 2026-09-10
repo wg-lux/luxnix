@@ -130,7 +130,7 @@ let
 
           rm -rf "''${LX_MODELS_DIR}"
 
-          git clone --branch report_template --single-branch \
+          git clone --branch contracts --single-branch \
             https://github.com/wg-lux/lx-data-models \
             "''${LX_MODELS_DIR}" || {
               echo "ERROR: Failed to clone lx-data-models"
@@ -163,6 +163,16 @@ let
           echo "endoreg-db cloned successfully"
         else
           echo "endoreg-db already present"
+        
+          cd "''${ENDOREG_DB_DIR}"
+        
+          git fetch origin lx-ai-service
+        
+          git checkout lx-ai-service
+        
+          git reset --hard origin/lx-ai-service
+        
+          cd "${repoDir}"
         fi
 
         echo "endoreg-db dependency is present for uv workspace sync"
