@@ -153,6 +153,39 @@ credentials and must not be used for admin rotation.
 
 ## 4. Validate, then export
 
+### Rotate one existing admin pair when unrelated credentials have expired
+
+For an existing canonical pair and registered host PSK, add `--admin-host <host>`
+to `vault-bootstrap --skip-sync`. The input must contain exactly that host.
+This mode imports and validates the selected pair, then saves it in the active
+vault. It does not change other credentials or their expiry timestamps.
+All stored ciphertext must still authenticate with the explicit master key;
+complete legacy metadata/key migration first. Central HashiCorp Vault unsealing
+does not repair this local file-vault contract.
+
+```bash
+devenv shell vault-bootstrap \
+  --vault-dir ~/.lxv --vault-key ~/.lxv.key --skip-sync \
+  --admin-host gc-02 --admin-passwords <admin-passwords-file>
+devenv shell validate-admin-passwords \
+  --vault-dir ~/.lxv --vault-key ~/.lxv.key \
+  --admin-passwords <admin-passwords-file> --vault-id luxnix-master
+devenv shell vault-bootstrap \
+  --vault-dir ~/.lxv --vault-key ~/.lxv.key --skip-sync \
+  --admin-host gc-02 --export
+```
+
+The scoped export contains only the two validated admin files under
+`~/.lxv/admin-rotations/gc-02/deploy/gc-02/`. It leaves the ordinary fleet export
+unchanged. For the apply command in section 5, add
+`-e lx_vault_host_deploy_dir=/home/admin/.lxv/admin-rotations/gc-02/deploy/gc-02`
+(substitute the actual operator home and host). Keep the same recovery and terminal
+approval requirements. Export without reimport rejects an expired selected pair.
+Full-vault bootstrap continues to reject unrelated expired credentials; this mode
+does not establish fleet readiness or renew those credentials.
+
+### Full-vault validation and export
+
 ```bash
 devenv shell validate-admin-passwords \
   --vault-dir ~/.lxv --vault-key ~/.lxv.key \
@@ -246,6 +279,93 @@ sessions separately from the verified root console/independent account, then
 check new login acceptance and old login rejection. Do not terminate the only
 active recovery connection. Database and application sessions have separate
 owners and are not changed by this account workflow.
+
+### Activate on the same machine
+
+Use Ansible's local connection when the controller is the account's target host.
+The ordinary connection check uses SSH, even when its inventory address belongs
+to the controller. `Permission denied (publickey)` therefore does not establish
+that local sudo is unavailable.
+
+The rotation play targets the `managed` group. `--limit gc-02` only filters that
+group; it does not add an absent host. For an intentional local rotation, create
+a private temporary inventory overlay rather than changing fleet membership.
+This example is for commands run as `admin` on **gc-02**, from the repository root:
+
+```bash
+umask 077
+local_inventory="${XDG_RUNTIME_DIR}/luxnix-admin-local.yml"
+cat > "$local_inventory" <<'YAML'
+managed:
+  hosts:
+    gc-02:
+      ansible_connection: local
+YAML
+
+devenv shell check-connectivity gc-02 \
+  -e ansible_connection=local -e ansible_become=false
+
+devenv shell rotate-admin-passwords \
+  -i "$PWD/ansible/inventory/hosts.ini" -i "$local_inventory" \
+  --limit gc-02 --list-hosts
+```
+
+The host list must contain exactly `gc-02`. The playbook also checks the local
+machine's short hostname against the selected inventory hostname before writing
+credentials. It loads `ansible/inventory/group_vars/all/10-vault.yml` explicitly,
+so the canonical vault paths do not depend on inventory variable discovery.
+
+First complete import, validation and scoped export from section 4. Reimporting
+a different password makes an earlier export stale; regenerate the export before
+activation. A bootstrap YAML-lint message saying `Passed` is not live activation
+evidence. Dependency deprecation messages alone do not mean an import failed.
+
+In a separate terminal, run `sudo -i` with the **current** account password and
+keep that verified root shell open. Then, in the ordinary admin terminal:
+
+```bash
+devenv shell rotate-admin-passwords \
+  -i "$PWD/ansible/inventory/hosts.ini" -i "$local_inventory" \
+  --limit gc-02 --ask-become-pass \
+  --vault-id "gc-02@$HOME/.lxv/psk/gc-02.psk" \
+  -e "lx_vault_host_deploy_dir=$HOME/.lxv/admin-rotations/gc-02/deploy/gc-02" \
+  -e admin_rotation_recovery_confirmed=true
+```
+
+Enter the **current** password at `BECOME password:`; this is the initial sudo
+authentication, not the replacement password prompt. Review the replacement
+displayed later and answer `y` to activate it. Do not run the whole Devenv wrapper
+as root or pass passwords through extra variables. The wrapper needs the normal
+operator's private runtime directory and vault access. A shell continuation
+backslash must be the final character on its line, with no trailing spaces.
+
+After successful account update, the playbook switches its in-memory sudo
+credential to the approved replacement when the actual connection account is
+`admin`. This includes local connections, where `ansible_user` may not identify
+the process user. A different connection account retains its own sudo credential.
+The replacement is not cached as a persistent fact or printed in task output.
+
+To verify fresh authentication, run `sudo -k` followed by `sudo -v` in the
+ordinary admin terminal and enter the **new** password. Keep the root recovery
+shell open until this succeeds and the playbook's hash comparison passes.
+
+### Recover from a final sudo readback failure
+
+An older playbook can update the account successfully, then fail at
+`Read back the running account hash` with `Duplicate become password prompt` or
+`Sorry, try again`. It is attempting sudo with the password supplied before the
+rotation. Do not conclude that the account update was rolled back.
+
+Keep the root recovery shell open. Test `sudo -k` and `sudo -v` using the new
+password. If accepted, rerun the same activation command, supplying the **new**
+password at `BECOME password:` and approving the same exported pair. An identical
+installed hash is accepted, and readback can complete. Do not reimport or generate
+another replacement merely to perform this verification. If new-password sudo
+fails, stop and use the retained recovery shell to investigate.
+
+This recovery was reported successful by the operator on `gc-02` on 2026-09-10.
+It establishes that recovery path; it is not a live acceptance test of the new
+automatic sudo credential handoff or proof that existing sessions were revoked.
 
 ## 6. Install on a new machine
 

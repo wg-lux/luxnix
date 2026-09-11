@@ -200,7 +200,7 @@ def test_real_ansible_rotation_prompt_is_terminal_only(tmp_path, answer, activat
     config = tmp_path / "ansible.cfg"
     config.write_text(
         "[defaults]\n"
-        f'action_plugins = {ROOT / "ansible/playbooks/action_plugins"}\n'
+        f"action_plugins = {ROOT / 'ansible/playbooks/action_plugins'}\n"
         f"log_path = {log}\n"
     )
     playbook = tmp_path / "prompt.yml"
@@ -349,3 +349,178 @@ def test_prompt_rejects_control_characters_before_opening_terminal(monkeypatch):
     monkeypatch.setattr(os, "open", lambda *_: pytest.fail("terminal opened"))
     with pytest.raises(ValueError, match="control characters"):
         confirm_on_terminal("gc-05", payload)
+
+
+@pytest.mark.parametrize("account", ["admin", "maintenance"])
+@pytest.mark.parametrize("activation_succeeded", [True, False])
+def test_rotation_hands_sudo_password_to_real_ansible_task_executor(
+    tmp_path, account, activation_succeeded
+):
+    """Exercise credential precedence without invoking sudo or changing accounts."""
+    play = yaml.safe_load(
+        (ROOT / "ansible/playbooks/rotate_admin_passwords.yml").read_text()
+    )[0]
+    block = play["tasks"][0]
+    tasks = block["block"]
+    update = next(i for i, t in enumerate(tasks) if "ansible.builtin.user" in t)
+    handoff = tasks[update + 1]
+    assert "ansible_become_password" in handoff["ansible.builtin.set_fact"]
+    assert handoff["ansible.builtin.set_fact"]["cacheable"] is False
+    assert tasks[update + 2]["register"] == "rotation_after"
+    assert block["no_log"] is True and block["diff"] is False
+    assert play["become_method"] == "ansible.builtin.sudo"
+
+    plugins = tmp_path / "action_plugins"
+    plugins.mkdir()
+    # The action reads the actual become plugin configured by TaskExecutor.
+    # It executes no target module and therefore never escalates privileges.
+    (plugins / "probe_password.py").write_text(
+        "from ansible.plugins.action import ActionBase\n"
+        "class ActionModule(ActionBase):\n"
+        "    def run(self, tmp=None, task_vars=None):\n"
+        '        actual = self._connection.become.get_option("become_pass")\n'
+        '        failed = actual != self._task.args["expected"]\n'
+        '        return {"changed": False, "failed": failed,\n'
+        '                "_ansible_no_log": True}\n'
+    )
+    log = tmp_path / "ansible.log"
+    config = tmp_path / "ansible.cfg"
+    config.write_text(f"[defaults]\nlog_path={log}\n")
+    old = "SYNTHETIC-OLD-SUDO-ONLY"
+    new = "SYNTHETIC-NEW-SUDO-ONLY"
+    expected = new if account == "admin" else old
+    fixture = tmp_path / "handoff.yml"
+    fixture.write_text(
+        yaml.safe_dump(
+            [
+                {
+                    "hosts": "localhost",
+                    "connection": "local",
+                    "gather_facts": False,
+                    "become": True,
+                    "become_method": "sudo",
+                    "become_user": "root",
+                    "vars": {
+                        "ansible_become_password": old,
+                        "rotation_connection_account": {"stdout": account},
+                        "rotation_credential": {"password": new},
+                        "original_test_password": old,
+                        "expected_test_password": expected,
+                    },
+                    "tasks": [
+                        {
+                            "no_log": True,
+                            "block": [
+                                {
+                                    "name": "Verify original authentication",
+                                    "probe_password": {
+                                        "expected": "{{ original_test_password }}"
+                                    },
+                                },
+                                {
+                                    "name": "Represent account update result",
+                                    "ansible.builtin.assert": {
+                                        "that": [activation_succeeded]
+                                    },
+                                },
+                                handoff,
+                                {
+                                    "name": "Verify subsequent authentication",
+                                    "probe_password": {
+                                        "expected": "{{ expected_test_password }}"
+                                    },
+                                },
+                            ],
+                        }
+                    ],
+                }
+            ]
+        )
+    )
+    env = {k: v for k, v in os.environ.items() if not k.startswith("ANSIBLE_")}
+    result = subprocess.run(
+        ["ansible-playbook", "-i", "localhost,", str(fixture)],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={**env, "ANSIBLE_CONFIG": str(config)},
+    )
+    assert (result.returncode == 0) == activation_succeeded, (
+        result.stdout + result.stderr
+    )
+    if not activation_succeeded:
+        assert "Use the approved password" not in result.stdout
+        assert "Verify subsequent authentication" not in result.stdout
+    combined = result.stdout + result.stderr + log.read_text()
+    assert old not in combined and new not in combined
+
+
+@pytest.mark.parametrize("correct_host", [True, False])
+def test_local_rotation_loads_canonical_vars_and_rejects_wrong_machine(
+    tmp_path, correct_host
+):
+    import socket
+    import sys
+
+    source = ROOT / "ansible/playbooks/rotate_admin_passwords.yml"
+    original = yaml.safe_load(source.read_text())[0]
+    hostname = (
+        socket.gethostname().split(".")[0] if correct_host else "not-this-machine"
+    )
+    inventory = tmp_path / "local.yml"
+    inventory.write_text(
+        yaml.safe_dump(
+            {
+                "managed": {
+                    "hosts": {
+                        hostname: {
+                            "ansible_connection": "local",
+                            "ansible_python_interpreter": sys.executable,
+                        }
+                    }
+                }
+            }
+        )
+    )
+    config = tmp_path / "ansible.cfg"
+    config.write_text("[defaults]\n")
+    play = tmp_path / "preflight.yml"
+    play.write_text(
+        yaml.safe_dump(
+            [
+                {
+                    "hosts": original["hosts"],
+                    "gather_facts": False,
+                    "vars_files": [
+                        str((source.parent / f).resolve())
+                        for f in original["vars_files"]
+                    ],
+                    "vars": {"admin_rotation_recovery_confirmed": True},
+                    "tasks": original["pre_tasks"][:3]
+                    + [
+                        {
+                            "name": "Validate canonical vault paths",
+                            "ansible.builtin.assert": {
+                                "that": [
+                                    "lx_vault_dir == '/etc/secrets/vault'",
+                                    "admin_password_hashed_filename == "
+                                    "'SCRT_local_password_admin_password_hash'",
+                                ]
+                            },
+                        }
+                    ],
+                }
+            ]
+        )
+    )
+    env = {k: v for k, v in os.environ.items() if not k.startswith("ANSIBLE_")}
+    result = subprocess.run(
+        ["ansible-playbook", "-i", str(inventory), str(play)],
+        env={**env, "ANSIBLE_CONFIG": str(config)},
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert (result.returncode == 0) == correct_host, result.stdout + result.stderr
+    if not correct_host:
+        assert "Local activation must select this machine" in result.stdout

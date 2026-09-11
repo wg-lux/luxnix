@@ -303,3 +303,99 @@ def test_load_dir_retains_key_symlink_for_fail_closed_validation(tmp_path):
     assert vault.key == str(link)
     with pytest.raises(ValueError, match="non-symlink"):
         vault.validate_local_key()
+
+
+def test_scoped_admin_rotation_preserves_expired_unrelated_credentials(tmp_path):
+    import sys
+    from datetime import datetime, timedelta
+    import yaml
+    from lx_administration.models.ansible import AnsibleInventory, AnsibleInventoryHost
+    from lx_administration.models.vault import import_admin_passwords
+
+    repo = Path(__file__).resolve().parents[2]
+    master = key(tmp_path, "master")
+    psk = key(tmp_path, "client.psk")
+    root = tmp_path / "vault"
+    root.mkdir(mode=0o700)
+    vault = Vault(
+        dir=str(root),
+        key=str(master),
+        inventory=AnsibleInventory(
+            all=[
+                AnsibleInventoryHost(hostname="client"),
+                AnsibleInventoryHost(hostname="other"),
+            ]
+        ),
+        pre_shared_keys=[PreSharedKey(name="client", file=str(psk))],
+    )
+    import_admin_passwords(
+        vault, {"client": "old-test-password", "other": "unrelated-test-password"}
+    )
+    for entry in vault.secrets:
+        entry.created = entry.updated = datetime.now() - timedelta(days=400)
+    (root / "vault.yml").write_text(yaml.safe_dump(vault.model_dump(mode="json")))
+    unrelated = {
+        s.name: (s.model_dump(), Path(s.file).read_bytes())
+        for s in vault.secrets
+        if s.template_name == "admin@other"
+    }
+    existing_export = root / "deploy/other/existing"
+    existing_export.parent.mkdir(parents=True)
+    existing_export.write_bytes(b"existing-ciphertext")
+    mapping = tmp_path / "input.yml"
+    mapping.write_text("admin_passwords:\n  client: new-test-password\n")
+    mapping.chmod(0o600)
+    command = [
+        sys.executable,
+        str(repo / "scripts/bootstrap-lx-vault.py"),
+        "--vault-dir",
+        str(root),
+        "--vault-key",
+        str(master),
+        "--skip-sync",
+        "--admin-host",
+        "client",
+        "--export",
+    ]
+    env = {k: v for k, v in os.environ.items() if not k.startswith("ANSIBLE_")}
+    env["PYTHONPATH"] = str(repo)
+    # Expired selected credentials cannot be exported without replacement.
+    result = subprocess.run(command, cwd=tmp_path, env=env, capture_output=True)
+    assert result.returncode != 0
+    assert not (root / "admin-rotations").exists()
+    result = subprocess.run(
+        command + ["--admin-passwords", str(mapping)],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+    )
+    assert result.returncode == 0, "scoped rotation failed"
+    loaded = Vault.load_dir(str(root), str(master))
+    for entry in loaded.secrets:
+        if entry.name in unrelated:
+            metadata, ciphertext = unrelated[entry.name]
+            assert entry.model_dump() == metadata
+            assert Path(entry.file).read_bytes() == ciphertext
+    with pytest.raises(ValueError, match="validity window"):
+        loaded.validate_vault()
+    export = root / "admin-rotations/client/deploy/client"
+    assert sorted(p.name for p in export.iterdir()) == [
+        "SCRT_local_password_admin_password",
+        "SCRT_local_password_admin_password_hash",
+    ]
+    assert (
+        decrypt_secret(export / "SCRT_local_password_admin_password", psk, "client")
+        == b"new-test-password"
+    )
+    assert existing_export.read_bytes() == b"existing-ciphertext"
+    snapshot = {p: p.read_bytes() for p in root.rglob("*") if p.is_file()}
+    # Scope/input disagreement fails before changing any vault state.
+    mapping.write_text("admin_passwords:\n  other: forbidden-test-password\n")
+    result = subprocess.run(
+        command + ["--admin-passwords", str(mapping)],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+    )
+    assert result.returncode != 0
+    assert snapshot == {p: p.read_bytes() for p in root.rglob("*") if p.is_file()}

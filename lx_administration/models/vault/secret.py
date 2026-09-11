@@ -16,8 +16,6 @@ if TYPE_CHECKING:
     from .manager import Vault
 
 
-DEFAULT_VALIDITY = timedelta(days=180)
-
 
 def _absolute_path(path: str | Path) -> Path:
     """Expand a path without resolving and following its final symlink."""
@@ -121,7 +119,6 @@ class Secret(BaseModel):
     target_name: str
     created: datetime | None = None
     updated: datetime | None = None
-    validity: timedelta | None = DEFAULT_VALIDITY
     value: str | None = None
 
     @staticmethod
@@ -190,9 +187,6 @@ class Secret(BaseModel):
         if self.created is None:
             raise ValueError(f"Secret.created is not set for {self.name}")
 
-        validity = self.validity or DEFAULT_VALIDITY
-        if not _is_valid(validity, self.created, self.updated, now):
-            raise ValueError(f"Secret {self.name} is outside its validity window")
 
         secret_file = Path(self.file).expanduser().resolve()
         if not secret_file.is_file():

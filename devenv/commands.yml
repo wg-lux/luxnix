@@ -21,6 +21,13 @@ commands:
     implementation: scripts/run-secret-playbook.sh
     playbook: ansible/playbooks/rotate_admin_passwords.yml
     documentation: docs/admin-passwords.md
+    local_activation:
+      transport: ansible_connection=local
+      inventory: Use the canonical inventory plus a private managed-group overlay for the selected host.
+      privilege: --ask-become-pass requests the current sudo password.
+      recovery: Keep a separately verified root shell open until new-password authentication and hash readback pass.
+      verification: After updating admin, subsequent sudo tasks use the approved replacement only when the connection account is admin.
+      documentation: docs/admin-passwords.md#activate-on-the-same-machine
 
   - id: deliver-hub-enrollment
     summary: Deliver one gs-02 enrollment bundle using private controller tmpfs and pinned SSH.
@@ -68,6 +75,18 @@ commands:
     usage: devenv shell vault-bootstrap [bootstrap arguments...]
     implementation: scripts/bootstrap-lx-vault.py
     documentation: docs/admin-passwords.md
+    scoped_admin_rotation:
+      usage: >-
+        devenv shell vault-bootstrap --skip-sync --admin-host <host>
+        [--admin-passwords <private-input.yml>] [--export]
+      prerequisites:
+        - Existing canonical admin pair and registered host PSK.
+        - All local ciphertext migrated to the explicit master key.
+      effects:
+        - Validates expiry and password/hash agreement only for the selected admin pair.
+        - Preserves unrelated credentials and their expiry metadata.
+        - Exports only the pair under <vault-dir>/admin-rotations/<host>/deploy/<host>.
+        - Leaves the ordinary fleet export unchanged.
 
   - id: validate-admin-passwords
     summary: Validate inventory admin passwords against the encrypted vault.
