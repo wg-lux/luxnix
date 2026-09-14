@@ -7,32 +7,17 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from nix_eval_helpers import FLAKE_URI_PLACEHOLDER, REPO_FLAKE_URI, eval_json
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _eval_gc02(expression: str) -> dict[str, Any]:
-    result = subprocess.run(
-        [
-            "nix",
-            "eval",
-            "--impure",
-            "--json",
-            "--expr",
-            (
-                    'let cfg = (builtins.getFlake "path:'
-                    f'{REPO_ROOT}").nixosConfigurations.gc-02.config; '
-                f"in {expression}"
-            ),
-            "--show-trace",
-        ],
-        cwd=REPO_ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
+    return eval_json(
+        f'let cfg = (builtins.getFlake "{FLAKE_URI_PLACEHOLDER}")'
+        f".nixosConfigurations.gc-02.config; in {expression}"
     )
-    assert result.returncode == 0, result.stderr
-    return json.loads(result.stdout)
 
 
 def test_preflight_blocks_web_and_always_on_workers() -> None:
@@ -130,7 +115,7 @@ def test_hub_backup_publishes_database_and_media_as_one_restore_point(
 
     expression = f"""
       let
-        flake = builtins.getFlake "path:{REPO_ROOT}";
+        flake = builtins.getFlake "{REPO_FLAKE_URI}";
         pkgs = flake.inputs.nixpkgs.legacyPackages.x86_64-linux;
         generated = import {REPO_ROOT}/modules/nixos/services/lx-annotate-local/scripts/hub-backup.nix {{
           config.networking.hostName = "hub-backup-test";

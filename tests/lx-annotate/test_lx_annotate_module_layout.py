@@ -20,6 +20,7 @@ EXPECTED_OPTION_GROUPS = {
     "hls-backfill": "hlsBackfill",
     "hls-materialization": "hlsMaterialization",
     "hub": "hub",
+    "monitoring": "runtime.monitoring",
     "runtime": "runtime",
     "source": "source",
     "storage-relief": "storageRelief",
@@ -59,8 +60,17 @@ def test_option_aggregator_exposes_one_readable_module_per_group() -> None:
     for module in option_modules:
         public_name = EXPECTED_OPTION_GROUPS[module.stem]
         source = module.read_text(encoding="utf-8")
-        assert "options.services.luxnix.lxAnnotateLocal = {" in source
-        assert len(re.findall(rf"^    {public_name} = ", source, re.MULTILINE)) == 1
+        option_root = "options.services.luxnix.lxAnnotateLocal"
+        direct_assignment = re.findall(
+            rf"^\s+{re.escape(option_root + '.' + public_name)}\s*=",
+            source,
+            re.MULTILINE,
+        )
+        if direct_assignment:
+            assert len(direct_assignment) == 1
+        else:
+            assert f"{option_root} = {{" in source
+            assert len(re.findall(rf"^    {re.escape(public_name)} = ", source, re.MULTILINE)) == 1
         assert f"./options/{module.name}" in aggregator_source
 
     assert "options.services.luxnix.lxAnnotateLocal" not in aggregator_source

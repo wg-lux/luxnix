@@ -1,0 +1,29 @@
+{
+  "task_status": "complete",
+  "findings": [
+    {
+      "claim": "The prior Endoreg visibility test was a false positive for gc-05 because LX-Annotate production settings omitted the timeout settings.",
+      "source": "endoreg_db/config/settings/base.py, endoreg_db/tests/services/test_audit_integrity.py, and lx_annotate/settings/settings_prod.py",
+      "confidence": "high"
+    },
+    {
+      "claim": "Application tests must exercise a non-default 93600-second sentinel through production settings and the real lx_annotate Celery app, verify integer equality across all three settings, reject malformed values, and compare against registered late-ack task limits.",
+      "source": "lx-annotate tests/system/test_production_celery_routing.py",
+      "confidence": "high"
+    },
+    {
+      "claim": "LuxNix must type and propagate visibilityTimeoutSeconds into every application and worker environment and fail evaluation below the FFmpeg-plus-margin threshold.",
+      "source": "LuxNix lx-annotate role, service options, environment script, and Nix evaluation contract",
+      "confidence": "high"
+    },
+    {
+      "claim": "Post-deployment app, Kombu connection/channel, and live worker-conf inspection can prove the effective threshold immediately without waiting 25 hours.",
+      "source": "Celery/Kombu Redis channel behavior and modules/nixos/services/lx-annotate-local/Diagnostics.md",
+      "confidence": "high"
+    }
+  ],
+  "gaps": [
+    "Immediate configuration inspection is not a black-box 25-hour redelivery test.",
+    "A disposable NixOS worker-loss and Redis-interruption convergence test remains future readiness work."
+  ]
+}

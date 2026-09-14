@@ -142,7 +142,7 @@ def test_projection_reconstructs_history_and_status_does_not_scan_evidence(
     resolver = FeatureResolver(registry, tmp_path / "state")
     identity = FeatureIdentity(provider="example", id="semantic_feature")
     subject = DeployedSubject(
-        provider="example", feature_id="semantic_feature", nix_store_path=package
+        **resolver.get_deployed_feature_subject("example", "semantic_feature")
     )
     event = RequirementAssessmentEvent(
         event_id="stable-event",
@@ -172,6 +172,84 @@ def test_projection_reconstructs_history_and_status_does_not_scan_evidence(
     events = cast(list[dict[str, object]], evidence["events"])
     evidence_items = cast(list[dict[str, object]], events[0]["evidence"])
     assert evidence_items[0]["result"] == "passed"
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "unchanged", "package_store_path", "drv_path", "revision", "version",
+        "system_generation", "missing_subject", "missing_package", "partial_provenance",
+        "wrong_feature", "wrong_provider",
+    ],
+)
+def test_verification_applies_only_to_exact_deployed_subject(
+    tmp_path: Path, change: str,
+) -> None:
+    package = tmp_path / "package-a"
+    root = package / "features"
+    registry = tmp_path / "providers.json"
+    state = tmp_path / "state"
+    write_specification(root)
+    write_registry(registry, root, package)
+    resolver = FeatureResolver(registry, state)
+    subject = DeployedSubject.model_validate(
+        resolver.get_deployed_feature_subject("example", "semantic_feature")
+    )
+    resolver.ledger.append(RequirementAssessmentEvent(
+        feature=FeatureIdentity(provider="example", id="semantic_feature"),
+        requirement_id="resolved",
+        status="verified",
+        subject=subject,
+        evidence=(Evidence(kind="test", reference="synthetic-regression", result="passed"),),
+        assessed_by="test-reviewer",
+        assessed_at=datetime(2026, 8, 20, tzinfo=UTC),
+    ))
+    if change in {"package_store_path", "drv_path", "revision", "version", "system_generation"}:
+        registry_data = json.loads(registry.read_text())
+        descriptor = registry_data["providers"]["example"]
+        descriptor[change] += "-replacement"
+        if change == "package_store_path":
+            new_root = Path(descriptor[change]) / "features"
+            write_specification(new_root)
+            descriptor["feature_root"] = str(new_root)
+        registry.write_text(json.dumps(registry_data))
+    elif change != "unchanged":
+        projection_path = resolver.ledger.projection_path("example", "semantic_feature")
+        projection = json.loads(projection_path.read_text())
+        recorded = projection["requirements"]["resolved"]
+        if change == "missing_subject":
+            recorded["subject"] = None
+        elif change == "missing_package":
+            recorded["subject"]["nix_store_path"] = None
+        elif change == "partial_provenance":
+            recorded["subject"]["revision"] = None
+        elif change == "wrong_feature":
+            recorded["subject"]["feature_id"] = "other_feature"
+        elif change == "wrong_provider":
+            recorded["subject"]["provider"] = "other_provider"
+        projection_path.write_text(json.dumps(projection))
+
+    current = FeatureResolver(registry, state)
+    status = current.get_feature_status("example", "semantic_feature")
+    detail = current.get_requirement("example", "semantic_feature", "resolved")
+    assessment = detail["assessment"]
+    assert isinstance(assessment, dict)
+    expected = "verified" if change == "unchanged" else "not_assessed"
+    assert status["state"] == expected
+    assert assessment["status"] == expected
+    assert assessment["recorded_status"] == "verified"
+    assert assessment["matches_deployed_subject"] is (change == "unchanged")
+    assert status["verified_requirement_ids"] == (["resolved"] if change == "unchanged" else [])
+    assert status["stale_requirement_ids"] == ([] if change == "unchanged" else ["resolved"])
+    if change != "unchanged":
+        assert status["not_assessed_requirement_ids"] == ["resolved"]
+        assert assessment["invalidation_reason"] in {"missing_provenance", "deployment_changed"}
+    # Reading current status must not rewrite historical assessments or evidence.
+    assert current.ledger.load_projection("example", "semantic_feature").requirements[
+        "resolved"
+    ].status == "verified"
+    evidence = current.get_feature_evidence("example", "semantic_feature", "resolved")
+    assert evidence["events"][0]["subject"]["nix_store_path"] == str(package)
 
 
 def test_migration_separates_specification_assessment_and_current_work(tmp_path: Path) -> None:

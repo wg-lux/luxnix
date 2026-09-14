@@ -49,8 +49,13 @@ contracts` job and always uploads `nix-quality-generators-junit.xml` as the
 `nix develop .#default` only supplies the pinned CI tool environment; the pytest
 test command itself performs no Nix evaluation.
 
-The scheduled CI job runs the full check before host, module, input, or flake
-changes are considered healthy. Run it locally only on a machine with enough
+Pull requests, main-branch pushes, scheduled runs, and manual runs execute full
+flake evaluation and the repository Python and tracker contracts. Python uses
+the committed dependency lock, and JUnit results are uploaded even on failure.
+The independent MCP suite runs in a separate job with its own locked development
+dependencies and JUnit artifact, keeping its environment separate from LuxNix.
+Jobs have explicit timeouts; a timeout is a failure, not acceptance evidence.
+Run the full check locally only on a machine with enough
 CPU and memory:
 
 ```console
@@ -60,6 +65,13 @@ devenv tasks run nix-quality:full
 The full mode additionally runs `nix flake check --no-build`. It can take
 several minutes because all exported NixOS and Home Manager configurations are
 evaluated.
+
+The flake-checker wrapper forces the same text output in CI and local runs.
+Unknown, missing, or ambiguous summaries fail the gate rather than reporting
+zero findings. The JSON report retains input ages and parse failures. Passing
+the ratcheted issue-count baseline does not certify that dependencies are
+current, supported, or suitable for clinical deployment; review each retained
+finding and the release-specific integration evidence before activation.
 
 For automation or comparisons, request JSON directly:
 

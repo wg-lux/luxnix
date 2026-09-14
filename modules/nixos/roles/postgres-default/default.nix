@@ -8,9 +8,9 @@ with lib;
 let
   cfg = config.roles.postgres.default;
 
-  # Password file paths
+  # The application password file is the canonical credential for the local
+  # EndoReg role.  It is intentionally separate from human/admin secrets.
   endoregDbLocalPasswordFile = config.roles.endoreg-client.database.endoregLocalUserPasswordFile;
-  maintenancePasswordFile = config.roles.endoreg-client.database.passwordFile;
 
   # Utility function to create attributes for a user
   mkDefaultUser = user: {
@@ -31,6 +31,7 @@ let
       echo "Options:"
       echo "  --reset-psql       Reset PostgreSQL data (interactive confirmation required)"
       echo "  --show-psql-conf   Show PostgreSQL configuration"
+      echo "  --check-endoreg-auth  Verify password authentication as endoregDbLocal"
       echo "  --help             Show this help message"
       echo ""
       echo "WARNING: Reset operations will permanently delete data!"
@@ -80,12 +81,28 @@ let
       fi
     }
 
+    check_endoreg_auth() {
+      if [ ! -s ${endoregDbLocalPasswordFile} ]; then
+        echo "ERROR: application password file is missing or empty: ${endoregDbLocalPasswordFile}" >&2
+        return 1
+      fi
+
+      echo "Checking password authentication as ${cfg.defaultDbName}..."
+      sudo env PGPASSWORD="$(${pkgs.coreutils}/bin/cat ${endoregDbLocalPasswordFile})" \
+        ${config.services.postgresql.package}/bin/psql \
+        -h 127.0.0.1 -U "${cfg.defaultDbName}" -d "${cfg.defaultDbName}" \
+        -v ON_ERROR_STOP=1 -c 'select current_user, current_database();'
+    }
+
     case "''${1:-}" in
       --reset-psql)
         reset_postgresql
         ;;
       --show-psql-conf)
         show_psql_conf
+        ;;
+      --check-endoreg-auth)
+        check_endoreg_auth
         ;;
       --help|"")
         show_help
@@ -117,21 +134,25 @@ let
       sleep 2
     done
 
-    # Create password if it doesn't exist
-    if [ ! -f ${maintenancePasswordFile} ]; then
+    # Create the application credential only when it does not exist.  Existing
+    # credentials must survive activation; a legacy maintenance secret must
+    # never silently replace the password used by the application.
+    if [ ! -s ${endoregDbLocalPasswordFile} ]; then
       echo "Generating password for endoregDbLocal user..."
-      mkdir -p $(dirname ${maintenancePasswordFile})
-      ${pkgs.openssl}/bin/openssl rand -base64 32 > ${maintenancePasswordFile}
-      chmod 640 ${maintenancePasswordFile}
-      chown root:${config.luxnix.generic-settings.sensitiveServiceGroupName} ${maintenancePasswordFile}
+      ${pkgs.coreutils}/bin/install -d -o postgres -g postgres -m 0700 \
+        "$(dirname ${endoregDbLocalPasswordFile})"
+      temporary_password_file="$(${pkgs.coreutils}/bin/mktemp \
+        "${endoregDbLocalPasswordFile}.tmp.XXXXXX")"
+      trap 'rm -f "$temporary_password_file"' EXIT
+      ${pkgs.openssl}/bin/openssl rand -base64 32 > "$temporary_password_file"
+      chown postgres:postgres "$temporary_password_file"
+      chmod 600 "$temporary_password_file"
+      mv -f "$temporary_password_file" ${endoregDbLocalPasswordFile}
+      trap - EXIT
     fi
 
-    # Ensure correct permissions on existing file
-    chmod 640 ${maintenancePasswordFile}
-    chown root:${config.luxnix.generic-settings.sensitiveServiceGroupName} ${maintenancePasswordFile}
-
-    # Copy password for PostgreSQL access
-    cp ${maintenancePasswordFile} ${endoregDbLocalPasswordFile}
+    # Ensure the protected application credential remains readable only by
+    # PostgreSQL and is never exposed through the legacy secret path.
     chown postgres:postgres ${endoregDbLocalPasswordFile}
     chmod 600 ${endoregDbLocalPasswordFile}
 
@@ -233,11 +254,9 @@ in
       description = "Set up endoregDbLocal PostgreSQL user password";
       after = [
         "postgresql.service"
-        "managed-secrets-setup.service"
       ];
       requires = [
         "postgresql.service"
-        "managed-secrets-setup.service"
       ];
       wantedBy = [ "multi-user.target" ];
       serviceConfig = {

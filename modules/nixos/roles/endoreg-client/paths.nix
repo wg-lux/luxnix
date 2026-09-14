@@ -16,6 +16,20 @@ with lib;
     default = "/mnt/endoreg-client-storage";
     description = "Mount point for persistent storage volume for endoreg client.";
   };
+  storagePersistingDeviceId = mkOption {
+    type = types.nullOr (types.strMatching "[A-Za-z0-9_+.:=-]+");
+    default =
+      let
+        legacy = lib.attrByPath [ "secretspec" "secrets" "STORAGE_PERSISTING_HDD_ID" ] "" config;
+      in
+      if legacy == "" then null else legacy;
+    description = "Host-owned /dev/disk/by-id basename for persistent external storage, without its partition suffix. Null enables discovery-only reporting: disconnected storage is normal, connected devices require enrollment before mounting. Never select a replacement disk automatically.";
+  };
+  storagePersistingDevicePart = mkOption {
+    type = types.strMatching "part[0-9]+";
+    default = lib.attrByPath [ "secretspec" "secrets" "STORAGE_PERSISTING_HDD_PART" ] "part1" config;
+    description = "Verified partition suffix for storagePersistingDeviceId.";
+  };
 
   storageBaseDir = mkOption {
     type = types.path;

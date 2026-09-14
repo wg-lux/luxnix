@@ -3,11 +3,12 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 import subprocess
+import sys
 from types import ModuleType
 from typing import Any
 
 import yaml
-
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 POLICY_PATH = REPO_ROOT / "nix-quality.yml"
@@ -168,9 +169,7 @@ def test_boot_decryption_outputs_have_a_safe_shared_renderer() -> None:
 def test_generated_devenv_flake_is_outside_source_scope() -> None:
     policy = _policy()
     runner = _load_runner()
-    files = {
-        str(path.relative_to(REPO_ROOT)) for path in runner.nix_files(policy)
-    }
+    files = {str(path.relative_to(REPO_ROOT)) for path in runner.nix_files(policy)}
 
     assert runner.is_excluded(".devenv.flake.nix", policy)
     assert ".devenv.flake.nix" not in files
@@ -215,22 +214,36 @@ def test_quality_tools_are_owned_by_both_development_environments() -> None:
         assert package in flake_shell
 
 
-def test_ci_runs_fast_checks_and_reserves_full_evaluation_for_ci() -> None:
+def test_ci_runs_full_evaluation_and_python_contracts_on_pull_requests() -> None:
     workflow = (REPO_ROOT / ".github/workflows/nix-quality.yml").read_text(
         encoding="utf-8"
     )
 
     assert "scripts/nix-quality.py --json" in workflow
     assert "scripts/nix-quality.py --full --json" in workflow
-    assert "github.event_name == 'schedule'" in workflow
     assert "workflow_dispatch" in workflow
+    jobs = yaml.safe_load(workflow)["jobs"]
+    assert "if" not in jobs["full"]
+    assert jobs["full"]["timeout-minutes"] > 0
+    python_job = jobs["python"]
+    assert "if" not in python_job
+    run = next(step["run"] for step in python_job["steps"] if "run" in step)
+    assert "uv run --locked pytest" in run
+    assert "tests feature-tracking/test_tracker.py" in run
+    artifact = python_job["steps"][-1]
+    assert artifact["if"] == "always()"
+    assert artifact["with"]["path"] == "luxnix-python-junit.xml"
+    mcp_job = jobs["mcp"]
+    assert "if" not in mcp_job
+    mcp_run = next(step for step in mcp_job["steps"] if "run" in step)
+    assert mcp_run["working-directory"] == "wg-lux-mcp"
+    assert "uv run --locked --extra dev pytest" in mcp_run["run"]
+    assert mcp_job["steps"][-1]["if"] == "always()"
 
 
 def test_flake_checker_is_ratcheted_in_fast_mode() -> None:
     policy = _policy()
-    runner_source = (REPO_ROOT / "scripts/nix-quality.py").read_text(
-        encoding="utf-8"
-    )
+    runner_source = (REPO_ROOT / "scripts/nix-quality.py").read_text(encoding="utf-8")
 
     assert not policy["checks"]["flake_checker"].get("full_only", False)
     assert '"flake_checker": count_flake_checker(policy)' in runner_source
@@ -241,7 +254,7 @@ def test_precommit_fast_gate_includes_flake_lock() -> None:
     devenv_source = (REPO_ROOT / "devenv.nix").read_text(encoding="utf-8")
     hook = devenv_source.split("    nix-quality = {", 1)[1].split("\n    };", 1)[0]
 
-    assert '^flake\\\\.lock$' in hook
+    assert "^flake\\\\.lock$" in hook
     assert "|modules|" in hook
     # The hook entry runs scripts/nix-quality.py, either directly or through a
     # wrapper defined elsewhere in devenv.nix that puts the quality tools on PATH.
@@ -272,13 +285,86 @@ def test_flake_checker_report_exposes_outdated_inputs(monkeypatch) -> None:
     ]
 
 
+@pytest.mark.parametrize(
+    "output",
+    [
+        "",
+        "WARNING: the `nixpkgs` input is 227 days old (the max allowed is 30)",
+        "no flake lockfile found; ignoring",
+        "discovered 1 issue\ndiscovered 0 issues",
+        "discovered 1 issue\nThe flake checker scanned your flake.lock "
+        "and didn't identify any issues.",
+    ],
+)
+def test_flake_checker_unknown_or_ambiguous_results_fail_closed(
+    monkeypatch, output
+) -> None:
+    runner = _load_runner()
+    policy = _policy()
+    monkeypatch.setattr(
+        runner,
+        "run",
+        lambda _command: subprocess.CompletedProcess(
+            args=[], returncode=0, stdout=output, stderr=""
+        ),
+    )
+
+    result = runner.count_flake_checker(policy)
+    report = _passing_report(policy)
+    report["flake_checker"] = result
+
+    assert result["issues"] is None
+    assert not result["command_ok"]
+    assert runner.evaluate_baselines(report, policy, full=False)
+
+
+def test_flake_checker_explicit_clean_summary_passes(monkeypatch) -> None:
+    runner = _load_runner()
+    monkeypatch.setattr(
+        runner,
+        "run",
+        lambda _command: subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout=(
+                "The flake checker scanned your flake.lock "
+                "and didn't identify any issues. All\nNixpkgs inputs:\n"
+            ),
+            stderr="",
+        ),
+    )
+
+    result = runner.count_flake_checker(_policy())
+
+    assert result["command_ok"]
+    assert result["issues"] == 0
+
+
+def test_flake_checker_uses_text_contract_inside_github_actions(monkeypatch) -> None:
+    runner = _load_runner()
+    policy = _policy()
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    policy["checks"]["flake_checker"]["command"] = [
+        sys.executable,
+        "-c",
+        "import os; print('annotation-only' if 'GITHUB_ACTIONS' in os.environ "
+        "else 'discovered 3 issues')",
+    ]
+
+    result = runner.count_flake_checker(policy)
+    report = _passing_report(policy)
+    report["flake_checker"] = result
+
+    assert result["command_ok"]
+    assert result["issues"] == 3
+    assert runner.evaluate_baselines(report, policy, full=False)
+
+
 def test_generator_quality_gate_is_non_evaluating_and_always_uploads_junit() -> None:
     workflow = (REPO_ROOT / ".github/workflows/nix-quality.yml").read_text(
         encoding="utf-8"
     )
-    generator_job = workflow.split("  generators:\n", 1)[1].split(
-        "\n  full:\n", 1
-    )[0]
+    generator_job = workflow.split("  generators:\n", 1)[1].split("\n  full:\n", 1)[0]
 
     assert "name: Generated Nix renderer contracts" in generator_job
     assert "nix develop .#default --command uv run pytest -q" in generator_job
@@ -335,9 +421,9 @@ def test_generator_quality_task_and_documentation_share_the_61_test_contract() -
 
 
 def test_postgresql_service_settings_are_defined_once() -> None:
-    module = (
-        REPO_ROOT / "modules/nixos/services/postgres/default.nix"
-    ).read_text(encoding="utf-8")
+    module = (REPO_ROOT / "modules/nixos/services/postgres/default.nix").read_text(
+        encoding="utf-8"
+    )
 
     assert module.count("settings = {") == 1
 
@@ -352,9 +438,9 @@ def test_vfio_uses_the_defined_libvirt_run_as_root_option() -> None:
 
 
 def test_custom_packages_combines_podman_flags_booleanly() -> None:
-    module = (
-        REPO_ROOT / "modules/nixos/roles/custom-packages/default.nix"
-    ).read_text(encoding="utf-8")
+    module = (REPO_ROOT / "modules/nixos/roles/custom-packages/default.nix").read_text(
+        encoding="utf-8"
+    )
 
     podman_expression = module.split("podmanEnabled =", 1)[1].split(";", 1)[0]
     assert podman_expression.count("||") == 2

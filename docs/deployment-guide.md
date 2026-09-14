@@ -130,29 +130,13 @@ On the control machine:
 8. If the entry point imports `disks.nix`, confirm its disk identifiers match
    the target hardware.
 
-## 3. Optional: bootstrap vault/secrets
+## 3. Prepare managed admin credentials
 
-If your host relies on managed secrets:
-
-```bash
-# Create local password mapping from tracked example
-mkdir -p ansible/secrets
-cp ansible/admin-passwords.example.yml ansible/secrets/admin-passwords.yml
-
-# Bootstrap vault and export per-host encrypted secrets
-devenv shell vault-bootstrap \
-  --admin-passwords ansible/secrets/admin-passwords.yml \
-  --export
-```
-
-Validate admin passwords (optional):
-
-```bash
-devenv shell validate-admin-passwords \
-  --vault-dir ~/.lxv \
-  --vault-key ~/.lxv.key \
-  --admin-passwords ansible/secrets/admin-passwords.yml
-```
+Follow [Admin Password Creation and Rotation](admin-passwords.md) for private
+input creation, paired import, mandatory validation and encrypted export.
+For a new installation, follow its runtime-hash staging procedure before first
+activation. A missing hash fails activation; no shared fallback is installed.
+For an existing account, use its scoped rotation workflow and acceptance checks.
 
 ## 4. Preflight checks
 
@@ -182,8 +166,11 @@ installer deployment from a failed or stale result.
 
 ## 5. Deploy with nixos-anywhere
 
+Use the protected staging tree from the [admin password guide](admin-passwords.md#6-install-on-a-new-machine).
+Confirm the exact target and destructive install scope before running:
+
 ```bash
-nixos-anywhere --flake ".#<host>" nixos@<target-ip>
+nixos-anywhere --extra-files <staging-root> --flake ".#<host>" nixos@<target-ip>
 ```
 
 ### Deployment failure and recovery

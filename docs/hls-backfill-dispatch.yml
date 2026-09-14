@@ -1,0 +1,27 @@
+schema_version: 1
+scope: LX-Annotate queued HLS backfill
+source:
+  repository: /home/admin/luxnix
+  branch: lx-annotate_ollama
+  recovery_merge: fd8a8937702703ff2cf255a80f0db683bde20887
+  flake_lock_sha256: aac5cc82ffc23649a62dde7fd515b1a2f7131e816e6c69cdb075866380ca8d36
+  target: gc-10
+  lx_annotate_version: 1.2.3
+  wheel_digest: sha256-5UkRdJDjc2jhZlM56CmuD+moyr1muE0cTCjhMdANM6Q=
+dispatch:
+  default_artifact_kind: both
+  owner: endoreg_db.management.commands.materialize_video_hls
+  behavior: >-
+    Invoke the application once so its processed-video pass, including
+    annotation-aware video ordering, completes before its raw-video pass.
+    Explicit --artifact-kind selections remain supported.
+  queue: ffmpeg_media
+limitations:
+  - Existing broker deliveries are not reordered or removed by this change.
+  - The verified source hash cache is process-local; worker recycling clears it.
+  - Worker concurrency, resource limits, encryption and GPU policy are unchanged.
+verification:
+  regression: tests/lx-annotate/test_hls_startup_ordering.py
+  deployment_acceptance: >-
+    After an operator activates the generation, verify the deployed wrapper,
+    worker queue, successful web startup and a completed playable HLS artifact.

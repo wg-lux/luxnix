@@ -21,6 +21,16 @@ let
     ;
 
   runtime = lxAnnotateRuntime;
+  llmWorkerMode = if cfg.runtime.llm.enable then cfg.runtime.llmInferenceWorker.mode else "manual";
+  useLocalOllama =
+    cfg.runtime.llm.enable
+    && cfg.runtime.llm.provider == "ollama"
+    && builtins.elem cfg.runtime.llm.baseUrl [
+      "http://127.0.0.1:11434"
+      "http://127.0.0.1:11434/"
+      "http://[::1]:11434"
+      "http://[::1]:11434/"
+    ];
   inherit (runtime.identities)
     endoreg-service-user-name
     endoreg-service-user-home
@@ -84,10 +94,40 @@ let
   endoregDbRevision = endoregDbSource.rev or "unversioned";
   hubTransferHttpTimeout = "${toString cfg.hub.transferApi.httpTimeoutSeconds}s";
 
+  hubCrlPython = pkgs.python3.withPackages (ps: [ ps.cryptography ]);
+  hubCrlPublishScript = pkgs.writeShellScript "publish-hub-crl" ''
+    set -euo pipefail
+    ready=/run/luxnix-hub-crl/ready
+    # Serialize bootstrap and timer runs through publication, reload and gate.
+    exec 9>/var/lib/luxnix-hub-crl/.refresh.lock
+    ${pkgs.util-linux}/bin/flock 9
+    trap '${pkgs.coreutils}/bin/rm -f "$ready"' ERR
+    ${hubCrlPython}/bin/python ${../../../../scripts/vault/publish-hub-crl.py} \
+      ${
+        lib.concatMapStringsSep " " (url: "--url ${lib.escapeShellArg url}") cfg.hub.transferApi.crlUrls
+      } \
+      --tls-ca ${lib.escapeShellArg (toString cfg.hub.transferApi.crlTlsCaFile)} \
+      --client-ca ${lib.escapeShellArg (toString cfg.hub.transferApi.clientCaFile)} \
+      --output ${lib.escapeShellArg cfg.hub.transferApi.clientCrlFile} \
+      --max-age-seconds ${toString cfg.hub.transferApi.crlMaxAgeSeconds}
+    # Startup is ordered before Nginx: do not enqueue a reload while its
+    # initial start is waiting for this unit. Periodic refresh reloads it.
+    if [ "$#" -eq 0 ] && ${pkgs.systemd}/bin/systemctl is-active --quiet nginx.service; then
+      ${pkgs.systemd}/bin/systemctl reload nginx.service
+    fi
+    ${pkgs.coreutils}/bin/touch "$ready"
+  '';
+
   hubTransferProxyExtraConfig = ''
     # The shared virtual host also serves browser traffic, so client
     # certificates are requested at server scope and enforced only here.
     # Reject before reading or proxying a transfer request body.
+    # This runtime gate closes even on already-established connections when
+    # an authenticated refresh or Nginx reload fails.
+    if (!-f /run/luxnix-hub-crl/ready) {
+      return 503;
+    }
+    keepalive_requests 1;
     if ($ssl_client_verify != SUCCESS) {
       return 403;
     }
@@ -131,6 +171,11 @@ let
     lib.concatStringsSep "\n" wheelDependencyOverrides
   );
 
+  wheelDowngradeGuard = pkgs.runCommand "lx-annotate-wheel-downgrade-guard" { } ''
+    mkdir -p "$out"
+    cp ${./scripts/wheel-downgrade-guard.py} "$out/guard.py"
+    cp ${../../../../lx_administration/utils/file_operations.py} "$out/wheel_guard_file_operations.py"
+  '';
   wheelRuntimePackage = pkgs.runCommand "lx-annotate-wheel-runtime-${packageVersion}" { } ''
     mkdir -p "$out/bin" "$out/libexec" "$out/share/lx-annotate"
     ln -s ${lib.escapeShellArg runtimeStaticRootPath} "$out/share/lx-annotate/staticfiles"
@@ -252,9 +297,11 @@ let
       local install_hash=""
       local installed_package_version=""
       local install_allowed="''${LX_ANNOTATE_WHEEL_INSTALL_ALLOWED:-true}"
-      local wheel_installer_revision="wheel-console-contract-v6-version-verified"
+      local wheel_installer_revision="wheel-console-contract-v7-downgrade-guard"
       local venv_created="false"
       local pip_cache_dir=${lib.escapeShellArg "${runtimeRootPath}/pip-cache"}
+      local application_constraints=${lib.escapeShellArg "${runtimeRootPath}/.wheel-application.constraints"}
+      local override_constraints=${lib.escapeShellArg "${runtimeRootPath}/.wheel-overrides.constraints"}
 
       if [ -z "$wheel_path" ]; then
         echo "ERROR: services.luxnix.lxAnnotateLocal.runtime.wheelPath must be set in wheel mode." >&2
@@ -326,12 +373,19 @@ let
         install -m 0640 "$wheel_path" "$staged_wheel_path"
         export PIP_CACHE_DIR="$pip_cache_dir"
         export PIP_DISABLE_PIP_VERSION_CHECK=1
+        # Resolve both install steps before changing the shared environment.
         # shellcheck disable=SC2086
-        ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/pip"} install --upgrade $pip_install_args "$staged_wheel_path"
-        ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/pip"} install --force-reinstall --no-deps "$staged_wheel_path"
+        ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/python"} ${wheelDowngradeGuard}/guard.py \
+          --wheel "$staged_wheel_path" --expected-version "$expected_package_version" \
+          --overrides-json ${lib.escapeShellArg (builtins.toJSON wheelDependencyOverrides)} \
+          --application-constraints "$application_constraints" --override-constraints "$override_constraints" \
+          -- $pip_install_args
+        # shellcheck disable=SC2086
+        ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/pip"} install --upgrade $pip_install_args "$staged_wheel_path" --constraint "$application_constraints"
+        ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/pip"} install --force-reinstall --no-deps "$staged_wheel_path" --constraint "$application_constraints"
         if [ -n "$wheel_dependency_overrides" ]; then
           # shellcheck disable=SC2086
-          ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/pip"} install --upgrade --no-deps $pip_install_args $wheel_dependency_overrides
+          ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/pip"} install --upgrade --no-deps $pip_install_args $wheel_dependency_overrides --force-reinstall --constraint "$override_constraints"
         fi
       fi
 
@@ -361,10 +415,11 @@ let
       local package_static_dir=""
 
       package_static_dir="$(${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/python"} - <<'PY'
+    from importlib.metadata import distribution
     from pathlib import Path
-    import lx_annotate
 
-    package_root = Path(lx_annotate.__file__).resolve().parent
+    # Importing lx_annotate initializes Django and prints startup messages.
+    package_root = Path(distribution("lx-annotate").locate_file("lx_annotate")).resolve()
     for candidate in (package_root / "staticfiles", package_root / "static"):
         if candidate.exists():
             print(candidate)
@@ -527,6 +582,136 @@ let
       (lib.makeLibraryPath (runtimeLibraryPackages ++ [ pkgs.ffmpeg ]))
     ]
   );
+  monitoringDeploymentRevision =
+    if cfg.runtime.monitoring.deploymentRevision != null then
+      cfg.runtime.monitoring.deploymentRevision
+    else
+      lxAnnotateSource.rev or null;
+  monitoringConfig = pkgs.writeText "lx-annotate-monitoring-config-v1.json" (
+    builtins.toJSON {
+      schema_version = 1;
+      deployment_revision = monitoringDeploymentRevision;
+      systemctl_path = "${pkgs.systemd}/bin/systemctl";
+      systemctl_timeout_seconds = cfg.runtime.monitoring.systemctlTimeoutSeconds;
+      disk_warning_free_percent = cfg.runtime.monitoring.diskWarningFreePercent;
+      disk_error_free_percent = cfg.runtime.monitoring.diskErrorFreePercent;
+      pending_warning_seconds = cfg.runtime.monitoring.pendingWarningSeconds;
+      recent_failure_window_seconds = cfg.runtime.monitoring.recentFailureWindowSeconds;
+      services = [
+        {
+          key = "web";
+          unit = "lx-annotate.service";
+          required = true;
+        }
+        {
+          key = "worker_default";
+          unit = "lx-annotate-celery-worker.service";
+          required = true;
+        }
+        {
+          key = "worker_pipeline";
+          unit = "lx-annotate-celery-pipeline-worker.service";
+          required = true;
+        }
+        {
+          key = "scheduler";
+          unit = "lx-annotate-celery-beat.service";
+          required = true;
+        }
+        {
+          key = "reverse_proxy";
+          unit = "nginx.service";
+          required = true;
+        }
+      ]
+      ++ lib.optionals (cfg.runtime.ffmpegWorker.mode == "always") [
+        {
+          key = "worker_ffmpeg";
+          unit = "lx-annotate-celery-ffmpeg-worker.service";
+          required = true;
+        }
+      ]
+      ++ lib.optionals (cfg.runtime.frameExtractionWorker.mode != "manual") [
+        {
+          key = "worker_frame_extraction";
+          unit =
+            if cfg.runtime.frameExtractionWorker.mode == "always" then
+              "lx-annotate-celery-frame-extraction-worker.service"
+            else
+              "lx-annotate-celery-frame-extraction-worker.timer";
+          required = true;
+        }
+      ]
+      ++ lib.optionals (cfg.runtime.inferenceWorker.mode == "always") [
+        {
+          key = "worker_inference";
+          unit = "lx-annotate-celery-inference-worker.service";
+          required = true;
+        }
+      ]
+      ++ lib.optionals (cfg.runtime.trainingWorker.mode == "always") [
+        {
+          key = "worker_training";
+          unit = "lx-annotate-celery-training-worker.service";
+          required = true;
+        }
+      ]
+      ++ lib.optionals (llmWorkerMode == "always") [
+        {
+          key = "worker_llm_inference";
+          unit = "lx-annotate-celery-llm-inference-worker.service";
+          required = true;
+        }
+      ]
+      ++ lib.optionals (!externalRedisConfigured) [
+        {
+          key = "broker";
+          unit = "redis-lx-annotate.service";
+          required = true;
+        }
+      ]
+      ++ lib.optionals (!externalPostgresConfigured) [
+        {
+          key = "database";
+          unit = "postgresql.service";
+          required = true;
+        }
+      ];
+      storage = [
+        {
+          key = "protected_data";
+          path = envDataDir;
+          required = true;
+          writable = true;
+        }
+        {
+          key = "application_storage";
+          path = runtimeStorageRootPath;
+          required = true;
+          writable = true;
+        }
+        {
+          key = "import_intake";
+          path = runtimeIoImportRootPath;
+          required = true;
+          writable = true;
+        }
+        {
+          key = "hls_raw";
+          path = runtimeStreamableVideoRawRootPath;
+          required = true;
+          writable = true;
+        }
+        {
+          key = "hls_processed";
+          path = runtimeStreamableVideoProcessedRootPath;
+          required = true;
+          writable = true;
+        }
+      ];
+    }
+  );
+  monitoringConfigFile = "/etc/lx-annotate/monitoring.json";
   envContract = import ./scripts/env.nix (
     args
     // {
@@ -534,6 +719,7 @@ let
         effectivePackageVersion
         packageStaticRoot
         runtimeLdLibraryPath
+        monitoringConfigFile
         ;
     }
   );
@@ -998,6 +1184,7 @@ let
       mode = cfg.runtime.ffmpegWorker.mode;
       timeoutStopSec = cfg.runtime.ffmpegWorker.timeoutStopSec;
       environment = postValidationWorkerEnv;
+      cudaVisibleDevices = cfg.runtime.ffmpegWorker.cudaVisibleDevices;
     };
     inference = mkWorker {
       unitName = "lx-annotate-celery-inference-worker";
@@ -1022,11 +1209,11 @@ let
       hostname = "llm-inference";
       queues = [ "llm_inference" ];
       pool = cfg.runtime.workerPools.llmInference;
-      mode = cfg.runtime.llmInferenceWorker.mode;
+      mode = llmWorkerMode;
       environment = llmInferenceWorkerEnv;
-      after = [ "ollama.service" ];
-      wants = [ "ollama.service" ];
-      requires = [ "ollama.service" ];
+      after = lib.optional useLocalOllama "ollama.service";
+      wants = lib.optional useLocalOllama "ollama.service";
+      requires = lib.optional useLocalOllama "ollama.service";
     };
   };
   alwaysWorkerServiceUnits = lib.mapAttrsToList (_: workerCfg: "${workerCfg.unitName}.service") (
@@ -1656,7 +1843,22 @@ in
         {
           environment.systemPackages = [ lxAnnotateMigrateVideoStreamableStorageScript ];
 
+          environment.etc."lx-annotate/monitoring.json" = mkIf cfg.runtime.monitoring.enable {
+            source = monitoringConfig;
+            mode = "0444";
+          };
+
           assertions = [
+            {
+              assertion =
+                !cfg.hub.transferApi.enable
+                || (
+                  cfg.hub.transferApi.crlTlsCaFile != null
+                  && cfg.hub.transferApi.crlUrls != [ ]
+                  && lib.all (url: lib.hasPrefix "https://" url) cfg.hub.transferApi.crlUrls
+                );
+              message = "Hub transfer requires authenticated HTTPS CRL endpoints and an independently provisioned crlTlsCaFile.";
+            }
             {
               assertion = cfg.hlsBackfill.enable;
               message = "services.luxnix.lxAnnotateLocal.hlsBackfill.enable must remain true because raw and processed HLS are mandatory playback prerequisites.";
@@ -1682,8 +1884,8 @@ in
               message = "services.luxnix.lxAnnotateLocal.runtime.clustered.enable requires runtime.externalServices.redisUrl.";
             }
             {
-              assertion = cfg.runtime.llmInferenceWorker.mode != "always" || config.services.luxnix.ollama.enable;
-              message = "services.luxnix.lxAnnotateLocal.runtime.llmInferenceWorker.mode = \"always\" requires services.luxnix.ollama.enable = true.";
+              assertion = llmWorkerMode != "always" || !useLocalOllama || config.services.luxnix.ollama.enable;
+              message = "services.luxnix.lxAnnotateLocal.runtime.llmInferenceWorker.mode = \"always\" requires services.luxnix.ollama.enable = true when using local Ollama.";
             }
             {
               assertion =
@@ -1706,6 +1908,25 @@ in
             {
               assertion = !(builtins.hasAttr "CELERY_VISIBILITY_TIMEOUT_SECONDS" cfg.runtime.extraEnvironment);
               message = "Set runtime.celeryBroker.visibilityTimeoutSeconds instead of overriding CELERY_VISIBILITY_TIMEOUT_SECONDS through runtime.extraEnvironment.";
+            }
+            {
+              assertion = !(builtins.hasAttr "ENDOREG_HLS_ENCODING_PROFILE" cfg.runtime.extraEnvironment);
+              message = "Set runtime.hlsEncodingProfile instead of overriding ENDOREG_HLS_ENCODING_PROFILE through runtime.extraEnvironment.";
+            }
+            {
+              assertion = !(builtins.hasAttr "LX_ANNOTATE_MONITORING_CONFIG_FILE" cfg.runtime.extraEnvironment);
+              message = "LX_ANNOTATE_MONITORING_CONFIG_FILE is generated from runtime.monitoring and cannot be overridden through runtime.extraEnvironment.";
+            }
+            {
+              assertion =
+                cfg.runtime.monitoring.diskErrorFreePercent < cfg.runtime.monitoring.diskWarningFreePercent;
+              message = "runtime.monitoring.diskErrorFreePercent must be lower than diskWarningFreePercent.";
+            }
+            {
+              assertion =
+                cfg.runtime.hlsEncodingProfile != "clinical_h264_nvenc_cq_v1"
+                || cfg.runtime.ffmpegWorker.cudaVisibleDevices != null;
+              message = "services.luxnix.lxAnnotateLocal.runtime.hlsEncodingProfile = \"clinical_h264_nvenc_cq_v1\" requires runtime.ffmpegWorker.cudaVisibleDevices to isolate one GPU.";
             }
             {
               assertion = cfg.runtime.deploymentRole != "central_hub" || cfg.hub.enable;
@@ -2179,7 +2400,7 @@ in
                   );
                 };
               };
-              ollama.enable = mkIf (cfg.runtime.llmInferenceWorker.mode == "always") (mkDefault true);
+              ollama.enable = mkIf (llmWorkerMode == "always" && useLocalOllama) (mkDefault true);
               fileMover = {
                 serviceDependencies = {
                   after = mkAfter fileMoverAfter;
@@ -2239,6 +2460,11 @@ in
                 + optionalString cfg.hub.transferApi.enable ''
                   ssl_verify_client optional;
                   ssl_client_certificate ${toString cfg.hub.transferApi.clientCaFile};
+                  ssl_crl ${cfg.hub.transferApi.clientCrlFile};
+                  # Resumed TLS sessions can retain an earlier verification
+                  # result. Force new verification after a CRL refresh.
+                  ssl_session_cache off;
+                  ssl_session_tickets off;
                 '';
                 locations = {
                   "/static/" = {
@@ -2246,8 +2472,7 @@ in
                     extraConfig = "expires 30d; add_header Cache-Control 'public';";
                   };
                   "/media/" = {
-                    alias = "${envDataDir}/";
-                    extraConfig = "sendfile on; tcp_nopush on;";
+                    extraConfig = "return 404;";
                   };
                   "/protected_media/" = {
                     alias = "${runtimeStorageRootPath}/";
@@ -2337,6 +2562,77 @@ in
           '';
 
           systemd = {
+            services = {
+              luxnix-hub-crl = mkIf cfg.hub.transferApi.enable {
+                description = "Refresh authenticated hub CRLs and close transfers on failure";
+                after = [
+                  "network-online.target"
+                ]
+                ++ lib.optionals config.luxnix.vault.server.enable [ "vault.service" ]
+                ++ lib.optionals config.luxnix.vault.server.hubPki.enable [
+                  "luxnix-vault-publish-hub-client-ca.service"
+                ];
+                wants = [ "network-online.target" ];
+                requires = lib.optionals config.luxnix.vault.server.hubPki.enable [
+                  "luxnix-vault-publish-hub-client-ca.service"
+                ];
+                serviceConfig = {
+                  Type = "oneshot";
+                  ExecStart = hubCrlPublishScript;
+                  ExecStopPost = pkgs.writeShellScript "hub-crl-failure-gate" ''
+                    if [ "$SERVICE_RESULT" != success ]; then
+                      ${pkgs.coreutils}/bin/rm -f /run/luxnix-hub-crl/ready
+                    fi
+                  '';
+                  StateDirectory = "luxnix-hub-crl";
+                  StateDirectoryMode = "0755";
+                  RuntimeDirectory = "luxnix-hub-crl";
+                  RuntimeDirectoryMode = "0755";
+                  RuntimeDirectoryPreserve = true;
+                  TimeoutStartSec = "90s";
+                  UMask = "0022";
+                };
+              };
+              luxnix-hub-crl-bootstrap = mkIf cfg.hub.transferApi.enable {
+                description = "Require an authenticated CRL before starting Nginx";
+                wants = [ "network-online.target" ];
+                before = [ "nginx.service" ];
+                after = [
+                  "network-online.target"
+                ]
+                ++ lib.optionals config.luxnix.vault.server.enable [ "vault.service" ]
+                ++ lib.optionals config.luxnix.vault.server.hubPki.enable [
+                  "luxnix-vault-publish-hub-client-ca.service"
+                ];
+                requires = lib.optionals config.luxnix.vault.server.hubPki.enable [
+                  "luxnix-vault-publish-hub-client-ca.service"
+                ];
+                serviceConfig = {
+                  Type = "oneshot";
+                  RemainAfterExit = true;
+                  ExecStart = "${hubCrlPublishScript} --bootstrap";
+                  StateDirectory = "luxnix-hub-crl";
+                  StateDirectoryMode = "0755";
+                  RuntimeDirectory = "luxnix-hub-crl";
+                  RuntimeDirectoryMode = "0755";
+                  RuntimeDirectoryPreserve = true;
+                  TimeoutStartSec = "90s";
+                };
+              };
+              nginx = mkIf cfg.hub.transferApi.enable {
+                requires = [ "luxnix-hub-crl-bootstrap.service" ];
+                after = [ "luxnix-hub-crl-bootstrap.service" ];
+              };
+
+            };
+            timers.luxnix-hub-crl = mkIf cfg.hub.transferApi.enable {
+              wantedBy = [ "timers.target" ];
+              timerConfig = {
+                OnBootSec = "30s";
+                OnUnitInactiveSec = "60s";
+                AccuracySec = "1s";
+              };
+            };
             tmpfiles.rules =
               lib.optional streamableExternalStorageEnabled "d ${streamableExternalStorageRoot} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
               ++ [

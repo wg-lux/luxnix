@@ -99,6 +99,12 @@ lib.foldl' lib.recursiveUpdate
       roles.endoreg-client.defaultCenterKey = "rbk_stuttgart";
     }
     {
+      roles.endoreg-client.paths.storagePersistingDeviceId = "usb-Seagate_Expansion_HDD_00000000NT197WLC-0:0";
+    }
+    {
+      roles.endoreg-client.paths.storagePersistingDevicePart = "part3";
+    }
+    {
       services.luxnix.lxAnnotateLocal.hub.nodeProvisioning.enable = true;
     }
     {
@@ -129,7 +135,16 @@ lib.foldl' lib.recursiveUpdate
       services.luxnix.lxAnnotateLocal.hub.outboundTransfer.requireMtls = true;
     }
     {
+      services.luxnix.lxAnnotateLocal.runtime.ffmpegWorker.cudaVisibleDevices = "0";
+    }
+    {
+      services.luxnix.lxAnnotateLocal.runtime.hlsEncodingProfile = "clinical_h264_nvenc_cq_v1";
+    }
+    {
       services.luxnix.lxAnnotateLocal.runtime.mode = "wheel";
+    }
+    {
+      services.luxnix.lxAnnotateLocal.runtime.monitoring.enable = true;
     }
     {
       services.wg-lux-mcp.enable = true;

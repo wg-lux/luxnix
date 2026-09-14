@@ -422,10 +422,19 @@ class FeatureResolver:
     def get_feature_status(self, provider: str, feature_id: str) -> dict[str, object]:
         specification = self._specification(provider, feature_id)
         projection = self.ledger.load_projection(provider, feature_id)
+        deployed_subject = self._deployed_subject(provider, feature_id)
         groups: dict[str, list[str]] = {state: [] for state in ASSESSMENT_STATES}
+        stale_requirement_ids: list[str] = []
         for requirement in specification.definition_of_done:
             assessment = projection.requirements.get(requirement.id)
             status = assessment.status if assessment is not None else "not_assessed"
+            if (
+                status == "verified"
+                and assessment is not None
+                and not self._assessment_matches_deployment(assessment, deployed_subject)
+            ):
+                status = "not_assessed"
+                stale_requirement_ids.append(requirement.id)
             groups[status].append(requirement.id)
         required_ids = {item.id for item in specification.definition_of_done if item.required}
         if any(item in required_ids for item in groups["blocked"]):
@@ -444,6 +453,8 @@ class FeatureResolver:
             "verified_requirement_ids": groups["verified"],
             "in_progress_requirement_ids": groups["in_progress"],
             "blocked_requirement_ids": groups["blocked"],
+            "not_assessed_requirement_ids": groups["not_assessed"],
+            "stale_requirement_ids": stale_requirement_ids,
             "current_objective": (
                 projection.current_work.objective if projection.current_work is not None else None
             ),
@@ -466,10 +477,24 @@ class FeatureResolver:
         assessment = self.ledger.load_projection(provider, feature_id).requirements.get(
             requirement_id
         )
+        assessment_view = assessment.model_dump(mode="json") if assessment else None
+        if assessment is not None and assessment_view is not None:
+            matches = self._assessment_matches_deployment(
+                assessment, self._deployed_subject(provider, feature_id)
+            )
+            assessment_view["matches_deployed_subject"] = matches
+            assessment_view["recorded_status"] = assessment.status
+            if assessment.status == "verified" and not matches:
+                assessment_view["status"] = "not_assessed"
+                assessment_view["invalidation_reason"] = (
+                    "missing_provenance"
+                    if assessment.subject is None or assessment.subject.nix_store_path is None
+                    else "deployment_changed"
+                )
         return {
             "feature": {"provider": provider, "id": feature_id},
             "requirement": requirement.model_dump(mode="json"),
-            "assessment": assessment.model_dump(mode="json") if assessment else None,
+            "assessment": assessment_view,
         }
 
     def get_current_work(self, provider: str, feature_id: str) -> dict[str, object]:
@@ -507,6 +532,21 @@ class FeatureResolver:
 
     def get_deployed_feature_subject(self, provider: str, feature_id: str) -> dict[str, object]:
         self._specification(provider, feature_id)
+        return self._deployed_subject(provider, feature_id).model_dump(mode="json")
+
+    @staticmethod
+    def _assessment_matches_deployment(
+        assessment: RequirementProjection, deployed_subject: DeployedSubject
+    ) -> bool:
+        # Semantic feature identity survives deployment changes; verification
+        # does not. Preserve historical evidence without certifying a new build.
+        return (
+            assessment.subject is not None
+            and assessment.subject.nix_store_path is not None
+            and assessment.subject == deployed_subject
+        )
+
+    def _deployed_subject(self, provider: str, feature_id: str) -> DeployedSubject:
         descriptor = self._provider(provider)
         return DeployedSubject(
             provider=provider,
@@ -516,7 +556,7 @@ class FeatureResolver:
             revision=descriptor.revision,
             version=descriptor.version,
             system_generation=descriptor.system_generation,
-        ).model_dump(mode="json")
+        )
 
 
 def deployed_resolver(registry_path: Path, state_root: Path) -> FeatureResolver:

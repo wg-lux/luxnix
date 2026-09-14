@@ -54,6 +54,28 @@ def test_streamable_video_directories_are_provisioned_and_migration_is_exposed()
     assert "lx-annotate-video-streamable-migration" in readme
 
 
+def test_nginx_media_requires_application_authorization():
+    source = CONFIG_NIX.read_text(encoding="utf-8")
+
+    def location_body(path: str) -> str:
+        return source.split(f'"{path}" = {{', 1)[1].split("\n                  };", 1)[0]
+
+    # Deny legacy direct URLs even when the attacker knows a patient filename.
+    legacy_media = location_body("/media/")
+    assert 'return 404;' in legacy_media
+    assert "alias =" not in legacy_media
+    assert 'alias = "${envDataDir}/";' not in source
+
+    # Application-approved X-Accel-Redirect responses retain the internal path.
+    protected_media = location_body("/protected_media/")
+    assert 'alias = "${runtimeStorageRootPath}/";' in protected_media
+    assert "internal;" in protected_media
+    for prefix in ("/api/media/videos/", "/endoreg-api/media/videos/"):
+        video_route = location_body(prefix)
+        assert 'proxyPass = "http://127.0.0.1:${toString cfg.django.port}";' in video_route
+        assert "videoStreamProxyExtraConfig" in video_route
+
+
 def test_optional_streamable_bind_mount_is_top_level_and_null_lazy():
     config_source = CONFIG_NIX.read_text(encoding="utf-8")
 

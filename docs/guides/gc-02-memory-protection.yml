@@ -1,0 +1,52 @@
+schema_version: 1
+host: gc-02
+canonical_input: ansible/inventory/host_vars/gc-02.yml
+generated_output: systems/x86_64-linux/gc-02/default.nix
+reason: >-
+  The September 9, 2026 hang and the preceding day's hang showed sustained
+  memory pressure before reboot. VS Code extension hosts became unresponsive,
+  but no process-level history proves which workload initiated the pressure.
+  oomd was active without monitoring the desktop workload's ancestor slices.
+policy:
+  implementation: NixOS systemd.oomd.enableUserSlices
+  memory_pressure:
+    system_slice: user.slice
+    user_manager_slices: All user-owned slices through the upstream slice drop-in.
+    action: kill
+    limit_percent: 80
+    duration_seconds: 30
+    defaults: Threshold and duration follow the locked NixOS and systemd defaults.
+  swap_pressure:
+    monitored_slice: user.slice
+    action: kill
+    system_memory_and_swap_used_limit_percent: 90
+    defaults: Threshold follows the locked systemd default.
+  scope: User workloads on gc-02; no fleet-wide or system-service policy change.
+  consequence: >-
+    oomd kills all processes in a selected eligible descendant cgroup. Unsaved
+    work can be lost, and applications sharing a session scope may be killed
+    together, including the desktop session. This is recovery from sustained
+    pressure, not a fix for a memory leak or a guarantee against all hangs.
+  application_isolation: >-
+    Prefer separate systemd user service or scope units for heavy applications
+    so recovery can target them independently. This change does not rearrange
+    existing sessions or change application launchers.
+deployment:
+  workflow: docs/deployment-guide.md
+  activation: Requires a separately authorized gc-02 deployment from the reviewed checkout.
+verification:
+  configuration:
+    - "nix eval '.#nixosConfigurations.gc-02.config.system.build.toplevel.drvPath'"
+    - "nix eval --json '.#nixosConfigurations.gc-02.config.systemd.slices.user.sliceConfig'"
+  after_activation:
+    - "systemctl is-active systemd-oomd.service"
+    - "systemctl show user.slice -p ManagedOOMMemoryPressure -p ManagedOOMMemoryPressureLimit -p ManagedOOMSwap"
+    - "oomctl dump --no-pager"
+    - "journalctl -u systemd-oomd --since today --no-pager"
+  acceptance: >-
+    user.slice appears in both memory-pressure and swap monitored cgroups;
+    ManagedOOMMemoryPressure and ManagedOOMSwap are kill. Review actual
+    application cgroup placement and any oomd kills after normal workload use.
+  destructive_tests: Do not exhaust memory on the workstation to test the policy.
+references:
+  - https://www.freedesktop.org/software/systemd/man/latest/systemd-oomd.service.html

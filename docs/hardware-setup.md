@@ -103,7 +103,7 @@ Alias equivalents:
 
 ## Password/secret path note
 
-If your setup uses managed admin passwords, follow [Vault Setup](./vault-setup.md).
+If your setup uses managed admin passwords, follow [Admin Password Creation and Rotation](./admin-passwords.md).
 Do not rely on undocumented local paths like `etc/user-password/files`.
 
 ## Boot decryption setup

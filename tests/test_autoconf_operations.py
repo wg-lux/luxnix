@@ -280,3 +280,175 @@ def test_private_report_has_no_second_default_config_path() -> None:
     source = (REPO_ROOT / "scripts/generate-cmdb-report.py").read_text(encoding="utf-8")
 
     assert 'DEFAULT_CONFIG_PATH = REPO_ROOT / "autoconf/config.yml"' not in source
+
+
+def _run_private_report(tmp_path, payload):
+    facts_dir = tmp_path / "facts"
+    facts_dir.mkdir(exist_ok=True)
+    (facts_dir / "node-01.json").write_text(json.dumps(payload))
+    output = tmp_path / "report/index.html"
+    result = subprocess.run(
+        [
+            sys.executable,
+            REPO_ROOT / "scripts/generate-cmdb-report.py",
+            "--facts-dir",
+            facts_dir,
+            "--output",
+            output,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result, output
+
+
+def test_private_report_exposes_static_observation_age_and_unknown_timestamp(tmp_path):
+    result, output = _run_private_report(
+        tmp_path,
+        {
+            "ansible_facts": {
+                "ansible_distribution": "NixOS",
+                "ansible_date_time": {"epoch": "946684800"},
+                "ansible_memtotal_mb": "2048",
+                "ansible_processor_vcpus": "4",
+            }
+        },
+    )
+    assert result.returncode == 0, result.stderr
+    report = output.read_text()
+    assert "Generated at " in report
+    assert "2000-01-01T00:00:00+00:00" in report
+    assert "seconds at generation" in report
+    assert "Static inventory snapshot, not live health or availability" in report
+    assert "No clinical" in report
+    assert "<td>4</td><td>2.0</td>" in report
+    result, output = _run_private_report(
+        tmp_path,
+        {
+            "ansible_facts": {
+                "ansible_distribution": "NixOS",
+            }
+        },
+    )
+    assert result.returncode == 0, result.stderr
+    assert "<td>unknown</td><td>unknown</td>" in output.read_text()
+
+
+def test_private_report_marks_future_observation_as_clock_skew(tmp_path):
+    result, output = _run_private_report(
+        tmp_path,
+        {
+            "ansible_facts": {
+                "ansible_date_time": {"epoch": "4102444800"},
+            }
+        },
+    )
+    assert result.returncode == 0, result.stderr
+    assert "clock skew: observation is in the future" in output.read_text()
+
+
+def test_private_report_rejects_malformed_fields_and_failed_results(tmp_path):
+    result, output = _run_private_report(
+        tmp_path,
+        {
+            "ansible_facts": {
+                "ansible_distribution": "NixOS",
+            }
+        },
+    )
+    assert result.returncode == 0
+    last_good = output.read_text()
+    invalid = [
+        {"ansible_facts": {}},
+        {"failed": True, "ansible_facts": {"ansible_distribution": "NixOS"}},
+        {"unreachable": True, "ansible_facts": {"ansible_distribution": "NixOS"}},
+        {"failed": None, "ansible_facts": {"ansible_distribution": "NixOS"}},
+        {"node-01": [{"unreachable": True, "ansible_facts": {"x": 1}}]},
+    ]
+    for key, value in [
+        ("ansible_distribution", {"unexpected": "TOP_SECRET"}),
+        ("ansible_architecture", ["TOP_SECRET"]),
+        ("ansible_memtotal_mb", "NaN"),
+        ("ansible_memtotal_mb", -1024),
+        ("ansible_memtotal_mb", True),
+        ("ansible_memtotal_mb", "Infinity"),
+        ("ansible_processor_vcpus", 1.5),
+        ("ansible_processor_vcpus", False),
+        ("ansible_date_time", "TOP_SECRET"),
+        ("ansible_date_time", {"epoch": "1e300"}),
+    ]:
+        invalid.append({"ansible_facts": {key: value}})
+    for payload in invalid:
+        result, output = _run_private_report(tmp_path, payload)
+        assert result.returncode == 1, payload
+        assert output.read_text() == last_good
+        assert "TOP_SECRET" not in result.stderr + result.stdout
+
+
+def test_fact_refresh_rejects_failed_unreachable_empty_and_malformed_flags(tmp_path):
+    inventory = tmp_path / "ansible/inventory"
+    inventory.mkdir(parents=True)
+    (inventory / "hosts.ini").write_text("[all]\nnode-01\n")
+    facts = tmp_path / "ansible/cmdb"
+    facts.mkdir()
+    snapshot = facts / "node-01.json"
+    snapshot.write_text(json.dumps({"ansible_facts": {"marker": "last-good"}}))
+    original = snapshot.read_bytes()
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    _write_executable(
+        fake_bin / "ansible",
+        """#!/usr/bin/env bash
+set -euo pipefail
+for argument in "$@"; do
+  if [[ "$argument" == "--list-hosts" ]]; then
+    printf '  hosts (1):\\n    node-01\\n'
+    exit 0
+  fi
+done
+while (( $# > 0 )); do
+  if [[ "$1" == "--tree" ]]; then
+    cp "$TEST_FACT_RESPONSE" "$2/node-01"
+    exit 0
+  fi
+  shift
+done
+exit 2
+""",
+    )
+    response = tmp_path / "response.json"
+    payloads = [{"ansible_facts": {}}]
+    for flag in ("failed", "unreachable"):
+        for value in (True, None, "false", 0):
+            item = {flag: value, "ansible_facts": {"marker": "bad"}}
+            payloads.extend([item, {"node-01": [item]}])
+    raw_responses = [json.dumps(payload) for payload in payloads]
+    raw_responses.extend(
+        [
+            "",
+            "not JSON",
+            '{"ansible_facts":{"x":1}}\n{"ansible_facts":{"x":2}}',
+        ]
+    )
+    for raw_response in raw_responses:
+        response.write_text(raw_response)
+        result = subprocess.run(
+            [
+                "bash",
+                REPO_ROOT / "scripts/refresh-ansible-facts.sh",
+                "--ansible-root",
+                inventory.parent,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            env=os.environ
+            | {
+                "PATH": f"{fake_bin}:{os.environ['PATH']}",
+                "TEST_FACT_RESPONSE": str(response),
+            },
+        )
+        assert result.returncode == 1, raw_response
+        assert "retained last-known-good snapshot" in result.stderr
+        assert snapshot.read_bytes() == original

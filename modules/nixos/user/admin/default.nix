@@ -21,15 +21,11 @@ in
     name = mkOpt str "admin" "The name of the user's account";
     passwordFile = mkOpt str passwordFile "The hashed password file to use";
     passwordFallback = {
-      enable = mkBoolOpt true "Create a known fallback hashed password file when passwordFile is missing.";
+      enable = mkBoolOpt false "Legacy shared password fallback; enabling it is refused.";
       hashedPassword = mkOption {
         type = str;
-        default = "$6$yC9hyVoZEYLlzjbZ$pILBYLOZBlplgoYL9L.dyIKPGPrcW2ifd1I3ffRAYIwsv8B.pA76Eo6OUq71gJJKl8kGyBsmlbKwnGcKQEpoa.";
-        description = ''
-          SHA-512 crypt hash used only as an explicit local recovery fallback.
-          This must be a precomputed, known value and must never be randomly
-          generated during activation.
-        '';
+        default = "";
+        description = "Removed inline fallback hash. Provision a unique root-only runtime hash file instead.";
       };
     };
     extraGroups = mkOpt (listOf str) [ ] "Groups for the user to be assigned.";
@@ -39,23 +35,65 @@ in
   config = {
     assertions = [
       {
-        assertion = !cfg.passwordFallback.enable || cfg.passwordFallback.hashedPassword != "";
-        message = "user.admin.passwordFallback.hashedPassword must be set when admin password fallback is enabled.";
+        assertion = !cfg.passwordFallback.enable && cfg.passwordFallback.hashedPassword == "";
+        message = "Shared admin password fallback is removed. Provision a unique root-only runtime hash file, and verify independent SSH recovery before deployment.";
+      }
+      {
+        assertion = hasPrefix "/" cfg.passwordFile && !hasPrefix "/nix/store/" cfg.passwordFile;
+        message = "user.admin.passwordFile must be an absolute runtime path outside the Nix store.";
+      }
+      {
+        assertion =
+          !(any (name: builtins.hasAttr name cfg.extraOptions) [
+            "password"
+            "hashedPassword"
+            "hashedPasswordFile"
+            "initialPassword"
+            "initialHashedPassword"
+          ]);
+        message = "Configure admin credentials through user.admin.passwordFile; extraOptions must not override password validation.";
+      }
+      {
+        assertion = !config.systemd.sysusers.enable && !config.services.userborn.enable;
+        message = "Admin password validation requires the NixOS users activation backend.";
       }
     ];
 
-    system.activationScripts.createDefaultHashedPasswordAdmin = mkIf cfg.passwordFallback.enable {
-      deps = [ "etc" ];
+    # Abort the entire activation before users can change /etc/shadow. Keep the
+    # existing account and independent authorized SSH keys available on failure.
+    system.activationScripts.users.deps = [ "luxnixValidateAdminPasswordFile" ];
+    system.activationScripts.luxnixValidateAdminPasswordFile = {
+      deps = [
+        "specialfs"
+      ]
+      ++ optional (config.system.activationScripts ? setupSecretsForUsers) "setupSecretsForUsers";
       text = ''
-        set -euo pipefail
-        password_file=${lib.escapeShellArg cfg.passwordFile}
-        if [ ! -s "$password_file" ]; then
-          echo "Creating known fallback hashed password file for user ${cfg.name} at $password_file" >&2
-          install -d -m 0700 -o root -g root "$(dirname "$password_file")"
-          umask 077
-          printf '%s\n' ${lib.escapeShellArg cfg.passwordFallback.hashedPassword} > "$password_file"
-          chmod 0600 "$password_file"
+        admin_password_file=${lib.escapeShellArg cfg.passwordFile}
+        if [ ! -f "$admin_password_file" ] || [ ! -s "$admin_password_file" ]; then
+          echo "ERROR: admin password hash file is missing, empty, or not a regular file; refusing account activation." >&2
+          exit 1
         fi
+        admin_password_metadata=$(${pkgs.coreutils}/bin/stat -Lc '%u:%a' -- "$admin_password_file") || exit 1
+        case "$admin_password_metadata" in
+          0:400|0:600) ;;
+          *) echo "ERROR: admin password hash must be root-owned with mode 0400 or 0600." >&2; exit 1 ;;
+        esac
+        # Only supported modern crypt encodings, exactly one nonempty line.
+        # Neither the hash nor its value is ever emitted in diagnostics.
+        if ! ${pkgs.gnugrep}/bin/grep -qxE '\$6\$(rounds=[0-9]+\$)?[./A-Za-z0-9]{1,16}\$[./A-Za-z0-9]{86}|\$y\$[./A-Za-z0-9]+\$[./A-Za-z0-9]+\$[./A-Za-z0-9]{43}' "$admin_password_file" ||
+           [ "$(${pkgs.gawk}/bin/awk 'END { print NR }' "$admin_password_file")" -ne 1 ]; then
+          echo "ERROR: admin password file must contain one SHA-512 crypt or yescrypt hash; refusing account activation." >&2
+          exit 1
+        fi
+        # Refuse the retired repository-wide credential even if an earlier
+        # generation already installed it into the runtime file.
+        admin_password_fingerprint=$(${pkgs.gawk}/bin/awk '{ printf "%s", $0 }' "$admin_password_file" | ${pkgs.coreutils}/bin/sha256sum) || exit 1
+        case "$admin_password_fingerprint" in
+          a396e38d2c16276942366260dfc8e88ccef88e5df8915d50e688aca7e1502bba*)
+            echo "ERROR: retired shared admin password detected; provision a unique host credential before activation." >&2
+            exit 1
+            ;;
+        esac
       '';
     };
     users.users.${cfg.name} = {

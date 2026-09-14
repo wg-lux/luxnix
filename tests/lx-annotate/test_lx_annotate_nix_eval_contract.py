@@ -1296,8 +1296,6 @@ def test_lx_annotate_hls_backfill_defers_during_active_imports() -> None:
     assert "UploadJob.objects.filter" in module_source
     for status in ("pending", "processing", "retrying"):
         assert status in module_source
-
-
 def test_lx_annotate_frame_extraction_worker_defaults_to_always_on() -> None:
     evaluated = _gc_02_contract()["frameExtractionWorkerDefault"]
 
@@ -1413,12 +1411,24 @@ def test_lx_annotate_intake_contract_has_one_configurable_root() -> None:
 
 
 def test_lx_annotate_local_exposes_generic_runtime_env_override() -> None:
-    options_source = _option_source()
-    env_source = SCRIPTS_ENV_NIX.read_text(encoding="utf-8")
+    values = _nix_eval_expr_json(
+        """
+        let
+          flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
+          cfg = (flake.nixosConfigurations.gc-02.extendModules {
+            modules = [{
+              services.luxnix.lxAnnotateLocal.runtime.extraEnvironment.TEST_CUSTOM_ENV =
+                "configured";
+            }];
+          }).config;
+        in builtins.map
+          (name: cfg.systemd.services.${name}.environment.TEST_CUSTOM_ENV)
+          [ "lx-annotate" "lx-annotate-filewatcher"
+            "lx-annotate-celery-ffmpeg-worker" ]
+        """
+    )
 
-    assert "extraEnvironment = mkOption" in options_source
-    assert "commonEnv = {" in env_source
-    assert "// cfg.runtime.extraEnvironment;" in env_source
+    assert values == ["configured", "configured", "configured"]
 
 
 def test_lx_annotate_filewatcher_exports_only_canonical_data_root() -> None:
@@ -1505,8 +1515,12 @@ def test_all_lx_annotate_acceptance_scripts_verify_tls() -> None:
     source = SCRIPTS_NIX.read_text(encoding="utf-8")
     service_source = _service_source()
 
-    assert source.count('--cacert "${publicSslCertificatePath}"') == 2
-    assert service_source.count('--cacert "${publicSslCertificatePath}"') == 1
+    assert source.count("${staticAcceptanceCheck}") == 2
+    assert "import ./scripts/acceptance-static.nix" in source
+    assert "import ../scripts/acceptance-static.nix" in service_source
+    helper = (SCRIPTS_NIX.parent / "scripts/acceptance-static.nix").read_text()
+    assert "--cacert" in helper
+    assert "--insecure" not in helper
     assert "--insecure" not in source
     assert "--insecure" not in service_source
 

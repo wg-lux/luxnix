@@ -56,6 +56,29 @@ in
                   default = null;
                   description = "PEM bundle used by Nginx to verify client certificates for hub transfer requests.";
                 };
+                clientCrlFile = mkOption {
+                  type = types.str;
+                  default = "/var/lib/luxnix-hub-crl/client-crl.pem";
+                  readOnly = true;
+                  description = "Authenticated complete CRL bundle published for Nginx; initial publication is required before Nginx starts.";
+                };
+                crlUrls = mkOption {
+                  type = types.listOf types.str;
+                  default = [
+                    "${config.luxnix.vault.server.apiAddress}/v1/${config.luxnix.vault.server.hubPki.mountPath}/crl/pem"
+                  ];
+                  description = "Direct HTTPS Vault CRL endpoints. Include a complete CRL for every CA in clientCaFile, including intermediate and root CAs. Redirects are refused.";
+                };
+                crlTlsCaFile = mkOption {
+                  type = types.nullOr (types.either types.path types.str);
+                  default = config.luxnix.vault.server.caCertFile;
+                  description = "Independently provisioned Vault server CA authenticating CRL downloads. Never fetched from the CRL endpoint.";
+                };
+                crlMaxAgeSeconds = mkOption {
+                  type = types.ints.positive;
+                  default = 72 * 60 * 60;
+                  description = "Maximum signed CRL age. Nginx also rejects expired CRLs; refresh failures immediately block new transfer requests. Align with Vault CRL expiry and rebuild settings.";
+                };
                 recipientPrivateKeyFiles = mkOption {
                   type = types.listOf types.str;
                   default = [ ];

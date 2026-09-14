@@ -56,13 +56,15 @@ Notes:
    - `nix eval '.#nixosConfigurations.<host>.config.system.build.toplevel.drvPath'`
    - `nix build '.#nixosConfigurations.<host>.config.system.build.toplevel' --no-link`
    - `devenv shell check-connectivity <host>`
-6. Bootstrap the vault if secrets are needed:
-   - Create the local password mapping:
-     `mkdir -p ansible/secrets && cp ansible/admin-passwords.example.yml ansible/secrets/admin-passwords.yml`
-   - Bootstrap from the configured generated inventory:
-     `devenv shell vault-bootstrap --admin-passwords ansible/secrets/admin-passwords.yml --export`
-7. Deploy:
-   - `nixos-anywhere --flake '.#<host>' nixos@<target-ip>`
+6. Prepare the admin credential using the canonical
+   [Admin Password Creation and Rotation](admin-passwords.md) guide:
+   - Create, import, validate and export the host's unique password/hash pair.
+   - Stage the protected runtime hash for first activation as described under
+     [Install on a new machine](admin-passwords.md#6-install-on-a-new-machine).
+7. Deploy after explicitly confirming the target and destructive install scope:
+   - `nixos-anywhere --extra-files <staging-root> --flake '.#<host>' nixos@<target-ip>`
+   - Use the verified staging tree from the admin password guide; the hash must
+     exist before first activation.
 8. First login on target host:
    - `nh os switch` (alias: `nho`)
    - `nh home switch` (alias: `nhh`)

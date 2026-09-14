@@ -1,0 +1,134 @@
+schema_version: 1
+title: LX-Annotate operational timing and monitoring
+feature: feature-tracking/lx_annotate_operational_monitoring.yml
+ownership:
+  application:
+    - Emit typed workflow and task timing with monotonic in-process durations.
+    - Classify outcomes and phases without sensitive or unbounded metric labels.
+    - Provide the authenticated admin monitoring snapshot.
+  luxnix:
+    - Generate the immutable monitored service and storage inventory.
+    - Provide absolute executable paths, thresholds, service isolation, and collection wiring.
+    - Provision scrape targets, recording rules, alerts, and dashboards after the metric contract is packaged.
+  operator:
+    - Approve remote scrape exposure, retention, alert routes, and production rollout.
+host_contract:
+  environment_variable: LX_ANNOTATE_MONITORING_CONFIG_FILE
+  schema_version: 1
+  installed_path: /etc/lx-annotate/monitoring.json
+  browser_supplied_paths_or_units: prohibited
+  privilege_escalation: prohibited
+  inaccessible_systemd_metadata: unknown
+  defaults:
+    systemctl_timeout_seconds: 3
+    disk_warning_free_percent: 10
+    disk_error_free_percent: 5
+    pending_warning_seconds: 3600
+    recent_failure_window_seconds: 86400
+  validation_bounds:
+    deployment_revision: null_or_lowercase_hex_7_to_64
+    systemctl_timeout_seconds: [1, 5]
+    pending_warning_seconds: [60, 604800]
+    recent_failure_window_seconds: [60, 604800]
+    service_alias: lowercase_letters_digits_underscore_dot_dash_max_64
+    maximum_services: 40
+    maximum_storage_paths: 24
+    aliases_unique_within_each_collection: true
+timing_contract:
+  clocks:
+    execution_duration: monotonic
+    cross_process_queue_wait: planned_utc_timestamp_with_skew_detection
+  event: workload.timing
+  metric: workload_duration_seconds
+  instrumented_operations:
+    - pipeline_ingest
+    - video_import
+    - report_import
+    - hls_materialization
+    - frame_full_materialization
+    - frame_range_materialization
+    - celery_task
+  phases:
+    - total
+    - source_materialization
+    - source_validation
+    - encoder_preflight
+    - encode
+    - decode
+    - output_validation
+    - publication
+    - database_state
+    - unknown
+  outcomes:
+    - completed
+    - failed
+    - retry
+    - deferred
+    - reused
+    - validation_failed
+    - revoked
+    - unknown
+  allowed_labels:
+    - operation
+    - task_family
+    - phase
+    - outcome
+    - queue
+    - retry_bucket
+  prohibited_labels:
+    - video_id
+    - upload_job_id
+    - task_id
+    - filename
+    - path
+    - hash
+    - exception_message
+    - user
+    - center
+    - clinical_value
+collection:
+  current_stage: contract_and_host_inventory
+  current_log_metric:
+    event: workload.timing
+    metric_name: workload_duration_seconds
+    unit: seconds
+    transport: structured_application_log
+  planned_metrics:
+    - lx_annotate_task_duration_seconds
+    - lx_annotate_task_queue_wait_seconds
+    - lx_annotate_task_completed_total
+    - lx_annotate_task_active
+    - lx_annotate_queue_depth
+    - lx_annotate_workflow_phase_duration_seconds
+    - lx_annotate_telemetry_last_success_unixtime
+  infrastructure_signals:
+    - systemd_unit_state
+    - worker_cpu_throttled_seconds
+    - worker_memory_bytes
+    - worker_io_bytes
+    - nvidia_encoder_utilization
+    - nvidia_gpu_memory_bytes
+    - protected_storage_free_bytes
+  note: >-
+    Prometheus scrape exposure remains disabled until the packaged application
+    metric names and labels pass privacy, cardinality, restart, and stale-data tests.
+alerts:
+  planned:
+    - stuck_task
+    - queue_growth
+    - sustained_cpu_throttling
+    - hls_encoder_failure
+    - worker_unavailable
+    - protected_storage_pressure
+    - telemetry_stale
+rollout:
+  deployed: false
+  canary: gc-10
+  prerequisites:
+    - Package the application timing and admin snapshot contracts in the selected wheel.
+    - Evaluate and build the gc-10 LuxNix generation without activation.
+    - Review all labels for privacy and bounded cardinality.
+    - Exercise synthetic success, failure, retry, deferred, cancellation, and stale cases.
+  rollback:
+    - Disable runtime.monitoring and revert the scrape target without changing application data.
+    - Preserve structured logs needed for incident analysis according to approved retention.

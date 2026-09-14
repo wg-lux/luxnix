@@ -15,6 +15,10 @@ python_suites:
     path: feature-tracking/test_tracker.py
     scope: Feature-tracking schema, lock, message, and orchestration contracts.
     command: uv run pytest -q feature-tracking/test_tracker.py
+  - id: repository-cleanup
+    path: feature-tracking/test_repository_cleanup.py
+    scope: Retired artifacts, preserved sources, ignored local output, and stale references.
+    command: uv run pytest -q feature-tracking/test_repository_cleanup.py
   - id: cuda-probes
     path: scripts/cuda
     scope: Optional CUDA environment probes, outside the default pytest suite.

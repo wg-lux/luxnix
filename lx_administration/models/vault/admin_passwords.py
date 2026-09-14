@@ -1,6 +1,8 @@
 """Load local admin-password files and import them into a Vault."""
 
 import logging
+import re
+import stat
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -16,14 +18,18 @@ if TYPE_CHECKING:
     from .manager import Vault
 
 
-def load_admin_passwords(path: str | Path) -> dict[str, str]:
+def load_admin_passwords(path: str | Path, *, strict: bool = False) -> dict[str, str]:
     """Load hostname/password pairs without exposing their values in errors."""
     source = Path(path).expanduser()
     if not source.is_file():
         raise FileNotFoundError(f"Admin password file not found: {source}")
+    if strict and (source.is_symlink() or stat.S_IMODE(source.stat().st_mode) & 0o077):
+        raise ValueError(
+            "Admin password source must be a private regular non-symlink file"
+        )
 
     data = load_unique_yaml_file(source)
-    if data is None:
+    if data is None and not strict:
         return {}
     if not isinstance(data, dict):
         raise ValueError("Admin password file must be a YAML mapping")
@@ -31,12 +37,28 @@ def load_admin_passwords(path: str | Path) -> dict[str, str]:
     passwords = data.get("admin_passwords") or {}
     if not isinstance(passwords, dict):
         raise ValueError("'admin_passwords' must be a YAML mapping")
+    if strict:
+        _validate_password_mapping(passwords)
 
     return {
         str(hostname): str(password)
         for hostname, password in passwords.items()
         if password is not None
     }
+
+
+def _validate_password_mapping(passwords: dict[str, str]) -> None:
+    if not passwords:
+        raise ValueError("Admin password mapping must not be empty")
+    for hostname, password in passwords.items():
+        if not isinstance(hostname, str) or not re.fullmatch(
+            r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", hostname
+        ):
+            raise ValueError("Admin password mapping contains an invalid hostname")
+        if not isinstance(password, str) or not password.strip():
+            raise ValueError(
+                "Admin password mapping requires non-empty string passwords"
+            )
 
 
 def _admin_secret_values(
@@ -78,6 +100,14 @@ def import_admin_passwords(
     if not passwords:
         logger.info("No admin passwords supplied; skipping import")
         return
+
+    _validate_password_mapping(passwords)
+    if vault.inventory is not None:
+        unknown = set(passwords) - set(vault.inventory.get_hostnames())
+        if unknown:
+            raise ValueError(
+                "Admin password mapping contains hosts absent from the vault inventory"
+            )
 
     logger.info("Importing %d admin passwords into the vault", len(passwords))
     generator = PasswordGenerator(mode="password", require_special=False)

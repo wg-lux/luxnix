@@ -56,6 +56,11 @@ let
     processedVideoDirName
     ;
   makeBin = "${pkgs.gnumake}/bin/make";
+  staticAcceptanceCheck = import ./scripts/acceptance-static.nix {
+    inherit pkgs lib;
+    hostname = cfg.django.hostname;
+    certificatePath = publicSslCertificatePath;
+  };
   envScripts = args.envContract or (import ./scripts/env.nix args);
   inherit (envScripts)
     celeryDefaultQueueName
@@ -274,6 +279,7 @@ let
         }
 
         repair_known_wheel_schema_drift() {
+          run_installed_django_command "${wheelVenvPythonPath}" check_migration_compatibility
           "${wheelVenvPythonPath}" - <<'PY'
     import django
     from django.apps import apps
@@ -700,6 +706,7 @@ let
     lx_annotate_activate_runtime
 
     log "Running database migrations..."
+    run_repo_django_command check_migration_compatibility
     run_repo_django_command migrate --noinput
 
     bootstrap_stamp_file="${envConfDir}/.bootstrap-revision"
@@ -796,9 +803,9 @@ let
       exec ${effectiveRuntimePackage}/bin/lx-annotate-manage materialize_video_hls --apply --json "$@"
     fi
 
-    for default_artifact_kind in raw processed; do
-      run_hls_materialization "$default_artifact_kind" "$@"
-    done
+    # Let the application finish its prioritized processed pass before raw HLS.
+    # Separate invocations bypass its cross-artifact ordering and hash cache.
+    run_hls_materialization both "$@"
   '';
 
   lxAnnotateBootstrapScript = pkgs.writeShellScriptBin "${bootstrapScriptName}" ''
@@ -881,6 +888,7 @@ let
     export LX_ANNOTATE_WHEEL_APP_ROOT="${runtimeWheelRootPath}"
 
     log "Applying Django migrations for wheel runtime."
+    run_installed_django_command "${wheelVenvPythonPath}" check_migration_compatibility
     "${pkgs.bash}/bin/bash" -lc ${lib.escapeShellArg wheelMigrateCommand}
     repair_known_wheel_schema_drift
   '';
@@ -932,10 +940,11 @@ let
         write_wheel_systemd_env_file
 
         package_static_dir="$("${runtimeWheelVenvPath}/bin/python" - <<'PY'
+    from importlib.metadata import distribution
     from pathlib import Path
-    import lx_annotate
 
-    package_root = Path(lx_annotate.__file__).resolve().parent
+    # Importing lx_annotate initializes Django and prints startup messages.
+    package_root = Path(distribution("lx-annotate").locate_file("lx_annotate")).resolve()
     for candidate in (package_root / "staticfiles", package_root / "static"):
         if candidate.exists():
             print(candidate)
@@ -981,10 +990,7 @@ let
     run_repo_django_command check --fail-level CRITICAL
     run_repo_django_command verify_encrypted_storage
     run_repo_django_command check_production_hls_readiness
-    ${pkgs.curl}/bin/curl --fail --silent --show-error \
-      --cacert "${publicSslCertificatePath}" \
-      --resolve "${cfg.django.hostname}:443:127.0.0.1" \
-      "https://${cfg.django.hostname}/static/.vite/manifest.json" >/dev/null
+    ${staticAcceptanceCheck}
 
     log "lx-annotate acceptance checks passed."
   '';
@@ -1232,10 +1238,7 @@ let
     run_installed_django_command "${wheelVenvPythonPath}" check --fail-level CRITICAL
     run_installed_django_command "${wheelVenvPythonPath}" verify_encrypted_storage
     run_installed_django_command "${wheelVenvPythonPath}" check_production_hls_readiness
-    ${pkgs.curl}/bin/curl --fail --silent --show-error \
-      --cacert "${publicSslCertificatePath}" \
-      --resolve "${cfg.django.hostname}:443:127.0.0.1" \
-      "https://${cfg.django.hostname}/static/.vite/manifest.json" >/dev/null
+    ${staticAcceptanceCheck}
 
     log "lx-annotate acceptance checks passed."
   '';
@@ -1513,6 +1516,7 @@ let
           ensure_wheel_runtime_installed
           if [ -x "${wheelVenvPythonPath}" ]; then
             echo "Applying Django migrations before data recovery helper commands."
+            run_installed_django_command "${wheelVenvPythonPath}" check_migration_compatibility
             run_installed_django_command "${wheelVenvPythonPath}" migrate --noinput
           fi
         fi

@@ -84,37 +84,82 @@ definition_of_done:
     status: blocked
     evidence:
     - kind: command
+      reference: 'uv run pytest -q: 629 passed, 1 warning in 357.75s'
+    - kind: command
+      reference: 'uv run pytest -q tests/lx-annotate: 127 passed in 1224.98s'
+    - kind: command
+      reference: 'nix run .#nixtests -- --workers 1 --no-color: 39/39 passed'
+    - kind: command
       reference: 'devenv tasks run nix-quality:generators: passed'
     - kind: command
       reference: 'uv run pytest -q tests/test_test_layout_contract.py feature-tracking/test_tracker.py:
-        20 passed in 0.85s'
+        20 passed in 0.77s'
     - kind: command
-      reference: 'uv run pytest -q --ignore=tests/lx-annotate: 497 passed, 5 failed, 1 warning in 140.58s'
+      reference: 'devenv tasks run autoconf:check: passed'
     - kind: command
-      reference: 'nix run .#nixtests -- --workers 1 (via tests/test_nixtests.py): 31/39 successful'
+      reference: 'devenv tasks run autoconf:generate: passed after isolated external render comparison'
     - kind: command
-      reference: 'uv run pytest -q interrupted diagnostic: 99 passed, 11 failed, 1 warning in 919.19s;
-        all observed direct failures under tests/lx-annotate'
+      reference: 'nix eval .#nixosConfigurations.lx-test.config.system.build.toplevel.drvPath: passed'
+    - kind: command
+      reference: 'nix build .#nixosConfigurations.lx-test.config.system.build.toplevel --no-link: passed'
+    - kind: command
+      reference: 'nix build .#nixosConfigurations.gc-06.config.system.build.toplevel --no-link: passed'
+    - kind: command
+      reference: './tests/run-configuration-tests.sh warmed rerun: all hosts evaluated; 4 builds timed
+        out at 80s (gc-06, gs-01, gs-02, s-02), all other builds passed'
     - kind: test
-      reference: tests/test_devenv_command_catalog.py
+      reference: tests/lx-annotate/nix_eval_helpers.py
     - kind: test
-      reference: tests/test_logging.py
-    - kind: test
-      reference: tests/test_network_service_contract.py
-    - kind: test
-      reference: tests/test_nixtests.py
-    - kind: test
-      reference: tests/lx-annotate/test_lx_annotate_nix_eval_contract.py
-    note: 'Generator, tracker, and layout gates pass. The non-LX diagnostic suite now has 497 passes and
-      five failures: orphan scripts/lxv-postgres-secrets.py, a connectivity fixture missing conf/connectivity-ansible.cfg,
-      Nix writer expectation mismatch, missing wg-lux-features assertion, and the aggregate Nixtest failure.
-      Nixtest improved from 28/39 to 31/39 but eight contracts remain failing. A full canonical run was
-      interrupted after 919.19s at 99 passed/11 failed because current LX-Annotate Nix evaluations were
-      unusually slow; every direct failure observed in that partial run was under tests/lx-annotate, including
-      contracts overlapping the existing HLS worktree changes. No failure was skipped or hidden, and the
-      interrupted run is diagnostic rather than pass evidence.'
-    assessed_by: codex-luxnix-tests-20260902
-    assessed_at: '2026-09-02T11:45:54.930246Z'
+      reference: tests/nixtest
+    - kind: code
+      reference: ansible/inventory/group_vars/gpu_server.yml
+    - kind: code
+      reference: modules/nixos/luxnix/generic-settings/linux/default.nix
+    - kind: command
+      reference: '2026-09-09: uv run --locked pytest -q tests/test_test_layout_contract.py tests/test_project_map_contract.py
+        tests/test_yaml_checkfiles.py feature-tracking/test_repository_cleanup.py feature-tracking/test_tracker.py:
+        63 passed'
+    - kind: command
+      reference: '2026-09-09: devenv tasks run nix-quality:check: passed'
+    - kind: command
+      reference: '2026-09-09: devenv tasks run nix-quality:generators: passed'
+    - kind: command
+      reference: '2026-09-09: devenv tasks run docs:check: passed'
+    - kind: command
+      reference: '2026-09-09: cd wg-lux-mcp && uv run --locked --extra dev pytest -q: 20 passed'
+    - kind: command
+      reference: 'Final shared tree: uv run --locked pytest -q tests feature-tracking/test_tracker.py
+        feature-tracking/test_repository_cleanup.py --tb=short: 865 passed; one stale assertion and 21
+        interrupted recovery errors subsequently fixed'
+    - kind: command
+      reference: 'Final shared tree: uv run --locked pytest -q tests feature-tracking/test_tracker.py
+        feature-tracking/test_repository_cleanup.py --lf --tb=short: 22 passed in 30.20s'
+    - kind: command
+      reference: 'Final shared tree: nix eval --raw .#nixosConfigurations.gc-02.config.system.build.toplevel.drvPath:
+        exit 0'
+    - kind: command
+      reference: 'Final shared tree: nix eval --raw .#nixosConfigurations.gs-02.config.system.build.toplevel.drvPath:
+        exit 0'
+    - kind: command
+      reference: 'Final shared tree: devenv tasks run nix-quality:check: passed; git diff --check: exit
+        0'
+    - kind: code
+      reference: tests/test_local_user_recovery.py
+    note: '2026-09-09 final shared-workspace implementation: confirmed handoff completed. Fixed Snowfall
+      self-reference recursion, denied direct /media/ access while preserving protected media/API routes,
+      and corrected HLS/monitoring Nixtest assertions. Preserved integrated runtime.llm changes. Replaced
+      stale environment-merge punctuation assertion with evaluated propagation; recovery evaluation now
+      uses Git-filtered source. Combined tests plus both tracker suites: 865 passed, one stale assertion
+      failed, and 21 recovery errors followed an intentionally interrupted unfiltered evaluation. After
+      fixes, the exact failed-test rerun passed 22/22: all 887 cases verified across the full and focused
+      runs, including the Nixtest wrapper. Fast Nix quality and whitespace checks pass; tracker schema
+      validates. Shared gc-02 and gs-02 toplevel drvPath evaluations both exit 0. No handoff blockers
+      remain. Criterion remains blocked only because full-flake and all-host build acceptance is incomplete:
+      earlier full evaluation stopped under memory/swap pressure and cold builds exceeded the 80-second
+      runner timeout. No deployments or secret operations. Historical evidence below is retained with
+      its original scope.'
+    assessed_by: codex-tests-20260909
+    assessed_at: '2026-09-09T12:24:26.376654Z'
 - id: security_regressions_remain_covered
   category: security
   title: Security-sensitive contracts remain covered

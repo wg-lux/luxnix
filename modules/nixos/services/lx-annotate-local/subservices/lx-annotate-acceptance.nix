@@ -42,10 +42,11 @@ with ctx;
         for worker_unit in "''${required_workers[@]}"; do
           ${pkgs.systemd}/bin/systemctl is-active --quiet "$worker_unit"
         done
-        ${pkgs.curl}/bin/curl --fail --silent --show-error \
-          --cacert "${publicSslCertificatePath}" \
-          --resolve "${cfg.django.hostname}:443:127.0.0.1" \
-          "https://${cfg.django.hostname}/static/.vite/manifest.json" >/dev/null
+        ${import ../scripts/acceptance-static.nix {
+          inherit pkgs lib;
+          hostname = cfg.django.hostname;
+          certificatePath = publicSslCertificatePath;
+        }}
       '';
       ReadWritePaths = appReadWritePaths;
     };

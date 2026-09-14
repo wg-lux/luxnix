@@ -31,8 +31,8 @@ nix build '.#nixosConfigurations.<host>.config.system.build.toplevel' --no-link
 # Confirm remote connectivity without changing the host
 devenv shell check-connectivity <host>
 
-# Destructive remote install (replace <host> and <target-ip>)
-nixos-anywhere --flake '.#<host>' nixos@<target-ip>
+# Destructive remote install (prepare <staging-root>, replace <host> and <target-ip>)
+nixos-anywhere --extra-files <staging-root> --flake '.#<host>' nixos@<target-ip>
 
 # Post-install switch on host
 nh os switch

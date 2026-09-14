@@ -9,9 +9,10 @@ host_roles:
   nginxHost.glm52.acme.email: '"hild@coloreg.de"'
   nginxHost.keycloak.enable: "false"
   nginxHost.nextcloud.enable: "false"
+  endoreg-client.lxAi: "true"
 
 host_services:
-
+  luxnix.lxAiLocal.runtime.protectedDataDir: '"/var/lib/lx-annotate/data"'
   # Keep the hub broker host-local. The former shared broker on s-04 is not
   # reachable, and plaintext Redis must not be exposed node-to-node.
   luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl: "null"

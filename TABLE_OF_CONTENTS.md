@@ -31,6 +31,8 @@
 - **Vault**
   - [Setup and Bootstrap](docs/vault-setup.md)
   - [Maintainer Notes](docs/vault-maintainer-operations.md)
+  - [Admin Password Creation and Rotation](docs/admin-passwords.md)
+  - [Storage and Key Migration](docs/vault-setup.md)
   - [Machine Enrollment](docs/vault-hub-machine-enrollment.md)
   - [Owner Operations](docs/vault-owner-immediate-actions.md)
   - [Server Rebuild](docs/vault-server-rebuild.md)

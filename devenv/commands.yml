@@ -11,6 +11,46 @@ risk_levels_source: ../luxnix.yml#risk_levels
 # marked operator_confirmation_required. The field does not imply that the
 # underlying wrapper implements its own prompt.
 commands:
+  - id: rotate-admin-passwords
+    summary: Show one validated admin replacement on the terminal and require y/n before live activation.
+    risk: sensitive-remote-state
+    operator_confirmation_required: true
+    usage: >-
+      devenv shell rotate-admin-passwords --limit <host>
+      -e admin_rotation_recovery_confirmed=true [ansible-playbook arguments...]
+    implementation: scripts/run-secret-playbook.sh
+    playbook: ansible/playbooks/rotate_admin_passwords.yml
+    documentation: docs/admin-passwords.md
+    local_activation:
+      transport: ansible_connection=local
+      inventory: Use the canonical inventory plus a private managed-group overlay for the selected host.
+      privilege: --ask-become-pass requests the current sudo password.
+      recovery: Keep a separately verified root shell open until new-password authentication and hash readback pass.
+      verification: After updating admin, subsequent sudo tasks use the approved replacement only when the connection account is admin.
+      documentation: docs/admin-passwords.md#activate-on-the-same-machine
+
+  - id: deliver-hub-enrollment
+    summary: Deliver one gs-02 enrollment bundle using private controller tmpfs and pinned SSH.
+    risk: sensitive-remote-state
+    operator_confirmation_required: true
+    usage: >-
+      devenv shell deliver-hub-enrollment --limit <host>
+      -e enrollment_expected_ca_sha256=<independently-verified-fingerprint>
+    implementation: scripts/run-secret-playbook.sh
+    playbook: ansible/playbooks/deliver_hub_enrollment.yml
+    documentation: docs/vault-hub-machine-enrollment.md
+
+  - id: vault-migrate-local-key
+    summary: Create one explicitly migrated master-encrypted copy without replacing the legacy source.
+    risk: sensitive-local-state
+    operator_confirmation_required: true
+    usage: >-
+      devenv shell vault-migrate-local-key --source <old> --output <new>
+      --legacy-key <key-file> --legacy-id <label>
+      --master-key <key-file> --confirm-migration
+    implementation: scripts/vault/migrate_local_key.py
+    documentation: docs/vault-setup.md
+
   - id: manage
     summary: Prepare the local environment or select its development mode.
     risk: local-state
@@ -34,7 +74,19 @@ commands:
     operator_confirmation_required: true
     usage: devenv shell vault-bootstrap [bootstrap arguments...]
     implementation: scripts/bootstrap-lx-vault.py
-    documentation: docs/vault-setup.md
+    documentation: docs/admin-passwords.md
+    scoped_admin_rotation:
+      usage: >-
+        devenv shell vault-bootstrap --skip-sync --admin-host <host>
+        [--admin-passwords <private-input.yml>] [--export]
+      prerequisites:
+        - Existing canonical admin pair and registered host PSK.
+        - All local ciphertext migrated to the explicit master key.
+      effects:
+        - Validates expiry and password/hash agreement only for the selected admin pair.
+        - Preserves unrelated credentials and their expiry metadata.
+        - Exports only the pair under <vault-dir>/admin-rotations/<host>/deploy/<host>.
+        - Leaves the ordinary fleet export unchanged.
 
   - id: validate-admin-passwords
     summary: Validate inventory admin passwords against the encrypted vault.
@@ -42,7 +94,7 @@ commands:
     operator_confirmation_required: false
     usage: devenv shell validate-admin-passwords [validation arguments...]
     implementation: scripts/validate-admin-passwords.py
-    documentation: docs/vault-setup.md
+    documentation: docs/admin-passwords.md
 
   - id: vault-site-preflight
     summary: Validate non-secret prerequisites for one Vault site enrollment.

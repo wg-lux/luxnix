@@ -1,5 +1,4 @@
 import runpy
-import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -80,15 +79,11 @@ def test_decrypt_failure_does_not_expose_process_output(tmp_path, monkeypatch):
     encrypted = tmp_path / "secret"
     encrypted.touch()
 
-    monkeypatch.setattr(
-        namespace["subprocess"],
-        "run",
-        lambda *args, **kwargs: subprocess.CompletedProcess(
-            args[0],
-            2,
-            stdout="TOP_SECRET_STDOUT",
-            stderr="TOP_SECRET_STDERR",
-        ),
+    def failed_decryption(*args, **kwargs):
+        raise ValueError("TOP_SECRET_STDOUT TOP_SECRET_STDERR")
+
+    monkeypatch.setitem(
+        namespace["_decrypt_secret"].__globals__, "decrypt_secret", failed_decryption
     )
 
     with pytest.raises(RuntimeError) as error:
@@ -100,7 +95,7 @@ def test_decrypt_failure_does_not_expose_process_output(tmp_path, monkeypatch):
 
     assert "TOP_SECRET_STDOUT" not in str(error.value)
     assert "TOP_SECRET_STDERR" not in str(error.value)
-    assert "ansible-vault exit 2" in str(error.value)
+    assert "declared master key" in str(error.value)
 
 
 def test_admin_password_import_uses_vault_directory_for_unset_template(

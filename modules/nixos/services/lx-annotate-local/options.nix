@@ -4,6 +4,7 @@ args: {
     (import ./options/debug.nix args)
     (import ./options/source.nix args)
     (import ./options/runtime.nix args)
+    (import ./options/monitoring.nix args)
     (import ./options/django.nix args)
     (import ./options/database.nix args)
     (import ./options/data-recovery.nix args)

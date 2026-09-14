@@ -120,7 +120,16 @@ lib.foldl' lib.recursiveUpdate
       services.luxnix.lxAnnotateLocal.hub.outboundTransfer.requireMtls = true;
     }
     {
+      services.luxnix.lxAnnotateLocal.runtime.ffmpegWorker.cudaVisibleDevices = "0";
+    }
+    {
+      services.luxnix.lxAnnotateLocal.runtime.hlsEncodingProfile = "clinical_h264_nvenc_cq_v1";
+    }
+    {
       services.luxnix.lxAnnotateLocal.runtime.mode = "wheel";
+    }
+    {
+      services.luxnix.lxAnnotateLocal.runtime.monitoring.enable = true;
     }
     {
       services.wg-lux-mcp.enable = true;

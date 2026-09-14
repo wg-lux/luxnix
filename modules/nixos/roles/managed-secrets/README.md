@@ -61,8 +61,11 @@ Do not leave that enabled for steady-state deployments.
 The following secrets are automatically managed:
 
 ### Database Secrets
-- **`/etc/secrets/vault/SCRT_local_password_maintenance_password`**: PostgreSQL maintenance user password
-  - Used by: postgres-default role, endoreg-client role
+- **`/etc/secrets/vault/SCRT_local_password_maintenance_password`**: legacy maintenance password path
+  - Retained for compatibility with older deployments; it is not used to authenticate the `endoregDbLocal`
+    application role.
+- **`/var/lib/postgresql/endoregDbLocal.password`**: protected, systemd-managed application password
+  - Used by: postgres-default and endoreg-client for the local `endoregDbLocal` role.
 
 ### Django Application Secrets  
 - **`/etc/secrets/vault/django_secret_key`**: Django SECRET_KEY for local API instances

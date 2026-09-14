@@ -116,6 +116,9 @@ lib.foldl' lib.recursiveUpdate
       roles.nginxHost.settings.recommendedTlsSettings = true;
     }
     {
+      roles.endoreg-client.lxAi = true;
+    }
+    {
       roles.nginxHost.glm52.acme.email = "hild@coloreg.de";
     }
     {
@@ -131,7 +134,16 @@ lib.foldl' lib.recursiveUpdate
       services.luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl = null;
     }
     {
+      services.luxnix.lxAnnotateLocal.runtime.ffmpegWorker.cudaVisibleDevices = "0";
+    }
+    {
+      services.luxnix.lxAnnotateLocal.runtime.hlsEncodingProfile = "clinical_h264_nvenc_cq_v1";
+    }
+    {
       services.luxnix.lxAnnotateLocal.runtime.llmInferenceWorker.mode = "always";
+    }
+    {
+      services.luxnix.lxAnnotateLocal.runtime.monitoring.enable = true;
     }
     {
       services.luxnix.lxAnnotateLocal.runtime.trainingWorker.cudaVisibleDevices = "0";
@@ -204,6 +216,9 @@ lib.foldl' lib.recursiveUpdate
           recipientPublicKeyFile = "/etc/secrets/vault/hub-storage/gs-01-recipient-current.pub.pem";
         }
       ];
+    }
+    {
+      services.luxnix.lxAiLocal.runtime.protectedDataDir = "/var/lib/lx-annotate/data";
     }
     {
       services.luxnix.lxAnnotateLocal.database.port = 5432;
