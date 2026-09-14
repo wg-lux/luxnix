@@ -603,6 +603,15 @@ def test_devenv_has_one_package_list_and_one_python_toolchain():
     assert not (REPO_ROOT / "devenv/environment.nix").exists()
 
 
+def test_devenv_does_not_override_the_dynamic_linker_search_path():
+    devenv_config = (REPO_ROOT / "devenv.nix").read_text()
+
+    # A shell-wide override mixes libraries from the Devenv and host Nixpkgs
+    # closures. In particular, host utilities can then load a newer libmount
+    # or libselinux with an older glibc and fail with GLIBC_ABI_* errors.
+    assert not re.search(r"^\s*LD_LIBRARY_PATH\s*=", devenv_config, re.MULTILINE)
+
+
 def test_devenv_owns_uv_sync_and_enter_shell_activates_the_managed_venv():
     devenv_config = (REPO_ROOT / "devenv.nix").read_text()
 

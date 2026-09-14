@@ -21,6 +21,7 @@
   - [Virtualization](docs/virtualization-guide.md)
   - [SSH Host Identity](docs/ssh-host-identity.md)
   - [Configuration Tests](docs/testing-nixtests.md)
+  - [NixOS Version Bump](docs/nixos-version-bump.md)
 - **Services**
   - [Service Module Pattern](docs/deploying-services-lx-annotate-style.md)
   - [lx-annotate Encrypted Data](docs/lx-annotate-encrypted-data.md)
@@ -28,9 +29,12 @@
   - [lx-annotate Cluster Readiness](docs/lx-annotate-cluster-readiness.md)
   - [gs-02 Local Redis Recovery](docs/operations/gs-02-local-redis-broker.md)
 - **Vault**
+  - [Setup and Bootstrap](docs/vault-setup.md)
+  - [Maintainer Notes](docs/vault-maintainer-operations.md)
   - [Admin Password Creation and Rotation](docs/admin-passwords.md)
   - [Storage and Key Migration](docs/vault-setup.md)
   - [Machine Enrollment](docs/vault-hub-machine-enrollment.md)
-  - [Owner Actions](docs/vault-owner-immediate-actions.md)
+  - [Owner Operations](docs/vault-owner-immediate-actions.md)
+  - [Server Rebuild](docs/vault-server-rebuild.md)
 - **Clinical Operations**
   - [Central Hub Transfer](docs/clinical-hub-transfer-guide.md)

@@ -35,13 +35,13 @@ in
         m4
         gperf
         unzip
-        xorg.libXi
-        xorg.libXmu
+        libxi
+        libxmu
         freeglut
-        xorg.libXext
-        xorg.libX11
-        xorg.libXv
-        xorg.libXrandr
+        libxext
+        libx11
+        libxv
+        libxrandr
         ncurses5
         stdenv.cc
         binutils

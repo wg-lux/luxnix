@@ -1,5 +1,17 @@
 { pkgs, ... }:
 {
+  # devenv runs `prek run -a` (every hook over every file) as part of
+  # `devenv:enterShell --mode all` on every shell entry, because the built-in
+  # `devenv:git-hooks:run` task is dependency-connected to `enterShell`. A
+  # repo-wide lint sweep does not belong on `cd`: it is slow and it hard-blocks
+  # the shell whenever the tree carries any pre-existing lint debt (which it
+  # currently does, on `origin` too). Neutralise the entry-time run. The git
+  # pre-commit hook installed by `devenv:git-hooks:install` still runs the same
+  # ansible-lint and nix-quality checks against staged files on every real
+  # commit, and running "prek run -a" by hand still performs the full sweep on
+  # demand.
+  "devenv:git-hooks:run".exec = pkgs.lib.mkForce "true";
+
   # Environment initialization
   "initialize-environment:endoreg-db" = {
     description = "Initialize and migrate the EndoReg database";
@@ -58,6 +70,11 @@
   "tests:pytest" = {
     description = "Run the repository Python test suite";
     exec = "${pkgs.uv}/bin/uv run pytest -q";
+  };
+
+  "repo:state-summary" = {
+    description = "Run the repository checks and write a state snapshot for before/after comparison";
+    exec = ''${pkgs.uv}/bin/uv run python scripts/repo-state-summary.py "$@"'';
   };
 
   # Nix quality

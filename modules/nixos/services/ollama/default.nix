@@ -109,8 +109,10 @@ in
     {
       services.ollama = {
         enable = true;
+        # NixOS 26.05 removed services.ollama.acceleration; the acceleration
+        # choice is already encoded in `unstableOllama` (ollama / ollama-cpu /
+        # ollama-<backend>) selected from services.luxnix.ollama.acceleration.
         package = mkDefault unstableOllama;
-        acceleration = mkDefault cfg.acceleration;
         environmentVariables = {
           OLLAMA_KEEP_ALIVE = mkDefault "1m";
           OLLAMA_MAX_LOADED_MODELS = mkDefault "1";

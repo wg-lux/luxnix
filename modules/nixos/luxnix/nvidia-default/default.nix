@@ -61,7 +61,10 @@ in
       powerManagement.finegrained = false;
       open = true;
       nvidiaSettings = true;
-      package = nvidiaDrivers.${cfg.nvidiaDriver};
+      # mkDefault so a host that also enables luxnix.nvidia-prime (which pins the
+      # production driver) wins without an option-merge conflict; NixOS 26.05
+      # makes hardware.nvidia.package strictly unique.
+      package = mkDefault nvidiaDrivers.${cfg.nvidiaDriver};
       nvidiaPersistenced = true;
     };
   };

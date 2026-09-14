@@ -12,7 +12,8 @@ result/
 utils/secrets/
 *keyfile.bin
 luxnix.code-workspace
-/cmdb/
+/cmdb/*
+!/cmdb/.gitkeep
 /conf/hostinfo.json
 /conf/hostinfos/
 /docs/hostinfo/
@@ -36,6 +37,9 @@ secrets/
 ansible/secrets/admin-passwords.yml
 .ruff_cache/
 .devenv
+# devenv writes suffixed session-state dirs (.devenv.<rand>/) when the primary
+# .devenv/ is already held by another run; ignore every .devenv.* sibling.
+.devenv.*
 untracked_notes.md
 tests/sensitive/
 erc_data/
@@ -161,6 +165,12 @@ venv.bak/
 
 # mkdocs documentation
 /site
+
+# Private, dated Vault incident evidence (not release documentation)
+/docs/vault-rebuild-ceremony-2026-08-11.md
+
+# Local repo-state snapshots from `devenv tasks run repo:state-summary`
+/repo-state/
 
 # mypy
 .mypy_cache/

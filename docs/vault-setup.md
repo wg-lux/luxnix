@@ -5,6 +5,15 @@ For the complete operator procedure, use the canonical
 [Admin Password Creation and Rotation](admin-passwords.md) guide. It owns password
 input creation, bootstrap/import, validation, export, installation and rotation.
 
+!!! important "Two independent vault systems"
+
+    This page describes the repository's **Ansible Vault** store (`~/.lxv`).
+    It is not the HashiCorp Vault service on `gs-02`. For HashiCorp Vault
+    custody, seal, and recovery procedures, use
+    [HashiCorp Vault Owner Operations](vault-owner-immediate-actions.md) and
+    [Vault Server Rebuild](vault-server-rebuild.md). Its unseal share must not
+    be stored in `~/.lxv` or reused as an Ansible Vault password.
+
 ## Vault building blocks
 
 - **Vault directory (`~/.lxv/`)** – Stores encrypted secrets under

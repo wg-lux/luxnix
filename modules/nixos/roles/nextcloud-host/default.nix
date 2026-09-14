@@ -21,12 +21,15 @@ let
   sslCertGroupName = sensitiveServicesGroupName;
 
   nextcloudPwdFile = "/etc/nextcloud-admin-pass";
-  minioSecretFile = "/etc/minio-secret";
 
-  # Remove the hardcoded credentials
-  rootCredentialsFile = "/etc/minio-credentials";
-
-  accessKey = "nextcloud";
+  # Nextcloud's S3 primary storage runs against a local single-node Garage
+  # instance (MinIO was removed from nixpkgs in 26.05). The access-key ID is
+  # not secret and is set per host; the matching secret key, the Garage RPC
+  # secret, and the admin token are delivered together in one Vault file.
+  s3SecretFile = "/etc/nextcloud-s3-secret";
+  garageEnvFile = "/run/nextcloud-garage/garage.env";
+  garageS3Port = 3900;
+  garageRegion = "garage";
 
   # Safe maintenance script for resetting Nextcloud services
   nextcloudMaintenanceScript = pkgs.writeScriptBin "nextcloud-maintenance" ''
@@ -39,7 +42,7 @@ let
       echo ""
       echo "Options:"
       echo "  --reset-psql       Reset PostgreSQL data (interactive confirmation required)"
-      echo "  --reset-minio      Reset MinIO data (interactive confirmation required)"
+      echo "  --reset-garage     Reset Garage object-store data (interactive confirmation required)"
       echo "  --reset-all        Reset all Nextcloud data (interactive confirmation required)"
       echo "  --show-psql-conf   Show PostgreSQL configuration"
       echo "  --help             Show this help message"
@@ -63,12 +66,12 @@ let
 
     stop_services() {
       echo "Stopping services..."
-      sudo systemctl stop nextcloud-setup.service nextcloud-cron.service nginx.service postgresql.service minio.service || true
+      sudo systemctl stop nextcloud-setup.service nextcloud-cron.service nginx.service postgresql.service garage.service || true
     }
 
     start_services() {
       echo "Starting services..."
-      sudo systemctl start postgresql.service minio.service nginx.service || true
+      sudo systemctl start postgresql.service garage.service nginx.service || true
     }
 
     reset_postgresql() {
@@ -91,33 +94,34 @@ let
       echo "Consider running: nixos-rebuild switch to reinitialize services."
     }
 
-    reset_minio() {
-      local minio_dir="/var/lib/minio"
-      
-      if [ ! -d "$minio_dir" ]; then
-        echo "MinIO data directory $minio_dir does not exist."
+    reset_garage() {
+      local garage_dir="/var/lib/garage"
+
+      if [ ! -d "$garage_dir" ]; then
+        echo "Garage data directory $garage_dir does not exist."
         return 0
       fi
 
-      confirm_action "MinIO" "$minio_dir"
-      
-      echo "Stopping services before MinIO reset..."
+      confirm_action "Garage" "$garage_dir"
+
+      echo "Stopping services before Garage reset..."
       stop_services
-      
-      echo "Removing MinIO data directory: $minio_dir"
-      sudo rm -rf "$minio_dir"
-      
-      echo "MinIO data has been reset. You will need to reconfigure MinIO."
+
+      echo "Removing Garage data directory: $garage_dir"
+      sudo rm -rf "$garage_dir"
+
+      echo "Garage data has been reset. garage-bootstrap.service will re-apply"
+      echo "the cluster layout, key, and bucket on the next start."
       echo "Consider running: nixos-rebuild switch to reinitialize services."
     }
 
     reset_all() {
       echo "This will reset ALL Nextcloud-related data!"
-      confirm_action "ALL Nextcloud services" "/var/lib/postgresql and /var/lib/minio"
-      
+      confirm_action "ALL Nextcloud services" "/var/lib/postgresql and /var/lib/garage"
+
       reset_postgresql
-      reset_minio
-      
+      reset_garage
+
       echo "All Nextcloud data has been reset."
       echo "Run: nixos-rebuild switch to reinitialize all services."
     }
@@ -136,8 +140,8 @@ let
       --reset-psql)
         reset_postgresql
         ;;
-      --reset-minio)
-        reset_minio
+      --reset-garage)
+        reset_garage
         ;;
       --reset-all)
         reset_all
@@ -156,27 +160,77 @@ let
     esac
   '';
 
+  # Runs before both garage.service and nextcloud-setup.service. Splits the
+  # single delivered Vault file
+  #   NEXTCLOUD_S3_SECRET_KEY=<64 hex>
+  #   GARAGE_RPC_SECRET=<64 hex>
+  #   GARAGE_ADMIN_TOKEN=<token>
+  # into the S3 secret Nextcloud reads and the environment file systemd feeds
+  # to Garage (read by systemd as root, so root-only is fine).
   nextcloudPrepareScript = pkgs.writeShellScript "nextcloud-prepare-files_nxtcld.sh" ''
-    #!${pkgs.zsh}/bin/zsh
-    set -e
+    set -eu
 
-    # Copy admin password
-    cp ${cfg.passwordFilePath} ${nextcloudPwdFile}
-    chown nextcloud:nextcloud ${nextcloudPwdFile}
-    chmod 640 ${nextcloudPwdFile}
+    umask 077
 
-    # Copy minio credentials
-    cp ${cfg.minioCredentialsFilePath} ${rootCredentialsFile}
-    chown minio:minio ${rootCredentialsFile}
-    chmod 600 ${rootCredentialsFile}
+    # Admin password
+    install -o nextcloud -g nextcloud -m 0640 ${cfg.passwordFilePath} ${nextcloudPwdFile}
 
-    # Extract and store the minio secret separately for nextcloud
-    # Use a more reliable method to extract the password
-    cat ${rootCredentialsFile} | grep MINIO_ROOT_PASSWORD | cut -d'=' -f2 > ${minioSecretFile}
-    chown nextcloud:nextcloud ${minioSecretFile}
-    chmod 600 ${minioSecretFile}
+    creds=${cfg.garageCredentialsFilePath}
+    get() { ${pkgs.gnugrep}/bin/grep -E "^$1=" "$creds" | ${pkgs.coreutils}/bin/head -n1 | ${pkgs.coreutils}/bin/cut -d= -f2-; }
 
-    echo "Credentials prepared successfully" > /tmp/nextcloud-prepare-log
+    # S3 secret key for Nextcloud's object store
+    printf '%s' "$(get NEXTCLOUD_S3_SECRET_KEY)" > ${s3SecretFile}
+    chown nextcloud:nextcloud ${s3SecretFile}
+    chmod 0600 ${s3SecretFile}
+
+    # Environment file for garage.service
+    install -d -m 0700 "$(${pkgs.coreutils}/bin/dirname ${garageEnvFile})"
+    {
+      printf 'GARAGE_RPC_SECRET=%s\n' "$(get GARAGE_RPC_SECRET)"
+      printf 'GARAGE_ADMIN_TOKEN=%s\n' "$(get GARAGE_ADMIN_TOKEN)"
+    } > ${garageEnvFile}
+    chmod 0600 ${garageEnvFile}
+  '';
+
+  # Runs once after garage.service: applies the single-node cluster layout,
+  # imports the deterministic S3 key, and creates the bucket. Every step is
+  # guarded so the unit is idempotent and safe to re-run after `--reset-garage`.
+  garageBootstrapScript = pkgs.writeShellScript "nextcloud-garage-bootstrap.sh" ''
+    set -eu
+
+    # GARAGE_RPC_SECRET / GARAGE_ADMIN_TOKEN for the CLI to reach the local RPC.
+    set -a
+    . ${garageEnvFile}
+    set +a
+
+    garage=${pkgs.garage_1}/bin/garage
+    grep=${pkgs.gnugrep}/bin/grep
+    key_id=${lib.escapeShellArg cfg.s3AccessKeyId}
+    secret="$($grep -E '^NEXTCLOUD_S3_SECRET_KEY=' ${cfg.garageCredentialsFilePath} \
+      | ${pkgs.coreutils}/bin/head -n1 | ${pkgs.coreutils}/bin/cut -d= -f2-)"
+
+    # Wait for the local Garage RPC to answer.
+    for _ in $(${pkgs.coreutils}/bin/seq 1 60); do
+      "$garage" status >/dev/null 2>&1 && break
+      sleep 1
+    done
+
+    # Single-node layout: assign this node a role and apply version 1, but only
+    # while the applied layout is still version 0 (i.e. nothing assigned yet).
+    if "$garage" layout show 2>/dev/null | $grep -qE 'layout version:[[:space:]]*0'; then
+      node_id="$("$garage" node id -q 2>/dev/null | ${pkgs.coreutils}/bin/cut -d@ -f1)"
+      "$garage" layout assign -z dc1 -c 100G "$node_id"
+      "$garage" layout apply --version 1
+    fi
+
+    # Deterministic access key.
+    if ! "$garage" key info "$key_id" >/dev/null 2>&1; then
+      "$garage" key import --yes -n nextcloud "$key_id" "$secret"
+    fi
+
+    # Bucket and grant (both idempotent).
+    "$garage" bucket create nextcloud >/dev/null 2>&1 || true
+    "$garage" bucket allow --read --write --owner nextcloud --key "$key_id"
   '';
 
   conf = config.luxnix.generic-settings.network.nextcloud;
@@ -195,10 +249,25 @@ in
       default = "/var/lib/nextcloud";
       description = "Path to the directory containing the Nextcloud configuration";
     };
-    minioCredentialsFilePath = mkOption {
+    garageCredentialsFilePath = mkOption {
       type = types.path;
-      default = "/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_minio_credentials";
-      description = "Path to the file containing the Minio admin credentials (format: MINIO_ROOT_USER=username\\nMINIO_ROOT_PASSWORD=password)";
+      default = "/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_garage_credentials";
+      description = ''
+        Path to the delivered Vault file for the Nextcloud object store. It is
+        an env-style file with three lines:
+        NEXTCLOUD_S3_SECRET_KEY=<64 hex>, GARAGE_RPC_SECRET=<64 hex>,
+        GARAGE_ADMIN_TOKEN=<token>.
+      '';
+    };
+
+    s3AccessKeyId = mkOption {
+      type = types.str;
+      default = "GK00000000000000000000000000";
+      description = ''
+        S3 access-key ID Nextcloud presents to Garage. Not secret; set it per
+        host. Must be a valid Garage key ID (GK followed by 24 hex characters)
+        and must match the NEXTCLOUD_S3_SECRET_KEY in garageCredentialsFilePath.
+      '';
     };
 
     package = mkOption {
@@ -247,7 +316,7 @@ in
       nextcloud-maintenance = "nextcloud-maintenance";
       # Interactive reset commands with confirmation prompts
       reset-psql-safe = "nextcloud-maintenance --reset-psql";
-      reset-minio-safe = "nextcloud-maintenance --reset-minio";
+      reset-garage-safe = "nextcloud-maintenance --reset-garage";
       reset-nextcloud-all = "nextcloud-maintenance --reset-all";
     };
 
@@ -263,7 +332,6 @@ in
     };
 
     environment.systemPackages = [
-      pkgs.minio-client
       cfg.package
       pkgs.clamav
       nextcloudMaintenanceScript
@@ -275,15 +343,24 @@ in
     ];
 
     services = {
-      # TODO (nextcloud-host owner): verify whether MinIO bootstrap is still
-      # manual, then encode it in a oneshot service or remove these commands.
-      # mc config host add minio http://localhost:9000 ${accessKey} ${secretKey} --api s3v4
-      # mc mb minio/nextcloud
-      minio = {
+      garage = {
         enable = true;
-        listenAddress = "127.0.0.1:9000";
-        consoleAddress = "127.0.0.1:9001";
-        inherit rootCredentialsFile;
+        package = pkgs.garage_1;
+        environmentFile = garageEnvFile;
+        settings = {
+          metadata_dir = "/var/lib/garage/meta";
+          data_dir = "/var/lib/garage/data";
+          db_engine = "lmdb";
+          replication_factor = 1;
+          rpc_bind_addr = "127.0.0.1:3901";
+          rpc_public_addr = "127.0.0.1:3901";
+          s3_api = {
+            s3_region = garageRegion;
+            api_bind_addr = "127.0.0.1:${toString garageS3Port}";
+            root_domain = ".s3.garage.internal";
+          };
+          admin.api_bind_addr = "127.0.0.1:3903";
+        };
       };
 
       nextcloud-whiteboard-server = {
@@ -327,14 +404,16 @@ in
           objectstore.s3 = {
             enable = true;
             bucket = "nextcloud";
-            verify_bucket_exists = true;
-            key = accessKey;
-            secretFile = minioSecretFile;
-            hostname = "localhost";
+            # garage-bootstrap.service guarantees the bucket exists and is
+            # granted before nextcloud-setup runs.
+            verify_bucket_exists = false;
+            key = cfg.s3AccessKeyId;
+            secretFile = s3SecretFile;
+            hostname = "127.0.0.1";
             useSsl = false;
-            port = 9000;
+            port = garageS3Port;
             usePathStyle = true;
-            region = "us-east-1";
+            region = garageRegion;
           };
 
           # Configure ClamAV executable location:
@@ -592,27 +671,22 @@ in
     };
 
     systemd = {
-      tmpfiles.rules =
-        map (dir: "d ${dir} 0750 nextcloud nextcloud - -") [
-          "${cfg.customDir}"
-          "${cfg.customDir}/config"
-          "${cfg.customDir}/data"
-          "${cfg.customDir}/store-apps"
-        ]
-        ++ [
-          "d /var/lib/minio 0750 minio minio - -"
-          "d /var/lib/minio/data 0750 minio minio - -"
-          "d /var/lib/minio/config 0750 minio minio - -"
-        ];
+      tmpfiles.rules = map (dir: "d ${dir} 0750 nextcloud nextcloud - -") [
+        "${cfg.customDir}"
+        "${cfg.customDir}/config"
+        "${cfg.customDir}/data"
+        "${cfg.customDir}/store-apps"
+      ];
 
       services = {
-        # Add systemd service to prepare files
+        # Split the delivered Vault file into the Garage env file and the
+        # Nextcloud S3 secret. Must finish before Garage and Nextcloud start.
         nextcloud-prepare-files = {
-          description = "Prepare files for Nextcloud";
+          description = "Prepare credentials for Nextcloud and Garage";
           wantedBy = [ "multi-user.target" ];
           before = [
             "nextcloud-setup.service"
-            "minio.service"
+            "garage.service"
           ];
           after = [ "managed-secrets-setup.service" ];
           requires = [ "managed-secrets-setup.service" ];
@@ -623,10 +697,35 @@ in
           };
         };
 
-        # Add post-install hook for minio
-        minio = {
+        garage = {
           after = [ "nextcloud-prepare-files.service" ];
           requires = [ "nextcloud-prepare-files.service" ];
+        };
+
+        # Apply the single-node layout, import the S3 key, and create the
+        # bucket once Garage is up and before Nextcloud configures itself.
+        garage-bootstrap = {
+          description = "Bootstrap the Nextcloud Garage bucket and key";
+          wantedBy = [ "multi-user.target" ];
+          after = [
+            "garage.service"
+            "nextcloud-prepare-files.service"
+          ];
+          requires = [
+            "garage.service"
+            "nextcloud-prepare-files.service"
+          ];
+          before = [ "nextcloud-setup.service" ];
+          serviceConfig = {
+            Type = "oneshot";
+            RemainAfterExit = true;
+            ExecStart = "${garageBootstrapScript}";
+          };
+        };
+
+        nextcloud-setup = {
+          after = [ "garage-bootstrap.service" ];
+          requires = [ "garage-bootstrap.service" ];
         };
       };
     };

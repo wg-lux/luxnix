@@ -1,12 +1,21 @@
 nextcloud_host_password_filename: "SCRT_roles_system_password_nextcloud_host_password"
-nextcloud_host_minio_cred_filename: "SCRT_roles_system_password_nextcloud_host_minio_credentials"
+nextcloud_host_garage_cred_filename: "SCRT_roles_system_password_nextcloud_host_garage_credentials"
 nextcloud_host_pw_src: "{{ lx_vault_dir_src }}/deploy/{{ inventory_hostname }}/{{ nextcloud_host_password_filename }}"
-nextcloud_host_minio_cred_src: "{{ lx_vault_dir_src }}//secrets/system_password/roles/nextcloud_host/nextcloud_host_minio_credentials"
+nextcloud_host_garage_cred_src: "{{ lx_vault_dir_src }}//secrets/system_password/roles/nextcloud_host/nextcloud_host_garage_credentials"
 
 nextcloud_host_roles:
   nextcloudHost.enable: "true"
-  nextcloudHost.package: "pkgs.nextcloud31"
+  # nextcloud 31 (31.0.14) is EOL and marked insecure in the pinned nixpkgs.
+  # Nextcloud majors must be upgraded one step at a time: 31 -> 32.
+  nextcloudHost.package: "pkgs.nextcloud32"
   nextcloudHost.passwordFilePath: '"/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_password"'
-  nextcloudHost.minioCredentialsFilePath: '"/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_minio_credentials"'
+  # Object store: local single-node Garage (MinIO was removed from nixpkgs in
+  # 26.05). The access-key ID below is not secret; the matching secret key,
+  # Garage RPC secret, and admin token live together in the delivered file
+  #   NEXTCLOUD_S3_SECRET_KEY=<64 hex>
+  #   GARAGE_RPC_SECRET=<64 hex>
+  #   GARAGE_ADMIN_TOKEN=<token>
+  nextcloudHost.garageCredentialsFilePath: '"/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_garage_credentials"'
+  nextcloudHost.s3AccessKeyId: '"GK8403eaf51b565c579d23d8e1"'
   nextcloudHost.maxUploadSize: '"10G"'
   postgres.default.enable: "false"

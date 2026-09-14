@@ -569,6 +569,23 @@ let
     '';
   };
 
+  serverRebuildPreparationTool = pkgs.writeShellApplication {
+    name = "luxnix-vault-prepare-server-rebuild";
+    runtimeInputs = [
+      pkgs.age
+      pkgs.coreutils
+      pkgs.gnutar
+      pkgs.systemd
+    ];
+    text = ''
+      export EXPECTED_HOSTNAME=${lib.escapeShellArg config.networking.hostName}
+      export VAULT_STORAGE_PATH=${lib.escapeShellArg (toString serverCfg.storagePath)}
+      export VAULT_TLS_STATE_DIRECTORY=${lib.escapeShellArg managedTlsCfg.stateDirectory}
+      export VAULT_TLS_CA_FILE=${lib.escapeShellArg (toString serverCfg.caCertFile)}
+      exec ${pkgs.bash}/bin/bash ${../../../../scripts/vault/prepare-server-rebuild.sh} "$@"
+    '';
+  };
+
   managedServerTlsTool = pkgs.writeShellApplication {
     name = "luxnix-vault-maintain-server-tls";
     runtimeInputs = [
@@ -1759,6 +1776,7 @@ in
         hubPkiBootstrapTool
         hubSitesReconcileTool
         hubSiteEnrollmentTool
+        serverRebuildPreparationTool
         hubSiteLifecycleTool
         pkgs.vault
       ]

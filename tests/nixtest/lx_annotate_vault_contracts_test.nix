@@ -47,6 +47,8 @@ in
           assert_file_contains ${vaultModule} 'storageBackend = "raft"' "Vault server must use integrated Raft storage"
           assert_file_contains ${vaultModule} 'luxnix-vault-bootstrap-hub-pki' "Vault must expose explicit hub PKI bootstrap tooling"
           assert_file_contains ${vaultModule} 'luxnix-vault-enroll-hub-site' "Vault must expose bounded per-site enrollment tooling"
+          assert_file_contains ${vaultModule} 'luxnix-vault-prepare-server-rebuild' "Vault must expose guarded encrypted rebuild preparation tooling"
+          assert_file_contains ${vaultModule} 'pkgs\.age' "Vault rebuild archives must be recipient encrypted"
           assert_file_contains ${vaultModule} 'client_flag=true' "hub certificates must be client identities"
           assert_file_contains ${vaultModule} 'server_flag=false' "hub client certificates must not be valid server identities"
           assert_file_contains ${vaultModule} 'services\.luxnix-vault-issue-hub-client-certificate = lib\.mkIf clientHubPkiCfg\.enable' "site client identities must be issued and renewed by a dedicated service"

@@ -286,9 +286,10 @@ in
             xdg.userDirs = {
               enable = true;
               createDirectories = true;
-              extraConfig = {
-                XDG_DESKTOP_DIR = "${config.home.homeDirectory}/${cfg.desktop.dirName}";
-              };
+              # home-manager 26.05: bare key (not XDG_DESKTOP_DIR), and keep the
+              # session variables exported as before the default flipped.
+              setSessionVariables = true;
+              extraConfig.DESKTOP = "${config.home.homeDirectory}/${cfg.desktop.dirName}";
             };
             xdg.configFile."user-dirs.dirs".force = true;
 
