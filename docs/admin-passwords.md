@@ -11,6 +11,46 @@ apply → verify**. Local import and file distribution alone do not rotate a liv
 account. HashiCorp Vault AppRoles, hub node secrets and client certificates have
 a separate [enrollment and incident workflow](vault-hub-machine-enrollment.md).
 
+## Quick runbook: `gc-02`
+
+Run these commands from the repository root after completing the recovery
+check in step 1. First run the [private-input command in step 2](#2-create-the-private-password-input),
+enter exactly two words twice, and copy the printed private path. Replace
+`<admin-passwords-file>` below with that path. Do not use a deployed
+`/etc/secrets/...` path.
+
+```bash
+admin_host=gc-02
+admin_passwords_file="/run/user/$(id -u)/luxnix-admin-REPLACE.yml"
+# Replace the path above with the path printed by the private-input command.
+
+# Import the plaintext/hash pair into the encrypted local vault.
+devenv shell vault-bootstrap \
+  --vault-dir ~/.lxv --vault-key ~/.lxv.key \
+  --local-hostname "$admin_host" --skip-sync \
+  --admin-passwords "$admin_passwords_file"
+
+# Confirm that the plaintext and generated hash match the vault.
+devenv shell validate-admin-passwords \
+  --vault-dir ~/.lxv --vault-key ~/.lxv.key \
+  --admin-passwords "$admin_passwords_file" --vault-id luxnix-master
+
+# Export the validated pair for the registered hosts.
+devenv shell vault-bootstrap \
+  --vault-dir ~/.lxv --vault-key ~/.lxv.key \
+  --local-hostname "$admin_host" --skip-sync --export
+
+# Only after reviewing the export and confirming recovery access:
+devenv shell check-connectivity "$admin_host"
+devenv shell rotate-admin-passwords --limit "$admin_host" \
+  -e admin_rotation_recovery_confirmed=true
+```
+
+The final command changes the live account and displays the validated password
+once for confirmation. Stop after validation or export if you are only
+preparing credentials. Record verification results, then remove the private
+plaintext input as described in step 7.
+
 ## 1. Select the host and establish recovery
 
 Record the inventory hostname, verified SSH identity/address, repository commit,
@@ -59,6 +99,16 @@ do not maintain or rotate the hash independently.
 Create a private YAML input outside the checkout on operator-owned tmpfs. Its
 structure is a top-level `admin_passwords` mapping from exact inventory hostname
 to a nonempty string password. Include only the intended host for rotation.
+The value passed to `--admin-passwords` must be this private YAML input; it must
+not be the deployed target-side secret path such as
+`/etc/secrets/vault/SCRT_local_password_admin_password` or a symlink to one.
+Those paths contain deployed secret material, not the YAML input consumed by
+`vault-bootstrap`.
+
+For a two-word password, enter exactly two whitespace-separated words at both
+prompts below. Spaces are part of the password, so preserve the same spelling,
+capitalization and punctuation when entering it later. Store the result in the
+approved password manager; the script prints only the private input path.
 Use a secure editor with swap, backup and session recording disabled, or this
 hidden-input snippet from an interactive terminal:
 
@@ -92,8 +142,8 @@ if (not re.fullmatch(r"[a-z0-9-]{1,63}", host)
         or not host[0].isalnum() or not host[-1].isalnum()):
     raise SystemExit("Invalid inventory hostname")
 password = getpass.getpass("New admin password: ")
-if not password.strip() or password != getpass.getpass("Confirm password: "):
-    raise SystemExit("Empty or mismatched password; no file written")
+if password != getpass.getpass("Confirm two-word password: "):
+    raise SystemExit("Mismatched password; no file written")
 fd, filename = tempfile.mkstemp(prefix="luxnix-admin-", suffix=".yml", dir=runtime)
 with os.fdopen(fd, "w") as stream:
     yaml.safe_dump({"admin_passwords": {host: password}}, stream)
@@ -107,6 +157,15 @@ only its path is printed. Never pass a password through shell arguments,
 disabled. Remove the plaintext input after acceptance and recovery-record
 verification; after a failure, retain it only while needed in protected tmpfs.
 A process crash can leave private staging files requiring cleanup.
+
+For example, after the snippet prints a path, pass that path to the importer:
+
+```bash
+devenv shell vault-bootstrap \
+  --vault-dir ~/.lxv --vault-key ~/.lxv.key \
+  --local-hostname hostname --skip-sync \
+  --admin-passwords <admin-passwords-file>
+```
 
 ## 3. Import the paired credential
 
@@ -153,39 +212,6 @@ credentials and must not be used for admin rotation.
 
 ## 4. Validate, then export
 
-### Rotate one existing admin pair when unrelated credentials have expired
-
-For an existing canonical pair and registered host PSK, add `--admin-host <host>`
-to `vault-bootstrap --skip-sync`. The input must contain exactly that host.
-This mode imports and validates the selected pair, then saves it in the active
-vault. It does not change other credentials or their expiry timestamps.
-All stored ciphertext must still authenticate with the explicit master key;
-complete legacy metadata/key migration first. Central HashiCorp Vault unsealing
-does not repair this local file-vault contract.
-
-```bash
-devenv shell vault-bootstrap \
-  --vault-dir ~/.lxv --vault-key ~/.lxv.key --skip-sync \
-  --admin-host gc-02 --admin-passwords <admin-passwords-file>
-devenv shell validate-admin-passwords \
-  --vault-dir ~/.lxv --vault-key ~/.lxv.key \
-  --admin-passwords <admin-passwords-file> --vault-id luxnix-master
-devenv shell vault-bootstrap \
-  --vault-dir ~/.lxv --vault-key ~/.lxv.key --skip-sync \
-  --admin-host gc-02 --export
-```
-
-The scoped export contains only the two validated admin files under
-`~/.lxv/admin-rotations/gc-02/deploy/gc-02/`. It leaves the ordinary fleet export
-unchanged. For the apply command in section 5, add
-`-e lx_vault_host_deploy_dir=/home/admin/.lxv/admin-rotations/gc-02/deploy/gc-02`
-(substitute the actual operator home and host). Keep the same recovery and terminal
-approval requirements. Export without reimport rejects an expired selected pair.
-Full-vault bootstrap continues to reject unrelated expired credentials; this mode
-does not establish fleet readiness or renew those credentials.
-
-### Full-vault validation and export
-
 ```bash
 devenv shell validate-admin-passwords \
   --vault-dir ~/.lxv --vault-key ~/.lxv.key \
@@ -218,7 +244,6 @@ and have the custodian reconcile it with `deploy` against the intended revision.
 Do not blindly delete the recovery marker or distribute a partial export.
 
 ## 5. Apply to an existing machine
-
 
 Use the dedicated consumer workflow after paired import, validation and export:
 
@@ -280,95 +305,7 @@ check new login acceptance and old login rejection. Do not terminate the only
 active recovery connection. Database and application sessions have separate
 owners and are not changed by this account workflow.
 
-### Activate on the same machine
-
-Use Ansible's local connection when the controller is the account's target host.
-The ordinary connection check uses SSH, even when its inventory address belongs
-to the controller. `Permission denied (publickey)` therefore does not establish
-that local sudo is unavailable.
-
-The rotation play targets the `managed` group. `--limit gc-02` only filters that
-group; it does not add an absent host. For an intentional local rotation, create
-a private temporary inventory overlay rather than changing fleet membership.
-This example is for commands run as `admin` on **gc-02**, from the repository root:
-
-```bash
-umask 077
-local_inventory="${XDG_RUNTIME_DIR}/luxnix-admin-local.yml"
-cat > "$local_inventory" <<'YAML'
-managed:
-  hosts:
-    gc-02:
-      ansible_connection: local
-YAML
-
-devenv shell check-connectivity gc-02 \
-  -e ansible_connection=local -e ansible_become=false
-
-devenv shell rotate-admin-passwords \
-  -i "$PWD/ansible/inventory/hosts.ini" -i "$local_inventory" \
-  --limit gc-02 --list-hosts
-```
-
-The host list must contain exactly `gc-02`. The playbook also checks the local
-machine's short hostname against the selected inventory hostname before writing
-credentials. It loads `ansible/inventory/group_vars/all/10-vault.yml` explicitly,
-so the canonical vault paths do not depend on inventory variable discovery.
-
-First complete import, validation and scoped export from section 4. Reimporting
-a different password makes an earlier export stale; regenerate the export before
-activation. A bootstrap YAML-lint message saying `Passed` is not live activation
-evidence. Dependency deprecation messages alone do not mean an import failed.
-
-In a separate terminal, run `sudo -i` with the **current** account password and
-keep that verified root shell open. Then, in the ordinary admin terminal:
-
-```bash
-devenv shell rotate-admin-passwords \
-  -i "$PWD/ansible/inventory/hosts.ini" -i "$local_inventory" \
-  --limit gc-02 --ask-become-pass \
-  --vault-id "gc-02@$HOME/.lxv/psk/gc-02.psk" \
-  -e "lx_vault_host_deploy_dir=$HOME/.lxv/admin-rotations/gc-02/deploy/gc-02" \
-  -e admin_rotation_recovery_confirmed=true
-```
-
-Enter the **current** password at `BECOME password:`; this is the initial sudo
-authentication, not the replacement password prompt. Review the replacement
-displayed later and answer `y` to activate it. Do not run the whole Devenv wrapper
-as root or pass passwords through extra variables. The wrapper needs the normal
-operator's private runtime directory and vault access. A shell continuation
-backslash must be the final character on its line, with no trailing spaces.
-
-After successful account update, the playbook switches its in-memory sudo
-credential to the approved replacement when the actual connection account is
-`admin`. This includes local connections, where `ansible_user` may not identify
-the process user. A different connection account retains its own sudo credential.
-The replacement is not cached as a persistent fact or printed in task output.
-
-To verify fresh authentication, run `sudo -k` followed by `sudo -v` in the
-ordinary admin terminal and enter the **new** password. Keep the root recovery
-shell open until this succeeds and the playbook's hash comparison passes.
-
-### Recover from a final sudo readback failure
-
-An older playbook can update the account successfully, then fail at
-`Read back the running account hash` with `Duplicate become password prompt` or
-`Sorry, try again`. It is attempting sudo with the password supplied before the
-rotation. Do not conclude that the account update was rolled back.
-
-Keep the root recovery shell open. Test `sudo -k` and `sudo -v` using the new
-password. If accepted, rerun the same activation command, supplying the **new**
-password at `BECOME password:` and approving the same exported pair. An identical
-installed hash is accepted, and readback can complete. Do not reimport or generate
-another replacement merely to perform this verification. If new-password sudo
-fails, stop and use the retained recovery shell to investigate.
-
-This recovery was reported successful by the operator on `gc-02` on 2026-09-10.
-It establishes that recovery path; it is not a live acceptance test of the new
-automatic sudo credential handoff or proof that existing sessions were revoked.
-
 ## 6. Install on a new machine
-
 
 Activation no longer manufactures the shared recovery password. Provision a
 unique root-owned, mode-`0600` or `0400` admin hash at the evaluated

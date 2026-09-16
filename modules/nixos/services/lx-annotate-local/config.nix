@@ -176,7 +176,14 @@ let
     cp ${./scripts/wheel-downgrade-guard.py} "$out/guard.py"
     cp ${../../../../lx_administration/utils/file_operations.py} "$out/wheel_guard_file_operations.py"
   '';
+  wheelStaticAssetCheck = pkgs.runCommand "lx-annotate-wheel-static-check-${packageVersion}" { } ''
+    ${pkgs.python3}/bin/python ${./scripts/wheel-static-check.py} \
+      --wheel ${lib.escapeShellArg wheelFilePath}
+    touch "$out"
+  '';
   wheelRuntimePackage = pkgs.runCommand "lx-annotate-wheel-runtime-${packageVersion}" { } ''
+    # A broken candidate must fail the build before activation or migrations.
+    test -f ${wheelStaticAssetCheck}
     mkdir -p "$out/bin" "$out/libexec" "$out/share/lx-annotate"
     ln -s ${lib.escapeShellArg runtimeStaticRootPath} "$out/share/lx-annotate/staticfiles"
 
@@ -414,18 +421,9 @@ let
     lx_annotate_wheel_sync_static() {
       local package_static_dir=""
 
-      package_static_dir="$(${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/python"} - <<'PY'
-    from importlib.metadata import distribution
-    from pathlib import Path
-
-    # Importing lx_annotate initializes Django and prints startup messages.
-    package_root = Path(distribution("lx-annotate").locate_file("lx_annotate")).resolve()
-    for candidate in (package_root / "staticfiles", package_root / "static"):
-        if candidate.exists():
-            print(candidate)
-            break
-    PY
-    )"
+      # Check installed files as the service user before touching served assets.
+      package_static_dir="$(${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/python"} \
+        ${./scripts/wheel-static-check.py} --installed)"
 
       if [ -z "$package_static_dir" ] || [ ! -d "$package_static_dir" ]; then
         echo "ERROR: No packaged static assets found in installed lx-annotate wheel." >&2

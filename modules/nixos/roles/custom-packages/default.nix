@@ -77,38 +77,6 @@ let
     nextcloud-talk-desktop
   ];
 
-  ldCuda = with pkgs; [
-    # cudaPackages.cudatoolkit
-    mesa
-    glibc
-    glib
-    # linuxPackages.nvidia_x11
-    libxi
-    libxmu
-    freeglut
-    libxext
-    libx11
-    libxv
-    libxrandr
-    ncurses5
-    binutils
-    autoAddDriverRunpath
-    cudaPackages.cuda_nvcc
-    cudaPackages.nccl
-    cudaPackages.cudnn
-    cudaPackages.libnpp
-    cudaPackages.libcutensor
-    cudaPackages.libcufft
-    cudaPackages.libcurand
-    cudaPackages.libcublas
-  ];
-
-  # Packages for podman + nvidia combination (for development)
-  podmanNvidia = with pkgs; [
-    cudaPackages.cudatoolkit # Keep for CUDA development
-    nvidia-container-toolkit
-  ];
-
   customPackages =
     with pkgs;
     [
@@ -136,8 +104,7 @@ let
 
       vdpauinfo # sudo vainfo
       libva-utils # sudo vainfo
-    ]
-    ++ optionals (podmanEnabled && nvidiaEnabled) podmanNvidia;
+    ];
 
 in
 {
@@ -147,6 +114,9 @@ in
     kdePlasma = mkBoolOpt false "Add KDE Plasma Packages to custom packages";
     baseDevelopment = mkBoolOpt false "Add Base Development Packages to custom packages";
     cuda = mkBoolOpt false "Add CUDA packages to custom packages";
+    # NCCL is built from source when the exact derivation is not cached.
+    # Keep it opt-in for native consumers; Python wheels manage their own NCCL.
+    # Diagnosis and opt-in procedure: docs/guides/cuda-source-builds.yml.
     videoEditing = mkBoolOpt false "Add Video Editing packages to custom packages";
     visuals = mkBoolOpt false "Add Visuals packages to custom packages";
     dev03 = mkBoolOpt false "Add dev03 packages to custom packages";
@@ -163,7 +133,6 @@ in
 
     cli.programs.nix-ld = {
       enable = lib.mkForce cfg.ld.enable;
-      extraLibraries = optionals cfg.cuda ldCuda;
     };
 
     programs.obs-studio.enable = cfg.videoEditing;

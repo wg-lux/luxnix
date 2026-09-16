@@ -195,3 +195,4 @@ host_luxnix:
 
 host_nixos:
   networking.firewall.interfaces.tun0.allowedTCPPorts: "lib.mkAfter [ 11434 8088 8200 ]"
+  

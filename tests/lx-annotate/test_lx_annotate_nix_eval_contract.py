@@ -924,6 +924,35 @@ def test_endoreg_client_lx_annotate_runtime_limits_flow_to_systemd() -> None:
     }
 
 
+def test_web_recovery_preserves_gates_and_resource_limits_on_incident_hosts() -> None:
+    evaluated = _nix_eval_expr_json(
+        """
+        let
+          flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
+        in builtins.mapAttrs (_: host:
+          let s = host.config.systemd.services.lx-annotate;
+          in {
+            inherit (s) requires;
+            inherit (s.unitConfig) StartLimitIntervalSec;
+            inherit (s.serviceConfig) Restart RestartSec OOMPolicy Nice
+              IOSchedulingPriority OOMScoreAdjust MemoryMax CPUQuota;
+          }
+        ) { inherit (flake.nixosConfigurations) gc-02 gc-10 gs-02; }
+        """
+    )
+    for service in evaluated.values():
+        assert service["Restart"] == "always"
+        assert service["RestartSec"] == 30
+        assert service["StartLimitIntervalSec"] == 0
+        assert service["OOMPolicy"] == "stop"
+        assert service["Nice"] == service["OOMScoreAdjust"] == 0
+        assert service["IOSchedulingPriority"] == 4
+        assert service["MemoryMax"] != "infinity"
+        assert service["CPUQuota"]
+        assert "lx-annotate-master-key-check.service" in service["requires"]
+        assert "lx-annotate-preflight.service" in service["requires"]
+
+
 def test_endoreg_client_lx_annotate_worker_limits_flow_to_celery_systemd() -> None:
     evaluated = _gc_02_extended_contracts()["workerLimits"]
 

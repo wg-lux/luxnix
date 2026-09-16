@@ -40,19 +40,24 @@ with ctx;
     ++ localPostgresSetupUnits
     ++ managedSecretsSetupUnits
     ++ encryptionServiceUnits;
-    unitConfig = encryptedDataMountUnitConfig;
+    unitConfig = encryptedDataMountUnitConfig // {
+      # Keep retrying transient process failures without a permanent rate-limit latch.
+      StartLimitIntervalSec = 0;
+    };
     serviceConfig = {
       TimeoutStartSec = "5min";
-      Restart = "on-failure";
-      RestartSec = mkDefault 5;
+      Restart = mkForce "always";
+      RestartSec = mkForce 30;
+      # Recycle the whole web cgroup if an OOM kill leaves the master alive.
+      OOMPolicy = "stop";
       LogNamespace = lxAnnotateJournalNamespace;
       MemoryHigh = cfg.runtime.limits.memoryHigh;
       MemoryMax = cfg.runtime.limits.memoryMax;
       CPUQuota = cfg.runtime.limits.cpuQuota;
-      Nice = 10;
+      Nice = 0;
       IOSchedulingClass = "best-effort";
-      IOSchedulingPriority = 6;
-      OOMScoreAdjust = 250;
+      IOSchedulingPriority = 4;
+      OOMScoreAdjust = 0;
       ProtectSystem = "full";
       PrivateTmp = true;
       NoNewPrivileges = true;

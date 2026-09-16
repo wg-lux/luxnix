@@ -10,7 +10,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 import yaml
 
@@ -89,6 +89,7 @@ def check_nix_parse(policy: dict[str, Any], files: list[Path]) -> dict[str, Any]
         "command_ok": accepted(result, definition),
         "exit_code": result.returncode,
         "parsed_files": len(files) if accepted(result, definition) else 0,
+        "stdout": result.stdout.strip(),
         "stderr": result.stderr.strip(),
     }
 
@@ -124,6 +125,7 @@ def count_deadnix(policy: dict[str, Any]) -> dict[str, Any]:
         "command_ok": accepted(result, definition),
         "exit_code": result.returncode,
         "findings": len(findings),
+        "details": findings,
         "non_generated_findings": sum(
             not is_generated(item["file"], policy) for item in findings
         ),
@@ -149,6 +151,7 @@ def count_statix(policy: dict[str, Any]) -> dict[str, Any]:
         "command_ok": accepted(result, definition),
         "exit_code": result.returncode,
         "findings": len(findings),
+        "details": findings,
         "non_generated_findings": sum(
             not is_generated(item["file"], policy) for item in findings
         ),
@@ -174,6 +177,7 @@ def count_nixfmt(policy: dict[str, Any], files: list[Path]) -> dict[str, Any]:
         "command_ok": accepted(result, definition),
         "exit_code": result.returncode,
         "unformatted_files": len(unformatted),
+        "files": unformatted,
         "non_generated_unformatted_files": sum(
             not is_generated(path, policy) for path in unformatted
         ),
@@ -272,7 +276,93 @@ def evaluate_baselines(
     return failures
 
 
-def print_human(report: dict[str, Any], failures: list[str], full: bool) -> None:
+def diagnostic_location(path: str, position: dict[str, Any]) -> str:
+    """Use the tool's coordinates; some error reports contain only a message."""
+    line = position.get("line")
+    column = position.get("column")
+    if line is None:
+        return path
+    if column is None:
+        return f"{path}:{line}"
+    return f"{path}:{line}:{column}"
+
+
+def print_diagnostics(
+    report: dict[str, Any], stream: TextIO, *, verbose: bool = False
+) -> None:
+    """Print retained diagnostics without rerunning checks or changing counts."""
+    untracked = report["flake_source_visibility"].get("files", [])
+    if untracked:
+        print("\nFlake source visibility: untracked files:", file=stream)
+        for path in sorted(untracked):
+            print(f"  {path}", file=stream)
+
+    deadnix_details = report["deadnix"].get("details", [])
+    if deadnix_details:
+        print("\ndeadnix diagnostics:", file=stream)
+        for finding in sorted(deadnix_details, key=lambda item: item["file"]):
+            location = diagnostic_location(finding["file"], finding)
+            message = finding.get("message") or "Unused declaration"
+            print(f"  {location}: {message}", file=stream)
+
+    statix_details = report["statix"].get("details", [])
+    if statix_details:
+        print("\nstatix diagnostics:", file=stream)
+        for finding in sorted(statix_details, key=lambda item: item["file"]):
+            # A Statix report can contain several source locations. Keep each
+            # location visible, but continue counting reports, not locations.
+            code = finding.get("code")
+            severity = str(finding.get("severity", "Warn")).lower()
+            prefix = {"warn": "W", "error": "E", "hint": "I"}.get(severity, "W")
+            rule = f"[{prefix}{code}] " if code is not None else ""
+            note = finding.get("note") or ""
+            for diagnostic in finding.get("diagnostics") or [{}]:
+                position = (diagnostic.get("at") or {}).get("from") or {}
+                location = diagnostic_location(finding["file"], position)
+                message = diagnostic.get("message") or note or "Lint finding"
+                if note and note != message:
+                    message = f"{note}: {message}"
+                print(f"  {location}: {rule}{message}", file=stream)
+
+    unformatted = report["nixfmt"].get("files", [])
+    if unformatted:
+        print("\nnixfmt: unformatted files:", file=stream)
+        for path in sorted(unformatted):
+            print(f"  {path}: not formatted", file=stream)
+
+    for check_name, result in report.items():
+        if not isinstance(result, dict):
+            continue
+
+        # Commands with unstructured output should also be shown when their
+        # metrics fail, even if the policy accepts their process exit code.
+        show_output = (
+            verbose
+            or not result.get("command_ok", True)
+            or (check_name == "flake_checker" and bool(result.get("issues")))
+        )
+        output = result.get("output") if show_output else None
+        if output:
+            print(f"\n{check_name} output:\n{output}", file=stream)
+
+        stdout = result.get("stdout") if show_output else None
+        if stdout:
+            print(f"\n{check_name} stdout:\n{stdout}", file=stream)
+
+        # Preserve warnings/errors even when the exit code was accepted.
+        # nixfmt's ordinary 'not formatted' lines are already printed above.
+        stderr = result.get("stderr")
+        if stderr:
+            print(f"\n{check_name} stderr:\n{stderr}", file=stream)
+
+
+def print_human(
+    report: dict[str, Any],
+    failures: list[str],
+    full: bool,
+    *,
+    verbose: bool = False,
+) -> None:
     deadnix_non_generated = report["deadnix"]["non_generated_findings"]
     statix_non_generated = report["statix"]["non_generated_findings"]
     print(f"Nix quality ({'full' if full else 'fast'})")
@@ -305,16 +395,15 @@ def print_human(report: dict[str, Any], failures: list[str], full: bool) -> None
         )
         print(f"  flake evaluation: {flake_status}")
     if failures:
+        # Keep the summary before stderr diagnostics in merged hook logs.
+        sys.stdout.flush()
         print("Quality gate failed:", file=sys.stderr)
         for failure in failures:
             print(f"  - {failure}", file=sys.stderr)
-        for check_name, result in report.items():
-            if not isinstance(result, dict) or result.get("command_ok", True):
-                continue
-            diagnostic = result.get("output") or result.get("stderr")
-            if diagnostic:
-                print(f"\n{check_name} output:\n{diagnostic}", file=sys.stderr)
+        print_diagnostics(report, sys.stderr, verbose=verbose)
     else:
+        if verbose:
+            print_diagnostics(report, sys.stdout, verbose=True)
         print("Quality gate passed; no metric exceeded its ratcheted baseline.")
 
 
@@ -324,6 +413,12 @@ def main() -> int:
     parser.add_argument("--full", action="store_true", help="also run nix flake check")
     parser.add_argument(
         "--json", action="store_true", help="emit the complete report as JSON"
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="show detailed diagnostics even when the gate passes (human output only)",
     )
     args = parser.parse_args()
 
@@ -348,7 +443,7 @@ def main() -> int:
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
     else:
-        print_human(report, failures, args.full)
+        print_human(report, failures, args.full, verbose=args.verbose)
     return 0 if report["passed"] else 1
 
 

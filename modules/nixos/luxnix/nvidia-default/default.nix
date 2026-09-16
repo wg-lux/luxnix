@@ -15,15 +15,6 @@ let
     "beta" = config.boot.kernelPackages.nvidiaPackages.beta;
     "production" = config.boot.kernelPackages.nvidiaPackages.production;
 
-    # Custom imports
-    "555_58" = {
-      version = "555.58";
-      sha256_64bit = "sha256-bXvcXkg2kQZuCNKRZM5QoTaTjF4l2TtrsKUvyicj5ew=";
-      sha256_aarch64 = pkgs.lib.fakeSha256;
-      openSha256 = pkgs.lib.fakeSha256;
-      settingsSha256 = "sha256-vWnrXlBCb3K5uVkDFmJDVq51wrCoqgPF03lSjZOuU8M=";
-      persistencedSha256 = pkgs.lib.fakeSha256;
-    };
   };
 
 in
@@ -57,15 +48,16 @@ in
     boot.initrd.kernelModules = [ "nvidia" ];
     hardware.nvidia = {
       modesetting.enable = true;
-      powerManagement.enable = true;
+      powerManagement.enable = false;
       powerManagement.finegrained = false;
       open = true;
       nvidiaSettings = true;
       # mkDefault so a host that also enables luxnix.nvidia-prime (which pins the
       # production driver) wins without an option-merge conflict; NixOS 26.05
       # makes hardware.nvidia.package strictly unique.
-      package = mkDefault nvidiaDrivers.${cfg.nvidiaDriver};
+      # package = mkDefault nvidiaDrivers.${cfg.nvidiaDriver};
       nvidiaPersistenced = true;
+      package = config.boot.kernelPackages.nvidiaPackages.beta;
     };
   };
 

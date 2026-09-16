@@ -1,6 +1,38 @@
 schema_version: 1
 title: LX-Annotate operational timing and monitoring
 feature: feature-tracking/lx_annotate_operational_monitoring.yml
+web_resilience:
+  ownership: LuxNix wheel wrapper and systemd web unit
+  build_gate:
+    validator: modules/nixos/services/lx-annotate-local/scripts/wheel-static-check.py
+    behavior:
+      - Validate the exact selected wheel before its runtime package can build.
+      - Require the src/main.ts Vite entry point, referenced files, CSS, assets, and resolved static and dynamic imports.
+      - Reject missing, empty, malformed, or escaping asset references without manufacturing a manifest.
+    limitation: This asset gate does not replace installed-wheel Django smoke tests or migration compatibility review.
+  startup_gate:
+    - Discover the installed distribution through metadata without importing Django or mixing startup logs into the returned directory.
+    - Validate readable installed assets as the service user before rsync can change the served tree.
+    - Preserve existing served assets when candidate validation fails; partial copy failures still require repair.
+  process_recovery:
+    restart: always
+    restart_delay_seconds: 30
+    start_rate_limit: disabled
+    oom_policy: stop
+    behavior:
+      - Unexpected clean exits and process failures retry without a permanent start-limit latch.
+      - An OOM kill stops the remaining web process group so systemd can restart it.
+      - Explicit systemctl stop remains effective; this policy does not override operator stops.
+      - Web uses normal nice, IO priority, and OOM adjustment while retaining configured CPU and memory limits.
+    limitations:
+      - Failed prerequisite jobs, missing mounts, invalid secrets, and failed migrations still block startup and require diagnosis.
+      - Restart policy is not application readiness and does not detect a live but hung web master.
+      - Worker retries and task idempotency are separate application contracts; no active task is killed merely for age.
+  rollout:
+    - Build the runtime package and evaluate the selected host with locked inputs before deployment.
+    - Review the candidate release against the deployed release and schema before activating through the documented deployment workflow.
+    - Verify TLS frontend, manifest and referenced asset, authenticated readiness, and five minutes of stable restart count.
+    - Exercise clean exit and OOM recovery in an isolated service test before claiming runtime failure-injection coverage.
 ownership:
   application:
     - Emit typed workflow and task timing with monotonic in-process durations.

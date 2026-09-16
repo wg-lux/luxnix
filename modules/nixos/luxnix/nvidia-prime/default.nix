@@ -65,7 +65,8 @@ in
         powerManagement.finegrained = false;
         open = lib.mkForce false;
 
-        package = config.boot.kernelPackages.nvidiaPackages.production;
+        package = config.boot.kernelPackages.nvidiaPackages.beta;
+
 
         gsp.enable = false; # GSP disabled is supposed to solve sleep issues on laptops
 
