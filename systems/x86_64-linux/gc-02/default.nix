@@ -135,6 +135,9 @@ lib.foldl' lib.recursiveUpdate
       services.wg-lux-mcp.enable = true;
     }
     {
+      services.luxnix.lxAnnotateLocal.django.enrollLegacyDefaultSalt = true;
+    }
+    {
       services.luxnix.vllm.enable = false;
     }
     {

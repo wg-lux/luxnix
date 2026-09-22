@@ -9,7 +9,6 @@ with ctx;
       "nginx.service"
       "lx-annotate-runtime-env.service"
       "lx-annotate-load-base-data.service"
-      "lx-annotate-preflight.service"
     ]
     ++ dataRecoveryServiceUnits
     ++ localRedisServiceUnits
@@ -21,7 +20,6 @@ with ctx;
       "lx-annotate-runtime-env.service"
       "lx-annotate-load-base-data.service"
       "lx-annotate-master-key-check.service"
-      "lx-annotate-preflight.service"
     ]
     ++ dataRecoveryServiceUnits
     ++ managedSecretsSetupUnits
@@ -30,7 +28,6 @@ with ctx;
       "lx-annotate-runtime-env.service"
       "lx-annotate-load-base-data.service"
       "lx-annotate-master-key-check.service"
-      "lx-annotate-preflight.service"
       "endoreg-django-setup.service"
       "systemd-tmpfiles-setup.service"
     ]

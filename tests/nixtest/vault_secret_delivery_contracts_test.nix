@@ -176,7 +176,7 @@ in
         script = ''
           ${ntlib.helpers.path [ pkgs.gnugrep ]}
           ${ntlib.helpers.scriptHelpers}
-          assert_file_contains ${lxAnnotateEnvScripts} 'export LX_ANNOTATE_ENCRYPTED_DATA_DIR=' "lx-annotate scripts must export the encrypted data dir"
+          assert_file_contains ${lxAnnotateEnvScripts} 'export LX_RUNTIME_ROOT=' "lx-annotate scripts must export the canonical runtime root"
           assert_file_contains ${lxAnnotateEnvScripts} 'export LX_ANNOTATE_MASTER_KEY_FILE=' "lx-annotate scripts must export the application master key file when configured"
           assert_file_contains ${lxAnnotateScripts} 'require_file_backed_master_key' "lx-annotate scripts must enforce the file-backed master key contract"
           assert_file_contains ${lxAnnotateScripts} 'LX_ANNOTATE_MASTER_KEY must not be set in production' "lx-annotate scripts must reject an inline master key that would override the key file"

@@ -11,6 +11,8 @@ host_roles:
   endoreg_client.defaultCenterKey: '"university_hospital_wuerzburg"'
 
 host_services:
+  # Explicit legacy-default enrollment requested for the 1.3.1 upgrade.
+  luxnix.lxAnnotateLocal.django.enrollLegacyDefaultSalt: "true"
   luxnix.vllm.enable: "false"
   luxnix.vllm.gpuMemoryUtilization: 0.85
   luxnix.vllm.host: '"127.0.0.1"'

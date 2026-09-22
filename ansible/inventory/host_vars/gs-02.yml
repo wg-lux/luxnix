@@ -194,5 +194,4 @@ host_luxnix:
   generic_settings.linux.kernelModulesBlacklist: []
 
 host_nixos:
-  networking.firewall.interfaces.tun0.allowedTCPPorts: "lib.mkAfter [ 11434 8088 8200 ]"
-  
+  networking.firewall.interfaces.tun0.allowedTCPPorts: "lib.mkAfter [ 11434 8088 8200 ]"  

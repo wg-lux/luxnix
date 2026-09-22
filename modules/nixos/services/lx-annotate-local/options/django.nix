@@ -7,7 +7,7 @@ in
   options.services.luxnix.lxAnnotateLocal = {
     django = mkOption {
       type = types.submodule {
-        options = mkDjangoOptions {
+        options = (mkDjangoOptions {
           defaults = {
             hostname = "lx-annotate.local";
             port = 8117;
@@ -35,7 +35,6 @@ in
             djangoEnv = null;
             dataDir = "data";
             confDir = "conf";
-            confTemplateDir = "conf_template";
             djangoModule = "lx_annotate";
             assetDir = "tests/assets";
             httpProtocol = "https";
@@ -49,6 +48,28 @@ in
           includeKeycloak = true;
           logLevelType = types.str;
           httpProtocolType = types.str;
+        }) // {
+          enrollLegacyDefaultSalt = mkOption {
+            type = types.bool;
+            default = false;
+            description = ''
+              Explicitly enroll historical default_salt as a retiring identity
+              generation and provision one new active salt. Requires coordinated
+              keyring-capable identity writers. This does not run bulk migration
+              or rotate media or Django signing keys. Never enable on a host
+              whose established identity salt is unknown or different.
+            '';
+          };
+          identitySaltFile = mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = "Private file holding an established non-default identity salt, exported as DJANGO_SALT_FILE.";
+          };
+          identitySaltKeyringFile = mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = "Private identity manifest exported as DJANGO_IDENTITY_SALT_KEYRING_FILE; takes precedence over a single salt file.";
+          };
         };
       };
       default = { };

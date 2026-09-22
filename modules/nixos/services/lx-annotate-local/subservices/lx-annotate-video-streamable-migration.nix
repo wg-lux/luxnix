@@ -4,7 +4,7 @@
 with ctx;
 {
   systemd.services.lx-annotate-video-streamable-migration = mkIf cfg.streamableMigration.enable {
-    description = "Backfill LX-Annotate streamable video artifacts";
+    description = "Reconcile LX-Annotate canonical video and PDF storage";
     wantedBy = [ ];
     after = [
       "systemd-tmpfiles-setup.service"
@@ -40,6 +40,7 @@ with ctx;
       WorkingDirectory = runtimeDataRootPath;
       ExecStart = lib.escapeShellArgs [
         "${lxAnnotateMigrateVideoStreamableStorageScript}/bin/lx-annotate-migrate-video-streamable-storage"
+        "--apply"
       ];
       EnvironmentFile = envSystemdFilePath;
       TimeoutStartSec = "infinity";

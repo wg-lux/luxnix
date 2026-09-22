@@ -104,7 +104,7 @@ audited management command outside the normal service path.
 | `failed` | Transcoding, source decryption, validation, publication, or cleanup failed. | Not playable; inspect `last_error` and the worker journal. |
 | systemd oneshot `Finished` | Selection and dispatch completed successfully. | It does **not** mean queued Celery tasks completed. |
 
-The automatic backfill starts after the web unit, encrypted-storage preflight,
+The automatic backfill starts after the web unit, master-key check,
 and FFmpeg worker, with the local Redis service required when configured.
 Neither the web unit nor preflight depends on the corpus scan: slow or failed
 reconciliation must not hold the frontend offline. The recurring timer retries
@@ -112,7 +112,9 @@ deferred scans, including scans skipped while imports are active. A database or
 runtime error in that check fails the unit instead of silently skipping it. Systemd worker
 startup ordering does not prove broker connectivity or task completion; web
 startup does not prove that the legacy backlog has drained. The production
-readiness check remains the launch gate.
+readiness check remains required for release acceptance. Comprehensive preflight
+diagnostics are invoked explicitly and do not gate normal service startup;
+migrations and the master-key check remain startup prerequisites.
 
 External archive storage uses the host-owned
 `roles.endoreg-client.paths.storagePersistingDeviceId` (the verified

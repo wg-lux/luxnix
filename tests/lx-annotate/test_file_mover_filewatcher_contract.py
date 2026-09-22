@@ -158,7 +158,7 @@ def test_file_mover_publishes_into_filewatcher_intake_contract() -> None:
         resolved["report"],
         resolved["preanonymized"],
     ]
-    assert watcher_env["DATA_DIR"] == "/var/lib/lx-annotate/data"
+    assert watcher_env["LX_RUNTIME_ROOT"] == "/var/lib/lx-annotate/data"
     assert not any(key.startswith("WATCHER_") for key in watcher_env)
     assert resolved["moverStaging"] not in watcher_path["PathChanged"]
 
@@ -214,7 +214,7 @@ def test_all_file_mover_hosts_publish_into_filewatcher_intake_contract() -> None
             resolved["preanonymized"],
         ], host_name
         assert resolved["moverStaging"] not in watcher_path["PathChanged"], host_name
-        assert watcher_env["DATA_DIR"].endswith("/data"), host_name
+        assert watcher_env["LX_RUNTIME_ROOT"].endswith("/data"), host_name
         assert not any(key.startswith("WATCHER_") for key in watcher_env), host_name
 
         # PathChanged handles normal arrivals. The periodic timer retries files
@@ -470,7 +470,7 @@ def test_file_mover_transcodes_video_before_publish() -> None:
 
     assert "transcode_video" in contract["fileMover"]["transcodeVideoCommand"]
     assert "export_video_transcode_fallback_env()" in source
-    assert "DATA_DIR" in contract["fileMover"]["transcodeEnvironmentScript"]
+    assert "LX_RUNTIME_ROOT" in contract["fileMover"]["transcodeEnvironmentScript"]
     assert "FFMPEG_TRANSCODE_TIMEOUT_SECONDS" in source
     assert "--input-dir" in contract["fileMover"]["transcodeVideoCommand"]
     assert "--filename" in contract["fileMover"]["transcodeVideoCommand"]

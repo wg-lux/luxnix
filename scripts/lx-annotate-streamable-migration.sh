@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  lx-annotate-streamable-migration <host> [migrate_video_streamable_storage args...]
+  lx-annotate-streamable-migration <host> [migrate_media_storage args...]
 
 Examples:
   lx-annotate-streamable-migration gc-10 --video-id 34 --processed-only

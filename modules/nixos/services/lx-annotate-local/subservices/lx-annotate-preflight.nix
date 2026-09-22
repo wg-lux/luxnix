@@ -4,8 +4,8 @@
 with ctx;
 {
   systemd.services.lx-annotate-preflight = {
-    description = "Gate LX-Annotate web and workers on production runtime readiness";
-    before = [ "lx-annotate.service" ] ++ alwaysWorkerServiceUnits;
+    description = "Run explicit LX-Annotate production readiness diagnostics";
+    wantedBy = [ ];
     after = [
       "lx-annotate-runtime-env.service"
       "lx-annotate-load-base-data.service"
@@ -37,7 +37,7 @@ with ctx;
     environment = commonExtraEnv;
     serviceConfig = {
       Type = "oneshot";
-      RemainAfterExit = true;
+      RemainAfterExit = false;
       User = endoreg-service-user-name;
       Group = endoreg-service-group-name;
       SupplementaryGroups = [ config.luxnix.generic-settings.sensitiveServiceGroupName ];

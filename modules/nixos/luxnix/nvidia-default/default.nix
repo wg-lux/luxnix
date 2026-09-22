@@ -48,7 +48,7 @@ in
     boot.initrd.kernelModules = [ "nvidia" ];
     hardware.nvidia = {
       modesetting.enable = true;
-      powerManagement.enable = false;
+      powerManagement.enable = mkDefault false;
       powerManagement.finegrained = false;
       open = true;
       nvidiaSettings = true;

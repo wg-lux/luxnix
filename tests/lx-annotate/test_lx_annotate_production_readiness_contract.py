@@ -20,12 +20,12 @@ def _eval_gc02(expression: str) -> dict[str, Any]:
     )
 
 
-def test_preflight_blocks_web_and_always_on_workers() -> None:
+def test_diagnostic_preflight_does_not_block_web_and_always_on_workers() -> None:
     evaluated = _eval_gc02(
         """
         {
           preflight = {
-            inherit (cfg.systemd.services.lx-annotate-preflight) before requires;
+            inherit (cfg.systemd.services.lx-annotate-preflight) before requires wantedBy;
           };
           web = {
             inherit (cfg.systemd.services.lx-annotate) requires;
@@ -44,12 +44,15 @@ def test_preflight_blocks_web_and_always_on_workers() -> None:
     )
 
     preflight = evaluated["preflight"]
-    assert "lx-annotate.service" in preflight["before"]
+    assert preflight["before"] == []
+    assert preflight["wantedBy"] == []
     assert "lx-annotate-master-key-check.service" in preflight["requires"]
     assert "lx-annotate-load-base-data.service" in preflight["requires"]
-    assert "lx-annotate-preflight.service" in evaluated["web"]["requires"]
-    for worker in evaluated["workers"]:
-        assert "lx-annotate-preflight.service" in worker["requires"]
+    for service in [evaluated["web"], *evaluated["workers"]]:
+        assert "lx-annotate-preflight.service" not in service["requires"]
+        assert "lx-annotate-data-recovery.service" not in service["requires"]
+        assert "lx-annotate-master-key-check.service" in service["requires"]
+        assert "lx-annotate-load-base-data.service" in service["requires"]
 
 
 def test_live_acceptance_requires_preflight_web_nginx_and_workers() -> None:
@@ -65,6 +68,60 @@ def test_live_acceptance_requires_preflight_web_nginx_and_workers() -> None:
         "lx-annotate-celery-worker.service",
         "lx-annotate-celery-pipeline-worker.service",
     } <= required
+
+
+def test_fleet_boot_does_not_pull_diagnostics_or_legacy_recovery() -> None:
+    fleet = eval_json(
+        '''
+        let
+          flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
+          lib = flake.inputs.nixpkgs.lib;
+        in builtins.mapAttrs (_: host:
+          lib.mapAttrs (_: service: {
+            inherit (service) after before wants requires wantedBy;
+          }) host.config.systemd.services
+        ) { inherit (flake.nixosConfigurations) gc-02 gc-10 gs-02; }
+        '''
+    )
+    for host, units in fleet.items():
+        pending = [name for name, unit in units.items() if unit["wantedBy"]]
+        reached = set()
+        while pending:
+            name = pending.pop()
+            if name in reached or name not in units:
+                continue
+            reached.add(name)
+            pending.extend(
+                dependency.removesuffix(".service")
+                for edge in ("wants", "requires")
+                for dependency in units[name][edge]
+                if dependency.endswith(".service")
+            )
+        assert "lx-annotate" in reached, host
+        assert "lx-annotate-migrate" in reached, host
+        assert "lx-annotate-master-key-check" in reached, host
+        assert "lx-annotate-data-recovery" not in reached, host
+        assert "lx-annotate-preflight" not in reached, host
+
+
+def test_reviewed_legacy_recovery_can_be_explicitly_required() -> None:
+    units = eval_json(
+        '''
+        let
+          flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
+          host = flake.nixosConfigurations.gc-02.extendModules {
+            modules = [{
+              services.luxnix.lxAnnotateLocal.dataRecovery.runBeforeStartup = true;
+            }];
+          };
+        in {
+          web = host.config.systemd.services.lx-annotate.requires;
+          recovery = host.config.systemd.services.lx-annotate-data-recovery.before;
+        }
+        '''
+    )
+    assert "lx-annotate-data-recovery.service" in units["web"]
+    assert "lx-annotate-migrate.service" in units["recovery"]
 
 
 def test_backup_stages_and_verifies_before_latest_publication() -> None:

@@ -727,7 +727,7 @@ let
     set -euo pipefail
     source "${lxAnnotateRuntimeLib}"
 
-    log "Syncing LX-Annotate video streamable artifacts..."
+    log "Reconciling LX-Annotate video and PDF artifact paths and filenames..."
     if [ "${if useWheelRuntime then "true" else "false"}" = "true" ]; then
       source "${lxAnnotateEnvHelpers}"
       lx_annotate_export_wheel_service_env "${envDataDir}"
@@ -736,7 +736,8 @@ let
       lx_annotate_export_runtime_env
       lx_annotate_activate_runtime
     fi
-    exec ${effectiveRuntimePackage}/bin/lx-annotate-manage migrate_video_streamable_storage "$@"
+    export LX_RUNTIME_ROOT="${envDataDir}"
+    exec ${effectiveRuntimePackage}/bin/lx-annotate-manage migrate_media_storage "$@"
   '';
 
   runLocalHlsMaterializationScript = pkgs.writeShellScriptBin "${hlsMaterializationScriptName}" ''
@@ -1399,14 +1400,8 @@ let
     exportFramesDir="$exportFramesStorageRoot/export/frames"
     install -d -m 0750 "$exportFramesDir"
 
-    # 5. Run export inside devenv shell
-    if [ -f Makefile ] && command -v devenv >/dev/null 2>&1; then
-      export STORAGE_DIR="$exportFramesStorageRoot/storage"
-      export DATA_DIR="$exportFramesStorageRoot"
-      exec "${makeBin}" REPO_DIR="${repoDir}" CACHE_DIR="${makeCacheDir}" start-export
-    fi
-
-    exec devenv shell -- bash -c "STORAGE_DIR='$exportFramesStorageRoot/storage' DATA_DIR='$exportFramesStorageRoot' export-frames"
+    # Use the application entry point and its canonical runtime path contract.
+    exec devenv shell -- lx-annotate-export-frames --output-dir "$exportFramesDir" --output-path "$exportFramesDir/frames.csv"
   '';
   runLocalExportFramesWheelScript = pkgs.writeShellScriptBin "${exportFramesScriptName}" ''
     set -euo pipefail
@@ -1425,8 +1420,6 @@ let
 
     lx_annotate_export_wheel_service_env "$exportFramesStorageRoot"
     export PATH="${runtimeWheelVenvPath}/bin:$PATH"
-    export STORAGE_DIR="$exportFramesStorageRoot/storage"
-    export DATA_DIR="$exportFramesStorageRoot"
 
     install -d -m 0750 "$exportFramesStorageRoot/export/frames"
 

@@ -11,6 +11,7 @@ host_roles:
 
 
 host_services:
+  luxnix.lxAnnotateLocal.django.enrollLegacyDefaultSalt: "true"
   luxnix.lxAiLocal.runtime.protectedDataDir: '"/var/lib/lx-annotate/data"'
 
 host_nixos: {}

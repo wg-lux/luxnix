@@ -150,6 +150,9 @@ lib.foldl' lib.recursiveUpdate
       services.luxnix.lxAiLocal.runtime.protectedDataDir = "/var/lib/lx-annotate/data";
     }
     {
+      services.luxnix.lxAnnotateLocal.django.enrollLegacyDefaultSalt = true;
+    }
+    {
       luxnix.boot-decryption-stick.enable = true;
     }
     {

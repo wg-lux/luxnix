@@ -38,6 +38,32 @@ The encrypted-data unit then:
 3. opens the LUKS device with `cryptsetup`
 4. mounts it at `runtime.encryptedDataDir`
 
+## Legacy identity salt enrollment
+
+For a reviewed upgrade from identities hashed with `default_salt`, enable
+`django.enrollLegacyDefaultSalt` in the host inventory and regenerate its Nix
+configuration. gc-02 explicitly enables this migration. Other hosts must opt in
+only after confirming their established salt and keyring-capable identity writers.
+
+The managed-secrets service provisions three service-owned, mode-0600 files:
+
+- `/etc/secrets/vault/lx_annotate_identity_active`: independent active salt.
+- `/etc/secrets/vault/lx_annotate_identity_legacy_default`: retiring `default_salt`.
+- `/etc/secrets/vault/lx_annotate_identity_keyring.yml`: manifest explicitly allowing
+  the legacy salt as retiring material.
+
+The common environment supplies `DJANGO_IDENTITY_SALT_KEYRING_FILE` to systemd
+services and maintenance wrappers. Existing files are preserved; a missing active
+salt cannot be regenerated after manifest publication. Back up these files through
+the established secret backup process. Enrollment does not perform a bulk identity
+rehash or rotate media encryption or Django signing keys.
+
+Apply through the normal NixOS deployment and managed-secrets service. Do not use
+`luxnix-secrets generate --secret` for diagnostics: that CLI displays secret values.
+Verify service status, private file metadata and loader success without printing
+the salt or environment contents. For externally provisioned material, use
+`django.identitySaltKeyringFile` or `django.identitySaltFile` instead of enrollment.
+
 ## Runtime Path Contract
 
 For this module there is exactly one canonical protected runtime root:
@@ -54,8 +80,9 @@ Everything else is derived from that root:
 
 When changing LuxNix or lx-annotate integration code, keep these rules:
 
-1. `LX_ANNOTATE_ENCRYPTED_DATA_DIR` is the single protected root.
-2. `STORAGE_DIR` is derived as `${LX_ANNOTATE_ENCRYPTED_DATA_DIR}/storage`.
+1. `LX_RUNTIME_ROOT`, supplied from `runtime.encryptedDataDir`, is the single protected runtime root.
+2. The application derives storage and media paths through
+   `endoreg_db.utils.paths.get_runtime_paths()` and `EndoregPathsModel`.
 3. `storage/streamable_videos/` is the dedicated Nginx-served subtree for authorized
    video handoff via `X-Accel-Redirect`.
 4. Any path under the service-user home is an access path only unless the
@@ -83,7 +110,31 @@ When adding or changing a shared lx-annotate/secretspec-style variable, update
 `commonEnv` first. Do not add a parallel export block in `config.nix`, a
 subservice, or `scripts.nix`. Small wrapper-only variables can stay in the wrapper that owns
 them, for example `PATH`, wheel virtualenv paths, command arguments,
-`CUDA_VISIBLE_DEVICES`, and export-frame compatibility `DATA_DIR`/`STORAGE_DIR`.
+`CUDA_VISIBLE_DEVICES`.
+
+The central path and hash APIs are binding acceptance requirements for future
+changes; see the [environment lifecycle tracker](../../../../feature-tracking/lx_annotate_environment_lifecycle_audit.yml).
+Do not export `DATA_DIR`, `STORAGE_DIR`, `LX_ANNOTATE_DATA_DIR`,
+`LX_ANNOTATE_ENCRYPTED_DATA_DIR`, `PROTECTED_MEDIA_ROOT`, or the three
+`LX_ANNOTATE_STREAMABLE_VIDEO_*ROOT` aliases. Application media paths come from
+`EndoregPathsModel` (the central paths module), including in maintenance and
+frame-export commands. Nix still derives matching directories for mount,
+permission, and Nginx configuration; these are not independent application inputs.
+Asset, static-file, training-staging, and secret-file settings with active
+consumers remain explicit deployment inputs.
+Unused `CONF_DIR` and `CONF_TEMPLATE_DIR` exports are also retired; secret-file
+handles retain their configured absolute paths.
+
+Media integrity operations use artifact `get_hash()` methods and the shared
+`get_file_hash` implementation in endoreg-db. Do not add shell hashing of encrypted
+artifact paths: these contain ciphertext, while artifact identity describes
+authenticated plaintext. The environment and file-mover contract tests must pass
+alongside endoreg-db's hash/path contract tests before accepting a related change.
+This contract requires an application package using `LX_RUNTIME_ROOT`; an older
+package that requires retired aliases must be upgraded before activation. The
+wheel build validator rejects packages whose base settings do not call the
+central `get_runtime_paths()` API. The checked-in 1.2.2 artifact predates that
+contract and must be replaced by a compatible release before building for deployment.
 
 Host-specific env overrides that do not need a dedicated LuxNix option can be
 set with:
@@ -132,19 +183,22 @@ The module also exposes a dedicated manual post-deploy acceptance unit:
 
 - `systemctl start lx-annotate-acceptance`
 
-`lx-annotate-video-streamable-migration.service` runs the lx-annotate
-`migrate_video_streamable_storage` command with the same production environment
-as the main application service. Its no-argument default lets lx-annotate sync
-raw and processed streamable video artifacts according to the active storage
-policy. It is intentionally not
-timer-driven or wanted by a boot target so operators can control rollout pace and
-observe I/O.
+`lx-annotate-video-streamable-migration.service` retains its operational name and
+runs the shared `migrate_media_storage --apply` command for videos and PDFs.
+`LX_RUNTIME_ROOT` is the encrypted runtime directory; the application owns all
+relative directories and the central filename policy. Known legacy artifacts are
+reconciled into canonical storage after content verification. Competing content or
+occupied canonical destinations fail explicitly. Original sources are retained;
+legacy deletion and apply remain subject to the Endoreg feature-tracker gates in
+`feature-tracking/VideoStorageNormalization.yml`.
+The unit is manual and has no boot target or timer. Calling the deployed helper
+without `--apply` produces a dry-run report.
 
 For bounded runs with command arguments from the admin machine, use the Devenv
 entry point. It invokes the same deployed helper as the systemd unit:
 
 ```console
-devenv shell lx-annotate-streamable-migration <host> --video-id 34 --processed-only
+devenv shell lx-annotate-streamable-migration <host> --video-id 34 --include-processed
 ```
 
 `lx-annotate-acceptance.service` runs the deployed Django system checks with the
@@ -183,7 +237,8 @@ mount unit.
 | --- | --- | --- |
 | `lx-annotate-runtime-env.service` | root oneshot, remains active | Creates the runtime/config/data directories, copies the database password into the runtime config directory, normalizes Keycloak secret permissions, and writes `/var/lib/lx-annotate/.env.systemd` plus the compatibility copy under the data root. |
 | `lx-annotate-encrypted-data.service` | optional root oneshot, remains active | Opens the configured LUKS device, mounts it at `runtime.encryptedDataDir`, fixes owner/mode on the mount point, and closes it again on stop. Enabled by `runtime.managedEncryptedData.enable`. |
-| `lx-annotate-data-recovery.service` | oneshot, enabled by default | Runs before migrations when `dataRecovery.enable` is true. It moves or overlays legacy data/media into the current protected data root, repairs managed payloads when possible, and records recovery state so heavy recovery is not repeated unnecessarily. |
+| `lx-annotate-data-recovery.service` | manual oneshot, exposed by default | Normal startup uses the canonical runtime root without invoking legacy recovery. `dataRecovery.runBeforeStartup = true` explicitly restores the startup dependency for a reviewed migration with compatible recovery commands. The current backend removed `migrate_data_dir`; do not enable this legacy path for that release. |
+| `lx-annotate-preflight.service` | explicit diagnostic oneshot | Runs comprehensive checks when requested directly or through live acceptance. It does not block normal web, worker, or HLS startup and does not cache a previous successful diagnostic run. |
 | `lx-annotate-migrate.service` | oneshot | Runs `lx-annotate-manage migrate --noinput` against the effective runtime package. On failure it applies the reviewed legacy-history repair and retries once; unrelated or unrepaired failures remain fatal. It is ordered before base-data loading, encrypted-storage validation, and the web service. |
 | `lx-annotate-terminology-bootstrap.service` | best-effort oneshot in wheel mode | After the web service starts, independently registers the packaged `dgvs_reporting`, `mst_3_0`, and `star_upper_gi` bundles. A new registry activates `star_upper_gi`; an existing active selection is preserved. No LX-Annotate startup unit wants, requires, or waits for this attempt. |
 | `lx-annotate-load-base-data.service` | oneshot | Runs `lx-annotate-load-base-data` after successful migrations. The script logs a failed base-data load but exits successfully so schema-correct deployments can still boot. |
@@ -215,7 +270,7 @@ directly rather than copying a mutable checkout or duplicating the bundle.
 
 The intake directory contract has one setting, `runtime.intakeDirs.importRoot`.
 All standard drop and staging directories are derived from that root, and the
-application receives only the canonical `DATA_DIR` environment variable.
+application receives only the canonical `LX_RUNTIME_ROOT` environment variable.
 
 ### Celery Worker Units
 
@@ -623,11 +678,10 @@ vault-auth-setup.service
   -> managed-secrets-setup.service
     -> lx-annotate-encrypted-data.service
       -> lx-annotate-runtime-env.service
-        -> lx-annotate-data-recovery.service
-          -> lx-annotate-migrate.service
-            -> lx-annotate-load-base-data.service
-              -> lx-annotate-master-key-check.service
-                -> lx-annotate.service
+        -> lx-annotate-migrate.service
+          -> lx-annotate-load-base-data.service
+            -> lx-annotate-master-key-check.service
+              -> lx-annotate.service
 ```
 
 `lx-annotate-boot.service` is an alias for `lx-annotate.service`. Path units,

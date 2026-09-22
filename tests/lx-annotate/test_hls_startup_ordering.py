@@ -37,7 +37,6 @@ def test_hls_reconciliation_runs_after_web_and_queue_prerequisites() -> None:
     assert "lx-annotate.service" in backfill["after"]
     assert "lx-annotate.service" not in backfill["before"]
     for prerequisite in (
-        "lx-annotate-preflight.service",
         "lx-annotate-celery-ffmpeg-worker.service",
         "redis-lx-annotate.service",
     ):
@@ -46,6 +45,7 @@ def test_hls_reconciliation_runs_after_web_and_queue_prerequisites() -> None:
     assert "multi-user.target" in backfill["wantedBy"]
     assert units["timer"]["Unit"] == backfill_name
     assert units["timer"]["OnUnitInactiveSec"] == "1h"
+    assert "lx-annotate-preflight.service" not in backfill["requires"]
 
 
 @pytest.mark.parametrize("command_status, expected", [(0, 0), (75, 1), (1, 255), (127, 255)])

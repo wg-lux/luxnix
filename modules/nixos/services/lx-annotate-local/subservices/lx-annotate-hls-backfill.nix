@@ -30,11 +30,10 @@ in
   systemd.services.lx-annotate-hls-backfill = mkIf cfg.hlsBackfill.enable (mkLxAnnotateAppService {
     description = "Dispatch local encrypted HLS backfill for LX-Annotate videos";
     wantedBy = [ "multi-user.target" ];
-    # Corpus reconciliation must never gate the web or its cryptographic
-    # preflight. Start it only after the application and queue consumer start.
+    # Start corpus reconciliation after the application and queue consumer.
+    # Comprehensive diagnostics are explicitly invoked through acceptance.
     after = [
       "lx-annotate.service"
-      "lx-annotate-preflight.service"
       "lx-annotate-celery-ffmpeg-worker.service"
       "lx-annotate-load-base-data.service"
       "lx-annotate-master-key-check.service"
@@ -44,7 +43,6 @@ in
       "lx-annotate-load-base-data.service"
     ];
     requires = [
-      "lx-annotate-preflight.service"
       "lx-annotate-celery-ffmpeg-worker.service"
       "lx-annotate-load-base-data.service"
       "lx-annotate-master-key-check.service"

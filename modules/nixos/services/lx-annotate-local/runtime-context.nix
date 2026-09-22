@@ -84,11 +84,6 @@ let
     else
       "${repoDir}/${cfg.django.confDir}";
   makeCacheDir = "${envConfDir}/make-cache";
-  envConfTemplateDir =
-    if useWheelRuntime then
-      "${runtimeWheelRootPath}/${cfg.django.confTemplateDir}"
-    else
-      "${repoDir}/${cfg.django.confTemplateDir}";
   envDjangoModule = cfg.django.djangoModule;
   envHttpProtocol =
     if cfg.django.httpProtocol != "http" then
@@ -228,7 +223,6 @@ let
         envDataDir
         envConfDir
         makeCacheDir
-        envConfTemplateDir
         sslDir
         sslKeyPath
         sslCertPath

@@ -47,6 +47,54 @@ def test_checked_in_release_passes():
     assert result.stdout == ""
 
 
+def test_legacy_release_is_rejected_before_central_path_deployment():
+    result = run(
+        "--wheel",
+        ROOT / "release-artifacts/lx-annotate/1.2.2/lx_annotate-1.2.2-py3-none-any.whl",
+        "--require-central-paths",
+    )
+    assert result.returncode == 1
+    assert "upgrade the application before activation" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "source, accepted",
+    [
+        (
+            "from endoreg_db.utils.paths import get_runtime_paths\n"
+            "paths = get_runtime_paths()\n",
+            True,
+        ),
+        (
+            "from endoreg_db.utils.paths import get_runtime_paths as resolve\n"
+            "paths = resolve()\n",
+            True,
+        ),
+        ("from endoreg_db.utils.paths import get_runtime_paths\n", False),
+        ("# get_runtime_paths()\npaths = '/legacy/data'\n", False),
+        (
+            "def get_runtime_paths(): return '/legacy/data'\n"
+            "paths = get_runtime_paths()\n",
+            False,
+        ),
+    ],
+)
+def test_wheel_path_contract_requires_shared_resolver(tmp_path, source, accepted):
+    candidate = wheel(tmp_path)
+    with zipfile.ZipFile(candidate, "a") as archive:
+        archive.writestr("lx_annotate/settings/settings_base.py", source)
+    result = run("--wheel", candidate, "--require-central-paths")
+    assert (result.returncode == 0) is accepted, result.stderr
+
+
+def test_build_requires_central_paths_before_runtime_publication():
+    source = (CHECK.parent.parent / "config.nix").read_text()
+    assert (
+        "--wheel ${lib.escapeShellArg wheelFilePath} --require-central-paths" in source
+    )
+    assert "test -f ${wheelStaticAssetCheck}" in source
+
+
 @pytest.mark.parametrize(
     "manifest",
     [

@@ -812,7 +812,7 @@ def test_lx_annotate_generated_master_key_is_recoverable_runtime_contract() -> N
     assert (
         "/var/lib/lx-annotate/data" in data_recovery["serviceConfig"]["ReadWritePaths"]
     )
-    assert "lx-annotate-data-recovery.service" in evaluated["bootRequires"]
+    assert "lx-annotate-data-recovery.service" not in evaluated["bootRequires"]
     assert "lx-annotate-migrate.service" in data_recovery["before"]
 
     runtime_script = "\n".join(
@@ -950,7 +950,7 @@ def test_web_recovery_preserves_gates_and_resource_limits_on_incident_hosts() ->
         assert service["MemoryMax"] != "infinity"
         assert service["CPUQuota"]
         assert "lx-annotate-master-key-check.service" in service["requires"]
-        assert "lx-annotate-preflight.service" in service["requires"]
+        assert "lx-annotate-preflight.service" not in service["requires"]
 
 
 def test_endoreg_client_lx_annotate_worker_limits_flow_to_celery_systemd() -> None:
@@ -1109,7 +1109,7 @@ def test_wheel_migrate_and_load_base_data_services_run_before_web() -> None:
     )
     assert "lx-annotate-load-base-data.service" in evaluated["bootAfter"]
     assert "lx-annotate-load-base-data.service" in evaluated["bootRequires"]
-    assert "lx-annotate-data-recovery.service" in evaluated["bootRequires"]
+    assert "lx-annotate-data-recovery.service" not in evaluated["bootRequires"]
 
 
 def test_wheel_migrate_repairs_known_videostate_schema_drift() -> None:
@@ -1182,7 +1182,7 @@ def test_lx_annotate_wheel_celery_worker_exports_shared_runtime_env() -> None:
     assert "wheelCeleryWorkerCommand" in source
     assert "LX_ANNOTATE_DEFAULT_CENTER = envDefaultCenter;" in source
     assert 'export DJANGO_DB_HOST="${cfg.database.host}"' in source
-    assert 'export LX_ANNOTATE_ENCRYPTED_DATA_DIR="$data_root"' in source
+    assert 'export LX_RUNTIME_ROOT="$data_root"' in source
 
 
 def test_lx_annotate_celery_worker_service_config_evaluates() -> None:
@@ -1463,8 +1463,40 @@ def test_lx_annotate_local_exposes_generic_runtime_env_override() -> None:
 def test_lx_annotate_filewatcher_exports_only_canonical_data_root() -> None:
     environment = _gc_02_contract()["fileWatcherServiceConfig"]["Environment"]
 
-    assert "DATA_DIR=/var/lib/lx-annotate/data" in environment
+    assert "LX_RUNTIME_ROOT=/var/lib/lx-annotate/data" in environment
+    retired = {
+        "DATA_DIR",
+        "STORAGE_DIR",
+        "LX_ANNOTATE_DATA_DIR",
+        "LX_ANNOTATE_ENCRYPTED_DATA_DIR",
+        "PROTECTED_MEDIA_ROOT",
+        "LX_ANNOTATE_STREAMABLE_VIDEO_ROOT",
+        "LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT",
+        "LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT",
+    }
+    assert not retired.intersection(value.split("=", 1)[0] for value in environment)
     assert not any(value.startswith("WATCHER_") for value in environment)
+
+
+def test_custom_runtime_root_reaches_web_watcher_and_workers() -> None:
+    roots = _nix_eval_expr_json(
+        """
+        let
+          flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
+          lib = flake.inputs.nixpkgs.lib;
+          cfg = (flake.nixosConfigurations.gc-02.extendModules {
+            modules = [{
+              services.luxnix.lxAnnotateLocal.runtime.encryptedDataDir =
+                lib.mkForce "/srv/protected/clinical";
+            }];
+          }).config;
+        in builtins.map
+          (name: cfg.systemd.services.${name}.environment.LX_RUNTIME_ROOT)
+          [ "lx-annotate" "lx-annotate-filewatcher"
+            "lx-annotate-celery-ffmpeg-worker" ]
+        """
+    )
+    assert roots == ["/srv/protected/clinical"] * 3
 
 
 def test_lx_annotate_filewatcher_path_triggers_on_runtime_intake_drops() -> None:

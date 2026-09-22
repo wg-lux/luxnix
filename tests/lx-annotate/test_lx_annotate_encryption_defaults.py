@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
+import os
+import subprocess
+
+import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -21,6 +25,68 @@ def _service_source() -> str:
 
 def _has_assignment(source: str, name: str) -> bool:
     return re.search(rf"^\s*{re.escape(name)}\s*=", source, re.MULTILINE) is not None
+
+
+RETIRED_MEDIA_PATH_VARIABLES = (
+    "CONF_DIR",
+    "CONF_TEMPLATE_DIR",
+    "DATA_DIR",
+    "STORAGE_DIR",
+    "LX_ANNOTATE_DATA_DIR",
+    "LX_ANNOTATE_ENCRYPTED_DATA_DIR",
+    "PROTECTED_MEDIA_ROOT",
+    "LX_ANNOTATE_STREAMABLE_VIDEO_ROOT",
+    "LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT",
+    "LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT",
+)
+
+
+@pytest.mark.parametrize("name", RETIRED_MEDIA_PATH_VARIABLES)
+def test_service_does_not_reintroduce_retired_media_path_inputs(name: str) -> None:
+    for path in SERVICE_DIR.rglob("*.nix"):
+        source = path.read_text(encoding="utf-8")
+        assert not _has_assignment(source, name), path
+        assert re.search(rf"\bexport\s+{re.escape(name)}=", source) is None, path
+
+
+@pytest.mark.parametrize(
+    "root", ["/protected/runtime", "/protected/runtime with spaces"]
+)
+def test_storage_shell_helper_exports_only_canonical_root(root: str) -> None:
+    source = SCRIPTS_ENV_NIX.read_text(encoding="utf-8")
+    match = re.search(
+        r"lx_annotate_export_storage_env\(\) \{(.*?)\n    \}", source, re.DOTALL
+    )
+    assert match is not None
+    script = "lx_annotate_export_storage_env() {" + match.group(1) + "\n}\n"
+    script += 'lx_annotate_export_storage_env "$1"\nenv -0'
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in RETIRED_MEDIA_PATH_VARIABLES
+    }
+    result = subprocess.run(
+        ["bash", "-eu", "-c", script, "contract", root],
+        env=environment,
+        capture_output=True,
+        check=True,
+    )
+    exports = dict(
+        entry.split(b"=", 1) for entry in result.stdout.split(b"\0") if entry
+    )
+    assert exports[b"LX_RUNTIME_ROOT"] == root.encode()
+    assert not set(name.encode() for name in RETIRED_MEDIA_PATH_VARIABLES).intersection(
+        exports
+    )
+
+
+def test_repo_frame_export_uses_application_path_contract() -> None:
+    source = SCRIPTS_NIX.read_text(encoding="utf-8")
+    assert (
+        'exec devenv shell -- lx-annotate-export-frames '
+        '--output-dir "$exportFramesDir" --output-path "$exportFramesDir/frames.csv"'
+        in source
+    )
 
 
 def test_lx_annotate_scripts_export_protected_storage_contract():
@@ -68,8 +134,7 @@ def test_lx_annotate_scripts_export_protected_storage_contract():
     assert "lx-annotate-migrate = mkLxAnnotateAppService" in config_source
     assert (
         "SupplementaryGroups = [ "
-        "config.luxnix.generic-settings.sensitiveServiceGroupName ];"
-        in config_source
+        "config.luxnix.generic-settings.sensitiveServiceGroupName ];" in config_source
     )
     assert (
         'pkgs.writeShellScript "lx-annotate-migrate-with-legacy-history-fallback"'
@@ -80,7 +145,9 @@ def test_lx_annotate_scripts_export_protected_storage_contract():
         in config_source
     )
     assert "lx-annotate-manage shell --command" in config_source
-    assert 'call_command("repair_legacy_migration_history", apply=True)' in config_source
+    assert (
+        'call_command("repair_legacy_migration_history", apply=True)' in config_source
+    )
     assert (
         "exec ${effectiveRuntimePackage}/bin/lx-annotate-manage migrate --noinput"
         in config_source
@@ -95,7 +162,7 @@ def test_lx_annotate_scripts_export_protected_storage_contract():
         'ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-export-frames";'
         in config_source
     )
-    assert "LX_ANNOTATE_ENCRYPTED_DATA_DIR = envDataDir;" in helper_source
+    assert "LX_RUNTIME_ROOT = envDataDir;" in helper_source
     assert "commonExtraEnv =" in config_source
     assert "// lib.optionalAttrs cfg.hub.transferApi.enable {" in config_source
     assert (
@@ -113,7 +180,7 @@ def test_lx_annotate_scripts_export_protected_storage_contract():
     assert not _has_assignment(config_source, "DJANGO_ENV")
     assert not _has_assignment(config_source, "MEDIA_URL")
 
-    assert 'export DATA_DIR="$data_root"' in helper_source
+    assert 'export LX_RUNTIME_ROOT="$data_root"' in helper_source
     assert 'export LX_ANNOTATE_DATA_DIR="$data_root"' not in helper_source
     assert (
         'export PROTECTED_MEDIA_ROOT="${runtimeStorageRootPath}"' not in helper_source

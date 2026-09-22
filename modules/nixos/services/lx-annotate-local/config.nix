@@ -178,7 +178,7 @@ let
   '';
   wheelStaticAssetCheck = pkgs.runCommand "lx-annotate-wheel-static-check-${packageVersion}" { } ''
     ${pkgs.python3}/bin/python ${./scripts/wheel-static-check.py} \
-      --wheel ${lib.escapeShellArg wheelFilePath}
+      --wheel ${lib.escapeShellArg wheelFilePath} --require-central-paths
     touch "$out"
   '';
   wheelRuntimePackage = pkgs.runCommand "lx-annotate-wheel-runtime-${packageVersion}" { } ''
@@ -536,7 +536,7 @@ let
   ];
   localPostgresServiceUnits = lib.optionals (!externalPostgresConfigured) [ "postgresql.service" ];
   localRedisServiceUnits = lib.optionals (!externalRedisConfigured) [ "redis-lx-annotate.service" ];
-  dataRecoveryServiceUnits = lib.optionals cfg.dataRecovery.enable [
+  dataRecoveryServiceUnits = lib.optionals (cfg.dataRecovery.enable && cfg.dataRecovery.runBeforeStartup) [
     "lx-annotate-data-recovery.service"
   ];
   hlsBackfillServiceUnits = lib.optionals cfg.hlsBackfill.enable [
@@ -1260,18 +1260,15 @@ let
       after = [
         "lx-annotate-load-base-data.service"
         "lx-annotate-master-key-check.service"
-        "lx-annotate-preflight.service"
       ]
       ++ workerCfg.after;
       wants = [
         "lx-annotate-load-base-data.service"
-        "lx-annotate-preflight.service"
       ]
       ++ workerCfg.wants;
       requires = [
         "lx-annotate-load-base-data.service"
         "lx-annotate-master-key-check.service"
-        "lx-annotate-preflight.service"
       ]
       ++ workerCfg.requires;
       environment = workerEnvironment;
@@ -1291,8 +1288,9 @@ let
   workerServices = lib.listToAttrs (lib.mapAttrsToList mkWorkerService workerConfigs);
   celeryBeatService = mkLxAnnotateAppService {
     description = "LX-Annotate Celery periodic task scheduler";
-    after = [ "network-online.target" ];
+    after = [ "network-online.target" "lx-annotate-load-base-data.service" "lx-annotate-master-key-check.service" ];
     wants = [ "network-online.target" ];
+    requires = [ "lx-annotate-load-base-data.service" "lx-annotate-master-key-check.service" ];
     serviceConfig = {
       ExecStart = lib.escapeShellArgs [
         "${effectiveRuntimePackage}/bin/lx-annotate-celery"
@@ -1343,7 +1341,7 @@ let
       exit 0
     fi
 
-    mode_output="$(${effectiveRuntimePackage}/bin/lx-annotate-manage ffmpeg_stream_throttle_state --mode-only)"
+    mode_output="$(${pkgs.util-linux}/bin/runuser -u ${lib.escapeShellArg endoreg-service-user-name} -- ${effectiveRuntimePackage}/bin/lx-annotate-manage ffmpeg_stream_throttle_state --mode-only)"
     mode=""
     while IFS= read -r mode_line; do
       case "$mode_line" in
@@ -1841,12 +1839,24 @@ in
         {
           environment.systemPackages = [ lxAnnotateMigrateVideoStreamableStorageScript ];
 
+          services.luxnix.lxAnnotateLocal.django.identitySaltKeyringFile =
+            mkIf cfg.django.enrollLegacyDefaultSalt
+              (mkDefault "/etc/secrets/vault/lx_annotate_identity_keyring.yml");
+
           environment.etc."lx-annotate/monitoring.json" = mkIf cfg.runtime.monitoring.enable {
             source = monitoringConfig;
             mode = "0444";
           };
 
           assertions = [
+            {
+              assertion = !cfg.django.enrollLegacyDefaultSalt || (
+                cfg.django.identitySaltFile == null
+                && cfg.django.identitySaltKeyringFile == "/etc/secrets/vault/lx_annotate_identity_keyring.yml"
+                && (cfg.runtime.extraEnvironment.DJANGO_IDENTITY_SALT_KEYRING_FILE or cfg.django.identitySaltKeyringFile) == cfg.django.identitySaltKeyringFile
+              );
+              message = "Explicit default-salt enrollment must use its managed identity keyring without conflicting salt overrides.";
+            }
             {
               assertion =
                 !cfg.hub.transferApi.enable
@@ -2223,6 +2233,43 @@ in
               ];
 
               customSecrets = {
+                lx_annotate_identity_active = mkIf cfg.django.enrollLegacyDefaultSalt {
+                  path = "/etc/secrets/vault/lx_annotate_identity_active";
+                  owner = endoreg-service-user-name;
+                  group = endoreg-service-group-name;
+                  permissions = "600";
+                  description = "Active LX-Annotate identity salt for explicitly enrolled legacy identities";
+                  customScript = true;
+                  generator = ''
+                    if [ -e /etc/secrets/vault/lx_annotate_identity_keyring.yml ]; then
+                      echo "Refusing to replace a missing active identity salt after enrollment" >&2
+                      exit 1
+                    fi
+                    ${pkgs.openssl}/bin/openssl rand -hex 32 > "$TARGET_FILE"
+                  '';
+                };
+                lx_annotate_identity_legacy = mkIf cfg.django.enrollLegacyDefaultSalt {
+                  path = "/etc/secrets/vault/lx_annotate_identity_legacy_default";
+                  owner = endoreg-service-user-name;
+                  group = endoreg-service-group-name;
+                  permissions = "600";
+                  description = "Explicitly enrolled retiring default_salt; never an active production salt";
+                  generator = "printf '%s\\n' default_salt";
+                };
+                lx_annotate_identity_manifest = mkIf cfg.django.enrollLegacyDefaultSalt {
+                  path = "/etc/secrets/vault/lx_annotate_identity_keyring.yml";
+                  owner = endoreg-service-user-name;
+                  group = endoreg-service-group-name;
+                  permissions = "600";
+                  description = "LX-Annotate identity manifest with explicit legacy compatibility";
+                  generator = "${pkgs.coreutils}/bin/cat ${pkgs.writeText "lx-annotate-identity-manifest.yml" ''
+                    schema_version: 1
+                    active: /etc/secrets/vault/lx_annotate_identity_active
+                    retiring:
+                      - /etc/secrets/vault/lx_annotate_identity_legacy_default
+                    allow_legacy_default_salt: true
+                  ''}";
+                };
                 lx_annotate_master_key_local =
                   mkIf
                     (
@@ -2643,6 +2690,8 @@ in
                 "z ${runtimeRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
                 "d ${envDataDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
                 "z ${envDataDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+                "d ${envDataDir}/quarantine 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+                "d ${envDataDir}/quarantine/failed 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
                 "d ${envConfDir} 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
                 "d ${runtimeStorageRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
                 "z ${runtimeStorageRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"

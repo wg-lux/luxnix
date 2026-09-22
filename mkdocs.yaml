@@ -88,7 +88,6 @@ nav:
       - Setup and Bootstrap: vault-setup.md
       - Maintainer Notes: vault-maintainer-operations.md
       - Admin Password Creation and Rotation: admin-passwords.md
-      - Storage and Key Migration: vault-setup.md
       - Machine Enrollment: vault-hub-machine-enrollment.md
       - Owner Operations: vault-owner-immediate-actions.md
       - Server Rebuild: vault-server-rebuild.md

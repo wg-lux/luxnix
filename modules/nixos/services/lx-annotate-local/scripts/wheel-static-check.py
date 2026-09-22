@@ -1,6 +1,7 @@
 """Validate release assets without importing the application or initializing Django."""
 
 import argparse
+import ast
 from importlib.metadata import PackageNotFoundError, distribution
 import json
 from pathlib import Path, PurePosixPath
@@ -47,11 +48,39 @@ def validate(read):
                 raise ValueError("unresolved manifest import")
 
 
-def check_wheel(path):
+class RuntimePathContractError(ValueError):
+    """The candidate predates the mandatory central runtime-path API."""
+
+
+def validate_runtime_paths(source: bytes) -> None:
+    tree = ast.parse(source)
+    providers = {
+        alias.asname or alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+        and node.module == "endoreg_db.utils.paths"
+        for alias in node.names
+        if alias.name == "get_runtime_paths"
+    }
+    if not any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id in providers
+        for node in ast.walk(tree)
+    ):
+        raise RuntimePathContractError
+
+
+def check_wheel(path, *, require_central_paths=False):
     with zipfile.ZipFile(path) as wheel:
         names = wheel.namelist()
         if len(names) != len(set(names)):
             raise ValueError("duplicate wheel members")
+        if require_central_paths:
+            settings_member = "lx_annotate/settings/settings_base.py"
+            if settings_member not in names:
+                raise RuntimePathContractError
+            validate_runtime_paths(wheel.read(settings_member))
         for root in ("lx_annotate/staticfiles/", "lx_annotate/static/"):
             if root + ".vite/manifest.json" in names:
                 validate(lambda relative: wheel.read(root + relative))
@@ -84,18 +113,29 @@ def main():
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--wheel", type=Path)
     mode.add_argument("--installed", action="store_true")
+    parser.add_argument("--require-central-paths", action="store_true")
     args = parser.parse_args()
+    if args.require_central_paths and not args.wheel:
+        parser.error("--require-central-paths requires --wheel")
     try:
         if args.wheel:
-            check_wheel(args.wheel)
+            check_wheel(args.wheel, require_central_paths=args.require_central_paths)
         else:
             check_installed()
+    except RuntimePathContractError:
+        print(
+            "ERROR: LX-Annotate wheel must use endoreg_db get_runtime_paths() "
+            "and LX_RUNTIME_ROOT; upgrade the application before activation.",
+            file=sys.stderr,
+        )
+        return 1
     except (
         OSError,
         ValueError,
         KeyError,
         PackageNotFoundError,
         zipfile.BadZipFile,
+        SyntaxError,
     ) as error:
         # Do not log manifest contents or application-controlled exception text.
         print(

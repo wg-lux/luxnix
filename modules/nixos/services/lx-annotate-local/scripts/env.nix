@@ -25,13 +25,9 @@ let
     ;
   inherit (runtime.paths)
     runtimeRootPath
-    runtimeStreamableVideoRootPath
-    runtimeStreamableVideoRawRootPath
-    runtimeStreamableVideoProcessedRootPath
     runtimeWorkingDir
     envDataDir
     envConfDir
-    envConfTemplateDir
     envAssetDir
     ;
   inherit (runtime.env)
@@ -102,14 +98,11 @@ rec {
   };
 
   commonEnv = {
+    LX_RUNTIME_ROOT = envDataDir;
     HOME_DIR = endoreg-service-user-home;
-    CONF_DIR = envConfDir;
-    CONF_TEMPLATE_DIR = envConfTemplateDir;
     WORKING_DIR = runtimeWorkingDir;
     ASSET_DIR = envAssetDir;
     XDG_DATA_HOME = runtimeRootPath;
-    DATA_DIR = envDataDir;
-    LX_ANNOTATE_ENCRYPTED_DATA_DIR = envDataDir;
     DJANGO_HOST = "127.0.0.1";
     DJANGO_PORT = envDjangoPort;
     DJANGO_STATIC_ROOT = packageStaticRoot;
@@ -188,9 +181,6 @@ rec {
     SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
     REQUESTS_CA_BUNDLE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
     LX_ANNOTATE_PACKAGE_VERSION = effectivePackageVersion;
-    LX_ANNOTATE_STREAMABLE_VIDEO_ROOT = runtimeStreamableVideoRootPath;
-    LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT = runtimeStreamableVideoRawRootPath;
-    LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT = runtimeStreamableVideoProcessedRootPath;
   }
   // optionalAttrs (cfg.runtime.masterKeyFile != null) {
     LX_ANNOTATE_MASTER_KEY_FILE = toString cfg.runtime.masterKeyFile;
@@ -215,6 +205,12 @@ rec {
   }
   // optionalAttrs (cfg.hub.transferApi.recipientPrivateKeyFiles != [ ]) {
     ENDOREG_HUB_TRANSFER_RECIPIENT_PRIVATE_KEY_FILES = lib.concatStringsSep "," cfg.hub.transferApi.recipientPrivateKeyFiles;
+  }
+  // optionalAttrs (cfg.django.identitySaltFile != null) {
+    DJANGO_SALT_FILE = cfg.django.identitySaltFile;
+  }
+  // optionalAttrs (cfg.django.identitySaltKeyringFile != null) {
+    DJANGO_IDENTITY_SALT_KEYRING_FILE = cfg.django.identitySaltKeyringFile;
   }
   // cfg.runtime.extraEnvironment
   // llmEnv;
@@ -245,11 +241,7 @@ rec {
 
     lx_annotate_export_storage_env() {
       local data_root="$1"
-      export DATA_DIR="$data_root"
-      export LX_ANNOTATE_ENCRYPTED_DATA_DIR="$data_root"
-      export LX_ANNOTATE_STREAMABLE_VIDEO_ROOT="$data_root/storage/streamable_videos"
-      export LX_ANNOTATE_STREAMABLE_VIDEO_RAW_ROOT="$data_root/storage/streamable_videos/raw"
-      export LX_ANNOTATE_STREAMABLE_VIDEO_PROCESSED_ROOT="$data_root/storage/streamable_videos/processed"
+      export LX_RUNTIME_ROOT="$data_root"
     }
 
     lx_annotate_export_encryption_env() {

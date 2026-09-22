@@ -468,6 +468,104 @@ sudo stat -c '%A %U:%G %n' /var/lib/lx-annotate/.env.systemd /var/lib/lx-annotat
 sudo systemctl show lx-annotate.service -p EnvironmentFiles -p User -p Group -p SupplementaryGroups -p WorkingDirectory
 ```
 
+### HLS
+
+For your NixOS/LuxNix deployment, **start with `lx-annotate-celery-ffmpeg-worker.service`**—that is the worker executing HLS generation. Your repository’s diagnostics use the **`lx-annotate` journal namespace**, which is important: ordinary `journalctl -u …` can miss those logs.
+
+### 1. Follow HLS generation live
+
+Run this on the server doing the encoding:
+
+```bash
+sudo journalctl \
+  --namespace=+lx-annotate \
+  -u lx-annotate-celery-ffmpeg-worker.service \
+  -n 100 \
+  -f \
+  -o short-iso
+```
+
+This shows the last 100 entries and follows new ones. The `+` in `--namespace=+lx-annotate` includes both the application namespace and the default journal, so systemd lifecycle messages are included too. Press **Ctrl+C** to stop following. 
+
+### 2. Include dispatch and backfill logs
+
+Your repository distinguishes between the **worker that executes generation**, the **automatic backfill dispatcher**, and the **manual materialization dispatcher**. The dispatchers enqueue work on `ffmpeg_media`; their completion is not the completion of encoding.
+
+Watch all three together:
+
+```bash
+sudo journalctl \
+  --namespace=+lx-annotate \
+  -u lx-annotate-celery-ffmpeg-worker.service \
+  -u lx-annotate-hls-backfill.service \
+  -u lx-annotate-hls-materialization.service \
+  -n 200 \
+  -f \
+  -o short-iso
+```
+
+**This is the command I would use first to investigate why generation is not progressing.**
+
+### 3. Read recent logs without following
+
+For the worker’s full output over the last two hours:
+
+```bash
+sudo journalctl \
+  --namespace=+lx-annotate \
+  -u lx-annotate-celery-ffmpeg-worker.service \
+  --since "2 hours ago" \
+  --no-pager \
+  -o short-iso
+```
+
+To search across lx-annotate services for HLS activity and errors:
+
+```bash
+sudo journalctl \
+  --namespace=+lx-annotate \
+  -u 'lx-annotate*' \
+  --since "2 hours ago" \
+  --grep='hls|ffmpeg|video_hls_materialization|error|failed|traceback' \
+  --case-sensitive=no \
+  --no-pager \
+  -o short-iso
+```
+
+The second command filters **individual journal messages**. Use the unfiltered worker output when you need surrounding context or complete traceback details.
+
+### 4. Check the deployed service and logging configuration
+
+These commands let you verify the names and namespace on the actual server rather than relying only on repository documentation: ([man7.org][2])
+
+```bash
+# Discover loaded lx-annotate services, including inactive ones.
+systemctl list-units --all --type=service 'lx-annotate*' --no-pager
+
+# Check worker health and the configured logging destination.
+systemctl show lx-annotate-celery-ffmpeg-worker.service \
+  -p LoadState \
+  -p ActiveState \
+  -p SubState \
+  -p LogNamespace \
+  -p StandardOutput \
+  -p StandardError
+```
+
+When the namespace differs or you get no entries, search **all journal namespaces**:
+
+```bash
+sudo journalctl \
+  --namespace='*' \
+  -u lx-annotate-celery-ffmpeg-worker.service \
+  -n 200 \
+  --no-pager \
+  -o short-iso
+```
+
+`--namespace='*'` reads all namespaces, including the default one. ([man7.org][1])
+
+
 ## Django checks
 
 The production environment is supplied by systemd. Prefer the acceptance unit

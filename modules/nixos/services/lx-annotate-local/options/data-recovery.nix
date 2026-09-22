@@ -15,7 +15,12 @@ in
           enable = mkOption {
             type = types.bool;
             default = true;
-            description = "Recover legacy lx-annotate data and media trees into the runtime STORAGE_DIR before boot.";
+            description = "Expose the legacy data recovery unit for explicitly reviewed maintenance.";
+          };
+          runBeforeStartup = mkOption {
+            type = types.bool;
+            default = false;
+            description = "Require legacy data recovery before application startup. Enable only for a reviewed legacy migration with a compatible installed recovery command; normal startup uses the existing canonical runtime root.";
           };
           legacyDataDir = mkOption {
             type = types.str;
