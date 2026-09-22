@@ -39,6 +39,12 @@
       bash scripts/run-secret-playbook.sh ansible/playbooks/rotate_admin_passwords.yml "$@"
   '';
 
+  rotate-hub-enrollment.package = pkgs.zsh;
+  rotate-hub-enrollment.exec = ''
+    ANSIBLE_HOST_KEY_CHECKING=True LUXNIX_UV_BIN=${pkgs.uv}/bin/uv \
+      bash scripts/run-secret-playbook.sh ansible/playbooks/rotate_hub_enrollment.yml "$@"
+  '';
+
   deliver-hub-enrollment.package = pkgs.zsh;
   deliver-hub-enrollment.exec = ''
     ANSIBLE_HOST_KEY_CHECKING=True LUXNIX_UV_BIN=${pkgs.uv}/bin/uv \

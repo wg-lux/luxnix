@@ -241,5 +241,9 @@
     inputs.nixpkgs.lib.recursiveUpdate base {
       packages = nixtestPackages;
       checks = nixtestChecks;
+      formatter = builtins.mapAttrs (
+        system: _: inputs.nixpkgs.legacyPackages.${system}.nixfmt-tree
+      ) nixtestPackages;
     };
+
 }

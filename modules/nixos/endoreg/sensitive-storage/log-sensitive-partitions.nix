@@ -99,7 +99,7 @@ let
 in
 {
   # Include the script in system packages
-  environment.systemPackages = with pkgs; [
+  environment.systemPackages = [
     scriptPath
   ];
 

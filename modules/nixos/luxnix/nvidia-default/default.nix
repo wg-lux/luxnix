@@ -10,13 +10,6 @@ with lib.luxnix;
 let
   cfg = config.luxnix.nvidia-default;
 
-  nvidiaDrivers = {
-    "stable" = config.boot.kernelPackages.nvidiaPackages.stable;
-    "beta" = config.boot.kernelPackages.nvidiaPackages.beta;
-    "production" = config.boot.kernelPackages.nvidiaPackages.production;
-
-  };
-
 in
 {
   options.luxnix.nvidia-default = with types; {

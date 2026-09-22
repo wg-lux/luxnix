@@ -707,6 +707,42 @@ files, explicitly restart bootstrap authentication and the dependent enrollment
 chain under the approved maintenance procedure so other Vault consumers also
 adopt the replacement; a plain start of an already-active unit is insufficient.
 
+### Interactive routine AppRole replacement
+
+After the custodian prepares a fresh `/root/vault-enrollment/gc-02` bundle on
+`gs-02` using the enrollment procedure in section 4, run from a clean reviewed
+deployment checkout in an interactive terminal:
+
+```bash
+devenv shell rotate-hub-enrollment --limit gc-02 \
+  -e enrollment_expected_ca_sha256='<independently-verified-CA-fingerprint>'
+```
+
+Substitute the intended site for `gc-02`. The command runs site preflight and
+hub/site connectivity checks, displays both addresses, the source revision and
+the `flake.lock` digest, then requires `rotate gc-02` before delivery. Confirm
+that the bundle is newly prepared and the node shared secret is unchanged.
+Declining or running without a terminal stops before delivery.
+
+The workflow reuses fingerprint-pinned enrollment delivery, restarts
+`vault-auth-setup.service` even when already active, requires enrollment state
+`ready`, restarts `managed-secrets-setup.service`, and invokes
+`luxnix-vault-reissue-hub-client-certificate`. It checks the certificate unit's
+result rather than requiring an issuing oneshot to remain active. On failure it
+stops and displays classified enrollment guidance: replace rejected AppRole
+material, migrate a changed CA through authenticated fingerprint verification,
+unseal Vault on the hub, or repair connectivity as indicated. A `ready` state
+with failed issuance requires inspecting the certificate service journal.
+
+After successful activation, verify receiver acceptance and a disposable
+transfer before revoking retiring Secret IDs/tokens and removing protected
+staging. This command does not generate or revoke credentials, rotate the node
+shared secret, or release containment. For incident rotation or changed node
+secrets, use the coordinated procedure below. Password rotation remains a
+separate workflow.
+
+### Incident rotation boundaries
+
 During an incident, isolate the affected site at trusted network and receiver
 boundaries before issuing replacements. Stopping a worker on a compromised
 machine is insufficient containment. Prevent new Vault issuance, revoke issued

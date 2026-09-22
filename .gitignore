@@ -28,7 +28,6 @@ test_wd/
 *.key
 
 # pre-commit
-.pre-commit-config.yaml
 feature-tracking/
 untracked-notes.md
 node_modules/

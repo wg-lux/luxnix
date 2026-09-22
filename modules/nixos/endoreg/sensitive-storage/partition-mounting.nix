@@ -168,7 +168,7 @@ in
     ];
   };
 
-  environment.systemPackages = with pkgs; [
+  environment.systemPackages = [
     mount-script-path
     umount-script-path
   ];

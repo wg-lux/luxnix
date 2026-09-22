@@ -2,6 +2,11 @@
 set -euo pipefail
 umask 077
 
+if [[ "${1:-}" == *rotate_hub_enrollment.yml ]] && [[ ! -t 0 ]]; then
+  echo 'ERROR: Vault enrollment rotation requires an interactive terminal.' >&2
+  exit 2
+fi
+
 # Ansible detaches controller workers from /dev/tty. Pass the original terminal
 # device explicitly; never accept an inherited terminal override or piped yes.
 if [[ "${1:-}" == *rotate_admin_passwords.yml ]]; then

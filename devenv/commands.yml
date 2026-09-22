@@ -11,6 +11,26 @@ risk_levels_source: ../luxnix.yml#risk_levels
 # marked operator_confirmation_required. The field does not imply that the
 # underlying wrapper implements its own prompt.
 commands:
+  - id: rotate-hub-enrollment
+    summary: Interactively deliver a prepared routine AppRole replacement and renew the site client certificate.
+    risk: sensitive-remote-state
+    operator_confirmation_required: true
+    usage: >-
+      devenv shell rotate-hub-enrollment --limit <host>
+      -e enrollment_expected_ca_sha256=<independently-verified-fingerprint>
+    implementation: scripts/run-secret-playbook.sh
+    playbook: ansible/playbooks/rotate_hub_enrollment.yml
+    documentation: docs/vault-hub-machine-enrollment.md
+    prerequisites:
+      - Fresh enrollment bundle prepared by the custodian on gs-02; node shared secret unchanged.
+      - Clean reviewed checkout, pinned SSH identities, and independently verified Vault CA fingerprint.
+      - Interactive terminal and explicit host confirmation after preflight and connectivity checks.
+    effects:
+      - Delivers through the existing private tmpfs enrollment workflow.
+      - Restarts authentication, requires ready, restarts managed secrets, and forces certificate reissuance.
+      - Stops on failure with classified authentication recovery guidance.
+      - Leaves receiver acceptance, retiring credential revocation and staging cleanup to the operator.
+
   - id: rotate-admin-passwords
     summary: Show one validated admin replacement on the terminal and require y/n before live activation.
     risk: sensitive-remote-state

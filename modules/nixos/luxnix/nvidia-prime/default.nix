@@ -67,7 +67,6 @@ in
 
         package = config.boot.kernelPackages.nvidiaPackages.beta;
 
-
         gsp.enable = false; # GSP disabled is supposed to solve sleep issues on laptops
 
       };

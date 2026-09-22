@@ -536,9 +536,11 @@ let
   ];
   localPostgresServiceUnits = lib.optionals (!externalPostgresConfigured) [ "postgresql.service" ];
   localRedisServiceUnits = lib.optionals (!externalRedisConfigured) [ "redis-lx-annotate.service" ];
-  dataRecoveryServiceUnits = lib.optionals (cfg.dataRecovery.enable && cfg.dataRecovery.runBeforeStartup) [
-    "lx-annotate-data-recovery.service"
-  ];
+  dataRecoveryServiceUnits =
+    lib.optionals (cfg.dataRecovery.enable && cfg.dataRecovery.runBeforeStartup)
+      [
+        "lx-annotate-data-recovery.service"
+      ];
   hlsBackfillServiceUnits = lib.optionals cfg.hlsBackfill.enable [
     "lx-annotate-hls-backfill.service"
   ];
@@ -1288,9 +1290,16 @@ let
   workerServices = lib.listToAttrs (lib.mapAttrsToList mkWorkerService workerConfigs);
   celeryBeatService = mkLxAnnotateAppService {
     description = "LX-Annotate Celery periodic task scheduler";
-    after = [ "network-online.target" "lx-annotate-load-base-data.service" "lx-annotate-master-key-check.service" ];
+    after = [
+      "network-online.target"
+      "lx-annotate-load-base-data.service"
+      "lx-annotate-master-key-check.service"
+    ];
     wants = [ "network-online.target" ];
-    requires = [ "lx-annotate-load-base-data.service" "lx-annotate-master-key-check.service" ];
+    requires = [
+      "lx-annotate-load-base-data.service"
+      "lx-annotate-master-key-check.service"
+    ];
     serviceConfig = {
       ExecStart = lib.escapeShellArgs [
         "${effectiveRuntimePackage}/bin/lx-annotate-celery"
@@ -1840,8 +1849,9 @@ in
           environment.systemPackages = [ lxAnnotateMigrateVideoStreamableStorageScript ];
 
           services.luxnix.lxAnnotateLocal.django.identitySaltKeyringFile =
-            mkIf cfg.django.enrollLegacyDefaultSalt
-              (mkDefault "/etc/secrets/vault/lx_annotate_identity_keyring.yml");
+            mkIf cfg.django.enrollLegacyDefaultSalt (
+              mkDefault "/etc/secrets/vault/lx_annotate_identity_keyring.yml"
+            );
 
           environment.etc."lx-annotate/monitoring.json" = mkIf cfg.runtime.monitoring.enable {
             source = monitoringConfig;
@@ -1850,11 +1860,16 @@ in
 
           assertions = [
             {
-              assertion = !cfg.django.enrollLegacyDefaultSalt || (
-                cfg.django.identitySaltFile == null
-                && cfg.django.identitySaltKeyringFile == "/etc/secrets/vault/lx_annotate_identity_keyring.yml"
-                && (cfg.runtime.extraEnvironment.DJANGO_IDENTITY_SALT_KEYRING_FILE or cfg.django.identitySaltKeyringFile) == cfg.django.identitySaltKeyringFile
-              );
+              assertion =
+                !cfg.django.enrollLegacyDefaultSalt
+                || (
+                  cfg.django.identitySaltFile == null
+                  && cfg.django.identitySaltKeyringFile == "/etc/secrets/vault/lx_annotate_identity_keyring.yml"
+                  &&
+                    (cfg.runtime.extraEnvironment.DJANGO_IDENTITY_SALT_KEYRING_FILE
+                      or cfg.django.identitySaltKeyringFile
+                    ) == cfg.django.identitySaltKeyringFile
+                );
               message = "Explicit default-salt enrollment must use its managed identity keyring without conflicting salt overrides.";
             }
             {

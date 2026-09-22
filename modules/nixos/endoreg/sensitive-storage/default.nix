@@ -9,9 +9,38 @@ with lib.luxnix;
 let
   cfg = config.endoreg.sensitiveStorage;
 
+  adminUser = config.user.admin.name;
+  adminHome = config.users.users.${adminUser}.home or "/home/${adminUser}";
   sensitiveLogsDirectory = "${cfg.sensitiveDirectory}/logs";
-  # get mountpoint directory helper function (expects sensitiveDataDirectory)
-  # and returns "${sensitiveDataDirectory}/${label}"
+
+  # Helper zur Erstellung der vollständigen Partitions-Konfiguration
+  createPartitionConfig =
+    label: group:
+    let
+      customCfg = cfg.partitionConfigurations."${label}" or { };
+    in
+    {
+      inherit label group;
+      inherit (cfg) user;
+      keyFile = "${cfg.keyFileDirectory}/${label}.key";
+      filemodeSecret = "0600";
+      filemodeMountpoint = "0770";
+      mountScriptName = "mount-${label}";
+      umountScriptName = "umount-${label}";
+      mountServiceName = "mount-${label}";
+      umountServiceName = "umount-${label}";
+      logScriptName = "log-${label}";
+      logServiceName = "log-${label}";
+      logTimerOnCalendar = "*:0/30"; # Alle 30 Minuten
+      logDir = sensitiveLogsDirectory;
+    }
+    // customCfg;
+
+  partitionList = [
+    (createPartitionConfig "dropoff" "sensitive-storage-dropoff")
+    (createPartitionConfig "processing" "sensitive-storage-processing")
+    (createPartitionConfig "processed" "sensitive-storage-processed")
+  ];
 
 in
 {
@@ -47,9 +76,9 @@ in
           filemodeSecret = "0700";
           filemodeMountpoint = "0750";
           mountScriptName = "mount-processing";
-          umountScriptName = "umont-processing";
+          umountScriptName = "umount-processing"; # Korrigiert
           mountServiceName = "mount-processing";
-          umountServiceName = "umont-processing";
+          umountServiceName = "umount-processing"; # Korrigiert
           keyFile = "dummy2";
           user = "admin";
           group = "endoreg-service";
@@ -62,9 +91,9 @@ in
           filemodeSecret = "0700";
           filemodeMountpoint = "0750";
           mountScriptName = "mount-processed";
-          umountScriptName = "umont-processed";
+          umountScriptName = "umount-processed"; # Korrigiert
           mountServiceName = "mount-processed";
-          umountServiceName = "umont-processed";
+          umountServiceName = "umount-processed"; # Korrigiert
           keyFile = "dummy3";
           user = "admin";
           group = "endoreg-service";
@@ -82,7 +111,7 @@ in
 
     keyFileDirectory = mkOption {
       type = types.str;
-      default = "/home/${config.user.admin.name}/.config/endoreg-sensitive-keyfiles";
+      default = "${adminHome}/.config/endoreg-sensitive-keyfiles";
       description = ''
         Directory where keyfiles are stored
       '';
@@ -94,146 +123,78 @@ in
     };
   };
 
-  imports =
-    let
-      # create helper function wich accepts "label" and returns a configuration dict
-      createPartitionConfig =
-        { label, group }:
-        {
-          inherit label;
-          inherit (cfg) user;
-          inherit group;
-          keyFile = "${cfg.keyFileDirectory}/${label}.key";
-          filemodeSecret = "0600";
-          filemodeMountpoint = "0770";
-          mountScriptName = "mount-${label}";
-          umountScriptName = "umount-${label}";
-          mountServiceName = "mount-${label}";
-          umountServiceName = "umount-${label}";
-          logScriptName = "log-${label}";
-          logServiceName = "log-${label}";
-          logTimerOnCalendar = "*:0/30"; # Every 30 minutes
-          logDir = sensitiveLogsDirectory;
-        }
-        // cfg.partitionConfigurations."${label}";
-
-      dropoffConfig = createPartitionConfig {
-        label = "dropoff";
-        group = "sensitive-storage-dropoff";
-      };
-      processingConfig = createPartitionConfig {
-        label = "processing";
-        group = "sensitive-storage-processing";
-      };
-      processedConfig = createPartitionConfig {
-        label = "processed";
-        group = "sensitive-storage-processed";
+  config = mkIf cfg.enable (mkMerge [
+    {
+      users.groups = {
+        "sensitive-storage-dropoff" = {
+          gid = 3301;
+          members = [
+            adminUser
+            cfg.user
+          ];
+        };
+        "sensitive-storage-processing" = {
+          gid = 3302;
+          members = [
+            adminUser
+            cfg.user
+          ];
+        };
+        "sensitive-storage-processed" = {
+          gid = 3303;
+          members = [
+            adminUser
+            cfg.user
+          ];
+        };
+        "sensitive-storage-keyfiles" = {
+          gid = 3304;
+          members = [
+            adminUser
+            cfg.user
+          ];
+        };
       };
 
-    in
-    [
-      ##### Mounting
-      (import ./partition-mounting.nix {
-        inherit config pkgs lib;
-        partitionConfiguration = dropoffConfig;
-      })
-      (import ./partition-mounting.nix {
-        inherit config pkgs lib;
-        partitionConfiguration = processingConfig;
-      })
-      (import ./partition-mounting.nix {
-        inherit config pkgs lib;
-        partitionConfiguration = processedConfig;
-      })
+      systemd.tmpfiles.rules = [
+        "d ${cfg.sensitiveDirectory} 0770 ${adminUser} endoreg-service -"
+        "d ${sensitiveLogsDirectory} 0770 ${adminUser} endoreg-service -"
+        "d ${cfg.keyFileDirectory} 0700 ${adminUser} endoreg-service -"
+      ];
 
-      #### Loggers
-      (import ./log-sensitive-partitions.nix {
-        inherit config pkgs lib;
-        partitionConfiguration = dropoffConfig;
-      })
-      (import ./log-sensitive-partitions.nix {
-        inherit config pkgs lib;
-        partitionConfiguration = processingConfig;
-      })
-      (import ./log-sensitive-partitions.nix {
-        inherit config pkgs lib;
-        partitionConfiguration = processedConfig;
-      })
-    ];
+      security.polkit.extraConfig = ''
+        polkit.addRule(function(action, subject) {
+            var units = ["dropoff", "processing", "processed"];
+            for (var i = 0; i < units.length; i++) {
+                var u = units[i];
+                var group = "sensitive-storage-" + u;
+                if ((action.lookup("unit") == "mount-" + u + ".service" || 
+                    action.lookup("unit") == "umount-" + u + ".service" || 
+                    action.lookup("unit") == "log-" + u + ".service") &&
+                    (subject.isInGroup(group) || subject.user == "${adminUser}") &&
+                    (action.lookup("verb") == "start" || action.lookup("verb") == "stop" || action.lookup("verb") == "restart")) {
+                    return polkit.Result.YES;
+                }
+            }
+        });
+      '';
+    }
 
-  config = mkIf cfg.enable {
-
-    # TODO (sensitive-storage owner): administrator membership is broader than
-    # the service needs; add an explicit operator-groups option, migrate hosts,
-    # then remove the four hard-coded "admin" memberships below.
-    users.groups = {
-      "sensitive-storage-dropoff" = {
-        gid = 3301;
-        members = [
-          "admin"
-          "${cfg.user}"
-        ];
-      };
-      "sensitive-storage-processing" = {
-        gid = 3302;
-        members = [
-          "admin"
-          "${cfg.user}"
-        ];
-      };
-      "sensitive-storage-processed" = {
-        gid = 3303;
-        members = [
-          "admin"
-          "${cfg.user}"
-        ];
-      };
-      "sensitive-storage-keyfiles" = {
-        gid = 3304;
-        members = [
-          "admin"
-          "${cfg.user}"
-        ];
-      };
-    };
-
-    systemd.tmpfiles.rules = [
-      # USB Encrypter
-      "d ${cfg.sensitiveDirectory} 0770 admin endoreg-service -"
-      "d ${sensitiveLogsDirectory} 0770 admin endoreg-service -"
-      "d ${cfg.keyFileDirectory} 0700 admin endoreg-service -"
-    ];
-
-    security.polkit.extraConfig = ''
-      polkit.addRule(function(action, subject) {
-          // Allow users in group "sensitive-storage-dropoff" or "admin" to manage mount-dropoff and umount-dropoff services
-          if ((action.lookup("unit") == "mount-dropoff.service" || 
-              action.lookup("unit") == "umount-dropoff.service" || 
-              action.lookup("unit") == "log-dropoff.service") &&
-              (subject.isInGroup("sensitive-storage-dropoff") || subject.user == "admin") &&
-              (action.lookup("verb") == "start" || action.lookup("verb") == "stop" || action.lookup("verb") == "restart")) {
-              return polkit.Result.YES;
-          }
-
-          // Allow users in group "sensitive-storage-processing" or "admin" to manage mount-processing and umount-processing services
-          if ((action.lookup("unit") == "mount-processing.service" || 
-              action.lookup("unit") == "umount-processing.service" || 
-              action.lookup("unit") == "log-processing.service") &&
-              (subject.isInGroup("sensitive-storage-processing") || subject.user == "admin") &&
-              (action.lookup("verb") == "start" || action.lookup("verb") == "stop" || action.lookup("verb") == "restart")) {
-              return polkit.Result.YES;
-          }
-
-          // Allow users in group "sensitive-storage-processed" or "admin" to manage mount-processed and umount-processed services
-          if ((action.lookup("unit") == "mount-processed.service" || 
-              action.lookup("unit") == "umount-processed.service" || 
-              action.lookup("unit") == "log-processed.service") &&
-              (subject.isInGroup("sensitive-storage-processed") || subject.user == "admin") &&
-              (action.lookup("verb") == "start" || action.lookup("verb") == "stop" || action.lookup("verb") == "restart")) {
-              return polkit.Result.YES;
-          }
-      });
-    '';
-
-  };
+    # Dynamische Generierung aller Partitions-Mounts und Logger
+    (mkMerge (
+      map (
+        partitionConfig:
+        mkMerge [
+          (import ./partition-mounting.nix {
+            inherit config pkgs lib;
+            partitionConfiguration = partitionConfig;
+          })
+          (import ./log-sensitive-partitions.nix {
+            inherit config pkgs lib;
+            partitionConfiguration = partitionConfig;
+          })
+        ]
+      ) partitionList
+    ))
+  ]);
 }

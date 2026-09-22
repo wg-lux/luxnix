@@ -9,16 +9,6 @@ with lib.luxnix;
 let
   cfg = config.roles.custom-packages;
 
-  # Check if both podman and nvidia are enabled
-  podmanEnabled =
-    (config.services.luxnix.podman.enable or false)
-    || (config.services.virtualisation.podman.enable or false)
-    || (config.luxnix.generic-settings.virtualization.enable or false);
-  nvidiaEnabled =
-    (config.luxnix.nvidia-default.enable or false)
-    || (config.luxnix.nvidia-prime.enable or false)
-    || (config.luxnix.generic-settings.gpu.nvidia.enable or false);
-
   dev03 = with pkgs; [
     obsidian
     balena-cli
