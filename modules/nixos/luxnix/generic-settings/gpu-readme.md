@@ -48,6 +48,27 @@ Luxnix provides automatic GPU configuration through the `luxnix.generic-settings
 
 ## Configuration Options
 
+### Driver selection contract
+
+`luxnix.generic-settings.gpu.nvidia.driver` defaults to `production` and accepts
+only `stable`, `beta`, or `production`. Both `luxnix.nvidia-prime.nvidiaDriver`
+and `luxnix.nvidia-default.nvidiaDriver` inherit this value. An explicit legacy
+module selection remains supported. The selected package comes from
+`config.boot.kernelPackages.nvidiaPackages` in the locked Nixpkgs input; a branch
+name is not a fixed version number.
+
+When both modules are enabled, their branch selections must agree. PRIME owns
+the package definition, and a conflicting selection fails the NixOS assertion
+check. Neither module silently selects beta.
+
+Changing the selected package does not replace an already loaded NVIDIA kernel
+module. After an authorized driver deployment, use a coordinated host reboot
+and verify `nvidia-smi`, `/proc/driver/nvidia/version`, and the application encoder
+preflight before resuming GPU jobs. Restarting an application alone does not
+resolve a kernel-module/userspace-library mismatch. Configuration verification
+is tracked in `feature-tracking/luxnix_module_ownership_cleanup.yml`, criterion
+`nvidia_driver_selection`.
+
 ### Global GPU Settings
 
 ```nix

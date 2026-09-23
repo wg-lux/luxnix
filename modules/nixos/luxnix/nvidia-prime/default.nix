@@ -37,13 +37,25 @@ in
     };
 
     nvidiaDriver = mkOption {
-      type = types.str;
-      default = "beta";
-      description = "The nvidia driver to use";
+      type = types.enum [
+        "stable"
+        "beta"
+        "production"
+      ];
+      default = config.luxnix.generic-settings.gpu.nvidia.driver;
+      description = "NVIDIA driver branch; inherits the shared GPU selection unless explicitly overridden.";
     };
   };
 
   config = mkIf cfg.enable {
+    assertions = [
+      {
+        assertion =
+          !config.luxnix.nvidia-default.enable
+          || cfg.nvidiaDriver == config.luxnix.nvidia-default.nvidiaDriver;
+        message = "LuxNix NVIDIA PRIME and standard modules must select the same nvidiaDriver branch when both are enabled.";
+      }
+    ];
 
     hardware = {
       graphics = {
@@ -65,7 +77,7 @@ in
         powerManagement.finegrained = false;
         open = lib.mkForce false;
 
-        package = config.boot.kernelPackages.nvidiaPackages.beta;
+        package = config.boot.kernelPackages.nvidiaPackages.${cfg.nvidiaDriver};
 
         gsp.enable = false; # GSP disabled is supposed to solve sleep issues on laptops
 

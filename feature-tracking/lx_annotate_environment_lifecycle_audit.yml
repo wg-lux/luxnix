@@ -183,33 +183,29 @@ definition_of_done:
       note: X25519 envelope public/private keys receive regular-file, type, and private-key permission
         checks.
     - kind: test
-      reference: '2026-09-22 codex-config-20260921-a: enrollment/startup contracts 18 passed;
-        corrected customScript identity generator regression 3 passed; installed gc-02
-        production loader passed as endoreg-service-user with retiring default_salt.'
-      note: 'Explicit gc-02 enrollment uses service-owned 0600 files. Corrected a multiline
-        generator redirection bug exposed during concurrent deployment; preserved the empty
-        failed-first-enrollment file and manifest before provisioning. No usable active salt
-        was replaced and no bulk identity rehash was performed. Full corrected system build
-        passed from immutable source /nix/store/g93kqgr91x1qq0l7qanqi5k77p18lgf2-source.
-        Subsequent startup exposed root-owned quarantine/failed; scoped tmpfiles ownership
-        rules restore service writability without changing payload files. Fleet readiness
-        remains unverified; application source-hygiene check fails on a stale guide path.'
+      reference: '2026-09-22 codex-config-20260921-a: enrollment/startup contracts 18 passed; corrected
+        customScript identity generator regression 3 passed; installed gc-02 production loader passed
+        as endoreg-service-user with retiring default_salt.'
+      note: Explicit gc-02 enrollment uses service-owned 0600 files. Corrected a multiline generator redirection
+        bug exposed during concurrent deployment; preserved the empty failed-first-enrollment file and
+        manifest before provisioning. No usable active salt was replaced and no bulk identity rehash was
+        performed. Full corrected system build passed from immutable source /nix/store/g93kqgr91x1qq0l7qanqi5k77p18lgf2-source.
+        Subsequent startup exposed root-owned quarantine/failed; scoped tmpfiles ownership rules restore
+        service writability without changing payload files. Fleet readiness remains unverified; application
+        source-hygiene check fails on a stale guide path.
     - kind: command
-      reference: '2026-09-22 codex-config-20260921-a gc-02 recovery: active system
-        /nix/store/k2avnk69y2hlmd0jz3d9dklxlv1f288y-nixos-system-gc-02-26.05.20260905.6713828;
-        source /nix/store/lxf1gnmzil2ary6nlskzzikmqagd6sfc-source from /home/admin/luxnix,
-        revision e3d16ae91658534bf58dd12b57839a7e6ea0a591 with reviewed incident changes;
-        flake.lock SHA256 e0239d3ccb3aa793716a5d7be4f04117952735af97be902e9eb1e8773dab852d.'
-      note: 'User authorized migrating stale builtin terminology provider entries to the
-        installed catalog. Validated all staged hydrated bundles under registry writer lock,
-        preserved dgvs_reporting@0.1.0 active, backed up registry to
-        registry.before-reviewed-upgrade-20260922.json and atomically published. Repeated
-        provision/load passed. Migrations, base-data load and encrypted-storage check passed;
-        web, beat and configured workers active; hub-export-health exited 0; local HTTP 301.
-        Vault client certificate renewal still fails AppRole authentication. Clinical browser
-        acceptance and outbound transfers are not verified. Concurrent unrelated Firefox
-        changes subsequently blocked current-checkout Nix evaluation with an invalid
-        home-manager.users.admin.security.pki option; deployed immutable source builds.'
+      reference: '2026-09-22 codex-config-20260921-a gc-02 recovery: active system /nix/store/k2avnk69y2hlmd0jz3d9dklxlv1f288y-nixos-system-gc-02-26.05.20260905.6713828;
+        source /nix/store/lxf1gnmzil2ary6nlskzzikmqagd6sfc-source from /home/admin/luxnix, revision e3d16ae91658534bf58dd12b57839a7e6ea0a591
+        with reviewed incident changes; flake.lock SHA256 e0239d3ccb3aa793716a5d7be4f04117952735af97be902e9eb1e8773dab852d.'
+      note: User authorized migrating stale builtin terminology provider entries to the installed catalog.
+        Validated all staged hydrated bundles under registry writer lock, preserved dgvs_reporting@0.1.0
+        active, backed up registry to registry.before-reviewed-upgrade-20260922.json and atomically published.
+        Repeated provision/load passed. Migrations, base-data load and encrypted-storage check passed;
+        web, beat and configured workers active; hub-export-health exited 0; local HTTP 301. Vault client
+        certificate renewal still fails AppRole authentication. Clinical browser acceptance and outbound
+        transfers are not verified. Concurrent unrelated Firefox changes subsequently blocked current-checkout
+        Nix evaluation with an invalid home-manager.users.admin.security.pki option; deployed immutable
+        source builds.
     - kind: code
       reference: /home/admin/dev/lx-annotate/lx_annotate/hub/hub_export_worker.py resolve_hub_transport_config
       note: mTLS certificate, private key, CA, and source-node secret are checked only for readability
@@ -292,3 +288,37 @@ definition_of_done:
       needed to prevent drift.
     assessed_by: codex-lx-env-audit-20260831
     assessed_at: '2026-08-31T16:00:00+02:00'
+- id: ocr_runtime_dependencies
+  category: operations
+  title: Wheel services receive reproducible OCR binaries and language data
+  acceptance:
+  - The service owns one Nix Tesseract package with deu and eng traineddata.
+  - Default TESSDATA_PREFIX references that package in the Nix store.
+  - Web and Celery services and wheel maintenance wrappers can execute its Tesseract binary.
+  - The Endoreg role preserves the service default unless an explicit tessdataPrefix override is supplied.
+  required: true
+  verification:
+    kind: command
+    command:
+    - .devenv/state/venv/bin/python
+    - -m
+    - pytest
+    - -q
+    - tests/lx-annotate/test_lx_annotate_ocr_runtime.py
+    timeout_seconds: 900
+  assessment:
+    status: verified
+    evidence:
+    - kind: test
+      reference: '2026-09-23: OCR runtime suite 4 passed in 17.37s (default and overridden prefix, web/Celery
+        PATH, wheel wrapper, built package deu/eng languages).'
+    - kind: test
+      reference: '2026-09-23: gc-02 top-level evaluation and shared wheel Celery environment contract
+        tests passed.'
+    - kind: command
+      reference: '2026-09-23: Tesseract package build and traineddata non-empty checks passed; focused
+        Pyright 0 errors; Ruff, nixfmt, git diff --check and devenv tasks run docs:check passed.'
+    note: Verified Nix configuration and package closure; no NixOS activation or production PDF import
+      performed.
+    assessed_by: codex-pdf-import-20260923
+    assessed_at: '2026-09-23T07:22:20.065832Z'

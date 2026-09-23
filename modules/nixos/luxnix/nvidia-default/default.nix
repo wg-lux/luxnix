@@ -19,9 +19,13 @@ in
     # enable prime sync, enable modesetting,
 
     nvidiaDriver = mkOption {
-      type = types.str;
-      default = "production";
-      description = "The nvidia driver to use";
+      type = types.enum [
+        "stable"
+        "beta"
+        "production"
+      ];
+      default = config.luxnix.generic-settings.gpu.nvidia.driver;
+      description = "NVIDIA driver branch; inherits the shared GPU selection unless explicitly overridden.";
     };
   };
 
@@ -45,12 +49,10 @@ in
       powerManagement.finegrained = false;
       open = true;
       nvidiaSettings = true;
-      # mkDefault so a host that also enables luxnix.nvidia-prime (which pins the
-      # production driver) wins without an option-merge conflict; NixOS 26.05
-      # makes hardware.nvidia.package strictly unique.
-      # package = mkDefault nvidiaDrivers.${cfg.nvidiaDriver};
+      # PRIME owns the package when both modules are enabled. Its assertion
+      # requires matching branch selections; package options are unique.
       nvidiaPersistenced = true;
-      package = config.boot.kernelPackages.nvidiaPackages.beta;
+      package = mkDefault config.boot.kernelPackages.nvidiaPackages.${cfg.nvidiaDriver};
     };
   };
 

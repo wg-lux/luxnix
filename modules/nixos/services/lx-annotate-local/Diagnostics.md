@@ -220,7 +220,34 @@ sudo systemctl start lx-annotate-celery-frame-extraction-worker.service
 sudo systemctl stop lx-annotate-celery-frame-extraction-worker.service
 ```
 
-FFmpeg stream throttling, when enabled:
+API request throttling (the default):
+
+```bash
+sudo systemctl status lx-annotate-request-throttle.socket lx-annotate-request-throttle.service
+sudo systemctl show lx-annotate-background.slice -p CPUQuotaPerSecUSec -p CPUWeight -p IOWeight
+sudo systemctl show lx-annotate-celery-ffmpeg-worker.service -p Slice
+sudo systemctl show lx-annotate.service postgresql.service -p Slice
+sudo journalctl --namespace=lx-annotate -u lx-annotate-request-throttle.service -n 100 --no-pager
+```
+
+Use the configured journal namespace from the host profile if it differs. During
+an ordinary authorized frontend API request, the background slice should have the
+configured quota (default 50%, or 500 ms per second). It returns to an unlimited
+aggregate quota only after every API response closes and the two-second trailing
+buffer expires; individual worker limits still apply. Repeated frontend polling
+can keep the lower profile active. Streaming responses hold priority until they
+finish or disconnect. Nginx media delivery after application handoff does not.
+The web and database services must stay outside `lx-annotate-background.slice`.
+
+An API response `503 request_resources_unavailable` indicates failed admission:
+check the socket, controller journal, service-user permissions on the root-owned
+`/run/lx-annotate-request-throttle/activity.lock`, and the packaged middleware.
+Do not remove or recreate that file with running requests. A controller restart
+retains active reservations through kernel locks. CPU/I/O limits do not directly
+throttle existing GPU kernels or external inference servers. See the README and
+feature criterion `frontend_request_throttle` for the contract and evidence.
+
+Legacy FFmpeg stream throttling, only when explicitly enabled instead of API throttling:
 
 ```bash
 sudo systemctl status lx-annotate-ffmpeg-stream-throttle.service

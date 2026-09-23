@@ -197,6 +197,7 @@ let
         pkgs.gnused
         pkgs.rsync
         pkgs.util-linux
+        cfg.runtime.tesseractPackage
       ]
     }:''${PATH:-}"
 
@@ -1032,6 +1033,7 @@ let
       requires = appServiceBaseRequires ++ requires;
       unitConfig = encryptedDataMountUnitConfig // unitConfig;
       environment = commonExtraEnv // environment;
+      path = [ cfg.runtime.tesseractPackage ];
       serviceConfig = {
         User = endoreg-service-user-name;
         Group = endoreg-service-group-name;
@@ -1285,7 +1287,23 @@ let
       // lib.optionalAttrs (runtimeMaxSec != null) {
         RuntimeMaxSec = runtimeMaxSec;
       }
-      // workerCfg.serviceConfig;
+      // workerCfg.serviceConfig
+      //
+        lib.optionalAttrs
+          (
+            cfg.runtime.frontendRequestThrottle.enable
+            && builtins.elem name [
+              "ffmpeg"
+              "pipeline"
+              "frame-extraction"
+              "inference"
+              "training"
+              "llm-inference"
+            ]
+          )
+          {
+            Slice = "lx-annotate-background.slice";
+          };
     });
   workerServices = lib.listToAttrs (lib.mapAttrsToList mkWorkerService workerConfigs);
   celeryBeatService = mkLxAnnotateAppService {
@@ -1836,6 +1854,7 @@ let
     (import ./subservices/lx-annotate-acceptance.nix { ctx = subserviceContext; })
     (import ./subservices/lx-annotate-ffmpeg-stream-throttle.nix { ctx = subserviceContext; })
     (import ./subservices/lx-annotate-ffmpeg-stream-throttle-reset.nix { ctx = subserviceContext; })
+    (import ./subservices/lx-annotate-request-throttle.nix { ctx = subserviceContext; })
     (import ./subservices/integrations/move-my-files.nix { ctx = subserviceContext; })
     (import ./subservices/integrations/nginx.nix { ctx = subserviceContext; })
   ]
@@ -1935,6 +1954,20 @@ in
             {
               assertion = !(builtins.hasAttr "ENDOREG_HLS_ENCODING_PROFILE" cfg.runtime.extraEnvironment);
               message = "Set runtime.hlsEncodingProfile instead of overriding ENDOREG_HLS_ENCODING_PROFILE through runtime.extraEnvironment.";
+            }
+            {
+              assertion =
+                !(builtins.hasAttr "LX_ANNOTATE_REQUEST_THROTTLE_DIRECTORY" cfg.runtime.extraEnvironment);
+              message = "LX_ANNOTATE_REQUEST_THROTTLE_DIRECTORY is owned by runtime.frontendRequestThrottle.";
+            }
+            {
+              assertion =
+                !(cfg.runtime.frontendRequestThrottle.enable && cfg.runtime.ffmpegStreamThrottle.enable);
+              message = "Use frontendRequestThrottle or the legacy ffmpegStreamThrottle, never both.";
+            }
+            {
+              assertion = builtins.match "0+([.]0+)?%" cfg.runtime.frontendRequestThrottle.cpuQuota == null;
+              message = "frontendRequestThrottle.cpuQuota must be positive.";
             }
             {
               assertion = !(builtins.hasAttr "LX_ANNOTATE_MONITORING_CONFIG_FILE" cfg.runtime.extraEnvironment);

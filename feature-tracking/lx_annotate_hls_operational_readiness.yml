@@ -20,6 +20,44 @@ source_documents:
   disposition: reference
   note: Canonical host diagnostics and privacy-safe operational procedures.
 definition_of_done:
+- id: frontend_request_throttle
+  category: functionality
+  title: Foreground API activity controls background resource limits
+  acceptance:
+  - API admission applies the configured CPU and input/output limits to a shared slice containing FFmpeg
+    and compute-heavy Celery workers; web and database services stay outside it.
+  - Normal background capacity returns only after all request locks are released and a configurable trailing
+    buffer expires; new activity resets the buffer.
+  - Local socket admission verifies the service user and accepts no arbitrary commands or units; process
+    death releases locks and controller restart observes surviving requests.
+  - The old stream-lease timer is disabled by default and cannot run concurrently with request throttling.
+    Normal per-worker resource limits remain in place.
+  required: true
+  verification:
+    kind: command
+    command:
+    - .devenv/state/venv/bin/pytest
+    - tests/test_frontend_request_throttle.py
+    - -q
+    timeout_seconds: 600
+  assessment:
+    status: in_progress
+    evidence:
+    - kind: test
+      reference: tests/test_frontend_request_throttle.py
+    - kind: code
+      reference: scripts/frontend-request-throttle.py
+    - kind: document
+      reference: modules/nixos/services/lx-annotate-local/README.md
+    note: '2026-09-23: 16 focused tests passed: trailing buffer, real shared locks and process death,
+      real Unix socket peer authorization, fixed resource commands, gc-10 Nix worker isolation, disabled/invalid
+      configurations and packaged runtime gate syntax. Controller Pyright: 0 errors; Ruff and nixfmt passed;
+      26 documentation checks passed. Client-role legacy default disabled as well as service default.
+      Shared aggregate CPU quota defaults to 50%, weights 10, trailing buffer 2 seconds. Application suite:
+      79 passed. Live systemd resource actuation, wheel packaging and host activation remain unverified;
+      no deployment performed. GPU kernels and external inference servers are not directly capped.'
+    assessed_by: codex-gc10-hls-20260923
+    assessed_at: '2026-09-23T07:17:15.138629Z'
 - id: hls_cross_repository_contract
   category: requirements
   title: WP-LN-01 Deployment dependencies and ownership are explicit
@@ -32,9 +70,9 @@ definition_of_done:
   - One compatibility matrix names the required Endoreg and LX-Annotate work-package revisions, queue
     contract, timeout relationship, database schema, and rollback boundary for each deployable LuxNix
     generation.
-  - NVIDIA-capable deployment roles select the versioned NVENC HLS profile for new HLS reservations,
-    expose exactly one GPU to the FFmpeg worker, and retain fail-closed encoder preflight without changing
-    HLS encryption, frame timing, or already-valid CPU-encoded generations.
+  - NVIDIA-capable deployment roles select the versioned NVENC HLS profile for new HLS reservations, expose
+    exactly one GPU to the FFmpeg worker, and retain fail-closed encoder preflight without changing HLS
+    encryption, frame timing, or already-valid CPU-encoded generations.
   required: true
   verification:
     kind: manual

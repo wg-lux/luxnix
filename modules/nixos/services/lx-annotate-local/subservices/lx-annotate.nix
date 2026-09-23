@@ -4,6 +4,7 @@
 with ctx;
 {
   systemd.services.lx-annotate = {
+    path = [ cfg.runtime.tesseractPackage ];
     aliases = [ "lx-annotate-boot.service" ];
     wants = [
       "nginx.service"

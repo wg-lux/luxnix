@@ -288,8 +288,8 @@ in
             "beta"
             "production"
           ];
-          default = "beta";
-          description = "Nvidia driver version to use";
+          default = "production";
+          description = "NVIDIA driver branch from the locked kernel package set, shared by PRIME and standard GPU modules.";
         };
 
         prime = {

@@ -136,6 +136,8 @@ rec {
     SKIP_EXPENSIVE_TESTS = envSkipExpensiveTests;
     FFMPEG_TRANSCODE_TIMEOUT_SECONDS = toString ffmpegTranscodeTimeoutSeconds;
     ENDOREG_HLS_ENCODING_PROFILE = cfg.runtime.hlsEncodingProfile;
+    LX_ANNOTATE_REQUEST_THROTTLE_DIRECTORY =
+      if cfg.runtime.frontendRequestThrottle.enable then "/run/lx-annotate-request-throttle" else "";
     MEDIA_OPERATION_STREAM_LEASE_SECONDS = "300";
     SERVE_WITH_NGINX = boolString cfg.runtime.streamableServing.nginxOffload;
     NGINX_PROTECTED_MEDIA_URL = cfg.runtime.streamableServing.protectedMediaUrl;

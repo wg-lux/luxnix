@@ -336,8 +336,8 @@ in
           wheelPath = mkOption {
             type = types.nullOr types.path;
             default = pkgs.fetchurl {
-              url = "https://files.pythonhosted.org/packages/f8/3c/419d93b06cd277fc551d092daa5bf43f88a09acbe6c15d7c7df5abb887b2/lx_annotate-1.3.3-py3-none-any.whl";
-              hash = "sha256-patYQoLlKebGP3PDxYKpdpZdKNkdpfND9ExpqYUkkSw=";
+              url = "https://files.pythonhosted.org/packages/89/52/3f9d74fdb97ba70e179474328410a835ecbcee0096d02a5ea0be315842f5/lx_annotate-1.3.4-py3-none-any.whl";
+              hash = "sha256-zistlzDuF4Jv1qrPvOvsNZ92k9zYvzQn9lH70QStVWQ=";
             };
             description = "Path to the lx-annotate wheel artifact used in wheel mode.";
           };
@@ -613,9 +613,19 @@ in
             default = pkgs.python312;
             description = "Python interpreter used to create the runtime virtualenv in wheel mode.";
           };
+          tesseractPackage = mkOption {
+            type = types.package;
+            default = pkgs.tesseract.override {
+              enableLanguages = [
+                "deu"
+                "eng"
+              ];
+            };
+            description = "Tesseract runtime with German and English OCR language data.";
+          };
           tessdataPrefix = mkOption {
             type = types.str;
-            default = "/run/current-system/sw/share/tessdata";
+            default = "${cfg.runtime.tesseractPackage}/share/tessdata";
             description = "TESSDATA_PREFIX exported to wheel-based services.";
           };
           pytorchAllocConf = mkOption {
@@ -834,13 +844,46 @@ in
             default = { };
             description = "Scheduling policy for the dedicated low-priority FFmpeg media Celery worker.";
           };
-          ffmpegStreamThrottle = mkOption {
+          frontendRequestThrottle = mkOption {
             type = types.submodule {
               options = {
                 enable = mkOption {
                   type = types.bool;
                   default = true;
-                  description = "Enable runtime stream-aware throttling for the FFmpeg worker cgroup.";
+                  description = "Throttle compute-heavy Celery workers during API requests and their trailing buffer.";
+                };
+                tailSeconds = mkOption {
+                  type = types.ints.unsigned;
+                  default = 2;
+                  description = "Seconds of quiet after the final API request before restoring background capacity.";
+                };
+                cpuQuota = mkOption {
+                  type = types.strMatching "[0-9]+([.][0-9]+)?%";
+                  default = "50%";
+                  description = "Aggregate CPUQuota for the background slice during API activity; individual worker ceilings still apply.";
+                };
+                cpuWeight = mkOption {
+                  type = types.ints.between 1 10000;
+                  default = 10;
+                  description = "Background slice CPUWeight during API activity.";
+                };
+                ioWeight = mkOption {
+                  type = types.ints.between 1 10000;
+                  default = 10;
+                  description = "Background slice IOWeight during API activity.";
+                };
+              };
+            };
+            default = { };
+            description = "Synchronous API admission and process-safe request activity, independent of playback leases.";
+          };
+          ffmpegStreamThrottle = mkOption {
+            type = types.submodule {
+              options = {
+                enable = mkOption {
+                  type = types.bool;
+                  default = false;
+                  description = "Legacy playback-lease throttle; mutually exclusive with frontendRequestThrottle.";
                 };
                 interval = mkOption {
                   type = types.str;

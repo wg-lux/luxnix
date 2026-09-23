@@ -13,6 +13,23 @@ This module manages the local `lx-annotate` deployment on LuxNix hosts.
 - [`scripts.nix`](scripts.nix): shell-script derivations used by the service units.
 - [`scripts/env.nix`](scripts/env.nix): single source of truth for shared lx-annotate runtime environment variables.
 
+## OCR runtime dependencies
+
+The service provides `runtime.tesseractPackage` with German (`deu`) and English
+(`eng`) traineddata, matching the language selection in lx-anonymizer/package.nix.
+The default `runtime.tessdataPrefix` references that package's `share/tessdata`
+directory in the Nix store. The shared environment exports `TESSDATA_PREFIX`,
+and application services and wheel maintenance wrappers include the package in
+`PATH`. Neither a global Tesseract installation nor a system-profile tessdata
+symlink is required. Wheel builds (`make package`) do not bundle these native
+dependencies; the NixOS service closure supplies them.
+
+The Endoreg role delegates to this service default unless its
+`runtime.tessdataPrefix` is explicitly set. Apply the NixOS configuration through
+the normal deployment process to update running services. The corresponding
+contract is tracked by `ocr_runtime_dependencies` in
+[`lx_annotate_environment_lifecycle_audit.yml`](../../../../feature-tracking/lx_annotate_environment_lifecycle_audit.yml).
+
 ## Encrypted Data Flow
 
 The module can manage the application data directory as a LUKS-backed mount:
@@ -297,10 +314,56 @@ limits come from `runtime.workerPools.*`.
 
 | Unit | Type / trigger | Runtime role |
 | --- | --- | --- |
-| `lx-annotate-ffmpeg-stream-throttle.timer` | timer, default every two minutes | Starts `lx-annotate-ffmpeg-stream-throttle.service`, which asks Django whether user video streams are active and then applies runtime cgroup CPU/IO weights to the FFmpeg worker. Its last applied profile is stored in `/run/lx-annotate/ffmpeg-stream-throttle.state`. |
+| `lx-annotate-ffmpeg-stream-throttle.timer` | legacy, disabled by default | Starts `lx-annotate-ffmpeg-stream-throttle.service`, which asks Django whether user video streams are active and then applies runtime cgroup CPU/IO weights to the FFmpeg worker. Its last applied profile is stored in `/run/lx-annotate/ffmpeg-stream-throttle.state`. |
 | `lx-annotate-data-cleanup.timer` | timer when `dataCleanup.enable` | Starts duplicate cleanup for legacy anonymized payloads, moving verified duplicates into the configured archive tree. |
 | `lx-annotate-emergency-storage-relief.timer` | optional timer | Starts the emergency relief job when explicitly enabled. The service fails closed unless the external archive mount matches the configured device id or filesystem UUID, then archives only verified duplicates or validated export bundles. Manual starts are the default workflow. |
 | `lx-annotate-hub-backup.timer` | timer when `hub.backup.enable` | Starts hub snapshots. The service rsyncs the encrypted runtime tree into timestamped snapshots, writes JSON manifests, maintains a `latest` symlink, and prunes by `hub.backup.retainCount`. |
+
+### API request priority and trailing buffer
+
+`runtime.frontendRequestThrottle.enable` defaults to `true`. The application
+middleware reserves priority before processing paths under `/api/`,
+`/endoreg-api/`, and `/dtypes-api/`, including non-browser clients. The reservation
+covers response delivery, streaming completion, and disconnect cleanup. Static
+files and media handed off to Nginx do not hold a reservation after Django closes
+the response. No frontend header or individual SQL-query instrumentation is needed.
+
+The root controller acknowledges each admission only after applying runtime limits
+to `lx-annotate-background.slice`. This slice contains the FFmpeg, pipeline, frame
+extraction, inference, training, and LLM inference workers, including their child
+processes. Web, PostgreSQL, maintenance, and hub transfer services stay outside it.
+The defaults are an **aggregate** `CPUQuota = "50%"` (half of one CPU),
+`CPUWeight = 10`, and `IOWeight = 10`. Individual worker ceilings remain in force.
+CPU and I/O scheduling do not directly cap already-running GPU kernels or external
+Ollama services; this is not a GPU utilization limiter.
+
+After the last reservation closes, `runtime.frontendRequestThrottle.tailSeconds`
+(default `2`) must pass without activity before the aggregate quota is removed and
+slice weights return to 100. A new request resets this buffer. The controller
+checks locks every 100 ms, so restoration can occur slightly later, never earlier.
+Independent shared file locks account for concurrent requests, survive controller
+restarts, and are released by the kernel when a web process dies. The root-owned
+lock file must not be replaced while web workers are running.
+
+`LX_ANNOTATE_REQUEST_THROTTLE_DIRECTORY` is module-owned and passed through the
+packaged runtime environment. The local socket accepts only a fixed admission byte
+from the application user; no request content, SQL, user identity, arbitrary unit,
+or command is sent. Admission has a five-second deadline. A configured but
+unavailable controller produces HTTP 503 with `Retry-After: 1` before view execution.
+An empty directory setting disables this integration for local development.
+
+Deploy the application middleware and its runtime environment allowlist together
+with this module. The web service checks the installed package's middleware and
+setting before startup, so an older wheel fails explicitly. The legacy
+`runtime.ffmpegStreamThrottle.enable` defaults to `false` in both the service and
+client role; enabling both mechanisms is a configuration error. For a rollback to
+an older application package, disable request throttling explicitly before
+activation. No application release or activation is implied by local tests.
+
+Acceptance evidence belongs to
+[`lx_annotate_hls_operational_readiness.yml`](../../../../feature-tracking/lx_annotate_hls_operational_readiness.yml),
+criterion `frontend_request_throttle`, and the application's `StorageOptimization.yml`,
+criterion `frontend_request_priority`.
 
 ### Supporting Runtime Services
 
