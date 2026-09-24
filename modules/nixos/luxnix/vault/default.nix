@@ -854,6 +854,7 @@ let
       ''}
       ROLE_ID_FILE=${lib.escapeShellArg (toString cfg.client.auth.roleIdFile)}
       SECRET_ID_FILE=${lib.escapeShellArg (toString cfg.client.auth.secretIdFile)}
+      VAULT_AUTH_ERROR_CLASSIFIER=${vaultAuthErrorClassifierTool}/bin/luxnix-vault-classify-auth-error
       source ${../../../../scripts/vault/refresh-client-auth.sh}
       if ! refresh_client_auth; then
         ${optionalString cfg.client.allowOffline ''

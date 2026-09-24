@@ -175,20 +175,22 @@ let
           "${helperPythonPath}" - "$key_file" <<'PY'
     import base64
     import binascii
+    import pwd
     import stat
     import sys
     from pathlib import Path
 
     key_path = Path(sys.argv[1])
+    if not key_path.is_absolute() or key_path.is_symlink():
+        raise SystemExit("Application master key must be an absolute, non-symlink file")
     key_stat = key_path.stat()
     key_mode = stat.S_IMODE(key_stat.st_mode)
 
-    if key_stat.st_uid != 0:
-        raise SystemExit("Application master key file must be owned by root")
-    if key_mode & 0o020:
-        raise SystemExit("Application master key file must not be group-writable")
-    if key_mode & 0o007:
-        raise SystemExit("Application master key file must not grant access to other users")
+    service_uid = pwd.getpwnam("${endoreg-service-user-name}").pw_uid
+    if key_stat.st_uid not in {0, service_uid}:
+        raise SystemExit("Application master key file must be owned by root or the service user")
+    if not stat.S_ISREG(key_stat.st_mode) or key_mode & 0o077:
+        raise SystemExit("Application master key must be a private regular file without group or other access")
 
     try:
         encoded_key = key_path.read_text(encoding="ascii").strip()

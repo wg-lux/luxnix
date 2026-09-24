@@ -394,6 +394,25 @@ in
         cfg.gpu.nvidia.prime.enable && !cfg.gpu.nvidia.enable
       ) "Nvidia PRIME is enabled but Nvidia GPU support is disabled");
 
+    # Compare the loaded module, not /run/current-system: a previous failed
+    # activation may already have moved that symlink to the incoming driver.
+    system.preSwitchChecks.nvidiaDriver =
+      mkIf (config.luxnix.nvidia-prime.enable || config.luxnix.nvidia-default.enable)
+        ''
+          action="''${2-}"
+          if [ "$action" = boot ] || [ ! -e /sys/module/nvidia/version ]; then
+            exit 0
+          fi
+          loaded_version="$(< /sys/module/nvidia/version)"
+          expected_version=${lib.escapeShellArg config.hardware.nvidia.package.version}
+          if [ "$loaded_version" != "$expected_version" ]; then
+            echo "ERROR: loaded NVIDIA driver $loaded_version differs from incoming $expected_version." >&2
+            echo "Stage this configuration with nixos-rebuild boot and reboot during a maintenance window." >&2
+            echo "Live activation would break NVML, GPU workloads, and NVIDIA CDI generation." >&2
+            exit 1
+          fi
+        '';
+
     # GPU Configuration - Nvidia PRIME
     luxnix.nvidia-prime = mkIf (cfg.gpu.nvidia.enable && cfg.gpu.nvidia.prime.enable) {
       enable = true;

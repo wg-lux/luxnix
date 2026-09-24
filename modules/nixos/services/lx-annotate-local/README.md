@@ -726,7 +726,7 @@ The main review caveats have now been addressed in code:
    `runtime.vaultManagedEncryptedData.enable` now asserts that `networking.hostName` is set, and the secret path stays hostname-scoped.
 
 4. Secret file permissions remain strict by design.
-   The LUKS key, UUID, and application master key are written as `root:root` with `0400`.
+   The LUKS key and UUID are written as `root:root` with `0400`. The application master key uses the configured EndoReg service user/group and `0600`.
 
 5. The trust boundary is split in the right place.
    Vault material unlocks the mounted data directory and provides the application master key file, but the application still consumes files from the mounted path rather than raw Vault state.

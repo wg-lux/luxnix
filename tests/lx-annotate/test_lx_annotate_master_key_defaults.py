@@ -41,3 +41,36 @@ def test_lx_annotate_vault_master_key_refuses_accidental_rotation():
     assert "lx_annotate_master_key =" in source
     assert '${pkgs.diffutils}/bin/cmp -s "$SECRET_FILE" "$TARGET_FILE"' in source
     assert "Refusing to replace it during managed-secrets refresh" in source
+
+
+def test_managed_application_keys_are_service_private():
+    source = CONFIG_NIX.read_text()
+    for name in ("lx_annotate_master_key_local", "lx_annotate_master_key"):
+        block = source.split(f"{name} =", 1)[1].split("description =", 1)[0]
+        assert "owner = endoreg-service-user-name;" in block
+        assert "group = endoreg-service-group-name;" in block
+        assert 'permissions = "600";' in block
+
+
+def test_master_key_preflight_permissions(tmp_path):
+    import base64
+    import os
+    import pwd
+    import subprocess
+    import sys
+    import textwrap
+
+    source = (SERVICE_DIR / "scripts.nix").read_text()
+    code = textwrap.dedent(source.split("<<'PY'\n", 1)[1].split("\n    PY", 1)[0])
+    code = code.replace("${endoreg-service-user-name}", pwd.getpwuid(os.geteuid()).pw_name)
+    key = tmp_path / "key"
+    key.write_bytes(base64.urlsafe_b64encode(bytes(32)))
+    for mode, succeeds in ((0o600, True), (0o400, True), (0o640, False), (0o644, False), (0o620, False)):
+        key.chmod(mode)
+        result = subprocess.run([sys.executable, "-c", code, str(key)], capture_output=True)
+        assert (result.returncode == 0) is succeeds, result.stderr
+    key.chmod(0o600)
+    link = tmp_path / "link"
+    link.symlink_to(key)
+    result = subprocess.run([sys.executable, "-c", code, str(link)], capture_output=True)
+    assert result.returncode != 0

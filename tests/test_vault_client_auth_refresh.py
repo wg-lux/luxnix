@@ -11,8 +11,16 @@ ROOT = Path(__file__).resolve().parents[1]
 HELPER = ROOT / "scripts/vault/refresh-client-auth.sh"
 
 
-@pytest.mark.parametrize("fail", [False, True])
-def test_refresh_ignores_expired_token_and_redacts_errors(tmp_path, fail):
+@pytest.mark.parametrize("error, state", [
+    (None, None),
+    ("test-only-sensitive-error", "vault-error"),
+    ("x509: certificate signed by unknown authority", "tls-trust-failed"),
+    ("Vault is sealed", "vault-sealed"),
+    ("dial tcp: connection refused", "vault-unreachable"),
+    ("invalid role or secret ID", "auth-rejected"),
+])
+def test_refresh_ignores_expired_token_and_redacts_errors(tmp_path, error, state):
+    fail = error is not None
     if not shutil.which("jq"):
         pytest.skip("jq is required by deployed refresh helper")
     vault = tmp_path / "vault"
@@ -23,13 +31,16 @@ assert sys.argv[1:] == ['write', '-field=token', 'auth/approle/login', '-']
 assert json.load(sys.stdin) == {
     'role_id':'test-only-role', 'secret_id':'test-only-secret'}
 if os.environ.get('TEST_FAIL') == '1':
-    print('test-only-sensitive-error', file=sys.stderr)
+    print(os.environ['TEST_ERROR'] + ' test-only-sensitive-error', file=sys.stderr)
     sys.exit(2)
 print('test-only-fresh-token')
 """)
     vault.chmod(0o700)
     (tmp_path / "role").write_text("test-only-role\n")
     (tmp_path / "secret").write_text("test-only-secret\n")
+    classifier = tmp_path / "classify-auth-error"
+    classifier.write_text((ROOT / "scripts/vault/classify-auth-error.sh").read_text())
+    classifier.chmod(0o700)
     env = dict(
         os.environ,
         PATH=str(tmp_path) + ":" + os.environ["PATH"],
@@ -37,6 +48,9 @@ print('test-only-fresh-token')
         ROLE_ID_FILE=str(tmp_path / "role"),
         SECRET_ID_FILE=str(tmp_path / "secret"),
         TEST_FAIL=str(int(fail)),
+        TEST_ERROR=error or "",
+        TMPDIR=str(tmp_path),
+        VAULT_AUTH_ERROR_CLASSIFIER=str(classifier),
     )
     result = subprocess.run(
         [
@@ -54,6 +68,9 @@ print('test-only-fresh-token')
         text=True,
     )
     assert result.returncode == int(fail)
+    assert not list(tmp_path.glob("tmp.*"))
+    if fail:
+        assert f"state: {state}" in result.stderr
     assert "test-only-sensitive" not in result.stderr
     assert "test-only-fresh-token" not in result.stdout
     assert "test-only-secret" not in result.stderr

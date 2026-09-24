@@ -124,3 +124,34 @@ def test_invalid_driver_branch_is_rejected(option):
     assert result.returncode != 0
     assert "unsupported" in result.stderr
     assert "one of" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "action, loaded, expected, code",
+    [
+        ("test", "595.45.04", "595.71.05", 1),
+        ("switch", "595.45.04", "595.71.05", 1),
+        ("switch", "595.71.05", "595.71.05", 0),
+        ("boot", "595.45.04", "595.71.05", 0),
+        ("switch", None, "595.71.05", 0),
+    ],
+)
+def test_loaded_driver_guard(tmp_path, action, loaded, expected, code):
+    source = (ROOT / "modules/nixos/luxnix/generic-settings/default.nix").read_text()
+    script = source.split("system.preSwitchChecks.nvidiaDriver =", 1)[1]
+    script = script.split(") ''\n", 1)[1].split("    '';", 1)[0]
+    version_file = tmp_path / "version"
+    if loaded is not None:
+        version_file.write_text(loaded + "\n")
+    script = script.replace("/sys/module/nvidia/version", str(version_file))
+    script = script.replace("''${2-}", "${2-}")
+    script = script.replace(
+        "${lib.escapeShellArg config.hardware.nvidia.package.version}", expected
+    )
+    result = subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", script, "_", "/incoming", action],
+        capture_output=True, text=True,
+    )
+    assert result.returncode == code, result.stderr
+    if code:
+        assert "nixos-rebuild boot" in result.stderr

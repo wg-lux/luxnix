@@ -692,3 +692,22 @@ sudo systemctl restart \
   lx-annotate-celery-pipeline-worker.service \
   lx-annotate-celery-ffmpeg-worker.service
 ```
+
+## Master-key gate rejects secret permissions
+
+`Secret files must be private regular files owned by root or the service user`
+means metadata was rejected before decryption. Older LuxNix configurations used
+root-owned `0640` application keys; endoreg_db rejects all group/other access.
+Inspect metadata without displaying the key:
+
+```bash
+sudo stat -c '%a %U:%G %F %n' /etc/secrets/vault/lx_annotate_master_key
+```
+
+Both generated and Vault-backed application keys now use the configured EndoReg
+service user/group and `0600`. Apply the reviewed configuration through the normal
+deployment workflow. Managed-secrets reconciles existing permissions; Vault refresh
+still refuses different key bytes. Never delete or regenerate the key to repair
+permissions. Custom key paths must also be private and readable by the service.
+Verify the master-key gate before starting dependent services, following the
+startup sequence above. Passing permissions alone does not verify decryption.
