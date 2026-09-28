@@ -138,6 +138,18 @@ lib.foldl' lib.recursiveUpdate
       services.luxnix.lxAnnotateLocal.django.enrollLegacyDefaultSalt = true;
     }
     {
+      services.luxnix.ollama.acceleration = "cuda";
+    }
+    {
+      services.luxnix.ollama.enable = true;
+    }
+    {
+      services.luxnix.ollama.enableModelBootstrap = false;
+    }
+    {
+      services.luxnix.ollama.models = [ "gemma4:e2b" ];
+    }
+    {
       services.luxnix.vllm.enable = false;
     }
     {
@@ -154,6 +166,9 @@ lib.foldl' lib.recursiveUpdate
     }
     {
       services.luxnix.vllm.port = 8000;
+    }
+    {
+      services.ollama.host = "0.0.0.0";
     }
     {
       luxnix.boot-decryption-stick.enable = true;
