@@ -32,6 +32,7 @@ let
   inherit (runtimePaths)
     envDataDir
     envProtectedDataDir
+    envEndoregRuntimeRoot
     envConfDir
 
     envFrameDir
@@ -166,12 +167,11 @@ let
         
           cd "''${ENDOREG_DB_DIR}"
         
-          git fetch origin lx-ai-service
+          git fetch origin lx-ai-service-prototype
         
-          git checkout lx-ai-service
+          git checkout lx-ai-service-prototype
         
-          git reset --hard origin/lx-ai-service
-        
+          git reset --hard origin/lx-ai-service-prototype
           cd "${repoDir}"
         fi
 
