@@ -32,6 +32,7 @@ let
   inherit (runtimePaths)
     envDataDir
     envProtectedDataDir
+    envEndoregRuntimeRoot
     envConfDir
 
     envFrameDir
@@ -127,19 +128,40 @@ let
 
         if [ ! -d "''${LX_MODELS_DIR}" ] || [ ! -f "''${LX_MODELS_DIR}/pyproject.toml" ]; then
           echo "lx-data-models missing or broken so re-cloning..."
-
+        
           rm -rf "''${LX_MODELS_DIR}"
-
+        
           git clone --branch contracts --single-branch \
             https://github.com/wg-lux/lx-data-models \
             "''${LX_MODELS_DIR}" || {
               echo "ERROR: Failed to clone lx-data-models"
               exit 1
           }
-
+        
           echo "lx-data-models cloned successfully"
         else
           echo "lx-data-models already present"
+          cd "''${LX_MODELS_DIR}"
+        
+          echo "Updating lx-data-models to contracts..."
+        
+          git fetch origin \
+            refs/heads/contracts:refs/remotes/origin/contracts || {
+              echo "ERROR: Failed to fetch lx-data-models contracts"
+              exit 1
+          }
+        
+          git checkout -B contracts origin/contracts || {
+              echo "ERROR: Failed to checkout lx-data-models contracts"
+              exit 1
+          }
+        
+          git reset --hard origin/contracts || {
+              echo "ERROR: Failed to reset lx-data-models to origin/contracts"
+              exit 1
+          }
+        
+          cd "${repoDir}"
         fi
 
         echo "Ensuring endoreg-db dependency..."
@@ -153,7 +175,7 @@ let
 
           rm -rf "''${ENDOREG_DB_DIR}"
 
-          git clone --branch lx-ai-service --single-branch \
+          git clone --branch lx-ai-service-prototype --single-branch \
             https://github.com/wg-lux/endoreg-db \
             "''${ENDOREG_DB_DIR}" || {
               echo "ERROR: Failed to clone endoreg-db"
@@ -166,11 +188,24 @@ let
         
           cd "''${ENDOREG_DB_DIR}"
         
-          git fetch origin lx-ai-service
+          echo "Updating endoreg-db to lx-ai-service-prototype..."
         
-          git checkout lx-ai-service
+          git fetch origin \
+            refs/heads/lx-ai-service-prototype:refs/remotes/origin/lx-ai-service-prototype || {
+              echo "ERROR: Failed to fetch endoreg-db lx-ai-service-prototype"
+              exit 1
+          }
         
-          git reset --hard origin/lx-ai-service
+          git checkout -B lx-ai-service-prototype \
+            origin/lx-ai-service-prototype || {
+              echo "ERROR: Failed to checkout endoreg-db lx-ai-service-prototype"
+              exit 1
+          }
+        
+          git reset --hard origin/lx-ai-service-prototype || {
+              echo "ERROR: Failed to reset endoreg-db to origin/lx-ai-service-prototype"
+              exit 1
+          }
         
           cd "${repoDir}"
         fi
@@ -226,6 +261,9 @@ let
         export DATA_DIR="${envDataDir}"
         export DJANGO_DATA_DIR="${envDataDir}"
         export LX_ANNOTATE_DATA_DIR="${envDataDir}"
+
+        # Canonical EndoReg-DB prototype path contract.
+        export LX_RUNTIME_ROOT="${envEndoregRuntimeRoot}"
 
         export LX_ANNOTATE_ENCRYPTED_DATA_DIR="${envProtectedDataDir}"
         export STORAGE_DIR="${envStorageDir}"
@@ -291,7 +329,7 @@ let
     profile = "production"
     EOF
 
-        cat > "${envSystemdFilePath}" <<EOF
+    cat > "${envSystemdFilePath}" <<EOF
     HOME_DIR=${endoreg-service-user-home}
     WORKING_DIR=${repoDir}
 
@@ -302,6 +340,8 @@ let
     LX_ANNOTATE_ENCRYPTED_DATA_DIR=${envProtectedDataDir}
     STORAGE_DIR=${envStorageDir}
     PROTECTED_MEDIA_ROOT=${envStorageDir}
+
+    LX_RUNTIME_ROOT=${envEndoregRuntimeRoot}
 
     CONF_DIR=${envConfDir}
     FRAME_DIR=${envFrameDir}

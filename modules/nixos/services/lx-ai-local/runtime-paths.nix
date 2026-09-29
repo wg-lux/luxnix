@@ -54,6 +54,18 @@ let
       makeRuntimePath cfg.runtime.protectedDataDir
     else
       envDataDir;
+  
+  # Canonical EndoReg-DB prototype runtime root.
+  #
+  # endoreg-db lx-ai-service-prototype derives its protected storage tree from:
+  #   LX_RUNTIME_ROOT/storage
+  #
+  # In production this is intentionally the lx-annotate protected data root:
+  #   /var/lib/lx-annotate/data
+  #
+  # In local/fallback mode, when protectedDataDir is null, this resolves to
+  # lx-ai's own data directory.
+  envEndoregRuntimeRoot = envProtectedDataDir;
 
   envConfDir = makeRuntimePath cfg.runtime.confDir;
 
@@ -98,6 +110,7 @@ in
 
     envFrameDir
     envFrameMaterializationOutputRoot
+    envEndoregRuntimeRoot
 
     envTrainingRoot
     envCheckpointsDir
