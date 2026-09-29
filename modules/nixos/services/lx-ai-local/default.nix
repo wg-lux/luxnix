@@ -153,7 +153,7 @@ let
 
           rm -rf "''${ENDOREG_DB_DIR}"
 
-          git clone --branch lx-ai-service --single-branch \
+          git clone --branch lx-ai-service-prototype --single-branch \
             https://github.com/wg-lux/endoreg-db \
             "''${ENDOREG_DB_DIR}" || {
               echo "ERROR: Failed to clone endoreg-db"
@@ -227,6 +227,9 @@ let
         export DJANGO_DATA_DIR="${envDataDir}"
         export LX_ANNOTATE_DATA_DIR="${envDataDir}"
 
+        # Canonical EndoReg-DB prototype path contract.
+        export LX_RUNTIME_ROOT="${envEndoregRuntimeRoot}"
+
         export LX_ANNOTATE_ENCRYPTED_DATA_DIR="${envProtectedDataDir}"
         export STORAGE_DIR="${envStorageDir}"
         export PROTECTED_MEDIA_ROOT="${envStorageDir}"
@@ -291,7 +294,7 @@ let
     profile = "production"
     EOF
 
-        cat > "${envSystemdFilePath}" <<EOF
+    cat > "${envSystemdFilePath}" <<EOF
     HOME_DIR=${endoreg-service-user-home}
     WORKING_DIR=${repoDir}
 
@@ -302,6 +305,8 @@ let
     LX_ANNOTATE_ENCRYPTED_DATA_DIR=${envProtectedDataDir}
     STORAGE_DIR=${envStorageDir}
     PROTECTED_MEDIA_ROOT=${envStorageDir}
+
+    LX_RUNTIME_ROOT=${envEndoregRuntimeRoot}
 
     CONF_DIR=${envConfDir}
     FRAME_DIR=${envFrameDir}
