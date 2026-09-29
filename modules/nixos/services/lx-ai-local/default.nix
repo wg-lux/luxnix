@@ -128,19 +128,40 @@ let
 
         if [ ! -d "''${LX_MODELS_DIR}" ] || [ ! -f "''${LX_MODELS_DIR}/pyproject.toml" ]; then
           echo "lx-data-models missing or broken so re-cloning..."
-
+        
           rm -rf "''${LX_MODELS_DIR}"
-
+        
           git clone --branch contracts --single-branch \
             https://github.com/wg-lux/lx-data-models \
             "''${LX_MODELS_DIR}" || {
               echo "ERROR: Failed to clone lx-data-models"
               exit 1
           }
-
+        
           echo "lx-data-models cloned successfully"
         else
           echo "lx-data-models already present"
+          cd "''${LX_MODELS_DIR}"
+        
+          echo "Updating lx-data-models to contracts..."
+        
+          git fetch origin \
+            refs/heads/contracts:refs/remotes/origin/contracts || {
+              echo "ERROR: Failed to fetch lx-data-models contracts"
+              exit 1
+          }
+        
+          git checkout -B contracts origin/contracts || {
+              echo "ERROR: Failed to checkout lx-data-models contracts"
+              exit 1
+          }
+        
+          git reset --hard origin/contracts || {
+              echo "ERROR: Failed to reset lx-data-models to origin/contracts"
+              exit 1
+          }
+        
+          cd "${repoDir}"
         fi
 
         echo "Ensuring endoreg-db dependency..."
