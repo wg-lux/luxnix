@@ -1,0 +1,59 @@
+schema_version: 1
+owner: LuxNix maintainers
+canonical_topic: LX terminology package hosting and publication
+purpose: Upload versioned ZIP bundles once and download them publicly during application runs.
+deployment:
+  host: s-02
+  domain: terminology.endo-reg.net
+  public_url: https://terminology.endo-reg.net
+  state: configured_in_inventory_not_deployed
+  prerequisites:
+    - Point the public DNS record at the s-02 public web ingress.
+    - Verify the managed certificate covers terminology.endo-reg.net.
+    - Provision a random upload token of at least 32 ASCII characters at /run/secrets/lx-terminology-upload-token through the managed secret workflow.
+    - Use the documented host deployment workflow after reviewing the source revision and build.
+  token_lifecycle: LoadCredential reads the root-owned secret at service start; restart lx-terminology after rotation.
+  tls: Reuses s-02 nginx-host certificate synchronization; no plaintext public listener.
+  persistence: /var/lib/lx-terminology/packages.sqlite3
+  backup: Use SQLite online backup or stop the service before copying the database; retain the host's encrypted backup policy.
+  readiness: DNS, certificate coverage, secret provisioning, host build, activation and public HTTP acceptance remain operator checks.
+contract:
+  catalog: GET /api/packages
+  publish: POST /api/packages with raw application/zip body and Authorization bearer token
+  download: GET /packages/{sha256}.zip
+  upload_response: name, version, sha256, size, url
+  immutable_identity: A different ZIP for an existing name/version returns 409; identical bytes return 200.
+  limits: 64 MiB uploaded ZIP, 256 MiB expanded bytes, 4096 entries, 64 KiB root config.
+  validation: ZIP paths, size, readability and root identity; full domain and graph validation remains with the consuming application.
+  cors: Public reads and explicit bearer uploads; browser requests omit cookies.
+  public_content: Publish approved terminology only; every package and catalog entry is publicly readable.
+  nix_boundary: Nix packages the server software only. Bundle contents live in the writable runtime database.
+publication:
+  browser: Open the host URL, select an editor-exported ZIP, supply the upload token, and publish.
+  editor: The package publication panel uploads the current generated bundle and returns its public download link. The token is never persisted.
+  data_models:
+    source: /home/admin/lx-data-models/lx_dtypes/data
+    tool: modules/nixos/services/lx-terminology/publish.py
+    dependencies: Recursively include referenced modules and depends_on entries from the same data root; missing or ambiguous dependencies fail.
+    version_selection: External dependencies resolve by config name outside versions/; ambiguous names fail. Historical root versions do not pin historical dependency versions.
+    example: >-
+      python modules/nixos/services/lx-terminology/publish.py
+      /home/admin/lx-data-models/lx_dtypes/data/dgvs_reporting
+      --data-root /home/admin/lx-data-models/lx_dtypes/data
+      --server https://terminology.endo-reg.net
+      --token-file /path/to/operator-token
+    python_dependencies: [flask, pyyaml]
+    behavior: Reads source files without modifying them and produces deterministic ZIP bytes; no Nix rebuild is involved.
+consumption:
+  reporting: Paste the returned package link in ReportingShell's public package link control.
+  runtime: Browser downloads with a 64 MiB bound and SHA-256 verification, then calls the existing authenticated terminology import.
+  activation: Existing draft saving, server-side validation, registration and active-terminology reconciliation remain authoritative.
+  editor_import: Download the hosted ZIP and use ZIP öffnen or ZIP zusammenführen; the editor's existing editable-layout restrictions still apply.
+verification:
+  server: python -m pytest tests/lx-terminology/test_package_host.py -q
+  application: npm exec vitest run src/api/__tests__/terminologyPackageHost.test.ts src/api/__tests__/terminologyApi.test.ts
+  editor: npm test
+  local_import_blocker: >-
+    Full domain import against /home/admin/lx-data-models is blocked by the existing
+    ReportTemplate.py NameError for datetime during model import. Structural export
+    passed for all seven catalog entries; this is not evidence of clinical graph validity.

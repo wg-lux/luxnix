@@ -7,6 +7,7 @@ from email.parser import BytesParser
 from importlib.metadata import PackageNotFoundError, version
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
 from zipfile import ZipFile
@@ -89,12 +90,64 @@ def validate_report(
     return selected
 
 
+def resolver_failure_summary(stderr: str) -> str:
+    """Allowlisted facts only: pip output may contain credentials and URLs."""
+    missing = re.findall(
+        r"^ERROR: No matching distribution found for "
+        r"([A-Za-z0-9][A-Za-z0-9_.-]{0,99}(?:\[[A-Za-z0-9_,.-]+\])?"
+        r"(?:===?|~=|>=?|<=?|!=)[0-9][A-Za-z0-9.*+!_-]*(?:\.[A-Za-z0-9*+!_-]+)*)$",
+        stderr,
+        re.MULTILINE,
+    )
+    # Transport failures can also end with a misleading 'no matching' error.
+    if "CERTIFICATE_VERIFY_FAILED" in stderr:
+        return "category=tls_verification_failed; check the configured index trust"
+    if any(
+        token in stderr
+        for token in (
+            "ProxyError",
+            "NameResolutionError",
+            "ConnectionError",
+            "NewConnectionError",
+            "ReadTimeoutError",
+            "ConnectTimeoutError",
+        )
+    ):
+        return (
+            "category=index_unreachable; "
+            "check DNS, connectivity and proxy configuration"
+        )
+    if missing:
+        requirements = ",".join(sorted(set(missing))[:5])
+        return (
+            f"category=distribution_unavailable; requirements={requirements}; "
+            "publish or supply the compatible release "
+            "in the configured index/wheelhouse"
+        )
+    if "ResolutionImpossible" in stderr:
+        return "category=dependency_conflict; review the release dependency constraints"
+    if "No matching distribution found" in stderr:
+        return (
+            "category=distribution_unavailable; "
+            "review wheel compatibility and index contents"
+        )
+    if "No space left on device" in stderr:
+        return "category=storage_full; check runtime and temporary storage capacity"
+    if "Permission denied" in stderr:
+        return (
+            "category=permission_denied; "
+            "check service-user access to runtime and package inputs"
+        )
+    return "category=resolver_error; inspect package inputs and index configuration"
+
+
 def check_plan(
     requirements: list[str],
     pip_args: list[str],
     installed: dict[str, Version],
     *,
     no_deps: bool = False,
+    phase: str = "application",
 ) -> dict[str, Version]:
     command = [sys.executable, "-m", "pip", "install", "--upgrade"]
     if no_deps:
@@ -102,11 +155,12 @@ def check_plan(
     command.extend([*pip_args, *requirements, "--dry-run", "--report", "-", "--quiet"])
     result = subprocess.run(command, check=False, capture_output=True, text=True)
     if result.returncode:
-        # Resolver output can include authenticated index URLs. Retain only the
-        # exit status here, and never reinterpret failure as an empty plan.
+        # Never echo raw stdout/stderr: even dependency errors may include
+        # authenticated indexes, direct URLs, local paths or build output.
         raise ValueError(
-            f"pip candidate resolution failed (exit {result.returncode}); "
-            "no packages installed"
+            f"pip candidate resolution failed (exit {result.returncode}, "
+            f"phase={phase}); "
+            f"{resolver_failure_summary(result.stderr)}; no packages installed"
         )
     return validate_report(json.loads(result.stdout), installed)
 
@@ -135,10 +189,19 @@ def main() -> None:
     parser.add_argument("--wheel", type=Path, required=True)
     parser.add_argument("--expected-version", required=True)
     parser.add_argument("--overrides-json", default="[]")
-    parser.add_argument("--application-constraints", type=Path, required=True)
-    parser.add_argument("--override-constraints", type=Path, required=True)
+    parser.add_argument("--application-constraints", type=Path)
+    parser.add_argument("--override-constraints", type=Path)
+    parser.add_argument(
+        "--check-only",
+        action="store_true",
+        help="Resolve and validate without writing constraints or installing packages",
+    )
     parser.add_argument("pip_args", nargs=argparse.REMAINDER)
     args = parser.parse_args()
+    if not args.check_only and (
+        args.application_constraints is None or args.override_constraints is None
+    ):
+        parser.error("constraint destinations are required unless --check-only is used")
     installed = installed_versions()
     validate_wheel(args.wheel, args.expected_version, installed)
     overrides = json.loads(args.overrides_json)
@@ -152,9 +215,12 @@ def main() -> None:
     if overrides:
         # Compare overrides against both the original environment and the
         # app-step plan; do not permit a transient upgrade followed by downgrade.
-        override_plan = check_plan(overrides, pip_args, application_plan, no_deps=True)
-    write_constraints(args.application_constraints, application_plan)
-    write_constraints(args.override_constraints, override_plan)
+        override_plan = check_plan(
+            overrides, pip_args, application_plan, no_deps=True, phase="overrides"
+        )
+    if not args.check_only:
+        write_constraints(args.application_constraints, application_plan)
+        write_constraints(args.override_constraints, override_plan)
     print(
         json.dumps(
             {

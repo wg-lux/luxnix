@@ -50,3 +50,118 @@ verification:
   destructive_tests: Do not exhaust memory on the workstation to test the policy.
 references:
   - https://www.freedesktop.org/software/systemd/man/latest/systemd-oomd.service.html
+  - https://github.com/microsoft/pylance-release/blob/main/docs/howto/performance-tuning.md
+
+review_2026_09_28:
+  evidence:
+    - >-
+      Seven systemd-oomd selections between 10:18 and 15:48 local time targeted
+      app-org.chromium.Chromium scopes for combined RAM/swap exhaustion.
+      The current similarly named scope contains VS Code, Pylance, nixd,
+      Codex and pytest. The name alone does not identify a browser process.
+      Historical scope membership was not retained, so individual past
+      VS Code exits cannot all be conclusively attributed to these kills.
+    - >-
+      Snapshot: 15 GiB usable RAM, 3.1 GiB zram full, 13.7 GiB of the 16 GiB
+      disk swap occupied, 19 GiB filesystem space free (97% used). Memory PSI
+      full averaged 11.64% over five minutes. No matching kernel OOM,
+      segfault or GPU-hang entries were returned for the current boot.
+    - >-
+      Six Pylance instances used an 8192 MiB Node heap allowance each.
+      User settings selected full analysis and disabled large-file
+      optimizations. Heap allowances are ceilings, not measured consumption.
+  editor_settings:
+    path: /home/admin/.config/Code/User/settings.json
+    backup: /home/admin/.config/Code/User/settings.json.before-gc02-memory-20260928
+    values:
+      editor.largeFileOptimizations: true
+      python.analysis.languageServerMode: default
+      python.analysis.indexing: false
+      python.analysis.diagnosticMode: openFilesOnly
+      python.analysis.nodeArguments: ["--max-old-space-size=2048"]
+    tradeoff: >-
+      Keep strict type checking for open files. Disable background indexing;
+      auto-import discovery is reduced. The heap bound applies per language
+      server, not to the whole editor. Workspace settings may override
+      resource-scoped user settings; check them if pressure persists.
+    activation: >-
+      Settings were updated locally with a private backup. The Node arguments
+      require an editor reload; save work and finish or detach terminal jobs
+      before reloading. No editor or existing task was forcibly restarted.
+  configuration_changes:
+    zram_percent: 50
+    disk_swap: Existing 16 GiB unchanged; no disk allocation or swapoff.
+    batch_launcher: "luxnix-batch <command> [args...]"
+    batch_slice: luxnix-batch.slice
+    batch_budget:
+      memory_high: 4G
+      memory_max: 6G
+      swap_max: 2G
+      cpu_weight: 25
+      io_weight: 25
+    nix_daemon_budget:
+      memory_high: 4G
+      memory_max: 6G
+      swap_max: 2G
+      cpu_weight: 25
+      io_weight: 25
+    consequences: >-
+      All launcher jobs share one aggregate budget and run in scopes separate
+      from the editor. MemoryHigh throttles/reclaims; MemoryMax may cause job
+      failure under excess demand. Nix daemon builds have a separate budget;
+      wrapping a Nix client does not constrain daemon builds. These budgets
+      do not reserve RAM and do not bound unrelated application services.
+      Larger jobs require reviewed budgets or a larger host. CPU and IO
+      weights are relative shares, not hard quotas.
+    deployment: >-
+      Requires a separately authorized system activation from the reviewed
+      repository. Do not reset a populated zram device on this pressured
+      machine; arrange a controlled reboot for the larger device. Existing
+      jobs remain in their original scopes. The launcher affects new jobs.
+  follow_up:
+    - Save work, then reload VS Code so the smaller Node heap takes effect.
+    - Use luxnix-batch for new tests and other heavy development commands after activation.
+    - Review disk usage before any cleanup; no files or Nix generations were deleted.
+    - >-
+      Review the independently failed Vault certificate renewal service
+      separately; memory changes do not repair enrollment or certificate state.
+  checks_after_activation:
+    - "zramctl"
+    - "systemctl --user show luxnix-batch.slice -p MemoryHigh -p MemoryMax -p MemorySwapMax -p CPUWeight -p IOWeight"
+    - "systemctl show nix-daemon.service -p MemoryHigh -p MemoryMax -p MemorySwapMax"
+    - "luxnix-batch sh -c 'cat /proc/self/cgroup'"
+    - "cat /proc/pressure/memory"
+    - "journalctl -u systemd-oomd --since today --no-pager"
+  validation:
+    passed:
+      - "devenv tasks run autoconf:check"
+      - >-
+        Isolated run_pipeline with temporary output and nix_output roots:
+        only systems/x86_64-linux/gc-02/default.nix differed from the working tree.
+      - "devenv tasks run autoconf:generate"
+      - "devenv tasks run docs:check"
+      - "devenv tasks run nix-quality:generators"
+      - "nix eval --json '.#nixosConfigurations' --apply builtins.attrNames"
+      - "nix eval '.#nixosConfigurations.gc-02.config.system.build.toplevel.drvPath'"
+      - "nix build '.#nixosConfigurations.gc-02.config.system.build.toplevel' --no-link --max-jobs 1 --cores 2"
+      - >-
+        Built launcher smoke checks passed: missing arguments exit 64;
+        child runs below luxnix.slice/luxnix-batch.slice; spaced argument
+        preserved; child exit 7 propagated. No memory-exhaustion test run.
+      - >-
+        Selected Nix option evaluation returned zramPercent=50, batch and
+        Nix daemon MemoryHigh=4G, MemoryMax=6G, MemorySwapMax=2G,
+        CPUWeight=25 and IOWeight=25.
+      - "nix-instantiate --parse systems/x86_64-linux/gc-02/default.nix"
+      - "nixfmt --check systems/x86_64-linux/gc-02/default.nix"
+      - "./feature-tracking/tracker.py validate"
+      - "./feature-tracking/tracker.py check luxnix_host_configuration_cleanup"
+      - "git diff --check"
+      - Local settings JSON comparison confirmed exactly the five intended changes.
+    blocked:
+      - >-
+        devenv tasks run nix-quality:check failed because nix-quality.yml is
+        absent from this checkout. No quality baseline was created or weakened.
+    warnings:
+      - The configured cuda-maintainers.cachix.org cache returned HTTP 401 during evaluation.
+    runtime_acceptance: Pending system activation, controlled reboot and representative workload observation.

@@ -169,7 +169,7 @@ def test_rendered_guard_ships_filesystem_helper_and_schema_gates() -> None:
         """
         let
           f = builtins.getFlake "__LUXNIX_FLAKE_URI__";
-          c = f.nixosConfigurations.gc-05.config;
+          c = f.nixosConfigurations.gc-02.config;
         in {
           runtime = builtins.readFile
             "${c.services.lx-annotate.package}/libexec/lx-annotate-wheel-runtime-lib";
@@ -202,3 +202,119 @@ def test_rendered_guard_ships_filesystem_helper_and_schema_gates() -> None:
         "migrate"
     ].index("migrate --noinput")
     assert "check_migration_compatibility" in rendered["preflight"]
+
+
+@pytest.mark.parametrize(
+    ("stderr", "category"),
+    [
+        (
+            "ERROR: No matching distribution found for endoreg-db==1.3.15",
+            "distribution_unavailable",
+        ),
+        ("ERROR: ResolutionImpossible", "dependency_conflict"),
+        ("CERTIFICATE_VERIFY_FAILED", "tls_verification_failed"),
+        (
+            "NewConnectionError\n"
+            "ERROR: No matching distribution found for endoreg-db==1.3.15",
+            "index_unreachable",
+        ),
+        ("No space left on device", "storage_full"),
+        ("Permission denied", "permission_denied"),
+        ("private build failure", "resolver_error"),
+    ],
+)
+def test_resolver_errors_have_safe_actionable_categories(
+    stderr: str, category: str
+) -> None:
+    summary = guard.resolver_failure_summary(stderr)
+    assert f"category={category}" in summary
+    assert "private" not in summary
+
+
+def test_missing_requirement_is_reported_without_index_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stderr = (
+        "Looking in indexes: https://user:secret@index.invalid/simple?token=secret\n"
+        "ERROR: No matching distribution found for endoreg-db==1.3.15\n"
+    )
+    monkeypatch.setattr(
+        guard.subprocess,
+        "run",
+        lambda command, **kwargs: subprocess.CompletedProcess(command, 1, "", stderr),
+    )
+    with pytest.raises(ValueError) as error:
+        guard.check_plan(["candidate.whl"], [], {})
+    assert "requirements=endoreg-db==1.3.15" in str(error.value)
+    assert "phase=application" in str(error.value)
+    assert "secret" not in str(error.value)
+    assert "index.invalid" not in str(error.value)
+    assert "no packages installed" in str(error.value)
+
+
+@pytest.mark.parametrize(
+    "requirement",
+    [
+        "package @ https://user:secret@example.invalid/wheel.whl",
+        "/private/secret.whl",
+        "package==1.0 https://user:secret@example.invalid",
+    ],
+)
+def test_unrecognized_requirement_text_is_never_echoed(requirement: str) -> None:
+    summary = guard.resolver_failure_summary(
+        "ERROR: No matching distribution found for " + requirement
+    )
+    assert "secret" not in summary
+    assert "example.invalid" not in summary
+    assert "requirements=" not in summary
+
+
+def test_check_only_does_not_write_constraints(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "guard.py",
+            "--wheel",
+            str(tmp_path / "candidate.whl"),
+            "--expected-version",
+            "1.3.13",
+            "--check-only",
+        ],
+    )
+    monkeypatch.setattr(guard, "installed_versions", lambda: {})
+    monkeypatch.setattr(guard, "validate_wheel", lambda *args: None)
+    monkeypatch.setattr(guard, "check_plan", lambda *args, **kwargs: {})
+
+    def unexpected_write(*args):
+        raise AssertionError("Read-only admission wrote constraints")
+
+    monkeypatch.setattr(guard, "write_constraints", unexpected_write)
+    guard.main()
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_online_preparation_waits_for_network_and_offline_does_not() -> None:
+    rendered = eval_json("""
+      let
+        f = builtins.getFlake "__LUXNIX_FLAKE_URI__";
+        c = f.nixosConfigurations.gc-02.config;
+        offline = (f.nixosConfigurations.gc-02.extendModules {
+          modules = [({ lib, ... }: {
+            services.luxnix.lxAnnotateLocal.runtime.wheelhousePath =
+              lib.mkForce /var/lib/lx-annotate/wheelhouse;
+          })];
+        }).config;
+      in {
+        onlineAfter = c.systemd.services.lx-annotate-wheel-runtime.after;
+        onlineWants = c.systemd.services.lx-annotate-wheel-runtime.wants;
+        offlineAfter = offline.systemd.services.lx-annotate-wheel-runtime.after;
+        requires = c.systemd.services.lx-annotate-wheel-runtime.requires;
+      }
+    """)
+    assert "network-online.target" in rendered["onlineAfter"]
+    assert "network-online.target" in rendered["onlineWants"]
+    assert "network-online.target" not in rendered["offlineAfter"]
+    assert "lx-annotate-runtime-env.service" in rendered["requires"]

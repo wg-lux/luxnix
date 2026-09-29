@@ -716,7 +716,7 @@ let
     last_bootstrap_revision="$(cat "$bootstrap_stamp_file" 2>/dev/null || true)"
 
 
-    run_repo_django_command load_base_db_data
+    run_repo_django_command load_base_db_data --reconcile-legacy
 
 
     if [ "$current_revision" != "$last_bootstrap_revision" ]; then

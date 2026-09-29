@@ -91,6 +91,21 @@ lib.foldl' lib.recursiveUpdate
       services.wg-lux-mcp.enable = true;
     }
     {
+      services.luxnix.lxTerminology.certificateFile = "/etc/nginx-host/ssl_cert";
+    }
+    {
+      services.luxnix.lxTerminology.certificateKeyFile = "/etc/nginx-host/ssl_key";
+    }
+    {
+      services.luxnix.lxTerminology.domain = "terminology.endo-reg.net";
+    }
+    {
+      services.luxnix.lxTerminology.enable = true;
+    }
+    {
+      services.luxnix.lxTerminology.uploadTokenFile = "/run/secrets/lx-terminology-upload-token";
+    }
+    {
       luxnix.boot-decryption-stick.enable = true;
     }
     {

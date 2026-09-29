@@ -1050,7 +1050,7 @@ let
     };
   loadBaseDataServiceScript = pkgs.writeShellScript "lx-annotate-load-base-data-service" ''
     set -euo pipefail
-    exec ${effectiveRuntimePackage}/bin/lx-annotate-load-base-data
+    exec ${effectiveRuntimePackage}/bin/lx-annotate-load-base-data --reconcile-legacy
   '';
   sapImportServiceScript = pkgs.writeShellScript "lx-annotate-sap-import-service" ''
     set -euo pipefail

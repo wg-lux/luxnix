@@ -6,8 +6,14 @@ with ctx;
   systemd.services.lx-annotate-wheel-runtime = mkIf useWheelRuntime {
     description = "Prepare the shared LX-Annotate wheel runtime";
     before = [ "lx-annotate-migrate.service" ];
-    after = [ "lx-annotate-runtime-env.service" ];
-    wants = [ "lx-annotate-runtime-env.service" ];
+    after = [
+      "lx-annotate-runtime-env.service"
+    ]
+    ++ lib.optional (cfg.runtime.wheelhousePath == null) "network-online.target";
+    wants = [
+      "lx-annotate-runtime-env.service"
+    ]
+    ++ lib.optional (cfg.runtime.wheelhousePath == null) "network-online.target";
     requires = [ "lx-annotate-runtime-env.service" ];
     restartTriggers = [ effectiveRuntimePackage ];
     serviceConfig = {

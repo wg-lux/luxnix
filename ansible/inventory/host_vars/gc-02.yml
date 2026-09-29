@@ -13,6 +13,9 @@ host_roles:
 host_services:
   # Explicit legacy-default enrollment requested for the 1.3.1 upgrade.
   luxnix.lxAnnotateLocal.django.enrollLegacyDefaultSalt: "true"
+  # Reporting needs narrative output; extraction supplies its own JSON prompt/format.
+  # Both consumers currently share LLM_MODEL. See docs/guides/gc-02-reporting-llm.yml.
+  luxnix.lxAnnotateLocal.runtime.llm.model: '"gemma4:e2b"'
   luxnix.vllm.enable: "false"
   luxnix.vllm.gpuMemoryUtilization: 0.85
   luxnix.vllm.host: '"127.0.0.1"'
@@ -21,7 +24,7 @@ host_services:
   luxnix.vllm.port: 8000
   luxnix.ollama.acceleration: '"cuda"'
   luxnix.ollama.enable: "true"
-  luxnix.ollama.enableModelBootstrap: "false"
+  luxnix.ollama.enableModelBootstrap: "true"
   luxnix.ollama.models: '[ "gemma4:e2b" ]'
   ollama.host: '"0.0.0.0"'
 
@@ -34,6 +37,27 @@ host_nixos:
   systemd.slices.user.sliceConfig.ManagedOOMSwap: '"kill"'
   nix.settings.max_jobs: 1
   nix.settings.cores: 4
+  # Prefer compressed RAM to additional disk swap on this nearly full laptop.
+  # disks.nix owns the original 20% hardware setting; override it here.
+  zramSwap.memoryPercent: "lib.mkForce 50"
+  # Aggregate budget for opt-in development jobs, separate from editor scopes.
+  systemd.user.slices.luxnix-batch.sliceConfig.MemoryHigh: '"4G"'
+  systemd.user.slices.luxnix-batch.sliceConfig.MemoryMax: '"6G"'
+  systemd.user.slices.luxnix-batch.sliceConfig.MemorySwapMax: '"2G"'
+  systemd.user.slices.luxnix-batch.sliceConfig.CPUWeight: 25
+  systemd.user.slices.luxnix-batch.sliceConfig.IOWeight: 25
+  environment.systemPackages:
+    - >-
+      (pkgs.writeShellScriptBin "luxnix-batch" ''
+      if [ "$#" -eq 0 ]; then echo 'usage: luxnix-batch <command> [args...]' >&2; exit 64; fi;
+      exec ${pkgs.systemd}/bin/systemd-run --user --scope --collect --slice=luxnix-batch.slice -- "$@"
+      '')
+  # Daemon builds are outside user slices and need their own budget.
+  systemd.services.nix-daemon.serviceConfig.MemoryHigh: '"4G"'
+  systemd.services.nix-daemon.serviceConfig.MemoryMax: '"6G"'
+  systemd.services.nix-daemon.serviceConfig.MemorySwapMax: '"2G"'
+  systemd.services.nix-daemon.serviceConfig.CPUWeight: 25
+  systemd.services.nix-daemon.serviceConfig.IOWeight: 25
   nixpkgs.config.cudaCapabilities:
     - '"8.6"'
 

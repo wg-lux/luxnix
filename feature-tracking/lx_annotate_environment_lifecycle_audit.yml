@@ -92,6 +92,9 @@ definition_of_done:
   category: operations
   title: Systemd and interactive maintenance receive one contract
   acceptance:
+  - Base-data startup and the repository migration helper explicitly enable bounded legacy catalogue reconciliation
+    after schema migrations; fresh imports and repeated starts preserve IDs and receipts, while unrelated
+    conflicts fail the unit without partial database changes or a success stamp.
   - commonEnv is rendered atomically to /var/lib/lx-annotate/.env.systemd and copied below the protected
     data root with root/service-group ownership and mode 0640.
   - Service-only process controls are distinguished from application configuration.
@@ -114,10 +117,30 @@ definition_of_done:
       reference: modules/nixos/services/lx-annotate-local/scripts/env.nix lxAnnotateEnvHelpers
       note: Maintenance wrappers additionally materialize database, Django, and OIDC secrets as inline
         process variables instead of retaining the file-handle-only contract.
-    note: The rendered file and systemd unit environment are similar but not identical, and wrapper compatibility
+    - kind: test
+      reference: 'tests/lx-annotate/test_lx_annotate_terminology_contract.py: 8 passed; test_wheel_migrate_and_load_base_data_services_run_before_web
+        and test_wheel_web_startup_is_split_from_migration_and_base_data: passed.'
+    - kind: command
+      reference: 'Source /home/admin/luxnix at a62232ebad34e58fc0b72eb9b3d3108ee2cb192e plus reviewed
+        working changes; pre-existing unrelated staged work preserved. flake.lock SHA256 e0239d3ccb3aa793716a5d7be4f04117952735af97be902e9eb1e8773dab852d.
+        Evaluation target gc-02 selects lx-annotate 1.4.0 wheel SHA256 b91e7fc3e0e70999f39c179860236514a98912f34cd6e3637b36d9d6c56e1adf;
+        no updated backend artifact produced. Locked lx-annotate input 7e2ce39085863c6aae5afbe3ad9b10466694ec75.
+        nix eval gc-02 system.build.toplevel.drvPath succeeded: /nix/store/qbnmpv5xpkqr1vp88kmk51mj21nlxvii-nixos-system-gc-02-26.05.20260905.6713828.drv.'
+    note: 'The rendered file and systemd unit environment are similar but not identical, and wrapper compatibility
       exports create a second effective contract.
-    assessed_by: codex-lx-env-audit-20260831
-    assessed_at: '2026-08-31T16:00:00+02:00'
+
+
+      2026-09-29: Shared base-data startup and the repository migration helper now request load_base_db_data
+      --reconcile-legacy through the existing runtime and environment. The application handles fresh imports,
+      bounded legacy repair and repeated execution; failures propagate before dependent startup. Eight
+      focused terminology/service tests passed after correcting the new test to inspect the Nix script
+      derivation text; two existing migration/base-data ordering tests also passed. Application Secretspec/config
+      tests: 39 passed. gc-02 whole-system drvPath evaluation passed after a source-change-during-evaluation
+      retry. Documentation check, Nix parsing/formatting, Ruff and diff checks passed. Coordinated backend
+      release supporting the flag is required. No build, activation, runtime package installation or production
+      database mutation performed. Existing environment parity blockers remain open.'
+    assessed_by: codex-study-definitions-20260929
+    assessed_at: '2026-09-29T13:46:12.277809Z'
 - id: django_conversion_complete
   category: functionality
   title: Every application value becomes a typed Django setting

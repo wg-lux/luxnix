@@ -138,13 +138,16 @@ lib.foldl' lib.recursiveUpdate
       services.luxnix.lxAnnotateLocal.django.enrollLegacyDefaultSalt = true;
     }
     {
+      services.luxnix.lxAnnotateLocal.runtime.llm.model = "gemma4:e2b";
+    }
+    {
       services.luxnix.ollama.acceleration = "cuda";
     }
     {
       services.luxnix.ollama.enable = true;
     }
     {
-      services.luxnix.ollama.enableModelBootstrap = false;
+      services.luxnix.ollama.enableModelBootstrap = true;
     }
     {
       services.luxnix.ollama.models = [ "gemma4:e2b" ];
@@ -617,6 +620,11 @@ lib.foldl' lib.recursiveUpdate
       xdg.menus.enable = true;
     }
     {
+      environment.systemPackages = [
+        (pkgs.writeShellScriptBin "luxnix-batch" ''if [ "$#" -eq 0 ]; then echo 'usage: luxnix-batch <command> [args...]' >&2; exit 64; fi; exec ${pkgs.systemd}/bin/systemd-run --user --scope --collect --slice=luxnix-batch.slice -- "$@" '')
+      ];
+    }
+    {
       nix.settings.cores = 4;
     }
     {
@@ -634,6 +642,39 @@ lib.foldl' lib.recursiveUpdate
       systemd.oomd.enableUserSlices = true;
     }
     {
+      systemd.services.nix-daemon.serviceConfig.CPUWeight = 25;
+    }
+    {
+      systemd.services.nix-daemon.serviceConfig.IOWeight = 25;
+    }
+    {
+      systemd.services.nix-daemon.serviceConfig.MemoryHigh = "4G";
+    }
+    {
+      systemd.services.nix-daemon.serviceConfig.MemoryMax = "6G";
+    }
+    {
+      systemd.services.nix-daemon.serviceConfig.MemorySwapMax = "2G";
+    }
+    {
       systemd.slices.user.sliceConfig.ManagedOOMSwap = "kill";
+    }
+    {
+      systemd.user.slices.luxnix-batch.sliceConfig.CPUWeight = 25;
+    }
+    {
+      systemd.user.slices.luxnix-batch.sliceConfig.IOWeight = 25;
+    }
+    {
+      systemd.user.slices.luxnix-batch.sliceConfig.MemoryHigh = "4G";
+    }
+    {
+      systemd.user.slices.luxnix-batch.sliceConfig.MemoryMax = "6G";
+    }
+    {
+      systemd.user.slices.luxnix-batch.sliceConfig.MemorySwapMax = "2G";
+    }
+    {
+      zramSwap.memoryPercent = lib.mkForce 50;
     }
   ]

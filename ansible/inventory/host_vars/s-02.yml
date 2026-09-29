@@ -10,7 +10,12 @@ ansible_roles:
 
 host_roles:
   nginxHost.glm52.enable: false
-host_services: {}
+host_services:
+  luxnix.lxTerminology.enable: "true"
+  luxnix.lxTerminology.domain: '"terminology.endo-reg.net"'
+  luxnix.lxTerminology.uploadTokenFile: '"/run/secrets/lx-terminology-upload-token"'
+  luxnix.lxTerminology.certificateFile: '"/etc/nginx-host/ssl_cert"'
+  luxnix.lxTerminology.certificateKeyFile: '"/etc/nginx-host/ssl_key"'
 
 host_luxnix:
   generic_settings.hostPlatform: '"x86_64-linux"'

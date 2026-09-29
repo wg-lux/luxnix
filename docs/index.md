@@ -60,6 +60,7 @@ devenv tasks run docs:toc-generator
 
 ## Service engineering
 
+- [LX Terminology package host](./guides/lx-terminology.yml): public ZIP distribution, editor publication, runtime imports, and deployment prerequisites.
 - [Service Module Pattern](./deploying-services-lx-annotate-style.md): reusable pattern for Vault-backed service deployment.
 - [lx-annotate Encrypted Data](./lx-annotate-encrypted-data.md): hostname-scoped Vault delivery and LUKS mount flow for lx-annotate.
 - [lx-annotate Secure HLS](./lx-annotate-secure-hls.md): end-to-end encrypted video playback, deployment, hub boundary, readiness, and incident-response contract.
