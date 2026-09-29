@@ -167,11 +167,25 @@ let
         
           cd "''${ENDOREG_DB_DIR}"
         
-          git fetch origin lx-ai-service-prototype
+          echo "Updating endoreg-db to lx-ai-service-prototype..."
         
-          git checkout lx-ai-service-prototype
+          git fetch origin \
+            refs/heads/lx-ai-service-prototype:refs/remotes/origin/lx-ai-service-prototype || {
+              echo "ERROR: Failed to fetch endoreg-db lx-ai-service-prototype"
+              exit 1
+          }
         
-          git reset --hard origin/lx-ai-service-prototype
+          git checkout -B lx-ai-service-prototype \
+            origin/lx-ai-service-prototype || {
+              echo "ERROR: Failed to checkout endoreg-db lx-ai-service-prototype"
+              exit 1
+          }
+        
+          git reset --hard origin/lx-ai-service-prototype || {
+              echo "ERROR: Failed to reset endoreg-db to origin/lx-ai-service-prototype"
+              exit 1
+          }
+        
           cd "${repoDir}"
         fi
 
