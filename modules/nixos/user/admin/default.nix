@@ -85,9 +85,6 @@ in
           echo "ERROR: admin password file must contain one SHA-512 crypt or yescrypt hash; refusing account activation." >&2
           exit 1
         fi
-        # Refuse the retired repository-wide credential even if an earlier
-        # generation already installed it into the runtime file.
-        admin_password_fingerprint=$(${pkgs.gawk}/bin/awk '{ printf "%s", $0 }' "$admin_password_file" | ${pkgs.coreutils}/bin/sha256sum) || exit 1
       '';
     };
     users.users.${cfg.name} = {
