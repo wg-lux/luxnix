@@ -116,9 +116,6 @@ lib.foldl' lib.recursiveUpdate
       roles.nginxHost.settings.recommendedTlsSettings = true;
     }
     {
-      roles.endoreg-client.lxAi = true;
-    }
-    {
       roles.nginxHost.glm52.acme.email = "hild@coloreg.de";
     }
     {
@@ -756,6 +753,9 @@ lib.foldl' lib.recursiveUpdate
     }
     {
       luxnix.maintenance.autoUpdates.enable = false;
+    }
+    {
+      luxnix.nvidia-prime.enable = lib.mkForce false;
     }
     {
       luxnix.vault.server.apiAddress = "https://172.16.255.22:8200";
