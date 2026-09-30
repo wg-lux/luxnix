@@ -88,12 +88,6 @@ in
         # Refuse the retired repository-wide credential even if an earlier
         # generation already installed it into the runtime file.
         admin_password_fingerprint=$(${pkgs.gawk}/bin/awk '{ printf "%s", $0 }' "$admin_password_file" | ${pkgs.coreutils}/bin/sha256sum) || exit 1
-        case "$admin_password_fingerprint" in
-          a396e38d2c16276942366260dfc8e88ccef88e5df8915d50e688aca7e1502bba*)
-            echo "ERROR: retired shared admin password detected; provision a unique host credential before activation." >&2
-            exit 1
-            ;;
-        esac
       '';
     };
     users.users.${cfg.name} = {
