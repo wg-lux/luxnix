@@ -7,7 +7,6 @@ result/
 # direnv
 .direnv
 .devenv_built
-.env
 ~git-credentials
 utils/secrets/
 *keyfile.bin

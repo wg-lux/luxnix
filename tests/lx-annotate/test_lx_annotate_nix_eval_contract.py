@@ -1499,6 +1499,59 @@ def test_custom_runtime_root_reaches_web_watcher_and_workers() -> None:
     assert roots == ["/srv/protected/clinical"] * 3
 
 
+def test_all_hosts_export_runtime_root_to_application_services() -> None:
+    hosts = _nix_eval_expr_json(
+        'builtins.attrNames (builtins.getFlake "__LUXNIX_FLAKE_URI__")'
+        ".nixosConfigurations"
+    )
+    enabled_hosts = []
+    # Evaluate separately to bound memory use as the fleet grows.
+    for host in hosts:
+        contract = _nix_eval_expr_json(
+            """
+            let
+              flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
+              lib = flake.inputs.nixpkgs.lib;
+              cfg = flake.nixosConfigurations.__HOST__.config;
+              app = cfg.services.luxnix.lxAnnotateLocal;
+              services = lib.filterAttrs
+                (name: _: name == "lx-annotate"
+                  || name == "lx-annotate-filewatcher"
+                  || lib.hasPrefix "lx-annotate-celery-" name)
+                cfg.systemd.services;
+            in if !app.enable then null else {
+              root = app.runtime.encryptedDataDir;
+              services = lib.mapAttrs (_: service: {
+                root = service.environment.LX_RUNTIME_ROOT or null;
+                requires = service.requires;
+                after = service.after;
+              }) services;
+              environmentScript = if "__HOST__" == "gs-02" then
+                builtins.readFile
+                  cfg.systemd.services.lx-annotate-runtime-env.serviceConfig.ExecStart
+                else null;
+            }
+            """.replace("__HOST__", host)
+        )
+        if contract is None:
+            continue
+        enabled_hosts.append(host)
+        root = contract["root"]
+        assert root.startswith("/"), host
+        assert contract["services"], host
+        for name, service in contract["services"].items():
+            assert service["root"] == root, (host, name)
+            assert "lx-annotate-runtime-env.service" in service["requires"], (
+                host, name
+            )
+            assert "lx-annotate-runtime-env.service" in service["after"], (host, name)
+        if host == "gs-02":
+            assert "lx-annotate-celery-beat" in contract["services"]
+            # EnvironmentFile takes precedence over systemd's Environment entries.
+            assert f'LX_RUNTIME_ROOT="{root}"' in contract["environmentScript"]
+    assert "gs-02" in enabled_hosts
+
+
 def test_lx_annotate_filewatcher_path_triggers_on_runtime_intake_drops() -> None:
     path_unit = _gc_02_contract()["fileWatcherPath"]
     path_config = path_unit["pathConfig"]

@@ -26,6 +26,8 @@ definition_of_done:
   acceptance:
   - LX_RUNTIME_ROOT from runtime.encryptedDataDir is the sole application runtime-root input in systemd
     and maintenance wrappers.
+  - Every enabled host, including gs-02 Celery beat, receives the absolute root in application services,
+    with runtime environment preparation ordered before startup; gs-02 also verifies the generated EnvironmentFile.
   - Retired data-root, storage-root and streamable-directory aliases are absent; application paths use
     EndoregPathsModel through get_runtime_paths.
   - Frame export uses the application entry point; media integrity uses artifact get_hash and the shared
@@ -42,11 +44,13 @@ definition_of_done:
     - -m
     - pytest
     - -q
-    - tests/lx-annotate/test_lx_annotate_encryption_defaults.py - tests/lx-annotate/test_lx_annotate_nix_eval_contract.py::test_gc_02_top_level_evaluates
-      - tests/lx-annotate/test_lx_annotate_nix_eval_contract.py::test_lx_annotate_filewatcher_exports_only_canonical_data_root
-      - tests/lx-annotate/test_lx_annotate_nix_eval_contract.py::test_custom_runtime_root_reaches_web_watcher_and_workers
-      - tests/lx-annotate/test_lx_annotate_nix_eval_contract.py::test_lx_annotate_wheel_celery_worker_exports_shared_runtime_env
-      - tests/lx-annotate/test_file_mover_filewatcher_contract.py::test_file_mover_publishes_into_filewatcher_intake_contract
+    - tests/lx-annotate/test_lx_annotate_encryption_defaults.py
+    - tests/lx-annotate/test_lx_annotate_nix_eval_contract.py::test_gc_02_top_level_evaluates
+    - tests/lx-annotate/test_lx_annotate_nix_eval_contract.py::test_lx_annotate_filewatcher_exports_only_canonical_data_root
+    - tests/lx-annotate/test_lx_annotate_nix_eval_contract.py::test_custom_runtime_root_reaches_web_watcher_and_workers
+    - tests/lx-annotate/test_lx_annotate_nix_eval_contract.py::test_all_hosts_export_runtime_root_to_application_services
+    - tests/lx-annotate/test_lx_annotate_nix_eval_contract.py::test_lx_annotate_wheel_celery_worker_exports_shared_runtime_env
+    - tests/lx-annotate/test_file_mover_filewatcher_contract.py::test_file_mover_publishes_into_filewatcher_intake_contract
     - tests/lx-annotate/test_wheel_static_check.py
     timeout_seconds: 900
   assessment:

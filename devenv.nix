@@ -107,6 +107,10 @@ in
       set +a
       echo "Loaded optional environment from .env.systemd."
     fi
+    cat << EOF > .env
+    HOME_DIR=$HOME
+    WORKING_DIR=$(pwd)
+    EOF
   '';
 
   enterTest = "";
