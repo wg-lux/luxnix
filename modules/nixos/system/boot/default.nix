@@ -36,8 +36,8 @@ in
       };
 
       kernelParams = lib.optionals cfg.plymouth [
-        "quiet"
-        "splash"
+        # "quiet"
+        # "splash"
         "loglevel=3"
         "udev.log_level=0"
       ];
