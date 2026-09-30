@@ -371,7 +371,9 @@ lib.foldl' lib.recursiveUpdate
       luxnix.generic-settings.enable = true;
     }
     {
-      luxnix.generic-settings.gpu.nvidia.driver = "production";
+      luxnix.generic-settings.gpu.nvidia.driver = [
+        "stable"
+      ];
     }
     {
       luxnix.generic-settings.gpu.nvidia.enable = true;

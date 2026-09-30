@@ -164,6 +164,9 @@ host_luxnix:
   generic_settings.systemStateVersion: '"23.11"'
   generic_settings.linux.cpuMicrocode: '"amd"'
 
+  generic_settings.gpu.nvidia.driver:
+    - "stable"
+
   generic_settings.linux.kernelModules:
     - "kvm-amd"
 
