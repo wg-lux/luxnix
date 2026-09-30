@@ -116,6 +116,9 @@ lib.foldl' lib.recursiveUpdate
       roles.nginxHost.settings.recommendedTlsSettings = true;
     }
     {
+      roles.endoreg-client.lxAi = true;
+    }
+    {
       roles.nginxHost.glm52.acme.email = "hild@coloreg.de";
     }
     {
