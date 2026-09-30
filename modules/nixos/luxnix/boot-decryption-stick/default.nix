@@ -1,4 +1,9 @@
-{ lib, config, pkgs, ... }:
+{
+  lib,
+  config,
+  pkgs,
+  ...
+}:
 with lib;
 with lib.luxnix;
 
@@ -8,6 +13,7 @@ let
 
   # Offset in bytes for the keyfile partition
   offsetB = cfg.offsetM * 1024 * 1024;
+  rendererPath = import ./render-boot-decryption-config.nix { inherit pkgs; };
 
   scriptPath = pkgs.writeShellScriptBin "${cfg.scriptName}" ''
     #!/usr/bin/env bash
@@ -81,34 +87,14 @@ let
         cryptsetup luksAddKey "$LUKS_DEVICE" "$KEYFILE_NAME"
     fi
 
-    # Step 6: Create .nix configuration file with the correct structure
+    # Step 6: Render the Nix configuration after all device operations complete.
     echo "Generating NixOS configuration file..."
-
-    cat <<EOF > $NIX_CONFIGURATION_OUTPUT
-    let
-      usb-uuid = "$USB_UUID";
-      usb-mountpoint = "$MOUNT_POINT";
-      usb-device = "$USB_DEVICE";
-
-      bs = $BS;
-      offset-m = $OFFSET_M;
-      offset-b = $OFFSET_B;
-      keyfile-size = $COUNT;
-    in {
-      # Ensure necessary kernel modules for USB and LUKS
-      boot.initrd.availableKernelModules = [ "dm-crypt" "sd_mod" "usb_storage" ];
-
-      # 'cryptroot' is defined by disko as the name of the LUKS container.
-      # Use the usb-device as keyFile, with offset and size defined above.
-      boot.initrd.luks.devices."cryptroot" = {
-        keyFile            = usb-device;
-        keyFileOffset      = offset-b;
-        keyFileSize        = keyfile-size;
-        preLVM             = true;
-        keyFileTimeout = 10; # if no prompt is displayed, try pressing "Esc"
-      };
-    }
-    EOF
+    ${rendererPath}/bin/luxnix-render-boot-decryption-config \
+      --output "$NIX_CONFIGURATION_OUTPUT" \
+      --usb-uuid "$USB_UUID" \
+      --offset-bytes "$OFFSET_B" \
+      --keyfile-size "$COUNT" \
+      --luks-device cryptroot
 
     # set owner to ${config.user.admin.name}
     chown ${config.user.admin.name}:users $NIX_CONFIGURATION_OUTPUT
@@ -126,7 +112,8 @@ let
     echo "Script completed successfully!"
   '';
 
-in {
+in
+{
   options.luxnix.boot-decryption-stick = {
     enable = mkBoolOpt false "Enable boot stick with keyfile configuration";
 
@@ -178,6 +165,7 @@ in {
   config = mkIf cfg.enable {
     environment.systemPackages = with pkgs; [
       scriptPath
+      rendererPath
       parted
       cryptsetup
     ];

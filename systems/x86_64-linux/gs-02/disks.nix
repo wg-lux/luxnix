@@ -3,14 +3,14 @@ let
   primaryNVME = "/dev/disk/by-id/nvme-KINGSTON_SFYRD4000G_50026B7686F7C454";
 
   # Additional NVMe disks
-  dataNVME1   = "/dev/disk/by-id/nvme-KINGSTON_SFYRD4000G_50026B7686F7C8E0";
-  dataNVME2   = "/dev/disk/by-id/nvme-KINGSTON_SFYRD4000G_50026B7686F7C8E3";
+  dataNVME1 = "/dev/disk/by-id/nvme-KINGSTON_SFYRD4000G_50026B7686F7C8E0";
+  dataNVME2 = "/dev/disk/by-id/nvme-KINGSTON_SFYRD4000G_50026B7686F7C8E3";
 
   # Four 6 TB HDD drives (LUKS + Btrfs RAID1)
-  hdd0        = "/dev/disk/by-id/ata-ST6000NE000-2KR101_WSD9GTCG";
-  hdd1        = "/dev/disk/by-id/ata-ST6000NE000-2KR101_WSD9GTZ0";
-  hdd2        = "/dev/disk/by-id/ata-ST6000NE000-2KR101_WSD9J076";
-  hdd3        = "/dev/disk/by-id/ata-ST6000NE000-2KR101_WSD9MWWY";
+  hdd0 = "/dev/disk/by-id/ata-ST6000NE000-2KR101_WSD9GTCG";
+  hdd1 = "/dev/disk/by-id/ata-ST6000NE000-2KR101_WSD9GTZ0";
+  hdd2 = "/dev/disk/by-id/ata-ST6000NE000-2KR101_WSD9J076";
+  hdd3 = "/dev/disk/by-id/ata-ST6000NE000-2KR101_WSD9MWWY";
 
   # Swap size on the primary NVMe swap partition
   swapSize = "16G";
@@ -53,27 +53,51 @@ in
               size = "1T";
               content = {
                 type = "btrfs";
-                extraArgs = [ "-f" "-L" "nixos" ];
+                extraArgs = [
+                  "-f"
+                  "-L"
+                  "nixos"
+                ];
                 subvolumes = {
                   "root" = {
                     mountpoint = "/";
-                    mountOptions = [ "subvol=root" "compress=zstd" "noatime" ];
+                    mountOptions = [
+                      "subvol=root"
+                      "compress=zstd"
+                      "noatime"
+                    ];
                   };
                   "home" = {
                     mountpoint = "/home";
-                    mountOptions = [ "subvol=home" "compress=zstd" "noatime" ];
+                    mountOptions = [
+                      "subvol=home"
+                      "compress=zstd"
+                      "noatime"
+                    ];
                   };
                   "nix" = {
                     mountpoint = "/nix";
-                    mountOptions = [ "subvol=nix" "compress=zstd" "noatime" ];
+                    mountOptions = [
+                      "subvol=nix"
+                      "compress=zstd"
+                      "noatime"
+                    ];
                   };
                   "persist" = {
                     mountpoint = "/persist";
-                    mountOptions = [ "subvol=persist" "compress=zstd" "noatime" ];
+                    mountOptions = [
+                      "subvol=persist"
+                      "compress=zstd"
+                      "noatime"
+                    ];
                   };
                   "log" = {
                     mountpoint = "/var/log";
-                    mountOptions = [ "subvol=log" "compress=zstd" "noatime" ];
+                    mountOptions = [
+                      "subvol=log"
+                      "compress=zstd"
+                      "noatime"
+                    ];
                   };
                 };
               };
@@ -84,11 +108,19 @@ in
               size = "100%";
               content = {
                 type = "btrfs";
-                extraArgs = [ "-f" "-L" "data2_primary" ];
+                extraArgs = [
+                  "-f"
+                  "-L"
+                  "data2_primary"
+                ];
                 subvolumes = {
                   "main" = {
                     mountpoint = "/data2";
-                    mountOptions = [ "subvol=main" "compress=zstd" "noatime" ];
+                    mountOptions = [
+                      "subvol=main"
+                      "compress=zstd"
+                      "noatime"
+                    ];
                   };
                 };
               };
@@ -100,23 +132,32 @@ in
       ########################################################################
       # TWO Additional NVMes for Data
       ########################################################################
-      data_aux1_disk = { # Renamed from data1
+      data_aux1_disk = {
+        # Renamed from data1
         device = dataNVME1;
         type = "disk";
         content = {
           type = "gpt";
           partitions = {
             data = {
-              label = "data_aux1"; 
-              name = "data_aux1_nvme_part"; 
+              label = "data_aux1";
+              name = "data_aux1_nvme_part";
               size = "100%";
               content = {
                 type = "btrfs";
-                extraArgs = [ "-f" "-L" "data_aux1" ]; 
+                extraArgs = [
+                  "-f"
+                  "-L"
+                  "data_aux1"
+                ];
                 subvolumes = {
                   "main" = {
                     mountpoint = "/data_aux1"; # Changed mountpoint
-                    mountOptions = [ "subvol=main" "compress=zstd" "noatime" ];
+                    mountOptions = [
+                      "subvol=main"
+                      "compress=zstd"
+                      "noatime"
+                    ];
                   };
                 };
               };
@@ -125,7 +166,8 @@ in
         };
       };
 
-      data_aux2_disk = { # Renamed from data2
+      data_aux2_disk = {
+        # Renamed from data2
         device = dataNVME2;
         type = "disk";
         content = {
@@ -137,11 +179,19 @@ in
               size = "100%";
               content = {
                 type = "btrfs";
-                extraArgs = [ "-f" "-L" "data_aux2" ]; # Changed Btrfs label
+                extraArgs = [
+                  "-f"
+                  "-L"
+                  "data_aux2"
+                ]; # Changed Btrfs label
                 subvolumes = {
                   "main" = {
                     mountpoint = "/data_aux2"; # Changed mountpoint
-                    mountOptions = [ "subvol=main" "compress=zstd" "noatime" ];
+                    mountOptions = [
+                      "subvol=main"
+                      "compress=zstd"
+                      "noatime"
+                    ];
                   };
                 };
               };
@@ -156,7 +206,8 @@ in
         content = {
           type = "gpt";
           partitions = {
-            data = { # Renamed from luks to data
+            data = {
+              # Renamed from luks to data
               name = "btrfsHDD0_part"; # GPT partition name
               label = "archive_hdd0"; # ADDED GPT partition label
               size = "100%";
@@ -172,7 +223,8 @@ in
         content = {
           type = "gpt";
           partitions = {
-            data = { # Renamed from luks to data
+            data = {
+              # Renamed from luks to data
               name = "btrfsHDD1_part"; # GPT partition name
               label = "archive_hdd1"; # ADDED GPT partition label
               size = "100%";
@@ -188,7 +240,8 @@ in
         content = {
           type = "gpt";
           partitions = {
-            data = { # Renamed from luks to data
+            data = {
+              # Renamed from luks to data
               name = "btrfsHDD2_part"; # GPT partition name
               label = "archive_hdd2"; # ADDED GPT partition label
               size = "100%";
@@ -205,7 +258,8 @@ in
         content = {
           type = "gpt";
           partitions = {
-            data = { # Renamed from luks to data
+            data = {
+              # Renamed from luks to data
               name = "btrfsHDD3_part"; # GPT partition name
               label = "archive_hdd3"; # ADDED GPT partition label
               size = "100%";
@@ -213,9 +267,12 @@ in
                 type = "btrfs";
                 extraArgs = [
                   "-f"
-                  "-L" "archive"
-                  "-m" "raid1c3"  # metadata = RAID1c3 for 4 drives
-                  "-d" "raid1"    # data = RAID1
+                  "-L"
+                  "archive"
+                  "-m"
+                  "raid1c3" # metadata = RAID1c3 for 4 drives
+                  "-d"
+                  "raid1" # data = RAID1
                   "/dev/disk/by-partlabel/archive_hdd0"
                   "/dev/disk/by-partlabel/archive_hdd1"
                   "/dev/disk/by-partlabel/archive_hdd2"

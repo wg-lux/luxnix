@@ -1,20 +1,15 @@
 {
   lib,
-  pkgs,
   config,
   ...
 }:
-with lib; 
-with lib.luxnix; let
+with lib;
+with lib.luxnix;
+let
   cfg = config.luxnix.dns;
 
-  gs = config.luxnix.generic-settings;
-
-  hosts = {
-    "${gs.traefikHostIp}" = [ gs.traefikHostDomain ];
-  };
-
-in {
+in
+{
   options.luxnix.dns = {
     enable = mkOption {
       type = types.bool;
@@ -25,7 +20,6 @@ in {
     };
 
   };
-
 
   config = mkIf cfg.enable {
 

@@ -1,297 +1,193 @@
-{ lib
-, config
-, pkgs
-, ...
+{
+  lib,
+  config,
+  pkgs,
+  ...
 }:
+
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.roles.endoreg-client;
 
-
   sensitiveServiceGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
+  endoregServiceGroupName = config.luxnix.generic-settings.endoregServiceGroupName;
+  fileMoverDefinition = import ./file-mover.nix { inherit lib; };
+  lxAiDefinition = import ./lx-ai.nix { };
+  persistingStorageDefinition = import ./persisting-storage.nix { inherit lib; };
+  lxAnnotateDefinition = import ./lx-annotate.nix { inherit lib; };
+
 in
 {
-  options.roles.endoreg-client = {
-    enable = mkEnableOption "Enable endoreg client configuration";
+  options.roles.endoreg-client =
+    let
+      pathOptions = import ./paths.nix { inherit lib config; };
+      apiOptions = import ./api.nix { inherit lib; };
+      databaseOptions = import ./database.nix { inherit lib; };
+      environmentDefaultsOptions = import ./environment-details.nix { inherit lib; };
+    in
+    {
+      enable = mkEnableOption "Enable endoreg client configuration";
+      adminIsServiceUser = mkBoolOpt true "Whether the admin user is also the endoreg service user.";
+      paths = pathOptions;
 
-    # Central Nodes Configuration
-    centralNodes = mkOption {
-      type = types.listOf types.str;
-      default = [];
-      description = "List of hostnames that act as central nodes for the endoreg database API";
-      example = [ "s-04.local" "backup-central.local" ];
-    };
-
-    dbApiLocal = mkOption {
-      type = types.bool;
-      default = false;
-      description = "Enable local endoreg-db-api service";
-    };
-
-    endoAi = mkOption {
-      type = types.bool;
-      default = false;
-      description = "Enable endoAi service";
-    };
-
-    # Django API Configuration Options
-    api = {
-      hostname = mkOption {
-        type = types.str;
-        default = "localhost";
-        description = "Hostname for the Django API service";
-        example = "api.example.com";
+      # Central Nodes Configuration
+      centralNodes = mkOption {
+        type = types.listOf types.str;
+        default = [ ];
+        description = "List of hostnames that act as central nodes for the endoreg database API";
+        example = [
+          "s-04.local"
+          "backup-central.local"
+        ];
       };
 
-      port = mkOption {
-        type = types.port;
-        default = 8118;
-        description = "Port for the Django API service";
-      };
-
-      useHttps = mkOption {
+      lxAi = mkOption {
         type = types.bool;
         default = false;
-        description = "Whether to use HTTPS for the API service";
+        description = "Enable the lx-ai training service unit.";
       };
 
-      sslCertificatePath = mkOption {
-        type = types.nullOr types.path;
+      defaultCenterKey = mkOption {
+        type = types.nullOr types.str;
         default = null;
-        description = "Path to SSL certificate file (required if useHttps is true)";
-        example = "/etc/secrets/ssl/api.crt";
+        description = "Optional explicit center_key exported to lx-annotate as DEFAULT_CENTER_KEY. Set this to avoid center-name ambiguity.";
+        example = "university_hospital_wuerzburg";
       };
 
-      sslKeyPath = mkOption {
-        type = types.nullOr types.path;
-        default = null;
-        description = "Path to SSL private key file (required if useHttps is true)";
-        example = "/etc/secrets/ssl/api.key";
-      };
+      # Django API Configuration Options
+      api = apiOptions;
 
-      djangoAllowedHosts = mkOption {
-        type = types.listOf types.str;
-        default = [ "localhost" "127.0.0.1" ];
-        description = "Django ALLOWED_HOSTS setting";
-        example = [ "api.example.com" "localhost" "127.0.0.1" ];
-      };
+      # Database Configuration Options
+      database = databaseOptions;
 
-      djangoDebug = mkOption {
-        type = types.bool;
-        default = false;
-        description = "Enable Django DEBUG mode (should be false in production)";
-      };
+      environmentDefaults = environmentDefaultsOptions;
 
-      djangoSecretKeyFile = mkOption {
-        type = types.path;
-        default = "/etc/secrets/vault/django_secret_key";
-        description = "Path to file containing Django SECRET_KEY";
-      };
-
-      corsAllowedOrigins = mkOption {
-        type = types.listOf types.str;
-        default = [];
-        description = "CORS allowed origins for the API";
-        example = [ "https://frontend.example.com" "http://localhost:3000" ];
-      };
-
-      logLevel = mkOption {
-        type = types.enum [ "DEBUG" "INFO" "WARNING" "ERROR" "CRITICAL" ];
-        default = "INFO";
-        description = "Django logging level";
-      };
-
-      maxRequestSize = mkOption {
-        type = types.str;
-        default = "100M";
-        description = "Maximum request size for file uploads";
-      };
-
-      timeZone = mkOption {
-        type = types.str;
-        default = "UTC";
-        description = "Django timezone setting";
-        example = "Europe/Berlin";
-      };
-
-      language = mkOption {
-        type = types.str;
-        default = "en-us";
-        description = "Django language setting";
-        example = "de-de";
-      };
+      lxAnnotate = lxAnnotateDefinition.options;
     };
 
-    # lxAnnotate = {};
+  config = mkIf cfg.enable (
+    let
+      adminUserName =
+        if config ? user && config.user ? admin && config.user.admin ? name then
+          config.user.admin.name
+        else
+          "admin";
+      clientUserName =
+        if config ? user && config.user ? client && config.user.client ? name then
+          config.user.client.name
+        else
+          "client-user";
+      clientHomeStateVersion =
+        if config ? user && config.user ? client && config.user.client ? homeStateVersion then
+          config.user.client.homeStateVersion
+        else
+          (config.system.stateVersion or "24.05");
+      storageBaseDir = cfg.paths.storageBaseDir;
+      videoInputDir = cfg.paths.videoInputDir;
+      pdfInputDir = cfg.paths.pdfInputDir;
+      storagePersistingMountPoint = cfg.paths.storagePersistingMountPoint;
 
-    # Database Configuration Options
-    database = {
-      host = mkOption {
-        type = types.str;
-        default = "localhost";
-        description = "PostgreSQL database host";
+      normalUsers = lib.filterAttrs (_: user: (user.isNormalUser or false)) config.users.users;
+      normalUserNames = lib.attrNames normalUsers;
+
+      firstNonNull = values: lib.foldl' (acc: val: if acc != null then acc else val) null values;
+      endoregServiceUserName =
+        if
+          config ? user && config.user ? endoreg-service-user && config.user.endoreg-service-user ? name
+        then
+          config.user.endoreg-service-user.name
+        else
+          "endoreg-service-user";
+      endoregServiceUserHome =
+        let
+          maybeHome =
+            if
+              config ? user && config.user ? endoreg-service-user && config.user.endoreg-service-user ? home
+            then
+              config.user.endoreg-service-user.home
+            else
+              null;
+        in
+        if maybeHome != null then maybeHome else "/var/${endoregServiceUserName}";
+
+      lxAnnotateRole = lxAnnotateDefinition.entrypoint {
+        inherit cfg endoregServiceUserHome firstNonNull;
       };
-
-      port = mkOption {
-        type = types.port;
-        default = 5432;
-        description = "PostgreSQL database port";
+      fileMoverRole = fileMoverDefinition.entrypoint {
+        inherit lxAnnotateRole;
       };
-
-      name = mkOption {
-        type = types.str;
-        default = "endoregDbLocal";
-        description = "PostgreSQL database name";
+      lxAiRole = lxAiDefinition.entrypoint {
+        inherit cfg;
       };
-
-      user = mkOption {
-        type = types.str;
-        default = "endoregDbLocal";
-        description = "PostgreSQL database user";
+      persistingStorageRole = persistingStorageDefinition.entrypoint {
+        inherit
+          cfg
+          config
+          pkgs
+          adminUserName
+          storagePersistingMountPoint
+          ;
       };
+    in
+    mkMerge [
+      {
+        luxnix = {
+          # Storage settings
+          storage.enable = mkDefault true;
+          nvidia-prime.enable = true;
 
-      passwordFile = mkOption {
-        type = types.path;
-        default = "/etc/secrets/vault/SCRT_local_password_maintenance_password";
-        description = "Path to file containing database password";
-      };
-
-      sslMode = mkOption {
-        type = types.enum [ "disable" "allow" "prefer" "require" "verify-ca" "verify-full" ];
-        default = "prefer";
-        description = "PostgreSQL SSL mode";
-      };
-    };
-
-    # Service Configuration Options
-    service = {
-      workers = mkOption {
-        type = types.int;
-        default = 1;
-        description = "Number of worker processes for the API service";
-      };
-
-      maxRequests = mkOption {
-        type = types.int;
-        default = 1000;
-        description = "Maximum requests per worker before restart";
-      };
-
-      timeout = mkOption {
-        type = types.int;
-        default = 30;
-        description = "Request timeout in seconds";
-      };
-
-      keepAlive = mkOption {
-        type = types.int;
-        default = 60;
-        description = "Keep-alive timeout in seconds";
-      };
-
-      extraEnvironment = mkOption {
-        type = types.attrsOf types.str;
-        default = {};
-        description = "Additional environment variables for the service";
-        example = {
-          REDIS_URL = "redis://localhost:6379/0";
-          CELERY_BROKER_URL = "redis://localhost:6379/1";
+          # Development clients must remain usable while the central Vault host is
+          # being rebuilt. Existing local secrets are reused; first provisioning
+          # still fails closed if a required secret has never been deployed.
+          vault.client.allowOffline = mkDefault true;
         };
-      };
-    };
 
-    # Git Repository Options
-    repository = {
-      url = mkOption {
-        type = types.str;
-        default = "https://github.com/wg-lux/endo-api";
-        description = "Git repository URL for the Django API";
-      };
+        user.client.enable = mkDefault true;
+        user.endoreg-service-user.enable = true;
+        group.endoreg-service.enable = true; # Ensure the group is created
+        group.endoreg-service.members = mkAfter (lib.unique normalUserNames);
 
-      branch = mkOption {
-        type = types.str;
-        default = "main";
-        description = "Git branch to checkout";
-      };
-
-      updateOnBoot = mkOption {
-        type = types.bool;
-        default = true;
-        description = "Whether to update the repository on service start";
-      };
-    };
-  };
-
-  config = mkIf cfg.enable {
-    user.endoreg-service-user.enable = true;
-    group.endoreg-service.enable = true;  # Ensure the group is created
-
-    roles = {
-      desktop.enable = true;
-      custom-packages.cuda = true;
-      aglnet.client.enable = true;
-    };
-
-    luxnix.nvidia-prime.enable = true;
-
-    services.luxnix.endoregDbApiLocal = mkIf (!config.roles.endoreg-db-central-01.enable) {
-      enable = mkDefault cfg.dbApiLocal;
-      
-      # Pass configuration options to the service
-      api = cfg.api // {
-        # Add central nodes information
-        extraSettings = {
-          CENTRAL_NODES = cfg.centralNodes;
-          IS_CENTRAL_NODE = false;
+        roles = {
+          desktop.enable = true;
+          custom-packages.cuda = true;
+          aglnet.client.enable = true;
+          managed-secrets.enable = mkDefault true;
         };
-      };
-      database = cfg.database;
-      service = cfg.service;
-      repository = cfg.repository;
-    };
 
-    services.luxnix.endoAi = {
-      enable = cfg.endoAi;
-    };
+        services.luxnix.lxAnnotateLocal = lxAnnotateRole.service;
 
-    # Create additional systemd tmpfiles for configuration
-    systemd.tmpfiles.rules = [
-      # USB Encrypter
-      "d /mnt/endoreg-sensitive-data 0770 root ${sensitiveServiceGroupName} -"
-      # Django configuration directory
-      "d /etc/endoreg-api 0755 root root -"
-      # Service user config directory
-      "d /var/endoreg-service-user/config 0755 endoreg-service-user endoreg-service -"
-    ];
+        services.lx-annotate.extraEnv = mkIf lxAnnotateRole.enable (
+          mkDefault lxAnnotateRole.environment.extraEnv
+        );
 
-    # Generate Django secret key if it doesn't exist
-    systemd.services.endoreg-django-setup = mkIf cfg.dbApiLocal {
-      description = "Django configuration setup (handled by managed-secrets)";
-      wantedBy = [ "multi-user.target" ];
-      before = [ "endo-api-boot.service" ];
-      after = [ "managed-secrets-setup.service" ];
-      requires = [ "managed-secrets-setup.service" ];
-      serviceConfig = {
-        Type = "oneshot";
-        RemainAfterExit = true;
-        User = "root";
-        ExecStart = pkgs.writeShellScript "setup-django-config" ''
-          set -euo pipefail
-          
-          # Verify that Django secret key exists (should be created by managed-secrets)
-          if [ ! -f ${cfg.api.djangoSecretKeyFile} ]; then
-            echo "ERROR: Django secret key not found at ${cfg.api.djangoSecretKeyFile}"
-            echo "This should have been created by managed-secrets-setup.service"
-            exit 1
-          fi
-          
-          # Ensure correct permissions (managed-secrets should handle this, but double-check)
-          chmod 640 ${cfg.api.djangoSecretKeyFile}
-          chown root:${sensitiveServiceGroupName} ${cfg.api.djangoSecretKeyFile}
-          
-          echo "Django configuration verification completed"
-        '';
-      };
-    };
-  };
+        # Create additional systemd tmpfiles for configuration
+        systemd.tmpfiles.rules = [
+          # USB Encrypter
+          "d /mnt/endoreg-sensitive-data 0770 root ${sensitiveServiceGroupName} -"
+          # Service user config directory
+          "d /var/endoreg-service-user/config 0755 endoreg-service-user ${endoregServiceGroupName} -"
+          # Storage directories (must exist for the symlinks to valid targets)
+          "d ${storageBaseDir} 0770 root ${endoregServiceGroupName} -"
+          "d ${videoInputDir} 0770 root ${endoregServiceGroupName} -"
+          "d ${pdfInputDir} 0770 root ${endoregServiceGroupName} -"
+        ]
+        ++ lib.optionals cfg.paths.storagePersistingEnable [
+          # Persistent storage mount point
+          "d ${storagePersistingMountPoint} 0770 root ${endoregServiceGroupName} -"
+        ];
+
+        # Update Home Manager configuration to use XDG User Dirs and OutOfStore symlinks
+        home-manager.users.${clientUserName} = _: {
+          home.username = mkDefault clientUserName;
+          home.stateVersion = mkDefault clientHomeStateVersion;
+
+          roles.desktop.enable = mkDefault true;
+        };
+      }
+      fileMoverRole.config
+      lxAiRole.config
+      persistingStorageRole.config
+    ]
+  );
 }

@@ -1,32 +1,43 @@
-.repo_initialized
 .ansible/.lock
 conf/ansible.cfg
 result
-autoconf/
+result/
+/autoconf/*
+!/autoconf/config.yml
 # direnv
 .direnv
 .devenv_built
-.env
 ~git-credentials
 utils/secrets/
 *keyfile.bin
 luxnix.code-workspace
-docs/hostinfo/
-docs/luxnix-hostinfo.md
-conf/hostinfo.json
-
+/cmdb/*
+!/cmdb/.gitkeep
+/conf/hostinfo.json
+/conf/hostinfos/
+/docs/hostinfo/
+/docs/luxnix-hostinfo.md
+/ansible/cmdb/*
+!/ansible/cmdb/.gitkeep
+/ansible/.cmdb-refresh.*/
+logs/
+**.env
+test_wd/
+.codex
 *.key
 
 # pre-commit
-.pre-commit-config.yaml
-
+feature-tracking/
 untracked-notes.md
-
+node_modules/
 .vscode
-result/
 secrets/
+ansible/secrets/admin-passwords.yml
 .ruff_cache/
 .devenv
+# devenv writes suffixed session-state dirs (.devenv.<rand>/) when the primary
+# .devenv/ is already held by another run; ignore every .devenv.* sibling.
+.devenv.*
 untracked_notes.md
 tests/sensitive/
 erc_data/
@@ -116,9 +127,6 @@ target/
 profile_default/
 ipython_config.py
 
-# pyenv
-.python-version
-
 # pipenv
 #Pipfile.lock
 
@@ -139,7 +147,6 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env
 .venv
 env/
 venv/
@@ -157,6 +164,12 @@ venv.bak/
 # mkdocs documentation
 /site
 
+# Private, dated Vault incident evidence (not release documentation)
+/docs/vault-rebuild-ceremony-2026-08-11.md
+
+# Local repo-state snapshots from `devenv tasks run repo:state-summary`
+/repo-state/
+
 # mypy
 .mypy_cache/
 .dmypy.json
@@ -173,3 +186,11 @@ cython_debug/
 
 # PyCharm
 #.idea/
+
+# Local coordination state created by feature-tracking/tracker.py.
+/feature-tracking/.locks/
+/feature-tracking/.messages/
+
+# Repository-generated or local-only bundles and transcripts.
+/result.txt
+/wg-lux-mcp.zip

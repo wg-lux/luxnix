@@ -1,0 +1,44 @@
+schema_version: 1
+host: gc-02
+canonical_input: ansible/inventory/host_vars/gc-02.yml
+generated_output: systems/x86_64-linux/gc-02/default.nix
+configuration:
+  provider: ollama
+  endpoint: http://127.0.0.1:11434
+  model: gemma4:e2b
+  bootstrap: luxnix.ollama.enableModelBootstrap
+reason: >-
+  Narrative report writing must not inherit the lx-gemma4-e2b-json custom
+  model's system prompt restricting output to five patient metadata fields.
+  Select the base model already listed for gc-02's Ollama bootstrap.
+consumer_contract:
+  version_reviewed: lx-annotate 1.3.14
+  setting: services.luxnix.lxAnnotateLocal.runtime.llm.model
+  environment: LLM_MODEL
+  scope: Shared by report writing and metadata extraction on gc-02.
+  reporting: >-
+    REPORTING_LLM reads LLM_MODEL. The authenticated report endpoint checks
+    /api/tags and calls /api/chat directly with a report-specific system prompt.
+    It does not require the dedicated LLM Celery worker.
+  extraction: >-
+    lx_anonymizer supplies an extraction prompt and requests format=json.
+    Selecting the base model removes the custom model's global metadata-only
+    prompt; extraction quality must still be checked after deployment.
+  custom_model: >-
+    The shared custom model definition is retained for other consumers.
+    Bootstrap may create it, but gc-02 selects the base model explicitly.
+verification:
+  configuration:
+    - "devenv tasks run autoconf:check"
+    - "nix eval --raw '.#nixosConfigurations.gc-02.config.systemd.services.lx-annotate.environment.LLM_MODEL'"
+  after_deployment:
+    - Confirm Ollama /api/tags contains gemma4:e2b after model bootstrap succeeds.
+    - Confirm the authenticated reporting/llm/status/ endpoint returns ready=true and model=gemma4:e2b.
+    - Verify narrative report output and metadata extraction using approved test cases.
+  limits: >-
+    Configuration evaluation does not establish model availability, generation
+    quality, GPU memory fit, or completion within the reporting timeout.
+deployment: >-
+  Apply through the documented gc-02 deployment workflow. Configuration changes
+  alone do not update the running service or download models. Do not activate
+  from the temporary directory used to compare generated output.

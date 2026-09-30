@@ -1,0 +1,69 @@
+schema_version: 1
+canonical_directory: tests/lx-annotate
+relocations:
+  - source: tests/test_lx_annotate_align_env_script.py
+    destination: tests/lx-annotate/test_lx_annotate_align_env_script.py
+    previous_tests:
+      - test_align_env_script_is_noop_when_env_file_is_missing
+      - test_align_env_script_rewrites_existing_module_and_env
+      - test_align_env_script_appends_missing_module_and_env
+
+  - source: tests/test_lx_annotate_data_recovery_repair_gate.py
+    destination: tests/lx-annotate/test_lx_annotate_data_recovery_repair_gate.py
+    previous_tests:
+      - test_repair_managed_runtime_payloads_skips_when_master_key_is_not_configured
+      - test_repair_managed_runtime_payloads_runs_when_master_key_is_configured
+      - test_wheel_data_recovery_keeps_legacy_media_overlay_after_helper_success
+      - test_data_recovery_versions_payload_repair_independently_of_legacy_recovery
+
+  - source: tests/test_lx_annotate_encryption_defaults.py
+    destination: tests/lx-annotate/test_lx_annotate_encryption_defaults.py
+    previous_tests:
+      - test_lx_annotate_scripts_export_protected_storage_contract
+
+  - source: tests/test_lx_annotate_filewatcher_wheel_key_env.py
+    destination: tests/lx-annotate/test_lx_annotate_filewatcher_wheel_key_env.py
+    previous_tests:
+      - test_wheel_filewatcher_exports_encryption_env_before_start
+      - test_wheel_filewatcher_passes_master_key_file_to_child_process
+
+  - source: tests/test_lx_annotate_master_key_defaults.py
+    destination: tests/lx-annotate/test_lx_annotate_master_key_defaults.py
+    previous_tests:
+      - test_lx_annotate_module_declares_auto_generated_master_key_options
+      - test_lx_annotate_module_wires_per_machine_master_key_generation
+
+  - source: tests/test_lx_annotate_nix_eval_contract.py
+    destination: tests/lx-annotate/test_lx_annotate_nix_eval_contract.py
+    previous_tests:
+      - test_gc_02_top_level_evaluates
+      - test_lx_annotate_tmpfiles_rules_evaluate_with_runtime_storage_paths
+      - test_lx_annotate_boot_service_config_evaluates
+      - test_wheel_boot_script_runs_migrations_before_daphne
+      - test_lx_annotate_wheel_filewatcher_command_uses_django_module_entrypoint
+      - test_lx_annotate_filewatcher_service_config_uses_wheel_runtime_paths
+      - test_lx_annotate_acceptance_service_config_evaluates
+      - test_wheel_acceptance_script_uses_installed_django_not_manage_py
+      - test_lx_annotate_streamable_migration_service_config_evaluates
+      - test_lx_annotate_streamable_migration_unit_runs_after_boot_by_default
+      - test_hub_transfer_api_extend_modules_enables_nginx_and_backup_surfaces
+      - test_endoreg_client_default_center_key_flows_to_lx_annotate_runtime_env
+    replacements:
+      test_wheel_boot_script_runs_migrations_before_daphne:
+        - test_wheel_web_startup_is_split_from_migration_and_base_data
+        - test_wheel_migrate_and_load_base_data_services_run_before_web
+      test_lx_annotate_streamable_migration_unit_runs_after_boot_by_default:
+        - test_lx_annotate_streamable_migration_unit_is_opt_in_manual
+
+  - source: tests/test_lx_annotate_streamable_video_contract.py
+    destination: tests/lx-annotate/test_lx_annotate_streamable_video_contract.py
+    previous_tests:
+      - test_streamable_video_paths_are_first_class_runtime_derivations
+      - test_streamable_video_directories_are_provisioned_and_migration_is_exposed
+
+  - source: tests/test_lx_annotate_wheel_runtime_install.py
+    destination: tests/lx-annotate/test_lx_annotate_wheel_runtime_install.py
+    previous_tests:
+      - test_ensure_wheel_runtime_installed_mocks_venv_creation
+      - test_ensure_wheel_runtime_installed_skips_venv_creation_when_python_exists
+      - test_ensure_runtime_vite_manifest_repairs_empty_manifest

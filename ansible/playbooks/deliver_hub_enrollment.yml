@@ -1,0 +1,121 @@
+---
+# Use the cataloged wrapper to confine Ansible plaintext staging to private
+# controller tmpfs. All secret-bearing tasks suppress logs and diffs.
+- name: Deliver one hub enrollment bundle through pinned SSH
+  hosts: gpu_client
+  gather_facts: false
+  become: true
+  become_user: root
+  any_errors_fatal: true
+  vars:
+    ansible_become_user: root
+    ansible_host_key_checking: true
+    ansible_ssh_host_key_checking: true
+    enrollment_hub: gs-02
+    enrollment_source: '/root/vault-enrollment/{{ inventory_hostname }}'
+    enrollment_files: [approle_role_id, approle_secret_id, vault-server-ca.pem, source-node-secret]
+  pre_tasks:
+    - name: Require an explicit site and independently obtained CA fingerprint
+      ansible.builtin.assert:
+        that:
+          - ansible_play_hosts_all | length == 1
+          - inventory_hostname != enrollment_hub
+          - inventory_hostname is match('^[a-z0-9][a-z0-9-]*$')
+          - enrollment_expected_ca_sha256 is defined
+          - enrollment_expected_ca_sha256 | regex_replace(':', '') is match('^[A-Fa-f0-9]{64}$')
+          - enrollment_hub == 'gs-02'
+
+    - name: Run local inventory and deployment-source preflight
+      ansible.builtin.command:
+        argv: [uv, run, python, scripts/vault/site_enrollment_preflight.py, '{{ inventory_hostname }}', --json]
+        chdir: '{{ playbook_dir }}/../..'
+      delegate_to: localhost
+      become: false
+      changed_when: false
+
+  tasks:
+    - name: Deliver the private bundle and install both node-secret copies
+      no_log: true
+      diff: false
+      block:
+        - name: Inspect root-owned hub staging
+          ansible.builtin.stat:
+            path: '{{ enrollment_source }}'
+            follow: false
+          delegate_to: '{{ enrollment_hub }}'
+          register: enrollment_directory
+
+        - name: Refuse unprotected or redirected staging
+          ansible.builtin.assert:
+            that:
+              - enrollment_directory.stat.isdir | default(false)
+              - not (enrollment_directory.stat.islnk | default(false))
+              - enrollment_directory.stat.uid == 0
+              - enrollment_directory.stat.mode == '0700'
+
+        - name: Inspect each enrollment input
+          ansible.builtin.stat:
+            path: '{{ enrollment_source }}/{{ item }}'
+            follow: false
+          delegate_to: '{{ enrollment_hub }}'
+          loop: '{{ enrollment_files }}'
+          register: enrollment_inputs
+
+        - name: Require private regular files before reading
+          ansible.builtin.assert:
+            that:
+              - item.stat.isreg | default(false)
+              - not (item.stat.islnk | default(false))
+              - item.stat.uid == 0
+              - item.stat.mode in ['0400', '0600']
+              - item.stat.size > 0
+          loop: '{{ enrollment_inputs.results }}'
+
+        - name: Read the bundle over the hub SSH connection
+          ansible.builtin.slurp:
+            src: '{{ enrollment_source }}/{{ item }}'
+          delegate_to: '{{ enrollment_hub }}'
+          loop: '{{ enrollment_files }}'
+          register: enrollment_bundle
+
+        - name: Create ephemeral private staging on the site
+          ansible.builtin.tempfile:
+            state: directory
+            path: /run
+            prefix: luxnix-enrollment-
+          register: enrollment_staging
+
+        - name: Stage the bundle on the site
+          ansible.builtin.copy:
+            content: '{{ item.content | b64decode }}'
+            dest: '{{ enrollment_staging.path }}/{{ item.item }}'
+            owner: root
+            group: root
+            mode: '0400'
+          loop: '{{ enrollment_bundle.results }}'
+
+        - name: Validate and install the fingerprint-pinned bundle
+          ansible.builtin.command:
+            argv: [luxnix-vault-install-hub-site-enrollment, '{{ enrollment_staging.path }}', '{{ enrollment_expected_ca_sha256 }}']
+          # The installer atomically replaces the destination files on every successful invocation.
+          changed_when: true
+
+        - name: Install the matching receiver-side node secret
+          ansible.builtin.copy:
+            remote_src: true
+            src: '{{ enrollment_source }}/source-node-secret'
+            dest: '/etc/secrets/vault/hub-pki/{{ inventory_hostname }}-source-node-secret'
+            owner: root
+            group: sensitiveServices
+            mode: '0640'
+          delegate_to: '{{ enrollment_hub }}'
+      always:
+        - name: Remove ephemeral site staging after success or failure
+          ansible.builtin.file:
+            path: '{{ enrollment_staging.path }}'
+            state: absent
+          when: enrollment_staging.path is defined
+
+    - name: Record the remaining explicit activation gate
+      ansible.builtin.debug:
+        msg: Bundle delivered. Complete authentication, node reprovisioning, old-credential rejection and transfer acceptance before restoring access.

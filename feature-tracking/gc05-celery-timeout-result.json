@@ -1,0 +1,29 @@
+{
+  "task_status": "complete",
+  "findings": [
+    {
+      "claim": "gc-05 used Kombu's 3600-second Redis visibility default while late-ack tasks and the configured FFmpeg interval can run for 86400 seconds.",
+      "source": "gc-05 deployed Celery/Kombu runtime probe; lx_annotate/settings/settings_base.py; endoreg_db/tasks.py",
+      "confidence": "high"
+    },
+    {
+      "claim": "The production-safe value is 90000 seconds, exported identically as CELERY_VISIBILITY_TIMEOUT, broker transport visibility_timeout, and result transport visibility_timeout, with a one-hour margin over every configured late-ack task.",
+      "source": "Celery Redis transport contract and gc-05 task/runtime timeout inventory",
+      "confidence": "high"
+    },
+    {
+      "claim": "The missing implicit route for endoreg_db.tasks.video_hls_materialization must target ffmpeg_media.",
+      "source": "lx_annotate/settings/settings_base.py and endoreg_db/services/hls_media.py",
+      "confidence": "high"
+    },
+    {
+      "claim": "All workers consuming Redis DB 1 must restart together after deployment because the shortest visibility timeout used by a shared broker wins.",
+      "source": "Celery Redis documentation and gc-05 worker topology",
+      "confidence": "high"
+    }
+  ],
+  "gaps": [
+    "A 25-hour behavioral redelivery test is not practical before today's user session; effective live Kombu channel and worker configuration must be inspected immediately after deployment.",
+    "The separate explicit HLS task hard limit remains shorter than the host's maximum FFmpeg interval."
+  ]
+}

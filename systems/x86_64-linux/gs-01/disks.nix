@@ -47,27 +47,51 @@ in
               size = "100%";
               content = {
                 type = "btrfs";
-                extraArgs = [ "-f" "-L" "nixos" ];
+                extraArgs = [
+                  "-f"
+                  "-L"
+                  "nixos"
+                ];
                 subvolumes = {
                   "root" = {
                     mountpoint = "/";
-                    mountOptions = [ "subvol=root" "compress=zstd" "noatime" ];
+                    mountOptions = [
+                      "subvol=root"
+                      "compress=zstd"
+                      "noatime"
+                    ];
                   };
                   "home" = {
                     mountpoint = "/home";
-                    mountOptions = [ "subvol=home" "compress=zstd" "noatime" ];
+                    mountOptions = [
+                      "subvol=home"
+                      "compress=zstd"
+                      "noatime"
+                    ];
                   };
                   "nix" = {
                     mountpoint = "/nix";
-                    mountOptions = [ "subvol=nix" "compress=zstd" "noatime" ];
+                    mountOptions = [
+                      "subvol=nix"
+                      "compress=zstd"
+                      "noatime"
+                    ];
                   };
                   "persist" = {
                     mountpoint = "/persist";
-                    mountOptions = [ "subvol=persist" "compress=zstd" "noatime" ];
+                    mountOptions = [
+                      "subvol=persist"
+                      "compress=zstd"
+                      "noatime"
+                    ];
                   };
                   "log" = {
                     mountpoint = "/var/log";
-                    mountOptions = [ "subvol=log" "compress=zstd" "noatime" ];
+                    mountOptions = [
+                      "subvol=log"
+                      "compress=zstd"
+                      "noatime"
+                    ];
                   };
                 };
               };
@@ -108,16 +132,23 @@ in
                 type = "btrfs";
                 extraArgs = [
                   "-f"
-                  "-L" "archive"
-                  "-m" "raid1"
-                  "-d" "raid1"
+                  "-L"
+                  "archive"
+                  "-m"
+                  "raid1"
+                  "-d"
+                  "raid1"
                   "/dev/disk/by-partlabel/archive_data1"
                   # The partition on data_disk2 (/dev/disk/by-partlabel/archive_data2) is implicitly included
                 ];
                 subvolumes = {
                   "storage" = {
                     mountpoint = "/archive";
-                    mountOptions = [ "subvol=storage" "compress=zstd" "noatime" ];
+                    mountOptions = [
+                      "subvol=storage"
+                      "compress=zstd"
+                      "noatime"
+                    ];
                   };
                 };
               };

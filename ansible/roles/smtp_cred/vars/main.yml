@@ -1,7 +1,7 @@
-smtp_cred_user_src: "/home/admin/dev/luxnix/secrets/smtp/smtp_user"
+smtp_cred_user_src: "{{ luxnix_dev_repo }}/secrets/smtp/smtp_user"
 smtp_cred_user_dest: "/etc/secrets/vault/smtp_user"
 
-smtp_cred_pwd_src: "/home/admin/dev/luxnix/secrets/smtp/smtp_pwd"
+smtp_cred_pwd_src: "{{ luxnix_dev_repo }}/secrets/smtp/smtp_pwd"
 smtp_cred_pwd_dest: "/etc/secrets/vault/smtp_pwd"
 
 smtp_cred_roles: {}

@@ -1,19 +1,19 @@
 {
   lib,
-  pkgs,
   config,
   ...
 }:
-with lib; 
-with lib.luxnix; let
+with lib;
+with lib.luxnix;
+let
   cfg = config.luxnix.hardware;
-  
-in {
+
+in
+{
   options.luxnix.hardware = {
     enable = mkEnableOption "Enable Default Hardware configuration";
 
   };
-
 
   config = mkIf cfg.enable {
 

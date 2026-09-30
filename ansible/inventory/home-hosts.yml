@@ -1,0 +1,34 @@
+# Home Manager inputs are independent of remote Ansible connectivity.
+schema_version: 1
+
+default_groups:
+  - group_home_luxnix
+  - group_home_roles
+  - group_home_cli
+  - group_home_desktops
+  - group_home_services
+
+hosts:
+  s-01: {}
+  s-02: {}
+  s-03: {}
+  s-04: {}
+  gs-01: {}
+  gs-02: {}
+  gc-01: {}
+  gc-02: {}
+  gc-03: {}
+  gc-04: {}
+  gc-05: {}
+  gc-06:
+    extra_groups:
+      - group_home_editors
+  gc-07: {}
+  gc-08: {}
+  gc-09: {}
+  gc-10: {}
+  c-01:
+    use_default_groups: false
+  h-01:
+    extra_groups:
+      - group_home_networking

@@ -1,22 +1,16 @@
-# from pydantic import BaseModel
-# from typing import Optional, List, Dict, Union
-# import os
-# import subprocess
-# import shutil
-# import yaml
-# import warnings
-# from lx_administration.logging import get_logger
-# from lx_administration.password.generator import PasswordGenerator
-# from datetime import datetime, timedelta
-# from pathlib import Path
+"""Public, lazily loaded Vault model API."""
 
-# from .keys import ClientKey, ClientKeys, PreSharedKey, AccessKey
-# from .secrets import RawSecret, EncryptedSecret, Secret, Secrets
-# from .hosts import VaultGroup, VaultGroups, VaultClient, VaultClients, HostConfig, Hosts
-# from .manager import Vault
+from typing import TYPE_CHECKING
 
+from ..._lazy_exports import public_names, resolve_lazy_export
 
-from .manager import Vault, PreSharedKey, Secret, SecretTemplate, AnsibleCfg
+if TYPE_CHECKING:
+    from .admin_passwords import import_admin_passwords, load_admin_passwords
+    from .ansible_cfg import AnsibleCfg
+    from .manager import Vault
+    from .psk import PreSharedKey
+    from .secret import Secret
+    from .secret_template import SecretTemplate
 
 __all__ = [
     "Vault",
@@ -24,4 +18,30 @@ __all__ = [
     "Secret",
     "SecretTemplate",
     "AnsibleCfg",
+    "load_admin_passwords",
+    "import_admin_passwords",
 ]
+
+_EXPORTS = {
+    "Vault": (".manager", "Vault"),
+    "PreSharedKey": (".psk", "PreSharedKey"),
+    "Secret": (".secret", "Secret"),
+    "SecretTemplate": (".secret_template", "SecretTemplate"),
+    "AnsibleCfg": (".ansible_cfg", "AnsibleCfg"),
+    "load_admin_passwords": (".admin_passwords", "load_admin_passwords"),
+    "import_admin_passwords": (".admin_passwords", "import_admin_passwords"),
+}
+
+
+def __getattr__(name: str) -> object:
+    """Resolve Vault models only when callers request them."""
+    return resolve_lazy_export(
+        name,
+        package_name=__name__,
+        exports=_EXPORTS,
+        namespace=globals(),
+    )
+
+
+def __dir__() -> list[str]:
+    return public_names(globals(), _EXPORTS)

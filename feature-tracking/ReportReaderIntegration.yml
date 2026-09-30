@@ -1,0 +1,89 @@
+schema_version: "1.0"
+id: report_reader_integration
+name: ReportReader deployment integration
+description: >-
+  Deploy lx-anonymizer ReportReader with compatible lx-data-models contracts and
+  explicit OCR, PDF, NER, and optional LLM capabilities while preserving the
+  caller's attempt and publication authority. Runtime capability selection must
+  remain explicit, and LuxNix must not acquire ownership of durable attempts,
+  retries, canonical publication, or clinical identity persistence.
+owners:
+  - LuxNix maintainers
+production_critical: true
+source_documents:
+  - path: docs/system-feature-tracking.md
+    disposition: reference
+    note: Defines provider identity, immutable specifications, and deployed resolution.
+  - path: modules/nixos/services/lx-annotate-local/Publishing.md
+    disposition: reference
+    note: Defines coordinated lx-dtypes, lx-anonymizer, and host-package publication.
+definition_of_done:
+  - id: compatible_packages
+    category: requirements
+    title: ReportReader and its shared contracts deploy as a compatible set
+    acceptance:
+      - The selected lx-anonymizer package contains the public ReportReader entry point.
+      - The selected lx-dtypes package contains the report metadata and report anonymization contracts consumed by ReportReader.
+      - Package updates crossing this boundary are pinned and evaluated together before host activation.
+    required: true
+    verification:
+      kind: manual
+      instructions: Evaluate the target host closure and inspect the resolved lx-anonymizer and lx-dtypes package versions.
+      timeout_seconds: 600
+  - id: runtime_capabilities
+    category: operations
+    title: The host supplies an explicit ReportReader capability profile
+    acceptance:
+      - PDF and image decoding dependencies required by the selected package profile are present.
+      - OCR, NER, and LLM features are enabled only when their packaged dependencies and configured providers are available.
+      - Reduced-capability execution is named and observable rather than an accidental silent fallback.
+    required: true
+    verification:
+      kind: manual
+      instructions: Inspect the evaluated service environment and run the packaged ReportReader smoke check on the target host.
+      timeout_seconds: 600
+  - id: deployed_pipeline
+    category: functionality
+    title: The deployed entry point preserves the attempt-scoped report contract
+    acceptance:
+      - One deployed invocation consumes caller-owned immutable input and creates one unpublished attempt-owned result.
+      - Enabled OCR, NER, and LLM capabilities are observable and reduced-capability execution is explicitly named.
+    required: true
+    verification:
+      kind: manual
+      instructions: Exercise the packaged ReportReader entry point with representative immutable fixtures and inspect its unpublished result.
+      timeout_seconds: 600
+  - id: deployment_smoke_coverage
+    category: testing
+    title: Deployment behavior has focused reproducible coverage
+    acceptance:
+      - Focused smoke checks cover the selected PDF, image, OCR, NER, and optional LLM capability profile.
+      - The checks fail when a declared packaged dependency or typed lx-dtypes contract is unavailable.
+    required: true
+    verification:
+      kind: manual
+      instructions: Run the packaged ReportReader smoke checks against the evaluated target closure and record exact package versions and results.
+      timeout_seconds: 600
+  - id: attempt_boundary
+    category: security
+    title: Deployment preserves report-attempt ownership and fail-closed publication
+    acceptance:
+      - Caller-selected immutable input and attempt-owned output paths cross the service boundary unchanged.
+      - A failed or cancelled ReportReader invocation cannot publish partial output as a canonical report.
+      - Sensitive temporary files have one owner, restrictive permissions, bounded lifetime, and deterministic cleanup.
+    required: true
+    verification:
+      kind: manual
+      instructions: Review the deployed caller integration against the report pipeline concurrency contract and its focused tests.
+      timeout_seconds: 600
+  - id: deployment_contract_documented
+    category: documentation
+    title: Capability and ownership boundaries are documented
+    acceptance:
+      - The deployed lx-anonymizer and lx-dtypes compatibility set and selected capability profile are reviewable before activation.
+      - Documentation states that LuxNix does not own attempts, retries, canonical publication, or clinical identity persistence.
+    required: true
+    verification:
+      kind: manual
+      instructions: Review the feature specification and publishing documentation against the evaluated deployment boundary.
+      timeout_seconds: 600

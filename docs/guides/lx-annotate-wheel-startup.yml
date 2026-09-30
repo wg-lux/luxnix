@@ -1,0 +1,100 @@
+schema_version: 1
+service: lx-annotate-wheel-runtime.service
+owner: modules/nixos/services/lx-annotate-local
+risk: remote-read-only
+startup_contract:
+  - The preparation unit is the sole package installer for the shared virtual environment.
+  - Online installations wait for network-online.target; an explicit wheelhouse does not add this dependency.
+  - Application and override plans must both resolve and pass downgrade admission before either install starts.
+  - Resolver failure leaves installed distributions and the successful release stamp unchanged.
+  - Diagnostics expose a fixed category and narrowly validated missing requirements, never raw pip output or authenticated URLs.
+  - Network-online ordering does not guarantee that a package index is reachable or contains a requested release.
+catalogue_reconciliation:
+  service: lx-annotate-load-base-data.service
+  command: lx-annotate-load-base-data --reconcile-legacy
+  order: Prepared runtime and Django schema migrations, then base-data reconciliation, then key verification and web startup.
+  behavior:
+    - The application provisions the governed registry through its normal base-data loader.
+    - Fresh or equivalent catalogues use strict import; the known seven colorectal indication conflicts receive the bounded migration.
+    - Dependency creation, relationship changes and reconciliation commit atomically; existing IDs and patient links are preserved.
+    - Repeated service runs recheck the database and reuse import receipts without duplicate records or filesystem success stamps.
+    - Unexpected conflicts and missing command support fail the unit and block dependent startup.
+  release_requirement: Install an endoreg-db artifact implementing load_base_db_data --reconcile-legacy together with this LuxNix change; older packages reject the flag.
+  preview: lx-annotate-load-base-data --reconcile-legacy --dry-run
+  scope: Shared base-data service in wheel and repository modes, plus the repository migration helper. Legacy custom runtime.commands overrides remain operator-owned.
+read_only_admission:
+  script: modules/nixos/services/lx-annotate-local/scripts/wheel-downgrade-guard.py
+  invocation: >-
+    <runtime-venv>/bin/python <guard.py> --wheel <canonical-wheel-path>
+    --expected-version <release-version> --check-only
+  optional_overrides: --overrides-json '<JSON list matching runtime.wheelDependencyOverrides>'
+  offline_arguments: -- --no-index --find-links <approved-wheelhouse>
+  notes:
+    - Use the same interpreter, package index and wheelhouse configuration as the preparation unit.
+    - A Nix-store wheel filename with a store-hash prefix must first be staged under its canonical wheel filename in a private review directory.
+    - Check-only resolves dependencies but writes no constraints and installs no packages; pip may download/cache candidates and prepare build metadata.
+    - Use PIP_NO_CACHE_DIR=1 to avoid persistent pip cache writes during investigation.
+    - Avoid inherited development-shell LD_LIBRARY_PATH, LD_PRELOAD, PYTHONHOME and PYTHONPATH; they can load libraries from an unrelated checkout.
+    - A successful check is admission evidence, not proof that installation, migrations or application startup will succeed.
+failure_categories:
+  distribution_unavailable: Check requested release publication, wheel Python/platform compatibility and index or wheelhouse contents.
+  dependency_conflict: Build a release with compatible constraints; do not bypass dependency resolution.
+  tls_verification_failed: Repair the package-index trust configuration without disabling TLS verification.
+  index_unreachable: Inspect DNS, network availability and proxy configuration before retrying.
+  storage_full: Inspect runtime cache and temporary storage capacity before preparing packages.
+  permission_denied: Inspect service-user access to wheel inputs, cache and runtime directories.
+  resolver_error: Inspect release inputs in a private operator session; do not copy raw resolver output into shared logs.
+incident:
+  host: gc-02
+  observed_at: '2026-09-28T11:47:57+02:00'
+  selected_application: lx-annotate==1.3.13
+  missing_requirement: endoreg-db==1.3.15
+  pip_visible_index_maximum_at_investigation: endoreg-db==1.3.14
+  publication_verified:
+    source: https://pypi.org/pypi/endoreg-db/1.3.15/json
+    wheel_uploaded_at: '2026-09-28T08:02:10.606249Z'
+    sdist_uploaded_at: '2026-09-28T08:02:12.905301Z'
+    requires_python: '<3.13,>=3.12'
+    yanked: false
+  index_response_discrepancy:
+    endpoint: https://pypi.org/simple/endoreg-db/
+    method: Same runtime Python 3.12.12 and pip PipSession, JSON Accept header, Cache-Control no-cache; vary only Accept-Encoding.
+    identity:
+      last_serial: '41542001'
+      includes_1_3_15: true
+    gzip:
+      last_serial: '41444057'
+      includes_1_3_15: false
+    gzip_deflate:
+      last_serial: '41444057'
+      includes_1_3_15: false
+    interpretation: A stale compressed response is served on the index request path; the responsible cache layer is not established.
+    pip_reproduction: Both default configuration and explicit PyPI with PIP_CONFIG_FILE=/dev/null fail no-deps dry-run admission for endoreg-db==1.3.15, with --no-cache-dir.
+  installed_application: lx-annotate==1.3.12
+  installed_backend: endoreg-db==1.3.14
+  first_failed_stage: Wheel candidate resolution, before package installation or migration.
+  additional_observations:
+    - Pip reported invalid-distribution remnants in the shared environment. No deletion or repair was attempted.
+recovery:
+  - For this incident, do not upload again or change the release version solely to address visibility; both release artifacts already exist on PyPI.
+  - Restore fresh compressed index responses, or provision an approved wheelhouse containing the selected release and its complete dependencies, verifying artifacts against PyPI release hashes.
+  - Do not permanently monkeypatch pip HTTP headers to hide an unresolved index-cache issue.
+  - Run check-only admission for the complete selected release before activation.
+  - Do not substitute a lower dependency with --no-deps, weaken the downgrade guard, or delete the successful release stamp.
+  - After an explicitly authorized deployment, run the ordered preparation, migration, base-data, key and application gates documented in Diagnostics.md.
+  - Confirm the final acceptance unit and worker health before declaring recovery.
+verification:
+  focused_tests:
+    command: .devenv/state/venv/bin/pytest tests/lx-annotate/test_wheel_downgrade_guard.py tests/lx-annotate/test_lx_annotate_wheel_runtime_install.py -q
+    result: 36 passed, including rendered gc-02 guard and online/offline unit ordering.
+  host_evaluation:
+    command: nix eval --raw '.#nixosConfigurations.gc-02.config.system.build.toplevel.drvPath'
+    result: Passed; an unrelated optional CUDA binary-cache request emitted HTTP 401.
+  documentation:
+    command: devenv tasks run docs:check
+    result: Passed.
+  other_checks:
+    - Focused Ruff, nixfmt --check and git diff --check passed.
+    - Feature tracker validation passed; environment lifecycle readiness remains incomplete (2 of 8 criteria verified).
+  live_admission: Check-only reproduced distribution_unavailable for endoreg-db==1.3.15 without installing packages or writing constraints.
+  not_performed: Activation, service restarts, package installation, migrations, invalid-distribution cleanup, and full NixOS system build.

@@ -1,14 +1,14 @@
-{ lib
-, pkgs
-, config
-, ...
+{
+  lib,
+  pkgs,
+  config,
+  ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.roles.custom-packages;
 
-  dev01 = [ ];
-  dev02 = [ ];
   dev03 = with pkgs; [
     obsidian
     balena-cli
@@ -18,11 +18,14 @@ with lib.luxnix; let
     kdePackages.xdg-desktop-portal-kde
     kdePackages.svgpart
     kdePackages.systemsettings
+    kdePackages.kwallet
+    kdePackages.kwalletmanager
   ];
 
   baseDevelopment = with pkgs; [
     # vscode-fhs
-    nixfmt-rfc-style
+    nixfmt
+    ripgrep
     cacert
     openssl
     vscode
@@ -35,6 +38,14 @@ with lib.luxnix; let
     vlc
     bind
     nixd
+    fd
+    duf
+    dust
+    dysk
+    ncdu
+    nix-tree
+    nixos-shell
+    nix-output-monitor
   ];
 
   visuals = with pkgs; [
@@ -52,95 +63,39 @@ with lib.luxnix; let
     zotero
   ];
 
-  cuda = with pkgs; [
-    autoAddDriverRunpath
-  ];
-
-  ldBase = with pkgs; [
-    stdenv.cc.cc
-    zlib
-    fuse3
-    icu
-    nss
-    openssl
-    curl
-    expat
-    libGLU
-    libGL
-    git
-    gitRepo
-    gnupg
-    autoconf
-    procps
-    gnumake
-    util-linux
-    m4
-    gperf
-    unzip
-  ];
-
   cloud = with pkgs; [
     nextcloud-talk-desktop
   ];
 
-  ldCuda = with pkgs; [
-    # cudaPackages.cudatoolkit
-    mesa
-    glibc
-    glib
-    # linuxPackages.nvidia_x11
-    xorg.libXi
-    xorg.libXmu
-    freeglut
-    xorg.libXext
-    xorg.libX11
-    xorg.libXv
-    xorg.libXrandr
-    ncurses5
-    binutils
-    autoAddDriverRunpath
-    cudaPackages.cuda_nvcc
-    cudaPackages.nccl
-    cudaPackages.cudnn
-    cudaPackages.libnpp
-    cudaPackages.cutensor
-    cudaPackages.libcufft
-    cudaPackages.libcurand
-    cudaPackages.libcublas
-  ];
+  customPackages =
+    with pkgs;
+    [
+      bash
+      bashInteractive
+      iftop
+      bmon
+      nload
+    ]
+    ++ optionals cfg.kdePlasma kdePlasma
+    ++ optionals cfg.baseDevelopment baseDevelopment
+    ++ optionals cfg.office office
+    ++ optionals cfg.visuals visuals
+    ++ optionals cfg.dev03 dev03
+    ++ optionals cfg.cloud cloud
+    ++ optionals cfg.protonmail [
+      protonmail-bridge-gui
+      protonmail-desktop
+      proton-pass
+      planify
+    ]
+    ++ optionals cfg.hardwareAcceleration [
+      pciutils
+      libva
 
-  customPackages = [
-    pkgs.bash
-    pkgs.bashInteractive
-    pkgs.iftop
-    pkgs.bmon
-    pkgs.nload
-  ]
-  ++ (if cfg.kdePlasma then kdePlasma else [ ])
-  ++ (if cfg.baseDevelopment then baseDevelopment else [ ])
-  ++ (if cfg.office then office else [ ])
-  ++ (if cfg.visuals then visuals else [ ])
-  ++ (if cfg.dev01 then dev01 else [ ])
-  ++ (if cfg.dev02 then dev02 else [ ])
-  ++ (if cfg.dev03 then dev03 else [ ])
-  ++ (if cfg.cloud then cloud else [ ])
-  ++ (if cfg.protonmail then [
-    pkgs.protonmail-bridge-gui
-    pkgs.protonmail-desktop
-    pkgs.proton-pass
-  ] else [ ])
-  ++ (if cfg.hardwareAcceleration then [
-    pkgs.pciutils
-    pkgs.libva
+      vdpauinfo # sudo vainfo
+      libva-utils # sudo vainfo
+    ];
 
-    pkgs.vdpauinfo # sudo vainfo
-    pkgs.libva-utils # sudo vainfo
-  ] else [ ])
-  ;
-
-  ldPackages = lib.mkIf cfg.ld.enable (
-    ldBase ++ (if cfg.cuda then ldCuda else [ ])
-  );
 in
 {
   options.roles.custom-packages = {
@@ -149,10 +104,11 @@ in
     kdePlasma = mkBoolOpt false "Add KDE Plasma Packages to custom packages";
     baseDevelopment = mkBoolOpt false "Add Base Development Packages to custom packages";
     cuda = mkBoolOpt false "Add CUDA packages to custom packages";
+    # NCCL is built from source when the exact derivation is not cached.
+    # Keep it opt-in for native consumers; Python wheels manage their own NCCL.
+    # Diagnosis and opt-in procedure: docs/guides/cuda-source-builds.yml.
     videoEditing = mkBoolOpt false "Add Video Editing packages to custom packages";
     visuals = mkBoolOpt false "Add Visuals packages to custom packages";
-    dev01 = mkBoolOpt false "Add dev01 packages to custom packages";
-    dev02 = mkBoolOpt false "Add dev02 packages to custom packages";
     dev03 = mkBoolOpt false "Add dev03 packages to custom packages";
     protonmail = mkBoolOpt false "Add Protonmail packages to custom packages";
     ld = {
@@ -162,27 +118,23 @@ in
     hardwareAcceleration = mkBoolOpt false "Add Hardware Acceleration packages to custom packages";
   };
 
-
   config = mkIf cfg.enable {
     environment.systemPackages = customPackages;
 
     cli.programs.nix-ld = {
       enable = lib.mkForce cfg.ld.enable;
-      libraries = ldPackages;
     };
 
     programs.obs-studio.enable = cfg.videoEditing;
 
-    programs.thunderbird.enable = cfg.office;
+    programs.thunderbird.enable = false; # cfg.office;
 
     hardware.graphics = {
       enable = lib.mkDefault cfg.hardwareAcceleration;
-      extraPackages = with pkgs; (if cfg.hardwareAcceleration then [
-        intel-media-driver
-      ] else [ ]);
+      extraPackages = optionals cfg.hardwareAcceleration [
+        pkgs.intel-media-driver
+      ];
     };
-
-    environment.variables = { };
 
   };
 }

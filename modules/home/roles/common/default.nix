@@ -3,9 +3,11 @@
   pkgs,
   config,
   ...
-}: let
+}:
+let
   cfg = config.roles.common;
-in {
+in
+{
   options.roles.common = {
     enable = lib.mkEnableOption "Enable common configuration";
   };
@@ -33,19 +35,22 @@ in {
     };
 
     # TODO: move this to a separate module
-    home.packages = with pkgs; [
-      keymapp
+    home.packages =
+      with pkgs;
+      [
+        keymapp
 
-      src-cli
-      optinix
+        src-cli
+        optinix
 
-      (hiPrio parallel)
-      moreutils
-      nvtopPackages.amd
-      unzip
-      gnupg
+        # (hiPrio parallel)
+        moreutils
+        nvtopPackages.amd
+        unzip
+        gnupg
 
-      showmethekey
-    ];
+        showmethekey
+      ]
+      ++ [ (lib.hiPrio parallel) ];
   };
 }

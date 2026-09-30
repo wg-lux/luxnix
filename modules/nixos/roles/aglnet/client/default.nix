@@ -1,10 +1,12 @@
-{ lib
-, pkgs
-, config
-, ...
+{
+  lib,
+  pkgs,
+  config,
+  ...
 }:
 
-with lib; let
+with lib;
+let
   cfg = config.roles.aglnet.client;
 
   # defaultBackupNameservers = ["8.8.8.8" "1.1.1.1"];
@@ -25,7 +27,6 @@ with lib; let
   defaultVerbosity = "3";
   defaultNoBind = true;
 
-
   defaultCaPath = "/etc/openvpn/ca.pem";
   defaultTlsAuthPath = "/etc/openvpn/tls.pem";
   defaultServerCertPath = "/etc/openvpn/crt.crt";
@@ -44,7 +45,6 @@ with lib; let
 
   # defaultClientToClient = true;
 
-
 in
 {
   options.roles.aglnet.client = {
@@ -61,7 +61,6 @@ in
       default = defaultDomain;
       description = "The main domain for the vpn";
     };
-
 
     port = mkOption {
       type = types.int;
@@ -129,7 +128,6 @@ in
       description = "Subnet intern for the VPN";
     };
 
-
     keepalive = mkOption {
       type = types.str;
       default = defaultKeepalive;
@@ -185,7 +183,6 @@ in
     };
   };
 
-
   config = mkIf cfg.enable {
     environment = {
       systemPackages = with pkgs; [
@@ -194,7 +191,9 @@ in
     };
     #
     systemd.tmpfiles.rules = [
-      "d /etc/openvpn 0750 admin users -" #TODO Harden?
+      # TODO (aglnet owner): replace the broad users group after inventory
+      # declares the operators that require OpenVPN configuration access.
+      "d /etc/openvpn 0750 admin users -"
     ];
 
     services.openvpn =
@@ -204,7 +203,7 @@ in
           proto ${cfg.protocolLc}
           dev ${cfg.dev}
           remote ${cfg.mainDomain} ${toString cfg.port}
-        
+
           resolv-retry ${cfg.resolvRetry}
           ${if cfg.noBind then "nobind" else ""}
           ${if cfg.persistKey then "persist-key" else ""}
@@ -215,7 +214,7 @@ in
           cert ${cfg.serverCertPath}
           key ${cfg.serverKeyPath}
           cipher ${cfg.cipher}
-        
+
           # Route only VPN subnet through tunnel
           route-nopull
           route ${cfg.subnet} ${cfg.subnetIntern}
@@ -235,13 +234,12 @@ in
 
       in
       {
-        restartAfterSleep = cfg.restartAfterSleep;
+        inherit (cfg) restartAfterSleep;
 
         servers = {
           "${cfg.networkName}" = {
-            config = config;
-            autoStart = cfg.autoStart;
-            updateResolvConf = cfg.updateResolvConf;
+            inherit config;
+            inherit (cfg) autoStart updateResolvConf;
           };
         };
       };

@@ -1,0 +1,351 @@
+schema_version: '1.0'
+id: lx_annotate_environment_lifecycle_audit
+name: LX-Annotate environment lifecycle audit
+description: Track the production environment contract from Secretspec through LuxNix, Django settings
+  conversion, endoreg_db consumption, and runtime secret/key verification.
+owners:
+- LX-Annotate and LuxNix maintainers
+production_critical: true
+tracking:
+  state: active
+  history: []
+source_documents:
+- path: modules/nixos/services/lx-annotate-local/README.md
+  disposition: reference
+  note: LuxNix environment ownership and rendering contract.
+- path: modules/nixos/services/lx-annotate-local/Diagnostics.md
+  disposition: reference
+  note: Operational environment and secret-file diagnostics.
+- path: AGENTS.md
+  disposition: reference
+  note: Repository-level contribution and package ownership policy.
+definition_of_done:
+- id: centralized_media_paths_and_hashes
+  category: testing
+  title: Service consumers preserve the central media path and hash contracts
+  acceptance:
+  - LX_RUNTIME_ROOT from runtime.encryptedDataDir is the sole application runtime-root input in systemd
+    and maintenance wrappers.
+  - Every enabled host, including gs-02 Celery beat, receives the absolute root in application services,
+    with runtime environment preparation ordered before startup; gs-02 also verifies the generated EnvironmentFile.
+  - Retired data-root, storage-root and streamable-directory aliases are absent; application paths use
+    EndoregPathsModel through get_runtime_paths.
+  - Frame export uses the application entry point; media integrity uses artifact get_hash and the shared
+    get_file_hash plaintext contract rather than shell ciphertext hashing.
+  - Source guards, shell execution tests and evaluated filewatcher environments enforce the contract without
+    changing encryption, mounts or Nginx permissions.
+  - The wheel build rejects pre-centralization settings before activation or migrations; deployment requires
+    a compatible application release.
+  required: true
+  verification:
+    kind: command
+    command:
+    - .devenv/state/venv/bin/python
+    - -m
+    - pytest
+    - -q
+    - tests/lx-annotate/test_lx_annotate_encryption_defaults.py
+    - tests/lx-annotate/test_lx_annotate_nix_eval_contract.py::test_gc_02_top_level_evaluates
+    - tests/lx-annotate/test_lx_annotate_nix_eval_contract.py::test_lx_annotate_filewatcher_exports_only_canonical_data_root
+    - tests/lx-annotate/test_lx_annotate_nix_eval_contract.py::test_custom_runtime_root_reaches_web_watcher_and_workers
+    - tests/lx-annotate/test_lx_annotate_nix_eval_contract.py::test_all_hosts_export_runtime_root_to_application_services
+    - tests/lx-annotate/test_lx_annotate_nix_eval_contract.py::test_lx_annotate_wheel_celery_worker_exports_shared_runtime_env
+    - tests/lx-annotate/test_file_mover_filewatcher_contract.py::test_file_mover_publishes_into_filewatcher_intake_contract
+    - tests/lx-annotate/test_wheel_static_check.py
+    timeout_seconds: 900
+  assessment:
+    status: verified
+    evidence:
+    - kind: test
+      reference: '43 targeted tests passed in 47.05s: gc-02 evaluation, default/custom LX_RUNTIME_ROOT,
+        worker/filewatcher environment, shell exports, legacy wheel rejection (2026-09-21)'
+    - kind: document
+      reference: modules/nixos/services/lx-annotate-local/README.md
+    - kind: command
+      reference: 'devenv tasks run docs:toc-generator and devenv tasks run docs:check: passed (2026-09-21);
+        Nix parse and focused Ruff checks passed'
+    assessed_by: codex-pytest-lf-20260921
+    assessed_at: '2026-09-21T12:16:20.762202Z'
+- id: application_contract_complete
+  category: requirements
+  title: Secretspec declares every application-facing input
+  acceptance:
+  - Every externally configurable application variable has a name, description, type-compatible safe default,
+    and ownership classification.
+  - Production secrets are represented only by file handles; infrastructure-only variables are explicitly
+    documented as exclusions.
+  - Compatibility aliases have a named canonical variable and a retirement rationale.
+  required: true
+  verification:
+    kind: manual
+    instructions: Compare lx-annotate secretspec.toml with LuxNix commonEnv and all Python environment
+      reads.
+    timeout_seconds: 600
+  assessment:
+    status: blocked
+    evidence:
+    - kind: review
+      reference: /home/admin/dev/lx-annotate/secretspec.toml versus modules/nixos/services/lx-annotate-local/scripts/env.nix
+        commonEnv
+      note: 94 commonEnv keys were inventoried; 34 are absent from Secretspec, including 23 clear application/runtime
+        inputs that require declaration or an explicit exclusion decision.
+    note: The application contract and provisioned commonEnv are not closed over the same variable set.
+    assessed_by: codex-lx-env-audit-20260831
+    assessed_at: '2026-08-31T16:00:00+02:00'
+- id: provisioning_contract_identical
+  category: operations
+  title: Systemd and interactive maintenance receive one contract
+  acceptance:
+  - Base-data startup and the repository migration helper explicitly enable bounded legacy catalogue reconciliation
+    after schema migrations; fresh imports and repeated starts preserve IDs and receipts, while unrelated
+    conflicts fail the unit without partial database changes or a success stamp.
+  - commonEnv is rendered atomically to /var/lib/lx-annotate/.env.systemd and copied below the protected
+    data root with root/service-group ownership and mode 0640.
+  - Service-only process controls are distinguished from application configuration.
+  - Interactive maintenance wrappers and systemd services receive identical application values and file
+    handles.
+  required: true
+  verification:
+    kind: manual
+    instructions: Compare commonEnv, commonExtraEnv, EnvironmentFile usage, and every maintenance wrapper
+      export helper.
+    timeout_seconds: 600
+  assessment:
+    status: blocked
+    evidence:
+    - kind: code
+      reference: modules/nixos/services/lx-annotate-local/config.nix runtimeEnvScript and commonExtraEnv
+      note: The two .env.systemd copies are mode 0640 and aligned, but three ENDOREG feature-registry
+        values are added only to systemd service environments.
+    - kind: code
+      reference: modules/nixos/services/lx-annotate-local/scripts/env.nix lxAnnotateEnvHelpers
+      note: Maintenance wrappers additionally materialize database, Django, and OIDC secrets as inline
+        process variables instead of retaining the file-handle-only contract.
+    - kind: test
+      reference: 'tests/lx-annotate/test_lx_annotate_terminology_contract.py: 8 passed; test_wheel_migrate_and_load_base_data_services_run_before_web
+        and test_wheel_web_startup_is_split_from_migration_and_base_data: passed.'
+    - kind: command
+      reference: 'Source /home/admin/luxnix at a62232ebad34e58fc0b72eb9b3d3108ee2cb192e plus reviewed
+        working changes; pre-existing unrelated staged work preserved. flake.lock SHA256 e0239d3ccb3aa793716a5d7be4f04117952735af97be902e9eb1e8773dab852d.
+        Evaluation target gc-02 selects lx-annotate 1.4.0 wheel SHA256 b91e7fc3e0e70999f39c179860236514a98912f34cd6e3637b36d9d6c56e1adf;
+        no updated backend artifact produced. Locked lx-annotate input 7e2ce39085863c6aae5afbe3ad9b10466694ec75.
+        nix eval gc-02 system.build.toplevel.drvPath succeeded: /nix/store/qbnmpv5xpkqr1vp88kmk51mj21nlxvii-nixos-system-gc-02-26.05.20260905.6713828.drv.'
+    note: 'The rendered file and systemd unit environment are similar but not identical, and wrapper compatibility
+      exports create a second effective contract.
+
+
+      2026-09-29: Shared base-data startup and the repository migration helper now request load_base_db_data
+      --reconcile-legacy through the existing runtime and environment. The application handles fresh imports,
+      bounded legacy repair and repeated execution; failures propagate before dependent startup. Eight
+      focused terminology/service tests passed after correcting the new test to inspect the Nix script
+      derivation text; two existing migration/base-data ordering tests also passed. Application Secretspec/config
+      tests: 39 passed. gc-02 whole-system drvPath evaluation passed after a source-change-during-evaluation
+      retry. Documentation check, Nix parsing/formatting, Ruff and diff checks passed. Coordinated backend
+      release supporting the flag is required. No build, activation, runtime package installation or production
+      database mutation performed. Existing environment parity blockers remain open.'
+    assessed_by: codex-study-definitions-20260929
+    assessed_at: '2026-09-29T13:46:12.277809Z'
+- id: django_conversion_complete
+  category: functionality
+  title: Every application value becomes a typed Django setting
+  acceptance:
+  - settings_base parses every value consumed through django.conf.settings and exports an uppercase typed
+    setting.
+  - settings_prod re-exports the complete base contract without ambient os.environ fallbacks in application
+    code.
+  - Invalid booleans, integers, lists, roles, paths, and security relationships fail closed at settings
+    import.
+  required: true
+  verification:
+    kind: manual
+    instructions: Run an isolated production-settings probe with non-default values and compare Django
+      settings with endoreg_db consumers.
+    timeout_seconds: 600
+  assessment:
+    status: blocked
+    evidence:
+    - kind: command
+      reference: isolated settings_prod probe using tests/system/test_production_celery_routing.py::_production_settings_environment
+      note: MODEL_TRAINING_JOB_MODE, MODEL_TRAINING_STAGING_ROOT, LX_DTYPES_KB_REGISTRY, LX_ANNOTATE_DEFAULT_CENTER,
+        and LX_ANNOTATE_HUB_SOURCE_NODE_SECRET_FILE were all absent from settings_prod despite being supplied.
+    - kind: code
+      reference: /home/admin/dev/lx-annotate/.devenv/state/venv/lib/python3.12/site-packages/endoreg_db/services/jobs/model_training_jobs.py
+      note: Installed endoreg-db 1.1.2 reads MODEL_TRAINING_JOB_MODE and MODEL_TRAINING_STAGING_ROOT from
+        django.conf.settings, so the LuxNix staging root is ineffective and falls back to the package
+        default.
+    - kind: code
+      reference: /home/admin/dev/lx-annotate/lx_annotate/checks.py and lx_annotate/file_watcher.py
+      note: LX_DTYPES_KB_REGISTRY and LX_ANNOTATE_DEFAULT_CENTER retain direct os.environ fallbacks instead
+        of an explicit settings conversion.
+    note: At least one production path value, MODEL_TRAINING_STAGING_ROOT, is provisioned but ignored
+      by its Django consumer.
+    assessed_by: codex-lx-env-audit-20260831
+    assessed_at: '2026-08-31T16:00:00+02:00'
+- id: runtime_secret_verification_complete
+  category: security
+  title: Runtime initialization verifies secret material and identity
+  acceptance:
+  - Each secret handle is checked for a regular non-symlink file, readability, non-empty content, owner,
+    group, and restrictive mode.
+  - Cryptographic keys and certificates are parsed, constrained to the required algorithm, checked for
+    validity, and checked for matching identity where a pair is required.
+  - The application master key is verified against existing ciphertext without rotation or regeneration
+    during normal startup.
+  required: true
+  verification:
+    kind: manual
+    instructions: Review initialization units and application loaders for every file-backed secret, certificate,
+      and key.
+    timeout_seconds: 900
+  assessment:
+    status: blocked
+    evidence:
+    - kind: code
+      reference: modules/nixos/services/lx-annotate-local/scripts.nix require_file_backed_master_key and
+        runLocalMasterKeyCheckScript
+      note: Master-key existence, ownership, mode, base64 format, decoded length, and encrypted-storage
+        identity are checked before application startup.
+    - kind: code
+      reference: modules/nixos/services/lx-annotate-local/config.nix hubEnvelopeKeyPreflightScript
+      note: X25519 envelope public/private keys receive regular-file, type, and private-key permission
+        checks.
+    - kind: test
+      reference: '2026-09-22 codex-config-20260921-a: enrollment/startup contracts 18 passed; corrected
+        customScript identity generator regression 3 passed; installed gc-02 production loader passed
+        as endoreg-service-user with retiring default_salt.'
+      note: Explicit gc-02 enrollment uses service-owned 0600 files. Corrected a multiline generator redirection
+        bug exposed during concurrent deployment; preserved the empty failed-first-enrollment file and
+        manifest before provisioning. No usable active salt was replaced and no bulk identity rehash was
+        performed. Full corrected system build passed from immutable source /nix/store/g93kqgr91x1qq0l7qanqi5k77p18lgf2-source.
+        Subsequent startup exposed root-owned quarantine/failed; scoped tmpfiles ownership rules restore
+        service writability without changing payload files. Fleet readiness remains unverified; application
+        source-hygiene check fails on a stale guide path.
+    - kind: command
+      reference: '2026-09-22 codex-config-20260921-a gc-02 recovery: active system /nix/store/k2avnk69y2hlmd0jz3d9dklxlv1f288y-nixos-system-gc-02-26.05.20260905.6713828;
+        source /nix/store/lxf1gnmzil2ary6nlskzzikmqagd6sfc-source from /home/admin/luxnix, revision e3d16ae91658534bf58dd12b57839a7e6ea0a591
+        with reviewed incident changes; flake.lock SHA256 e0239d3ccb3aa793716a5d7be4f04117952735af97be902e9eb1e8773dab852d.'
+      note: User authorized migrating stale builtin terminology provider entries to the installed catalog.
+        Validated all staged hydrated bundles under registry writer lock, preserved dgvs_reporting@0.1.0
+        active, backed up registry to registry.before-reviewed-upgrade-20260922.json and atomically published.
+        Repeated provision/load passed. Migrations, base-data load and encrypted-storage check passed;
+        web, beat and configured workers active; hub-export-health exited 0; local HTTP 301. Vault client
+        certificate renewal still fails AppRole authentication. Clinical browser acceptance and outbound
+        transfers are not verified. Concurrent unrelated Firefox changes subsequently blocked current-checkout
+        Nix evaluation with an invalid home-manager.users.admin.security.pki option; deployed immutable
+        source builds.
+    - kind: code
+      reference: /home/admin/dev/lx-annotate/lx_annotate/hub/hub_export_worker.py resolve_hub_transport_config
+      note: mTLS certificate, private key, CA, and source-node secret are checked only for readability
+        when a transfer runs; initialization does not validate PEM format, certificate validity, cert/key
+        identity, ownership, or mode.
+    note: Runtime verification is strong for the master key and envelope keys but incomplete for Django,
+      database, OIDC, source-node, CA, and mTLS materials.
+    assessed_by: codex-lx-env-audit-20260831
+    assessed_at: '2026-08-31T16:00:00+02:00'
+- id: lifecycle_tests_close_the_contract
+  category: testing
+  title: Automated tests catch cross-layer omissions
+  acceptance:
+  - Tests compare Secretspec, LuxNix commonEnv, Django uppercase settings, and installed endoreg_db consumers
+    bidirectionally.
+  - Production probes use non-default sentinels so a package fallback cannot accidentally pass.
+  - Runtime preflight tests cover missing files, symlinks, ownership, permissions, malformed material,
+    expired certificates, mismatched identities, and wrong master-key identity.
+  required: true
+  verification:
+    kind: command
+    command:
+    - uv
+    - run
+    - pytest
+    - -q
+    - tests/system/test_secretspec_environment_contract.py
+    - tests/system/test_production_celery_routing.py
+    timeout_seconds: 300
+  assessment:
+    status: blocked
+    evidence:
+    - kind: test
+      reference: uv run pytest -q tests/system/test_secretspec_environment_contract.py tests/system/test_production_celery_routing.py
+      note: 7 passed in 33.36 seconds on 2026-08-31.
+    - kind: review
+      reference: /home/admin/dev/lx-annotate/tests/system/test_secretspec_environment_contract.py
+      note: Current tests classify Python environment reads and require selected host keys, but do not
+        prove commonEnv-to-Secretspec parity or that provisioned values become Django settings.
+    - kind: test
+      reference: uv run pytest -q tests/lx-annotate/test_lx_annotate_encryption_defaults.py tests/lx-annotate/test_lx_annotate_filewatcher_wheel_key_env.py
+      note: 3 passed and 1 failed; the failure detects that the helper still exports the DATA_DIR compatibility
+        alias contrary to the canonical protected-root contract.
+    - kind: test
+      reference: uv run pytest -q tests/lx-annotate/test_lx_annotate_nix_eval_contract.py -k 'environment
+        or master_key or hub_transfer or package_version'
+      note: 1 passed, 8 failed, and 59 were deselected; all eight Nix evaluations were blocked because
+        the concurrently added systems/x86_64-linux/host-common.nix is untracked and therefore absent
+        from the flake source.
+    note: The application narrow suite passes while the isolated sentinel probe demonstrates five missing
+      production settings; LuxNix also has one direct contract-test failure, and Nix evaluation is currently
+      blocked by an unrelated untracked import.
+    assessed_by: codex-lx-env-audit-20260831
+    assessed_at: '2026-08-31T16:00:00+02:00'
+- id: variable_matrix_documented
+  category: documentation
+  title: The variable lifecycle matrix is maintained
+  acceptance:
+  - A maintained matrix records each variable's owner, type, default, secret classification, aliases,
+    Django setting name, consumer, runtime check, and deployment scope.
+  - Documentation distinguishes public VITE values, process controls, compatibility aliases, and file-backed
+    secrets.
+  - Operational diagnostics verify presence and metadata without printing secret values.
+  required: true
+  verification:
+    kind: manual
+    instructions: Review the service README and Diagnostics guide against the generated lifecycle inventory.
+    timeout_seconds: 600
+  assessment:
+    status: in_progress
+    evidence:
+    - kind: document
+      reference: modules/nixos/services/lx-annotate-local/README.md
+      note: Documents commonEnv, both .env.systemd paths, and file-backed secret handles, but does not
+        contain a complete per-variable lifecycle matrix.
+    - kind: document
+      reference: modules/nixos/services/lx-annotate-local/Diagnostics.md
+      note: Correctly warns against printing .env.systemd and provides metadata-only inspection commands.
+    note: The documentation captures the architecture but not the systematic variable-by-variable closure
+      needed to prevent drift.
+    assessed_by: codex-lx-env-audit-20260831
+    assessed_at: '2026-08-31T16:00:00+02:00'
+- id: ocr_runtime_dependencies
+  category: operations
+  title: Wheel services receive reproducible OCR binaries and language data
+  acceptance:
+  - The service owns one Nix Tesseract package with deu and eng traineddata.
+  - Default TESSDATA_PREFIX references that package in the Nix store.
+  - Web and Celery services and wheel maintenance wrappers can execute its Tesseract binary.
+  - The Endoreg role preserves the service default unless an explicit tessdataPrefix override is supplied.
+  required: true
+  verification:
+    kind: command
+    command:
+    - .devenv/state/venv/bin/python
+    - -m
+    - pytest
+    - -q
+    - tests/lx-annotate/test_lx_annotate_ocr_runtime.py
+    timeout_seconds: 900
+  assessment:
+    status: verified
+    evidence:
+    - kind: test
+      reference: '2026-09-23: OCR runtime suite 4 passed in 17.37s (default and overridden prefix, web/Celery
+        PATH, wheel wrapper, built package deu/eng languages).'
+    - kind: test
+      reference: '2026-09-23: gc-02 top-level evaluation and shared wheel Celery environment contract
+        tests passed.'
+    - kind: command
+      reference: '2026-09-23: Tesseract package build and traineddata non-empty checks passed; focused
+        Pyright 0 errors; Ruff, nixfmt, git diff --check and devenv tasks run docs:check passed.'
+    note: Verified Nix configuration and package closure; no NixOS activation or production PDF import
+      performed.
+    assessed_by: codex-pdf-import-20260923
+    assessed_at: '2026-09-23T07:22:20.065832Z'

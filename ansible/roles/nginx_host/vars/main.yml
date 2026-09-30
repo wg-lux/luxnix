@@ -1,6 +1,6 @@
 nginx_host_password_filename: "SCRT_roles_system_password_nginx_host_password"
-nginx_host_ssl_cert_src: "/home/admin/dev/luxnix/secrets/ssl/ssl_cert"
-nginx_host_ssl_key_src: "/home/admin/dev/luxnix/secrets/ssl/ssl_key"
+nginx_host_ssl_cert_src: "{{ luxnix_dev_repo }}/secrets/ssl/ssl_cert"
+nginx_host_ssl_key_src: "{{ luxnix_dev_repo }}/secrets/ssl/ssl_key"
 nginx_host_ssl_cert_dest: "/etc/secrets/vault/ssl_cert"
 nginx_host_ssl_key_dest: "/etc/secrets/vault/ssl_key"
 
@@ -8,6 +8,8 @@ nginx_host_roles:
   nginxHost.enable: "true"
 
   nginxHost.keycloak.enable: "true"
+
+  nginxHost.glm52.enable: "true"
 
   nginxHost.nextcloud.enable: "true"
 

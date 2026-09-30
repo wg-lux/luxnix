@@ -1,64 +1,41 @@
 import argparse
-from lx_administration.models.vault.manager import Vault
-from lx_administration.password.generator import PasswordGenerator
+import getpass
+import sys
+import warnings
+from lx_administration.models.vault import Vault
+from lx_administration.password import PasswordGenerator
 
 # example usage:
 # Lets say you named postgres_host_main_password
-# TODO @hamza: Add the following to the docs
-
 # change export SECRET_NAME=postgres_host_main_password as required
-
-_bash = """
-## CHANGE THIS AS REQUIRED
-export SECRET_TEMPLATE_NAME=nextcloud_host
-export SECRET_NAME=nextcloud_host_password
-
-
-export VAULT_DIR=~/.lxv
-export VAULT_KEY=~/.lsv.key
-export MODE=password
-export KEY_LENGTH=20
-export MIN_LENGTH=12
-export NUM_WORDS=5
-export REQUIRE_UPPER=true
-export REQUIRE_LOWER=true
-export REQUIRE_DIGITS=true
-export REQUIRE_SPECIAL=false
-
-# Look up the secret in VAULT_DIR/vault.yml 
-# (Secret with this name must exist)
-# (Secret with this name has a path and an existing encrypted file)
-export SECRET_PATH=~/.lxv/secrets/system_password/roles/$SECRET_TEMPLATE_NAME/$SECRET_NAME
-ansible-vault view $SECRET_PATH
-
-# run script
-python scripts/update_secret.py --secret-name $SECRET_NAME --mode $MODE --key-length $KEY_LENGTH --min-length $MIN_LENGTH --num-words $NUM_WORDS --require-upper $REQUIRE_UPPER --require-lower $REQUIRE_LOWER --require-digits $REQUIRE_DIGITS --require-special $REQUIRE_SPECIAL
-
-# verify the secret has been updated
-ansible-vault view $SECRET_PATH
-"""
-
-# python update_secret.py --secret-name myapp_password --mode password --key-length 20
-# python update_secret.py --secret-name myapp_passphrase --mode passphrase --num-words 5
-# python update_secret.py --secret-name custom_secret --custom-value "my-custom-value"
 
 
 def parse_bool(value):
     return str(value).lower() in ("true", "1", "yes")
 
 
-def parse_args():
+def parse_args(argv=None):
     """Parse and return command line arguments for secret management.
 
     Returns:
         argparse.Namespace: Parsed command line arguments
     """
-    parser = argparse.ArgumentParser(description="Update a secret in the vault.")
+    parser = argparse.ArgumentParser(
+        description="Update a secret in the vault.", allow_abbrev=False
+    )
+    arguments = sys.argv[1:] if argv is None else argv
+    if any(
+        arg == "--custom-value" or arg.startswith("--custom-value=")
+        for arg in arguments
+    ):
+        parser.error(
+            "--custom-value is unsafe and no longer accepted; use --prompt-value"
+        )
     parser.add_argument(
         "--vault-dir", default="~/.lxv/", help="Path to vault directory"
     )
     parser.add_argument(
-        "--vault-key", default="~/.lsv.key", help="Path to vault key file"
+        "--vault-key", default="~/.lxv.key", help="Path to vault key file"
     )
     parser.add_argument(
         "--secret-name", required=True, help="Name of the secret to update"
@@ -84,19 +61,19 @@ def parse_args():
     parser.add_argument(
         "--require-upper",
         type=parse_bool,
-        default=False,
+        default=True,
         help="Require uppercase characters",
     )
     parser.add_argument(
         "--require-lower",
         type=parse_bool,
-        default=False,
+        default=True,
         help="Require lowercase characters",
     )
     parser.add_argument(
         "--require-digits",
         type=parse_bool,
-        default=False,
+        default=True,
         help="Require digits",
     )
     parser.add_argument(
@@ -106,17 +83,24 @@ def parse_args():
         help="Require special characters",
     )
     parser.add_argument(
-        "--custom-value", help="Use this value instead of generating one"
+        "--prompt-value",
+        action="store_true",
+        help="Read a replacement value at a hidden terminal prompt",
     )
-    return parser.parse_args()
+    return parser.parse_args(arguments)
 
 
 def main():
     args = parse_args()
     vault = Vault.load_dir(args.vault_dir, args.vault_key)
 
-    if args.custom_value:
-        new_value = args.custom_value
+    if args.prompt_value:
+        # Never fall back to an echoed prompt when no terminal is available.
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", getpass.GetPassWarning)
+            new_value = getpass.getpass("Replacement secret: ")
+        if not new_value:
+            raise ValueError("Replacement secret must not be empty")
     else:
         pg = PasswordGenerator(
             mode=args.mode,
@@ -135,9 +119,8 @@ def main():
         )
 
     vault.update_secret_value(args.secret_name, new_value)
-    print(
-        f"Updated secret '{args.secret_name}' with new {'password' if args.mode=='password' else 'passphrase'}."
-    )
+    generated_kind = "password" if args.mode == "password" else "passphrase"
+    print(f"Updated secret '{args.secret_name}' with new {generated_kind}.")
 
 
 if __name__ == "__main__":

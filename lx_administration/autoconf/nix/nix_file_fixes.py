@@ -1,42 +1,45 @@
+"""Normalize comma-separated list syntax in generated Nix files."""
+
+import logging
 import re
 from pathlib import Path
-from datetime import datetime as dt
-from lx_administration.logging import get_logger, log_heading
+
+from lx_administration.logging import log_heading
+
+LIST_ASSIGNMENT = re.compile(r"(\s*[A-Za-z0-9._-]+)\s*=\s*\[([^]]*)\];")
 
 
 def fix_yml_list_in_nix_file(
-    filepath, log_dir: Path = Path("./autoconf/logs"), logger=None
-):
-    log_dir.mkdir(exist_ok=True)
+    filepath: str | Path,
+    logger: logging.Logger | None = None,
+) -> None:
+    source = Path(filepath)
+    if logger is None:
+        logger = logging.getLogger(__name__)
 
-    if not logger:
-        logger = get_logger("fix_yml_list_in_nix_file", reset=True)
-
-    with open(filepath, "r") as f:
-        lines = f.readlines()
-
-    timestamp = dt.now().strftime("%Y-%m-%d %H:%M:%S")
-    log_heading(logger, f"Fixing lists in Nix file: {filepath} at {timestamp}")
-
+    log_heading(logger, f"Normalizing generated Nix lists in {source.name}")
     output = []
-    pattern = re.compile(r"(\s*[A-Za-z0-9._-]+)\s*=\s*\[([^]]*)\];")
-    for i, line in enumerate(lines):
-        original_line = line
-        match = pattern.search(line)
-        if match:
-            left_side, list_content = match.groups()
-            items = [
-                i.strip().strip("'\"") for i in list_content.split(",") if i.strip()
-            ]
-            # Convert items to Nix-style list
-            new_list = "[" + " ".join(f'"{item}"' for item in items) + "]"
-            line = f"{left_side} = {new_list};"
+    for line_number, line in enumerate(
+        source.read_text(encoding="utf-8").splitlines(keepends=True), start=1
+    ):
+        match = LIST_ASSIGNMENT.search(line)
+        if match is None:
+            output.append(line)
+            continue
 
-            logger.info(
-                f"\nFound list in line {i}: {original_line.strip()}\nFixed line {i}: {line.strip()}\n"
-            )
+        left_side, list_content = match.groups()
+        if "," not in list_content:
+            output.append(line)
+            continue
 
-        output.append(line)
+        items = [
+            item.strip().strip("'\"")
+            for item in list_content.split(",")
+            if item.strip()
+        ]
+        new_list = "[" + " ".join(f'"{item}"' for item in items) + "]"
+        line_ending = "\n" if line.endswith("\n") else ""
+        output.append(f"{left_side} = {new_list};{line_ending}")
+        logger.info("Normalized comma-separated list on line %d", line_number)
 
-    with open(f"{filepath}", "w") as f:
-        f.writelines(output)
+    source.write_text("".join(output), encoding="utf-8")

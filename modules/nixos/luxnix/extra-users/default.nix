@@ -1,25 +1,26 @@
 {
   lib,
-  pkgs,
   config,
   ...
 }:
-with lib; 
-with lib.luxnix; let
+with lib;
+with lib.luxnix;
+let
   cfg = config.luxnix.extraUsers;
 
-############################################
-#  Documentation
-############################################
-# users.extraUsers.<name>.linger: 
-# Whether to enable lingering for this user. 
-# If true, systemd user units will start at boot, rather than starting at 
-# login and stopping at logout. This is the declarative equivalent of running 
-# loginctl enable-linger for this user.
-# If false, user units will not be started until the user logs in, and may be 
-# stopped on logout depending on the settings in 
+  ############################################
+  #  Documentation
+  ############################################
+  # users.extraUsers.<name>.linger:
+  # Whether to enable lingering for this user.
+  # If true, systemd user units will start at boot, rather than starting at
+  # login and stopping at logout. This is the declarative equivalent of running
+  # loginctl enable-linger for this user.
+  # If false, user units will not be started until the user logs in, and may be
+  # stopped on logout depending on the settings in
 
-in {
+in
+{
   options.luxnix.extraUsers = {
     enable = mkOption {
       type = types.bool;
@@ -31,7 +32,7 @@ in {
 
     extraUsers = mkOption {
       type = types.attrs;
-      default = {};
+      default = { };
       description = ''
         A set of users to create.
         Is passed to users.extraUsers, common options are:
@@ -52,11 +53,9 @@ in {
     };
   };
 
-
   config = mkIf cfg.enable {
 
     users.extraUsers = cfg.extraUsers;
 
-    
   };
 }

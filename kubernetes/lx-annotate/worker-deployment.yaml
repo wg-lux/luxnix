@@ -1,0 +1,559 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lx-annotate-worker-maintenance
+  labels:
+    app.kubernetes.io/name: lx-annotate
+    app.kubernetes.io/component: worker-maintenance
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lx-annotate
+      app.kubernetes.io/component: worker-maintenance
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: lx-annotate
+        app.kubernetes.io/component: worker-maintenance
+    spec:
+      initContainers:
+        - name: wait-for-bootstrap
+          image: ghcr.io/wg-lux/lx-annotate:0.5.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -lc
+          args:
+            - |
+              set -eu
+
+              marker="${LX_ANNOTATE_BOOTSTRAP_MARKER_DIR:-/var/lib/lx-annotate/data/.bootstrap}/release-${LX_ANNOTATE_RELEASE_ID}.ready"
+              until [ -f "$marker" ]; do
+                echo "waiting for lx-annotate bootstrap marker: $marker"
+                sleep 10
+              done
+          envFrom:
+            - configMapRef:
+                name: lx-annotate-config
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/lx-annotate/data
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+      containers:
+        - name: maintenance-worker
+          image: ghcr.io/wg-lux/lx-annotate:0.5.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -lc
+          args:
+            - >-
+              exec celery -A lx_annotate.celery:app worker
+              --loglevel=INFO
+              --hostname=maintenance@%h
+              --queues="${CELERY_MAINTENANCE_QUEUE},${CELERY_DEFAULT_QUEUE}"
+              --concurrency=1
+              --prefetch-multiplier=1
+              --max-tasks-per-child=100
+          envFrom:
+            - configMapRef:
+                name: lx-annotate-config
+          env:
+            - name: DJANGO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: lx-annotate-secret
+                  key: DJANGO_SECRET_KEY
+            - name: DJANGO_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: lx-annotate-secret
+                  key: DJANGO_DB_PASSWORD
+            - name: OIDC_RP_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: lx-annotate-secret
+                  key: OIDC_RP_CLIENT_ID
+            - name: OIDC_RP_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lx-annotate-secret
+                  key: OIDC_RP_CLIENT_SECRET
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/lx-annotate/data
+            - name: master-key
+              mountPath: /run/secrets/lx-annotate
+              readOnly: true
+          resources:
+            requests:
+              cpu: 250m
+              memory: 1Gi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: lx-annotate-data
+        - name: master-key
+          secret:
+            secretName: lx-annotate-secret
+            items:
+              - key: master-key
+                path: master-key
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lx-annotate-worker-pipeline
+  labels:
+    app.kubernetes.io/name: lx-annotate
+    app.kubernetes.io/component: worker-pipeline
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lx-annotate
+      app.kubernetes.io/component: worker-pipeline
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: lx-annotate
+        app.kubernetes.io/component: worker-pipeline
+    spec:
+      initContainers:
+        - name: wait-for-bootstrap
+          image: ghcr.io/wg-lux/lx-annotate:0.5.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -lc
+          args:
+            - |
+              set -eu
+
+              marker="${LX_ANNOTATE_BOOTSTRAP_MARKER_DIR:-/var/lib/lx-annotate/data/.bootstrap}/release-${LX_ANNOTATE_RELEASE_ID}.ready"
+              until [ -f "$marker" ]; do
+                echo "waiting for lx-annotate bootstrap marker: $marker"
+                sleep 10
+              done
+          envFrom:
+            - configMapRef:
+                name: lx-annotate-config
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/lx-annotate/data
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+      containers:
+        - name: pipeline-worker
+          image: ghcr.io/wg-lux/lx-annotate:0.5.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -lc
+          args:
+            - >-
+              exec celery -A lx_annotate.celery:app worker
+              --loglevel=INFO
+              --hostname=pipeline@%h
+              --queues="${CELERY_PIPELINE_QUEUE}"
+              --concurrency=1
+              --prefetch-multiplier=1
+              --max-tasks-per-child=1
+          envFrom:
+            - configMapRef:
+                name: lx-annotate-config
+          env:
+            - name: DJANGO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: lx-annotate-secret
+                  key: DJANGO_SECRET_KEY
+            - name: DJANGO_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: lx-annotate-secret
+                  key: DJANGO_DB_PASSWORD
+            - name: OIDC_RP_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: lx-annotate-secret
+                  key: OIDC_RP_CLIENT_ID
+            - name: OIDC_RP_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lx-annotate-secret
+                  key: OIDC_RP_CLIENT_SECRET
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/lx-annotate/data
+            - name: master-key
+              mountPath: /run/secrets/lx-annotate
+              readOnly: true
+          resources:
+            requests:
+              cpu: 500m
+              memory: 2Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: lx-annotate-data
+        - name: master-key
+          secret:
+            secretName: lx-annotate-secret
+            items:
+              - key: master-key
+                path: master-key
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lx-annotate-worker-frame-extraction
+  labels:
+    app.kubernetes.io/name: lx-annotate
+    app.kubernetes.io/component: worker-frame-extraction
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lx-annotate
+      app.kubernetes.io/component: worker-frame-extraction
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: lx-annotate
+        app.kubernetes.io/component: worker-frame-extraction
+    spec:
+      initContainers:
+        - name: wait-for-bootstrap
+          image: ghcr.io/wg-lux/lx-annotate:0.5.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -lc
+          args:
+            - |
+              set -eu
+
+              marker="${LX_ANNOTATE_BOOTSTRAP_MARKER_DIR:-/var/lib/lx-annotate/data/.bootstrap}/release-${LX_ANNOTATE_RELEASE_ID}.ready"
+              until [ -f "$marker" ]; do
+                echo "waiting for lx-annotate bootstrap marker: $marker"
+                sleep 10
+              done
+          envFrom:
+            - configMapRef:
+                name: lx-annotate-config
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/lx-annotate/data
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+      containers:
+        - name: frame-extraction-worker
+          image: ghcr.io/wg-lux/lx-annotate:0.5.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -lc
+          args:
+            - >-
+              exec celery -A lx_annotate.celery:app worker
+              --loglevel=INFO
+              --hostname=frame-extraction@%h
+              --queues="${CELERY_FRAME_EXTRACTION_QUEUE}"
+              --concurrency=1
+              --prefetch-multiplier=1
+              --max-tasks-per-child=1
+          envFrom:
+            - configMapRef:
+                name: lx-annotate-config
+          env:
+            - name: DJANGO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: lx-annotate-secret
+                  key: DJANGO_SECRET_KEY
+            - name: DJANGO_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: lx-annotate-secret
+                  key: DJANGO_DB_PASSWORD
+            - name: OIDC_RP_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: lx-annotate-secret
+                  key: OIDC_RP_CLIENT_ID
+            - name: OIDC_RP_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lx-annotate-secret
+                  key: OIDC_RP_CLIENT_SECRET
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/lx-annotate/data
+            - name: master-key
+              mountPath: /run/secrets/lx-annotate
+              readOnly: true
+          resources:
+            requests:
+              cpu: "1"
+              memory: 3Gi
+            limits:
+              cpu: "2"
+              memory: 5Gi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: lx-annotate-data
+        - name: master-key
+          secret:
+            secretName: lx-annotate-secret
+            items:
+              - key: master-key
+                path: master-key
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lx-annotate-worker-inference
+  labels:
+    app.kubernetes.io/name: lx-annotate
+    app.kubernetes.io/component: worker-inference
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lx-annotate
+      app.kubernetes.io/component: worker-inference
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: lx-annotate
+        app.kubernetes.io/component: worker-inference
+    spec:
+      initContainers:
+        - name: wait-for-bootstrap
+          image: ghcr.io/wg-lux/lx-annotate:0.5.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -lc
+          args:
+            - |
+              set -eu
+
+              marker="${LX_ANNOTATE_BOOTSTRAP_MARKER_DIR:-/var/lib/lx-annotate/data/.bootstrap}/release-${LX_ANNOTATE_RELEASE_ID}.ready"
+              until [ -f "$marker" ]; do
+                echo "waiting for lx-annotate bootstrap marker: $marker"
+                sleep 10
+              done
+          envFrom:
+            - configMapRef:
+                name: lx-annotate-config
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/lx-annotate/data
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+      containers:
+        - name: inference-worker
+          image: ghcr.io/wg-lux/lx-annotate:0.5.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -lc
+          args:
+            - >-
+              exec celery -A lx_annotate.celery:app worker
+              --loglevel=INFO
+              --hostname=inference@%h
+              --queues="${CELERY_INFERENCE_QUEUE}"
+              --concurrency=1
+              --prefetch-multiplier=1
+              --max-tasks-per-child=1
+          envFrom:
+            - configMapRef:
+                name: lx-annotate-config
+          env:
+            - name: DJANGO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: lx-annotate-secret
+                  key: DJANGO_SECRET_KEY
+            - name: DJANGO_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: lx-annotate-secret
+                  key: DJANGO_DB_PASSWORD
+            - name: OIDC_RP_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: lx-annotate-secret
+                  key: OIDC_RP_CLIENT_ID
+            - name: OIDC_RP_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lx-annotate-secret
+                  key: OIDC_RP_CLIENT_SECRET
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/lx-annotate/data
+            - name: master-key
+              mountPath: /run/secrets/lx-annotate
+              readOnly: true
+          resources:
+            requests:
+              cpu: "2"
+              memory: 12Gi
+            limits:
+              cpu: "3"
+              memory: 16Gi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: lx-annotate-data
+        - name: master-key
+          secret:
+            secretName: lx-annotate-secret
+            items:
+              - key: master-key
+                path: master-key
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lx-annotate-worker-training
+  labels:
+    app.kubernetes.io/name: lx-annotate
+    app.kubernetes.io/component: worker-training
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lx-annotate
+      app.kubernetes.io/component: worker-training
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: lx-annotate
+        app.kubernetes.io/component: worker-training
+    spec:
+      initContainers:
+        - name: wait-for-bootstrap
+          image: ghcr.io/wg-lux/lx-annotate:0.5.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -lc
+          args:
+            - |
+              set -eu
+
+              marker="${LX_ANNOTATE_BOOTSTRAP_MARKER_DIR:-/var/lib/lx-annotate/data/.bootstrap}/release-${LX_ANNOTATE_RELEASE_ID}.ready"
+              until [ -f "$marker" ]; do
+                echo "waiting for lx-annotate bootstrap marker: $marker"
+                sleep 10
+              done
+          envFrom:
+            - configMapRef:
+                name: lx-annotate-config
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/lx-annotate/data
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+      containers:
+        - name: training-worker
+          image: ghcr.io/wg-lux/lx-annotate:0.5.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -lc
+          args:
+            - >-
+              exec celery -A lx_annotate.celery:app worker
+              --loglevel=INFO
+              --hostname=model-training@%h
+              --queues="${CELERY_TRAINING_QUEUE}"
+              --concurrency=1
+              --prefetch-multiplier=1
+              --max-tasks-per-child=1
+          envFrom:
+            - configMapRef:
+                name: lx-annotate-config
+          env:
+            - name: DJANGO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: lx-annotate-secret
+                  key: DJANGO_SECRET_KEY
+            - name: DJANGO_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: lx-annotate-secret
+                  key: DJANGO_DB_PASSWORD
+            - name: OIDC_RP_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: lx-annotate-secret
+                  key: OIDC_RP_CLIENT_ID
+            - name: OIDC_RP_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lx-annotate-secret
+                  key: OIDC_RP_CLIENT_SECRET
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/lx-annotate/data
+            - name: master-key
+              mountPath: /run/secrets/lx-annotate
+              readOnly: true
+          resources:
+            requests:
+              cpu: "4"
+              memory: 24Gi
+            limits:
+              cpu: "4"
+              memory: 32Gi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: lx-annotate-data
+        - name: master-key
+          secret:
+            secretName: lx-annotate-secret
+            items:
+              - key: master-key
+                path: master-key
