@@ -134,6 +134,9 @@ ansible_roles:
   - "nginx_host"
 
 host_luxnix:
+  #gs-02 is a discrete GPU server, not a hybrid PRIME machine.
+  nvidia_prime.enable: "lib.mkForce false"
+
   # Keep system upgrades manual on this host.
   maintenance.autoUpdates.enable: "false"
 
