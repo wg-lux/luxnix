@@ -52,7 +52,7 @@ in
       # PRIME owns the package when both modules are enabled. Its assertion
       # requires matching branch selections; package options are unique.
       nvidiaPersistenced = true;
-      package = mkDefault config.boot.kernelPackages.nvidiaPackages.${cfg.nvidiaDriver};
+      package = mkForce config.boot.kernelPackages.nvidiaPackages.stable;
     };
   };
 
