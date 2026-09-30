@@ -66,7 +66,7 @@ in
         enable = false;
           #cfg.plymouth;
       };
-      boot.consoleLogLevel = 7;
+      consoleLogLevel = 7;
     };
 
     # Boot space management configuration
