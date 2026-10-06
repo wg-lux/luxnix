@@ -7,6 +7,19 @@ configuration:
   endpoint: http://127.0.0.1:11434
   model: gemma4:e2b
   bootstrap: luxnix.ollama.enableModelBootstrap
+  extraction_worker:
+    setting: services.luxnix.lxAnnotateLocal.runtime.llmInferenceWorker.mode
+    condition: services.luxnix.lxAnnotateLocal.runtime.llm.enable
+    environment_flag: LLM_ENABLED
+    when_enabled: always
+    when_disabled: manual
+    startup_order: Ollama starts before the worker through existing Requires/After dependencies.
+    reason: Report extraction jobs queued on llm_inference need an active consumer.
+    application_alignment: >-
+      ReportReader and FrameCleaner first honor LLM_ENABLED, then check the
+      configured provider and model at runtime. Keep those availability checks
+      and existing non-LLM fallback in lx-anonymizer; worker autostart follows
+      the configuration flag rather than a transient provider health probe.
 reason: >-
   Narrative report writing must not inherit the lx-gemma4-e2b-json custom
   model's system prompt restricting output to five patient metadata fields.
@@ -33,6 +46,7 @@ verification:
     - "nix eval --raw '.#nixosConfigurations.gc-02.config.systemd.services.lx-annotate.environment.LLM_MODEL'"
   after_deployment:
     - Confirm Ollama /api/tags contains gemma4:e2b after model bootstrap succeeds.
+    - Confirm lx-annotate-celery-llm-inference-worker.service is active and consumes llm_inference jobs.
     - Confirm the authenticated reporting/llm/status/ endpoint returns ready=true and model=gemma4:e2b.
     - Verify narrative report output and metadata extraction using approved test cases.
   limits: >-

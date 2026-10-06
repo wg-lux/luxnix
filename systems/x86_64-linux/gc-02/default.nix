@@ -141,6 +141,10 @@ lib.foldl' lib.recursiveUpdate
       services.luxnix.lxAnnotateLocal.runtime.llm.model = "gemma4:e2b";
     }
     {
+      services.luxnix.lxAnnotateLocal.runtime.llmInferenceWorker.mode =
+        lib.mkIf config.services.luxnix.lxAnnotateLocal.runtime.llm.enable "always";
+    }
+    {
       services.luxnix.ollama.acceleration = "cuda";
     }
     {
@@ -606,7 +610,7 @@ lib.foldl' lib.recursiveUpdate
       luxnix.generic-settings.systemStateVersion = "23.11";
     }
     {
-      luxnix.vault.client.auth.deferUntilProvisioned = true;
+      luxnix.vault.client.auth.deferUntilProvisioned = false;
     }
     {
       networking.hosts."172.16.255.22" = [

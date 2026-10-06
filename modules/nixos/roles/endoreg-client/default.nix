@@ -59,7 +59,10 @@ in
       api = apiOptions;
 
       # Database Configuration Options
-      database = databaseOptions;
+      database = mkOption {
+        type = types.submodule databaseOptions;
+        default = { };
+      };
 
       environmentDefaults = environmentDefaultsOptions;
 

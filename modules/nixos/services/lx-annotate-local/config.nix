@@ -530,7 +530,7 @@ let
       "auth"
       "deferUntilProvisioned"
     ] false config;
-  externalPostgresConfigured = cfg.runtime.externalServices.postgresHost != null;
+  externalPostgresConfigured = cfg.database.ownership == "external";
   externalRedisConfigured = cfg.runtime.externalServices.redisUrl != null;
   localPostgresSetupUnits = lib.optionals (!externalPostgresConfigured) [
     "postgres-endoreg-setup.service"
@@ -542,9 +542,6 @@ let
       [
         "lx-annotate-data-recovery.service"
       ];
-  hlsBackfillServiceUnits = lib.optionals cfg.hlsBackfill.enable [
-    "lx-annotate-hls-backfill.service"
-  ];
   hubNodeProvisioningServiceUnits = lib.optionals cfg.hub.nodeProvisioning.enable [
     "lx-annotate-hub-node-provisioning.service"
   ];
@@ -785,15 +782,6 @@ let
   ];
 
   serviceUserIoAccessLinkPath = "${endoreg-service-user-home}/lx-annotate-io";
-  desktopPreanonymizedLinkTarget = "${serviceUserIoAccessLinkPath}/preanonymized_import";
-  desktopSapImportLinkTarget = "${serviceUserIoAccessLinkPath}/sap_import";
-
-  lxAnnotateTranscodeVideoCommand = "${effectiveRuntimePackage}/bin/lx-annotate-manage transcode_video";
-  lxAnnotateFileMoverTranscodeCommand = "${lxAnnotateTranscodeVideoCommand} --input-dir \"$1\" --filename \"$2\" --output-dir \"$3\" --overwrite --json";
-  lxAnnotateFileMoverTranscodeEnv = ''
-    ${envContract.commonShellExportText}
-    export LD_LIBRARY_PATH="${runtimeLdLibraryPath}:''${LD_LIBRARY_PATH:-}"
-  '';
 
   hubNodeProvisioningData = pkgs.writeText "lx-annotate-hub-nodes.json" (
     builtins.toJSON (
@@ -806,6 +794,7 @@ let
       ) cfg.hub.nodeProvisioning.nodes
     )
   );
+
   hubNodeProvisioningPython = pkgs.writeText "lx-annotate-provision-hub-nodes.py" ''
     import json
     from pathlib import Path
@@ -902,77 +891,8 @@ let
     '') cfg.hub.transferApi.recipientPrivateKeyFiles}
   '';
 
-  mkWorker =
-    {
-      pool,
-      queues,
-      hostname,
-      unitName ? null,
-      mode ? "always",
-      environment ? { },
-      cudaVisibleDevices ? null,
-      taskSoftTimeLimitSeconds ? null,
-      taskHardTimeLimitSeconds ? null,
-      onCalendar ? null,
-      randomizedDelaySec ? null,
-      persistentTimer ? null,
-      runtimeMaxSec ? null,
-      timeoutStopSec ? null,
-      after ? [ ],
-      wants ? [ ],
-      requires ? [ ],
-    }:
-    {
-      inherit
-        queues
-        hostname
-        mode
-        environment
-        after
-        wants
-        requires
-        ;
-      inherit (pool)
-        concurrency
-        maxTasksPerChild
-        ;
-      serviceConfig = {
-        MemoryHigh = pool.memoryHigh;
-        MemoryMax = pool.memoryMax;
-        CPUQuota = pool.cpuQuota;
-        CPUWeight = pool.cpuWeight;
-        IOWeight = pool.ioWeight;
-        Nice = pool.nice;
-        OOMScoreAdjust = pool.oomScoreAdjust;
-      };
-    }
-    // optionalAttrs (unitName != null) {
-      inherit unitName;
-    }
-    // optionalAttrs (cudaVisibleDevices != null) {
-      inherit cudaVisibleDevices;
-    }
-    // optionalAttrs (taskSoftTimeLimitSeconds != null) {
-      inherit taskSoftTimeLimitSeconds;
-    }
-    // optionalAttrs (taskHardTimeLimitSeconds != null) {
-      inherit taskHardTimeLimitSeconds;
-    }
-    // optionalAttrs (onCalendar != null) {
-      inherit onCalendar;
-    }
-    // optionalAttrs (randomizedDelaySec != null) {
-      inherit randomizedDelaySec;
-    }
-    // optionalAttrs (persistentTimer != null) {
-      inherit persistentTimer;
-    }
-    // optionalAttrs (runtimeMaxSec != null) {
-      inherit runtimeMaxSec;
-    }
-    // optionalAttrs (timeoutStopSec != null) {
-      inherit timeoutStopSec;
-    };
+  # Internal worker record contract: Workers.md
+  mkWorker = import ./worker.nix { inherit lib; };
 
   postValidationWorkerEnv = { };
   inferenceWorkerEnv = { };
@@ -1445,7 +1365,7 @@ let
     install -d -m 0755 -o ${endoreg-service-user-name} -g ${endoreg-service-group-name} ${envConfDir}
     install -d -m 0750 -o ${endoreg-service-user-name} -g ${endoreg-service-group-name} ${envDataDir}
 
-    source_pwd="${cfg.database.endoregLocalUserPasswordFile}"
+    source_pwd="${cfg.database.applicationPasswordFile}"
     target_pwd="${envConfDir}/db_pwd"
     if [ -f "$source_pwd" ]; then
       cp "$source_pwd" "$target_pwd"
@@ -1594,11 +1514,7 @@ let
     runLocalHlsMaterializationScript
     runLocalMasterKeyCheckScript
     ;
-  inherit (lxAnnotateScripts.serviceOrdering)
-    fileMoverAfter
-    fileMoverRequires
-    fileMoverWants
-    ;
+
   emergencyStorageReliefScript = pkgs.writeShellScriptBin "runLxAnnotateEmergencyStorageRelief" ''
     set -euo pipefail
 
@@ -1672,109 +1588,44 @@ let
     inherit
       alwaysWorkerServiceUnits
       appReadWritePaths
-      appServiceBaseAfter
-      appServiceBaseRequires
-      appServiceBaseWants
-      boolString
-      brokerUrlUsesSecureTransport
       celeryBeatService
-      celeryBrokerUrl
-      celeryWorkerResourceEnv
       cfg
-      commonEnv
       commonExtraEnv
       config
       dataCleanupScript
       dataRecoveryServiceUnits
-      desktopPreanonymizedLinkTarget
-      desktopSapImportLinkTarget
-      effectivePackageVersion
       effectiveRuntimePackage
-      emergencyStorageReliefConfig
       emergencyStorageReliefScript
       encryptedDataMountUnitConfig
-      encryptedDataScripts
       encryptionServiceUnits
       endoreg-service-group-name
       endoreg-service-user-home
       endoreg-service-user-name
-      endoregDbProject
-      endoregDbRevision
-      endoregDbSource
-      endoregDbVersion
       envConfDir
-      envContract
       envDataDir
       envSystemdFilePath
-      externalPostgresConfigured
-      externalRedisConfigured
-      ffmpegStreamThrottleNormalProfile
       ffmpegStreamThrottleResetScript
       ffmpegStreamThrottleScript
-      ffmpegStreamThrottleStateFile
       ffmpegStreamThrottleWorkerUnit
-      fileMoverAfter
-      fileMoverRequires
-      fileMoverWants
-      hlsBackfillServiceUnits
-      hubBackupScripts
       hubEnvelopeKeyPreflightScript
-      hubEnvelopePreflightServiceUnits
-      hubNodeProvisioningData
-      hubNodeProvisioningPython
       hubNodeProvisioningScript
-      hubNodeProvisioningServiceUnits
-      hubOidcMiddlewarePolicy
-      hubRootPath
-      hubTransferHttpTimeout
-      hubTransferProxyExtraConfig
-      inferenceWorkerEnv
-      inputs
-      isLocalPostgresHost
-      isLocalRedisUrl
       lib
-      llmInferenceWorkerEnv
       loadBaseDataServiceScript
       localPostgresServiceUnits
       localPostgresSetupUnits
       localRedisServiceUnits
       lxAnnotateEncryptedDataMountScript
       lxAnnotateEncryptedDataUmountScript
-      lxAnnotateEndoregDbDependencies
-      lxAnnotateEndoregDbVersion
-      lxAnnotateFileMoverTranscodeCommand
-      lxAnnotateFileMoverTranscodeEnv
       lxAnnotateJournalNamespace
       lxAnnotateMigrateVideoStreamableStorageScript
-      lxAnnotateProject
-      lxAnnotateRuntime
-      lxAnnotateScripts
-      lxAnnotateSource
-      lxAnnotateTranscodeVideoCommand
-      maintenanceWorkerPool
-      managedEncryptedDataServiceName
       managedSecretsSetupUnits
       mkAfter
-      mkBefore
-      mkDefault
       mkForce
       mkIf
       mkLxAnnotateAppService
-      mkMerge
-      mkTimer
-      mkWorker
-      mkWorkerService
-      optionalAttrs
-      optionalString
       packageStaticRoot
-      packageVersion
       pkgs
-      postValidationWorkerEnv
-      processedReportDirName
-      processedVideoDirName
       publicSslCertificatePath
-      pythonInterpreter
-      repoDir
       runLocalDataRecoveryScript
       runLocalHlsMaterializationScript
       runLocalHubBackupScript
@@ -1782,46 +1633,15 @@ let
       runtime
       runtimeDataRootPath
       runtimeEnvScript
-      runtimeHostDriverLibraryPaths
-      runtimeIoImportRootPath
-      runtimeLdLibraryPath
-      runtimeLibraryPackages
-      runtimeMoverStagingDirPath
       runtimeRootPath
       runtimeSapImportDirPath
-      runtimeSapImportFailedDirPath
-      runtimeSapImportProcessedDirPath
-      runtimeStaticRootPath
       runtimeStorageRootPath
-      runtimeStreamableVideoProcessedRootPath
-      runtimeStreamableVideoRawRootPath
-      runtimeStreamableVideoRootPath
       runtimeWatcherPreanonymizedDirPath
       runtimeWatcherReportDirPath
       runtimeWatcherVideoDirPath
-      runtimeWheelRootPath
-      runtimeWheelVenvPath
       sapImportServiceScript
-      serviceUserIoAccessLinkPath
-      sslCertPath
-      sslCfg
-      sslKeyPath
-      storageReliefScripts
-      streamableExternalStorageEnabled
-      streamableExternalStorageRoot
-      trainingWorkerEnv
       useWheelRuntime
-      vaultClientHubPkiEnabled
-      vaultClientHubPkiDeferred
-      videoStreamProxyExtraConfig
-      wheelDependencyOverrideArgs
-      wheelDependencyOverrideHash
-      wheelDependencyOverrides
-      wheelFilePath
-      wheelRuntimePackage
-      wheelRuntimePrepareServiceUnits
       wheelhousePath
-      workerConfigs
       workerServices
       workerTimers
       ;
@@ -2008,12 +1828,33 @@ in
               message = "services.luxnix.lxAnnotateLocal.runtime.clustered.enable requires a non-local Redis URL.";
             }
             {
-              assertion = !cfg.runtime.clustered.enable || cfg.runtime.externalServices.postgresHost != null;
-              message = "services.luxnix.lxAnnotateLocal.runtime.clustered.enable requires runtime.externalServices.postgresHost.";
+              assertion = externalPostgresConfigured || isLocalPostgresHost cfg.database.host;
+              message = "LX-Annotate database.ownership = local requires a local database.host; declare external ownership for a remote database.";
             }
             {
               assertion =
-                !cfg.runtime.clustered.enable || !isLocalPostgresHost cfg.runtime.externalServices.postgresHost;
+                externalPostgresConfigured
+                || (config.roles.postgres.default.enable && config.services.postgresql.enable);
+              message = "LX-Annotate database.ownership = local requires the local PostgreSQL role and service.";
+            }
+            {
+              assertion =
+                externalPostgresConfigured
+                || (
+                  cfg.database.name == config.roles.postgres.default.defaultDbName
+                  && cfg.database.user == config.roles.postgres.default.defaultDbName
+                  && cfg.database.port == config.services.postgresql.settings.port
+                  &&
+                    cfg.database.applicationPasswordFile == config.roles.endoreg-client.database.applicationPasswordFile
+                );
+              message = "LX-Annotate managed-local database name/user, port and credential file must match roles.postgres.default and roles.endoreg-client.database.applicationPasswordFile; align provisioning explicitly or declare external ownership.";
+            }
+            {
+              assertion = !cfg.runtime.clustered.enable || externalPostgresConfigured;
+              message = "LX-Annotate clustered runtime requires database.ownership = external.";
+            }
+            {
+              assertion = !cfg.runtime.clustered.enable || !isLocalPostgresHost cfg.database.host;
               message = "services.luxnix.lxAnnotateLocal.runtime.clustered.enable requires a non-local PostgreSQL host.";
             }
             {
@@ -2425,7 +2266,6 @@ in
             luxnix = {
               lxAnnotateLocal = {
                 hub = {
-                  enable = mkDefault (config.networking.hostName == "gs-02");
                   outboundTransfer = {
                     clientCertificateFile = mkIf vaultClientHubPkiEnabled (
                       mkDefault config.luxnix.vault.client.hubPki.certificateFile
@@ -2484,21 +2324,13 @@ in
                   extraSettings.IS_CENTRAL_NODE = mkIf cfg.hub.enable (mkForce true);
                   djangoAllowedHosts = mkAfter [ cfg.django.hostname ];
                 };
-                database = {
-                  host = mkIf (cfg.runtime.externalServices.postgresHost != null) (
-                    mkForce cfg.runtime.externalServices.postgresHost
-                  );
-                  port = mkIf (cfg.runtime.externalServices.postgresPort != null) (
-                    mkForce cfg.runtime.externalServices.postgresPort
-                  );
-                };
               };
               ollama.enable = mkIf (llmWorkerMode == "always" && useLocalOllama) (mkDefault true);
               fileMover = {
                 serviceDependencies = {
-                  after = mkAfter fileMoverAfter;
-                  wants = mkAfter fileMoverWants;
-                  requires = mkAfter fileMoverRequires;
+                  after = mkAfter lxAnnotateScripts.serviceOrdering.fileMoverAfter;
+                  wants = mkAfter lxAnnotateScripts.serviceOrdering.fileMoverWants;
+                  requires = mkAfter lxAnnotateScripts.serviceOrdering.fileMoverRequires;
                 };
                 paths = {
                   destinationVideoDir = mkDefault runtimeWatcherVideoDirPath;
@@ -2506,13 +2338,16 @@ in
                   stagingDir = mkDefault runtimeMoverStagingDirPath;
                 };
                 desktop.links = {
-                  preanonymized_import = mkDefault desktopPreanonymizedLinkTarget;
-                  sap_import = mkDefault desktopSapImportLinkTarget;
+                  preanonymized_import = mkDefault "${serviceUserIoAccessLinkPath}/preanonymized_import";
+                  sap_import = mkDefault "${serviceUserIoAccessLinkPath}/sap_import";
                 };
                 videoTranscodeFallback = {
-                  command = mkDefault lxAnnotateFileMoverTranscodeCommand;
+                  command = mkDefault "${effectiveRuntimePackage}/bin/lx-annotate-manage transcode_video --input-dir \"$1\" --filename \"$2\" --output-dir \"$3\" --overwrite --json";
                   workingDir = mkDefault runtimeDataRootPath;
-                  environmentScript = mkDefault lxAnnotateFileMoverTranscodeEnv;
+                  environmentScript = mkDefault ''
+                    ${envContract.commonShellExportText}
+                    export LD_LIBRARY_PATH="${runtimeLdLibraryPath}:''${LD_LIBRARY_PATH:-}"
+                  '';
                 };
               };
               lxSsl.enable = mkDefault true;
@@ -2617,7 +2452,9 @@ in
             };
           };
 
-          luxnix.generic-settings.postgres.enable = mkDefault (!externalPostgresConfigured);
+          # Only request local provisioning when this application owns it. Other
+          # consumers and inventory retain control of machine-wide PostgreSQL.
+          luxnix.generic-settings.postgres.enable = mkIf (!externalPostgresConfigured) (mkDefault true);
 
           fileSystems = optionalAttrs streamableExternalStorageEnabled {
             "${runtimeStreamableVideoRootPath}" = {

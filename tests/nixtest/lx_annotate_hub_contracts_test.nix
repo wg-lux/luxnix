@@ -19,7 +19,6 @@ let
       )
     )
   );
-  lxAnnotateScripts = "${repoRoot}/modules/nixos/services/lx-annotate-local/scripts.nix";
   lxAnnotateEnvScripts = "${repoRoot}/modules/nixos/services/lx-annotate-local/scripts/env.nix";
   vaultConfig = "${repoRoot}/modules/nixos/luxnix/vault/default.nix";
 in
@@ -35,7 +34,7 @@ in
           ${ntlib.helpers.scriptHelpers}
           assert_file_contains ${lxAnnotateOptions} 'deploymentRole = mkOption' "lx-annotate must expose an explicit deployment role"
           assert_file_contains ${lxAnnotateOptions} 'LuxNix central server nodes map to central_hub' "deployment role docs must distinguish central servers from laptop center nodes"
-          assert_file_contains ${lxAnnotateConfig} 'config\.networking\.hostName == "gs-02"' "lx-annotate hub mode must retain the declared gs-02 default"
+          assert_file_contains ${repoRoot}/ansible/inventory/group_vars/endoreg_central_hub.yml 'luxnix\.lxAnnotateLocal\.hub\.enable: "true"' "central hub inventory must explicitly enable hub mode"
           assert_file_contains ${lxAnnotateConfig} 'if cfg\.hub\.enable then "central_hub" else "site_node"' "lx-annotate deployment role must derive from its own hub contract"
           assert_file_contains ${lxAnnotateConfig} 'extraSettings\.IS_CENTRAL_NODE = mkIf cfg\.hub\.enable' "hub mode must set the Django central-node contract"
           assert_file_contains ${lxAnnotateConfig} 'mkForce true' "the central-node contract must override the site-role default"
@@ -54,8 +53,7 @@ in
           assert_file_contains ${lxAnnotateEnvScripts} 'ENDOREG_HUB_TRANSFER_REQUIRE_MTLS = boolString cfg\.hub\.transferApi\.requireMtls' "lx-annotate runtime env must define ENDOREG_HUB_TRANSFER_REQUIRE_MTLS"
           assert_file_contains ${lxAnnotateEnvScripts} 'ENDOREG_HUB_TRANSFER_MTLS_META_KEY = cfg\.hub\.transferApi\.mtlsMetaKey' "lx-annotate runtime env must define ENDOREG_HUB_TRANSFER_MTLS_META_KEY"
           assert_file_contains ${lxAnnotateEnvScripts} 'ENDOREG_HUB_TRANSFER_MTLS_META_VALUE = cfg\.hub\.transferApi\.mtlsMetaValue' "lx-annotate runtime env must define ENDOREG_HUB_TRANSFER_MTLS_META_VALUE"
-          assert_file_contains ${lxAnnotateScripts} 'emit_common_systemd_env' "lx-annotate systemd env files must render the canonical common environment"
-          assert_file_contains ${lxAnnotateScripts} 'commonSystemdEnvText' "lx-annotate systemd env files must use the shared serialized environment"
+          assert_file_contains ${lxAnnotateConfig} 'envContract\.commonSystemdEnvText' "lx-annotate systemd env files must use the shared serialized environment"
           assert_file_contains ${lxAnnotateConfig} 'environment = commonExtraEnv // environment' "lx-annotate services must receive the canonical common environment"
         '';
       }

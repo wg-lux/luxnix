@@ -21,8 +21,9 @@ group_services:
   luxnix.lxAnnotateLocal.hub.enable: "true"
   luxnix.lxAnnotateLocal.runtime.deploymentRole: '"central_hub"'
   luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl: '"redis://172.16.255.14:6380/1"'
-  luxnix.lxAnnotateLocal.runtime.externalServices.postgresHost: '"172.16.255.22"'
-  luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort: 5432
+  luxnix.lxAnnotateLocal.database.ownership: '"external"'
+  luxnix.lxAnnotateLocal.database.host: '"172.16.255.22"'
+  luxnix.lxAnnotateLocal.database.port: 5432
   luxnix.lxAnnotateLocal.runtime.celeryBroker.secureTransportConfirmed: "true"
   luxnix.lxAnnotateLocal.runtime.trainingWorker.mode: '"manual"'
   luxnix.lxAnnotateLocal.hub.transferApi.enable: "true"

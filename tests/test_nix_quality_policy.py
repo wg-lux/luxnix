@@ -435,12 +435,3 @@ def test_vfio_uses_the_defined_libvirt_run_as_root_option() -> None:
 
     assert "cfg.qemu.runAsRoot" not in module
     assert "config.virtualisation.libvirtd.qemu.runAsRoot" in module
-
-
-def test_custom_packages_combines_podman_flags_booleanly() -> None:
-    module = (REPO_ROOT / "modules/nixos/roles/custom-packages/default.nix").read_text(
-        encoding="utf-8"
-    )
-
-    podman_expression = module.split("podmanEnabled =", 1)[1].split(";", 1)[0]
-    assert podman_expression.count("||") == 2

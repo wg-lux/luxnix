@@ -20,7 +20,7 @@ in
         options = {
           enable = mkOption {
             type = types.bool;
-            default = config.networking.hostName == "gs-02";
+            default = false;
             description = "Mark this host as the central lx-annotate hub node and enable central-node groundwork defaults.";
           };
           transferApi = mkOption {

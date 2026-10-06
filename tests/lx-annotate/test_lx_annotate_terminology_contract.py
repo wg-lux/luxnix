@@ -174,21 +174,6 @@ def test_base_data_service_always_reconciles_and_propagates_failures(
         assert result.stdout.splitlines() == ["--reconcile-legacy"]
 
 
-def test_repo_migration_reconciles_after_schema_and_before_success_stamp() -> None:
-    source = (
-        REPO_ROOT / "modules/nixos/services/lx-annotate-local/scripts.nix"
-    ).read_text()
-    body = source.split("lxAnnotateMigrateScript = pkgs.writeShellScriptBin", 1)[
-        1
-    ].split("\n  '';", 1)[0]
-    command = "run_repo_django_command load_base_db_data --reconcile-legacy"
-    assert body.index("migrate --noinput") < body.index(command)
-    assert body.index(command) < body.index(
-        'if [ "$current_revision" != "$last_bootstrap_revision" ]'
-    )
-    assert "set -euo pipefail" in body
-
-
 def test_base_data_uses_prepared_runtime_environment() -> None:
     contract = _gc_02_terminology_contract()
     assert contract["loadBaseData"]["execStart"].endswith(

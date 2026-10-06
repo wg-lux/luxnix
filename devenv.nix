@@ -86,7 +86,7 @@ in
       name = "nix-quality";
       entry = "${nixQualityHook}/bin/nix-quality-hook";
       files = "\\.nix$|^flake\\.lock$|^nix-quality\\.yml$|^scripts/nix-quality\\.py$|^(homes|lib|modules|overlays|packages|shells|systems|tests/nixtest|topology)/";
-      pass_filenames = true;
+      pass_filenames = false;
     };
   };
 

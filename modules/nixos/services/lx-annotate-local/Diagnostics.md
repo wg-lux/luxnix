@@ -359,7 +359,7 @@ LuxNix handles the database boundary through one shared environment contract:
 - `lx-annotate-migrate.service` runs before base-data loading, the master-key
   check, and the web service
 - local PostgreSQL and its setup unit are ordered before application units when
-  `runtime.externalServices.postgresHost` is unset
+  `database.ownership = "local"`
 
 First inspect non-secret connection metadata and confirm that the service user
 can read the password file:
@@ -651,7 +651,7 @@ nixos-option services.luxnix.lxAnnotateLocal.django.port
 nixos-option services.luxnix.lxAnnotateLocal.runtime.mode
 nixos-option services.luxnix.lxAnnotateLocal.runtime.encryptedDataDir
 nixos-option services.luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl
-nixos-option services.luxnix.lxAnnotateLocal.runtime.externalServices.postgresHost
+nixos-option services.luxnix.lxAnnotateLocal.database
 nixos-option services.luxnix.lxAnnotateLocal.runtime.frameExtractionWorker.mode
 nixos-option services.luxnix.lxAnnotateLocal.runtime.ffmpegWorker.mode
 nixos-option services.luxnix.lxAnnotateLocal.runtime.inferenceWorker.mode

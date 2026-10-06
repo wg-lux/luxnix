@@ -4,6 +4,9 @@
   pkgs,
   ...
 }:
+
+# In case of boot failure, rename this to default.nix and rerun. Plymouth is disabled, making boot error messages visible
+
 let
   inherit (lib) mkIf;
   inherit (lib.luxnix) mkBoolOpt;
@@ -36,8 +39,8 @@ in
       };
 
       kernelParams = lib.optionals cfg.plymouth [
-        "quiet"
-        "splash"
+        # "quiet"
+        # "splash"
         "loglevel=3"
         "udev.log_level=0"
       ];
@@ -63,8 +66,10 @@ in
       };
 
       plymouth = {
-        enable = cfg.plymouth;
+        enable = false;
+        #cfg.plymouth;
       };
+      consoleLogLevel = 7;
     };
 
     # Boot space management configuration

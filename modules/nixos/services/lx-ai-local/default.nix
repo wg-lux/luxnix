@@ -541,46 +541,12 @@ in
     };
 
     database = mkOption {
-      type = types.submodule {
-        options = {
-          host = mkOption {
-            type = types.str;
-            default = "localhost";
-          };
-
-          port = mkOption {
-            type = types.port;
-            default = 5432;
-          };
-
-          name = mkOption {
-            type = types.str;
-            default = "endoregDbLocal";
-          };
-
-          user = mkOption {
-            type = types.str;
-            default = "endoregDbLocal";
-          };
-
-          passwordFile = mkOption {
-            type = types.path;
-            default = "/etc/secrets/vault/SCRT_local_password_maintenance_password";
-            description = "Vault managed DB password";
-          };
-
-          sslMode = mkOption {
-            type = types.str;
-            default = "prefer";
-          };
-
-          endoregLocalUserPasswordFile = mkOption {
-            type = types.path;
-            default = "/var/lib/postgresql/endoregDbLocal.password";
-            description = "Local postgres password file";
-          };
-        };
-      };
+      type = types.submodule (
+        import ../../roles/endoreg-client/database.nix {
+          inherit lib;
+          strictSslMode = false;
+        }
+      );
       default = { };
       description = "Database configuration for lx-ai.";
     };
@@ -654,7 +620,7 @@ in
           # Now it is safe to create conf inside the lx-ai repository.
           ${pkgs.coreutils}/bin/mkdir -p ${envConfDir}
 
-          SOURCE_PWD="${cfg.database.endoregLocalUserPasswordFile}"
+          SOURCE_PWD="${cfg.database.applicationPasswordFile}"
           TARGET_PWD="${envConfDir}/db_pwd"
 
           if [ -f "$SOURCE_PWD" ]; then

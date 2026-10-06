@@ -174,13 +174,72 @@ lib.foldl' lib.recursiveUpdate
       luxnix.generic-settings.gpu.nvidia.prime.enable = true;
     }
     {
+      luxnix.generic-settings.gpu.nvidia.prime.nvidiaBusId = "PCI:1:0:0";
+    }
+    {
+      luxnix.generic-settings.gpu.nvidia.prime.onboardBusId = "PCI:0:2:0";
+    }
+    {
+      luxnix.generic-settings.gpu.nvidia.prime.onboardType = "intel";
+    }
+    {
+      luxnix.generic-settings.hostPlatform = "x86_64-linux";
+    }
+    {
       luxnix.generic-settings.language = "english";
+    }
+    {
+      luxnix.generic-settings.linux.cpuMicrocode = "intel";
+    }
+    {
+      luxnix.generic-settings.linux.initrd.availableKernelModules = [
+        "vmd"
+        "xhci_pci"
+        "ahci"
+        "nvme"
+        "usb_storage"
+        "sd_mod"
+        "thunderbolt"
+      ];
+    }
+    {
+      luxnix.generic-settings.linux.initrd.kernelModules = [
+        "dm-snapshot"
+        "nfs"
+        "btrfs"
+      ];
+    }
+    {
+      luxnix.generic-settings.linux.initrd.supportedFilesystems = [
+        "nfs"
+        "btrfs"
+      ];
+    }
+    {
+      luxnix.generic-settings.linux.kernelModules = [
+        "kvm-intel"
+      ];
+    }
+    {
+      luxnix.generic-settings.linux.kernelModulesBlacklist = [ ];
     }
     {
       luxnix.generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
     }
     {
+      luxnix.generic-settings.linux.kernelParams = [ ];
+    }
+    {
+      luxnix.generic-settings.linux.resumeDevice = "/dev/disk/by-label/nixos";
+    }
+    {
       luxnix.generic-settings.linux.rmemMax = 7500000;
+    }
+    {
+      luxnix.generic-settings.linux.supportedFilesystems = [
+        "btrfs"
+        "nfs"
+      ];
     }
     {
       luxnix.generic-settings.linux.wmemMax = 7500000;
@@ -445,6 +504,9 @@ lib.foldl' lib.recursiveUpdate
       luxnix.generic-settings.sensitiveServiceGroupName = "sensitiveServices";
     }
     {
+      luxnix.generic-settings.systemStateVersion = "23.11";
+    }
+    {
       luxnix.generic-settings.traefikHostDomain = "traefik.endo-reg.net";
     }
     {
@@ -520,69 +582,7 @@ lib.foldl' lib.recursiveUpdate
       luxnix.vault.psk = "/etc/secrets/.psk";
     }
     {
-      luxnix.generic-settings.gpu.nvidia.prime.nvidiaBusId = "PCI:1:0:0";
-    }
-    {
-      luxnix.generic-settings.gpu.nvidia.prime.onboardBusId = "PCI:0:2:0";
-    }
-    {
-      luxnix.generic-settings.gpu.nvidia.prime.onboardType = "intel";
-    }
-    {
-      luxnix.generic-settings.hostPlatform = "x86_64-linux";
-    }
-    {
-      luxnix.generic-settings.linux.cpuMicrocode = "intel";
-    }
-    {
       luxnix.generic-settings.linux.extraModulePackages = [ ];
-    }
-    {
-      luxnix.generic-settings.linux.initrd.availableKernelModules = [
-        "vmd"
-        "xhci_pci"
-        "ahci"
-        "nvme"
-        "usb_storage"
-        "sd_mod"
-        "thunderbolt"
-      ];
-    }
-    {
-      luxnix.generic-settings.linux.initrd.kernelModules = [
-        "dm-snapshot"
-        "nfs"
-        "btrfs"
-      ];
-    }
-    {
-      luxnix.generic-settings.linux.initrd.supportedFilesystems = [
-        "nfs"
-        "btrfs"
-      ];
-    }
-    {
-      luxnix.generic-settings.linux.kernelModules = [
-        "kvm-intel"
-      ];
-    }
-    {
-      luxnix.generic-settings.linux.kernelModulesBlacklist = [ ];
-    }
-    {
-      luxnix.generic-settings.linux.kernelParams = [ ];
-    }
-    {
-      luxnix.generic-settings.linux.resumeDevice = "/dev/disk/by-label/nixos";
-    }
-    {
-      luxnix.generic-settings.linux.supportedFilesystems = [
-        "btrfs"
-        "nfs"
-      ];
-    }
-    {
-      luxnix.generic-settings.systemStateVersion = "23.11";
     }
     {
       luxnix.gpu-eval.enable = true;

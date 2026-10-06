@@ -10,7 +10,7 @@ let
 
   # The application password file is the canonical credential for the local
   # EndoReg role.  It is intentionally separate from human/admin secrets.
-  endoregDbLocalPasswordFile = config.roles.endoreg-client.database.endoregLocalUserPasswordFile;
+  applicationPasswordFile = config.roles.endoreg-client.database.applicationPasswordFile;
 
   # Utility function to create attributes for a user
   mkDefaultUser = user: {
@@ -82,13 +82,13 @@ let
     }
 
     check_endoreg_auth() {
-      if [ ! -s ${endoregDbLocalPasswordFile} ]; then
-        echo "ERROR: application password file is missing or empty: ${endoregDbLocalPasswordFile}" >&2
+      if [ ! -s ${applicationPasswordFile} ]; then
+        echo "ERROR: application password file is missing or empty: ${applicationPasswordFile}" >&2
         return 1
       fi
 
       echo "Checking password authentication as ${cfg.defaultDbName}..."
-      sudo env PGPASSWORD="$(${pkgs.coreutils}/bin/cat ${endoregDbLocalPasswordFile})" \
+      sudo env PGPASSWORD="$(${pkgs.coreutils}/bin/cat ${applicationPasswordFile})" \
         ${config.services.postgresql.package}/bin/psql \
         -h 127.0.0.1 -U "${cfg.defaultDbName}" -d "${cfg.defaultDbName}" \
         -v ON_ERROR_STOP=1 -c 'select current_user, current_database();'
@@ -137,30 +137,30 @@ let
     # Create the application credential only when it does not exist.  Existing
     # credentials must survive activation; a legacy maintenance secret must
     # never silently replace the password used by the application.
-    if [ ! -s ${endoregDbLocalPasswordFile} ]; then
+    if [ ! -s ${applicationPasswordFile} ]; then
       echo "Generating password for endoregDbLocal user..."
       ${pkgs.coreutils}/bin/install -d -o postgres -g postgres -m 0700 \
-        "$(dirname ${endoregDbLocalPasswordFile})"
+        "$(dirname ${applicationPasswordFile})"
       temporary_password_file="$(${pkgs.coreutils}/bin/mktemp \
-        "${endoregDbLocalPasswordFile}.tmp.XXXXXX")"
+        "${applicationPasswordFile}.tmp.XXXXXX")"
       trap 'rm -f "$temporary_password_file"' EXIT
       ${pkgs.openssl}/bin/openssl rand -base64 32 > "$temporary_password_file"
       chown postgres:postgres "$temporary_password_file"
       chmod 600 "$temporary_password_file"
-      mv -f "$temporary_password_file" ${endoregDbLocalPasswordFile}
+      mv -f "$temporary_password_file" ${applicationPasswordFile}
       trap - EXIT
     fi
 
     # Ensure the protected application credential remains readable only by
     # PostgreSQL and is never exposed through the legacy secret path.
-    chown postgres:postgres ${endoregDbLocalPasswordFile}
-    chmod 600 ${endoregDbLocalPasswordFile}
+    chown postgres:postgres ${applicationPasswordFile}
+    chmod 600 ${applicationPasswordFile}
 
     # Set the password in PostgreSQL safely using dollar-quoted strings
     # Dollar-quoting prevents SQL injection by treating the content as a literal string
     echo "Setting password for user ${cfg.defaultDbName}..."
 
-    PASSWORD=$(cat ${endoregDbLocalPasswordFile})
+    PASSWORD=$(cat ${applicationPasswordFile})
 
     # Use dollar-quoted strings ($tag$...$tag$) which safely handle any special characters
     # including single quotes, backslashes, and other SQL metacharacters

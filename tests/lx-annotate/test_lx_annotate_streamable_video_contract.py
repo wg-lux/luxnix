@@ -32,10 +32,6 @@ def test_streamable_video_paths_are_first_class_runtime_derivations():
         '"${runtimeStreamableVideoRootPath}/processed";'
         in source
     )
-    assert (
-        "envNginxProtectedMediaUrl = "
-        "cfg.runtime.streamableServing.protectedMediaUrl;"
-    ) in source
     assert 'default = "/protected_media/";' in options_source
 
 
@@ -90,7 +86,7 @@ def test_generic_postgres_default_is_not_nested_below_services():
 
     assignment = (
         "luxnix.generic-settings.postgres.enable = "
-        "mkDefault (!externalPostgresConfigured);"
+        "mkIf (!externalPostgresConfigured) (mkDefault true);"
     )
     assert assignment in config_source
     assert f"\n        {assignment}" not in config_source

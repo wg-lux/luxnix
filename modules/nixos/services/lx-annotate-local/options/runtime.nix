@@ -26,55 +26,6 @@ let
         versionMatch = builtins.match ".*lx_annotate-([^-]+)-.*[.]whl" wheelFileName;
       in
       if versionMatch == null then "" else elemAt versionMatch 0;
-  workerPoolType = types.submodule {
-    options = {
-      concurrency = mkOption {
-        type = types.ints.positive;
-        default = 1;
-        description = "Celery worker concurrency for this workload pool.";
-      };
-      maxTasksPerChild = mkOption {
-        type = types.ints.positive;
-        default = 1;
-        description = "Maximum Celery tasks each child process handles before recycling.";
-      };
-      memoryHigh = mkOption {
-        type = types.str;
-        default = "1G";
-        description = "MemoryHigh limit applied to this Celery workload pool.";
-      };
-      memoryMax = mkOption {
-        type = types.str;
-        default = "2G";
-        description = "MemoryMax limit applied to this Celery workload pool.";
-      };
-      cpuQuota = mkOption {
-        type = types.str;
-        default = "35%";
-        description = "CPUQuota assigned to this Celery workload pool.";
-      };
-      cpuWeight = mkOption {
-        type = types.ints.between 1 10000;
-        default = 100;
-        description = "CPUWeight assigned to this Celery workload pool.";
-      };
-      ioWeight = mkOption {
-        type = types.ints.between 1 10000;
-        default = 100;
-        description = "IOWeight assigned to this Celery workload pool.";
-      };
-      nice = mkOption {
-        type = types.int;
-        default = 15;
-        description = "Systemd Nice value for this Celery workload pool.";
-      };
-      oomScoreAdjust = mkOption {
-        type = types.int;
-        default = 750;
-        description = "OOMScoreAdjust value for this Celery workload pool.";
-      };
-    };
-  };
   frameExtractionWorkerType = types.submodule {
     options = {
       mode = mkOption {
@@ -333,11 +284,14 @@ in
               Use standalone only for isolated, non-networked test deployments.
             '';
           };
+          # TODO Update lx-annotate to the version you would like, generate the hash with e.g. (multiline command, copy as is and remove #):
+          # nix hash convert --hash-algo sha256 --to sri \
+          #  $(nix-prefetch-url https://files.pythonhosted.org/packages/ee/eb/6c8f0d28762f0b261dfcb0a80fc75d29962abcb97c0a6d1f03c80b3e2d69/lx_annotate-1.4.7-py3-none-any.whl)
           wheelPath = mkOption {
             type = types.nullOr types.path;
             default = pkgs.fetchurl {
-              url = "https://files.pythonhosted.org/packages/75/c8/a36a903c8c23eacdb3599baa84e36c079cf613a57bf4fd17c939dadd5a96/lx_annotate-1.4.2-py3-none-any.whl";
-              hash = "sha256-JhpwZD5yZChc1koSZS0ZNpnN1hK+jauSuPnYO10thr4=";
+              url = "https://files.pythonhosted.org/packages/ee/eb/6c8f0d28762f0b261dfcb0a80fc75d29962abcb97c0a6d1f03c80b3e2d69/lx_annotate-1.4.7-py3-none-any.whl";
+              hash = "sha256-0VIb04SXRa8hy6sMOnTHth7ORrnlf2zaqak97O36ACw=";
             };
             description = "Path to the lx-annotate wheel artifact used in wheel mode.";
           };
@@ -720,120 +674,11 @@ in
             default = "90s";
             description = "Delay applied before always-on Celery workers start after lx-annotate boot.";
           };
-          workerPools = mkOption {
-            type = types.submodule {
-              options = {
-                pipeline = mkOption {
-                  type = workerPoolType;
-                  default = {
-                    concurrency = 1;
-                    maxTasksPerChild = 1;
-                    memoryHigh = "2G";
-                    memoryMax = "4G";
-                    cpuQuota = "45%";
-                    nice = 16;
-                    oomScoreAdjust = 800;
-                  };
-                  description = "Celery pool for upload/import/anonymization pipeline work.";
-                };
-                ffmpeg = mkOption {
-                  type = workerPoolType;
-                  default = {
-                    concurrency = 1;
-                    maxTasksPerChild = 1;
-                    memoryHigh = "10G";
-                    memoryMax = "12G";
-                    cpuQuota = "600%";
-                    cpuWeight = 100;
-                    ioWeight = 100;
-                    nice = 0;
-                    oomScoreAdjust = 850;
-                  };
-                  description = "Celery pool for bounded FFmpeg media reprocessing.";
-                };
-                frameExtraction = mkOption {
-                  type = workerPoolType;
-                  default = {
-                    concurrency = 1;
-                    maxTasksPerChild = 1;
-                    memoryHigh = "3G";
-                    memoryMax = "5G";
-                    cpuQuota = "55%";
-                    nice = 18;
-                    oomScoreAdjust = 850;
-                  };
-                  description = "Celery pool for FFmpeg frame extraction and post-validation rebuilds.";
-                };
-                inference = mkOption {
-                  type = workerPoolType;
-                  default = {
-                    concurrency = 1;
-                    maxTasksPerChild = 1;
-                    memoryHigh = "12G";
-                    memoryMax = "16G";
-                    cpuQuota = "250%";
-                    nice = 10;
-                    oomScoreAdjust = 350;
-                  };
-                  description = "Celery pool for AI temporal inference jobs.";
-                };
-                training = mkOption {
-                  type = workerPoolType;
-                  default = {
-                    concurrency = 1;
-                    maxTasksPerChild = 1;
-                    memoryHigh = "24G";
-                    memoryMax = "32G";
-                    cpuQuota = "400%";
-                    nice = 5;
-                    oomScoreAdjust = 200;
-                  };
-                  description = "Celery pool for single-GPU model training jobs.";
-                };
-                llmInference = mkOption {
-                  type = workerPoolType;
-                  default = {
-                    concurrency = 1;
-                    maxTasksPerChild = 1;
-                    memoryHigh = "4G";
-                    memoryMax = "8G";
-                    cpuQuota = "150%";
-                    nice = 12;
-                    oomScoreAdjust = 350;
-                  };
-                  description = "Celery pool for Ollama-backed report and metadata LLM inference jobs.";
-                };
-                maintenance = mkOption {
-                  type = workerPoolType;
-                  default = {
-                    concurrency = 1;
-                    maxTasksPerChild = 100;
-                    memoryHigh = "1G";
-                    memoryMax = "2G";
-                    cpuQuota = "25%";
-                    nice = 12;
-                    oomScoreAdjust = 700;
-                  };
-                  description = "Celery pool for default and maintenance queues.";
-                };
-                hubTransfer = mkOption {
-                  type = workerPoolType;
-                  default = {
-                    concurrency = 1;
-                    maxTasksPerChild = 20;
-                    memoryHigh = "768M";
-                    memoryMax = "1536M";
-                    cpuQuota = "35%";
-                    nice = 14;
-                    oomScoreAdjust = 750;
-                  };
-                  description = "Celery pool dedicated to bounded outbound hub transfer and recovery jobs.";
-                };
-              };
-            };
-            default = { };
-            description = "Queue-specific Celery worker pools for load-balancing heavy media jobs.";
+          workerPools = import ../worker-pools.nix {
+            inherit lib;
+            includeHubTransfer = true;
           };
+
           frameExtractionWorker = mkOption {
             type = frameExtractionWorkerType;
             default = { };
@@ -942,13 +787,13 @@ in
                   type = types.nullOr types.str;
                   default = null;
                   example = "postgres.lx-annotate.svc.cluster.local";
-                  description = "Optional external PostgreSQL host used for clustered lx-annotate deployments.";
+                  description = "Legacy endpoint alias; prefer services.luxnix.lxAnnotateLocal.database.host and explicit database.ownership.";
                 };
                 postgresPort = mkOption {
                   type = types.nullOr types.port;
                   default = null;
                   example = 5432;
-                  description = "Optional external PostgreSQL port used with runtime.externalServices.postgresHost.";
+                  description = "Legacy endpoint alias; prefer services.luxnix.lxAnnotateLocal.database.port.";
                 };
               };
             };
@@ -984,64 +829,7 @@ in
             default = { };
             description = "Cluster-readiness guardrails for lx-annotate.";
           };
-          commands = mkOption {
-            type = types.submodule {
-              options = {
-                web = mkOption {
-                  type = types.nullOr types.str;
-                  default = null;
-                  description = "Legacy helper override. Wheel mode normally uses the lx-annotate-web console script.";
-                };
-                migrate = mkOption {
-                  type = types.nullOr types.str;
-                  default = null;
-                  description = "Legacy helper override. Wheel mode normally uses the lx-annotate-migrate console script.";
-                };
-                loadBaseData = mkOption {
-                  type = types.nullOr types.str;
-                  default = null;
-                  description = "Legacy helper override. Wheel mode normally uses the lx-annotate-load-base-data console script.";
-                };
-                fileWatcher = mkOption {
-                  type = types.nullOr types.str;
-                  default = null;
-                  description = "Legacy helper override. Wheel mode normally uses the lx-annotate-watch console script.";
-                };
-                fileWatcherOnce = mkOption {
-                  type = types.nullOr types.str;
-                  default = null;
-                  description = "Legacy helper override for one-shot watcher runs.";
-                };
-                exportFrames = mkOption {
-                  type = types.nullOr types.str;
-                  default = null;
-                  description = "Legacy helper override. Wheel mode normally uses the lx-annotate-export-frames console script.";
-                };
-                celeryWorker = mkOption {
-                  type = types.nullOr types.str;
-                  default = null;
-                  description = "Legacy helper override. Wheel mode normally uses the lx-annotate-worker console script.";
-                };
-                sapImport = mkOption {
-                  type = types.nullOr types.str;
-                  default = null;
-                  description = "Legacy helper override. Wheel mode normally uses the lx-annotate-import-sap console script.";
-                };
-                mediaMigration = mkOption {
-                  type = types.nullOr types.str;
-                  default = null;
-                  description = "Legacy helper override retained for older media migration helper scripts. The streamable migration unit uses lx-annotate-manage directly.";
-                };
-                transcodeVideo = mkOption {
-                  type = types.nullOr types.str;
-                  default = null;
-                  description = "Legacy helper override. The active file mover adapter uses lx-annotate-manage directly.";
-                };
-              };
-            };
-            default = { };
-            description = "Additional service commands used in wheel mode.";
-          };
+
         };
       };
       default = { };

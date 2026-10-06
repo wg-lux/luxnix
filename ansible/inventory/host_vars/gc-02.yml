@@ -16,6 +16,9 @@ host_services:
   # Reporting needs narrative output; extraction supplies its own JSON prompt/format.
   # Both consumers currently share LLM_MODEL. See docs/guides/gc-02-reporting-llm.yml.
   luxnix.lxAnnotateLocal.runtime.llm.model: '"gemma4:e2b"'
+  # Match ReportReader/FrameCleaner LLM_ENABLED gating for automatic queue consumption.
+  # The worker's existing Requires/After dependencies start Ollama first.
+  luxnix.lxAnnotateLocal.runtime.llmInferenceWorker.mode: 'lib.mkIf config.services.luxnix.lxAnnotateLocal.runtime.llm.enable "always"'
   luxnix.vllm.enable: "false"
   luxnix.vllm.gpuMemoryUtilization: 0.85
   luxnix.vllm.host: '"127.0.0.1"'
@@ -65,8 +68,10 @@ extra_secret_names:
   - "SCRT_roles_system_password_postgres_host_test_password"
 
 host_luxnix:
-  # Temporary bootstrap exception; set false after verified Vault enrollment.
-  vault.client.auth.deferUntilProvisioned: "true"
+  # Enrolled sender: enable automatic certificate renewal and fail-closed startup.
+  # Restore Vault authentication before activation; see the certificate-expiry
+  # recovery procedure in docs/vault-hub-machine-enrollment.md.
+  vault.client.auth.deferUntilProvisioned: "false"
   generic_settings.hostPlatform: '"x86_64-linux"'
   generic_settings.systemStateVersion: '"23.11"'
 

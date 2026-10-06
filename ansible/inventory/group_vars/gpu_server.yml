@@ -12,8 +12,9 @@ group_services:
   luxnix.lxAnnotateLocal.runtime.hlsEncodingProfile: '"clinical_h264_nvenc_cq_v1"'
   luxnix.lxAnnotateLocal.runtime.ffmpegWorker.cudaVisibleDevices: '"0"'
   luxnix.lxAnnotateLocal.runtime.celeryBroker.secureTransportConfirmed: "true"
-  luxnix.lxAnnotateLocal.runtime.externalServices.postgresHost: '"172.16.255.22"'
-  luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort: 5432
+  luxnix.lxAnnotateLocal.database.ownership: '"external"'
+  luxnix.lxAnnotateLocal.database.host: '"172.16.255.22"'
+  luxnix.lxAnnotateLocal.database.port: 5432
   luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl: '"redis://172.16.255.14:6380/1"'
   luxnix.lxAnnotateLocal.runtime.llmInferenceWorker.mode: '"always"'
   luxnix.lxAnnotateLocal.runtime.trainingWorker.cudaVisibleDevices: '"0"'

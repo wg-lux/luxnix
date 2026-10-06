@@ -89,6 +89,7 @@ def test_common_and_worker_environment_agree(enabled, provider, url):
           }];
         };
         cfg = {
+          django = { identitySaltKeyringFile = null; identitySaltFile = null; };
           runtime = system.config.services.luxnix.lxAnnotateLocal.runtime // {
             monitoring.enable = false;
             extraEnvironment = { LLM_ENABLED = "conflicting-legacy-value"; };

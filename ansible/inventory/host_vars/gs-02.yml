@@ -50,9 +50,10 @@ host_services:
   luxnix.ollama.acceleration: '"cuda"'
   luxnix.ollama.enableModelBootstrap: "false"
 
+  # The loopback endpoint is provisioned by this host's PostgreSQL role.
+  luxnix.lxAnnotateLocal.database.ownership: '"local"'
+  luxnix.lxAnnotateLocal.database.host: '"127.0.0.1"'
   luxnix.lxAnnotateLocal.database.port: "5432"
-  luxnix.lxAnnotateLocal.runtime.externalServices.postgresHost: '"127.0.0.1"'
-  luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort: "5432"
 
   # Raw Nix list expression.
   # A normal YAML list currently generates invalid Nix single quotes.
@@ -164,8 +165,6 @@ host_luxnix:
   generic_settings.systemStateVersion: '"23.11"'
   generic_settings.linux.cpuMicrocode: '"amd"'
   nvidia_prime.enable: "lib.mkForce false"
-
-
 
   generic_settings.linux.kernelModules:
     - "kvm-amd"

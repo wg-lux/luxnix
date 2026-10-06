@@ -9,6 +9,7 @@ This module manages the local `lx-annotate` deployment on LuxNix hosts.
 - [`options.nix`](options.nix): compatibility aggregator for the public option surface.
 - [`options/`](options/): one readable module per top-level configuration group; public option paths remain under `services.luxnix.lxAnnotateLocal`.
 - [`config.nix`](config.nix): centralized shared configuration, assertions, secret wiring, and the explicit context passed to subservices.
+- [`worker.nix`](worker.nix): typed internal worker constructor; see [worker configuration shapes](Workers.md) for fields, validation, and extension rules.
 - [`subservices/`](subservices/): one systemd service per leaf file. A matching timer or path unit stays beside the service it triggers; `workers.nix` is only an aggregator.
 - [`scripts.nix`](scripts.nix): shell-script derivations used by the service units.
 - [`scripts/env.nix`](scripts/env.nix): single source of truth for shared lx-annotate runtime environment variables.
@@ -458,8 +459,8 @@ For cluster-oriented validation, set:
 
 - `runtime.clustered.enable = true`
 - `runtime.externalServices.redisUrl`
-- `runtime.externalServices.postgresHost`
-- `runtime.externalServices.postgresPort`
+- `database.ownership = "external"`
+- `database.host` and `database.port`
 - `runtime.clustered.sharedStorage = true`
 - `runtime.clustered.sharedMasterKeyFile = /run/secrets/lx-annotate/master-key`
 - `runtime.autoGenerateMasterKey = false`
@@ -819,8 +820,8 @@ Notes:
   `lx-annotate-migrate`, `lx-annotate-load-base-data`,
   `lx-annotate-worker`, `lx-annotate-watch`,
   `lx-annotate-export-frames`, and `lx-annotate-import-sap`.
-- `runtime.commands.*` is retained only for legacy helper scripts and is not
-  needed for the active wheel console-script runtime.
+- Removed `runtime.commands.*` and `source.*` options no longer configure launchers.
+  Select the deployed artifact with `runtime.package` or `runtime.wheelPath`.
 - `runtime.encryptedDataDir` remains the canonical protected root. Paths under
   the service-user home are access paths only unless the runtime contract is
   intentionally redesigned.

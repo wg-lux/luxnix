@@ -50,7 +50,6 @@ def test_tmpfiles_eagerly_provisions_complete_protected_intake_contract() -> Non
 def test_sap_runtime_helpers_refuse_missing_intake_infrastructure() -> None:
     for relative_path in (
         "modules/nixos/services/lx-annotate-local/config.nix",
-        "modules/nixos/services/lx-annotate-local/scripts.nix",
     ):
         source = (REPO_ROOT / relative_path).read_text(encoding="utf-8")
         assert 'install -d -m 0770 "$sap_drop_dir"' not in source

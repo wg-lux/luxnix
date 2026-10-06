@@ -54,7 +54,7 @@ let
       makeRuntimePath cfg.runtime.protectedDataDir
     else
       envDataDir;
-  
+
   # Canonical EndoReg-DB prototype runtime root.
   #
   # endoreg-db lx-ai-service-prototype derives its protected storage tree from:

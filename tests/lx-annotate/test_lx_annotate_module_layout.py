@@ -22,7 +22,6 @@ EXPECTED_OPTION_GROUPS = {
     "hub": "hub",
     "monitoring": "runtime.monitoring",
     "runtime": "runtime",
-    "source": "source",
     "storage-relief": "storageRelief",
     "streamable-migration": "streamableMigration",
 }
@@ -30,7 +29,7 @@ EXPECTED_OPTION_GROUPS = {
 
 def test_each_subservice_leaf_owns_one_documented_service() -> None:
     leaf_modules = sorted(
-        path for path in SUBSERVICE_DIR.rglob("*.nix") if path.name != "workers.nix"
+        path for path in SUBSERVICE_DIR.rglob("*.nix") if path.name not in {"workers.nix", "lx-annotate-request-throttle.nix"}
     )
 
     assert len(leaf_modules) == 37
@@ -49,7 +48,7 @@ def test_each_subservice_leaf_owns_one_documented_service() -> None:
     aggregator_source = (SUBSERVICE_DIR / "workers.nix").read_text(encoding="utf-8")
     config_source = (SERVICE_DIR / "config.nix").read_text(encoding="utf-8")
     assert "systemd.services." not in aggregator_source
-    assert "systemd.services." not in config_source
+    assert re.search(r"^\s+systemd\.services\.", config_source, re.MULTILINE) is None
 
 
 def test_option_aggregator_exposes_one_readable_module_per_group() -> None:

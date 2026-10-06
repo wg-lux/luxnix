@@ -12,6 +12,76 @@ This is an operator runbook. Clinical users must not perform these steps. A
 machine is ready only after the configuration, key, service, identity, and
 disposable-transfer checks at the end of this guide all pass.
 
+## Expired site client certificate
+
+Scope and readiness evidence belong to
+[`luxnix_secret_lifecycle_readiness.yml`](https://github.com/wg-lux/luxnix/blob/main/feature-tracking/luxnix_secret_lifecycle_readiness.yml).
+
+On 6 October 2026, read-only inspection on **gc-02** found that its hub-transfer
+client certificate expired on **10 September 2026 at 08:13:59 UTC (10:13:59 CEST)**.
+The CA-verified Vault health endpoint was reachable but returned `sealed: true`.
+The certificate issuer reported `fresh Vault AppRole authentication failed`,
+and systemd refused to start the transfer worker because that dependency failed.
+The two reported video jobs queued on 25 September had zero attempts and no
+`last_attempt_at`. This establishes the observed blocker, not when Vault first
+became sealed. `queued` / **Eingeplant (25%)** is a workflow stage, not byte progress.
+
+The repository requests 720-hour client certificates, renews within seven days
+of expiry, and schedules checks every 12 hours with up to 15 minutes of jitter.
+The gc-02 inventory still had the temporary `deferUntilProvisioned` exception:
+it suppressed automatic startup of the renewal timer, which was inactive during
+inspection. The gc-02 configuration now sets the exception to `false` for its
+enrolled sender identity. **Restore and verify Vault authentication before
+activating that configuration.** This setting deliberately makes authentication
+failures block startup; it does not unseal Vault or repair credentials.
+
+Read-only checks on gc-02 (never print the private key or runtime environment):
+
+```bash
+sudo openssl x509 -in /var/lib/lx-annotate/hub-pki/client.crt -noout -dates
+sudo openssl x509 -in /var/lib/lx-annotate/hub-pki/client.crt -noout -checkend 604800
+sudo curl --silent --show-error --connect-timeout 5 --max-time 15 \
+  --cacert /etc/secrets/vault/hub-pki/vault-server-ca.pem \
+  https://vault.endo-reg.net:8200/v1/sys/health
+sudo luxnix-vault-enrollment-status
+systemctl list-timers 'luxnix-vault-issue-hub-client-certificate*' --all
+systemctl show luxnix-vault-issue-hub-client-certificate.service \
+  lx-annotate-celery-hub-transfer-worker.service -p Id -p ActiveState -p Result
+sudo journalctl --namespace=+lx-annotate \
+  -u luxnix-vault-issue-hub-client-certificate.service \
+  -u lx-annotate-celery-hub-transfer-worker.service -n 60 --no-pager
+```
+
+Recovery requires an authorized Vault custodian to unseal the existing Vault
+on gs-02 using the approved recovery ceremony. Do not initialize a replacement
+Vault or copy unseal shares onto either server. After health reports
+`initialized: true` and `sealed: false`, an authorized operator runs on gc-02:
+
+```bash
+sudo systemctl restart vault-auth-setup.service
+sudo luxnix-vault-enrollment-status
+```
+
+Stop unless enrollment reports `ready`. If authentication is rejected, use the
+authenticated enrollment procedure below; do not replace credentials blindly.
+Then continue, stopping at any failed command:
+
+```bash
+sudo systemctl restart managed-secrets-setup.service
+sudo systemctl restart luxnix-vault-issue-hub-client-certificate.service
+sudo openssl x509 -in /var/lib/lx-annotate/hub-pki/client.crt -noout -checkend 604800
+sudo systemctl restart lx-annotate-hub-node-provisioning.service
+sudo systemctl start lx-annotate-celery-hub-transfer-worker.service
+```
+
+Build and deploy the reviewed gc-02 configuration through the normal deployment
+workflow, then verify that the renewal timer is active, the transfer worker is
+running, and the existing jobs reach `completed` with matching hub receipts.
+The recovery timer dispatches onto the same `hub_transfer` queue; successful
+dispatch alone does not prove recovery while its consumer is stopped. Do not
+purge that queue or create replacement transfer jobs. Certificate renewal cannot
+succeed while Vault remains sealed, regardless of the timer configuration.
+
 ## Identities and keys
 
 The deployment uses independent credentials for independent purposes. Do not

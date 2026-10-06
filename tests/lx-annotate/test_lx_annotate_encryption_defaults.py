@@ -80,13 +80,10 @@ def test_storage_shell_helper_exports_only_canonical_root(root: str) -> None:
     )
 
 
-def test_repo_frame_export_uses_application_path_contract() -> None:
-    source = SCRIPTS_NIX.read_text(encoding="utf-8")
-    assert (
-        'exec devenv shell -- lx-annotate-export-frames '
-        '--output-dir "$exportFramesDir" --output-path "$exportFramesDir/frames.csv"'
-        in source
-    )
+def test_frame_export_uses_packaged_application_path_contract() -> None:
+    source = (SERVICE_DIR / "subservices/lx-annotate-export-frames.nix").read_text()
+    assert 'ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-export-frames";' in source
+    assert 'LX_ANNOTATE_EXPORT_FRAMES_OUTPUT_DIR = "${runtimeStorageRootPath}/export/frames";' in source
 
 
 def test_lx_annotate_scripts_export_protected_storage_contract():
@@ -152,7 +149,7 @@ def test_lx_annotate_scripts_export_protected_storage_contract():
         "exec ${effectiveRuntimePackage}/bin/lx-annotate-manage migrate --noinput"
         in config_source
     )
-    assert "ExecStartPre" not in config_source
+    assert "ExecStartPre" not in (SERVICE_DIR / "subservices/lx-annotate-migrate.nix").read_text()
     assert 'TimeoutStartSec = "2h";' in config_source
     assert (
         'ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-watch --once";'

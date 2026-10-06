@@ -32,8 +32,8 @@ Cluster-oriented validation is opt-in through:
 
 - `runtime.clustered.enable = true`
 - `runtime.externalServices.redisUrl`
-- `runtime.externalServices.postgresHost`
-- `runtime.externalServices.postgresPort`
+- `database.ownership = "external"`
+- `database.host` and `database.port`
 - `runtime.clustered.sharedStorage = true`
 - `runtime.clustered.sharedMasterKeyFile`
 - `runtime.autoGenerateMasterKey = false`

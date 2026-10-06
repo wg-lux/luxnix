@@ -17,13 +17,7 @@ let
 
   publicSslCertificatePath = sslCfg.publicCertPath;
 
-  adminName = config.user.admin.name;
-  scriptName = "runLocalLxAnnotate";
-  exportFramesScriptName = "runLocalExportFrames";
-
-  gitURL = cfg.source.url;
   repoDirName = "lx-annotate";
-  branchName = cfg.source.branch;
 
   endoreg-service-user-name = config.user.endoreg-service-user.name;
   endoreg-service-user = config.users.users.${endoreg-service-user-name};
@@ -66,16 +60,13 @@ let
   runtimeStreamableVideoRootPath = "${runtimeStorageRootPath}/streamable_videos";
   runtimeStreamableVideoRawRootPath = "${runtimeStreamableVideoRootPath}/raw";
   runtimeStreamableVideoProcessedRootPath = "${runtimeStreamableVideoRootPath}/processed";
-  envNginxProtectedMediaUrl = cfg.runtime.streamableServing.protectedMediaUrl;
   runtimeStaticRootPath = "/var/lib/lx-annotate/staticfiles";
   runtimeWheelRootPath = "${endoreg-service-user-home}/lx-annotate-wheel";
   runtimeWheelVenvPath = "${runtimeWheelRootPath}/.venv";
   useWheelRuntime = cfg.runtime.mode == "wheel";
   runtimeWorkingDir = if useWheelRuntime then runtimeWheelRootPath else repoDir;
-  staticRootPath = runtimeStaticRootPath;
   djangoStaticRootPath =
     if useWheelRuntime then "${runtimeWheelRootPath}/staticfiles" else repoStaticRootPath;
-  viteSourcePath = "${repoDir}/static";
 
   envDataDir = runtimeDataRootPath;
   envConfDir =
@@ -83,7 +74,6 @@ let
       "${runtimeWheelRootPath}/${cfg.django.confDir}"
     else
       "${repoDir}/${cfg.django.confDir}";
-  makeCacheDir = "${envConfDir}/make-cache";
   envDjangoModule = cfg.django.djangoModule;
   envHttpProtocol =
     if cfg.django.httpProtocol != "http" then
@@ -119,8 +109,6 @@ let
   makeAbsolute = path: if lib.hasPrefix "/" path then path else "${runtimeWorkingDir}/${path}";
 
   envAssetDir = makeAbsolute cfg.django.assetDir;
-  envStaticUrl = cfg.django.staticUrl;
-  envMediaUrl = cfg.django.mediaUrl;
   envRunVideoTests = if cfg.django.runVideoTests then "true" else "false";
   envSkipExpensiveTests = if cfg.django.skipExpensiveTests then "true" else "false";
   envViteEnableDebug = if cfg.debug.enable then "true" else "false";
@@ -140,7 +128,6 @@ let
   settingsProfile = cfg.django.settingsProfile;
   envIsCentralNode = cfg.django.extraSettings.IS_CENTRAL_NODE or false;
   envAnnotateDjangoSettingsModule = "lx_annotate.settings.settings_prod";
-  envDjangoEnv = "production";
   envCentralNodeFlag = if envIsCentralNode || settingsProfile == "central" then "true" else "false";
   envDeploymentRole = cfg.runtime.deploymentRole;
 
@@ -151,7 +138,6 @@ let
       hostDefaultCenterKey = trimToString config.roles.endoreg-client.defaultCenterKey;
     in
     if explicitDefaultCenterKey != "" then explicitDefaultCenterKey else hostDefaultCenterKey;
-  exportFramesStorageRootDefault = config.roles.endoreg-client.paths.storagePersistingMountPoint;
   externalCleanupArchiveRootDefault = "${config.roles.endoreg-client.paths.storagePersistingMountPoint}/lx-annotate-archive";
   emergencyReliefArchiveRootDefault = "${config.roles.endoreg-client.paths.storagePersistingMountPoint}/lx-annotate-emergency-relief";
   emergencyReliefManifestDirDefault = "${emergencyReliefArchiveRootDefault}/manifests";
@@ -182,24 +168,16 @@ let
   lxAnnotateRuntime = {
     identities = {
       inherit
-        adminName
         endoreg-service-user-name
         endoreg-service-user
         endoreg-service-user-home
         endoreg-service-group-name
         ;
     };
-    names = {
-      inherit scriptName exportFramesScriptName;
-    };
-    source = {
-      inherit gitURL repoDirName branchName;
-    };
     paths = {
       inherit
         runtimeRootPath
         repoDir
-        repoStaticRootPath
         runtimeDataRootPath
         runtimeStorageRootPath
         runtimeIoImportRootPath
@@ -217,12 +195,9 @@ let
         runtimeWheelRootPath
         runtimeWheelVenvPath
         runtimeWorkingDir
-        staticRootPath
         djangoStaticRootPath
-        viteSourcePath
         envDataDir
         envConfDir
-        makeCacheDir
         sslDir
         sslKeyPath
         sslCertPath
@@ -230,11 +205,9 @@ let
         envSystemdFilePath
         envAssetDir
         hubRootPath
-        hubBackupRootPath
         hubBackupIncomingPath
         hubBackupSnapshotPath
         hubBackupManifestPath
-        dataRecoveryStateDir
         dataRecoveryStateFile
         legacyRepoDataRootPath
         legacyRepoMediaRootPath
@@ -248,25 +221,19 @@ let
     };
     env = {
       inherit
-        envNginxProtectedMediaUrl
         envDjangoModule
         envHttpProtocol
-        envDjangoHost
         envDjangoPort
         envBaseUrl
-        envStaticUrl
-        envMediaUrl
         envRunVideoTests
         envSkipExpensiveTests
         envViteEnableDebug
         envAllowedHosts
         envCorsAllowedOrigins
         envAnnotateDjangoSettingsModule
-        envDjangoEnv
         envCentralNodeFlag
         envDeploymentRole
         envDefaultCenter
-        envIsCentralNode
         settingsProfile
         ;
     };
@@ -283,7 +250,6 @@ let
     };
     defaults = {
       inherit
-        exportFramesStorageRootDefault
         externalCleanupArchiveRootDefault
         emergencyReliefArchiveRootDefault
         emergencyReliefManifestDirDefault

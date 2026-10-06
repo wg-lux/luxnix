@@ -16,83 +16,85 @@ let
   '';
 in
 mkIf throttle.enable {
-  systemd.tmpfiles.rules = [
-    "d ${directory} 0750 root ${endoreg-service-group-name} - -"
-    "f ${directory}/activity.lock 0640 root ${endoreg-service-group-name} - -"
-  ];
-  systemd.slices.lx-annotate-background = {
-    description = "LX-Annotate compute-heavy background workers";
-    sliceConfig = {
-      CPUAccounting = true;
-      IOAccounting = true;
-      CPUWeight = 100;
-      IOWeight = 100;
-    };
-  };
-  systemd.sockets.lx-annotate-request-throttle = {
-    description = "Local API resource-admission socket";
-    wantedBy = [ "sockets.target" ];
-    after = [ "systemd-tmpfiles-setup.service" ];
-    requires = [ "systemd-tmpfiles-setup.service" ];
-    socketConfig = {
-      ListenStream = "${directory}/control.sock";
-      SocketUser = "root";
-      SocketGroup = endoreg-service-group-name;
-      SocketMode = "0660";
-      RemoveOnStop = true;
-      Backlog = 128;
-    };
-  };
-  systemd.services.lx-annotate-request-throttle = {
-    description = "Apply API activity and trailing-buffer resource limits";
-    wantedBy = [ "multi-user.target" ];
-    requires = [
-      socketUnit
-      "lx-annotate-background.slice"
+  systemd = {
+    tmpfiles.rules = [
+      "d ${directory} 0750 root ${endoreg-service-group-name} - -"
+      "f ${directory}/activity.lock 0640 root ${endoreg-service-group-name} - -"
     ];
-    after = [
-      socketUnit
-      "lx-annotate-background.slice"
-    ];
-    unitConfig.StartLimitIntervalSec = 0;
-    serviceConfig = {
-      ExecStart = lib.escapeShellArgs [
-        "${pkgs.python3}/bin/python"
-        "${../../../../../scripts/frontend-request-throttle.py}"
-        "--directory"
-        directory
-        "--user"
-        endoreg-service-user-name
-        "--systemctl"
-        "${pkgs.systemd}/bin/systemctl"
-        "--tail-seconds"
-        (toString throttle.tailSeconds)
-        "--cpu-quota"
-        throttle.cpuQuota
-        "--cpu-weight"
-        (toString throttle.cpuWeight)
-        "--io-weight"
-        (toString throttle.ioWeight)
+    slices.lx-annotate-background = {
+      description = "LX-Annotate compute-heavy background workers";
+      sliceConfig = {
+        CPUAccounting = true;
+        IOAccounting = true;
+        CPUWeight = 100;
+        IOWeight = 100;
+      };
+    };
+    sockets.lx-annotate-request-throttle = {
+      description = "Local API resource-admission socket";
+      wantedBy = [ "sockets.target" ];
+      after = [ "systemd-tmpfiles-setup.service" ];
+      requires = [ "systemd-tmpfiles-setup.service" ];
+      socketConfig = {
+        ListenStream = "${directory}/control.sock";
+        SocketUser = "root";
+        SocketGroup = endoreg-service-group-name;
+        SocketMode = "0660";
+        RemoveOnStop = true;
+        Backlog = 128;
+      };
+    };
+    services.lx-annotate-request-throttle = {
+      description = "Apply API activity and trailing-buffer resource limits";
+      wantedBy = [ "multi-user.target" ];
+      requires = [
+        socketUnit
+        "lx-annotate-background.slice"
       ];
-      Sockets = [ socketUnit ];
-      Restart = "on-failure";
-      RestartSec = "1s";
-      User = "root";
-      NoNewPrivileges = true;
-      ProtectSystem = "strict";
-      ProtectHome = true;
-      PrivateTmp = true;
-      RestrictAddressFamilies = [ "AF_UNIX" ];
-      LogNamespace = lxAnnotateJournalNamespace;
+      after = [
+        socketUnit
+        "lx-annotate-background.slice"
+      ];
+      unitConfig.StartLimitIntervalSec = 0;
+      serviceConfig = {
+        ExecStart = lib.escapeShellArgs [
+          "${pkgs.python3}/bin/python"
+          "${../../../../../scripts/frontend-request-throttle.py}"
+          "--directory"
+          directory
+          "--user"
+          endoreg-service-user-name
+          "--systemctl"
+          "${pkgs.systemd}/bin/systemctl"
+          "--tail-seconds"
+          (toString throttle.tailSeconds)
+          "--cpu-quota"
+          throttle.cpuQuota
+          "--cpu-weight"
+          (toString throttle.cpuWeight)
+          "--io-weight"
+          (toString throttle.ioWeight)
+        ];
+        Sockets = [ socketUnit ];
+        Restart = "on-failure";
+        RestartSec = "1s";
+        User = "root";
+        NoNewPrivileges = true;
+        ProtectSystem = "strict";
+        ProtectHome = true;
+        PrivateTmp = true;
+        RestrictAddressFamilies = [ "AF_UNIX" ];
+        LogNamespace = lxAnnotateJournalNamespace;
+      };
     };
-  };
-  systemd.services.lx-annotate = {
-    wants = [ controllerUnit ];
-    requires = [ socketUnit ];
-    after = [
-      socketUnit
-      controllerUnit
-    ];
-    serviceConfig.ExecStartPre = [ runtimeCheck ];
+    services.lx-annotate = {
+      wants = [ controllerUnit ];
+      requires = [ socketUnit ];
+      after = [
+        socketUnit
+        controllerUnit
+      ];
+      serviceConfig.ExecStartPre = [ runtimeCheck ];
+    };
   };
 }

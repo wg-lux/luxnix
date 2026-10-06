@@ -122,13 +122,16 @@ lib.foldl' lib.recursiveUpdate
       roles.nginxHost.glm52.acme.email = "hild@coloreg.de";
     }
     {
+      services.luxnix.lxAnnotateLocal.database.host = "127.0.0.1";
+    }
+    {
+      services.luxnix.lxAnnotateLocal.database.ownership = "local";
+    }
+    {
+      services.luxnix.lxAnnotateLocal.database.port = 5432;
+    }
+    {
       services.luxnix.lxAnnotateLocal.runtime.celeryBroker.secureTransportConfirmed = lib.mkForce true;
-    }
-    {
-      services.luxnix.lxAnnotateLocal.runtime.externalServices.postgresHost = "127.0.0.1";
-    }
-    {
-      services.luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort = 5432;
     }
     {
       services.luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl = null;
@@ -219,9 +222,6 @@ lib.foldl' lib.recursiveUpdate
     }
     {
       services.luxnix.lxAiLocal.runtime.protectedDataDir = "/var/lib/lx-annotate/data";
-    }
-    {
-      services.luxnix.lxAnnotateLocal.database.port = 5432;
     }
     {
       services.luxnix.lxAnnotateLocal.django.extraSettings."IS_CENTRAL_NODE" = lib.mkForce true;

@@ -215,6 +215,13 @@ other identifying data in ordinary email or chat.
 
 ## Failure procedure
 
+If a resource remains **Eingeplant (25%)**, that percentage is a fixed workflow
+stage, not measured upload progress. Ask the administrator to check the transfer
+worker and its certificate dependency. See the
+[certificate-expiry diagnosis and recovery procedure](./vault-hub-machine-enrollment.md#expired-site-client-certificate).
+The gc-02 incident diagnosed on 6 October 2026 involved an expired client
+certificate and a sealed Vault; marking the videos again cannot repair this.
+
 When a status says `failed`:
 
 1. Do not delete or rename the local resource.

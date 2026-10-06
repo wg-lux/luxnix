@@ -1,6 +1,6 @@
 # Database Ownership and Legacy Names
 
-This page documents the current ownership of the local PostgreSQL database used by `lx-annotate-local`, and explains the legacy names that can otherwise be misleading.
+This page documents the current ownership of the local PostgreSQL database used by `lx-annotate-local`.
 
 ## Current Model
 
@@ -14,21 +14,44 @@ roles.endoreg-client.database = {
   port = 5432;
   name = "endoregDbLocal";
   user = "endoregDbLocal";
-  endoregLocalUserPasswordFile = "/var/lib/postgresql/endoregDbLocal.password";
+  applicationPasswordFile = "/var/lib/postgresql/endoregDbLocal.password";
   sslMode = "prefer";
 };
 ```
 
-The wiring is in `modules/nixos/roles/endoreg-client/default.nix`:
+The effective connection lives in `services.luxnix.lxAnnotateLocal.database`.
+Inventories and cluster validation use its `host`, `port`, and `ownership`.
+Endoreg-client, lx-annotate, and lx-ai share the option schema in
+`modules/nixos/roles/endoreg-client/database.nix`; service SSL modes retain their
+string type while the client role restricts them to the supported enum.
+The legacy `runtime.externalServices.postgresHost` and `postgresPort` options
+remain supported: they replace the standard client `localhost:5432` endpoint,
+but must agree with custom role endpoints and explicit service endpoints.
+Conflicting values fail evaluation instead of being hidden by `mkForce`.
 
-```nix
-services.luxnix.lxAnnotateLocal = {
-  enable = cfg.lxAnnotate.enable;
-  database = cfg.database;
-};
-```
+`database.ownership` declares who provisions this application's database:
 
-This means that when `lx-annotate-local` is enabled through `roles.endoreg-client`, it uses `endoregDbLocal` unless the host explicitly overrides `roles.endoreg-client.database`.
+- `local` requires the local PostgreSQL role and orders runtime preparation,
+  migrations, and application startup after its provisioning units. Database
+  name/user, port, and credential path must match local provisioning.
+- `external` omits those application dependencies, including for an externally
+  managed database reached over loopback. Its credential file must be provisioned
+  independently before runtime preparation.
+
+For compatibility, declaring the legacy external host defaults ownership to
+`external`; otherwise it defaults to `local`. Address spelling does not override
+an explicit ownership declaration. gs-02 explicitly declares `local` for its
+managed `127.0.0.1:5432` endpoint. A new remote endpoint configured directly through
+`database.host` must also declare `ownership = "external"`.
+
+External ownership does not disable machine-wide PostgreSQL: inventory and
+profiles control that service because other applications may use it.
+
+`database.applicationPasswordFile` is the application credential source in all
+three consumers. `endoregLocalUserPasswordFile` remains a compatibility alias.
+The unused `database.passwordFile` option was removed: delete that setting;
+configure `applicationPasswordFile` only with an application credential, never
+the former maintenance-password default. No database identity or file is renamed.
 
 ## PostgreSQL Owner
 
@@ -60,18 +83,20 @@ authentication as the `postgres` operating-system user.
 
 ## Direct `lxAnnotateLocal` Use
 
-If `services.luxnix.lxAnnotateLocal` is enabled directly, without `roles.endoreg-client`, its service-level database defaults are different:
-
-```nix
-services.luxnix.lxAnnotateLocal.database = {
-  host = "lx-annotate.local";
-  port = 5433;
-  name = "lxAnnotateLocal";
-  user = "lxAnnotateLocal";
-};
-```
+If `services.luxnix.lxAnnotateLocal` is enabled directly, without
+`roles.endoreg-client`, its defaults follow the local PostgreSQL role.
 
 For ordinary client hosts, prefer enabling `roles.endoreg-client.lxAnnotate.enable = true` or explicitly set `services.luxnix.lxAnnotateLocal.database` to the desired database.
+
+For a locally provisioned central hub, explicitly align
+`roles.postgres.default.defaultDbName` with the application's database name and
+user (typically `endoregDbCentral`). Unsupported local combinations fail
+evaluation; this change does not rename databases or rotate existing passwords.
+Deployments using the former direct-service defaults must explicitly declare
+their existing endpoint and ownership before activation.
+
+Hub selection comes from inventory or `profiles.endoregCentralHub`, not the
+hostname. The service's neutral `hub.enable` default is false.
 
 ## Naming Rule
 
@@ -83,3 +108,12 @@ Use these terms consistently:
   activation and use it for password-authenticated diagnostics.
 - `lx-annotate-local`: the current lx-annotate service implementation.
 - `local_endoreg_db`: deprecated Ansible role name; do not use for current configuration.
+
+## Validation
+
+Run `pytest tests/lx-annotate/test_database_ownership.py` for ownership, endpoint
+precedence, credential aliases, conflicts and removed-option rejection. Cluster
+and inventory consumers are covered in `test_lx_annotate_nix_eval_contract.py`.
+The original investigation is retained in
+[the ownership audit](guides/lx-annotate-configuration-ownership-audit.yml).
+Configuration tests do not establish cold-boot success or queued-import completion.

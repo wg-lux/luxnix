@@ -7,6 +7,45 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_intel_gpu_laptop_hardware_matches_pre_consolidation_configuration() -> None:
+    import hashlib
+    import json
+
+    from lx_administration.models.ansible.inventory import AnsibleInventory
+    from lx_administration.models.ansible.merged_host_vars import MergedHostVars
+
+    # Snapshots of all effective Linux/GPU settings before moving host inputs.
+    # Updating these requires reviewing the complete host hardware difference.
+    expected = {
+        "gc-04": "2e6c3f43c8acab0c4216843af4f386379861d9fb3065f38c8356982c9c2bd5d1",
+        "gc-05": "07a3f36d995d7aa1833e7a38bd08d7b6918b4b2c2c9e0adbb39c6b6b70d3cb65",
+        "gc-06": "576b2f731b0bc86db008582f9e2e5359eedc2a44c73a7f92843724c756c9095a",
+        "gc-07": "a8d60c0d4a51ad31b5502b88d928ff9a5600fc4f16f055cd9fc43431a4297614",
+        "gc-08": "a8d60c0d4a51ad31b5502b88d928ff9a5600fc4f16f055cd9fc43431a4297614",
+        "gc-09": "07a3f36d995d7aa1833e7a38bd08d7b6918b4b2c2c9e0adbb39c6b6b70d3cb65",
+        "gc-10": "2e6c3f43c8acab0c4216843af4f386379861d9fb3065f38c8356982c9c2bd5d1",
+    }
+    assert _inventory_group_members("intel_gpu_laptop") == set(expected)
+    inventory = AnsibleInventory.load_from_hosts_ini(
+        REPO_ROOT / "ansible/inventory/hosts.ini", subnet="172.16.255."
+    )
+    for hostname, digest in expected.items():
+        settings = MergedHostVars.model_validate(
+            inventory.export_merged_host_vars(hostname)
+        ).prepare_luxnix()
+        hardware = {
+            key: value
+            for key, value in settings.items()
+            if key.startswith(("generic-settings.linux.", "generic-settings.gpu."))
+            or key in (
+                "generic-settings.hostPlatform", "generic-settings.systemStateVersion"
+            )
+        }
+        serialized = json.dumps(hardware, sort_keys=True).encode()
+        actual = hashlib.sha256(serialized).hexdigest()
+        assert actual == digest, hostname
+
+
 def _read(relative_path: str) -> str:
     return (REPO_ROOT / relative_path).read_text()
 

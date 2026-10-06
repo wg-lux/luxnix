@@ -91,6 +91,15 @@ lib.foldl' lib.recursiveUpdate
       roles.ssh-access.dev-04.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICSpoZVcX+K6NdrfqcUVPTU8Ljqlp83YDzzEHjTHU2NO flippos@inexen9";
     }
     {
+      services.luxnix.lxAnnotateLocal.database.host = "172.16.255.22";
+    }
+    {
+      services.luxnix.lxAnnotateLocal.database.ownership = "external";
+    }
+    {
+      services.luxnix.lxAnnotateLocal.database.port = 5432;
+    }
+    {
       services.luxnix.lxAnnotateLocal.hub.enable = true;
     }
     {
@@ -111,12 +120,6 @@ lib.foldl' lib.recursiveUpdate
     }
     {
       services.luxnix.lxAnnotateLocal.runtime.deploymentRole = "central_hub";
-    }
-    {
-      services.luxnix.lxAnnotateLocal.runtime.externalServices.postgresHost = "172.16.255.22";
-    }
-    {
-      services.luxnix.lxAnnotateLocal.runtime.externalServices.postgresPort = 5432;
     }
     {
       services.luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl = "redis://172.16.255.14:6380/1";

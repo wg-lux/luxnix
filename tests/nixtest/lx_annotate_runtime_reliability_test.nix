@@ -64,8 +64,7 @@ in
           ${ntlib.helpers.scriptHelpers}
           assert_file_contains ${lxAnnotateConfig} 'mountpoint -q "\$persisting_mount"' "active cleanup must verify a mounted persisting filesystem"
           assert_file_contains ${lxAnnotateConfig} 'findmnt -n -o TARGET --target "\$resolved_archive"' "active cleanup must resolve the archive mount target"
-          assert_file_contains ${lxAnnotateScripts} 'mountpoint -q "\$persisting_mount"' "exported cleanup helper must fail closed on a plain directory"
-          assert_file_contains ${lxAnnotateScripts} 'archive is outside the persisting mount' "exported cleanup helper must constrain archive ownership"
+          assert_file_contains ${lxAnnotateConfig} 'archive is outside the persisting mount' "active cleanup must constrain archive ownership"
         '';
       }
       {

@@ -15,3 +15,10 @@ them in filename order.
 
 Do not create both `<group>.yml` and `<group>/`; Autoconf rejects that ambiguous
 ownership. Host-specific values belong under `../host_vars/` instead.
+
+`intel_gpu_laptop.yml` centralizes the matching hardware inputs for `gc-04`
+through `gc-10`, selected explicitly in `../hosts.ini`. Differing kernel/initrd
+modules and filesystems remain host overrides; Vault enrollment stays host-owned.
+The consolidation preserves every host's effective settings. Hardware snapshots
+in `tests/test_repository_architecture_contract.py` guard the original values;
+review complete hardware differences before updating those snapshots.
