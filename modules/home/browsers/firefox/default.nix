@@ -11,6 +11,17 @@ in
 {
   options.browsers.firefox = {
     enable = mkEnableOption "enable firefox browser";
+    certificateFiles = mkOption {
+      type = types.listOf types.str;
+      default = [ "/run/lx-annotate-ssl/lx-annotate-selfsigned.crt" ];
+      description = ''
+        Public certificate paths imported by Firefox at startup. The default
+        trusts this machine's lxSsl certificate, published before Nginx starts.
+        Use an empty list on machines without lxSsl, or supply the issuing CA
+        for an explicitly configured Django TLS certificate. Runtime paths must
+        be strings so evaluation does not copy them into the Nix store.
+      '';
+    };
   };
 
   config = mkIf cfg.enable {
@@ -30,9 +41,7 @@ in
       policies = {
         Certificates = {
           ImportEnterpriseRoots = true;
-          Install = [
-            "${../certificates/lx-annotate-local.crt}"
-          ];
+          Install = cfg.certificateFiles;
         };
       };
       configPath = ".mozilla/firefox";

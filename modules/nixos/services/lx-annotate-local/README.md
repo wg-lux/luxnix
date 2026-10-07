@@ -2,6 +2,21 @@
 
 This module manages the local `lx-annotate` deployment on LuxNix hosts.
 
+## Automatic media cleanup
+
+`runtime.automaticMediaCleanup` defaults to `true` for every enabled host. The
+shared environment renders `UPLOAD_JOB_SOURCE_REAPER_APPLY_ENABLED=true` for the
+existing 15-minute maintenance task. Set the typed option to `false` for dry-run
+operation; do not override its environment variable through `extraEnvironment`.
+The backend validates ownership, current source integrity, available streaming
+replacement and media leases before removing obsolete derivatives and their
+terminal records. Unknown files and uncertain master replacements remain blocked.
+Deploy the matching Endoreg cleanup implementation with this configuration and
+inspect `periodic_hls_cleanup` / `periodic_generation_cleanup` events after
+activation. The option does not perform deployment or run manual filesystem
+deletion. Readiness evidence belongs to
+[`lx_annotate_hls_operational_readiness.yml`](../../../../feature-tracking/lx_annotate_hls_operational_readiness.yml).
+
 ## Structure
 
 - [`default.nix`](default.nix): thin wrapper that assembles the runtime context, script exports, and split submodules.
@@ -195,13 +210,13 @@ The module exposes a manual migration unit for backfilling existing videos into
 the streamable protected subtree:
 
 - rebuild
-- run `systemctl start lx-annotate-video-streamable-migration`
+- run `systemctl start lx-annotate-storage-migration`
 
 The module also exposes a dedicated manual post-deploy acceptance unit:
 
 - `systemctl start lx-annotate-acceptance`
 
-`lx-annotate-video-streamable-migration.service` retains its operational name and
+`lx-annotate-storage-migration.service` retains its operational name and
 runs the shared `migrate_media_storage --apply` command for videos and PDFs.
 `LX_RUNTIME_ROOT` is the encrypted runtime directory; the application owns all
 relative directories and the central filename policy. Known legacy artifacts are
@@ -251,18 +266,18 @@ mount unit.
 
 ### Core Boot Units
 
-| Unit | Type / trigger | Runtime role |
-| --- | --- | --- |
-| `lx-annotate-runtime-env.service` | root oneshot, remains active | Creates the runtime/config/data directories, copies the database password into the runtime config directory, normalizes Keycloak secret permissions, and writes `/var/lib/lx-annotate/.env.systemd` plus the compatibility copy under the data root. |
-| `lx-annotate-encrypted-data.service` | optional root oneshot, remains active | Opens the configured LUKS device, mounts it at `runtime.encryptedDataDir`, fixes owner/mode on the mount point, and closes it again on stop. Enabled by `runtime.managedEncryptedData.enable`. |
-| `lx-annotate-data-recovery.service` | manual oneshot, exposed by default | Normal startup uses the canonical runtime root without invoking legacy recovery. `dataRecovery.runBeforeStartup = true` explicitly restores the startup dependency for a reviewed migration with compatible recovery commands. The current backend removed `migrate_data_dir`; do not enable this legacy path for that release. |
-| `lx-annotate-preflight.service` | explicit diagnostic oneshot | Runs comprehensive checks when requested directly or through live acceptance. It does not block normal web, worker, or HLS startup and does not cache a previous successful diagnostic run. |
-| `lx-annotate-migrate.service` | oneshot | Runs `lx-annotate-manage migrate --noinput` against the effective runtime package. On failure it applies the reviewed legacy-history repair and retries once; unrelated or unrepaired failures remain fatal. It is ordered before base-data loading, encrypted-storage validation, and the web service. |
-| `lx-annotate-terminology-bootstrap.service` | best-effort oneshot in wheel mode | After the web service starts, independently registers the packaged `dgvs_reporting`, `mst_3_0`, and `star_upper_gi` bundles. A new registry activates `star_upper_gi`; an existing active selection is preserved. No LX-Annotate startup unit wants, requires, or waits for this attempt. |
-| `lx-annotate-load-base-data.service` | oneshot | Runs `lx-annotate-load-base-data --reconcile-legacy` after successful migrations. Fresh imports and bounded legacy reconciliation are idempotent; failures block dependent startup. Requires a backend release supporting the flag. See [startup contract](../../../../docs/guides/lx-annotate-wheel-startup.yml). |
-| `lx-annotate-master-key-check.service` | oneshot, remains active | Runs `lx-annotate-manage verify_encrypted_storage` with the deployed environment. The web service and workers require this check so a wrong or missing application master key fails closed before user traffic or background processing starts. |
-| `lx-annotate-center-admin-bootstrap.service` | temporary oneshot | When `centerAdminBootstrap.username` is set, runs the audited `bootstrap_center_admin` command after migrations, base-data loading, and encrypted-storage validation. It refuses users without the exact synchronized `center_scope:admin` group. Clear the option after a successful bootstrap deployment. |
-| `lx-annotate.service` / `lx-annotate-boot.service` | long-running web service | Starts the ASGI/web entrypoint on `127.0.0.1:${django.port}`. It requires the runtime env, base data, master-key check, managed secrets, encrypted data, and local Redis/PostgreSQL units when those local services are in use. |
+| Unit                                               | Type / trigger                        | Runtime role                                                                                                                                                                                                                                                                                                                    |
+| -------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lx-annotate-runtime-env.service`                  | root oneshot, remains active          | Creates the runtime/config/data directories, copies the database password into the runtime config directory, normalizes Keycloak secret permissions, and writes `/var/lib/lx-annotate/.env.systemd` plus the compatibility copy under the data root.                                                                            |
+| `lx-annotate-encrypted-data.service`               | optional root oneshot, remains active | Opens the configured LUKS device, mounts it at `runtime.encryptedDataDir`, fixes owner/mode on the mount point, and closes it again on stop. Enabled by `runtime.managedEncryptedData.enable`.                                                                                                                                  |
+| `lx-annotate-data-recovery.service`                | manual oneshot, exposed by default    | Normal startup uses the canonical runtime root without invoking legacy recovery. `dataRecovery.runBeforeStartup = true` explicitly restores the startup dependency for a reviewed migration with compatible recovery commands. The current backend removed `migrate_data_dir`; do not enable this legacy path for that release. |
+| `lx-annotate-preflight.service`                    | explicit diagnostic oneshot           | Runs comprehensive checks when requested directly or through live acceptance. It does not block normal web, worker, or HLS startup and does not cache a previous successful diagnostic run.                                                                                                                                     |
+| `lx-annotate-migrate.service`                      | oneshot                               | Runs `lx-annotate-manage migrate --noinput` against the effective runtime package. On failure it applies the reviewed legacy-history repair and retries once; unrelated or unrepaired failures remain fatal. It is ordered before base-data loading, encrypted-storage validation, and the web service.                         |
+| `lx-annotate-terminology-bootstrap.service`        | best-effort oneshot in wheel mode     | After the web service starts, independently registers the packaged `dgvs_reporting`, `mst_3_0`, and `star_upper_gi` bundles. A new registry activates `star_upper_gi`; an existing active selection is preserved. No LX-Annotate startup unit wants, requires, or waits for this attempt.                                       |
+| `lx-annotate-load-base-data.service`               | oneshot                               | Runs `lx-annotate-load-base-data --reconcile-legacy` after successful migrations. Fresh imports and bounded legacy reconciliation are idempotent; failures block dependent startup. Requires a backend release supporting the flag. See [startup contract](../../../../docs/guides/lx-annotate-wheel-startup.yml).              |
+| `lx-annotate-master-key-check.service`             | oneshot, remains active               | Runs `lx-annotate-manage verify_encrypted_storage` with the deployed environment. The web service and workers require this check so a wrong or missing application master key fails closed before user traffic or background processing starts.                                                                                 |
+| `lx-annotate-center-admin-bootstrap.service`       | temporary oneshot                     | When `centerAdminBootstrap.username` is set, runs the audited `bootstrap_center_admin` command after migrations, base-data loading, and encrypted-storage validation. It refuses users without the exact synchronized `center_scope:admin` group. Clear the option after a successful bootstrap deployment.                     |
+| `lx-annotate.service` / `lx-annotate-boot.service` | long-running web service              | Starts the ASGI/web entrypoint on `127.0.0.1:${django.port}`. It requires the runtime env, base data, master-key check, managed secrets, encrypted data, and local Redis/PostgreSQL units when those local services are in use.                                                                                                 |
 
 In wheel mode, the effective runtime package is a wrapper around
 `runtime.wheelPath`. The first command that needs it creates or updates the
@@ -276,15 +291,47 @@ directly rather than copying a mutable checkout or duplicating the bundle.
 
 ### Intake And Manual Jobs
 
-| Unit | Type / trigger | Runtime role |
-| --- | --- | --- |
-| `lx-annotate-filewatcher.path` | path unit | Watches the standard video, report, and preanonymized directories derived from `runtime.intakeDirs.importRoot`. |
-| `lx-annotate-filewatcher.service` | path-triggered oneshot | Runs `lx-annotate-watch --once` after migrations/base data and the master-key check. It drains files already present in the watched intake directories instead of running a permanent watcher process. |
-| `lx-annotate-sap-import.path` | path unit | Watches the derived `sap_import` directory for `*.zip` drops. |
-| `lx-annotate-sap-import.service` | path-triggered oneshot | Waits for each SAP IS-H zip to become stable, converts it with `lx-annotate-import-sap`, writes preanonymized watcher payload into the preanonymized intake directory, and moves the original zip to processed or failed storage. |
-| `lx-annotate-export-frames.service` | manual oneshot | Runs `lx-annotate-export-frames` and writes frame export output below the protected runtime storage tree. It is not started by a boot target. |
-| `lx-annotate-video-streamable-migration.service` | manual oneshot | Backfills raw and processed streamable video artifacts into the protected streamable-video subtree according to lx-annotate's active storage policy. It is intentionally operator-started. |
-| `lx-annotate-acceptance.service` | manual oneshot | Runs Django critical checks, verifies encrypted storage, and fetches the Vite manifest through the local TLS Nginx vhost. Use it as a post-deploy smoke test. |
+To build and verify the `ExecStart` executable of every configured LX-Annotate
+service without starting services, run from the LuxNix repository:
+
+```bash
+nix build --impure --file tests/lx-annotate/service-binaries.nix --argstr host gc-02 --no-link -L
+```
+
+Select the host being prepared. Evaluation alone only computes store paths;
+the build verifies that the executable files exist and have execute permission.
+Git-backed evaluation requires new modules to be registered with Git. In wheel
+mode these are wrappers: the installed virtualenv and Django commands still
+need runtime validation on the deployed host.
+
+On that host, inspect the active command without running migration or cleanup:
+
+```bash
+systemctl show lx-annotate-storage-migration.service lx-annotate-data-cleanup.service -p ExecStart
+```
+
+Use `test -x` on the absolute `path=` value in that output. The storage-migration
+wrapper is named `lx-annotate-migrate-video-streamable-storage` and calls
+`lx-annotate-manage migrate_media_storage`; the unit supplies `--apply`.
+Do not run its `ExecStart` merely to check whether the binary exists.
+
+`lx-annotate-data-cleanup` archives matching legacy duplicates. Its archive and
+legacy checkout may be absent when systemd creates the service namespace; the
+script creates the archive only after verifying the external mount. Missing
+runtime storage and legacy trees overlapping active storage fail closed.
+Recurring media cleanup instead runs through Celery Beat every 15 minutes on
+the maintenance worker; inspect both `lx-annotate-celery-beat.service` and
+`lx-annotate-celery-worker.service` when investigating that cleanup path.
+
+| Unit                                    | Type / trigger         | Runtime role                                                                                                                                                                                                                      |
+| --------------------------------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lx-annotate-filewatcher.path`          | path unit              | Watches the standard video, report, and preanonymized directories derived from `runtime.intakeDirs.importRoot`.                                                                                                                   |
+| `lx-annotate-filewatcher.service`       | path-triggered oneshot | Runs `lx-annotate-watch --once` after migrations/base data and the master-key check. It drains files already present in the watched intake directories instead of running a permanent watcher process.                            |
+| `lx-annotate-sap-import.path`           | path unit              | Watches the derived `sap_import` directory for `*.zip` drops.                                                                                                                                                                     |
+| `lx-annotate-sap-import.service`        | path-triggered oneshot | Waits for each SAP IS-H zip to become stable, converts it with `lx-annotate-import-sap`, writes preanonymized watcher payload into the preanonymized intake directory, and moves the original zip to processed or failed storage. |
+| `lx-annotate-export-frames.service`     | manual oneshot         | Runs `lx-annotate-export-frames` and writes frame export output below the protected runtime storage tree. It is not started by a boot target.                                                                                     |
+| `lx-annotate-storage-migration.service` | manual oneshot         | Backfills raw and processed streamable video artifacts into the protected streamable-video subtree according to lx-annotate's active storage policy. It is intentionally operator-started.                                        |
+| `lx-annotate-acceptance.service`        | manual oneshot         | Runs Django critical checks, verifies encrypted storage, and fetches the Vite manifest through the local TLS Nginx vhost. Use it as a post-deploy smoke test.                                                                     |
 
 The intake directory contract has one setting, `runtime.intakeDirs.importRoot`.
 All standard drop and staging directories are derived from that root, and the
@@ -297,15 +344,15 @@ All worker services wait for base data and the master-key check. Workers in
 Timer-scheduled workers are started by their matching timer, and workers in
 `mode = "manual"` are available for explicit operator starts only.
 
-| Unit | Default mode | Queues | Runtime role |
-| --- | --- | --- | --- |
-| `lx-annotate-celery-worker.service` | always | `maintenance,default` | General maintenance/default work, including post-validation behavior selected by `VIDEO_POST_VALIDATION_JOB_MODE=celery`. |
-| `lx-annotate-celery-pipeline-worker.service` | always | `pipeline` | Upload, import, anonymization, and other pipeline jobs separated from the default queue. |
-| `lx-annotate-celery-frame-extraction-worker.service` | `maintenance-window` timer | `frame_extraction` | FFmpeg frame extraction and post-validation rebuild work. The default policy starts it from a timer at 22:00 and caps each activation with `RuntimeMaxSec=7h`. |
-| `lx-annotate-celery-ffmpeg-worker.service` | always | `ffmpeg_media` | Heavy FFmpeg media processing with its own CPU, memory, IO, and OOM scoring profile. |
-| `lx-annotate-celery-inference-worker.service` | always | `inference` | Temporal inference jobs with stream-backed frame input and optional `CUDA_VISIBLE_DEVICES`. |
-| `lx-annotate-celery-training-worker.service` | manual | `model_training` | GPU model-training jobs using `runtime.modelTrainingStagingRoot`; exports `CUDA_VISIBLE_DEVICES`, defaulting to `0`. |
-| `lx-annotate-celery-llm-inference-worker.service` | manual | `llm_inference` | Ollama-backed report and metadata LLM inference. It requires and orders after `ollama.service`. |
+| Unit                                                 | Default mode               | Queues                | Runtime role                                                                                                                                                   |
+| ---------------------------------------------------- | -------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lx-annotate-celery-worker.service`                  | always                     | `maintenance,default` | General maintenance/default work, including post-validation behavior selected by `VIDEO_POST_VALIDATION_JOB_MODE=celery`.                                      |
+| `lx-annotate-celery-pipeline-worker.service`         | always                     | `pipeline`            | Upload, import, anonymization, and other pipeline jobs separated from the default queue.                                                                       |
+| `lx-annotate-celery-frame-extraction-worker.service` | `maintenance-window` timer | `frame_extraction`    | FFmpeg frame extraction and post-validation rebuild work. The default policy starts it from a timer at 22:00 and caps each activation with `RuntimeMaxSec=7h`. |
+| `lx-annotate-celery-ffmpeg-worker.service`           | always                     | `ffmpeg_media`        | Heavy FFmpeg media processing with its own CPU, memory, IO, and OOM scoring profile.                                                                           |
+| `lx-annotate-celery-inference-worker.service`        | always                     | `inference`           | Temporal inference jobs with stream-backed frame input and optional `CUDA_VISIBLE_DEVICES`.                                                                    |
+| `lx-annotate-celery-training-worker.service`         | manual                     | `model_training`      | GPU model-training jobs using `runtime.modelTrainingStagingRoot`; exports `CUDA_VISIBLE_DEVICES`, defaulting to `0`.                                           |
+| `lx-annotate-celery-llm-inference-worker.service`    | manual                     | `llm_inference`       | Ollama-backed report and metadata LLM inference. It requires and orders after `ollama.service`.                                                                |
 
 Each worker calls `lx-annotate-worker` with an explicit hostname, queue list,
 concurrency, `--prefetch-multiplier=1`, and optional child recycling. Pool
@@ -313,12 +360,12 @@ limits come from `runtime.workerPools.*`.
 
 ### Maintenance Timers
 
-| Unit | Type / trigger | Runtime role |
-| --- | --- | --- |
-| `lx-annotate-ffmpeg-stream-throttle.timer` | legacy, disabled by default | Starts `lx-annotate-ffmpeg-stream-throttle.service`, which asks Django whether user video streams are active and then applies runtime cgroup CPU/IO weights to the FFmpeg worker. Its last applied profile is stored in `/run/lx-annotate/ffmpeg-stream-throttle.state`. |
-| `lx-annotate-data-cleanup.timer` | timer when `dataCleanup.enable` | Starts duplicate cleanup for legacy anonymized payloads, moving verified duplicates into the configured archive tree. |
-| `lx-annotate-emergency-storage-relief.timer` | optional timer | Starts the emergency relief job when explicitly enabled. The service fails closed unless the external archive mount matches the configured device id or filesystem UUID, then archives only verified duplicates or validated export bundles. Manual starts are the default workflow. |
-| `lx-annotate-hub-backup.timer` | timer when `hub.backup.enable` | Starts hub snapshots. The service rsyncs the encrypted runtime tree into timestamped snapshots, writes JSON manifests, maintains a `latest` symlink, and prunes by `hub.backup.retainCount`. |
+| Unit                                         | Type / trigger                  | Runtime role                                                                                                                                                                                                                                                                         |
+| -------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `lx-annotate-ffmpeg-stream-throttle.timer`   | legacy, disabled by default     | Starts `lx-annotate-ffmpeg-stream-throttle.service`, which asks Django whether user video streams are active and then applies runtime cgroup CPU/IO weights to the FFmpeg worker. Its last applied profile is stored in `/run/lx-annotate/ffmpeg-stream-throttle.state`.             |
+| `lx-annotate-data-cleanup.timer`             | timer when `dataCleanup.enable` | Starts duplicate cleanup for legacy anonymized payloads, moving verified duplicates into the configured archive tree.                                                                                                                                                                |
+| `lx-annotate-emergency-storage-relief.timer` | optional timer                  | Starts the emergency relief job when explicitly enabled. The service fails closed unless the external archive mount matches the configured device id or filesystem UUID, then archives only verified duplicates or validated export bundles. Manual starts are the default workflow. |
+| `lx-annotate-hub-backup.timer`               | timer when `hub.backup.enable`  | Starts hub snapshots. The service rsyncs the encrypted runtime tree into timestamped snapshots, writes JSON manifests, maintains a `latest` symlink, and prunes by `hub.backup.retainCount`.                                                                                         |
 
 ### API request priority and trailing buffer
 
@@ -387,12 +434,12 @@ The module enables or orders against several non-`lx-annotate-*` services:
 `runtime.intakeDirs` contract. Do not give either service a parallel hardcoded
 intake path.
 
-| Operator path | Mover behavior | Watcher contract |
-| --- | --- | --- |
-| `Video_Input` desktop link | path-triggered source, copied into mover staging, then published below `runtime.intakeDirs.importRoot` | `lx-annotate-filewatcher.path` watches the derived `video_import` directory |
-| `PDF_Input` desktop link | path-triggered source, copied into mover staging, then published below `runtime.intakeDirs.importRoot` | `lx-annotate-filewatcher.path` watches the derived `report_import` directory |
-| `preanonymized_import` desktop link | direct service-user access path, not moved by `move-my-files` | `lx-annotate-filewatcher.path` watches the derived `preanonymized_import` directory |
-| `sap_import` desktop link | direct service-user access path for SAP intake | handled by SAP import services, not by the file watcher path unit |
+| Operator path                       | Mover behavior                                                                                         | Watcher contract                                                                    |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| `Video_Input` desktop link          | path-triggered source, copied into mover staging, then published below `runtime.intakeDirs.importRoot` | `lx-annotate-filewatcher.path` watches the derived `video_import` directory         |
+| `PDF_Input` desktop link            | path-triggered source, copied into mover staging, then published below `runtime.intakeDirs.importRoot` | `lx-annotate-filewatcher.path` watches the derived `report_import` directory        |
+| `preanonymized_import` desktop link | direct service-user access path, not moved by `move-my-files`                                          | `lx-annotate-filewatcher.path` watches the derived `preanonymized_import` directory |
+| `sap_import` desktop link           | direct service-user access path for SAP intake                                                         | handled by SAP import services, not by the file watcher path unit                   |
 
 The mover staging directory is `.move-my-files-staging` below the import root. It is
 intentionally not watched. `move-my-files` first copies operator input into that

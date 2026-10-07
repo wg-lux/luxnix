@@ -119,6 +119,9 @@ definition_of_done:
   category: operations
   title: WP-LN-03 Hosts reconcile HLS state and gate readiness on terminal evidence
   acceptance:
+  - Every enabled host defaults to automatic apply for bounded, reference-aware media cleanup; an explicit
+    typed runtime option retains dry-run operation. Terminal streaming records are retired by the backend
+    only after owned files are removed and the current source and playback derivative are verified.
   - A bounded recurring reconciliation path compares active database attempts with broker and worker liveness
     and invokes the Endoreg-owned safe recovery contract.
   - Acceptance distinguishes READY, live active, stale active, terminal failure, missing source, and absent
@@ -152,11 +155,22 @@ definition_of_done:
     - kind: code
       reference: modules/nixos/services/lx-annotate-local/subservices/lx-annotate-hls-backfill.nix persistent
         hourly reconciliation timer
-    note: Every enabled host runs an unrestricted full raw and processed pass at startup and repeats it
-      hourly through a persistent timer, so legacy replacement and stale orphan redispatch require no
-      user action or reboot. Terminal READY deployment acceptance remains open under this broader criterion.
-    assessed_by: codex-gc10-hls-investigate
-    assessed_at: '2026-09-02T09:53:29.196174Z'
+    - kind: test
+      reference: tests/lx-annotate/test_lx_annotate_nix_eval_contract.py
+    - kind: code
+      reference: modules/nixos/services/lx-annotate-local/scripts/env.nix
+    note: 'Shared runtime.automaticMediaCleanup defaults to true for every enabled application host and
+      renders the existing UPLOAD_JOB_SOURCE_REAPER_APPLY_ENABLED gate. A typed false override retains
+      automatic dry-run mode; extraEnvironment cannot bypass the typed option. Two Nix evaluation tests
+      passed in an isolated verification worktree with the same locked inputs and only the cleanup configuration
+      patch. The live worktree now contains an unrelated concurrent import of a missing lx-annotate-storage-migration.nix;
+      both live-worktree evaluations fail on that missing module. No host activation or production deletion
+      performed. Connectivity reaches gs-02 and gc-05 (the latter requires its system Python); other checked
+      application clients time out or reject public-key authentication. Backend tests: 173 integration
+      cases plus a final overlapping focused suite of 50 passed. Terminal READY acceptance and broader
+      readiness remain open.'
+    assessed_by: codex-cleanup-20261005
+    assessed_at: '2026-10-06T13:49:30.091755Z'
 - id: hls_runtime_artifact_provenance
   category: security
   title: WP-LN-04 Evaluated provenance identifies the HLS code actually imported

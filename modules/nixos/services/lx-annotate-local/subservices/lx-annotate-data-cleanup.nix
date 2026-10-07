@@ -16,14 +16,14 @@ with ctx;
       Type = "oneshot";
       User = endoreg-service-user-name;
       Group = endoreg-service-group-name;
-      WorkingDirectory = endoreg-service-user-home;
+      WorkingDirectory = runtimeDataRootPath;
       ExecStart = "${dataCleanupScript}/bin/runLxAnnotateDataCleanup";
       ReadWritePaths = [
         endoreg-service-user-home
         envDataDir
-        cfg.dataCleanup.archiveDir
+        "-${cfg.dataCleanup.archiveDir}"
         runtimeRootPath
-        "/var/endoreg-service-user/lx-annotate"
+        "-/var/endoreg-service-user/lx-annotate"
         config.roles.endoreg-client.paths.storagePersistingMountPoint
       ];
     };

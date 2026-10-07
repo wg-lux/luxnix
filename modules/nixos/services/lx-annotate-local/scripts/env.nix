@@ -139,6 +139,7 @@ rec {
     LX_ANNOTATE_REQUEST_THROTTLE_DIRECTORY =
       if cfg.runtime.frontendRequestThrottle.enable then "/run/lx-annotate-request-throttle" else "";
     MEDIA_OPERATION_STREAM_LEASE_SECONDS = "300";
+    UPLOAD_JOB_SOURCE_REAPER_APPLY_ENABLED = boolString cfg.runtime.automaticMediaCleanup;
     SERVE_WITH_NGINX = boolString cfg.runtime.streamableServing.nginxOffload;
     NGINX_PROTECTED_MEDIA_URL = cfg.runtime.streamableServing.protectedMediaUrl;
     LX_ANNOTATE_DEFAULT_CENTER = envDefaultCenter;

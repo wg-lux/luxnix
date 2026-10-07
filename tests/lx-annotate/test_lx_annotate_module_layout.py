@@ -32,7 +32,7 @@ def test_each_subservice_leaf_owns_one_documented_service() -> None:
         path for path in SUBSERVICE_DIR.rglob("*.nix") if path.name not in {"workers.nix", "lx-annotate-request-throttle.nix"}
     )
 
-    assert len(leaf_modules) == 37
+    assert len(leaf_modules) == 38
     for module in leaf_modules:
         source = module.read_text(encoding="utf-8")
         relative_path = module.relative_to(SERVICE_DIR)

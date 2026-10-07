@@ -27,6 +27,38 @@ def _option_source() -> str:
     )
 
 
+def test_automatic_media_cleanup_is_enabled_on_every_application_host() -> None:
+    hosts = _nix_eval_expr_json("""
+      let
+        flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
+        lib = flake.inputs.nixpkgs.lib;
+        hosts = lib.filterAttrs (_: host:
+          host.config.services.luxnix.lxAnnotateLocal.enable
+        ) flake.nixosConfigurations;
+      in lib.mapAttrs (_: host: {
+        enabled = host.config.services.luxnix.lxAnnotateLocal.runtime.automaticMediaCleanup;
+        worker = host.config.systemd.services.lx-annotate-celery-worker.environment.UPLOAD_JOB_SOURCE_REAPER_APPLY_ENABLED;
+        scheduler = host.config.systemd.services.lx-annotate-celery-beat.environment.UPLOAD_JOB_SOURCE_REAPER_APPLY_ENABLED;
+      }) hosts
+    """)
+    assert hosts
+    assert "gc-02" in hosts and "gs-02" in hosts
+    for host, values in hosts.items():
+        assert values == {"enabled": True, "worker": "true", "scheduler": "true"}, host
+
+
+def test_automatic_media_cleanup_can_be_explicitly_disabled() -> None:
+    value = _nix_eval_expr_json("""
+      let
+        flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
+        host = flake.nixosConfigurations.gc-02.extendModules {
+          modules = [{ services.luxnix.lxAnnotateLocal.runtime.automaticMediaCleanup = false; }];
+        };
+      in host.config.systemd.services.lx-annotate-celery-worker.environment.UPLOAD_JOB_SOURCE_REAPER_APPLY_ENABLED
+    """)
+    assert value == "false"
+
+
 def _service_source() -> str:
     return CONFIG_NIX.read_text(encoding="utf-8") + "\n" + "\n".join(
         path.read_text(encoding="utf-8")
@@ -609,33 +641,33 @@ def _gc_02_extended_contracts() -> dict[str, Any]:
             serviceConfig = service.serviceConfig;
           };
           streamableService = let
-            serviceExists = builtins.hasAttr "lx-annotate-video-streamable-migration" streamableEnabled.systemd.services;
+            serviceExists = builtins.hasAttr "lx-annotate-storage-migration" streamableEnabled.systemd.services;
           in {
             inherit serviceExists;
             serviceConfig =
               if serviceExists then
-                streamableEnabled.systemd.services."lx-annotate-video-streamable-migration".serviceConfig
+                streamableEnabled.systemd.services."lx-annotate-storage-migration".serviceConfig
               else
                 {};
           };
           streamableUnit = let
-            enabledHasService = builtins.hasAttr "lx-annotate-video-streamable-migration" streamableEnabled.systemd.services;
+            enabledHasService = builtins.hasAttr "lx-annotate-storage-migration" streamableEnabled.systemd.services;
           in {
-            defaultHasService = builtins.hasAttr "lx-annotate-video-streamable-migration" gc02.config.systemd.services;
+            defaultHasService = builtins.hasAttr "lx-annotate-storage-migration" gc02.config.systemd.services;
             inherit enabledHasService;
             enabledAfter =
               if enabledHasService then
-                streamableEnabled.systemd.services."lx-annotate-video-streamable-migration".after
+                streamableEnabled.systemd.services."lx-annotate-storage-migration".after
               else
                 [];
             enabledRequires =
               if enabledHasService then
-                streamableEnabled.systemd.services."lx-annotate-video-streamable-migration".requires
+                streamableEnabled.systemd.services."lx-annotate-storage-migration".requires
               else
                 [];
             enabledWantedBy =
               if enabledHasService then
-                streamableEnabled.systemd.services."lx-annotate-video-streamable-migration".wantedBy
+                streamableEnabled.systemd.services."lx-annotate-storage-migration".wantedBy
               else
                 [];
           };

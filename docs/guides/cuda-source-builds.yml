@@ -73,3 +73,33 @@ verification:
   not_performed:
     - Full system build, to avoid triggering other expensive source builds.
     - Activation or runtime GPU tests; no running host was changed.
+
+obs_cache_followup:
+  date: '2026-10-07'
+  host: gc-02
+  process: '1854853 (shell) -> nh os switch -> nix build; OBS compiled through ninja'
+  locked_revision: b25309931cfda5f0b8805f462a29897eeae50168
+  previous_locked_revision: 6713828a351efa628b025a1adf7f43cbf8597513
+  cause: >-
+    Updating nixpkgs changes package derivations. On this host the package set
+    also enables CUDA globally. For OBS 32.1.2 that adds only the redundant
+    autoAddDriverRunpath hook; the standard recipe already adds driver runpaths.
+  outputs:
+    cuda: /nix/store/g4qd80y4w0g44zdqsm5nvjvf285bsq72-obs-studio-32.1.2
+    standard: /nix/store/4ijwmam0rhp8qqp5myapzflpa7srhz7c-obs-studio-32.1.2
+  cache_nixos_org_probe:
+    cuda: 404
+    standard: 200
+  changes:
+    - Select the standard OBS package in the custom-packages role using an overridable default.
+    - Preserve global CUDA, NVIDIA PRIME, FFmpeg, and OBS build features.
+    - Replace the retired CUDA cache and key in host defaults; remove retired entries from flake settings.
+    - Merge extra cache URLs and keys at normal priority; mkDefault lost to NixOS standard-cache definitions on all 16 hosts.
+  cache_reference: https://wiki.nixos.org/wiki/CUDA#Setting_up_CUDA_Binary_Cache
+  wayland_evidence: 'loginctl show-session 3: Desktop=KDE, Type=wayland, State=active; kwin_wayland installed.'
+  tests: tests/test_package_cache_contract.py
+  limits:
+    - Existing builds retain their already-evaluated dependency graph.
+    - Duplicate references to identical store paths do not cause repeated compilation.
+    - Other CUDA consumers and uncached releases can still require source builds.
+    - No activation or interactive recording test was performed by this audit.

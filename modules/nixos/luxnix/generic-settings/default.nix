@@ -28,7 +28,7 @@ in
         type = types.listOf types.str;
         default = [
           "https://nix-community.cachix.org"
-          "https://cuda-maintainers.cachix.org"
+          "https://cache.nixos-cuda.org"
         ];
         description = "Extra binary caches (substituters) to use in addition to cache.nixos.org.";
       };
@@ -37,7 +37,7 @@ in
         type = types.listOf types.str;
         default = [
           "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
-          "cuda-maintainers.cachix.org-1:0dq3bujKpuEPMCX6U4WylrUDZ9JyUG0VpVZa7CNfq5E="
+          "cache.nixos-cuda.org:74DUi4Ye579gUqzH4ziL9IyiJBlDpMRn9MBN8oNan9M="
         ];
         description = "Trusted public keys for the configured extra binary caches.";
       };
@@ -365,13 +365,10 @@ in
       {
         auto-optimise-store = mkDefault true;
         cores = mkDefault cfg.nix.cores;
-        substituters = mkDefault ([ "https://cache.nixos.org/" ] ++ cfg.nix.extraSubstituters);
-        trusted-public-keys = mkDefault (
-          [
-            "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
-          ]
-          ++ cfg.nix.extraTrustedPublicKeys
-        );
+        # NixOS adds its standard cache/key at normal priority. mkDefault
+        # here would be discarded instead of extending those lists.
+        substituters = cfg.nix.extraSubstituters;
+        trusted-public-keys = cfg.nix.extraTrustedPublicKeys;
       }
       // optionalAttrs (cfg.nix.maxJobs != null) {
         max-jobs = mkDefault cfg.nix.maxJobs;

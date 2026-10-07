@@ -115,6 +115,27 @@ installation fails, repair and restart the wheel-runtime unit before retrying
 `lx-annotate-migrate.service`; do not run `pip` concurrently with application
 units.
 
+The package-provided `lx-dtypes-kb-bootstrap.service` must also require and
+follow wheel preparation. If an interrupted upgrade leaves it failed with
+"wheel runtime is not prepared", an authorized operator can recover in order:
+
+```bash
+sudo systemctl start lx-annotate-wheel-runtime.service &&
+sudo systemctl start lx-dtypes-kb-bootstrap.service &&
+sudo systemctl start lx-annotate.service
+```
+
+This retains runtime validation and strict terminology provisioning. Do not
+disable the bootstrap dependency or delete the release stamp to bypass it.
+
+If `luxnix-vault-issue-hub-client-certificate.service` reports a generic
+`vault-error`, verify that its generated `PATH` contains both `vault` and `jq`.
+The fresh-authentication helper uses these commands by name; a missing binary
+is not evidence that the AppRole credentials need rotation. The Vault module
+declares both runtime dependencies. Continue with the
+[Vault enrollment runbook](../../../../docs/vault-hub-machine-enrollment.md)
+if authentication still fails after correcting the service environment.
+
 If the initial Django migration fails, `lx-annotate-migrate.service` runs
 the `repair_legacy_migration_history` command through Django's migration-safe
 shell entrypoint and retries the migration. The shell entrypoint avoids the

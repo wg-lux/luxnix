@@ -1,9 +1,9 @@
-# Purpose: Define only the lx-annotate-video-streamable-migration.service unit.
+# Purpose: Define only the lx-annotate-storage-migration.service unit.
 # Command: lx-annotate-migrate-video-streamable-storage.
 { ctx }:
 with ctx;
 {
-  systemd.services.lx-annotate-video-streamable-migration = mkIf cfg.streamableMigration.enable {
+  systemd.services.lx-annotate-storage-migration = mkIf cfg.streamableMigration.enable {
     description = "Reconcile LX-Annotate canonical video and PDF storage";
     wantedBy = [ ];
     after = [

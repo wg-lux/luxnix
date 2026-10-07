@@ -119,6 +119,32 @@ def test_governed_terminology_paths_are_exported_inside_encrypted_storage() -> N
     )
 
 
+@pytest.mark.parametrize("mode", ["wheel", "repo"])
+def test_packaged_bootstrap_requires_prepared_wheel_without_ordering_cycle(mode) -> None:
+    result = _nix_eval_json(f'''
+      let
+        f = builtins.getFlake "git+file://{REPO_ROOT}";
+        c = (f.nixosConfigurations.gc-02.extendModules {{ modules = [{{
+          services.luxnix.lxAnnotateLocal.runtime.mode = f.inputs.nixpkgs.lib.mkForce "{mode}";
+        }}]; }}).config;
+        units = c.systemd.services;
+      in {{
+        bootstrap = {{ inherit (units.lx-dtypes-kb-bootstrap) after requires before; }};
+        prepareAfter = if "{mode}" == "wheel" then units.lx-annotate-wheel-runtime.after else [];
+        migrateAfter = units.lx-annotate-migrate.after;
+        webRequires = units.lx-annotate.requires;
+      }}
+    ''')
+    bootstrap = result["bootstrap"]
+    prepare = "lx-annotate-wheel-runtime.service"
+    for relation in ("after", "requires"):
+        assert (prepare in bootstrap[relation]) == (mode == "wheel")
+    assert "lx-dtypes-kb-bootstrap.service" in result["webRequires"]
+    assert "lx-dtypes-kb-bootstrap.service" not in result["prepareAfter"]
+    assert "lx-annotate-migrate.service" not in result["prepareAfter"]
+    assert "lx-annotate-migrate.service" in bootstrap["before"]
+
+
 def test_retired_host_terminology_bootstrap_is_not_a_startup_gate() -> None:
     contract = _gc_02_terminology_contract()
     unit_name = "lx-annotate-terminology-bootstrap.service"

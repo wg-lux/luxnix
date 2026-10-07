@@ -1,6 +1,7 @@
 """Run the actual sourced refresh helper with an expired bootstrap token."""
 
 import os
+import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -9,6 +10,26 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 HELPER = ROOT / "scripts/vault/refresh-client-auth.sh"
+
+
+def test_certificate_service_can_resolve_authentication_tools():
+    expression = f'''
+      let f = builtins.getFlake "git+file://{ROOT}";
+      in f.nixosConfigurations.gc-02.config.systemd.services
+        .luxnix-vault-issue-hub-client-certificate.environment.PATH
+    '''
+    result = subprocess.run(
+        ["nix", "eval", "--impure", "--json", "--expr", expression],
+        cwd=ROOT, capture_output=True, text=True, check=True,
+    )
+    path = json.loads(result.stdout)
+    for command in ("vault", "jq"):
+        executable = shutil.which(command, path=path)
+        assert executable, f"{command} is missing from the service PATH"
+        subprocess.run(
+            [executable, "version" if command == "vault" else "--version"],
+            env={"PATH": path}, capture_output=True, text=True, check=True,
+        )
 
 
 @pytest.mark.parametrize("error, state", [

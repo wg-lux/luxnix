@@ -1399,11 +1399,9 @@ let
     marker_dir="$runtime_root/logs"
     marker_file="$marker_dir/data_cleanup_latest.log"
 
-    mkdir -p "$marker_dir"
-
     if [ ! -d "$runtime_root" ]; then
-      echo "Skipping cleanup; runtime root missing: $runtime_root"
-      exit 0
+      echo "ERROR: refusing cleanup; runtime root missing: $runtime_root" >&2
+      exit 1
     fi
 
     if ! ${pkgs.util-linux}/bin/mountpoint -q "$persisting_mount"; then
@@ -1426,7 +1424,7 @@ let
       exit 1
     fi
 
-    mkdir -p "$archive_root"
+    mkdir -p "$marker_dir"
 
     moved_count=0
     skipped_count=0
@@ -1440,6 +1438,22 @@ let
         echo "Skipping $label source; directory not present: $source_root"
         return 0
       fi
+
+      local resolved_source resolved_target
+      resolved_source="$(${pkgs.coreutils}/bin/realpath -e "$source_root")"
+      resolved_target="$(${pkgs.coreutils}/bin/realpath -m "$runtime_target_root")"
+      case "$resolved_source/" in
+        "$resolved_target/"*)
+          echo "ERROR: refusing cleanup of active runtime storage: $label" >&2
+          return 1
+          ;;
+      esac
+      case "$resolved_target/" in
+        "$resolved_source/"*)
+          echo "ERROR: refusing cleanup of a parent of runtime storage: $label" >&2
+          return 1
+          ;;
+      esac
 
       while IFS= read -r -d "" source_file; do
         local rel_path runtime_file archive_file archive_dir
@@ -1650,6 +1664,7 @@ let
   subserviceModules = [
     (import ./subservices/lx-annotate-runtime-env.nix { ctx = subserviceContext; })
     (import ./subservices/lx-annotate-wheel-runtime.nix { ctx = subserviceContext; })
+    (import ./subservices/lx-dtypes-kb-bootstrap.nix { ctx = subserviceContext; })
     (import ./subservices/lx-annotate-data-recovery.nix { ctx = subserviceContext; })
     (import ./subservices/lx-annotate-migrate.nix { ctx = subserviceContext; })
     (import ./subservices/lx-annotate-load-base-data.nix { ctx = subserviceContext; })
@@ -1665,7 +1680,7 @@ let
     (import ./subservices/lx-annotate.nix { ctx = subserviceContext; })
     (import ./subservices/lx-annotate-master-key-check.nix { ctx = subserviceContext; })
     (import ./subservices/lx-annotate-preflight.nix { ctx = subserviceContext; })
-    (import ./subservices/lx-annotate-video-streamable-migration.nix { ctx = subserviceContext; })
+    (import ./subservices/lx-annotate-storage-migration.nix { ctx = subserviceContext; })
     (import ./subservices/lx-annotate-hls-materialization.nix { ctx = subserviceContext; })
     (import ./subservices/lx-annotate-hls-backfill.nix { ctx = subserviceContext; })
     (import ./subservices/lx-annotate-data-cleanup.nix { ctx = subserviceContext; })
@@ -1766,6 +1781,11 @@ in
                 !cfg.hub.outboundTransfer.enable
                 || cfg.runtime.celeryBroker.visibilityTimeoutSeconds > cfg.hub.outboundTransfer.staleAfterSeconds;
               message = "services.luxnix.lxAnnotateLocal.runtime.celeryBroker.visibilityTimeoutSeconds must exceed hub.outboundTransfer.staleAfterSeconds.";
+            }
+            {
+              assertion =
+                !(builtins.hasAttr "UPLOAD_JOB_SOURCE_REAPER_APPLY_ENABLED" cfg.runtime.extraEnvironment);
+              message = "Set runtime.automaticMediaCleanup instead of overriding UPLOAD_JOB_SOURCE_REAPER_APPLY_ENABLED through runtime.extraEnvironment.";
             }
             {
               assertion = !(builtins.hasAttr "CELERY_VISIBILITY_TIMEOUT_SECONDS" cfg.runtime.extraEnvironment);
@@ -2575,6 +2595,7 @@ in
                 "z ${runtimeRootPath} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
                 "d ${envDataDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
                 "z ${envDataDir} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
+                "d ${cfg.runtime.terminology.importRoot} 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
                 "d ${envDataDir}/quarantine 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
                 "d ${envDataDir}/quarantine/failed 0750 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"
                 "d ${envConfDir} 0755 ${endoreg-service-user-name} ${endoreg-service-group-name} - -"

@@ -48,7 +48,7 @@ def test_streamable_video_directories_are_provisioned_and_migration_is_exposed()
     assert 'export LX_RUNTIME_ROOT="${envDataDir}"' in scripts_source
     assert 'source "${lxAnnotateRuntimeLib}"' in scripts_source
     assert "lx_annotate_export_runtime_env" in scripts_source
-    assert "lx-annotate-video-streamable-migration" in readme
+    assert "lx-annotate-storage-migration" in readme
 
 
 def test_nginx_media_requires_application_authorization():

@@ -135,6 +135,18 @@ host_conventions:
 # Risk is intentionally explicit so tools can distinguish inspection from mutation.
 # Commands containing <host> or <target-ip> require those values to be substituted.
 workflows:
+  - id: lx-annotate-check-service-binaries
+    summary: Build and verify configured LX-Annotate service executables without starting services.
+    risk: local-state
+    documentation: docs/deploying-services-lx-annotate-style.md
+    command: nix build --impure --file tests/lx-annotate/service-binaries.nix --argstr host <host> --no-link -L
+    arguments:
+      host:
+        required: true
+        source: discover-hosts
+    effects:
+      - May download dependencies and add paths to the local Nix store.
+
   - id: check-nix-quality
     summary: Run fast, ratcheted source and lockfile quality checks without modifying files.
     risk: read-only

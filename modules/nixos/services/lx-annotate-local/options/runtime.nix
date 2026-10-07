@@ -290,8 +290,8 @@ in
           wheelPath = mkOption {
             type = types.nullOr types.path;
             default = pkgs.fetchurl {
-              url = "https://files.pythonhosted.org/packages/ee/eb/6c8f0d28762f0b261dfcb0a80fc75d29962abcb97c0a6d1f03c80b3e2d69/lx_annotate-1.4.7-py3-none-any.whl";
-              hash = "sha256-0VIb04SXRa8hy6sMOnTHth7ORrnlf2zaqak97O36ACw=";
+              url = "https://files.pythonhosted.org/packages/bd/9a/e84bbbb31491ff24bfd6defedaf65db788d3a90c1531fbba382276616402/lx_annotate-1.4.9-py3-none-any.whl";
+              hash = "sha256-nalUdu8SPx9zuNJKbs37R0MgTF+lcS71npBmi+9C1eM=";
             };
             description = "Path to the lx-annotate wheel artifact used in wheel mode.";
           };
@@ -313,6 +313,11 @@ in
               device; encoder preflight then fails closed if NVENC is
               unavailable.
             '';
+          };
+          automaticMediaCleanup = mkOption {
+            type = types.bool;
+            default = true;
+            description = "Apply the recurring, reference-aware media cleanup on every enabled host. False keeps the worker in dry-run mode. Endoreg retains integrity, ownership and active-lease checks.";
           };
           extraEnvironment = mkOption {
             type = types.attrsOf types.str;

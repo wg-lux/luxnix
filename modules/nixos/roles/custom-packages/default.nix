@@ -125,7 +125,12 @@ in
       enable = lib.mkForce cfg.ld.enable;
     };
 
-    programs.obs-studio.enable = cfg.videoEditing;
+    programs.obs-studio = {
+      enable = cfg.videoEditing;
+      # The pinned OBS recipe already adds driver runpaths and builds NVENC.
+      # Avoid the redundant CUDA hook, which changes the cached derivation.
+      package = mkDefault (pkgs.obs-studio.override { cudaSupport = false; });
+    };
 
     programs.thunderbird.enable = false; # cfg.office;
 

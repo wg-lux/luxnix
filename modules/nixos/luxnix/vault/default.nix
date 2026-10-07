@@ -1846,6 +1846,10 @@ in
 
       services.luxnix-vault-issue-hub-client-certificate = lib.mkIf clientHubPkiCfg.enable {
         description = "Issue or renew the LX-Annotate hub-transfer client certificate";
+        path = [
+          pkgs.vault
+          pkgs.jq
+        ];
         wantedBy = lib.optionals (!cfg.client.auth.deferUntilProvisioned) [ "multi-user.target" ];
         before = [ "lx-annotate-celery-hub-transfer-worker.service" ];
         after = [

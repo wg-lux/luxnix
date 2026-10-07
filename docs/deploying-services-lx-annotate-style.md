@@ -15,6 +15,20 @@ Today, the pattern is integrated across:
 
 If you want another service to behave the same way, you should deliberately copy this structure rather than assuming Vault integration is automatic for all LuxNix services.
 
+## Verify LX-Annotate Service Executables
+
+Before deployment, build and check the configured `ExecStart` binaries without
+running services (replace `<host>` with a known host, such as `gc-02`):
+
+```bash
+nix build --impure --file tests/lx-annotate/service-binaries.nix --argstr host <host> --no-link -L
+```
+
+This checks executable availability, not installed Python dependencies, database
+readiness, or cleanup success. See the
+[service guide](https://github.com/wg-lux/luxnix/blob/main/modules/nixos/services/lx-annotate-local/README.md#intake-and-manual-jobs)
+for deployed-host checks and the distinction between legacy and Celery cleanup.
+
 ## What “`lx-annotate`-Style” Means
 
 A service deployed `lx-annotate`-style follows this chain:
@@ -358,3 +372,37 @@ We are not fully there yet, but `lx-annotate` is now the reference implementatio
 - [Nixtest Safety Suite](testing-nixtests.md)
 - [Managed Secrets Role](https://github.com/wg-lux/luxnix/blob/main/modules/nixos/roles/managed-secrets/README.md)
 - [lx-annotate Service Module](https://github.com/wg-lux/luxnix/blob/main/modules/nixos/services/lx-annotate-local/README.md)
+
+## Firefox trust for local LX-Annotate HTTPS
+
+`lxSsl` generates a separate self-signed certificate on each machine. Firefox
+must trust that actual certificate; the historical certificate under
+`modules/home/browsers/certificates/` does not match a fresh deployment.
+The Home Manager Firefox module now imports the root-owned public copy at
+`/run/lx-annotate-ssl/lx-annotate-selfsigned.crt` through
+`Certificates.Install`. This is the [Mozilla-supported certificate policy](https://firefox-admin-docs.mozilla.org/reference/policies/certificates/);
+`ImportEnterpriseRoots` alone does not provide this trust on Linux.
+The private key remains in the restricted server directory.
+
+Deploy the updated Home Manager configuration as well as the service's NixOS
+configuration using the normal reviewed deployment workflow. Once
+`generate-lx-ssl.service` and Nginx have started, fully quit and reopen Firefox.
+In `about:policies`, check that `Certificates.Install` names the runtime path
+and that there is no certificate import error. Open `https://lx-annotate.local`
+and verify there is no certificate warning or saved security exception.
+After certificate regeneration, restart Firefox to import the new certificate.
+Previously imported certificates can remain in the profile: remove obsolete
+LX-Annotate authorities and old site exceptions in Firefox's certificate manager.
+“No ownership information” is normal for this certificate and does not itself
+indicate a broken TLS connection.
+
+`browsers.firefox.certificateFiles` controls the Home Manager trust list. Set
+it to `[]` on machines without `lxSsl`; when overriding
+`django.sslCertificatePath` and `django.sslKeyPath`, set it to the actual
+issuer's public CA certificate path instead (or `[]` for a publicly trusted
+issuer). For a browser on another machine, provision the server's public
+certificate through a trusted channel and configure its local path; the
+browser machine's own generated certificate cannot authenticate another host.
+Never distribute a private key or disable certificate validation. Importing a
+certificate as an authority grants CA trust within that Firefox profile; only
+use certificates controlled by the trusted deployment administrator.
