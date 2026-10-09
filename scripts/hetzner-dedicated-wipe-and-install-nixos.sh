@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 
+# STATUS: unsupported manual template, not a canonical LuxNix deployment command.
+# Review scripts/manual-operations.yml and adapt a copy before use. This script
+# destroys disk layouts, installs a standalone configuration, and reboots.
+# Prefer the deploy-new-host workflow in luxnix.yml for supported hosts.
+
 # Installs NixOS on a Hetzner server, wiping the server.
 #
 # This is for a specific server configuration; adjust where needed.

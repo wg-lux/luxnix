@@ -32,6 +32,7 @@ for host in $HOSTS; do
   eval_log="$LOGDIR/${host}-eval.log"
   build_log="$LOGDIR/${host}-build.log"
   temp_log="$(mktemp)"
+  trap 'rm -f "$temp_log"' EXIT
 
   # Step 1: Evaluation
   if nix eval ".#nixosConfigurations.${host}.config.system.build.toplevel" --show-trace > /dev/null 2> "$eval_log"; then
@@ -40,6 +41,7 @@ for host in $HOSTS; do
     echo " $host: Evaluation failed"
     cat "$eval_log"
     failures=$((failures + 1))
+    rm -f "$temp_log"
     continue
   fi
 
@@ -61,7 +63,7 @@ for host in $HOSTS; do
     fi
 
     echo " Last 20 lines of build output:" | tee -a "$build_log"
-    tail -n 20 "$build_log" | tee -a "$build_log"
+    tail -n 20 "$build_log"
 
     echo ""
     echo "  To manually debug:"
@@ -70,6 +72,7 @@ for host in $HOSTS; do
 
     failures=$((failures + 1))
   fi
+  rm -f "$temp_log"
 done
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

@@ -1,0 +1,14 @@
+# Vault locations and secret filenames shared by managed hosts.
+secret_dir: /etc/secrets
+lx_vault_dir: '{{ secret_dir }}/vault'
+lx_vault_key: '{{ secret_dir }}/.key'
+lx_vault_psk: '{{ secret_dir }}/.psk'
+lx_vault_dir_src: /home/admin/.lxv
+lx_vault_key_src: /home/admin/.lxv.key
+lx_vault_host_deploy_dir: '{{ lx_vault_dir_src }}/deploy/{{ inventory_hostname }}'
+
+maintenance_password_filename: SCRT_local_password_maintenance_password
+admin_password_filename: SCRT_local_password_admin_password
+admin_password_hashed_filename: '{{ admin_password_filename }}_hash'
+postgres_host_main_password_filename: SCRT_roles_system_password_postgres_host_main_password
+postgres_host_test_password_filename: SCRT_roles_system_password_postgres_host_test_password

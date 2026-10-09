@@ -1,7 +1,8 @@
-{ config
-, pkgs
-, lib
-, ...
+{
+  config,
+  pkgs,
+  lib,
+  ...
 }:
 with lib;
 with lib.luxnix;
@@ -24,9 +25,9 @@ in
       # Some high-level settings:
 
       # Run to get options
-      # plasma-apply-colorscheme     plasma-apply-lookandfeel   
+      # plasma-apply-colorscheme     plasma-apply-lookandfeel
       # plasma-apply-cursortheme     plasma-apply-wallpaperimage
-      # plasma-apply-desktoptheme  
+      # plasma-apply-desktoptheme
 
       workspace = {
         clickItemTo = "select";
@@ -110,11 +111,13 @@ in
             }
             {
               systemTray.items = {
-                # We explicitly show 
+                # We explicitly show
                 shown = [
                   "org.kde.plasma.battery"
                   "org.kde.plasma.networkmanagement"
                   "org.kde.plasma.volume"
+                  "org.kde.plasma.clipboard"
+                  "org.kde.plasma.devicenotifier"
                 ];
                 # And explicitly hide
                 hidden = [
@@ -187,15 +190,7 @@ in
             };
             window-types = [ "normal" ];
           };
-          apply = {
-            noborder = {
-              value = true;
-              apply = "force";
-            };
-            # `apply` defaults to "apply-initially"
-            maximizehoriz = true;
-            maximizevert = true;
-          };
+
         }
       ];
 
@@ -208,10 +203,10 @@ in
           };
           dimDisplay = {
             enable = true;
-            idleTimeout = (15 * 60);
+            idleTimeout = 15 * 60;
           };
           turnOffDisplay = {
-            idleTimeout = (20 * 60);
+            idleTimeout = 20 * 60;
             idleTimeoutWhenLocked = "immediately";
           };
           displayBrightness = 100;
@@ -231,9 +226,6 @@ in
         edgeBarrier = 0; # Disables the edge-barriers introduced in plasma 6.1
         cornerBarrier = true; # When enabled, prevents the cursor from crossing at screen-corners.
 
-        scripts.polonium.enable = true;
-        borderlessMaximizedWindows = true;
-
         nightLight = {
           mode = "location";
           # Set Würzburg, Germany
@@ -243,17 +235,28 @@ in
             night = 3750;
           };
         };
+        titlebarButtons = {
+          left = [
+            "help"
+            "application-menu"
+          ];
+          right = [
+            "minimize"
+            "maximize"
+            "close"
+          ];
+        };
 
       };
 
       kscreenlocker = {
         appearance = {
           alwaysShowClock = true;
-          wallpaperPictureOfTheDay = {
-            # null or one of “apod”, “bing”, “flickr”, “natgeo”, “noaa”, “wcpotd”, “epod”, “simonstalenhag”
-            provider = "bing";
-          };
-          # wallpaper = "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Kay/contents/images/1080x1920.png";
+          #wallpaperPictureOfTheDay = {
+          # null or one of “apod”, “bing”, “flickr”, “natgeo”, “noaa”, “wcpotd”, “epod”, “simonstalenhag”
+          #  provider = "bing";
+          #};
+          wallpaper = "${pkgs.kdePackages.plasma-workspace-wallpapers}/share/wallpapers/Kay/contents/images/1080x1920.png";
 
         };
         lockOnResume = true;
@@ -262,7 +265,6 @@ in
         lockOnStartup = false;
         passwordRequired = true;
         passwordRequiredDelay = 10; # The time it takes in seconds for the password to be required after the screen is locked.
-
 
       };
 
@@ -291,7 +293,6 @@ in
       #
       configFile = {
         baloofilerc."Basic Settings"."Indexing-Enabled" = false;
-        kwinrc."org.kde.kdecoration2".ButtonsOnLeft = "SF";
         kwinrc.Desktops.Number = {
           value = 8;
           # Forces kde to not change this value (even through the settings app).

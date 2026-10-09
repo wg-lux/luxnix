@@ -1,0 +1,117 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lx-annotate-web
+  labels:
+    app.kubernetes.io/name: lx-annotate
+    app.kubernetes.io/component: web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lx-annotate
+      app.kubernetes.io/component: web
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: lx-annotate
+        app.kubernetes.io/component: web
+    spec:
+      initContainers:
+        - name: wait-for-bootstrap
+          image: ghcr.io/wg-lux/lx-annotate:0.5.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -lc
+          args:
+            - |
+              set -eu
+
+              marker="${LX_ANNOTATE_BOOTSTRAP_MARKER_DIR:-/var/lib/lx-annotate/data/.bootstrap}/release-${LX_ANNOTATE_RELEASE_ID}.ready"
+              until [ -f "$marker" ]; do
+                echo "waiting for lx-annotate bootstrap marker: $marker"
+                sleep 10
+              done
+          envFrom:
+            - configMapRef:
+                name: lx-annotate-config
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/lx-annotate/data
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+      containers:
+        - name: web
+          image: ghcr.io/wg-lux/lx-annotate:0.5.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -lc
+          args:
+            - exec daphne -b "$DJANGO_HOST" -p "$DJANGO_PORT" lx_annotate.asgi:application
+          ports:
+            - name: http
+              containerPort: 8117
+          envFrom:
+            - configMapRef:
+                name: lx-annotate-config
+          env:
+            - name: DJANGO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: lx-annotate-secret
+                  key: DJANGO_SECRET_KEY
+            - name: DJANGO_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: lx-annotate-secret
+                  key: DJANGO_DB_PASSWORD
+            - name: OIDC_RP_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: lx-annotate-secret
+                  key: OIDC_RP_CLIENT_ID
+            - name: OIDC_RP_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lx-annotate-secret
+                  key: OIDC_RP_CLIENT_SECRET
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/lx-annotate/data
+            - name: master-key
+              mountPath: /run/secrets/lx-annotate
+              readOnly: true
+          startupProbe:
+            tcpSocket:
+              port: http
+            failureThreshold: 30
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: http
+            failureThreshold: 3
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 500m
+              memory: 2Gi
+            limits:
+              cpu: "2"
+              memory: 6Gi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: lx-annotate-data
+        - name: master-key
+          secret:
+            secretName: lx-annotate-secret
+            items:
+              - key: master-key
+                path: master-key

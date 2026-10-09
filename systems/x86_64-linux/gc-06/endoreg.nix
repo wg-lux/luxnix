@@ -1,4 +1,4 @@
-{config, ...}@inputs: {
+_: {
   endoreg = {
     sensitiveStorage = {
       enable = false;

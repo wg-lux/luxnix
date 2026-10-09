@@ -1,0 +1,33 @@
+# Preserved operator capabilities that are intentionally not canonical wrappers.
+# Review every listed blocker and adapt a copy before running either template.
+schema_version: 1
+risk_levels_source: ../luxnix.yml#risk_levels
+canonical_workflows_source: ../luxnix.yml#workflows
+
+operations:
+  - id: hetzner-dedicated-reinstall-template
+    path: scripts/hetzner-dedicated-wipe-and-install-nixos.sh
+    status: manual-template
+    canonical: false
+    risk: destructive-remote
+    summary: Repartition and reinstall one legacy-BIOS Hetzner server layout.
+    guidance: docs/hardware-setup.md
+    safer_workflow: deploy-new-host
+    review_required:
+      - Replaces both /dev/sda and /dev/sdb partition tables and filesystem signatures.
+      - Assumes two SATA disks, RAID1, LVM, legacy BIOS, and a specific network layout.
+      - Contains a placeholder SSH public key and enables an empty local root password.
+      - Installs Nix through a network-fetched shell script and reboots automatically.
+
+  - id: gc-06-live-boot-recovery-template
+    path: scripts/recover-files-live-boot.sh
+    status: manual-template
+    canonical: false
+    risk: destructive-local
+    summary: Mount and rebuild the site-specific gc-06 installation from a live system.
+    guidance: docs/hardware-setup.md
+    review_required:
+      - Hard-codes NVMe partitions, Btrfs subvolumes, mount points, repository path, and gc-06.
+      - Pulls the current Git branch inside the mounted installation before rebuilding.
+      - Activates swap and bind mounts without a cleanup trap for interrupted runs.
+      - Must be adapted to the actual encrypted device and recovery objective.

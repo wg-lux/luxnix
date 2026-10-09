@@ -1,162 +1,167 @@
+from __future__ import annotations
+
+import logging
 from pathlib import Path
-import yaml
-from . import (
-    load_all_host_facts,
-    load_inventory_hostfile,
+
+from pydantic import ValidationError
+
+from lx_administration.logging import get_logger, log_heading
+from lx_administration.models import MergedHostVars
+from lx_administration.models.ansible import AnsibleInventory
+
+from ..errors import AutoconfPipelineError, AutoconfSourceNotFoundError
+from ..layout import AutoconfOutputLayout, AutoconfSourceLayout
+from .ansible_facts import load_all_host_facts
+from .ansible_inventory import load_inventory_hostfile
+from .artifacts import (
+    HostVariables,
+    ValidatedHosts,
+    write_merged_host_variables,
+    write_system_intermediates,
 )
-import warnings
-from lx_administration.autoconf.imports.utils import is_home_only_host
-
-from lx_administration.logging import log_heading, get_logger
-from lx_administration.models import MergedHostVars
-from lx_administration.yaml.dump import dump_yaml, ansible_lint, format_yaml
-
-from lx_administration.autoconf.imports.utils import _load_config
-from lx_administration.models import MergedHostVars
-from lx_administration.yaml.dump import dump_yaml, format_yaml
-from lx_administration.autoconf.imports.utils import is_home_only_host
-
-def home_etl(ansible_root: Path, autoconf_out: Path, logger=None):
-    if not logger:
-        logger = get_logger("home_etl", reset=True)
-
-    logger.info("Running home_etl...")
-
-    home_merged_vars_out = autoconf_out / "home_merged_vars"
-    home_merged_vars_out.mkdir(parents=True, exist_ok=True)
-    #print("here is the issue in : lx_administration/autoconf/imports/main.py -res")
-    # Load the fully merged vars per host
-    ansible_inventory_dir = ansible_root / "inventory"
-    home_host_vars = load_home_host_vars(ansible_inventory_dir)
+from .sources import load_home_host_vars
 
 
-    for hostname, merged_dict in home_host_vars.items():
-        try:
-            merged_vars = MergedHostVars(**merged_dict)
-        except Exception as e:
-            logger.warning(f"Invalid home vars for {hostname}: {e}")
-            continue
-
-        dump_yaml(merged_dict, home_merged_vars_out / f"{hostname}.yml", format_yaml)
-
-    logger.info("Finished home_etl.")
+def _require_directory(path: Path, label: str) -> None:
+    if not path.is_dir():
+        raise AutoconfSourceNotFoundError(f"{label} not found: {path}")
 
 
-
-from lx_administration.autoconf.imports.utils import load_home_host_vars
-
-def ansible_etl(ansible_root: Path, autoconf_out: Path, subnet: str, logger=None):
-    #print("ansible_etl")
-    if not logger:
-        logger = get_logger("ansible_etl", reset=True)
-
-    log_heading(logger, "------------ansible_etl------------")
-
-    ansible_inventory_dir = ansible_root / "inventory"
-    inventory_file = ansible_inventory_dir / "hosts.ini"
-    host_facts_dir = ansible_root / "cmdb"
-    log_dir = autoconf_out / "logs"
-    log_dir.mkdir(exist_ok=True)
-
-    if not host_facts_dir.exists():
-        # raise exception
-        logger.error(f"Host facts directory not found: {host_facts_dir}")
-        return
-
-    if not ansible_inventory_dir.exists():
-        # raise exception
-        logger.error(f"Ansible inventory directory not found: {ansible_inventory_dir}")
-        return
-
-    if not inventory_file.exists():
-        # raise exception
-        logger.error(f"Inventory file not found: {inventory_file}")
-        return
-
-    # Load inventory
-    inventory = load_inventory_hostfile(inventory_file)
-
-    host_facts = load_all_host_facts(host_facts_dir)
-
-    for host, facts in host_facts.items():
-        inventory.hostname_update_ansible_facts(host, facts)
-
-    for host in inventory.all:
-        # Bootstrap group names for heach host
-        host.init_ansible_role_names()
-
-    inventory.save_to_file(autoconf_out / "inventory.yml")
-
-        # Load and write home-specific merged vars
-    """home_host_vars = load_home_host_vars(ansible_inventory_dir)
-
-    home_merged_out = autoconf_out / "home_merged_vars"
-    home_merged_out.mkdir(parents=True, exist_ok=True)
-
-    for host, home_vars in home_host_vars.items():
-        try:
-            home_merged = MergedHostVars(**home_vars)
-        except Exception as e:
-            warnings.warn(f"Invalid home_merged_vars for {host}: {e}")
-
-        dump_yaml(
-            home_vars,
-            home_merged_out / f"{host}.yml",
-            format_yaml,
-        )"""
+def _require_file(path: Path, label: str) -> None:
+    if not path.is_file():
+        raise AutoconfSourceNotFoundError(f"{label} not found: {path}")
 
 
-    merged_vars_out = autoconf_out / "merged_vars"
-    merged_vars_out.mkdir(exist_ok=True)
-    inventory.validate()
-
-    #This skips the export and YAML write for home-only hosts like c-01.
-    home_only_hosts = set() # home system issue
-    for host in inventory.all:
-        if is_home_only_host(host): # home system issue
-            logger.info(f"Skipping system config for home-only host: {host.hostname}") # home system issue
-            home_only_hosts.add(host.hostname) # home system issue
-            continue # home system issue
-        merged_vars = inventory.export_merged_host_vars(host.hostname)
-
-        try:
-            MergedHostVars(**merged_vars)
-        except Exception as e:
-            warnings.warn(f"Invalid merged_vars for {host.hostname}: {e}")
-
-        dump_yaml(
-            merged_vars,
-            merged_vars_out / f"{host.hostname}.yml",
-            format_yaml,
-            # ansible_lint,
+def build_home_merged_variables(
+    ansible_root: Path,
+    autoconf_out: Path,
+    logger: logging.Logger | None = None,
+) -> None:
+    """Validate and write merged Home Manager variables."""
+    layout = AutoconfOutputLayout(autoconf_out)
+    source = AutoconfSourceLayout(ansible_root)
+    if logger is None:
+        logger = get_logger(
+            "autoconf_home_import",
+            log_dir=layout.log_dir,
+            reset=True,
         )
 
-    #     host_configs[host] = merged_config
-    inventory.save_to_file(autoconf_out / "inventory.yml")
-    return inventory, home_only_hosts # home system issue
-    #return inventory
+    logger.info("Loading Home Manager inventory variables")
+
+    home_host_vars = load_home_host_vars(source.inventory.root)
+
+    validated_hosts: ValidatedHosts = []
+    for hostname in sorted(home_host_vars):
+        merged_dict: HostVariables = home_host_vars[hostname]
+        try:
+            MergedHostVars.model_validate(merged_dict)
+        except ValidationError as exc:
+            raise AutoconfPipelineError(
+                f"Invalid Home Manager variables for {hostname} ({type(exc).__name__})"
+            ) from exc
+        validated_hosts.append((hostname, merged_dict))
+
+    write_merged_host_variables(
+        layout.home_vars_dir,
+        validated_hosts,
+    )
+
+    logger.info("Finished loading Home Manager inventory variables")
 
 
-def pipe(
-    ansible_root: Path, autoconf_out: Path, subnet: str = "172.16.255.0", logger=None
-):
-    #print("pipe function in main.py")
-    if not logger:
-        logger = get_logger("autoconf_imports_main_pipe", reset=True)
+def build_system_merged_variables(
+    ansible_root: Path,
+    autoconf_out: Path,
+    subnet: str,
+    system_group: str,
+    logger: logging.Logger | None = None,
+) -> AnsibleInventory:
+    """Validate inventory data and write merged NixOS system variables."""
+    layout = AutoconfOutputLayout(autoconf_out)
+    source = AutoconfSourceLayout(ansible_root)
+    if logger is None:
+        logger = get_logger(
+            "autoconf_system_import",
+            log_dir=layout.log_dir,
+            reset=True,
+        )
 
-    log_heading(logger, "------------autoconf/imports/main:pipe------------")
-    logger.info(f"ansible_root: {ansible_root}")
-    logger.info(f"autoconf_out: {autoconf_out}")
-    logger.info(f"subnet: {subnet}\n\n\n")
-    if not autoconf_out.exists():
-        autoconf_out.mkdir(exist_ok=True)
+    log_heading(logger, "Load Ansible inventory")
 
-    inventory, home_only_hosts = ansible_etl(ansible_root, autoconf_out, subnet, logger=logger)
-    return inventory,home_only_hosts
+    _require_directory(source.inventory.root, "Ansible inventory directory")
+    _require_file(source.inventory.hosts_file, "Ansible inventory")
 
-    """# home system issue
-    inventory = ansible_etl(ansible_root, autoconf_out, subnet, logger=logger)
+    inventory = load_inventory_hostfile(source.inventory.hosts_file, subnet=subnet)
+
+    host_facts = load_all_host_facts(source.facts_dir)
+
+    for hostname in sorted(host_facts):
+        inventory.hostname_update_ansible_facts(hostname, host_facts[hostname])
+
+    for host in inventory.all:
+        host.init_ansible_role_names()
+
+    if system_group not in inventory.get_group_names():
+        raise AutoconfPipelineError(f"System inventory group not found: {system_group}")
+    system_hosts = [
+        host for host in inventory.all if system_group in host.ansible_group_names
+    ]
+    if not system_hosts:
+        raise AutoconfPipelineError(
+            f"System inventory group has no hosts: {system_group}"
+        )
+
+    validated_hosts: ValidatedHosts = []
+    for host in system_hosts:
+        if not host.hostname:
+            raise AutoconfPipelineError("Inventory contains a host without a hostname")
+        merged_vars: HostVariables = inventory.export_merged_host_vars(host.hostname)
+
+        try:
+            MergedHostVars.model_validate(merged_vars)
+        except ValidationError as exc:
+            raise AutoconfPipelineError(
+                f"Invalid system variables for {host.hostname} ({type(exc).__name__})"
+            ) from exc
+        validated_hosts.append((host.hostname, merged_vars))
+
+    write_system_intermediates(
+        inventory,
+        autoconf_out,
+        validated_hosts,
+    )
+
     return inventory
 
-    
-    """
+
+def import_source_data(
+    ansible_root: Path,
+    autoconf_out: Path,
+    subnet: str,
+    system_group: str,
+    logger: logging.Logger | None = None,
+) -> AnsibleInventory:
+    """Import configured Ansible sources into private Autoconf intermediates."""
+    layout = AutoconfOutputLayout(autoconf_out)
+    if logger is None:
+        logger = get_logger(
+            "autoconf_source_import",
+            log_dir=layout.log_dir,
+            reset=True,
+        )
+
+    log_heading(logger, "Import Autoconf source data")
+    logger.info("Ansible root: %s", ansible_root)
+    logger.info("Autoconf output: %s", autoconf_out)
+    logger.info("Managed subnet: %s", subnet)
+    logger.info("System inventory group: %s", system_group)
+    autoconf_out.mkdir(parents=True, exist_ok=True)
+
+    return build_system_merged_variables(
+        ansible_root,
+        autoconf_out,
+        subnet,
+        system_group,
+        logger=logger,
+    )

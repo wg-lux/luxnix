@@ -1,61 +1,117 @@
-{ pkgs, lib, config, inputs, ... }:
-let
-#
-  packageDefs = import ./devenv/packages.nix { inherit pkgs; };
-  buildInputs = packageDefs.buildInputs;
-  tasks = import ./devenv/tasks.nix {
-    inherit pkgs lib config inputs;
-  };
-  scripts = import ./devenv/scripts.nix {
-    inherit pkgs lib config inputs;
-  };
-  processes = import ./devenv/processes.nix {inherit pkgs;};
-
-in 
 {
-  packages = packageDefs.packages;
+  pkgs,
+  lib,
+  config,
+  ...
+}:
+let
+  pythonVersion = lib.removeSuffix "\n" (builtins.readFile ./.python-version);
+  pythonPackageName = "python${builtins.replaceStrings [ "." ] [ "" ] pythonVersion}";
+  python = pkgs.${pythonPackageName};
+  uvPackage = pkgs.uv;
 
-  # A dotenv file was found, while dotenv integration is currently not enabled.
+  baseEnv = {
+    # --- Directories & Paths ---
+    inherit (config.secretspec.secrets)
+      STORAGE_PERSISTING_HDD_ID
+      HOME_DIR
+      WORKING_DIR
+      ;
+  };
+  devenvUtils = import ./devenv/default.nix {
+    inherit pkgs uvPackage;
+  };
+  devenvPackages = devenvUtils.packages;
+
+  # The nix-quality git hook runs on `git commit`, outside the devenv shell,
+  # so its PATH does not carry the Nix quality tools. Wrap the entry point so
+  # deadnix/statix/nixfmt/flake-checker/nix resolve regardless of the caller's
+  # environment, using the same packages the shell provides.
+  nixQualityHook = pkgs.writeShellApplication {
+    name = "nix-quality-hook";
+    runtimeInputs = [
+      uvPackage
+      pkgs.nix
+      pkgs.git
+      pkgs.deadnix
+      pkgs.statix
+      pkgs.nixfmt
+      pkgs.flake-checker
+    ];
+    text = ''
+      exec uv run python scripts/nix-quality.py "$@"
+    '';
+  };
+in
+{
   dotenv.enable = false;
   dotenv.disableHint = true;
-
-  env = {
-    LD_LIBRARY_PATH = "${
-      with pkgs;
-      lib.makeLibraryPath buildInputs
-    }:/run/opengl-driver/lib:/run/opengl-driver-32/lib";
-  };
+  packages = devenvPackages;
+  # Do not set a shell-wide LD_LIBRARY_PATH here. Nix executables carry the
+  # exact runtime paths of the libraries they were built against. Prepending
+  # the development package closure can make host tools load a newer libmount
+  # or libselinux alongside the host's older glibc, causing ABI errors before
+  # the program reaches main(). Tools that genuinely need an additional
+  # runtime library should be wrapped individually instead.
+  env = baseEnv;
 
   languages.python = {
     enable = true;
+    package = python;
     uv = {
       enable = true;
+      package = uvPackage;
       sync.enable = true;
     };
   };
-  
+
+  languages.javascript = {
+    enable = true;
+    package = pkgs.nodejs_22;
+    npm.enable = true;
+    # npm.install.enable runs `npm clean-install` on every shell entry and then
+    # writes node_modules/package-lock.json.checksum. Our package-lock.json has
+    # zero dependencies, so `npm ci` succeeds without creating node_modules and
+    # the checksum write fails with "No such file or directory", hanging shell
+    # startup. Re-enable once package.json declares real dependencies.
+    npm.install.enable = false;
+  };
+
+  inherit (devenvUtils) processes tasks;
+
   git-hooks.hooks = {
     ansible-lint.enable = true;
+    nix-quality = {
+      enable = true;
+      name = "nix-quality";
+      entry = "${nixQualityHook}/bin/nix-quality-hook";
+      files = "\\.nix$|^flake\\.lock$|^nix-quality\\.yml$|^scripts/nix-quality\\.py$|^(homes|lib|modules|overlays|packages|shells|systems|tests/nixtest|topology)/";
+      pass_filenames = false;
+    };
   };
 
-  tasks = tasks;
-
-  scripts = scripts;
-
-  processes = {
-  };
+  inherit (devenvUtils) scripts;
 
   enterShell = ''
-    . .devenv/state/venv/bin/activate
-    # ensure-ansible-config
-    # devenv tasks run "autoconf:initialize-vault"
-    # python -m unittest
-    hello
-    # python mermaid_report_of_autoconf_hosts.py
+    if command -v env-setup >/dev/null 2>&1; then
+      env-setup
+    fi
+
+    # The Devenv sync task prepares this environment in a subprocess; activate
+    # it in the caller's shell so Python tools resolve to the managed venv.
+    source .devenv/state/venv/bin/activate
+
+    if [ -f ".env.systemd" ]; then
+      set -a
+      source .env.systemd
+      set +a
+      echo "Loaded optional environment from .env.systemd."
+    fi
+    cat << EOF > .env
+    HOME_DIR=$HOME
+    WORKING_DIR=$(pwd)
+    EOF
   '';
 
-  enterTest = ''
-    nvcc -V
-    python -m unittest
-  '';
+  enterTest = "";
 }

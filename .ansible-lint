@@ -4,6 +4,9 @@ exclude_paths:
     - docs/
     - conf/
     - examples/
+    # Non-Ansible YAML: feature-tracker coordination files and release manifests.
+    - feature-tracking/
+    - release-artifacts/
 
 skip_list:
     - role-name # Skip the role name validation rule

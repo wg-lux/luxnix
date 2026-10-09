@@ -1,0 +1,434 @@
+schema_version: 1
+document: gs-01-storage-node-rollout
+last_reviewed: "2026-08-11"
+
+status:
+  state: blocked
+  production_test_ready: false
+  summary: >-
+    gs-01 is declared as the first protected storage node, but it must not be
+    activated as one until its plaintext archive has been migrated to an
+    approved encrypted layout, the release wheels are locked, and the gs-02
+    mTLS and recipient-key contracts have been completed.
+  safety_rule: >-
+    Keep storage balancing disabled on gs-02 and do not run a gs-01 NixOS
+    switch from the current declaration until every destructive-storage
+    prerequisite below has an owner and archived evidence.
+
+topology:
+  central_hub:
+    host: gs-02
+    vpn_address: 172.16.255.22
+    certificate_identity: spiffe://endoreg/hub/gs-02
+    balancing_required_state_during_rollout: disabled
+  storage_node:
+    host: gs-01
+    immutable_node_key: gs-01
+    vpn_address: 172.16.255.21
+    dns_name: gs-01.intern
+    interface: tun0
+    port: 9443
+    mount_point: /archive
+    required_mount_source: /dev/mapper/gs-01-storage
+    residency_key: de
+  availability:
+    storage_node_count: 1
+    redundant: false
+    note: >-
+      A single node is suitable only for a bounded production test. It is not
+      highly available and must not become the only retained copy of an
+      artifact.
+
+current_declaration:
+  node_config: systems/x86_64-linux/gs-01/default.nix
+  disk_config: systems/x86_64-linux/gs-01/disks.nix
+  boot_unlock_config: systems/x86_64-linux/gs-01/boot-decryption-config.nix
+  service_module: modules/nixos/services/hub-storage-node/default.nix
+  hub_config: systems/x86_64-linux/gs-02/default.nix
+  wire_contract: lx-hub-storage-v1
+  additive_inventory_endpoint: /v1/inventory
+  hub_balancing_enabled: false
+
+known_blockers:
+  - id: encrypted_archive_layout
+    severity: stop
+    current: >-
+      disks.nix creates a plaintext two-device Btrfs RAID1 and mounts its
+      storage subvolume directly at /archive.
+    required: >-
+      findmnt for /archive must resolve exactly to the active dm-crypt mapping
+      /dev/mapper/gs-01-storage. Existing archive contents must be restored
+      from an independently verified backup after provisioning.
+  - id: destructive_layout_not_approved
+    severity: stop
+    current: >-
+      The repository does not yet declare an approved encryption/redundancy
+      stack for the two archive disks.
+    required: >-
+      Storage and security owners must select and document one design whose
+      mounted filesystem has the single source /dev/mapper/gs-01-storage.
+      A RAID layer below one LUKS2 mapping is compatible with the current
+      service contract. Per-disk LUKS plus multi-device Btrfs requires a
+      separately reviewed representation because the current preflight
+      deliberately compares one exact mount source.
+  - id: boot_unlock_contract
+    severity: stop
+    current: >-
+      boot-decryption-config.nix is commented out. The existing gs-01
+      boot-stick helper assumes luks0/luks1/luks2 and cryptroot0/1/2; that does
+      not describe the declared /dev/mapper/gs-01-storage mapping.
+    required: >-
+      Replace or adapt the unlock declaration for the approved layout, enroll
+      a recovery method, and prove one unattended/normal boot and one recovery
+      boot from physical console. Do not run the legacy helper against the
+      archive disks as currently configured.
+  - id: archive_backup
+    severity: stop
+    current: unknown
+    required: >-
+      Store a complete backup and SHA-256 manifest on media independent of both
+      gs-01 archive disks. Complete a restore rehearsal or an owner-approved
+      representative restore before repartitioning either disk.
+  - id: filesystem_ownership
+    severity: stop
+    current: unknown
+    required: >-
+      The mounted storage root must be writable by lx-storage-node and hidden
+      from unrelated accounts. Prefer lx-storage-node:lx-storage-node with mode
+      0700 after restore. Do not grant the application service or interactive
+      users direct access to ciphertext objects or recipient private keys.
+  - id: mtls_material
+    severity: stop
+    current: externally_in_progress
+    required: >-
+      Install and approve the CA, gs-01 server leaf/key, and gs-02 client
+      leaf/key. The gs-01 server certificate must cover gs-01.intern (and any
+      explicitly used IP endpoint); the gs-02 client certificate must contain
+      exactly the authorized URI SAN spiffe://endoreg/hub/gs-02.
+  - id: recipient_key_pair
+    severity: stop
+    current: externally_in_progress
+    required: >-
+      The private X25519 identity on gs-01 and public recipient key on gs-02
+      must be the same key pair. Archive the non-secret public key ID. Private
+      material must remain root-owned, group-readable only by lx-storage-node,
+      and inaccessible to others.
+  - id: release_artifacts
+    severity: stop
+    current: unpublished
+    required: >-
+      Publish and lock the approved endoreg-db 1.0.11.0 wheel, rebuild and lock
+      lx-annotate 0.9.63 against it, then build the LuxNix node package from the
+      archived revisions. Source-worktree imports are not acceptance evidence.
+  - id: final_owner_verification
+    severity: stop
+    current: not_run_for_latest_delta
+    required: >-
+      The evidence owner must run the repository, cross-wheel, PostgreSQL,
+      Nix-build, and disposable-certificate matrix documented in the LX hub
+      storage runbook. This document does not claim those checks passed.
+
+required_decisions:
+  - id: archive_stack
+    owner: storage_and_security
+    record:
+      - exact physical disk by-id values
+      - RAID layer and failure behavior
+      - LUKS2 container location and mapper name
+      - Btrfs filesystem and subvolume layout
+      - discard policy
+      - key slots and recovery custody
+      - degraded-boot policy
+  - id: capacity_policy
+    owner: storage_and_application
+    current_defaults:
+      recovery_percent: 70
+      warning_percent: 75
+      stop_percent: 90
+      reserve_bytes: 10737418240
+      maximum_object_bytes: 1099511627776
+    record:
+      - measured usable bytes after encryption and redundancy
+      - largest expected processed artifact
+      - alert ownership and escalation path
+      - evidence that recovery_percent is below warning_percent and warning_percent is below stop_percent
+  - id: key_rotation
+    owner: security_and_deployment
+    record:
+      - current and retiring recipient key IDs
+      - certificate overlap interval
+      - restart procedure after certificate replacement
+      - retirement proof showing no retained evidence references the old recipient key
+
+phases:
+  - id: 0_freeze_and_assign
+    destructive: false
+    prerequisites: []
+    actions:
+      - Keep services.luxnix.hubStorage.hubClient.balancing.enable false on gs-02.
+      - Do not activate the current gs-01 storage-node declaration.
+      - Assign storage, security, database, application, and deployment owners.
+      - Reserve physical-console access and a maintenance/rollback window.
+      - Record git revisions, package versions, and the intended Nix closure.
+    exit_evidence:
+      - signed owner list
+      - approved maintenance window
+      - archived revisions
+
+  - id: 1_read_only_inventory
+    destructive: false
+    prerequisites:
+      - 0_freeze_and_assign
+    commands:
+      - "hostnamectl --static"
+      - "date -Is"
+      - "lsblk --bytes --fs --output NAME,PATH,SIZE,TYPE,FSTYPE,LABEL,UUID,PARTLABEL,MOUNTPOINTS"
+      - "findmnt --target /archive --output SOURCE,TARGET,FSTYPE,OPTIONS"
+      - "btrfs filesystem show /archive"
+      - "btrfs filesystem usage --bytes /archive"
+      - "btrfs device stats /archive"
+      - "btrfs scrub status /archive"
+      - "cryptsetup status gs-01-storage"
+      - "df --block-size=1 --output=source,size,used,avail,pcent,target /archive"
+      - "ip -brief address show tun0"
+    actions:
+      - Confirm both configured archive disk by-id links resolve to the expected physical disks.
+      - Record file count, byte count, ownership, xattrs, ACLs, and hard links.
+      - Generate a deterministic SHA-256 manifest and store it with the independent backup, not on either archive disk.
+      - Record Btrfs device error counters and complete a scrub before accepting the backup.
+    exit_evidence:
+      - hardware inventory
+      - filesystem inventory
+      - pre-migration SHA-256 manifest
+      - clean or explicitly accepted scrub report
+
+  - id: 2_backup_and_restore_rehearsal
+    destructive: false
+    prerequisites:
+      - 1_read_only_inventory
+    actions:
+      - Copy /archive to storage independent of both gs-01 archive disks.
+      - Preserve ownership, modes, timestamps, xattrs, ACLs, sparse files, and hard links.
+      - Verify every restored file against the SHA-256 manifest.
+      - Prove the backup is readable without gs-01 being online.
+      - Record the exact restore command and measured restore duration.
+    exit_evidence:
+      - backup location and immutable identifier
+      - full manifest comparison
+      - restore rehearsal record
+      - recovery time estimate
+
+  - id: 3_prepare_declarative_layout
+    destructive: false
+    prerequisites:
+      - 2_backup_and_restore_rehearsal
+      - archive_stack decision
+    actions:
+      - Update disks.nix to the approved encrypted/redundant design without applying it.
+      - Make the resulting mounted source exactly /dev/mapper/gs-01-storage.
+      - Replace the stale cryptroot0/1/2 boot-unlock assumptions with the approved mapper contract.
+      - Keep the storage-node service disabled in the migration revision so a reboot cannot accept requests before restore verification.
+      - Build, inspect, and archive the gs-01 system closure; activation remains a separate approved step.
+    exit_evidence:
+      - reviewed Nix diff
+      - non-activated build result
+      - reviewed boot and recovery design
+      - explicit confirmation that no disko apply or switch occurred during preparation
+
+  - id: 4_destructive_archive_migration
+    destructive: true
+    approval: separate_explicit_storage_owner_approval_required
+    prerequisites:
+      - 3_prepare_declarative_layout
+      - verified independent backup
+      - physical console and recovery media
+    actions:
+      - Stop and mask the storage-node service and janitor before unmounting /archive.
+      - Confirm the exact by-id targets again immediately before destructive work.
+      - Apply only the reviewed archive layout; do not repartition the system disk.
+      - Open /dev/mapper/gs-01-storage and mount the intended Btrfs subvolume at /archive.
+      - Restore the archive with metadata, then compare the complete SHA-256 manifest.
+      - Set the reviewed lx-storage-node ownership and restrictive permissions.
+      - Reboot once normally and once through the documented recovery path before enabling the node.
+    abort_if:
+      - either disk identity differs from the archived inventory
+      - the independent backup or manifest is unavailable
+      - physical-console recovery is unavailable
+      - the mapper name or mount source differs from the reviewed design
+      - any restored hash differs
+    exit_evidence:
+      - LUKS2 metadata backup stored separately
+      - exact mapper and mount evidence
+      - post-restore manifest comparison
+      - normal and recovery boot records
+
+  - id: 5_install_identity_material
+    destructive: false
+    prerequisites:
+      - 4_destructive_archive_migration
+      - completed external mTLS workflow
+    expected_files:
+      ca_certificate: /etc/secrets/vault/hub-storage/ca.pem
+      server_certificate: /etc/secrets/vault/hub-storage/gs-01-server.crt
+      server_private_key: /etc/secrets/vault/hub-storage/gs-01-server.key
+      recipient_private_key: /etc/secrets/vault/hub-storage/gs-01-recipient-current.pem
+      hub_recipient_public_key: /etc/secrets/vault/hub-storage/gs-01-recipient-current.pub.pem
+    actions:
+      - Verify certificate validity, issuer, EKU, SANs, expiry, and key matching without printing private material.
+      - Verify the X25519 private/public pair and archive its public recipient key ID.
+      - Set server and recipient private keys to root:lx-storage-node with mode 0640 and no permissions for others.
+      - Confirm the CA and server certificate are readable by the service without granting access to private keys beyond the service group.
+      - Confirm replacement of certificates or trust roots includes an explicit service restart and overlap window.
+    exit_evidence:
+      - certificate fingerprints and SAN report
+      - public recipient key ID and pair-match report
+      - redacted ownership and mode report
+      - certificate rotation and restart procedure
+
+  - id: 6_node_only_activation
+    destructive: false
+    prerequisites:
+      - 5_install_identity_material
+      - release_artifacts
+      - final_owner_verification
+    safety_conditions:
+      - gs-02 balancing remains disabled
+      - no existing local artifact is deleted
+      - no production artifact is selected for the first write
+    actions:
+      - Enable the gs-01 node declaration in the reviewed final revision.
+      - Activate gs-01 only during the approved window.
+      - Confirm the contract oneshot succeeds before the data-plane service starts.
+      - Confirm the service binds only 172.16.255.21:9443
+      - Confirm firewall access is limited to 172.16.255.22 on tun0.
+      - Confirm health reports node_id gs-01
+      - wire contract lx-hub-storage-v1, the expected recipient key ID
+      - Confirm accepting_writes consistent with capacity thresholds.
+      - Confirm an unauthorized source, certificate SAN, and operation are rejected without revealing inventory.
+      - Run the janitor once with an empty/no-op result and retain its structured event.
+    exit_evidence:
+      - contract and service status
+      - mount/device evidence captured after service start
+      - private bind and firewall evidence
+      - positive and negative mTLS authorization evidence
+      - health, capacity, and empty inventory responses
+
+  - id: 7_hub_registration_and_disposable_transfer
+    destructive: false
+    prerequisites:
+      - 6_node_only_activation
+    actions:
+      - Reconcile immutable database node key gs-01 with role storage_node, residency de
+      - Add failure domain gs-01, and the declared capabilities.
+      - Keep automatic publication and balancing disabled.
+      - Use only the installed lx-annotate wheel's typed envelope-producing transfer client.
+      - Transfer one disposable processed artifact with a fresh envelope
+      - verify ciphertext hash, plaintext hash, recipient key ID, capacity accounting
+      - verify idempotent replay, fetch, and inventory.
+      - Delete the disposable object only through its typed authorized cleanup path and retain all receipts.
+      - Prove existing local report/video/HLS reads are unchanged.
+    exit_evidence:
+      - exact wheel origins and versions
+      - database node/capability/telemetry record
+      - transfer, verification, fetch, inventory, and cleanup receipts
+      - unchanged application read-path evidence
+
+  - id: 8_bounded_production_test
+    destructive: false
+    prerequisites:
+      - 7_hub_registration_and_disposable_transfer
+      - monitoring and rollback owner approval
+    actions:
+      - Enable admission for a tightly bounded allowlisted processed-artifact cohort.
+      - Preserve the hub-local verified copy throughout the one-node test.
+      - Exercise restart, lost acknowledgement, stale telemetry, full-disk stop/recovery
+      - Exercise corruption detection, lease-deferred cleanup, and recipient/certificate overlap.
+      - Keep raw media excluded and keep local HLS serving unchanged.
+      - Disable admission before evaluating results or widening scope.
+    exit_evidence:
+      - approved artifact cohort
+      - correlated logs, metrics, alerts, and immutable receipts
+      - no only-copy loss
+      - accounting and reconciliation report
+      - signed go/no-go decision
+
+activation_gates:
+  mount_and_encryption:
+    - /archive is a mountpoint
+    - cryptsetup reports gs-01-storage active
+    - findmnt source resolves exactly to /dev/mapper/gs-01-storage
+    - restored inventory and hashes match
+    - lx-storage-node can write while unrelated users cannot
+    - used capacity is below the configured stop threshold
+  identity_and_network:
+    - tun0 owns 172.16.255.21
+    - gs-01.intern resolves to the intended private address from gs-02
+    - port 9443 is not reachable outside the approved tun0/source rule
+    - server and client certificate identities match the declared names and SANs
+    - private keys have reviewed ownership and permissions
+    - recipient public/private key IDs match across gs-02 and gs-01
+  application_contract:
+    - installed wire contract is exactly lx-hub-storage-v1
+    - response node_id is exactly gs-01
+    - endoreg database node_key is exactly gs-01 and role is storage_node
+    - configured and observed capability, residency, capacity, and recipient-key data agree
+    - inventory is bounded and does not invent database artifact identities
+    - balancing and automatic publication remain disabled until the disposable transfer passes
+
+rollback:
+  before_any_remote_commit:
+    - Disable hub admission and balancing.
+    - Stop and mask the gs-01 node and janitor.
+    - Preserve service logs, environment-contract metadata, and node receipts.
+    - Revert the application/Nix revision only after confirming ordinary local reads remain available.
+  after_a_remote_commit:
+    - Disable new admission, but do not delete or reformat gs-01 storage.
+    - Keep both the local copy and every verified remote copy.
+    - Preserve placement, transfer, lease, reconciliation, and cleanup records.
+    - Select a rollback primary only through the typed database lifecycle; never infer it from filesystem presence.
+  disk_migration_failure:
+    - Stop before writing further if mapper, mount, or hashes disagree.
+    - Restore only from the independently verified backup onto an owner-approved layout.
+    - Do not reuse a partially verified archive as a source of truth.
+  incidents_requiring_admission_stop:
+    - integrity mismatch
+    - unknown recipient key ID
+    - mTLS identity ambiguity or expiry
+    - stale or unreachable node telemetry
+    - accounting skew or reservation leak
+    - cleanup attempted while a lease is active
+    - loss or corruption of the only verified copy
+
+evidence_archive:
+  required_metadata:
+    - timestamp and operator
+    - repository revisions and dirty-worktree disclosure
+    - Nix closure and wheel hashes
+    - disk by-id inventory and LUKS metadata fingerprint
+    - certificate fingerprints, SANs, expiry, and public recipient key IDs
+    - exact command and exit status
+    - redacted output location
+    - approval or blocker
+  prohibited_content:
+    - private keys
+    - LUKS passphrases or raw key slots
+    - patient identifiers
+    - plaintext processed artifacts
+
+completion_definition:
+  production_test_ready_when:
+    - every stop blocker is resolved with archived evidence
+    - phases 0 through 7 are complete
+    - gs-02 balancing is still disabled immediately before the approved test window
+    - storage, security, application, database, and deployment owners approve phase 8
+  production_ready_when: >-
+    Not defined by this one-node rollout. A successful bounded test does not make
+    a sole storage node redundant or generally production-ready.
+
+references:
+  primary_application_runbook: /home/admin/dev/lx-annotate/docs/guides/hub-storage-load-balancing.md
+  node_service_module: /home/admin/luxnix/modules/nixos/services/hub-storage-node/default.nix
+  node_host_config: /home/admin/luxnix/systems/x86_64-linux/gs-01/default.nix
+  node_disk_config: /home/admin/luxnix/systems/x86_64-linux/gs-01/disks.nix
+  node_boot_unlock_config: /home/admin/luxnix/systems/x86_64-linux/gs-01/boot-decryption-config.nix
+  central_hub_config: /home/admin/luxnix/systems/x86_64-linux/gs-02/default.nix

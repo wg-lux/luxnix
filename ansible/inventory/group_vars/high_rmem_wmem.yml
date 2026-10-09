@@ -1,3 +1,5 @@
 group_roles: {}
 group_services: {}
-group_luxnix: {}
+group_luxnix:
+  generic_settings.linux.rmemMax: 7500000
+  generic_settings.linux.wmemMax: 7500000

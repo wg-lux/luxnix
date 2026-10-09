@@ -1,0 +1,17 @@
+schema_version: 1
+canonical_directory: tests/hub-storage-node
+relocations:
+  - source: tests/lx-annotate/test_hub_storage_node_deployment_contract.py
+    destination: tests/hub-storage-node/test_hub_storage_node_deployment_contract.py
+    previous_tests:
+      - test_storage_node_role_is_inactive_until_explicitly_enabled
+      - test_gs01_is_declared_as_gs02_only_storage_peer_with_balancing_gated
+      - test_storage_node_fails_closed_on_mount_identity_network_and_capacity
+      - test_storage_node_network_port_is_private_interface_only
+      - test_hub_nodes_json_uses_the_canonical_typed_schema
+      - test_hub_contract_requires_central_role_https_and_credentials
+      - test_deployment_contract_never_exports_application_master_key
+      - test_nix_evaluation_keeps_both_storage_contracts_disabled_by_default
+      - test_nix_evaluation_wires_private_firewall_mount_and_environment
+      - test_nix_evaluation_provides_packaged_application_command
+      - test_nix_evaluation_wires_fail_closed_crash_artifact_janitor

@@ -4,14 +4,15 @@
   config,
   ...
 }:
-with lib; 
-with lib.luxnix; let
+with lib;
+with lib.luxnix;
+let
   cfg = config.luxnix.gpu-eval;
-in {
+in
+{
   options.luxnix.gpu-eval = {
     enable = mkBoolOpt false "Enable Default GPU Evaluation configuration";
   };
-
 
   config = mkIf cfg.enable {
     programs.steam = {

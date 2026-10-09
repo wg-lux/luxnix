@@ -4,17 +4,21 @@
   lib,
   ...
 }:
-with lib; let
+with lib;
+let
   cfg = config.programs.tuis;
-in {
+in
+{
   options.programs.tuis = {
     enable = mkEnableOption "Enable TUI applications"; # CHANGEME?! Check what this is
   };
 
   config = mkIf cfg.enable {
-    home.packages = with pkgs;
-    with pkgs.luxnix; [
-      s-tui
-    ];
+    home.packages =
+      with pkgs;
+      with pkgs.luxnix;
+      [
+        s-tui
+      ];
   };
 }

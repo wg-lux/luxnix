@@ -5,9 +5,11 @@
   ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.cli.programs.xcp;
-in {
+in
+{
   options.cli.programs.xcp = with types; {
     enable = mkBoolOpt true "Whether or not to enable xcp";
   };

@@ -1,20 +1,30 @@
-{config, lib, pkgs, ...}: 
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
-with lib; 
-with lib.luxnix; let
+with lib;
+with lib.luxnix;
+let
   cfg = config.services.luxnix.traefik;
-  dynCfgFile = "./${cfg.dynamicConfigFile}";
-in {
+in
+{
   options.services.luxnix.traefik = {
     enable = mkBoolOpt false "Enable traefik";
     dashboard = mkBoolOpt true "Enable traefik dashboard";
     insecure = mkBoolOpt false "Allow insecure configurations";
-    staticConfigOptions = mkOpt types.attrs {} "Additional static configuration options";
+    staticConfigOptions = mkOpt types.attrs { } "Additional static configuration options";
     dashboardHost = mkOpt types.str "traefik.endo-reg.net" "Hostname for the dashboard";
-    allowedIPs = mkOpt (types.listOf types.str) ["127.0.0.1"] "IPs allowed to access the dashboard";
+    allowedIPs = mkOpt (types.listOf types.str) [ "127.0.0.1" ] "IPs allowed to access the dashboard";
     bindIP = mkOpt types.str "0.0.0.0" "IP address to bind Traefik to";
-    sslCertPath = mkOpt types.path config.luxnix.generic-settings.sslCertificatePath "Path to SSL certificate";
-    sslKeyPath = mkOpt types.path config.luxnix.generic-settings.sslCertificateKeyPath "Path to SSL key";
+    sslCertPath =
+      mkOpt types.path config.luxnix.generic-settings.sslCertificatePath
+        "Path to SSL certificate";
+    sslKeyPath =
+      mkOpt types.path config.luxnix.generic-settings.sslCertificateKeyPath
+        "Path to SSL key";
     keycloak = {
       enable = mkOption {
         type = types.bool;
@@ -28,19 +38,19 @@ in {
 
   config = mkIf cfg.enable {
 
-    users.groups.traefik = {};
+    users.groups.traefik = { };
 
     users.extraUsers = {
       traefik = {
         isSystemUser = true;
         group = "traefik";
-        extraGroups = [ 
+        extraGroups = [
           "docker"
           "podman"
           "networkmanager"
           "sslCert"
           "sensitiveServices"
-          ];
+        ];
         # home = "/var/lib/traefik";
         # createHome = true;
       };
@@ -48,22 +58,24 @@ in {
 
     # 1) Create a dedicated directory and copy/symlink your cert/key files there.
     #    Adjust paths and permissions so that "traefik" can read them.
-    
-    systemd.tmpfiles.rules = [
-      "d /etc/traefik 0750 traefik traefik -"
-      "d /var/lib/traefik 0750 traefik traefik -"
-      
-      # log files
-      "f /etc/traefik/traefik.log 0640 traefik traefik -"
-      "f /etc/traefik/traefik-access.log 0640 traefik traefik -"
-    ];
-    systemd.services.traefik.restartIfChanged = true;
-    systemd.services.traefik.wantedBy = [ "multi-user.target" ];
 
+    systemd = {
+      tmpfiles.rules = [
+        "d /etc/traefik 0750 traefik traefik -"
+        "d /var/lib/traefik 0750 traefik traefik -"
 
+        # log files
+        "f /etc/traefik/traefik.log 0640 traefik traefik -"
+        "f /etc/traefik/traefik-access.log 0640 traefik traefik -"
+      ];
+      services.traefik = {
+        restartIfChanged = true;
+        wantedBy = [ "multi-user.target" ];
+      };
+    };
 
     environment.etc = {
-      "traefik/ssl_cert.pem" = { 
+      "traefik/ssl_cert.pem" = {
         source = cfg.sslCertPath;
         user = "traefik";
         group = "traefik";
@@ -79,12 +91,10 @@ in {
 
     };
 
-
-
     # 2) Define the Traefik service configuration
     services.traefik = {
       enable = true;
-      package = pkgs.traefik;  # This should be v3.2 as per your channel
+      package = pkgs.traefik; # This should be v3.2 as per your channel
       group = "traefik";
       dataDir = "/var/lib/traefik";
 
@@ -99,7 +109,7 @@ in {
           format = "json";
         };
         metrics = {
-          prometheus = {};
+          prometheus = { };
         };
 
         accessLog = {
@@ -123,8 +133,8 @@ in {
           dashboard = true;
         };
 
-        tracing = {};
-        
+        tracing = { };
+
         entryPoints = {
           web = {
             address = "0.0.0.0:80";
@@ -137,7 +147,7 @@ in {
           websecure = {
             address = "0.0.0.0:443";
             http = {
-              tls = {};
+              tls = { };
             };
           };
         };
@@ -163,11 +173,17 @@ in {
 
     # (Optional) Ensure Traefik can read the certificate and key.
     # Here we “import” the files into NixOS’s /etc – adjust if you manage secrets differently.
-    
+
     networking.firewall = {
-      allowedTCPPorts = [ 80 443 ];
+      allowedTCPPorts = [
+        80
+        443
+      ];
       allowedTCPPortRanges = mkIf cfg.dashboard [
-        { from = 8080; to = 8080; }
+        {
+          from = 8080;
+          to = 8080;
+        }
       ];
     };
   };

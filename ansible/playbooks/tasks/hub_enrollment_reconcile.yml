@@ -1,0 +1,92 @@
+---
+- name: Reconcile one protected enrollment bundle
+  no_log: true
+  diff: false
+  block:
+    - name: Inspect existing site identity files without following links
+      ansible.builtin.stat:
+        path: '/etc/secrets/vault/hub-pki/{{ item }}'
+        follow: false
+      loop: [approle_role_id, approle_secret_id, source-node-secret]
+      register: fleet_installed_files
+
+    - name: Reject redirected or unprotected existing credentials
+      ansible.builtin.assert:
+        that:
+          - item.stat.isreg | default(false)
+          - not (item.stat.islnk | default(false))
+          - item.stat.uid == 0
+          - item.stat.size > 0
+          - item.stat.mode in (['0400', '0600', '0640'] if item.item == 'source-node-secret' else ['0400', '0600'])
+      loop: '{{ fleet_installed_files.results }}'
+      when: item.stat.exists
+
+    - name: Read existing identities to preserve them on repeat enrollment
+      ansible.builtin.slurp:
+        src: '{{ item.stat.path }}'
+      loop: '{{ fleet_installed_files.results }}'
+      when: item.stat.exists
+      register: fleet_installed_values
+
+    - name: Initialize the deployed credential map
+      ansible.builtin.set_fact:
+        fleet_installed: {}
+
+    - name: Collect existing credentials only in memory
+      ansible.builtin.set_fact:
+        fleet_installed: '{{ fleet_installed | combine({item.item.item: item.content | b64decode | trim}) }}'
+      loop: '{{ fleet_installed_values.results }}'
+      when: not (item.skipped | default(false))
+
+    - name: Create root-only transient helper directory on the hub
+      ansible.builtin.tempfile:
+        state: directory
+        path: /run
+        prefix: luxnix-fleet-enrollment-
+      delegate_to: '{{ enrollment_hub }}'
+      register: fleet_helper
+
+    - name: Stage reviewed helpers without embedding credentials
+      ansible.builtin.copy:
+        src: '{{ playbook_dir }}/../../scripts/vault/{{ item }}'
+        dest: '{{ fleet_helper.path }}/{{ item }}'
+        owner: root
+        group: root
+        mode: '0500'
+      loop: [ensure_site_enrollment.py, site_lifecycle.py]
+      delegate_to: '{{ enrollment_hub }}'
+
+    - name: Reconcile or reuse the site's saved identity
+      ansible.builtin.command:
+        argv: [/run/current-system/sw/bin/python3, '{{ fleet_helper.path }}/ensure_site_enrollment.py']
+        stdin: >-
+          {{ {'token': hostvars[enrollment_hub].fleet_admin_token.user_input,
+              'site': inventory_hostname ~ '.intern', 'installed': fleet_installed,
+              'kv_mount': (hostvars[enrollment_hub].fleet_hub_eval.stdout | from_json).kv,
+              'recipient_path': (hostvars[enrollment_hub].fleet_hub_eval.stdout | from_json).recipient} | to_json }}
+      environment:
+        VAULT_SKIP_VERIFY: 'false'
+        VAULT_ADDR: '{{ (hostvars[enrollment_hub].fleet_hub_eval.stdout | from_json).address }}'
+        VAULT_CACERT: '{{ (hostvars[enrollment_hub].fleet_hub_eval.stdout | from_json).ca }}'
+      delegate_to: '{{ enrollment_hub }}'
+      register: fleet_reconciled
+      changed_when: fleet_reconciled.rc == 0 and (fleet_reconciled.stdout | from_json).changed
+
+    - name: Require the bundle CA to match the independently read hub fingerprint
+      ansible.builtin.assert:
+        that: >-
+          (fleet_reconciled.stdout | from_json).ca_sha256 | lower ==
+          enrollment_expected_ca_sha256 | regex_replace(':', '') | lower
+
+    - name: Read validated recipient public key over pinned hub SSH
+      ansible.builtin.slurp:
+        src: '{{ enrollment_source }}/hub-recipient-current.pub.pem'
+      delegate_to: '{{ enrollment_hub }}'
+      register: fleet_recipient
+  always:
+    - name: Remove transient hub helpers after success or failure
+      ansible.builtin.file:
+        path: '{{ fleet_helper.path }}'
+        state: absent
+      delegate_to: '{{ enrollment_hub }}'
+      when: fleet_helper.path is defined

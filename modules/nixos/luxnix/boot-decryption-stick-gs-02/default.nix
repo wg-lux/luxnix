@@ -1,4 +1,9 @@
-{ lib, config, pkgs, ... }:
+{
+  lib,
+  config,
+  pkgs,
+  ...
+}:
 with lib;
 with lib.luxnix;
 
@@ -8,10 +13,10 @@ let
 
   # Offset in bytes for the keyfile partition
   offsetB = cfg.offsetM * 1024 * 1024;
-
+  rendererPath = import ../boot-decryption-stick/render-boot-decryption-config.nix { inherit pkgs; };
 
   #"${cfg.scriptName}" ''
-  scriptPath = pkgs.writeShellScriptBin "gs-02-bootstick" '' 
+  scriptPath = pkgs.writeShellScriptBin "gs-02-bootstick" ''
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -97,55 +102,17 @@ let
         cryptsetup luksAddKey "$LUKS_DEVICE" "$KEYFILE_NAME"
     fi
 
-    # Step 6: Create .nix configuration file with the correct structure
+    # Step 6: Render the Nix configuration after all device operations complete.
     echo "Generating NixOS configuration file..."
-
-    cat <<EOF > $NIX_CONFIGURATION_OUTPUT
-    let
-      usb-uuid = "$USB_UUID";
-      usb-mountpoint = "$MOUNT_POINT";
-      usb-device = "$USB_DEVICE";
-
-      bs = $BS;
-      offset-m = $OFFSET_M;
-      offset-b = $OFFSET_B;
-      keyfile-size = $COUNT;
-    in {
-      # Ensure necessary kernel modules for USB and LUKS
-      boot.initrd.availableKernelModules = [ "dm-crypt" "sd_mod" "usb_storage" ];
-
-      # Use the usb-device as keyFile, with offset and size defined above.
-      # Adjust the LUKS device naming to match the updated configuration.
-      boot.initrd.luks.devices."cryptroot0" = {
-        keyFile        = usb-device;
-        keyFileOffset  = offset-b;
-        keyFileSize    = keyfile-size;
-        preLVM         = true;
-        keyFileTimeout = 10;
-      };
-      boot.initrd.luks.devices."cryptroot1" = {
-        keyFile        = usb-device;
-        keyFileOffset  = offset-b;
-        keyFileSize    = keyfile-size;
-        preLVM         = true;
-        keyFileTimeout = 10;
-      };
-      boot.initrd.luks.devices."cryptroot2" = {
-        keyFile        = usb-device;
-        keyFileOffset  = offset-b;
-        keyFileSize    = keyfile-size;
-        preLVM         = true;
-        keyFileTimeout = 10;
-      };
-      boot.initrd.luks.devices."cryptroot3" = {
-        keyFile        = usb-device;
-        keyFileOffset  = offset-b;
-        keyFileSize    = keyfile-size;
-        preLVM         = true;
-        keyFileTimeout = 10;
-      };
-    }
-    EOF
+    ${rendererPath}/bin/luxnix-render-boot-decryption-config \
+      --output "$NIX_CONFIGURATION_OUTPUT" \
+      --usb-uuid "$USB_UUID" \
+      --offset-bytes "$OFFSET_B" \
+      --keyfile-size "$COUNT" \
+      --luks-device cryptroot0 \
+      --luks-device cryptroot1 \
+      --luks-device cryptroot2 \
+      --luks-device cryptroot3
 
     # set owner to ${config.user.admin.name}
     chown ${config.user.admin.name}:users $NIX_CONFIGURATION_OUTPUT
@@ -163,7 +130,8 @@ let
     echo "Script completed successfully!"
   '';
 
-in {
+in
+{
   options.luxnix.boot-decryption-stick-gs-02 = {
     enable = mkBoolOpt false "Enable boot stick with keyfile configuration";
 
@@ -215,6 +183,7 @@ in {
   config = mkIf cfg.enable {
     environment.systemPackages = with pkgs; [
       scriptPath
+      rendererPath
       parted
       cryptsetup
     ];

@@ -16,7 +16,7 @@ in
             ESP = {
               label = "boot"; # GPT Label
               name = "ESP"; # Nix attr name
-              size = "512M";
+              size = "2G";
               type = "EF00"; # EFI System Partition
               content = {
                 type = "filesystem";

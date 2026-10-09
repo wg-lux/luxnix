@@ -1,13 +1,14 @@
 {
-  pkgs,
   lib,
   config,
   ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.roles.ssh-access.dev-01;
-in {
+in
+{
   options.roles.ssh-access.dev-01 = {
     enable = mkBoolOpt false ''
       Enable ssh access for dev-01 (defaults to gc-02 pub key)
@@ -25,6 +26,6 @@ in {
   config = mkIf cfg.enable {
     services.ssh.authorizedKeys = [
       "${cfg.idEd25519}"
-    ];    
+    ];
   };
 }

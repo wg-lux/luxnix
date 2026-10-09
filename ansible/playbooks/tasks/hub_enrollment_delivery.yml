@@ -1,0 +1,108 @@
+---
+- name: Deliver the private bundle and install both node-secret copies
+  no_log: true
+  diff: false
+  block:
+    - name: Inspect root-owned hub staging
+      ansible.builtin.stat:
+        path: '{{ enrollment_source }}'
+        follow: false
+      delegate_to: '{{ enrollment_hub }}'
+      register: enrollment_directory
+
+    - name: Refuse unprotected or redirected staging
+      ansible.builtin.assert:
+        that:
+          - enrollment_directory.stat.isdir | default(false)
+          - not (enrollment_directory.stat.islnk | default(false))
+          - enrollment_directory.stat.uid == 0
+          - enrollment_directory.stat.mode == '0700'
+
+    - name: Inspect each enrollment input
+      ansible.builtin.stat:
+        path: '{{ enrollment_source }}/{{ item }}'
+        follow: false
+      delegate_to: '{{ enrollment_hub }}'
+      loop: '{{ enrollment_files }}'
+      register: enrollment_inputs
+
+    - name: Require private regular files before reading
+      ansible.builtin.assert:
+        that:
+          - item.stat.isreg | default(false)
+          - not (item.stat.islnk | default(false))
+          - item.stat.uid == 0
+          - item.stat.mode in ['0400', '0600']
+          - item.stat.size > 0
+      loop: '{{ enrollment_inputs.results }}'
+
+    - name: Read the bundle over the hub SSH connection
+      ansible.builtin.slurp:
+        src: '{{ enrollment_source }}/{{ item }}'
+      delegate_to: '{{ enrollment_hub }}'
+      loop: '{{ enrollment_files }}'
+      register: enrollment_bundle
+
+    - name: Create ephemeral private staging on the site
+      ansible.builtin.tempfile:
+        state: directory
+        path: /run
+        prefix: luxnix-enrollment-
+      register: enrollment_staging
+
+    - name: Stage the bundle on the site
+      ansible.builtin.copy:
+        content: '{{ item.content | b64decode }}'
+        dest: '{{ enrollment_staging.path }}/{{ item.item }}'
+        owner: root
+        group: root
+        mode: '0400'
+      loop: '{{ enrollment_bundle.results }}'
+
+    - name: Compare installed files before invoking the atomic installer
+      ansible.builtin.stat:
+        path: '/etc/secrets/vault/hub-pki/{{ item }}'
+        follow: false
+      loop: '{{ enrollment_files }}'
+      register: enrollment_destinations
+
+    - name: Determine whether installation is needed
+      ansible.builtin.set_fact:
+        enrollment_install_needed: false
+
+    - name: Check content, ownership and permissions
+      ansible.builtin.set_fact:
+        enrollment_install_needed: true
+      loop: '{{ range(0, enrollment_files | length) | list }}'
+      when: >-
+        not (enrollment_destinations.results[item].stat.isreg | default(false)) or
+        enrollment_destinations.results[item].stat.islnk | default(false) or
+        enrollment_destinations.results[item].stat.uid | default(-1) != 0 or
+        enrollment_destinations.results[item].stat.checksum | default('') != enrollment_inputs.results[item].stat.checksum or
+        enrollment_destinations.results[item].stat.mode | default('') !=
+          ('0644' if enrollment_files[item] == 'vault-server-ca.pem' else
+           '0640' if enrollment_files[item] == 'source-node-secret' else '0400') or
+        enrollment_destinations.results[item].stat.gr_name | default('') !=
+          ('sensitiveServices' if enrollment_files[item] == 'source-node-secret' else 'root')
+
+    - name: Validate and install the fingerprint-pinned bundle
+      ansible.builtin.command:
+        argv: [luxnix-vault-install-hub-site-enrollment, '{{ enrollment_staging.path }}', '{{ enrollment_expected_ca_sha256 }}']
+      changed_when: true
+      when: enrollment_install_needed
+
+    - name: Install the matching receiver-side node secret
+      ansible.builtin.copy:
+        remote_src: true
+        src: '{{ enrollment_source }}/source-node-secret'
+        dest: '/etc/secrets/vault/hub-pki/{{ inventory_hostname }}-source-node-secret'
+        owner: root
+        group: sensitiveServices
+        mode: '0640'
+      delegate_to: '{{ enrollment_hub }}'
+  always:
+    - name: Remove ephemeral site staging after success or failure
+      ansible.builtin.file:
+        path: '{{ enrollment_staging.path }}'
+        state: absent
+      when: enrollment_staging.path is defined

@@ -1,31 +1,188 @@
 {
   config,
   lib,
+  pkgs,
   ...
 }:
-#CHANGEME 
-with lib;
-with lib.luxnix; let
+let
+  inherit (lib)
+    any
+    elem
+    elemAt
+    filter
+    hasPrefix
+    head
+    length
+    mkAfter
+    mkIf
+    optional
+    splitString
+    types
+    unique
+    ;
+  inherit (lib.luxnix) mkBoolOpt mkOpt;
+
   cfg = config.services.ssh;
-in {
-  options.services.ssh = with types; {
+  forwardingCfg = cfg.forwarding;
+  hostIdentityCfg = cfg.hostIdentity;
+  networkCfg = cfg.network;
+
+  hostname = config.networking.hostName;
+  adminUserName = config.user.admin.name;
+
+  networkHosts = config.luxnix.generic-settings.network.hosts;
+  hostNetwork = networkHosts.${hostname} or { };
+  hostVpnIp = hostNetwork."ip-vpn" or null;
+  aglnetClientRole = config.roles.aglnet.client or { };
+  aglnetHostRole = config.roles.aglnet.host or { };
+  defaultVpnDev =
+    if (aglnetClientRole.enable or false) then
+      aglnetClientRole.dev
+    else if (aglnetHostRole.enable or false) then
+      aglnetHostRole.dev
+    else
+      "tun";
+  defaultVpnInterface = "${defaultVpnDev}0";
+  defaultHostAliases = unique (
+    [
+      hostname
+      "${hostname}.intern"
+    ]
+    ++ optional (hostVpnIp != null) hostVpnIp
+  );
+
+  registryLines = splitString "\n" (builtins.readFile hostIdentityCfg.registryFile);
+  splitFields = line: filter (part: part != "") (splitString " " line);
+  registryEntries =
+    builtins.map
+      (
+        line:
+        let
+          fields = splitFields line;
+        in
+        {
+          names = splitString "," (elemAt fields 0);
+          keyType = elemAt fields 1;
+          key = elemAt fields 2;
+        }
+      )
+      (
+        filter (line: line != "" && !(hasPrefix "#" line) && length (splitFields line) >= 3) registryLines
+      );
+  matchingEd25519Entries = filter (
+    entry: entry.keyType == "ssh-ed25519" && any (alias: elem alias entry.names) hostIdentityCfg.aliases
+  ) registryEntries;
+  registryEd25519PublicKey =
+    if matchingEd25519Entries == [ ] then
+      null
+    else
+      let
+        entry = head matchingEd25519Entries;
+      in
+      "${entry.keyType} ${entry.key}";
+  inherit (hostIdentityCfg) expectedEd25519PublicKey;
+  hasExpectedEd25519PublicKey = expectedEd25519PublicKey != null;
+  hostKeyGuardScript = strictMissing: ''
+    expected='${expectedEd25519PublicKey}'
+    key_file=/etc/ssh/ssh_host_ed25519_key.pub
+
+    if [ ! -f "$key_file" ]; then
+      echo "Luxnix SSH host-key guard: missing $key_file"
+      ${if strictMissing then "exit 1" else "exit 0"}
+    fi
+
+    actual="$(${pkgs.coreutils}/bin/cut -d ' ' -f 1,2 "$key_file")"
+    if [ "$actual" != "$expected" ]; then
+      expected_fingerprint="$(printf '%s\n' "$expected" | ${pkgs.openssh}/bin/ssh-keygen -lf - 2>/dev/null | ${pkgs.coreutils}/bin/cut -d ' ' -f 2 || true)"
+      actual_fingerprint="$(${pkgs.openssh}/bin/ssh-keygen -lf "$key_file" 2>/dev/null | ${pkgs.coreutils}/bin/cut -d ' ' -f 2 || true)"
+      echo "Luxnix SSH host-key guard: ed25519 host key mismatch for ${hostname}" >&2
+      echo "Registry: ${builtins.toString hostIdentityCfg.registryFile}" >&2
+      echo "Expected fingerprint: ''${expected_fingerprint:-unavailable}" >&2
+      echo "Actual fingerprint:   ''${actual_fingerprint:-unavailable}" >&2
+      echo "Update the registry only after out-of-band verification." >&2
+      ${
+        if hostIdentityCfg.allowRotation then
+          "echo \"Host-key rotation override is enabled; continuing.\" >&2"
+        else
+          "exit 1"
+      }
+    fi
+  '';
+in
+{
+  options.services.ssh = {
     enable = mkBoolOpt false "Enable ssh";
-    authorizedKeys = mkOpt (listOf str) [] "The public keys to grant access to connect as admin.";
+    authorizedKeys =
+      mkOpt (types.listOf types.str) [ ]
+        "The public keys to grant access to connect as admin.";
+    network = {
+      vpnInterface = mkOpt types.str defaultVpnInterface "VPN interface allowed to receive inbound SSH.";
+    };
+    forwarding = {
+      allowTcp = mkBoolOpt false "Allow SSH TCP forwarding.";
+      allowAgent = mkBoolOpt false "Allow SSH agent forwarding.";
+      gatewayPorts = mkOpt (types.enum [
+        "yes"
+        "no"
+        "clientspecified"
+      ]) "no" "GatewayPorts value when TCP forwarding is enabled.";
+    };
+    hostIdentity = {
+      enable = mkBoolOpt true "Guard and persist this host's SSH host identity.";
+      allowRotation = mkBoolOpt false "Allow a local SSH host key mismatch while intentionally rotating keys.";
+      registryFile =
+        mkOpt types.path ../../../../conf/ssh-host-keys/known_hosts
+          "Tracked public SSH host-key registry.";
+      aliases =
+        mkOpt (types.listOf types.str) defaultHostAliases
+          "Host aliases that must resolve to this machine's SSH host key.";
+      expectedEd25519PublicKey =
+        mkOpt (types.nullOr types.str) registryEd25519PublicKey
+          "Expected ssh-ed25519 host public key, usually read from the registry.";
+    };
   };
 
   config = mkIf cfg.enable {
     services.openssh = {
       enable = true;
-      ports = [22];
+      openFirewall = false;
+      ports = [ 22 ];
 
-      settings = { #TODO LIMIT TO vpn access
+      settings = {
+        AllowAgentForwarding = forwardingCfg.allowAgent;
+        AllowTcpForwarding = if forwardingCfg.allowTcp then "yes" else "no";
+        AllowUsers = [ adminUserName ];
+        GatewayPorts = forwardingCfg.gatewayPorts;
+        KbdInteractiveAuthentication = false;
         PasswordAuthentication = false;
+        PermitRootLogin = "no";
         StreamLocalBindUnlink = "yes";
-        GatewayPorts = "clientspecified";
+        X11Forwarding = false;
       };
     };
+
+    networking.firewall.interfaces.${networkCfg.vpnInterface}.allowedTCPPorts = [ 22 ];
+
     users.users = {
-      ${config.user.admin.name}.openssh.authorizedKeys.keys = cfg.authorizedKeys;
+      ${adminUserName}.openssh.authorizedKeys.keys = cfg.authorizedKeys;
     };
+
+    programs.ssh.knownHostsFiles = [
+      hostIdentityCfg.registryFile
+    ];
+
+    system.activationScripts.luxnixSshHostKeyGuard =
+      mkIf (hostIdentityCfg.enable && hasExpectedEd25519PublicKey)
+        {
+          text = hostKeyGuardScript false;
+        };
+
+    systemd.services.sshd.preStart = mkIf (hostIdentityCfg.enable && hasExpectedEd25519PublicKey) (
+      mkAfter (hostKeyGuardScript true)
+    );
+
+    warnings =
+      optional (hostIdentityCfg.enable && !hasExpectedEd25519PublicKey)
+        "Luxnix SSH host-key guard for ${hostname} has no registry-derived ed25519 key; sshd preStart identity enforcement is inactive until ${builtins.toString hostIdentityCfg.registryFile} is updated.";
   };
 }

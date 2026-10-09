@@ -1,0 +1,25 @@
+# Shared hardware baseline for gc-04 through gc-10; host values override it.
+group_luxnix:
+  generic_settings.hostPlatform: '"x86_64-linux"'
+  generic_settings.systemStateVersion: '"23.11"'
+  generic_settings.linux.cpuMicrocode: '"intel"'
+  generic_settings.linux.kernelModules:
+    - "kvm-intel"
+  generic_settings.linux.initrd.supportedFilesystems:
+    - "nfs"
+  generic_settings.linux.initrd.kernelModules:
+    - "nfs"
+  generic_settings.linux.initrd.availableKernelModules:
+    - "xhci_pci"
+    - "ahci"
+    - "nvme"
+    - "usb_storage"
+    - "sd_mod"
+  generic_settings.linux.supportedFilesystems:
+    - "btrfs"
+  generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+  generic_settings.linux.kernelParams: []
+  generic_settings.linux.kernelModulesBlacklist: []
+  generic_settings.gpu.nvidia.prime.nvidiaBusId: '"PCI:1:0:0"'
+  generic_settings.gpu.nvidia.prime.onboardBusId: '"PCI:0:2:0"'
+  generic_settings.gpu.nvidia.prime.onboardType: '"intel"'

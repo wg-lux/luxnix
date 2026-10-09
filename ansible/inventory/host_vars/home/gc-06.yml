@@ -9,8 +9,6 @@ host_home_luxnix:
   luxnix.generic-settings.language: "english"
   luxnix.generic-settings.hostPlatform: '"x86_64-linux"'
 
-# Only if programs.nixvim is NOT shared across all
-# host_home_editors:
-# programs.nixvim.enable: true
+
 group_home_editors:
-  programs.nixvim.enable: true
+  programs.nixvim.enable: false

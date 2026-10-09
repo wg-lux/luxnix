@@ -1,0 +1,62 @@
+schema_version: 1
+purpose: Configure one LLM connection for LX-Annotate web, Celery and lx-anonymizer.
+implementation_status:
+  runtime_options: implemented
+  shared_environment_and_worker_wiring: implemented
+  validation_blocker: 'Full host evaluation currently fails at flake.nix:145 with infinite recursion; reported to flake lock owner.'
+option_root: services.luxnix.lxAnnotateLocal.runtime.llm
+options:
+  enable: {default: true, environment: LLM_ENABLED}
+  provider: {default: ollama, allowed: [ollama, vllm], environment: LLM_PROVIDER}
+  baseUrl: {default: 'http://127.0.0.1:11434 for ollama; http://127.0.0.1:8000 for vllm', environment: LLM_BASE_URL}
+  model: {default: lx-gemma4-e2b-json, environment: LLM_MODEL}
+  timeoutSeconds: {default: 120, minimum: 1, maximum: 120, environment: LLM_TIMEOUT}
+  caFile: {default: null, environment: LLM_CA_FILE}
+  clientCertificateFile: {default: null, environment: LLM_CLIENT_CERT_FILE}
+  clientKeyFile: {default: null, environment: LLM_CLIENT_KEY_FILE}
+inventory_example:
+  host_services:
+    luxnix.lxAnnotateLocal.runtime.llm.enable: 'true'
+    luxnix.lxAnnotateLocal.runtime.llm.provider: '"vllm"'
+    luxnix.lxAnnotateLocal.runtime.llm.baseUrl: '"https://llm.internal.example"'
+    luxnix.lxAnnotateLocal.runtime.llm.model: '"configured-glm-model"'
+    luxnix.lxAnnotateLocal.runtime.llm.caFile: '"/run/secrets/llm-ca"'
+    luxnix.lxAnnotateLocal.runtime.llm.clientCertificateFile: '"/run/secrets/llm-client-cert"'
+    luxnix.lxAnnotateLocal.runtime.llm.clientKeyFile: '"/run/secrets/llm-client-key"'
+semantics:
+  - Typed runtime.llm settings are authoritative over runtime.extraEnvironment LLM keys.
+  - Disabled LLM functionality prevents automatic startup of the dedicated LLM worker.
+  - Only a local default-port Ollama connection adds an Ollama service dependency.
+  - Enable permits inference; it does not claim that a server or model is ready.
+  - The application probes the configured model. It does not download or substitute models.
+  - Use the server root URL without /v1; vllm selects the OpenAI-compatible protocol, including GLM.
+  - Remote clinical inference requires HTTPS and mTLS; HTTP is limited to literal loopback addresses.
+  - TLS paths must be readable by the service identity; the private key must remain owner-private.
+  - Changes require regeneration through Autoconf and the normal deployment workflow, then consumer restarts.
+  - Inference configuration does not enable training or active learning.
+  - No host inventories or running services were changed by introducing these options.
+verification:
+  - command: env -u LD_LIBRARY_PATH -u LD_PRELOAD .devenv/state/venv/bin/pytest -q tests/lx-annotate/test_lx_annotate_llm_configuration.py
+    result: 7 passed; covers option defaults, validation and shared web/worker environment for enabled, disabled and remote configurations.
+  - command: devenv tasks run docs:check
+    result: passed
+  - command: nixfmt --check modules/nixos/services/lx-annotate-local/config.nix modules/nixos/services/lx-annotate-local/scripts/env.nix
+    result: passed; applied Nix files also pass nix-instantiate --parse.
+  - command: ./feature-tracking/tracker.py validate
+    result: 11 feature definitions valid.
+  - command: ./feature-tracking/tracker.py check luxnix_host_configuration_cleanup
+    result: passed
+  - command: nix eval --json .#nixosConfigurations --apply builtins.attrNames
+    result: blocked by pre-existing concurrent flake.nix recursion at line 145.
+  - command: .devenv/state/venv/bin/pyright
+    directory: /home/admin/lx-anonymizer
+    result: 0 errors and 8 existing warnings.
+  - command: .devenv/state/venv/bin/pytest -q -o log_cli=false tests/test_config.py tests/test_llm_configuration.py tests/test_llm_meta_helpers.py tests/test_llm_service_vision_ocr.py tests/test_report_reader_init.py
+    directory: /home/admin/lx-anonymizer
+    result: 56 passed.
+  - command: uv sync --extra dev
+    directory: /home/admin/lx-anonymizer
+    result: Canceled large dependency downloads; repeated with --frozen and canceled. Tests used the existing virtualenv. Original uv.lock preserved.
+  - command: ruff check on existing llm_extractor.py and llm_service.py
+    directory: /home/admin/lx-anonymizer
+    result: Existing lint debt remains; new connection helper and configuration tests pass Ruff.

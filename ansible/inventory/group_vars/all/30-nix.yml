@@ -1,0 +1,130 @@
+# Shared inputs rendered into generated NixOS configurations.
+ansible_groups: []
+
+group_roles:
+  custom_packages.enable: 'true'
+  custom_packages.cloud: 'true'
+  common.enable: 'true'
+
+group_services:
+  wg-lux-mcp.enable: 'true'
+
+group_nixos:
+  xdg.menus.enable: 'true'
+  programs.nix-ld.enable: 'true'
+
+group_luxnix:
+  maintenance.autoUpdates.operation: '"switch"'
+  maintenance.autoUpdates.flake: '"github:wg-lux/luxnix/prototype"'
+  maintenance.autoUpdates.dates: '"17:00"'
+
+  # VPN addresses are derived from ansible_host in ../../hosts.ini.
+  generic_settings.network.hosts.gc_06.ip_local: '"172.31.179.8"'
+  generic_settings.network.hosts.gc_06.domains:
+    - gc-06.intern
+  generic_settings.network.hosts.gc_06.syncthing_id: '"MJU2YAF-4IXFRSS-I3JHU2Z-6LUSSTN-L6BR5HS-PLS6ACJ-4E2X2UQ-5AVBUAQ"'
+
+  generic_settings.network.hosts.s_01.ip_local: '"192.168.179.1"'
+  generic_settings.network.hosts.s_01.domains:
+    - s-01.intern
+  generic_settings.network.hosts.s_01.syncthing_id: '"WTGG7YQ-AGGOG6H-PQPA54T-HQRCF4P-2T52JSI-OQTIBUG-JUCC45Y-MBCB4QS"'
+  generic_settings.network.hosts.s_01.network_cluster: '"L1"'
+
+  generic_settings.network.hosts.s_02.ip_local: '"192.168.179.2"'
+  generic_settings.network.hosts.s_02.domains:
+    - nginx.endo-reg.net
+    - cloud.endo-reg.net
+    - keycloak.endo-reg.net
+    - s-02.intern
+  generic_settings.network.hosts.s_02.syncthing_id: '"GF7EOBC-UVEYSV7-BK77MKA-DIK62JP-TPVG4M3-3NUUWS7-B724MAI-OK2J7AW"'
+  generic_settings.network.hosts.s_02.network_cluster: '"L1"'
+
+  generic_settings.network.hosts.s_03.ip_local: '"192.168.179.3"'
+  generic_settings.network.hosts.s_03.domains:
+    - s-03.intern
+  generic_settings.network.hosts.s_03.network_cluster: '"L1"'
+  generic_settings.network.hosts.s_03.syncthing_id: '"MLC6QP7-MI5RMNB-H7JCOTE-ODXOCV7-UIIOMUS-ZRJULS7-5ZLD2LB-LYZVZAF"'
+
+  generic_settings.network.hosts.s_04.ip_local: '"192.168.0.194"'
+  generic_settings.network.hosts.s_04.domains:
+    - s-04.intern
+
+  generic_settings.network.hosts.gs_01.ip_local: '"192.168.0.228"'
+  generic_settings.network.hosts.gs_01.domains:
+    - gs-01.intern
+  generic_settings.network.hosts.gs_01.syncthing_id: '"X2KFB5D-HJWUNFK-GS6TP7A-GV4TGEF-ZYH3RHL-AWWJIW4-76SSCHP-YIMUUAA"'
+  generic_settings.network.hosts.gs_01.network_cluster: '"L2"'
+
+  generic_settings.network.hosts.gs_02.ip_local: '"192.168.0.56"'
+  generic_settings.network.hosts.gs_02.syncthing_id: '"XSAKTSB-36K6OY4-NEPJ2K4-WHGZF2D-EMDOMFQ-Q5DEVO6-2BYD2MS-JWPFVQ4"'
+  generic_settings.network.hosts.gs_02.domains:
+    - glm.endo-reg.net
+    - gs-02.intern
+    - vault.endo-reg.net
+  generic_settings.network.hosts.gs_02.network_cluster: '"L2"'
+
+  generic_settings.network.hosts.gc_01.domains:
+    - '"gc-01.intern"'
+    - '"lx-annotate.local"'
+  generic_settings.network.hosts.gc_02.domains:
+    - '"gc-02.intern"'
+    - '"lx-annotate.local"'
+  generic_settings.network.hosts.gc_03.domains:
+    - '"gc-03.intern"'
+    - '"lx-annotate.local"'
+  generic_settings.network.hosts.gc_04.domains:
+    - gc-04.intern
+    - lx-annotate.local
+  generic_settings.network.hosts.gc_05.domains:
+    - gc-05.intern
+    - '"lx-annotate.local"'
+  generic_settings.network.hosts.gc_07.domains:
+    - gc-07.intern
+    - '"lx-annotate.local"'
+  generic_settings.network.hosts.gc_08.domains:
+    - gc-08.intern
+    - lx-annotate.local
+  generic_settings.network.hosts.gc_09.domains:
+    - gc-09.intern
+    - lx-annotate.local
+  generic_settings.network.hosts.gc_10.domains:
+    - gc-10.intern
+    - lx-annotate.local
+
+  generic_settings.network.syncthing.enable: 'true'
+  generic_settings.network.syncthing.extraFlags: []
+
+  generic_settings.network.serviceHosts.keycloak: '"s-02"'
+  generic_settings.network.serviceHosts.nextcloud: '"s-03"'
+  generic_settings.network.serviceHosts.glm52: '"gs-02"'
+  generic_settings.network.serviceHosts.psqlMain: '"gs-02"'
+  generic_settings.network.serviceHosts.psqlTest: '"s-04"'
+  generic_settings.network.serviceHosts.nginx: '"s-02"'
+
+  generic_settings.network.keycloak.domain: '"keycloak.endo-reg.net"'
+  generic_settings.network.keycloak.adminDomain: '"adminKeycloak.endo-reg.net"'
+  generic_settings.network.keycloak.port: '8443'
+  generic_settings.network.nextcloud.domain: '"cloud.endo-reg.net"'
+  generic_settings.network.glm52.domain: '"glm.endo-reg.net"'
+  generic_settings.network.glm52.port: '8088'
+  generic_settings.network.psqlMain.port: '5432'
+  generic_settings.network.psqlTest.domain: '"psql-test.endo-reg.net"'
+
+  generic-settings.sslCertificatePath: '"/etc/secrets/vault/ssl_cert"'
+  generic-settings.sslCertificateKeyPath: '"/etc/secrets/vault/ssl_key"'
+  generic-settings.smtpUserFilePath: '"/etc/secrets/vault/smtp_user"'
+  generic-settings.smtpPwdFilePath: '"/etc/secrets/vault/smtp_pwd"'
+  generic_settings.transferCaPath: '"/var/lib/lx-annotate/ssl/transfer_ca.crt"'
+  generic_settings.vpnSubnet: '"172.16.255.0/24"'
+  generic_settings.sensitiveServiceGroupName: '"sensitiveServices"'
+  generic_settings.postgres.enable: 'true'
+  dns.enable: 'true'
+  generic_settings.enable: 'true'
+  generic_settings.linux.kernelPackages: pkgs.linuxPackages_6_12
+  generic_settings.adminVpnIp: '"172.16.255.106"'
+  generic_settings.traefikHostIp: '"172.16.255.12"'
+  generic_settings.traefikHostDomain: '"traefik.endo-reg.net"'
+  vault.enable: 'true'
+  vault.dir: '"/etc/secrets/vault"'
+  vault.key: '"/etc/secrets/.key"'
+  vault.psk: '"/etc/secrets/.psk"'

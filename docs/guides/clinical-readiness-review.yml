@@ -1,0 +1,211 @@
+schema_version: 1
+review:
+  date: '2026-09-09'
+  repository: luxnix
+  base_commit: 469620aa86e8f326bb200cf07fff485081e3b6f8
+  checkout_state: Includes pre-existing uncommitted monitoring and gc-02 protection changes.
+  verdict: not_ready_for_hostile_clinical_release
+  scope: >-
+    Repository-owned infrastructure, storage data plane, inventory parsing,
+    deployment contracts, quality gates, and MCP verification freshness.
+    This review does not establish clinical diagnostic accuracy or certify a
+    deployed environment. No deployment, secret rotation, migration, clinical
+    data processing, or deliberate resource-exhaustion operation was performed.
+  readiness_source: feature-tracking
+  interpretation: >-
+    This is an evidence review, not a parallel completion tracker. Existing
+    feature criteria remain authoritative. A passing source test or lint
+    baseline cannot replace packaged integration tests and live acceptance.
+
+findings:
+  - id: CLIN-001
+    severity: high
+    title: Direct clinical media serving bypasses application authorization
+    status: remediation_blocked_by_concurrent_edit
+    evidence:
+      - modules/nixos/services/lx-annotate-local/config.nix:2464
+      - modules/nixos/services/lx-annotate-local/runtime-context.nix:36
+      - modules/nixos/services/lx-annotate-local/runtime-context.nix:80
+    impact: >-
+      A client able to reach the public vhost and guess a readable path can
+      request files under the protected data root through the direct /media/
+      alias without passing Django object authorization.
+    proposed_fix: >-
+      Replace only the /media/ alias with return 404. Preserve the internal
+      /protected_media/ X-Accel-Redirect path and application video routes.
+    coordination: >-
+      config.nix is locked by codex-nvenc-gc10; coordination requests were sent.
+      Do not overwrite its unrelated monitoring changes.
+    acceptance: >-
+      Verify denied direct requests and unauthorized object access, successful
+      authorized playback, and protected-path denial in the deployed release.
+      Compatibility observed in a sibling source checkout is not release proof.
+
+  - id: CLIN-002
+    severity: high
+    title: Idle TLS peer could block the storage accept loop
+    status: fixed_in_source
+    evidence:
+      - lx_administration/storage/data_plane.py:924
+      - tests/storage_manager/test_storage_data_plane.py
+    impact: A reachable peer could stall new storage connections before authentication.
+    fix: >-
+      Defer TLS handshake until a bounded request worker has applied the socket
+      timeout. Close failed handshakes and release admission capacity.
+    verification: Real TLS idle-peer and failed-handshake regressions; storage suite passed.
+    residual: >-
+      Connection floods can still consume bounded capacity. Deployment and
+      representative load testing remain required; no throughput claim is made.
+
+  - id: CLIN-003
+    severity: medium
+    title: Invalid fact responses and undisclosed observation age mislead operators
+    status: fixed_in_source
+    evidence:
+      - scripts/refresh-ansible-facts.sh:147
+      - scripts/generate-cmdb-report.py
+      - tests/test_autoconf_operations.py
+    fix: >-
+      Require exactly one valid successful nonempty setup response before
+      replacing facts. Reject malformed flags and report field types. Display
+      host-reported observation time, age at generation, unknown time and clock
+      skew, together with report generation time and static-report limitations.
+    residual: >-
+      Retained facts are not a live availability check. Host-provided timestamps
+      are not independent trusted time. Missing hosts remain absent and no
+      clinical maximum age is inferred.
+
+  - id: CLIN-004
+    severity: high
+    title: CI could report zero dependency findings without parsing a result
+    status: fixed_in_source
+    evidence:
+      - scripts/nix-quality.py:192
+      - tests/test_nix_quality_policy.py
+      - .github/workflows/nix-quality.yml
+    fix: >-
+      Force the flake-checker text format in CI; require a recognized unambiguous
+      summary. Missing or invalid results remain unknown and fail the gate.
+      Run full flake evaluation and locked Python/tracker contracts on pull
+      requests; retain JUnit results on failure and bound job duration.
+    residual: Repository branch protection and successful hosted workflow runs are unverified.
+    reference: https://github.com/DeterminateSystems/flake-checker/blob/main/src/summary.rs
+
+  - id: CLIN-005
+    severity: high
+    title: Clinical parser and publication contracts lack release-bound evidence
+    status: release_blocker
+    evidence:
+      - feature-tracking/ReportReaderIntegration.yml
+      - feature-tracking/FrameCleanerIntegration.yml
+    ownership: lx-anonymizer and endoreg-db applications, with LuxNix deployment integration.
+    required_evidence: >-
+      Test the exact packaged capability profile against representative
+      synthetic PDF, image and video fixtures and malformed inputs. Verify
+      clinical identity association, typed contracts, partial/cancelled attempts,
+      retries, concurrent publication, and fail-closed anonymization. Record
+      package identities and clinical assessor approval; source existence is
+      insufficient to claim that these integrations work as advertised.
+
+  - id: CLIN-006
+    severity: high
+    title: Runtime dependency closure is not fully immutable
+    status: release_blocker
+    evidence:
+      - modules/nixos/services/lx-annotate-local/options/runtime.nix:286
+      - modules/nixos/services/lx-annotate-local/options/runtime.nix:323
+      - modules/nixos/services/lx-annotate-local/config.nix:374
+      - modules/nixos/services/lx-annotate-local/scripts/wheel-downgrade-guard.py
+    observation: >-
+      The top-level 1.2.3 wheel is hash-pinned, but wheelhousePath defaults null.
+      Dependency resolution may use the network during runtime preparation;
+      the version guard is not a complete hashed dependency lock.
+    required_evidence: >-
+      Provision and verify an immutable compatible dependency closure, then
+      prove offline startup and rollback. Do not enable an unprovisioned
+      wheelhouse or replace pins with unreviewed latest versions.
+
+  - id: CLIN-007
+    severity: high
+    title: Dependency age and support need release review
+    status: release_blocker
+    evidence:
+      - flake.lock
+      - nix-quality.yml:114
+    observed_age_days:
+      nixpkgs: 227
+      nixpkgs-unstable: 66
+    interpretation: >-
+      The existing two-issue ceiling permits these warnings. Passing that
+      ceiling is not evidence of current security patches. Review supported
+      release inputs, update deliberately, evaluate/build every affected host,
+      and validate integration compatibility and rollback before activation.
+
+  - id: CLIN-008
+    severity: high
+    title: Downtime and HLS readiness are not proven by current acceptance
+    status: release_blocker
+    evidence:
+      - modules/nixos/services/lx-annotate-local/subservices/lx-annotate-acceptance.nix:39
+      - docs/guides/lx-annotate-monitoring.yml
+      - feature-tracking/lx_annotate_hls_operational_readiness.yml
+      - feature-tracking/lx_annotate_operational_monitoring.yml
+      - docs/lx-annotate-cluster-readiness.md
+    observation: >-
+      The active acceptance unit checks Django, encrypted storage, worker
+      activity and an HTTPS manifest fetch, but omits HLS readiness. The fetch
+      lacks explicit curl deadlines and discards manifest contents. Monitoring
+      rollout and alerts remain unverified; Kubernetes TCP readiness does not
+      establish database, broker or shared-storage availability.
+    required_evidence: >-
+      Prove release-matched probes, data freshness indicators, bounded timeout
+      behavior and explicit unavailable/degraded/stale states. Inject dependency
+      failures only on an isolated test deployment and measure detection and
+      recovery; do not substitute zero latency/success for missing telemetry.
+
+  - id: CLIN-009
+    severity: high
+    title: A changed deployed MCP provider inherited previous verification
+    status: fixed_in_source
+    evidence:
+      - wg-lux-mcp/src/wg_lux_mcp/tools/features.py:422
+      - wg-lux-mcp/tests/test_features.py
+      - wg-lux-mcp/tests/test_server.py
+    fix: >-
+      Effective verified status requires an immutable package identity and an
+      exact deployed-subject match. Changed or missing provenance yields
+      not_assessed while preserving recorded historical status and evidence.
+      Requirement detail and compact status agree and expose invalidation.
+    verification: 20 independent MCP tests passed in an isolated locked environment.
+    residual: This does not age-expire assessments for an unchanged package.
+
+acceptance_requirements_still_needed:
+  deployment_scope: No priority deployment selected during this review.
+  clinical_maximum_data_age: Not supplied; requires the clinical owner.
+  outage_detection_deadline: Not supplied; requires the service owner.
+  reporting_latency_slo: Not supplied; benchmark representative load before claiming speed.
+  recent_data_policy: >-
+    Prefer the newest authenticated, schema-valid, complete version with
+    reviewable source identity, observation time and retrieval time. Future
+    timestamps, unavailable sources and failed refreshes cannot establish
+    freshness. Preserve history and expose stale or unavailable states.
+  clinical_correctness: >-
+    Source and infrastructure tests cannot validate diagnostic interpretation,
+    patient association or clinical suitability without representative fixtures,
+    exact deployed versions and an identified domain assessor.
+
+verification:
+  completed:
+    - command: uv run --locked pytest -q tests/test_nix_quality_policy.py tests/test_autoconf_operations.py tests/storage_manager
+      result: 94 passed in 7.53s
+    - command: uv run --locked ruff check scripts/nix-quality.py tests/test_nix_quality_policy.py scripts/generate-cmdb-report.py tests/test_autoconf_operations.py lx_administration/storage/data_plane.py tests/storage_manager/test_storage_data_plane.py
+      result: All checks passed.
+    - command: uv run --locked python scripts/nix-quality.py --json
+      result: 319 Nix files parsed; zero lint/format findings; two retained dependency-age findings.
+  pending:
+    - Complete repository Python suite and full flake evaluation.
+    - Resolve concurrent media configuration lock and verify remediation.
+  not_performed:
+    - Clinical source-data processing or assessment.
+    - Production fault injection, activation, migration or secret mutation.
+    - Fleet-wide builds, runtime acceptance, sustained load and downtime measurements.
