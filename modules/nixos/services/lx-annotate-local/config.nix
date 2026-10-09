@@ -1675,6 +1675,8 @@ let
     (import ./subservices/lx-annotate-filewatcher.nix { ctx = subserviceContext; })
     (import ./subservices/lx-annotate-hub-export-recovery.nix { ctx = subserviceContext; })
     (import ./subservices/lx-annotate-hub-export-health.nix { ctx = subserviceContext; })
+    (import ./subservices/lx-annotate-identity-salts.nix { ctx = subserviceContext; })
+    (import ./subservices/lx-annotate-identity-salt-migration.nix { ctx = subserviceContext; })
     (import ./subservices/lx-annotate-sap-import.nix { ctx = subserviceContext; })
     (import ./subservices/lx-annotate-export-frames.nix { ctx = subserviceContext; })
     (import ./subservices/lx-annotate.nix { ctx = subserviceContext; })
@@ -1718,13 +1720,15 @@ in
                 !cfg.django.enrollLegacyDefaultSalt
                 || (
                   cfg.django.identitySaltFile == null
+                  && !(cfg.runtime.extraEnvironment ? DJANGO_SALT)
+                  && !(cfg.runtime.extraEnvironment ? DJANGO_SALT_FILE)
                   && cfg.django.identitySaltKeyringFile == "/etc/secrets/vault/lx_annotate_identity_keyring.yml"
                   &&
                     (cfg.runtime.extraEnvironment.DJANGO_IDENTITY_SALT_KEYRING_FILE
                       or cfg.django.identitySaltKeyringFile
                     ) == cfg.django.identitySaltKeyringFile
                 );
-              message = "Explicit default-salt enrollment must use its managed identity keyring without conflicting salt overrides.";
+              message = "Automatic identity salt provisioning must use its managed keyring without conflicting salt overrides.";
             }
             {
               assertion =
@@ -2142,43 +2146,6 @@ in
               ];
 
               customSecrets = {
-                lx_annotate_identity_active = mkIf cfg.django.enrollLegacyDefaultSalt {
-                  path = "/etc/secrets/vault/lx_annotate_identity_active";
-                  owner = endoreg-service-user-name;
-                  group = endoreg-service-group-name;
-                  permissions = "600";
-                  description = "Active LX-Annotate identity salt for explicitly enrolled legacy identities";
-                  customScript = true;
-                  generator = ''
-                    if [ -e /etc/secrets/vault/lx_annotate_identity_keyring.yml ]; then
-                      echo "Refusing to replace a missing active identity salt after enrollment" >&2
-                      exit 1
-                    fi
-                    ${pkgs.openssl}/bin/openssl rand -hex 32 > "$TARGET_FILE"
-                  '';
-                };
-                lx_annotate_identity_legacy = mkIf cfg.django.enrollLegacyDefaultSalt {
-                  path = "/etc/secrets/vault/lx_annotate_identity_legacy_default";
-                  owner = endoreg-service-user-name;
-                  group = endoreg-service-group-name;
-                  permissions = "600";
-                  description = "Explicitly enrolled retiring default_salt; never an active production salt";
-                  generator = "printf '%s\\n' default_salt";
-                };
-                lx_annotate_identity_manifest = mkIf cfg.django.enrollLegacyDefaultSalt {
-                  path = "/etc/secrets/vault/lx_annotate_identity_keyring.yml";
-                  owner = endoreg-service-user-name;
-                  group = endoreg-service-group-name;
-                  permissions = "600";
-                  description = "LX-Annotate identity manifest with explicit legacy compatibility";
-                  generator = "${pkgs.coreutils}/bin/cat ${pkgs.writeText "lx-annotate-identity-manifest.yml" ''
-                    schema_version: 1
-                    active: /etc/secrets/vault/lx_annotate_identity_active
-                    retiring:
-                      - /etc/secrets/vault/lx_annotate_identity_legacy_default
-                    allow_legacy_default_salt: true
-                  ''}";
-                };
                 lx_annotate_master_key_local =
                   mkIf
                     (

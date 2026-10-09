@@ -23,13 +23,22 @@ def test_certificate_service_can_resolve_authentication_tools():
         cwd=ROOT, capture_output=True, text=True, check=True,
     )
     path = json.loads(result.stdout)
-    for command in ("vault", "jq"):
+    for command in ("vault", "jq", "getent"):
         executable = shutil.which(command, path=path)
         assert executable, f"{command} is missing from the service PATH"
         subprocess.run(
             [executable, "version" if command == "vault" else "--version"],
             env={"PATH": path}, capture_output=True, text=True, check=True,
         )
+    # Without HOME, Vault resolves its token-helper config through getent before
+    # contacting the server. Exercise that path with no live credentials.
+    result = subprocess.run(
+        [shutil.which("vault", path=path), "write", "auth/approle/login", "-"],
+        input="{}", env={"PATH": path, "VAULT_ADDR": "http://127.0.0.1:1"},
+        capture_output=True, text=True, timeout=10,
+    )
+    assert result.returncode != 0
+    assert "connection refused" in result.stderr
 
 
 @pytest.mark.parametrize("error, state", [

@@ -15,7 +15,11 @@ let
     publicCertPath = "/run/lx-annotate-ssl/lx-annotate-selfsigned.crt";
   } config;
 
-  publicSslCertificatePath = sslCfg.publicCertPath;
+  publicSslCertificatePath =
+    if cfg.django.sslCaCertificatePath != null then
+      cfg.django.sslCaCertificatePath
+    else
+      sslCfg.publicCertPath;
 
   repoDirName = "lx-annotate";
 

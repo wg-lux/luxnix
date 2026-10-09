@@ -51,15 +51,20 @@ in
             httpProtocolType = types.str;
           })
           // {
+            sslCaCertificatePath = mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              description = "CA bundle for verified local HTTPS acceptance; null trusts the generated self-signed certificate.";
+            };
             enrollLegacyDefaultSalt = mkOption {
               type = types.bool;
-              default = false;
+              default = true;
               description = ''
-                Explicitly enroll historical default_salt as a retiring identity
-                generation and provision one new active salt. Requires coordinated
-                keyring-capable identity writers. This does not run bulk migration
-                or rotate media or Django signing keys. Never enable on a host
-                whose established identity salt is unknown or different.
+                Automatically provision and recover a per-machine active identity
+                salt, retaining default_salt for legacy reads. Existing managed
+                salts are preserved with two root-owned recovery copies. External
+                salt configurations must explicitly disable managed provisioning.
+                Requires keyring-capable writers; never replaces an established salt.
               '';
             };
             identitySaltFile = mkOption {
@@ -71,6 +76,11 @@ in
               type = types.nullOr types.str;
               default = null;
               description = "Private identity manifest exported as DJANGO_IDENTITY_SALT_KEYRING_FILE; takes precedence over a single salt file.";
+            };
+            automaticIdentitySaltMigration = mkOption {
+              type = types.bool;
+              default = true;
+              description = "Periodically migrate verified identities to the configured keyring's active salt in the background, retaining blocked identities and retiring salts.";
             };
           };
       };

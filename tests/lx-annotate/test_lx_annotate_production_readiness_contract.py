@@ -163,6 +163,7 @@ def test_hub_backup_publishes_database_and_media_as_one_restore_point(
     runtime_root.mkdir()
     credential_root.mkdir()
     (runtime_root / "processed-media.bin").write_bytes(b"anonymized-media")
+    (runtime_root / ".identity-salt-recovery").mkdir(mode=0o000)
     database_dump = credential_root / "hub-postgresql.sql.gz"
     with gzip.open(database_dump, "wb") as compressed:
         compressed.write(b"CREATE DATABASE hub_test;\n")
@@ -185,7 +186,8 @@ def test_hub_backup_publishes_database_and_media_as_one_restore_point(
             manifestDir = {nix_string(manifest_root)};
             retainCount = 2;
             minimumFreeBytes = 1;
-            exclude = [];
+            exclude = flake.nixosConfigurations.gs-02.config.services
+              .luxnix.lxAnnotateLocal.hub.backup.exclude;
           }};
         }};
       in generated.runLocalHubBackupScript
@@ -223,6 +225,7 @@ def test_hub_backup_publishes_database_and_media_as_one_restore_point(
     latest_snapshot = (snapshot_root / "latest").resolve(strict=True)
     copied_dump = latest_snapshot / "database/all.sql.gz"
     assert copied_dump.read_bytes() == database_dump.read_bytes()
+    assert not (latest_snapshot / ".identity-salt-recovery").exists()
     assert (latest_snapshot / "processed-media.bin").read_bytes() == b"anonymized-media"
     manifest = json.loads(next(manifest_root.glob("*.json")).read_text())
     assert manifest["database_dump"]["relative_path"] == "database/all.sql.gz"

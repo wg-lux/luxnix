@@ -44,7 +44,7 @@ During implementation:
   evaluation or deployment continue.
 - Keep documentation and comments in English.
 - Prefer editing canonical YAML inputs and templates; do not hand-edit
-  generated Nix output when a generator owns it.
+  generated Nix output when a generator owns it. This does not apply to documentation, write ocumentation to .md files.
 
 After implementation, run the narrowest relevant checks first, then broader
 checks when module, generator, deployment, or security boundaries were crossed.

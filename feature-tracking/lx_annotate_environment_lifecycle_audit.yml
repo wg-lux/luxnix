@@ -200,6 +200,39 @@ definition_of_done:
   assessment:
     status: blocked
     evidence:
+    - kind: test
+      reference: '2026-10-09 automatic fleet provisioning: tests/lx-annotate/test_identity_salt_provisioning.py,
+        test_identity_salt_enrollment.py and test_lx_annotate_encryption_defaults.py: 44 passed;
+        test_lx_annotate_production_readiness_contract.py -k backup: 2 passed.'
+      note: Every enabled host provisions a private active salt and retains default_salt for legacy
+        reads. Root-owned recovery copies and fingerprint receipts are fsynced before publication;
+        missing copies recover without rotation. Tests cover adoption, every surviving copy,
+        interrupted publication, concurrency, conflicts and unsafe inputs. Salt copies are never
+        pruned; unprivileged hub snapshots exclude the private recovery directory. Total loss of
+        all storage still requires external secret backups; no production activation was performed.
+    - kind: command
+      reference: '2026-10-09: docs:check and nix-quality:check passed after correcting the new unit
+        attrset structure; gc-02 and gs-02 system.build.toplevel.drvPath evaluated; nix build --impure
+        --no-link of gc-02 systemd.units."lx-annotate-identity-salts.service".unit passed.'
+      note: Focused Python Ruff and diff checks passed; the existing backup-test file retains two
+        pre-existing E501 lines and passes with E501 excluded. gs-02 evaluation reports the existing
+        missing registry-derived SSH host-key warning. Full system builds and live recovery remain
+        unverified; the broader runtime-secret assessment stays blocked.
+    - kind: test
+      reference: '2026-10-09: tests/lx-annotate/test_identity_salt_enrollment.py: 8 passed;
+        tests/lx-annotate/test_lx_annotate_encryption_defaults.py: 14 passed.'
+      note: Automatic keyring migration runs through a delayed hourly timer using the installed
+        rotate_identity_salt --apply --allow-partial command. Evaluated enrollment, external keyring,
+        opt-out and missing-keyring cases prove no service depends on migration. Existing secret
+        verification blockers remain; this does not generate salts or authorize retirement.
+    - kind: test
+      reference: '2026-10-09: /home/admin/endoreg-db/.devenv/state/venv/bin/pytest -q
+        tests/services/test_identity_salt_rotation.py: 17 passed, one pytest plugin rewrite warning.
+        Covers partial commits, blocked identities, stable links and concurrent imports.'
+    - kind: command
+      reference: '2026-10-09: devenv tasks run docs:check and devenv tasks run nix-quality:check
+        passed; nix eval .#nixosConfigurations.gc-02.config.system.build.toplevel.drvPath passed
+        on retry after a source-change-during-evaluation failure. No build or activation performed.'
     - kind: code
       reference: modules/nixos/services/lx-annotate-local/scripts.nix require_file_backed_master_key and
         runLocalMasterKeyCheckScript

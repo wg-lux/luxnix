@@ -224,10 +224,16 @@ lib.foldl' lib.recursiveUpdate
       services.luxnix.lxAiLocal.runtime.protectedDataDir = "/var/lib/lx-annotate/data";
     }
     {
+      services.luxnix.lxAnnotateLocal.django.enrollLegacyDefaultSalt = true;
+    }
+    {
       services.luxnix.lxAnnotateLocal.django.extraSettings."IS_CENTRAL_NODE" = lib.mkForce true;
     }
     {
       services.luxnix.lxAnnotateLocal.django.hostname = "gs-02.intern";
+    }
+    {
+      services.luxnix.lxAnnotateLocal.django.sslCaCertificatePath = "/var/lib/luxnix-vault-pki/ca.crt";
     }
     {
       services.luxnix.lxAnnotateLocal.django.sslCertificatePath = "/var/lib/luxnix-vault-pki/server.crt";

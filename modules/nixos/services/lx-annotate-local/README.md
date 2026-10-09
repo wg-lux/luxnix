@@ -71,25 +71,84 @@ The encrypted-data unit then:
 3. opens the LUKS device with `cryptsetup`
 4. mounts it at `runtime.encryptedDataDir`
 
-## Legacy identity salt enrollment
+## Automatic identity salt provisioning and recovery
 
-For a reviewed upgrade from identities hashed with `default_salt`, enable
-`django.enrollLegacyDefaultSalt` in the host inventory and regenerate its Nix
-configuration. gc-02 explicitly enables this migration. Other hosts must opt in
-only after confirming their established salt and keyring-capable identity writers.
+Every enabled host defaults to `django.enrollLegacyDefaultSalt = true`. The
+root-owned `lx-annotate-identity-salts.service` provisions a random 256-bit active
+salt on first installation and retains `default_salt` as a retiring generation
+for legacy reads. New identities always use the active salt. All writers must
+support identity keyrings before activation.
 
-The managed-secrets service provisions three service-owned, mode-0600 files:
+The existing service-owned, mode-0600 paths remain stable:
 
-- `/etc/secrets/vault/lx_annotate_identity_active`: independent active salt.
-- `/etc/secrets/vault/lx_annotate_identity_legacy_default`: retiring `default_salt`.
-- `/etc/secrets/vault/lx_annotate_identity_keyring.yml`: manifest explicitly allowing
-  the legacy salt as retiring material.
+- `/etc/secrets/vault/lx_annotate_identity_active`
+- `/etc/secrets/vault/lx_annotate_identity_legacy_default`
+- `/etc/secrets/vault/lx_annotate_identity_keyring.yml`
 
-The common environment supplies `DJANGO_IDENTITY_SALT_KEYRING_FILE` to systemd
-services and maintenance wrappers. Existing files are preserved; a missing active
-salt cannot be regenerated after manifest publication. Back up these files through
-the established secret backup process. Enrollment does not perform a bulk identity
-rehash or rotate media encryption or Django signing keys.
+Existing valid active salts are adopted without changing their value. Before
+publishing an active salt or manifest, the provisioner durably writes `active.salt`
+and an `enrolled` fingerprint receipt in two root-owned, mode-0700 directories:
+
+- `/var/lib/lx-annotate-identity-salts`
+- `runtime.encryptedDataDir/.identity-salt-recovery`
+
+Recovery files are mode 0400. Creation uses an exclusive lock, fsynced files and
+directories, and atomic publication without overwriting existing files. Missing
+copies are restored from any surviving matching salt. Conflicting copies,
+changed manifests, unsafe permissions, symlinks, or an enrollment receipt without
+recoverable salt fail closed. Salt values and parsing errors are never logged.
+The legacy fallback is never used to conceal a missing active salt.
+
+This local validation/recovery step runs before the shared application environment
+is prepared and repeats every fifteen minutes. It performs no network operations
+or database migration. Bulk identity migration remains a separate background
+service. Normal rebuilds, repeat starts and managed-secret regeneration do not
+replace a deployed salt; the salts are no longer generic managed-secret entries.
+
+The protected runtime copy follows the configured data volume's encryption at
+rest. The root-filesystem copy has the same at-rest boundary as the existing
+`/etc/secrets/vault` files. Both recovery directories are retained indefinitely;
+there is no automatic rotation or pruning of their material. Unprivileged hub
+runtime snapshots exclude `.identity-salt-recovery` to preserve its root-only
+boundary and avoid permission errors. Include the recovery directories in the
+established root-level encrypted secret backup process, separately from those
+application snapshots. Local redundancy does not protect against loss of every
+underlying disk or an administrator deleting all copies. An enrollment receipt
+that survives such loss prevents silent generation of a replacement salt.
+
+External salt/keyring configurations must explicitly set
+`django.enrollLegacyDefaultSalt = false` and retain their own recovery lifecycle.
+Conflicting salt environment overrides are rejected. A pre-existing managed
+manifest naming different generations requires deliberate reconciliation; the
+provisioner never discards those generations. Do not remove an older generation
+until all identity, examiner and replica dependencies have been verified.
+
+Apply through the normal NixOS deployment workflow. Inspect unit status and file
+metadata without displaying secret contents. No salt creation, migration or
+production activation occurs merely by editing this configuration.
+
+### Automatic background identity migration
+
+Hosts with an identity keyring automatically run
+`rotate_identity_salt --apply --allow-partial` through the installed application
+runtime. The `lx-annotate-identity-salt-migration.timer` first fires ten minutes
+after boot (with up to one minute of jitter), then one hour after each completed
+attempt. The service waits for application startup; web and workers never wait
+for migration. Each attempt has a fifteen-minute timeout and reduced CPU/I/O
+priority. The shared service environment, account and storage prerequisites apply.
+
+Verified patient groups commit independently, preserving patient and examination
+IDs. Blocked groups remain unchanged, and an incomplete run remains a failed unit
+with details in the LX-Annotate journal; the timer retries automatically. Erased
+source identities and collisions still require an administrator's reviewed
+evidence. Routine migration requires no end-user action.
+
+This migrates identities to the already provisioned active salt. It does not
+generate replacement salts or remove retiring generations. Retirement requires
+separate verification of examiner mappings, replicas and historical references.
+Deploy a backend supporting `rotate_identity_salt --allow-partial` before
+activation. Set `django.automaticIdentitySaltMigration = false` to suspend this
+maintenance; hosts without a keyring have no migration service or timer.
 
 Apply through the normal NixOS deployment and managed-secrets service. Do not use
 `luxnix-secrets generate --secret` for diagnostics: that CLI displays secret values.

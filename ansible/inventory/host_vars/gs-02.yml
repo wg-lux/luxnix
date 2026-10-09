@@ -12,6 +12,9 @@ host_roles:
   nginxHost.nextcloud.enable: "false"
 
 host_services:
+  # Operator confirmed historical default_salt; retain it as a retiring reader.
+  luxnix.lxAnnotateLocal.django.enrollLegacyDefaultSalt: "true"
+  luxnix.lxAnnotateLocal.django.sslCaCertificatePath: '"/var/lib/luxnix-vault-pki/ca.crt"'
   luxnix.lxAiLocal.runtime.protectedDataDir: '"/var/lib/lx-annotate/data"'
   # Keep the hub broker host-local. The former shared broker on s-04 is not
   # reachable, and plaintext Redis must not be exposed node-to-node.

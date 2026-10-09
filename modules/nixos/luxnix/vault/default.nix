@@ -1849,6 +1849,7 @@ in
         path = [
           pkgs.vault
           pkgs.jq
+          pkgs.getent
         ];
         wantedBy = lib.optionals (!cfg.client.auth.deferUntilProvisioned) [ "multi-user.target" ];
         before = [ "lx-annotate-celery-hub-transfer-worker.service" ];
