@@ -1,0 +1,278 @@
+---
+- name: Discover reachable configured hub sites without changing remote state
+  hosts: 'active_clients:&gpu_client:&endoreg_client'
+  gather_facts: false
+  become: false
+  tasks:
+    - name: Default to failed until all preflight checks pass
+      ansible.builtin.set_fact:
+        fleet_enrollment_status: failed-preflight
+
+    - name: Validate canonical site and receiver configuration
+      ansible.builtin.command:
+        argv: [uv, run, python, scripts/vault/site_enrollment_preflight.py, '{{ inventory_hostname }}', --json, --controller]
+        chdir: '{{ playbook_dir }}/../..'
+      delegate_to: localhost
+      changed_when: false
+      register: fleet_preflight
+      failed_when: false
+
+    - name: Report failed preflight checks
+      ansible.builtin.debug:
+        msg: '{{ fleet_preflight.stdout | default("Preflight could not run") }}'
+      when: fleet_preflight.rc != 0
+
+    - name: Stop this site on invalid configuration
+      ansible.builtin.meta: end_host
+      when: fleet_preflight.rc != 0
+
+    - name: Probe pinned SSH connectivity with a bounded timeout
+      ansible.builtin.wait_for_connection:
+        timeout: 15
+        connect_timeout: 5
+        sleep: 1
+      register: fleet_connection
+      ignore_errors: true
+
+    - name: Record reachability separately from configuration failures
+      ansible.builtin.set_fact:
+        fleet_enrollment_status: '{{ "unreachable" if fleet_connection is failed else "reachable" }}'
+
+    - name: Run the canonical connectivity check before remote changes
+      ansible.builtin.command:
+        argv: [bash, scripts/check-connectivity.sh, '{{ inventory_hostname }}', -e, ansible_python_interpreter=/run/current-system/sw/bin/python3]
+        chdir: '{{ playbook_dir }}/../..'
+      delegate_to: localhost
+      changed_when: false
+      when: fleet_enrollment_status == 'reachable'
+      register: fleet_connectivity_check
+      failed_when: false
+
+    - name: Record failed command execution without treating it as offline
+      ansible.builtin.set_fact:
+        fleet_enrollment_status: failed-connectivity
+      when: fleet_enrollment_status == 'reachable' and fleet_connectivity_check.rc != 0
+
+    - name: Verify root access and ephemeral staging on this reachable site
+      ansible.builtin.command:
+        argv: [findmnt, -n, -o, FSTYPE, --target, /dev/shm]
+      become: true
+      vars:
+        ansible_become_user: root
+      when: fleet_enrollment_status == 'reachable'
+      changed_when: false
+      failed_when: false
+      ignore_errors: true
+      ignore_unreachable: true
+      register: fleet_site_tmpfs
+
+    - name: Exclude sites with unavailable root access or unsafe staging
+      ansible.builtin.set_fact:
+        fleet_enrollment_status: failed-prerequisite
+      when: >-
+        fleet_enrollment_status == 'reachable' and
+        (fleet_site_tmpfs.rc | default(1) != 0 or
+         fleet_site_tmpfs.stdout | default('') | trim != 'tmpfs')
+
+- name: Prepare the trusted hub once and request the admin token
+  hosts: gs-02
+  gather_facts: false
+  become: true
+  any_errors_fatal: true
+  vars:
+    ansible_become_user: root
+  tasks:
+    - name: Select only sites that passed connectivity and preflight
+      ansible.builtin.set_fact:
+        fleet_reachable: >-
+          {{ hostvars | dict2items | selectattr('value.fleet_enrollment_status', 'defined') |
+             selectattr('value.fleet_enrollment_status', 'equalto', 'reachable') | map(attribute='key') | sort }}
+
+    - name: Report selected targets
+      ansible.builtin.debug:
+        msg: 'Hub gs-02 ({{ ansible_host }}); reachable sites: {{ fleet_reachable | join(", ") }}'
+
+    - name: Stop hub preparation when no sites are reachable
+      ansible.builtin.meta: end_play
+      when: fleet_reachable | length == 0
+
+    - name: Check hub connectivity using the canonical workflow
+      ansible.builtin.command:
+        argv: [bash, scripts/check-connectivity.sh, gs-02, -e, ansible_python_interpreter=/run/current-system/sw/bin/python3]
+        chdir: '{{ playbook_dir }}/../..'
+      delegate_to: localhost
+      become: false
+      changed_when: false
+
+    - name: Read evaluated hub trust and Vault paths
+      ansible.builtin.command:
+        argv:
+          - nix
+          - eval
+          - --json
+          - '.#nixosConfigurations.gs-02.config.luxnix.vault'
+          - --apply
+          - 'v: { address = v.server.apiAddress; ca = v.server.caCertFile; kv = v.server.hubPki.kvMountPath; recipient = v.server.hubPki.recipientPublicKeyKvPath; }'
+        chdir: '{{ playbook_dir }}/../..'
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      register: fleet_hub_eval
+
+    - name: Record reviewed revision and locked inputs
+      ansible.builtin.command:
+        argv: '{{ item }}'
+        chdir: '{{ playbook_dir }}/../..'
+      loop:
+        - [git, rev-parse, HEAD]
+        - [sha256sum, flake.lock]
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      register: fleet_source_facts
+
+    - name: Display the reviewed revision and locked-input digest
+      ansible.builtin.debug:
+        msg: '{{ fleet_source_facts.results | map(attribute="stdout") | list }}'
+
+    - name: Display each exact reachable target before token entry
+      ansible.builtin.debug:
+        msg: '{{ item }} ({{ hostvars[item].ansible_host }})'
+      loop: '{{ fleet_reachable }}'
+
+    - name: Require ephemeral hub staging before handling secrets
+      ansible.builtin.command:
+        argv: [findmnt, -n, -o, FSTYPE, --target, /dev/shm]
+      changed_when: false
+      register: fleet_remote_tmpfs
+      failed_when: fleet_remote_tmpfs.rc != 0 or fleet_remote_tmpfs.stdout | trim != 'tmpfs'
+
+    - name: Enter the Vault admin token to authorize enrollment of the listed reachable sites
+      ansible.builtin.pause:
+        prompt: 'Vault admin token (hidden; creates and deploys missing enrollment, preserves existing identities)'
+        echo: false
+      register: fleet_admin_token
+      no_log: true
+
+    - name: Validate token input without logging it
+      ansible.builtin.assert:
+        that:
+          - fleet_admin_token.user_input | default('') is match('^[A-Za-z0-9._-]+$')
+      no_log: true
+
+    - name: Bootstrap using the token over stdin, never command arguments
+      ansible.builtin.shell: |
+        set -eu
+        read -r VAULT_TOKEN
+        test -n "$VAULT_TOKEN"
+        export VAULT_TOKEN
+        flock -x /run/lock/luxnix-vault-hub-bootstrap.lock luxnix-vault-bootstrap-hub-pki
+      args:
+        stdin: '{{ fleet_admin_token.user_input }}'
+        executable: /run/current-system/sw/bin/bash
+      environment:
+        VAULT_SKIP_VERIFY: 'false'
+        VAULT_ADDR: '{{ (fleet_hub_eval.stdout | from_json).address }}'
+        VAULT_CACERT: '{{ (fleet_hub_eval.stdout | from_json).ca }}'
+      no_log: true
+      changed_when: true
+
+    - name: Read CA fingerprint independently from the hub trust anchor
+      ansible.builtin.command:
+        argv: [openssl, x509, -in, '{{ (fleet_hub_eval.stdout | from_json).ca }}', -noout, -fingerprint, -sha256]
+      register: fleet_ca_fingerprint
+      changed_when: false
+
+    - name: Publish the client CA for the hub receiver
+      ansible.builtin.systemd_service:
+        name: luxnix-vault-publish-hub-client-ca.service
+        state: restarted
+
+- name: Reconcile and deploy credentials independently for each reachable site
+  hosts: 'active_clients:&gpu_client:&endoreg_client'
+  gather_facts: false
+  become: true
+  serial: 1
+  vars:
+    ansible_become_user: root
+    enrollment_hub: gs-02
+    enrollment_source: '/root/vault-enrollment/{{ inventory_hostname }}'
+    enrollment_files: [approle_role_id, approle_secret_id, vault-server-ca.pem, source-node-secret]
+    enrollment_expected_ca_sha256: '{{ hostvars[enrollment_hub].fleet_ca_fingerprint.stdout.split("=")[-1] | trim }}'
+  tasks:
+    - name: Reconcile one reachable site without disrupting the remaining fleet
+      when: fleet_enrollment_status | default('failed-preflight') == 'reachable'
+      block:
+        - name: Default to failure until deployment and verification complete
+          ansible.builtin.set_fact:
+            fleet_enrollment_status: failed-enrollment
+
+        - name: Reconcile secrets with protected stdin and transient helper files
+          ansible.builtin.include_tasks: tasks/hub_enrollment_reconcile.yml
+
+        - name: Deliver the reconciled enrollment using the existing protected transport
+          ansible.builtin.include_tasks: tasks/hub_enrollment_delivery.yml
+
+        - name: Install authenticated recipient public key
+          ansible.builtin.copy:
+            content: '{{ fleet_recipient.content | b64decode }}'
+            dest: /etc/secrets/vault/hub-pki/hub-recipient-current.pub.pem
+            owner: root
+            group: sensitiveServices
+            mode: '0640'
+
+        - name: Authenticate with installed credentials
+          ansible.builtin.systemd_service:
+            name: vault-auth-setup.service
+            state: restarted
+
+        - name: Require authenticated enrollment readiness
+          ansible.builtin.command: luxnix-vault-enrollment-status
+          changed_when: false
+          register: fleet_auth
+          failed_when: >-
+            fleet_auth.rc != 0 or fleet_auth.stdout | trim != 'Vault enrollment state: ready'
+
+        - name: Issue or renew only when the existing client certificate needs it
+          ansible.builtin.systemd_service:
+            name: luxnix-vault-issue-hub-client-certificate.service
+            state: started
+
+        - name: Start the certificate renewal timer
+          ansible.builtin.systemd_service:
+            name: luxnix-vault-issue-hub-client-certificate.timer
+            state: started
+
+        - name: Validate the installed envelope key
+          ansible.builtin.systemd_service:
+            name: lx-annotate-hub-envelope-key-preflight.service
+            state: restarted
+
+        - name: Record credential deployment and authentication success
+          ansible.builtin.set_fact:
+            fleet_enrollment_status: enrolled
+      rescue:
+        - name: Record failure and continue with the next site
+          ansible.builtin.debug:
+            msg: 'Enrollment failed for {{ inventory_hostname }}. Saved credentials are retained; inspect the failed task and restricted Vault logs, then rerun. No automatic rotation or containment recovery was attempted.'
+
+- name: Report every selected site and fail if a reachable site could not enroll
+  hosts: gs-02
+  gather_facts: false
+  become: false
+  tasks:
+    - name: Clear the token from host facts
+      ansible.builtin.set_fact:
+        fleet_admin_token: {}
+      no_log: true
+
+    - name: Report per-site outcomes without secret material
+      ansible.builtin.debug:
+        msg: '{{ item }}: {{ hostvars[item].fleet_enrollment_status | default("not-run") }}'
+      loop: '{{ groups.active_clients | intersect(groups.gpu_client) | intersect(groups.endoreg_client) | sort }}'
+
+    - name: Require success for all configured reachable sites
+      ansible.builtin.assert:
+        that: hostvars[item].fleet_enrollment_status | default('not-run') in ['enrolled', 'unreachable']
+        fail_msg: 'Some sites failed. Offline sites may be retried later; configuration, credential and deployment failures require investigation.'
+      loop: '{{ groups.active_clients | intersect(groups.gpu_client) | intersect(groups.endoreg_client) | sort }}'

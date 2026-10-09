@@ -45,6 +45,11 @@
       bash scripts/run-secret-playbook.sh ansible/playbooks/rotate_hub_enrollment.yml "$@"
   '';
 
+  enroll-reachable-hub-sites.package = pkgs.zsh;
+  enroll-reachable-hub-sites.exec = ''
+    LUXNIX_UV_BIN=${pkgs.uv}/bin/uv bash scripts/enroll-reachable-hub-sites.sh "$@"
+  '';
+
   deliver-hub-enrollment.package = pkgs.zsh;
   deliver-hub-enrollment.exec = ''
     ANSIBLE_HOST_KEY_CHECKING=True LUXNIX_UV_BIN=${pkgs.uv}/bin/uv \

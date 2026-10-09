@@ -919,3 +919,80 @@ For removal, preserve transfer and audit records, disable the sender, revoke
 its Vault access and mTLS identity, remove its secret delivery, and mark the
 receiver-side `NetworkNode` inactive. Do not delete completed transfer evidence
 or reuse the removed node key for another physical machine.
+
+## Enroll all reachable configured sites with one token
+
+From the clean, reviewed LuxNix controller checkout, run:
+
+```bash
+devenv shell enroll-reachable-hub-sites
+```
+
+The command selects the intersection of `active_clients`, `gpu_client`, and
+`endoreg_client` in the canonical inventory. It validates each site's evaluated
+Vault configuration, matching hub receiver record, and pinned SSH identity,
+then checks connectivity. It displays the reachable targets, hub address,
+checkout revision, and locked-input digest. Enter the Vault administrator token
+at the hidden prompt to authorize that displayed scope. No token, fingerprint,
+or bundle needs to be pasted into command arguments or configuration files.
+A host's remote checkout may differ from the controller checkout: this workflow
+uses preflight's `--controller` mode for credential delivery, without performing
+a NixOS activation. Source cleanliness and identity checks still apply.
+
+Prerequisites are an initialized, unsealed Vault on `gs-02`, the existing hub
+bootstrap/enrollment commands and site installer deployed, pinned SSH access,
+and noninteractive root sudo access on hub and sites. The controller needs its
+usual private mode-0700 tmpfs runtime directory. Remote Ansible staging uses
+private per-operation directories on `/dev/shm`; the workflow verifies tmpfs
+before transmitting credentials. Swap must be encrypted or disabled. Use a
+short-lived enrollment-administration token with the capabilities described
+above, including AppRole Secret ID lookup for validating existing credentials.
+The command does not initialize or unseal Vault and never saves the admin token.
+It does not revoke the supplied token, which may be shared with the operator's
+session; let its bounded TTL expire or revoke it after the run.
+
+The workflow bootstraps the hub engines and recipient public key with the
+existing identity-preserving command. It reads the Vault CA fingerprint directly
+from the configured hub trust anchor over pinned SSH, independently of the
+bundle. For each reachable site it:
+
+1. Reuses valid installed AppRole credentials or the protected saved bundle.
+   A new bundle is created only when no AppRole identity is available. Existing
+   node secrets and hub recipient keys are preserved.
+2. Validates the saved credentials against Vault, checks the receiver's node
+   secret, and refuses containment markers, revoked credentials, conflicting
+   identities, symlinks, and unprotected files.
+3. Delivers the bundle using the shared fingerprint-pinned installer and copies
+   the matching receiver node secret. Identical installed files are not rewritten.
+   It also installs the authenticated X25519 recipient public key.
+4. Refreshes site authentication, requires enrollment status `ready`, issues a
+   client certificate only when renewal is needed, starts the renewal timer,
+   and validates the envelope key.
+
+Repeat runs preserve credential values; authentication and service checks may
+run again. An interrupted delivery can resume from the hub's root-only bundle
+at `/root/vault-enrollment/<host>`. The fleet workflow retains these bundles as
+its reconciliation cache, unlike the temporary manual-delivery copies discussed
+above. Treat them as production credentials: root-owned mode-0700 directories,
+mode-0400 files, and approved encrypted custodian backups. Removing a cache
+is safe only after verified delivery and backup; a subsequent run can rebuild
+it from valid installed site credentials. Never remove a partial cache simply
+to force creation of another identity. If initial credential issuance fails
+before a complete AppRole pair is saved, the next run stops for custodian
+recovery rather than silently issuing replacement credentials.
+
+The final report lists each configured site's outcome. Unreachable sites are
+skipped and can be enrolled by running the same command after they reconnect.
+Configuration, credential, or activation failures produce a nonzero exit status;
+one site's enrollment failure does not prevent attempts on the other reachable
+sites. A hub bootstrap failure stops the whole run. Contained identities remain
+under the separate incident recovery procedure.
+
+`enrolled` means credentials were deployed and authentication, certificate
+issuance, and envelope-key validation succeeded. It does not claim an accepted
+application transfer. Follow the activation and acceptance procedure above for
+node database provisioning and transfer verification. Sites still configured
+with `deferUntilProvisioned = true` need that host-scoped setting removed through
+the normal generated configuration rollout to retain automatic timer startup
+after reboot. This command starts the timer for the current boot and does not
+modify inventory or activate new NixOS configurations.

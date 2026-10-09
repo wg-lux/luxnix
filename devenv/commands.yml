@@ -11,6 +11,25 @@ risk_levels_source: ../luxnix.yml#risk_levels
 # marked operator_confirmation_required. The field does not imply that the
 # underlying wrapper implements its own prompt.
 commands:
+  - id: enroll-reachable-hub-sites
+    summary: Prompt once for a Vault admin token and reconcile enrollment on reachable configured sites.
+    risk: sensitive-remote-state
+    operator_confirmation_required: true
+    usage: devenv shell enroll-reachable-hub-sites
+    implementation: scripts/enroll-reachable-hub-sites.sh
+    playbook: ansible/playbooks/enroll_reachable_hub_sites.yml
+    documentation: docs/vault-hub-machine-enrollment.md
+    prerequisites:
+      - Clean reviewed durable checkout, configured receiver identities and pinned SSH keys.
+      - Initialized unsealed Vault on gs-02; existing hub enrollment commands deployed.
+      - SSH and noninteractive root sudo access; private controller tmpfs; encrypted or disabled swap.
+    effects:
+      - Token entry authorizes the displayed reachable fleet; token is not saved or printed.
+      - Reuses valid installed or saved credentials; creates missing initial enrollment.
+      - Preserves node secrets and hub recipient identity; refuses contained or conflicting identities.
+      - Installs credentials, recipient public keys and receiver secret copies, then verifies authentication and certificates.
+      - Skips unreachable sites, reports failures and retains protected hub bundles for retry.
+
   - id: rotate-hub-enrollment
     summary: Interactively deliver a prepared routine AppRole replacement and renew the site client certificate.
     risk: sensitive-remote-state

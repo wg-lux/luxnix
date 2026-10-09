@@ -86,6 +86,11 @@ def successful_runner(
             "secretIdFile": "/etc/secrets/vault/hub-pki/approle_secret_id",
             "deferUntilProvisioned": True,
             "hubPkiEnable": True,
+            "commonName": "gc-10.intern",
+            "nodeSecretFile": "/etc/secrets/vault/hub-pki/source-node-secret",
+            "recipientPublicKeyFile": (
+                "/etc/secrets/vault/hub-pki/hub-recipient-current.pub.pem"
+            ),
         },
         "transfer": {
             "enable": True,
@@ -202,3 +207,32 @@ def test_inventory_group_name_is_not_accepted_as_a_host(tmp_path: Path) -> None:
     assert report["ready"] is False
     assert checks["repository.paths"]["status"] == "fail"
     assert checks["inventory.host"]["status"] == "fail"
+
+
+def test_controller_delivery_allows_distinct_durable_remote_source(
+    tmp_path: Path,
+) -> None:
+    module = load_script()
+    repository = prepare_repository(tmp_path)
+    variables = repository / "ansible/inventory/host_vars/gc-10.yml"
+    variables.write_text(
+        variables.read_text().replace(str(tmp_path), "/home/admin/dev/luxnix")
+    )
+    assert not module.inspect_repository(
+        repository, "gc-10", successful_runner(repository)
+    )["ready"]
+    report = module.inspect_repository(
+        repository, "gc-10", successful_runner(repository), controller=True
+    )
+    assert report["ready"]
+    # The controller exception never bypasses a dirty checkout or receiver mismatch.
+    assert not module.inspect_repository(
+        repository, "gc-10", successful_runner(repository, dirty=True), controller=True
+    )["ready"]
+    variables.write_text(
+        variables.read_text().replace("/home/admin/dev/luxnix", "/tmp/luxnix")
+    )
+    report = module.inspect_repository(
+        repository, "gc-10", successful_runner(repository), controller=True
+    )
+    assert not report["ready"]

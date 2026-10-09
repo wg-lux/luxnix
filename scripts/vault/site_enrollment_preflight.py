@@ -122,6 +122,9 @@ def _target_eval_expression() -> str:
         secretIdFile = c.luxnix.vault.client.auth.secretIdFile;
         deferUntilProvisioned = c.luxnix.vault.client.auth.deferUntilProvisioned;
         hubPkiEnable = c.luxnix.vault.client.hubPki.enable;
+        commonName = c.luxnix.vault.client.hubPki.commonName;
+        nodeSecretFile = c.luxnix.vault.client.hubPki.nodeSecretFile;
+        recipientPublicKeyFile = c.luxnix.vault.client.hubPki.recipientPublicKeyFile;
       };
       transfer = {
         enable = c.services.luxnix.lxAnnotateLocal.hub.outboundTransfer.enable;
@@ -136,6 +139,8 @@ def inspect_repository(
     repository: Path,
     host: str,
     runner: RunCommand = run_command,
+    *,
+    controller: bool = False,
 ) -> dict[str, object]:
     checks: list[CheckResult] = []
 
@@ -232,8 +237,16 @@ def inspect_repository(
             configured_source = host_vars.get("luxnix_dev_repo")
             record(
                 "source.host_contract",
-                configured_source == str(repository),
-                "host deployment source matches this checkout"
+                (
+                    isinstance(configured_source, str)
+                    and Path(configured_source).is_absolute()
+                    and not Path(configured_source).is_relative_to("/tmp")
+                )
+                if controller
+                else configured_source == str(repository),
+                "remote source is durable; controller only delivers credentials"
+                if controller
+                else "host deployment source matches this checkout"
                 if configured_source == str(repository)
                 else "host deployment source does not match this checkout",
             )
@@ -329,6 +342,11 @@ def inspect_repository(
             "secretIdFile": "/etc/secrets/vault/hub-pki/approle_secret_id",
             "deferUntilProvisioned": host_defer,
             "hubPkiEnable": True,
+            "commonName": f"{host}.intern",
+            "nodeSecretFile": "/etc/secrets/vault/hub-pki/source-node-secret",
+            "recipientPublicKeyFile": (
+                "/etc/secrets/vault/hub-pki/hub-recipient-current.pub.pem"
+            ),
         }
         transfer_expected = {
             "enable": True,
@@ -407,6 +425,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=Path.cwd(),
         help="Reviewed LuxNix deployment checkout (default: current directory)",
     )
+    parser.add_argument(
+        "--controller",
+        action="store_true",
+        help="Validate delivery from a separate controller checkout; no Nix activation",
+    )
     parser.add_argument("--json", action="store_true", help="Emit structured JSON")
     args = parser.parse_args(argv)
     if not HOST_PATTERN.fullmatch(args.host):
@@ -416,7 +439,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    report = inspect_repository(args.repository, args.host)
+    report = inspect_repository(args.repository, args.host, controller=args.controller)
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
     else:
