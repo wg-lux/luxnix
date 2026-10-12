@@ -6,9 +6,9 @@ template_name: "main"
 host_roles:
   custom_packages.baseDevelopment: "true"
   endoreg-client.defaultCenterKey: "university_hospital_wuerzburg"
-  luxnix.lxAnnotateLocal.django.enrollLegacyDefaultSalt: "true"
 
-host_services: {}
+host_services:
+  luxnix.lxAnnotateLocal.django.enrollLegacyDefaultSalt: "true"
 
 host_nixos:
   nix.settings.max_jobs: 1

@@ -1,0 +1,50 @@
+---
+- name: Add the declared hub administrator key without replacing existing access
+  hosts: hub_enrollment_admin_access
+  gather_facts: false
+  become: true
+  vars_files:
+    - ../inventory/group_vars/hub_enrollment_admin_access.yml
+  vars:
+    ansible_become_user: root
+    ansible_host_key_checking: true
+    ansible_ssh_host_key_checking: true
+    hub_admin_key: '{{ (group_services["ssh.authorizedKeys"] | from_json)[0] }}'
+  pre_tasks:
+    - name: Require the reviewed controller identity and explicit scope
+      ansible.builtin.assert:
+        that:
+          - inventory_hostname in ['gs-02', 'gc-09']
+          - (group_services['ssh.authorizedKeys'] | from_json) | length == 1
+          - hub_admin_key is match('^from="172\.16\.255\.22",restrict ssh-ed25519 [A-Za-z0-9+/=]+ admin@gs-02$')
+
+    - name: Inspect administrator SSH paths without following links
+      ansible.builtin.stat:
+        path: '{{ item }}'
+        follow: false
+      loop: [/home/admin/.ssh, /home/admin/.ssh/authorized_keys]
+      register: hub_admin_paths
+
+    - name: Refuse redirected SSH paths
+      ansible.builtin.assert:
+        that:
+          - not (item.stat.islnk | default(false))
+      loop: '{{ hub_admin_paths.results }}'
+      loop_control:
+        label: '{{ item.item }}'
+
+  tasks:
+    - name: Protect the existing administrator SSH directory
+      ansible.builtin.file:
+        path: /home/admin/.ssh
+        state: directory
+        owner: admin
+        mode: '0700'
+
+    - name: Add the controller key without removing other administrators
+      ansible.builtin.lineinfile:
+        path: /home/admin/.ssh/authorized_keys
+        line: '{{ hub_admin_key }}'
+        create: true
+        owner: admin
+        mode: '0600'

@@ -19,3 +19,6 @@ gc-09,gc-09.intern,172.16.255.109 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQCZ+NMLO8
 # gc-10 was not reachable by ssh-keyscan when this registry was introduced.
 # This ed25519 public key comes from the existing trusted operator known_hosts entry.
 gc-10,gc-10.intern,172.16.255.110 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPo7b00A0pEXtRisYdyA/SvMsxawbgphsgNweREwhymD
+
+# gs-02 verified through the existing authenticated administrator connection.
+gs-02,gs-02.intern,172.16.255.22 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMLZ/JfDRgTmg7BSkpgTblaiKaTFHeTxUnAgqNs5DVL3

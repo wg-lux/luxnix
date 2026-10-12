@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 umask 077
-if [[ ! -t 0 ]] || [[ $# -gt 0 ]]; then
-  echo 'Usage: devenv shell enroll-reachable-hub-sites (interactive token prompt, no arguments)' >&2
+if [[ ! -t 0 ]] || [[ $# -gt 1 ]] ||
+   [[ $# -eq 1 && "$1" != --ask-become-pass ]]; then
+  echo 'Usage: devenv shell enroll-reachable-hub-sites [--ask-become-pass] (interactive hidden prompts)' >&2
   exit 2
 fi
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
@@ -23,4 +24,4 @@ export ANSIBLE_SSH_COMMON_ARGS="-o StrictHostKeyChecking=yes -o UserKnownHostsFi
 bash scripts/run-secret-playbook.sh ansible/playbooks/enroll_reachable_hub_sites.yml \
   -i ansible/inventory/hosts.ini --limit 'gs-02:active_clients' \
   -e ansible_python_interpreter=/run/current-system/sw/bin/python3 \
-  -e ansible_become_user=root
+  -e ansible_become_user=root "$@"

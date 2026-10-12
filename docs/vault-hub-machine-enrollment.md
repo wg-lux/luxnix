@@ -941,7 +941,13 @@ a NixOS activation. Source cleanliness and identity checks still apply.
 
 Prerequisites are an initialized, unsealed Vault on `gs-02`, the existing hub
 bootstrap/enrollment commands and site installer deployed, pinned SSH access,
-and noninteractive root sudo access on hub and sites. The controller needs its
+and root sudo access on hub and sites. When they share a sudo password, use
+`devenv shell enroll-reachable-hub-sites --ask-become-pass`: Ansible requests
+the password once at a hidden prompt before discovery. This password is separate
+from the Vault token requested after discovery. Omit the option only when sudo
+is already noninteractive. The shared password must work on every selected
+reachable host; hosts with different passwords need separately configured,
+protected per-host Ansible become credentials. The controller needs its
 usual private mode-0700 tmpfs runtime directory. Remote Ansible staging uses
 private per-operation directories on `/dev/shm`; the workflow verifies tmpfs
 before transmitting credentials. Swap must be encrypted or disabled. Use a
@@ -996,3 +1002,150 @@ with `deferUntilProvisioned = true` need that host-scoped setting removed throug
 the normal generated configuration rollout to retain automatic timer startup
 after reboot. This command starts the timer for the current boot and does not
 modify inventory or activate new NixOS configurations.
+
+### Hub administrator SSH access
+
+`hub_enrollment_admin_access` in the inventory scopes the existing `gs-02`
+administrator public key to `gs-02` and `gc-09`. Its group YAML supplies
+`services.ssh.authorizedKeys` for generated NixOS configuration. The key is
+restricted to connections from `172.16.255.22` and has SSH forwarding and PTY
+allocation disabled; Ansible command execution remains available.
+
+For initial access from a controller that already has administrator access, use
+`ansible/playbooks/deploy_hub_admin_access.yml` through the protected playbook
+wrapper with the explicit `--limit gs-02,gc-09`. Supply the current sudo password
+through Ansible's protected become-password handling, never a literal command
+argument. The playbook appends the same public key to each administrator's
+persistent `~/.ssh/authorized_keys`, preserves other keys, and protects the SSH
+directory/file with modes 0700/0600. It does not copy private keys, restart SSH,
+activate NixOS, or change sudo policy. Preview with `--check --diff` first.
+
+The existing trusted controller connection was used to verify and record the
+hub's host public key in `conf/ssh-host-keys/known_hosts`. Client host pins and
+administrator login keys serve different purposes; both must be valid.
+
+Removing this authorization requires removing both the declarative key and the
+initial-access entry in `~/.ssh/authorized_keys`. Passwordless SSH does not imply
+passwordless sudo: use the optional hidden `--ask-become-pass` prompt when
+root access requires a password.
+
+### Repeat the workflow on gs-02
+
+Run the following as **admin on gs-02**, in `/home/admin/dev/luxnix`.
+The controller workflow does not need local sudo. Its Ansible connections,
+including the connection back to gs-02, use the remote administrator password.
+For the current gs-02/gc-09 setup, both hosts share that password. The separate
+local sudo password on the original administration machine is not used here.
+Do not copy password files or private SSH keys into the checkout.
+
+1. Use the reviewed version of this checkout containing
+   `scripts/enroll-reachable-hub-sites.sh` with `--ask-become-pass` support.
+   Check the source before starting; `git status --short` must produce no output.
+   If there are local edits, review and preserve them before updating. Do not
+   bypass the clean-checkout check or reset local work.
+
+   ```bash
+   cd /home/admin/dev/luxnix
+   git status --short
+   git log -1 --oneline
+   sha256sum flake.lock
+   ```
+
+2. Load the existing gs-02 administrator key in this terminal if needed, then
+   verify pinned SSH access. The gs-02 public key has already been installed
+   additively on gs-02 and gc-09; do not generate a replacement key.
+
+   ```bash
+   eval "$(ssh-agent -s)"
+   ssh-add ~/.ssh/id_ed25519
+   devenv shell check-connectivity gs-02 -e ansible_python_interpreter=/run/current-system/sw/bin/python3
+   devenv shell check-connectivity gc-09 -e ansible_python_interpreter=/run/current-system/sw/bin/python3
+   ```
+
+   These commands test SSH, not sudo. Use the pinned registry at
+   `conf/ssh-host-keys/known_hosts` when testing SSH manually. Never disable
+   host-key checking to fix a connection failure.
+
+3. Unseal the existing Vault using your custodian procedure. Do not initialize
+   a new Vault. Verify its health using the existing CA:
+
+   ```bash
+   sudo curl --silent --show-error --connect-timeout 5 --max-time 15 \
+     --cacert /var/lib/luxnix-vault-pki/ca.crt \
+     https://172.16.255.22:8200/v1/sys/health
+   ```
+
+   Require `initialized: true` and `sealed: false`. Obtain your authorized
+   short-lived enrollment admin token. Unseal shares, the Vault admin token,
+   and the Linux sudo password are three different credentials.
+
+4. Start enrollment:
+
+   ```bash
+   devenv shell enroll-reachable-hub-sites --ask-become-pass
+   ```
+
+   At `BECOME password:`, enter the shared **Linux administrator password**
+   for gs-02 and gc-09. Ansible keeps it hidden. Discovery then evaluates the
+   fleet and verifies SSH and root access. At `Vault admin token`, review the
+   displayed host names, addresses and revision, then enter the **Vault token**.
+   It is also hidden. If no site passes discovery, there is no token prompt;
+   investigate the earlier failed prerequisite instead of entering a token.
+
+   The command targets every eligible reachable inventory site, not only gc-09.
+   On hosts with a different sudo password, the shared prompt is insufficient;
+   do not change their passwords to work around this. They need protected
+   per-host become credentials before fleet enrollment can succeed there.
+
+5. Read the final per-host report. For gc-09 require `enrolled`, then inspect
+   the deployed state from an ordinary admin login on gc-09:
+
+   ```bash
+   sudo luxnix-vault-enrollment-status
+   sudo openssl x509 -in /var/lib/lx-annotate/hub-pki/client.crt -noout -dates
+   systemctl is-active luxnix-vault-issue-hub-client-certificate.timer
+   systemctl is-failed lx-annotate-hub-envelope-key-preflight.service
+   ```
+
+   Enrollment status must be `ready`, the certificate must be current, the
+   timer must be `active`, and the key preflight must not be failed.
+   `systemctl is-failed` returns nonzero for a healthy unit; a completed oneshot
+   may be inactive. Use `systemctl show` to inspect its `Result` when uncertain.
+   Complete the application activation and acceptance steps earlier in this
+   guide before declaring end-to-end transfer operational. Credential enrollment
+   alone does not provision the application database or prove a transfer.
+
+6. After a failure, correct the reported prerequisite and rerun the same
+   command. Valid credentials and existing hub keys are reused. Do not delete
+   `/root/vault-enrollment/gc-09` or the installed secret files to force a retry.
+   Offline sites can be retried when they reconnect. A failure on another site
+   can make the overall command fail even if gc-09 reports `enrolled`.
+
+Known pending fleet configuration issues from the previous preflight are gc-04
+(missing SSH pin and invalid center), gc-06 (missing SSH pin and receiver-center
+mismatch), and gc-08 (invalid center). These require verified inventory data;
+the workflow deliberately does not invent host keys or center identities.
+Recheck current preflight output before correcting them. Do not equate these
+configuration failures with offline hosts.
+
+### Implementation map
+
+| File | Responsibility |
+| --- | --- |
+| `devenv/scripts.nix` and `devenv/commands.yml` | Expose and document the shell command. |
+| `scripts/enroll-reachable-hub-sites.sh` | Restrict options and scope, enforce pinned SSH, optionally request the hidden sudo password. |
+| `scripts/run-secret-playbook.sh` | Confine controller secret staging to private tmpfs and remove transient files. |
+| `ansible/playbooks/enroll_reachable_hub_sites.yml` | Discover sites, prompt for the token, bootstrap the hub, deploy and verify each site, report failures. |
+| `scripts/vault/site_enrollment_preflight.py` | Validate source, evaluated configuration, receiver identities and SSH pins. |
+| `scripts/vault/ensure_site_enrollment.py` | Reconcile saved and installed identities against Vault; preserve valid credentials and reject conflicts. |
+| `ansible/playbooks/tasks/hub_enrollment_reconcile.yml` | Run reconciliation using protected transport and temporary helpers. |
+| `ansible/playbooks/tasks/hub_enrollment_delivery.yml` | Reuse the shared fingerprint-verified installation procedure. |
+| `ansible/playbooks/deploy_hub_admin_access.yml` | Add the gs-02 public key without replacing existing administrator access. |
+| `ansible/inventory/group_vars/hub_enrollment_admin_access.yml` | Declare the public key and source-address restriction. |
+| `tests/test_vault_fleet_enrollment.py` | Exercise reconciliation, protected prompts, permitted wrapper options and failure reporting. |
+
+The installed `luxnix-vault-*` commands come from
+`modules/nixos/luxnix/vault/default.nix`;
+find their exact definitions with `rg 'luxnix-vault-(bootstrap-hub-pki|enroll-hub-site|install-hub-site-enrollment)' modules`.
+This workflow deploys credentials, not a new NixOS system generation. Changes to
+boot-time service policy still require the normal reviewed NixOS rollout.

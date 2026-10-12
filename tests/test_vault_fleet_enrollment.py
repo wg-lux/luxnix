@@ -217,6 +217,48 @@ def test_rejects_piped_token_and_arbitrary_arguments():
     assert "synthetic-secret" not in result.stdout + result.stderr
 
 
+@pytest.mark.parametrize(
+    "arguments,expected",
+    [
+        ([], 0),
+        (["--ask-become-pass"], 0),
+        (["--limit", "gc-09"], 2),
+        (["--extra-vars=secret"], 2),
+    ],
+)
+def test_wrapper_forwards_only_optional_hidden_sudo_prompt(arguments, expected):
+    import os
+    import pty
+    import tempfile
+
+    # A durable-path fixture exercises the real wrapper without contacting hosts.
+    with tempfile.TemporaryDirectory(dir=ROOT.parent) as directory:
+        scripts = Path(directory) / "scripts"
+        scripts.mkdir()
+        wrapper = scripts / "enroll-reachable-hub-sites.sh"
+        wrapper.write_text((ROOT / "scripts/enroll-reachable-hub-sites.sh").read_text())
+        (scripts / "run-secret-playbook.sh").write_text('printf "%s\\n" "$@"\n')
+        master, slave = pty.openpty()
+        try:
+            result = subprocess.run(
+                ["bash", str(wrapper), *arguments],
+                stdin=slave,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+        finally:
+            os.close(master)
+            os.close(slave)
+        assert result.returncode == expected
+        if expected == 0:
+            forwarded = result.stdout.splitlines()
+            assert ("--ask-become-pass" in forwarded) == bool(arguments)
+            assert forwarded[forwarded.index("--limit") + 1] == "gs-02:active_clients"
+        else:
+            assert "--extra-vars=secret" not in result.stdout + result.stderr
+
+
 def test_cli_errors_never_echo_secret_input():
     result = subprocess.run(
         [sys.executable, str(ROOT / "scripts/vault/ensure_site_enrollment.py")],

@@ -15,14 +15,14 @@ commands:
     summary: Prompt once for a Vault admin token and reconcile enrollment on reachable configured sites.
     risk: sensitive-remote-state
     operator_confirmation_required: true
-    usage: devenv shell enroll-reachable-hub-sites
+    usage: devenv shell enroll-reachable-hub-sites [--ask-become-pass]
     implementation: scripts/enroll-reachable-hub-sites.sh
     playbook: ansible/playbooks/enroll_reachable_hub_sites.yml
     documentation: docs/vault-hub-machine-enrollment.md
     prerequisites:
       - Clean reviewed durable checkout, configured receiver identities and pinned SSH keys.
       - Initialized unsealed Vault on gs-02; existing hub enrollment commands deployed.
-      - SSH and noninteractive root sudo access; private controller tmpfs; encrypted or disabled swap.
+      - SSH and root sudo access (use --ask-become-pass for a shared sudo password); private controller tmpfs; encrypted or disabled swap.
     effects:
       - Token entry authorizes the displayed reachable fleet; token is not saved or printed.
       - Reuses valid installed or saved credentials; creates missing initial enrollment.

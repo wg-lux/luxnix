@@ -170,6 +170,11 @@ lib.foldl' lib.recursiveUpdate
       services.ollama.host = "0.0.0.0";
     }
     {
+      services.ssh.authorizedKeys = [
+        "from=\"172.16.255.22\",restrict ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHBcw5O7SQuLHz9mNyCAGFZgqQS/gUkrUfKBslRGOwX/ admin@gs-02"
+      ];
+    }
+    {
       services.wg-lux-mcp.enable = true;
     }
     {

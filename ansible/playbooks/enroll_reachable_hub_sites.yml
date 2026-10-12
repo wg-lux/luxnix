@@ -112,7 +112,9 @@
           - --json
           - '.#nixosConfigurations.gs-02.config.luxnix.vault'
           - --apply
-          - 'v: { address = v.server.apiAddress; ca = v.server.caCertFile; kv = v.server.hubPki.kvMountPath; recipient = v.server.hubPki.recipientPublicKeyKvPath; }'
+          - >-
+            v: { address = v.server.apiAddress; ca = v.server.caCertFile;
+            kv = v.server.hubPki.kvMountPath; recipient = v.server.hubPki.recipientPublicKeyKvPath; }
         chdir: '{{ playbook_dir }}/../..'
       delegate_to: localhost
       become: false
@@ -254,7 +256,10 @@
       rescue:
         - name: Record failure and continue with the next site
           ansible.builtin.debug:
-            msg: 'Enrollment failed for {{ inventory_hostname }}. Saved credentials are retained; inspect the failed task and restricted Vault logs, then rerun. No automatic rotation or containment recovery was attempted.'
+            msg: >-
+              Enrollment failed for {{ inventory_hostname }}. Saved credentials are retained;
+              inspect the failed task and restricted Vault logs, then rerun.
+              No automatic rotation or containment recovery was attempted.
 
 - name: Report every selected site and fail if a reachable site could not enroll
   hosts: gs-02
