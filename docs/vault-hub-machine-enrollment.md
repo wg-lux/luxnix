@@ -1128,6 +1128,21 @@ the workflow deliberately does not invent host keys or center identities.
 Recheck current preflight output before correcting them. Do not equate these
 configuration failures with offline hosts.
 
+### Enrollment tasks skipped after target selection
+
+If a run reports `gc-09: failed-enrollment` with `changed=0`, `rescued=0`, and
+all delivery tasks skipped, check the controller revision. The initial workflow
+used the mutable result status as its block condition. Setting the initial
+failure status made Ansible skip subsequent tasks. The corrected workflow
+captures eligibility in `fleet_site_selected` before entering the block, so
+result changes cannot disable delivery or rescue handling.
+
+Update to the corrected reviewed controller revision, then rerun
+`devenv shell enroll-reachable-hub-sites --ask-become-pass`. No bundle deletion
+or identity rotation is needed. Hub bootstrap may already have run successfully;
+the repeated workflow preserves existing identities. This signature differs
+from a real delivery failure: inspect the first failed task when rescue runs.
+
 ### Implementation map
 
 | File | Responsibility |

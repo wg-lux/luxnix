@@ -528,3 +528,72 @@ def test_real_ansible_installer_runs_only_for_content_or_permission_changes(
         ),
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    "status,fail,expected",
+    [
+        ("reachable", False, "enrolled"),
+        ("reachable", True, "failed-enrollment"),
+        ("unreachable", False, "unreachable"),
+        ("failed-preflight", False, "failed-preflight"),
+    ],
+)
+def test_real_ansible_enrollment_block_survives_status_transition(
+    tmp_path, status, fail, expected
+):
+    """Execute production selection/state control with harmless delivery substitutes."""
+    import os
+
+    ansible = ROOT / ".devenv/state/venv/bin/ansible-playbook"
+    if not ansible.exists():
+        pytest.skip("Ansible development environment unavailable")
+    play = yaml.safe_load(
+        (ROOT / "ansible/playbooks/enroll_reachable_hub_sites.yml").read_text()
+    )[2]
+    block = next(task for task in play["tasks"] if "block" in task)
+    block["block"] = [
+        block["block"][0],
+        {
+            "name": "Observe delivery execution",
+            "ansible.builtin.set_fact": {"delivery_attempted": True},
+        },
+        {
+            "name": "Simulate delivery outcome",
+            "ansible.builtin.assert": {"that": [not fail]},
+        },
+        block["block"][-1],
+    ]
+    play.update(
+        hosts="localhost", become=False, vars={"fleet_enrollment_status": status}
+    )
+    play["tasks"].append(
+        {
+            "name": "Verify result and whether delivery actually ran",
+            "ansible.builtin.assert": {
+                "that": [
+                    f"fleet_enrollment_status == '{expected}'",
+                    "(delivery_attempted | default(false) | bool) == "
+                    + ("true" if status == "reachable" else "false"),
+                ]
+            },
+        }
+    )
+    path = tmp_path / "selection.yml"
+    path.write_text(yaml.safe_dump([play]))
+    env = dict(
+        os.environ,
+        ANSIBLE_CONFIG=str(ROOT / "conf/connectivity-ansible.cfg"),
+        ANSIBLE_LOCAL_TEMP=str(tmp_path / "ansible-tmp"),
+    )
+    env.pop("ANSIBLE_LOG_PATH", None)
+    result = subprocess.run(
+        [str(ansible), "-i", "localhost,", "-c", "local", str(path)],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    if fail:
+        assert "Enrollment failed for localhost" in result.stdout

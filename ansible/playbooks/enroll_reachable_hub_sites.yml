@@ -202,8 +202,14 @@
     enrollment_files: [approle_role_id, approle_secret_id, vault-server-ca.pem, source-node-secret]
     enrollment_expected_ca_sha256: '{{ hostvars[enrollment_hub].fleet_ca_fingerprint.stdout.split("=")[-1] | trim }}'
   tasks:
+    # Block conditions are evaluated before every task; keep selection stable
+    # while the result changes from pending failure to verified enrollment.
+    - name: Preserve this run's eligible target selection
+      ansible.builtin.set_fact:
+        fleet_site_selected: '{{ fleet_enrollment_status | default("failed-preflight") == "reachable" }}'
+
     - name: Reconcile one reachable site without disrupting the remaining fleet
-      when: fleet_enrollment_status | default('failed-preflight') == 'reachable'
+      when: fleet_site_selected | bool
       block:
         - name: Default to failure until deployment and verification complete
           ansible.builtin.set_fact:
