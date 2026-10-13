@@ -2,6 +2,29 @@
 
 LuxNix already follows a Snowfall-based multi-host layout. Keep the repository centered on custom options and reusable profiles instead of adding direct imports across hosts.
 
+## From configuration to a running host
+
+A host is one managed machine. A module is a reusable piece of its configuration;
+Home Manager configures a user's environment. Snowfall is the library that
+organizes these pieces into the flake's host and home outputs.
+
+```text
+Inventory + local facts + templates
+                 |
+                 v
+       Autoconf generation
+                 |
+                 v
+Host/home entry points + reusable modules + locked dependencies
+                 |
+                 v
+        Evaluate --> Build --> Activate on the selected host
+```
+
+Generation writes configuration files, evaluation resolves their settings,
+building prepares the required software, and activation changes the running
+machine. Read the source ownership rules below before choosing a file to edit.
+
 ## Layout Contract
 
 | Path | Purpose | Rule |

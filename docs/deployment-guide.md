@@ -68,6 +68,74 @@ Prefer a recoverable quarantine when the contents have not yet been independentl
 verified. Preserve structured deployment and acceptance logs, but move them to
 the approved audit-log location rather than leaving them in `/tmp`.
 
+## Updating an existing LX-Annotate host
+
+Use `nixos-rebuild switch` for a persistent live update after the source, build,
+connectivity, and target checks above. Run on the explicitly selected host from
+the reviewed checkout; for gc-10:
+
+```bash
+sudo nixos-rebuild switch --flake .#gc-10
+readlink -e /run/current-system
+readlink -e /nix/var/nix/profiles/system
+systemctl --failed
+systemctl is-active lx-annotate.service
+```
+
+Require a successful rebuild and equal active/system-profile paths before
+declaring deployment successful. Equality alone does not prove the firmware's
+boot selection: check the bootloader default and any one-shot override, then
+verify `/run/booted-system` matches the intended closure after a scheduled reboot.
+The managed Ansible handler checks active/profile equality after switching.
+
+For kernel or NVIDIA driver changes that cannot be activated safely live, use
+`sudo nixos-rebuild boot --flake .#gc-10` and reboot in an authorized maintenance
+window. The running generation is expected to differ until that reboot.
+
+Do not use `nixos-rebuild test` on wheel-mode LX-Annotate production hosts.
+Their pre-switch check rejects this action before activation, including helpers
+that internally perform `test` before persisting the boot generation. Use
+`nixos-rebuild build` or `dry-activate` for non-activating review instead.
+The shell alias `nho` now invokes native `nixos-rebuild switch`; `nhb` stages
+with `nixos-rebuild boot` without restarting running services. Both require
+`LUXNIX_FLAKE` and `LUXNIX_HOST` to select the reviewed checkout and host explicitly.
+`nhu` only updates that checkout's flake lock; review and build before activation.
+Existing shells retain their old aliases until Home Manager is applied and a
+new shell is opened. Use the explicit command above for the first deployment.
+See the [NixOS switching documentation](https://github.com/NixOS/nixpkgs/blob/master/nixos/doc/manual/development/what-happens-during-a-system-switch.chapter.md).
+
+### SSH access during updates
+
+Run `devenv shell check-connectivity gc-10` from the controller before changing
+gc-10. Keep the original SSH session open, then verify a second fresh connection
+with host-key verification enabled after activation. The managed Ansible handler
+closes its cached connection and requires a fresh authenticated connection before
+continuing. A successful rebuild or an existing SSH session alone is insufficient.
+
+The pinned NixOS SSH module uses `stopIfChanged = false` and `KillMode = "process"`
+to preserve established SSH child sessions during daemon replacement. These
+settings do not preserve a broken VPN route, firewall policy, or authentication
+configuration. Keep key-only authentication and pinned host identity checks.
+
+No rebuild command guarantees SSH after arbitrary failures. For changes to SSH,
+VPN, firewall, kernel, or boot configuration, stage with `nhb` and arrange console
+or out-of-band recovery before the separately authorized reboot. Staging leaves
+the current running SSH configuration in place; it does not prove the next boot
+will be reachable. Do not attach an automatic generation rollback to these
+stateful application deployments: it cannot roll back database or shared-runtime
+mutations. A failed activation requires inspection, not an automatic reboot.
+
+On gc-10, an October 8, 2026 `test` activation installed LX-Annotate 1.4.9,
+while the persisted generation retained 1.3.12. The October 12 reboot exposed
+this mismatch and the downgrade guard stopped startup. The activation log does
+not establish whether `test` was requested directly or invoked by a helper.
+
+NixOS generation rollback does not restore the shared virtualenv or database.
+For these hosts, the rollback suggestions elsewhere in this guide require an
+independently verified compatible application/database pair. Preserve the
+downgrade and migration checks; recover using a reviewed compatible persistent
+generation. Older generations do not acquire this new pre-switch check.
+
 ## Prerequisites
 
 - Nix + flakes enabled on the control machine
@@ -190,7 +258,7 @@ verify `/run/current-system` and SSH access before retrying.
 
 ```bash
 # Canonical commands
-nh os switch
+sudo nixos-rebuild switch --flake .
 nh home switch
 
 # Aliases (if enabled)

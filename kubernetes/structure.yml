@@ -1,0 +1,29 @@
+version: 1
+tier: domain
+path: kubernetes
+parent: ../structure.yml
+summary: Alternative declarative LX-Annotate deployment manifests.
+responsibilities:
+- Compose namespace, workload, storage and ingress resources
+- Keep deployment interfaces aligned with LX-Annotate contracts
+boundaries:
+- Do not apply resources as part of validation
+- Do not store production secret values in manifests
+entrypoints:
+- name: kustomization
+  file: lx-annotate/kustomization.yaml
+  purpose: Inspect kustomization ownership and interfaces.
+dependencies:
+  internal:
+  - modules/nixos/services/lx-annotate-local
+  external:
+  - Kubernetes
+  - Kustomize
+  - LX-Annotate
+submodules: []
+contracts:
+- name: deployment-interfaces
+  doc: ../docs/deploying-services-lx-annotate-style.md
+tests:
+  directory: ../tests/lx-annotate
+  command: python -m pytest -q tests/lx-annotate/test_lx_annotate_kubernetes_contract.py

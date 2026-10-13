@@ -11,11 +11,44 @@ risk_levels_source: ../luxnix.yml#risk_levels
 # marked operator_confirmation_required. The field does not imply that the
 # underlying wrapper implements its own prompt.
 commands:
+  - id: check-secret-rotation
+    summary: Validate the central rotation catalog against three source checkouts and display ordered gates.
+    risk: read-only
+    operator_confirmation_required: false
+    usage: devenv shell check-secret-rotation --endoreg-db <checkout> --lx-annotate <checkout> [--family <family>]
+    implementation: scripts/check-secret-rotation.py
+    documentation: docs/secret-rotation.md
+
+  - id: rebuild-host-switch
+    summary: Persist and activate the reviewed configuration using native NixOS switching.
+    risk: remote-state
+    operator_confirmation_required: true
+    usage: sudo nixos-rebuild switch --flake '<checkout>#<host>'
+    implementation: modules/home/cli/shells/shared/default.nix
+    documentation: docs/deployment-guide.md
+    prerequisites:
+      - Explicit checkout and host; reviewed revision and locked inputs; successful build and connectivity checks.
+      - Retain SSH session and verify fresh access after activation; console recovery for access-affecting changes.
+    effects:
+      - Updates the persistent system profile and boot default and activates services.
+      - The nho alias uses LUXNIX_FLAKE and LUXNIX_HOST; no intermediate test activation.
+
+  - id: rebuild-host-boot
+    summary: Stage the reviewed configuration for the next boot without live activation.
+    risk: remote-state
+    operator_confirmation_required: true
+    usage: sudo nixos-rebuild boot --flake '<checkout>#<host>'
+    implementation: modules/home/cli/shells/shared/default.nix
+    documentation: docs/deployment-guide.md
+    effects:
+      - Updates the system profile and boot default; running services retain their configuration.
+      - The nhb alias uses LUXNIX_FLAKE and LUXNIX_HOST; reboot is a separate authorized action.
+
   - id: enroll-reachable-hub-sites
     summary: Prompt once for a Vault admin token and reconcile enrollment on reachable configured sites.
     risk: sensitive-remote-state
     operator_confirmation_required: true
-    usage: devenv shell enroll-reachable-hub-sites [--ask-become-pass]
+    usage: devenv shell enroll-reachable-hub-sites [--site gc-09] [--ask-become-pass]
     implementation: scripts/enroll-reachable-hub-sites.sh
     playbook: ansible/playbooks/enroll_reachable_hub_sites.yml
     documentation: docs/vault-hub-machine-enrollment.md
@@ -28,6 +61,7 @@ commands:
       - Reuses valid installed or saved credentials; creates missing initial enrollment.
       - Preserves node secrets and hub recipient identity; refuses contained or conflicting identities.
       - Installs credentials, recipient public keys and receiver secret copies, then verifies authentication and certificates.
+      - Refreshes receiver and sender database identities, then starts the site application and transfer worker; existing queued work may run.
       - Skips unreachable sites, reports failures and retains protected hub bundles for retry.
 
   - id: rotate-hub-enrollment
@@ -224,6 +258,14 @@ commands:
 # Tasks are listed separately because they are invoked through `devenv tasks`
 # rather than the shell-wrapper namespace above.
 tasks:
+  - id: context:check
+    summary: Validate hierarchical context manifests and all declared local references.
+    risk: read-only
+    operator_confirmation_required: false
+    usage: devenv tasks run context:check
+    implementation: scripts/lint_structure.py
+    documentation: docs/agent_context.md
+
   - id: nix-quality:check
     summary: Run ratcheted parse, deadnix, statix, nixfmt, and flake-checker checks without modifying files.
     risk: read-only

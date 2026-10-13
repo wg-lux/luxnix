@@ -3,6 +3,11 @@ group_roles:
   aglnet.client.enable: "true"
   nextcloudClient.enable: "true"
 group_services:
+  # Center identity enrollment is configured here or overridden in host_services.
+  # Enable after managed enrollment and verified legacy migration. The center
+  # namespace follows roles.endoreg-client.defaultCenterKey, never the hostname.
+  # Existing differing machine salts must not be silently replaced on a rebuild.
+  luxnix.lxAnnotateLocal.django.centerIdentitySalt: "false"
   # Shared fail-closed transfer contract for every gc-* node. Host identity and
   # owning Center come from the evaluated host configuration.
   luxnix.lxAnnotateLocal.runtime.mode: '"wheel"'

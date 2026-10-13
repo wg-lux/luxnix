@@ -8,6 +8,9 @@ with lib;
 with lib.luxnix;
 let
   cfg = config.cli.shells;
+  rebuild =
+    action:
+    ''sudo nixos-rebuild ${action} --flake "''${LUXNIX_FLAKE:?Set LUXNIX_FLAKE to the reviewed checkout}#''${LUXNIX_HOST:?Set LUXNIX_HOST to the target host}"'';
 in
 {
   options.cli.shells.shared = with types; {
@@ -32,8 +35,9 @@ in
 
       # nix
       nhh = "nh home switch";
-      nho = "nh os switch";
-      nhu = "nh os --update";
+      nho = rebuild "switch";
+      nhb = rebuild "boot";
+      nhu = ''nix flake update --flake "''${LUXNIX_FLAKE:?Set LUXNIX_FLAKE to the reviewed checkout}"'';
 
       nd = "nix develop";
       nfu = "nix flake update";

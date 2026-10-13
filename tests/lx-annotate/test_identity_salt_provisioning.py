@@ -70,6 +70,37 @@ def test_adopts_existing_salt_without_rewriting_it(stores):
     assert (stores[1] / "active.salt").read_bytes() == b"established-test-salt\n"
 
 
+def test_shared_center_source_enrolls_two_machines_without_local_generation(stores, tmp_path):
+    source = tmp_path / "center-identity"
+    source.write_bytes(b"test-center-identity-material\n")
+    source.chmod(0o600)
+    other = tuple(tmp_path / f"second-{name}" for name in ("deployed", "recovery", "replica"))
+    for directories in (stores, other):
+        MODULE["provision"](*directories, os.getuid(), os.getgid(), source)
+        assert (directories[0] / ACTIVE).read_bytes() == source.read_bytes()
+
+
+@pytest.mark.parametrize("kind", ["missing", "public", "symlink", "different"])
+def test_center_source_failure_never_replaces_established_machine_salt(stores, tmp_path, kind):
+    provision(stores)
+    before = (stores[0] / ACTIVE).read_bytes()
+    source = tmp_path / "center-identity"
+    if kind == "symlink":
+        source.symlink_to(stores[0] / ACTIVE)
+    elif kind != "missing":
+        source.write_bytes(b"different-center-material\n" if kind == "different" else before)
+        source.chmod(0o644 if kind == "public" else 0o600)
+    with pytest.raises((ValueError, OSError)):
+        MODULE["provision"](*stores, os.getuid(), os.getgid(), source)
+    assert (stores[0] / ACTIVE).read_bytes() == before
+
+
+def test_missing_center_source_never_generates_a_machine_identity(stores, tmp_path):
+    with pytest.raises(ValueError, match="unavailable"):
+        MODULE["provision"](*stores, os.getuid(), os.getgid(), tmp_path / "missing")
+    assert not (stores[0] / ACTIVE).exists()
+
+
 @pytest.mark.parametrize("evidence", ["manifest", "receipt", "legacy"])
 def test_never_regenerates_if_only_enrollment_evidence_survives(stores, evidence):
     provision(stores)

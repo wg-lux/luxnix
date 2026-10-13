@@ -1,0 +1,62 @@
+# Coordinated secret rotation
+
+[secrets-management.yml](https://github.com/wg-lux/luxnix/blob/main/secrets-management.yml)
+is the single coordination catalog for LuxNix, endoreg-db and LX-Annotate.
+It contains public ownership, source references and ordered gates, never secrets
+or host state. Production readiness remains exclusively in
+[the lifecycle feature](https://github.com/wg-lux/luxnix/blob/main/feature-tracking/luxnix_secret_lifecycle_readiness.yml)
+and the linked application feature trackers. A source check is not deployment acceptance.
+
+From the LuxNix checkout, validate the three source trees and display one procedure:
+
+```bash
+devenv shell check-secret-rotation \
+  --endoreg-db /home/admin/endoreg-db \
+  --lx-annotate /home/admin/dev/lx-annotate \
+  --family django_signing
+```
+
+Paths select source checkouts only. The checker validates the catalog schema,
+gate order and referenced files, without reading credential files, invoking
+remote commands or executing displayed steps. Application tests and installed
+runtime checks establish behavior. Rotate one family and one reviewed scope at
+a time: inventory, prepare, activate, verify, retire. There is no bulk apply or
+automatic retirement. Missing evidence stops progression; repeat the owning
+workflow's preview before resuming. Record versions, scope, operator, acceptance
+results and recovery time in the appropriate feature tracker without secret values.
+
+## Application keyrings
+
+LuxNix owns private provisioning and atomic manifest publication. endoreg-db owns
+the existing strict manifest parser and migration commands. LX-Annotate consumes
+the handles and exports Django signing fallbacks. Keep all generations as private
+immutable files; the manifest contains paths, not key values. Changing permissions
+must never regenerate an established secret.
+
+Use `services.luxnix.lxAnnotateLocal.django.identitySaltKeyringFile` for the identity
+manifest. The existing `runtime.extraEnvironment` map carries
+`DJANGO_SIGNING_KEYRING_FILE` and `LX_ANNOTATE_MASTER_KEYRING_FILE` into the common
+systemd and maintenance environment. Values are absolute private manifest paths;
+no key material may enter Nix evaluation or the store. For planned signing
+rotation, first distribute the new key as a retiring reader while the old key
+remains active; reload and verify all consumers before swapping active and
+retiring generations. Reload again after the swap. Settings reload is required
+for signing changes. Planned retiring signing keys permit session/token overlap;
+compromised keys must be removed and affected sessions invalidated.
+
+Identity salts and media master keys are durable data dependencies, not routine
+passwords. Preserve all required old readers, backups and clinical relationships.
+Follow [the backend procedure](https://github.com/wg-lux/endoreg-db/blob/main/docs/key_rotation.md)
+for preview, apply, lease handling and retirement evidence. Do not use application
+rotation to replace disk-encryption keys. Never transmit the media master key.
+
+## Credentials and incidents
+
+Use the existing [admin password workflow](admin-passwords.md) and
+[hub enrollment workflow](vault-hub-machine-enrollment.md) for their respective
+families. Their terminal confirmation, pinned transport and recovery gates remain
+mandatory. Re-enrollment preserves identity; it is not complete breach recovery.
+Revoke Secret IDs, tokens, certificates and node request secrets at their owning
+authorities as required by the incident procedure. Database, identity-provider,
+recipient, local vault and disk credentials require their own reviewed procedure;
+the catalog deliberately does not invent a generic replacement operation.

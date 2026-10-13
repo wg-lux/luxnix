@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import re
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +23,133 @@ LX_ANNOTATE_FILEWATCHER_SOURCE = (
 LX_ANNOTATE_ENV_SOURCE = (
     REPO_ROOT / "modules/nixos/services/lx-annotate-local/scripts/env.nix"
 )
+
+
+def _mover_function(name: str, next_marker: str) -> str:
+    source = FILE_MOVER_SOURCE.read_text()
+    prefix = f"{name}() {{"
+    function = prefix + source.split(prefix, 1)[1].split(next_marker, 1)[0]
+
+    def executable(match: re.Match[str]) -> str:
+        binary = shutil.which(match.group(1))
+        assert binary is not None
+        return binary
+
+    return re.sub(r"\$\{pkgs\.\w+\}/bin/([\w-]+)", executable, function).replace(
+        "''${", "${"
+    )
+
+
+def test_report_batches_publish_without_overwriting_repeated_folder_names(
+    tmp_path: Path,
+) -> None:
+    function = _mover_function("publish_report_batch", "process_input_dir() {")
+    destination = tmp_path / "report intake"
+    destination.mkdir()
+    published = []
+    for content in ("first", "second"):
+        staging = tmp_path / "staging"
+        (staging / "txt").mkdir(parents=True)
+        (staging / "txt" / "report.txt").write_text(content)
+        result = subprocess.run(
+            [
+                "bash",
+                "-euo",
+                "pipefail",
+                "-c",
+                function + '\npublish_report_batch "$1" "$2"',
+                "test",
+                str(staging),
+                str(destination),
+            ],
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        published.append(Path(result.stdout.strip()))
+        assert not staging.exists()
+    assert published[0] != published[1]
+    assert [(path / "txt" / "report.txt").read_text() for path in published] == [
+        "first",
+        "second",
+    ]
+    assert all(not path.name.startswith(".") for path in destination.iterdir())
+
+    staging.mkdir()
+    retained = staging / "report.txt"
+    retained.write_text("retained on failure")
+    result = subprocess.run(
+        [
+            "bash",
+            "-euo",
+            "pipefail",
+            "-c",
+            function + '\npublish_report_batch "$1" "$2"',
+            "test",
+            str(staging),
+            str(tmp_path / "missing" / "destination"),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert retained.read_text() == "retained on failure"
+
+
+def test_report_mover_retains_source_changed_after_staging(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    destination = tmp_path / "destination"
+    staging = tmp_path / "staging"
+    for directory in (source, destination, staging):
+        directory.mkdir()
+    (source / "changed.txt").write_text("original")
+    (source / "unchanged.txt").write_text("unchanged")
+    publish = _mover_function("publish_report_batch", "process_input_dir() {").replace(
+        "publish_report_batch()", "publish_original_report_batch()"
+    )
+    process = _mover_function("process_input_dir", "# Rsync with retry")
+    script = (
+        publish
+        + process
+        + """
+normalize_source_permissions() { :; }
+quarantine_symlink_entries() { :; }
+quarantine_unreadable_files() { :; }
+wait_for_input_ready() { :; }
+publish_report_batch() {
+  publish_original_report_batch "$@"
+  printf 'new arrival' > "$source_dir/changed.txt"
+}
+serviceUserName="$(id -un)"
+serviceGroup="$(id -gn)"
+runtimeMoverStagingDir="$3"
+overall_status=0
+process_input_dir "$1" "$2" "$3/quarantine" PDF
+test "$overall_status" -eq 1
+"""
+    )
+    subprocess.run(
+        [
+            "bash",
+            "-euo",
+            "pipefail",
+            "-c",
+            script,
+            "test",
+            str(source),
+            str(destination),
+            str(staging),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert (source / "changed.txt").read_text() == "new arrival"
+    assert not (source / "unchanged.txt").exists()
+    assert [path.read_text() for path in destination.rglob("changed.txt")] == [
+        "original"
+    ]
 
 
 def _environment_map(environment: list[str]) -> dict[str, str]:
@@ -47,7 +177,8 @@ def _file_mover_host_matrix() -> dict[str, Any]:
         let
           flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
           lib = flake.inputs.nixpkgs.lib;
-          envList = env: lib.mapAttrsToList (name: value: "${name}=${toString value}") env;
+          envList = env:
+            lib.mapAttrsToList (name: value: "${name}=${toString value}") env;
           hostNames = builtins.attrNames flake.nixosConfigurations;
           fileMoverEnabledHosts = lib.filter
             (hostName:
@@ -71,6 +202,7 @@ def _file_mover_host_matrix() -> dict[str, Any]:
                   "${runtimeDataDir}/${lib.removePrefix "data/" pathString}"
                 else
                   "${runtimeDataDir}/${pathString}";
+              intake_root = resolveRuntimeDataPath lxCfg.runtime.intakeDirs.importRoot;
               hasWatcherService =
                 builtins.hasAttr "lx-annotate-filewatcher" cfg.systemd.services;
               hasWatcherPath =
@@ -88,6 +220,9 @@ def _file_mover_host_matrix() -> dict[str, Any]:
                   cfg.systemd.services.move-my-files.serviceConfig;
                 fileMoverPathConfig =
                   cfg.systemd.paths.move-my-files.pathConfig;
+                desktopLinks = cfg.services.luxnix.fileMover.desktop.links;
+                sapPathConfig = cfg.systemd.paths.lx-annotate-sap-import.pathConfig;
+                sapTimerConfig = cfg.systemd.timers.lx-annotate-sap-import.timerConfig;
                 transcodeVideoCommand =
                   cfg.services.luxnix.fileMover.videoTranscodeFallback.command;
                 transcodeEnvironmentScript =
@@ -107,7 +242,8 @@ def _file_mover_host_matrix() -> dict[str, Any]:
                   if hasWatcherService then
                     cfg.systemd.services."lx-annotate-filewatcher".serviceConfig
                     // {
-                      Environment = envList cfg.systemd.services."lx-annotate-filewatcher".environment;
+                      Environment = envList
+                        cfg.systemd.services."lx-annotate-filewatcher".environment;
                     }
                   else
                     {};
@@ -122,11 +258,11 @@ def _file_mover_host_matrix() -> dict[str, Any]:
                   else
                     {};
                 resolvedIntakeDirs = {
-                  video = "${resolveRuntimeDataPath lxCfg.runtime.intakeDirs.importRoot}/video_import";
-                  report = "${resolveRuntimeDataPath lxCfg.runtime.intakeDirs.importRoot}/report_import";
-                  preanonymized = "${resolveRuntimeDataPath lxCfg.runtime.intakeDirs.importRoot}/preanonymized_import";
-                  sap = "${resolveRuntimeDataPath lxCfg.runtime.intakeDirs.importRoot}/sap_import";
-                  moverStaging = "${resolveRuntimeDataPath lxCfg.runtime.intakeDirs.importRoot}/.move-my-files-staging";
+                  video = "${intake_root}/video_import";
+                  report = "${intake_root}/report_import";
+                  preanonymized = "${intake_root}/preanonymized_import";
+                  sap = "${intake_root}/sap_import";
+                  moverStaging = "${intake_root}/.move-my-files-staging";
                 };
                 tmpfiles = cfg.systemd.tmpfiles.rules;
               };
@@ -239,6 +375,27 @@ def test_all_file_mover_hosts_publish_into_filewatcher_intake_contract() -> None
         user = mover_config["User"]
         group = mover_config["Group"]
         tmpfiles = contract["tmpfiles"]
+
+        assert set(contract["desktopLinks"]) == {
+            "Report_Input",
+            "Video_Input",
+            "preanonymized_import",
+            "sap_import",
+        }, host_name
+        assert contract["desktopLinks"]["Report_Input"] == source_paths["report"], (
+            host_name
+        )
+        assert contract["desktopLinks"]["Video_Input"] == source_paths["video"], (
+            host_name
+        )
+        for root in (resolved["report"], resolved["video"], resolved["preanonymized"]):
+            assert not any(
+                _tmpfiles_declares_dir(tmpfiles, f"{root}/{ext}", "0770", user, group)
+                for ext in ("pdf", "txt", "mp4", "avi", "mov", "mkv", "webm", "m4v")
+            ), host_name
+        assert contract["sapPathConfig"]["PathChanged"] == [resolved["sap"]], host_name
+        assert "PathExistsGlob" not in contract["sapPathConfig"], host_name
+        assert contract["sapTimerConfig"]["OnUnitInactiveSec"] == "5m", host_name
 
         for path in (
             resolved["video"],

@@ -1,0 +1,37 @@
+version: 1
+tier: service
+path: wg-lux-mcp
+parent: ../structure.yml
+summary: Independent read-only OAuth-protected MCP context service for allowlisted repositories.
+responsibilities:
+- Expose bounded repository context with provenance
+- Validate access tokens and confine repository paths
+boundaries:
+- No arbitrary shell, writes, database access or service control through MCP
+- Use this service own dependency lock and test environment
+entrypoints:
+- name: server
+  file: src/wg_lux_mcp/asgi.py
+  purpose: Inspect server ownership and interfaces.
+- name: project
+  file: pyproject.toml
+  purpose: Inspect project ownership and interfaces.
+dependencies:
+  internal:
+  - feature-tracking
+  external:
+  - MCP
+  - OAuth
+  - Keycloak
+  - Starlette
+  - uvicorn
+  - PyJWT
+submodules: []
+contracts:
+- name: architecture
+  doc: context/architecture.md
+- name: AGENT
+  doc: AGENT.md
+tests:
+  directory: tests
+  command: cd wg-lux-mcp && uv run --locked --extra dev pytest -q

@@ -6,7 +6,7 @@ site_url: https://github.com/wg-lux/luxnix
 
 repo_name: wg-lux/luxnix
 repo_url: https://github.com/wg-lux/luxnix
-edit_uri: "edit/main/"
+edit_uri: "edit/main/docs/"
 
 theme:
   name: material
@@ -62,17 +62,23 @@ nav:
   - Start Here:
       - Getting Started: getting-started.md
       - Development: development.md
+      - Maintaining Documentation: documentation.md
+      - Documentation Compose Example: docker-compose.md
       - Nix Quality: nix-quality.md
       - Autoconf and Local Inventory: autoconf.md
   - Architecture:
       - System Architecture: architecture.md
+      - Agent Context: agent_context.md
       - Network Architecture: network-architecture.md
+      - Network Source Map: network-topology.md
       - Network Resolution: network-resolution.md
       - Database Ownership: database-ownership.md
       - System Feature Tracking: system-feature-tracking.md
       - Access Management: access-management.md
   - Deployment and Testing:
       - Deployment Guide: deployment-guide.md
+      - Activation Failure Recovery: activation-failure-recovery.md
+      - External Storage Detection: external-storage-detection.md
       - Hardware Setup: hardware-setup.md
       - Virtualization: virtualization-guide.md
       - SSH Host Identity: ssh-host-identity.md
@@ -80,6 +86,13 @@ nav:
       - NixOS Version Bump: nixos-version-bump.md
   - Services:
       - Service Module Pattern: deploying-services-lx-annotate-style.md
+      - LX Terminology Package Host: guides/lx-terminology.md
+      - LX-Annotate Wheel Startup: guides/lx-annotate-wheel-startup.md
+      - LX-Annotate Monitoring: guides/lx-annotate-monitoring.md
+      - HLS Backfill Dispatch: hls-backfill-dispatch.md
+      - LLM Configuration: guides/llm-configuration.md
+      - LLM Status: guides/llm-status.md
+      - gc-02 Reporting LLM: guides/gc-02-reporting-llm.md
       - lx-annotate Encrypted Data: lx-annotate-encrypted-data.md
       - lx-annotate Secure HLS: lx-annotate-secure-hls.md
       - lx-annotate Cluster Readiness: lx-annotate-cluster-readiness.md
@@ -88,8 +101,15 @@ nav:
       - Setup and Bootstrap: vault-setup.md
       - Maintainer Notes: vault-maintainer-operations.md
       - Admin Password Creation and Rotation: admin-passwords.md
+      - Coordinated Secret Rotation: secret-rotation.md
       - Machine Enrollment: vault-hub-machine-enrollment.md
+      - Hub Export Consumer Walkthrough: lx-annotate-hub-export-mtls-consumer-walkthrough.md
       - Owner Operations: vault-owner-immediate-actions.md
       - Server Rebuild: vault-server-rebuild.md
   - Clinical Operations:
       - Central Hub Transfer: clinical-hub-transfer-guide.md
+  - Diagnostics and Reviews:
+      - gc-02 Memory Protection: guides/gc-02-memory-protection.md
+      - CUDA Source Builds: guides/cuda-source-builds.md
+      - Configuration Ownership Audit: guides/lx-annotate-configuration-ownership-audit.md
+      - Clinical Readiness Review: guides/clinical-readiness-review.md

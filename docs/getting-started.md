@@ -1,6 +1,7 @@
 # Getting Started
 
-This guide is the canonical Day-0 onboarding path for new LuxNix users.
+Use this guide to prepare and install a LuxNix host. You can also inspect an
+existing configuration locally before deciding whether to deploy it.
 
 For a concise, machine-readable index of repository paths and commands, see
 [`luxnix.yml`](https://github.com/wg-lux/luxnix/blob/main/luxnix.yml). Its workflow risk labels distinguish read-only
@@ -24,7 +25,42 @@ Notes:
 - The Python admin package is part of this repository as `lx_administration/`.
 - Older docs may mention `luxnix_administration`; use `lx_administration`.
 
-## Day-0 flow
+## Read command examples
+
+Run control-machine commands from the repository root. Replace values in angle
+brackets before running a command; do not paste the brackets literally.
+
+| Value | How to choose it |
+| --- | --- |
+| `<host>` | A host returned by the discovery command below, matching the intended machine |
+| `<target-ip>` | The independently confirmed address of that machine in the installer |
+| `<staging-root>` | The protected directory prepared by the admin password installation guide |
+
+A **flake** is the repository's Nix entry point; `flake.lock` records its pinned
+dependencies. **Inventory** is the host and group data under `ansible/inventory/`.
+**Autoconf** turns that data and templates into configuration files.
+**Activation** applies a built configuration to a machine.
+
+## Inspect an existing host locally
+
+With Nix and flakes enabled, run:
+
+```bash
+nix eval --json '.#nixosConfigurations' --apply builtins.attrNames
+```
+
+Expect a JSON list of host names. For a local evaluation or build of an existing
+configuration, choose one and use the commands in step 5 below, replacing
+`<host>`. If you change inventory inputs first, validate and regenerate them as
+shown in step 4. Stop after evaluation and build if you only want to inspect the
+configuration; connectivity checks and subsequent steps concern deployment.
+
+## Install a host
+
+The following steps can replace the target's operating system and partition its
+disks. Confirm backups, recovery access, the selected host and address, and the
+reviewed repository revision before installation. For local development only,
+continue with [Development](development.md).
 
 1. Prepare the target machine in the NixOS installer:
    - Set a temporary password: `passwd`
@@ -56,6 +92,13 @@ Notes:
    - `nix eval '.#nixosConfigurations.<host>.config.system.build.toplevel.drvPath'`
    - `nix build '.#nixosConfigurations.<host>.config.system.build.toplevel' --no-link`
    - `devenv shell check-connectivity <host>`
+
+   Evaluation should print a `/nix/store/…drv` path. A successful build exits
+   with status zero; `--no-link` creates no `result` link. Evaluation and build
+   may download dependencies or populate the local Nix store, but do not
+   activate the configuration. The connectivity check contacts the target and
+   must succeed before deployment.
+
 6. Prepare the admin credential using the canonical
    [Admin Password Creation and Rotation](admin-passwords.md) guide:
    - Create, import, validate and export the host's unique password/hash pair.
@@ -66,7 +109,7 @@ Notes:
    - Use the verified staging tree from the admin password guide; the hash must
      exist before first activation.
 8. First login on target host:
-   - `nh os switch` (alias: `nho`)
+   - `sudo nixos-rebuild switch --flake '.#<host>'` (alias: `nho`)
    - `nh home switch` (alias: `nhh`)
 
 At each boundary, record the selected host, repository commit, `flake.lock`
@@ -88,9 +131,15 @@ Run these before a production deploy:
 
 Always use canonical commands in documentation and runbooks:
 
-- OS switch: `nh os switch` (alias: `nho`)
+- OS switch: `sudo nixos-rebuild switch --flake '.#<host>'` (alias: `nho`)
+- Stage next boot without live activation: `sudo nixos-rebuild boot --flake '.#<host>'` (alias: `nhb`)
+- Update inputs only: `nix flake update --flake <checkout>` (alias: `nhu`)
 - Home switch: `nh home switch` (alias: `nhh`)
 - GC: `nix-collect-garbage -d` (alias: `cleanup`)
+
+Rebuild aliases require `LUXNIX_FLAKE` and `LUXNIX_HOST`; they do not use `nh`'s
+temporary activation. Follow the [SSH deployment checks](deployment-guide.md#ssh-access-during-updates)
+and retain console recovery for changes that could break remote access.
 
 ## If deployment fails
 

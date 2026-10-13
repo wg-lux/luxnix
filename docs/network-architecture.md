@@ -6,7 +6,7 @@ it does not duplicate the current host/address table.
 
 For exact name-resolution behavior and troubleshooting, use
 [Network Resolution](./network-resolution.md). Agents can inspect the compact
-[network source map](./network-topology.yaml).
+[network source map](./network-topology.md).
 
 ## Source ownership
 

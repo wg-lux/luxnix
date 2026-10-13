@@ -346,8 +346,9 @@ xrandr --listproviders
 
 3. **Test the change**:
    ```bash
-   nh os build .
-   nh os switch .
+   nixos-rebuild build --flake .
+   sudo nixos-rebuild boot --flake .
+   # Reboot separately during a maintenance window with console recovery available.
    ```
 
 ## Benefits

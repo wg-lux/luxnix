@@ -119,7 +119,7 @@ in
           sourcePdfDir = mkOption {
             type = types.str;
             default = toString endoregPaths.pdfInputDir;
-            description = "Directory watched for operator PDF drops.";
+            description = "Directory watched for operator PDF and TXT report drops.";
           };
 
           failedVideoDir = mkOption {
@@ -255,7 +255,7 @@ in
     {
       services.luxnix.fileMover.desktop.links = {
         Video_Input = mkDefault sourceVideoDir;
-        PDF_Input = mkDefault sourcePdfDir;
+        Report_Input = mkDefault sourcePdfDir;
       };
     }
     {
@@ -635,11 +635,27 @@ in
               done < <(${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -type l -print0)
             }
 
+            publish_report_batch() {
+              local staging_dir="$1"
+              local dest_dir="$2"
+              local publication_dir
+              publication_dir="$(${pkgs.coreutils}/bin/mktemp -d "$dest_dir/.report.XXXXXXXXXX")" || return 1
+              # Keep the complete batch hidden until its atomic publication.
+              ${pkgs.coreutils}/bin/mv -T -- "$staging_dir" "$publication_dir" || return 1
+              local batch_name="''${publication_dir##*/}"
+              local final_dir="$dest_dir/''${batch_name#.}"
+              ${pkgs.coreutils}/bin/mv -T -n -- "$publication_dir" "$final_dir" || return 1
+              [ ! -e "$publication_dir" ] || return 1
+              printf '{"event":"report_batch_published"}\n' >&2
+              printf '%s\n' "$final_dir"
+            }
+
             process_input_dir() {
               local source_dir="$1"
               local dest_dir="$2"
               local quarantine_dir="$3"
               local label="$4"
+              local published_report_dir=""
 
               if [ -z "$(${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -print -quit)" ]; then
                 return 0
@@ -677,27 +693,40 @@ in
               ${pkgs.findutils}/bin/find "$staging_dir" -mindepth 1 -type f -exec ${pkgs.coreutils}/bin/chmod 0660 {} +
               ${pkgs.findutils}/bin/find "$staging_dir" -type f -printf '%P\0' > "$manifest_file"
 
-              while IFS= read -r -d "" staged_entry; do
-                entry_name="$(${pkgs.coreutils}/bin/basename "$staged_entry")"
-                if [ "$label" = "Video" ] && is_video_filename "$entry_name"; then
-                  if transcode_video_entry "$staged_entry" "$dest_dir" "$entry_name"; then
+              if [ "$label" = "PDF" ]; then
+                if ! published_report_dir="$(publish_report_batch "$staging_dir" "$dest_dir")"; then
+                  echo "Warning: report batch publication failed; source files retained."
+                  overall_status=1
+                  return 0
+                fi
+              else
+                while IFS= read -r -d "" staged_entry; do
+                  entry_name="$(${pkgs.coreutils}/bin/basename "$staged_entry")"
+                  if [ "$label" = "Video" ] && is_video_filename "$entry_name"; then
+                    if transcode_video_entry "$staged_entry" "$dest_dir" "$entry_name"; then
+                      continue
+                    fi
+                    echo "Warning: failed to transcode staged Video entry: $staged_entry"
+                    publish_status=1
+                    overall_status=1
                     continue
                   fi
-                  echo "Warning: failed to transcode staged Video entry: $staged_entry"
-                  publish_status=1
-                  overall_status=1
-                  continue
-                fi
 
-                if ! ${pkgs.coreutils}/bin/mv -f "$staged_entry" "''${dest_dir}/''${entry_name}"; then
-                  echo "Warning: failed to publish staged ''${label} entry: $staged_entry"
-                  publish_status=1
-                  overall_status=1
-                fi
-              done < <(${pkgs.findutils}/bin/find "$staging_dir" -mindepth 1 -maxdepth 1 -print0)
+                  if ! ${pkgs.coreutils}/bin/mv -f "$staged_entry" "''${dest_dir}/''${entry_name}"; then
+                    echo "Warning: failed to publish staged ''${label} entry: $staged_entry"
+                    publish_status=1
+                    overall_status=1
+                  fi
+                done < <(${pkgs.findutils}/bin/find "$staging_dir" -mindepth 1 -maxdepth 1 -print0)
+              fi
 
               if [ "$publish_status" -eq 0 ]; then
                 while IFS= read -r -d "" source_relative_path; do
+                  if [ "$label" = "PDF" ] && ! ${pkgs.diffutils}/bin/cmp -s -- "''${source_dir}/''${source_relative_path}" "$published_report_dir/$source_relative_path"; then
+                    echo "Warning: report source changed after staging; retaining it for the next run."
+                    overall_status=1
+                    continue
+                  fi
                   ${pkgs.coreutils}/bin/rm -f "''${source_dir}/''${source_relative_path}" || true
                 done < "$manifest_file"
                 ${pkgs.findutils}/bin/find "$source_dir" -mindepth 1 -type d -empty -delete || true
@@ -706,8 +735,8 @@ in
 
             # Rsync with retry logic is not needed here because Systemd will re-trigger
             # if files are left behind.
-            process_input_dir "${sourceVideoDir}" "${destVideoDir}" "${failedVideoDir}" "Video"
             process_input_dir "${sourcePdfDir}" "${destReportDir}" "${failedPdfDir}" "PDF"
+            process_input_dir "${sourceVideoDir}" "${destVideoDir}" "${failedVideoDir}" "Video"
 
             # Cleanup empty dirs in Source (ignore errors)
             ${pkgs.findutils}/bin/find "${sourceVideoDir}" -mindepth 1 -type d -empty -delete || true

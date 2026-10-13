@@ -222,11 +222,19 @@ def test_rejects_piped_token_and_arbitrary_arguments():
     [
         ([], 0),
         (["--ask-become-pass"], 0),
+        (["--site", "gc-09"], 0),
+        (["--site", "gc-09", "--ask-become-pass"], 0),
+        (["--ask-become-pass", "--site", "gc-09"], 0),
+        (["--site"], 2),
+        (["--site", "gc-09:gc-02"], 2),
+        (["--site", "gs-02"], 2),
+        (["--site", "gc-09", "--site", "gc-02"], 2),
+        (["--ask-become-pass", "--ask-become-pass"], 2),
         (["--limit", "gc-09"], 2),
         (["--extra-vars=secret"], 2),
     ],
 )
-def test_wrapper_forwards_only_optional_hidden_sudo_prompt(arguments, expected):
+def test_wrapper_restricts_scope_and_hidden_sudo_prompt(arguments, expected):
     import os
     import pty
     import tempfile
@@ -253,8 +261,14 @@ def test_wrapper_forwards_only_optional_hidden_sudo_prompt(arguments, expected):
         assert result.returncode == expected
         if expected == 0:
             forwarded = result.stdout.splitlines()
-            assert ("--ask-become-pass" in forwarded) == bool(arguments)
-            assert forwarded[forwarded.index("--limit") + 1] == "gs-02:active_clients"
+            assert ("--ask-become-pass" in forwarded) == (
+                "--ask-become-pass" in arguments
+            )
+            scoped = "--site" in arguments
+            assert forwarded[forwarded.index("--limit") + 1] == (
+                "gs-02:gc-09" if scoped else "gs-02:active_clients"
+            )
+            assert ("fleet_enrollment_site=gc-09" in forwarded) == scoped
         else:
             assert "--extra-vars=secret" not in result.stdout + result.stderr
 
@@ -305,8 +319,9 @@ def test_fleet_scope_transport_and_secret_blocks():
         ("failed-preflight", 2),
     ],
 )
+@pytest.mark.parametrize("scoped", [False, True])
 def test_real_ansible_summary_reports_failures_and_skips_offline(
-    tmp_path, status, expected
+    tmp_path, status, expected, scoped
 ):
     """Execute the real reporting play locally; no SSH or production inventory."""
     ansible = ROOT / ".devenv/state/venv/bin/ansible-playbook"
@@ -316,6 +331,8 @@ def test_real_ansible_summary_reports_failures_and_skips_offline(
         (ROOT / "ansible/playbooks/enroll_reachable_hub_sites.yml").read_text()
     )
     summary = tmp_path / "summary.yml"
+    if scoped:
+        plays[-1]["vars"]["fleet_enrollment_site"] = "gc-09"
     summary.write_text(yaml.safe_dump([plays[-1]]))
     inventory = tmp_path / "inventory.yml"
     inventory.write_text(
@@ -330,9 +347,12 @@ def test_real_ansible_summary_reports_failures_and_skips_offline(
                             },
                         },
                         "gc-09": {"fleet_enrollment_status": status},
+                        "gc-04": {"fleet_enrollment_status": "failed-preflight"},
                     },
                     "children": {
-                        group: {"hosts": {"gc-09": {}}}
+                        group: {
+                            "hosts": {"gc-09": {}, **({"gc-04": {}} if scoped else {})}
+                        }
                         for group in ["active_clients", "gpu_client", "endoreg_client"]
                     },
                 }
@@ -354,6 +374,7 @@ def test_real_ansible_summary_reports_failures_and_skips_offline(
     assert result.returncode == expected, result.stdout + result.stderr
     assert "synthetic-sensitive-token" not in result.stdout + result.stderr
     assert f"gc-09: {status}" in result.stdout
+    assert "gc-04:" not in result.stdout
 
 
 def test_real_hidden_token_prompt_does_not_log_input(tmp_path):
@@ -597,3 +618,66 @@ def test_real_ansible_enrollment_block_survives_status_transition(
     assert result.returncode == 0, result.stdout + result.stderr
     if fail:
         assert "Enrollment failed for localhost" in result.stdout
+
+
+@pytest.mark.parametrize("site,expected", [("gc-09", 0), ("gc-99", 2)])
+def test_real_ansible_rejects_unknown_site_before_hub_preparation(
+    tmp_path, site, expected
+):
+    import os
+
+    ansible = ROOT / ".devenv/state/venv/bin/ansible-playbook"
+    if not ansible.exists():
+        pytest.skip("Ansible development environment unavailable")
+    play = yaml.safe_load(
+        (ROOT / "ansible/playbooks/enroll_reachable_hub_sites.yml").read_text()
+    )[1]
+    play.update(become=False, vars={"fleet_enrollment_site": site})
+    play["tasks"] = play["tasks"][:1]
+    path = tmp_path / "validate.yml"
+    path.write_text(yaml.safe_dump([play]))
+    inventory = tmp_path / "inventory.yml"
+    inventory.write_text(
+        yaml.safe_dump(
+            {
+                "all": {
+                    "hosts": {"gs-02": {"ansible_connection": "local"}},
+                    "children": {
+                        group: {"hosts": {"gc-09": {}}}
+                        for group in ["active_clients", "gpu_client", "endoreg_client"]
+                    },
+                }
+            }
+        )
+    )
+    result = subprocess.run(
+        [str(ansible), "-i", str(inventory), str(path)],
+        capture_output=True,
+        text=True,
+        env=dict(
+            os.environ, ANSIBLE_CONFIG=str(ROOT / "conf/connectivity-ansible.cfg")
+        ),
+    )
+    assert result.returncode == expected, result.stdout + result.stderr
+
+
+def test_enrollment_provisions_both_databases_before_starting_consumers():
+    play = yaml.safe_load(
+        (ROOT / "ansible/playbooks/enroll_reachable_hub_sites.yml").read_text()
+    )[2]
+    block = next(task for task in play["tasks"] if "block" in task)
+    tasks = block["block"]
+    services = [task for task in tasks if "ansible.builtin.systemd_service" in task]
+    receiver, sender, consumers = services[-3:]
+    for task in (receiver, sender):
+        assert task["ansible.builtin.systemd_service"] == {
+            "name": "lx-annotate-hub-node-provisioning.service", "state": "restarted"
+        }
+    assert receiver["delegate_to"] == "{{ enrollment_hub }}"
+    assert "delegate_to" not in sender
+    assert consumers["loop"] == [
+        "lx-annotate.service", "lx-annotate-celery-hub-transfer-worker.service"
+    ]
+    assert tasks.index(consumers) < len(tasks) - 1
+    assert tasks[-1]["ansible.builtin.set_fact"]["fleet_enrollment_status"] == "enrolled"
+    assert all(not task.get("ignore_errors") for task in (receiver, sender, consumers))

@@ -1,0 +1,43 @@
+version: 1
+tier: domain
+path: modules/nixos
+parent: ../structure.yml
+summary: System options, atomic service modules, roles, and profiles consumed by hosts.
+responsibilities:
+- Define reusable system behavior and service runtime dependencies
+- Bundle defaults through roles and profiles
+boundaries:
+- Shared defaults can affect the entire fleet
+- Shared contributor tools belong in roles/custom-packages
+entrypoints:
+- name: development-packages
+  file: roles/custom-packages/default.nix
+  purpose: Inspect development packages ownership and interfaces.
+- name: client-profile
+  file: profiles/endoreg-client/default.nix
+  purpose: Inspect client profile ownership and interfaces.
+- name: hub-profile
+  file: profiles/endoreg-central-hub/default.nix
+  purpose: Inspect hub profile ownership and interfaces.
+dependencies:
+  internal:
+  - packages
+  - lx_administration
+  external:
+  - NixOS
+  - systemd
+  - Vault
+  - SOPS
+submodules:
+- name: lx-annotate-local
+  path: services/lx-annotate-local
+  manifest: services/lx-annotate-local/structure.yml
+  summary: LuxNix deployment composition for the upstream LX-Annotate application.
+contracts:
+- name: architecture
+  doc: ../../docs/architecture.md
+- name: README
+  doc: roles/managed-secrets/README.md
+tests:
+  directory: ../../tests
+  command: python -m pytest -q tests/test_repository_architecture_contract.py tests/test_network_service_contract.py

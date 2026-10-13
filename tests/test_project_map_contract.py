@@ -263,7 +263,7 @@ def test_readme_start_here_has_only_canonical_role_based_entry_points() -> None:
     project_map = _project_map()
     paths = project_map["paths"]
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-    start_here = readme.split("## Start Here", 1)[1].split("## Quick Start", 1)[0]
+    start_here = readme.split("## Start Here", 1)[1].split("\n## ", 1)[0]
     targets = re.findall(r"\[[^]]+\]\(([^)]+)\)", start_here)
     expected_targets = {
         project_map["project"]["start_here"],
@@ -283,12 +283,14 @@ def test_readme_start_here_has_only_canonical_role_based_entry_points() -> None:
         assert goal in start_here
 
 
-def test_readme_quick_start_matches_central_host_workflows() -> None:
+def test_readme_inspection_links_to_canonical_host_workflows() -> None:
     workflows = {workflow["id"]: workflow for workflow in _project_map()["workflows"]}
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-    quick_start = readme.split("## Quick Start", 1)[1].split(
-        "Agents and automation", 1
-    )[0]
+    inspection = readme.split("## Inspect the repository", 1)[1].split("\n## ", 1)[0]
+    assert workflows["discover-hosts"]["command"] in inspection
+    assert "docs/getting-started.md" in inspection
+    assert workflows["deploy-new-host"]["command"] not in inspection
+    guide = (REPO_ROOT / "docs/getting-started.md").read_text(encoding="utf-8")
     ordered_workflows = (
         "discover-hosts",
         "validate-host",
@@ -298,12 +300,12 @@ def test_readme_quick_start_matches_central_host_workflows() -> None:
     )
 
     command_positions = [
-        quick_start.index(workflows[workflow_id]["command"])
+        guide.index(workflows[workflow_id]["command"])
         for workflow_id in ordered_workflows
     ]
     assert command_positions == sorted(command_positions)
-    assert "repartition" in quick_start
-    assert "<ip>" not in quick_start
+    assert "repartition" in inspection
+    assert "<ip>" not in guide
 
 
 def test_host_setup_guides_match_central_host_file_conventions() -> None:

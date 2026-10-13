@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 import pytest
+import json
+import os
+import re
+import sys
 
 from nix_eval_helpers import eval_json
+import subprocess
 
 
 def test_identity_enrollment_is_automatic_on_every_enabled_host():
@@ -42,6 +47,103 @@ def test_identity_enrollment_is_automatic_on_every_enabled_host():
         assert not any(
             name.startswith("lx_annotate_identity_") for name in contract["secrets"]
         )
+
+
+@pytest.mark.parametrize("host, center", [
+    ("gc-02", "university_hospital_wuerzburg"),
+    ("gc-05", "rbk_stuttgart"),
+])
+def test_center_identity_source_uses_inventory_center_and_managed_secrets(host, center):
+    contract = eval_json('''
+      let f = builtins.getFlake "__LUXNIX_FLAKE_URI__";
+          host = f.nixosConfigurations.HOST.extendModules {
+            modules = [({ lib, ... }: {
+              services.luxnix.lxAnnotateLocal.django.centerIdentitySalt = true;
+              luxnix.vault.client.auth.deferUntilProvisioned = lib.mkForce false;
+            })];
+          };
+          c = host.config;
+      in {
+        defaultCenterIdentity = (host.options.services.luxnix.lxAnnotateLocal.django.type.getSubOptions []).centerIdentitySalt.default;
+        secret = c.roles.managed-secrets.customSecrets.lx_annotate_center_identity_source;
+        script = builtins.readFile c.systemd.services.lx-annotate-identity-salts.serviceConfig.ExecStart;
+      }
+    '''.replace("HOST", host))
+    source = contract["secret"]
+    assert contract["defaultCenterIdentity"] is False
+    assert source["permissions"] == "600"
+    assert source["owner"] == "root"
+    assert source["refreshOnBoot"]
+    assert f"/centers/{center}/identity" in source["generator"]
+    assert "--source-salt" in contract["script"]
+    assert source["path"] in contract["script"]
+
+
+@pytest.mark.parametrize("denied", [False, True])
+def test_center_identity_enrollment_publishes_once_and_grants_only_scoped_reads(tmp_path, denied):
+    script = eval_json('''
+      let f = builtins.getFlake "__LUXNIX_FLAKE_URI__";
+          c = f.nixosConfigurations.gs-02.config;
+          tool = builtins.head (builtins.filter
+            (p: (p.name or "") == "luxnix-vault-reconcile-hub-sites")
+            c.environment.systemPackages);
+      in builtins.readFile "${tool}/bin/luxnix-vault-reconcile-hub-sites"
+    ''')
+    # Execute the built enrollment script against a recording Vault CLI, never a server.
+    recorder = tmp_path / "vault.py"
+    recorder.write_text('''
+import json, os, sys
+from pathlib import Path
+path = Path(os.environ["RECORDING_VAULT"])
+state = json.loads(path.read_text()) if path.exists() else {"created": [], "policies": {}, "puts": []}
+args = sys.argv[1:]
+if args[:2] == ["secrets", "list"]:
+    print(json.dumps({"lx-hub-pki/": {}, "lx-hub-secrets/": {}}))
+elif args[:2] == ["auth", "list"]:
+    print(json.dumps({"approle/": {}}))
+elif args[:2] == ["kv", "get"]:
+    if os.environ["DENIED"] == "true":
+        print("permission denied", file=sys.stderr)
+        sys.exit(2)
+    if args[-1] not in state["created"]:
+        print("No value found at requested path", file=sys.stderr)
+        sys.exit(2)
+    print("existing-test-material")
+elif args[:2] == ["kv", "put"]:
+    assert "-cas=0" in args
+    assert len(sys.stdin.read().strip()) == 64
+    state["puts"].append(args[-2])
+    state["created"].append(args[-2])
+elif args[:2] == ["policy", "write"]:
+    state["policies"][args[2]] = Path(args[3]).read_text()
+path.write_text(json.dumps(state))
+''')
+    script = re.sub(r'(?<![\w/-])vault(?= )', f'{sys.executable} {recorder}', script)
+    script = script.replace("/var/lib/luxnix-vault-site-lifecycle", str(tmp_path / "lifecycle"))
+    record = tmp_path / "calls.json"
+    result = subprocess.run(
+        ["bash", "-c", script, "enroll", "gc-02.intern", "gc-10.intern", "gc-05.intern"],
+        env={**os.environ, "VAULT_ADDR": "https://test.invalid", "VAULT_TOKEN": "test-only",
+             "RECORDING_VAULT": str(record), "DENIED": str(denied).lower()},
+        text=True, capture_output=True, timeout=30,
+    )
+    state = json.loads(record.read_text())
+    if denied:
+        assert result.returncode != 0
+        assert state["puts"] == []
+        assert state["policies"] == {}
+    else:
+        assert result.returncode == 0, result.stderr
+        assert state["puts"] == [
+            "lx-hub-secrets/centers/university_hospital_wuerzburg/identity",
+            "lx-hub-secrets/centers/rbk_stuttgart/identity",
+        ]
+        policy = state["policies"]["lx-hub-site-gc_02_intern"]
+        assert 'data/centers/university_hospital_wuerzburg/identity' in policy
+        assert 'rbk_stuttgart' not in policy
+        center_rules = policy.split('data/centers/', 1)[1]
+        assert 'capabilities = ["read"]' in center_rules
+        assert '"update"' not in center_rules and '"create"' not in center_rules
 
 
 def test_gs02_acceptance_trusts_its_vault_ca():
@@ -118,3 +220,24 @@ def test_background_identity_migration_contract(mode):
         "RandomizedDelaySec": "1m",
         "Unit": "lx-annotate-identity-salt-migration.service",
     }
+
+
+def test_reviewed_migration_path_is_passed_as_one_literal_argument(tmp_path):
+    script = eval_json('''
+      let f = builtins.getFlake "__LUXNIX_FLAKE_URI__";
+          c = (f.nixosConfigurations.gc-02.extendModules {
+            modules = [{ services.luxnix.lxAnnotateLocal.django.identitySaltMigrationReviewFile =
+              "/private/review file $(false).yml"; }];
+          }).config;
+      in builtins.readFile c.systemd.services.lx-annotate-identity-salt-migration.serviceConfig.ExecStart
+    ''')
+    # Exercise shell quoting without running Django or touching a real review file.
+    command = script.split("exec ", 1)[1].split(" rotate_identity_salt", 1)[0]
+    capture = tmp_path / "capture"
+    capture.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
+    capture.chmod(0o700)
+    result = subprocess.run(["bash", "-c", script.replace(command, str(capture))],
+                            capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == ["rotate_identity_salt", "--apply", "--allow-partial",
+                                          "--review-file", "/private/review file $(false).yml"]

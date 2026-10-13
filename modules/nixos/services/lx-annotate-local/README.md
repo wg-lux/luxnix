@@ -73,6 +73,45 @@ The encrypted-data unit then:
 
 ## Automatic identity salt provisioning and recovery
 
+### Center-scoped enrollment
+
+Set `luxnix.lxAnnotateLocal.django.centerIdentitySalt: "true"` under
+`group_services` in `ansible/inventory/group_vars`, or under `host_services` in
+`ansible/inventory/host_vars`. The center namespace comes from
+`roles.endoreg-client.defaultCenterKey`; it must agree with the receiver's
+existing `hub.nodeProvisioning.nodes[].centerKey` assignment. The enrollment
+preflight checks that agreement. Host placement changes require reconciling
+both assignments before granting the new center policy.
+Use this mode for new center enrollments. The module defaults to disabled so
+existing generated configurations cannot switch identity sources before their
+inventory is regenerated and established machine identities are reconciled.
+
+The existing `luxnix-vault-reconcile-hub-sites` enrollment workflow creates
+`centers/<center_key>/identity` once in the hub KV mount using compare-and-set.
+It grants only that center's read path to the site's machine identity. Permission
+errors and Vault outages never count as an absent secret. Sites fetch the salt
+through `managed-secrets`; they cannot generate or overwrite the center key.
+No clinical user handles secret material. This identity salt is independent of
+the application media master key, which remains local and is never distributed.
+
+The existing local provisioner accepts the managed center source, validates
+private file access, and maintains its existing recovery copies and enrollment
+receipts. A missing source never falls back to a random machine salt. A source
+that differs from an established machine salt fails without overwriting either
+generation. An identity-changing rotation is therefore never an incidental
+effect of a restart, changed placement, secret refresh, or rebuild.
+
+Existing GPU-client inventory leaves this switch disabled until its legacy
+identity migration is verified. Do not simply enable it fleet-wide: retained
+machine generations, erased identities, previously exported hashes, and hub
+links must be reconciled first. Same-center matching requires the shared salt
+and identical legacy center-name/demographic inputs; this change deliberately
+does not rewrite the persisted hash format or infer missing identifiers.
+Track source checks and rollout acceptance in
+`feature-tracking/luxnix_secret_lifecycle_readiness.yml`.
+
+### Machine-generation compatibility
+
 Every enabled host defaults to `django.enrollLegacyDefaultSalt = true`. The
 root-owned `lx-annotate-identity-salts.service` provisions a random 256-bit active
 salt on first installation and retains `default_salt` as a retiring generation
@@ -333,7 +372,7 @@ mount unit.
 | `lx-annotate-preflight.service`                    | explicit diagnostic oneshot           | Runs comprehensive checks when requested directly or through live acceptance. It does not block normal web, worker, or HLS startup and does not cache a previous successful diagnostic run.                                                                                                                                     |
 | `lx-annotate-migrate.service`                      | oneshot                               | Runs `lx-annotate-manage migrate --noinput` against the effective runtime package. On failure it applies the reviewed legacy-history repair and retries once; unrelated or unrepaired failures remain fatal. It is ordered before base-data loading, encrypted-storage validation, and the web service.                         |
 | `lx-annotate-terminology-bootstrap.service`        | best-effort oneshot in wheel mode     | After the web service starts, independently registers the packaged `dgvs_reporting`, `mst_3_0`, and `star_upper_gi` bundles. A new registry activates `star_upper_gi`; an existing active selection is preserved. No LX-Annotate startup unit wants, requires, or waits for this attempt.                                       |
-| `lx-annotate-load-base-data.service`               | oneshot                               | Runs `lx-annotate-load-base-data --reconcile-legacy` after successful migrations. Fresh imports and bounded legacy reconciliation are idempotent; failures block dependent startup. Requires a backend release supporting the flag. See [startup contract](../../../../docs/guides/lx-annotate-wheel-startup.yml).              |
+| `lx-annotate-load-base-data.service`               | oneshot                               | Runs `lx-annotate-load-base-data --reconcile-legacy` after successful migrations. Fresh imports and bounded legacy reconciliation are idempotent; failures block dependent startup. Requires a backend release supporting the flag. See [startup contract](../../../../docs/guides/lx-annotate-wheel-startup.md).              |
 | `lx-annotate-master-key-check.service`             | oneshot, remains active               | Runs `lx-annotate-manage verify_encrypted_storage` with the deployed environment. The web service and workers require this check so a wrong or missing application master key fails closed before user traffic or background processing starts.                                                                                 |
 | `lx-annotate-center-admin-bootstrap.service`       | temporary oneshot                     | When `centerAdminBootstrap.username` is set, runs the audited `bootstrap_center_admin` command after migrations, base-data loading, and encrypted-storage validation. It refuses users without the exact synchronized `center_scope:admin` group. Clear the option after a successful bootstrap deployment.                     |
 | `lx-annotate.service` / `lx-annotate-boot.service` | long-running web service              | Starts the ASGI/web entrypoint on `127.0.0.1:${django.port}`. It requires the runtime env, base data, master-key check, managed secrets, encrypted data, and local Redis/PostgreSQL units when those local services are in use.                                                                                                 |
@@ -972,10 +1011,16 @@ pair and an explicit recovery procedure.
 
 ## How To Apply
 
+Wheel-mode hosts reject temporary `test` activation before services are changed:
+the shared virtualenv and database survive reboot, but a temporary generation
+does not become the boot default. This also rejects deployment helpers that
+implement switching through an intermediate `test` action. Use the persistent
+deployment procedure in the [deployment guide](../../../../docs/deployment-guide.md#updating-an-existing-lx-annotate-host).
+
 After setting the host options, apply the system with:
 
 ```bash
-nh os switch . -- --accept-flake-config
+sudo nixos-rebuild switch --flake .
 ```
 
 The expected startup order is:

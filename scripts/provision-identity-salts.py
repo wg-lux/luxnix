@@ -110,7 +110,8 @@ def salt_line(raw: bytes) -> bytes:
 
 
 def provision(
-    secret_dir: Path, recovery_dir: Path, replica_dir: Path, uid: int, gid: int
+    secret_dir: Path, recovery_dir: Path, replica_dir: Path, uid: int, gid: int,
+    source_salt: Path | None = None,
 ):
     with ExitStack() as stack:
         primary = stack.enter_context(directory(recovery_dir, private=True))
@@ -150,6 +151,14 @@ def provision(
         backups = [read(fd, "active.salt", {os.geteuid()}) for fd in (primary, replica)]
         receipts = [read(fd, "enrolled", {os.geteuid()}) for fd in (primary, replica)]
         values = {salt_line(raw) for raw in [active, *backups] if raw is not None}
+        if source_salt is not None:
+            if not source_salt.is_absolute():
+                raise ValueError("Authoritative salt source must be absolute")
+            with directory(source_salt.parent) as source_dir:
+                source = read(source_dir, source_salt.name, owners)
+            if source is None:
+                raise ValueError("Authoritative center salt is unavailable; refusing local generation")
+            values.add(salt_line(source))
         if len(values) > 1:
             raise ValueError("Salt copies disagree; all copies preserved for recovery")
         if not values and any(raw is not None for raw in [manifest, legacy, *receipts]):
@@ -188,6 +197,7 @@ def main() -> int:
         parser.add_argument(f"--{option}", type=Path, required=True)
     parser.add_argument("--user", required=True)
     parser.add_argument("--group", required=True)
+    parser.add_argument("--source-salt", type=Path)
     args = parser.parse_args()
     try:
         provision(
@@ -196,6 +206,7 @@ def main() -> int:
             args.replica_dir,
             pwd.getpwnam(args.user).pw_uid,
             grp.getgrnam(args.group).gr_gid,
+            args.source_salt,
         )
     except (OSError, ValueError, KeyError, yaml.YAMLError):
         # Never render parser exceptions or file contents into service logs.

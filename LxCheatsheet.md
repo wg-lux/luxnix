@@ -12,7 +12,7 @@ that it is a host-local command.
 Canonical:
 
 ```bash
-nh os switch
+sudo nixos-rebuild switch --flake .
 ```
 
 Alias:

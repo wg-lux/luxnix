@@ -1,6 +1,9 @@
 { pkgs, ... }:
 {
   # Configuration and validation
+  check-secret-rotation.package = pkgs.zsh;
+  check-secret-rotation.exec = ''${pkgs.uv}/bin/uv run python scripts/check-secret-rotation.py "$@"'';
+
   bnsc.package = pkgs.zsh;
   bnsc.exec = "devenv tasks run autoconf:generate";
 

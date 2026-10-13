@@ -248,7 +248,7 @@ The operational flow is now:
 4. Deploy with:
 
 ```bash
-nh os switch . -- --accept-flake-config
+sudo nixos-rebuild switch --flake . --accept-flake-config
 ```
 
 On a healthy system this causes:

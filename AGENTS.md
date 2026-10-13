@@ -7,7 +7,8 @@ may affect more than the host currently being inspected.
 
 ## Start here
 
-Before making a change, read the relevant entries in this order:
+Start at [`structure.yml`](structure.yml), then follow only the domain manifests
+needed for the task. Within that scope, read the relevant entries in this order:
 
 1. [`luxnix.yml`](luxnix.yml), the machine-readable project map, path
    ownership map, risk vocabulary, and canonical workflows.
@@ -21,6 +22,27 @@ Before making a change, read the relevant entries in this order:
 Do not infer ownership or deployment behavior from filenames alone. Inspect
 actual imports, inventory precedence, templates, call sites, tests, and
 documentation before editing.
+
+## Source of Truth & Context Protocol
+
+- **Read:** Traverse from root `structure.yml` through its `submodules` before
+  searching code. Read the selected manifests, entrypoints and contracts; use
+  scoped searches inside that ownership boundary rather than broad repository
+  grepping. Follow declared dependencies when a task crosses domains.
+- **Authority:** Manifests are navigation and boundary contracts. `luxnix.yml`
+  remains authoritative for source ownership and risk, and `devenv/commands.yml`
+  for supported commands. Read actual imports and consumers before editing.
+- **Write:** Whenever adding, removing or renaming files or changing boundaries,
+  review and update the corresponding `structure.yml` files in the same
+  changeset. Update affected entrypoints, contracts, dependencies, parent links
+  and child links. Leaf files need not all be enumerated; keep manifests at
+  meaningful architectural tiers and maintain accurate responsibilities.
+- **Scope:** Give any authorized subagent its local manifest and directory tree,
+  relevant contracts, and explicit dependency boundaries. See
+  [agent context guidance](docs/agent_context.md).
+- **Pre-flight:** Run `python scripts/lint_structure.py` from the repository root
+  before concluding every prompt or submitting a pull request. A nonzero exit is
+  a blocker; report it rather than weakening the schema or ignoring drift.
 
 ## Working agreement
 

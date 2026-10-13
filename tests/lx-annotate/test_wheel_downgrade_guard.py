@@ -9,6 +9,7 @@ import sys
 from zipfile import ZipFile
 
 import pytest
+import yaml
 
 from nix_eval_helpers import REPO_ROOT, eval_json
 
@@ -312,9 +313,41 @@ def test_online_preparation_waits_for_network_and_offline_does_not() -> None:
         onlineWants = c.systemd.services.lx-annotate-wheel-runtime.wants;
         offlineAfter = offline.systemd.services.lx-annotate-wheel-runtime.after;
         requires = c.systemd.services.lx-annotate-wheel-runtime.requires;
+        activationCheck = c.system.preSwitchChecks.lxAnnotatePersistentActivation;
       }
     """)
     assert "network-online.target" in rendered["onlineAfter"]
     assert "network-online.target" in rendered["onlineWants"]
     assert "network-online.target" not in rendered["offlineAfter"]
     assert "lx-annotate-runtime-env.service" in rendered["requires"]
+    for action in ("test", "switch", "boot", "dry-activate"):
+        result = subprocess.run(
+            ["bash", "-euo", "pipefail", "-c", rendered["activationCheck"],
+             "_", "/incoming-system", action],
+            capture_output=True, text=True,
+        )
+        assert result.returncode == (1 if action == "test" else 0), result.stderr
+        if action == "test":
+            assert "nixos-rebuild switch" in result.stderr
+
+
+@pytest.mark.parametrize("persisted", ["active", "older", None])
+def test_managed_deployment_detects_unpersisted_activation(tmp_path: Path, persisted):
+    handlers = yaml.safe_load(
+        (REPO_ROOT / "ansible/roles/managed/handlers/main.yml").read_text()
+    )
+    deploy = next(item for item in handlers if item["name"] == "Run nho")
+    assert "sudo nixos-rebuild switch --flake" in deploy["ansible.builtin.expect"]["command"]
+    check = next(item for item in handlers if item.get("listen") == "Run nho")
+    active = tmp_path / "active"
+    active.mkdir()
+    older = tmp_path / "older"
+    older.mkdir()
+    profile = tmp_path / "system"
+    if persisted is not None:
+        profile.symlink_to(tmp_path / persisted)
+    script = check["ansible.builtin.shell"].replace(
+        "/run/current-system", str(active)
+    ).replace("/nix/var/nix/profiles/system", str(profile))
+    result = subprocess.run(["sh", "-c", script], capture_output=True, text=True)
+    assert (result.returncode == 0) == (persisted == "active")

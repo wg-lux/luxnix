@@ -92,13 +92,13 @@ confirmation-required operation; do not pass credentials on the command line.
 Use canonical commands first:
 
 ```bash
-nh os switch
+sudo nixos-rebuild switch --flake .
 nh home switch
 ```
 
 Alias equivalents:
 
-- `nho` -> `nh os switch`
+- `nho` -> `sudo nixos-rebuild switch --flake .`
 - `nhh` -> `nh home switch`
 
 ## Password/secret path note

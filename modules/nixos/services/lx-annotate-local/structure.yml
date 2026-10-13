@@ -1,0 +1,49 @@
+version: 1
+tier: service
+path: modules/nixos/services/lx-annotate-local
+parent: ../../structure.yml
+summary: LuxNix deployment composition for the upstream LX-Annotate application.
+responsibilities:
+- Own service options, runtime environment contracts and systemd composition
+- Coordinate workers, storage, secret handles and hub interfaces
+boundaries:
+- Application business logic belongs in the upstream wheel
+- Preserve database ownership, encrypted storage and least-privilege secret contracts
+entrypoints:
+- name: module
+  file: default.nix
+  purpose: Inspect module ownership and interfaces.
+- name: options
+  file: options.nix
+  purpose: Inspect options ownership and interfaces.
+- name: composition
+  file: config.nix
+  purpose: Inspect composition ownership and interfaces.
+- name: runtime-context
+  file: runtime-context.nix
+  purpose: Inspect runtime context ownership and interfaces.
+dependencies:
+  internal:
+  - lx_administration
+  - ansible
+  - kubernetes
+  external:
+  - LX-Annotate wheel
+  - Django
+  - PostgreSQL
+  - systemd
+  - Vault
+  - mTLS
+submodules: []
+contracts:
+- name: OWNERSHIP
+  doc: OWNERSHIP.md
+- name: Workers
+  doc: Workers.md
+- name: Diagnostics
+  doc: Diagnostics.md
+- name: database-ownership
+  doc: ../../../../docs/database-ownership.md
+tests:
+  directory: ../../../../tests/lx-annotate
+  command: python -m pytest -q tests/lx-annotate/test_lx_annotate_module_layout.py tests/lx-annotate/test_database_ownership.py

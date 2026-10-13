@@ -72,6 +72,17 @@ in
               default = null;
               description = "Private file holding an established non-default identity salt, exported as DJANGO_SALT_FILE.";
             };
+            centerIdentitySalt = mkOption {
+              type = types.bool;
+              default = false;
+              description = ''
+                Enroll from the Vault identity salt scoped to endoreg-client.defaultCenterKey.
+                Set through host_services or group_services in inventory. Requires the
+                center-scoped Vault enrollment policy. Existing different salts fail closed
+                and require verified migration; they are never overwritten by enrollment.
+                Enable through inventory after enrollment and legacy migration review.
+              '';
+            };
             identitySaltKeyringFile = mkOption {
               type = types.nullOr types.str;
               default = null;
@@ -81,6 +92,11 @@ in
               type = types.bool;
               default = true;
               description = "Periodically migrate verified identities to the configured keyring's active salt in the background, retaining blocked identities and retiring salts.";
+            };
+            identitySaltMigrationReviewFile = mkOption {
+              type = types.nullOr (types.strMatching "/.*");
+              default = null;
+              description = "Absolute path to a private, service-readable reviewed identity YAML file; contents must never enter the Nix store. Passed to rotate_identity_salt --review-file.";
             };
           };
       };

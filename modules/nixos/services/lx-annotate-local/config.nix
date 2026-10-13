@@ -1716,6 +1716,10 @@ in
 
           assertions = [
             {
+              assertion = !cfg.django.centerIdentitySalt || cfg.django.enrollLegacyDefaultSalt;
+              message = "Center identity salt must use the managed identity enrollment and recovery service.";
+            }
+            {
               assertion =
                 !cfg.django.enrollLegacyDefaultSalt
                 || (

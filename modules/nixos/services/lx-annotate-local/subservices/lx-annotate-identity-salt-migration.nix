@@ -3,6 +3,7 @@
 with ctx;
 let
   enabled = cfg.django.automaticIdentitySaltMigration && cfg.django.identitySaltKeyringFile != null;
+  command = "${effectiveRuntimePackage}/bin/lx-annotate-manage rotate_identity_salt --apply --allow-partial";
 in
 {
   systemd.services.lx-annotate-identity-salt-migration = mkIf enabled (mkLxAnnotateAppService {
@@ -19,7 +20,13 @@ in
     ];
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-manage rotate_identity_salt --apply --allow-partial";
+      ExecStart =
+        if cfg.django.identitySaltMigrationReviewFile == null then
+          command
+        else
+          pkgs.writeShellScript "lx-annotate-reviewed-identity-migration" ''
+            exec ${command} --review-file ${lib.escapeShellArg cfg.django.identitySaltMigrationReviewFile}
+          '';
       TimeoutStartSec = "15m";
       Nice = 10;
       IOWeight = 10;

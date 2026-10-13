@@ -106,7 +106,7 @@ in
     cuda = mkBoolOpt false "Add CUDA packages to custom packages";
     # NCCL is built from source when the exact derivation is not cached.
     # Keep it opt-in for native consumers; Python wheels manage their own NCCL.
-    # Diagnosis and opt-in procedure: docs/guides/cuda-source-builds.yml.
+    # Diagnosis and opt-in procedure: docs/guides/cuda-source-builds.md.
     videoEditing = mkBoolOpt false "Add Video Editing packages to custom packages";
     visuals = mkBoolOpt false "Add Visuals packages to custom packages";
     dev03 = mkBoolOpt false "Add dev03 packages to custom packages";

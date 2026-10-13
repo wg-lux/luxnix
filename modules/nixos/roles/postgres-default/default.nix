@@ -187,6 +187,7 @@ let
 
 in
 {
+  imports = [ ./collation-repair.nix ];
   options.roles.postgres.default = {
     enable = mkEnableOption "Enable common configuration";
     postgresqlEnable = mkEnableOption "Enable PostgreSQL";

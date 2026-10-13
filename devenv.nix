@@ -81,6 +81,13 @@ in
 
   git-hooks.hooks = {
     ansible-lint.enable = true;
+    structure = {
+      enable = true;
+      name = "context structure";
+      entry = "${uvPackage}/bin/uv run --locked python scripts/lint_structure.py";
+      always_run = true;
+      pass_filenames = false;
+    };
     nix-quality = {
       enable = true;
       name = "nix-quality";

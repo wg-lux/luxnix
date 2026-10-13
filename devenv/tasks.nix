@@ -67,9 +67,15 @@
     exec = "${pkgs.uv}/bin/uv run pytest -q tests/test_documentation_contract.py";
   };
 
+  "context:check" = {
+    description = "Validate hierarchical context manifests and reference integrity";
+    exec = "${pkgs.uv}/bin/uv run python scripts/lint_structure.py";
+  };
+
   "tests:pytest" = {
     description = "Run the repository Python test suite";
     exec = "${pkgs.uv}/bin/uv run pytest -q";
+    after = [ "context:check" ];
   };
 
   "repo:state-summary" = {

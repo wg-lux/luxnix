@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
+import json
+import os
+import subprocess
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -59,3 +62,53 @@ def test_shell_helpers_do_not_delete_gc_roots_or_print_managed_secrets() -> None
     assert "rm /nix/var/nix/gcroots" not in reviewed_text
     assert "SCRT_local_password_admin_password" not in reviewed_text
     assert "inspect-gcroots" in reviewed_text
+
+
+def test_native_rebuild_aliases_and_ssh_session_preservation(tmp_path):
+    expression = f'''
+      let f = builtins.getFlake "git+file://{REPO_ROOT}";
+          a = f.homeConfigurations."admin@gc-02".config.programs.zsh.shellAliases;
+          c = f.nixosConfigurations.gc-02.config;
+      in {{
+        aliases = {{ inherit (a) nho nhb nhu; }};
+        stopIfChanged = c.systemd.services.sshd.stopIfChanged;
+        killMode = c.systemd.services.sshd.serviceConfig.KillMode;
+        passwordAuth = c.services.openssh.settings.PasswordAuthentication;
+      }}
+    '''
+    evaluated = subprocess.run(["nix", "eval", "--impure", "--json", "--expr", expression],
+                               capture_output=True, text=True, check=True)
+    contract = json.loads(evaluated.stdout)
+    assert contract["stopIfChanged"] is False
+    assert contract["killMode"] == "process"
+    assert contract["passwordAuth"] is False
+    for name in ("sudo", "nix"):
+        executable = tmp_path / name
+        executable.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
+        executable.chmod(0o700)
+    env = {**os.environ, "PATH": f"{tmp_path}:{os.environ['PATH']}",
+           "LUXNIX_FLAKE": "/reviewed checkout/$(false)", "LUXNIX_HOST": "gc-02"}
+    for alias, action in (("nho", "switch"), ("nhb", "boot")):
+        result = subprocess.run(["bash", "-c", contract["aliases"][alias]],
+                                env=env, capture_output=True, text=True)
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.splitlines() == ["nixos-rebuild", action, "--flake",
+                                             "/reviewed checkout/$(false)#gc-02"]
+        missing_host = {key: value for key, value in env.items() if key != "LUXNIX_HOST"}
+        result = subprocess.run(["bash", "-c", contract["aliases"][alias]],
+                                env=missing_host, capture_output=True, text=True)
+        assert result.returncode != 0 and not result.stdout
+    result = subprocess.run(["bash", "-c", contract["aliases"]["nhu"]],
+                            env=env, capture_output=True, text=True)
+    assert result.returncode == 0
+    assert result.stdout.splitlines() == ["flake", "update", "--flake", env["LUXNIX_FLAKE"]]
+
+
+def test_managed_rebuild_checks_a_fresh_connection():
+    import yaml
+    handlers = yaml.safe_load((REPO_ROOT / "ansible/roles/managed/handlers/main.yml").read_text())
+    checks = [h for h in handlers if h.get("listen") == "Run nho"]
+    reset = next(i for i, h in enumerate(checks) if h.get("ansible.builtin.meta") == "reset_connection")
+    reconnect = next(i for i, h in enumerate(checks) if "ansible.builtin.wait_for_connection" in h)
+    assert reset < reconnect
+    assert checks[reconnect]["ansible.builtin.wait_for_connection"]["timeout"] == 120

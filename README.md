@@ -10,53 +10,39 @@ LuxNix is a NixOS configuration framework for reproducible multi-host deployment
 | Browse operator and contributor guides | [Documentation Home](docs/index.md) · [Documentation Map](TABLE_OF_CONTENTS.md) |
 | Inspect paths, workflows, commands, and risks as data | [Project Map](luxnix.yml) · [Developer Command Catalog](devenv/commands.yml) |
 
-## Quick Start
+## Inspect the repository
 
-The final install command can repartition the target. Complete the
-[Getting Started](docs/getting-started.md) checklist and confirm both the host
-and target address before running it.
+To read the guides, open [Documentation Home](docs/index.md) in your Git
+browser or local Markdown viewer. Running LuxNix requires Nix with flakes
+enabled; contributor tasks also require Devenv.
 
 ```bash
-# Clone
 git clone https://github.com/wg-lux/luxnix.git
 cd luxnix
 
-# Discover and validate a host configuration (read-only)
+# List the host configurations exported by this checkout
 nix eval --json '.#nixosConfigurations' --apply builtins.attrNames
-nix eval '.#nixosConfigurations.<host>.config.system.build.toplevel.drvPath'
-
-# Build locally without creating a result link or activating it
-nix build '.#nixosConfigurations.<host>.config.system.build.toplevel' --no-link
-
-# Confirm remote connectivity without changing the host
-devenv shell check-connectivity <host>
-
-# Destructive remote install (prepare <staging-root>, replace <host> and <target-ip>)
-nixos-anywhere --extra-files <staging-root> --flake '.#<host>' nixos@<target-ip>
-
-# Post-install switch on host
-nh os switch
-nh home switch
 ```
 
+Success prints a JSON list of host names. To evaluate or build one of them,
+follow [Getting Started](docs/getting-started.md). Evaluation checks whether a
+configuration can be resolved; building prepares its software locally;
+activation applies it to a running machine.
+
 Validate before activation with the evaluation, build, and connectivity
-commands above. If an activated generation is unhealthy, boot a previous NixOS
-generation or run `sudo nixos-rebuild rollback` on the host, then check
-`systemctl --failed` and the affected service. Keep deployment logs for review;
+checks in that guide. Installation can repartition the target, so complete its
+checklist before deploying. If an activated generation is unhealthy, boot a
+previous NixOS generation or run `sudo nixos-rebuild rollback` on the host,
+then check `systemctl --failed` and the affected service. Keep deployment logs;
 do not delete paths directly from `/nix/store`.
 
-Agents and automation should read [`luxnix.yml`](luxnix.yml) first. It provides
-the same entry points as structured data and labels commands that affect local
-or remote state.
+Contributors should start with [Development](docs/development.md) and
+[Nix Quality](docs/nix-quality.md). Change generated host and home outputs
+through their inventory or template inputs. For documentation changes, follow
+[Maintaining documentation](docs/documentation.md).
 
-For contributor checks, use [Nix Quality](docs/nix-quality.md) and
-`devenv tasks run docs:check`; generated host and home outputs must be changed
-through their inventory or template inputs. See the [documentation home](docs/index.md)
-for canonical operational and recovery guides.
-
-Alias notes:
-- `nho` = `nh os switch`
-- `nhh` = `nh home switch`
+Agents and automation should read [`luxnix.yml`](luxnix.yml) first for
+structured paths, ownership, workflows, and command risks.
 
 ## Repository Structure
 
@@ -64,6 +50,7 @@ Alias notes:
 luxnix/
 ├── flake.nix                 # Nix flake entry point
 ├── luxnix.yml                # machine-readable project map and workflows
+├── secrets-management.yml    # central cross-repository rotation catalog
 ├── nix-quality.yml           # Nix quality policy, baselines, and progress
 ├── TABLE_OF_CONTENTS.md      # generated documentation map
 ├── autoconf/                 # centralized pipeline options and intermediates

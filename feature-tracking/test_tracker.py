@@ -14,6 +14,7 @@ from lx_administration.utils.file_operations import (
 )
 from tracker import (
     TRACKING_DIR,
+    NON_FEATURE_FILES,
     Assessment,
     AssessmentStatus,
     Evidence,
@@ -180,7 +181,7 @@ def test_repository_registry_is_valid_and_tracks_current_assessments() -> None:
     feature_paths = tuple(
         path
         for path in TRACKING_DIR.glob("*.yml")
-        if path.name not in {"policy.yml", "schema.example.yml"}
+        if path.name not in NON_FEATURE_FILES
     )
 
     assert len(features) == len(feature_paths)

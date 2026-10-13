@@ -4,6 +4,7 @@ result
 result/
 /autoconf/*
 !/autoconf/config.yml
+!/autoconf/structure.yml
 # direnv
 .direnv
 .devenv_built
@@ -27,7 +28,8 @@ test_wd/
 *.key
 
 # pre-commit
-feature-tracking/
+/feature-tracking/*
+!/feature-tracking/structure.yml
 untracked-notes.md
 node_modules/
 .vscode

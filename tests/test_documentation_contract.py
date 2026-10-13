@@ -42,7 +42,11 @@ def _documentation_files() -> list[Path]:
         REPO_ROOT / "modules/nixos/luxnix/generic-settings/readme.md",
         *(REPO_ROOT / "modules/nixos/services/lx-annotate-local").glob("*.md"),
     ]
-    return sorted(DOCS_DIR.glob("*.md")) + sorted(module_docs)
+    return (
+        sorted(DOCS_DIR.glob("*.md"))
+        + sorted((DOCS_DIR / "guides").glob("*.md"))
+        + sorted(module_docs)
+    )
 
 
 def _matches_exclude_pattern(target: str, pattern: str) -> bool:
@@ -186,30 +190,34 @@ def test_machine_support_map_exposes_human_and_agent_entry_points() -> None:
 
 def test_network_docs_use_inventory_as_the_single_topology_source() -> None:
     architecture = (DOCS_DIR / "network-architecture.md").read_text(encoding="utf-8")
-    topology = yaml.safe_load(
-        (DOCS_DIR / "network-topology.yaml").read_text(encoding="utf-8")
-    )
+    topology = (DOCS_DIR / "network-topology.md").read_text(encoding="utf-8")
     project_map = yaml.safe_load((REPO_ROOT / "luxnix.yml").read_text())
 
-    assert topology["status"] == "derived-source-map"
-    assert topology["canonical_sources"]["hosts_groups_and_vpn_addresses"] == (
-        "ansible/inventory/hosts.ini"
+    assert "derived-source-map" in topology
+    assert (
+        "| Hosts, groups, and VPN addresses | `ansible/inventory/hosts.ini` |"
+        in topology
     )
     assert "Clients" not in topology
     assert "Permissions" not in topology
     assert "vpn_ip" not in topology
 
-    for source in topology["canonical_sources"].values():
+    canonical_sources = topology.split("## Canonical sources", 1)[1].split(
+        "## Generated consumers", 1
+    )[0]
+    sources = re.findall(r"\| `([^`]+)` \|", canonical_sources)
+    assert len(sources) == 6
+    for source in sources:
         assert (REPO_ROOT / source).exists()
         assert source in architecture
 
     assert "./network-resolution.md" in architecture
-    assert "./network-topology.yaml" in architecture
+    assert "./network-topology.md" in architecture
     for stale_claim in ("homelab.haseebmajid.dev", "vpn.luxnix.org", "Tailscale"):
         assert stale_claim not in architecture
 
     assert project_map["paths"]["network_topology_map"] == (
-        "docs/network-topology.yaml"
+        "docs/network-topology.md"
     )
     assert project_map["support"]["network_architecture"] == (
         "docs/network-architecture.md"
@@ -217,11 +225,12 @@ def test_network_docs_use_inventory_as_the_single_topology_source() -> None:
     assert project_map["support"]["network_resolution"] == (
         "docs/network-resolution.md"
     )
-    assert topology["visualization"] == {
-        "entrypoint": "topology/default.nix",
-        "source": "flake.nix nixosConfigurations",
-        "rule": "Do not duplicate static hosts or networks in the topology module.",
-    }
+    for required in (
+        "topology/default.nix",
+        "flake.nix nixosConfigurations",
+        "Do not duplicate static hosts or networks in the topology module.",
+    ):
+        assert required in topology
     assert "topology/default.nix" in architecture
     assert "nixosConfigurations" in architecture
 

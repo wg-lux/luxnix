@@ -109,11 +109,48 @@ Use these terms consistently:
 - `lx-annotate-local`: the current lx-annotate service implementation.
 - `local_endoreg_db`: deprecated Ansible role name; do not use for current configuration.
 
+## gc-02 automatic collation repair
+
+`roles.postgres.default.automaticCollationRepair` is enabled only in gc-02's
+canonical inventory. The `postgresql-collation-repair.service` runs after
+PostgreSQL provisioning and before local EndoReg setup. It checks the managed
+databases plus `postgres` and `template1`, rebuilding user and system indexes
+only when the recorded default collation version differs. It refreshes the
+recorded version only after both rebuilds succeed. Matching versions are a no-op.
+Database names are quoted as SQL identifiers. `template0`, unmanaged databases,
+and individually versioned named collations are outside this repair's scope.
+
+This is maintenance that can extend application startup, consume disk space,
+and block database queries while rebuilding indexes. Preserve the normal backup
+schedule and use a maintenance window for the first deployment. Lock waits are
+limited to 30 seconds, individual statements to one hour, and the unit to two
+hours. Failures remain visible and block local application setup; no version
+refresh hides an incomplete repair. Databases containing collatable partition
+keys or materialized views require manual review because reindexing alone cannot
+repair those stored results. Remote consumers are not stopped by this unit.
+See [PostgreSQL collation maintenance](https://www.postgresql.org/docs/16/sql-altercollation.html).
+
+## Reviewed salt migration on gc-02
+
+The automatic background migration already retries independently verified groups.
+gc-02's October 12 inspection found 15 blocked groups and three pending examiner
+mappings; missing source evidence and placeholder identities cannot be safely
+reconstructed by NixOS. The application remains active while these await review.
+
+`services.luxnix.lxAnnotateLocal.django.identitySaltMigrationReviewFile` optionally
+passes an absolute private YAML path to the packaged command's `--review-file`
+argument. Supply only reviewed evidence in the application's validated schema,
+with private permissions and access for the service account. Keep the contents
+out of inventory, Git, and the Nix store. An absent configured file or invalid
+evidence must fail, not silently fall back. No review file is configured until
+real reviewed evidence exists. This option does not replace salts, remove retiring
+keys, invent identity metadata, or suppress incomplete-migration errors.
+
 ## Validation
 
 Run `pytest tests/lx-annotate/test_database_ownership.py` for ownership, endpoint
 precedence, credential aliases, conflicts and removed-option rejection. Cluster
 and inventory consumers are covered in `test_lx_annotate_nix_eval_contract.py`.
 The original investigation is retained in
-[the ownership audit](guides/lx-annotate-configuration-ownership-audit.yml).
+[the ownership audit](guides/lx-annotate-configuration-ownership-audit.md).
 Configuration tests do not establish cold-boot success or queued-import completion.

@@ -82,6 +82,13 @@
   vars:
     ansible_become_user: root
   tasks:
+    - name: Require the requested site to be an active configured hub client
+      ansible.builtin.assert:
+        that: >-
+          fleet_enrollment_site is not defined or
+          fleet_enrollment_site in (groups.active_clients | intersect(groups.gpu_client) | intersect(groups.endoreg_client))
+        fail_msg: 'The requested site must belong to active_clients, gpu_client and endoreg_client.'
+
     - name: Select only sites that passed connectivity and preflight
       ansible.builtin.set_fact:
         fleet_reachable: >-
@@ -256,6 +263,25 @@
             name: lx-annotate-hub-envelope-key-preflight.service
             state: restarted
 
+        - name: Refresh receiver identities after installing node secrets
+          ansible.builtin.systemd_service:
+            name: lx-annotate-hub-node-provisioning.service
+            state: restarted
+          delegate_to: '{{ enrollment_hub }}'
+
+        - name: Refresh sender identities after installing node secrets
+          ansible.builtin.systemd_service:
+            name: lx-annotate-hub-node-provisioning.service
+            state: restarted
+
+        - name: Start the enrolled application and transfer worker
+          ansible.builtin.systemd_service:
+            name: '{{ item }}'
+            state: started
+          loop:
+            - lx-annotate.service
+            - lx-annotate-celery-hub-transfer-worker.service
+
         - name: Record credential deployment and authentication success
           ansible.builtin.set_fact:
             fleet_enrollment_status: enrolled
@@ -271,6 +297,10 @@
   hosts: gs-02
   gather_facts: false
   become: false
+  vars:
+    fleet_report_sites: >-
+      {{ [fleet_enrollment_site] if fleet_enrollment_site is defined else
+         groups.active_clients | intersect(groups.gpu_client) | intersect(groups.endoreg_client) | sort }}
   tasks:
     - name: Clear the token from host facts
       ansible.builtin.set_fact:
@@ -280,10 +310,10 @@
     - name: Report per-site outcomes without secret material
       ansible.builtin.debug:
         msg: '{{ item }}: {{ hostvars[item].fleet_enrollment_status | default("not-run") }}'
-      loop: '{{ groups.active_clients | intersect(groups.gpu_client) | intersect(groups.endoreg_client) | sort }}'
+      loop: '{{ fleet_report_sites }}'
 
     - name: Require success for all configured reachable sites
       ansible.builtin.assert:
         that: hostvars[item].fleet_enrollment_status | default('not-run') in ['enrolled', 'unreachable']
         fail_msg: 'Some sites failed. Offline sites may be retried later; configuration, credential and deployment failures require investigation.'
-      loop: '{{ groups.active_clients | intersect(groups.gpu_client) | intersect(groups.endoreg_client) | sort }}'
+      loop: '{{ fleet_report_sites }}'

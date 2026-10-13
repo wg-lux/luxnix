@@ -5,7 +5,7 @@ Start with the [project map](luxnix.yml) for canonical paths and the
 metadata. Generated NixOS and Home Manager files are diagnostic outputs; fix
 their inventory sources and regenerate them instead of editing them directly.
 
-## `nho` / `nh os switch` permission denied
+## `nho` / native rebuild permission denied
 
 Cause:
 
@@ -14,10 +14,13 @@ Cause:
 Fix:
 
 ```bash
-sudo nh os switch
-# fallback
 sudo nixos-rebuild switch --flake .#<host>
 ```
+
+`nho` now runs native `nixos-rebuild switch` with sudo, using `LUXNIX_FLAKE`
+and `LUXNIX_HOST`. Apply Home Manager and open a new shell to replace the old
+alias. A `test` activation rejection from `nh` is intentional for LX-Annotate;
+use the native command instead. See [SSH deployment checks](docs/deployment-guide.md#ssh-access-during-updates).
 
 ## Host missing expected packages or services
 

@@ -19,6 +19,13 @@ let
   managedTlsCfg = serverCfg.managedTls;
   hubPkiCfg = serverCfg.hubPki;
   clientHubPkiCfg = cfg.client.hubPki;
+  centerIdentitySites = pkgs.writeText "lx-hub-center-identities.json" (
+    builtins.toJSON (builtins.listToAttrs (map (node: {
+      name = "${node.nodeKey}.${hubPkiCfg.allowedDnsSuffix}";
+      value = node.centerKey;
+    }) (builtins.filter (node: node.role == "site_node" && node.centerKey != null)
+      config.services.luxnix.lxAnnotateLocal.hub.nodeProvisioning.nodes)))
+  );
   clientHubPkiSecretDirectories = lib.unique [
     (builtins.dirOf clientHubPkiCfg.nodeSecretFile)
     (builtins.dirOf clientHubPkiCfg.recipientPublicKeyFile)
@@ -368,6 +375,7 @@ let
         local node_fqdn="$1"
         local role=""
         local policy=""
+        local center_key=""
 
         case "$node_fqdn" in
           ""|*[!a-z0-9.-]*|.*|*..*|*.)
@@ -382,6 +390,29 @@ let
           echo "ERROR: site is contained; reconciliation cannot restore access." >&2
           return 1
         fi
+
+        center_key="$(${pkgs.jq}/bin/jq -r --arg node "$node_fqdn" '.[$node] // empty' ${centerIdentitySites})"
+        if [ -n "$center_key" ]; then
+          case "$center_key" in
+            *[!A-Za-z0-9_-]*)
+              echo "ERROR: configured center key is invalid for identity enrollment." >&2
+              return 1
+              ;;
+          esac
+          # Only the custodian creates center material. Site policies remain read-only.
+          if ! vault kv get -field=salt "$kv_mount/centers/$center_key/identity" \
+            >/dev/null 2> "$state_file"; then
+            if ! ${pkgs.gnugrep}/bin/grep -Fq 'No value found at' "$state_file"; then
+              echo "ERROR: center identity lookup failed; refusing replacement." >&2
+              return 1
+            fi
+            if ! ${pkgs.openssl}/bin/openssl rand -hex 32 \
+              | vault kv put -cas=0 "$kv_mount/centers/$center_key/identity" salt=- >/dev/null; then
+              vault kv get -field=salt "$kv_mount/centers/$center_key/identity" >/dev/null
+            fi
+          fi
+        fi
+
 
         vault write "$mount/roles/$role" \
           allowed_domains="$node_fqdn" \
@@ -408,6 +439,12 @@ let
           "path \"$kv_mount/data/$recipient_public_key_kv_path\" {" \
           '  capabilities = ["read"]' \
           '}' > "$policy_file"
+        if [ -n "$center_key" ]; then
+          ${pkgs.coreutils}/bin/printf '%s\n' \
+            "path \"$kv_mount/data/centers/$center_key/identity\" {" \
+            '  capabilities = ["read"]' \
+            '}' >> "$policy_file"
+        fi
         vault policy write "$policy" "$policy_file" >/dev/null
         ${pkgs.coreutils}/bin/rm -f "$policy_file"
         policy_file=""

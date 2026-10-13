@@ -487,11 +487,11 @@ and build:
 
 ```bash
 # On gs-02
-nh os switch . -- --accept-flake-config
+sudo nixos-rebuild switch --flake . --accept-flake-config
 systemctl restart lx-annotate-hub-node-provisioning.service
 
 # On the site
-nh os switch . -- --accept-flake-config
+sudo nixos-rebuild switch --flake . --accept-flake-config
 systemctl reset-failed vault-auth-setup.service
 systemctl restart vault-auth-setup.service
 ```
@@ -650,7 +650,7 @@ otherwise incomplete local center relationships.
    devenv tasks run autoconf:generate
    nix eval '.#nixosConfigurations.gs-02.config.system.build.toplevel.drvPath'
    nix build '.#nixosConfigurations.gs-02.config.system.build.toplevel' --no-link
-   nh os switch . -- --accept-flake-config
+   sudo nixos-rebuild switch --flake . --accept-flake-config
    ```
 
 5. Verify the audited one-shot on `gs-02`:
@@ -927,6 +927,34 @@ From the clean, reviewed LuxNix controller checkout, run:
 ```bash
 devenv shell enroll-reachable-hub-sites
 ```
+
+Enrollment also refreshes receiver and sender database identities and starts the
+site application and transfer worker before reporting success. Starting the
+worker can resume existing queued work. A failure in these steps remains a failed
+enrollment; rerun after correcting the reported blocker. Successful enrollment
+does not establish that every local recording has transferable metadata.
+
+For a single-machine setup or retry, select gc-09 explicitly:
+
+```bash
+devenv shell enroll-reachable-hub-sites --site gc-09 --ask-become-pass
+```
+
+This includes the required hub gs-02 and checks, enrolls, and reports only
+gc-09. Other sites' preflight failures do not block this run. The site must
+belong to all three enrollment inventory groups; arbitrary Ansible patterns
+and extra options are rejected.
+
+If an older run showed `failed-enrollment` followed by skipped reconciliation
+and delivery tasks, update the reviewed controller checkout before retrying.
+That version rechecked a block condition after changing its own status to
+failure, skipping the actual enrollment. The corrected playbook preserves
+target selection separately. Existing valid enrollment bundles are reused;
+do not delete credentials or rotate identities just to retry. On gc-09,
+`sudo luxnix-vault-enrollment-status` must report `ready` and
+`systemctl is-active luxnix-vault-issue-hub-client-certificate.timer` must
+report `active` after success. The transfer acceptance checks below are still
+required.
 
 The command selects the intersection of `active_clients`, `gpu_client`, and
 `endoreg_client` in the canonical inventory. It validates each site's evaluated

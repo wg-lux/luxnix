@@ -1,0 +1,45 @@
+version: 1
+tier: domain
+path: tests
+parent: ../structure.yml
+summary: Root-scoped Python contracts, service suites and explicit Nix evaluation or VM lanes.
+responsibilities:
+- Test configuration ownership, generators and administration interfaces
+- Keep independent MCP tests outside root discovery
+boundaries:
+- Source checks do not prove deployment readiness
+- Nix evaluation and VM tests are separate from the fast Python lane
+entrypoints:
+- name: secret-rotation-contracts
+  file: test_secret_rotation_catalog.py
+  purpose: Verify catalog boundaries, gate order and missing source rejection.
+- name: pytest-config
+  file: ../pyproject.toml
+  purpose: Inspect pytest config ownership and interfaces.
+- name: configuration-suite
+  file: run-configuration-tests.sh
+  purpose: Inspect configuration suite ownership and interfaces.
+- name: autoconf-map
+  file: autoconf.yml
+  purpose: Inspect autoconf map ownership and interfaces.
+- name: context-contracts
+  file: test_structure.py
+  purpose: Inspect context contracts ownership and interfaces.
+dependencies:
+  internal:
+  - lx_administration
+  - modules
+  - scripts
+  external:
+  - pytest
+  - nixtest
+  - NixOS VMs
+submodules: []
+contracts:
+- name: testing-nixtests
+  doc: ../docs/testing-nixtests.md
+- name: README
+  doc: nixtest/README.md
+tests:
+  directory: .
+  command: python -m pytest -q tests/test_structure.py tests/test_test_layout_contract.py

@@ -22,7 +22,7 @@ runpath fixups are preserved. Global CUDA support for other applications is
 unchanged, and `programs.obs-studio.package` remains overridable. The evaluated
 feature and dependency comparison in `tests/test_package_cache_contract.py`
 must pass when updating nixpkgs. See the
-[build diagnosis](../../../../../docs/guides/cuda-source-builds.yml) for evidence.
+[build diagnosis](../../../../../docs/guides/cuda-source-builds.md) for evidence.
 
 Host cache additions belong to `luxnix.generic-settings.nix.extraSubstituters`
 and `extraTrustedPublicKeys`. They merge with NixOS's standard cache at normal

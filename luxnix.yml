@@ -31,6 +31,8 @@ risk_levels:
   destructive-remote: May overwrite, delete, or repartition data on remote hosts.
 
 paths:
+  secret_rotation_catalog: secrets-management.yml
+  secret_rotation_check: scripts/check-secret-rotation.py
   flake: flake.nix
   host_configurations: systems/x86_64-linux
   home_configurations: homes/x86_64-linux
@@ -67,7 +69,7 @@ paths:
   development_command_catalog: devenv/commands.yml
   nix_quality_policy: nix-quality.yml
   nix_quality_runner: scripts/nix-quality.py
-  network_topology_map: docs/network-topology.yaml
+  network_topology_map: docs/network-topology.md
 
 quality:
   generator_tests:
@@ -372,6 +374,7 @@ workflows:
       - Can repartition and install the target machine according to the host configuration.
 
 support:
+  secret_rotation: docs/secret-rotation.md
   documentation_home: docs/index.md
   command_catalog: devenv/commands.yml
   manual_operations: scripts/manual-operations.yml

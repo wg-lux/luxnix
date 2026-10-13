@@ -25,9 +25,19 @@ with ctx;
     description = "Trigger SAP IS-H zip conversion when SAP drops exist";
     wantedBy = [ "multi-user.target" ];
     pathConfig = {
-      PathExistsGlob = [ "${runtimeSapImportDirPath}/*.zip" ];
+      PathChanged = [ runtimeSapImportDirPath ];
       Unit = "lx-annotate-sap-import.service";
       MakeDirectory = true;
+    };
+  };
+  systemd.timers.lx-annotate-sap-import = {
+    description = "Retry pending SAP IS-H zip imports";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "2m";
+      OnUnitInactiveSec = "5m";
+      RandomizedDelaySec = "30s";
+      Unit = "lx-annotate-sap-import.service";
     };
   };
 }
