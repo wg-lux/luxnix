@@ -40,6 +40,12 @@ and application services and wheel maintenance wrappers include the package in
 symlink is required. Wheel builds (`make package`) do not bundle these native
 dependencies; the NixOS service closure supplies them.
 
+The same service and wrapper paths provide `ffmpeg` and `ffprobe` from
+`pkgs.ffmpeg-headless`. Its libraries also enter the existing native library
+path. The package must supply `libx264` and `h264_nvenc`; using NVENC additionally
+requires the configured host NVIDIA driver and GPU. These native executables
+come from the Nix store, without Python wheel replacements or dependency overrides.
+
 The Endoreg role delegates to this service default unless its
 `runtime.tessdataPrefix` is explicitly set. Apply the NixOS configuration through
 the normal deployment process to update running services. The corresponding

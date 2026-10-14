@@ -32,6 +32,8 @@ dependencies:
   - Django
   - PostgreSQL
   - systemd
+  - FFmpeg and FFprobe
+  - Tesseract
   - Vault
   - mTLS
 submodules: []

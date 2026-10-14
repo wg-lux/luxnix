@@ -60,7 +60,7 @@
       ansible.builtin.command:
         argv: [/run/current-system/sw/bin/python3, '{{ fleet_helper.path }}/ensure_site_enrollment.py']
         stdin: >-
-          {{ {'token': hostvars[enrollment_hub].fleet_admin_token.user_input,
+          {{ {'token': hostvars[enrollment_hub].fleet_enrollment_token.user_input,
               'site': inventory_hostname ~ '.intern', 'installed': fleet_installed,
               'kv_mount': (hostvars[enrollment_hub].fleet_hub_eval.stdout | from_json).kv,
               'recipient_path': (hostvars[enrollment_hub].fleet_hub_eval.stdout | from_json).recipient} | to_json }}

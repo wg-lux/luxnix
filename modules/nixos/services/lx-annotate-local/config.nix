@@ -167,6 +167,10 @@ let
     if cfg.runtime.wheelhousePath == null then "" else toString cfg.runtime.wheelhousePath;
   wheelDependencyOverrides = cfg.runtime.wheelDependencyOverrides;
   wheelDependencyOverrideArgs = lib.concatStringsSep " " wheelDependencyOverrides;
+  mediaRuntimePackages = [
+    cfg.runtime.tesseractPackage
+    pkgs.ffmpeg-headless
+  ];
   wheelDependencyOverrideHash = builtins.hashString "sha256" (
     lib.concatStringsSep "\n" wheelDependencyOverrides
   );
@@ -191,14 +195,16 @@ let
     set -euo pipefail
 
     export PATH="${
-      lib.makeBinPath [
-        pkgs.coreutils
-        pkgs.findutils
-        pkgs.gnused
-        pkgs.rsync
-        pkgs.util-linux
-        cfg.runtime.tesseractPackage
-      ]
+      lib.makeBinPath (
+        [
+          pkgs.coreutils
+          pkgs.findutils
+          pkgs.gnused
+          pkgs.rsync
+          pkgs.util-linux
+        ]
+        ++ mediaRuntimePackages
+      )
     }:''${PATH:-}"
 
     lx_annotate_wheel_read_required_secret() {
@@ -577,7 +583,7 @@ let
   runtimeLdLibraryPath = lib.concatStringsSep ":" (
     runtimeHostDriverLibraryPaths
     ++ [
-      (lib.makeLibraryPath (runtimeLibraryPackages ++ [ pkgs.ffmpeg ]))
+      (lib.makeLibraryPath (runtimeLibraryPackages ++ [ pkgs.ffmpeg-headless ]))
     ]
   );
   monitoringDeploymentRevision =
@@ -953,7 +959,7 @@ let
       requires = appServiceBaseRequires ++ requires;
       unitConfig = encryptedDataMountUnitConfig // unitConfig;
       environment = commonExtraEnv // environment;
-      path = [ cfg.runtime.tesseractPackage ];
+      path = mediaRuntimePackages;
       serviceConfig = {
         User = endoreg-service-user-name;
         Group = endoreg-service-group-name;
@@ -1605,6 +1611,7 @@ let
       celeryBeatService
       cfg
       commonExtraEnv
+      mediaRuntimePackages
       config
       dataCleanupScript
       dataRecoveryServiceUnits

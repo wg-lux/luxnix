@@ -10,6 +10,9 @@ boundaries:
 - Source checks do not prove deployment readiness
 - Nix evaluation and VM tests are separate from the fast Python lane
 entrypoints:
+- name: encrypted-data-mount-contract
+  file: lx-annotate/test_encrypted_data_mount.py
+  purpose: Execute rendered mount guards against matching and mismatched encrypted-volume probes.
 - name: secret-rotation-contracts
   file: test_secret_rotation_catalog.py
   purpose: Verify catalog boundaries, gate order and missing source rejection.

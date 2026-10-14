@@ -1149,6 +1149,8 @@ let
 
     auth_error="$(${pkgs.coreutils}/bin/mktemp ${lib.escapeShellArg runtimeDir}/.vault-auth-error.XXXXXX)"
     trap '${pkgs.coreutils}/bin/rm -f "$auth_error"' EXIT
+    # Only newly authenticated credentials may establish readiness.
+    rm -f ${lib.escapeShellArg runtimeEnvironmentFile} ${lib.escapeShellArg runtimeTokenFile}
     if ! ${vaultAuthSetupScript} 2> "$auth_error"; then
       rm -f ${lib.escapeShellArg runtimeEnvironmentFile} ${lib.escapeShellArg runtimeTokenFile}
       auth_state="$(${vaultAuthErrorClassifierTool}/bin/luxnix-vault-classify-auth-error "$auth_error")"
@@ -1977,7 +1979,7 @@ in
             if cfg.client.auth.deferUntilProvisioned then
               "${pkgs.coreutils}/bin/true"
             else
-              vaultAuthSetupScript;
+              vaultAuthProvisioningConditionScript;
           ExecStop = vaultAuthCleanupScript;
           Environment = lib.optionals cfg.client.allowOffline [
             "VAULT_CLIENT_TIMEOUT=5s"

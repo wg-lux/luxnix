@@ -2,10 +2,26 @@
 set -euo pipefail
 umask 077
 usage() {
-  echo 'Usage: devenv shell enroll-reachable-hub-sites [--site gc-09] [--ask-become-pass] (interactive hidden prompts)' >&2
-  exit 2
+  cat <<'EOF'
+Usage: devenv shell enroll-reachable-hub-sites [--site gc-09] [--ask-sudo-password]
+
+Run as the controller's normal administrator, from a reviewed LuxNix checkout.
+--site HOST           Enroll one configured site and use gs-02 as its hub.
+                      Without this option, consider every configured active site.
+--ask-sudo-password   Ask privately for the Linux login account's sudo password
+                      separately on each reachable site and on gs-02.
+                      Different hosts may have different passwords.
+--ask-become-pass     Legacy option: Ansible asks once for a shared sudo password.
+--help               Show this help without connecting to any host.
+
+SSH keys and verified host keys must already work from this controller to each
+target, including gs-02. A sudo password does not authenticate SSH or Vault.
+After access checks, enter the short-lived Vault enrollment token at its hidden
+prompt. Vault must already be initialized and unsealed. An unseal share is not
+an enrollment token. See docs/vault-hub-machine-enrollment.md for prerequisites.
+EOF
+  exit "${1:-2}"
 }
-[[ -t 0 ]] || usage
 site=''
 prompt=()
 while [[ $# -gt 0 ]]; do
@@ -15,14 +31,21 @@ while [[ $# -gt 0 ]]; do
       site="$2"
       shift 2
       ;;
+    --ask-sudo-password)
+      [[ ${#prompt[@]} -eq 0 ]] || usage
+      prompt=(-e fleet_prompt_sudo_password=true)
+      shift
+      ;;
     --ask-become-pass)
       [[ ${#prompt[@]} -eq 0 ]] || usage
       prompt=(--ask-become-pass)
       shift
       ;;
+    --help|-h) usage 0 ;;
     *) usage ;;
   esac
 done
+[[ -t 0 ]] || usage
 scope=(--limit gs-02:active_clients)
 if [[ -n "$site" ]]; then
   scope=(--limit "gs-02:$site" -e "fleet_enrollment_site=$site")

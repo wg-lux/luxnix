@@ -1,90 +1,144 @@
-schema_version: "1.0"
+schema_version: '1.0'
 id: frame_cleaner_integration
 name: FrameCleaner deployment integration
-description: >-
-  Deploy lx-anonymizer FrameCleaner with compatible lx-data-models contracts and
-  an attempt-scoped runtime boundary without transferring persistence or
-  publication authority away from endoreg-db. One deployed invocation processes
-  one immutable source into one unpublished attempt-owned candidate; LuxNix
-  supplies compatible packages and runtime capabilities but does not own
-  durable attempts, retries, publication, or cleanup.
+description: Deploy lx-anonymizer FrameCleaner with compatible lx-data-models contracts and an attempt-scoped
+  runtime boundary without transferring persistence or publication authority away from endoreg-db. One
+  deployed invocation processes one immutable source into one unpublished attempt-owned candidate; LuxNix
+  supplies compatible packages and runtime capabilities but does not own durable attempts, retries, publication,
+  or cleanup.
 owners:
-  - LuxNix maintainers
+- LuxNix maintainers
 production_critical: true
+tracking:
+  state: active
+  history: []
 source_documents:
-  - path: docs/system-feature-tracking.md
-    disposition: reference
-    note: Defines provider identity, immutable specifications, and deployed resolution.
-  - path: modules/nixos/services/lx-annotate-local/Publishing.md
-    disposition: reference
-    note: Defines coordinated lx-dtypes, lx-anonymizer, and host-package publication.
+- path: docs/system-feature-tracking.md
+  disposition: reference
+  note: Defines provider identity, immutable specifications, and deployed resolution.
+- path: modules/nixos/services/lx-annotate-local/Publishing.md
+  disposition: reference
+  note: Defines coordinated lx-dtypes, lx-anonymizer, and host-package publication.
 definition_of_done:
-  - id: compatible_packages
-    category: requirements
-    title: FrameCleaner and its shared contracts are deployed as a compatible set
-    acceptance:
-      - The selected lx-anonymizer package contains the public FrameCleaner video entry point.
-      - The selected lx-dtypes package contains the VideoMeta and frame-analysis contracts consumed by FrameCleaner.
-      - Package updates that cross this boundary are pinned and evaluated together before host activation.
-    required: true
-    verification:
-      kind: manual
-      instructions: Evaluate the target host closure and inspect the resolved lx-anonymizer and lx-dtypes package versions.
-      timeout_seconds: 600
-  - id: runtime_capabilities
-    category: operations
-    title: The host supplies explicit video-processing capabilities
-    acceptance:
-      - FFmpeg and FFprobe are present in the FrameCleaner runtime environment.
-      - Hardware acceleration is enabled only when the target host and packaged backend support it.
-      - CPU execution remains an explicit supported deployment profile rather than an accidental fallback.
-    required: true
-    verification:
-      kind: manual
-      instructions: Inspect the evaluated service environment and run the packaged FrameCleaner smoke check on the target host.
-      timeout_seconds: 600
-  - id: deployed_invocation
-    category: functionality
-    title: The deployed entry point preserves the attempt-scoped processing contract
-    acceptance:
-      - One deployed invocation processes one immutable source into one unpublished attempt-owned candidate.
-      - Caller-selected input and candidate paths cross the packaged application boundary unchanged.
-    required: true
-    verification:
-      kind: manual
-      instructions: Exercise the packaged FrameCleaner entry point with an immutable fixture and inspect the unpublished candidate path.
-      timeout_seconds: 600
-  - id: deployment_smoke_coverage
-    category: testing
-    title: Deployment behavior has focused reproducible coverage
-    acceptance:
-      - A focused smoke check covers the CPU deployment profile and the configured accelerated profile where enabled.
-      - The check fails when FFmpeg, FFprobe, or the typed lx-dtypes contract is unavailable.
-    required: true
-    verification:
-      kind: manual
-      instructions: Run the packaged FrameCleaner smoke checks against the evaluated target closure and record exact package versions and results.
-      timeout_seconds: 600
-  - id: ownership_boundary
-    category: security
-    title: Deployment preserves attempt ownership and fail-closed publication
-    acceptance:
-      - Each concurrent attempt constructs a separate FrameCleaner instance.
-      - Caller-selected immutable input and attempt-owned candidate paths cross the service boundary unchanged.
-      - A failed or cancelled invocation cannot publish a partial candidate as canonical media.
-    required: true
-    verification:
-      kind: manual
-      instructions: Review the deployed endoreg-db invocation path against the video import concurrency contract and its focused tests.
-      timeout_seconds: 600
-  - id: deployment_contract_documented
-    category: documentation
-    title: Package compatibility and ownership boundaries are documented
-    acceptance:
-      - The deployed lx-anonymizer and lx-dtypes compatibility set is reviewable before activation.
-      - Documentation states that LuxNix supplies packages and runtime capabilities but does not own attempts, retries, publication, or cleanup.
-    required: true
-    verification:
-      kind: manual
-      instructions: Review the feature specification and publishing documentation against the evaluated deployment boundary.
-      timeout_seconds: 600
+- id: compatible_packages
+  category: requirements
+  title: FrameCleaner and its shared contracts are deployed as a compatible set
+  acceptance:
+  - The selected lx-anonymizer package contains the public FrameCleaner video entry point.
+  - The selected lx-dtypes package contains the VideoMeta and frame-analysis contracts consumed by FrameCleaner.
+  - Package updates that cross this boundary are pinned and evaluated together before host activation.
+  required: true
+  verification:
+    kind: manual
+    instructions: Evaluate the target host closure and inspect the resolved lx-anonymizer and lx-dtypes
+      package versions.
+    timeout_seconds: 600
+  assessment:
+    status: not_assessed
+    evidence: []
+- id: runtime_capabilities
+  category: operations
+  title: The host supplies explicit video-processing capabilities
+  acceptance:
+  - FFmpeg and FFprobe are present in the FrameCleaner runtime environment.
+  - Hardware acceleration is enabled only when the target host and packaged backend support it.
+  - CPU execution remains an explicit supported deployment profile rather than an accidental fallback.
+  required: true
+  verification:
+    kind: manual
+    instructions: Inspect the evaluated service environment and run the packaged FrameCleaner smoke check
+      on the target host.
+    timeout_seconds: 600
+  assessment:
+    status: in_progress
+    evidence:
+    - kind: test
+      reference: '2026-10-14: python -m pytest tests/lx-annotate/test_lx_annotate_ocr_runtime.py -q: 5
+        passed in 27.16s; real Nix evaluation/build and bare ffmpeg/ffprobe execution using web/pipeline/frame-extraction/ffmpeg
+        service PATH.'
+    - kind: command
+      reference: '2026-10-14: focused Pyright 0 errors/0 warnings; Ruff passed; nixfmt applied; git diff
+        --check passed; structure lint 23 manifests. Evaluated FFmpeg 8.1.2 includes h264_nvenc and libx264
+        encoders; no GPU encoding performed.'
+    - kind: command
+      reference: '2026-10-14: selected gc-10 services.lx-annotate.package built without activation: /nix/store/c8aa82mbpa0rljm8bh78jik38wdd0wd3-lx-annotate-wheel-runtime-1.5.2.
+        Exact FFmpeg 8.1.2 candidate NVENC smoke on gc-10: exit 0, stderr empty.'
+    - kind: test
+      reference: '2026-10-14 final focused runtime + module-layout check: 6 passed, 1 failed in 33.63s.
+        All five runtime tests pass, including real wrapper with empty PATH. Existing layout test expects
+        38 leaf modules; committed HEAD already contains 40 after exclusions. No service leaves added
+        by this patch.'
+    - kind: test
+      reference: '2026-10-14 headless provider: .devenv/state/venv/bin/pytest tests/lx-annotate/test_lx_annotate_ocr_runtime.py
+        -q --tb=short: 5 passed in 24.20s. Evaluated gc-10 service PATH and built empty-PATH wrapper resolve
+        ffmpeg/ffprobe to ffmpeg-headless-8.1.2-bin; executable version checks and libx264/h264_nvenc
+        encoder presence passed; Tesseract 5.5.2 includes deu/eng.'
+    - kind: command
+      reference: '2026-10-14 headless provider: focused Pyright 0 errors/0 warnings; Ruff, nixfmt --check,
+        git diff --check, structure lint 23 and devenv tasks run docs:check passed. No remote activation
+        or headless GPU encode performed.'
+    assessed_by: codex-endoreg-binaries-01a1398f
+    assessed_at: '2026-10-14T09:37:46.945603Z'
+- id: deployed_invocation
+  category: functionality
+  title: The deployed entry point preserves the attempt-scoped processing contract
+  acceptance:
+  - One deployed invocation processes one immutable source into one unpublished attempt-owned candidate.
+  - Caller-selected input and candidate paths cross the packaged application boundary unchanged.
+  required: true
+  verification:
+    kind: manual
+    instructions: Exercise the packaged FrameCleaner entry point with an immutable fixture and inspect
+      the unpublished candidate path.
+    timeout_seconds: 600
+  assessment:
+    status: not_assessed
+    evidence: []
+- id: deployment_smoke_coverage
+  category: testing
+  title: Deployment behavior has focused reproducible coverage
+  acceptance:
+  - A focused smoke check covers the CPU deployment profile and the configured accelerated profile where
+    enabled.
+  - The check fails when FFmpeg, FFprobe, or the typed lx-dtypes contract is unavailable.
+  required: true
+  verification:
+    kind: manual
+    instructions: Run the packaged FrameCleaner smoke checks against the evaluated target closure and
+      record exact package versions and results.
+    timeout_seconds: 600
+  assessment:
+    status: not_assessed
+    evidence: []
+- id: ownership_boundary
+  category: security
+  title: Deployment preserves attempt ownership and fail-closed publication
+  acceptance:
+  - Each concurrent attempt constructs a separate FrameCleaner instance.
+  - Caller-selected immutable input and attempt-owned candidate paths cross the service boundary unchanged.
+  - A failed or cancelled invocation cannot publish a partial candidate as canonical media.
+  required: true
+  verification:
+    kind: manual
+    instructions: Review the deployed endoreg-db invocation path against the video import concurrency
+      contract and its focused tests.
+    timeout_seconds: 600
+  assessment:
+    status: not_assessed
+    evidence: []
+- id: deployment_contract_documented
+  category: documentation
+  title: Package compatibility and ownership boundaries are documented
+  acceptance:
+  - The deployed lx-anonymizer and lx-dtypes compatibility set is reviewable before activation.
+  - Documentation states that LuxNix supplies packages and runtime capabilities but does not own attempts,
+    retries, publication, or cleanup.
+  required: true
+  verification:
+    kind: manual
+    instructions: Review the feature specification and publishing documentation against the evaluated
+      deployment boundary.
+    timeout_seconds: 600
+  assessment:
+    status: not_assessed
+    evidence: []

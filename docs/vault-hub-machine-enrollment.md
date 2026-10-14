@@ -1,86 +1,194 @@
-# Add a Machine to Vault-Backed Hub Transfer
+# Vault-backed hub enrollment
 
-This runbook enrolls a new site node, written below as `<host>`, into the
-`gs-02` LX-Annotate hub and bootstraps the first audited
-Django superuser on the hub when one is required. It applies to the current
-LuxNix `gpu_client`/`endoreg_client` inventory model. Run secret-handling
-commands as `root`. Never put unseal keys, Vault tokens, AppRole Secret IDs,
-private keys, node shared secrets, application master keys, or passwords in
-Git, Nix, terminal arguments, logs, or chat.
+Use this guide to enroll configured site machines into the `gs-02` hub or repair
+an existing enrollment. Run the controller command as the normal administrator
+from a clean, reviewed LuxNix checkout outside `/tmp`. The command requests root
+privileges on the targets itself. Clinical video approval is a separate workflow.
 
-This is an operator runbook. Clinical users must not perform these steps. A
-machine is ready only after the configuration, key, service, identity, and
-disposable-transfer checks at the end of this guide all pass.
+## What you need before starting
+
+The **controller** is the machine where you run the command. The **site** sends
+recordings; the **hub** receives them. Moving the checkout to another controller
+does not move SSH authorization, sudo permissions or Vault credentials.
+
+| Requirement | What it means and where it is used |
+| --- | --- |
+| Controller SSH key | The controller's administrator must already connect to every selected site and `gs-02`, including when the controller is `gs-02` itself. Each target must authorize that public key. Keep private keys on their owning machine. |
+| Verified SSH host keys | `conf/ssh-host-keys/known_hosts` must contain verified server identities. These pins authenticate servers; they do not grant administrator login. Never disable host-key checking to fix access. |
+| Linux sudo password | The password of the SSH login account, normally `admin`, **on the named target**. It permits running commands as root. Hosts can have different passwords. It is neither an SSH key nor a Vault credential. |
+| Vault unseal shares | Custodian recovery material used only when Vault is sealed. Unsealing makes the existing Vault available; it does not authenticate an enrollment operator. |
+| Vault enrollment token | A short-lived token supplied by the Vault owner with reviewed enrollment permissions. Enter it at the hidden prompt after host checks. A site AppRole credential, unseal share or Linux password cannot replace it. |
+| Installed services and configuration | Hub bootstrap/enrollment commands and site installer already deployed; matching centers and receiver identities configured; protected storage available; private tmpfs staging and encrypted or disabled swap. |
+
+Ansible calls privilege elevation **become**. In this workflow that means sudo
+to root. Its native variables `ansible_become_user` and
+`ansible_become_password` retain their Ansible names. The legacy
+`--ask-become-pass` option means **ask once for one shared sudo password**.
+Prefer `--ask-sudo-password`, which asks separately for each reachable host.
+Omit both only when the target accounts already have noninteractive sudo access.
+Do not pass passwords with `-e`, save them in inventory, or paste them into chat.
+
+## Enroll a configured site
+
+1. Verify the controller's access and reviewed configuration before obtaining
+   a Vault token. Replace `gc-09` consistently with the intended site:
+
+   ```bash
+   devenv shell vault-site-preflight gc-09 --controller
+   devenv shell check-connectivity gc-09
+   devenv shell check-connectivity gs-02
+   ```
+
+   The preflight is local and read-only. It checks inventory, source cleanliness,
+   evaluated configuration, receiver identities and SSH pins. The connectivity
+   command checks SSH and remote command execution, not sudo or Vault access.
+   A reachable machine from another laptop is not proof of controller access.
+
+2. Have the Vault custodian confirm that the existing Vault is initialized and
+   unsealed, then provide a short-lived enrollment token using the approved
+   private handoff. See the Vault access procedure below. LuxNix does not
+   provision a human login method or an enrollment-administrator policy: the
+   Vault owner must establish those first. A bare `vault token create` is not
+   the enrollment procedure and can inherit the issuing token's broad policy.
+
+3. Run from the controller's normal administrator shell:
+
+   ```bash
+   devenv shell enroll-reachable-hub-sites --site gc-09 --ask-sudo-password
+   ```
+
+   Enter the Linux sudo password for each host named in the hidden prompts.
+   Then review the displayed target scope, hub address, revision and lock digest
+   before entering the **Vault enrollment token**. No token prompt is shown if
+   no site passes prerequisites. Use `--help` to inspect options without connections.
+
+4. Read the per-site results. `enrolled` means credential installation,
+   authentication, certificate and key checks, database node provisioning, and
+   application/transfer-worker startup succeeded. Starting workers may resume
+   queued work. It does not approve clinical recordings or prove a completed
+   transfer. Complete the deployment acceptance checks below.
+
+To consider all configured active sites, omit `--site`. Selection is the
+intersection of `active_clients`, `gpu_client` and `endoreg_client`. Unreachable
+sites are reported separately and can be retried later. A run fails if no site
+enrolls or any selected reachable site fails. Correct the first reported blocker
+and rerun the same scoped command: valid credentials and saved bundles are reused.
+Do not delete identities to force a retry. Enrollment does not activate a new
+NixOS configuration or rotate existing node secrets, salts or media keys.
+
+## Troubleshooting enrollment
+
+| Result or message | Check and next action |
+| --- | --- |
+| SSH connection closed / connection timed out | Check controller VPN route, SSH login account, authorized controller public key and server host-key pin. `unreachable` does not prove the host is powered off. A sudo password or new Vault token cannot repair SSH. |
+| Incorrect sudo password / failed-prerequisite | Use the Linux password for the named target account, not the controller's password. Use `--ask-sudo-password` for differing passwords. Also verify that `/dev/shm` is tmpfs. |
+| failed-connectivity | Inspect the failed remote command and configured Python interpreter. Ansible's ping module tests remote execution; it is not an ICMP network ping. |
+| failed-preflight | Correct the reported inventory, receiver center, source-state or trust mismatch before issuing credentials. |
+| Vault connection refused at 127.0.0.1 | Set `VAULT_ADDR` and `VAULT_CACERT` in the shell actually running Vault. Environment settings in a different shell do not apply. |
+| Vault sealed | Ask the custodian to unseal the existing Vault. Never initialize it again as an access repair. |
+| Vault permission denied | Verify the token's approved policy and lifetime with its issuer. Do not substitute an unrestricted root token. |
+| failed-enrollment | Inspect the first failed task and restricted service logs. Saved bundles remain available for retry; re-enrollment is not breach recovery. |
 
 ## Expired site client certificate
 
-Scope and readiness evidence belong to
-[`luxnix_secret_lifecycle_readiness.yml`](https://github.com/wg-lux/luxnix/blob/main/feature-tracking/luxnix_secret_lifecycle_readiness.yml).
-
-On 6 October 2026, read-only inspection on **gc-02** found that its hub-transfer
-client certificate expired on **10 September 2026 at 08:13:59 UTC (10:13:59 CEST)**.
-The CA-verified Vault health endpoint was reachable but returned `sealed: true`.
-The certificate issuer reported `fresh Vault AppRole authentication failed`,
-and systemd refused to start the transfer worker because that dependency failed.
-The two reported video jobs queued on 25 September had zero attempts and no
-`last_attempt_at`. This establishes the observed blocker, not when Vault first
-became sealed. `queued` / **Eingeplant (25%)** is a workflow stage, not byte progress.
-
-The repository requests 720-hour client certificates, renews within seven days
-of expiry, and schedules checks every 12 hours with up to 15 minutes of jitter.
-The gc-02 inventory still had the temporary `deferUntilProvisioned` exception:
-it suppressed automatic startup of the renewal timer, which was inactive during
-inspection. The gc-02 configuration now sets the exception to `false` for its
-enrolled sender identity. **Restore and verify Vault authentication before
-activating that configuration.** This setting deliberately makes authentication
-failures block startup; it does not unseal Vault or repair credentials.
-
-Read-only checks on gc-02 (never print the private key or runtime environment):
+On the site, inspect public certificate dates and renewal state:
 
 ```bash
 sudo openssl x509 -in /var/lib/lx-annotate/hub-pki/client.crt -noout -dates
-sudo openssl x509 -in /var/lib/lx-annotate/hub-pki/client.crt -noout -checkend 604800
-sudo curl --silent --show-error --connect-timeout 5 --max-time 15 \
-  --cacert /etc/secrets/vault/hub-pki/vault-server-ca.pem \
-  https://vault.endo-reg.net:8200/v1/sys/health
 sudo luxnix-vault-enrollment-status
 systemctl list-timers 'luxnix-vault-issue-hub-client-certificate*' --all
-systemctl show luxnix-vault-issue-hub-client-certificate.service \
-  lx-annotate-celery-hub-transfer-worker.service -p Id -p ActiveState -p Result
-sudo journalctl --namespace=+lx-annotate \
-  -u luxnix-vault-issue-hub-client-certificate.service \
-  -u lx-annotate-celery-hub-transfer-worker.service -n 60 --no-pager
 ```
 
-Recovery requires an authorized Vault custodian to unseal the existing Vault
-on gs-02 using the approved recovery ceremony. Do not initialize a replacement
-Vault or copy unseal shares onto either server. After health reports
-`initialized: true` and `sealed: false`, an authorized operator runs on gc-02:
+Restore Vault availability and valid AppRole authentication first. After correcting
+the blocker, restart `vault-auth-setup.service` and require enrollment status
+`ready`, then restart `luxnix-vault-issue-hub-client-certificate.service` and
+start its timer. Verify the renewed certificate and transfer worker dependencies.
+An enrollment deferral is for initial provisioning; do not retain it to suppress
+renewal failures. Never write the enrollment status file manually.
+
+## Transfer health failures after activation
+
+The export health service checks the persisted export ledger. Payload rejection
+can remain even when Vault, certificates and node provisioning are healthy.
+Read the application journal before changing credentials:
 
 ```bash
-sudo systemctl restart vault-auth-setup.service
-sudo luxnix-vault-enrollment-status
+sudo journalctl --namespace=+lx-annotate -u lx-annotate-hub-export-health.service -n 30 --no-pager
 ```
 
-Stop unless enrollment reports `ready`. If authentication is rejected, use the
-authenticated enrollment procedure below; do not replace credentials blindly.
-Then continue, stopping at any failed command:
+Use the export overview to inspect the recording's blocker. Complete metadata,
+anonymization and segment review, then wait for cleanup and export proof. For
+missing frame provenance on otherwise usable media, use **Frame-Herkunft
+reparieren** in Hub Export. Preview and explicitly save an unresolved mapping;
+available original timestamps and known recording start/end remain in endoreg-db.
+This permits an otherwise eligible transfer while disabling electrical-data
+matching. It does not clear cleanup failures or content mismatches. See the
+[backend recovery contract](https://github.com/wg-lux/endoreg-db/blob/main/docs/video_storage_normalization.md#recover-usable-media-with-unresolved-frame-mapping).
+Deploy matching shared contracts and applications on both sender and receiver. Never invent provenance,
+set readiness flags in SQL, delete failed ledger entries or bypass clinical review.
+Salt rotation does not reconstruct provenance or complete review gates.
 
-```bash
-sudo systemctl restart managed-secrets-setup.service
-sudo systemctl restart luxnix-vault-issue-hub-client-certificate.service
-sudo openssl x509 -in /var/lib/lx-annotate/hub-pki/client.crt -noout -checkend 604800
-sudo systemctl restart lx-annotate-hub-node-provisioning.service
-sudo systemctl start lx-annotate-celery-hub-transfer-worker.service
-```
+Retry the existing transfer only after eligibility and payload checks pass.
+Preserve its identity and audit history. Verify a matching receiver receipt for
+the current artifact, then rerun the export health service and require zero
+critical failures. A historical completion does not validate changed media.
+See the [clinical transfer guide](clinical-hub-transfer-guide.md) and
+[application export workflow](https://github.com/wg-lux/lx-annotate/blob/main/docs/guides/hub-export-workflow.md).
 
-Build and deploy the reviewed gc-02 configuration through the normal deployment
-workflow, then verify that the renewal timer is active, the transfer worker is
-running, and the existing jobs reach `completed` with matching hub receipts.
-The recovery timer dispatches onto the same `hub_transfer` queue; successful
-dispatch alone does not prove recovery while its consumer is stopped. Do not
-purge that queue or create replacement transfer jobs. Certificate renewal cannot
-succeed while Vault remains sealed, regardless of the timer configuration.
+## Application interface requirements
+
+The application owns these changes; LuxNix supplies runtime and worker health.
+Extend the existing overview and backend contracts instead of creating a second
+readiness implementation.
+
+1. Add a **Needs action** filter with counts and a per-row **Next step** button.
+   Include videos without transfer jobs. Distinguish processing, anonymization
+   review, segment review, cleanup, identity evidence, provenance, integrity,
+   operator marking and transport readiness. A generic “not ready for export”
+   does not tell the operator which page or person can resolve the blocker.
+2. Return structured blocker codes and allowed actions from shared backend
+   validators. The current `resolve_video_hub_export_state` checks approval and
+   artifact/hash readiness; it does not establish every payload requirement.
+   A stored `persisted_verified` state must not imply that all current payload
+   checks passed. Add a guarded complete preflight using the
+   same identity/provenance/payload rules as the sender, with media leases where
+   required; distinguish stored metadata from freshly verified bytes. Preflight
+   must not mark, approve, reset or queue a video.
+3. Deep-link **Review anonymization**, **Review segments**, **Check export
+   readiness** and **Repair processing** to the selected video, retaining the
+   originating filter and a return link. Add ID selection to the repair overview
+   if needed; do not rely on filenames as identifiers. Missing originals block source reprocessing but permit explicit unresolved
+   provenance acknowledgment. Missing identity evidence still requires
+   **Request administrator recovery**.
+4. Show cleanup task age, last observed progress, queue/worker availability and
+   whether the task is actually observed. Preserve “unknown” when inspection
+   cannot establish liveness. Provide a permission-checked **Inspect recovery**
+   preview for old queued/running jobs. Reuse the existing job dispatcher and
+   operation guards after review; it can expire old histories and roll back
+   frame artifacts, so this must not be an automatic UI timeout or bulk reset.
+5. Keep preflight, clinical approval, marking and sending separate. Show the
+   specific reason beside a disabled action, support keyboard focus, announce
+   asynchronous completion/errors, and preserve selection after refresh. Display
+   workflow stages as stages; the existing percentage must not imply bytes sent.
+   Completion requires the matching receiver receipt for the current artifact.
+
+Implementation entrypoints in LX-Annotate are
+`frontend/src/components/Export/HubExportOverviewComponent.vue`,
+`frontend/src/stores/hubExportStore.ts`,
+`frontend/src/components/VideoExamination/VideoExaminationAnnotation.vue`,
+`frontend/src/components/Anonymizer/VideoBackfillRepairPanel.vue`,
+`frontend/src/router/index.ts`, and `lx_annotate/hub/hub_export_state.py` /
+`hub_export_payloads.py`. Reuse endoreg-db's
+`services/annotations/segment_validation_workflow.py` and
+`services/jobs/video_post_validation_jobs.py` for cleanup semantics.
+
+Acceptance tests should cover a stored-ready video with missing provenance, a
+missing-original acknowledgment and source-reprocessing refusal, missing identity hashes, completed cleanup
+without export proof, stale versus live jobs, permission-denied actions, and a
+video with no outbound job. Verify deep-link selection and keyboard navigation;
+preflight must not change approvals or queue work, and retry must preserve the
+existing transfer identity. The provenance-recovery panel is shared by the video examination and Hub Export
+pages; its source implementation requires matching application and contract releases.
 
 ## Identities and keys
 
@@ -90,7 +198,7 @@ substitute one for another.
 | Material | Purpose | Authoritative location | May leave that location? |
 | --- | --- | --- | --- |
 | Vault Shamir unseal shares | Unlock Vault after a restart | Authorized custodians | Never install on `gs-02` or any site node |
-| Temporary Vault operator token | Reconcile PKI, AppRole, and node secrets | Operator session on `gs-02` | No; unset immediately after use |
+| Vault enrollment token | Reconcile PKI, AppRole, and node secrets | Operator session on `gs-02` | No; unset immediately after use |
 | Vault server CA | Authenticate `vault.endo-reg.net` | `/var/lib/luxnix-vault-pki/ca.crt` on `gs-02`; pinned copy on each site | Public certificate; deliver through an authenticated channel and verify its fingerprint separately |
 | Vault AppRole Role ID and Secret ID | Authenticate one site to Vault | `/etc/secrets/vault/hub-pki/approle_role_id` and `approle_secret_id` on that site | Only in the encrypted, host-specific enrollment delivery |
 | Hub-transfer client certificate and key | mTLS identity of one site | `/var/lib/lx-annotate/hub-pki/client.crt` and `client.key` on that site | Certificate may be inspected; private key must remain on that site |
@@ -154,13 +262,22 @@ devenv shell check-connectivity <host>
 Do not issue credentials when either command fails. Correct the canonical YAML
 or source-state problem, regenerate when necessary, and rerun the checks.
 
-## 1. Check and unseal Vault
+## 1. Check and unseal Vault (custodian procedure)
 
 In this deployment, `gs-02` is configured as the central hub. On a trusted
 `gs-02` session, set the local authenticated endpoint before checking state:
 
+First run **only** this command and wait for the root shell prompt:
+
 ```bash
 sudo -i
+```
+
+Then run the following **inside that root shell**. Do not paste `sudo -i` and
+these commands together: they can run in the original shell after root exits.
+A successful Linux sudo login does not authenticate to Vault.
+
+```bash
 export VAULT_ADDR="https://172.16.255.22:8200"
 export VAULT_CACERT=/var/lib/luxnix-vault-pki/ca.crt
 vault status
@@ -230,7 +347,10 @@ denied` when the issuer is not allowed to assign the requested policy; that is
 an authorization blocker, not a reason to use the initial root token casually
 or weaken the policy.
 
-Keep the token only in this shell environment. Do not pass it as a command-line
+For the manual procedures below, keep the token only in this shell environment.
+For controller enrollment, use the approved private handoff to its hidden prompt;
+the wrapper deliberately ignores an inherited `VAULT_TOKEN`. The custodian
+retains a trusted session for revocation. Do not pass it as a command-line
 argument, save it in `~/.vault-token`, write it to a file, paste it into chat,
 or enable shell tracing. When bootstrap or enrollment is complete, revoke it
 before closing the shell:
@@ -486,14 +606,14 @@ configuration. Use the same durable repository revision that passed evaluation
 and build:
 
 ```bash
-# On gs-02
-sudo nixos-rebuild switch --flake . --accept-flake-config
-systemctl restart lx-annotate-hub-node-provisioning.service
+# On gs-02, from the reviewed checkout
+sudo nixos-rebuild switch --flake .#gs-02 --accept-flake-config
+sudo systemctl restart lx-annotate-hub-node-provisioning.service
 
-# On the site
-sudo nixos-rebuild switch --flake . --accept-flake-config
-systemctl reset-failed vault-auth-setup.service
-systemctl restart vault-auth-setup.service
+# On the site, replace <host> with its explicit flake hostname
+sudo nixos-rebuild switch --flake ".#<host>" --accept-flake-config
+sudo systemctl reset-failed vault-auth-setup.service
+sudo systemctl restart vault-auth-setup.service
 ```
 
 If a site configuration was deliberately switched before its enrollment files
@@ -650,7 +770,7 @@ otherwise incomplete local center relationships.
    devenv tasks run autoconf:generate
    nix eval '.#nixosConfigurations.gs-02.config.system.build.toplevel.drvPath'
    nix build '.#nixosConfigurations.gs-02.config.system.build.toplevel' --no-link
-   sudo nixos-rebuild switch --flake . --accept-flake-config
+   sudo nixos-rebuild switch --flake .#gs-02 --accept-flake-config
    ```
 
 5. Verify the audited one-shot on `gs-02`:
@@ -891,7 +1011,7 @@ root-only command bypasses a still-valid cached certificate and forces fresh
 authentication and issuance. Its runtime marker remains after failure and is
 removed only after the new files are installed; after a reboot, rerun the command
 while containment remains. Verify new identity acceptance and a disposable transfer before
-removing receiver/network containment. Revoke the operator token afterward.
+removing receiver/network containment. Revoke the Vault enrollment token afterward.
 These steps do not revoke application/database sessions or rotate encryption
 master keys. Record containment and recovery timestamps in the incident record.
 
@@ -920,118 +1040,7 @@ its Vault access and mTLS identity, remove its secret delivery, and mark the
 receiver-side `NetworkNode` inactive. Do not delete completed transfer evidence
 or reuse the removed node key for another physical machine.
 
-## Enroll all reachable configured sites with one token
-
-From the clean, reviewed LuxNix controller checkout, run:
-
-```bash
-devenv shell enroll-reachable-hub-sites
-```
-
-Enrollment also refreshes receiver and sender database identities and starts the
-site application and transfer worker before reporting success. Starting the
-worker can resume existing queued work. A failure in these steps remains a failed
-enrollment; rerun after correcting the reported blocker. Successful enrollment
-does not establish that every local recording has transferable metadata.
-
-For a single-machine setup or retry, select gc-09 explicitly:
-
-```bash
-devenv shell enroll-reachable-hub-sites --site gc-09 --ask-become-pass
-```
-
-This includes the required hub gs-02 and checks, enrolls, and reports only
-gc-09. Other sites' preflight failures do not block this run. The site must
-belong to all three enrollment inventory groups; arbitrary Ansible patterns
-and extra options are rejected.
-
-If an older run showed `failed-enrollment` followed by skipped reconciliation
-and delivery tasks, update the reviewed controller checkout before retrying.
-That version rechecked a block condition after changing its own status to
-failure, skipping the actual enrollment. The corrected playbook preserves
-target selection separately. Existing valid enrollment bundles are reused;
-do not delete credentials or rotate identities just to retry. On gc-09,
-`sudo luxnix-vault-enrollment-status` must report `ready` and
-`systemctl is-active luxnix-vault-issue-hub-client-certificate.timer` must
-report `active` after success. The transfer acceptance checks below are still
-required.
-
-The command selects the intersection of `active_clients`, `gpu_client`, and
-`endoreg_client` in the canonical inventory. It validates each site's evaluated
-Vault configuration, matching hub receiver record, and pinned SSH identity,
-then checks connectivity. It displays the reachable targets, hub address,
-checkout revision, and locked-input digest. Enter the Vault administrator token
-at the hidden prompt to authorize that displayed scope. No token, fingerprint,
-or bundle needs to be pasted into command arguments or configuration files.
-A host's remote checkout may differ from the controller checkout: this workflow
-uses preflight's `--controller` mode for credential delivery, without performing
-a NixOS activation. Source cleanliness and identity checks still apply.
-
-Prerequisites are an initialized, unsealed Vault on `gs-02`, the existing hub
-bootstrap/enrollment commands and site installer deployed, pinned SSH access,
-and root sudo access on hub and sites. When they share a sudo password, use
-`devenv shell enroll-reachable-hub-sites --ask-become-pass`: Ansible requests
-the password once at a hidden prompt before discovery. This password is separate
-from the Vault token requested after discovery. Omit the option only when sudo
-is already noninteractive. The shared password must work on every selected
-reachable host; hosts with different passwords need separately configured,
-protected per-host Ansible become credentials. The controller needs its
-usual private mode-0700 tmpfs runtime directory. Remote Ansible staging uses
-private per-operation directories on `/dev/shm`; the workflow verifies tmpfs
-before transmitting credentials. Swap must be encrypted or disabled. Use a
-short-lived enrollment-administration token with the capabilities described
-above, including AppRole Secret ID lookup for validating existing credentials.
-The command does not initialize or unseal Vault and never saves the admin token.
-It does not revoke the supplied token, which may be shared with the operator's
-session; let its bounded TTL expire or revoke it after the run.
-
-The workflow bootstraps the hub engines and recipient public key with the
-existing identity-preserving command. It reads the Vault CA fingerprint directly
-from the configured hub trust anchor over pinned SSH, independently of the
-bundle. For each reachable site it:
-
-1. Reuses valid installed AppRole credentials or the protected saved bundle.
-   A new bundle is created only when no AppRole identity is available. Existing
-   node secrets and hub recipient keys are preserved.
-2. Validates the saved credentials against Vault, checks the receiver's node
-   secret, and refuses containment markers, revoked credentials, conflicting
-   identities, symlinks, and unprotected files.
-3. Delivers the bundle using the shared fingerprint-pinned installer and copies
-   the matching receiver node secret. Identical installed files are not rewritten.
-   It also installs the authenticated X25519 recipient public key.
-4. Refreshes site authentication, requires enrollment status `ready`, issues a
-   client certificate only when renewal is needed, starts the renewal timer,
-   and validates the envelope key.
-
-Repeat runs preserve credential values; authentication and service checks may
-run again. An interrupted delivery can resume from the hub's root-only bundle
-at `/root/vault-enrollment/<host>`. The fleet workflow retains these bundles as
-its reconciliation cache, unlike the temporary manual-delivery copies discussed
-above. Treat them as production credentials: root-owned mode-0700 directories,
-mode-0400 files, and approved encrypted custodian backups. Removing a cache
-is safe only after verified delivery and backup; a subsequent run can rebuild
-it from valid installed site credentials. Never remove a partial cache simply
-to force creation of another identity. If initial credential issuance fails
-before a complete AppRole pair is saved, the next run stops for custodian
-recovery rather than silently issuing replacement credentials.
-
-The final report lists each configured site's outcome. Unreachable sites are
-skipped and can be enrolled by running the same command after they reconnect.
-Configuration, credential, or activation failures produce a nonzero exit status;
-one site's enrollment failure does not prevent attempts on the other reachable
-sites. A hub bootstrap failure stops the whole run. Contained identities remain
-under the separate incident recovery procedure.
-
-`enrolled` means credentials were deployed and authentication, certificate
-issuance, and envelope-key validation succeeded. It does not claim an accepted
-application transfer. Follow the activation and acceptance procedure above for
-node database provisioning and transfer verification. Sites still configured
-with `deferUntilProvisioned = true` need that host-scoped setting removed through
-the normal generated configuration rollout to retain automatic timer startup
-after reboot. This command starts the timer for the current boot and does not
-modify inventory or activate new NixOS configurations.
-
-### Hub administrator SSH access
+## Controller SSH authorization
 
 `hub_enrollment_admin_access` in the inventory scopes the existing `gs-02`
 administrator public key to `gs-02` and `gc-09`. Its group YAML supplies
@@ -1042,136 +1051,21 @@ allocation disabled; Ansible command execution remains available.
 For initial access from a controller that already has administrator access, use
 `ansible/playbooks/deploy_hub_admin_access.yml` through the protected playbook
 wrapper with the explicit `--limit gs-02,gc-09`. Supply the current sudo password
-through Ansible's protected become-password handling, never a literal command
+through Ansible's hidden sudo-password prompt (`--ask-become-pass`), never a literal command
 argument. The playbook appends the same public key to each administrator's
 persistent `~/.ssh/authorized_keys`, preserves other keys, and protects the SSH
 directory/file with modes 0700/0600. It does not copy private keys, restart SSH,
 activate NixOS, or change sudo policy. Preview with `--check --diff` first.
 
-The existing trusted controller connection was used to verify and record the
-hub's host public key in `conf/ssh-host-keys/known_hosts`. Client host pins and
+Verify and record server host public keys through an existing trusted channel in `conf/ssh-host-keys/known_hosts`. Client host pins and
 administrator login keys serve different purposes; both must be valid.
 
 Removing this authorization requires removing both the declarative key and the
 initial-access entry in `~/.ssh/authorized_keys`. Passwordless SSH does not imply
-passwordless sudo: use the optional hidden `--ask-become-pass` prompt when
+passwordless sudo: use the enrollment command's hidden `--ask-sudo-password` prompts when
 root access requires a password.
 
-### Repeat the workflow on gs-02
-
-Run the following as **admin on gs-02**, in `/home/admin/dev/luxnix`.
-The controller workflow does not need local sudo. Its Ansible connections,
-including the connection back to gs-02, use the remote administrator password.
-For the current gs-02/gc-09 setup, both hosts share that password. The separate
-local sudo password on the original administration machine is not used here.
-Do not copy password files or private SSH keys into the checkout.
-
-1. Use the reviewed version of this checkout containing
-   `scripts/enroll-reachable-hub-sites.sh` with `--ask-become-pass` support.
-   Check the source before starting; `git status --short` must produce no output.
-   If there are local edits, review and preserve them before updating. Do not
-   bypass the clean-checkout check or reset local work.
-
-   ```bash
-   cd /home/admin/dev/luxnix
-   git status --short
-   git log -1 --oneline
-   sha256sum flake.lock
-   ```
-
-2. Load the existing gs-02 administrator key in this terminal if needed, then
-   verify pinned SSH access. The gs-02 public key has already been installed
-   additively on gs-02 and gc-09; do not generate a replacement key.
-
-   ```bash
-   eval "$(ssh-agent -s)"
-   ssh-add ~/.ssh/id_ed25519
-   devenv shell check-connectivity gs-02 -e ansible_python_interpreter=/run/current-system/sw/bin/python3
-   devenv shell check-connectivity gc-09 -e ansible_python_interpreter=/run/current-system/sw/bin/python3
-   ```
-
-   These commands test SSH, not sudo. Use the pinned registry at
-   `conf/ssh-host-keys/known_hosts` when testing SSH manually. Never disable
-   host-key checking to fix a connection failure.
-
-3. Unseal the existing Vault using your custodian procedure. Do not initialize
-   a new Vault. Verify its health using the existing CA:
-
-   ```bash
-   sudo curl --silent --show-error --connect-timeout 5 --max-time 15 \
-     --cacert /var/lib/luxnix-vault-pki/ca.crt \
-     https://172.16.255.22:8200/v1/sys/health
-   ```
-
-   Require `initialized: true` and `sealed: false`. Obtain your authorized
-   short-lived enrollment admin token. Unseal shares, the Vault admin token,
-   and the Linux sudo password are three different credentials.
-
-4. Start enrollment:
-
-   ```bash
-   devenv shell enroll-reachable-hub-sites --ask-become-pass
-   ```
-
-   At `BECOME password:`, enter the shared **Linux administrator password**
-   for gs-02 and gc-09. Ansible keeps it hidden. Discovery then evaluates the
-   fleet and verifies SSH and root access. At `Vault admin token`, review the
-   displayed host names, addresses and revision, then enter the **Vault token**.
-   It is also hidden. If no site passes discovery, there is no token prompt;
-   investigate the earlier failed prerequisite instead of entering a token.
-
-   The command targets every eligible reachable inventory site, not only gc-09.
-   On hosts with a different sudo password, the shared prompt is insufficient;
-   do not change their passwords to work around this. They need protected
-   per-host become credentials before fleet enrollment can succeed there.
-
-5. Read the final per-host report. For gc-09 require `enrolled`, then inspect
-   the deployed state from an ordinary admin login on gc-09:
-
-   ```bash
-   sudo luxnix-vault-enrollment-status
-   sudo openssl x509 -in /var/lib/lx-annotate/hub-pki/client.crt -noout -dates
-   systemctl is-active luxnix-vault-issue-hub-client-certificate.timer
-   systemctl is-failed lx-annotate-hub-envelope-key-preflight.service
-   ```
-
-   Enrollment status must be `ready`, the certificate must be current, the
-   timer must be `active`, and the key preflight must not be failed.
-   `systemctl is-failed` returns nonzero for a healthy unit; a completed oneshot
-   may be inactive. Use `systemctl show` to inspect its `Result` when uncertain.
-   Complete the application activation and acceptance steps earlier in this
-   guide before declaring end-to-end transfer operational. Credential enrollment
-   alone does not provision the application database or prove a transfer.
-
-6. After a failure, correct the reported prerequisite and rerun the same
-   command. Valid credentials and existing hub keys are reused. Do not delete
-   `/root/vault-enrollment/gc-09` or the installed secret files to force a retry.
-   Offline sites can be retried when they reconnect. A failure on another site
-   can make the overall command fail even if gc-09 reports `enrolled`.
-
-Known pending fleet configuration issues from the previous preflight are gc-04
-(missing SSH pin and invalid center), gc-06 (missing SSH pin and receiver-center
-mismatch), and gc-08 (invalid center). These require verified inventory data;
-the workflow deliberately does not invent host keys or center identities.
-Recheck current preflight output before correcting them. Do not equate these
-configuration failures with offline hosts.
-
-### Enrollment tasks skipped after target selection
-
-If a run reports `gc-09: failed-enrollment` with `changed=0`, `rescued=0`, and
-all delivery tasks skipped, check the controller revision. The initial workflow
-used the mutable result status as its block condition. Setting the initial
-failure status made Ansible skip subsequent tasks. The corrected workflow
-captures eligibility in `fleet_site_selected` before entering the block, so
-result changes cannot disable delivery or rescue handling.
-
-Update to the corrected reviewed controller revision, then rerun
-`devenv shell enroll-reachable-hub-sites --ask-become-pass`. No bundle deletion
-or identity rotation is needed. Hub bootstrap may already have run successfully;
-the repeated workflow preserves existing identities. This signature differs
-from a real delivery failure: inspect the first failed task when rescue runs.
-
-### Implementation map
+## Implementation map
 
 | File | Responsibility |
 | --- | --- |
@@ -1181,6 +1075,7 @@ from a real delivery failure: inspect the first failed task when rescue runs.
 | `ansible/playbooks/enroll_reachable_hub_sites.yml` | Discover sites, prompt for the token, bootstrap the hub, deploy and verify each site, report failures. |
 | `scripts/vault/site_enrollment_preflight.py` | Validate source, evaluated configuration, receiver identities and SSH pins. |
 | `scripts/vault/ensure_site_enrollment.py` | Reconcile saved and installed identities against Vault; preserve valid credentials and reject conflicts. |
+| `ansible/playbooks/tasks/hub_enrollment_sudo_password.yml` | Request each host's sudo password without logging or caching it. |
 | `ansible/playbooks/tasks/hub_enrollment_reconcile.yml` | Run reconciliation using protected transport and temporary helpers. |
 | `ansible/playbooks/tasks/hub_enrollment_delivery.yml` | Reuse the shared fingerprint-verified installation procedure. |
 | `ansible/playbooks/deploy_hub_admin_access.yml` | Add the gs-02 public key without replacing existing administrator access. |

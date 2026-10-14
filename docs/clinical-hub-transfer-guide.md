@@ -313,8 +313,50 @@ The browser does not carry the clinical payload to gs-02. It only records the
 authorized user's decision to mark an eligible resource. The server-side worker
 sends the bytes.
 
+## Viewing received data on gs-02
+
+The hub viewer is the existing **lx-annotate-local** application at
+`https://gs-02.intern/`. Its HTTPS origin address is `172.16.255.22:443`;
+there is no separate viewer service. Resolve `gs-02.intern` to
+`172.16.255.22` on the workstation's approved network/VPN and trust the
+managed Vault CA. Sign in through the existing institutional Keycloak flow
+and use the application's media and annotation views with the assigned roles.
+
+An upstream proxy must reach that private address and use `gs-02.intern`
+for both TLS SNI and the upstream Host header, verifying the origin certificate
+against the managed CA. A bare IP URL does not select the same virtual host
+reliably. Port 8117 is the loopback application backend, not the viewer origin.
+
+Registering a future public hostname also requires configuring the application's
+host/origin settings, browser-facing TLS, and the Keycloak client's allowed
+callback URLs for that hostname. DNS alone does not make a private VPN address
+internet-routable. Until those changes are configured, the browser-facing URL
+remains `https://gs-02.intern/` and its callback is
+`https://gs-02.intern/oidc/callback/`.
+
+Read-only checks on 13 October 2026 verified active nginx and lx-annotate
+services, a CA-verified HTTPS connection to the origin, login redirects from
+`/` and `/api/media/videos/`, and a Keycloak authorization redirect from
+`/oidc/authenticate/`. Direct `/media/` access returned 404 and the hub transfer
+route without a client certificate returned 403. These checks did not verify
+a completed institutional login or playback/annotation access for a user.
+
 ## Technical references
 
 - [lx-annotate secure HLS and hub security boundary](./lx-annotate-secure-hls.md)
 - [lx-annotate encrypted data](./lx-annotate-encrypted-data.md)
 - [LuxNix Vault-backed transfer implementation](https://github.com/wg-lux/luxnix/blob/main/modules/nixos/services/lx-annotate-local/README.md#vault-backed-transfer-pki)
+
+## Usable videos with unresolved frame provenance
+
+Use **Frame-Herkunft reparieren** in Hub Export to preview and explicitly record
+an unresolved frame mapping. The same panel is available through **Video für
+Transfer reparieren** on the video examination page. All authenticated users in
+the video's center can use it. Current media hashes, actual processed presentation
+timestamps, available original timestamps, and known recording start/end remain
+in endoreg-db. Electrical-data matching stays unavailable for these records.
+
+The acknowledgment permits an otherwise eligible transfer; it does not complete
+outside-frame blackening, approve anonymization or repair a content mismatch.
+Follow the [backend procedure](https://github.com/wg-lux/endoreg-db/blob/main/docs/video_storage_normalization.md#recover-usable-media-with-unresolved-frame-mapping).
+Sender and hub require matching contract and application releases.

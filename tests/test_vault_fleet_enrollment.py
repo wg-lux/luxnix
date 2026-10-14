@@ -221,6 +221,11 @@ def test_rejects_piped_token_and_arbitrary_arguments():
     "arguments,expected",
     [
         ([], 0),
+        (["--ask-sudo-password"], 0),
+        (["--site", "gc-09", "--ask-sudo-password"], 0),
+        (["--ask-sudo-password", "--site", "gc-09"], 0),
+        (["--ask-sudo-password", "--ask-become-pass"], 2),
+        (["--ask-sudo-password", "--ask-sudo-password"], 2),
         (["--ask-become-pass"], 0),
         (["--site", "gc-09"], 0),
         (["--site", "gc-09", "--ask-become-pass"], 0),
@@ -264,6 +269,9 @@ def test_wrapper_restricts_scope_and_hidden_sudo_prompt(arguments, expected):
             assert ("--ask-become-pass" in forwarded) == (
                 "--ask-become-pass" in arguments
             )
+            assert ("fleet_prompt_sudo_password=true" in forwarded) == (
+                "--ask-sudo-password" in arguments
+            )
             scoped = "--site" in arguments
             assert forwarded[forwarded.index("--limit") + 1] == (
                 "gs-02:gc-09" if scoped else "gs-02:active_clients"
@@ -293,7 +301,7 @@ def test_fleet_scope_transport_and_secret_blocks():
         == plays[2]["hosts"]
         == "active_clients:&gpu_client:&endoreg_client"
     )
-    assert plays[2]["serial"] == 1
+    assert plays[0]["serial"] == plays[2]["serial"] == 1
     secret_tasks = yaml.safe_load(
         (ROOT / "ansible/playbooks/tasks/hub_enrollment_reconcile.yml").read_text()
     )
@@ -303,7 +311,7 @@ def test_fleet_scope_transport_and_secret_blocks():
     assert prompt["no_log"] and prompt["ansible.builtin.pause"]["echo"] is False
     bootstrap = next(t for t in plays[1]["tasks"] if "ansible.builtin.shell" in t)
     assert bootstrap["no_log"] and "stdin" in bootstrap["args"]
-    assert "fleet_admin_token" not in bootstrap["ansible.builtin.shell"]
+    assert "fleet_enrollment_token" not in bootstrap["ansible.builtin.shell"]
     wrapper = (ROOT / "scripts/enroll-reachable-hub-sites.sh").read_text()
     assert "StrictHostKeyChecking=yes" in wrapper
     assert "ANSIBLE_REMOTE_TEMP=/dev/shm" in wrapper
@@ -313,8 +321,9 @@ def test_fleet_scope_transport_and_secret_blocks():
 @pytest.mark.parametrize(
     "status,expected",
     [
-        ("unreachable", 0),
+        ("unreachable", 2),
         ("enrolled", 0),
+        ("mixed", 0),
         ("failed-enrollment", 2),
         ("failed-preflight", 2),
     ],
@@ -342,16 +351,29 @@ def test_real_ansible_summary_reports_failures_and_skips_offline(
                     "hosts": {
                         "gs-02": {
                             "ansible_connection": "local",
-                            "fleet_admin_token": {
+                            "fleet_enrollment_token": {
                                 "user_input": "synthetic-sensitive-token"
                             },
                         },
-                        "gc-09": {"fleet_enrollment_status": status},
+                        "gc-09": {
+                            "fleet_enrollment_status": "enrolled"
+                            if status == "mixed"
+                            else status
+                        },
+                        "gc-08": {"fleet_enrollment_status": "unreachable"},
                         "gc-04": {"fleet_enrollment_status": "failed-preflight"},
                     },
                     "children": {
                         group: {
-                            "hosts": {"gc-09": {}, **({"gc-04": {}} if scoped else {})}
+                            "hosts": {
+                                "gc-09": {},
+                                **({"gc-04": {}} if scoped else {}),
+                                **(
+                                    {"gc-08": {}}
+                                    if status == "mixed" and not scoped
+                                    else {}
+                                ),
+                            }
                         }
                         for group in ["active_clients", "gpu_client", "endoreg_client"]
                     },
@@ -373,11 +395,15 @@ def test_real_ansible_summary_reports_failures_and_skips_offline(
     )
     assert result.returncode == expected, result.stdout + result.stderr
     assert "synthetic-sensitive-token" not in result.stdout + result.stderr
-    assert f"gc-09: {status}" in result.stdout
+    reported_status = "enrolled" if status == "mixed" else status
+    assert f"gc-09: {reported_status}" in result.stdout
+    if status == "mixed" and not scoped:
+        assert "gc-08: unreachable" in result.stdout
     assert "gc-04:" not in result.stdout
 
 
-def test_real_hidden_token_prompt_does_not_log_input(tmp_path):
+@pytest.mark.parametrize("credential", ["token", "sudo"])
+def test_real_hidden_credential_prompt_does_not_log_input(tmp_path, credential):
     import fcntl
     import termios
     import os
@@ -397,12 +423,32 @@ def test_real_hidden_token_prompt_does_not_log_input(tmp_path):
         if "ansible.builtin.pause" in task
         or task["name"] == "Validate token input without logging it"
     ]
+    if credential == "sudo":
+        tasks = yaml.safe_load(
+            (
+                ROOT / "ansible/playbooks/tasks/hub_enrollment_sudo_password.yml"
+            ).read_text()
+        )
+        tasks.append(
+            {
+                "name": "Verify each host received its own password",
+                "ansible.builtin.assert": {
+                    "that": (
+                        "ansible_become_password == 'synthetic-' "
+                        "+ inventory_hostname"
+                    )
+                },
+                "no_log": True,
+            }
+        )
+    hosts = "first,second" if credential == "sudo" else "localhost"
     playbook = tmp_path / "prompt.yml"
     playbook.write_text(
         yaml.safe_dump(
             [
                 {
-                    "hosts": "localhost",
+                    "hosts": hosts,
+                    "serial": 1,
                     "gather_facts": False,
                     "become": False,
                     "tasks": tasks,
@@ -413,7 +459,14 @@ def test_real_hidden_token_prompt_does_not_log_input(tmp_path):
     log = tmp_path / "ansible.log"
     config = tmp_path / "ansible.cfg"
     config.write_text(f"[defaults]\nlog_path = {log}\n")
-    token = b"hvs.synthetic-fleet-test-token"
+    credentials = (
+        [
+            (b"on first (hidden", b"synthetic-first"),
+            (b"on second (hidden", b"synthetic-second"),
+        ]
+        if credential == "sudo"
+        else [(b"Vault enrollment token (hidden", b"hvs.synthetic-fleet-test-token")]
+    )
     master, slave = pty.openpty()
 
     def controlling_terminal():
@@ -421,7 +474,7 @@ def test_real_hidden_token_prompt_does_not_log_input(tmp_path):
         fcntl.ioctl(slave, termios.TIOCSCTTY, 0)
 
     process = subprocess.Popen(
-        [str(ansible), "-i", "localhost,", "-c", "local", str(playbook)],
+        [str(ansible), "-i", hosts + ",", "-c", "local", str(playbook)],
         stdin=slave,
         stdout=slave,
         stderr=slave,
@@ -430,26 +483,24 @@ def test_real_hidden_token_prompt_does_not_log_input(tmp_path):
     )
     transcript = b""
     try:
-        deadline = time.monotonic() + 15
-        while (
-            b"Vault admin token (hidden" not in transcript
-            and time.monotonic() < deadline
-        ):
-            if select.select([master], [], [], 0.1)[0]:
-                transcript += os.read(master, 65536)
-        assert b"Vault admin token (hidden" in transcript, transcript.decode()
-        # Ansible prints before flushing pending input and disabling echo.
-        # Wait for its terminal mode transition before simulating typing.
-        while termios.tcgetattr(slave)[3] & termios.ECHO:
-            assert time.monotonic() < deadline
-            time.sleep(0.01)
-        os.write(master, token + b"\r")
+        for prompt_text, token in credentials:
+            deadline = time.monotonic() + 15
+            while prompt_text not in transcript and time.monotonic() < deadline:
+                if select.select([master], [], [], 0.1)[0]:
+                    transcript += os.read(master, 65536)
+            assert prompt_text in transcript, transcript.decode()
+            # Ansible flushes pending input before switching off terminal echo.
+            while termios.tcgetattr(slave)[3] & termios.ECHO:
+                assert time.monotonic() < deadline
+                time.sleep(0.01)
+            os.write(master, token + b"\r")
         process.wait(timeout=15)
         while select.select([master], [], [], 0.1)[0]:
             transcript += os.read(master, 65536)
         assert process.returncode == 0, transcript.decode()
-        assert token not in transcript
-        assert token.decode() not in log.read_text()
+        for _, token in credentials:
+            assert token not in transcript
+            assert token.decode() not in log.read_text()
     finally:
         if process.poll() is None:
             process.kill()
@@ -671,13 +722,29 @@ def test_enrollment_provisions_both_databases_before_starting_consumers():
     receiver, sender, consumers = services[-3:]
     for task in (receiver, sender):
         assert task["ansible.builtin.systemd_service"] == {
-            "name": "lx-annotate-hub-node-provisioning.service", "state": "restarted"
+            "name": "lx-annotate-hub-node-provisioning.service",
+            "state": "restarted",
         }
     assert receiver["delegate_to"] == "{{ enrollment_hub }}"
     assert "delegate_to" not in sender
     assert consumers["loop"] == [
-        "lx-annotate.service", "lx-annotate-celery-hub-transfer-worker.service"
+        "lx-annotate.service",
+        "lx-annotate-celery-hub-transfer-worker.service",
     ]
     assert tasks.index(consumers) < len(tasks) - 1
-    assert tasks[-1]["ansible.builtin.set_fact"]["fleet_enrollment_status"] == "enrolled"
+    assert (
+        tasks[-1]["ansible.builtin.set_fact"]["fleet_enrollment_status"] == "enrolled"
+    )
     assert all(not task.get("ignore_errors") for task in (receiver, sender, consumers))
+
+
+def test_enrollment_help_without_terminal_or_connections():
+    result = subprocess.run(
+        ["bash", str(ROOT / "scripts/enroll-reachable-hub-sites.sh"), "--help"],
+        input="",
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
+    assert "--ask-sudo-password" in result.stdout
+    assert "unseal share is not" in result.stdout

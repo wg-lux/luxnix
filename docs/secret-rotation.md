@@ -52,6 +52,39 @@ rotation to replace disk-encryption keys. Never transmit the media master key.
 
 ## Credentials and incidents
 
+### Standard operator sequence
+
+1. Select one family and one explicit host scope from the catalog. Hub AppRole
+   credentials, certificates, node request secrets, media keys, identity salts
+   and Django signing keys have different lifecycles. Payload rejection alone
+   is not evidence that credentials need rotation.
+2. Verify an encrypted backup and tested restore path, installed reader support
+   and all consumers. Do not begin a data-key migration with a failed backup.
+3. For planned application rotation, provision immutable private generations and
+   an atomic keyring manifest. Distribute the new reader while retaining the old
+   active generation, verify every reader, then switch the active generation.
+   Validate file contents, ownership and permissions; a configured path is not
+   proof that a usable key exists.
+4. Preview `rotate_storage_secrets --include-hls` or `rotate_identity_salt`
+   without `--apply`, using the installed production environment and service user.
+   Missing identity evidence requires authenticated originals and the backend's
+   private review procedure. Never guess identity values. Review application-level
+   blocked counts: a successful process exit does not prove migration completion.
+   Confirm the installed command's transaction semantics before applying.
+5. Reload web and worker settings after signing-key activation and verify active
+   and retiring readers. For hub credentials, follow the enrollment/rotation
+   procedure and verify fresh authentication, certificates, both node records
+   and a matching receiver receipt. Never distribute media master keys.
+6. Retire only after previews, live readers, backups, replicas, offline workers
+   and retained media generations are accounted for. Keep required retiring salts
+   and media keys. Compromised signing keys must not remain as fallbacks.
+
+For the distinctions between SSH keys, Linux sudo passwords, Vault unseal shares
+and Vault enrollment tokens, use the [enrollment prerequisites](vault-hub-machine-enrollment.md#what-you-need-before-starting).
+An unseal share unlocks the existing Vault; it is not a token. Never reinitialize
+Vault to recover access. Record deployment evidence in the feature tracker,
+not as dated incident narratives in this procedure.
+
 Use the existing [admin password workflow](admin-passwords.md) and
 [hub enrollment workflow](vault-hub-machine-enrollment.md) for their respective
 families. Their terminal confirmation, pinned transport and recovery gates remain

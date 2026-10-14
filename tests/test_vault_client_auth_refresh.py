@@ -5,11 +5,57 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
+import shlex
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 HELPER = ROOT / "scripts/vault/refresh-client-auth.sh"
+
+
+@pytest.mark.parametrize("outcome", ["ready", "offline-cached", "auth-rejected"])
+def test_enrollment_status_requires_fresh_authentication(tmp_path, outcome):
+    source = (ROOT / "modules/nixos/luxnix/vault/default.nix").read_text()
+    condition = source.split("  vaultAuthProvisioningConditionScript =", 1)[1]
+    script = condition.split("    write_status()", 1)[1].split("    missing=0", 1)[0]
+    script = "write_status()" + script
+    script += "auth_error=" + condition.split("    auth_error=", 1)[1].split(
+        "  '';", 1
+    )[0]
+    for name, filename in (("runtimeEnvironmentFile", "vault.env"),
+                           ("runtimeTokenFile", "vault.token"),
+                           ("runtimeStatusFile", "enrollment-status"),
+                           ("runtimeDir", ".")):
+        script = script.replace("${lib.escapeShellArg " + name + "}",
+                                shlex.quote(str(tmp_path / filename)))
+    script = script.replace("${pkgs.coreutils}/bin/", "")
+    script = script.replace("${vaultAuthSetupScript}", "authenticate")
+    script = script.replace(
+        "${vaultAuthErrorClassifierTool}/bin/luxnix-vault-classify-auth-error",
+        "bash " + shlex.quote(str(ROOT / "scripts/vault/classify-auth-error.sh")),
+    )
+    (tmp_path / "vault.env").write_text("test-only-stale-env")
+    (tmp_path / "vault.token").write_text("test-only-stale-token")
+    auth = {
+        "ready": "printf fresh > vault.env; printf fresh > vault.token",
+        "offline-cached": "return 0",
+        "auth-rejected": (
+            "echo 'invalid role or secret ID test-only-sensitive' >&2; return 1"
+        ),
+    }[outcome]
+    result = subprocess.run(
+        ["bash", "-euo", "pipefail", "-c",
+         "authenticate() { " + auth + "; };\n" + script],
+        cwd=tmp_path, capture_output=True, text=True,
+    )
+    assert result.returncode == int(outcome == "auth-rejected"), result.stderr
+    assert (tmp_path / "enrollment-status").read_text().strip() == outcome
+    assert (tmp_path / "vault.env").exists() == (outcome == "ready")
+    assert (tmp_path / "vault.token").exists() == (outcome == "ready")
+    assert not list(tmp_path.glob(".vault-auth-error.*"))
+    assert "test-only-sensitive" not in result.stderr
+    unit = source.split("services.vault-auth-setup =", 1)[1]
+    assert 'else\n              vaultAuthProvisioningConditionScript;' in unit
 
 
 def test_certificate_service_can_resolve_authentication_tools():

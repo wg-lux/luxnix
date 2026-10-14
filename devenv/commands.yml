@@ -45,24 +45,24 @@ commands:
       - The nhb alias uses LUXNIX_FLAKE and LUXNIX_HOST; reboot is a separate authorized action.
 
   - id: enroll-reachable-hub-sites
-    summary: Prompt once for a Vault admin token and reconcile enrollment on reachable configured sites.
+    summary: Prompt once for a Vault enrollment token and reconcile enrollment on reachable configured sites.
     risk: sensitive-remote-state
     operator_confirmation_required: true
-    usage: devenv shell enroll-reachable-hub-sites [--site gc-09] [--ask-become-pass]
+    usage: devenv shell enroll-reachable-hub-sites [--site gc-09] [--ask-sudo-password]
     implementation: scripts/enroll-reachable-hub-sites.sh
     playbook: ansible/playbooks/enroll_reachable_hub_sites.yml
     documentation: docs/vault-hub-machine-enrollment.md
     prerequisites:
       - Clean reviewed durable checkout, configured receiver identities and pinned SSH keys.
       - Initialized unsealed Vault on gs-02; existing hub enrollment commands deployed.
-      - SSH and root sudo access (use --ask-become-pass for a shared sudo password); private controller tmpfs; encrypted or disabled swap.
+      - SSH from this controller and root sudo access (use --ask-sudo-password for separate host passwords; legacy --ask-become-pass asks once for a shared password); private controller tmpfs; encrypted or disabled swap.
     effects:
       - Token entry authorizes the displayed reachable fleet; token is not saved or printed.
       - Reuses valid installed or saved credentials; creates missing initial enrollment.
       - Preserves node secrets and hub recipient identity; refuses contained or conflicting identities.
       - Installs credentials, recipient public keys and receiver secret copies, then verifies authentication and certificates.
       - Refreshes receiver and sender database identities, then starts the site application and transfer worker; existing queued work may run.
-      - Skips unreachable sites, reports failures and retains protected hub bundles for retry.
+      - Reports unreachable sites, fails when no site enrolls or a reachable site fails, and retains protected hub bundles for retry.
 
   - id: rotate-hub-enrollment
     summary: Interactively deliver a prepared routine AppRole replacement and renew the site client certificate.

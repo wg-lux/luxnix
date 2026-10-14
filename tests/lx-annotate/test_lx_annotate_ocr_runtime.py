@@ -1,5 +1,6 @@
 """OCR dependencies must survive wheel deployment without a system profile link."""
 
+import shutil
 import subprocess
 
 import pytest
@@ -47,12 +48,98 @@ def test_gc_02_ocr_runtime_contract(custom_prefix: str | None) -> None:
         assert f"{result['package']}/bin" in service["path"].split(":")
 
 
-def test_wheel_maintenance_wrapper_provides_tesseract() -> None:
-    source = (
-        REPO_ROOT / "modules/nixos/services/lx-annotate-local/config.nix"
-    ).read_text()
-    wrapper = source.split('export PATH="${', 1)[1].split("}:", 1)[0]
-    assert "cfg.runtime.tesseractPackage" in wrapper
+def test_wheel_wrapper_provides_media_tools_without_inherited_path() -> None:
+    ffmpeg_bin = eval_json("""
+      let flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
+      in toString (flake.nixosConfigurations.gc-10.pkgs.lib.getBin
+        flake.nixosConfigurations.gc-10.pkgs.ffmpeg-headless)
+    """)
+    result = subprocess.run(
+        [
+            "nix",
+            "build",
+            "--no-link",
+            "--print-out-paths",
+            f"git+file://{REPO_ROOT}#nixosConfigurations.gc-10.config.services.lx-annotate.package",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
+    )
+    bash = shutil.which("bash")
+    assert bash is not None
+    subprocess.run(
+        [
+            bash,
+            "-c",
+            'source "$1"\n'
+            '[ "$(command -v ffmpeg)" = "$2/bin/ffmpeg" ]\n'
+            '[ "$(command -v ffprobe)" = "$2/bin/ffprobe" ]\n'
+            "ffmpeg -version\nffprobe -version\ntesseract --version",
+            "media-runtime-check",
+            f"{result.stdout.strip()}/libexec/lx-annotate-wheel-runtime-lib",
+            ffmpeg_bin,
+        ],
+        env={"PATH": ""},
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+
+def test_gc_10_media_tools_execute_in_service_path() -> None:
+    result = eval_json("""
+        let
+          flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
+          host = flake.nixosConfigurations.gc-10;
+        in {
+          package = toString (host.pkgs.lib.getBin host.pkgs.ffmpeg-headless);
+          services = map (name: host.config.systemd.services.${name}.environment.PATH) [
+            "lx-annotate"
+            "lx-annotate-celery-pipeline-worker"
+            "lx-annotate-celery-frame-extraction-worker"
+            "lx-annotate-celery-ffmpeg-worker"
+          ];
+        }
+        """)
+    subprocess.run(
+        [
+            "nix",
+            "build",
+            "--no-link",
+            f"git+file://{REPO_ROOT}#nixosConfigurations.gc-10.pkgs.ffmpeg-headless",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
+    )
+    for service_path in result["services"]:
+        assert f"{result['package']}/bin" in service_path.split(":")
+        for executable in ("ffmpeg", "ffprobe"):
+            subprocess.run(
+                [executable, "-version"],
+                env={"PATH": service_path},
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+    encoders = subprocess.run(
+        [f"{result['package']}/bin/ffmpeg", "-hide_banner", "-encoders"],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    names = {
+        line.split()[1]
+        for line in encoders.stdout.splitlines()
+        if len(line.split()) > 1
+    }
+    assert {"libx264", "h264_nvenc"} <= names
 
 
 def test_gc_02_tesseract_package_contains_required_languages() -> None:

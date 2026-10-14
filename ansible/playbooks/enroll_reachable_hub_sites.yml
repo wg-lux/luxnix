@@ -3,6 +3,7 @@
   hosts: 'active_clients:&gpu_client:&endoreg_client'
   gather_facts: false
   become: false
+  serial: 1
   tasks:
     - name: Default to failed until all preflight checks pass
       ansible.builtin.set_fact:
@@ -53,7 +54,11 @@
         fleet_enrollment_status: failed-connectivity
       when: fleet_enrollment_status == 'reachable' and fleet_connectivity_check.rc != 0
 
-    - name: Verify root access and ephemeral staging on this reachable site
+    - name: Request the reachable site's Linux sudo password
+      ansible.builtin.include_tasks: tasks/hub_enrollment_sudo_password.yml
+      when: fleet_prompt_sudo_password | default(false) | bool and fleet_enrollment_status == 'reachable'
+
+    - name: Verify sudo access and private temporary storage on this reachable site
       ansible.builtin.command:
         argv: [findmnt, -n, -o, FSTYPE, --target, /dev/shm]
       become: true
@@ -74,7 +79,7 @@
         (fleet_site_tmpfs.rc | default(1) != 0 or
          fleet_site_tmpfs.stdout | default('') | trim != 'tmpfs')
 
-- name: Prepare the trusted hub once and request the admin token
+- name: Prepare the trusted hub once and request the Vault enrollment token
   hosts: gs-02
   gather_facts: false
   become: true
@@ -110,6 +115,10 @@
       delegate_to: localhost
       become: false
       changed_when: false
+
+    - name: Request the hub's Linux sudo password
+      ansible.builtin.include_tasks: tasks/hub_enrollment_sudo_password.yml
+      when: fleet_prompt_sudo_password | default(false) | bool
 
     - name: Read evaluated hub trust and Vault paths
       ansible.builtin.command:
@@ -156,17 +165,17 @@
       register: fleet_remote_tmpfs
       failed_when: fleet_remote_tmpfs.rc != 0 or fleet_remote_tmpfs.stdout | trim != 'tmpfs'
 
-    - name: Enter the Vault admin token to authorize enrollment of the listed reachable sites
+    - name: Enter the Vault enrollment token to authorize the listed sites
       ansible.builtin.pause:
-        prompt: 'Vault admin token (hidden; creates and deploys missing enrollment, preserves existing identities)'
+        prompt: 'Vault enrollment token (hidden; not a Linux sudo password or unseal share; authorizes the listed sites)'
         echo: false
-      register: fleet_admin_token
+      register: fleet_enrollment_token
       no_log: true
 
     - name: Validate token input without logging it
       ansible.builtin.assert:
         that:
-          - fleet_admin_token.user_input | default('') is match('^[A-Za-z0-9._-]+$')
+          - fleet_enrollment_token.user_input | default('') is match('^[A-Za-z0-9._-]+$')
       no_log: true
 
     - name: Bootstrap using the token over stdin, never command arguments
@@ -177,7 +186,7 @@
         export VAULT_TOKEN
         flock -x /run/lock/luxnix-vault-hub-bootstrap.lock luxnix-vault-bootstrap-hub-pki
       args:
-        stdin: '{{ fleet_admin_token.user_input }}'
+        stdin: '{{ fleet_enrollment_token.user_input }}'
         executable: /run/current-system/sw/bin/bash
       environment:
         VAULT_SKIP_VERIFY: 'false'
@@ -304,7 +313,7 @@
   tasks:
     - name: Clear the token from host facts
       ansible.builtin.set_fact:
-        fleet_admin_token: {}
+        fleet_enrollment_token: {}
       no_log: true
 
     - name: Report per-site outcomes without secret material
@@ -312,8 +321,38 @@
         msg: '{{ item }}: {{ hostvars[item].fleet_enrollment_status | default("not-run") }}'
       loop: '{{ fleet_report_sites }}'
 
+    - name: Explain the next step for each site that did not enroll
+      ansible.builtin.debug:
+        msg: '{{ fleet_next_steps[hostvars[item].fleet_enrollment_status | default("not-run")] | default("Inspect the first failed task and rerun for this site.") }}'
+      vars:
+        fleet_next_steps:
+          unreachable: 'SSH unavailable from this controller. Check its SSH key, the target login account, VPN route and pinned host key. This does not prove the host is offline; a Vault token cannot fix SSH.'
+          failed-prerequisite: 'Check the named host Linux sudo password and that /dev/shm is tmpfs. Use --ask-sudo-password for separate host passwords.'
+          failed-connectivity: 'SSH connected but the connectivity command failed. Check the configured remote Python interpreter and account permissions.'
+          failed-preflight: 'Fix the reported inventory, source checkout or trust configuration before issuing credentials.'
+      loop: '{{ fleet_report_sites }}'
+      when: hostvars[item].fleet_enrollment_status | default('not-run') != 'enrolled'
+
+    - name: Clear prompted sudo passwords from in-memory host variables
+      ansible.builtin.set_fact:
+        ansible_become_password: ''
+        cacheable: false
+      delegate_to: '{{ item }}'
+      delegate_facts: true
+      loop: '{{ (fleet_report_sites + ["gs-02"]) | unique }}'
+      when: fleet_prompt_sudo_password | default(false) | bool
+      no_log: true
+
+    - name: Require at least one site to have enrolled
+      ansible.builtin.assert:
+        that: >-
+          fleet_report_sites | map('extract', hostvars) |
+          selectattr('fleet_enrollment_status', 'defined') |
+          selectattr('fleet_enrollment_status', 'equalto', 'enrolled') | list | length > 0
+        fail_msg: 'No site enrolled. Fix the SSH, sudo or configuration failures above; creating another Vault token will not repair host access.'
+
     - name: Require success for all configured reachable sites
       ansible.builtin.assert:
         that: hostvars[item].fleet_enrollment_status | default('not-run') in ['enrolled', 'unreachable']
-        fail_msg: 'Some sites failed. Offline sites may be retried later; configuration, credential and deployment failures require investigation.'
+        fail_msg: 'Some sites failed. Unreachable sites may be retried later; configuration, credential and deployment failures require investigation.'
       loop: '{{ fleet_report_sites }}'

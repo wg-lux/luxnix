@@ -6,6 +6,7 @@ summary: Canonical host inventory, variable precedence, and guarded deployment p
 responsibilities:
 - Own inventory membership and shared or host-specific variables
 - Deliver configuration through reviewed playbooks
+- Enroll hub sites with pinned SSH, per-host hidden sudo prompts and protected Vault token handling
 boundaries:
 - Local CMDB facts are sensitive and must not be committed
 - Remote changes require explicit target authorization and connectivity checks

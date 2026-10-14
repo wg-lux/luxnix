@@ -131,6 +131,14 @@ vault-auth-setup.service
 4. mounts `/dev/mapper/<mapperName>` at `runtime.encryptedDataDir`
 5. applies the configured owner, group, and mode to the mount point
 
+An already mounted directory is accepted only when its device resolves to the
+configured mapper, the active mapping is LUKS with the configured backing-volume
+UUID, and its filesystem matches `fsType` when explicitly configured. A mismatch
+or failed identity probe stops startup without unmounting, changing permissions,
+or otherwise modifying that existing mount. An already open mapper is checked
+before mounting it as well. The service opens existing LUKS volumes; it does not
+format a device or create a file-backed encrypted container.
+
 On stop, it:
 
 1. unmounts the directory
