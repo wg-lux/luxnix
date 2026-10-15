@@ -93,6 +93,9 @@ lib.foldl' lib.recursiveUpdate
       roles.postgres.default.automaticCollationRepair = true;
     }
     {
+      services.luxnix.lxAnnotateLocal.django.centerIdentitySalt = false;
+    }
+    {
       services.luxnix.lxAnnotateLocal.hub.nodeProvisioning.enable = true;
     }
     {

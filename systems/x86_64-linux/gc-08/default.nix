@@ -90,6 +90,9 @@ lib.foldl' lib.recursiveUpdate
       roles.endoreg-client.lxAi = true;
     }
     {
+      services.luxnix.lxAnnotateLocal.django.centerIdentitySalt = false;
+    }
+    {
       services.luxnix.lxAnnotateLocal.hub.nodeProvisioning.enable = true;
     }
     {

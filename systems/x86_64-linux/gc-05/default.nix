@@ -105,6 +105,12 @@ lib.foldl' lib.recursiveUpdate
       roles.endoreg-client.paths.storagePersistingDevicePart = "part3";
     }
     {
+      roles.luxnix.lxAnnotateLocal.django.enrollLegacyDefaultSalt = true;
+    }
+    {
+      services.luxnix.lxAnnotateLocal.django.centerIdentitySalt = false;
+    }
+    {
       services.luxnix.lxAnnotateLocal.hub.nodeProvisioning.enable = true;
     }
     {

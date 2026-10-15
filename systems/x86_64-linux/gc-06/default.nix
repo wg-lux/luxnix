@@ -75,6 +75,24 @@ lib.foldl' lib.recursiveUpdate
       roles.nextcloudClient.enable = true;
     }
     {
+      roles.ssh-access.dev-01.enable = true;
+    }
+    {
+      roles.ssh-access.dev-01.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK";
+    }
+    {
+      roles.ssh-access.dev-03.enable = true;
+    }
+    {
+      roles.ssh-access.dev-03.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAVt7FP3BCARMRyL791VauxIPd3t8nVm4A49VVpL9FUj";
+    }
+    {
+      roles.ssh-access.dev-04.enable = true;
+    }
+    {
+      roles.ssh-access.dev-04.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICSpoZVcX+K6NdrfqcUVPTU8Ljqlp83YDzzEHjTHU2NO flippos@inexen9";
+    }
+    {
       roles.custom-packages.baseDevelopment = true;
     }
     {
@@ -91,6 +109,9 @@ lib.foldl' lib.recursiveUpdate
     }
     {
       roles.endoreg-client.defaultCenterKey = "university_hospital_wuerzburg";
+    }
+    {
+      services.luxnix.lxAnnotateLocal.django.centerIdentitySalt = false;
     }
     {
       services.luxnix.lxAnnotateLocal.hub.nodeProvisioning.enable = true;
@@ -136,6 +157,9 @@ lib.foldl' lib.recursiveUpdate
     }
     {
       services.wg-lux-mcp.enable = true;
+    }
+    {
+      services.luxnix.lxAnnotateLocal.django.enrollLegacyDefaultSalt = true;
     }
     {
       luxnix.boot-decryption-stick.enable = true;

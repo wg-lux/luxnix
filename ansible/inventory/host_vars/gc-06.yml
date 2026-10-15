@@ -22,9 +22,9 @@ host_roles:
   custom_packages.hardwareAcceleration: "true"
   custom_packages.protonmail: "true"
   endoreg_client.defaultCenterKey: '"university_hospital_wuerzburg"'
-  luxnix.lxAnnotateLocal.django.enrollLegacyDefaultSalt: "true"
 
-host_services: {}
+host_services:
+  luxnix.lxAnnotateLocal.django.enrollLegacyDefaultSalt: "true"
 
 host_luxnix:
   # Temporary bootstrap exception; set false after verified Vault enrollment.
