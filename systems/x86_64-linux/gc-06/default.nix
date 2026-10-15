@@ -111,6 +111,9 @@ lib.foldl' lib.recursiveUpdate
       roles.endoreg-client.defaultCenterKey = "university_hospital_wuerzburg";
     }
     {
+      roles.postgres.default.automaticCollationRepair = true;
+    }
+    {
       services.luxnix.lxAnnotateLocal.django.centerIdentitySalt = false;
     }
     {
