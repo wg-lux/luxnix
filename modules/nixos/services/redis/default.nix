@@ -1,14 +1,14 @@
 {
   config,
   lib,
-  pkgs,
   ...
 }:
-#CHANGEME
-with lib; 
-with lib.luxnix; let
+with lib;
+with lib.luxnix;
+let
   cfg = config.services.luxnix.redis;
-in {
+in
+{
   options.services.luxnix.redis = {
     enable = mkBoolOpt false "Enable redis";
   };
@@ -42,7 +42,7 @@ in {
 
             routers = {
               redis = {
-                entryPoints = ["redis"];
+                entryPoints = [ "redis" ];
                 rule = "HostSNI(`*`)";
                 service = "redis";
               };

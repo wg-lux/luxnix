@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# STATUS: site-specific manual template, not a generic recovery command.
+# Review scripts/manual-operations.yml and adapt a copy before use. Device,
+# repository, subvolume, and host values below are hard-coded for gc-06.
+
 set -e  # Exit on first error
 set -o pipefail  # Pipe errors also cause script to fail
 
@@ -67,4 +71,3 @@ echo "Unmounting filesystems..."
 sudo umount -R $MOUNT_POINT || handle_error "Failed to unmount filesystems."
 
 echo "Recovery process complete. You can now reboot the system."
-

@@ -1,11 +1,14 @@
-import os
-import glob
-import yaml
-import pwd
 import grp
+import os
+import pwd
 import stat
+from argparse import ArgumentParser
+from collections.abc import Iterable
+from pathlib import Path
+
 from pydantic import BaseModel, Field, field_validator
-from typing import Optional, List
+
+from .loading import load_unique_yaml_file
 
 
 class CheckFile(BaseModel):
@@ -14,88 +17,111 @@ class CheckFile(BaseModel):
     exists: bool = Field(default=True)
     symlink: bool = Field(default=False)
     directory: bool = Field(default=False)
-    owner: Optional[str] = None
-    group: Optional[str] = None
-    filemode: Optional[str] = None
+    owner: str | None = None
+    group: str | None = None
+    filemode: str | None = None
 
     @field_validator("filemode")
-    def validate_filemode(cls, v):
-        if v is not None:
-            # Simple check to ensure filemode is 4 digits
-            if len(v) != 4 or not all(c.isdigit() for c in v):
+    @classmethod
+    def validate_filemode(cls, value: str | None) -> str | None:
+        if value is not None:
+            if len(value) != 4 or not all(character.isdigit() for character in value):
                 raise ValueError("Invalid filemode format (use '0XYZ')")
-        return v
+        return value
 
-    def check_and_fix(self):
-        target_path = (
-            os.path.join(os.getcwd(), self.path) if self.relative else self.path
-        )
-        if self.exists and not os.path.exists(target_path):
+    def resolved_path(self) -> Path:
+        """Return the configured path relative to the current working directory."""
+        path = Path(self.path).expanduser()
+        return Path.cwd() / path if self.relative else path
+
+    def check_and_fix(self) -> None:
+        """Validate one path and correct explicitly configured ownership or mode."""
+        target_path = self.resolved_path()
+        if self.exists and not target_path.exists():
             raise ValueError(f"{target_path} expected but not found.")
-        if self.directory and not os.path.isdir(target_path):
+        if self.symlink and not target_path.is_symlink():
+            raise ValueError(f"{target_path} is not a symbolic link.")
+        if self.directory and not target_path.is_dir():
             raise ValueError(f"{target_path} is not a directory.")
         if self.owner:
-            current_owner = pwd.getpwuid(os.stat(target_path).st_uid).pw_name
+            current_owner = pwd.getpwuid(target_path.stat().st_uid).pw_name
             if current_owner != self.owner:
                 print(
-                    f"Warning: Owner mismatch, correcting {current_owner} -> {self.owner}"
+                    "Warning: Owner mismatch, correcting "
+                    f"{current_owner} -> {self.owner}"
                 )
                 os.chown(
                     target_path,
                     pwd.getpwnam(self.owner).pw_uid,
-                    os.stat(target_path).st_gid,
+                    target_path.stat().st_gid,
                 )
         if self.group:
-            current_group = grp.getgrgid(os.stat(target_path).st_gid).gr_name
+            current_group = grp.getgrgid(target_path.stat().st_gid).gr_name
             if current_group != self.group:
                 print(
-                    f"Warning: Group mismatch, correcting {current_group} -> {self.group}"
+                    "Warning: Group mismatch, correcting "
+                    f"{current_group} -> {self.group}"
                 )
                 os.chown(
                     target_path,
-                    os.stat(target_path).st_uid,
+                    target_path.stat().st_uid,
                     grp.getgrnam(self.group).gr_gid,
                 )
         if self.filemode:
             desired_mode = int(self.filemode, 8)
-            current_mode = stat.S_IMODE(os.stat(target_path).st_mode)
+            current_mode = stat.S_IMODE(target_path.stat().st_mode)
             if current_mode != desired_mode:
                 print(
-                    f"Warning: Filemode mismatch, correcting {oct(current_mode)} -> {oct(desired_mode)}"
+                    "Warning: Filemode mismatch, correcting "
+                    f"{oct(current_mode)} -> {oct(desired_mode)}"
                 )
-                os.chmod(target_path, desired_mode)
+                target_path.chmod(desired_mode)
 
 
-def load_check_files(folder: str) -> List[CheckFile]:
-    check_files = []
-    for file_path in glob.glob(os.path.join(folder, "*.yaml")):
-        with open(file_path, "r") as f:
-            data = yaml.safe_load(f)
-            if not isinstance(data, list):
-                raise ValueError(f"YAML in {file_path} must be a list of objects.")
-            for item in data:
-                check_files.append(CheckFile(**item))
+def load_check_files(folder: str | Path) -> list[CheckFile]:
+    """Load `.yml` and legacy `.yaml` check definitions in filename order."""
+    folder_path = Path(folder)
+    definitions = sorted((*folder_path.glob("*.yml"), *folder_path.glob("*.yaml")))
+    check_files: list[CheckFile] = []
+    for file_path in definitions:
+        data = load_unique_yaml_file(file_path)
+        if not isinstance(data, list):
+            raise ValueError(f"YAML in {file_path} must be a list of objects.")
+        check_files.extend(CheckFile(**item) for item in data)
     return check_files
 
 
-def apply_checks(check_files: List[CheckFile]):
-    for cf in check_files:
-        target_path = os.path.join(os.getcwd(), cf.path) if cf.relative else cf.path
+def apply_checks(check_files: Iterable[CheckFile]) -> None:
+    for check_file in check_files:
+        target_path = check_file.resolved_path()
         print(f"Checking path: {target_path}")
-        print(f" - Must exist: {cf.exists}")
-        print(f" - Must be symlink: {cf.symlink}")
-        print(f" - Must be directory: {cf.directory}")
-        if cf.owner:
-            print(f" - Desired owner: {cf.owner}")
-        if cf.group:
-            print(f" - Desired group: {cf.group}")
-        if cf.filemode:
-            print(f" - Desired filemode: {cf.filemode}")
+        print(f" - Must exist: {check_file.exists}")
+        print(f" - Must be symlink: {check_file.symlink}")
+        print(f" - Must be directory: {check_file.directory}")
+        if check_file.owner:
+            print(f" - Desired owner: {check_file.owner}")
+        if check_file.group:
+            print(f" - Desired group: {check_file.group}")
+        if check_file.filemode:
+            print(f" - Desired filemode: {check_file.filemode}")
         print("------------")
-        cf.check_and_fix()
+        check_file.check_and_fix()
+
+
+def main() -> None:
+    parser = ArgumentParser(
+        description="Validate paths and apply explicitly configured ownership/modes."
+    )
+    parser.add_argument(
+        "folder",
+        nargs="?",
+        type=Path,
+        default=Path("conf/check_files"),
+        help="folder containing .yml check definitions (default: conf/check_files)",
+    )
+    args = parser.parse_args()
+    apply_checks(load_check_files(args.folder))
 
 
 if __name__ == "__main__":
-    folder_path = "./checks"  # folder with YAML files
-    checks = load_check_files(folder_path)
-    apply_checks(checks)
+    main()

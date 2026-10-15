@@ -1,0 +1,18 @@
+{
+  "task_status": "complete",
+  "findings": [
+    {
+      "claim": "options.nix is a compatibility aggregator over fourteen focused top-level option modules.",
+      "source": "modules/nixos/services/lx-annotate-local/options.nix:1",
+      "confidence": "high"
+    },
+    {
+      "claim": "All split option modules parse, format, and preserve representative gc-02 and gs-02 evaluations.",
+      "source": "modules/nixos/services/lx-annotate-local/options/runtime.nix:1",
+      "confidence": "high"
+    }
+  ],
+  "gaps": [
+    "Git-backed flake evaluation excludes the unrelated untracked host-common.nix; path: evaluation was used."
+  ]
+}

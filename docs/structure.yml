@@ -1,0 +1,42 @@
+version: 1
+tier: domain
+path: docs
+parent: ../structure.yml
+summary: Maintained architecture, contributor guidance, and operator runbooks.
+responsibilities:
+- Document ownership and operational risks
+- Maintain navigation through mkdocs.yaml and regenerate the derived table of contents
+boundaries:
+- Do not create parallel readiness trackers
+- Do not include secrets or local host facts in guides
+entrypoints:
+- name: machine-secrets-checklist
+  file: machine-secrets-checklist.md
+  purpose: Machine provisioning inputs, secret lifecycle ownership, and acceptance gates.
+- name: secret-rotation
+  file: secret-rotation.md
+  purpose: Canonical catalog usage and application/credential ownership boundaries.
+- name: documentation-home
+  file: index.md
+  purpose: Inspect documentation home ownership and interfaces.
+- name: architecture
+  file: architecture.md
+  purpose: Inspect architecture ownership and interfaces.
+- name: context-protocol
+  file: agent_context.md
+  purpose: Inspect context protocol ownership and interfaces.
+dependencies:
+  internal:
+  - feature-tracking
+  external:
+  - MkDocs
+  - Markdown
+submodules: []
+contracts:
+- name: documentation
+  doc: documentation.md
+- name: agent_context
+  doc: agent_context.md
+tests:
+  directory: ../tests
+  command: python -m pytest -q tests/test_documentation_contract.py

@@ -6,9 +6,11 @@
   ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.roles.video;
-in {
+in
+{
   options.roles.video = with types; {
     enable = mkBoolOpt false "Whether or not to manage video editting and recording";
   };

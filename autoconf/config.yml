@@ -1,0 +1,34 @@
+# Canonical options for the LuxNix autoconf pipeline.
+# Relative paths are resolved from this file's directory.
+# Validate changes without writing outputs: devenv tasks run autoconf:check
+# Operator guide: docs/autoconf.md
+schema_version: 1
+
+paths:
+  # Inventory, variables, and roles are durable inputs. The cmdb/ child holds
+  # sensitive, gitignored local fact snapshots with a separate lifecycle.
+  ansible_root: ../ansible
+  # Destination root for private generated intermediates. Its merged-data
+  # directories use mode 0700 and files use 0600. config.yml itself is durable
+  # configuration and is never a generated output.
+  output: .
+  # Repository root containing generated systems/ and homes/ configurations;
+  # the repository root itself is not a generated output.
+  nix_output: ..
+  # Durable input root: edit templates here, not their rendered outputs.
+  nix_templates: ../conf/nix-templates
+  # Generated, private report; keep this destination outside version control.
+  report_output: ../cmdb/index.html
+
+inventory:
+  # IPv4 prefix used to recognize managed inventory addresses.
+  subnet: 172.16.255.
+  # Only members of this Ansible group receive generated NixOS configurations.
+  system_group: active_clients
+
+home:
+  # Used only when a host does not declare system_users in its merged variables.
+  default_users:
+    - admin
+  # Compatibility baseline for generated Home Manager configurations.
+  state_version: "23.11"

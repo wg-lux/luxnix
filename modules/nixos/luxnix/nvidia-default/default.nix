@@ -1,33 +1,14 @@
-{ config
-, inputs
-, pkgs
-, lib
-, ...
+{
+  config,
+  pkgs,
+  lib,
+  ...
 }:
 
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.luxnix.nvidia-default;
-
-  nvidiaDrivers = {
-    "stable" = config.boot.kernelPackages.nvidiaPackages.stable;
-    "beta" = config.boot.kernelPackages.nvidiaPackages.beta;
-    "production" = config.boot.kernelPackages.nvidiaPackages.production;
-
-
-    # Custom imports
-    "555_58" = {
-      version = "555.58";
-      sha256_64bit = "sha256-bXvcXkg2kQZuCNKRZM5QoTaTjF4l2TtrsKUvyicj5ew=";
-      sha256_aarch64 = pkgs.lib.fakeSha256;
-      openSha256 = pkgs.lib.fakeSha256;
-      settingsSha256 = "sha256-vWnrXlBCb3K5uVkDFmJDVq51wrCoqgPF03lSjZOuU8M=";
-      persistencedSha256 = pkgs.lib.fakeSha256;
-    };
-  };
-
-  # we need to find out what system we are working on (eg linux, darwin, ...)
-  system = config.system.build.host.system;
 
 in
 {
@@ -35,12 +16,16 @@ in
     enable = mkBoolOpt false "Enable or disable the Nvidia GPU Support";
 
     # Other bool options are: enable cuda support for nix packages, add xserver driver, add initrd-kernel-module, addd autoadddriverrunpath
-    # enable prime sync, enable modesetting, 
+    # enable prime sync, enable modesetting,
 
     nvidiaDriver = mkOption {
-      type = types.str;
-      default = "beta";
-      description = "The nvidia driver to use";
+      type = types.enum [
+        "stable"
+        "beta"
+        "production"
+      ];
+      default = config.luxnix.generic-settings.gpu.nvidia.driver;
+      description = "NVIDIA driver branch; inherits the shared GPU selection unless explicitly overridden.";
     };
   };
 
@@ -49,6 +34,8 @@ in
     hardware.graphics = {
       enable = true;
       extraPackages = with pkgs; [
+        triton-llvm
+        nvidia-vaapi-driver
       ];
     };
 
@@ -56,14 +43,16 @@ in
 
     services.xserver.videoDrivers = [ "nvidia" ];
     boot.initrd.kernelModules = [ "nvidia" ];
-
     hardware.nvidia = {
       modesetting.enable = true;
-      powerManagement.enable = true;
+      powerManagement.enable = mkDefault false;
       powerManagement.finegrained = false;
-      open = false;
+      open = true;
       nvidiaSettings = true;
-      package = nvidiaDrivers."${cfg.nvidiaDriver}";
+      # PRIME owns the package when both modules are enabled. Its assertion
+      # requires matching branch selections; package options are unique.
+      nvidiaPersistenced = true;
+      package = mkDefault config.boot.kernelPackages.nvidiaPackages.${cfg.nvidiaDriver};
     };
   };
 

@@ -1,54 +1,68 @@
-from pathlib import Path
-from lx_administration.logging import get_logger, log_heading
+"""Render Home Manager configurations from merged Autoconf host data."""
+
+import logging
+
+from jinja2 import TemplateError
+
+from lx_administration.logging import get_logger
 from lx_administration.models import MergedHostVars
+
+from ..config import AutoconfConfig
+from ..errors import AutoconfPipelineError
 from .home_template_renderer import render_home_nix_template as render_nix_template
-from .utils import write_nix_file
+from .utils import RenderedNixOutput
 
 
+def render_home_outputs(
+    config: AutoconfConfig,
+    logger: logging.Logger | None = None,
+) -> list[RenderedNixOutput]:
+    """Render every Home Manager output without publishing files."""
+    if logger is None:
+        logger = get_logger(
+            "autoconf_home_render",
+            log_dir=config.log_dir,
+            reset=True,
+        )
 
-def home_pipe(autoconf_out: Path, nix_template_dir: Path, nix_out: Path, logger=None):
-    if not logger:
-        logger = get_logger("home_pipe", reset=True)
-
-    merged_vars_dir = autoconf_out
-
-    for merged_vars_file in merged_vars_dir.glob("*.yml"):
+    rendered_outputs: list[RenderedNixOutput] = []
+    for merged_vars_file in sorted(config.output_layout.home_vars_dir.glob("*.yml")):
         hostname = merged_vars_file.stem
-        merged_vars = MergedHostVars.load_home_from_file(merged_vars_file)
-        platform = merged_vars.get_host_platform()
-        users = merged_vars.system_users or ["admin"] #this needs to ensure
+        try:
+            merged_vars = MergedHostVars.load_home_from_file(merged_vars_file)
+            platform = merged_vars.get_host_platform()
+        except ValueError as exc:
+            raise AutoconfPipelineError(
+                f"Cannot render Home Manager configuration for {hostname} "
+                f"({type(exc).__name__})"
+            ) from exc
+        users = merged_vars.system_users or config.home_default_users
 
-        # Move logging after the merged_vars_file is loaded
-        logger.info(f"Loading merged vars from: {merged_vars_file}")
-        logger.info(f"Platform = {platform}")
+        logger.info("Loading Home Manager variables from %s", merged_vars_file)
+        logger.info("Home Manager platform: %s", platform)
 
-        for user in users:
-            #home_config = merged_vars.prepare_home_config()
-            home_config = merged_vars.prepare_home_config(username=user)
-
-
-
-            template_path = nix_template_dir / "homes" / platform
-            rendered = render_nix_template(
-                template_path,
-                "default.nix.j2",
-                home_config,
+        template_path = config.template_layout.home_template_dir(platform)
+        if not template_path.is_dir():
+            raise AutoconfPipelineError(
+                f"Home Manager template directory not found: {template_path}"
             )
+        for user in users:
+            try:
+                home_config = merged_vars.prepare_home_config(
+                    username=user,
+                    state_version=config.home_state_version,
+                )
+                rendered = render_nix_template(
+                    template_path,
+                    "default.nix.j2",
+                    home_config,
+                )
+            except (TypeError, ValueError, TemplateError) as exc:
+                raise AutoconfPipelineError(
+                    f"Cannot render Home Manager configuration for "
+                    f"{user}@{hostname} ({type(exc).__name__})"
+                ) from exc
+            output_path = config.nix_output_layout.home_file(platform, user, hostname)
+            rendered_outputs.append((output_path, rendered))
 
-            output_path = nix_out / "homes" / platform / f"{user}@{hostname}" / "default.nix"
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-
-            #print(f"[WRITE] ---------- Writing home config for {user}@{hostname}")
-            #print(f"[WRITE] ---------- Output path: {output_path}")
-
-            write_nix_file(rendered, output_path, logger)
-
-            #print("forth")
-
-            # Logging after rendering
-            logger.info(f"Template path: {template_path}")
-            logger.info(f"Rendered: {rendered}")
-            if output_path.exists():
-                logger.info("File exists after write!")
-            else:
-                logger.warning("File write may have failed!")
+    return rendered_outputs

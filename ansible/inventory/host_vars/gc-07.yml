@@ -1,5 +1,6 @@
 # inventory/host_vars/gc-07.yml
 ---
+luxnix_dev_repo: "/home/admin/luxnix"
 template_name: "main"
 host_roles:
   custom_packages.cuda: "true"
@@ -11,9 +12,8 @@ extra_secret_names:
   - "SCRT_roles_system_password_postgres_host_test_password"
 
 host_luxnix:
-  generic_settings.hostPlatform: '"x86_64-linux"'
-  generic_settings.systemStateVersion: '"23.11"'
-  generic_settings.linux.cpuMicrocode: '"intel"'
+  # Temporary bootstrap exception; set false after verified Vault enrollment.
+  vault.client.auth.deferUntilProvisioned: "true"
 
   generic_settings.linux.kernelModules:
     - "intel"
@@ -33,9 +33,3 @@ host_luxnix:
   generic_settings.linux.supportedFilesystems:
     - "nfs"
     - "btrfs"
-  generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
-  generic_settings.linux.kernelParams: []
-  generic_settings.linux.kernelModulesBlacklist: []
-  nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
-  nvidia_prime.onboardBusId: '"PCI:0:2:0"'
-  nvidia_prime.onboardGpuType: '"intel"'

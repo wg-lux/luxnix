@@ -4,9 +4,11 @@
   ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.cli.terminals.foot;
-in {
+in
+{
   options.cli.terminals.foot = with types; {
     enable = mkBoolOpt false "enable foot terminal emulator";
   };

@@ -1,0 +1,38 @@
+version: 1
+tier: package
+path: lx_administration/models/vault
+parent: ../../structure.yml
+summary: Typed encrypted vault lifecycle, secret identities and export contracts.
+responsibilities:
+- Validate vault entries, host keys and secret templates
+- Support reviewed bootstrap and rotation workflows
+boundaries:
+- Never log plaintext secrets or substitute placeholder keys
+- Do not bypass encrypted-at-rest or host identity boundaries
+entrypoints:
+- name: manager
+  file: manager.py
+  purpose: Inspect manager ownership and interfaces.
+- name: configuration
+  file: config.py
+  purpose: Inspect configuration ownership and interfaces.
+- name: secret-contract
+  file: secret.py
+  purpose: Inspect secret contract ownership and interfaces.
+dependencies:
+  internal:
+  - ansible
+  - scripts
+  external:
+  - cryptography
+  - Pydantic
+  - Vault
+submodules: []
+contracts:
+- name: vault-setup
+  doc: ../../../docs/vault-setup.md
+- name: admin-passwords
+  doc: ../../../docs/admin-passwords.md
+tests:
+  directory: ../../../tests/models
+  command: python -m pytest -q tests/models/test_vault_key_contract.py tests/models/test_vault_export.py

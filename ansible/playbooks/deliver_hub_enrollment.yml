@@ -1,0 +1,42 @@
+---
+# Use the cataloged wrapper to confine Ansible plaintext staging to private
+# controller tmpfs. All secret-bearing tasks suppress logs and diffs.
+- name: Deliver one hub enrollment bundle through pinned SSH
+  hosts: gpu_client
+  gather_facts: false
+  become: true
+  become_user: root
+  any_errors_fatal: true
+  vars:
+    ansible_become_user: root
+    ansible_host_key_checking: true
+    ansible_ssh_host_key_checking: true
+    enrollment_hub: gs-02
+    enrollment_source: '/root/vault-enrollment/{{ inventory_hostname }}'
+    enrollment_files: [approle_role_id, approle_secret_id, vault-server-ca.pem, source-node-secret]
+  pre_tasks:
+    - name: Require an explicit site and independently obtained CA fingerprint
+      ansible.builtin.assert:
+        that:
+          - ansible_play_hosts_all | length == 1
+          - inventory_hostname != enrollment_hub
+          - inventory_hostname is match('^[a-z0-9][a-z0-9-]*$')
+          - enrollment_expected_ca_sha256 is defined
+          - enrollment_expected_ca_sha256 | regex_replace(':', '') is match('^[A-Fa-f0-9]{64}$')
+          - enrollment_hub == 'gs-02'
+
+    - name: Run local inventory and deployment-source preflight
+      ansible.builtin.command:
+        argv: [uv, run, python, scripts/vault/site_enrollment_preflight.py, '{{ inventory_hostname }}', --json]
+        chdir: '{{ playbook_dir }}/../..'
+      delegate_to: localhost
+      become: false
+      changed_when: false
+
+  tasks:
+    - name: Deliver through the shared protected transport
+      ansible.builtin.import_tasks: tasks/hub_enrollment_delivery.yml
+
+    - name: Record the remaining explicit activation gate
+      ansible.builtin.debug:
+        msg: Bundle delivered. Complete authentication, node reprovisioning, old-credential rejection and transfer acceptance before restoring access.

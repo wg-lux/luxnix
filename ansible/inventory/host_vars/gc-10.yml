@@ -1,28 +1,26 @@
 # inventory/host_vars/gc-10.yml
 ---
+luxnix_dev_repo: "/home/admin/luxnix"
 template_name: "main"
 
 host_roles:
+  aglnet.client.enable: "true"
   custom_packages.baseDevelopment: "true"
+  endoreg-client.lxAi: "true"
+  endoreg_client.defaultCenterKey: '"university_hospital_wuerzburg"'
 
-host_services: {}
+host_services:
+  luxnix.lxAnnotateLocal.django.enrollLegacyDefaultSalt: "true"
+  luxnix.lxAiLocal.runtime.protectedDataDir: '"/var/lib/lx-annotate/data"'
+
+host_nixos: {}
 
 extra_secret_names: []
 
 host_luxnix:
-  generic_settings.configurationPathRelative: '"luxnix"'
-  generic_settings.configurationPath: 'lib.mkForce "/home/admin/luxnix"'
+  # Temporary bootstrap exception; set false after verified Vault enrollment.
+  vault.client.auth.deferUntilProvisioned: "false"
 
-  generic_settings.hostPlatform: '"x86_64-linux"'
-  generic_settings.systemStateVersion: '"23.11"'
-
-  generic_settings.linux.cpuMicrocode: '"intel"'
-  generic_settings.linux.kernelModules:
-    - "kvm-intel"
-  generic_settings.linux.initrd.supportedFilesystems:
-    - "nfs"
-  generic_settings.linux.initrd.kernelModules:
-    - "nfs"
   generic_settings.linux.initrd.availableKernelModules:
     - "xhci_pci"
     - "ahci"
@@ -31,12 +29,3 @@ host_luxnix:
     - "sd_mod"
     - "thunderbolt"
     - "vmd"
-  generic_settings.linux.supportedFilesystems:
-    - "btrfs"
-  generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
-  generic_settings.linux.kernelParams: []
-  generic_settings.linux.kernelModulesBlacklist: []
-
-  nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
-  nvidia_prime.onboardBusId: '"PCI:0:2:0"'
-  nvidia_prime.onboardGpuType: '"intel"'

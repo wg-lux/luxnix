@@ -3,9 +3,11 @@
   lib,
   ...
 }:
-with lib; let
+with lib;
+let
   cfg = config.cli.terminals.wezterm;
-in {
+in
+{
   options.cli.terminals.wezterm = {
     enable = mkEnableOption "enable wezterm terminal emulator";
   };

@@ -1,0 +1,5 @@
+# Default remote connection settings.
+ansible_user: admin
+ansible_become_user: admin
+ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+ansible_python_interpreter: '{{ luxnix_dest }}/.devenv/state/venv/bin/python'

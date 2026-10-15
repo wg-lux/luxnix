@@ -5,9 +5,11 @@
   ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.roles.gpu-client-dev;
-in {
+in
+{
   options.roles.gpu-client-dev = {
     enable = mkBoolOpt false ''
       Enable desktop configuration for gpu development clients.
@@ -21,10 +23,11 @@ in {
 
     services.ssh = {
       enable = true;
-        authorizedKeys = [ # just adds authorized keys for admin user, does not enable ssh!
-        "${config.luxnix.generic-settings.rootIdED25519}" 
-        ];
-      };
+      authorizedKeys = [
+        # just adds authorized keys for admin user, does not enable ssh!
+        "${config.luxnix.generic-settings.rootIdED25519}"
+      ];
+    };
 
     boot.binfmt.emulatedSystems = [
       # "aarch64-linux"
@@ -34,11 +37,9 @@ in {
 
     roles = { };
 
-    services = {};
-    
-    environment.systemPackages = with pkgs; [];
+    services = { };
 
+    environment.systemPackages = with pkgs; [ ];
 
-    
   };
 }

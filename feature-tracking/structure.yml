@@ -1,0 +1,31 @@
+version: 1
+tier: tool
+path: feature-tracking
+parent: ../structure.yml
+summary: Authoritative readiness evidence, feature locks, and agent message coordination.
+responsibilities:
+- Validate readiness criteria and durable assessments
+- Coordinate overlapping work with stable owner identities
+boundaries:
+- Percentages are not release approval
+- Do not mark readiness complete without verified criteria and an assessor
+entrypoints:
+- name: tracker
+  file: tracker.py
+  purpose: Inspect tracker ownership and interfaces.
+- name: policy
+  file: policy.yml
+  purpose: Inspect policy ownership and interfaces.
+dependencies:
+  internal:
+  - lx_administration
+  external:
+  - PyYAML
+  - Pydantic
+submodules: []
+contracts:
+- name: README
+  doc: README.md
+tests:
+  directory: .
+  command: python -m pytest -q feature-tracking/test_tracker.py

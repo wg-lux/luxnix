@@ -3,11 +3,12 @@
   lib,
   ...
 }:
-#CHANGEME
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.services.luxnix.monitoring;
-in {
+in
+{
   options.services.luxnix.monitoring = {
     enable = mkBoolOpt false "Enable The monitoring stack(loki, prometheus, grafana)";
   };
@@ -58,25 +59,25 @@ in {
 
             routers = {
               prometheus = {
-                entryPoints = ["websecure"];
+                entryPoints = [ "websecure" ];
                 rule = "Host(`prometheus.homelab.haseebmajid.dev`)";
                 service = "prometheus";
                 tls.certResolver = "letsencrypt";
               };
               grafana = {
-                entryPoints = ["websecure"];
+                entryPoints = [ "websecure" ];
                 rule = "Host(`grafana.homelab.haseebmajid.dev`)";
                 service = "grafana";
                 tls.certResolver = "letsencrypt";
               };
               promtail = {
-                entryPoints = ["websecure"];
+                entryPoints = [ "websecure" ];
                 rule = "Host(`promtail.homelab.haseebmajid.dev`)";
                 service = "promtail";
                 tls.certResolver = "letsencrypt";
               };
               alertmanager = {
-                entryPoints = ["websecure"];
+                entryPoints = [ "websecure" ];
                 rule = "Host(`alertmanager.homelab.haseebmajid.dev`)";
                 service = "alertmanager";
                 tls.certResolver = "letsencrypt";
@@ -103,7 +104,7 @@ in {
 
             route = {
               receiver = "all";
-              group_by = ["instance"];
+              group_by = [ "instance" ];
               group_wait = "30s";
               group_interval = "2m";
               repeat_interval = "24h";
@@ -113,8 +114,8 @@ in {
               {
                 name = "all";
                 webhook_configs = [
-                  {url = "http://127.0.0.1:11000/alert";} # matrix-hook
-                  {url = with config.services.gotify; "http://localhost:${environment.GOTIFY_SERVER_PORT}";} # alertmanger-ntfy
+                  { url = "http://127.0.0.1:11000/alert"; } # matrix-hook
+                  { url = with config.services.gotify; "http://localhost:${environment.GOTIFY_SERVER_PORT}"; } # alertmanger-ntfy
                 ];
               }
             ];
@@ -124,12 +125,13 @@ in {
         exporters = {
           node = {
             port = 3021;
-            enabledCollectors = ["systemd"];
+            enabledCollectors = [ "systemd" ];
             enable = true;
           };
         };
 
-        # TODO: work out this is on a different host
+        # TODO (monitoring owner): this remote Home Assistant target is fixed;
+        # add a target option and migrate the monitoring host configuration.
         scrapeConfigs = [
           {
             job_name = "home-assistant";
@@ -137,7 +139,7 @@ in {
             bearer_token_file = config.sops.secrets.home_assistant_token.path;
             static_configs = [
               {
-                targets = ["s100:8123"];
+                targets = [ "s100:8123" ];
               }
             ];
           }
@@ -228,13 +230,14 @@ in {
                 max_age = "12h";
                 labels = {
                   job = "systemd-journal";
-                  # TODO: do not hardcode
+                  # TODO (monitoring owner): derive this label from networking.hostName
+                  # after confirming existing Loki dashboards do not depend on "ms01".
                   host = "ms01";
                 };
               };
               relabel_configs = [
                 {
-                  source_labels = ["__journal__systemd_unit"];
+                  source_labels = [ "__journal__systemd_unit" ];
                   target_label = "unit";
                 }
               ];
@@ -244,7 +247,7 @@ in {
       };
 
       postgresql = {
-        ensureDatabases = ["grafana"];
+        ensureDatabases = [ "grafana" ];
         ensureUsers = [
           {
             name = "grafana";
