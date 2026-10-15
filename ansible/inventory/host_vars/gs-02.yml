@@ -112,7 +112,7 @@ host_services:
       centerKey = "rbk_stuttgart";
       sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-05-source-node-secret"; }
     { nodeKey = "gc-06"; displayName = "gc-06 site node"; role = "site_node";
-      centerKey = "rbk_stuttgart";
+      centerKey = "university_hospital_wuerzburg";
       sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-06-source-node-secret"; }
     { nodeKey = "gc-07"; displayName = "gc-07 site node"; role = "site_node";
       sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-07-source-node-secret"; }
