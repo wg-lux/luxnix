@@ -27,6 +27,7 @@ for canonical invocations and risk labels.
 ## Start here
 
 - [Getting Started](./getting-started.md): first installation, prerequisites, and preflight checks.
+- [Machine Setup Secrets Checklist](./machine-secrets-checklist.md): credentials to deliver, locally provisioned material, role-specific requirements, and acceptance gates.
 - [Development](./development.md): local development environment and contributor workflow.
 - [Nix Quality](./nix-quality.md): formatting, lint, generator, and flake-quality checks.
 - [Architecture](./architecture.md): repository layout, profile/role rules, and introspection workflow.

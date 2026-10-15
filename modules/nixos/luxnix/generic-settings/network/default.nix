@@ -107,9 +107,9 @@ in
             };
             network-cluster = mkOption {
               type = types.nullOr types.str;
-              default = config.networking.hostName;
+              default = null;
               description = ''
-                Identifier for the network cluster the host belongs to.
+                Explicit network cluster identifier. Unset clusters use VPN routing.
               '';
             };
 

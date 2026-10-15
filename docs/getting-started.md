@@ -3,6 +3,9 @@
 Use this guide to prepare and install a LuxNix host. You can also inspect an
 existing configuration locally before deciding whether to deploy it.
 
+Before installation, complete the [Machine Setup Secrets Checklist](machine-secrets-checklist.md)
+to identify credentials to deliver and secrets provisioned by the selected roles.
+
 For a concise, machine-readable index of repository paths and commands, see
 [`luxnix.yml`](https://github.com/wg-lux/luxnix/blob/main/luxnix.yml). Its workflow risk labels distinguish read-only
 inspection from local-state and remote deployment operations.

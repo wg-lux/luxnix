@@ -10,13 +10,13 @@ host_roles:
   # A stale 8:3 mount remains an operator recovery blocker; never auto-remount it.
   endoreg_client.paths.storagePersistingDeviceId: '"usb-Seagate_Expansion_HDD_00000000NT197WLC-0:0"'
   endoreg_client.paths.storagePersistingDevicePart: '"part3"'
-  luxnix.lxAnnotateLocal.django.enrollLegacyDefaultSalt: "true"
 
 host_services:
   # Host-scoped emergency release; immutable artifact identity is recorded
   # alongside the wheel under release-artifacts/lx-annotate/1.2.2/.
   luxnix.lxAnnotateLocal.runtime.wheelPath: '../../../release-artifacts/lx-annotate/1.2.2/lx_annotate-1.2.2-py3-none-any.whl'
   luxnix.lxAnnotateLocal.runtime.packageVersion: '"1.2.2"'
+  luxnix.lxAnnotateLocal.django.enrollLegacyDefaultSalt: "true"
 
 host_nixos:
   nix.settings.max_jobs: 1

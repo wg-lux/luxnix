@@ -20,8 +20,6 @@ group_luxnix:
 
   # VPN addresses are derived from ansible_host in ../../hosts.ini.
   generic_settings.network.hosts.gc_06.ip_local: '"172.31.179.8"'
-  generic_settings.network.hosts.gc_06.domains:
-    - gc-06.intern
   generic_settings.network.hosts.gc_06.syncthing_id: '"MJU2YAF-4IXFRSS-I3JHU2Z-6LUSSTN-L6BR5HS-PLS6ACJ-4E2X2UQ-5AVBUAQ"'
 
   generic_settings.network.hosts.s_01.ip_local: '"192.168.179.1"'
@@ -73,23 +71,26 @@ group_luxnix:
     - '"gc-03.intern"'
     - '"lx-annotate.local"'
   generic_settings.network.hosts.gc_04.domains:
-    - gc-04.intern
-    - lx-annotate.local
+    - '"gc-04.intern"'
+    - '"lx-annotate.local"'
   generic_settings.network.hosts.gc_05.domains:
-    - gc-05.intern
+    - '"gc-05.intern"'
+    - '"lx-annotate.local"'
+  generic_settings.network.hosts.gc_06.domains:
+    - '"gc-06.intern"'
     - '"lx-annotate.local"'
   generic_settings.network.hosts.gc_07.domains:
-    - gc-07.intern
+    - '"gc-07.intern"'
     - '"lx-annotate.local"'
   generic_settings.network.hosts.gc_08.domains:
-    - gc-08.intern
-    - lx-annotate.local
+    - '"gc-08.intern"'
+    - '"lx-annotate.local"'
   generic_settings.network.hosts.gc_09.domains:
-    - gc-09.intern
-    - lx-annotate.local
+    - '"gc-09.intern"'
+    - '"lx-annotate.local"'
   generic_settings.network.hosts.gc_10.domains:
-    - gc-10.intern
-    - lx-annotate.local
+    - '"gc-10.intern"'
+    - '"lx-annotate.local"'
 
   generic_settings.network.syncthing.enable: 'true'
   generic_settings.network.syncthing.extraFlags: []

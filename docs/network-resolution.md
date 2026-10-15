@@ -51,6 +51,15 @@ luxnix.generic-settings.network.publicDomainSuffixes = [
 This prevents `keycloak.endo-reg.net`, `cloud.endo-reg.net`, and other names
 under that suffix from being pinned to `172.16.255.12` in generated host files.
 
+## LAN address selection
+
+LAN addresses are selected only when both hosts explicitly declare the same
+non-null `network-cluster`. Hosts without cluster metadata use their inventory
+VPN address, even when an `ip-local` value exists. Do not assign a common cluster
+unless the machines actually share that LAN. This avoids selecting unreachable
+LAN addresses for mobile clients such as gc-06. Existing machines need the
+reviewed configuration activated before their generated `/etc/hosts` changes.
+
 ## Local-Only Domains
 
 Some names are intentionally local aliases. For example:

@@ -223,6 +223,7 @@ lib.foldl' lib.recursiveUpdate
     {
       luxnix.generic-settings.network.hosts.gc-06.domains = [
         "gc-06.intern"
+        "lx-annotate.local"
       ];
     }
     {

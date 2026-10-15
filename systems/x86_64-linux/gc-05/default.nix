@@ -105,9 +105,6 @@ lib.foldl' lib.recursiveUpdate
       roles.endoreg-client.paths.storagePersistingDevicePart = "part3";
     }
     {
-      roles.luxnix.lxAnnotateLocal.django.enrollLegacyDefaultSalt = true;
-    }
-    {
       services.luxnix.lxAnnotateLocal.django.centerIdentitySalt = false;
     }
     {
@@ -154,6 +151,9 @@ lib.foldl' lib.recursiveUpdate
     }
     {
       services.wg-lux-mcp.enable = true;
+    }
+    {
+      services.luxnix.lxAnnotateLocal.django.enrollLegacyDefaultSalt = true;
     }
     {
       services.luxnix.lxAnnotateLocal.runtime.packageVersion = "1.2.2";
@@ -311,6 +311,7 @@ lib.foldl' lib.recursiveUpdate
     {
       luxnix.generic-settings.network.hosts.gc-06.domains = [
         "gc-06.intern"
+        "lx-annotate.local"
       ];
     }
     {

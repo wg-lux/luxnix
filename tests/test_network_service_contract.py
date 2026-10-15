@@ -1,9 +1,68 @@
+import json
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
 
 from lx_administration.models.ansible.inventory import AnsibleInventory
 from lx_administration.yaml import load_unique_yaml_file
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.skipif(shutil.which("nix") is None, reason="Nix evaluation required")
+def test_network_cluster_routing_requires_explicit_membership() -> None:
+    expression = r'''
+      let
+        flake = builtins.getFlake ("git+file://" + builtins.toString ./.);
+        lib = flake.inputs.nixpkgs.lib.extend (_: _: { luxnix = {}; });
+        evaluate = own: remote: (lib.evalModules {
+          modules = [
+            ./modules/nixos/luxnix/generic-settings/network/default.nix
+            ({ lib, ... }: {
+              options.networking = lib.mkOption { type = lib.types.attrs; };
+              config.networking.hostName = "client";
+              config.luxnix.generic-settings.network.hosts = {
+                client = { ip-vpn = "10.0.0.1"; } // own;
+                peer = {
+                  ip-vpn = "10.0.0.2";
+                  ip-local = "192.168.1.2";
+                } // remote;
+              };
+            })
+          ];
+        }).config.networking.hosts;
+      in {
+        omitted = evaluate {} {};
+        unknown = evaluate { network-cluster = null; } { network-cluster = null; };
+        oneKnown = evaluate { network-cluster = "LAN"; } {};
+        different = evaluate { network-cluster = "A"; } { network-cluster = "B"; };
+        matching = evaluate { network-cluster = "LAN"; } { network-cluster = "LAN"; };
+      }
+    '''
+    result = subprocess.run(
+        ["nix", "eval", "--json", "--impure", "--expr", expression],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=True,
+    )
+    cases = json.loads(result.stdout)
+    for case in ("omitted", "unknown", "oneKnown", "different"):
+        assert cases[case]["10.0.0.2"] == ["peer"]
+        assert "192.168.1.2" not in cases[case]
+    assert cases["matching"]["192.168.1.2"] == ["peer"]
+    assert "10.0.0.2" not in cases["matching"]
+
+
+def test_gc06_is_targetable_by_managed_deployment() -> None:
+    inventory = AnsibleInventory.load_from_hosts_ini(
+        REPO_ROOT / "ansible/inventory/hosts.ini", subnet="172.16.255."
+    )
+    host = next(host for host in inventory.all if host.hostname == "gc-06")
+    assert "managed" in host.ansible_group_names
 
 
 def test_keycloak_dependency_uses_the_configured_vpn_service_name() -> None:

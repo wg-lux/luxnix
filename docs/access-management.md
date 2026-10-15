@@ -1,5 +1,9 @@
 # User Roles
 
+For SSH login failures, public-key authorization, and the distinction between
+`authorized_keys` and `known_hosts`, see
+[SSH Host Identity and Login Troubleshooting](ssh-host-identity.md).
+
 ## Overview
 The LuxNix system implements a hierarchical role-based access control system with three primary user types: admin, dev-01, and user. Each role has specific permissions and use cases designed for different operational needs.
 
