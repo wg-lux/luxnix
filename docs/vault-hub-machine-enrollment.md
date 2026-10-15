@@ -1043,14 +1043,14 @@ or reuse the removed node key for another physical machine.
 ## Controller SSH authorization
 
 `hub_enrollment_admin_access` in the inventory scopes the existing `gs-02`
-administrator public key to `gs-02` and `gc-09`. Its group YAML supplies
+administrator public key to `gs-02`, `gc-06` and `gc-09`. Its group YAML supplies
 `services.ssh.authorizedKeys` for generated NixOS configuration. The key is
 restricted to connections from `172.16.255.22` and has SSH forwarding and PTY
 allocation disabled; Ansible command execution remains available.
 
 For initial access from a controller that already has administrator access, use
 `ansible/playbooks/deploy_hub_admin_access.yml` through the protected playbook
-wrapper with the explicit `--limit gs-02,gc-09`. Supply the current sudo password
+wrapper with an explicit limit, for example `--limit gc-06`. Supply the current sudo password
 through Ansible's hidden sudo-password prompt (`--ask-become-pass`), never a literal command
 argument. The playbook appends the same public key to each administrator's
 persistent `~/.ssh/authorized_keys`, preserves other keys, and protects the SSH

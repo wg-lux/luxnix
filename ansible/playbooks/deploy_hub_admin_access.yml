@@ -14,7 +14,7 @@
     - name: Require the reviewed controller identity and explicit scope
       ansible.builtin.assert:
         that:
-          - inventory_hostname in ['gs-02', 'gc-09']
+          - inventory_hostname in ['gs-02', 'gc-06', 'gc-09']
           - (group_services['ssh.authorizedKeys'] | from_json) | length == 1
           - hub_admin_key is match('^from="172\.16\.255\.22",restrict ssh-ed25519 [A-Za-z0-9+/=]+ admin@gs-02$')
 
