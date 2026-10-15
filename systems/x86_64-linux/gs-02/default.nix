@@ -284,7 +284,7 @@ lib.foldl' lib.recursiveUpdate
           nodeKey = "gc-06";
           displayName = "gc-06 site node";
           role = "site_node";
-          centerKey = "rbk_stuttgart";
+          centerKey = "university_hospital_wuerzburg";
           sharedSecretFile = "/etc/secrets/vault/hub-pki/gc-06-source-node-secret";
         }
         {
