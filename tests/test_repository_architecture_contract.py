@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import json
 import re
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -37,9 +42,8 @@ def test_intel_gpu_laptop_hardware_matches_pre_consolidation_configuration() -> 
             key: value
             for key, value in settings.items()
             if key.startswith(("generic-settings.linux.", "generic-settings.gpu."))
-            or key in (
-                "generic-settings.hostPlatform", "generic-settings.systemStateVersion"
-            )
+            or key
+            in ("generic-settings.hostPlatform", "generic-settings.systemStateVersion")
         }
         serialized = json.dumps(hardware, sort_keys=True).encode()
         actual = hashlib.sha256(serialized).hexdigest()
@@ -84,14 +88,73 @@ def test_snowfall_layout_contract_is_declared() -> None:
 def test_reusable_profiles_define_project_options() -> None:
     expected_profiles = {
         "modules/nixos/profiles/endoreg-client/default.nix": "profiles.endoregClient",
-        "modules/nixos/profiles/endoreg-gpu-client/default.nix": "profiles.endoregGpuClient",
-        "modules/nixos/profiles/endoreg-central-hub/default.nix": "profiles.endoregCentralHub",
+        "modules/nixos/profiles/endoreg-gpu-client/default.nix": (
+            "profiles.endoregGpuClient"
+        ),
+        "modules/nixos/profiles/endoreg-central-hub/default.nix": (
+            "profiles.endoregCentralHub"
+        ),
     }
 
     for relative_path, option_path in expected_profiles.items():
         profile = _read(relative_path)
         assert f"options.{option_path}" in profile
         assert "mkDefault" in profile
+
+
+@pytest.mark.skipif(shutil.which("nix") is None, reason="Nix evaluation required")
+def test_endoreg_profiles_inherit_policy_from_role_options() -> None:
+    expression = r"""
+      let
+        flake = builtins.getFlake ("git+file://" + builtins.toString ./.);
+        lib = flake.inputs.nixpkgs.lib.extend (_: _: { luxnix = {}; });
+        evaluate = profile: (lib.evalModules {
+          modules = [
+            ./modules/nixos/profiles/endoreg-client/default.nix
+            ./modules/nixos/profiles/endoreg-central-hub/default.nix
+            ({ lib, ... }: {
+              options = {
+                roles = lib.mkOption { type = lib.types.attrs; };
+                services = lib.mkOption { type = lib.types.attrs; default = {}; };
+              };
+              config.profiles.${profile}.enable = true;
+            })
+          ];
+        }).config;
+        # Evaluate actual role API/database defaults with each profile's policy.
+        policy = profile: (lib.evalModules {
+          modules = [
+            { options.enable = lib.mkEnableOption "role";
+              options.api = import ./modules/nixos/roles/endoreg-client/api.nix {
+                inherit lib;
+              };
+              options.database = lib.mkOption {
+                type = lib.types.submodule
+                  (import ./modules/nixos/roles/endoreg-client/database.nix {
+                    inherit lib;
+                  });
+                default = {};
+              };
+            }
+            (evaluate profile).roles.endoreg-client
+          ];
+        }).config;
+      in builtins.mapAttrs (_: profile: policy profile) {
+        client = "endoregClient"; hub = "endoregCentralHub";
+      }
+    """
+    result = subprocess.run(
+        ["nix", "eval", "--json", "--impure", "--expr", expression],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=True,
+    )
+    profiles = json.loads(result.stdout)
+    assert profiles["client"] == profiles["hub"]
+    assert profiles["client"]["enable"] is True
+    assert profiles["client"]["api"]["useHttps"] is True
 
 
 def test_common_development_bucket_contains_introspection_tools() -> None:
@@ -123,7 +186,8 @@ def test_nix_ld_library_ownership_is_not_duplicated() -> None:
     assert "extraLibraries" in cli_module
     assert "cfg.libraries ++ cfg.extraLibraries" in cli_module
     assert "ldBase" not in package_role
-    assert "extraLibraries = optionals cfg.cuda ldCuda;" in package_role
+    # The package role no longer owns a second CUDA loader library list.
+    assert "ldCuda" not in package_role
     assert "cli.programs.nix-ld" not in base_server
 
 
@@ -179,9 +243,7 @@ def test_autoconf_hosts_use_one_shared_host_baseline() -> None:
     assert "ansible.enable = true;" in shared
     assert "settings.mutable = false;" in shared
 
-    template = _read(
-        "conf/nix-templates/systems/x86_64-linux/main/default.nix.j2"
-    )
+    template = _read("conf/nix-templates/systems/x86_64-linux/main/default.nix.j2")
     assert template.count("../host-common.nix") == 1
     assert "ansible.enable" not in template
     assert "settings.mutable" not in template

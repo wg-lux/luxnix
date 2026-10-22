@@ -1,4 +1,4 @@
-# Worker configuration shapes
+# Worker configuration and lifecycle rules
 
 Every Celery worker is declared through the typed `mkWorker` constructor in
 [`worker.nix`](worker.nix). It validates a common record and produces the shape
@@ -88,6 +88,27 @@ The renderer defaults `TimeoutStopSec` to `45min` when omitted; worker overrides
 including the FFmpeg warm-shutdown timeout, take precedence. A supplied
 `runtimeMaxSec` remains effective independently of activation mode.
 
+Shutdown, reboot, and service restart wait for workers to stop. Allow active
+LX-Annotate tasks to finish within the configured stop grace period; a long
+stop job alone is not evidence of a hung worker. The default is `45min`, frame
+extraction defaults to `45min`, and FFmpeg defaults to `6h15min` through
+`runtime.ffmpegWorker.timeoutStopSec`. These are bounded waits: systemd may
+send a final kill signal after the timeout. They do not guarantee task completion
+or an empty broker queue.
+
+Before planned maintenance, pause task submission and scheduling, account for
+timer-triggered workers and Celery Beat, and inspect active tasks and worker
+logs. Keep required database, broker, and storage services available while
+workers finish. Do not shorten stop timeouts or force-kill workers merely to
+speed up shutdown. Investigate stalled work and record any explicitly approved
+forced interruption and recovery checks.
+
+Use the effective host unit settings when planning downtime; inventory or host
+overrides can change these defaults. After restart, verify worker health and
+task outcomes before resuming submissions. This repository configures the stop
+budget, but application signal handling and successful task recovery require
+runtime verification; local Nix evaluation alone does not establish them.
+
 ## Existing workers
 
 The unit column omits `.service`; the pool column names `runtime.workerPools` keys.
@@ -104,6 +125,20 @@ The unit column omits `.service`; the pool column names `runtime.workerPools` ke
 | llm-inference | `lx-annotate-celery-llm-inference-worker` | `llm-inference` | `llm_inference` | `llmInference` |
 
 ## Adding or changing a worker
+
+With `runtime.frontendRequestThrottle.enable`, all Celery pools share
+`lx-annotate-background.slice`, including maintenance and hub transfer. File
+watching, SAP import, frame export and the external file mover also join this
+slice. The controller limits their aggregate CPU and I/O resources during API
+requests and the trailing activity window; individual worker limits still apply.
+Startup gates remain outside the background slice. Disabling request throttling
+removes these LuxNix slice assignments.
+
+The upstream LX-Annotate Nix module additionally defines sibling foreground and
+background slices for proportional scheduling. Consume the reviewed upstream
+module release to enable that policy; a wheel update alone is insufficient.
+Slice changes require service restarts, so preserve the shutdown rules above.
+Web CPU quotas and memory limits must still leave enough capacity for annotation.
 
 Use the same record layout as the existing pipeline worker:
 

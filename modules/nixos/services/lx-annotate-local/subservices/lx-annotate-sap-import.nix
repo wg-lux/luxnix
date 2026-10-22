@@ -5,6 +5,7 @@ with ctx;
 {
   systemd.services.lx-annotate-sap-import = mkLxAnnotateAppService {
     description = "Convert SAP IS-H zip drops into preanonymized watcher payload";
+    background = true;
     wantedBy = [ ];
     after = [
       "lx-annotate-load-base-data.service"

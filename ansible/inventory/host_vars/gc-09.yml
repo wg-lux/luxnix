@@ -9,6 +9,8 @@ host_roles:
 
 host_services:
   luxnix.lxAnnotateLocal.django.enrollLegacyDefaultSalt: "true"
+  # Würzburg shares one center salt; differing local salts stay as historical keys.
+  luxnix.lxAnnotateLocal.django.centerIdentitySalt: "true"
 
 host_nixos:
   nix.settings.max_jobs: 1

@@ -10,6 +10,7 @@ from ansible.parsing.vault import VaultLib, VaultSecret
 from pydantic import BaseModel, ConfigDict
 
 from ...permissions import PRIVATE_FILE_MODE, ensure_private_directory
+from ...secret_storage import encrypted_storage
 from .manager_utils import _get_by_name, _is_valid
 
 if TYPE_CHECKING:
@@ -32,6 +33,7 @@ def _read_key(path: str | Path) -> VaultSecret:
         raise ValueError("Vault key must be an existing regular, non-symlink file")
     if key_path.stat().st_mode & 0o077:
         raise ValueError("Vault key must not grant group or other permissions")
+    encrypted_storage(key_path, allow_runtime=True)
     key = key_path.read_bytes().strip()
     if not key:
         raise ValueError("Vault key must not be empty")

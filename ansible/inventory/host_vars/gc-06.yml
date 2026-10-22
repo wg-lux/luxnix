@@ -26,6 +26,8 @@ host_roles:
 
 host_services:
   luxnix.lxAnnotateLocal.django.enrollLegacyDefaultSalt: "true"
+  # Würzburg shares one center salt; differing local salts stay as historical keys.
+  luxnix.lxAnnotateLocal.django.centerIdentitySalt: "true"
 
 host_luxnix:
   # Temporary bootstrap exception; set false after verified Vault enrollment.

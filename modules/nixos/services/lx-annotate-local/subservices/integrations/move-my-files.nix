@@ -6,5 +6,8 @@ with ctx;
   systemd.services.move-my-files = mkIf config.services.luxnix.fileMover.enable {
     after = mkAfter [ "lx-annotate-runtime-env.service" ];
     wants = mkAfter [ "lx-annotate-runtime-env.service" ];
+    serviceConfig = mkIf cfg.runtime.frontendRequestThrottle.enable {
+      Slice = "lx-annotate-background.slice";
+    };
   };
 }

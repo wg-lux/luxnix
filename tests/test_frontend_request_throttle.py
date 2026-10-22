@@ -196,10 +196,13 @@ def test_nixos_worker_scope_and_runtime_contract():
           "lx-annotate-celery-frame-extraction-worker"
           "lx-annotate-celery-inference-worker"
           "lx-annotate-celery-training-worker" "lx-annotate-celery-llm-inference-worker"
+          "lx-annotate-celery-worker" "lx-annotate-celery-hub-transfer-worker"
+          "lx-annotate-filewatcher" "lx-annotate-sap-import"
+          "lx-annotate-export-frames" "move-my-files"
         ];
         foreground = builtins.map
           (name: s.${name}.serviceConfig.Slice or "system.slice") [
-          "lx-annotate" "postgresql" "lx-annotate-celery-worker"
+          "lx-annotate" "postgresql" "lx-annotate-migrate"
         ];
         directory = s.lx-annotate.environment.LX_ANNOTATE_REQUEST_THROTTLE_DIRECTORY;
         controller = s.lx-annotate-request-throttle.serviceConfig.ExecStart;
@@ -211,7 +214,7 @@ def test_nixos_worker_scope_and_runtime_contract():
 
     value = json.loads(result.stdout)
     assert value["enabled"] and value["tail"] == 2 and not value["legacy"]
-    assert value["workers"] == ["lx-annotate-background.slice"] * 6
+    assert value["workers"] == ["lx-annotate-background.slice"] * 12
     assert value["foreground"] == ["system.slice"] * 3
     assert value["directory"] == "/run/lx-annotate-request-throttle"
     assert "--tail-seconds" in value["controller"]
@@ -241,13 +244,23 @@ def test_nixos_disabled_and_invalid_configurations(overrides, expected):
         directory = c.systemd.services.lx-annotate.environment
           .LX_ANNOTATE_REQUEST_THROTTLE_DIRECTORY;
         controller = builtins.hasAttr "lx-annotate-request-throttle" c.systemd.services;
+        backgroundSlices = builtins.map
+          (name: c.systemd.services.${name}.serviceConfig.Slice or "system.slice") [
+          "lx-annotate-celery-worker" "lx-annotate-celery-hub-transfer-worker"
+          "lx-annotate-celery-ffmpeg-worker" "lx-annotate-celery-pipeline-worker"
+          "lx-annotate-filewatcher" "lx-annotate-sap-import"
+          "lx-annotate-export-frames" "move-my-files"
+        ];
       }
     """.replace("__OVERRIDES__", overrides)
     )
     assert result.returncode == 0, result.stderr
     value = json.loads(result.stdout)
     if expected is None:
-        assert value == {"failures": [], "directory": "", "controller": False}
+        assert value == {
+            "failures": [], "directory": "", "controller": False,
+            "backgroundSlices": ["system.slice"] * 8,
+        }
     else:
         assert any(expected in message for message in value["failures"])
 

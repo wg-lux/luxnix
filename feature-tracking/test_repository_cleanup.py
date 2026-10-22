@@ -33,8 +33,8 @@ IGNORED_LOCAL_OUTPUTS = (
 
 RETAINED_SOURCES = (
     "wg-lux-mcp/pyproject.toml",
-    "feature-tracking/FrameCleanerIntegration.yml",
-    "feature-tracking/ReportReaderIntegration.yml",
+    "feature-tracking/FrameCleanerIntegration.yaml",
+    "feature-tracking/ReportReaderIntegration.yaml",
     "docs/operations/gs-02-local-redis-broker.md",
     "docs/vault-hub-machine-enrollment.md",
     "ansible/inventory/host_vars/gs-02.yml",

@@ -30,7 +30,12 @@ priority; `mkDefault` on the final lists would discard the extra caches. The
 CUDA cache is `https://cache.nixos-cuda.org`; its retired Cachix URL is removed
 from both the daemon defaults and the flake settings.
 
-`cli.programs.nix-ld` owns the common `nix-ld` library set.
-`roles.custom-packages` contributes only opt-in libraries, currently the CUDA
-runtime bundle, through `cli.programs.nix-ld.extraLibraries`. Host roles should
-select the relevant bundle and must not redeclare either library set.
+`cli.programs.nix-ld` owns its library set. Installing a command-line package
+through the lists above does not add it to the dynamic loader's library path;
+use its explicit `extraLibraries` interface only for a required library.
+
+The same module owns `luxnix.packages.shared`, `roles` and `machine`. Existing
+bundles contribute through `luxnix.packages.roles.custom-packages`; identical
+packages selected in several scopes are installed once by this aggregator.
+See [Package Management](../../../../../docs/package-management.md) for YAML
+examples, custom flake source ownership, local derivations and installation.

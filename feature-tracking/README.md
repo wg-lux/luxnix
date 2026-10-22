@@ -8,6 +8,14 @@ A percentage communicates progress; it is not a release approval. A feature is
 `PRODUCTION_READY` only when every required criterion is `verified` with stable
 evidence and an identified assessor.
 
+Feature records and `schema.example.yaml` use `.yaml`. `policy.yml` and
+`structure.yml` retain their repository-wide conventions. The tracker reads legacy
+`.yml` records for compatibility and creates new records as `.yaml`; duplicate
+feature IDs across extensions are rejected.
+
+LX-Annotate service worker lifecycle rules are maintained centrally in
+[Workers.md](../modules/nixos/services/lx-annotate-local/Workers.md#activation-and-shutdown).
+
 ## Commands
 
 Run commands from the repository root:

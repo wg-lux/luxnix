@@ -154,11 +154,26 @@ in
         glm52 = "gs-02";
         psqlMain = "gs-02";
         psqlTest = "s-04";
+        redis = "s-04";
       };
       description = ''
         Maps service names to the hostname where they are deployed.
         This allows automatic derivation of VPN IPs for services.
       '';
+    };
+
+    vault.vpnIp = mkOption {
+      type = types.str;
+      readOnly = true;
+      default =
+        let
+          address = getServiceVpnIp "vault";
+        in
+        if address != "172.16.255.x" then
+          address
+        else
+          throw "Vault requires serviceHosts.vault to select an inventory host with a VPN address.";
+      description = "Vault VPN address derived from serviceHosts.vault and the inventory host map.";
     };
 
     syncthing = {
@@ -254,6 +269,19 @@ in
         description = ''
           The public GLM-5.2 inference domain.
         '';
+      };
+    };
+
+    redis = {
+      vpnIp = mkOption {
+        type = types.str;
+        default = getServiceVpnIp "redis";
+        description = "VPN address of the shared Redis host, derived from serviceHosts.";
+      };
+      port = mkOption {
+        type = types.port;
+        default = 6380;
+        description = "Port shared by the Redis server and its remote clients.";
       };
     };
 

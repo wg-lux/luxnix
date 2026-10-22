@@ -22,6 +22,9 @@ entrypoints:
 - name: overlays
   file: overlays/hyprpanel/default.nix
   purpose: Inspect overlays ownership and interfaces.
+- name: winapps-overlay
+  file: overlays/winapps/default.nix
+  purpose: Expose the pinned IMGW client with its adjacent Nix installer compatibility patch.
 - name: shells
   file: shells/default/default.nix
   purpose: Inspect shells ownership and interfaces.

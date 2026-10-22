@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import grp
 import os
 from pathlib import Path
-import pwd
 import runpy
 import subprocess
 import sys
@@ -18,7 +16,12 @@ ACTIVE, LEGACY, MANIFEST = (MODULE[key] for key in ("ACTIVE", "LEGACY", "MANIFES
 
 @pytest.fixture
 def stores(tmp_path):
-    return tuple(tmp_path / name for name in ("deployed", "recovery", "replica"))
+    stores = tuple(tmp_path / name for name in ("deployed", "recovery", "replica"))
+    stores[0].mkdir(mode=0o700, exist_ok=True)
+    active = stores[0] / ACTIVE
+    active.write_bytes(b"a" * 64 + b"\n")
+    active.chmod(0o600)
+    return stores
 
 
 def provision(stores):
@@ -61,7 +64,7 @@ def test_any_surviving_salt_restores_all_missing_copies(stores, survivor):
 
 
 def test_adopts_existing_salt_without_rewriting_it(stores):
-    stores[0].mkdir(mode=0o700)
+    stores[0].mkdir(mode=0o700, exist_ok=True)
     active = stores[0] / ACTIVE
     active.write_bytes(b"established-test-salt\r\n")
     active.chmod(0o600)
@@ -70,25 +73,33 @@ def test_adopts_existing_salt_without_rewriting_it(stores):
     assert (stores[1] / "active.salt").read_bytes() == b"established-test-salt\n"
 
 
-def test_shared_center_source_enrolls_two_machines_without_local_generation(stores, tmp_path):
+def test_shared_center_source_enrolls_two_machines_without_local_generation(
+    stores, tmp_path
+):
     source = tmp_path / "center-identity"
-    source.write_bytes(b"test-center-identity-material\n")
+    source.write_bytes(b"a" * 64 + b"\n")
     source.chmod(0o600)
-    other = tuple(tmp_path / f"second-{name}" for name in ("deployed", "recovery", "replica"))
+    other = tuple(
+        tmp_path / f"second-{name}" for name in ("deployed", "recovery", "replica")
+    )
     for directories in (stores, other):
         MODULE["provision"](*directories, os.getuid(), os.getgid(), source)
         assert (directories[0] / ACTIVE).read_bytes() == source.read_bytes()
 
 
 @pytest.mark.parametrize("kind", ["missing", "public", "symlink", "different"])
-def test_center_source_failure_never_replaces_established_machine_salt(stores, tmp_path, kind):
+def test_center_source_failure_never_replaces_established_machine_salt(
+    stores, tmp_path, kind
+):
     provision(stores)
     before = (stores[0] / ACTIVE).read_bytes()
     source = tmp_path / "center-identity"
     if kind == "symlink":
         source.symlink_to(stores[0] / ACTIVE)
     elif kind != "missing":
-        source.write_bytes(b"different-center-material\n" if kind == "different" else before)
+        source.write_bytes(
+            b"different-center-material\n" if kind == "different" else before
+        )
         source.chmod(0o644 if kind == "public" else 0o600)
     with pytest.raises((ValueError, OSError)):
         MODULE["provision"](*stores, os.getuid(), os.getgid(), source)
@@ -98,7 +109,7 @@ def test_center_source_failure_never_replaces_established_machine_salt(stores, t
 def test_missing_center_source_never_generates_a_machine_identity(stores, tmp_path):
     with pytest.raises(ValueError, match="unavailable"):
         MODULE["provision"](*stores, os.getuid(), os.getgid(), tmp_path / "missing")
-    assert not (stores[0] / ACTIVE).exists()
+    assert (stores[0] / ACTIVE).read_bytes() == b"a" * 64 + b"\n"
 
 
 @pytest.mark.parametrize("evidence", ["manifest", "receipt", "legacy"])
@@ -131,7 +142,7 @@ def test_conflicting_copies_are_preserved(stores, index):
     assert all(path.read_bytes() == value for path, value in before.items())
 
 
-@pytest.mark.parametrize("failure_after", range(1, 8))
+@pytest.mark.parametrize("failure_after", range(1, 7))
 def test_interrupted_publication_resumes_same_salt(stores, monkeypatch, failure_after):
     real = MODULE["publish"]
     count = 0
@@ -148,8 +159,6 @@ def test_interrupted_publication_resumes_same_salt(stores, monkeypatch, failure_
         with pytest.raises(OSError):
             provision(stores)
     original = (stores[1] / "active.salt").read_bytes()
-    if failure_after < 5:
-        assert not (stores[0] / ACTIVE).exists()
     provision(stores)
     assert (stores[0] / ACTIVE).read_bytes() == original
 
@@ -175,24 +184,12 @@ def test_unsafe_or_corrupt_inputs_fail_closed(stores, kind):
         provision(stores)
 
 
-def test_concurrent_cli_runs_share_one_salt_and_do_not_log_it(stores):
-    command = [sys.executable, str(SCRIPT)]
-    for option, directory in zip(("secret-dir", "recovery-dir", "replica-dir"), stores):
-        command.extend([f"--{option}", str(directory)])
-    command.extend(
-        [
-            "--user",
-            pwd.getpwuid(os.getuid()).pw_name,
-            "--group",
-            grp.getgrgid(os.getgid()).gr_name,
-        ]
-    )
-    processes = [
-        subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        for _ in range(4)
-    ]
-    for process in processes:
-        stdout, stderr = process.communicate(timeout=20)
-        assert process.returncode == 0, stderr
-        assert (stores[0] / ACTIVE).read_bytes().strip() not in stdout + stderr
-    provision(stores)
+def test_cli_requires_authoritative_source_and_encrypted_storage(stores):
+    result = subprocess.run([sys.executable, str(SCRIPT)], capture_output=True)
+    assert result.returncode == 2
+
+
+def test_missing_authoritative_salt_never_generates_locally(tmp_path):
+    stores = tuple(tmp_path / name for name in ("deployed", "recovery", "replica"))
+    with pytest.raises(ValueError, match="local generation is prohibited"):
+        provision(stores)

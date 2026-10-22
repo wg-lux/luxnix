@@ -9,6 +9,7 @@ responsibilities:
 boundaries:
 - Never log plaintext secrets or substitute placeholder keys
 - Do not bypass encrypted-at-rest or host identity boundaries
+- Key reads require the shared encrypted storage verifier; key writes use guarded private file publication
 entrypoints:
 - name: manager
   file: manager.py

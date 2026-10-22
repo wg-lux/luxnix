@@ -4,6 +4,11 @@ This guide describes how to deploy a LuxNix host with current repository tooling
 
 For a first-time setup flow, start with [Getting Started](./getting-started.md).
 
+Before restarting or shutting down an LX-Annotate host, follow the central
+[worker lifecycle rules](https://github.com/wg-lux/luxnix/blob/main/modules/nixos/services/lx-annotate-local/Workers.md#activation-and-shutdown).
+Shutdown waits for workers to stop within their configured grace periods,
+including the longer FFmpeg allowance; plan maintenance around active tasks.
+
 ## Scope
 
 - Example host names: `gc-02`, `s-02`, etc.

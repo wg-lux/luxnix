@@ -290,8 +290,8 @@ in
           wheelPath = mkOption {
             type = types.nullOr types.path;
             default = pkgs.fetchurl {
-              url = "https://files.pythonhosted.org/packages/df/c5/ca8bc8ce6b8172c877ed253eb7b106c0995bde83e075b782d16513259e6f/lx_annotate-1.5.7-py3-none-any.whl";
-              hash = "sha256-lDL1JGOdG6Oyf8YL2WqGp1ENs69gZ8HIiv3NAxaq/ZE=";
+              url = "https://files.pythonhosted.org/packages/16/7a/adb0449a030ab1354cb30f17ff919d3587b6fbd726c296c4f7671282c0a4/lx_annotate-1.5.9-py3-none-any.whl";
+              hash = "sha256-zwUDHZsZcr78LcnQxyZCIMf1cFebJfpc+L2MZimTL9g=";
             };
             description = "Path to the lx-annotate wheel artifact used in wheel mode.";
           };
@@ -299,6 +299,12 @@ in
             type = types.str;
             default = inferWheelPackageVersion cfg.runtime.wheelPath;
             defaultText = literalExpression "version parsed from runtime.wheelPath";
+            apply =
+              value:
+              if cfg.runtime.mode == "wheel" && value != inferWheelPackageVersion cfg.runtime.wheelPath then
+                throw "runtime.packageVersion must match runtime.wheelPath; select the release through wheelPath."
+              else
+                value;
             description = "lx-annotate Python package version exported as LX_ANNOTATE_PACKAGE_VERSION.";
           };
           hlsEncodingProfile = mkOption {

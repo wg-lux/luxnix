@@ -59,7 +59,7 @@ def _fixture_feature(
     command_verification: bool = False,
 ) -> FeatureDefinition:
     payload = yaml.safe_load(
-        (TRACKING_DIR / "schema.example.yml").read_text(encoding="utf-8"),
+        (TRACKING_DIR / "schema.example.yaml").read_text(encoding="utf-8"),
     )
     payload.update({"id": feature_id, "name": name, "source_documents": []})
     base_criterion = payload["definition_of_done"][0]
@@ -180,7 +180,7 @@ def test_repository_registry_is_valid_and_tracks_current_assessments() -> None:
     _, features = load_registry(TRACKING_DIR)
     feature_paths = tuple(
         path
-        for path in TRACKING_DIR.glob("*.yml")
+        for path in TRACKING_DIR.glob("*.yaml")
         if path.name not in NON_FEATURE_FILES
     )
 
@@ -234,19 +234,34 @@ def test_update_and_atomic_save_round_trip(tmp_path: Path) -> None:
 
 def test_save_feature_preserves_existing_filename_case(tmp_path: Path) -> None:
     feature = _fixture_feature()
-    existing = tmp_path / "FixtureFeature.yml"
+    existing = tmp_path / "FixtureFeature.yaml"
     existing.write_text("placeholder: true\n", encoding="utf-8")
 
     destination = save_feature(feature, tmp_path)
 
     assert destination == existing
-    assert not (tmp_path / "fixture_feature.yml").exists()
+    assert not (tmp_path / "fixture_feature.yaml").exists()
     assert load_feature_file(existing).id == "fixture_feature"
+
+
+def test_registry_rejects_duplicate_extensions(tmp_path: Path) -> None:
+    (tmp_path / "policy.yml").write_bytes((TRACKING_DIR / "policy.yml").read_bytes())
+    destination = save_feature(_fixture_feature(), tmp_path)
+    assert destination.suffix == ".yaml"
+    assert len(load_registry(tmp_path)[1]) == 1
+    legacy = destination.with_suffix(".yml")
+    destination.rename(legacy)
+    assert len(load_registry(tmp_path)[1]) == 1
+    destination.write_bytes(legacy.read_bytes())
+    with pytest.raises(TrackerError):
+        load_registry(tmp_path)
+    with pytest.raises(TrackerError, match="Mehrere Feature-Dateien"):
+        save_feature(_fixture_feature(), tmp_path)
 
 
 def test_file_name_must_match_feature_id(tmp_path: Path) -> None:
     payload = _fixture_feature().model_dump(mode="json", exclude_none=True)
-    path = tmp_path / "wrong_name.yml"
+    path = tmp_path / "wrong_name.yaml"
     path.write_text(yaml.safe_dump(payload), encoding="utf-8")
 
     with pytest.raises(TrackerError, match="Dateiname und Feature-ID"):
@@ -269,7 +284,7 @@ def test_check_returns_failure_until_definition_of_done_is_verified(
         ),
         encoding="utf-8",
     )
-    (tracking_dir / "FixtureFeature.yml").write_text(
+    (tracking_dir / "FixtureFeature.yaml").write_text(
         yaml.safe_dump(feature.model_dump(mode="json"), sort_keys=False),
         encoding="utf-8",
     )
@@ -289,7 +304,7 @@ def test_verify_update_requires_assessor_before_command_runs(tmp_path: Path) -> 
         primary_criterion_id="terminal_command",
         command_verification=True,
     )
-    (tracking_dir / "FixtureFeature.yml").write_text(
+    (tracking_dir / "FixtureFeature.yaml").write_text(
         yaml.safe_dump(feature.model_dump(mode="json"), sort_keys=False),
         encoding="utf-8",
     )
@@ -325,8 +340,9 @@ def test_feature_references_match_ids_names_and_separator_variants() -> None:
     assert find_feature_references("documentation cleanup", features) == ()
 
 
+@pytest.mark.parametrize("suffix", [".yaml", ".yml"])
 def test_commit_guard_uses_staged_readiness_not_unstaged_yaml(
-    tmp_path: Path,
+    tmp_path: Path, suffix: str,
 ) -> None:
     feature = _fixture_feature()
     policy, _ = load_registry(TRACKING_DIR)
@@ -337,7 +353,7 @@ def test_commit_guard_uses_staged_readiness_not_unstaged_yaml(
         yaml.safe_dump(staged_policy.model_dump(mode="json"), sort_keys=False),
         encoding="utf-8",
     )
-    feature_path = tracking_dir / "FixtureFeature.yml"
+    feature_path = tracking_dir / f"FixtureFeature{suffix}"
     feature_path.write_text(
         yaml.safe_dump(feature.model_dump(mode="json"), sort_keys=False),
         encoding="utf-8",

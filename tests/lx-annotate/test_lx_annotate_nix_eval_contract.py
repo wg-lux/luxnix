@@ -27,6 +27,41 @@ def _option_source() -> str:
     )
 
 
+def test_runtime_dependency_metadata_is_not_taken_from_source_inputs() -> None:
+    result = _nix_eval_expr_json("""
+      let
+        flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
+        lib = flake.inputs.nixpkgs.lib;
+        inspect = mode: let
+          cfg = (flake.nixosConfigurations.gc-02.extendModules {
+            modules = [ {
+              services.luxnix.lxAnnotateLocal.runtime.mode = lib.mkForce mode;
+            } ];
+          }).config;
+          retired = [
+            "ENDOREG_FEATURE_REGISTRY_REVISION"
+            "ENDOREG_FEATURE_REGISTRY_SOURCE_VERSION"
+            "ENDOREG_RUNTIME_ENDOREG_DB_VERSION"
+          ];
+          staleKeys = env: lib.intersectLists retired (builtins.attrNames env);
+        in {
+          application = staleKeys cfg.services.lx-annotate.extraEnv;
+          units = lib.filterAttrs (_: keys: keys != [])
+            (lib.mapAttrs (_: unit: staleKeys unit.environment) cfg.systemd.services);
+        };
+      in {
+        independentInput = flake.inputs ? endoreg-db;
+        wheel = inspect "wheel";
+        package = inspect "repo";
+      }
+    """)
+    assert result == {
+        "independentInput": False,
+        "wheel": {"application": [], "units": {}},
+        "package": {"application": [], "units": {}},
+    }
+
+
 def test_automatic_media_cleanup_is_enabled_on_every_application_host() -> None:
     hosts = _nix_eval_expr_json("""
       let

@@ -51,3 +51,18 @@ def load_test_env_vars() -> None:
 
 # def pytest_configure() -> None:
 #     _load_env_file()
+
+
+@pytest.fixture
+def encrypted_test_storage(monkeypatch):
+    """Synthetic encrypted devices for tests that create isolated test-only keys."""
+    from lx_administration import secret_storage
+
+    def probe(*command):
+        return {
+            "swapon": {"swapdevices": []},
+            "findmnt": {"filesystems": [{"fstype": "ext4", "source": "/dev/mapper/test"}]},
+            "lsblk": {"blockdevices": [{"type": "crypt"}]},
+        }[command[0]]
+
+    monkeypatch.setattr(secret_storage, "_probe", probe)

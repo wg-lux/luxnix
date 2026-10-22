@@ -17,7 +17,7 @@ in
   };
 
   config = mkIf cfg.enable {
-    environment.systemPackages = with pkgs; [
+    luxnix.packages.roles.nextcloud-client = with pkgs; [
       nextcloud-client
       nextcloud-notify_push
       nextcloud-talk-desktop

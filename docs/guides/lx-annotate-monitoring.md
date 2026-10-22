@@ -2,7 +2,7 @@
 
 **Schema version:** 1
 
-**Feature:** `feature-tracking/lx_annotate_operational_monitoring.yml`
+**Feature:** `feature-tracking/lx_annotate_operational_monitoring.yaml`
 
 ## Web resilience
 

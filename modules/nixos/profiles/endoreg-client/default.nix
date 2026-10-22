@@ -25,25 +25,8 @@ in
         cloud = mkDefault true;
       };
 
-      endoreg-client = {
-        enable = mkDefault true;
-        centralNodes = mkDefault [ "s-04" ];
-
-        api = {
-          djangoAllowedHosts = mkDefault [
-            "localhost"
-            "127.0.0.1"
-            "172.16.255.106"
-            "172.16.255.230"
-            "lx-annotate.local"
-          ];
-          httpProtocol = mkDefault "https";
-          language = mkDefault "en-us";
-          logLevel = mkDefault "WARNING";
-          maxRequestSize = mkDefault "50G";
-          settingsProfile = mkDefault "prod";
-        };
-      };
+      # Inventory owns deployment policy; role options own reusable defaults.
+      endoreg-client.enable = mkDefault true;
     };
   };
 }

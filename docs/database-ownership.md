@@ -41,7 +41,8 @@ Conflicting values fail evaluation instead of being hidden by `mkForce`.
 For compatibility, declaring the legacy external host defaults ownership to
 `external`; otherwise it defaults to `local`. Address spelling does not override
 an explicit ownership declaration. gs-02 explicitly declares `local` for its
-managed `127.0.0.1:5432` endpoint. A new remote endpoint configured directly through
+managed loopback endpoint. Its port follows the effective local PostgreSQL
+listener. A new remote endpoint configured directly through
 `database.host` must also declare `ownership = "external"`.
 
 External ownership does not disable machine-wide PostgreSQL: inventory and
@@ -56,6 +57,19 @@ the former maintenance-password default. No database identity or file is renamed
 ## PostgreSQL Owner
 
 The PostgreSQL database and user are owned by the NixOS `roles.postgres.default` role, not by Ansible.
+
+The shared service port is owned by
+`generic_settings.network.psqlMain.port` in
+`ansible/inventory/group_vars/all/30-nix.yml`. On the host selected by
+`generic_settings.network.serviceHosts.psqlMain`, the PostgreSQL role derives its
+port from that setting; a conflicting listener override fails validation.
+Remote clients consume the same setting. gs-02 keeps its explicit local ownership
+and loopback address, but derives its application port from the local listener.
+Its client-role database port follows that listener too, keeping LX-AI aligned.
+Other hosts' independent local databases retain their own default port.
+Provisioning, maintenance, and the optional PostgreSQL main-role firewall use
+the effective listener port. Changing the shared port requires coordinated
+server and client deployment; these settings do not migrate live connections.
 
 Important implementation points:
 

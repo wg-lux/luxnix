@@ -6,6 +6,7 @@ with ctx;
   systemd = {
     services.lx-annotate-filewatcher = mkLxAnnotateAppService {
       description = "Process pending LX-Annotate import files";
+      background = true;
       wantedBy = [ ];
       after = [
         "lx-annotate-load-base-data.service"

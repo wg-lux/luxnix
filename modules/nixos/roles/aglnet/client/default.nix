@@ -8,6 +8,8 @@
 with lib;
 let
   cfg = config.roles.aglnet.client;
+  network = config.luxnix.generic-settings.network;
+  dnsAddress = network.hosts.${network.serviceHosts.openvpn}.ip-vpn;
 
   # defaultBackupNameservers = ["8.8.8.8" "1.1.1.1"];
   defaultPort = 1194;
@@ -19,8 +21,6 @@ let
 
   defaultDev = "tun";
 
-  defaultSubnet = "172.16.255.0";
-  defaultSubnetIntern = "255.255.255.0";
   # defaultSubnetSuffix = "32";
   defaultKeepalive = "10 1200";
   defaultCipher = "AES-256-GCM";
@@ -118,14 +118,20 @@ in
 
     subnet = mkOption {
       type = types.str;
-      default = defaultSubnet;
+      default = config.roles.aglnet.host.subnet;
       description = "Subnet for the VPN";
     };
 
     subnetIntern = mkOption {
       type = types.str;
-      default = defaultSubnetIntern;
+      default = config.roles.aglnet.host.subnetIntern;
       description = "Subnet intern for the VPN";
+    };
+
+    localDomain = mkOption {
+      type = types.str;
+      default = config.roles.aglnet.host.localDomain;
+      description = "Local domain accepted from the VPN server";
     };
 
     keepalive = mkOption {
@@ -220,13 +226,13 @@ in
           route ${cfg.subnet} ${cfg.subnetIntern}
 
           # Allow server to push specific routes and DNS settings
-          pull-filter accept "route 172.16.255.0"
-          pull-filter accept "route 172.16.255.1"
-          pull-filter accept "route 172.16.255.12"
+          pull-filter accept "route ${cfg.subnet}"
+          pull-filter accept "route ${dnsAddress}"
+          pull-filter accept "route ${network.nginx.vpnIp}"
           pull-filter accept "dhcp-option DNS"
-          pull-filter accept "dhcp-option DOMAIN endoreg.intern"
-          pull-filter accept "dhcp-option DOMAIN-ROUTE endoreg.intern"
-          pull-filter accept "dhcp-option DOMAIN-SEARCH endoreg.intern"
+          pull-filter accept "dhcp-option DOMAIN ${cfg.localDomain}"
+          pull-filter accept "dhcp-option DOMAIN-ROUTE ${cfg.localDomain}"
+          pull-filter accept "dhcp-option DOMAIN-SEARCH ${cfg.localDomain}"
 
           remote-cert-tls server
           verb ${cfg.verbosity}      

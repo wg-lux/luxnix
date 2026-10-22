@@ -3,6 +3,21 @@
   no_log: true
   diff: false
   block:
+    - name: Verify site identity storage before reading credentials
+      ansible.builtin.include_tasks: verify_secret_storage.yml
+      vars:
+        secret_remote_paths: [/etc/secrets/vault/hub-pki]
+
+    - name: Verify hub helper and persistent enrollment storage
+      ansible.builtin.script:
+        cmd: >-
+          {{ (playbook_dir ~ '/../../lx_administration/secret_storage.py') | quote }}
+          --allow-runtime /run /var/lib/vault/site-lifecycle
+          {{ enrollment_source | quote }} /etc/secrets/vault/hub-pki
+        executable: python3
+      delegate_to: '{{ enrollment_hub }}'
+      changed_when: false
+
     - name: Inspect existing site identity files without following links
       ansible.builtin.stat:
         path: '/etc/secrets/vault/hub-pki/{{ item }}'

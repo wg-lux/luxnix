@@ -10,6 +10,9 @@ boundaries:
 - Do not create parallel readiness trackers
 - Do not include secrets or local host facts in guides
 entrypoints:
+- name: package-management
+  file: package-management.md
+  purpose: Canonical package ownership and installation workflow.
 - name: machine-secrets-checklist
   file: machine-secrets-checklist.md
   purpose: Machine provisioning inputs, secret lifecycle ownership, and acceptance gates.

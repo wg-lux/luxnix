@@ -5,7 +5,6 @@ in
 mkDjangoOptions {
   defaults = {
     hostname = "localhost";
-    port = 8118;
     useHttps = true;
     sslCertificatePath = null;
     sslKeyPath = null;

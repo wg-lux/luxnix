@@ -1,6 +1,7 @@
 # s-04/default.nix
 
 {
+  config,
   pkgs,
   lib,
   modulesPath,
@@ -50,9 +51,6 @@ lib.foldl' lib.recursiveUpdate
       roles.endoreg-client.api.logLevel = "INFO";
     }
     {
-      roles.endoreg-client.api.port = 8118;
-    }
-    {
       roles.endoreg-client.api.useHttps = true;
     }
     {
@@ -91,13 +89,15 @@ lib.foldl' lib.recursiveUpdate
       roles.ssh-access.dev-04.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICSpoZVcX+K6NdrfqcUVPTU8Ljqlp83YDzzEHjTHU2NO flippos@inexen9";
     }
     {
-      services.luxnix.lxAnnotateLocal.database.host = "172.16.255.22";
+      services.luxnix.lxAnnotateLocal.database.host =
+        config.luxnix.generic-settings.network.psqlMain.vpnIp;
     }
     {
       services.luxnix.lxAnnotateLocal.database.ownership = "external";
     }
     {
-      services.luxnix.lxAnnotateLocal.database.port = 5432;
+      services.luxnix.lxAnnotateLocal.database.port =
+        config.luxnix.generic-settings.network.psqlMain.port;
     }
     {
       services.luxnix.lxAnnotateLocal.hub.enable = true;
@@ -122,7 +122,8 @@ lib.foldl' lib.recursiveUpdate
       services.luxnix.lxAnnotateLocal.runtime.deploymentRole = "central_hub";
     }
     {
-      services.luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl = "redis://172.16.255.14:6380/1";
+      services.luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl =
+        "redis://${config.luxnix.generic-settings.network.redis.vpnIp}:${toString config.luxnix.generic-settings.network.redis.port}/1";
     }
     {
       services.luxnix.lxAnnotateLocal.runtime.trainingWorker.mode = "manual";
@@ -131,7 +132,7 @@ lib.foldl' lib.recursiveUpdate
       services.luxnix.redis.enable = true;
     }
     {
-      services.redis.servers.main.bind = lib.mkForce "172.16.255.14";
+      services.redis.servers.main.bind = lib.mkForce config.luxnix.generic-settings.network.redis.vpnIp;
     }
     {
       services.wg-lux-mcp.enable = true;
@@ -409,10 +410,19 @@ lib.foldl' lib.recursiveUpdate
       luxnix.generic-settings.network.serviceHosts.nginx = "s-02";
     }
     {
+      luxnix.generic-settings.network.serviceHosts.openvpn = "s-01";
+    }
+    {
       luxnix.generic-settings.network.serviceHosts.psqlMain = "gs-02";
     }
     {
       luxnix.generic-settings.network.serviceHosts.psqlTest = "s-04";
+    }
+    {
+      luxnix.generic-settings.network.serviceHosts.redis = "s-04";
+    }
+    {
+      luxnix.generic-settings.network.serviceHosts.vault = "gs-02";
     }
     {
       luxnix.generic-settings.network.syncthing.enable = true;
@@ -452,6 +462,9 @@ lib.foldl' lib.recursiveUpdate
     }
     {
       luxnix.nvidia-prime.enable = lib.mkForce false;
+    }
+    {
+      luxnix.packages.shared = [ ];
     }
     {
       luxnix.vault.dir = "/etc/secrets/vault";

@@ -34,27 +34,6 @@ in
   config = mkIf cfg.enable {
     roles.desktop.enable = true;
 
-    cli = {
-
-      programs = {
-        db.enable = true;
-        direnv.enable = true;
-        eza.enable = true;
-        fzf.enable = true;
-        git.enable = true;
-        htop.enable = true;
-        modern-unix.enable = true;
-        network-tools.enable = true;
-        nix-index.enable = true;
-        podman.enable = false;
-        ssh.enable = true;
-        starship.enable = true;
-        yazi.enable = true;
-        zoxide.enable = true;
-      };
-      terminals.tmux.enable = true;
-    };
-
     programs.nixvim = {
       extraPackages = [
         pkgs.nixfmt
@@ -109,6 +88,27 @@ in
             };
           };
         };
+      };
+    };
+    # Zoxide at the end
+    cli = {
+      terminals.tmux.enable = true;
+
+      programs = {
+        db.enable = true;
+        direnv.enable = true;
+        eza.enable = true;
+        fzf.enable = true;
+        git.enable = true;
+        htop.enable = true;
+        modern-unix.enable = true;
+        network-tools.enable = true;
+        nix-index.enable = true;
+        podman.enable = false;
+        ssh.enable = true;
+        starship.enable = true;
+        yazi.enable = true;
+        zoxide.enable = true;
       };
     };
   };

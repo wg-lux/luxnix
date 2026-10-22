@@ -10,6 +10,15 @@ boundaries:
 - Do not bypass documented Devenv wrappers for sensitive operations
 - Manual destructive operations require reviewed targets and explicit authorization
 entrypoints:
+- name: identity-secrets-runtime
+  file: run-identity-secrets.py
+  purpose: Retired central identity delivery entrypoint; rejects before credentials or network access.
+- name: secret-storage-verifier
+  file: verify-secret-storage.py
+  purpose: Verify all encrypted block ancestry, reject active swap, and explicitly permit runtime tmpfs.
+- name: identity-salt-provisioning
+  file: provision-identity-salts.py
+  purpose: Preserve encrypted local identity salts; reject central enrollment before file access.
 - name: secret-rotation-check
   file: check-secret-rotation.py
   purpose: Validate public cross-repository source contracts without secret or runtime access.
@@ -25,12 +34,15 @@ entrypoints:
 - name: manual-operation-catalog
   file: manual-operations.yml
   purpose: Inspect manual operation catalog ownership and interfaces.
+files:
+- identity-secrets.toml
 dependencies:
   internal:
   - lx_administration
   - devenv
   - ansible
   external:
+  - SecretSpec
   - Python
   - Bash
   - Nix

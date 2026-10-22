@@ -6,6 +6,10 @@ import stat
 import subprocess
 import sys
 import textwrap
+import venv
+from zipfile import ZipFile
+
+import pytest
 from pathlib import Path
 
 
@@ -19,6 +23,50 @@ CONFIG_NIX = (
 WHEEL_FILENAME = "0123456789abcdef0123456789abcdef-lx_annotate-0.0.3-py3-none-any.whl"
 CANONICAL_WHEEL_FILENAME = "lx_annotate-0.0.3-py3-none-any.whl"
 PIP_INSTALL_PREFIX = "pip:install --upgrade"
+
+
+@pytest.mark.parametrize("broken", [False, True])
+def test_python_repair_preserves_downgrade_evidence(tmp_path: Path, broken: bool):
+    root = tmp_path / "venv"
+    venv.EnvBuilder(with_pip=True, symlinks=True).create(root)
+    python = root / "bin/python"
+    site = root / f"lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages"
+    metadata = site / "lx_annotate-1.5.5.dist-info/METADATA"
+    metadata.parent.mkdir()
+    metadata.write_text("Name: lx-annotate\nVersion: 1.5.5\n")
+    old = tmp_path / "old-python"
+    old.symlink_to(sys.executable)
+    python.unlink()
+    python.symlink_to(old)
+    if broken:
+        old.unlink()
+    helper = CONFIG_NIX.parent / "scripts/wheel-python-repair.py"
+    subprocess.run([sys.executable, str(helper), str(root)], check=True)
+    assert python.resolve() == Path(sys.executable).resolve()
+    assert metadata.read_text() == "Name: lx-annotate\nVersion: 1.5.5\n"
+    guard_path = CONFIG_NIX.parent / "scripts/wheel-downgrade-guard.py"
+    result = subprocess.run(
+        [str(python), "-c", f"import runpy; g = runpy.run_path({str(guard_path)!r}); "
+         "g['reject_downgrade']('lx-annotate', g['Version']('1.5.4'), g['installed_versions']())"],
+        capture_output=True, text=True,
+    )
+    assert result.returncode != 0
+    assert "Refusing shared-runtime downgrade: lx-annotate 1.5.5 -> 1.5.4" in result.stderr
+
+
+def test_python_repair_rejects_abi_change_without_mutation(tmp_path: Path):
+    root = tmp_path / "venv"
+    (root / "bin").mkdir(parents=True)
+    (root / "pyvenv.cfg").write_text("version = 2.7.18\n")
+    python = root / "bin/python"
+    python.symlink_to("/missing/interpreter")
+    result = subprocess.run(
+        [sys.executable, str(CONFIG_NIX.parent / "scripts/wheel-python-repair.py"), str(root)],
+        capture_output=True, text=True,
+    )
+    assert result.returncode != 0
+    assert "explicit runtime migration" in result.stderr
+    assert os.readlink(python) == "/missing/interpreter"
 
 
 def _extract_function(function_name: str, *, source_path: Path = SCRIPTS_NIX) -> str:
@@ -132,6 +180,8 @@ def _extract_function(function_name: str, *, source_path: Path = SCRIPTS_NIX) ->
     ]
     for nix_expression, shell_expression in config_replacements:
         body = body.replace(nix_expression, shell_expression)
+    body = body.replace("${./scripts/wheel-python-repair.py}", str(CONFIG_NIX.parent / "scripts/wheel-python-repair.py"))
+    body = body.replace('${lib.escapeShellArg "${runtimeWheelVenvPath}/pyvenv.cfg"}', '"${runtimeWheelVenvPath}/pyvenv.cfg"')
     body = body.replace("''${", "${")
     return f"{function_name}() {{\n{body}\n}}"
 
@@ -139,6 +189,58 @@ def _extract_function(function_name: str, *, source_path: Path = SCRIPTS_NIX) ->
 def _make_executable(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
+
+
+@pytest.mark.parametrize("command", [
+    "lx-annotate-recover-data", "lx-annotate-provision-hub-nodes",
+    "lx-annotate-storage-relief", "lx-annotate-acceptance", "lx-annotate-check-static",
+])
+@pytest.mark.parametrize("runtime_state", ["prepared", "unprepared", "missing-command"])
+def test_operational_wrappers_use_prepared_wheel(
+    tmp_path: Path, command: str, runtime_state: str,
+):
+    out = tmp_path / "wrapper"
+    runtime = tmp_path / "venv"
+    (out / "bin").mkdir(parents=True)
+    (out / "libexec").mkdir()
+    (runtime / "bin").mkdir(parents=True)
+    log = tmp_path / "calls.log"
+    (out / "libexec/lx-annotate-wheel-runtime-lib").write_text(
+        'lx_annotate_wheel_ensure() {\n'
+        '  test "$LX_ANNOTATE_WHEEL_INSTALL_ALLOWED" = false || exit 90\n'
+        '  printf "ensure\\n" >> "$CALLS_LOG"\n'
+        '  test "$RUNTIME_STATE" != unprepared || exit 91\n'
+        '}\n'
+        'lx_annotate_wheel_export_secret_env() { printf "env\\n" >> "$CALLS_LOG"; }\n'
+        'lx_annotate_wheel_sync_static() { exit 92; }\n'
+    )
+    if runtime_state != "missing-command":
+        _make_executable(runtime / "bin" / command,
+                         '#!/usr/bin/env bash\nprintf "arg:%s\\n" "$@" >> "$CALLS_LOG"\nexit 23\n')
+    call = re.search(rf"^    make_entrypoint {re.escape(command)} .+$",
+                     CONFIG_NIX.read_text(), re.MULTILINE)
+    assert call is not None, f"Missing wheel wrapper for {command}"
+    env = dict(os.environ, out=str(out), runtimeWheelVenvPath=str(runtime),
+               CALLS_LOG=str(log), RUNTIME_STATE=runtime_state)
+    subprocess.run(["bash", "-eu", "-c",
+                    _extract_function("make_entrypoint", source_path=CONFIG_NIX)
+                    + "\n" + call.group()], env=env, check=True)
+    result = subprocess.run(
+        ["bash", str(out / "bin" / command), "--config", "path with spaces", "*"],
+        env=env, capture_output=True, text=True,
+    )
+    if runtime_state == "prepared":
+        assert result.returncode == 23
+        assert log.read_text().splitlines() == [
+            "ensure", "env", "arg:--config", "arg:path with spaces", "arg:*",
+        ]
+    elif runtime_state == "unprepared":
+        assert result.returncode == 91
+        assert log.read_text().splitlines() == ["ensure"]
+    else:
+        assert result.returncode == 1
+        assert f"does not expose console script: {command}" in result.stderr
+        assert log.read_text().splitlines() == ["ensure", "env"]
 
 
 def test_ensure_wheel_runtime_installed_mocks_venv_creation(tmp_path: Path):
@@ -599,3 +701,63 @@ def test_ensure_wheel_runtime_installed_rejects_metadata_version_mismatch(
     ) in result.stderr
 
 
+
+
+@pytest.mark.parametrize("install_allowed", ["true", "false"])
+def test_installer_repairs_collected_python_only_in_preparation_unit(tmp_path: Path, install_allowed: str):
+    root = tmp_path / "venv"
+    venv.EnvBuilder(with_pip=True, symlinks=True).create(root)
+    site = root / f"lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages"
+    metadata = site / "lx_annotate-1.5.5.dist-info/METADATA"
+    metadata.parent.mkdir()
+    metadata.write_text("Name: lx-annotate\nVersion: 1.5.5\n")
+    python = root / "bin/python"
+    python.unlink()
+    python.symlink_to("/missing/collected-python")
+    wheel = tmp_path / CANONICAL_WHEEL_FILENAME
+    with ZipFile(wheel, "w") as archive:
+        archive.writestr("lx_annotate-0.0.3.dist-info/METADATA", "Name: lx-annotate\nVersion: 0.0.3\n")
+    script = _extract_function("lx_annotate_wheel_ensure", source_path=CONFIG_NIX)
+    script = script.replace("/test-wheel-downgrade-guard/guard.py", str(CONFIG_NIX.parent / "scripts/wheel-downgrade-guard.py"))
+    result = subprocess.run(
+        ["bash", "-c", script + "\nlx_annotate_wheel_ensure"],
+        env={**os.environ, "runtimeRootPath": str(tmp_path / "runtime"),
+             "runtimeWheelRootPath": str(tmp_path / "app"), "runtimeWheelVenvPath": str(root),
+             "envConfDir": str(tmp_path / "conf"), "envDataDir": str(tmp_path / "data"),
+             "runtimeStaticRootPath": str(tmp_path / "static"), "wheelFilePath": str(wheel),
+             "pythonInterpreter": sys.executable, "LX_ANNOTATE_WHEEL_INSTALL_ALLOWED": install_allowed},
+        capture_output=True, text=True,
+    )
+    assert result.returncode != 0
+    assert not (tmp_path / "runtime/.wheel-install.sha256").exists()
+    if install_allowed == "true":
+        assert python.resolve() == Path(sys.executable).resolve()
+        assert "Refusing shared-runtime downgrade: lx-annotate 1.5.5 -> 0.0.3" in result.stderr
+    else:
+        assert os.readlink(python) == "/missing/collected-python"
+        assert "not prepared for this release" in result.stderr
+
+
+@pytest.mark.parametrize("version", ["1.5.7", "1.5.4"])
+def test_release_version_must_match_selected_wheel(version: str):
+    from nix_eval_helpers import eval_result
+
+    result = eval_result('''
+      let
+        f = builtins.getFlake "__LUXNIX_FLAKE_URI__";
+        c = (f.nixosConfigurations.gc-10.extendModules {
+          modules = [({ lib, ... }: {
+            services.luxnix.lxAnnotateLocal.runtime = {
+              wheelPath = lib.mkForce /test/lx_annotate-1.5.7-py3-none-any.whl;
+              packageVersion = lib.mkForce "%s";
+            };
+          })];
+        }).config;
+      in c.services.luxnix.lxAnnotateLocal.runtime.packageVersion
+    ''' % version)
+    if version == "1.5.7":
+        assert result.returncode == 0, result.stderr
+        assert '"1.5.7"' in result.stdout
+    else:
+        assert result.returncode != 0
+        assert "runtime.packageVersion must match runtime.wheelPath" in result.stderr

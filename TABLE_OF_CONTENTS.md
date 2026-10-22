@@ -6,6 +6,7 @@
 - **Start Here**
   - [Getting Started](docs/getting-started.md)
   - [Development](docs/development.md)
+  - [Package Management](docs/package-management.md)
   - [Maintaining Documentation](docs/documentation.md)
   - [Documentation Compose Example](docs/docker-compose.md)
   - [Nix Quality](docs/nix-quality.md)

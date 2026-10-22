@@ -4,12 +4,20 @@ path: modules/nixos/services/lx-annotate-local
 parent: ../../structure.yml
 summary: LuxNix deployment composition for the upstream LX-Annotate application.
 responsibilities:
+- Reject central identity salt options and preserve established local identity storage.
 - Own service options, runtime environment contracts and systemd composition
 - Coordinate workers, storage, secret handles and hub interfaces
 boundaries:
 - Application business logic belongs in the upstream wheel
+- Runtime dependency versions belong to the selected application artifact, not independent source inputs
 - Preserve database ownership, encrypted storage and least-privilege secret contracts
 entrypoints:
+- name: wheel-python-repair
+  file: scripts/wheel-python-repair.py
+  purpose: Rebind the wheel virtualenv to configured Python while preserving downgrade evidence.
+- name: identity-salt-enrollment
+  file: subservices/lx-annotate-identity-salts.nix
+  purpose: Package the shared storage verifier and preserve local generations; central enrollment is disabled.
 - name: module
   file: default.nix
   purpose: Inspect module ownership and interfaces.
@@ -24,6 +32,7 @@ entrypoints:
   purpose: Inspect runtime context ownership and interfaces.
 dependencies:
   internal:
+  - scripts
   - lx_administration
   - ansible
   - kubernetes
@@ -38,7 +47,7 @@ dependencies:
   - mTLS
 submodules: []
 contracts:
-- name: OWNERSHIP
+- name: wheel-deployment-and-application-ownership-handoff
   doc: OWNERSHIP.md
 - name: Workers
   doc: Workers.md

@@ -60,8 +60,8 @@ in
               type = types.bool;
               default = true;
               description = ''
-                Automatically provision and recover a per-machine active identity
-                salt, retaining default_salt for legacy reads. Existing managed
+                Recover established machine identity salts or enroll an authoritative
+                center bundle, retaining historical salts for source matching. Existing managed
                 salts are preserved with two root-owned recovery copies. External
                 salt configurations must explicitly disable managed provisioning.
                 Requires keyring-capable writers; never replaces an established salt.
@@ -76,12 +76,28 @@ in
               type = types.bool;
               default = false;
               description = ''
-                Enroll from the Vault identity salt scoped to endoreg-client.defaultCenterKey.
-                Set through host_services or group_services in inventory. Requires the
-                center-scoped Vault enrollment policy. Existing different salts fail closed
-                and require verified migration; they are never overwritten by enrollment.
-                Enable through inventory after enrollment and legacy migration review.
+                Opt-in shared pseudonymization salt for all machines of one center. Enrolls
+                from the Vault salt scoped to endoreg-client.defaultCenterKey, which the Vault
+                host publishes only when that center is listed in
+                luxnix.vault.server.hubPki.sharedIdentityCenters. Existing differing local
+                salts fail closed and are retained as historical keys; they are never overwritten.
+                Enable per center through inventory after reviewing legacy hash links.
               '';
+            };
+            identitySaltViaSecretSpec = mkOption {
+              type = types.bool;
+              default = false;
+              description = "Retired central salt injection; enabling this option fails evaluation.";
+            };
+            identitySaltGeneration = mkOption {
+              type = types.nullOr types.ints.positive;
+              default = null;
+              description = "Reviewed center generation required for file-free SecretSpec delivery.";
+            };
+            identitySaltFingerprint = mkOption {
+              type = types.str;
+              default = "";
+              description = "Reviewed SHA-256 fingerprint of the active UTF-8 salt; public admission pin, never the salt itself.";
             };
             identitySaltKeyringFile = mkOption {
               type = types.nullOr types.str;

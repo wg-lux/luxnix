@@ -7,6 +7,8 @@
 with lib;
 let
   cfg = config.roles.postgres.default;
+  network = config.luxnix.generic-settings.network;
+  isSharedHost = config.networking.hostName == network.serviceHosts.psqlMain;
 
   # The application password file is the canonical credential for the local
   # EndoReg role.  It is intentionally separate from human/admin secrets.
@@ -88,7 +90,7 @@ let
       fi
 
       echo "Checking password authentication as ${cfg.defaultDbName}..."
-      sudo env PGPASSWORD="$(${pkgs.coreutils}/bin/cat ${applicationPasswordFile})" \
+      sudo env PGPORT=${toString config.services.postgresql.settings.port} PGPASSWORD="$(${pkgs.coreutils}/bin/cat ${applicationPasswordFile})" \
         ${config.services.postgresql.package}/bin/psql \
         -h 127.0.0.1 -U "${cfg.defaultDbName}" -d "${cfg.defaultDbName}" \
         -v ON_ERROR_STOP=1 -c 'select current_user, current_database();'
@@ -192,8 +194,9 @@ in
     enable = mkEnableOption "Enable common configuration";
     postgresqlEnable = mkEnableOption "Enable PostgreSQL";
     postgresqlPort = mkOption {
-      type = types.int;
-      default = 5432;
+      type = types.port;
+      default = if isSharedHost then network.psqlMain.port else 5432;
+      description = "Local PostgreSQL port; the shared service host follows network.psqlMain.port.";
     };
 
     replUser = mkOption {
@@ -245,6 +248,13 @@ in
   };
 
   config = mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = !isSharedHost || config.services.postgresql.settings.port == network.psqlMain.port;
+        message = "PostgreSQL shared server port must match luxnix.generic-settings.network.psqlMain.port; change the shared network port instead of overriding its listener.";
+      }
+    ];
+
     # Add maintenance script to system packages
     environment.systemPackages = [ postgresMaintenanceScript ];
 
@@ -253,6 +263,7 @@ in
     # Create systemd service to set up endoregDbLocal user password
     systemd.services.postgres-endoreg-setup = {
       description = "Set up endoregDbLocal PostgreSQL user password";
+      environment.PGPORT = toString config.services.postgresql.settings.port;
       after = [
         "postgresql.service"
       ];

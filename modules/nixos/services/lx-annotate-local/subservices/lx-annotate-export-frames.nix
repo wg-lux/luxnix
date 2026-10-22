@@ -5,6 +5,7 @@ with ctx;
 {
   systemd.services.lx-annotate-export-frames = mkLxAnnotateAppService {
     description = "Export annotated frames for LX-Annotate";
+    background = true;
     wantedBy = [ ];
     after = [
       "lx-annotate-load-base-data.service"

@@ -6,8 +6,14 @@ let
   centerKey = config.roles.endoreg-client.defaultCenterKey;
   centerSaltFile = "/etc/secrets/vault/lx_annotate_center_${centerKey}_identity";
   centerSaltPath = "${config.luxnix.vault.client.hubPki.kvMountPath}/centers/${centerKey}/identity";
+  provisioner = pkgs.runCommand "identity-salt-provisioner" { } ''
+    mkdir -p "$out"
+    cp ${../../../../../scripts/provision-identity-salts.py} "$out/provision-identity-salts.py"
+    cp ${../../../../../lx_administration/secret_storage.py} "$out/verify-secret-storage.py"
+  '';
   provision = pkgs.writeShellScript "lx-annotate-provision-identity-salts" ''
-    exec ${python}/bin/python ${../../../../../scripts/provision-identity-salts.py} \
+    export PATH=${lib.makeBinPath [ pkgs.util-linux ]}:"$PATH"
+    exec ${python}/bin/python ${provisioner}/provision-identity-salts.py \
       --secret-dir /etc/secrets/vault \
       --recovery-dir /var/lib/lx-annotate-identity-salts \
       --replica-dir ${lib.escapeShellArg "${envDataDir}/.identity-salt-recovery"} \
@@ -16,7 +22,7 @@ let
       ${lib.optionalString cfg.django.centerIdentitySalt "--source-salt ${lib.escapeShellArg centerSaltFile}"}
   '';
 in
-mkIf cfg.django.enrollLegacyDefaultSalt {
+mkIf (cfg.django.enrollLegacyDefaultSalt && !cfg.django.identitySaltViaSecretSpec) {
   assertions = lib.optional cfg.django.centerIdentitySalt {
     assertion = builtins.match "[A-Za-z0-9_-]+" centerKey != null
       && config.luxnix.vault.client.hubPki.enable
@@ -51,6 +57,7 @@ mkIf cfg.django.enrollLegacyDefaultSalt {
         StateDirectory = "lx-annotate-identity-salts";
         StateDirectoryMode = "0700";
         UMask = "0077";
+        LimitCORE = 0;
         User = "root";
         LogNamespace = lxAnnotateJournalNamespace;
         TimeoutStartSec = "1m";

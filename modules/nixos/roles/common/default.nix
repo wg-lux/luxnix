@@ -27,7 +27,7 @@ in
   };
 
   config = mkIf cfg.enable {
-    environment.systemPackages = cfg.packages;
+    luxnix.packages.roles.common = cfg.packages;
 
     systemd = {
       services.NetworkManager-wait-online.enable = lib.mkForce false;

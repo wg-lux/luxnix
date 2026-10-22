@@ -28,8 +28,9 @@ if [[ -L "$runtime_directory" || ! -d "$runtime_directory" ]] ||
   echo 'ERROR: secret delivery requires a private mode-0700 runtime directory on tmpfs.' >&2
   exit 2
 fi
+script_directory="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+python3 "$script_directory/../lx_administration/secret_storage.py" --allow-runtime "$runtime_directory"
 temporary="$(mktemp -d "$runtime_directory/luxnix-secret-playbook.XXXXXX")"
 trap 'rm -rf -- "$temporary"' EXIT
-script_directory="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ANSIBLE_LOCAL_TEMP="$temporary" ANSIBLE_HOST_KEY_CHECKING=True \
   bash "$script_directory/run-ansible-playbook.sh" "$@"

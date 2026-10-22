@@ -59,6 +59,7 @@ def test_all_group_vars_are_split_by_responsibility() -> None:
         "40-repositories.yml",
         "50-ansible.yml",
         "60-authentication.yml",
+        "70-packages.yml",
     }
 
 

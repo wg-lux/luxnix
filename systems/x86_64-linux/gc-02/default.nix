@@ -93,7 +93,7 @@ lib.foldl' lib.recursiveUpdate
       roles.postgres.default.automaticCollationRepair = true;
     }
     {
-      services.luxnix.lxAnnotateLocal.django.centerIdentitySalt = false;
+      services.luxnix.lxAnnotateLocal.django.centerIdentitySalt = true;
     }
     {
       services.luxnix.lxAnnotateLocal.hub.nodeProvisioning.enable = true;
@@ -473,10 +473,19 @@ lib.foldl' lib.recursiveUpdate
       luxnix.generic-settings.network.serviceHosts.nginx = "s-02";
     }
     {
+      luxnix.generic-settings.network.serviceHosts.openvpn = "s-01";
+    }
+    {
       luxnix.generic-settings.network.serviceHosts.psqlMain = "gs-02";
     }
     {
       luxnix.generic-settings.network.serviceHosts.psqlTest = "s-04";
+    }
+    {
+      luxnix.generic-settings.network.serviceHosts.redis = "s-04";
+    }
+    {
+      luxnix.generic-settings.network.serviceHosts.vault = "gs-02";
     }
     {
       luxnix.generic-settings.network.syncthing.enable = true;
@@ -531,6 +540,9 @@ lib.foldl' lib.recursiveUpdate
     }
     {
       luxnix.maintenance.autoUpdates.operation = "switch";
+    }
+    {
+      luxnix.packages.shared = [ ];
     }
     {
       luxnix.vault.client.address = "https://vault.endo-reg.net:8200";
@@ -625,7 +637,7 @@ lib.foldl' lib.recursiveUpdate
       luxnix.vault.client.auth.deferUntilProvisioned = false;
     }
     {
-      networking.hosts."172.16.255.22" = [
+      networking.hosts."${config.luxnix.generic-settings.network.vault.vpnIp}" = [
         "vault.endo-reg.net"
       ];
     }
@@ -636,7 +648,7 @@ lib.foldl' lib.recursiveUpdate
       xdg.menus.enable = true;
     }
     {
-      environment.systemPackages = [
+      luxnix.packages.machine = [
         (pkgs.writeShellScriptBin "luxnix-batch" ''if [ "$#" -eq 0 ]; then echo 'usage: luxnix-batch <command> [args...]' >&2; exit 64; fi; exec ${pkgs.systemd}/bin/systemd-run --user --scope --collect --slice=luxnix-batch.slice -- "$@" '')
       ];
     }

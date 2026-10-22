@@ -73,9 +73,9 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    endoreg-db = {
-      url = "git+https://github.com/wg-lux/endoreg-db.git?ref=prototype";
-      flake = false;
+    winapps = {
+      url = "git+https://gitlab.phaidra.org/imgw/winapps.git?ref=main";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
 
     nixos-generators = {

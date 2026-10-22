@@ -30,6 +30,7 @@ test_wd/
 # pre-commit
 /feature-tracking/*
 !/feature-tracking/structure.yml
+!/feature-tracking/*.yaml
 untracked-notes.md
 node_modules/
 .vscode

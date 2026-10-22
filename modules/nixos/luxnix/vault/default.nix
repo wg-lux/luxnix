@@ -15,15 +15,33 @@ let
   runtimeStatusFile = "${runtimeDir}/enrollment-status";
   clientReissueMarker = "${runtimeDir}/force-client-reissue";
   vaultAuthEnabled = cfg.enable && cfg.client.enable && cfg.client.auth.method != "none";
+  verifySecretStorage = pkgs.writeShellScript "verify-vault-secret-storage" ''
+    export PATH=${lib.makeBinPath [ pkgs.util-linux ]}:"$PATH"
+    exec ${pkgs.python3}/bin/python ${../../../../lx_administration/secret_storage.py} --allow-runtime "$@"
+  '';
+  clientCredentialPaths = lib.filter (path: path != null) [
+    cfg.client.auth.tokenFile
+    cfg.client.auth.roleIdFile
+    cfg.client.auth.secretIdFile
+    cfg.client.environmentFile
+  ];
+  verifyClientStorage =
+    "${verifySecretStorage} "
+    + lib.escapeShellArgs ([ runtimeDir ] ++ map toString clientCredentialPaths);
+
   serverCfg = cfg.server;
   managedTlsCfg = serverCfg.managedTls;
   hubPkiCfg = serverCfg.hubPki;
   clientHubPkiCfg = cfg.client.hubPki;
+  # Only centers explicitly listed in hubPki.sharedIdentityCenters receive a shared salt.
   centerIdentitySites = pkgs.writeText "lx-hub-center-identities.json" (
     builtins.toJSON (builtins.listToAttrs (map (node: {
       name = "${node.nodeKey}.${hubPkiCfg.allowedDnsSuffix}";
       value = node.centerKey;
-    }) (builtins.filter (node: node.role == "site_node" && node.centerKey != null)
+    }) (builtins.filter (node:
+      node.role == "site_node"
+      && node.centerKey != null
+      && builtins.elem node.centerKey hubPkiCfg.sharedIdentityCenters)
       config.services.luxnix.lxAnnotateLocal.hub.nodeProvisioning.nodes)))
   );
   clientHubPkiSecretDirectories = lib.unique [
@@ -43,6 +61,7 @@ let
     text = ''
       set -euo pipefail
       umask 077
+      ulimit -c 0
 
       if [ -z "''${VAULT_ADDR:-}" ] || [ -z "''${VAULT_TOKEN:-}" ]; then
         echo "VAULT_ADDR and a short-lived administrative VAULT_TOKEN are required." >&2
@@ -159,6 +178,7 @@ let
         return 1
       }
 
+      ${verifySecretStorage} "$recipient_private_dir" "$recipient_public_dir"
       ${pkgs.coreutils}/bin/install -d -m 0750 -o root -g "$recipient_sensitive_group" \
         "$recipient_private_dir" "$recipient_public_dir"
 
@@ -327,6 +347,7 @@ let
     text = ''
       set -euo pipefail
       umask 077
+      ulimit -c 0
       install -d -m 0700 /var/lib/luxnix-vault-site-lifecycle
       exec 9>/var/lib/luxnix-vault-site-lifecycle/lock
       flock -x 9
@@ -412,7 +433,6 @@ let
             fi
           fi
         fi
-
 
         vault write "$mount/roles/$role" \
           allowed_domains="$node_fqdn" \
@@ -501,6 +521,7 @@ let
     text = ''
       set -euo pipefail
       umask 077
+      ulimit -c 0
 
       if [ "$#" -ne 2 ]; then
         echo "Usage: luxnix-vault-enroll-hub-site <site-node-fqdn> <output-directory>" >&2
@@ -538,6 +559,7 @@ let
         exit 1
       fi
 
+      ${verifySecretStorage} "$output_directory"
       ${pkgs.coreutils}/bin/install -d -m 0700 "$output_directory"
       role_id_tmp="$(${pkgs.coreutils}/bin/mktemp "$output_directory/.role-id.XXXXXX")"
       secret_id_tmp="$(${pkgs.coreutils}/bin/mktemp "$output_directory/.secret-id.XXXXXX")"
@@ -687,6 +709,7 @@ let
     text = ''
       set -euo pipefail
       umask 077
+      ulimit -c 0
       if [ "$#" -ne 2 ]; then
         echo "Usage: luxnix-vault-install-server-ca <trusted-ca.pem> <expected-sha256-fingerprint>" >&2
         exit 2
@@ -728,6 +751,7 @@ let
     text = ''
       set -euo pipefail
       umask 077
+      ulimit -c 0
 
       if [ "$#" -ne 2 ]; then
         echo "Usage: luxnix-vault-install-hub-site-enrollment <enrollment-directory> <expected-vault-ca-sha256-fingerprint>" >&2
@@ -739,6 +763,8 @@ let
       fi
 
       source_directory="$1"
+      ${verifyClientStorage}
+      ${verifySecretStorage} "$source_directory"
       if [ -L "$source_directory" ] || [ ! -d "$source_directory" ]; then
         echo "ERROR: enrollment source must be a non-symlink directory." >&2
         exit 1
@@ -846,7 +872,16 @@ let
   issueHubClientCertificateScript = pkgs.writeShellScript "issue-lx-hub-client-certificate" ''
     set -euo pipefail
     umask 077
+    ulimit -c 0
 
+    ${verifyClientStorage}
+    ${verifySecretStorage} ${
+      lib.escapeShellArgs [
+        clientHubPkiCfg.certificateFile
+        clientHubPkiCfg.keyFile
+      ]
+    }
+    unset VAULT_SKIP_VERIFY VAULT_TLS_SERVER_NAME VAULT_AGENT_ADDR
     certificate=${lib.escapeShellArg clientHubPkiCfg.certificateFile}
     private_key=${lib.escapeShellArg clientHubPkiCfg.keyFile}
     client_ca=${lib.escapeShellArg clientHubPkiCfg.caCertificateFile}
@@ -1027,7 +1062,10 @@ let
   vaultAuthSetupScript = pkgs.writeShellScript "luxnix-vault-auth-setup" ''
     set -euo pipefail
     umask 077
+    ulimit -c 0
 
+    ${verifyClientStorage}
+    unset VAULT_SKIP_VERIFY VAULT_TLS_SERVER_NAME VAULT_AGENT_ADDR
     RUNTIME_DIR="${runtimeDir}"
     TOKEN_FILE="${runtimeTokenFile}"
     ENV_FILE="${runtimeEnvironmentFile}"
@@ -1117,6 +1155,8 @@ let
   vaultAuthProvisioningConditionScript = pkgs.writeShellScript "luxnix-vault-auth-provisioning-condition" ''
     set -euo pipefail
 
+    ${verifyClientStorage}
+    unset VAULT_SKIP_VERIFY VAULT_TLS_SERVER_NAME VAULT_AGENT_ADDR
     write_status() {
       status="$1"
       temporary="$(${pkgs.coreutils}/bin/mktemp ${lib.escapeShellArg runtimeDir}/.enrollment-status.XXXXXX)"
@@ -1577,6 +1617,16 @@ in
                   default = "lx-hub-secrets";
                   description = "Vault KV v2 mount used for per-site request-authentication secrets.";
                 };
+                sharedIdentityCenters = mkOption {
+                  type = types.listOf (types.strMatching "[A-Za-z0-9_-]+");
+                  default = [ ];
+                  description = ''
+                    Center keys whose site nodes share one pseudonymization salt published once
+                    (compare-and-set) at <kvMountPath>/centers/<key>/identity. Site policies are
+                    granted read access to their own center path only. Empty by default; listing
+                    a center never replaces an existing secret and never affects other centers.
+                  '';
+                };
                 clientRoleName = mkOption {
                   type = types.strMatching "[A-Za-z0-9_-]+";
                   default = "lx-hub-site-node";
@@ -1655,6 +1705,13 @@ in
             && cfg.client.caCertFile != null
           );
         message = "luxnix.vault.client.auth.deferUntilProvisioned requires AppRole authentication files and a Vault CA certificate file.";
+      }
+      {
+        assertion =
+          !serverCfg.enable
+          || !((config.luxnix.generic-settings.network.serviceHosts or { }) ? vault)
+          || config.luxnix.generic-settings.network.serviceHosts.vault == config.networking.hostName;
+        message = "An inventory-managed Vault server must run on network.serviceHosts.vault; move its server configuration with the host selection.";
       }
       {
         assertion = !serverCfg.enable || (serverCfg.tlsCertFile != null && serverCfg.tlsKeyFile != null);
@@ -1854,6 +1911,14 @@ in
           requires = [ "systemd-tmpfiles-setup.service" ];
           serviceConfig = {
             Type = "oneshot";
+            ExecStartPre =
+              "${verifySecretStorage} "
+              + lib.escapeShellArgs [
+                managedTlsCfg.stateDirectory
+                managedTlsCfg.caKeyFile
+                (toString serverCfg.tlsKeyFile)
+              ];
+            LimitCORE = 0;
             ExecStart = managedServerTlsCommand;
             ExecStartPost = pkgs.writeShellScript "reload-vault-after-leaf-rotation" ''
               marker=${lib.escapeShellArg "${runtimeDir}/server-leaf-rotated"}
@@ -1900,6 +1965,7 @@ in
         wants = [ "network-online.target" ];
         serviceConfig = {
           Type = "oneshot";
+          LimitCORE = 0;
           ExecStart = issueHubClientCertificateScript;
           Environment = lib.optionals cfg.client.allowOffline [
             "VAULT_CLIENT_TIMEOUT=5s"
@@ -1972,6 +2038,7 @@ in
           User = "root";
           Group = "root";
           UMask = "0077";
+          LimitCORE = 0;
           ExecCondition = lib.optionals cfg.client.auth.deferUntilProvisioned [
             vaultAuthProvisioningConditionScript
           ];

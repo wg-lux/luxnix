@@ -7,7 +7,7 @@ with lib;
 let
   cfg = config.roles.postgres.main;
 
-  postgresqlPort = config.roles.postgres.default.postgresqlPort;
+  postgresqlPort = config.services.postgresql.settings.port;
 
   adminAuthKeys = config.users.users.${config.user.admin.name}.openssh.authorizedKeys.keys;
   allAuthKeys = adminAuthKeys ++ cfg.additionalPostgresAuthKeys;

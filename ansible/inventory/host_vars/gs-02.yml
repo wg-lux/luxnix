@@ -5,6 +5,7 @@ template_name: "main"
 host_roles:
   endoreg-client.enable: "true"
   endoreg-client.lxAi: "true"
+  endoreg-client.database.port: config.services.postgresql.settings.port
   nginxHost.enable: "true"
   nginxHost.glm52.enable: "true"
   nginxHost.glm52.acme.email: '"hild@coloreg.de"'
@@ -56,7 +57,7 @@ host_services:
   # The loopback endpoint is provisioned by this host's PostgreSQL role.
   luxnix.lxAnnotateLocal.database.ownership: '"local"'
   luxnix.lxAnnotateLocal.database.host: '"127.0.0.1"'
-  luxnix.lxAnnotateLocal.database.port: "5432"
+  luxnix.lxAnnotateLocal.database.port: config.services.postgresql.settings.port
 
   # Raw Nix list expression.
   # A normal YAML list currently generates invalid Nix single quotes.
@@ -144,9 +145,9 @@ host_luxnix:
   # Production Vault server for the transfer PKI. Initialization and unseal
   # remain an explicit offline-custodian ceremony.
   vault.server.enable: "true"
-  vault.server.bindAddress: '"172.16.255.22:8200"'
-  vault.server.apiAddress: '"https://172.16.255.22:8200"'
-  vault.server.clusterAddress: '"https://172.16.255.22:8201"' # CLUSTER NEEDS TO BE DIFFERENT
+  vault.server.bindAddress: '"${config.luxnix.generic-settings.network.vault.vpnIp}:8200"'
+  vault.server.apiAddress: '"https://${config.luxnix.generic-settings.network.vault.vpnIp}:8200"'
+  vault.server.clusterAddress: '"https://${config.luxnix.generic-settings.network.vault.vpnIp}:8201"'
   # Vault owns a persistent CA. Renewal rotates only its CA-signed server leaf;
   # LX-Annotate's unrelated self-signed certificate is never a trust anchor.
   vault.server.tlsCertFile: '"/var/lib/luxnix-vault-pki/server.crt"'
@@ -158,8 +159,10 @@ host_luxnix:
     - '"vault.endo-reg.net"'
     - '"gs-02.intern"'
   vault.server.managedTls.ipAddresses:
-    - '"172.16.255.22"'
+    - "config.luxnix.generic-settings.network.vault.vpnIp"
   vault.server.hubPki.enable: "true"
+  # Only these centers share one pseudonymization salt (opt-in; see docs/secret-rotation.md).
+  vault.server.hubPki.sharedIdentityCenters: '[ "university_hospital_wuerzburg" ]'
   vault.server.hubPki.caCertificateFile: '"/var/lib/lx-annotate/hub-pki/client-ca.pem"'
 
   boot_decryption_stick_gs_01.enable: "true"

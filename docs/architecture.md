@@ -111,6 +111,11 @@ Use roles for reusable behavior and profiles for bundles of role defaults.
 - Prefer `mkDefault` inside profiles so hosts can override intentionally.
 - Prefer direct assignments only in host files when the value is genuinely host-specific.
 
+The Endoreg client and hub profiles compose roles and service enablement only.
+Their deployment policy (central nodes, allowed hosts, API settings and database
+identity) belongs in inventory; reusable option defaults belong in the roles.
+This avoids a second fleet policy hidden in an optional profile.
+
 ## Feature-Oriented Modules
 
 For larger features, keep the feature directory cohesive. The `lx-annotate-local` module is the current model: options, config, runtime context, and scripts live together under one service directory. Use that pattern before spreading one feature across unrelated files.
@@ -126,6 +131,9 @@ The base development set intentionally includes repository inspection tools:
 - `nix-tree` for dependency graph inspection
 - `nixos-shell` for VM testing of host configs
 - `nix-output-monitor` for readable Nix build output
+
+See [Package Management](package-management.md) for shared, role and machine
+selection, locked custom flakes, and the generation/build/activation workflow.
 
 ## Introspection
 

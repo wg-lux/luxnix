@@ -384,10 +384,19 @@ lib.foldl' lib.recursiveUpdate
       luxnix.generic-settings.network.serviceHosts.nginx = "s-02";
     }
     {
+      luxnix.generic-settings.network.serviceHosts.openvpn = "s-01";
+    }
+    {
       luxnix.generic-settings.network.serviceHosts.psqlMain = "gs-02";
     }
     {
       luxnix.generic-settings.network.serviceHosts.psqlTest = "s-04";
+    }
+    {
+      luxnix.generic-settings.network.serviceHosts.redis = "s-04";
+    }
+    {
+      luxnix.generic-settings.network.serviceHosts.vault = "gs-02";
     }
     {
       luxnix.generic-settings.network.syncthing.enable = true;
@@ -427,6 +436,9 @@ lib.foldl' lib.recursiveUpdate
     }
     {
       luxnix.nvidia-prime.enable = false;
+    }
+    {
+      luxnix.packages.shared = [ ];
     }
     {
       luxnix.vault.dir = "/etc/secrets/vault";

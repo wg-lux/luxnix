@@ -25,23 +25,8 @@ in
         cloud = mkDefault true;
       };
 
-      endoreg-client = {
-        enable = mkDefault true;
-        api = {
-          djangoDebug = mkDefault false;
-          hostname = mkDefault "0.0.0.0";
-          logLevel = mkDefault "INFO";
-          port = mkDefault 8118;
-          useHttps = mkDefault false;
-        };
-
-        database = {
-          name = mkDefault "endoregDbCentral";
-          sslMode = mkDefault "allow";
-          user = mkDefault "endoregDbCentral";
-        };
-
-      };
+      # Inventory owns deployment policy; role options own reusable defaults.
+      endoreg-client.enable = mkDefault true;
     };
 
     services.luxnix.lxAnnotateLocal = {

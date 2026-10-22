@@ -3,6 +3,20 @@
   no_log: true
   diff: false
   block:
+    - name: Verify site delivery storage before reading credentials
+      ansible.builtin.include_tasks: verify_secret_storage.yml
+      vars:
+        secret_remote_paths: [/run, /etc/secrets/vault/hub-pki]
+
+    - name: Verify hub enrollment source and receiver storage
+      ansible.builtin.script:
+        cmd: >-
+          {{ (playbook_dir ~ '/../../lx_administration/secret_storage.py') | quote }}
+          --allow-runtime {{ enrollment_source | quote }} /etc/secrets/vault/hub-pki
+        executable: python3
+      delegate_to: '{{ enrollment_hub }}'
+      changed_when: false
+
     - name: Inspect root-owned hub staging
       ansible.builtin.stat:
         path: '{{ enrollment_source }}'

@@ -63,6 +63,9 @@ paths:
   autoconf_config: autoconf/config.yml
   nix_generation_templates: conf/nix-templates
   nix_generation_template_guide: conf/nix-templates/readme.md
+  system_package_policy: modules/nixos/roles/custom-packages/default.nix
+  shared_package_inventory: ansible/inventory/group_vars/all/70-packages.yml
+  package_management: docs/package-management.md
   development_packages: devenv/packages.nix
   development_tasks: devenv/tasks.nix
   development_scripts: devenv/scripts.nix

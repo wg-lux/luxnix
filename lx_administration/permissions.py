@@ -4,6 +4,8 @@ import os
 from pathlib import Path
 import tempfile
 
+from .secret_storage import encrypted_storage
+
 
 PRIVATE_DIRECTORY_MODE = 0o700
 PRIVATE_FILE_MODE = 0o600
@@ -23,6 +25,7 @@ def write_private_text(path: str | Path, value: str) -> None:
     if target.is_symlink():
         raise OSError(f"Refusing to write private text through symlink: {target}")
 
+    encrypted_storage(target.absolute())
     descriptor, temporary_name = tempfile.mkstemp(
         dir=target.parent,
         prefix=f".{target.stem}.",

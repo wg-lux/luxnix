@@ -30,14 +30,14 @@ definition_of_done:
         - kind: test
           reference: feature-tracking/test_repository_cleanup.py
         - kind: review
-          reference: feature-tracking/FrameCleanerIntegration.yml
+          reference: feature-tracking/FrameCleanerIntegration.yaml
         - kind: review
-          reference: feature-tracking/ReportReaderIntegration.yml
+          reference: feature-tracking/ReportReaderIntegration.yaml
       note: >-
         Inventory decision: remove result.txt (local transcript, recoverable from Git commit 82330c8e); remove wg-lux-mcp.zip (generated bundle, rebuild from
         wg-lux-mcp/); migrate the gs-02 Redis proposal to docs/operations/gs-02-local-redis-broker.md; retire the mTLS walkthrough in favor of
         docs/vault-hub-machine-enrollment.md; retire the Vault simplification plan after its operational contracts moved into maintained guidance;
-        retain and current-schema-migrate FrameCleanerIntegration.yml and ReportReaderIntegration.yml because their LuxNix deployment criteria are distinct
+        retain and current-schema-migrate FrameCleanerIntegration.yaml and ReportReaderIntegration.yaml because their LuxNix deployment criteria are distinct
         from sibling application trackers.
       assessed_by: codex-repo-cleanup-20260831-b1
       assessed_at: '2026-08-31T14:13:06.770744Z'
@@ -132,9 +132,9 @@ definition_of_done:
         - kind: runbook
           reference: docs/operations/gs-02-local-redis-broker.md
         - kind: review
-          reference: feature-tracking/FrameCleanerIntegration.yml
+          reference: feature-tracking/FrameCleanerIntegration.yaml
         - kind: review
-          reference: feature-tracking/ReportReaderIntegration.yml
+          reference: feature-tracking/ReportReaderIntegration.yaml
       note: The still-relevant Redis incident, rollback, and encrypted-storage follow-up were migrated into the labeled operational runbook; active
         FrameCleaner and ReportReader deployment trackers remain active rather than being mislabeled as history.
       assessed_by: codex-repo-cleanup-20260831-b1
@@ -155,7 +155,7 @@ definition_of_done:
         - kind: test
           reference: feature-tracking/test_repository_cleanup.py
         - kind: review
-          reference: feature-tracking/luxnix_repository_cleanup.yml
+          reference: feature-tracking/luxnix_repository_cleanup.yaml
       note: The cleanup assessment records each removal, replacement or recovery source, and each safety-driven retention; regression tests reject
         reintroduction and stale references.
       assessed_by: codex-repo-cleanup-20260831-b1

@@ -10,6 +10,12 @@ boundaries:
 - Do not import upstream LX-Annotate business logic
 - Do not introduce secret or storage side effects at import time
 entrypoints:
+- name: secret-storage-boundary
+  file: secret_storage.py
+  purpose: Verify encrypted device ancestry and non-swappable runtime boundaries before plaintext secret access.
+- name: private-file-writes
+  file: permissions.py
+  purpose: Enforce encrypted persistence and atomic private file publication.
 - name: package
   file: __init__.py
   purpose: Inspect package ownership and interfaces.

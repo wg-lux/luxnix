@@ -7,6 +7,8 @@
 with lib;
 let
   cfg = config.roles.aglnet.host;
+  network = config.luxnix.generic-settings.network;
+  dnsAddress = network.hosts.${network.serviceHosts.openvpn}.ip-vpn;
 
   defaultBackupNameservers = [
     "8.8.8.8"
@@ -247,7 +249,7 @@ in
           };
         };
       };
-      nameservers = [ "172.16.255.1" ]; # Override system nameserver to ensure VPN DNS is used
+      nameservers = [ dnsAddress ]; # Override system nameserver to ensure VPN DNS is used
       search = [ cfg.localDomain ]; # Add explicit DNS search domain
     };
 
@@ -265,7 +267,7 @@ in
         # Only listen on VPN interface
         interface = "${cfg.dev}0";
         bind-interfaces = true;
-        listen-address = "172.16.255.1"; # VPN server IP
+        listen-address = dnsAddress; # VPN server IP
 
         # Don't modify non-local queries
         domain-needed = true;
@@ -315,10 +317,9 @@ in
           ${if cfg.client-to-client then "client-to-client" else ""}
 
           # DNS and routing configuration
-          push "route 172.16.255.0 255.255.255.0"  # Route all VPN subnet traffic
-          push "route 172.16.255.1 255.255.255.255"  # Ensure DNS server is reachable
-          push "route 172.16.255.12 255.255.255.255" # Nginx, keycloak
-          push "dhcp-option DNS 172.16.255.1"
+          push "route ${dnsAddress} 255.255.255.255"  # Ensure DNS server is reachable
+          push "route ${network.nginx.vpnIp} 255.255.255.255" # Nginx, keycloak
+          push "dhcp-option DNS ${dnsAddress}"
           push "dhcp-option DOMAIN ${cfg.localDomain}"
           push "dhcp-option DOMAIN-ROUTE ${cfg.localDomain}"
           push "dhcp-option DOMAIN-SEARCH ${cfg.localDomain}"  # Add search domain

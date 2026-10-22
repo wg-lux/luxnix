@@ -4,6 +4,7 @@ path: feature-tracking
 parent: ../structure.yml
 summary: Authoritative readiness evidence, feature locks, and agent message coordination.
 responsibilities:
+- Store feature records and their example as .yaml; policy and context manifests remain .yml
 - Validate readiness criteria and durable assessments
 - Coordinate overlapping work with stable owner identities
 boundaries:

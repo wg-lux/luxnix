@@ -19,6 +19,13 @@ let
 
 in
 {
+  imports = [
+    (lib.mkAliasOptionModule
+      [ "roles" "endoreg-client" "api" "port" ]
+      [ "services" "luxnix" "lxAnnotateLocal" "django" "port" ]
+    )
+  ];
+
   options.roles.endoreg-client =
     let
       pathOptions = import ./paths.nix { inherit lib config; };
@@ -56,7 +63,7 @@ in
       };
 
       # Django API Configuration Options
-      api = apiOptions;
+      api = builtins.removeAttrs apiOptions [ "port" ];
 
       # Database Configuration Options
       database = mkOption {

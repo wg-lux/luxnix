@@ -7,6 +7,21 @@ its Raft data without a valid unseal share. The LuxNix Ansible vault on
 
 Completing preparation does **not** authorize deletion of `/var/lib/vault`.
 
+## Network configuration ownership
+
+`generic_settings.network.serviceHosts.vault` in the shared inventory selects
+Vault's host. Its VPN address comes from `ansible/inventory/hosts.ini` through
+the generated host map. The read-only `network.vault.vpnIp` derives the server
+listener, advertised API and cluster addresses, managed TLS IP SAN, and GPU
+client DNS pin. Change the inventory address and regenerate with Autoconf;
+do not edit these consumers individually. Clients retain the authenticated
+VPN route and verify `vault.endo-reg.net` against the enrolled CA, even when
+they share a local network with Vault. The API and Raft ports remain 8200 and
+8201. Selecting another host does not migrate Vault data or enable its server;
+that requires a separately reviewed deployment and custody procedure. Evaluation
+rejects an enabled inventory-managed server whose hostname differs from the
+selected Vault host, preventing activation with another host's bind address.
+
 ## Expected loss of functionality
 
 A rebuild creates a new cryptographic trust domain. The old Vault contents,

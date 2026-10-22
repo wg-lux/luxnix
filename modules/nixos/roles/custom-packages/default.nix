@@ -53,6 +53,7 @@ let
   ];
 
   office = with pkgs; [
+    winapps
     libreoffice-qt6-fresh
     hunspell
     hunspellDicts.de_DE
@@ -98,6 +99,26 @@ let
 
 in
 {
+  # One installation boundary for fleet, role and machine package selections.
+  # Derivations from pinned custom flakes use the same interface as nixpkgs.
+  options.luxnix.packages = {
+    shared = mkOption {
+      type = types.listOf types.package;
+      default = [ ];
+      description = "Fleet-wide packages selected in all/70-packages.yml.";
+    };
+    roles = mkOption {
+      type = types.attrsOf (types.listOf types.package);
+      default = { };
+      description = "Named package contributions from enabled roles or inventory groups.";
+    };
+    machine = mkOption {
+      type = types.listOf types.package;
+      default = [ ];
+      description = "Machine-only packages selected in host inventory.";
+    };
+  };
+
   options.roles.custom-packages = {
     enable = mkBoolOpt false "Enable common configuration";
     office = mkBoolOpt false "Add Office Packages to custom packages";
@@ -118,28 +139,37 @@ in
     hardwareAcceleration = mkBoolOpt false "Add Hardware Acceleration packages to custom packages";
   };
 
-  config = mkIf cfg.enable {
-    environment.systemPackages = customPackages;
+  config = mkMerge [
+    {
+      environment.systemPackages = unique (
+        config.luxnix.packages.shared
+        ++ concatLists (attrValues config.luxnix.packages.roles)
+        ++ config.luxnix.packages.machine
+      );
+    }
+    (mkIf cfg.enable {
+      luxnix.packages.roles.custom-packages = customPackages;
 
-    cli.programs.nix-ld = {
-      enable = lib.mkForce cfg.ld.enable;
-    };
+      cli.programs.nix-ld = {
+        enable = lib.mkForce cfg.ld.enable;
+      };
 
-    programs.obs-studio = {
-      enable = cfg.videoEditing;
-      # The pinned OBS recipe already adds driver runpaths and builds NVENC.
-      # Avoid the redundant CUDA hook, which changes the cached derivation.
-      package = mkDefault (pkgs.obs-studio.override { cudaSupport = false; });
-    };
+      programs.obs-studio = {
+        enable = cfg.videoEditing;
+        # The pinned OBS recipe already adds driver runpaths and builds NVENC.
+        # Avoid the redundant CUDA hook, which changes the cached derivation.
+        package = mkDefault (pkgs.obs-studio.override { cudaSupport = false; });
+      };
 
-    programs.thunderbird.enable = false; # cfg.office;
+      programs.thunderbird.enable = false; # cfg.office;
 
-    hardware.graphics = {
-      enable = lib.mkDefault cfg.hardwareAcceleration;
-      extraPackages = optionals cfg.hardwareAcceleration [
-        pkgs.intel-media-driver
-      ];
-    };
+      hardware.graphics = {
+        enable = lib.mkDefault cfg.hardwareAcceleration;
+        extraPackages = optionals cfg.hardwareAcceleration [
+          pkgs.intel-media-driver
+        ];
+      };
 
-  };
+    })
+  ];
 }

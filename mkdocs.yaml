@@ -62,6 +62,7 @@ nav:
   - Start Here:
       - Getting Started: getting-started.md
       - Development: development.md
+      - Package Management: package-management.md
       - Maintaining Documentation: documentation.md
       - Documentation Compose Example: docker-compose.md
       - Nix Quality: nix-quality.md

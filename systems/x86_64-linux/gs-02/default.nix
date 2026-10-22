@@ -1,6 +1,7 @@
 # gs-02/default.nix
 
 {
+  config,
   pkgs,
   lib,
   modulesPath,
@@ -116,6 +117,9 @@ lib.foldl' lib.recursiveUpdate
       roles.nginxHost.settings.recommendedTlsSettings = true;
     }
     {
+      roles.endoreg-client.database.port = config.services.postgresql.settings.port;
+    }
+    {
       roles.endoreg-client.lxAi = true;
     }
     {
@@ -128,7 +132,7 @@ lib.foldl' lib.recursiveUpdate
       services.luxnix.lxAnnotateLocal.database.ownership = "local";
     }
     {
-      services.luxnix.lxAnnotateLocal.database.port = 5432;
+      services.luxnix.lxAnnotateLocal.database.port = config.services.postgresql.settings.port;
     }
     {
       services.luxnix.lxAnnotateLocal.runtime.celeryBroker.secureTransportConfirmed = lib.mkForce true;
@@ -642,10 +646,19 @@ lib.foldl' lib.recursiveUpdate
       luxnix.generic-settings.network.serviceHosts.nginx = "s-02";
     }
     {
+      luxnix.generic-settings.network.serviceHosts.openvpn = "s-01";
+    }
+    {
       luxnix.generic-settings.network.serviceHosts.psqlMain = "gs-02";
     }
     {
       luxnix.generic-settings.network.serviceHosts.psqlTest = "s-04";
+    }
+    {
+      luxnix.generic-settings.network.serviceHosts.redis = "s-04";
+    }
+    {
+      luxnix.generic-settings.network.serviceHosts.vault = "gs-02";
     }
     {
       luxnix.generic-settings.network.syncthing.enable = true;
@@ -697,6 +710,9 @@ lib.foldl' lib.recursiveUpdate
     }
     {
       luxnix.maintenance.autoUpdates.operation = "switch";
+    }
+    {
+      luxnix.packages.shared = [ ];
     }
     {
       luxnix.vault.dir = "/etc/secrets/vault";
@@ -773,16 +789,16 @@ lib.foldl' lib.recursiveUpdate
       luxnix.nvidia-prime.enable = lib.mkForce false;
     }
     {
-      luxnix.vault.server.apiAddress = "https://172.16.255.22:8200";
+      luxnix.vault.server.apiAddress = "https://${config.luxnix.generic-settings.network.vault.vpnIp}:8200";
     }
     {
-      luxnix.vault.server.bindAddress = "172.16.255.22:8200";
+      luxnix.vault.server.bindAddress = "${config.luxnix.generic-settings.network.vault.vpnIp}:8200";
     }
     {
       luxnix.vault.server.caCertFile = "/var/lib/luxnix-vault-pki/ca.crt";
     }
     {
-      luxnix.vault.server.clusterAddress = "https://172.16.255.22:8201";
+      luxnix.vault.server.clusterAddress = "https://${config.luxnix.generic-settings.network.vault.vpnIp}:8201";
     }
     {
       luxnix.vault.server.enable = true;
@@ -792,6 +808,9 @@ lib.foldl' lib.recursiveUpdate
     }
     {
       luxnix.vault.server.hubPki.enable = true;
+    }
+    {
+      luxnix.vault.server.hubPki.sharedIdentityCenters = [ "university_hospital_wuerzburg" ];
     }
     {
       luxnix.vault.server.managedTls.dnsNames = [
@@ -804,7 +823,7 @@ lib.foldl' lib.recursiveUpdate
     }
     {
       luxnix.vault.server.managedTls.ipAddresses = [
-        "172.16.255.22"
+        config.luxnix.generic-settings.network.vault.vpnIp
       ];
     }
     {

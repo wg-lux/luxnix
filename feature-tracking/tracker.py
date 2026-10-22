@@ -52,7 +52,9 @@ except ModuleNotFoundError as exc:
 TRACKING_DIR = Path(__file__).resolve().parent
 REPOSITORY_ROOT = _REPOSITORY_ROOT
 POLICY_FILE_NAME = "policy.yml"
-NON_FEATURE_FILES = frozenset({POLICY_FILE_NAME, "schema.example.yml", "structure.yml"})
+NON_FEATURE_FILES = frozenset({
+    POLICY_FILE_NAME, "schema.example.yaml", "schema.example.yml", "structure.yml",
+})
 LOCK_DIRECTORY_NAME = ".locks"
 LOCK_MUTEX_FILE_NAME = ".registry.lock"
 MESSAGE_DIRECTORY_NAME = ".messages"
@@ -780,7 +782,7 @@ def load_registry(
     policy = load_policy(directory)
     features = tuple(
         load_feature_file(path)
-        for path in sorted(directory.glob("*.yml"))
+        for path in sorted((*directory.glob("*.yaml"), *directory.glob("*.yml")))
         if path.name not in NON_FEATURE_FILES
     )
     return _validate_registry(
@@ -846,7 +848,10 @@ def load_registry_from_git_index(
 
     listed = _run_git(
         repository_root,
-        ("ls-files", "--cached", "--", ":(glob)feature-tracking/*.yml"),
+        (
+            "ls-files", "--cached", "--",
+            ":(glob)feature-tracking/*.yaml", ":(glob)feature-tracking/*.yml",
+        ),
     )
     feature_paths = tuple(
         Path(line)
@@ -1639,7 +1644,7 @@ def save_feature(feature: FeatureDefinition, directory: Path = TRACKING_DIR) -> 
     )
     matching_paths = tuple(
         path
-        for path in directory.glob("*.yml")
+        for path in (*directory.glob("*.yaml"), *directory.glob("*.yml"))
         if path.name not in NON_FEATURE_FILES
         and "".join(
             character for character in path.stem.casefold() if character.isalnum()
@@ -1650,7 +1655,7 @@ def save_feature(feature: FeatureDefinition, directory: Path = TRACKING_DIR) -> 
         names = ", ".join(sorted(path.name for path in matching_paths))
         raise TrackerError(f"Mehrere Feature-Dateien passen zu '{feature.id}': {names}")
     destination = (
-        matching_paths[0] if matching_paths else directory / f"{feature.id}.yml"
+        matching_paths[0] if matching_paths else directory / f"{feature.id}.yaml"
     )
     payload = cast(
         dict[str, object], feature.model_dump(mode="json", exclude_none=True),

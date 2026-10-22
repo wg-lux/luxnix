@@ -33,7 +33,7 @@ group_services:
     role = "central_hub"; baseUrl = "https://gs-02.intern"; } ]'
 group_nixos:
   # Pin Vault to the authenticated VPN route; TLS still verifies its identity.
-  'networking.hosts."172.16.255.22"':
+  'networking.hosts."${config.luxnix.generic-settings.network.vault.vpnIp}"':
     - "vault.endo-reg.net"
 
 group_luxnix:

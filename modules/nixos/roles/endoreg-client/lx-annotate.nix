@@ -682,7 +682,6 @@ let
         djangoModule = roleCfg.django.djangoModule;
         hostname = roleCfg.django.hostname;
         assetDir = if roleCfg.django.assetDir != null then roleCfg.django.assetDir else cfg.api.assetDir;
-        port = 8117;
         djangoAllowedHosts = lib.unique (cfg.api.djangoAllowedHosts ++ [ roleCfg.django.hostname ]);
         keycloakClientId = "endoregdb-api";
       };
@@ -697,7 +696,8 @@ let
         }
       );
 
-      django = lib.recursiveUpdate cfg.api (
+      # The API port is an alias of the service option; do not feed it back.
+      django = lib.recursiveUpdate (builtins.removeAttrs cfg.api [ "port" ]) (
         djangoOverrides
         // {
           extraSettings = djangoExtraSettings;
@@ -710,7 +710,6 @@ let
         (lib.mapAttrs (_: value: lib.mkDefault value) (lib.filterAttrs (_: value: value != null) django))
         // {
           extraSettings = lib.mapAttrs (_: value: lib.mkDefault value) djangoExtraSettings;
-          port = lib.mkForce 8117;
         };
 
       serviceRuntime = {

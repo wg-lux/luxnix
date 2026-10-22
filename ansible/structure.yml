@@ -11,6 +11,12 @@ boundaries:
 - Local CMDB facts are sensitive and must not be committed
 - Remote changes require explicit target authorization and connectivity checks
 entrypoints:
+- name: shared-packages
+  file: inventory/group_vars/all/70-packages.yml
+  purpose: Fleet-wide package additions consumed by the central package module.
+- name: secret-storage-preflight
+  file: playbooks/tasks/verify_secret_storage.yml
+  purpose: Gate secret sources, destinations and Ansible plaintext staging through the shared encrypted-storage verifier.
 - name: inventory
   file: inventory/hosts.ini
   purpose: Inspect inventory ownership and interfaces.
@@ -25,6 +31,7 @@ dependencies:
   - autoconf
   - conf
   - scripts
+  - lx_administration
   external:
   - Ansible
   - SSH

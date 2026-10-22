@@ -224,6 +224,12 @@ let
     ) secretNames
   );
 
+  # Shared with Vault and identity provisioning; checks before any secret write.
+  verifySecretStorage = pkgs.writeShellScript "verify-managed-secret-storage" ''
+    export PATH=${lib.makeBinPath [ pkgs.util-linux ]}:$PATH
+    exec ${pkgs.python3}/bin/python3 ${../../../../lx_administration/secret_storage.py} --allow-runtime "$@"
+  '';
+
   # Generate script for creating or refreshing a secret file
   mkSecretScript =
     name: secretConfig:
@@ -231,6 +237,7 @@ let
       set -euo pipefail
 
       SECRET_FILE="${secretConfig.path}"
+      ${verifySecretStorage} "$SECRET_FILE"
       SECRET_DIR="$(dirname "$SECRET_FILE")"
       SHOULD_REFRESH="${
         if secretConfig.forceRegenerate or false || secretConfig.refreshOnBoot or false then
@@ -263,13 +270,6 @@ let
           }
         ); then
           :
-        elif [ "${if vaultCfg.client.allowOffline then "true" else "false"}" = "true" ] \
-          && [ -f "$SECRET_FILE" ] \
-          && [ "$SHOULD_REFRESH" = "true" ]; then
-          echo "WARNING: Could not refresh ${name}; continuing with the existing local secret." >&2
-          chown ${secretConfig.owner}:${secretConfig.group} "$SECRET_FILE"
-          chmod ${secretConfig.permissions} "$SECRET_FILE"
-          exit 0
         else
           echo "ERROR: Failed to generate or refresh ${name}." >&2
           exit 1
@@ -301,20 +301,13 @@ let
         if [ -s ${lib.escapeShellArg vaultCfg.client.runtimeStatusFile} ]; then
           vault_state="$(${pkgs.coreutils}/bin/cat ${lib.escapeShellArg vaultCfg.client.runtimeStatusFile})"
         fi
-        ${
-          if vaultCfg.client.allowOffline then
-            ''
-              echo "WARNING: Vault runtime credentials are unavailable (state: $vault_state); only last-known-good local secrets may be retained." >&2
-            ''
-          else
-            ''
-              echo "ERROR: Vault runtime credentials are unavailable (state: $vault_state); managed secrets remain fail-closed." >&2
-              echo "Run luxnix-vault-enrollment-status for recovery guidance." >&2
-              exit 1
-            ''
-        }
+        echo "ERROR: Vault runtime credentials are unavailable (state: $vault_state); managed secrets remain fail-closed." >&2
+        echo "Run luxnix-vault-enrollment-status for recovery guidance." >&2
+        exit 1
       fi
     ''}
+
+    ${verifySecretStorage} /etc/secrets/vault/.storage-check
 
     # Verify sensitive service group exists by checking /etc/group
     if ! grep -q "^${sensitiveServiceGroupName}:" /etc/group; then
@@ -531,7 +524,7 @@ in
         User = "root";
         ExecStart = generateSecretsScript;
         UMask = "0077";
-        Environment = lib.optionals vaultCfg.client.allowOffline [ "VAULT_CLIENT_TIMEOUT=5s" ];
+        LimitCORE = 0;
         EnvironmentFile = managedSecretsVaultEnvironmentFiles;
       };
     };

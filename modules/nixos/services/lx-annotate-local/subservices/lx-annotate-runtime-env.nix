@@ -20,6 +20,8 @@ with ctx;
       Type = "oneshot";
       RemainAfterExit = true;
       User = "root";
+      LimitCORE = 0;
+      UMask = "0077";
       ExecStart = runtimeEnvScript;
       LogNamespace = lxAnnotateJournalNamespace;
     };

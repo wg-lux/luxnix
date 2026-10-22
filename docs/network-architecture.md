@@ -37,6 +37,20 @@ Autoconf derives each host's `ip-vpn` from its inventory `ansible_host` value.
 The group and host variables add metadata that cannot be inferred from the
 inventory, such as internal aliases, local addresses, and network clusters.
 
+## Shared service endpoints
+
+`luxnix.generic-settings.network.serviceHosts` selects service hosts by inventory
+name. PostgreSQL clients use `network.psqlMain.vpnIp` and `network.psqlMain.port`;
+the shared Redis server and remote LX-Annotate clients use `network.redis.vpnIp`
+and `network.redis.port`. Redis's Traefik backend follows the effective server
+port. Set shared ports through these network options so both ends change together;
+a forced server-only override does not reconfigure remote hosts.
+
+Keep these references in group variables instead of copying inventory addresses
+into database hosts, broker URLs or bind addresses. Explicit host policy retains
+precedence: for example, gs-02's local database and local broker stay local.
+The separate application-managed Redis instance is not the shared Redis service.
+
 ## Flake topology visualization
 
 The `topology` flake output passes the exported `nixosConfigurations` into
@@ -51,6 +65,12 @@ The `aglnet` roles own the OpenVPN overlay:
 - `roles.aglnet.host` provides the VPN host role.
 - `roles.aglnet.client` provides the client role.
 - Inventory groups decide which machines receive those roles.
+
+The VPN server address comes from `network.serviceHosts.openvpn`, while the
+proxy route comes from `network.nginx.vpnIp`. Server routes and client acceptance
+filters use those same inputs. Client subnet, netmask and local-domain defaults
+inherit `roles.aglnet.host`; set shared overrides in global inventory variables,
+not only on the VPN server. Explicit client overrides remain supported.
 
 The current service host is selected declaratively in the inventory. Do not
 copy a host address into documentation or a second topology file; inspect the

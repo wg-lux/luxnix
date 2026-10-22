@@ -19,7 +19,7 @@ in
         main = {
           enable = true;
           openFirewall = true;
-          port = 6380;
+          port = config.luxnix.generic-settings.network.redis.port;
           bind = "0.0.0.0";
           logLevel = "debug";
         };
@@ -33,7 +33,7 @@ in
                 loadBalancer = {
                   servers = [
                     {
-                      address = "127.0.0.1:6380";
+                      address = "127.0.0.1:${toString config.services.redis.servers.main.port}";
                     }
                   ];
                 };

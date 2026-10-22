@@ -21,6 +21,7 @@ let
     ;
 
   runtime = lxAnnotateRuntime;
+  inherit (runtime.env) envDefaultCenter;
   llmWorkerMode = if cfg.runtime.llm.enable then cfg.runtime.llmInferenceWorker.mode else "manual";
   useLocalOllama =
     cfg.runtime.llm.enable
@@ -76,22 +77,7 @@ let
     ;
   boolString = value: if value then "true" else "false";
 
-  endoregDbSource = inputs.endoreg-db;
   lxAnnotateSource = inputs.lx-annotate;
-  endoregDbProject =
-    (builtins.fromTOML (builtins.readFile "${endoregDbSource}/pyproject.toml")).project;
-  lxAnnotateProject =
-    (builtins.fromTOML (builtins.readFile "${lxAnnotateSource}/pyproject.toml")).project;
-  endoregDbVersion = endoregDbProject.version;
-  lxAnnotateEndoregDbDependencies = builtins.filter (
-    dependency: lib.hasPrefix "endoreg-db==" dependency
-  ) lxAnnotateProject.dependencies;
-  lxAnnotateEndoregDbVersion =
-    if builtins.length lxAnnotateEndoregDbDependencies == 1 then
-      lib.removePrefix "endoreg-db==" (builtins.head lxAnnotateEndoregDbDependencies)
-    else
-      null;
-  endoregDbRevision = endoregDbSource.rev or "unversioned";
   hubTransferHttpTimeout = "${toString cfg.hub.transferApi.httpTimeoutSeconds}s";
 
   hubCrlPython = pkgs.python3.withPackages (ps: [ ps.cryptography ]);
@@ -311,8 +297,9 @@ let
       local install_hash=""
       local installed_package_version=""
       local install_allowed="''${LX_ANNOTATE_WHEEL_INSTALL_ALLOWED:-true}"
-      local wheel_installer_revision="wheel-console-contract-v7-downgrade-guard"
+      local wheel_installer_revision="wheel-console-contract-v8-configured-python"
       local venv_created="false"
+      local python_changed="false"
       local pip_cache_dir=${lib.escapeShellArg "${runtimeRootPath}/pip-cache"}
       local application_constraints=${lib.escapeShellArg "${runtimeRootPath}/.wheel-application.constraints"}
       local override_constraints=${lib.escapeShellArg "${runtimeRootPath}/.wheel-overrides.constraints"}
@@ -369,17 +356,25 @@ let
       exec 9>"$wheel_install_lock_file"
       flock 9
 
+      if [ -f ${lib.escapeShellArg "${runtimeWheelVenvPath}/pyvenv.cfg"} ] && \
+        [ "$(readlink -f ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/python"})" != "$(readlink -f "$python_bin")" ]; then
+        python_changed="true"
+      fi
+
       installed_hash="$(cat "$wheel_install_stamp_file" 2>/dev/null || true)"
       if
         [ "$install_allowed" != "true" ] \
-          && { [ "$install_hash" != "$installed_hash" ] || [ ! -x ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/python"} ]; }
+          && { [ "$install_hash" != "$installed_hash" ] || [ ! -x ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/python"} ] || [ "$python_changed" = "true" ]; }
       then
         echo "ERROR: The LX-Annotate wheel runtime is not prepared for this release." >&2
         echo "Start lx-annotate-wheel-runtime.service before application units." >&2
         exit 1
       fi
 
-      if [ ! -x ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/python"} ]; then
+      if [ "$python_changed" = "true" ]; then
+        "$python_bin" ${./scripts/wheel-python-repair.py} ${lib.escapeShellArg runtimeWheelVenvPath}
+        venv_created="true"
+      elif [ ! -x ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/python"} ]; then
         "$python_bin" -m venv ${lib.escapeShellArg runtimeWheelVenvPath}
         venv_created="true"
       fi
@@ -489,10 +484,55 @@ let
     make_entrypoint lx-annotate-watch lx-annotate-watch 0
     make_entrypoint lx-annotate-export-frames lx-annotate-export-frames 0
     make_entrypoint lx-annotate-import-sap lx-annotate-import-sap 0
+    make_entrypoint lx-annotate-recover-data lx-annotate-recover-data 0
+    make_entrypoint lx-annotate-provision-hub-nodes lx-annotate-provision-hub-nodes 0
+    make_entrypoint lx-annotate-storage-relief lx-annotate-storage-relief 0
+    make_entrypoint lx-annotate-acceptance lx-annotate-acceptance 0
+    make_entrypoint lx-annotate-check-static lx-annotate-check-static 0
     make_entrypoint lx-dtypes-kb-registry lx-dtypes-kb-registry 0
     make_entrypoint lx-dtypes-prototype-kb-smoke lx-dtypes-prototype-kb-smoke 0
   '';
-  effectiveRuntimePackage = if useWheelRuntime then wheelRuntimePackage else cfg.runtime.package;
+  baseRuntimePackage = if useWheelRuntime then wheelRuntimePackage else cfg.runtime.package;
+  identityLauncher = pkgs.writeShellScript "lx-annotate-identity-launch" ''
+    set -euo pipefail
+    exec ${pkgs.python3}/bin/python ${../../../../scripts/run-identity-secrets.py} \
+      --vault ${pkgs.vault}/bin/vault --secretspec ${pkgs.secretspec}/bin/secretspec \
+      --manifest ${../../../../scripts/identity-secrets.toml} \
+      --address ${lib.escapeShellArg (config.luxnix.vault.client.address or "")} \
+      --ca-file ${lib.escapeShellArg (toString config.luxnix.vault.client.caCertFile)} \
+      --center ${lib.escapeShellArg envDefaultCenter} \
+      --generation ${toString cfg.django.identitySaltGeneration} \
+      --fingerprint ${lib.escapeShellArg cfg.django.identitySaltFingerprint} \
+      --vault-path ${lib.escapeShellArg "${config.luxnix.vault.client.hubPki.kvMountPath}/centers/${envDefaultCenter}/identity"} \
+      --legacy-path /etc/secrets/vault/lx_annotate_identity_active \
+      --legacy-path /etc/secrets/vault/lx_annotate_identity_legacy_default \
+      --legacy-path /etc/secrets/vault/lx_annotate_identity_keyring.yml \
+      --legacy-path ${lib.escapeShellArg "/etc/secrets/vault/lx_annotate_center_${envDefaultCenter}_identity"} \
+      --legacy-path '/etc/secrets/vault/identity-*.salt' \
+      --legacy-path /var/lib/lx-annotate-identity-salts \
+      --legacy-path ${lib.escapeShellArg "${envDataDir}/.identity-salt-recovery"} \
+      -- "$@"
+  '';
+  effectiveRuntimePackage = if !cfg.django.identitySaltViaSecretSpec then baseRuntimePackage else
+    pkgs.runCommand "lx-annotate-file-free-runtime" { } ''
+      mkdir -p "$out/bin"
+      for target in ${baseRuntimePackage}/bin/*; do
+        name="$(basename "$target")"
+        if [ "$name" = lx-annotate-runtime-ensure ]; then
+          ln -s "$target" "$out/bin/$name"
+        else
+          cat > "$out/bin/$name" <<EOF
+    #!${pkgs.bash}/bin/bash
+    exec ${identityLauncher} "$target" "\$@"
+    EOF
+          chmod +x "$out/bin/$name"
+        fi
+      done
+    '';
+  identityServiceConfig = optionalAttrs cfg.django.identitySaltViaSecretSpec {
+    EnvironmentFile = [ envSystemdFilePath config.luxnix.vault.client.runtimeEnvironmentFile ];
+    LimitCORE = 0;
+  };
   effectivePackageVersion =
     if useWheelRuntime then
       packageVersion
@@ -558,7 +598,7 @@ let
     lib.optionals (lib.attrByPath [ "roles" "managed-secrets" "enable" ] false config)
       [
         "managed-secrets-setup.service"
-      ];
+      ] ++ lib.optionals cfg.django.identitySaltViaSecretSpec [ "vault-auth-setup.service" ];
 
   isLocalPostgresHost =
     host: host == "localhost" || host == "127.0.0.1" || host == "::1" || host == cfg.django.hostname;
@@ -760,11 +800,6 @@ let
   '';
   commonExtraEnv =
     commonEnv
-    // {
-      ENDOREG_FEATURE_REGISTRY_REVISION = endoregDbRevision;
-      ENDOREG_FEATURE_REGISTRY_SOURCE_VERSION = endoregDbVersion;
-      ENDOREG_RUNTIME_ENDOREG_DB_VERSION = lxAnnotateEndoregDbVersion;
-    }
     // lib.optionalAttrs cfg.hub.transferApi.enable {
       PYTHONPATH = toString hubOidcMiddlewarePolicy;
     };
@@ -943,6 +978,7 @@ let
       before ? [ ],
       wantedBy ? [ "multi-user.target" ],
       environment ? { },
+      background ? false,
       serviceConfig ? { },
       unitConfig ? { },
       restartTriggers ? [ effectiveRuntimePackage ],
@@ -971,6 +1007,9 @@ let
         PrivateTmp = true;
         NoNewPrivileges = true;
         ReadWritePaths = appReadWritePaths;
+      } // identityServiceConfig
+      // lib.optionalAttrs (background && cfg.runtime.frontendRequestThrottle.enable) {
+        Slice = "lx-annotate-background.slice";
       }
       // serviceConfig;
     };
@@ -1186,6 +1225,7 @@ let
     in
     lib.nameValuePair workerCfg.unitName (mkLxAnnotateAppService {
       description = "LX-Annotate Celery worker ${name}";
+      background = true;
       wantedBy = lib.optionals (workerCfg.mode == "always") [ "multi-user.target" ];
       after = [
         "lx-annotate-load-base-data.service"
@@ -1213,23 +1253,7 @@ let
       // lib.optionalAttrs (runtimeMaxSec != null) {
         RuntimeMaxSec = runtimeMaxSec;
       }
-      // workerCfg.serviceConfig
-      //
-        lib.optionalAttrs
-          (
-            cfg.runtime.frontendRequestThrottle.enable
-            && builtins.elem name [
-              "ffmpeg"
-              "pipeline"
-              "frame-extraction"
-              "inference"
-              "training"
-              "llm-inference"
-            ]
-          )
-          {
-            Slice = "lx-annotate-background.slice";
-          };
+      // workerCfg.serviceConfig;
     });
   workerServices = lib.listToAttrs (lib.mapAttrsToList mkWorkerService workerConfigs);
   celeryBeatService = mkLxAnnotateAppService {
@@ -1365,6 +1389,16 @@ let
 
   runtimeEnvScript = pkgs.writeShellScript "lx-annotate-runtime-env" ''
     set -euo pipefail
+
+    export PATH=${lib.makeBinPath [ pkgs.util-linux ]}:"$PATH"
+    ${pkgs.python3}/bin/python ${../../../../lx_administration/secret_storage.py} --allow-runtime \
+      ${lib.escapeShellArgs [
+        runtimeRootPath
+        envConfDir
+        envDataDir
+        cfg.database.applicationPasswordFile
+      ]}
+    umask 077
 
     install -d -m 0750 -o ${endoreg-service-user-name} -g ${endoreg-service-group-name} ${endoreg-service-user-home}
     install -d -m 0750 -o ${endoreg-service-user-name} -g ${endoreg-service-group-name} ${runtimeRootPath}
@@ -1712,7 +1746,7 @@ in
           environment.systemPackages = [ lxAnnotateMigrateVideoStreamableStorageScript ];
 
           services.luxnix.lxAnnotateLocal.django.identitySaltKeyringFile =
-            mkIf cfg.django.enrollLegacyDefaultSalt (
+            mkIf (cfg.django.enrollLegacyDefaultSalt && !cfg.django.identitySaltViaSecretSpec) (
               mkDefault "/etc/secrets/vault/lx_annotate_identity_keyring.yml"
             );
 
@@ -1723,12 +1757,37 @@ in
 
           assertions = [
             {
-              assertion = !cfg.django.centerIdentitySalt || cfg.django.enrollLegacyDefaultSalt;
+              assertion = !cfg.django.identitySaltViaSecretSpec;
+              message = "Central identity salt provisioning is disabled; preserve established local identity salts.";
+            }
+            {
+              assertion = !cfg.django.identitySaltViaSecretSpec || (
+                cfg.django.centerIdentitySalt
+                && builtins.match "[A-Za-z0-9_-]+" envDefaultCenter != null
+                && cfg.django.identitySaltFile == null
+                && cfg.django.identitySaltKeyringFile == null
+                && cfg.django.identitySaltGeneration != null
+                && builtins.match "[0-9a-f]{64}" cfg.django.identitySaltFingerprint != null
+                && envDefaultCenter == config.roles.endoreg-client.defaultCenterKey
+                && config.luxnix.vault.client.hubPki.enable
+                && config.luxnix.vault.client.auth.method == "approle"
+                && !config.luxnix.vault.client.auth.deferUntilProvisioned
+                && !config.luxnix.vault.client.allowOffline
+                && config.luxnix.vault.client.caCertFile != null
+                && lib.hasPrefix "https://" (if config.luxnix.vault.client.address == null then "" else config.luxnix.vault.client.address)
+                && lib.all (name: !(builtins.hasAttr name cfg.runtime.extraEnvironment))
+                  [ "DJANGO_SALT" "DJANGO_SALT_FILE" "DJANGO_IDENTITY_SALT_KEYRING_FILE" "DJANGO_IDENTITY_SALT_BUNDLE"
+                    "DJANGO_IDENTITY_SALT_DELIVERY" "DJANGO_IDENTITY_SALT_GENERATION" "DJANGO_IDENTITY_CENTER_ID" "LX_ANNOTATE_DEFAULT_CENTER" ]
+              );
+              message = "File-free identity delivery requires authenticated center Vault access, reviewed generation/fingerprint pins and no legacy salt configuration.";
+            }
+            {
+              assertion = !cfg.django.centerIdentitySalt || cfg.django.enrollLegacyDefaultSalt || cfg.django.identitySaltViaSecretSpec;
               message = "Center identity salt must use the managed identity enrollment and recovery service.";
             }
             {
               assertion =
-                !cfg.django.enrollLegacyDefaultSalt
+                cfg.django.identitySaltViaSecretSpec || !cfg.django.enrollLegacyDefaultSalt
                 || (
                   cfg.django.identitySaltFile == null
                   && !(cfg.runtime.extraEnvironment ? DJANGO_SALT)
@@ -1758,10 +1817,6 @@ in
             {
               assertion = cfg.hlsBackfill.extraArgs == [ ];
               message = "services.luxnix.lxAnnotateLocal.hlsBackfill.extraArgs must remain empty so every enabled host automatically reconciles the complete raw and processed HLS corpus; use the manual materialization unit for scoped repairs.";
-            }
-            {
-              assertion = builtins.length lxAnnotateEndoregDbDependencies == 1;
-              message = "The pinned lx-annotate source must declare exactly one endoreg-db== dependency for feature-registry attestation.";
             }
             {
               assertion = !useWheelRuntime || cfg.runtime.wheelPath != null;
@@ -2363,6 +2418,7 @@ in
               dataDir = cfg.runtime.encryptedDataDir;
               settingsModule = "lx_annotate.settings.settings_prod";
               environmentFile = envSystemdFilePath;
+              extraServiceConfig = identityServiceConfig;
               extraEnv = commonExtraEnv;
             };
 

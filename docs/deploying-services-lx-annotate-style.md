@@ -15,6 +15,39 @@ Today, the pattern is integrated across:
 
 If you want another service to behave the same way, you should deliberately copy this structure rather than assuming Vault integration is automatic for all LuxNix services.
 
+## Release and interpreter authority
+
+For wheel deployments, select the release with `runtime.wheelPath` (including
+the fetch hash). `runtime.packageVersion` is derived from its filename; a
+conflicting override fails evaluation. The wheel metadata is checked before
+installation. Installed runtime state must never silently select the release.
+
+`runtime.pythonPackage` selects the interpreter and is referenced by the
+system's runtime package, keeping it in the Nix closure. Under the installer
+lock, an existing virtualenv is rebound to that interpreter when its target
+changes or has been garbage-collected. Installed package metadata is retained
+so downgrade checks still apply. Python major/minor changes fail explicitly
+and require a separately provisioned, schema-compatible runtime migration.
+
+For gc-10 recovery, build and persistently activate a reviewed configuration
+whose wheel is compatible with the installed release and database. Restarting
+the old booted configuration cannot select a newer release. Repository changes
+alone do not repair a running host: privileged activation is still required.
+Follow the [deployment guide](deployment-guide.md); do not disable downgrade
+checks or delete the virtualenv to bypass them.
+
+## Application listener port
+
+`services.luxnix.lxAnnotateLocal.django.port` owns the application listener
+port (default `8117`). The runtime and Nginx upstreams use this same value.
+`roles.endoreg-client.api.port` is a compatibility alias, so setting either
+name changes the same option. Use the service option for new configuration;
+conflicting assignments through both names fail evaluation.
+
+The former role default and central-hub inventory value `8118` were ignored
+by the adapter. Removing that inventory value preserves the deployed default
+`8117`; an explicit port assignment is now honored.
+
 ## Verify LX-Annotate Service Executables
 
 Before deployment, build and check the configured `ExecStart` binaries without

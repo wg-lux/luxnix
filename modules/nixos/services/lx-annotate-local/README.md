@@ -15,7 +15,7 @@ Deploy the matching Endoreg cleanup implementation with this configuration and
 inspect `periodic_hls_cleanup` / `periodic_generation_cleanup` events after
 activation. The option does not perform deployment or run manual filesystem
 deletion. Readiness evidence belongs to
-[`lx_annotate_hls_operational_readiness.yml`](../../../../feature-tracking/lx_annotate_hls_operational_readiness.yml).
+[`lx_annotate_hls_operational_readiness.yaml`](../../../../feature-tracking/lx_annotate_hls_operational_readiness.yaml).
 
 ## Structure
 
@@ -50,7 +50,7 @@ The Endoreg role delegates to this service default unless its
 `runtime.tessdataPrefix` is explicitly set. Apply the NixOS configuration through
 the normal deployment process to update running services. The corresponding
 contract is tracked by `ocr_runtime_dependencies` in
-[`lx_annotate_environment_lifecycle_audit.yml`](../../../../feature-tracking/lx_annotate_environment_lifecycle_audit.yml).
+[`lx_annotate_environment_lifecycle_audit.yaml`](../../../../feature-tracking/lx_annotate_environment_lifecycle_audit.yaml).
 
 ## Encrypted Data Flow
 
@@ -102,10 +102,10 @@ the application media master key, which remains local and is never distributed.
 
 The existing local provisioner accepts the managed center source, validates
 private file access, and maintains its existing recovery copies and enrollment
-receipts. A missing source never falls back to a random machine salt. A source
-that differs from an established machine salt fails without overwriting either
-generation. An identity-changing rotation is therefore never an incidental
-effect of a restart, changed placement, secret refresh, or rebuild.
+receipts. A missing source never falls back to a random machine salt. A higher, center-bound generation is accepted only with every historical salt
+retained for source-side patient matching. Rollback, conflicting same-generation
+material, or omitted history fails closed. The custodian must explicitly publish
+rotations using compare-and-set; restarting a client never invents a generation.
 
 Existing GPU-client inventory leaves this switch disabled until its legacy
 identity migration is verified. Do not simply enable it fleet-wide: retained
@@ -114,17 +114,18 @@ links must be reconciled first. Same-center matching requires the shared salt
 and identical legacy center-name/demographic inputs; this change deliberately
 does not rewrite the persisted hash format or infer missing identifiers.
 Track source checks and rollout acceptance in
-`feature-tracking/luxnix_secret_lifecycle_readiness.yml`.
+`feature-tracking/luxnix_secret_lifecycle_readiness.yaml`.
 
 ### Machine-generation compatibility
 
 Every enabled host defaults to `django.enrollLegacyDefaultSalt = true`. The
-root-owned `lx-annotate-identity-salts.service` provisions a random 256-bit active
-salt on first installation and retains `default_salt` as a retiring generation
-for legacy reads. New identities always use the active salt. All writers must
+root-owned `lx-annotate-identity-salts.service` recovers established machine salts
+without generating replacements. New enrollment requires an authoritative center
+bundle; any required `default_salt` history must be explicitly retained. New identities always use the active salt. All writers must
 support identity keyrings before activation.
 
-The existing service-owned, mode-0600 paths remain stable:
+Legacy recovery retains these service-owned paths; managed bundles publish immutable
+generation files and atomically switch the keyring manifest:
 
 - `/etc/secrets/vault/lx_annotate_identity_active`
 - `/etc/secrets/vault/lx_annotate_identity_legacy_default`
@@ -137,6 +138,7 @@ and an `enrolled` fingerprint receipt in two root-owned, mode-0700 directories:
 - `/var/lib/lx-annotate-identity-salts`
 - `runtime.encryptedDataDir/.identity-salt-recovery`
 
+All persistent directories require verified encrypted backing storage before access.
 Recovery files are mode 0400. Creation uses an exclusive lock, fsynced files and
 directories, and atomic publication without overwriting existing files. Missing
 copies are restored from any surviving matching salt. Conflicting copies,
@@ -250,7 +252,7 @@ them, for example `PATH`, wheel virtualenv paths, command arguments,
 `CUDA_VISIBLE_DEVICES`.
 
 The central path and hash APIs are binding acceptance requirements for future
-changes; see the [environment lifecycle tracker](../../../../feature-tracking/lx_annotate_environment_lifecycle_audit.yml).
+changes; see the [environment lifecycle tracker](../../../../feature-tracking/lx_annotate_environment_lifecycle_audit.yaml).
 Do not export `DATA_DIR`, `STORAGE_DIR`, `LX_ANNOTATE_DATA_DIR`,
 `LX_ANNOTATE_ENCRYPTED_DATA_DIR`, `PROTECTED_MEDIA_ROOT`, or the three
 `LX_ANNOTATE_STREAMABLE_VIDEO_*ROOT` aliases. Application media paths come from
@@ -513,7 +515,7 @@ an older application package, disable request throttling explicitly before
 activation. No application release or activation is implied by local tests.
 
 Acceptance evidence belongs to
-[`lx_annotate_hls_operational_readiness.yml`](../../../../feature-tracking/lx_annotate_hls_operational_readiness.yml),
+[`lx_annotate_hls_operational_readiness.yaml`](../../../../feature-tracking/lx_annotate_hls_operational_readiness.yaml),
 criterion `frontend_request_throttle`, and the application's `StorageOptimization.yml`,
 criterion `frontend_request_priority`.
 
@@ -978,6 +980,14 @@ Notes:
   intentionally redesigned.
 
 ## Wheel Install Behavior
+
+The selected `runtime.wheelPath` declares the `endoreg-db` dependency installed
+by the wheel runtime. LuxNix has no independent `endoreg-db` flake input and
+exports no source-derived Endoreg version or feature-registry attestation.
+Inspect the installed distribution metadata for the actual dependency version;
+changing a source checkout does not change the deployed wheel's dependencies.
+The upstream LX-Annotate flake still owns its transitive Nix dependencies for
+package mode; these are not a second LuxNix runtime dependency selection.
 
 Wheel mode now reuses the existing virtualenv and only reinstalls when one of these changes:
 

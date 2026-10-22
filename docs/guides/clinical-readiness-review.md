@@ -127,8 +127,8 @@ state or resolve recorded blockers.
 
 #### Evidence
 
-- `feature-tracking/ReportReaderIntegration.yml`
-- `feature-tracking/FrameCleanerIntegration.yml`
+- `feature-tracking/ReportReaderIntegration.yaml`
+- `feature-tracking/FrameCleanerIntegration.yaml`
 
 **Ownership:** lx-anonymizer and endoreg-db applications, with LuxNix deployment integration.
 
@@ -192,8 +192,8 @@ state or resolve recorded blockers.
 
 - `modules/nixos/services/lx-annotate-local/subservices/lx-annotate-acceptance.nix:39`
 - `docs/guides/lx-annotate-monitoring.md`
-- `feature-tracking/lx_annotate_hls_operational_readiness.yml`
-- `feature-tracking/lx_annotate_operational_monitoring.yml`
+- `feature-tracking/lx_annotate_hls_operational_readiness.yaml`
+- `feature-tracking/lx_annotate_operational_monitoring.yaml`
 - `docs/lx-annotate-cluster-readiness.md`
 
 **Observation:** The active acceptance unit checks Django, encrypted storage, worker activity and an HTTPS manifest fetch, but omits HLS readiness. The fetch lacks explicit curl deadlines and discards manifest contents. Monitoring rollout and alerts remain unverified; Kubernetes TCP readiness does not establish database, broker or shared-storage availability.

@@ -37,22 +37,22 @@ in
             services = {
               prometheus.loadBalancer.servers = [
                 {
-                  url = "http://localhost:3020";
+                  url = "http://localhost:${toString config.services.prometheus.port}";
                 }
               ];
               grafana.loadBalancer.servers = [
                 {
-                  url = "http://localhost:3010";
+                  url = "http://localhost:${toString config.services.grafana.settings.server.http_port}";
                 }
               ];
               promtail.loadBalancer.servers = [
                 {
-                  url = "http://localhost:3031";
+                  url = "http://localhost:${toString config.services.promtail.configuration.server.http_listen_port}";
                 }
               ];
               alertmanager.loadBalancer.servers = [
                 {
-                  url = "http://localhost:9093";
+                  url = "http://localhost:${toString config.services.prometheus.alertmanager.port}";
                 }
               ];
             };

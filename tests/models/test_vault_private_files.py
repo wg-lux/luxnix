@@ -36,3 +36,33 @@ def test_generate_psk_warns_before_replacing_existing_file(tmp_path):
         PreSharedKey.generate("example", str(psk_dir))
 
     assert psk_path.read_text(encoding="utf-8") != "old"
+
+
+@pytest.mark.parametrize("operation", ["master", "host", "read"])
+def test_vault_keys_require_encrypted_storage(tmp_path, monkeypatch, operation):
+    from lx_administration import secret_storage
+    from lx_administration.models.vault.secret import _read_key
+
+    def denied_probe(*command):
+        return {
+            "swapon": {"swapdevices": []},
+            "findmnt": {"filesystems": [{"fstype": "ext4", "source": "/dev/test"}]},
+            "lsblk": {"blockdevices": [{"type": "disk"}]},
+        }[command[0]]
+
+    monkeypatch.setattr(secret_storage, "_probe", denied_probe)
+    key_path = tmp_path / "key"
+    if operation == "read":
+        key_path.write_text("synthetic-test-key")
+        key_path.chmod(0o600)
+        with pytest.raises(ValueError, match="encrypted devices"):
+            _read_key(key_path)
+        assert key_path.read_text() == "synthetic-test-key"
+    elif operation == "master":
+        with pytest.raises(ValueError, match="encrypted devices"):
+            generate_ansible_key(key_path)
+        assert not key_path.exists()
+    else:
+        with pytest.raises(ValueError, match="encrypted devices"):
+            PreSharedKey.generate("example", tmp_path / "psks")
+        assert not list((tmp_path / "psks").iterdir())

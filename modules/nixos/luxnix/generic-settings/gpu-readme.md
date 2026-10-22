@@ -66,7 +66,7 @@ module. After an authorized driver deployment, use a coordinated host reboot
 and verify `nvidia-smi`, `/proc/driver/nvidia/version`, and the application encoder
 preflight before resuming GPU jobs. Restarting an application alone does not
 resolve a kernel-module/userspace-library mismatch. Configuration verification
-is tracked in `feature-tracking/luxnix_module_ownership_cleanup.yml`, criterion
+is tracked in `feature-tracking/luxnix_module_ownership_cleanup.yaml`, criterion
 `nvidia_driver_selection`.
 
 ### Global GPU Settings

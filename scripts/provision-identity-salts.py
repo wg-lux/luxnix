@@ -10,10 +10,11 @@ import hashlib
 import os
 from pathlib import Path
 import pwd
+import runpy
 import secrets
 import stat
 import sys
-
+import subprocess
 import yaml
 
 ACTIVE = "lx_annotate_identity_active"
@@ -108,10 +109,17 @@ def salt_line(raw: bytes) -> bytes:
         raise ValueError("Invalid active identity salt; refusing replacement")
     return value
 
+def generate_identity_salt() -> bytes:
+    return secrets.token_hex(32).encode("ascii")
 
 def provision(
-    secret_dir: Path, recovery_dir: Path, replica_dir: Path, uid: int, gid: int,
+    secret_dir: Path,
+    recovery_dir: Path,
+    replica_dir: Path,
+    uid: int,
+    gid: int,
     source_salt: Path | None = None,
+    allow_initial_enrollment: bool = False,
 ):
     with ExitStack() as stack:
         primary = stack.enter_context(directory(recovery_dir, private=True))
@@ -136,7 +144,7 @@ def provision(
         active = read(deployed, ACTIVE, owners)
         legacy = read(deployed, LEGACY, owners)
         manifest = read(deployed, MANIFEST, owners)
-        expected = {
+        expected: dict[str, str | int | bool | list[str]] = {
             "schema_version": 1,
             "active": str(secret_dir / ACTIVE),
             "retiring": [str(secret_dir / LEGACY)],
@@ -157,15 +165,30 @@ def provision(
             with directory(source_salt.parent) as source_dir:
                 source = read(source_dir, source_salt.name, owners)
             if source is None:
-                raise ValueError("Authoritative center salt is unavailable; refusing local generation")
+                raise ValueError(
+                    "Center salt is unavailable; refusing local generation"
+                )
             values.add(salt_line(source))
         if len(values) > 1:
             raise ValueError("Salt copies disagree; all copies preserved for recovery")
-        if not values and any(raw is not None for raw in [manifest, legacy, *receipts]):
+        if not values and any(
+            raw is not None for raw in [manifest, legacy, *receipts]
+        ):
             raise ValueError(
                 "Previously enrolled salt is missing; restore backup, never regenerate"
             )
-        value = values.pop() if values else secrets.token_hex(32).encode("ascii")
+
+        if not values:
+            if not allow_initial_enrollment:
+                raise ValueError(
+                    "Initial identity enrollment must be explicitly requested"
+                )
+            values.add(generate_identity_salt())
+        if not values:
+            raise ValueError(
+                "Authoritative center salt required; local generation is prohibited"
+            )
+        value = values.pop()
         fingerprint = hashlib.sha256(value).hexdigest().encode("ascii") + b"\n"
         if any(receipt is not None and receipt != fingerprint for receipt in receipts):
             raise ValueError(
@@ -190,6 +213,36 @@ def provision(
                 os.chown(name, uid, gid, dir_fd=deployed, follow_symlinks=False)
                 os.chmod(name, 0o600, dir_fd=deployed, follow_symlinks=False)
 
+encrypted_storage = runpy.run_path(
+    str(Path(__file__).with_name("verify-secret-storage.py"))
+)["encrypted_storage"]
+
+
+def replace_private(fd: int, name: str, content: bytes, uid: int, gid: int) -> None:
+    temporary = f".pending-{secrets.token_hex(12)}"
+    publish(fd, temporary, content, uid, gid, 0o600)
+    try:
+        os.replace(temporary, name, src_dir_fd=fd, dst_dir_fd=fd)
+        os.fsync(fd)
+    finally:
+        try:
+            os.unlink(temporary, dir_fd=fd)
+        except FileNotFoundError:
+            pass
+
+
+def provision_center(
+    secret_dir: Path,
+    recovery_dir: Path,
+    replica_dir: Path,
+    uid: int,
+    gid: int,
+    source_bundle: Path,
+    center_id: str,
+) -> None:
+    """Reject retired central enrollment before reading or mutating any files."""
+    raise ValueError("Central identity salt provisioning is disabled")
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -197,18 +250,50 @@ def main() -> int:
         parser.add_argument(f"--{option}", type=Path, required=True)
     parser.add_argument("--user", required=True)
     parser.add_argument("--group", required=True)
-    parser.add_argument("--source-salt", type=Path)
+    parser.add_argument("--source-bundle", type=Path)
+    parser.add_argument("--center-id")
+    parser.add_argument(
+        "--allow-create",
+        action="store_true",
+        help=(
+            "Permit explicit first enrollment when no existing identity "
+            "material or enrollment evidence is present."
+        ),
+    )
     args = parser.parse_args()
     try:
-        provision(
+        if bool(args.source_bundle) != bool(args.center_id):
+            raise ValueError("Source bundle and center must be supplied together")
+        if args.source_bundle is None:
+            for path in (args.recovery_dir, args.replica_dir):
+                encrypted_storage(path)
+            encrypted_storage(args.secret_dir, allow_runtime=True)
+            provision(
+                args.secret_dir,
+                args.recovery_dir,
+                args.replica_dir,
+                pwd.getpwnam(args.user).pw_uid,
+                grp.getgrnam(args.group).gr_gid,
+                allow_initial_enrollment=args.allow_create
+            )
+            return 0
+        provision_center(
             args.secret_dir,
             args.recovery_dir,
             args.replica_dir,
             pwd.getpwnam(args.user).pw_uid,
             grp.getgrnam(args.group).gr_gid,
-            args.source_salt,
+            args.source_bundle,
+            args.center_id,
         )
-    except (OSError, ValueError, KeyError, yaml.YAMLError):
+    except (
+        OSError,
+        ValueError,
+        KeyError,
+        TypeError,
+        subprocess.SubprocessError,
+        yaml.YAMLError,
+    ):
         # Never render parser exceptions or file contents into service logs.
         print(
             "Identity salt provisioning failed; existing files preserved. "
