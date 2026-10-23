@@ -305,6 +305,10 @@ in
             wants = [ "network-online.target" ] ++ optional cfg.autoDownload downloadUnit;
             requires = optional cfg.autoDownload downloadUnit;
             wantedBy = optional cfg.autoStart "multi-user.target";
+            # Each failed load rereads the full model from disk; stop instead
+            # of looping on a deterministic failure such as a GPU OOM.
+            startLimitBurst = 3;
+            startLimitIntervalSec = 1800;
             unitConfig.ConditionPathExists = modelFile;
 
             environment = {

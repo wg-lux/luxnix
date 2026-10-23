@@ -66,7 +66,8 @@ host_services:
 
   # GLM service
   luxnix.glm52.enable: "true"
-  luxnix.glm52.gpuLayers: "999"
+  # Leave gpuLayers unset: the ~223 GiB model cannot be fully offloaded to the
+  # 16 GiB GPU, and forcing it disables llama.cpp's automatic device fitting.
   luxnix.glm52.host: '"0.0.0.0"'
   luxnix.glm52.port: "8088"
   luxnix.glm52.quant: '"UD-IQ2_M"'

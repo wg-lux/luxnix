@@ -185,9 +185,6 @@ lib.foldl' lib.recursiveUpdate
       services.luxnix.glm52.enable = true;
     }
     {
-      services.luxnix.glm52.gpuLayers = 999;
-    }
-    {
       services.luxnix.glm52.host = "0.0.0.0";
     }
     {
