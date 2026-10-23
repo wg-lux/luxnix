@@ -1055,7 +1055,7 @@ or reuse the removed node key for another physical machine.
 ## Controller SSH authorization
 
 `hub_enrollment_admin_access` in the inventory scopes the existing `gs-02`
-administrator public key to `gs-02`, `gc-06` and `gc-09`. Its group YAML supplies
+administrator public key to `gs-02`, `gc-02`, `gc-06`, `gc-09` and `gc-10`. Its group YAML supplies
 `services.ssh.authorizedKeys` for generated NixOS configuration. The key is
 restricted to connections from `172.16.255.22` and has SSH forwarding and PTY
 allocation disabled; Ansible command execution remains available.
