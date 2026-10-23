@@ -848,18 +848,28 @@ lib.foldl' lib.recursiveUpdate
       xdg.menus.enable = true;
     }
     {
-      fileSystems."/etc/secrets/vault" = lib.mkIf config.luxnix.vault.server.managedTls.encryptedStorage {
-        device = "/var/lib/luxnix-vault-pki/managed-secrets";
-        fsType = "none";
-        options = [
-          "bind"
-          "noauto"
-          "nodev"
-          "nosuid"
-          "noexec"
-        ];
-        depends = [ "/var/lib/luxnix-vault-pki" ];
-      };
+      fileSystems = lib.mkIf config.luxnix.vault.server.managedTls.encryptedStorage (
+        lib.mapAttrs
+          (_: directory: {
+            device = "/var/lib/luxnix-vault-pki/${directory}";
+            fsType = "none";
+            options = [
+              "bind"
+              "noauto"
+              "nodev"
+              "nosuid"
+              "noexec"
+            ];
+            depends = [ "/var/lib/luxnix-vault-pki" ];
+          })
+          {
+            "/etc/secrets/vault" = "managed-secrets";
+            "/var/lib/luxnix-vault-site-lifecycle" = "site-lifecycle";
+            "/root/vault-enrollment" = "site-enrollment";
+            "/var/lib/lx-annotate-identity-salts" = "identity-salt-recovery";
+            "/var/lib/lx-annotate/data/.identity-salt-recovery" = "identity-salt-replica";
+          }
+      );
     }
     {
       networking.firewall.interfaces.tun0.allowedTCPPorts = lib.mkAfter [
@@ -873,6 +883,20 @@ lib.foldl' lib.recursiveUpdate
     }
     {
       systemd.generators.systemd-gpt-auto-generator = "/dev/null";
+    }
+    {
+      systemd.services.lx-annotate-identity-salts =
+        lib.mkIf config.luxnix.vault.server.managedTls.encryptedStorage
+          {
+            unitConfig.RequiresMountsFor = [
+              "/var/lib/lx-annotate-identity-salts"
+              "/var/lib/lx-annotate/data/.identity-salt-recovery"
+            ];
+            unitConfig.AssertPathIsMountPoint = [
+              "/var/lib/lx-annotate-identity-salts"
+              "/var/lib/lx-annotate/data/.identity-salt-recovery"
+            ];
+          };
     }
     {
       systemd.services.managed-secrets-setup =
