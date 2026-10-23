@@ -209,6 +209,9 @@ def test_vault_encrypted_mount_gates_services_and_preserves_raft() -> None:
           enrollmentFilesystems = map (path: c.fileSystems.${path} or null)
             [ "/var/lib/luxnix-vault-site-lifecycle" "/root/vault-enrollment" ];
           managed = unit "managed-secrets-setup";
+          salts = unit "lx-annotate-identity-salts";
+          saltFilesystems = map (path: c.fileSystems.${path} or null)
+            [ "/var/lib/lx-annotate-identity-salts" "/var/lib/lx-annotate/data/.identity-salt-recovery" ];
           vault = unit "vault";
           tls = unit "luxnix-vault-managed-server-tls";
           inherit (c) swapDevices;
@@ -264,6 +267,16 @@ def test_vault_encrypted_mount_gates_services_and_preserves_raft() -> None:
         assert filesystem["fsType"] == "none"
         assert set(managed_fs["options"]) == set(filesystem["options"])
     assert cases["disabled"]["enrollmentFilesystems"] == [None, None]
+    salt_paths = ["/var/lib/lx-annotate-identity-salts",
+                  "/var/lib/lx-annotate/data/.identity-salt-recovery"]
+    for filesystem, directory in zip(
+        enabled["saltFilesystems"], ("identity-salt-recovery", "identity-salt-replica")
+    ):
+        assert filesystem["device"] == f"/var/lib/luxnix-vault-pki/{directory}"
+        assert set(filesystem["options"]) == set(managed_fs["options"])
+    for key in ("RequiresMountsFor", "AssertPathIsMountPoint"):
+        assert set(salt_paths) <= set(enabled["salts"]["unitConfig"][key])
+    assert cases["disabled"]["saltFilesystems"] == [None, None]
     for service in ("tls", "vault"):
         assert "var-lib-luxnix\\x2dvault\\x2dpki.mount" in enabled[service]["bindsTo"]
         expected_mounts = {"/var/lib/luxnix-vault-pki"}

@@ -431,6 +431,32 @@ any downloaded patch outside the checkout, and require a clean worktree before
 rerunning the scoped enrollment command. The corrected preflight must check
 `/var/lib/luxnix-vault-site-lifecycle`, not `/var/lib/vault/site-lifecycle`.
 
+## Identity salt recovery storage
+
+The gs-02 identity provisioner also requires encrypted storage for both
+`/var/lib/lx-annotate-identity-salts` and
+`/var/lib/lx-annotate/data/.identity-salt-recovery`. The host inventory binds
+these to `identity-salt-recovery` and `identity-salt-replica` under the existing
+LUKS filesystem. The service requires both mounts and asserts they are mount
+points. The generic journal error about metadata and receipts can therefore
+also mean that a recovery directory still resolves to unencrypted root storage.
+
+For the initial migration, stop `lx-annotate-identity-salts.timer` and its
+service. Use the guarded copy-and-compare procedure in the preceding section,
+substituting these two source paths and destination directory names. Verify
+the deployed active salt and both recovery copies agree, and that both
+`enrolled` receipts match their SHA-256 digest, without printing the material.
+Preserve existing permissions and all salt bytes; never create replacement
+identities. Populate both encrypted directories before applying the reviewed
+configuration. Start both mount units, run the storage verifier on both paths,
+and then start `lx-annotate-identity-salts.service` and its timer. Require exit
+status 0 and the journal message confirming two durable recovery copies.
+
+These copies share one encrypted container; they do not replace an independently
+held encrypted backup. Original plaintext copies hidden beneath the mounts and
+historical snapshots remain subject to separate retirement. After manual unlock
+on subsequent boots, starting the salt service pulls in both mounts.
+
 ## After each reboot
 
 From an authenticated SSH session on gs-02:

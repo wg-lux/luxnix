@@ -866,6 +866,8 @@ lib.foldl' lib.recursiveUpdate
             "/etc/secrets/vault" = "managed-secrets";
             "/var/lib/luxnix-vault-site-lifecycle" = "site-lifecycle";
             "/root/vault-enrollment" = "site-enrollment";
+            "/var/lib/lx-annotate-identity-salts" = "identity-salt-recovery";
+            "/var/lib/lx-annotate/data/.identity-salt-recovery" = "identity-salt-replica";
           }
       );
     }
@@ -881,6 +883,20 @@ lib.foldl' lib.recursiveUpdate
     }
     {
       systemd.generators.systemd-gpt-auto-generator = "/dev/null";
+    }
+    {
+      systemd.services.lx-annotate-identity-salts =
+        lib.mkIf config.luxnix.vault.server.managedTls.encryptedStorage
+          {
+            unitConfig.RequiresMountsFor = [
+              "/var/lib/lx-annotate-identity-salts"
+              "/var/lib/lx-annotate/data/.identity-salt-recovery"
+            ];
+            unitConfig.AssertPathIsMountPoint = [
+              "/var/lib/lx-annotate-identity-salts"
+              "/var/lib/lx-annotate/data/.identity-salt-recovery"
+            ];
+          };
     }
     {
       systemd.services.managed-secrets-setup =
