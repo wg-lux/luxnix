@@ -78,6 +78,18 @@ NixOS configuration or rotate existing node secrets, salts or media keys.
 
 ## Troubleshooting enrollment
 
+If `Verify hub helper and persistent enrollment storage` fails on gs-02,
+the reconciliation task checks `/run`, `/var/lib/luxnix-vault-site-lifecycle`,
+`/root/vault-enrollment/<site>` and `/etc/secrets/vault/hub-pki` through the
+storage verifier. `/run` may be tmpfs; the persistent paths need encrypted
+backing storage and protected swap. The TLS/managed-secret migration alone
+does not cover the lifecycle directory or saved enrollment bundles. Preserve
+any existing state before migrating those paths; do not delete saved identities
+or create a new Vault token to bypass this prerequisite. Older checkouts used
+the incorrect `/var/lib/vault/site-lifecycle` probe path. Keep `no_log` enabled;
+inspect mount metadata or run the storage verifier separately, not credential
+reconciliation with tracing enabled.
+
 | Result or message | Check and next action |
 | --- | --- |
 | SSH connection closed / connection timed out | Check controller VPN route, SSH login account, authorized controller public key and server host-key pin. `unreachable` does not prove the host is powered off. A sudo password or new Vault token cannot repair SSH. |

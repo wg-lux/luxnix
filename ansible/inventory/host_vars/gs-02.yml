@@ -208,6 +208,20 @@ host_luxnix:
   generic_settings.linux.kernelModulesBlacklist: []
 
 host_nixos:
+  # Populate and verify this directory before activation; never create fresh secrets over it.
+  'fileSystems."/etc/secrets/vault"': >-
+    lib.mkIf config.luxnix.vault.server.managedTls.encryptedStorage {
+    device = "/var/lib/luxnix-vault-pki/managed-secrets";
+    fsType = "none";
+    options = [ "bind" "noauto" "nodev" "nosuid" "noexec" ];
+    depends = [ "/var/lib/luxnix-vault-pki" ];
+    }
+  systemd.services.managed-secrets-setup: >-
+    lib.mkIf config.luxnix.vault.server.managedTls.encryptedStorage {
+    bindsTo = [ "etc-secrets-vault.mount" ];
+    unitConfig.RequiresMountsFor = [ "/etc/secrets/vault" ];
+    unitConfig.AssertPathIsMountPoint = "/etc/secrets/vault";
+    }
   # Keep RAM-only zram; never page Vault key material onto the unencrypted disk.
   swapDevices: "lib.mkForce [ ]"
   # Explicit filesystems are configured; prevent GPT discovery from restoring disk swap.

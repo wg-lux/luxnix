@@ -205,6 +205,8 @@ def test_vault_encrypted_mount_gates_services_and_preserves_raft() -> None:
           };
         in {
           filesystem = c.fileSystems.${directory} or null;
+          managedFilesystem = c.fileSystems."/etc/secrets/vault" or null;
+          managed = unit "managed-secrets-setup";
           vault = unit "vault";
           tls = unit "luxnix-vault-managed-server-tls";
           inherit (c) swapDevices;
@@ -244,6 +246,15 @@ def test_vault_encrypted_mount_gates_services_and_preserves_raft() -> None:
     for key in ("AllowHibernation", "AllowHybridSleep", "AllowSuspendThenHibernate"):
         assert enabled["sleep"][key] is False
     assert enabled["raft"] == "/var/lib/vault"
+    managed_fs = enabled["managedFilesystem"]
+    assert managed_fs["device"] == "/var/lib/luxnix-vault-pki/managed-secrets"
+    assert managed_fs["fsType"] == "none"
+    assert {"bind", "noauto", "nodev", "nosuid", "noexec",
+            "x-systemd.requires-mounts-for=/var/lib/luxnix-vault-pki"} <= set(managed_fs["options"])
+    assert "etc-secrets-vault.mount" in enabled["managed"]["bindsTo"]
+    assert "/etc/secrets/vault" in enabled["managed"]["unitConfig"]["RequiresMountsFor"]
+    assert enabled["managed"]["unitConfig"]["AssertPathIsMountPoint"] == "/etc/secrets/vault"
+    assert cases["disabled"]["managedFilesystem"] is None
     for service in ("tls", "vault"):
         assert "var-lib-luxnix\\x2dvault\\x2dpki.mount" in enabled[service]["bindsTo"]
         expected_mounts = {"/var/lib/luxnix-vault-pki"}

@@ -12,7 +12,7 @@
       ansible.builtin.script:
         cmd: >-
           {{ (playbook_dir ~ '/../../lx_administration/secret_storage.py') | quote }}
-          --allow-runtime /run /var/lib/vault/site-lifecycle
+          --allow-runtime /run /var/lib/luxnix-vault-site-lifecycle
           {{ enrollment_source | quote }} /etc/secrets/vault/hub-pki
         executable: python3
       delegate_to: '{{ enrollment_hub }}'

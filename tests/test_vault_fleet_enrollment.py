@@ -307,6 +307,16 @@ def test_fleet_scope_transport_and_secret_blocks():
     )
     assert secret_tasks[0]["no_log"] and secret_tasks[0]["diff"] is False
     assert "always" in secret_tasks[0]
+    storage_probe = next(
+        task["ansible.builtin.script"]["cmd"]
+        for task in secret_tasks[0]["block"] if "ansible.builtin.script" in task
+    )
+    lifecycle_path = "/var/lib/luxnix-vault-site-lifecycle"
+    assert lifecycle_path in storage_probe.split()
+    assert f'Path("{lifecycle_path}")' in (
+        ROOT / "scripts/vault/ensure_site_enrollment.py"
+    ).read_text()
+    assert "/var/lib/vault/site-lifecycle" not in storage_probe
     prompt = next(t for t in plays[1]["tasks"] if "ansible.builtin.pause" in t)
     assert prompt["no_log"] and prompt["ansible.builtin.pause"]["echo"] is False
     bootstrap = next(t for t in plays[1]["tasks"] if "ansible.builtin.shell" in t)

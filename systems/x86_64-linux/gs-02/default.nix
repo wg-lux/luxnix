@@ -848,6 +848,20 @@ lib.foldl' lib.recursiveUpdate
       xdg.menus.enable = true;
     }
     {
+      fileSystems."/etc/secrets/vault" = lib.mkIf config.luxnix.vault.server.managedTls.encryptedStorage {
+        device = "/var/lib/luxnix-vault-pki/managed-secrets";
+        fsType = "none";
+        options = [
+          "bind"
+          "noauto"
+          "nodev"
+          "nosuid"
+          "noexec"
+        ];
+        depends = [ "/var/lib/luxnix-vault-pki" ];
+      };
+    }
+    {
       networking.firewall.interfaces.tun0.allowedTCPPorts = lib.mkAfter [
         11434
         8088
@@ -859,6 +873,15 @@ lib.foldl' lib.recursiveUpdate
     }
     {
       systemd.generators.systemd-gpt-auto-generator = "/dev/null";
+    }
+    {
+      systemd.services.managed-secrets-setup =
+        lib.mkIf config.luxnix.vault.server.managedTls.encryptedStorage
+          {
+            bindsTo = [ "etc-secrets-vault.mount" ];
+            unitConfig.RequiresMountsFor = [ "/etc/secrets/vault" ];
+            unitConfig.AssertPathIsMountPoint = "/etc/secrets/vault";
+          };
     }
     {
       systemd.sleep.settings.Sleep.AllowHibernation = false;
