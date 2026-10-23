@@ -68,4 +68,5 @@ export ANSIBLE_SSH_COMMON_ARGS="-o StrictHostKeyChecking=yes -o UserKnownHostsFi
 bash scripts/run-secret-playbook.sh ansible/playbooks/enroll_reachable_hub_sites.yml \
   -i ansible/inventory/hosts.ini "${scope[@]}" \
   -e ansible_python_interpreter=/run/current-system/sw/bin/python3 \
+  -e ansible_remote_tmp=/dev/shm \
   -e ansible_become_user=root "${prompt[@]}"
