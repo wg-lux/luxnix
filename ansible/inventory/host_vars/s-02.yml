@@ -9,7 +9,11 @@ ansible_roles:
   - ssl_cert
 
 host_roles:
-  nginxHost.glm52.enable: false
+  # Public DNS for *.endo-reg.net resolves to this ingress, so GLM terminates
+  # here and proxies over the VPN to the llama.cpp server on gs-02.
+  nginxHost.glm52.enable: "true"
+  # Served with the existing *.endo-reg.net wildcard certificate.
+  nginxHost.glm52.acme.enable: "false"
 host_services:
   luxnix.lxTerminology.enable: "true"
   luxnix.lxTerminology.domain: '"terminology.endo-reg.net"'

@@ -151,6 +151,45 @@ let
 
   serverExec = escapeShellArgs ([ "${cfg.package}/bin/llama-server" ] ++ serverArgs);
   downloadUnit = "glm-5-2-download.service";
+
+  ollamaPackage = config.services.ollama.package;
+  ollamaClientHost =
+    if
+      elem config.services.ollama.host [
+        "0.0.0.0"
+        "::"
+      ]
+    then
+      "127.0.0.1"
+    else
+      config.services.ollama.host;
+
+  # Ollama groups llama.cpp split shards matched by one wildcard FROM.
+  ollamaModelfile = pkgs.writeText "glm-5-2-ollama.Modelfile" ''
+    FROM ${cfg.modelDir}/${cfg.quant}/GLM-5.2-${cfg.quant}-*.gguf
+
+    PARAMETER temperature ${toString cfg.temperature}
+    PARAMETER top_p ${toString cfg.topP}
+    PARAMETER min_p ${toString cfg.minP}
+  '';
+
+  registerOllamaModel = pkgs.writeShellScript "glm-5-2-ollama-register" ''
+    set -euo pipefail
+
+    for _ in $(seq 60); do
+      ${ollamaPackage}/bin/ollama list >/dev/null 2>&1 && break
+      sleep 2
+    done
+
+    # Importing copies the full model into Ollama's store; never repeat it
+    # for a name that is already registered.
+    if ${ollamaPackage}/bin/ollama show ${escapeShellArg cfg.ollama.model} >/dev/null 2>&1; then
+      echo "Ollama model ${cfg.ollama.model} is already registered."
+      exit 0
+    fi
+
+    exec ${ollamaPackage}/bin/ollama create ${escapeShellArg cfg.ollama.model} -f ${ollamaModelfile}
+  '';
 in
 {
   options.services.luxnix.glm52 = {
@@ -231,6 +270,17 @@ in
     environment =
       mkOpt (types.attrsOf types.str) { }
         "Additional environment variables for the server.";
+
+    ollama = {
+      register = mkBoolOpt false "Import the downloaded GGUF into the local Ollama service once. Ollama keeps its own full copy of the model.";
+
+      model = mkOption {
+        type = types.str;
+        default = "glm-5.2:${toLower cfg.quant}";
+        defaultText = literalExpression ''"glm-5.2:''${toLower config.services.luxnix.glm52.quant}"'';
+        description = "Ollama model name registered for the configured quant.";
+      };
+    };
 
     studio = {
       enable = mkBoolOpt false "Enable optional Unsloth Studio service.";
@@ -347,6 +397,42 @@ in
         };
       };
     }
+
+    (mkIf cfg.ollama.register {
+      assertions = [
+        {
+          assertion = config.services.luxnix.ollama.enable;
+          message = "services.luxnix.glm52.ollama.register requires services.luxnix.ollama.enable.";
+        }
+      ];
+
+      systemd.services.glm-5-2-ollama-register = {
+        description = "Register GLM-5.2 GGUF in Ollama";
+        after = [ "ollama.service" ] ++ optional cfg.autoDownload downloadUnit;
+        requires = [ "ollama.service" ] ++ optional cfg.autoDownload downloadUnit;
+        wantedBy = [ "multi-user.target" ];
+        unitConfig.ConditionPathExists = modelFile;
+
+        environment = {
+          HOME = cfg.stateDir;
+          OLLAMA_HOST = "${ollamaClientHost}:${toString config.services.ollama.port}";
+        };
+
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+          User = cfg.user;
+          Group = cfg.group;
+          WorkingDirectory = cfg.stateDir;
+          ExecStart = registerOllamaModel;
+          TimeoutStartSec = "infinity";
+          NoNewPrivileges = true;
+          PrivateTmp = true;
+          ProtectSystem = "strict";
+          ProtectHome = true;
+        };
+      };
+    })
 
     (mkIf cfg.studio.enable {
       networking.firewall.allowedTCPPorts = optional cfg.studio.openFirewall cfg.studio.port;

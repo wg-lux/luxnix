@@ -58,7 +58,7 @@ lib.foldl' lib.recursiveUpdate
       roles.nginxHost.enable = true;
     }
     {
-      roles.nginxHost.glm52.enable = false;
+      roles.nginxHost.glm52.enable = true;
     }
     {
       roles.nginxHost.keycloak.enable = true;
@@ -86,6 +86,9 @@ lib.foldl' lib.recursiveUpdate
     }
     {
       roles.postgres.main.enable = true;
+    }
+    {
+      roles.nginxHost.glm52.acme.enable = false;
     }
     {
       services.wg-lux-mcp.enable = true;

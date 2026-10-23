@@ -7,8 +7,9 @@ host_roles:
   endoreg-client.lxAi: "true"
   endoreg-client.database.port: config.services.postgresql.settings.port
   nginxHost.enable: "true"
-  nginxHost.glm52.enable: "true"
-  nginxHost.glm52.acme.email: '"hild@coloreg.de"'
+  # The public GLM vhost lives on the s-02 ingress; public DNS never reaches
+  # this host, so a local vhost could neither serve nor obtain ACME certs.
+  nginxHost.glm52.enable: "false"
   nginxHost.keycloak.enable: "false"
   nginxHost.nextcloud.enable: "false"
 
@@ -71,6 +72,8 @@ host_services:
   luxnix.glm52.host: '"0.0.0.0"'
   luxnix.glm52.port: "8088"
   luxnix.glm52.quant: '"UD-IQ2_M"'
+  # Import the GGUF into the local Ollama as glm-5.2:ud-iq2_m (one-time copy).
+  luxnix.glm52.ollama.register: "true"
 
   # LX-Annotate receiver application
   luxnix.lxAnnotateLocal.enable: "true"

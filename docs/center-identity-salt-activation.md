@@ -108,19 +108,21 @@ replacement.
 1. Deploy the reviewed revision on gs-02 with the documented
    `rebuild-host-switch` workflow ([Deployment](deployment-guide.md)). This
    installs the reconcile tool that knows the center list.
-2. Create the center salt and grant the site policy. Use the documented enrollment
-   wrapper from the controller (it prompts once for the Vault enrollment token).
-   This changes Vault state:
+2. Create the center salt and grant the site policies. Run the documented
+   enrollment wrapper from the controller. It prompts once for the Vault
+   enrollment token and once for the shared sudo password, then reconciles every
+   reachable configured site in one run. This changes Vault and site state:
 
    ```bash
-   devenv shell check-connectivity "$SITE"
-   devenv shell enroll-reachable-hub-sites --site "$SITE"
+   devenv shell enroll-reachable-hub-sites --ask-become-pass
    ```
 
-   Repeat for every site of the center. The first reconciliation creates the salt.
-   Later reconciliations only reuse it and add the read grant to the site's policy.
-   Existing site tokens pick up the grant immediately, because Vault resolves
-   policies by name.
+   The first reconciled site of the center creates the salt. Later sites only
+   reuse it and add the read grant to their own policy. Existing site tokens pick
+   up the grant immediately, because Vault resolves policies by name. The wrapper
+   reports unreachable sites; rerun it once they are online. If the sites use
+   different sudo passwords, use `--ask-sudo-password` instead. To limit the run
+   to one site, add `--site "$SITE"`.
 3. Verify on gs-02, without reading the value. Use a short-lived administrative
    token, as in [Machine Enrollment](vault-hub-machine-enrollment.md):
 

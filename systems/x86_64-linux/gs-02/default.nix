@@ -90,7 +90,7 @@ lib.foldl' lib.recursiveUpdate
       roles.nginxHost.enable = true;
     }
     {
-      roles.nginxHost.glm52.enable = true;
+      roles.nginxHost.glm52.enable = false;
     }
     {
       roles.nginxHost.keycloak.enable = false;
@@ -121,9 +121,6 @@ lib.foldl' lib.recursiveUpdate
     }
     {
       roles.endoreg-client.lxAi = true;
-    }
-    {
-      roles.nginxHost.glm52.acme.email = "hild@coloreg.de";
     }
     {
       services.luxnix.lxAnnotateLocal.database.host = "127.0.0.1";
@@ -186,6 +183,9 @@ lib.foldl' lib.recursiveUpdate
     }
     {
       services.luxnix.glm52.host = "0.0.0.0";
+    }
+    {
+      services.luxnix.glm52.ollama.register = true;
     }
     {
       services.luxnix.glm52.port = 8088;
