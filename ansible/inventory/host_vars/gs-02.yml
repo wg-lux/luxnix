@@ -210,6 +210,8 @@ host_luxnix:
 host_nixos:
   # Keep RAM-only zram; never page Vault key material onto the unencrypted disk.
   swapDevices: "lib.mkForce [ ]"
+  # Explicit filesystems are configured; prevent GPT discovery from restoring disk swap.
+  systemd.generators.systemd-gpt-auto-generator: '"/dev/null"'
   systemd.sleep.settings.Sleep.AllowHibernation: "false"
   systemd.sleep.settings.Sleep.AllowHybridSleep: "false"
   systemd.sleep.settings.Sleep.AllowSuspendThenHibernate: "false"

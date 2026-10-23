@@ -14,6 +14,12 @@ Vault and TLS maintenance require that mount and stop when it is removed.
 The existing storage verifier still checks encrypted ancestry and swap.
 Other hosts retain their existing storage configuration.
 
+gs-02 also masks `systemd-gpt-auto-generator`: an empty `swapDevices` list
+alone does not prevent systemd from rediscovering the existing GPT swap
+partition. After applying the configuration, verify `swapon --show=NAME,TYPE`
+and stop any remaining disk swap with `sudo swapoff /dev/nvme0n1p3` after
+checking available memory. Only RAM-only zram may remain.
+
 No formatting, migration or unlock runs automatically. With the container
 locked, the mount request times out after ten seconds and Vault stays down;
 SSH remains available for an operator to unlock it. Never remove the storage
@@ -180,6 +186,14 @@ Retry `managed-secrets-setup.service` only after Vault is unsealed and its own
 credential/storage prerequisites pass. This TLS migration does not encrypt
 unrelated managed-secret destinations. A remaining failure there must be
 reported separately; it is not grounds to bypass its guard.
+
+In particular, `/etc/secrets/vault` must itself resolve to encrypted storage
+before `managed-secrets-setup.service` can pass. Verify it with
+`findmnt -T /etc/secrets/vault -o TARGET,SOURCE,FSTYPE`. If it still resolves
+to the plaintext root filesystem, stop here: its existing secrets need a
+preserving encrypted-storage migration and mount dependencies for their
+writers and consumers. The TLS-only migration above does not provide that.
+Do not delete or regenerate existing passwords to clear the failure.
 
 ## After each reboot
 

@@ -858,6 +858,9 @@ lib.foldl' lib.recursiveUpdate
       swapDevices = lib.mkForce [ ];
     }
     {
+      systemd.generators.systemd-gpt-auto-generator = "/dev/null";
+    }
+    {
       systemd.sleep.settings.Sleep.AllowHibernation = false;
     }
     {

@@ -210,6 +210,7 @@ def test_vault_encrypted_mount_gates_services_and_preserves_raft() -> None:
           inherit (c) swapDevices;
           zram = c.zramSwap.enable;
           resume = c.boot.resumeDevice;
+          gptGenerator = c.systemd.generators.systemd-gpt-auto-generator;
           sleep = c.systemd.sleep.settings.Sleep;
           raft = toString c.services.vault.storagePath;
         };
@@ -239,6 +240,7 @@ def test_vault_encrypted_mount_gates_services_and_preserves_raft() -> None:
     assert enabled["swapDevices"] == []
     assert enabled["zram"] is True
     assert enabled["resume"] == ""
+    assert enabled["gptGenerator"] == "/dev/null"
     for key in ("AllowHibernation", "AllowHybridSleep", "AllowSuspendThenHibernate"):
         assert enabled["sleep"][key] is False
     assert enabled["raft"] == "/var/lib/vault"
