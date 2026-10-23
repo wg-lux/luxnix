@@ -210,7 +210,7 @@ host_luxnix:
 host_nixos:
   # Populate and verify these directories before mounting; preserve existing identities.
   fileSystems: >-
-    lib.mkIf config.luxnix.vault.server.managedTls.encryptedStorage
+    lib.mkMerge [ (lib.mkIf config.luxnix.vault.server.managedTls.encryptedStorage
     (lib.mapAttrs (_: directory: {
     device = "/var/lib/luxnix-vault-pki/${directory}";
     fsType = "none";
@@ -222,6 +222,29 @@ host_nixos:
     "/root/vault-enrollment" = "site-enrollment";
     "/var/lib/lx-annotate-identity-salts" = "identity-salt-recovery";
     "/var/lib/lx-annotate/data/.identity-salt-recovery" = "identity-salt-replica";
+    }))
+    { "/var/lib/luxnix-app-storage" = {
+    device = "/dev/mapper/luxnix-app-storage";
+    fsType = "ext4";
+    options = [ "noauto" "nodev" "nosuid" "x-systemd.device-timeout=10s" ];
+    }; }
+    (lib.mapAttrs (_: directory: {
+    device = "/var/lib/luxnix-app-storage/${directory}";
+    fsType = "none";
+    options = [ "bind" "noauto" "nodev" "nosuid" ];
+    depends = [ "/var/lib/luxnix-app-storage" ];
+    }) {
+    "/var/lib/lx-annotate" = "application";
+    "/var/lib/postgresql" = "postgresql";
+    "/var/endoreg-service-user/lx-annotate-wheel/conf" = "wheel-conf";
+    }) ]
+  # Stop consumers if encrypted storage disappears; never initialize plaintext fallbacks.
+  systemd.services: >-
+    lib.genAttrs [ "lx-annotate-runtime-env" "postgresql" "postgresql-setup" "postgres-endoreg-setup" ]
+    (_: {
+    bindsTo = [ "var-lib-lx\\x2dannotate.mount" "var-lib-postgresql.mount" "var-endoreg\\x2dservice\\x2duser-lx\\x2dannotate\\x2dwheel-conf.mount" ];
+    unitConfig.RequiresMountsFor = [ "/var/lib/lx-annotate" "/var/lib/postgresql" "/var/endoreg-service-user/lx-annotate-wheel/conf" ];
+    unitConfig.AssertPathIsMountPoint = [ "/var/lib/lx-annotate" "/var/lib/postgresql" "/var/endoreg-service-user/lx-annotate-wheel/conf" ];
     })
   systemd.services.lx-annotate-identity-salts: >-
     lib.mkIf config.luxnix.vault.server.managedTls.encryptedStorage {

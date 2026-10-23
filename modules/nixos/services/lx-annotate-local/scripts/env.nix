@@ -118,8 +118,8 @@ rec {
     DJANGO_DB_SSLMODE = cfg.database.sslMode;
     DB_PWD_FILE = "${envConfDir}/db_pwd";
     DJANGO_DB_PASSWORD_FILE = "${envConfDir}/db_pwd";
-    DJANGO_SECRET_KEY_FILE = toString cfg.django.djangoSecretKeyFile;
-    DJANGO_KEYCLOAK_CLIENT_SECRET_FILE = toString cfg.django.keycloakSecretFile;
+    DJANGO_SECRET_KEY_FILE = "${envConfDir}/django_secret_key";
+    DJANGO_KEYCLOAK_CLIENT_SECRET_FILE = "${envConfDir}/keycloak_secret";
     DJANGO_KEYCLOAK_CLIENT_ID = cfg.django.keycloakClientId;
     OIDC_RP_CLIENT_ID = cfg.django.keycloakClientId;
     DJANGO_MODULE = envDjangoModule;

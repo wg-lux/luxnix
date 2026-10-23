@@ -848,28 +848,60 @@ lib.foldl' lib.recursiveUpdate
       xdg.menus.enable = true;
     }
     {
-      fileSystems = lib.mkIf config.luxnix.vault.server.managedTls.encryptedStorage (
-        lib.mapAttrs
+      fileSystems = lib.mkMerge [
+        (lib.mkIf config.luxnix.vault.server.managedTls.encryptedStorage (
+          lib.mapAttrs
+            (_: directory: {
+              device = "/var/lib/luxnix-vault-pki/${directory}";
+              fsType = "none";
+              options = [
+                "bind"
+                "noauto"
+                "nodev"
+                "nosuid"
+                "noexec"
+              ];
+              depends = [ "/var/lib/luxnix-vault-pki" ];
+            })
+            {
+              "/etc/secrets/vault" = "managed-secrets";
+              "/var/lib/luxnix-vault-site-lifecycle" = "site-lifecycle";
+              "/root/vault-enrollment" = "site-enrollment";
+              "/var/lib/lx-annotate-identity-salts" = "identity-salt-recovery";
+              "/var/lib/lx-annotate/data/.identity-salt-recovery" = "identity-salt-replica";
+            }
+        ))
+        {
+          "/var/lib/luxnix-app-storage" = {
+            device = "/dev/mapper/luxnix-app-storage";
+            fsType = "ext4";
+            options = [
+              "noauto"
+              "nodev"
+              "nosuid"
+              "x-systemd.device-timeout=10s"
+            ];
+          };
+        }
+        (lib.mapAttrs
           (_: directory: {
-            device = "/var/lib/luxnix-vault-pki/${directory}";
+            device = "/var/lib/luxnix-app-storage/${directory}";
             fsType = "none";
             options = [
               "bind"
               "noauto"
               "nodev"
               "nosuid"
-              "noexec"
             ];
-            depends = [ "/var/lib/luxnix-vault-pki" ];
+            depends = [ "/var/lib/luxnix-app-storage" ];
           })
           {
-            "/etc/secrets/vault" = "managed-secrets";
-            "/var/lib/luxnix-vault-site-lifecycle" = "site-lifecycle";
-            "/root/vault-enrollment" = "site-enrollment";
-            "/var/lib/lx-annotate-identity-salts" = "identity-salt-recovery";
-            "/var/lib/lx-annotate/data/.identity-salt-recovery" = "identity-salt-replica";
+            "/var/lib/lx-annotate" = "application";
+            "/var/lib/postgresql" = "postgresql";
+            "/var/endoreg-service-user/lx-annotate-wheel/conf" = "wheel-conf";
           }
-      );
+        )
+      ];
     }
     {
       networking.firewall.interfaces.tun0.allowedTCPPorts = lib.mkAfter [
@@ -883,6 +915,27 @@ lib.foldl' lib.recursiveUpdate
     }
     {
       systemd.generators.systemd-gpt-auto-generator = "/dev/null";
+    }
+    {
+      systemd.services =
+        lib.genAttrs [ "lx-annotate-runtime-env" "postgresql" "postgresql-setup" "postgres-endoreg-setup" ]
+          (_: {
+            bindsTo = [
+              "var-lib-lx\\x2dannotate.mount"
+              "var-lib-postgresql.mount"
+              "var-endoreg\\x2dservice\\x2duser-lx\\x2dannotate\\x2dwheel-conf.mount"
+            ];
+            unitConfig.RequiresMountsFor = [
+              "/var/lib/lx-annotate"
+              "/var/lib/postgresql"
+              "/var/endoreg-service-user/lx-annotate-wheel/conf"
+            ];
+            unitConfig.AssertPathIsMountPoint = [
+              "/var/lib/lx-annotate"
+              "/var/lib/postgresql"
+              "/var/endoreg-service-user/lx-annotate-wheel/conf"
+            ];
+          });
     }
     {
       systemd.services.lx-annotate-identity-salts =

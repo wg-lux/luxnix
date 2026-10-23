@@ -58,6 +58,58 @@ def test_storage_boundary(
     assert not destination.parent.exists()
 
 
+@pytest.mark.parametrize(
+    "sources,device_type,success",
+    [
+        (["/dev/mapper/test[/replica]"] * 2, "crypt", True),
+        (["/dev/plain[/replica]"] * 2, "part", False),
+        (["/dev/mapper/test[/replica]", "/dev/plain"], "crypt", False),
+        (["/dev/plain", "/dev/mapper/test[/replica]"], "crypt", False),
+        (["/dev/mapper/test[/replica]", "/dev/mapper/test[/other]"], "crypt", False),
+    ],
+)
+def test_stacked_mounts_require_identical_encrypted_sources(
+    tmp_path, monkeypatch, sources, device_type, success
+):
+    def probe(command, **kwargs):
+        if command[0] == "swapon":
+            return ""
+        return json.dumps(
+            {
+                "findmnt": {
+                    "filesystems": [
+                        {"fstype": "ext4", "source": source} for source in sources
+                    ]
+                },
+                "lsblk": {"blockdevices": [{"type": device_type}]},
+            }[command[0]]
+        )
+
+    monkeypatch.setattr(storage.subprocess, "check_output", probe)
+    if success:
+        storage.encrypted_storage(tmp_path)
+    else:
+        with pytest.raises(ValueError):
+            storage.encrypted_storage(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "second", [{"source": "/dev/mapper/test", "fstype": "tmpfs"}, None]
+)
+def test_stacked_mounts_reject_conflicting_types_or_malformed_entries(
+    monkeypatch, second
+):
+    monkeypatch.setattr(
+        storage,
+        "_probe",
+        lambda *args: {
+            "filesystems": [{"source": "/dev/mapper/test", "fstype": "ext4"}, second]
+        },
+    )
+    with pytest.raises(ValueError):
+        storage._mounted_filesystem(Path("/secrets"))
+
+
 def _swap_probe(swaps, devices, filesystem_source="/dev/mapper/test[/swap]"):
     def probe(command, **kwargs):
         if command[0] == "swapon":
@@ -85,7 +137,12 @@ def _swap_probe(swaps, devices, filesystem_source="/dev/mapper/test[/swap]"):
         ("/dev/mapper/swap partition\n", [{"type": "crypt"}], None, True),
         ("/swap/swapfile file\n", [{"type": "disk"}], None, False),
         ("/dev/sda2 partition\n", [{"type": "part"}], None, False),
-        ("/dev/zram0 partition\n/dev/sda2 partition\n", [{"type": "part"}], "none", False),
+        (
+            "/dev/zram0 partition\n/dev/sda2 partition\n",
+            [{"type": "part"}],
+            "none",
+            False,
+        ),
         ('{"swapdevices": [{"name": "/swapfile"}]}', [], None, False),
         ("{}", [], None, False),
         ("/swap/swapfile\n", [{"type": "crypt"}], None, False),

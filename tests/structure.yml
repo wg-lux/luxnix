@@ -10,6 +10,9 @@ boundaries:
 - Source checks do not prove deployment readiness
 - Nix evaluation and VM tests are separate from the fast Python lane
 entrypoints:
+- name: runtime-private-credentials
+  file: test_runtime_private_credentials.py
+  purpose: Verify private runtime credential copies preserve source values and reject invalid inputs without replacing existing copies.
 - name: vault-tls-storage
   file: test_vault_server_tls_rotation.py
   purpose: Verify CA-preserving leaf renewal, encrypted mount dependencies, disk-swap exclusion and opt-out behavior.

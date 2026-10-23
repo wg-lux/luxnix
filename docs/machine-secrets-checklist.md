@@ -30,9 +30,11 @@ The wheel startup loader accepts a raw Keycloak client secret or an assignment
 named `OIDC_RP_CLIENT_SECRET`, `KEYCLOAK_CLIENT_SECRET`, or
 `DJANGO_KEYCLOAK_CLIENT_SECRET`. Other environment helpers read the entire file
 as a raw value, so use a raw secret for compatibility across those consumers.
-The file must be readable by the configured application service user; the
-application setup reconciles its group to the sensitive-service group and mode
-to `0640`. A Keycloak **server admin password** is a different credential and
+Runtime setup reads the source as root and atomically publishes a service-owned
+`0600` copy in the encrypted configuration directory, alongside private signing-key
+and database-password copies. The file environment variables reference those
+copies; source values and permissions stay unchanged. Missing, empty or symlinked
+sources stop setup. A Keycloak **server admin password** is a different credential and
 cannot substitute for this file.
 
 OpenVPN clients also require these files outside the vault directory:
@@ -81,6 +83,52 @@ the machine runs those server roles. The legacy maintenance password is not the
 local application's PostgreSQL password.
 
 ## Conditional requirements
+
+### gs-02 application storage
+
+gs-02 uses a separate 64 GiB LUKS2 container at
+`/var/lib/luxnix-app-storage.luks`, manually opened as `luxnix-app-storage`.
+The ext4 filesystem mounts at `/var/lib/luxnix-app-storage`; its `application`,
+`postgresql` and `wheel-conf` directories bind onto `/var/lib/lx-annotate`,
+`/var/lib/postgresql` and `/var/endoreg-service-user/lx-annotate-wheel/conf`.
+The application environment and PostgreSQL setup/runtime units require these
+mounts and stop when they disappear. The existing identity-salt replica remains
+a nested bind from the separate Vault container.
+
+After a reboot, unlock both containers before starting consumers. Skip an
+`open` command if its mapping is already open and has the expected backing file:
+
+```bash
+sudo cryptsetup open /var/lib/luxnix-vault-tls.luks luxnix-vault-pki
+sudo cryptsetup open /var/lib/luxnix-app-storage.luks luxnix-app-storage
+sudo systemctl start postgresql.service lx-annotate-runtime-env.service
+sudo systemctl start lx-annotate.service
+```
+
+Do not repeat formatting or initial copying after migration. For initial copying,
+stop application timers, paths and sockets before services, and stop PostgreSQL
+and its backup jobs. Preserve ownership, modes, ACLs, extended attributes and
+hard links; exclude the already-mounted `data/.identity-salt-recovery` subtree.
+Verify file contents and metadata before mounting over the original paths.
+Remount the salt replica above the new application bind before starting services.
+Original plaintext data and filesystem snapshots remain recoverable beneath the
+mounts; this migration does not erase them. Keep an independent encrypted backup
+and the operator-held unlock passphrase in approved recovery custody.
+
+On 2026-10-23, the gs-02 migration passed content and metadata comparisons,
+the native NixOS switch completed, and the application, PostgreSQL and workers
+started successfully. HTTPS checks against `https://gs-02.intern/` returned the
+login redirect and HTTP 200 for `/static/.vite/manifest.json`. Use that certified
+hostname: the current server certificate does not cover `lx-annotate.local`.
+Reboot recovery and independent backup restoration still require separate tests.
+
+### Other conditional inputs
+
+The shared storage verifier accepts repeated, identical `SOURCE,FSTYPE` mount
+reports from systemd sandbox bind mounts. Conflicting reports still fail closed,
+and the backing device and swap encryption checks still apply. If identity salt
+checks pass outside the service but fail inside it, inspect the mount report in
+the service's mount namespace before attempting any salt recovery or replacement.
 
 - **Local vault tooling:** `/etc/secrets/.key`, `/etc/secrets/.psk`, and the
   plaintext admin-password companion belong to the documented local vault and

@@ -32,15 +32,19 @@ def _protected(device: object) -> bool:
 def _mounted_filesystem(path: Path) -> dict:
     mount = _probe(
         "findmnt", "--json", "--target", str(path), "--output", "SOURCE,FSTYPE"
-    ) #TODO Extend towards a stricter approach where filesystem types are valid
+    )
     if not isinstance(mount, dict):
         raise ValueError("Invalid secret storage mount probe")
     filesystems = mount.get("filesystems")
-    if not isinstance(filesystems, list) or len(filesystems) != 1:
+    if not isinstance(filesystems, list) or not filesystems:
         raise ValueError("Secret storage must resolve to one mounted filesystem")
     filesystem = filesystems[0]
     if not isinstance(filesystem, dict):
         raise ValueError("Invalid secret storage filesystem")
+    # systemd's recursive sandbox bind mounts can repeat the same target.
+    # Accept only identical source/type reports; ambiguous storage fails closed.
+    if any(candidate != filesystem for candidate in filesystems[1:]):
+        raise ValueError("Secret storage must resolve to one mounted filesystem")
     return filesystem
 
 
