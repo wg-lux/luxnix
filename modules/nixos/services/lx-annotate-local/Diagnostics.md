@@ -714,6 +714,33 @@ sudo systemctl restart \
   lx-annotate-celery-ffmpeg-worker.service
 ```
 
+## Center identity salt enrollment fails
+
+On hosts with `django.centerIdentitySalt = true`,
+`lx-annotate-identity-salts.service` must succeed before `lx-annotate-runtime-env`
+starts. Inspect the chain and metadata only. The manifest contains paths, and
+receipts are SHA-256 pins:
+
+```bash
+sudo systemctl status vault-auth-setup.service managed-secrets-setup.service lx-annotate-identity-salts.service
+sudo journalctl -u managed-secrets-setup.service -u lx-annotate-identity-salts.service -b --no-pager
+luxnix-vault-enrollment-status
+sudo cat /etc/secrets/vault/lx_annotate_identity_keyring.yml
+sudo ls -l /var/lib/lx-annotate-identity-salts/
+```
+
+- `Vault runtime credentials are unavailable`: fix Vault enrollment first. The
+  center source is never generated locally.
+- `Center salt copies differ from the Vault source` or `does not match its
+  enrollment receipt`: Vault material changed after enrollment. Stop and
+  investigate on gs-02; do not delete copies.
+- `Previously enrolled salt is missing`: restore the machine salt from backup.
+- `Identity keyring does not match the expected center` (Django): the manifest
+  has no `center_id`. Re-run `lx-annotate-identity-salts.service` on the current
+  revision.
+
+See [Center identity salt activation](../../../../docs/center-identity-salt-activation.md).
+
 ## Master-key gate rejects secret permissions
 
 `Secret files must be private regular files owned by root or the service user`

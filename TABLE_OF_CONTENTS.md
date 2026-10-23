@@ -49,6 +49,7 @@
   - [Admin Password Creation and Rotation](docs/admin-passwords.md)
   - [Coordinated Secret Rotation](docs/secret-rotation.md)
   - [Machine Enrollment](docs/vault-hub-machine-enrollment.md)
+  - [Center Identity Salt Activation](docs/center-identity-salt-activation.md)
   - [Hub Export Consumer Walkthrough](docs/lx-annotate-hub-export-mtls-consumer-walkthrough.md)
   - [Owner Operations](docs/vault-owner-immediate-actions.md)
   - [Server Rebuild](docs/vault-server-rebuild.md)

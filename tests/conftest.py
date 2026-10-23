@@ -60,9 +60,9 @@ def encrypted_test_storage(monkeypatch):
 
     def probe(*command):
         return {
-            "swapon": {"swapdevices": []},
             "findmnt": {"filesystems": [{"fstype": "ext4", "source": "/dev/mapper/test"}]},
             "lsblk": {"blockdevices": [{"type": "crypt"}]},
         }[command[0]]
 
     monkeypatch.setattr(secret_storage, "_probe", probe)
+    monkeypatch.setattr(secret_storage, "_require_protected_swap", lambda: None)

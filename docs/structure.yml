@@ -19,6 +19,9 @@ entrypoints:
 - name: secret-rotation
   file: secret-rotation.md
   purpose: Canonical catalog usage and application/credential ownership boundaries.
+- name: center-identity-salt-activation
+  file: center-identity-salt-activation.md
+  purpose: Operator runbook for shared center identity salt activation, recovery and hub continuity.
 - name: documentation-home
   file: index.md
   purpose: Inspect documentation home ownership and interfaces.

@@ -1,4 +1,6 @@
-
+diff --git a/setup.sh b/setup.sh
+--- a/setup.sh
++++ b/setup.sh
 @@ -74,7 +74,7 @@
  # 'WinApps Configuration File'
  readonly CONFIG_PATH="${HOME}/.config/winapps/winapps.conf" # UNIX path to the WinApps configuration file.

@@ -30,8 +30,9 @@ host_services:
   luxnix.lxAnnotateLocal.django.centerIdentitySalt: "true"
 
 host_luxnix:
-  # Temporary bootstrap exception; set false after verified Vault enrollment.
-  vault.client.auth.deferUntilProvisioned: "true"
+  # Vault enrollment verified by the operator (2026-10-23); the center identity
+  # salt requires fail-closed machine authentication.
+  vault.client.auth.deferUntilProvisioned: "false"
   maintenance.autoUpdates.enable: "false"
   # Custom packages
 

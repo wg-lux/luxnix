@@ -123,6 +123,31 @@ server's RDP certificate before trusting it. Then run the packaged
 `winapps-setup` as that user to register applications. No VM, container engine,
 firewall rule or credentials are configured by the package bundle.
 
+### Windows container service
+
+`services.luxnix.winapps.enable = true` runs the
+[dockur/windows](https://github.com/dockur/windows) image as the system
+service `podman-WinApps.service`, using `virtualisation.oci-containers` with
+the Podman backend. The image tag is pinned in the module. The VM gets
+`cpuCores`, `ramSize` and `diskSize` and keeps its disk under `stateDir`
+(default `/var/lib/winapps`, root-only). The home of `user` (default: the admin
+user) is shared as `\\host.lan\Data`. The fork's `oem/` post-install script is
+mounted from the pinned flake input. RDP (`3389`) and the VNC install console
+(`http://127.0.0.1:8006`) are bound to loopback only. The container is
+privileged, as the IMGW fork requires for the home share.
+
+Because system Podman owns the container, the client cannot manage it. Set
+`WAFLAVOR="manual"` and `RDP_IP="127.0.0.1"` in `winapps.conf`, and control the
+VM with `systemctl start|stop podman-WinApps`. The first start downloads and
+installs Windows, which can take a long time.
+
+The local Windows account defaults to the fork's `compose.yaml` values
+(`MyWindowsUser`), and the default password ends up in the Nix store. To keep
+the credentials out of the store, set `environmentFile` to a runtime secret
+(for example a SOPS secret) that defines `USERNAME` and `PASSWORD`, and use the
+same values for `RDP_USER`/`RDP_PASS`. dockur/windows only applies the account
+when it first installs Windows; changing it later requires a new install.
+
 ## Generate, inspect and install
 
 After inventory edits, follow the [Autoconf workflow](autoconf.md), including an

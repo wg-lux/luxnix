@@ -591,7 +591,7 @@ lib.foldl' lib.recursiveUpdate
       luxnix.vault.psk = "/etc/secrets/.psk";
     }
     {
-      luxnix.vault.client.auth.deferUntilProvisioned = true;
+      luxnix.vault.client.auth.deferUntilProvisioned = false;
     }
     {
       networking.hosts."${config.luxnix.generic-settings.network.vault.vpnIp}" = [

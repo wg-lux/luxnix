@@ -102,13 +102,21 @@ the application media master key, which remains local and is never distributed.
 
 The existing local provisioner accepts the managed center source, validates
 private file access, and maintains its existing recovery copies and enrollment
-receipts. A missing source never falls back to a random machine salt. A higher, center-bound generation is accepted only with every historical salt
+receipts. A missing source never falls back to a random machine salt. An
+established machine salt is never rewritten: the center salt becomes a new
+generation (`lx_annotate_identity_center_<key>` plus `center-<key>.salt` and
+`.enrolled` recovery copies). The keyring manifest then switches atomically to
+active center, retiring machine and `default_salt`, with `center_id` and
+`generation: 1`. Background migration then re-hashes verified identities. See
+[the activation runbook](../../../../docs/center-identity-salt-activation.md). A higher, center-bound generation is accepted only with every historical salt
 retained for source-side patient matching. Rollback, conflicting same-generation
 material, or omitted history fails closed. The custodian must explicitly publish
 rotations using compare-and-set; restarting a client never invents a generation.
 
 Existing GPU-client inventory leaves this switch disabled until its legacy
-identity migration is verified. Do not simply enable it fleet-wide: retained
+identity migration is verified; Würzburg hosts opt in per host. After activation the
+switch cannot be turned off again (machine mode rejects the center manifest).
+Do not simply enable it fleet-wide: retained
 machine generations, erased identities, previously exported hashes, and hub
 links must be reconciled first. Same-center matching requires the shared salt
 and identical legacy center-name/demographic inputs; this change deliberately

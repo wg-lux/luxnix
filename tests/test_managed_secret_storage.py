@@ -35,9 +35,10 @@ def test_storage_boundary(
     tmp_path, monkeypatch, filesystem, devices, allow_runtime, success
 ):
     def probe(command, **kwargs):
+        if command[0] == "swapon":
+            return ""
         return json.dumps(
             {
-                "swapon": {"swapdevices": []},
                 "findmnt": {
                     "filesystems": [
                         {"fstype": filesystem, "source": "/dev/mapper/test[/secrets]"}
@@ -57,15 +58,53 @@ def test_storage_boundary(
     assert not destination.parent.exists()
 
 
+def _swap_probe(swaps, devices, filesystem_source="/dev/mapper/test[/swap]"):
+    def probe(command, **kwargs):
+        if command[0] == "swapon":
+            return swaps
+        return json.dumps(
+            {
+                "findmnt": {
+                    "filesystems": [{"fstype": "btrfs", "source": filesystem_source}]
+                },
+                "lsblk": {"blockdevices": devices},
+            }[command[0]]
+        )
+
+    return probe
+
+
 @pytest.mark.parametrize(
-    "response", [{"swapdevices": [{"name": "/swapfile"}]}, {}, None]
+    "swaps,devices,backing,success",
+    [
+        ("", [], None, True),
+        ("/dev/zram0 partition\n", [], "none", True),
+        ("/dev/zram0 partition\n", [], None, True),
+        ("/dev/zram0 partition\n", [], "/dev/sda2", False),
+        ("/swap/swapfile file\n", [{"type": "crypt"}], None, True),
+        ("/dev/mapper/swap partition\n", [{"type": "crypt"}], None, True),
+        ("/swap/swapfile file\n", [{"type": "disk"}], None, False),
+        ("/dev/sda2 partition\n", [{"type": "part"}], None, False),
+        ("/dev/zram0 partition\n/dev/sda2 partition\n", [{"type": "part"}], "none", False),
+        ('{"swapdevices": [{"name": "/swapfile"}]}', [], None, False),
+        ("{}", [], None, False),
+        ("/swap/swapfile\n", [{"type": "crypt"}], None, False),
+    ],
 )
-def test_swap_or_invalid_probe_fails_closed(tmp_path, monkeypatch, response):
-    monkeypatch.setattr(
-        storage.subprocess, "check_output", lambda *a, **k: json.dumps(response)
-    )
-    with pytest.raises(ValueError):
-        storage.encrypted_storage(tmp_path / "secret", allow_runtime=True)
+def test_swap_must_not_reach_plaintext_storage(
+    tmp_path, monkeypatch, swaps, devices, backing, success
+):
+    sys_block = tmp_path / "sys-block"
+    if backing is not None:
+        (sys_block / "zram0").mkdir(parents=True)
+        (sys_block / "zram0" / "backing_dev").write_text(backing + "\n")
+    monkeypatch.setattr(storage, "SYS_BLOCK", sys_block)
+    monkeypatch.setattr(storage.subprocess, "check_output", _swap_probe(swaps, devices))
+    if success:
+        storage._require_protected_swap()
+    else:
+        with pytest.raises(ValueError):
+            storage._require_protected_swap()
 
 
 def test_failed_probe_fails_closed(tmp_path, monkeypatch):

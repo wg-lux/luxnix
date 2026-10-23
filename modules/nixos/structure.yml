@@ -19,6 +19,9 @@ entrypoints:
 - name: development-packages
   file: roles/custom-packages/default.nix
   purpose: Own optional bundles and shared, role and machine package aggregation.
+- name: winapps-service
+  file: services/winapps/default.nix
+  purpose: Opt-in systemd-managed dockur/windows container (loopback RDP) for the WinApps client.
 - name: client-profile
   file: profiles/endoreg-client/default.nix
   purpose: Inspect client profile ownership and interfaces.

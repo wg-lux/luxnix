@@ -43,8 +43,10 @@ Both sides must opt in:
 2. Each machine sets `luxnix.lxAnnotateLocal.django.centerIdentitySalt: "true"`
    (inventory: `host_vars/gc-02`, `gc-06`, `gc-09`, `gc-10`).
 
-Existing differing local salts are not overwritten: the provisioner fails closed
-and keeps them as historical keys, so existing hashes remain recognisable. Missing
+Existing differing local salts are not overwritten: the provisioner adds the
+center salt as a new active generation, keeps the machine salt as a retiring
+reader and switches the keyring manifest atomically (with `center_id`), so
+existing hashes remain recognisable. Conflicting or vanished copies fail closed. Missing
 Vault material never falls back to a random local salt, and permission errors are
 never treated as an absent secret. `django.identitySaltViaSecretSpec` (file-free
 delivery) stays rejected, and its launcher stops before secret access.
@@ -53,6 +55,8 @@ Activation is a coordinated deployment: run the reconcile workflow on the Vault
 host first, verify the grants, then roll the Würzburg clients. This source change
 neither deploys hosts nor revokes distributed secrets. Review retained local
 generations and hash links before activating a machine that already has data.
+Follow [Center identity salt activation](center-identity-salt-activation.md)
+for the gs-02 steps, verification, record recovery and hub pseudonym continuity.
 Use the `central_identity_salts_disabled` criterion in the lifecycle feature for
 evidence.
 

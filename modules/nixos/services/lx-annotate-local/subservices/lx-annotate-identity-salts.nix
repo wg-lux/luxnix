@@ -19,7 +19,7 @@ let
       --replica-dir ${lib.escapeShellArg "${envDataDir}/.identity-salt-recovery"} \
       --user ${lib.escapeShellArg endoreg-service-user-name} \
       --group ${lib.escapeShellArg endoreg-service-group-name} \
-      ${lib.optionalString cfg.django.centerIdentitySalt "--source-salt ${lib.escapeShellArg centerSaltFile}"}
+      ${lib.optionalString cfg.django.centerIdentitySalt "--source-salt ${lib.escapeShellArg centerSaltFile} --center-id ${lib.escapeShellArg centerKey}"}
   '';
 in
 mkIf (cfg.django.enrollLegacyDefaultSalt && !cfg.django.identitySaltViaSecretSpec) {
