@@ -195,6 +195,46 @@ preserving encrypted-storage migration and mount dependencies for their
 writers and consumers. The TLS-only migration above does not provide that.
 Do not delete or regenerate existing passwords to clear the failure.
 
+## Bind the existing managed secrets into encrypted storage
+
+gs-02 now declares `/etc/secrets/vault` as a bind mount of
+`/var/lib/luxnix-vault-pki/managed-secrets`. It requires the LUKS filesystem
+first. Managed-secret generation requires the bind mount and stops if it
+disappears; application services retain their existing managed-secret dependencies.
+This configuration does not migrate or generate the source directory.
+
+Before activating this configuration, stop enrollment/synchronization jobs,
+the lx-annotate timers, `lx-annotate-request-throttle.socket` and
+`lx-annotate-filewatcher.path`, then lx-annotate services, nginx and
+`managed-secrets-setup.service`. Preserve a verified encrypted backup. With
+the LUKS filesystem mounted and `/etc/secrets/vault` still on its original
+filesystem, copy that directory using `cp -a` into the previously nonexistent
+`managed-secrets` destination. Refuse unexpected symlinks or nested mounts.
+Compare contents with `diff -qr --no-dereference` and compare relative paths,
+types, modes, numeric owners and groups. Stop on any mismatch; do not overwrite
+an existing destination or move the originals. Keep all writers stopped until
+activation. The original directory remains hidden beneath the bind mount for
+recovery; this does not erase its historical plaintext contents.
+
+After the copy and metadata comparison pass, use the reviewed checkout on gs-02:
+
+```bash
+sudo nixos-rebuild switch --flake .#gs-02
+sudo systemctl start etc-secrets-vault.mount
+findmnt -T /etc/secrets/vault -o TARGET,SOURCE,FSTYPE
+sudo systemctl restart managed-secrets-setup.service
+```
+
+The source must be the LUKS mapper's `managed-secrets` subdirectory, not the
+root Btrfs filesystem. A failed activation does not mean nothing changed:
+inspect the mount and failed-unit journal before retrying. If managed-secret
+generation fails for another destination or credential, stop and resolve that
+specific failure without weakening its guard. Once it succeeds, start
+`lx-annotate.service`, nginx and the previously stopped application triggers
+through the normal application startup workflow. Verify Vault is unsealed,
+the application is healthy, and active/persistent generations match before
+fleet enrollment. Do not run another secret copy over the mounted destination.
+
 ## After each reboot
 
 From an authenticated SSH session on gs-02:
