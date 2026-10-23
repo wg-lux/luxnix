@@ -5,24 +5,28 @@
   ...
 }:
 with lib;
-with lib.luxnix; let
-  inherit (lib) types mkOption mkEnableOption optional optionals;
+with lib.luxnix;
+let
+  inherit (lib)
+    types
+    mkOption
+    mkEnableOption
+    optional
+    optionals
+    ;
   cfg = config.services.virtualisation.vfio;
 
   tmpfileEntry = name: f: "f /dev/shm/${name} ${f.mode} ${f.user} ${f.group} -";
 
-  boolToZeroOne = x:
-    if x
-    then "1"
-    else "0";
+  boolToZeroOne = x: if x then "1" else "0";
 
-  aclString = with lib.strings;
+  aclString =
+    with lib.strings;
     concatMapStringsSep ''
       ,
-    ''
-    escapeNixString
-    config.services.virtualisation.vfio.libvirtd.deviceACL;
-in {
+    '' escapeNixString config.services.virtualisation.vfio.libvirtd.deviceACL;
+in
+{
   # Based on this https://gist.github.com/CRTified/43b7ce84cd238673f7f24652c85980b3
   options.services.virtualisation.vfio = {
     enable = mkEnableOption "enable kvm vfio virtualisation";
@@ -30,7 +34,7 @@ in {
     libvirtd = {
       deviceACL = mkOption {
         type = types.listOf types.str;
-        default = [];
+        default = [ ];
       };
       clearEmulationCapabilities = mkOption {
         type = types.bool;
@@ -39,14 +43,20 @@ in {
     };
 
     IOMMUType = mkOption {
-      type = types.enum ["intel" "amd"];
+      type = types.enum [
+        "intel"
+        "amd"
+      ];
       example = "intel";
       description = "Type of the IOMMU used";
     };
     devices = mkOption {
       type = types.listOf (types.strMatching "[0-9a-f]{4}:[0-9a-f]{4}");
-      default = [];
-      example = ["10de:1b80" "10de:10f0"];
+      default = [ ];
+      example = [
+        "10de:1b80"
+        "10de:10f0"
+      ];
       description = "PCI IDs of devices to bind to vfio-pci";
     };
     disableEFIfb = mkOption {
@@ -67,31 +77,35 @@ in {
       description = "Enables or disables kvm guest access to model-specific registers";
     };
     sharedMemoryFiles = mkOption {
-      type = types.attrsOf (types.submodule ({name, ...}: {
-        options = {
-          name = mkOption {
-            visible = false;
-            default = name;
-            type = types.str;
-          };
-          user = mkOption {
-            type = types.str;
-            default = "root";
-            description = "Owner of the memory file";
-          };
-          group = mkOption {
-            type = types.str;
-            default = "root";
-            description = "Group of the memory file";
-          };
-          mode = mkOption {
-            type = types.str;
-            default = "0600";
-            description = "Group of the memory file";
-          };
-        };
-      }));
-      default = {};
+      type = types.attrsOf (
+        types.submodule (
+          { name, ... }: {
+            options = {
+              name = mkOption {
+                visible = false;
+                default = name;
+                type = types.str;
+              };
+              user = mkOption {
+                type = types.str;
+                default = "root";
+                description = "Owner of the memory file";
+              };
+              group = mkOption {
+                type = types.str;
+                default = "root";
+                description = "Group of the memory file";
+              };
+              mode = mkOption {
+                type = types.str;
+                default = "0600";
+                description = "Group of the memory file";
+              };
+            };
+          }
+        )
+      );
+      default = { };
     };
     hugepages = {
       enable = mkEnableOption "Hugepages";
@@ -120,15 +134,17 @@ in {
     boot = {
       kernelParams =
         (
-          if cfg.IOMMUType == "intel"
-          then [
-            "intel_iommu=on"
-            "intel_iommu=igfx_off"
-          ]
-          else ["amd_iommu=on"]
+          if cfg.IOMMUType == "intel" then
+            [
+              "intel_iommu=on"
+              "intel_iommu=igfx_off"
+            ]
+          else
+            [ "amd_iommu=on" ]
         )
-        ++ (optional (builtins.length cfg.devices > 0)
-          ("vfio-pci.ids=" + builtins.concatStringsSep "," cfg.devices))
+        ++ (optional (builtins.length cfg.devices > 0) (
+          "vfio-pci.ids=" + builtins.concatStringsSep "," cfg.devices
+        ))
         ++ (optional cfg.disableEFIfb "video=efifb:off")
         ++ (optionals cfg.ignoreMSRs [
           "kvm.ignore_msrs=1"
@@ -140,16 +156,29 @@ in {
           "hugepages=${toString cfg.hugepages.numPages}"
         ];
 
-      kernelModules = ["vfio_pci" "vfio_iommu_type1" "vfio"];
+      kernelModules = [
+        "vfio_pci"
+        "vfio_iommu_type1"
+        "vfio"
+      ];
 
-      initrd.kernelModules = ["vfio_pci" "vfio_iommu_type1" "vfio"];
-      blacklistedKernelModules =
-        optionals cfg.blacklistNvidia ["nvidia" "nouveau"];
+      initrd.kernelModules = [
+        "vfio_pci"
+        "vfio_iommu_type1"
+        "vfio"
+      ];
+      blacklistedKernelModules = optionals cfg.blacklistNvidia [
+        "nvidia"
+        "nouveau"
+      ];
     };
 
     # Add qemu-libvirtd to the input group if required
     users.users."qemu-libvirtd" = {
-      extraGroups = optionals (!cfg.qemu.runAsRoot) ["kvm" "input"];
+      extraGroups = optionals (!config.virtualisation.libvirtd.qemu.runAsRoot) [
+        "kvm"
+        "input"
+      ];
       isSystemUser = true;
     };
 
@@ -159,9 +188,7 @@ in {
     ];
 
     virtualisation.libvirtd.qemu.verbatimConfig = ''
-      clear_emulation_capabilities = ${
-        boolToZeroOne cfg.libvirtd.clearEmulationCapabilities
-      }
+      clear_emulation_capabilities = ${boolToZeroOne cfg.libvirtd.clearEmulationCapabilities}
       cgroup_device_acl = [
         ${aclString}
       ]
@@ -171,7 +198,6 @@ in {
       SUBSYSTEM=="vfio", OWNER="root", GROUP="kvm"
     '';
 
-    systemd.tmpfiles.rules =
-      mapAttrsToList tmpfileEntry cfg.sharedMemoryFiles;
+    systemd.tmpfiles.rules = mapAttrsToList tmpfileEntry cfg.sharedMemoryFiles;
   };
 }

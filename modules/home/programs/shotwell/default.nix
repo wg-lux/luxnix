@@ -4,9 +4,11 @@
   pkgs,
   ...
 }:
-with lib; let
+with lib;
+let
   cfg = config.programs.shotwell;
-in {
+in
+{
   options.programs.shotwell = {
     enable = mkEnableOption "Enable shotwell program";
   };

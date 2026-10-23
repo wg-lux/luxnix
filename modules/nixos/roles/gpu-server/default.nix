@@ -1,13 +1,14 @@
 {
-  pkgs,
   lib,
   config,
   ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.roles.gpu-server;
-in {
+in
+{
   options.roles.gpu-server = {
     enable = mkBoolOpt false ''
       Enable gpu server configuration.
@@ -25,7 +26,5 @@ in {
       custom-packages.cuda = true;
 
     };
-  
-    services.luxnix.endoregDbApiLocal.enable = true;   
   };
 }

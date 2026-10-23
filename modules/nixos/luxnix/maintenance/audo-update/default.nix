@@ -1,19 +1,19 @@
 {
   config,
-  inputs,
-  pkgs,
   lib,
   ...
 }:
 
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.luxnix.maintenance.autoUpdates;
 
-in {
+in
+{
   options.luxnix.maintenance.autoUpdates = with types; {
     enable = mkBoolOpt false "Enable or disable the scheduled rebooting of the system";
-    
+
     dates = mkOption {
       type = with types; str;
       default = "08:49";
@@ -28,29 +28,34 @@ in {
 
     flake = mkOption {
       type = with types; str;
-      default = "github:wg-lux/luxnix"; #TODO Create Production Branch and use it here
+      # TODO (maintenance owner): select a pinned production branch after the
+      # release workflow publishes and verifies that branch.
+      default = "github:wg-lux/luxnix";
       description = "The flake to upgrade";
     };
 
   };
 
-  #TODO Documentation
+  # TODO (maintenance owner): document timer inspection and rollback commands
+  # in the module runbook before enabling unattended upgrades on production hosts.
   # sudo systemctl status nixos-upgrade.timer
   # sudo systemctl status nixos-upgrade.service
 
   config = mkIf cfg.enable {
     system.autoUpgrade = {
-      enable = cfg.enable;
-      flake = cfg.flake;
+      inherit (cfg)
+        enable
+        flake
+        dates
+        operation
+        ;
       flags = [
         "-L"
       ];
-      dates = cfg.dates;
-      operation = cfg.operation;
       fixedRandomDelay = true;
       randomizedDelaySec = "30min";
       allowReboot = true;
     };
   };
-  
+
 }

@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lx-annotate-config
+data:
+  LX_ANNOTATE_RELEASE_ID: "0.5.1"
+  LX_ANNOTATE_BOOTSTRAP_MARKER_DIR: /var/lib/lx-annotate/data/.bootstrap
+  DJANGO_SETTINGS_MODULE: lx_annotate.settings.settings_prod
+  DJANGO_ENV: production
+  DJANGO_HOST: 0.0.0.0
+  DJANGO_PORT: "8117"
+  DJANGO_DB_ENGINE: django.db.backends.postgresql
+  DJANGO_DB_HOST: postgres.lx-annotate.svc.cluster.local
+  DJANGO_DB_PORT: "5432"
+  DJANGO_DB_NAME: lxAnnotateLocal
+  DJANGO_DB_USER: lxAnnotateLocal
+  DJANGO_DB_SSLMODE: require
+  CELERY_BROKER_URL: rediss://redis.lx-annotate.svc.cluster.local:6379/1
+  CELERY_DEFAULT_QUEUE: default
+  CELERY_PIPELINE_QUEUE: pipeline
+  CELERY_FRAME_EXTRACTION_QUEUE: frame_extraction
+  CELERY_INFERENCE_QUEUE: inference
+  CELERY_TRAINING_QUEUE: model_training
+  CELERY_MAINTENANCE_QUEUE: maintenance
+  CELERY_FRAME_EXTRACTION_REQUIRE_SECURE_TRANSPORT: "true"
+  CELERY_BROKER_SECURE_TRANSPORT_CONFIRMED: "false"
+  VIDEO_POST_VALIDATION_JOB_MODE: celery
+  VIDEO_TEMPORAL_INFERENCE_JOB_MODE: celery
+  MODEL_TRAINING_JOB_MODE: celery
+  LX_ANNOTATE_ENCRYPTED_DATA_DIR: /var/lib/lx-annotate/data
+  LX_ANNOTATE_DATA_DIR: /var/lib/lx-annotate/data
+  DATA_DIR: /var/lib/lx-annotate/data
+  STORAGE_DIR: /var/lib/lx-annotate/data/storage
+  PROTECTED_MEDIA_ROOT: /var/lib/lx-annotate/data/storage
+  LX_ANNOTATE_MASTER_KEY_FILE: /run/secrets/lx-annotate/master-key
+  DEFAULT_CENTER_KEY: default_center
+  STATIC_URL: /static/
+  MEDIA_URL: /media/
+  NGINX_PROTECTED_MEDIA_URL: /protected_media/
+  SERVE_WITH_NGINX: "true"

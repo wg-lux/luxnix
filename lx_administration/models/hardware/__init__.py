@@ -1,15 +1,20 @@
-from typing import Optional
+"""Hardware facts retained by the Autoconf data models."""
+
 from pydantic import BaseModel
 
 
 class BiosModel(BaseModel):
-    vendor: Optional[str]
-    version: Optional[str]
-    date: Optional[str]
+    """BIOS identity reported by Ansible."""
+
+    vendor: str | None
+    version: str | None
+    date: str | None
 
 
 class NetworkInterfaceModel(BaseModel):
-    interface: Optional[str]
-    address: Optional[str]
-    netmask: Optional[str]
-    gateway: Optional[str]
+    """Default network interface reported by Ansible."""
+
+    interface: str | None
+    address: str | None
+    netmask: str | None
+    gateway: str | None

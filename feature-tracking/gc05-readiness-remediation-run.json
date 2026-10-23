@@ -1,0 +1,168 @@
+{
+  "schema_version": "1.0",
+  "run_id": "gc05-readiness-remediation-20260904",
+  "feature_id": "lx_annotate_hls_operational_readiness",
+  "orchestrator": "codex-lxauth-gc05-20260904",
+  "topology": "independent_parallel",
+  "execution_mode": "centralized_multi_agent",
+  "agent_backend": {
+    "kind": "native_subagent",
+    "agent_profile": null
+  },
+  "max_workers": 4,
+  "total_token_budget": 32000,
+  "work_units": [
+    {
+      "id": "celery_timeout",
+      "responsibility": "Specify the smallest production-safe Redis visibility-timeout patch across LX-Annotate plus LuxNix",
+      "criterion_id": "hls_service_ordering_and_dispatch",
+      "depends_on": [],
+      "max_turns": 1,
+      "token_budget": 8000,
+      "status": "complete",
+      "result": {
+        "task_status": "complete",
+        "findings": [
+          {
+            "claim": "gc-05 used Kombu's 3600-second Redis visibility default while late-ack tasks and the configured FFmpeg interval can run for 86400 seconds.",
+            "source": "gc-05 deployed Celery/Kombu runtime probe; lx_annotate/settings/settings_base.py; endoreg_db/tasks.py",
+            "confidence": "high"
+          },
+          {
+            "claim": "The production-safe value is 90000 seconds, exported identically as CELERY_VISIBILITY_TIMEOUT, broker transport visibility_timeout, and result transport visibility_timeout, with a one-hour margin over every configured late-ack task.",
+            "source": "Celery Redis transport contract and gc-05 task/runtime timeout inventory",
+            "confidence": "high"
+          },
+          {
+            "claim": "The missing implicit route for endoreg_db.tasks.video_hls_materialization must target ffmpeg_media.",
+            "source": "lx_annotate/settings/settings_base.py and endoreg_db/services/hls_media.py",
+            "confidence": "high"
+          },
+          {
+            "claim": "All workers consuming Redis DB 1 must restart together after deployment because the shortest visibility timeout used by a shared broker wins.",
+            "source": "Celery Redis documentation and gc-05 worker topology",
+            "confidence": "high"
+          }
+        ],
+        "gaps": [
+          "A 25-hour behavioral redelivery test is not practical before today's user session; effective live Kombu channel and worker configuration must be inspected immediately after deployment.",
+          "The separate explicit HLS task hard limit remains shorter than the host's maximum FFmpeg interval."
+        ]
+      }
+    },
+    {
+      "id": "import_recovery",
+      "responsibility": "Design an idempotent recovery procedure for gc-05 video 4 from the current fenced retry loop",
+      "criterion_id": "hls_reconciliation_and_acceptance_gate",
+      "depends_on": [],
+      "max_turns": 1,
+      "token_budget": 8000,
+      "status": "complete",
+      "result": {
+        "task_status": "complete",
+        "findings": [
+          {
+            "claim": "Video 4 finalization first failed because an orphaned processed-HLS QUEUED reservation caused already_materializing while the import was still active.",
+            "source": "gc-05 lx-annotate journal from 2026-09-03 19:20 through 2026-09-04 09:58 CEST",
+            "confidence": "high"
+          },
+          {
+            "claim": "The active upload task e1424deb38764981a5e29719b7dcd661 was a Redis-redelivered task, and obsolete processed-HLS deliveries were independently queued.",
+            "source": "gc-05 Celery inspection and Redis DB 1 delivery metadata",
+            "confidence": "high"
+          },
+          {
+            "claim": "Non-terminating task revocation plus compare-and-set dispatch failure of the exact orphaned HLS reservations preserves the active import and deletes no media.",
+            "source": "endoreg_db/services/hls_media.py mark_hls_materialization_dispatch_failed and gc-05 live verification",
+            "confidence": "high"
+          },
+          {
+            "claim": "The current task must remain uninterrupted and the worker must not restart until the import is terminal because revoke state is memory-only.",
+            "source": "gc-05 ffmpeg worker ExecStart and Celery revoked registry",
+            "confidence": "high"
+          }
+        ],
+        "gaps": [
+          "The import was still processing when this work unit completed; terminal video, HLS, media, and queue acceptance gates remain orchestrator work.",
+          "Authenticated playback and annotation save/reload require a separate acceptance probe."
+        ]
+      }
+    },
+    {
+      "id": "storage_recovery",
+      "responsibility": "Resolve the gc-05 external archive device identity plus recommend the least-risk recovery procedure",
+      "criterion_id": "hls_rollout_recovery_documentation",
+      "depends_on": [],
+      "max_turns": 1,
+      "token_budget": 8000,
+      "status": "complete",
+      "result": {
+        "task_status": "complete",
+        "findings": [
+          {
+            "claim": "The archive mount is stale on absent device 8:3 while the same Seagate disk reappeared as /dev/sdb3, device 8:19.",
+            "source": "gc-05 findmnt, mountinfo, lsblk, udevadm, blkid, and sysfs inspection",
+            "confidence": "high"
+          },
+          {
+            "claim": "The persistent archive identity is usb-Seagate_Expansion_HDD_00000000NT197WLC-0:0-part3 with ext4 UUID 96c09eae-57cb-4e5c-95e1-9050a32abcc4.",
+            "source": "gc-05 /dev/disk/by-id, /dev/disk/by-uuid, and blkid",
+            "confidence": "high"
+          },
+          {
+            "claim": "Immediate read-write remount is unsafe because the filesystem reports needs_recovery and orphan_present; stale namespaces must first be cleared and an offline read-only e2fsck performed.",
+            "source": "gc-05 tune2fs, findmnt, namespace, and process-reference inspection",
+            "confidence": "high"
+          },
+          {
+            "claim": "One controlled video 4 recovery likely fits local NVMe capacity, but no concurrent import or reconciliation is safe until verified obsolete temporary data is cleaned.",
+            "source": "gc-05 df, btrfs usage, du, and active FFmpeg observations",
+            "confidence": "medium"
+          }
+        ],
+        "gaps": [
+          "Full physical-disk SMART telemetry is unavailable through the USB bridge.",
+          "Filesystem repair and persistent mount configuration remain separate post-import operational work."
+        ]
+      }
+    },
+    {
+      "id": "runtime_validation",
+      "responsibility": "Audit test coverage needed to prove slow FFmpeg tasks avoid redelivery under the deployed runtime",
+      "criterion_id": "hls_deployment_failure_injection",
+      "depends_on": [],
+      "max_turns": 1,
+      "token_budget": 8000,
+      "status": "complete",
+      "result": {
+        "task_status": "complete",
+        "findings": [
+          {
+            "claim": "The prior Endoreg visibility test was a false positive for gc-05 because LX-Annotate production settings omitted the timeout settings.",
+            "source": "endoreg_db/config/settings/base.py, endoreg_db/tests/services/test_audit_integrity.py, and lx_annotate/settings/settings_prod.py",
+            "confidence": "high"
+          },
+          {
+            "claim": "Application tests must exercise a non-default 93600-second sentinel through production settings and the real lx_annotate Celery app, verify integer equality across all three settings, reject malformed values, and compare against registered late-ack task limits.",
+            "source": "lx-annotate tests/system/test_production_celery_routing.py",
+            "confidence": "high"
+          },
+          {
+            "claim": "LuxNix must type and propagate visibilityTimeoutSeconds into every application and worker environment and fail evaluation below the FFmpeg-plus-margin threshold.",
+            "source": "LuxNix lx-annotate role, service options, environment script, and Nix evaluation contract",
+            "confidence": "high"
+          },
+          {
+            "claim": "Post-deployment app, Kombu connection/channel, and live worker-conf inspection can prove the effective threshold immediately without waiting 25 hours.",
+            "source": "Celery/Kombu Redis channel behavior and modules/nixos/services/lx-annotate-local/Diagnostics.md",
+            "confidence": "high"
+          }
+        ],
+        "gaps": [
+          "Immediate configuration inspection is not a black-box 25-hour redelivery test.",
+          "A disposable NixOS worker-loss and Redis-interruption convergence test remains future readiness work."
+        ]
+      }
+    }
+  ]
+}

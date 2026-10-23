@@ -5,8 +5,6 @@ let
 
   dataDisk1Id = "/dev/disk/by-id/nvme-Micron_3400_MTFDKBA1T0TFH_213330EC4FFF";
 
-
-
   swapSize = "64G"; # Adjusted swap size
 in
 {

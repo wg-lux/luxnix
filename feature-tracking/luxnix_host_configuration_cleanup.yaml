@@ -1,0 +1,137 @@
+schema_version: '1.0'
+id: luxnix_host_configuration_cleanup
+name: Host configuration cleanup
+description: Normalize host configurations so shared behavior is centralized and host differences remain intentional.
+owners:
+  - LuxNix maintainers
+production_critical: true
+tracking:
+  state: active
+  history: []
+source_documents:
+  - path: docs/architecture.md
+    disposition: reference
+    note: System and module architecture context.
+definition_of_done:
+  - id: host_variants_are_intentional
+    category: requirements
+    title: Host-specific differences are explicit
+    acceptance:
+      - Every host override has a documented reason or is moved to a shared module.
+      - Hardware, disk, boot, network, and service differences remain attributable to the host.
+    required: true
+    verification:
+      kind: manual
+      instructions: Compare systems/x86_64-linux host files and review each non-shared setting for an intentional reason.
+      timeout_seconds: 600
+    assessment:
+      status: verified
+      evidence:
+        - kind: review
+          reference: systems/x86_64-linux/*/default.nix; ansible/inventory/host_vars; tests/test_repository_architecture_contract.py
+      note: Reviewed all 15 Autoconf-managed host compositions plus isolated lx-test; shared admin/Ansible behavior is centralized and remaining disk,
+        boot, network, role, and service settings stay host-attributable.
+      assessed_by: codex-host-cleanup-20260831-b1
+      assessed_at: '2026-08-31T14:18:27.534191Z'
+  - id: shared_configuration_is_canonical
+    category: functionality
+    title: Shared configuration has one canonical home
+    acceptance:
+      - Repeated settings are factored into the appropriate NixOS or Home Manager module.
+      - Host files contain composition and host-specific values rather than copied module logic.
+    required: true
+    verification:
+      kind: command
+      command:
+        - nix
+        - flake
+        - check
+      timeout_seconds: 1800
+    assessment:
+      status: verified
+      evidence:
+        - kind: review
+          reference: systems/x86_64-linux/host-common.nix; 15-host centralization check passed
+        - kind: test
+          reference: tests/test_repository_architecture_contract.py; tests/test_ansible_autoconf_nixos_config.py
+      note: Canonical template and generated hosts use host-common.nix; isolated rendering reproduced all 15 managed host entrypoints byte-for-byte.
+      assessed_by: codex-host-cleanup-20260831-b1
+      assessed_at: '2026-08-31T14:18:29.196214Z'
+  - id: hardware_overrides_are_minimal
+    category: security
+    title: Hardware overrides are minimal
+    acceptance:
+      - Disk, boot, and hardware files contain only machine-specific settings.
+    required: true
+    verification:
+      kind: manual
+      instructions: Compare hardware and disk files across hosts and identify repeated non-hardware settings.
+      timeout_seconds: 600
+    assessment:
+      status: verified
+      evidence:
+        - kind: test
+          reference: tests/test_repository_architecture_contract.py::test_machine_specific_files_do_not_enable_services_or_roles
+      note: All disk and boot-decryption files were reviewed and the regression contract rejects service, role, profile, or user activation in
+        machine-specific files.
+      assessed_by: codex-host-cleanup-20260831-b1
+      assessed_at: '2026-08-31T14:18:30.722854Z'
+  - id: service_enablement_is_explicit
+    category: operations
+    title: Service enablement is explicit
+    acceptance:
+      - Host service differences are visible in composition and do not depend on accidental imports.
+    required: true
+    verification:
+      kind: manual
+      instructions: Review host imports and service enablement for implicit or duplicated activation.
+      timeout_seconds: 600
+    assessment:
+      status: verified
+      evidence:
+        - kind: test
+          reference: tests/test_repository_architecture_contract.py::test_host_entrypoints_keep_imports_local
+      note: Managed hosts compose only local hardware files and the single shared baseline; service and role differences remain explicit in
+        inventory-rendered host assignments.
+      assessed_by: codex-host-cleanup-20260831-b1
+      assessed_at: '2026-08-31T14:18:32.493908Z'
+  - id: host_names_are_consistent
+    category: documentation
+    title: Host naming and references are consistent
+    acceptance:
+      - Host names, deployment targets, topology references, and documentation agree.
+    required: true
+    verification:
+      kind: manual
+      instructions: Cross-check systems, homes, topology, deployment helpers, and host documentation.
+      timeout_seconds: 600
+    assessment:
+      status: verified
+      evidence:
+        - kind: test
+          reference: tests/test_repository_architecture_contract.py::test_exported_host_names_follow_the_active_inventory
+      note: System host directories match the active_clients inventory exactly; topology derives exported nixosConfigurations without static host
+        duplication.
+      assessed_by: codex-host-cleanup-20260831-b1
+      assessed_at: '2026-08-31T14:18:34.709218Z'
+  - id: representative_hosts_validate
+    category: testing
+    title: Representative hosts validate
+    acceptance:
+      - Representative server, workstation, and test profiles evaluate successfully.
+    required: true
+    verification:
+      kind: command
+      command:
+        - nix
+        - flake
+        - check
+      timeout_seconds: 1800
+    assessment:
+      status: verified
+      evidence:
+        - kind: command
+          reference: nix eval --json path:/home/admin/luxnix#nixosConfigurations.{gc-02,s-04,lx-test}.config.networking.hostName
+      note: Path-flake evaluation returned host names gc-02, s-04, and lx-test for workstation, server, and isolated test profiles.
+      assessed_by: codex-host-cleanup-20260831-b1
+      assessed_at: '2026-08-31T14:18:36.743843Z'

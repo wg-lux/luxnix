@@ -4,10 +4,12 @@
   lib,
   ...
 }:
-with lib; let
+with lib;
+let
   cfg = config.roles.desktop;
 
-in {
+in
+{
   options.roles.desktop = {
     enable = mkEnableOption "Enable desktop suite";
   };
@@ -24,7 +26,7 @@ in {
     services = {
       # spotify.enable = true;
     };
-    
+
     # home.sessionVariables = {
     #   MOZ_ENABLE_WAYLAND = 1;
     #   QT_QPA_PLATFORM = "wayland;xcb";
@@ -32,7 +34,7 @@ in {
     # };
 
     # TODO: move this to somewhere
-    home.packages = with pkgs; [      
+    home.packages = with pkgs; [
       mplayer
       brightnessctl
       xdg-utils

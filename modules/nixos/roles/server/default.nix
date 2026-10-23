@@ -5,9 +5,11 @@
   ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.roles.server;
-in {
+in
+{
   options.roles.server = {
     enable = mkEnableOption "Enable server configuration";
   };
@@ -30,21 +32,20 @@ in {
       };
     };
 
-    environment =
-      {
-        systemPackages = [
-          pkgs.nfs-utils
-          pkgs.openiscsi
-          pkgs.dnsutils
-        ];
-        # Print the URL instead on servers
-        variables.BROWSER = "echo";
-      }
-      // lib.optionalAttrs (lib.versionAtLeast (lib.versions.majorMinor lib.version) "24.05") {
-        # Don't install the /lib/ld-linux.so.2 and /lib64/ld-linux-x86-64.so.2
-        # stubs. Server users should know what they are doing.
-        stub-ld.enable = lib.mkDefault false;
-      };
+    environment = {
+      systemPackages = [
+        pkgs.nfs-utils
+        pkgs.openiscsi
+        pkgs.dnsutils
+      ];
+      # Print the URL instead on servers
+      variables.BROWSER = "echo";
+    }
+    // lib.optionalAttrs (lib.versionAtLeast (lib.versions.majorMinor lib.version) "24.05") {
+      # Don't install the /lib/ld-linux.so.2 and /lib64/ld-linux-x86-64.so.2
+      # stubs. Server users should know what they are doing.
+      stub-ld.enable = lib.mkDefault false;
+    };
 
     security = {
       sudo = {

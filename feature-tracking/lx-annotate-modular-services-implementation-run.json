@@ -1,0 +1,75 @@
+{
+  "schema_version": "1.0",
+  "run_id": "lx-annotate-modular-services-implementation-20260901",
+  "feature_id": "lx_annotate_environment_lifecycle_audit",
+  "orchestrator": "codex-lx-annotate-modular",
+  "topology": "independent_parallel",
+  "execution_mode": "centralized_multi_agent",
+  "agent_backend": {
+    "kind": "native_subagent",
+    "agent_profile": null
+  },
+  "max_workers": 2,
+  "total_token_budget": 26000,
+  "work_units": [
+    {
+      "id": "split_options",
+      "responsibility": "Split the public option surface into stable top-level configuration modules",
+      "criterion_id": "application_contract_complete",
+      "depends_on": [],
+      "max_turns": 2,
+      "token_budget": 12000,
+      "status": "complete",
+      "result": {
+        "task_status": "complete",
+        "findings": [
+          {
+            "claim": "options.nix is a compatibility aggregator over fourteen focused top-level option modules.",
+            "source": "modules/nixos/services/lx-annotate-local/options.nix:1",
+            "confidence": "high"
+          },
+          {
+            "claim": "All split option modules parse, format, and preserve representative gc-02 and gs-02 evaluations.",
+            "source": "modules/nixos/services/lx-annotate-local/options/runtime.nix:1",
+            "confidence": "high"
+          }
+        ],
+        "gaps": [
+          "Git-backed flake evaluation excludes the unrelated untracked host-common.nix; path: evaluation was used."
+        ]
+      }
+    },
+    {
+      "id": "split_services",
+      "responsibility": "Split systemd unit declarations into one-service subservice modules",
+      "criterion_id": "provisioning_contract_identical",
+      "depends_on": [],
+      "max_turns": 2,
+      "token_budget": 14000,
+      "status": "complete",
+      "result": {
+        "task_status": "complete",
+        "findings": [
+          {
+            "claim": "config.nix now composes thirty-seven one-service leaf modules through one shared service context.",
+            "source": "modules/nixos/services/lx-annotate-local/config.nix:1451",
+            "confidence": "high"
+          },
+          {
+            "claim": "Each leaf documents its purpose and command while colocating only same-name timers or paths.",
+            "source": "modules/nixos/services/lx-annotate-local/subservices/lx-annotate-filewatcher.nix:1",
+            "confidence": "high"
+          },
+          {
+            "claim": "The worker aggregator declares no service and composes nine one-service Celery modules.",
+            "source": "modules/nixos/services/lx-annotate-local/subservices/workers.nix:1",
+            "confidence": "high"
+          }
+        ],
+        "gaps": [
+          "The repository tracker directory now contains a concurrently restored legacy YAML that does not match the feature schema."
+        ]
+      }
+    }
+  ]
+}

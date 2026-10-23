@@ -1,0 +1,1 @@
+"""Packaged persistent project context."""

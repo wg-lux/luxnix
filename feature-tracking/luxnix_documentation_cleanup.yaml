@@ -1,0 +1,148 @@
+schema_version: '1.0'
+id: luxnix_documentation_cleanup
+name: LuxNix documentation cleanup
+description: Make operational documentation consistent, discoverable, and free of stale entry points.
+owners:
+  - LuxNix maintainers
+production_critical: false
+tracking:
+  state: active
+  history: []
+source_documents:
+  - path: docs/index.md
+    disposition: reference
+    note: Documentation navigation entry point.
+definition_of_done:
+  - id: links_and_entrypoints_are_valid
+    category: requirements
+    title: Documentation links and entry points are valid
+    acceptance:
+      - Navigation links resolve to tracked files or documented external resources.
+      - Deprecated commands and paths are either removed or labeled with migration guidance.
+      - Each operational procedure identifies prerequisites, validation, and rollback or recovery steps.
+    required: true
+    verification:
+      kind: manual
+      instructions: Review docs/index.md, README.md, and operational guides for broken links, stale commands, and missing recovery guidance.
+      timeout_seconds: 600
+    assessment:
+      status: blocked
+      evidence:
+        - kind: review
+          reference: README.md; docs/index.md; docs/development.md; docs:check passed
+        - kind: test
+          reference: tests/test_documentation_contract.py; 26 passed
+        - kind: review
+          reference: docs/deployment-guide.md; docs/getting-started.md; docs/vault-setup.md; docs/network-resolution.md; docs/virtualization-guide.md;
+            docs/access-management.md; docs/ssh-host-identity.md
+      note: Navigation and portable local-link tests pass, but a guide-by-guide audit does not support the requirement that every operational
+        procedure identifies prerequisites, validation, and rollback or recovery. Missing recovery contracts are recorded under
+        recovery_steps_are_present. The previous assessor was notified through tracker message b0b5322ebe50486099356e9ee6200c4a and did not provide
+        additional evidence before reconciliation.
+      assessed_by: codex-doc-cleanup-20260831-b1
+      assessed_at: '2026-08-31T14:15:52.403427Z'
+  - id: quality_guidance_is_current
+    category: functionality
+    title: Development and quality guidance matches the repository
+    acceptance:
+      - Documented formatting, testing, package, and deployment commands match the current flake and scripts.
+      - Cleanup policy is documented for generated files and local artifacts.
+    required: true
+    verification:
+      kind: manual
+      instructions: Compare contributor guidance with flake.nix, devenv files, tests, and AGENTS.md.
+      timeout_seconds: 300
+    assessment:
+      status: verified
+      evidence:
+        - kind: review
+          reference: AGENTS.md; docs/development.md; documentation contract tests 24 passed
+      assessed_by: codex-cleanup-20260831-a7
+      assessed_at: '2026-08-31T13:58:59.790644Z'
+  - id: duplicate_guidance_is_removed
+    category: security
+    title: Duplicate guidance is removed
+    acceptance:
+      - Each operational topic has one canonical guide and cross-links from legacy locations.
+    required: true
+    verification:
+      kind: manual
+      instructions: Search documentation for duplicate procedures and compare their commands and prerequisites.
+      timeout_seconds: 600
+    assessment:
+      status: verified
+      evidence:
+        - kind: test
+          reference: tests/test_documentation_contract.py::test_superseded_root_guides_do_not_compete_with_canonical_documentation;
+            tests/test_documentation_contract.py::test_autoconf_guide_has_one_canonical_navigable_location; 26 passed
+        - kind: review
+          reference: docs/index.md; README.md; luxnix.yml documentation_replacements
+      assessed_by: codex-doc-cleanup-20260831-b1
+      assessed_at: '2026-08-31T14:15:52.210666Z'
+  - id: examples_match_configuration
+    category: testing
+    title: Examples match configuration
+    acceptance:
+      - Commands, paths, host names, and module names in examples exist in the current repository.
+    required: true
+    verification:
+      kind: manual
+      instructions: Check examples against current Nix files, scripts, and flake outputs.
+      timeout_seconds: 600
+    assessment:
+      status: blocked
+      evidence:
+        - kind: test
+          reference: tests/test_documentation_contract.py::test_documented_devenv_commands_use_current_cli_entry_points;
+            tests/test_documentation_contract.py::test_day_zero_guides_generate_from_inventory_before_preflight; 26 passed
+        - kind: review
+          reference: docs/vault-hub-machine-enrollment.md:3; docs/vault-owner-immediate-actions.md:79; systems/x86_64-linux;
+            ansible/inventory/hosts.ini
+      note: Command/path contract tests pass, but the current examples acceptance is broader than automated coverage. The navigated docs use gc-11 as
+        a new enrollment example although current systems and inventory do not define gc-11, and gc-01 appears in a Vault receiver-path example
+        without a current system or inventory entry. Label these as hypothetical/non-current examples in the criterion policy or replace them with
+        existing configuration before verification.
+      assessed_by: codex-doc-cleanup-20260831-b1
+      assessed_at: '2026-08-31T14:15:52.301133Z'
+  - id: recovery_steps_are_present
+    category: operations
+    title: Recovery steps are present
+    acceptance:
+      - Destructive or maintenance procedures document validation, rollback, and recovery steps.
+    required: true
+    verification:
+      kind: manual
+      instructions: Review maintenance and deployment procedures for explicit rollback and recovery guidance.
+      timeout_seconds: 600
+    assessment:
+      status: blocked
+      evidence:
+        - kind: review
+          reference: docs/deployment-guide.md; docs/getting-started.md; docs/vault-setup.md; docs/network-resolution.md; docs/virtualization-guide.md;
+            docs/access-management.md; docs/ssh-host-identity.md
+      note: >-
+        Guide-by-guide audit found missing explicit rollback/recovery contracts: docs/deployment-guide.md has destructive nixos-anywhere and post-deployment
+        cleanup without deployment-failure recovery; docs/getting-started.md points only to logs/Common Errors; docs/vault-setup.md covers bootstrap/rotation
+        and validation but not backup/partial-failure recovery; docs/network-resolution.md documents switch and validation without rollback;
+        docs/virtualization-guide.md documents host-impacting VFIO/KVM changes and validation without prerequisites or rollback; docs/access-management.md
+        documents access changes without preflight or rollback. SSH host rotation documents backup and restore mechanics but not post-restore identity
+        validation. These gaps prevent the all-procedures acceptance statement.
+      assessed_by: codex-doc-cleanup-20260831-b1
+      assessed_at: '2026-08-31T14:03:33.881007Z'
+  - id: documentation_navigation_is_complete
+    category: documentation
+    title: Documentation navigation is complete
+    acceptance:
+      - New and retained guides are reachable from the documentation index or an intentional topical index.
+    required: true
+    verification:
+      kind: manual
+      instructions: Trace each maintained guide from docs/index.md, README.md, or an approved index.
+      timeout_seconds: 300
+    assessment:
+      status: verified
+      evidence:
+        - kind: review
+          reference: docs/index.md; mkdocs.yaml; docs:toc-generator passed
+      assessed_by: codex-cleanup-20260831-a7
+      assessed_at: '2026-08-31T13:59:02.339961Z'

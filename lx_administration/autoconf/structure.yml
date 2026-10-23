@@ -1,0 +1,45 @@
+version: 1
+tier: package
+path: lx_administration/autoconf
+parent: ../structure.yml
+summary: Validated inventory import and isolated Nix rendering pipeline.
+responsibilities:
+- Resolve centralized configuration and shared filesystem layouts
+- Stage and atomically publish generated artifacts
+boundaries:
+- Import and renderer layers must not pull in password or vault subsystems
+- Render comparisons outside the repository before replacing tracked output
+entrypoints:
+- name: pipeline
+  file: main.py
+  purpose: Inspect pipeline ownership and interfaces.
+- name: options
+  file: config.py
+  purpose: Inspect options ownership and interfaces.
+- name: layouts
+  file: layout.py
+  purpose: Inspect layouts ownership and interfaces.
+- name: imports
+  file: imports/main.py
+  purpose: Inspect imports ownership and interfaces.
+- name: rendering
+  file: nix/main.py
+  purpose: Inspect rendering ownership and interfaces.
+dependencies:
+  internal:
+  - ansible
+  - autoconf
+  - conf
+  external:
+  - Pydantic
+  - Jinja2
+  - PyYAML
+submodules: []
+contracts:
+- name: autoconf
+  doc: ../../docs/autoconf.md
+- name: autoconf-test-map
+  doc: ../../tests/autoconf.yml
+tests:
+  directory: ../../tests
+  command: python -m pytest -q tests/test_autoconf_rendering.py tests/test_autoconf_pipeline.py

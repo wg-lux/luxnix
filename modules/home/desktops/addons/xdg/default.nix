@@ -4,9 +4,11 @@
   ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.desktops.addons.xdg;
-in {
+in
+{
   options.desktops.addons.xdg = with types; {
     enable = mkBoolOpt false "manage xdg config";
   };
@@ -21,7 +23,7 @@ in {
     xdg = {
       enable = true;
       cacheHome = config.home.homeDirectory + "/.local/cache";
-      
+
       userDirs = {
         enable = true;
         createDirectories = true;
@@ -29,6 +31,8 @@ in {
           XDG_SCREENSHOTS_DIR = "${config.xdg.userDirs.pictures}/Screenshots";
         };
       };
+
+      configFile."user-dirs.dirs".force = true;
     };
   };
 }

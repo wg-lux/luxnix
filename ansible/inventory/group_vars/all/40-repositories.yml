@@ -1,0 +1,12 @@
+# Repository locations used by deployment and update playbooks.
+ansible_key_dir: '{{ luxnix_dest }}/secrets/ansible-vault-keys'
+ansible_key_source_dir: '{{ luxnix_dev_repo }}/secrets/ansible-vault-keys-source'
+
+luxnix_dev_repo: /home/admin/dev/luxnix
+luxnix_repo: https://github.com/wg-lux/luxnix.git
+luxnix_dest: /home/admin/dev/luxnix
+luxnix_branch: main
+
+endoreg_db_repo: https://github.com/wg-lux/endoreg-db.git
+endoreg_db_dest: /home/admin/endoreg-db-production
+endoreg_db_branch: main

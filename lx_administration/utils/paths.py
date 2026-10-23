@@ -6,7 +6,7 @@ def str2path(
     expanduser: bool = True,
     resolve: bool = True,
     return_as_string: bool = False,
-) -> Path:
+) -> str | Path:
     p = Path(path)
 
     if expanduser:
