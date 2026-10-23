@@ -440,6 +440,7 @@ def test_superseded_root_guides_do_not_compete_with_canonical_documentation() ->
 
     allowed_root_markdown = {
         "AGENTS.md",
+        "CLAUDE.md",
         "CommonErrors.md",
         "LxCheatsheet.md",
         "README.md",

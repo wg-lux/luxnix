@@ -13,6 +13,9 @@ entrypoints:
 - name: vault-network-policy
   file: test_vault_network_policy.py
   purpose: Evaluate inventory-derived Vault endpoints, certificate IPs and VPN DNS pinning.
+- name: ca-trust
+  file: test_ca_trust.py
+  purpose: Reject distrusted roots in either PEM form and repair or check virtualenv certifi bundles.
 - name: application-port-policy
   file: lx-annotate/test_application_port_policy.py
   purpose: Evaluate the application port alias, proxy propagation and conflicting assignments.

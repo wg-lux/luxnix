@@ -27,6 +27,7 @@
   - [Hardware Setup](docs/hardware-setup.md)
   - [Virtualization](docs/virtualization-guide.md)
   - [SSH Host Identity](docs/ssh-host-identity.md)
+  - [CA Trust and Certificate Repair](docs/ca-trust.md)
   - [Configuration Tests](docs/testing-nixtests.md)
   - [NixOS Version Bump](docs/nixos-version-bump.md)
 - **Services**

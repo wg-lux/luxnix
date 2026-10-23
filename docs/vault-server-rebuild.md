@@ -137,6 +137,12 @@ The IP is the Vault listener on the AGLNet VPN. `VAULT_TLS_SERVER_NAME` retains
 certificate hostname verification while avoiding the public DNS route from
 `gs-02`.
 
+`connection refused` means nothing is listening there yet; no key or token was
+sent. `vault.service` waits for `openvpn-aglnet.service` and up to two minutes for
+the VPN address, then retries indefinitely. Check `ip -br addr | grep 172.16.255.22`
+and `journalctl -u vault.service -b`. Every restart leaves Vault sealed, so unseal
+again after each start.
+
 The custodian captures the output directly into approved offline custody. Do
 not redirect it to a file on `gs-02`, paste it into chat, or retain it in
 terminal scrollback. Unseal through the hidden prompt:

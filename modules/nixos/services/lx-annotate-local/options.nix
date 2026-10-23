@@ -14,5 +14,6 @@ args: {
     (import ./options/data-cleanup.nix args)
     (import ./options/storage-relief.nix args)
     (import ./options/hub.nix args)
+    (import ./options/remote-access.nix args)
   ];
 }

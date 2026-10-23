@@ -21,6 +21,7 @@ EXPECTED_OPTION_GROUPS = {
     "hls-materialization": "hlsMaterialization",
     "hub": "hub",
     "monitoring": "runtime.monitoring",
+    "remote-access": "remoteAccess",
     "runtime": "runtime",
     "storage-relief": "storageRelief",
     "streamable-migration": "streamableMigration",
@@ -32,7 +33,7 @@ def test_each_subservice_leaf_owns_one_documented_service() -> None:
         path for path in SUBSERVICE_DIR.rglob("*.nix") if path.name not in {"workers.nix", "lx-annotate-request-throttle.nix"}
     )
 
-    assert len(leaf_modules) == 38
+    assert len(leaf_modules) == 40
     for module in leaf_modules:
         source = module.read_text(encoding="utf-8")
         relative_path = module.relative_to(SERVICE_DIR)
@@ -43,7 +44,17 @@ def test_each_subservice_leaf_owns_one_documented_service() -> None:
             source,
             re.MULTILINE,
         )
-        assert len(service_assignments) == 1, relative_path
+        if module.name == "lx-annotate-identity-salts.nix":
+            # Provisioning owns one service and adds an explicit consumer dependency.
+            assert len(service_assignments) == 2, relative_path
+            assert re.search(
+                r'services\.lx-annotate-runtime-env = \{\s*'
+                r'after = \[ "lx-annotate-identity-salts.service" \];\s*'
+                r'requires = \[ "lx-annotate-identity-salts.service" \];\s*\};',
+                source,
+            ), relative_path
+        else:
+            assert len(service_assignments) == 1, relative_path
 
     aggregator_source = (SUBSERVICE_DIR / "workers.nix").read_text(encoding="utf-8")
     config_source = (SERVICE_DIR / "config.nix").read_text(encoding="utf-8")

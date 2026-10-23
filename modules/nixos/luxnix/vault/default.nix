@@ -30,19 +30,55 @@ let
     + lib.escapeShellArgs ([ runtimeDir ] ++ map toString clientCredentialPaths);
 
   serverCfg = cfg.server;
+  # The listener binds a VPN address that only exists once the tunnel is up.
+  serverBindHost =
+    let
+      match = builtins.match "\\[?([^]]*)]?:[0-9]+" serverCfg.bindAddress;
+    in
+    if match == null then null else builtins.head match;
+  serverWaitsForBindAddress =
+    serverBindHost != null
+    && !(builtins.elem serverBindHost [
+      "0.0.0.0"
+      "::"
+      "127.0.0.1"
+      "::1"
+      "localhost"
+    ]);
+  serverVpnServices = lib.optional config.roles.aglnet.client.enable "openvpn-${config.roles.aglnet.client.networkName}.service";
+  waitForServerBindAddress = pkgs.writeShellScript "luxnix-vault-wait-bind-address" ''
+    set -euo pipefail
+    for _ in $(${pkgs.coreutils}/bin/seq 120); do
+      if [ -n "$(${pkgs.iproute2}/bin/ip -o addr show to ${lib.escapeShellArg serverBindHost})" ]; then
+        exit 0
+      fi
+      ${pkgs.coreutils}/bin/sleep 1
+    done
+    echo "ERROR: Vault bind address ${serverBindHost} is not assigned; is the VPN up?" >&2
+    exit 1
+  '';
   managedTlsCfg = serverCfg.managedTls;
   hubPkiCfg = serverCfg.hubPki;
   clientHubPkiCfg = cfg.client.hubPki;
   # Only centers explicitly listed in hubPki.sharedIdentityCenters receive a shared salt.
   centerIdentitySites = pkgs.writeText "lx-hub-center-identities.json" (
-    builtins.toJSON (builtins.listToAttrs (map (node: {
-      name = "${node.nodeKey}.${hubPkiCfg.allowedDnsSuffix}";
-      value = node.centerKey;
-    }) (builtins.filter (node:
-      node.role == "site_node"
-      && node.centerKey != null
-      && builtins.elem node.centerKey hubPkiCfg.sharedIdentityCenters)
-      config.services.luxnix.lxAnnotateLocal.hub.nodeProvisioning.nodes)))
+    builtins.toJSON (
+      builtins.listToAttrs (
+        map
+          (node: {
+            name = "${node.nodeKey}.${hubPkiCfg.allowedDnsSuffix}";
+            value = node.centerKey;
+          })
+          (
+            builtins.filter (
+              node:
+              node.role == "site_node"
+              && node.centerKey != null
+              && builtins.elem node.centerKey hubPkiCfg.sharedIdentityCenters
+            ) config.services.luxnix.lxAnnotateLocal.hub.nodeProvisioning.nodes
+          )
+      )
+    )
   );
   clientHubPkiSecretDirectories = lib.unique [
     (builtins.dirOf clientHubPkiCfg.nodeSecretFile)
@@ -1893,14 +1929,32 @@ in
         vault = lib.mkIf serverCfg.enable {
           after = [
             "managed-secrets-setup.service"
+            "network-online.target"
           ]
+          ++ serverVpnServices
           ++ lib.optional (
             config.services.luxnix.lxSsl.enable && !managedTlsCfg.enable
           ) "generate-lx-ssl.service";
-          wants = [ "managed-secrets-setup.service" ];
+          # Soft ordering only: a VPN restart must not stop (and thereby seal) Vault.
+          wants = [
+            "managed-secrets-setup.service"
+            "network-online.target"
+          ]
+          ++ serverVpnServices;
           requires = lib.optional (
             config.services.luxnix.lxSsl.enable && !managedTlsCfg.enable
           ) "generate-lx-ssl.service";
+          # The whole fleet depends on this server: never give up restarting it.
+          startLimitIntervalSec = lib.mkForce 0;
+          serviceConfig = {
+            # "+" runs the address probe with full privileges; Vault stays unprivileged.
+            ExecStartPre = lib.optional serverWaitsForBindAddress "+${waitForServerBindAddress}";
+            TimeoutStartSec = "3min";
+            Restart = lib.mkForce "always";
+            RestartSec = "5s";
+            RestartSteps = 5;
+            RestartMaxDelaySec = "1min";
+          };
         };
 
         luxnix-vault-managed-server-tls = lib.mkIf managedTlsCfg.enable {

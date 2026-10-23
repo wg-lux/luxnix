@@ -1,4 +1,5 @@
-# Local creation/recovery is required before settings load; bulk migration is separate.
+# Purpose: Preserve identity salts and order their runtime environment consumer.
+# Command: provision verifies durable copies before settings load; migration is separate.
 { ctx }:
 with ctx;
 let
@@ -24,25 +25,27 @@ let
 in
 mkIf (cfg.django.enrollLegacyDefaultSalt && !cfg.django.identitySaltViaSecretSpec) {
   assertions = lib.optional cfg.django.centerIdentitySalt {
-    assertion = builtins.match "[A-Za-z0-9_-]+" centerKey != null
+    assertion =
+      builtins.match "[A-Za-z0-9_-]+" centerKey != null
       && config.luxnix.vault.client.hubPki.enable
       && !config.luxnix.vault.client.auth.deferUntilProvisioned;
     message = "Center identity salt requires a stable center key and enrolled Vault machine authentication.";
   };
   roles.managed-secrets.customSecrets.lx_annotate_center_identity_source =
-    mkIf cfg.django.centerIdentitySalt {
-      path = centerSaltFile;
-      owner = "root";
-      group = "root";
-      permissions = "600";
-      description = "Vault-managed center identity salt";
-      customScript = true;
-      refreshOnBoot = true;
-      generator = ''
-        ${pkgs.vault}/bin/vault kv get -field=salt ${lib.escapeShellArg centerSaltPath} > "$TARGET_FILE"
-        test -s "$TARGET_FILE"
-      '';
-    };
+    mkIf cfg.django.centerIdentitySalt
+      {
+        path = centerSaltFile;
+        owner = "root";
+        group = "root";
+        permissions = "600";
+        description = "Vault-managed center identity salt";
+        customScript = true;
+        refreshOnBoot = true;
+        generator = ''
+          ${pkgs.vault}/bin/vault kv get -field=salt ${lib.escapeShellArg centerSaltPath} > "$TARGET_FILE"
+          test -s "$TARGET_FILE"
+        '';
+      };
   # Root-only recovery material is retained independently of prunable app snapshots.
   services.luxnix.lxAnnotateLocal.hub.backup.exclude = mkAfter [ ".identity-salt-recovery" ];
   systemd = {

@@ -1,7 +1,6 @@
 {
   lib,
   config,
-  pkgs,
   ...
 }:
 with lib;
@@ -354,12 +353,10 @@ in
     networking.useDHCP = lib.mkDefault cfg.useDHCP;
     # Note: /etc/secrets directory is now managed by the managed-secrets role
 
-    environment.systemPackages = with pkgs; [
-      cacert
-    ];
-
+    # Use the regenerated system bundle (luxnix.caTrust), not the unfiltered
+    # pkgs.cacert bundle, so distrusted roots stay removed for every client.
     nix.settings = {
-      ssl-cert-file = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+      ssl-cert-file = config.security.pki.caBundle;
     }
     // optionalAttrs cfg.nix.enableOptimizations (
       {
@@ -376,8 +373,8 @@ in
     );
 
     environment.variables = {
-      SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
-      NIX_SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+      SSL_CERT_FILE = config.security.pki.caBundle;
+      NIX_SSL_CERT_FILE = config.security.pki.caBundle;
       LUXNIX_FLAKE = toString cfg.configurationPath;
       LUXNIX_HOST = hostname;
     };

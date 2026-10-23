@@ -1,4 +1,5 @@
-# Migrate to the provisioned active generation without joining the startup chain.
+# Purpose: Migrate to the provisioned active generation outside the startup chain.
+# Command: rotate_identity_salt migrates verified groups while retaining blocked groups.
 { ctx }:
 with ctx;
 let

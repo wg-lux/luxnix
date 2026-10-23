@@ -13,6 +13,9 @@ entrypoints:
 - name: vault-secret-lifecycle
   file: luxnix/vault/default.nix
   purpose: Machine authentication enrollment without central identity salts; guarded Vault credential persistence.
+- name: ca-trust
+  file: luxnix/ca-trust/default.nix
+  purpose: Fleet CA bundle distrust list, build-time bundle verification and certifi repair command.
 - name: managed-secret-publication
   file: roles/managed-secrets/default.nix
   purpose: Fail-closed authenticated refresh and encrypted/runtime storage verification.

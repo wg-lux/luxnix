@@ -177,6 +177,8 @@ def _extract_function(function_name: str, *, source_path: Path = SCRIPTS_NIX) ->
         ("${lib.escapeShellArg envDataDir}", '"${envDataDir}"'),
         ("${lib.escapeShellArg runtimeStaticRootPath}", '"${runtimeStaticRootPath}"'),
         ("${helperPythonPath}", "${HELPER_PYTHON_PATH}"),
+        # tests/test_ca_trust.py covers the certifi repair command itself.
+        ("${caTrustRepair}", "true"),
     ]
     for nix_expression, shell_expression in config_replacements:
         body = body.replace(nix_expression, shell_expression)

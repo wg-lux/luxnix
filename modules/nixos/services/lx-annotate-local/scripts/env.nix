@@ -181,8 +181,10 @@ rec {
     TESSDATA_PREFIX = cfg.runtime.tessdataPrefix;
     PYTORCH_ALLOC_CONF = cfg.runtime.pytorchAllocConf;
     LD_LIBRARY_PATH = runtimeLdLibraryPath;
-    SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
-    REQUESTS_CA_BUNDLE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+    SSL_CERT_FILE = config.security.pki.caBundle;
+    REQUESTS_CA_BUNDLE = config.security.pki.caBundle;
+    # Nix-built certifi reads this instead of its store-linked cacert.pem.
+    NIX_SSL_CERT_FILE = config.security.pki.caBundle;
     LX_ANNOTATE_PACKAGE_VERSION = effectivePackageVersion;
   }
   // optionalAttrs (cfg.runtime.masterKeyFile != null) {
@@ -205,6 +207,16 @@ rec {
   }
   // optionalAttrs (cfg.hub.outboundTransfer.recipientPublicKeyFile != null) {
     LX_ANNOTATE_HUB_EXPORT_RECIPIENT_PUBLIC_KEY_FILE = toString cfg.hub.outboundTransfer.recipientPublicKeyFile;
+  }
+  // optionalAttrs (cfg.remoteAccess.machines != [ ]) {
+    LX_ANNOTATE_REMOTE_MACHINES = builtins.toJSON (
+      map (machine: {
+        inherit (machine) key;
+        display_name = machine.displayName;
+        base_url = machine.baseUrl;
+        deployment_role = machine.deploymentRole;
+      }) cfg.remoteAccess.machines
+    );
   }
   // optionalAttrs (cfg.hub.transferApi.recipientPrivateKeyFiles != [ ]) {
     ENDOREG_HUB_TRANSFER_RECIPIENT_PRIVATE_KEY_FILES = lib.concatStringsSep "," cfg.hub.transferApi.recipientPrivateKeyFiles;

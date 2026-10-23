@@ -83,6 +83,7 @@ nav:
       - Hardware Setup: hardware-setup.md
       - Virtualization: virtualization-guide.md
       - SSH Host Identity: ssh-host-identity.md
+      - CA Trust and Certificate Repair: ca-trust.md
       - Configuration Tests: testing-nixtests.md
       - NixOS Version Bump: nixos-version-bump.md
   - Services:

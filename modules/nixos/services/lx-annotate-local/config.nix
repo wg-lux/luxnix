@@ -117,6 +117,13 @@ let
     if ($ssl_client_verify != SUCCESS) {
       return 403;
     }
+  ''
+  + optionalString cfg.remoteAccess.restrictToVpn.enable ''
+    # Node-to-node transfer is gated by mTLS above, not by the browser VPN
+    # allow-list; same-cluster site nodes may connect from local addresses.
+    allow all;
+  ''
+  + ''
 
     proxy_http_version 1.1;
 
@@ -161,6 +168,7 @@ let
     lib.concatStringsSep "\n" wheelDependencyOverrides
   );
 
+  caTrustRepair = "${config.luxnix.caTrust.repairPackage}/bin/luxnix-ca-trust-repair";
   wheelDowngradeGuard = pkgs.runCommand "lx-annotate-wheel-downgrade-guard" { } ''
     mkdir -p "$out"
     cp ${./scripts/wheel-downgrade-guard.py} "$out/guard.py"
@@ -398,6 +406,13 @@ let
         fi
       fi
 
+      # pip restores certifi's bundled cacert.pem on every install; relink it
+      # to the regenerated system bundle and refuse to start stale runtimes.
+      if [ "$install_allowed" = "true" ]; then
+        ${caTrustRepair} ${lib.escapeShellArg runtimeWheelVenvPath}
+      else
+        ${caTrustRepair} --check ${lib.escapeShellArg runtimeWheelVenvPath}
+      fi
       if ! installed_package_version="$(${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/python"} -c 'from importlib.metadata import version; print(version("lx-annotate"))')"; then
         echo "ERROR: Installed wheel does not expose lx-annotate package metadata." >&2
         exit 1
@@ -513,24 +528,30 @@ let
       --legacy-path ${lib.escapeShellArg "${envDataDir}/.identity-salt-recovery"} \
       -- "$@"
   '';
-  effectiveRuntimePackage = if !cfg.django.identitySaltViaSecretSpec then baseRuntimePackage else
-    pkgs.runCommand "lx-annotate-file-free-runtime" { } ''
-      mkdir -p "$out/bin"
-      for target in ${baseRuntimePackage}/bin/*; do
-        name="$(basename "$target")"
-        if [ "$name" = lx-annotate-runtime-ensure ]; then
-          ln -s "$target" "$out/bin/$name"
-        else
-          cat > "$out/bin/$name" <<EOF
-    #!${pkgs.bash}/bin/bash
-    exec ${identityLauncher} "$target" "\$@"
-    EOF
-          chmod +x "$out/bin/$name"
-        fi
-      done
-    '';
+  effectiveRuntimePackage =
+    if !cfg.django.identitySaltViaSecretSpec then
+      baseRuntimePackage
+    else
+      pkgs.runCommand "lx-annotate-file-free-runtime" { } ''
+          mkdir -p "$out/bin"
+          for target in ${baseRuntimePackage}/bin/*; do
+            name="$(basename "$target")"
+            if [ "$name" = lx-annotate-runtime-ensure ]; then
+              ln -s "$target" "$out/bin/$name"
+            else
+              cat > "$out/bin/$name" <<EOF
+        #!${pkgs.bash}/bin/bash
+        exec ${identityLauncher} "$target" "\$@"
+        EOF
+              chmod +x "$out/bin/$name"
+            fi
+          done
+      '';
   identityServiceConfig = optionalAttrs cfg.django.identitySaltViaSecretSpec {
-    EnvironmentFile = [ envSystemdFilePath config.luxnix.vault.client.runtimeEnvironmentFile ];
+    EnvironmentFile = [
+      envSystemdFilePath
+      config.luxnix.vault.client.runtimeEnvironmentFile
+    ];
     LimitCORE = 0;
   };
   effectivePackageVersion =
@@ -595,10 +616,10 @@ let
     cfg.hub.transferApi.enable || cfg.hub.outboundTransfer.enable
   ) [ "lx-annotate-hub-envelope-key-preflight.service" ];
   managedSecretsSetupUnits =
-    lib.optionals (lib.attrByPath [ "roles" "managed-secrets" "enable" ] false config)
-      [
-        "managed-secrets-setup.service"
-      ] ++ lib.optionals cfg.django.identitySaltViaSecretSpec [ "vault-auth-setup.service" ];
+    lib.optionals (lib.attrByPath [ "roles" "managed-secrets" "enable" ] false config) [
+      "managed-secrets-setup.service"
+    ]
+    ++ lib.optionals cfg.django.identitySaltViaSecretSpec [ "vault-auth-setup.service" ];
 
   isLocalPostgresHost =
     host: host == "localhost" || host == "127.0.0.1" || host == "::1" || host == cfg.django.hostname;
@@ -1007,7 +1028,8 @@ let
         PrivateTmp = true;
         NoNewPrivileges = true;
         ReadWritePaths = appReadWritePaths;
-      } // identityServiceConfig
+      }
+      // identityServiceConfig
       // lib.optionalAttrs (background && cfg.runtime.frontendRequestThrottle.enable) {
         Slice = "lx-annotate-background.slice";
       }
@@ -1745,10 +1767,9 @@ in
         {
           environment.systemPackages = [ lxAnnotateMigrateVideoStreamableStorageScript ];
 
-          services.luxnix.lxAnnotateLocal.django.identitySaltKeyringFile =
-            mkIf (cfg.django.enrollLegacyDefaultSalt && !cfg.django.identitySaltViaSecretSpec) (
-              mkDefault "/etc/secrets/vault/lx_annotate_identity_keyring.yml"
-            );
+          services.luxnix.lxAnnotateLocal.django.identitySaltKeyringFile = mkIf (
+            cfg.django.enrollLegacyDefaultSalt && !cfg.django.identitySaltViaSecretSpec
+          ) (mkDefault "/etc/secrets/vault/lx_annotate_identity_keyring.yml");
 
           environment.etc."lx-annotate/monitoring.json" = mkIf cfg.runtime.monitoring.enable {
             source = monitoringConfig;
@@ -1757,37 +1778,57 @@ in
 
           assertions = [
             {
+              assertion =
+                !cfg.remoteAccess.restrictToVpn.enable || cfg.remoteAccess.restrictToVpn.allowedClientCidrs != [ ];
+              message = "services.luxnix.lxAnnotateLocal.remoteAccess.restrictToVpn.enable requires at least one allowedClientCidrs entry.";
+            }
+            {
               assertion = !cfg.django.identitySaltViaSecretSpec;
               message = "Central identity salt provisioning is disabled; preserve established local identity salts.";
             }
             {
-              assertion = !cfg.django.identitySaltViaSecretSpec || (
-                cfg.django.centerIdentitySalt
-                && builtins.match "[A-Za-z0-9_-]+" envDefaultCenter != null
-                && cfg.django.identitySaltFile == null
-                && cfg.django.identitySaltKeyringFile == null
-                && cfg.django.identitySaltGeneration != null
-                && builtins.match "[0-9a-f]{64}" cfg.django.identitySaltFingerprint != null
-                && envDefaultCenter == config.roles.endoreg-client.defaultCenterKey
-                && config.luxnix.vault.client.hubPki.enable
-                && config.luxnix.vault.client.auth.method == "approle"
-                && !config.luxnix.vault.client.auth.deferUntilProvisioned
-                && !config.luxnix.vault.client.allowOffline
-                && config.luxnix.vault.client.caCertFile != null
-                && lib.hasPrefix "https://" (if config.luxnix.vault.client.address == null then "" else config.luxnix.vault.client.address)
-                && lib.all (name: !(builtins.hasAttr name cfg.runtime.extraEnvironment))
-                  [ "DJANGO_SALT" "DJANGO_SALT_FILE" "DJANGO_IDENTITY_SALT_KEYRING_FILE" "DJANGO_IDENTITY_SALT_BUNDLE"
-                    "DJANGO_IDENTITY_SALT_DELIVERY" "DJANGO_IDENTITY_SALT_GENERATION" "DJANGO_IDENTITY_CENTER_ID" "LX_ANNOTATE_DEFAULT_CENTER" ]
-              );
+              assertion =
+                !cfg.django.identitySaltViaSecretSpec
+                || (
+                  cfg.django.centerIdentitySalt
+                  && builtins.match "[A-Za-z0-9_-]+" envDefaultCenter != null
+                  && cfg.django.identitySaltFile == null
+                  && cfg.django.identitySaltKeyringFile == null
+                  && cfg.django.identitySaltGeneration != null
+                  && builtins.match "[0-9a-f]{64}" cfg.django.identitySaltFingerprint != null
+                  && envDefaultCenter == config.roles.endoreg-client.defaultCenterKey
+                  && config.luxnix.vault.client.hubPki.enable
+                  && config.luxnix.vault.client.auth.method == "approle"
+                  && !config.luxnix.vault.client.auth.deferUntilProvisioned
+                  && !config.luxnix.vault.client.allowOffline
+                  && config.luxnix.vault.client.caCertFile != null
+                  && lib.hasPrefix "https://" (
+                    if config.luxnix.vault.client.address == null then "" else config.luxnix.vault.client.address
+                  )
+                  && lib.all (name: !(builtins.hasAttr name cfg.runtime.extraEnvironment)) [
+                    "DJANGO_SALT"
+                    "DJANGO_SALT_FILE"
+                    "DJANGO_IDENTITY_SALT_KEYRING_FILE"
+                    "DJANGO_IDENTITY_SALT_BUNDLE"
+                    "DJANGO_IDENTITY_SALT_DELIVERY"
+                    "DJANGO_IDENTITY_SALT_GENERATION"
+                    "DJANGO_IDENTITY_CENTER_ID"
+                    "LX_ANNOTATE_DEFAULT_CENTER"
+                  ]
+                );
               message = "File-free identity delivery requires authenticated center Vault access, reviewed generation/fingerprint pins and no legacy salt configuration.";
             }
             {
-              assertion = !cfg.django.centerIdentitySalt || cfg.django.enrollLegacyDefaultSalt || cfg.django.identitySaltViaSecretSpec;
+              assertion =
+                !cfg.django.centerIdentitySalt
+                || cfg.django.enrollLegacyDefaultSalt
+                || cfg.django.identitySaltViaSecretSpec;
               message = "Center identity salt must use the managed identity enrollment and recovery service.";
             }
             {
               assertion =
-                cfg.django.identitySaltViaSecretSpec || !cfg.django.enrollLegacyDefaultSalt
+                cfg.django.identitySaltViaSecretSpec
+                || !cfg.django.enrollLegacyDefaultSalt
                 || (
                   cfg.django.identitySaltFile == null
                   && !(cfg.runtime.extraEnvironment ? DJANGO_SALT)
@@ -2434,6 +2475,11 @@ in
                 extraConfig = ''
                   client_max_body_size ${cfg.django.maxRequestSize};
                   proxy_request_buffering off;
+                ''
+                + optionalString cfg.remoteAccess.restrictToVpn.enable ''
+                  # Browser UI and API are served over TLS to LuxNix VPN clients only.
+                  ${lib.concatMapStrings (cidr: "allow ${cidr};\n") cfg.remoteAccess.restrictToVpn.allowedClientCidrs}
+                  deny all;
                 ''
                 + optionalString sslCfg.enable ''
                   ssl_stapling off;
