@@ -848,18 +848,26 @@ lib.foldl' lib.recursiveUpdate
       xdg.menus.enable = true;
     }
     {
-      fileSystems."/etc/secrets/vault" = lib.mkIf config.luxnix.vault.server.managedTls.encryptedStorage {
-        device = "/var/lib/luxnix-vault-pki/managed-secrets";
-        fsType = "none";
-        options = [
-          "bind"
-          "noauto"
-          "nodev"
-          "nosuid"
-          "noexec"
-        ];
-        depends = [ "/var/lib/luxnix-vault-pki" ];
-      };
+      fileSystems = lib.mkIf config.luxnix.vault.server.managedTls.encryptedStorage (
+        lib.mapAttrs
+          (_: directory: {
+            device = "/var/lib/luxnix-vault-pki/${directory}";
+            fsType = "none";
+            options = [
+              "bind"
+              "noauto"
+              "nodev"
+              "nosuid"
+              "noexec"
+            ];
+            depends = [ "/var/lib/luxnix-vault-pki" ];
+          })
+          {
+            "/etc/secrets/vault" = "managed-secrets";
+            "/var/lib/luxnix-vault-site-lifecycle" = "site-lifecycle";
+            "/root/vault-enrollment" = "site-enrollment";
+          }
+      );
     }
     {
       networking.firewall.interfaces.tun0.allowedTCPPorts = lib.mkAfter [

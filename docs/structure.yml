@@ -12,7 +12,7 @@ boundaries:
 entrypoints:
 - name: vault-encrypted-tls-storage
   file: vault-encrypted-tls-storage.md
-  purpose: Preserve gs-02 TLS and managed secrets in manually unlocked LUKS storage, including bind-mount activation and interrupted-migration recovery.
+  purpose: Preserve gs-02 TLS, managed secrets and enrollment state in manually unlocked LUKS storage, including bind-mount activation and interrupted-migration recovery.
 - name: package-management
   file: package-management.md
   purpose: Canonical package ownership and installation workflow.

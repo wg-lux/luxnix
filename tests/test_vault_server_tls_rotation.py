@@ -206,6 +206,8 @@ def test_vault_encrypted_mount_gates_services_and_preserves_raft() -> None:
         in {
           filesystem = c.fileSystems.${directory} or null;
           managedFilesystem = c.fileSystems."/etc/secrets/vault" or null;
+          enrollmentFilesystems = map (path: c.fileSystems.${path} or null)
+            [ "/var/lib/luxnix-vault-site-lifecycle" "/root/vault-enrollment" ];
           managed = unit "managed-secrets-setup";
           vault = unit "vault";
           tls = unit "luxnix-vault-managed-server-tls";
@@ -255,6 +257,13 @@ def test_vault_encrypted_mount_gates_services_and_preserves_raft() -> None:
     assert "/etc/secrets/vault" in enabled["managed"]["unitConfig"]["RequiresMountsFor"]
     assert enabled["managed"]["unitConfig"]["AssertPathIsMountPoint"] == "/etc/secrets/vault"
     assert cases["disabled"]["managedFilesystem"] is None
+    for filesystem, directory in zip(
+        enabled["enrollmentFilesystems"], ("site-lifecycle", "site-enrollment")
+    ):
+        assert filesystem["device"] == f"/var/lib/luxnix-vault-pki/{directory}"
+        assert filesystem["fsType"] == "none"
+        assert set(managed_fs["options"]) == set(filesystem["options"])
+    assert cases["disabled"]["enrollmentFilesystems"] == [None, None]
     for service in ("tls", "vault"):
         assert "var-lib-luxnix\\x2dvault\\x2dpki.mount" in enabled[service]["bindsTo"]
         expected_mounts = {"/var/lib/luxnix-vault-pki"}

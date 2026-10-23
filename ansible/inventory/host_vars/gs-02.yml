@@ -208,14 +208,19 @@ host_luxnix:
   generic_settings.linux.kernelModulesBlacklist: []
 
 host_nixos:
-  # Populate and verify this directory before activation; never create fresh secrets over it.
-  'fileSystems."/etc/secrets/vault"': >-
-    lib.mkIf config.luxnix.vault.server.managedTls.encryptedStorage {
-    device = "/var/lib/luxnix-vault-pki/managed-secrets";
+  # Populate and verify these directories before mounting; preserve existing identities.
+  fileSystems: >-
+    lib.mkIf config.luxnix.vault.server.managedTls.encryptedStorage
+    (lib.mapAttrs (_: directory: {
+    device = "/var/lib/luxnix-vault-pki/${directory}";
     fsType = "none";
     options = [ "bind" "noauto" "nodev" "nosuid" "noexec" ];
     depends = [ "/var/lib/luxnix-vault-pki" ];
-    }
+    }) {
+    "/etc/secrets/vault" = "managed-secrets";
+    "/var/lib/luxnix-vault-site-lifecycle" = "site-lifecycle";
+    "/root/vault-enrollment" = "site-enrollment";
+    })
   systemd.services.managed-secrets-setup: >-
     lib.mkIf config.luxnix.vault.server.managedTls.encryptedStorage {
     bindsTo = [ "etc-secrets-vault.mount" ];

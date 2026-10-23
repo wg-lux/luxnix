@@ -358,6 +358,79 @@ through the normal application startup workflow. Verify Vault is unsealed,
 the application is healthy, and active/persistent generations match before
 fleet enrollment. Do not run another secret copy over the mounted destination.
 
+## Protect saved enrollment bundles and lifecycle state
+
+Fleet enrollment also requires encrypted storage for
+`/var/lib/luxnix-vault-site-lifecycle` and `/root/vault-enrollment`. The gs-02
+inventory binds these to `site-lifecycle` and `site-enrollment` under the
+existing LUKS filesystem. The mounts are `noauto`: start them explicitly after
+manual unlock and before any enrollment/lifecycle operation. This does not
+move `/var/lib/vault` or change any saved identity.
+
+Stop all enrollment, rotation, containment and reconciliation commands before
+copying, and keep them stopped until verification and mounting finish. Preserve
+a verified encrypted backup. Run this once on gs-02; it refuses existing
+destinations, symlinks, special files and mounted sources. Never interpret a
+zero `du` allocation as proof that a lifecycle directory is empty.
+
+```bash
+sudo bash -euo pipefail <<'SH'
+base=/var/lib/luxnix-vault-pki
+mountpoint -q "$base"
+test "$(findmnt -nr -o SOURCE --target "$base")" = /dev/mapper/luxnix-vault-pki
+sources=(/var/lib/luxnix-vault-site-lifecycle /root/vault-enrollment)
+destinations=("$base/site-lifecycle" "$base/site-enrollment")
+for i in 0 1; do
+  source=${sources[$i]}
+  destination=${destinations[$i]}
+  test -d "$source"
+  test ! -L "$source"
+  if mountpoint -q "$source"; then
+    echo "STOP: source is already mounted: $source"
+    exit 1
+  fi
+  test -z "$(findmnt -rn -o TARGET | awk -v p="$source/" 'index($0,p)==1')"
+  test -z "$(find "$source" ! -type f ! -type d -print -quit)"
+  test ! -e "$destination"
+  test ! -L "$destination"
+done
+for i in 0 1; do
+  source=${sources[$i]}
+  destination=${destinations[$i]}
+  cp -a "$source" "$destination"
+  diff -qr --no-dereference "$source" "$destination"
+  diff -q \
+    <(cd "$source"; find . -printf '%P %y %m %U %G\n' | LC_ALL=C sort) \
+    <(cd "$destination"; find . -printf '%P %y %m %U %G\n' | LC_ALL=C sort)
+done
+sync -f "$base"
+echo "Both encrypted copies verified; originals unchanged."
+SH
+```
+
+If interrupted, preserve all copies and compare before resuming; do not delete
+or overwrite an existing destination. Transfer the reviewed configuration patch
+to the durable gs-02 checkout, check/apply it, and persist the generation with
+`sudo nixos-rebuild switch --flake .#gs-02`. Then start and inspect the mounts:
+
+```bash
+for path in /var/lib/luxnix-vault-site-lifecycle /root/vault-enrollment; do
+  sudo systemctl start "$(systemd-escape --path --suffix=mount "$path")" || break
+  sudo findmnt -T "$path" -o TARGET,SOURCE,FSTYPE
+done
+sudo python3 lx_administration/secret_storage.py --allow-runtime \
+  /run /var/lib/luxnix-vault-site-lifecycle /root/vault-enrollment \
+  /etc/secrets/vault/hub-pki
+```
+
+Run the verifier from the gs-02 checkout; success is silent with exit status 0.
+Both persistent mounts must show the LUKS mapper and their respective
+subdirectories. Keep originals underneath for recovery and separately retire
+historical plaintext copies. Review and commit the configuration changes, keep
+any downloaded patch outside the checkout, and require a clean worktree before
+rerunning the scoped enrollment command. The corrected preflight must check
+`/var/lib/luxnix-vault-site-lifecycle`, not `/var/lib/vault/site-lifecycle`.
+
 ## After each reboot
 
 From an authenticated SSH session on gs-02:
@@ -365,6 +438,9 @@ From an authenticated SSH session on gs-02:
 ```bash
 sudo cryptsetup open --type luks /var/lib/luxnix-vault-tls.luks luxnix-vault-pki
 sudo systemctl start etc-secrets-vault.mount vault.service
+for path in /var/lib/luxnix-vault-site-lifecycle /root/vault-enrollment; do
+  sudo systemctl start "$(systemd-escape --path --suffix=mount "$path")" || break
+done
 ```
 
 Then use the CA-verified status and hidden unseal sequence above, restart
