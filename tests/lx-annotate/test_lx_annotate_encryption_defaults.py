@@ -163,9 +163,10 @@ def test_lx_annotate_scripts_export_protected_storage_contract():
     assert "commonExtraEnv =" in config_source
     assert "// lib.optionalAttrs cfg.hub.transferApi.enable {" in config_source
     assert (
-        "DJANGO_SECRET_KEY_FILE = toString cfg.django.djangoSecretKeyFile;"
+        'DJANGO_SECRET_KEY_FILE = "${envConfDir}/django_secret_key";'
         in helper_source
     )
+    assert 'DJANGO_KEYCLOAK_CLIENT_SECRET_FILE = "${envConfDir}/keycloak_secret";' in helper_source
     assert 'DJANGO_DB_PASSWORD_FILE = "${envConfDir}/db_pwd";' in helper_source
 
     assert not _has_assignment(config_source, "DATA_DIR")

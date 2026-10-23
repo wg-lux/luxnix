@@ -38,6 +38,11 @@ tasks before assuming that every role supports Ansible check mode completely.
    devenv shell sync-secrets --limit <host-or-group>
    ```
 
+Remote Ansible modules use `/run/current-system/sw/bin/python3`, independent of
+the LuxNix checkout location or a prepared Devenv virtual environment. Controller
+commands still run through Devenv. This allows connectivity checks before cloning
+or preparing the remote repository.
+
 The connectivity helper records operational output under `logs/`. Secret
 deployment tasks use `no_log`; do not add credential values to command-line
 arguments, logs, or debugging output.

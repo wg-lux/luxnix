@@ -124,7 +124,7 @@ def test_remote_python_interpreter_is_centralized() -> None:
         REPO_ROOT / "ansible/inventory/group_vars/all/50-ansible.yml"
     ).read_text(encoding="utf-8")
     assert (
-        "ansible_python_interpreter: '{{ luxnix_dest }}/.devenv/state/venv/bin/python'"
+        "ansible_python_interpreter: /run/current-system/sw/bin/python3"
         in defaults
     )
 

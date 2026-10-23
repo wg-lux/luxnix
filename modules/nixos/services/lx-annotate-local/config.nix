@@ -1427,18 +1427,22 @@ let
     install -d -m 0755 -o ${endoreg-service-user-name} -g ${endoreg-service-group-name} ${envConfDir}
     install -d -m 0750 -o ${endoreg-service-user-name} -g ${endoreg-service-group-name} ${envDataDir}
 
-    source_pwd="${cfg.database.applicationPasswordFile}"
-    target_pwd="${envConfDir}/db_pwd"
-    if [ -f "$source_pwd" ]; then
-      cp "$source_pwd" "$target_pwd"
-      chown ${endoreg-service-user-name}:${endoreg-service-group-name} "$target_pwd"
-      chmod 0600 "$target_pwd"
-    else
-      echo "WARNING: lx-annotate database password file $source_pwd not found" >&2
-    fi
+    copy_private_credential() (
+      source_file="$1"
+      target_file="$2"
+      if [ ! -f "$source_file" ] || [ ! -s "$source_file" ] || [ -L "$source_file" ]; then
+        echo "ERROR: required credential source is missing, empty or not a regular file" >&2
+        exit 1
+      fi
+      temporary=$(mktemp "$target_file.XXXXXXXX")
+      trap 'rm -f "$temporary"' EXIT
+      install -m 0600 -o ${endoreg-service-user-name} -g ${endoreg-service-group-name} "$source_file" "$temporary"
+      mv -T "$temporary" "$target_file"
+    )
 
-    [ -f "${toString cfg.django.keycloakSecretFile}" ] && chgrp ${config.luxnix.generic-settings.sensitiveServiceGroupName} "${toString cfg.django.keycloakSecretFile}" || true
-    [ -f "${toString cfg.django.keycloakSecretFile}" ] && chmod 0640 "${toString cfg.django.keycloakSecretFile}" || true
+    copy_private_credential ${lib.escapeShellArg cfg.database.applicationPasswordFile} ${lib.escapeShellArg "${envConfDir}/db_pwd"}
+    copy_private_credential ${lib.escapeShellArg (toString cfg.django.djangoSecretKeyFile)} ${lib.escapeShellArg "${envConfDir}/django_secret_key"}
+    copy_private_credential ${lib.escapeShellArg (toString cfg.django.keycloakSecretFile)} ${lib.escapeShellArg "${envConfDir}/keycloak_secret"}
 
     tmp_file="${envSystemdFilePath}.tmp"
     cat > "$tmp_file" <<'EOF'
