@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import grp
+import json
 import os
 from pathlib import Path
 import shutil
 import stat
 import subprocess
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts/vault/maintain-server-tls.sh"
@@ -67,8 +70,9 @@ def test_vault_auth_errors_have_distinct_safe_states(tmp_path: Path) -> None:
 
 
 def test_vault_leaf_rotation_preserves_ca_and_rejects_ca_replacement(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch,
 ) -> None:
+    monkeypatch.chdir(tmp_path)
     state = tmp_path / "vault-pki"
     ca_cert = state / "ca.crt"
     ca_key = state / "ca.key"
@@ -109,6 +113,7 @@ def test_vault_leaf_rotation_preserves_ca_and_rejects_ca_replacement(
     )
 
     _run(*common_args)
+    assert set(tmp_path.iterdir()) == {state, marker}
     first_ca = _fingerprint(ca_cert)
     first_leaf = _fingerprint(server_cert)
     assert marker.exists()
@@ -183,3 +188,68 @@ def test_vault_tls_uses_central_yaml_and_a_testable_maintenance_script() -> None
     assert "/var/lib/luxnix-vault-pki/ca.crt" in host_vars
     assert "lx-annotate-selfsigned.crt" not in host_vars
     assert "scripts/vault/maintain-server-tls.sh" in module
+
+
+@pytest.mark.skipif(shutil.which("nix") is None, reason="Nix evaluation required")
+def test_vault_encrypted_mount_gates_services_and_preserves_raft() -> None:
+    expression = r"""
+      let
+        f = builtins.getFlake ("git+file://" + builtins.toString ./.);
+        lib = f.inputs.nixpkgs.lib;
+        inspect = host: let
+          c = host.config;
+          directory = c.luxnix.vault.server.managedTls.stateDirectory;
+          unit = name: {
+            inherit (c.systemd.services.${name}) bindsTo unitConfig;
+            preflight = c.systemd.services.${name}.serviceConfig.ExecStartPre or [];
+          };
+        in {
+          filesystem = c.fileSystems.${directory} or null;
+          vault = unit "vault";
+          tls = unit "luxnix-vault-managed-server-tls";
+          inherit (c) swapDevices;
+          zram = c.zramSwap.enable;
+          resume = c.boot.resumeDevice;
+          sleep = c.systemd.sleep.settings.Sleep;
+          raft = toString c.services.vault.storagePath;
+        };
+      in {
+        enabled = inspect f.nixosConfigurations.gs-02;
+        disabled = inspect (f.nixosConfigurations.gs-02.extendModules {
+          modules = [{
+            luxnix.vault.server.managedTls.encryptedStorage = lib.mkForce false;
+          }];
+        });
+        invalid = builtins.any (a: !a.assertion &&
+          a.message == "Encrypted Vault TLS storage requires the Vault server and managed TLS.")
+          (f.nixosConfigurations.gs-02.extendModules {
+            modules = [{ luxnix.vault.server.managedTls.enable = lib.mkForce false; }];
+          }).config.assertions;
+      }
+    """
+    result = subprocess.run(
+        ["nix", "eval", "--impure", "--json", "--expr", expression],
+        cwd=REPO_ROOT, check=True, capture_output=True, text=True, timeout=180,
+    )
+    cases = json.loads(result.stdout)
+    enabled = cases["enabled"]
+    assert enabled["filesystem"]["device"] == "/dev/mapper/luxnix-vault-pki"
+    assert enabled["filesystem"]["fsType"] == "ext4"
+    assert {"noauto", "nodev", "nosuid", "noexec"} <= set(enabled["filesystem"]["options"])
+    assert enabled["swapDevices"] == []
+    assert enabled["zram"] is True
+    assert enabled["resume"] == ""
+    for key in ("AllowHibernation", "AllowHybridSleep", "AllowSuspendThenHibernate"):
+        assert enabled["sleep"][key] is False
+    assert enabled["raft"] == "/var/lib/vault"
+    for service in ("tls", "vault"):
+        assert "var-lib-luxnix\\x2dvault\\x2dpki.mount" in enabled[service]["bindsTo"]
+        expected_mounts = {"/var/lib/luxnix-vault-pki"}
+        if service == "vault":
+            expected_mounts.add("/var/lib/vault")
+        assert set(enabled[service]["unitConfig"]["RequiresMountsFor"]) == expected_mounts
+        assert enabled[service]["unitConfig"]["AssertPathIsMountPoint"] == "/var/lib/luxnix-vault-pki"
+        assert cases["disabled"][service]["bindsTo"] == []
+    assert "verify-vault-secret-storage" in str(enabled["tls"]["preflight"])
+    assert cases["disabled"]["filesystem"] is None
+    assert cases["invalid"] is True

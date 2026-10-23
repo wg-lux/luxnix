@@ -7,6 +7,10 @@ its Raft data without a valid unseal share. The LuxNix Ansible vault on
 
 Completing preparation does **not** authorize deletion of `/var/lib/vault`.
 
+For `Secret storage boundary verification failed` on gs-02, use
+[Encrypted Vault TLS storage](vault-encrypted-tls-storage.md). That migration
+preserves the existing Vault and CA; a storage failure does not require a reset.
+
 ## Network configuration ownership
 
 `generic_settings.network.serviceHosts.vault` in the shared inventory selects

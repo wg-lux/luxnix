@@ -10,6 +10,9 @@ boundaries:
 - Source checks do not prove deployment readiness
 - Nix evaluation and VM tests are separate from the fast Python lane
 entrypoints:
+- name: vault-tls-storage
+  file: test_vault_server_tls_rotation.py
+  purpose: Verify CA-preserving leaf renewal, encrypted mount dependencies, disk-swap exclusion and opt-out behavior.
 - name: vault-network-policy
   file: test_vault_network_policy.py
   purpose: Evaluate inventory-derived Vault endpoints, certificate IPs and VPN DNS pinning.

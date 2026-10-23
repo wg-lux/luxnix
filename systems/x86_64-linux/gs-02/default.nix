@@ -768,7 +768,7 @@ lib.foldl' lib.recursiveUpdate
       luxnix.generic-settings.linux.kernelParams = [ ];
     }
     {
-      luxnix.generic-settings.linux.resumeDevice = "/dev/disk/by-label/nixos";
+      luxnix.generic-settings.linux.resumeDevice = "";
     }
     {
       luxnix.generic-settings.linux.supportedFilesystems = [
@@ -819,6 +819,9 @@ lib.foldl' lib.recursiveUpdate
       luxnix.vault.server.managedTls.enable = true;
     }
     {
+      luxnix.vault.server.managedTls.encryptedStorage = true;
+    }
+    {
       luxnix.vault.server.managedTls.ipAddresses = [
         config.luxnix.generic-settings.network.vault.vpnIp
       ];
@@ -850,5 +853,17 @@ lib.foldl' lib.recursiveUpdate
         8088
         8200
       ];
+    }
+    {
+      swapDevices = lib.mkForce [ ];
+    }
+    {
+      systemd.sleep.settings.Sleep.AllowHibernation = false;
+    }
+    {
+      systemd.sleep.settings.Sleep.AllowHybridSleep = false;
+    }
+    {
+      systemd.sleep.settings.Sleep.AllowSuspendThenHibernate = false;
     }
   ]

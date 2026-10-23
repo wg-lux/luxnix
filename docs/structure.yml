@@ -10,6 +10,9 @@ boundaries:
 - Do not create parallel readiness trackers
 - Do not include secrets or local host facts in guides
 entrypoints:
+- name: vault-encrypted-tls-storage
+  file: vault-encrypted-tls-storage.md
+  purpose: Preserve the existing gs-02 CA in a manually unlocked LUKS container without disk repartitioning.
 - name: package-management
   file: package-management.md
   purpose: Canonical package ownership and installation workflow.

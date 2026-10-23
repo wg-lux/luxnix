@@ -110,6 +110,7 @@ nav:
       - Hub Export Consumer Walkthrough: lx-annotate-hub-export-mtls-consumer-walkthrough.md
       - Owner Operations: vault-owner-immediate-actions.md
       - Server Rebuild: vault-server-rebuild.md
+      - Encrypted Server TLS Storage: vault-encrypted-tls-storage.md
   - Clinical Operations:
       - Central Hub Transfer: clinical-hub-transfer-guide.md
   - Diagnostics and Reviews:

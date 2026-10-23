@@ -54,6 +54,7 @@
   - [Hub Export Consumer Walkthrough](docs/lx-annotate-hub-export-mtls-consumer-walkthrough.md)
   - [Owner Operations](docs/vault-owner-immediate-actions.md)
   - [Server Rebuild](docs/vault-server-rebuild.md)
+  - [Encrypted Server TLS Storage](docs/vault-encrypted-tls-storage.md)
 - **Clinical Operations**
   - [Central Hub Transfer](docs/clinical-hub-transfer-guide.md)
 - **Diagnostics and Reviews**

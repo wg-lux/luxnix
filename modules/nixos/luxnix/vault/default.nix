@@ -58,6 +58,8 @@ let
     exit 1
   '';
   managedTlsCfg = serverCfg.managedTls;
+  inherit (import "${pkgs.path}/nixos/lib/utils.nix" { inherit config lib pkgs; }) escapeSystemdPath;
+  tlsStorageMountUnit = "${escapeSystemdPath managedTlsCfg.stateDirectory}.mount";
   hubPkiCfg = serverCfg.hubPki;
   clientHubPkiCfg = cfg.client.hubPki;
   # Only centers explicitly listed in hubPki.sharedIdentityCenters receive a shared salt.
@@ -1585,6 +1587,7 @@ in
                   default = false;
                   description = "Create one persistent local CA and renew only the CA-signed Vault server leaf.";
                 };
+                encryptedStorage = mkEnableOption "Mount a manually unlocked luxnix-vault-pki LUKS mapping before accessing server TLS material";
                 stateDirectory = mkOption {
                   type = types.str;
                   default = "/var/lib/luxnix-vault-pki";
@@ -1754,6 +1757,10 @@ in
         message = "luxnix.vault.server.enable requires runtime TLS certificate and key files.";
       }
       {
+        assertion = !managedTlsCfg.encryptedStorage || (serverCfg.enable && managedTlsCfg.enable);
+        message = "Encrypted Vault TLS storage requires the Vault server and managed TLS.";
+      }
+      {
         assertion =
           !managedTlsCfg.enable
           || (
@@ -1916,6 +1923,7 @@ in
       ++ lib.optionals (cfg.client.enable && cfg.client.caCertFile != null) [
         vaultCaInstallTool
       ]
+      ++ lib.optionals managedTlsCfg.encryptedStorage [ pkgs.cryptsetup ]
       ++ lib.optionals clientHubPkiCfg.enable [ forceHubClientReissueTool ]
       ++ lib.optionals (clientHubPkiCfg.enable && cfg.client.auth.method == "approle") [
         hubSiteEnrollmentInstallTool
@@ -1924,9 +1932,27 @@ in
         vaultEnrollmentStatusTool
       ];
 
+    fileSystems = lib.mkIf managedTlsCfg.encryptedStorage {
+      ${managedTlsCfg.stateDirectory} = {
+        device = "/dev/mapper/luxnix-vault-pki";
+        fsType = "ext4";
+        # Unlock is an operator action after SSH is available, never a Vault client dependency.
+        options = [
+          "noauto"
+          "nodev"
+          "nosuid"
+          "noexec"
+          "x-systemd.device-timeout=10s"
+        ];
+      };
+    };
+
     systemd = {
       services = {
         vault = lib.mkIf serverCfg.enable {
+          bindsTo = lib.optional managedTlsCfg.encryptedStorage tlsStorageMountUnit;
+          unitConfig.RequiresMountsFor = lib.optional managedTlsCfg.encryptedStorage managedTlsCfg.stateDirectory;
+          unitConfig.AssertPathIsMountPoint = lib.mkIf managedTlsCfg.encryptedStorage managedTlsCfg.stateDirectory;
           after = [
             "managed-secrets-setup.service"
             "network-online.target"
@@ -1959,6 +1985,9 @@ in
 
         luxnix-vault-managed-server-tls = lib.mkIf managedTlsCfg.enable {
           description = "Maintain the CA-signed Vault server leaf without rotating its CA";
+          bindsTo = lib.optional managedTlsCfg.encryptedStorage tlsStorageMountUnit;
+          unitConfig.RequiresMountsFor = lib.optional managedTlsCfg.encryptedStorage managedTlsCfg.stateDirectory;
+          unitConfig.AssertPathIsMountPoint = lib.mkIf managedTlsCfg.encryptedStorage managedTlsCfg.stateDirectory;
           before = [ "vault.service" ] ++ lib.optional config.services.nginx.enable "nginx.service";
           requiredBy = [ "vault.service" ] ++ lib.optional config.services.nginx.enable "nginx.service";
           after = [ "systemd-tmpfiles-setup.service" ];

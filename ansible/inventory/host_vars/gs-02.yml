@@ -158,6 +158,8 @@ host_luxnix:
   vault.server.tlsKeyFile: '"/var/lib/luxnix-vault-pki/server.key"'
   vault.server.caCertFile: '"/var/lib/luxnix-vault-pki/ca.crt"'
   vault.server.managedTls.enable: "true"
+  # Operator-unlocked LUKS container; see docs/vault-encrypted-tls-storage.md.
+  vault.server.managedTls.encryptedStorage: "true"
   vault.server.managedTls.serverCommonName: '"vault.endo-reg.net"'
   vault.server.managedTls.dnsNames:
     - '"vault.endo-reg.net"'
@@ -201,9 +203,14 @@ host_luxnix:
     - "nfs"
     - "btrfs"
 
-  generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
+  generic_settings.linux.resumeDevice: '""'
   generic_settings.linux.kernelParams: []
   generic_settings.linux.kernelModulesBlacklist: []
 
 host_nixos:
+  # Keep RAM-only zram; never page Vault key material onto the unencrypted disk.
+  swapDevices: "lib.mkForce [ ]"
+  systemd.sleep.settings.Sleep.AllowHibernation: "false"
+  systemd.sleep.settings.Sleep.AllowHybridSleep: "false"
+  systemd.sleep.settings.Sleep.AllowSuspendThenHibernate: "false"
   networking.firewall.interfaces.tun0.allowedTCPPorts: "lib.mkAfter [ 11434 8088 8200 ]"
