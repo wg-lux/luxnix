@@ -46,7 +46,12 @@
 - **Vault**
   - [Machine Setup Secrets Checklist](docs/machine-secrets-checklist.md)
   - [Manually Unlocked Site Storage](docs/operator-unlocked-storage.md)
+  - [Fleet Secure Boot](docs/secure-boot.md)
   - [Setup and Bootstrap](docs/vault-setup.md)
+  - [OpenBao Hub and Vault Migration](docs/openbao.md)
+  - [Local OpenBao Bootstrap](docs/openbao-local.md)
+  - [OpenBao Target Architecture](docs/openbao-architecture.md)
+  - [TPM Release Client](docs/tpm-release-client.md)
   - [Maintainer Notes](docs/vault-maintainer-operations.md)
   - [Admin Password Creation and Rotation](docs/admin-passwords.md)
   - [Coordinated Secret Rotation](docs/secret-rotation.md)

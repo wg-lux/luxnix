@@ -21,7 +21,6 @@ let
     ;
 
   runtime = lxAnnotateRuntime;
-  inherit (runtime.env) envDefaultCenter;
   llmWorkerMode = if cfg.runtime.llm.enable then cfg.runtime.llmInferenceWorker.mode else "manual";
   useLocalOllama =
     cfg.runtime.llm.enable
@@ -507,53 +506,7 @@ let
     make_entrypoint lx-dtypes-kb-registry lx-dtypes-kb-registry 0
     make_entrypoint lx-dtypes-prototype-kb-smoke lx-dtypes-prototype-kb-smoke 0
   '';
-  baseRuntimePackage = if useWheelRuntime then wheelRuntimePackage else cfg.runtime.package;
-  identityLauncher = pkgs.writeShellScript "lx-annotate-identity-launch" ''
-    set -euo pipefail
-    exec ${pkgs.python3}/bin/python ${../../../../scripts/run-identity-secrets.py} \
-      --vault ${pkgs.vault}/bin/vault --secretspec ${pkgs.secretspec}/bin/secretspec \
-      --manifest ${../../../../scripts/identity-secrets.toml} \
-      --address ${lib.escapeShellArg (config.luxnix.vault.client.address or "")} \
-      --ca-file ${lib.escapeShellArg (toString config.luxnix.vault.client.caCertFile)} \
-      --center ${lib.escapeShellArg envDefaultCenter} \
-      --generation ${toString cfg.django.identitySaltGeneration} \
-      --fingerprint ${lib.escapeShellArg cfg.django.identitySaltFingerprint} \
-      --vault-path ${lib.escapeShellArg "${config.luxnix.vault.client.hubPki.kvMountPath}/centers/${envDefaultCenter}/identity"} \
-      --legacy-path /etc/secrets/vault/lx_annotate_identity_active \
-      --legacy-path /etc/secrets/vault/lx_annotate_identity_legacy_default \
-      --legacy-path /etc/secrets/vault/lx_annotate_identity_keyring.yml \
-      --legacy-path ${lib.escapeShellArg "/etc/secrets/vault/lx_annotate_center_${envDefaultCenter}_identity"} \
-      --legacy-path '/etc/secrets/vault/identity-*.salt' \
-      --legacy-path /var/lib/lx-annotate-identity-salts \
-      --legacy-path ${lib.escapeShellArg "${envDataDir}/.identity-salt-recovery"} \
-      -- "$@"
-  '';
-  effectiveRuntimePackage =
-    if !cfg.django.identitySaltViaSecretSpec then
-      baseRuntimePackage
-    else
-      pkgs.runCommand "lx-annotate-file-free-runtime" { } ''
-          mkdir -p "$out/bin"
-          for target in ${baseRuntimePackage}/bin/*; do
-            name="$(basename "$target")"
-            if [ "$name" = lx-annotate-runtime-ensure ]; then
-              ln -s "$target" "$out/bin/$name"
-            else
-              cat > "$out/bin/$name" <<EOF
-        #!${pkgs.bash}/bin/bash
-        exec ${identityLauncher} "$target" "\$@"
-        EOF
-              chmod +x "$out/bin/$name"
-            fi
-          done
-      '';
-  identityServiceConfig = optionalAttrs cfg.django.identitySaltViaSecretSpec {
-    EnvironmentFile = [
-      envSystemdFilePath
-      config.luxnix.vault.client.runtimeEnvironmentFile
-    ];
-    LimitCORE = 0;
-  };
+  effectiveRuntimePackage = if useWheelRuntime then wheelRuntimePackage else cfg.runtime.package;
   effectivePackageVersion =
     if useWheelRuntime then
       packageVersion
@@ -616,10 +569,10 @@ let
     cfg.hub.transferApi.enable || cfg.hub.outboundTransfer.enable
   ) [ "lx-annotate-hub-envelope-key-preflight.service" ];
   managedSecretsSetupUnits =
-    lib.optionals (lib.attrByPath [ "roles" "managed-secrets" "enable" ] false config) [
-      "managed-secrets-setup.service"
-    ]
-    ++ lib.optionals cfg.django.identitySaltViaSecretSpec [ "vault-auth-setup.service" ];
+    lib.optionals (lib.attrByPath [ "roles" "managed-secrets" "enable" ] false config)
+      [
+        "managed-secrets-setup.service"
+      ];
 
   isLocalPostgresHost =
     host: host == "localhost" || host == "127.0.0.1" || host == "::1" || host == cfg.django.hostname;
@@ -1029,7 +982,6 @@ let
         NoNewPrivileges = true;
         ReadWritePaths = appReadWritePaths;
       }
-      // identityServiceConfig
       // lib.optionalAttrs (background && cfg.runtime.frontendRequestThrottle.enable) {
         Slice = "lx-annotate-background.slice";
       }
@@ -1792,38 +1744,6 @@ in
             }
             {
               assertion =
-                !cfg.django.identitySaltViaSecretSpec
-                || (
-                  cfg.django.centerIdentitySalt
-                  && builtins.match "[A-Za-z0-9_-]+" envDefaultCenter != null
-                  && cfg.django.identitySaltFile == null
-                  && cfg.django.identitySaltKeyringFile == null
-                  && cfg.django.identitySaltGeneration != null
-                  && builtins.match "[0-9a-f]{64}" cfg.django.identitySaltFingerprint != null
-                  && envDefaultCenter == config.roles.endoreg-client.defaultCenterKey
-                  && config.luxnix.vault.client.hubPki.enable
-                  && config.luxnix.vault.client.auth.method == "approle"
-                  && !config.luxnix.vault.client.auth.deferUntilProvisioned
-                  && !config.luxnix.vault.client.allowOffline
-                  && config.luxnix.vault.client.caCertFile != null
-                  && lib.hasPrefix "https://" (
-                    if config.luxnix.vault.client.address == null then "" else config.luxnix.vault.client.address
-                  )
-                  && lib.all (name: !(builtins.hasAttr name cfg.runtime.extraEnvironment)) [
-                    "DJANGO_SALT"
-                    "DJANGO_SALT_FILE"
-                    "DJANGO_IDENTITY_SALT_KEYRING_FILE"
-                    "DJANGO_IDENTITY_SALT_BUNDLE"
-                    "DJANGO_IDENTITY_SALT_DELIVERY"
-                    "DJANGO_IDENTITY_SALT_GENERATION"
-                    "DJANGO_IDENTITY_CENTER_ID"
-                    "LX_ANNOTATE_DEFAULT_CENTER"
-                  ]
-                );
-              message = "File-free identity delivery requires authenticated center Vault access, reviewed generation/fingerprint pins and no legacy salt configuration.";
-            }
-            {
-              assertion =
                 !cfg.django.centerIdentitySalt
                 || cfg.django.enrollLegacyDefaultSalt
                 || cfg.django.identitySaltViaSecretSpec;
@@ -2495,7 +2415,6 @@ in
               dataDir = cfg.runtime.encryptedDataDir;
               settingsModule = "lx_annotate.settings.settings_prod";
               environmentFile = envSystemdFilePath;
-              extraServiceConfig = identityServiceConfig;
               extraEnv = commonExtraEnv;
             };
 

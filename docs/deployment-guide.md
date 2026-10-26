@@ -77,15 +77,26 @@ the approved audit-log location rather than leaving them in `/tmp`.
 
 Use `nixos-rebuild switch` for a persistent live update after the source, build,
 connectivity, and target checks above. Run on the explicitly selected host from
-the reviewed checkout; for gc-10:
+the reviewed checkout. The canonical persistent install command for gc-10 is
+cataloged as `rebuild-host-switch` in `devenv/commands.yml`.
+Run it **on gc-10**, with the reviewed compatible application version in
+`/home/admin/luxnix`:
 
 ```bash
-sudo nixos-rebuild switch --flake .#gc-10
+sudo nixos-rebuild switch --flake /home/admin/luxnix#gc-10 --accept-flake-config
 readlink -e /run/current-system
 readlink -e /nix/var/nix/profiles/system
 systemctl --failed
 systemctl is-active lx-annotate.service
 ```
+
+`nh os switch . --accept-flake-config` is intended to activate a configuration
+and make it the boot default when the entire command succeeds. The flag only
+accepts the flake's Nix settings; it does not add persistence. A failed or
+interrupted switch must not be treated as a durable install, even if the newer
+application is already running. Use the native command above for this service's
+canonical deployment path. It installs the version selected by the reviewed
+checkout and lockfile; it does not fetch a newer application release.
 
 Require a successful rebuild and equal active/system-profile paths before
 declaring deployment successful. Equality alone does not prove the firmware's
@@ -280,6 +291,27 @@ generation and logs, boot or switch to the previous known-good generation,
 restore any host-specific files from the approved backup, and repeat the
 preflight before another activation. Do not remove temporary worktrees or GC
 roots until recovery is no longer needed.
+
+### Local OpenBao volume unlock (not yet a fleet default)
+
+Hosts in `operator_unlocked_secrets` move to host-local OpenBao unlock in
+stages. Each stage uses cataloged commands and is limited by `--limit`:
+
+1. `devenv shell check-connectivity <host-or-group>`.
+2. Deploy `luxnix.openbao.local.enable = true` through the inventory and the
+   normal `autoconf` and rebuild flow.
+3. `devenv shell openbao-local enroll --limit <host-or-group> --recovery-host <host>`,
+   which only plans, then the same command with `--apply`.
+4. `devenv shell storage-provision escrow` per volume, then
+   `devenv shell openbao-local adopt --limit <host> --recovery-host <host>`, first
+   without and then with `--apply`.
+5. Switch `storage.operatorUnlocked.unlockMethod` to `"local-openbao"`. The
+   pre-switch gate refuses activation on hosts that lack a TPM, Secure Boot,
+   enrollment or a valid credential.
+
+Details, failure reasons and resumption are in
+[local OpenBao](openbao-local.md#enrollment-and-volume-adoption). Hardware and
+fleet acceptance are still open.
 
 ## 7. Add a new host checklist
 

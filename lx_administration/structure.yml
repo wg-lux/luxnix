@@ -13,6 +13,9 @@ entrypoints:
   - name: secret-storage-boundary
     file: secret_storage.py
     purpose: Verify encrypted device ancestry and non-swappable runtime boundaries before plaintext secret access.
+  - name: secure-boot-signing
+    file: secure_boot.py
+    purpose: Controller-held fleet Secure Boot PKI custody, per-generation signing and host-side signed artifact import.
   - name: private-file-writes
     file: permissions.py
     purpose: Enforce encrypted persistence and atomic private file publication.

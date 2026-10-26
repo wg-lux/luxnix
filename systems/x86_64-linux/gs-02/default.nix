@@ -1043,6 +1043,9 @@ lib.foldl' lib.recursiveUpdate
       security.luxnix.local-users.enable = true;
     }
     {
+      system.boot.secureBoot = true;
+    }
+    {
       xdg.menus.enable = true;
     }
     {

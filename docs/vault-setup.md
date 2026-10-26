@@ -94,3 +94,5 @@ copies files; it does not change live accounts, PostgreSQL roles or sessions.
 Generated `conf/ansible.cfg` supplies inventory and registered PSK identities to
 the supported wrappers. Keep its paths consistent with the selected vault.
 Never inject plaintext admin mappings into ad-hoc Ansible extra variables.
+
+See [OpenBao volume-release backend](openbao.md) for the isolated backend selected for the revised fleet encryption requirements. Existing Vault replacement is a separate migration.

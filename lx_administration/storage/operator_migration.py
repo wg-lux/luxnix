@@ -16,14 +16,27 @@ import shutil
 import stat
 import subprocess
 import sys
+import uuid
+import runpy
+
+if __package__:
+    from . import cutover as staged_copy
+else:
+    import cutover as staged_copy
 
 
 class MigrationError(RuntimeError):
     pass
 
 
-def run(*args, input=None):
-    result = subprocess.run(args, input=input, capture_output=True, check=False)
+def require_secure_boot():
+    variable = Path('/sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c')
+    if not variable.is_file() or variable.read_bytes()[4:] != b'\x01':
+        raise MigrationError('TPM unlock requires enabled UEFI Secure Boot; enroll trusted boot first')
+
+
+def run(*args, input=None, pass_fds=()):
+    result = subprocess.run(args, input=input, pass_fds=pass_fds, capture_output=True, check=False)
     if result.returncode:
         # rsync and cryptsetup diagnostics can contain private filenames.
         raise MigrationError(f"{args[0]} failed (exit {result.returncode}); sources retained")
@@ -37,16 +50,7 @@ def plain_path(value):
     return path
 
 
-def atomic_json(path, value):
-    temporary = path.with_suffix(".pending")
-    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
-    with os.fdopen(fd, "w") as stream:
-        json.dump(value, stream, sort_keys=True)
-        stream.flush()
-        os.fsync(stream.fileno())
-    os.replace(temporary, path)
-    run("sync", "-f", str(path.parent))
-
+atomic_json = staged_copy.atomic_json
 
 class Migration:
     def __init__(self, config, verifier):
@@ -57,6 +61,8 @@ class Migration:
         volume = self.config["volumes"][name]
         container = plain_path(volume["container"])
         mapping = volume["device"].removeprefix("/dev/mapper/")
+        if volume.get("luksUUID") and run("cryptsetup", "luksUUID", str(container)).decode().strip() != volume["luksUUID"]:
+            raise MigrationError("Native LUKS UUID does not match the declared volume")
         if Path(volume["device"]).exists():
             status = run("cryptsetup", "status", mapping).decode()
             fields = dict(line.strip().split(":", 1) for line in status.splitlines() if ":" in line)
@@ -64,38 +70,190 @@ class Migration:
                 raise MigrationError("Open mapping has a different backing container")
             return
         self.verifier._require_protected_swap()
-        new = not container.exists()
-        if new:
-            # Reserve enough for existing contents plus headroom. Never resize or
-            # format existing files; an interrupted new allocation needs inspection.
-            sources = [plain_path(path) for path, bind in self.config["binds"].items()
-                       if bind["volume"] == name and Path(path).exists()]
-            used = sum(int(run("du", "-sx", "--block-size=1", str(path)).split()[0]) for path in sources)
-            size = max(volume["minimumSizeMiB"] * 1024**2, used * 2 + 256 * 1024**2)
-            if shutil.disk_usage(container.parent).free < size + 256 * 1024**2:
-                raise MigrationError("Insufficient space for encrypted copy and safety reserve")
-            first = run("systemd-ask-password", "--timeout=0", f"New passphrase for {mapping}:")
-            second = run("systemd-ask-password", "--timeout=0", f"Repeat passphrase for {mapping}:")
-            if not first.rstrip(b"\n") or first != second:
-                raise MigrationError("Passphrases are empty or do not match; nothing created")
-            fd = os.open(container, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-            try:
-                os.posix_fallocate(fd, 0, size)
-                os.fsync(fd)
-            finally:
-                os.close(fd)
-            key = first.rstrip(b"\n")
-            run("cryptsetup", "luksFormat", "--type", "luks2", "--batch-mode", "--key-file=-", str(container), input=key)
-        else:
+        if self.config.get("unlockMethod") == "local-openbao":
+            if not volume.get("luksUUID") or not container.is_file():
+                raise MigrationError("Local OpenBao requires an existing UUID-bound container")
+            client = runpy.run_path(self.config["openbaoClient"])
+            credentials = Path(os.environ["CREDENTIALS_DIRECTORY"])
+            key = client["volume_key"](
+                self.config["machine"], name, volume["luksUUID"], credentials / "volume.unlock"
+            )
+            run("cryptsetup", "open", "--type", "luks", "--key-file=-", str(container), mapping, input=key)
+            return
+        if self.config.get("unlockMethod", "passphrase") == "tpm2":
+            require_secure_boot()
             if not container.is_file():
-                raise MigrationError("Configured container is not a regular file")
-            run("cryptsetup", "isLuks", str(container))
-            key = run("systemd-ask-password", "--timeout=0", f"Unlock {mapping}:").rstrip(b"\n")
+                raise MigrationError("TPM storage must be provisioned and enrolled before automatic startup")
+            metadata = json.loads(run("cryptsetup", "luksDump", "--dump-json-metadata", str(container)))
+            tokens = {key: token for key, token in metadata.get("tokens", {}).items()
+                      if token.get("type") == "systemd-tpm2"}
+            unattended = [key for key, token in tokens.items() if not token.get("tpm2-pin", False)]
+            if not unattended or any(7 not in token.get("tpm2-pcrs", []) for token in tokens.values()):
+                raise MigrationError("No unattended Secure Boot-bound TPM enrollment; enroll this container first")
+            run("cryptsetup", "open", "--type", "luks", "--token-only", "--token-type", "systemd-tpm2",
+                "--token-id", unattended[0], "--external-tokens-path", self.config["tpm2PluginPath"],
+                str(container), mapping)
+            return
+        if not container.is_file():
+            raise MigrationError("Container missing; startup never provisions or formats storage")
+        run("cryptsetup", "isLuks", str(container))
+        key = run("systemd-ask-password", "--timeout=0", f"Unlock {mapping}:").rstrip(b"\n")
         run("cryptsetup", "open", "--type", "luks", "--key-file=-", str(container), mapping, input=key)
-        del key
-        if new:
-            # Only the mapping just created from our exclusively created file.
-            run("mkfs.ext4", "-q", volume["device"])
+
+    def provision(self, name, record):
+        """Explicit operation only, after the controller has verified both escrows."""
+        method = record.get("backend", self.config.get("unlockMethod"))
+        if method not in ("tpm2", "local-openbao"):
+            raise MigrationError("Automatic provisioning requires the explicit TPM policy")
+        volume = self.config["volumes"][name]
+        container = plain_path(volume["container"])
+        expected_uuid = str(uuid.UUID(record["luks_uuid"]))
+        if volume.get("luksUUID") not in (None, expected_uuid):
+            raise MigrationError("Provision request does not match the declared native LUKS UUID")
+        if (record["machine_id"] != Path("/etc/machine-id").read_text().strip()
+                or record["volume"] != name or not record.get("primary_escrow")
+                or not record.get("emergency_export")):
+            raise MigrationError("Provisioning identity or recovery custody does not match")
+        key = record["recovery_passphrase"].encode("ascii")
+        if len(key) != 64 or any(c not in b"0123456789abcdef" for c in key):
+            raise MigrationError("Provisioning requires a random 256-bit recovery passphrase")
+        self.verifier._require_protected_swap()
+        require_secure_boot()
+        if method == "local-openbao":
+            if not self.config.get("localOpenbaoEnabled"):
+                raise MigrationError("Local OpenBao must be installed before deploy-time provisioning")
+            if volume.get("luksUUID") != expected_uuid:
+                raise MigrationError("Local OpenBao provisioning requires a declared LUKS UUID")
+            if record.get("host") != self.config["machine"] or record.get("container") != str(container):
+                raise MigrationError("Provision request does not match the declared host and container")
+            enrollment = runpy.run_path(self.config["openbaoEnroll"])
+            host = enrollment["Host"](self.config["machine"], runpy.run_path(self.config["openbaoClient"]), True)
+            try:
+                self.provision_local(name, record, host, key, expected_uuid)
+            except enrollment["EnrollError"] as exc:
+                raise MigrationError(str(exc)) from None
+            return
+        marker = container.with_suffix(container.suffix + ".provisioned.json")
+        identity = {"machine_id": record["machine_id"], "volume": name, "luks_uuid": expected_uuid}
+        if container.exists():
+            if (not marker.is_file() or json.loads(marker.read_text()) != identity
+                    or run("cryptsetup", "luksUUID", str(container)).decode().strip() != expected_uuid):
+                raise MigrationError("Existing container is not a completed matching provision; never reformat it")
+            run("cryptsetup", "open", "--test-passphrase", "--key-file=-", str(container), input=key)
+            return
+        if marker.exists() or Path(volume["device"]).exists():
+            raise MigrationError("Stale provisioning receipt or occupied mapping; inspect before provisioning")
+        self.allocate(name)
+        run("cryptsetup", "luksFormat", "--type", "luks2", "--batch-mode", "--uuid", expected_uuid,
+            "--key-file=-", str(container), input=key)
+        # The recovery key exists only in RAM here; independently encrypted copies
+        # were authenticated by the controller before this operation was invoked.
+        fd = os.memfd_create("luxnix-provision-key", os.MFD_CLOEXEC)
+        try:
+            os.fchmod(fd, 0o600)
+            os.write(fd, key)
+            os.lseek(fd, 0, os.SEEK_SET)
+            run("systemd-cryptenroll", f"--unlock-key-file=/proc/self/fd/{fd}", "--tpm2-device=auto",
+                "--tpm2-pcrs=7", "--tpm2-with-pin=no", str(container), pass_fds=(fd,))
+        finally:
+            os.close(fd)
+        self.unlock(name)
+        run("mkfs.ext4", "-q", volume["device"])
+        run("cryptsetup", "open", "--test-passphrase", "--key-file=-", str(container), input=key)
+        run("sync", "-f", str(container))
+        atomic_json(marker, identity)
+
+    def allocate(self, name, container=None):
+        volume = self.config["volumes"][name]
+        container = plain_path(volume["container"]) if container is None else container
+        sources = [plain_path(path) for path, bind in self.config["binds"].items()
+                   if bind["volume"] == name and Path(path).exists()]
+        used = sum(int(run("du", "-sx", "--block-size=1", str(path)).split()[0]) for path in sources)
+        size = max(volume["minimumSizeMiB"] * 1024**2, used * 2 + 256 * 1024**2)
+        if shutil.disk_usage(container.parent).free < size + 256 * 1024**2:
+            raise MigrationError("Insufficient space for encrypted storage and safety reserve")
+        fd = os.open(container, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        try:
+            os.posix_fallocate(fd, 0, size)
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+
+    def provision_local(self, name, record, host, recovery, expected_uuid):
+        """Resume only authenticated LUKS state; never reformat an existing file."""
+        volume = self.config["volumes"][name]
+        container = plain_path(volume["container"])
+        marker = container.with_suffix(container.suffix + ".provisioned.json")
+        pending = container.with_suffix(container.suffix + ".provisioning.json")
+        identity = {"machine_id": record["machine_id"], "volume": name, "luks_uuid": expected_uuid}
+        if record.get("origin") != "new" or volume.get("fsType", "ext4") != "ext4":
+            raise MigrationError("New-container provisioning requires new-volume escrow and ext4; adopt existing volumes")
+        if marker.exists() and json.loads(marker.read_text()) != identity:
+            raise MigrationError("Conflicting completed provisioning receipt")
+        if pending.exists() and json.loads(pending.read_text()) != identity:
+            raise MigrationError("Conflicting in-progress provisioning receipt")
+        # Authenticate the service and persist its independent key before allocation.
+        host.volume_record(name, expected_uuid, record["provisioner"], str(container) if container.exists() else None)
+        if container.exists():
+            if run("cryptsetup", "luksUUID", str(container)).decode().strip() != expected_uuid:
+                raise MigrationError("Existing container UUID differs; never reformat it")
+            run("cryptsetup", "open", "--test-passphrase", "--key-file=-", str(container), input=recovery)
+        else:
+            if marker.exists() or Path(volume["device"]).exists():
+                raise MigrationError("Missing container has existing provisioning state; inspect before proceeding")
+            temporary = plain_path(str(container) + ".allocating")
+            if temporary.exists() and not pending.exists():
+                raise MigrationError("Unowned allocation file; refusing replacement")
+            if not pending.exists():
+                atomic_json(pending, identity)
+            if temporary.exists():
+                info = temporary.stat()
+                if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) != 0o600:
+                    raise MigrationError("Unsafe allocation file")
+                probe = subprocess.run(["cryptsetup", "isLuks", str(temporary)], capture_output=True, check=False)
+                if probe.returncode == 1:
+                    # This unpublished, receipt-owned allocation has never held
+                    # a filesystem or been exposed to any application writer.
+                    temporary.unlink()
+                elif probe.returncode != 0:
+                    raise MigrationError("Cannot inspect interrupted allocation")
+            if not temporary.exists():
+                self.allocate(name, temporary)
+                run("cryptsetup", "luksFormat", "--type", "luks2", "--batch-mode", "--uuid", expected_uuid,
+                    "--key-file=-", str(temporary), input=recovery)
+            if run("cryptsetup", "luksUUID", str(temporary)).decode().strip() != expected_uuid:
+                raise MigrationError("Allocation UUID does not match escrow")
+            run("cryptsetup", "open", "--test-passphrase", "--key-file=-", str(temporary), input=recovery)
+            os.link(temporary, container)
+            temporary.unlink()
+            run("sync", "-f", str(container.parent))
+        # A valid authenticated LUKS header can resume after any completed format.
+        if not marker.exists() and not pending.exists():
+            atomic_json(pending, identity)
+        host.convert_volume(name, str(container), expected_uuid, record)
+        mapping = volume["device"].removeprefix("/dev/mapper/")
+        opened = not Path(volume["device"]).exists()
+        if not opened:
+            # Verifies backing-file identity without requesting a boot credential.
+            self.unlock(name)
+        else:
+            run("cryptsetup", "open", "--type", "luks", "--key-file=-", str(container), mapping, input=recovery)
+        complete = False
+        try:
+            probe = subprocess.run(["blkid", "-p", "-o", "value", "-s", "TYPE", volume["device"]],
+                                   capture_output=True, check=False)
+            if probe.returncode == 2 and not marker.exists():
+                # Only a resumable, escrow-authenticated new volume may gain a filesystem.
+                run("mkfs.ext4", "-q", volume["device"])
+            elif probe.returncode != 0 or probe.stdout.strip() != b"ext4":
+                raise MigrationError("Unexpected or missing filesystem; refusing overwrite")
+            run("sync", "-f", str(container))
+            atomic_json(marker, identity)
+            pending.unlink(missing_ok=True)
+            complete = True
+        finally:
+            if opened and not complete:
+                run("cryptsetup", "close", mapping)
 
     def receipt(self, source, destination, root):
         directory = root / ".luxnix-migrations"
@@ -117,17 +275,7 @@ class Migration:
                 "inode": destination.stat().st_ino,
                 "uuid": uuid}
 
-    def copy(self, source, destination, excludes, dry=False):
-        args = ["rsync", "-aHAXx", "--numeric-ids", "--checksum"]
-        if not dry:
-            args += ["--delete"]  # Only ever applied to our private staging copy.
-        if dry:
-            args += ["--dry-run", "--delete", "--itemize-changes", "--out-format=%i"]
-        for path in excludes:
-            args += ["--exclude=/" + path + "/***"]
-        return run(*args, str(source) + "/", str(destination) + "/")
-
-    def prepare(self):
+    def pending_copies(self):
         pending = []
         for value, bind in self.config["binds"].items():
             source = plain_path(value)
@@ -155,46 +303,53 @@ class Migration:
                     if Path(directory).stat().st_dev != device:
                         raise MigrationError("Unconfigured nested filesystem; declare its bind before migration")
             pending.append((source, destination, receipt, excludes))
+        return pending
+
+    def precopy(self):
+        for source, destination, _, excludes in self.pending_copies():
+            if source.exists():
+                staged_copy.precopy(staged_copy.Item(source, destination, tuple(excludes)))
+
+    def prepare(self):
+        pending = self.pending_copies()
         if not pending:
             return
-        # Normal startup orders all writers behind this service. Refuse a live
-        # retrofit rather than copying a running PostgreSQL cluster or stopping
-        # healthy services behind an operator's back.
         for name in self.config["writers"]:
             if int(run("systemctl", "show", "--value", "-p", "MainPID", name + ".service").strip() or b"0"):
                 raise MigrationError("A storage writer is running; migration requires a stopped application")
-        for source, destination, receipt, excludes in pending:
-            if source.exists() and not source.is_dir():
-                raise MigrationError("Migration source is not a directory")
-            if destination.exists():
-                # Adopt a prepared copy only after equality, never overwrite it.
-                if not source.is_dir() or self.copy(source, destination, excludes, dry=True).strip():
-                    raise MigrationError("Existing encrypted destination differs; refusing overwrite")
-            else:
-                stage = plain_path(str(destination) + ".luxnix-copy")
-                plan = {"source": str(source), "destination": str(destination)}
-                if stage.exists():
-                    info = stage.stat()
-                    if info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) != 0o700:
-                        raise MigrationError("Untrusted staging directory")
-                    if not (stage / "plan.json").is_file() or json.loads((stage / "plan.json").read_text()) != plan:
-                        raise MigrationError("Staging copy belongs to another migration")
+        try:
+            for source, destination, receipt, excludes in pending:
+                if not source.exists():
+                    if destination.exists():
+                        raise MigrationError("Existing encrypted destination differs; refusing overwrite")
+                    destination.mkdir(mode=0o700, parents=True)
+                    atomic_json(receipt, self.identity(source, destination))
                 else:
-                    stage.mkdir(mode=0o700, parents=True)
-                    atomic_json(stage / "plan.json", plan)
-                payload = plain_path(str(stage / "data"))
-                payload.mkdir(mode=0o700, exist_ok=True)
-                if source.is_dir():
-                    self.copy(source, payload, excludes)
-                    if self.copy(source, payload, excludes, dry=True).strip():
-                        raise MigrationError("Copy verification failed; sources retained")
-                run("sync", "-f", str(payload))
-                if destination.exists():
-                    raise MigrationError("Destination appeared while copying")
-                payload.rename(destination)
-                (stage / "plan.json").unlink()
-                stage.rmdir()
-            atomic_json(receipt, self.identity(source, destination))
+                    staged_copy.cutover(staged_copy.Item(source, destination, tuple(excludes)), receipt, self.identity)
+        except staged_copy.CutoverError as exc:
+            raise MigrationError(str(exc)) from None
+
+    def activate_binds(self):
+        units = self.config.get("bindUnits", [])
+        if units:
+            run("systemctl", "start", *units)
+
+    def rollback_copies(self, pending):
+        """Return only this attempt's new destinations to private staging."""
+        for source, destination, receipt, excludes, existed in reversed(pending):
+            if receipt.exists():
+                if json.loads(receipt.read_text()) != self.identity(source, destination):
+                    raise MigrationError("Cutover rollback receipt changed; refusing to move data")
+                receipt.unlink()
+            if not existed and destination.exists():
+                item = staged_copy.Item(source, destination, tuple(excludes))
+                if item.stage.exists():
+                    raise MigrationError("Cutover rollback staging path is occupied")
+                item.stage.mkdir(mode=0o700)
+                atomic_json(item.stage / "plan.json", item.plan)
+                destination.rename(item.payload)
+                run("sync", "-f", str(item.stage))
+
 
 
 def prepare_accounts(accounts):
@@ -216,13 +371,15 @@ def prepare_accounts(accounts):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("config", type=Path)
-    parser.add_argument("action", choices=["unlock", "prepare", "accounts"])
+    parser.add_argument("action", choices=["unlock", "prepare", "precopy", "cutover", "accounts", "provision"])
     parser.add_argument("volume", nargs="?")
     args = parser.parse_args()
     config = json.loads(args.config.read_text())
     spec = importlib.util.spec_from_file_location("storage_verifier", config["verifier"])
     verifier = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(verifier)
+    stopped = []
+    rollback = []
     try:
         if os.geteuid() != 0:
             raise MigrationError("Run as root")
@@ -234,11 +391,35 @@ def main():
             migration = Migration(config, verifier)
             if args.action == "unlock":
                 migration.unlock(args.volume)
+            elif args.action == "provision":
+                migration.provision(args.volume, json.loads(sys.stdin.buffer.read(16384)))
             elif args.action == "accounts":
                 prepare_accounts(config["accounts"])
+            elif args.action == "precopy":
+                migration.precopy()
+            elif args.action == "cutover":
+                # No bind activation until every final copy and receipt succeeds.
+                rollback = [(*item, item[1].exists()) for item in migration.pending_copies()]
+                stopped = staged_copy.stop_writers(config["writers"])
+                try:
+                    migration.prepare()
+                except (MigrationError, staged_copy.CutoverError, ValueError, OSError, KeyError):
+                    migration.rollback_copies(rollback)
+                    raise
             else:
                 migration.prepare()
-    except (MigrationError, ValueError, OSError, KeyError) as exc:
+        if args.action == "cutover":
+            # Bind units invoke prepare again; release the mutation lock first.
+            migration.activate_binds()
+            staged_copy.restart_writers(list(dict.fromkeys(stopped + config.get("startupServices", []))))
+    except (MigrationError, staged_copy.CutoverError, ValueError, OSError, KeyError) as exc:
+        if stopped:
+            # Restarts retain the configured encrypted-mount guards. Never clear
+            # dependencies or weaken storage checks as part of failure recovery.
+            try:
+                staged_copy.restart_writers(stopped)
+            except staged_copy.CutoverError:
+                print("Writer recovery failed; sources retained and storage guards remain enforced.", file=sys.stderr)
         # No subprocess stderr or source contents are emitted.
         print(f"ERROR: encrypted storage preparation: {type(exc).__name__}: {exc}", file=sys.stderr)
         sys.exit(1)

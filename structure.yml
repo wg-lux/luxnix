@@ -10,6 +10,9 @@ boundaries:
   - Do not edit generated host or home output instead of inventory and templates
   - Do not activate hosts or expose secrets during context inspection
 entrypoints:
+  - name: boot-encryption-acceptance
+    file: boot-encryption-acceptance.yml
+    purpose: Fleet encryption acceptance for local TPM-sealed OpenBao, central identity provisioning and independent recovery.
   - name: secret-rotation-catalog
     file: secrets-management.yml
     purpose: Canonical cross-repository secret ownership and ordered rotation gates.

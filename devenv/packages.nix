@@ -21,6 +21,10 @@ with pkgs;
   openssl
   sops
   tesseract
+  # Controller-held fleet Secure Boot keys (lx_administration/secure_boot.py).
+  age
+  sbctl
+  sbsigntool
 
   # Shared libraries required by Python and media tooling at runtime.
   libglvnd

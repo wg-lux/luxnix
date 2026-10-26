@@ -18,7 +18,7 @@ entrypoints:
     purpose: Verify all encrypted block ancestry, reject active swap, and explicitly permit runtime tmpfs.
   - name: identity-salt-provisioning
     file: provision-identity-salts.py
-    purpose: Preserve encrypted local identity salts; reject central enrollment before file access.
+    purpose: Preserve encrypted local identity salts and enroll managed center sources; reject retired bundle enrollment.
   - name: secret-rotation-check
     file: check-secret-rotation.py
     purpose: Validate public cross-repository source contracts without secret or runtime access.
@@ -34,15 +34,12 @@ entrypoints:
   - name: manual-operation-catalog
     file: manual-operations.yml
     purpose: Inspect manual operation catalog ownership and interfaces.
-files:
-  - identity-secrets.toml
 dependencies:
   internal:
     - lx_administration
     - devenv
     - ansible
   external:
-    - SecretSpec
     - Python
     - Bash
     - Nix

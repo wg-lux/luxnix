@@ -42,14 +42,26 @@ let
   };
   migrationConfig = pkgs.writeText "operator-storage-migration.json" (
     builtins.toJSON {
-      inherit (cfg) volumes;
+      inherit (cfg) volumes unlockMethod;
+      machine = config.networking.hostName;
+      localOpenbaoEnabled = lib.attrByPath [ "luxnix" "openbao" "local" "enable" ] false config;
+      openbaoClient = ../../../../lx_administration/storage/openbao_local.py;
+      openbaoEnroll = ../../../../lx_administration/storage/openbao_enroll.py;
+      tpm2PluginPath = "${pkgs.systemd}/lib/cryptsetup";
       binds = cfg.bindMounts;
+      bindUnits = map (path: "${escapeSystemdPath path}.mount") (builtins.attrNames cfg.bindMounts);
       writers = builtins.attrNames cfg.guardedServices;
+      inherit (cfg) startupServices;
       accounts = cfg.migration.accountHashes;
       verifier = ../../../../lx_administration/secret_storage.py;
     }
   );
-  migrationCommand = "${pkgs.python3}/bin/python ${../../../../lx_administration/storage/operator_migration.py} ${migrationConfig}";
+  migrationPackage = pkgs.runCommand "operator-storage-migration" { } ''
+    mkdir -p "$out"
+    cp ${../../../../lx_administration/storage/operator_migration.py} "$out/operator_migration.py"
+    cp ${../../../../lx_administration/storage/cutover.py} "$out/cutover.py"
+  '';
+  migrationCommand = "${pkgs.python3}/bin/python ${migrationPackage}/operator_migration.py ${migrationConfig}";
   migrationPath = [
     pkgs.coreutils
     pkgs.cryptsetup
@@ -70,11 +82,16 @@ let
         "nodev"
         "nosuid"
         "x-systemd.device-timeout=${
-          if cfg.migration.enable && volume.container != null then "infinity" else "10s"
+          if volume.container == null then
+            "10s"
+          else if cfg.unlockMethod != "passphrase" then
+            "90s"
+          else
+            "infinity"
         }"
       ]
       ++ lib.optional volume.noexec "noexec"
-      ++ lib.optionals (cfg.migration.enable && volume.container != null) [
+      ++ lib.optionals (volume.container != null) [
         "x-systemd.requires=${unlockName name}.service"
         "x-systemd.after=${unlockName name}.service"
       ];
@@ -106,12 +123,26 @@ let
 in
 {
   options.luxnix.storage.operatorUnlocked = {
-    enable = lib.mkEnableOption "manually unlocked encrypted storage and guarded consumers";
+    enable = lib.mkEnableOption "encrypted storage and guarded consumers";
+    unlockMethod = lib.mkOption {
+      type = lib.types.enum [
+        "passphrase"
+        "tpm2"
+        "local-openbao"
+      ];
+      default = "passphrase";
+      description = "local-openbao reads UUID-bound keys from local OpenBao; tpm2 and passphrase retain legacy behavior until migration acceptance.";
+    };
+    openbaoUnlockCredential = lib.mkOption {
+      type = absolutePath;
+      default = "/var/lib/openbao-bootstrap/volume-unlock.cred";
+      description = "TPM-only encrypted read-only AppRole credential named volume.unlock, written by enrollment; never a provisioning credential.";
+    };
     migration = {
       enable = lib.mkOption {
         type = lib.types.bool;
         default = true;
-        description = "Provision new container files at private passphrase prompts and copy/verify existing data before startup; never format existing storage or delete sources.";
+        description = "Copy and verify existing data before startup and expose explicit pre-copy/cutover units. Container creation is a separate escrowed deploy operation; never performed at boot.";
       };
       accountHashes = lib.mkOption {
         type = lib.types.attrsOf absolutePath;
@@ -121,7 +152,7 @@ in
     };
     volumes = lib.mkOption {
       default = { };
-      description = "Encrypted mappings; startup can provision new container files and migrate existing data.";
+      description = "Encrypted mappings; explicit deployment provisions missing containers, startup only unlocks and migrates existing storage.";
       type = lib.types.attrsOf (
         lib.types.submodule (
           { name, ... }: {
@@ -130,6 +161,13 @@ in
                 type = lib.types.nullOr absolutePath;
                 default = null;
                 description = "Operator-passphrase LUKS container file; null uses an externally unlocked mapping.";
+              };
+              luksUUID = lib.mkOption {
+                type = lib.types.nullOr (
+                  lib.types.strMatching "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                );
+                default = null;
+                description = "Expected native LUKS UUID, recorded when adopting an existing volume or after explicit provisioning.";
               };
               minimumSizeMiB = lib.mkOption {
                 type = lib.types.ints.positive;
@@ -200,7 +238,28 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    environment.systemPackages = [
+      (pkgs.writeShellApplication {
+        name = "luxnix-storage-provision";
+        runtimeInputs = migrationPath;
+        text = ''
+          [ "$#" -eq 1 ] || { echo "Usage: luxnix-storage-provision <volume> (escrowed request on stdin)" >&2; exit 2; }
+          exec ${migrationCommand} provision "$1"
+        '';
+      })
+    ];
+    security.tpm2.enable = lib.mkIf (cfg.unlockMethod == "tpm2") true;
     assertions = [
+      {
+        assertion =
+          cfg.unlockMethod != "local-openbao"
+          || (
+            config.luxnix.openbao.local.enable
+            && lib.all (v: v.container != null && v.luksUUID != null) (builtins.attrValues cfg.volumes)
+            && lib.hasPrefix "/var/lib/openbao-bootstrap/" cfg.openbaoUnlockCredential
+          );
+        message = "Local OpenBao unlock requires local service, UUID-bound containers and a pre-mount unlock credential.";
+      }
       {
         assertion =
           !cfg.migration.enable
@@ -273,7 +332,7 @@ in
     fileSystems = volumeMounts // bindMounts;
     # Preserve configured encrypted swap. The runtime verifier rejects plaintext
     # partitions/files and zram writeback before any guarded consumer starts.
-    system.activationScripts = lib.mkIf (cfg.migration.enable && cfg.migration.accountHashes != { }) {
+    system.activationScripts = lib.mkIf (cfg.migration.accountHashes != { }) {
       luxnixPrepareBootAccountHashes = {
         deps = [ "specialfs" ];
         text = "${migrationCommand} accounts";
@@ -312,43 +371,77 @@ in
             }
           )
         ) services
-        // lib.optionalAttrs cfg.migration.enable (
-          {
-            luxnix-storage-migrate = {
-              description = "Migrate and verify data before encrypted bind mounts";
-              path = migrationPath;
-              unitConfig.DefaultDependencies = false;
-              bindsTo = map (v: "${escapeSystemdPath v.mountPoint}.mount") (builtins.attrValues cfg.volumes);
-              requires = map (v: "${escapeSystemdPath v.mountPoint}.mount") (builtins.attrValues cfg.volumes);
-              after = map (v: "${escapeSystemdPath v.mountPoint}.mount") (builtins.attrValues cfg.volumes);
-              serviceConfig = {
-                Type = "oneshot";
-                RemainAfterExit = true;
-                UMask = "0077";
-                TimeoutStartSec = "infinity";
-                ExecStart = "${migrationCommand} prepare";
-              };
+        // lib.optionalAttrs cfg.migration.enable {
+          luxnix-storage-precopy = {
+            description = "Pre-copy live sources into private encrypted staging";
+            path = migrationPath;
+            requires = map (v: "${escapeSystemdPath v.mountPoint}.mount") (builtins.attrValues cfg.volumes);
+            after = map (v: "${escapeSystemdPath v.mountPoint}.mount") (builtins.attrValues cfg.volumes);
+            serviceConfig = {
+              Type = "oneshot";
+              UMask = "0077";
+              LimitCORE = 0;
+              TimeoutStartSec = "infinity";
+              ExecStart = "${migrationCommand} precopy";
+            };
+          };
+          luxnix-storage-cutover = {
+            description = "Stop writers, verify final copies and activate encrypted binds";
+            path = migrationPath;
+            requires = [ "luxnix-storage-precopy.service" ];
+            after = [ "luxnix-storage-precopy.service" ];
+            serviceConfig = {
+              Type = "oneshot";
+              UMask = "0077";
+              LimitCORE = 0;
+              TimeoutStartSec = "infinity";
+              ExecStart = "${migrationCommand} cutover";
+            };
+          };
+          luxnix-storage-migrate = {
+            description = "Migrate and verify data before encrypted bind mounts";
+            path = migrationPath;
+            unitConfig.DefaultDependencies = false;
+            bindsTo = map (v: "${escapeSystemdPath v.mountPoint}.mount") (builtins.attrValues cfg.volumes);
+            requires = map (v: "${escapeSystemdPath v.mountPoint}.mount") (builtins.attrValues cfg.volumes);
+            after = map (v: "${escapeSystemdPath v.mountPoint}.mount") (builtins.attrValues cfg.volumes);
+            serviceConfig = {
+              Type = "oneshot";
+              RemainAfterExit = true;
+              UMask = "0077";
+              TimeoutStartSec = "infinity";
+              ExecStart = "${migrationCommand} prepare";
+            };
+          };
+        }
+        // lib.mapAttrs' (
+          name: volume:
+          lib.nameValuePair (unlockName name) {
+            description = "Unlock operator storage ${name}";
+            requires = lib.optional (cfg.unlockMethod == "local-openbao") "openbao-local.service";
+            after = lib.optional (cfg.unlockMethod == "local-openbao") "openbao-local.service";
+            path = migrationPath;
+            unitConfig = {
+              DefaultDependencies = false;
+              RequiresMountsFor = volume.depends;
+            };
+            serviceConfig = {
+              Type = "oneshot";
+              RemainAfterExit = false;
+              UMask = "0077";
+              TimeoutStartSec = if cfg.unlockMethod != "passphrase" then "90s" else "infinity";
+              LimitCORE = 0;
+              LoadCredentialEncrypted = lib.optional (
+                cfg.unlockMethod == "local-openbao"
+              ) "volume.unlock:${cfg.openbaoUnlockCredential}";
+              ExecStartPre = lib.optionals (cfg.unlockMethod == "local-openbao") [
+                "${pkgs.python3}/bin/python ${../../../../lx_administration/secret_storage.py} --allow-runtime /run"
+                "${pkgs.python3}/bin/python ${../../../../lx_administration/storage/openbao_local.py} ${cfg.openbaoUnlockCredential}"
+              ];
+              ExecStart = "${migrationCommand} unlock ${lib.escapeShellArg name}";
             };
           }
-          // lib.mapAttrs' (
-            name: volume:
-            lib.nameValuePair (unlockName name) {
-              description = "Unlock operator storage ${name}";
-              path = migrationPath;
-              unitConfig = {
-                DefaultDependencies = false;
-                RequiresMountsFor = volume.depends;
-              };
-              serviceConfig = {
-                Type = "oneshot";
-                RemainAfterExit = false;
-                UMask = "0077";
-                TimeoutStartSec = "infinity";
-                ExecStart = "${migrationCommand} unlock ${lib.escapeShellArg name}";
-              };
-            }
-          ) (lib.filterAttrs (_: v: v.container != null) cfg.volumes)
-        );
+        ) (lib.filterAttrs (_: v: v.container != null) cfg.volumes);
 
       sleep.settings.Sleep = {
         AllowHibernation = false;

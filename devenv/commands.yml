@@ -19,31 +19,6 @@ commands:
     implementation: scripts/check-secret-rotation.py
     documentation: docs/secret-rotation.md
 
-  - id: rebuild-host-switch
-    summary: Persist and activate the reviewed configuration using native NixOS switching.
-    risk: remote-state
-    operator_confirmation_required: true
-    usage: sudo nixos-rebuild switch --flake '<checkout>#<host>'
-    implementation: modules/home/cli/shells/shared/default.nix
-    documentation: docs/deployment-guide.md
-    prerequisites:
-      - Explicit checkout and host; reviewed revision and locked inputs; successful build and connectivity checks.
-      - Retain SSH session and verify fresh access after activation; console recovery for access-affecting changes.
-    effects:
-      - Updates the persistent system profile and boot default and activates services.
-      - The nho alias uses LUXNIX_FLAKE and LUXNIX_HOST; no intermediate test activation.
-
-  - id: rebuild-host-boot
-    summary: Stage the reviewed configuration for the next boot without live activation.
-    risk: remote-state
-    operator_confirmation_required: true
-    usage: sudo nixos-rebuild boot --flake '<checkout>#<host>'
-    implementation: modules/home/cli/shells/shared/default.nix
-    documentation: docs/deployment-guide.md
-    effects:
-      - Updates the system profile and boot default; running services retain their configuration.
-      - The nhb alias uses LUXNIX_FLAKE and LUXNIX_HOST; reboot is a separate authorized action.
-
   - id: enroll-reachable-hub-sites
     summary: Prompt once for a Vault enrollment token and reconcile enrollment on reachable configured sites.
     risk: sensitive-remote-state
@@ -143,6 +118,21 @@ commands:
     implementation: devenv/tasks.nix
     documentation: docs/autoconf.md
 
+  - id: openbao-provision
+    summary: Reconcile selected KV v2 secrets from active Vault or verify existing OpenBao records when Vault is absent.
+    risk: sensitive-remote-state
+    operator_confirmation_required: true
+    usage: devenv shell openbao-provision --config <migration.yml> [--record <id>] [--apply]
+    implementation: lx_administration/storage/bao_migration.py
+    documentation: docs/openbao.md
+    prerequisites:
+      - Initialized active OpenBao, existing KV v2 mounts and scoped API credentials.
+      - Reviewed explicit record manifest, pinned HTTPS identities and protected credential files.
+    effects:
+      - Preview by default; --apply creates missing records and reconciles explicitly source-authoritative records with CAS.
+      - Repeated equal values create no new version; absent Vault succeeds only with complete target records.
+      - Immutable conflicts, missing required records and TLS or authentication failures remain errors.
+
   - id: vault-bootstrap
     summary: Create or update the encrypted LuxNix vault and host exports.
     risk: sensitive-local-state
@@ -178,6 +168,22 @@ commands:
     usage: devenv shell vault-site-preflight <host> [--json]
     implementation: scripts/vault/site_enrollment_preflight.py
     documentation: docs/vault-hub-machine-enrollment.md
+
+  - id: secure-boot-keys
+    summary: Create the fleet Secure Boot PKI once in controller custody and publish public enrollment files.
+    risk: sensitive-local-state
+    operator_confirmation_required: true
+    usage: devenv shell secure-boot-keys [--custody <path>]
+    implementation: lx_administration/secure_boot.py
+    documentation: docs/secure-boot.md
+
+  - id: secure-boot-sign
+    summary: Sign one host's reviewed generation on the controller and import the signed boot artifacts.
+    risk: remote-state
+    operator_confirmation_required: true
+    usage: devenv shell secure-boot-sign <host>
+    implementation: lx_administration/secure_boot.py
+    documentation: docs/secure-boot.md
 
   - id: check-connectivity
     summary: Check SSH connectivity to a selected inventory host or group.
@@ -257,9 +263,65 @@ commands:
     implementation: scripts/storage/mount_persisting_storage.py
     documentation: docs/hardware-setup.md
 
+  - id: storage-provision
+    summary: Escrow a per-volume recovery credential in the admin vault and on an independent host before explicit TPM container creation.
+    risk: sensitive-remote-state
+    operator_confirmation_required: true
+    usage: devenv shell storage-provision <escrow|provision> --host <host> --volume <volume> --recovery-host <host> [--backend tpm2|local-openbao] [--apply]
+    implementation: lx_administration/storage/provision.py
+    documentation: docs/operator-unlocked-storage.md
+
+  - id: openbao-local
+    summary: Show status of, enroll, adopt volumes into, or rotate the boot credential of host-local OpenBao; escrow precedes every dependent step.
+    risk: sensitive-remote-state
+    operator_confirmation_required: true
+    usage: >-
+      devenv shell openbao-local <status|enroll|adopt|rotate-unlock|rollout>
+      --limit <host-or-group> [--volume <volume>] [--recovery-host <host>] [--apply] [--cutover]
+    implementation: lx_administration/storage/local_enrollment.py
+    documentation: docs/openbao-local.md
+    effects:
+      - Without --apply, read-only status, TPM/Secure Boot preflight and keyslot plans only.
+      - enroll writes TPM-sealed credentials under /var/lib/openbao-bootstrap and initializes a missing local store once.
+      - adopt adds one OpenBao keyslot and removes systemd-tpm2 tokens; recovery keyslots, data and LUKS UUIDs are preserved.
+      - Escrow records go to the admin vault and the separate --recovery-host; existing records are never replaced.
+      - rollout enrolls, provisions missing volumes or adopts existing ones, then starts encrypted pre-copy; --cutover explicitly stops writers for final verification and bind activation.
+
 # Tasks are listed separately because they are invoked through `devenv tasks`
 # rather than the shell-wrapper namespace above.
 tasks:
+  - id: tests:operator-storage-migration-vm
+    summary: Verify encrypted pre-copy, final cutover and receipt reuse after reboot.
+    risk: local-state
+    operator_confirmation_required: false
+    usage: devenv tasks run tests:operator-storage-migration-vm
+    implementation: tests/nixtest/operator_storage_migration_vm_test.nix
+    documentation: docs/operator-unlocked-storage.md
+  - id: tests:bao-migration-vm
+    summary: Exercise Vault to OpenBao provisioning, retries and absent-source behavior with real TLS services.
+    risk: local-state
+    operator_confirmation_required: false
+    usage: devenv tasks run tests:bao-migration-vm
+    implementation: devenv/tasks.nix
+    documentation: docs/openbao.md
+  - id: tests:openbao-local-vm
+    summary: Verify local OpenBao bootstrap with real systemd credentials on disposable software TPMs.
+    risk: local-state
+    operator_confirmation_required: false
+    usage: devenv tasks run tests:openbao-local-vm
+    implementation: devenv/tasks.nix
+    documentation: docs/openbao-local.md
+  - id: tests:openbao-vm
+    summary: Verify isolated OpenBao release, authorization, revocation, audit and reseal in a disposable VM.
+    risk: local-state
+    operator_confirmation_required: false
+    usage: devenv tasks run tests:openbao-vm
+    implementation: devenv/tasks.nix
+    documentation: docs/openbao.md
+    effects:
+      - Builds and boots a local NixOS test VM; formats only its disposable test disk.
+      - Generates ephemeral test credentials inside the VM; no hardware TPM or remote operations.
+
   - id: context:check
     summary: Validate hierarchical context manifests and all declared local references.
     risk: read-only
@@ -422,3 +484,36 @@ tasks:
     usage: devenv tasks run endoreg-db:migrate
     implementation: devenv/tasks.nix
     documentation: docs/development.md
+
+# Native host operations deliberately run outside the Devenv shell.
+native_commands:
+  - id: rebuild-host-switch
+    summary: Persist and activate the reviewed configuration using native NixOS switching.
+    risk: remote-state
+    operator_confirmation_required: true
+    usage: sudo nixos-rebuild switch --flake '<checkout>#<host>'
+    gc10_install: sudo nixos-rebuild switch --flake /home/admin/luxnix#gc-10 --accept-flake-config
+    execution_context: Run on the selected host; the checkout must contain the reviewed compatible application version.
+    verification:
+      - Require exit status zero and matching /run/current-system and /nix/var/nix/profiles/system targets.
+      - Check bootloader default and one-shot overrides; after an authorized reboot, verify /run/booted-system matches the intended closure.
+    implementation: modules/home/cli/shells/shared/default.nix
+    documentation: docs/deployment-guide.md
+    prerequisites:
+      - Explicit checkout and host; reviewed revision and locked inputs; successful build and connectivity checks.
+      - Retain SSH session and verify fresh access after activation; console recovery for access-affecting changes.
+    effects:
+      - Updates the persistent system profile and boot default and activates services.
+      - The nho alias uses LUXNIX_FLAKE and LUXNIX_HOST; no intermediate test activation.
+
+  - id: rebuild-host-boot
+    summary: Stage the reviewed configuration for the next boot without live activation.
+    risk: remote-state
+    operator_confirmation_required: true
+    usage: sudo nixos-rebuild boot --flake '<checkout>#<host>'
+    implementation: modules/home/cli/shells/shared/default.nix
+    documentation: docs/deployment-guide.md
+    effects:
+      - Updates the system profile and boot default; running services retain their configuration.
+      - The nhb alias uses LUXNIX_FLAKE and LUXNIX_HOST; reboot is a separate authorized action.
+

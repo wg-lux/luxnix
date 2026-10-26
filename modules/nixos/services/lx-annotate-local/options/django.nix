@@ -99,16 +99,6 @@ in
               default = false;
               description = "Retired central salt injection; enabling this option fails evaluation.";
             };
-            identitySaltGeneration = mkOption {
-              type = types.nullOr types.ints.positive;
-              default = null;
-              description = "Reviewed center generation required for file-free SecretSpec delivery.";
-            };
-            identitySaltFingerprint = mkOption {
-              type = types.str;
-              default = "";
-              description = "Reviewed SHA-256 fingerprint of the active UTF-8 salt; public admission pin, never the salt itself.";
-            };
             identitySaltKeyringFile = mkOption {
               type = types.nullOr types.str;
               default = null;

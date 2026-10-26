@@ -44,7 +44,10 @@
     };
 
     impermanence.url = "github:nix-community/impermanence";
-    # lanzaboote.url = "github:nix-community/lanzaboote";
+    lanzaboote = {
+      url = "github:nix-community/lanzaboote/v1.2.0";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     # stylix.url = "github:danth/stylix";
     catppuccin.url = "github:catppuccin/nix";
     nix-index-database.url = "github:nix-community/nix-index-database";
@@ -171,6 +174,7 @@
           disko.nixosModules.disko
           impermanence.nixosModules.impermanence
           sops-nix.nixosModules.sops
+          lanzaboote.nixosModules.lanzaboote
           nix-topology.nixosModules.default
           inputs.lx-annotate.nixosModules.default
         ];
@@ -233,7 +237,21 @@
         }
       ) base.packages;
 
-      nixtestChecks = builtins.mapAttrs (_: packages: { inherit (packages) nixtests; }) nixtestPackages;
+      nixtestChecks = builtins.mapAttrs (system: packages: {
+        inherit (packages) nixtests;
+        operator-storage-migration = inputs.nixpkgs.legacyPackages.${system}.testers.runNixOSTest (
+          import ./tests/nixtest/operator_storage_migration_vm_test.nix { repoRoot = ./.; }
+        );
+        bao-migration = inputs.nixpkgs.legacyPackages.${system}.testers.runNixOSTest (
+          import ./tests/nixtest/bao_migration_vm_test.nix { repoRoot = ./.; }
+        );
+        openbao-local = inputs.nixpkgs.legacyPackages.${system}.testers.runNixOSTest (
+          import ./tests/nixtest/openbao_local_vm_test.nix { repoRoot = ./.; }
+        );
+        openbao-release = inputs.nixpkgs.legacyPackages.${system}.testers.runNixOSTest (
+          import ./tests/nixtest/openbao_vm_test.nix { repoRoot = ./.; }
+        );
+      }) nixtestPackages;
 
     in
     inputs.nixpkgs.lib.recursiveUpdate base {

@@ -4,7 +4,7 @@ path: modules/nixos/services/lx-annotate-local
 parent: ../../structure.yml
 summary: LuxNix deployment composition for the upstream LX-Annotate application.
 responsibilities:
-- Reject central identity salt options and preserve established local identity storage.
+- Reject retired file-free identity delivery and preserve established local identity storage.
 - Own service options, runtime environment contracts and systemd composition
 - Coordinate workers, storage, secret handles and hub interfaces
 boundaries:
@@ -17,7 +17,7 @@ entrypoints:
   purpose: Rebind the wheel virtualenv to configured Python while preserving downgrade evidence.
 - name: identity-salt-enrollment
   file: subservices/lx-annotate-identity-salts.nix
-  purpose: Package the shared storage verifier and preserve local generations; central enrollment is disabled.
+  purpose: Package the shared storage verifier, preserve local generations and enroll managed center salts.
 - name: module
   file: default.nix
   purpose: Inspect module ownership and interfaces.

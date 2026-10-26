@@ -108,10 +108,12 @@ generation (`lx_annotate_identity_center_<key>` plus `center-<key>.salt` and
 `.enrolled` recovery copies). The keyring manifest then switches atomically to
 active center, retiring machine and `default_salt`, with `center_id` and
 `generation: 1`. Background migration then re-hashes verified identities. See
-[the activation runbook](../../../../docs/center-identity-salt-activation.md). A higher, center-bound generation is accepted only with every historical salt
-retained for source-side patient matching. Rollback, conflicting same-generation
-material, or omitted history fails closed. The custodian must explicitly publish
-rotations using compare-and-set; restarting a client never invents a generation.
+[the activation runbook](../../../../docs/center-identity-salt-activation.md). Center enrollment currently supports
+only generation 1; changed center material is rejected. The retired file-free
+SecretSpec wrapper and manifest have been removed. `identitySaltViaSecretSpec`
+still fails evaluation, and the old launcher and bundle entrypoint remain
+rejection-only compatibility guards. Generation and fingerprint options for
+that retired delivery path are no longer supported.
 
 Existing GPU-client inventory leaves this switch disabled until its legacy
 identity migration is verified; Würzburg hosts opt in per host. After activation the

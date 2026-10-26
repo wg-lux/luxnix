@@ -10,6 +10,51 @@ boundaries:
   - Source checks do not prove deployment readiness
   - Nix evaluation and VM tests are separate from the fast Python lane
 entrypoints:
+  - name: storage-cutover
+    file: test_storage_cutover.py
+    purpose: Unit tests with real rsync for resumable pre-copy, verified cutover and preserved sources.
+  - name: bao-migration
+    file: test_bao_migration.py
+    purpose: Verify absent-source reconciliation, conflict protection and interrupted writes.
+  - name: bao-migration-vm
+    file: nixtest/bao_migration_vm_test.nix
+    purpose: Run real Vault and OpenBao TLS services for repeatable logical migration.
+  - name: bao-migration-guest
+    file: nixtest/bao_migration_guest.py
+    purpose: Exercise the actual provisioning CLI using ephemeral guest-only secrets.
+  - name: secure-boot
+    file: test_secure_boot.py
+    purpose: Evaluate fleet Secure Boot public-certificate and keyless-host contracts.
+  - name: secure-boot-controller
+    file: test_secure_boot_controller.py
+    purpose: Exercise controller signing and host import with real lzbt, sbctl and sbverify.
+  - name: encryption-primitives
+    file: test_encryption_primitives.py
+    purpose: Real dm-verity tamper and authenticated synthetic recovery tests; not hardware or full boot evidence.
+  - name: openbao-local-vm
+    file: nixtest/openbao_local_vm_test.nix
+    purpose: Exercise real systemd TPM-only credentials and isolated local OpenBao auto-unseal.
+  - name: openbao-local-guest
+    file: nixtest/openbao_local_guest.py
+    purpose: Initialize disposable test state and verify local API readiness without emitting secrets.
+  - name: openbao-local
+    file: test_openbao_local.py
+    purpose: Verify TPM bootstrap policy rejection and independent local/hub service evaluation.
+  - name: tpm-release
+    file: test_tpm_release.py
+    purpose: swtpm-backed TPM identity and mTLS release client contract.
+  - name: openbao-release-vm
+    file: nixtest/openbao_vm_test.nix
+    purpose: Exercise the hardened OpenBao unit on LUKS with isolated file-certificate clients, authorization, revocation, audit and reseal.
+  - name: openbao-release-guest
+    file: nixtest/openbao_release.py
+    purpose: Generate ephemeral VM-only credentials and verify HTTPS release API behavior; no TPM identity claim.
+  - name: openbao
+    file: test_openbao.py
+    purpose: Evaluate backend isolation, encrypted mount guards and TLS configuration.
+  - name: storage-recovery-escrow
+    file: test_storage_provision.py
+    purpose: Verify authenticated encrypted recovery copies, independent export, retries and conflict rejection.
   - name: operator-storage-migration-vm
     file: nixtest/operator_storage_migration_vm_test.nix
     purpose: Verify actual LUKS copy, mount ordering, post-mount permissions and receipt reuse after reboot.

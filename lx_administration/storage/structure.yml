@@ -10,9 +10,24 @@ boundaries:
   - Do not mount or alter live storage during context validation
   - Preserve encrypted storage and hub authentication boundaries
 entrypoints:
+  - name: cutover
+    file: cutover.py
+    purpose: Background pre-copy and short-stop cutover into encrypted storage without modifying sources.
+  - name: bao-migration
+    file: bao_migration.py
+    purpose: Idempotent allowlisted KV v2 provisioning with CAS and verified target-only operation after Vault retirement.
+  - name: openbao-local
+    file: openbao_local.py
+    purpose: Validate TPM-only PCR-bound bootstrap credentials without initializing state.
+  - name: storage-provision
+    file: provision.py
+    purpose: Escrow recovery in the existing encrypted admin vault and an independent host before explicit inventory-scoped provisioning.
+  - name: tpm-release
+    file: tpm_release.py
+    purpose: Create and verify the non-exportable TPM client identity and fetch one volume release over mTLS.
   - name: operator-migration
     file: operator_migration.py
-    purpose: Provision new passphrase containers and verify resumable startup copies without overwriting populated storage.
+    purpose: Unlock enrolled TPM containers or provision passphrase containers and verify resumable startup copies without overwriting populated storage.
   - name: manager
     file: manager.py
     purpose: Inspect manager ownership and interfaces.

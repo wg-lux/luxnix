@@ -620,3 +620,28 @@ def test_devenv_owns_uv_sync_and_enter_shell_activates_the_managed_venv():
     assert "SYNC_CMD" not in devenv_config
     assert devenv_config.count("source .devenv/state/venv/bin/activate") == 1
     assert "source .env.systemd" in devenv_config
+
+
+def test_native_host_commands_have_separate_validated_catalog() -> None:
+    catalog = _catalog()
+    native = catalog["native_commands"]
+    assert {entry["id"] for entry in native} == {
+        "rebuild-host-switch",
+        "rebuild-host-boot",
+    }
+    assert len(native) == 2
+    for entry in native:
+        action = entry["id"].removeprefix("rebuild-host-")
+        assert (
+            entry["usage"] == f"sudo nixos-rebuild {action} --flake '<checkout>#<host>'"
+        )
+        assert entry["risk"] == "remote-state"
+        assert entry["operator_confirmation_required"] is True
+        implementation = (REPO_ROOT / entry["implementation"]).read_text()
+        assert "sudo nixos-rebuild ${action} --flake" in implementation
+        alias = "nho" if action == "switch" else "nhb"
+        assert f'{alias} = rebuild "{action}";' in implementation
+        assert (
+            f"nixos-rebuild {action}"
+            in (REPO_ROOT / entry["documentation"]).read_text()
+        )

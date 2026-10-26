@@ -7,6 +7,9 @@
   bnsc.package = pkgs.zsh;
   bnsc.exec = "devenv tasks run autoconf:generate";
 
+  openbao-provision.package = pkgs.zsh;
+  openbao-provision.exec = ''${pkgs.uv}/bin/uv run python -m lx_administration.storage.bao_migration "$@"'';
+
   vault-bootstrap.package = pkgs.zsh;
   vault-bootstrap.exec = ''${pkgs.uv}/bin/uv run python scripts/bootstrap-lx-vault.py "$@"'';
 
@@ -59,6 +62,12 @@
       bash scripts/run-secret-playbook.sh ansible/playbooks/deliver_hub_enrollment.yml "$@"
   '';
 
+  secure-boot-keys.package = pkgs.zsh;
+  secure-boot-keys.exec = ''${pkgs.uv}/bin/uv run python -m lx_administration.secure_boot create-keys "$@"'';
+
+  secure-boot-sign.package = pkgs.zsh;
+  secure-boot-sign.exec = ''${pkgs.uv}/bin/uv run python -m lx_administration.secure_boot sign "$@"'';
+
   vault-migrate-local-key.package = pkgs.zsh;
   vault-migrate-local-key.exec = ''${pkgs.uv}/bin/uv run python scripts/vault/migrate_local_key.py "$@"'';
 
@@ -76,6 +85,10 @@
   conn-server-ssh.exec = "tmux attach-session -t ssh-servers";
 
   # Local storage
+  storage-provision.package = pkgs.zsh;
+  storage-provision.exec = ''${pkgs.uv}/bin/uv run python -m lx_administration.storage.provision "$@"'';
+  openbao-local.package = pkgs.zsh;
+  openbao-local.exec = ''${pkgs.uv}/bin/uv run python -m lx_administration.storage.local_enrollment "$@"'';
   mount-persisting-storage.package = pkgs.zsh;
   mount-persisting-storage.exec = ''
     secretspec run --provider dotenv \

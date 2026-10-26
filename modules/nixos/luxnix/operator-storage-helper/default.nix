@@ -47,6 +47,7 @@ let
       Usage: luxnix-operator-storage status
              luxnix-operator-storage open [mapping...]
              luxnix-operator-storage start
+             luxnix-operator-storage enroll-tpm2 <mapping>
              luxnix-operator-storage header-backup <mapping> <destination-file>
       EOF
         exit 2
@@ -103,8 +104,10 @@ let
       }
 
       cmd_open() {
-        [ -t 0 ] || die "open requires an interactive terminal; never pipe or pass passphrases."
-        local name backing container
+        ${lib.optionalString (cfg.unlockMethod == "passphrase") ''
+          [ -t 0 ] || die "open requires an interactive terminal; never pipe or pass passphrases."
+        ''}
+        local name backing
         local selected=("$@")
         [ "''${#selected[@]}" -gt 0 ] || selected=("''${mappings[@]}")
         for name in "''${selected[@]}"; do
@@ -133,23 +136,15 @@ let
             ) cfg.volumes
           )}
           esac
-          ${lib.optionalString cfg.migration.enable ''
-            case "$name" in
+          case "$name" in
             ${lib.concatStrings (
               lib.mapAttrsToList (
                 volumeName: volume:
                 "${lib.escapeShellArg (lib.removePrefix "/dev/mapper/" volume.device)}) systemctl start ${lib.escapeShellArg "luxnix-storage-unlock-${volumeName}.service"};;\n"
-              ) cfg.volumes
+              ) (lib.filterAttrs (_: volume: volume.container != null) cfg.volumes)
             )}
-            esac
-            continue
-          ''}
-          require_container "$name"
-          container="''${containers[$name]}"
-          cryptsetup isLuks "$container" \
-            || die "$container is not a LUKS container. Never format it; contact the recovery operator."
-          echo "Opening $name from $container"
-          cryptsetup open --type luks "$container" "$name"
+            *) die "$name requires an externally opened mapping." ;;
+          esac
         done
         echo "Mappings verified. Use luxnix-operator-storage start to start configured consumers."
       }
@@ -189,7 +184,7 @@ let
       command="$1"
       shift
       [ "$(id -u)" -eq 0 ] || die "Run as root (sudo)."
-      ${lib.optionalString cfg.migration.enable ''
+      ${lib.optionalString (cfg.unlockMethod == "passphrase") ''
         if [[ "$command" == open || "$command" == start ]]; then
           [ -t 0 ] || die "Unlock requires a private interactive terminal."
           systemd-tty-ask-password-agent --watch &
@@ -198,6 +193,17 @@ let
         fi
       ''}
       case "$command" in
+        enroll-tpm2)
+          [ "$#" -eq 1 ] || usage
+          [ -t 0 ] || die "Enrollment requires a private interactive terminal."
+          require_declared "$1"
+          require_container "$1"
+          python3 -c 'import runpy, sys; runpy.run_path(sys.argv[1])["require_secure_boot"]()' \
+            ${../../../../lx_administration/storage/operator_migration.py}
+          # Add a hardware slot; preserve every existing recovery passphrase slot.
+          systemd-cryptenroll --tpm2-device=auto --tpm2-pcrs=7 --tpm2-with-pin=no \
+            "''${containers[$1]}"
+          ;;
         status) cmd_status "$@" ;;
         open) cmd_open "$@" ;;
         start)

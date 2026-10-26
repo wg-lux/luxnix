@@ -90,7 +90,7 @@ in
       nix.enable = true;
       boot = {
         enable = true;
-        secureBoot = false;
+        secureBoot = mkDefault false;
         plymouth = true;
       };
       locale.enable = true;

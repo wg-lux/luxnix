@@ -2,7 +2,6 @@
 
 import json
 import os
-import pty
 import re
 import shlex
 from pathlib import Path
@@ -54,6 +53,8 @@ def hosts():
           adminHash = c.user.admin.passwordFile;
           accountHashes = builtins.filter (path: path != null) (map (u: u.hashedPasswordFile) (builtins.attrValues c.users.users));
           migration = c.luxnix.storage.operatorUnlocked.migration.enable;
+          unlockMethod = c.luxnix.storage.operatorUnlocked.unlockMethod;
+          unlockTimeout = c.systemd.services.luxnix-storage-unlock-luxnix-app-storage.serviceConfig.TimeoutStartSec;
           enabled = c.luxnix.storage.operatorUnlocked.enable;
           storageUnits = builtins.filter (n: f.inputs.nixpkgs.lib.hasPrefix "luxnix-storage-" n)
             (builtins.attrNames c.systemd.services);
@@ -78,7 +79,7 @@ def hosts():
     return json.loads(result.stdout)
 
 
-@pytest.mark.parametrize("host", ["gc-09"])
+@pytest.mark.parametrize("host", ["gc-09", "gc-10"])
 def test_mounts_and_startup_guards_survive_inventory_merging(hosts, host):
     c = hosts[host]
     mounts = c["mounts"]
@@ -86,7 +87,7 @@ def test_mounts_and_startup_guards_survive_inventory_merging(hosts, host):
     assert c["adminHash"] == "/var/lib/luxnix-account/admin-password.hash"
     assert set(c["accountHashes"]) == {c["adminHash"], "/var/lib/luxnix-account/client-password.hash"}
     assert {"lx-annotate", *c["workerBoot"]} <= set(c["startup"])
-    assert c["migration"]
+    assert c["migration"] == (host != "gc-10")
     for root in [SECRETS, "/var/lib/luxnix-app-storage"]:
         assert mounts[root]["device"] == "/dev/mapper/" + root.rsplit("/", 1)[1]
         assert "noauto" in mounts[root]["options"]
@@ -150,22 +151,19 @@ def test_host_specific_storage_and_unselected_host(hosts):
     assert hosts["gc-08"]["migration"]
 
 
-def test_gc10_live_deploy_gate_preserves_existing_account_sources(hosts):
+def test_gc10_uses_fleet_unlock_migration_and_boot_account_hashes(hosts):
     c = hosts["gc-10"]
-    assert c["assertions"] == []
-    assert not c["enabled"] and not c["migration"]
-    assert c["storageUnits"] == []
-    assert not c["copiesAccountHashes"]
-    assert c["helper"] is None
-    assert not set(PRIVATE + [SECRETS, APPLICATION, DATABASE,
-                              "/etc/secrets", "/var/backup/postgresql",
-                              "/var/lib/luxnix-app-storage"]) & c["mounts"].keys()
-    assert c["adminHash"].startswith("/etc/secrets/vault/")
-    assert set(c["accountHashes"]) == {
-        c["adminHash"], "/etc/secrets/vault/SCRT_client_user_password_hash",
-    }
-    assert c["swapDevices"] == []
-    assert c["generator"] == "/dev/null"
+    assert c["enabled"] and not c["migration"]
+    assert c["unlockMethod"] == "tpm2"
+    assert c["unlockTimeout"] == "90s"
+    assert {
+        "luxnix-storage-unlock-luxnix-secrets",
+        "luxnix-storage-unlock-luxnix-app-storage",
+    } <= set(c["storageUnits"])
+    assert "luxnix-storage-migrate" not in c["storageUnits"]
+    assert c["copiesAccountHashes"]
+    assert c["helper"] is not None
+    assert "/data/raid01" in c["mounts"]["/var/lib/luxnix-app-storage"]["depends"]
 
 
 @pytest.mark.skipif(shutil.which("nix") is None, reason="Nix evaluation required")
@@ -212,6 +210,7 @@ def test_generic_module_layout_merging_and_invalid_configuration():
         missingService = failed { luxnix.storage.operatorUnlocked.guardedServices.typo = [ "/srv/app" ]; };
         disabledService = failed { systemd.services.consumer.enable = false; };
         missingStartup = failed { luxnix.storage.operatorUnlocked.startupServices = [ "typo" ]; };
+        independentTpm = failed { luxnix.storage.operatorUnlocked = { unlockMethod = "tpm2"; migration.enable = false; }; };
         valid = builtins.all (a: a.assertion) c.assertions;
         disabledMounts = builtins.attrNames disabled.fileSystems;
         disabledServices = builtins.attrNames disabled.systemd.services;
@@ -246,6 +245,7 @@ def test_generic_module_layout_merging_and_invalid_configuration():
     assert not data["check"].get("PrivateDevices", False)
     assert data["disabledMounts"] == ["/"]
     assert "luxnix-storage-check-consumer" not in data["disabledServices"]
+    assert data["independentTpm"] == []
     for invalid in ["unknownVolume", "unknownGuard", "duplicate", "invalidTarget", "cycle", "missingService", "missingStartup", "disabledService"]:
         assert data[invalid], invalid
     assert not data["traversal"]["success"]
@@ -255,7 +255,7 @@ def test_generic_module_layout_merging_and_invalid_configuration():
 @pytest.mark.parametrize("mismatch", [False, True])
 def test_packaged_start_preserves_healthy_services_and_rejects_wrong_mapping(hosts, tmp_path, mismatch):
     """Execute the packaged CLI with device/systemctl probes isolated from the host."""
-    helper = hosts["gc-09"]["helper"]
+    helper = hosts["gc-10"]["helper"]
     result = subprocess.run(
         ["nix", "build", "--no-link", helper["derivation"] + "^out"],
         capture_output=True, text=True, timeout=240,
@@ -272,7 +272,7 @@ def test_packaged_start_preserves_healthy_services_and_rejects_wrong_mapping(hos
 if [ "$MISMATCH" = 1 ]; then
   echo "loop: /wrong-container"
 elif [ "$2" = luxnix-app-storage ]; then
-  echo "loop: /var/lib/luxnix-app-storage.luks"
+  echo "loop: /data/raid01/luxnix-app-storage.luks"
 else
   echo "loop: /var/lib/luxnix-secrets.luks"
 fi''',
@@ -292,16 +292,11 @@ fi''',
     executable.write_text(source)
     executable.chmod(0o700)
     calls = tmp_path / "calls"
-    master, slave = pty.openpty()
-    try:
-        run = subprocess.run(
-            [str(executable), "start"], stdin=slave, capture_output=True, text=True,
-            env={**os.environ, "CALL_LOG": str(calls), "MISMATCH": str(int(mismatch))},
-            timeout=20,
-        )
-    finally:
-        os.close(master)
-        os.close(slave)
+    run = subprocess.run(
+        [str(executable), "start"], stdin=subprocess.DEVNULL, capture_output=True, text=True,
+        env={**os.environ, "CALL_LOG": str(calls), "MISMATCH": str(int(mismatch))},
+        timeout=20,
+    )
     if mismatch:
         assert run.returncode != 0
         assert "mismatched mapping" in run.stderr
@@ -309,7 +304,7 @@ fi''',
     else:
         assert run.returncode == 0, run.stderr
         assert calls.read_text().splitlines() == [
-            "start", *[name + ".service" for name in hosts["gc-09"]["startup"]]
+            "start", *[name + ".service" for name in hosts["gc-10"]["startup"]]
         ]
 
 
@@ -325,6 +320,7 @@ def test_fleet_inventory_defaults_and_all_host_assertions():
       inspect = name: let c = f.nixosConfigurations.${name}.config; in {
         enabled = c.luxnix.storage.operatorUnlocked.enable;
         migration = c.luxnix.storage.operatorUnlocked.migration.enable;
+        unlockMethod = c.luxnix.storage.operatorUnlocked.unlockMethod;
         failures = map (a: a.message) (builtins.filter (a: !a.assertion) c.assertions);
         baselineFailures = map (a: a.message) (builtins.filter (a: !a.assertion)
           (f.nixosConfigurations.${name}.extendModules { modules = [{ luxnix.storage.operatorUnlocked.enable = f.inputs.nixpkgs.lib.mkForce false; }]; }).config.assertions);
@@ -338,14 +334,14 @@ def test_fleet_inventory_defaults_and_all_host_assertions():
     result = subprocess.run(["nix", "eval", "--impure", "--json", "--expr", expression], cwd=ROOT, capture_output=True, text=True, timeout=300)
     assert result.returncode == 0, result.stderr
     for host, settings in json.loads(result.stdout).items():
-        if host == "gc-10":
-            assert not settings["enabled"] and not settings["migration"]
-            assert settings["prepare"] is None
-            assert settings["mountOptions"] == []
-            assert settings["failures"] == []
-            continue
-        assert settings["enabled"] and settings["migration"], host
+        assert settings["enabled"], host
+        assert settings["migration"] == (host != "gc-10"), host
+        assert settings["unlockMethod"] == ("tpm2" if host == "gc-10" else "passphrase"), host
         assert settings["failures"] == settings["baselineFailures"], (host, settings["failures"])
+        if host == "gc-10":
+            assert settings["prepare"] is None
+            assert all("x-systemd.device-timeout=90s" in options for options in settings["mountOptions"])
+            continue
         assert "operator_migration.py" in settings["prepare"]
         assert settings["dependencies"]["DefaultDependencies"] is False
         assert all("x-systemd.device-timeout=infinity" in options for options in settings["mountOptions"])

@@ -226,10 +226,6 @@ def provision(
                     "Initial identity enrollment must be explicitly requested"
                 )
             values.add(generate_identity_salt())
-        if not values:
-            raise ValueError(
-                "Authoritative center salt required; local generation is prohibited"
-            )
         value = values.pop()
         fingerprint = fingerprint_line(value)
         if any(receipt is not None and receipt != fingerprint for receipt in receipts):

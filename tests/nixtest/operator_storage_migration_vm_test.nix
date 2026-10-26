@@ -37,6 +37,7 @@
           directory = "payload";
         };
         guardedServices.consumer = [ "/srv/plain" ];
+        startupServices = [ "consumer" ];
       };
       systemd.tmpfiles.rules = [ "d /srv/plain/quarantine 0700 root root -" ];
       systemd.services.consumer = {
@@ -56,12 +57,17 @@
     machine.succeed("cryptsetup luksFormat --type luks2 --batch-mode --key-file /root/test-key /dev/vdb")
     machine.succeed("cryptsetup open --key-file /root/test-key /dev/vdb test-data; mkfs.ext4 -q /dev/mapper/test-data")
     machine.succeed("printf original > /srv/plain/record; chmod 600 /srv/plain/record")
+    machine.succeed("systemctl start luxnix-storage-precopy.service")
+    machine.fail("mountpoint /srv/plain")
+    machine.succeed("test -s /srv/encrypted/payload.luxnix-copy/data/record")
+    machine.succeed("printf final-delta > /srv/plain/record")
+    machine.succeed("systemctl start luxnix-storage-cutover.service")
     machine.succeed("systemctl start consumer.service")
     machine.succeed("mountpoint /srv/plain; mountpoint /srv/encrypted")
-    assert machine.succeed("cat /srv/plain/record") == "original"
+    assert machine.succeed("cat /srv/plain/record") == "final-delta"
     assert machine.succeed("stat -c %a /srv/plain/quarantine").strip() == "700"
     machine.succeed("mkdir /run/original; mount --bind / /run/original")
-    assert machine.succeed("cat /run/original/srv/plain/record") == "original"
+    assert machine.succeed("cat /run/original/srv/plain/record") == "final-delta"
     machine.succeed("printf current > /srv/plain/record")
     machine.succeed("systemctl stop consumer.service srv-plain.mount srv-encrypted.mount")
     machine.succeed("systemctl start consumer.service")

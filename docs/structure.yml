@@ -10,9 +10,27 @@ boundaries:
 - Do not create parallel readiness trackers
 - Do not include secrets or local host facts in guides
 entrypoints:
+- name: gc-10-startup
+  file: gc-10-startup.md
+  purpose: Ordered gc-10 signing, enrollment, automatic startup and recovery runbook.
+- name: openbao-local
+  file: openbao-local.md
+  purpose: Local OpenBao bootstrap implementation and remaining migration gates.
+- name: openbao
+  file: openbao.md
+  purpose: Isolated hub backend, client compatibility and staged Vault migration gates.
+- name: openbao-architecture
+  file: openbao-architecture.md
+  purpose: Decided target of local TPM-sealed OpenBao for volume unlock and hub OpenBao for identity provisioning, with ordering rules and known weaknesses.
+- name: tpm-release-client
+  file: tpm-release-client.md
+  purpose: TPM-bound release client identity, fetch protocol, exit classes and open integration gates.
 - name: operator-unlocked-storage
   file: operator-unlocked-storage.md
   purpose: Reusable manual-unlock module, gc-09/gc-10 mount contracts, migration gates and reboot recovery.
+- name: secure-boot
+  file: secure-boot.md
+  purpose: Fleet Secure Boot with a controller-held key; custody, per-generation signing, host import and firmware enrollment.
 - name: vault-encrypted-tls-storage
   file: vault-encrypted-tls-storage.md
   purpose: Preserve gs-02 TLS, managed secrets and enrollment state in manually unlocked LUKS storage, including bind-mount activation and interrupted-migration recovery.

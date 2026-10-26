@@ -1,29 +1,59 @@
-# Operator-passphrase storage and startup migration
+# Encrypted storage and automatic startup
 
-Encrypted storage with automatic startup migration is the default for every
+Encrypted storage is configured for every
 host in `active_clients`. The `operator_unlocked_secrets` group has the same
 membership, checked by tests. The reusable NixOS options live under
 `luxnix.storage.operatorUnlocked`; inventory YAML owns each machine's layout.
 
 ## Normal startup
 
-Start normally. Dependencies unlock the volumes, copy and verify existing data
-when needed, mount the encrypted directories, apply directory permissions and
-then start the database and application. Plaintext data is migrated, not merely
-rejected by a storage check. Services cannot write while their initial copy is
-in progress.
+Start normally. Dependencies unlock existing volumes, mount the encrypted
+directories, apply directory permissions and then start the database and
+application. Startup never creates or formats a missing container. Migration is
+an independent option and is disabled in the gc-10 pilot (ENC-25).
 
-Passphrases remain operator-held. Boot prompts use `systemd-ask-password`; for
-remote administration use an interactive SSH terminal and:
+The gc-10 pilot selects `unlockMethod = "tpm2"`; other hosts retain their prior
+passphrase policy until individually enrolled and accepted. Each existing container must
+first be enrolled on its own host, with a trusted signed boot chain and UEFI
+Secure Boot enabled. In a private terminal, run once per configured mapping:
+
+```bash
+sudo luxnix-operator-storage enroll-tpm2 luxnix-secrets
+sudo luxnix-operator-storage enroll-tpm2 luxnix-app-storage
+```
+
+The target profile replaces this legacy TPM token with host-local OpenBao:
+`devenv shell openbao-local adopt` adds an OpenBao keyslot and removes every
+`systemd-tpm2` token, so do not run `enroll-tpm2` on a host that is being
+moved to `unlockMethod = "local-openbao"`. See
+[local OpenBao enrollment](openbao-local.md#enrollment-and-volume-adoption).
+
+Legacy enrollment adds a TPM slot bound to Secure Boot PCR 7 and preserves recovery
+passphrases. Ordinary signed kernel updates do not bind enrollment to a specific
+kernel measurement. Firmware trust changes may require recovery and reenrollment.
+TPM startup uses only an enrolled TPM token, with no password or key-file fallback.
+Missing containers, enrollment or Secure Boot prevent startup without formatting
+data or waiting for a password. Normal application starts pull in the unlock and
+mount dependencies automatically. Existing application media encryption is unchanged.
+Filesystem permissions restrict service access; host root remains trusted.
+
+This source configuration does not establish hardware enrollment. gc-10 was
+observed with Secure Boot disabled; automatic TPM recovery has not been tested
+there. Verify signed boot, both container credentials and recovery before rollout.
+PCR 7 and signed boot alone do not establish integrity of arbitrary persistent
+root/Nix-store code or enforce approved-version rollback. ENC-06/12 remain
+unverified; this implementation is not a release of the strong acceptance profile.
+
+Explicit `unlockMethod = "passphrase"` remains available for existing-volume unlock and
+recovery. In that mode, use an interactive SSH terminal and:
 
 ```bash
 sudo luxnix-operator-storage start
 ```
 
-The helper provides a private terminal password agent and starts configured
+In passphrase mode, the helper provides a private password agent and starts configured
 boot-time consumers. It uses `start`, not `restart`. Already open containers and
-already migrated data are reused; healthy services are not restarted. Locked
-storage still needs its passphrase—unattended unlock is intentionally not enabled.
+already migrated data are reused; healthy services are not restarted.
 
 For inspection or unlock only:
 
@@ -32,14 +62,43 @@ sudo luxnix-operator-storage status
 sudo luxnix-operator-storage open
 ```
 
-## First startup and migration
+## Explicit provisioning and recovery custody
 
-For a missing configured container file, startup estimates source data size,
-reserves space with headroom, asks for a new passphrase twice, exclusively
-creates the file, initializes LUKS2 and ext4, and unlocks it. It never formats an
-existing file, root partition or data partition. Existing containers are never
-resized automatically. An interrupted initial format requires inspection rather
-than an automatic reformat.
+The admin workflow generates one random 256-bit recovery passphrase for each
+new volume. It stores an authenticated Ansible Vault record under
+`~/.lxv/storage-recovery/<machine-id>/<volume>.vault`, using the existing admin
+vault key. The record binds host, machine ID, container path and native LUKS UUID.
+An encrypted copy is published on the selected independent recovery host under
+`~/.luxnix-recovery/<machine-id>/<luks-uuid>.vault`; the pilot uses gs-02.
+Only ciphertext is sent to that host. Keep the admin vault key separately in
+custodian recovery custody; it is not included with the export.
+
+`devenv shell storage-provision provision --host gc-10 --volume luxnix-app-storage
+--recovery-host gs-02` previews the exact target. `--apply` explicitly authorizes
+the operation after both recovery copies are authenticated. It uses the deployed
+`luxnix-storage-provision` helper, which requires Secure Boot and authenticated
+recovery custody. The legacy `tpm2` backend enrolls a TPM token. Select
+`--backend local-openbao` for a host with the local OpenBao tool installed and
+its enrollment escrow confirmed. This deploy-time choice does not change its
+boot unlock policy.
+
+The local backend writes and reads back an independent UUID-bound OpenBao key
+before allocation. It formats an unpublished private allocation with the
+escrowed recovery passphrase, publishes only a valid authenticated LUKS header,
+adds the OpenBao keyslot, and creates ext4 only for the authenticated new-volume
+request. A retry resumes the same record, UUID and keyslots. A partial allocation
+is private staging; an existing published container is never reformatted. The
+mapping stays open for subsequent pre-copy. Boot never invokes this workflow.
+
+For existing containers, use `storage-provision escrow` with the same host,
+volume and recovery-host arguments plus `--existing-key-file <private-file>`.
+The existing credential is tested before escrow; neither keyslots nor data are
+changed. Both workflows accept `--sudo-password-file <private-file>` when sudo
+authentication is required, and refuse unprotected credential files. Omit
+`--apply` for inspection only. Copying authenticated ciphertext is not proof of
+replacement-hardware recovery or completed ENC-16/17 acceptance.
+
+## Separately authorized migration
 
 For each bind destination, migration checks encrypted backing storage and swap,
 copies into private encrypted staging with rsync (permissions, ownership, ACLs,
@@ -65,12 +124,32 @@ bind mounts separately. Require no differences, then verify database access,
 authenticated application-media reads and recovery from the destination before
 retiring the source. Never copy a live PostgreSQL data directory as a valid backup.
 
-Migration does not stop a running database or copy its live files. For an
-initial live retrofit, schedule a maintenance stop of writers; subsequent normal
-boots order migration before those writers automatically. An actual problem
-(insufficient space, wrong passphrase, conflicting data or an unconfigured
-filesystem) prevents an unsafe cutover and retains the sources. No empty-data or
-plaintext fallback is used.
+Normal boot migration refuses live writers. The explicit deployment path is:
+
+```bash
+devenv shell openbao-local rollout --limit <host-or-group> --recovery-host <host>
+devenv shell openbao-local rollout --limit <host-or-group> --recovery-host <host> --apply
+devenv shell openbao-local rollout --limit <host-or-group> --recovery-host <host> --apply --cutover
+```
+
+The first command plans only. Applied rollout enrolls local OpenBao, provisions
+missing volumes with authenticated recovery exports, resumes incomplete new
+volumes, and adopts existing volumes using their previously escrowed recovery
+passphrases. It opens the mappings without changing the boot profile, then runs
+`luxnix-storage-precopy.service`. Pre-copy leaves writers running and never
+publishes a final destination or receipt.
+
+`--cutover` additionally runs `luxnix-storage-cutover.service`: stop active
+writers, synchronize and verify the final deltas, publish receipts, activate
+binds, then start the previously active writers and configured `startupServices`.
+Neither unit is started automatically at boot. Both require mounted encrypted
+volumes. If final copying fails, newly published destinations return to private
+staging and their new receipts are removed before writer recovery is attempted.
+Recovery uses the normal service dependencies and never disables encrypted
+storage checks. The original source directories are retained throughout.
+
+`devenv tasks run tests:operator-storage-migration-vm` exercises the packaged
+units with real LUKS, mounts, final-delta copying and reboot receipt reuse.
 
 Account activation happens before application-volume unlock. The fleet policy
 uses root-only boot-available files under `/var/lib/luxnix-account` for the admin
@@ -89,7 +168,8 @@ backups. Until then, do not claim that all historical plaintext has disappeared.
 | Option | Contract |
 | --- | --- |
 | `enable` | Opt-in reusable module; enabled by the fleet inventory for active machines. |
-| `migration.enable` | Defaults to true; provision/unlock and verify startup copies. Disable only for a separately prepared layout. |
+| `unlockMethod` | `local-openbao` (target, after enrollment and adoption), or legacy `tpm2`/`passphrase`; independent of provisioning and migration. |
+| `migration.enable` | Controls copying existing data only; false for the gc-10 pilot. Unlock services remain available when disabled. |
 | `migration.accountHashes` | Boot-available hash destination to existing hash source; never generates account credentials. |
 | `volumes` | Mapping device, mount point, filesystem, optional container path, minimum size, `noexec` and backing-filesystem dependencies. |
 | `bindMounts` | Logical destination to volume name and relative preserved directory. |
@@ -133,7 +213,7 @@ backed entirely by dm-crypt, and requires the data, storage and config roots and
 the master key file to resolve into those mounts. Evaluation fails when
 `runtime.encryptedDataDir` or `runtime.masterKeyFile` lies outside them.
 
-Hosts with `enable = false`, including gated gc-10, render no list. lx-annotate
+Hosts with `enable = false` render no list. lx-annotate
 then reports that no locations were declared and verifies only file-level
 encryption. Enforcement starts only with an lx-annotate release that contains
 this check. Older wheels ignore the variable, so rendering it is safe before the
@@ -141,18 +221,20 @@ wheel pin is updated.
 
 ## Deployment and verification
 
-gc-10 is temporarily gated out through its host YAML: both
-`storage.operatorUnlocked.enable` and `migration.enable` are false, and account
-hashes retain their existing Vault-backed paths. This permits a live deployment
-without introducing the new mount, migration, unlock or account-copy workflow.
-Keep gc-10's existing `/etc/systemd/system.control` mounts and storage guards;
-they remain responsible for its encrypted application and database mounts.
-Deploy only while both existing volumes are open and the account hashes are
-readable. This gate does not establish reboot recovery: none of the tested
-Desktop token files unlocked the application container on October 26.
-Before removing the gate, establish a tested unlock credential and recovery
-backup, then perform the stopped-writer migration and override review below.
-The outer secrets directory and PostgreSQL backups remain unmigrated while gated.
+gc-10 uses the shared operator-unlocked storage workflow, including unlock
+services, verified migration and boot-available account hashes. Its application
+container remains on `/data/raid01`; the existing no-disk-swap policy is retained.
+The temporary host-specific disable gate has been removed.
+
+Normal app startup automatically unlocks enrolled TPM volumes. No separate helper
+command is required for routine starts or rebuilds. Retain offline recovery
+passphrases; do not store unlock keys on plaintext root storage.
+
+Before first activation, verify recovery credentials and independent backups,
+keep existing secret hash sources readable for account activation, and schedule
+the stopped-writer transition described above. Review and replace conflicting
+`/etc/systemd/system.control` overrides before relying on generated mount units.
+Removing the gate does not itself migrate live data or verify reboot recovery.
 
 Regenerate through Autoconf and build from the reviewed durable checkout using
 the [deployment workflow](deployment-guide.md). Review legacy overrides under

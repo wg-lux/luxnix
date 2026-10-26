@@ -631,7 +631,7 @@ lib.foldl' lib.recursiveUpdate
       ];
     }
     {
-      luxnix.storage.operatorUnlocked.enable = false;
+      luxnix.storage.operatorUnlocked.enable = true;
     }
     {
       luxnix.storage.operatorUnlocked.guardedServices = lib.id (
@@ -776,10 +776,16 @@ lib.foldl' lib.recursiveUpdate
       luxnix.vault.psk = "/etc/secrets/.psk";
     }
     {
+      luxnix.openbao.local.enable = true;
+    }
+    {
       luxnix.storage.operatorUnlocked.bindMounts."/var/lib/lx-annotate/hub-pki" = {
         volume = "luxnix-secrets";
         directory = "hub-client-pki";
       };
+    }
+    {
+      luxnix.storage.operatorUnlocked.unlockMethod = "tpm2";
     }
     {
       luxnix.storage.operatorUnlocked.volumes.luxnix-app-storage.container =
@@ -787,6 +793,14 @@ lib.foldl' lib.recursiveUpdate
     }
     {
       luxnix.storage.operatorUnlocked.volumes.luxnix-app-storage.depends = [ "/data/raid01" ];
+    }
+    {
+      luxnix.storage.operatorUnlocked.volumes.luxnix-app-storage.luksUUID =
+        "f5869d54-4ea5-407c-a690-7238fe79cd6b";
+    }
+    {
+      luxnix.storage.operatorUnlocked.volumes.luxnix-secrets.luksUUID =
+        "dc53d362-e6e2-43ee-9cbf-4726d55c3055";
     }
     {
       luxnix.vault.client.auth.deferUntilProvisioned = false;
@@ -800,14 +814,18 @@ lib.foldl' lib.recursiveUpdate
       programs.nix-ld.enable = true;
     }
     {
-      security.luxnix.local-users.adminPassword.hashedFile = config.luxnix.vault.adminPasswordHashedFile;
+      security.luxnix.local-users.adminPassword.hashedFile =
+        "/var/lib/luxnix-account/admin-password.hash";
     }
     {
       security.luxnix.local-users.clientPassword.hashedFile =
-        "${config.luxnix.vault.dir}/SCRT_client_user_password_hash";
+        "/var/lib/luxnix-account/client-password.hash";
     }
     {
       security.luxnix.local-users.enable = true;
+    }
+    {
+      system.boot.secureBoot = true;
     }
     {
       xdg.menus.enable = true;

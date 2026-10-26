@@ -230,10 +230,6 @@ rec {
   // optionalAttrs cfg.django.centerIdentitySalt {
     DJANGO_IDENTITY_CENTER_ID = config.roles.endoreg-client.defaultCenterKey;
   }
-  // optionalAttrs cfg.django.identitySaltViaSecretSpec {
-    DJANGO_IDENTITY_SALT_DELIVERY = "secretspec";
-    DJANGO_IDENTITY_SALT_GENERATION = toString cfg.django.identitySaltGeneration;
-  }
   // cfg.runtime.extraEnvironment
   // llmEnv;
 

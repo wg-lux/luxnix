@@ -78,6 +78,7 @@ nav:
       - Access Management: access-management.md
   - Deployment and Testing:
       - Deployment Guide: deployment-guide.md
+      - gc-10 Automatic Startup: gc-10-startup.md
       - Activation Failure Recovery: activation-failure-recovery.md
       - External Storage Detection: external-storage-detection.md
       - Hardware Setup: hardware-setup.md
@@ -102,7 +103,12 @@ nav:
   - Vault:
       - Machine Setup Secrets Checklist: machine-secrets-checklist.md
       - Manually Unlocked Site Storage: operator-unlocked-storage.md
+      - Fleet Secure Boot: secure-boot.md
       - Setup and Bootstrap: vault-setup.md
+      - OpenBao Hub and Vault Migration: openbao.md
+      - Local OpenBao Bootstrap: openbao-local.md
+      - OpenBao Target Architecture: openbao-architecture.md
+      - TPM Release Client: tpm-release-client.md
       - Maintainer Notes: vault-maintainer-operations.md
       - Admin Password Creation and Rotation: admin-passwords.md
       - Coordinated Secret Rotation: secret-rotation.md

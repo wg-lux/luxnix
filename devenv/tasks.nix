@@ -83,6 +83,26 @@
     exec = ''${pkgs.uv}/bin/uv run python scripts/repo-state-summary.py "$@"'';
   };
 
+  "tests:bao-migration-vm" = {
+    description = "Verify idempotent Vault to OpenBao provisioning against real TLS services";
+    exec = "nix build .#checks.x86_64-linux.bao-migration --no-link -L";
+  };
+
+  "tests:openbao-local-vm" = {
+    description = "Verify local OpenBao TPM credentials and auto-unseal in disposable VMs";
+    exec = "nix build .#checks.x86_64-linux.openbao-local --no-link -L";
+  };
+
+  "tests:operator-storage-migration-vm" = {
+    description = "Verify staged encrypted storage cutover and reboot receipt reuse";
+    exec = "nix build .#checks.x86_64-linux.operator-storage-migration --no-link -L";
+  };
+
+  "tests:openbao-vm" = {
+    description = "Verify isolated OpenBao volume release in a disposable LUKS-backed VM";
+    exec = "nix build .#checks.x86_64-linux.openbao-release --no-link -L";
+  };
+
   # Nix quality
   "nix-quality:check" = {
     description = "Run fast Nix parse, deadnix, statix, nixfmt, and flake-checker checks";

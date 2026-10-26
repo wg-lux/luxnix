@@ -10,12 +10,21 @@ boundaries:
 - Shared defaults can affect the entire fleet
 - Shared contributor tools belong in roles/custom-packages
 entrypoints:
+- name: openbao
+  file: luxnix/openbao/default.nix
+  purpose: Separate opt-in encrypted TLS hub and TPM-sealed local Raft instances.
+- name: tpm-release-client
+  file: luxnix/tpm-release-client/default.nix
+  purpose: Opt-in TPM-bound client identity and release fetch command; not wired into unlock.
 - name: operator-unlocked-storage
   file: luxnix/operator-unlocked-storage/default.nix
-  purpose: Reusable typed encrypted volumes, nested binds, verified consumer gates and manual-unlock swap policy.
+  purpose: Reusable encrypted volumes, TPM or recovery unlock, nested binds and verified consumer gates.
 - name: operator-storage-helper
   file: luxnix/operator-storage-helper/default.nix
-  purpose: Per-volume container paths and the operator status, unlock and LUKS header-backup command.
+  purpose: Per-volume status, recovery unlock, TPM enrollment and LUKS header-backup commands.
+- name: secure-boot
+  file: system/boot/default.nix
+  purpose: Bootloader selection; keyless lanzaboote install verifying controller-signed artifacts against the public fleet certificate.
 - name: vault-secret-lifecycle
   file: luxnix/vault/default.nix
   purpose: Machine authentication, guarded Vault credentials and mount-gated manually unlocked server TLS storage.
