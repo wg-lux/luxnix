@@ -219,6 +219,7 @@ substitute one for another.
 | Hub X25519 recipient key pair | Wrap and unwrap a fresh per-transfer data-encryption key | Private key only on `gs-02`; public key delivered to sites through Vault | Only the public key may leave `gs-02` |
 | LX-Annotate application master key | Encrypt local application-managed storage | Host-local secret storage on each node | Never transmit it and never reuse it as a node secret or transfer key |
 | LUKS/disk unlock material | Protect the local storage boundary | Host/custodian-specific boot procedure | Never distribute as hub-transfer enrollment material |
+| Shared Keycloak client secret | LX-Annotate OIDC login (`OIDC_RP_CLIENT_SECRET`) | Keycloak; distributed from `lx-hub-secrets/oidc/endoregdb-api` on `gs-02` | Only to enrolled sites through their read-only AppRole policy |
 
 The mTLS certificate, `NetworkNode` secret, and X25519 public recipient key are
 all required. mTLS authenticates the channel, the shared secret authenticates
@@ -1051,6 +1052,42 @@ For removal, preserve transfer and audit records, disable the sender, revoke
 its Vault access and mTLS identity, remove its secret delivery, and mark the
 receiver-side `NetworkNode` inactive. Do not delete completed transfer evidence
 or reuse the removed node key for another physical machine.
+
+## Shared Keycloak client secret
+
+All sites currently share the confidential Keycloak client `endoregdb-api`.
+Keycloak issues its secret; Vault on `gs-02` only distributes it. The value lives
+in field `client_secret` at `<kvMountPath>/<oidcClientSecretKvPath>`, by default
+`lx-hub-secrets/oidc/endoregdb-api`. `luxnix-vault-reconcile-hub-sites` grants
+every reconciled site read access to this path and never writes it, so sites
+reconciled before this change need one more reconciliation run.
+
+Publish the value on `gs-02` with a short-lived administrative `VAULT_TOKEN`.
+The command reads the secret from a hidden prompt (or standard input), never
+from its arguments, and refuses whitespace or an empty value:
+
+```bash
+luxnix-vault-publish-oidc-client-secret
+```
+
+The first publication uses check-and-set `0`, so it cannot overwrite an
+existing value. Republishing the same value is a no-op. A different value is
+refused unless `LUXNIX_VAULT_ALLOW_OIDC_CLIENT_SECRET_ROTATION=1` is set, and
+is then written with check-and-set against the version that was read.
+
+Sites opt in with `services.luxnix.lxAnnotateLocal.django.keycloakSecretViaVault`.
+Evaluation fails unless managed secrets and enrolled hub-PKI machine
+authentication are enabled. Managed secrets then writes
+`django.keycloakSecretFile` (default `/etc/secrets/vault/keycloak.env`) as
+`root:root 0600` on every boot. A failed or empty fetch leaves the previous file
+in place and fails `managed-secrets-setup.service`; nothing falls back to an
+inline value. The application reads its copy only at startup.
+
+To rotate: regenerate the secret in Keycloak, publish it with the rotation
+variable set, then on each site restart `managed-secrets-setup.service`,
+`lx-annotate-runtime-env.service` and `lx-annotate.service`. Because the secret
+is shared, containing one site requires rotating it for all sites; revoking the
+site's AppRole alone does not invalidate a value it already fetched.
 
 ## Controller SSH authorization
 

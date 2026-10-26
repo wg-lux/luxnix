@@ -143,6 +143,15 @@ ansible_roles:
   - "nginx_host"
 
 host_luxnix:
+  storage.operatorUnlocked.volumes.luxnix-secrets.mountPoint: '"/var/lib/luxnix-vault-pki"'
+  storage.operatorUnlocked.volumes.luxnix-secrets.device: '"/dev/mapper/luxnix-vault-pki"'
+  storage.operatorUnlocked.volumes.luxnix-secrets.container: '"/var/lib/luxnix-vault-tls.luks"'
+  storage.operatorUnlocked.bindMounts."/var/endoreg-service-user/lx-annotate-wheel/conf".volume: '"luxnix-app-storage"'
+  storage.operatorUnlocked.bindMounts."/var/lib/luxnix-vault-site-lifecycle": >-
+    { volume = "luxnix-secrets"; directory = "site-lifecycle"; }
+  storage.operatorUnlocked.bindMounts."/root/vault-enrollment": >-
+    { volume = "luxnix-secrets"; directory = "site-enrollment"; }
+
   # Keep system upgrades manual on this host.
   maintenance.autoUpdates.enable: "false"
 
@@ -208,36 +217,6 @@ host_luxnix:
   generic_settings.linux.kernelModulesBlacklist: []
 
 host_nixos:
-  # Populate and verify these directories before mounting; preserve existing identities.
-  fileSystems: >-
-    lib.mkMerge [ (lib.mkIf config.luxnix.vault.server.managedTls.encryptedStorage
-    (lib.mapAttrs (_: directory: {
-    device = "/var/lib/luxnix-vault-pki/${directory}";
-    fsType = "none";
-    options = [ "bind" "noauto" "nodev" "nosuid" "noexec" ];
-    depends = [ "/var/lib/luxnix-vault-pki" ];
-    }) {
-    "/etc/secrets/vault" = "managed-secrets";
-    "/var/lib/luxnix-vault-site-lifecycle" = "site-lifecycle";
-    "/root/vault-enrollment" = "site-enrollment";
-    "/var/lib/lx-annotate-identity-salts" = "identity-salt-recovery";
-    "/var/lib/lx-annotate/data/.identity-salt-recovery" = "identity-salt-replica";
-    }))
-    { "/var/lib/luxnix-app-storage" = {
-    device = "/dev/mapper/luxnix-app-storage";
-    fsType = "ext4";
-    options = [ "noauto" "nodev" "nosuid" "x-systemd.device-timeout=10s" ];
-    }; }
-    (lib.mapAttrs (_: directory: {
-    device = "/var/lib/luxnix-app-storage/${directory}";
-    fsType = "none";
-    options = [ "bind" "noauto" "nodev" "nosuid" ];
-    depends = [ "/var/lib/luxnix-app-storage" ];
-    }) {
-    "/var/lib/lx-annotate" = "application";
-    "/var/lib/postgresql" = "postgresql";
-    "/var/endoreg-service-user/lx-annotate-wheel/conf" = "wheel-conf";
-    }) ]
   # Stop consumers if encrypted storage disappears; never initialize plaintext fallbacks.
   systemd.services: >-
     lib.genAttrs [ "lx-annotate-runtime-env" "postgresql" "postgresql-setup" "postgres-endoreg-setup" ]

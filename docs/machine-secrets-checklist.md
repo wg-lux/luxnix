@@ -18,7 +18,7 @@ Paths in the first table are relative to `/etc/secrets/vault/`.
 
 | File | Required by | Provisioning responsibility |
 | --- | --- | --- |
-| `keycloak.env` | LX-Annotate OIDC login | Supply the client secret registered with Keycloak. Managed-secrets does not generate it. |
+| `keycloak.env` | LX-Annotate OIDC login | Supply the client secret registered with Keycloak, or set `django.keycloakSecretViaVault` to fetch the shared secret from Vault on `gs-02` (see [shared Keycloak client secret](vault-hub-machine-enrollment.md#shared-keycloak-client-secret)). |
 | `SCRT_local_password_admin_password_hash` | Admin account | Deliver the validated hash through the admin-password workflow. |
 | `SCRT_client_user_password_hash` | Enabled client-user account | Supply the account hash; automatic human-password generation is disabled by default. |
 | `hub-pki/approle_role_id` and `hub-pki/approle_secret_id` | Vault AppRole authentication | Deliver the machine-specific enrollment credentials. |
@@ -124,6 +124,68 @@ Reboot recovery and independent backup restoration still require separate tests.
 
 ### Other conditional inputs
 
+For `gc-09` and `gc-10`, the `operator_unlocked_secrets` inventory group uses
+`/var/lib/luxnix-secrets.luks`, manually opened as `luxnix-secrets`, for Vault
+credentials, identity-salt recovery copies and wheel configuration. The group
+disables disk swap and automatic GPT swap discovery while retaining RAM-only
+zram. It configures the reusable `luxnix.storage.operatorUnlocked` module,
+including the separate `luxnix-app-storage` mapping and
+application/PostgreSQL binds; gc-10 retains its second-disk dependency and
+separate client-PKI bind. See [Manually Unlocked Site Storage](operator-unlocked-storage.md)
+for the complete mount contract and activation/reboot procedure. Declaring these
+mounts does not create containers or migrate existing data.
+
+Before activating this group, format and unlock the newly prepared container,
+create its filesystem, and copy and verify all four configured directories with
+consumers stopped. Never activate empty bind-mount sources or rerun `luksFormat`
+on an initialized container. Preserve original directories until recovery is
+verified. On subsequent boots, unlock with:
+
+```bash
+sudo cryptsetup open /var/lib/luxnix-secrets.luks luxnix-secrets
+```
+
+Unlock the application container as well before starting application services.
+Then start the configured mounts and authentication/secret services. Enrollment
+must pass the storage guard before credentials are delivered. The enrollment
+wrapper explicitly sets both `ANSIBLE_REMOTE_TEMP` and `ansible_remote_tmp` to
+`/dev/shm`, so the verifier checks the staging location actually used by Ansible.
+
+On 2026-10-23, all four directories on gc-09 and gc-10 were copied to their
+unlocked containers and verified with rsync content checksums and metadata
+comparison before bind mounting. Originals remain beneath the mounts. Disk swap
+was stopped; only zram remained active. The storage verifier and Vault
+authentication passed on both hosts. gc-10's web service initially restarted,
+then a later runtime check blocked it until the application/PostgreSQL migration
+described below completed.
+gc-09's application and PostgreSQL directories were subsequently copied with the
+database stopped into an 8 GiB `/var/lib/luxnix-app-storage.luks` container and
+verified before mounting. Its nested identity-salt replica remains on the separate
+secrets volume. PostgreSQL, the web service and checked workers started, client
+certificate renewal succeeded, and the local application returned HTTP 301.
+The `postgres` database reported a collation-version mismatch; no collation
+metadata was changed as part of storage migration.
+
+The interim live deployment uses five mount units and four service guard drop-ins
+under `/etc/systemd/system.control`, plus disk-swap masks there. This avoids a full
+NixOS switch while application storage is unresolved. These overrides take
+precedence over generated units: reconcile them with the inventory configuration
+when completing the full deployment. gc-09 also has application/PostgreSQL mount
+units and guards in that directory. Reboot recovery has not yet been tested.
+On gc-09, unlock both volumes before starting the application:
+
+```bash
+sudo cryptsetup open /var/lib/luxnix-secrets.luks luxnix-secrets
+sudo cryptsetup open /var/lib/luxnix-app-storage.luks luxnix-app-storage
+sudo systemctl start postgresql.service vault-auth-setup.service
+sudo systemctl start managed-secrets-setup.service lx-annotate.service
+```
+
+These are unlock commands only; never repeat `luksFormat` on either populated
+container. The mount dependencies attach the preserved salt replica after the
+application directory. Retained plaintext originals remain subject to the
+documented secret-retirement procedure; migration alone does not erase them.
+
 The shared storage verifier accepts repeated, identical `SOURCE,FSTYPE` mount
 reports from systemd sandbox bind mounts. Conflicting reports still fail closed,
 and the backing device and swap encryption checks still apply. If identity salt
@@ -187,3 +249,42 @@ this example is not evidence of deployed readiness.
 For later changes, use [Coordinated Secret Rotation](secret-rotation.md).
 Rotation, enrollment and restoration are different operations; replacing every
 file in the secrets directory is not a safe recovery procedure.
+
+On 2026-10-23, gc-10 client certificate issuance failed because
+`/var/lib/lx-annotate/hub-pki` remained on unencrypted root storage. Its contents
+were copied with metadata preserved and checksum-verified into
+`/var/lib/luxnix-secrets/hub-client-pki`, then bind mounted at the original path.
+The underlying originals were retained. Certificate issuance then succeeded.
+The gc-10 inventory defines this mount and required-mount guards for issuance,
+the web service and the hub-transfer worker. Matching interim units and guards
+are installed under `/etc/systemd/system.control`. This does not complete
+application/PostgreSQL encryption or fleet enrollment by itself. The subsequent
+application-storage migration below resolved the runtime storage failure.
+
+For gc-10's application migration, the separate 760 GiB LUKS container is
+`/data/raid01/luxnix-app-storage.luks`, on its second disk. The application
+and PostgreSQL bind mounts use `/var/lib/luxnix-app-storage`; the certificate
+and identity-salt replica mounts remain on `luxnix-secrets` and must be
+attached after the application mount. After a reboot, unlock both containers:
+
+```bash
+sudo cryptsetup open /var/lib/luxnix-secrets.luks luxnix-secrets
+sudo cryptsetup open /data/raid01/luxnix-app-storage.luks luxnix-app-storage
+sudo systemctl start postgresql.service vault-auth-setup.service
+sudo systemctl start managed-secrets-setup.service lx-annotate.service
+```
+
+The second-disk filesystem must be mounted before opening the application
+container. Formatting commands are deliberately omitted: both containers are
+already initialized. Do not delete the original application/database directories
+or override mount guards to regain disk space.
+
+The gc-10 recovery operator completed checksum-verified application/PostgreSQL
+cutover on 2026-10-23. Independent read-only checks on gc-09 and gc-10 confirmed
+the encrypted mount sources, storage-verifier success, Vault readiness, matching
+CA-verified client certificates and keys, PostgreSQL `SELECT 1`, running web and
+transfer workers, and validated HTTPS 302/200 for the login redirect/frontend
+manifest. The live setup still uses interim units; native activation of the
+reusable module and reboot recovery remain untested. See
+[Manually Unlocked Site Storage](operator-unlocked-storage.md) for deployment
+gates and the existing collation-version warning.

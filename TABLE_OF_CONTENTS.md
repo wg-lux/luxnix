@@ -45,6 +45,7 @@
   - [gs-02 Local Redis Recovery](docs/operations/gs-02-local-redis-broker.md)
 - **Vault**
   - [Machine Setup Secrets Checklist](docs/machine-secrets-checklist.md)
+  - [Manually Unlocked Site Storage](docs/operator-unlocked-storage.md)
   - [Setup and Bootstrap](docs/vault-setup.md)
   - [Maintainer Notes](docs/vault-maintainer-operations.md)
   - [Admin Password Creation and Rotation](docs/admin-passwords.md)

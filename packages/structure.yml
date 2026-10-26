@@ -4,24 +4,24 @@ path: packages
 parent: ../structure.yml
 summary: Project-specific Nix derivations and packaged resources.
 responsibilities:
-- Define packages absent from the ordinary upstream package set
-- Keep derivation resources adjacent to their package
+  - Define packages absent from the ordinary upstream package set
+  - Keep derivation resources adjacent to their package
 boundaries:
-- Ordinary shared contributor tools belong in roles/custom-packages
-- Do not traverse bundled font or wheel payloads for context discovery
+  - Ordinary shared contributor tools belong in roles/custom-packages
+  - Do not traverse bundled font or wheel payloads for context discovery
 entrypoints:
-- name: installer
-  file: install/default.nix
-  purpose: Inspect installer ownership and interfaces.
+  - name: installer
+    file: install/default.nix
+    purpose: Inspect installer ownership and interfaces.
 dependencies:
   internal:
-  - modules/nixos
+    - modules/nixos
   external:
-  - Nixpkgs
+    - Nixpkgs
 submodules: []
 contracts:
-- name: architecture
-  doc: ../docs/architecture.md
+  - name: architecture
+    doc: ../docs/architecture.md
 tests:
   directory: ../tests
   command: python -m pytest -q tests/test_repository_architecture_contract.py

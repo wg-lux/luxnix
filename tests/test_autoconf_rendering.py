@@ -14,6 +14,19 @@ from lx_administration.autoconf.nix.template_renderer import render_nix_template
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.mark.parametrize("value", ['(let x = 1; in { value = x; })', '"let this remain text"'])
+def test_folded_yaml_let_expression_and_explicit_string_render_verbatim(tmp_path, value):
+    template = tmp_path / "value.nix.j2"
+    template.write_text("{{ value | nix }}")
+    assert render_nix_template(tmp_path, template.name, {"value": value}).strip() == value
+
+
+def test_plain_let_prefix_remains_inventory_text(tmp_path):
+    template = tmp_path / "value.nix.j2"
+    template.write_text("{{ value | nix }}")
+    assert render_nix_template(tmp_path, template.name, {"value": "let operators decide"}) == '"let operators decide"'
+
+
 def _render_config(tmp_path: Path) -> AutoconfConfig:
     """Build renderer options without creating unrelated source directories."""
     return AutoconfConfig(

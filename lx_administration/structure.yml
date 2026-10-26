@@ -4,50 +4,50 @@ path: lx_administration
 parent: ../structure.yml
 summary: Python administration libraries for generation, inventory, secrets and storage.
 responsibilities:
-- Expose bounded reusable administration interfaces
-- Keep optional subsystems lazily imported
+  - Expose bounded reusable administration interfaces
+  - Keep optional subsystems lazily imported
 boundaries:
-- Do not import upstream LX-Annotate business logic
-- Do not introduce secret or storage side effects at import time
+  - Do not import upstream LX-Annotate business logic
+  - Do not introduce secret or storage side effects at import time
 entrypoints:
-- name: secret-storage-boundary
-  file: secret_storage.py
-  purpose: Verify encrypted device ancestry and non-swappable runtime boundaries before plaintext secret access.
-- name: private-file-writes
-  file: permissions.py
-  purpose: Enforce encrypted persistence and atomic private file publication.
-- name: package
-  file: __init__.py
-  purpose: Inspect package ownership and interfaces.
-- name: lazy-exports
-  file: _lazy_exports.py
-  purpose: Inspect lazy exports ownership and interfaces.
+  - name: secret-storage-boundary
+    file: secret_storage.py
+    purpose: Verify encrypted device ancestry and non-swappable runtime boundaries before plaintext secret access.
+  - name: private-file-writes
+    file: permissions.py
+    purpose: Enforce encrypted persistence and atomic private file publication.
+  - name: package
+    file: __init__.py
+    purpose: Inspect package ownership and interfaces.
+  - name: lazy-exports
+    file: _lazy_exports.py
+    purpose: Inspect lazy exports ownership and interfaces.
 dependencies:
   internal:
-  - ansible
-  - autoconf
-  - conf
+    - ansible
+    - autoconf
+    - conf
   external:
-  - Pydantic
-  - PyYAML
-  - cryptography
-  - Jinja2
+    - Pydantic
+    - PyYAML
+    - cryptography
+    - Jinja2
 submodules:
-- name: autoconf
-  path: autoconf
-  manifest: autoconf/structure.yml
-  summary: Validated inventory import and isolated Nix rendering pipeline.
-- name: vault
-  path: models/vault
-  manifest: models/vault/structure.yml
-  summary: Typed encrypted vault lifecycle, secret identities and export contracts.
-- name: storage
-  path: storage
-  manifest: storage/structure.yml
-  summary: Storage management and hub data-plane interfaces.
+  - name: autoconf
+    path: autoconf
+    manifest: autoconf/structure.yml
+    summary: Validated inventory import and isolated Nix rendering pipeline.
+  - name: vault
+    path: models/vault
+    manifest: models/vault/structure.yml
+    summary: Typed encrypted vault lifecycle, secret identities and export contracts.
+  - name: storage
+    path: storage
+    manifest: storage/structure.yml
+    summary: Storage management and hub data-plane interfaces.
 contracts:
-- name: architecture
-  doc: ../docs/architecture.md
+  - name: architecture
+    doc: ../docs/architecture.md
 tests:
   directory: ../tests
   command: python -m pytest -q tests/test_package_import_boundaries.py

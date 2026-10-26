@@ -19,7 +19,8 @@ group_services:
   redis.servers.main.bind: lib.mkForce config.luxnix.generic-settings.network.redis.vpnIp
   luxnix.lxAnnotateLocal.hub.enable: "true"
   luxnix.lxAnnotateLocal.runtime.deploymentRole: '"central_hub"'
-  luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl: '"redis://${config.luxnix.generic-settings.network.redis.vpnIp}:${toString config.luxnix.generic-settings.network.redis.port}/1"'
+  luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl: '"redis://${config.luxnix.generic-settings.network.redis.vpnIp}:${toString
+    config.luxnix.generic-settings.network.redis.port}/1"'
   luxnix.lxAnnotateLocal.database.ownership: '"external"'
   luxnix.lxAnnotateLocal.database.host: config.luxnix.generic-settings.network.psqlMain.vpnIp
   luxnix.lxAnnotateLocal.database.port: config.luxnix.generic-settings.network.psqlMain.port

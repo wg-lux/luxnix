@@ -4,33 +4,33 @@ path: systems
 parent: ../structure.yml
 summary: Snowfall host entry points and adjacent host-owned hardware or disk configuration.
 responsibilities:
-- Compose per-host module options and local hardware
-- Consume generated inventory and template output
+  - Compose per-host module options and local hardware
+  - Consume generated inventory and template output
 boundaries:
-- Do not import reusable modules directly across host entry points
-- Regenerate Autoconf-managed default.nix files from canonical inputs
+  - Do not import reusable modules directly across host entry points
+  - Regenerate Autoconf-managed default.nix files from canonical inputs
 entrypoints:
-- name: shared-baseline
-  file: x86_64-linux/host-common.nix
-  purpose: Inspect shared baseline ownership and interfaces.
-- name: isolated-test-host
-  file: x86_64-linux/lx-test/default.nix
-  purpose: Inspect isolated test host ownership and interfaces.
+  - name: shared-baseline
+    file: x86_64-linux/host-common.nix
+    purpose: Inspect shared baseline ownership and interfaces.
+  - name: isolated-test-host
+    file: x86_64-linux/lx-test/default.nix
+    purpose: Inspect isolated test host ownership and interfaces.
 dependencies:
   internal:
-  - modules/nixos
-  - ansible
-  - conf
+    - modules/nixos
+    - ansible
+    - conf
   external:
-  - Snowfall
-  - NixOS
-  - disko
+    - Snowfall
+    - NixOS
+    - disko
 submodules: []
 contracts:
-- name: architecture
-  doc: ../docs/architecture.md
-- name: README
-  doc: x86_64-linux/lx-test/README.md
+  - name: architecture
+    doc: ../docs/architecture.md
+  - name: README
+    doc: x86_64-linux/lx-test/README.md
 tests:
   directory: ../tests
   command: python -m pytest -q tests/test_repository_architecture_contract.py

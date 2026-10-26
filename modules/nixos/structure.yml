@@ -10,6 +10,12 @@ boundaries:
 - Shared defaults can affect the entire fleet
 - Shared contributor tools belong in roles/custom-packages
 entrypoints:
+- name: operator-unlocked-storage
+  file: luxnix/operator-unlocked-storage/default.nix
+  purpose: Reusable typed encrypted volumes, nested binds, verified consumer gates and manual-unlock swap policy.
+- name: operator-storage-helper
+  file: luxnix/operator-storage-helper/default.nix
+  purpose: Per-volume container paths and the operator status, unlock and LUKS header-backup command.
 - name: vault-secret-lifecycle
   file: luxnix/vault/default.nix
   purpose: Machine authentication, guarded Vault credentials and mount-gated manually unlocked server TLS storage.
@@ -35,6 +41,7 @@ dependencies:
   internal:
   - packages
   - lx_administration
+  - lx_administration
   external:
   - NixOS
   - systemd
@@ -46,6 +53,8 @@ submodules:
   manifest: services/lx-annotate-local/structure.yml
   summary: LuxNix deployment composition for the upstream LX-Annotate application.
 contracts:
+- name: operator-unlocked-storage
+  doc: ../../docs/operator-unlocked-storage.md
 - name: architecture
   doc: ../../docs/architecture.md
 - name: README

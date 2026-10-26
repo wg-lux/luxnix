@@ -323,10 +323,12 @@
 
     - name: Explain the next step for each site that did not enroll
       ansible.builtin.debug:
-        msg: '{{ fleet_next_steps[hostvars[item].fleet_enrollment_status | default("not-run")] | default("Inspect the first failed task and rerun for this site.") }}'
+        msg: '{{ fleet_next_steps[hostvars[item].fleet_enrollment_status | default("not-run")]
+          | default("Inspect the first failed task and rerun for this site.") }}'
       vars:
         fleet_next_steps:
-          unreachable: 'SSH unavailable from this controller. Check its SSH key, the target login account, VPN route and pinned host key. This does not prove the host is offline; a Vault token cannot fix SSH.'
+          unreachable: 'SSH unavailable from this controller. Check its SSH key, the target login account, VPN route and pinned host key.
+            This does not prove the host is offline; a Vault token cannot fix SSH.'
           failed-prerequisite: 'Check the named host Linux sudo password and that /dev/shm is tmpfs. Use --ask-sudo-password for separate host passwords.'
           failed-connectivity: 'SSH connected but the connectivity command failed. Check the configured remote Python interpreter and account permissions.'
           failed-preflight: 'Fix the reported inventory, source checkout or trust configuration before issuing credentials.'

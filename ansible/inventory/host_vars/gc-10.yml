@@ -18,11 +18,25 @@ host_services:
   luxnix.lxAnnotateLocal.django.centerIdentitySalt: "true"
   luxnix.lxAiLocal.runtime.protectedDataDir: '"/var/lib/lx-annotate/data"'
 
-host_nixos: {}
+host_nixos:
+  # Live-deploy gate: retain existing hash sources until storage migration is accepted.
+  security.luxnix.local-users.adminPassword.hashedFile: "config.luxnix.vault.adminPasswordHashedFile"
+  security.luxnix.local-users.clientPassword.hashedFile: '"${config.luxnix.vault.dir}/SCRT_client_user_password_hash"'
+  # Existing migrated-host policy; other fleet hosts retain their encrypted swap.
+  swapDevices: "lib.mkForce [ ]"
+  systemd.generators.systemd-gpt-auto-generator: '"/dev/null"'
 
 extra_secret_names: []
 
 host_luxnix:
+  # Preserve the live system.control mounts; do not migrate or provision on activation.
+  storage.operatorUnlocked.enable: "false"
+  storage.operatorUnlocked.migration.enable: "false"
+  storage.operatorUnlocked.bindMounts."/var/lib/lx-annotate/hub-pki": >-
+    { volume = "luxnix-secrets"; directory = "hub-client-pki"; }
+  storage.operatorUnlocked.volumes.luxnix-app-storage.container: '"/data/raid01/luxnix-app-storage.luks"'
+  # The application container lives on the second disk.
+  storage.operatorUnlocked.volumes.luxnix-app-storage.depends: '[ "/data/raid01" ]'
   # Temporary bootstrap exception; set false after verified Vault enrollment.
   vault.client.auth.deferUntilProvisioned: "false"
 

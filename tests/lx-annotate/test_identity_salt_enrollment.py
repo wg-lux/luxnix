@@ -191,6 +191,11 @@ path.write_text(json.dumps(state))
         assert 'capabilities = ["read"]' in rules
         assert '"update"' not in rules and '"create"' not in rules
     assert "/centers/" not in state["policies"]["lx-hub-site-gc_05_intern"]
+    # Every site reads, but never writes, the shared Keycloak client secret.
+    for site in ("gc_02_intern", "gc_10_intern", "gc_05_intern"):
+        policy = state["policies"][f"lx-hub-site-{site}"]
+        rules = policy.split('path "lx-hub-secrets/data/oidc/endoregdb-api" {', 1)[1]
+        assert rules.split("}", 1)[0].strip() == 'capabilities = ["read"]'
 
 
 def test_gs02_acceptance_trusts_its_vault_ca():

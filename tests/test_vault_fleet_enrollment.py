@@ -325,6 +325,8 @@ def test_fleet_scope_transport_and_secret_blocks():
     wrapper = (ROOT / "scripts/enroll-reachable-hub-sites.sh").read_text()
     assert "StrictHostKeyChecking=yes" in wrapper
     assert "ANSIBLE_REMOTE_TEMP=/dev/shm" in wrapper
+    # The storage task reads the Ansible variable, not the connection's env default.
+    assert "-e ansible_remote_tmp=/dev/shm" in wrapper
     assert "run-secret-playbook.sh" in wrapper
 
 

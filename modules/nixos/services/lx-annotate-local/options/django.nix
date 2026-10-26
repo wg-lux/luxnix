@@ -84,6 +84,16 @@ in
                 Enable per center through inventory after reviewing legacy hash links.
               '';
             };
+            keycloakSecretViaVault = mkOption {
+              type = types.bool;
+              default = false;
+              description = ''
+                Fetch keycloakSecretFile from the shared Vault path
+                luxnix.vault.client.hubPki.oidcClientSecretKvPath through managed secrets on
+                every boot. Requires enrolled Vault machine authentication; a failed fetch
+                keeps the previous file and fails the managed-secrets unit.
+              '';
+            };
             identitySaltViaSecretSpec = mkOption {
               type = types.bool;
               default = false;

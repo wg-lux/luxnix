@@ -2246,6 +2246,16 @@ in
                 || lib.hasPrefix "${cfg.storageRelief.archiveDir}/" cfg.storageRelief.stagingDir;
               message = "services.luxnix.lxAnnotateLocal.storageRelief.stagingDir must stay inside storageRelief.archiveDir.";
             }
+            {
+              assertion =
+                !cfg.django.keycloakSecretViaVault
+                || (
+                  config.luxnix.vault.client.hubPki.enable
+                  && !config.luxnix.vault.client.auth.deferUntilProvisioned
+                  && lib.attrByPath [ "roles" "managed-secrets" "enable" ] false config
+                );
+              message = "services.luxnix.lxAnnotateLocal.django.keycloakSecretViaVault requires managed secrets and enrolled Vault hub-PKI machine authentication.";
+            }
           ];
 
           roles = {
@@ -2257,6 +2267,28 @@ in
               ];
 
               customSecrets = {
+                lx_annotate_keycloak_client_secret = mkIf cfg.django.keycloakSecretViaVault {
+                  path = toString cfg.django.keycloakSecretFile;
+                  owner = "root";
+                  group = "root";
+                  permissions = "600";
+                  description = "Vault-managed shared Keycloak client secret";
+                  customScript = true;
+                  refreshOnBoot = true;
+                  generator =
+                    let
+                      hubPki = config.luxnix.vault.client.hubPki;
+                    in
+                    ''
+                      ${pkgs.vault}/bin/vault kv get -field=client_secret ${lib.escapeShellArg "${hubPki.kvMountPath}/${hubPki.oidcClientSecretKvPath}"} \
+                        | tr -d '\n' > "$TARGET_FILE"
+                      if [ ! -s "$TARGET_FILE" ]; then
+                        echo "ERROR: Vault returned an empty Keycloak client secret." >&2
+                        exit 1
+                      fi
+                    '';
+                };
+
                 lx_annotate_master_key_local =
                   mkIf
                     (

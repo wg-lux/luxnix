@@ -56,6 +56,23 @@ host_services:
 
 ## Verification
 
+### Local report inference on gc-09
+
+The localhost URL alone does not install Ollama. The gc-09 inventory enables
+`luxnix.ollama.enable`, CUDA acceleration and model bootstrap, and sets
+`luxnix.lxAnnotateLocal.runtime.llmInferenceWorker.mode` to `"always"`.
+Its worker requires and starts after
+`ollama-create-lx-gemma4-e2b-json.service`, which depends on the base model loader.
+The worker starts only after custom model creation succeeds.
+The first activation needs network access and time to download the model.
+
+After activation, check `ollama.service` and
+`lx-annotate-celery-llm-inference-worker.service` are active, and inspect
+`Result` for `ollama-model-loader.service` and
+`ollama-create-lx-gemma4-e2b-json.service`. A successful oneshot model unit may
+be inactive. Check report job status separately: a running worker does not
+prove that a report passed anonymization and identity-integrity checks.
+
 ### Entry 1
 
 #### Command

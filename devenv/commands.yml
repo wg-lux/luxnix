@@ -55,7 +55,9 @@ commands:
     prerequisites:
       - Clean reviewed durable checkout, configured receiver identities and pinned SSH keys.
       - Initialized unsealed Vault on gs-02; existing hub enrollment commands deployed.
-      - SSH from this controller and root sudo access (use --ask-sudo-password for separate host passwords; legacy --ask-become-pass asks once for a shared password); private controller tmpfs; encrypted or disabled swap.
+      - >-
+        SSH from this controller and root sudo access (use --ask-sudo-password for separate host passwords; legacy --ask-become-pass asks
+        once for a shared password); private controller tmpfs; encrypted or disabled swap.
     effects:
       - Token entry authorizes the displayed reachable fleet; token is not saved or printed.
       - Reuses valid installed or saved credentials; creates missing initial enrollment.

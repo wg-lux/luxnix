@@ -4,32 +4,35 @@ path: lx_administration/storage
 parent: ../structure.yml
 summary: Storage management and hub data-plane interfaces.
 responsibilities:
-- Manage storage paths and mounts through explicit calls
-- Validate hub envelopes and data-plane contracts
+  - Manage storage paths and mounts through explicit calls
+  - Validate hub envelopes and data-plane contracts
 boundaries:
-- Do not mount or alter live storage during context validation
-- Preserve encrypted storage and hub authentication boundaries
+  - Do not mount or alter live storage during context validation
+  - Preserve encrypted storage and hub authentication boundaries
 entrypoints:
-- name: manager
-  file: manager.py
-  purpose: Inspect manager ownership and interfaces.
-- name: data-plane
-  file: data_plane.py
-  purpose: Inspect data plane ownership and interfaces.
-- name: envelopes
-  file: envelope.py
-  purpose: Inspect envelopes ownership and interfaces.
+  - name: operator-migration
+    file: operator_migration.py
+    purpose: Provision new passphrase containers and verify resumable startup copies without overwriting populated storage.
+  - name: manager
+    file: manager.py
+    purpose: Inspect manager ownership and interfaces.
+  - name: data-plane
+    file: data_plane.py
+    purpose: Inspect data plane ownership and interfaces.
+  - name: envelopes
+    file: envelope.py
+    purpose: Inspect envelopes ownership and interfaces.
 dependencies:
   internal:
-  - modules/nixos
+    - modules/nixos
   external:
-  - cryptography
-  - mTLS
-  - filesystem mounts
+    - cryptography
+    - mTLS
+    - filesystem mounts
 submodules: []
 contracts:
-- name: hardware-setup
-  doc: ../../docs/hardware-setup.md
+  - name: hardware-setup
+    doc: ../../docs/hardware-setup.md
 tests:
   directory: ../../tests/storage_manager
   command: python -m pytest -q tests/storage_manager

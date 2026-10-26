@@ -8,11 +8,23 @@ host_roles:
   endoreg-client.defaultCenterKey: "university_hospital_wuerzburg"
 
 host_services:
+  luxnix.ollama.enable: "true"
+  luxnix.ollama.acceleration: '"cuda"'
+  luxnix.ollama.enableModelBootstrap: "true"
+  luxnix.lxAnnotateLocal.runtime.llmInferenceWorker.mode: '"always"'
   luxnix.lxAnnotateLocal.django.enrollLegacyDefaultSalt: "true"
   # Würzburg shares one center salt; differing local salts stay as historical keys.
   luxnix.lxAnnotateLocal.django.centerIdentitySalt: "true"
 
 host_nixos:
+  # Existing migrated-host policy; other fleet hosts retain their encrypted swap.
+  swapDevices: "lib.mkForce [ ]"
+  systemd.generators.systemd-gpt-auto-generator: '"/dev/null"'
+  # Do not consume queued reports until the configured local model exists.
+  systemd.services.lx-annotate-celery-llm-inference-worker.after:
+    '[ "ollama-create-lx-gemma4-e2b-json.service" ]'
+  systemd.services.lx-annotate-celery-llm-inference-worker.requires:
+    '[ "ollama-create-lx-gemma4-e2b-json.service" ]'
   nix.settings.max_jobs: 1
   nix.settings.cores: 4
 

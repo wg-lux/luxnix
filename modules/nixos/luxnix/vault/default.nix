@@ -407,6 +407,7 @@ let
       kv_mount=${lib.escapeShellArg hubPkiCfg.kvMountPath}
       client_ttl=${lib.escapeShellArg hubPkiCfg.clientTtl}
       recipient_public_key_kv_path=${lib.escapeShellArg hubPkiCfg.recipientPublicKeyKvPath}
+      oidc_client_secret_kv_path=${lib.escapeShellArg hubPkiCfg.oidcClientSecretKvPath}
       policy_file=""
       state_file="$(${pkgs.coreutils}/bin/mktemp)"
 
@@ -496,6 +497,9 @@ let
           '}' \
           "path \"$kv_mount/data/$recipient_public_key_kv_path\" {" \
           '  capabilities = ["read"]' \
+          '}' \
+          "path \"$kv_mount/data/$oidc_client_secret_kv_path\" {" \
+          '  capabilities = ["read"]' \
           '}' > "$policy_file"
         if [ -n "$center_key" ]; then
           ${pkgs.coreutils}/bin/printf '%s\n' \
@@ -528,6 +532,73 @@ let
 
       trap - EXIT
       cleanup
+    '';
+  };
+
+  # Keycloak issues the client secret; Vault only distributes it to enrolled sites.
+  oidcClientSecretPublishTool = pkgs.writeShellApplication {
+    name = "luxnix-vault-publish-oidc-client-secret";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.gnugrep
+      pkgs.jq
+      pkgs.vault
+    ];
+    text = ''
+      set -euo pipefail
+      umask 077
+      ulimit -c 0
+
+      if [ "$#" -ne 0 ]; then
+        echo "Usage: luxnix-vault-publish-oidc-client-secret < secret (or enter it at the hidden prompt)" >&2
+        exit 2
+      fi
+      if [ -z "''${VAULT_ADDR:-}" ] || [ -z "''${VAULT_TOKEN:-}" ]; then
+        echo "VAULT_ADDR and a short-lived administrative VAULT_TOKEN are required." >&2
+        exit 1
+      fi
+
+      kv_path=${lib.escapeShellArg "${hubPkiCfg.kvMountPath}/${hubPkiCfg.oidcClientSecretKvPath}"}
+      state_file="$(mktemp)"
+      error_file="$(mktemp)"
+      trap 'rm -f "$state_file" "$error_file"' EXIT
+
+      secret=""
+      if [ -t 0 ]; then
+        IFS= read -r -s -p "Keycloak client secret: " secret || true
+        echo >&2
+      else
+        IFS= read -r secret || true
+      fi
+      if [ -z "$secret" ] || [[ "$secret" =~ [[:space:]] ]]; then
+        echo "ERROR: the client secret must be one nonempty line without whitespace." >&2
+        exit 1
+      fi
+
+      if vault kv get -format=json "$kv_path" > "$state_file" 2> "$error_file"; then
+        current="$(jq -er '.data.data.client_secret' "$state_file")"
+        version="$(jq -er '.data.metadata.version' "$state_file")"
+        if [ "$current" = "$secret" ]; then
+          echo "Vault already holds this client secret at $kv_path."
+          exit 0
+        fi
+        if [ "''${LUXNIX_VAULT_ALLOW_OIDC_CLIENT_SECRET_ROTATION:-0}" != "1" ]; then
+          echo "ERROR: Vault already holds a different client secret; refusing implicit rotation." >&2
+          echo "Rerun with LUXNIX_VAULT_ALLOW_OIDC_CLIENT_SECRET_ROTATION=1 after rotating it in Keycloak." >&2
+          exit 1
+        fi
+        cas="$version"
+      else
+        # A permission or connection error is never treated as an absent secret.
+        if ! grep -Fq 'No value found at' "$error_file"; then
+          echo "ERROR: client secret lookup failed; refusing to publish." >&2
+          exit 1
+        fi
+        cas=0
+      fi
+
+      printf '%s' "$secret" | vault kv put -cas="$cas" "$kv_path" client_secret=- >/dev/null
+      echo "Published the Keycloak client secret at $kv_path (check-and-set $cas)."
     '';
   };
 
@@ -1520,6 +1591,11 @@ in
                   default = "hub/envelope-recipient/current";
                   description = "Vault KV v2 path containing only the central-hub X25519 public recipient key.";
                 };
+                oidcClientSecretKvPath = mkOption {
+                  type = types.strMatching "[A-Za-z0-9_/-]+";
+                  default = "oidc/endoregdb-api";
+                  description = "Vault KV v2 path of the shared Keycloak client secret (field client_secret).";
+                };
               };
             };
             default = { };
@@ -1705,6 +1781,15 @@ in
                   type = types.strMatching "[A-Za-z0-9_/-]+";
                   default = "hub/envelope-recipient/current";
                   description = "Vault KV v2 path containing only the current central-hub envelope recipient public key.";
+                };
+                oidcClientSecretKvPath = mkOption {
+                  type = types.strMatching "[A-Za-z0-9_/-]+";
+                  default = "oidc/endoregdb-api";
+                  description = ''
+                    Vault KV v2 path of the shared Keycloak client secret. Every reconciled site
+                    policy may read it; only the custodian publishes it with
+                    luxnix-vault-publish-oidc-client-secret, never the reconciler.
+                  '';
                 };
               };
             };
@@ -1916,6 +2001,7 @@ in
         hubPkiBootstrapTool
         hubSitesReconcileTool
         hubSiteEnrollmentTool
+        oidcClientSecretPublishTool
         serverRebuildPreparationTool
         hubSiteLifecycleTool
         pkgs.vault

@@ -4,27 +4,27 @@ path: homes
 parent: ../structure.yml
 summary: Generated Snowfall Home Manager entry points for user and host combinations.
 responsibilities:
-- Consume Home inventory and generation templates
-- Select reusable user-level module options
+  - Consume Home inventory and generation templates
+  - Select reusable user-level module options
 boundaries:
-- Do not hand-edit Autoconf-managed home entry points
-- Do not place system services in user configuration
+  - Do not hand-edit Autoconf-managed home entry points
+  - Do not place system services in user configuration
 entrypoints:
-- name: home-template-contract
-  file: ../conf/nix-templates/homes/x86_64-linux/default.nix.j2
-  purpose: Inspect home template contract ownership and interfaces.
+  - name: home-template-contract
+    file: ../conf/nix-templates/homes/x86_64-linux/default.nix.j2
+    purpose: Inspect home template contract ownership and interfaces.
 dependencies:
   internal:
-  - modules/home
-  - ansible
-  - conf
+    - modules/home
+    - ansible
+    - conf
   external:
-  - Home Manager
-  - Snowfall
+    - Home Manager
+    - Snowfall
 submodules: []
 contracts:
-- name: autoconf
-  doc: ../docs/autoconf.md
+  - name: autoconf
+    doc: ../docs/autoconf.md
 tests:
   directory: ../tests
   command: python -m pytest -q tests/test_autoconf_rendering.py

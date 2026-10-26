@@ -712,6 +712,168 @@ lib.foldl' lib.recursiveUpdate
       luxnix.packages.shared = [ ];
     }
     {
+      luxnix.storage.operatorUnlocked.bindMounts = lib.foldl' lib.recursiveUpdate { } [
+        {
+          "/etc/secrets" = {
+            volume = "luxnix-secrets";
+            directory = "host-secrets";
+          };
+          "/etc/secrets/vault" = {
+            volume = "luxnix-secrets";
+            directory = "managed-secrets";
+          };
+        }
+        (lib.optionalAttrs config.services.postgresql.enable {
+          "/var/lib/postgresql" = {
+            volume = "luxnix-app-storage";
+            directory = "postgresql";
+          };
+        })
+        (lib.optionalAttrs config.services.postgresqlBackup.enable {
+          ${config.services.postgresqlBackup.location} = {
+            volume = "luxnix-app-storage";
+            directory = "postgresql-backups";
+          };
+        })
+        (lib.optionalAttrs config.luxnix.vault.server.enable {
+          ${config.luxnix.vault.server.storagePath} = {
+            volume = "luxnix-app-storage";
+            directory = "vault-data";
+          };
+        })
+        (lib.optionalAttrs config.services.luxnix.lxAnnotateLocal.enable {
+          "/var/lib/lx-annotate-identity-salts" = {
+            volume = "luxnix-secrets";
+            directory = "identity-salt-recovery";
+          };
+          "/var/lib/lx-annotate/data/.identity-salt-recovery" = {
+            volume = "luxnix-secrets";
+            directory = "identity-salt-replica";
+          };
+          "/var/endoreg-service-user/lx-annotate-wheel/conf" = {
+            volume = "luxnix-secrets";
+            directory = "wheel-conf";
+          };
+          "/var/lib/lx-annotate" = {
+            volume = "luxnix-app-storage";
+            directory = "application";
+          };
+        })
+      ];
+    }
+    {
+      luxnix.storage.operatorUnlocked.enable = true;
+    }
+    {
+      luxnix.storage.operatorUnlocked.guardedServices = lib.id (
+        let
+          app = config.services.luxnix.lxAnnotateLocal;
+          secrets = [
+            "/etc/secrets"
+            "/etc/secrets/vault"
+          ];
+          identity = secrets ++ [
+            "/var/lib/lx-annotate-identity-salts"
+            "/var/lib/lx-annotate/data/.identity-salt-recovery"
+          ];
+          application = [ "/var/lib/lx-annotate" ];
+          database = lib.optional config.services.postgresql.enable "/var/lib/postgresql";
+          workers = map (name: "lx-annotate-celery-${name}") [
+            "beat"
+            "worker"
+            "pipeline-worker"
+            "ffmpeg-worker"
+            "frame-extraction-worker"
+            "inference-worker"
+            "llm-inference-worker"
+            "training-worker"
+            "hub-transfer-worker"
+          ];
+        in
+        lib.optionalAttrs (
+          config.luxnix.vault.enable
+          && config.luxnix.vault.client.enable
+          && config.luxnix.vault.client.auth.method != "none"
+        ) { vault-auth-setup = secrets; }
+        // lib.optionalAttrs config.roles.managed-secrets.enable { managed-secrets-setup = secrets; }
+        // lib.optionalAttrs config.services.postgresql.enable {
+          postgresql = database;
+          postgresql-setup = database;
+        }
+        // lib.optionalAttrs config.roles.postgres.default.enable { postgres-endoreg-setup = database; }
+        // lib.optionalAttrs config.services.postgresqlBackup.enable (
+          lib.genAttrs (
+            if config.services.postgresqlBackup.backupAll then
+              [ "postgresqlBackup" ]
+            else
+              map (name: "postgresqlBackup-${name}") config.services.postgresqlBackup.databases
+          ) (_: database ++ [ config.services.postgresqlBackup.location ])
+        )
+        // lib.optionalAttrs config.luxnix.vault.server.enable {
+          vault = secrets ++ [ config.luxnix.vault.server.storagePath ];
+        }
+        // lib.optionalAttrs (config.luxnix.vault.enable && config.luxnix.vault.client.hubPki.enable) {
+          luxnix-vault-issue-hub-client-certificate = secrets ++ lib.optionals app.enable application;
+        }
+        // lib.optionalAttrs app.enable (
+          {
+            lx-annotate-runtime-env =
+              identity ++ application ++ database ++ [ "/var/endoreg-service-user/lx-annotate-wheel/conf" ];
+            lx-annotate = application;
+          }
+          // lib.genAttrs workers (_: application)
+          // lib.optionalAttrs (!app.django.identitySaltViaSecretSpec) {
+            lx-annotate-identity-salts = identity;
+          }
+        )
+      );
+    }
+    {
+      luxnix.storage.operatorUnlocked.migration.accountHashes =
+        lib.recursiveUpdate
+          { "/var/lib/luxnix-account/admin-password.hash" = config.luxnix.vault.adminPasswordHashedFile; }
+          (
+            lib.optionalAttrs config.user.client.enable {
+              "/var/lib/luxnix-account/client-password.hash" =
+                "${config.luxnix.vault.dir}/SCRT_client_user_password_hash";
+            }
+          );
+    }
+    {
+      luxnix.storage.operatorUnlocked.migration.enable = true;
+    }
+    {
+      luxnix.storage.operatorUnlocked.startupServices = lib.filter (
+        name: builtins.elem "multi-user.target" config.systemd.services.${name}.wantedBy
+      ) (builtins.attrNames config.luxnix.storage.operatorUnlocked.guardedServices);
+    }
+    {
+      luxnix.storage.operatorUnlocked.volumes =
+        lib.recursiveUpdate
+          {
+            luxnix-secrets = {
+              mountPoint = "/var/lib/luxnix-secrets";
+              container = "/var/lib/luxnix-secrets.luks";
+              minimumSizeMiB = 256;
+              noexec = true;
+            };
+          }
+          (
+            lib.optionalAttrs
+              (
+                config.services.luxnix.lxAnnotateLocal.enable
+                || config.services.postgresql.enable
+                || config.luxnix.vault.server.enable
+              )
+              {
+                luxnix-app-storage = {
+                  mountPoint = "/var/lib/luxnix-app-storage";
+                  container = "/var/lib/luxnix-app-storage.luks";
+                };
+              }
+          );
+    }
+    {
       luxnix.vault.dir = "/etc/secrets/vault";
     }
     {
@@ -786,6 +948,31 @@ lib.foldl' lib.recursiveUpdate
       luxnix.nvidia-prime.enable = lib.mkForce false;
     }
     {
+      luxnix.storage.operatorUnlocked.bindMounts."/root/vault-enrollment" = {
+        volume = "luxnix-secrets";
+        directory = "site-enrollment";
+      };
+    }
+    {
+      luxnix.storage.operatorUnlocked.bindMounts."/var/endoreg-service-user/lx-annotate-wheel/conf".volume =
+        "luxnix-app-storage";
+    }
+    {
+      luxnix.storage.operatorUnlocked.bindMounts."/var/lib/luxnix-vault-site-lifecycle" = {
+        volume = "luxnix-secrets";
+        directory = "site-lifecycle";
+      };
+    }
+    {
+      luxnix.storage.operatorUnlocked.volumes.luxnix-secrets.container = "/var/lib/luxnix-vault-tls.luks";
+    }
+    {
+      luxnix.storage.operatorUnlocked.volumes.luxnix-secrets.device = "/dev/mapper/luxnix-vault-pki";
+    }
+    {
+      luxnix.storage.operatorUnlocked.volumes.luxnix-secrets.mountPoint = "/var/lib/luxnix-vault-pki";
+    }
+    {
       luxnix.vault.server.apiAddress = "https://${config.luxnix.generic-settings.network.vault.vpnIp}:8200";
     }
     {
@@ -845,63 +1032,18 @@ lib.foldl' lib.recursiveUpdate
       programs.nix-ld.enable = true;
     }
     {
-      xdg.menus.enable = true;
+      security.luxnix.local-users.adminPassword.hashedFile =
+        "/var/lib/luxnix-account/admin-password.hash";
     }
     {
-      fileSystems = lib.mkMerge [
-        (lib.mkIf config.luxnix.vault.server.managedTls.encryptedStorage (
-          lib.mapAttrs
-            (_: directory: {
-              device = "/var/lib/luxnix-vault-pki/${directory}";
-              fsType = "none";
-              options = [
-                "bind"
-                "noauto"
-                "nodev"
-                "nosuid"
-                "noexec"
-              ];
-              depends = [ "/var/lib/luxnix-vault-pki" ];
-            })
-            {
-              "/etc/secrets/vault" = "managed-secrets";
-              "/var/lib/luxnix-vault-site-lifecycle" = "site-lifecycle";
-              "/root/vault-enrollment" = "site-enrollment";
-              "/var/lib/lx-annotate-identity-salts" = "identity-salt-recovery";
-              "/var/lib/lx-annotate/data/.identity-salt-recovery" = "identity-salt-replica";
-            }
-        ))
-        {
-          "/var/lib/luxnix-app-storage" = {
-            device = "/dev/mapper/luxnix-app-storage";
-            fsType = "ext4";
-            options = [
-              "noauto"
-              "nodev"
-              "nosuid"
-              "x-systemd.device-timeout=10s"
-            ];
-          };
-        }
-        (lib.mapAttrs
-          (_: directory: {
-            device = "/var/lib/luxnix-app-storage/${directory}";
-            fsType = "none";
-            options = [
-              "bind"
-              "noauto"
-              "nodev"
-              "nosuid"
-            ];
-            depends = [ "/var/lib/luxnix-app-storage" ];
-          })
-          {
-            "/var/lib/lx-annotate" = "application";
-            "/var/lib/postgresql" = "postgresql";
-            "/var/endoreg-service-user/lx-annotate-wheel/conf" = "wheel-conf";
-          }
-        )
-      ];
+      security.luxnix.local-users.clientPassword.hashedFile =
+        "/var/lib/luxnix-account/client-password.hash";
+    }
+    {
+      security.luxnix.local-users.enable = true;
+    }
+    {
+      xdg.menus.enable = true;
     }
     {
       networking.firewall.interfaces.tun0.allowedTCPPorts = lib.mkAfter [
