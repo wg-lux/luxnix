@@ -86,6 +86,14 @@ def test_gc10_composes_valid_mount_units_without_enabling_other_hosts():
     assert units["otherHost"] is False
 
 
+def test_prepare_grants_nginx_group_read_without_world_access():
+    script = _configuration()["systemd"]["services"]["gc10-backup-exports-prepare"][
+        "script"
+    ]
+    assert "install -d -m 0750 -o 'export-user'" in script
+    assert "-g 'export-group'" in script
+
+
 @pytest.mark.parametrize(
     "uuid,probe_status,symlink,expected",
     [

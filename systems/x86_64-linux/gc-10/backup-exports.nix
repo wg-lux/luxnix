@@ -47,7 +47,8 @@ in
             echo 'gc-10 export refused: export directory is a symlink' >&2
             exit 1
           fi
-          install -d -m 0700 -o '${config.user.endoreg-service-user.name}' \
+          # Group read lets nginx serve downloads via the X-Accel /protected_media/ alias.
+          install -d -m 0750 -o '${config.user.endoreg-service-user.name}' \
             -g '${config.user.endoreg-service-user.group}' '${source}'
         '';
       };
