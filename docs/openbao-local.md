@@ -49,7 +49,58 @@ The passphrase lane uses the real enrollment wrapper, systemd credentials,
 OpenBao and LUKS, and exercises a cold boot with wrong and correct answers.
 These disposable VM checks do not establish physical host acceptance.
 
-## TPM implementation and existing acceptance gates
+## Passwords, initial enrollment and resets
+
+There is no default local OpenBao password. Installing the service does not
+create a boot passphrase, and the local API has no interactive password login.
+
+| Credential | Purpose | How it is established |
+| --- | --- | --- |
+| OpenBao boot passphrase | Unwraps the local static seal key in passphrase mode | Chosen by the operator during initial enrollment; never stored as plaintext or escrowed as a passphrase. |
+| LUKS recovery passphrase | Opens one existing encrypted container independently of OpenBao | Established when that container was provisioned; tested and escrowed before adoption. |
+| Linux login/sudo password | Authenticates the administrator to the host | Managed separately; does not unlock OpenBao or LUKS. |
+| OpenBao AppRole credential | Authorizes access to volume-key records after OpenBao is unsealed | Issued during enrollment; `rotate-unlock` replaces the unlock SecretID. |
+
+Check the deployed host before choosing an operation, using a reviewed checkout
+whose declared seal mode matches the installed tool:
+
+```bash
+devenv shell openbao-local status --limit gc-10
+```
+
+Add `--sudo-password-file <private-file>` when the SSH administrator needs sudo
+authentication. If the tool is missing, install it through the deployment
+workflow first while retaining the existing storage unlock method. An inactive
+service alone does not prove the absence of enrollment or Raft data.
+
+For a genuinely uninitialized store, initial enrollment chooses a new passphrase:
+
+```bash
+devenv shell openbao-local enroll --limit gc-10 --recovery-host <recovery-host>
+devenv shell openbao-local enroll --limit gc-10 --recovery-host <recovery-host> --apply
+```
+
+The first command is read-only. The second changes the host and requires explicit
+operator authorization, a validated admin vault, and independent recovery custody.
+Enter the passphrase twice in the private controller terminal, never in chat,
+command arguments or inventory. The same procedure applies to any selected host;
+gc-10 has no special password or enrollment policy. Volume adoption and the boot
+profile switch remain separate operations.
+
+**Passphrase change/reset is not implemented by the current CLI.** Rerunning
+`enroll --apply` requires the existing passphrase and verifies the existing record;
+it does not replace it with a new password. `rotate-unlock` changes an AppRole
+SecretID, not the OpenBao boot passphrase, static seal key or LUKS passphrases.
+
+If the boot passphrase is lost, preserve the wrapped record, Raft state and
+containers. Recovery requires the same static seal key from authenticated escrow
+and a separately reviewed recovery/rewrapping procedure. OpenBao recovery shares
+alone cannot replace that static key. The retained LUKS recovery credentials are
+the independent route to the containers. Do not delete the seal record or
+reinitialize OpenBao to simulate a password reset. A missing seal record alongside
+an existing store is a recovery case, not initial enrollment.
+
+## Shared service and TPM-specific checks
 
 The target is described in [OpenBao architecture](openbao-architecture.md).
 `luxnix.openbao.local.enable` now defines a separate `openbao-local.service`.
@@ -62,7 +113,8 @@ local service.
 Local Raft state lives at `/var/lib/openbao-local`, outside the containers it
 will unlock. The private API socket is `/run/openbao-local/api.sock`, accessible
 only by its service user and root. The static seal consumes a 32-byte key from
-`LoadCredentialEncrypted`, never from Nix settings. The
+`LoadCredentialEncrypted` in TPM mode or `LoadCredential` in passphrase mode,
+never from Nix settings. The
 [OpenBao 2.6 static seal](https://openbao.org/docs/2.6.x/configuration/seal/static/)
 supports this runtime file interface. OpenBao 2.6.4 cannot initialize Raft with Unix listeners alone: its
 [listener setup](https://github.com/openbao/openbao/blob/v2.6.4/command/server.go)
@@ -73,14 +125,14 @@ namespace. Clients still use the protected filesystem Unix socket. The internal
 API uses HTTP inside that namespace; Raft cluster traffic uses OpenBao TLS.
 The service is single-node and cannot join the hub Raft cluster.
 
-The bootstrap validator permits only the systemd TPM-only credential format
+In TPM mode, the bootstrap validator permits only the systemd TPM-only credential format
 and requires PCR 7 in its authenticated header. It rejects host-key, null-key,
 unknown-format and PCR-unbound credentials. Header checks follow the
 [systemd v260 format](https://github.com/systemd/systemd/blob/v260/src/shared/creds-util.c);
 they do not replace authenticated decryption. Boot preflight checks the live
 platform and ciphertext policy. Systemd authenticates and unseals
 `seal.key` when loading service credentials. Once the storage profile uses
-local OpenBao, a NixOS `preSwitchChecks` gate runs the filter and a transient
+local OpenBao in TPM mode, a NixOS `preSwitchChecks` gate runs the filter and a transient
 systemd credential-load probe before switching (rollout stage 5 below); it never
 reads plaintext into a Python process. Protected swap is checked
 before the probe, and core dumps are disabled. This gate is not an installer
@@ -106,8 +158,10 @@ devenv shell openbao-local rotate-unlock --limit <host-or-group> --recovery-host
 ```
 
 `--limit` accepts an inventory host or group; every selected host must belong
-to `operator_unlocked_secrets`. Without `--apply` the command shows only live
-status, the TPM/Secure Boot preflight and keyslot plans. A wave stops at the
+to `operator_unlocked_secrets`. Without `--apply` the command shows live
+status and escrow-file presence; `adopt` also reports keyslot plans and `rollout`
+checks its deployment prerequisites. Status includes platform observations but
+is not a successful mutating preflight or a recovery verification. A wave stops at the
 first failed host. `--recovery-host` must be a separate inventory host whose
 machine identity differs from both the target and the controller.
 
@@ -128,22 +182,26 @@ test evidence only; its fixture override is not installed by the production modu
 1. **Install the tool.** Deploy `luxnix.openbao.local.enable = true` with the
    existing unlock method. The service is then not started at boot, and no
    activation gate applies yet.
-2. **Enroll.** `openbao-local enroll --apply` runs these phases, each live-checking
-   the production TPM/platform prerequisites and firmware Secure Boot:
+2. **Enroll.** `openbao-local enroll --apply` runs these phases. The installed
+   tool checks runtime storage and swap before secret handling. TPM mode also
+   requires live platform and Secure Boot checks; passphrase mode requires the
+   operator's passphrase:
    1. *seal key*: generate 32 random bytes, or reuse the escrowed ones, and escrow
       them in the admin vault (`openbao-local/<host>/seal-key.vault`) and on the
-      recovery host. Then the host writes
-      `/var/lib/openbao-bootstrap/seal.cred` with `--with-key=tpm2`, PCR 7 and
-      `--name=seal.key`. An existing credential is compared, never replaced.
+      recovery host. TPM mode writes `/var/lib/openbao-bootstrap/seal.cred`
+      with `--with-key=tpm2`, PCR 7 and `--name=seal.key`. Passphrase mode
+      writes the wrapped `seal-passphrase.json` and stages the verified key.
+      An existing seal is verified, never replaced.
    2. *initialize*: `openbao-local-initialize.service` (never started at boot,
       asserting that no Raft database exists) creates the store, then `sys/init`
-      runs. The root token and recovery key are TPM-sealed in
+      runs. The root token and recovery key are encrypted in
       `pending-enrollment.cred` before anything else happens. The host configures
       a CAS-required KV v2 mount `volume-release`, an AppRole
       `volume-unlock` (read-only on `volume-release/data/<host>/*`, 60-second
       tokens) and an AppRole `volume-provisioner` (create/read records, rotate
       unlock SecretIDs). The boot credential `volume-unlock.cred` (`--name=volume.unlock`) and
-      the pending provisioner credential are TPM-sealed.
+      the pending provisioner credential are encrypted with the TPM in TPM mode
+      or the systemd host key in passphrase mode.
    3. *escrow*: the controller stores recovery key and provisioner credential as
       `openbao-local/<host>/enrollment.vault` in both custodies.
    4. *confirm*: the host accepts confirmation only with the SHA-256 of exactly
@@ -168,10 +226,13 @@ test evidence only; its fixture override is not installed by the production modu
    `openbao-local.service` is then wanted at boot, and the pre-switch gate
    `openbaoLocalPreflight` refuses activation with a named reason:
    `tpm-missing`, `secure-boot-disabled`, `not-enrolled`, `escrow-unconfirmed`,
-   `credential-not-tpm` or `credential-rejected`. It checks the live TPM, the
+   `credential-not-tpm` or `credential-rejected`. In TPM mode it checks the live TPM, the
    firmware, the store, both credential headers, and a transient systemd load of
    both credentials. That last check proves authenticated TPM decryption without
-   reading plaintext into a script.
+   reading plaintext into a script. In passphrase mode the gate instead requires
+   the authenticated record, matching staged key and receipt, and an unsealed
+   API as described above; failures include `seal-passphrase-missing` and
+   `seal-passphrase-unverified`. Both modes authenticate the loaded unlock credential.
 
 Every phase is idempotent and resumable: repeated runs neither add keyslots,
 records or SecretIDs nor change data. Host mutations hold the
@@ -205,14 +266,17 @@ the explicit deployment operation; it is not installed as a boot credential.
 
 ### Boot unlock
 
-Each unlock unit loads the TPM-encrypted `volume.unlock` AppRole credential.
+Each unlock unit loads the encrypted `volume.unlock` AppRole credential
+(TPM-bound in TPM mode, host-key encrypted in passphrase mode).
 It waits at most 60 seconds for initialized, unsealed and active state, logs in
 for a single-use token, reads exactly
 `volume-release/data/<hostname>/<volume>/<luks-uuid>` and revokes the token.
 Records must contain the matching `luks_uuid` and a base64 `key` decoding to 32
 bytes. Cryptsetup receives the key on stdin. A missing, denied or malformed
-record fails without fallback. The whole unit has a 90-second timeout. Neither
-the root token nor the provisioner credential is ever present at boot.
+record fails without fallback. Its execution has a 90-second timeout after
+the OpenBao dependencies are ready; this does not limit the earlier interactive
+passphrase prompt. After enrollment confirmation, neither the root token nor
+the provisioner credential is installed as a boot credential.
 
 `rotate-unlock` issues a new unlock SecretID with the escrowed provisioner
 credential. It seals the new SecretID, proves that it logs in, replaces the
@@ -225,7 +289,9 @@ written, the host reports `interrupted-initialization`. The store then holds no
 data, but its recovery key was never escrowed, so it is not usable. Enrollment
 never deletes state. An operator stops `openbao-local.service`, moves
 `/var/lib/openbao-local` aside for inspection and reruns `enroll`. The escrowed
-seal key is reused. Any other stop resumes automatically on rerun.
+seal key is reused. Other interrupted phases can be retried with the same
+credentials and intact escrow. Credential conflicts and missing recovery
+material require operator recovery; they are not repaired automatically.
 
 ### Not yet covered
 

@@ -179,7 +179,6 @@ in
 
         roles = {
           desktop.enable = true;
-          custom-packages.cuda = true;
           aglnet.client.enable = true;
           managed-secrets.enable = mkDefault true;
         };

@@ -20,6 +20,7 @@ let
     optionalString
     ;
 
+  # Derived host policy and runtime paths.
   runtime = lxAnnotateRuntime;
   llmWorkerMode = if cfg.runtime.llm.enable then cfg.runtime.llmInferenceWorker.mode else "manual";
   useLocalOllama =
@@ -76,6 +77,7 @@ let
     ;
   boolString = value: if value then "true" else "false";
 
+  # Reverse proxy and authenticated hub transfer.
   lxAnnotateSource = inputs.lx-annotate;
   hubTransferHttpTimeout = "${toString cfg.hub.transferApi.httpTimeoutSeconds}s";
 
@@ -155,6 +157,7 @@ let
     proxy_read_timeout 3600s;
     proxy_send_timeout 3600s;
   '';
+  # Wheel installation and application entrypoints.
   wheelhousePath =
     if cfg.runtime.wheelhousePath == null then "" else toString cfg.runtime.wheelhousePath;
   wheelDependencyOverrides = cfg.runtime.wheelDependencyOverrides;
@@ -374,7 +377,7 @@ let
           && { [ "$install_hash" != "$installed_hash" ] || [ ! -x ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/python"} ] || [ "$python_changed" = "true" ]; }
       then
         echo "ERROR: The LX-Annotate wheel runtime is not prepared for this release." >&2
-        echo "Start lx-annotate-wheel-runtime.service before application units." >&2
+        echo "Restart lx-annotate-wheel-runtime.service before application units." >&2
         exit 1
       fi
 
@@ -517,6 +520,7 @@ let
       runtimeStaticRootPath
     else
       "${cfg.runtime.package}/share/lx-annotate/staticfiles";
+  # Shared dependencies, environment and writable paths.
   envSystemdFilePath = "${runtimeRootPath}/.env.systemd";
   ffmpegStreamThrottleWorkerUnit = "lx-annotate-celery-ffmpeg-worker.service";
   ffmpegStreamThrottleStateFile = "/run/lx-annotate/ffmpeg-stream-throttle.state";
@@ -600,6 +604,7 @@ let
       (lib.makeLibraryPath (runtimeLibraryPackages ++ [ pkgs.ffmpeg-headless ]))
     ]
   );
+  # Monitoring configuration consumed by the shared runtime environment.
   monitoringDeploymentRevision =
     if cfg.runtime.monitoring.deploymentRevision != null then
       cfg.runtime.monitoring.deploymentRevision
@@ -787,6 +792,7 @@ let
 
   serviceUserIoAccessLinkPath = "${endoreg-service-user-home}/lx-annotate-io";
 
+  # Hub identity provisioning and recipient-key validation.
   hubNodeProvisioningData = pkgs.writeText "lx-annotate-hub-nodes.json" (
     builtins.toJSON (
       map (
@@ -898,9 +904,7 @@ let
   # Internal worker record contract: Workers.md
   mkWorker = import ./worker.nix { inherit lib; };
 
-  postValidationWorkerEnv = { };
-  inferenceWorkerEnv = { };
-  trainingWorkerEnv = { };
+  # Common application unit dependencies and sandbox defaults.
   wheelRuntimePrepareServiceUnits = lib.optionals useWheelRuntime [
     "lx-annotate-wheel-runtime.service"
   ];
@@ -945,6 +949,10 @@ let
       serviceConfig ? { },
       unitConfig ? { },
       restartTriggers ? [ effectiveRuntimePackage ],
+      # Startup-preparation oneshots pass false: a switch then restarts them
+      # after daemon-reload instead of stopping them before activation, when a
+      # timer or path trigger could re-run them from the outgoing generation.
+      stopIfChanged ? true,
     }:
     {
       inherit
@@ -952,6 +960,7 @@ let
         before
         wantedBy
         restartTriggers
+        stopIfChanged
         ;
       after = appServiceBaseAfter ++ after;
       wants = appServiceBaseWants ++ wants;
@@ -976,6 +985,7 @@ let
       }
       // serviceConfig;
     };
+  # Application setup and intake commands.
   loadBaseDataServiceScript = pkgs.writeShellScript "lx-annotate-load-base-data-service" ''
     set -euo pipefail
     exec ${effectiveRuntimePackage}/bin/lx-annotate-load-base-data --reconcile-legacy
@@ -1036,6 +1046,7 @@ let
       fi
     done
   '';
+  # Worker policy, service rendering and schedules.
   maintenanceWorkerPool = cfg.runtime.workerPools.maintenance // {
     inherit (cfg.runtime.workerLimits) memoryHigh memoryMax cpuQuota;
   };
@@ -1048,7 +1059,6 @@ let
         "default"
       ];
       pool = maintenanceWorkerPool;
-      environment = postValidationWorkerEnv;
     };
     hub-transfer = mkWorker {
       unitName = "lx-annotate-celery-hub-transfer-worker";
@@ -1072,7 +1082,6 @@ let
           "always"
         else
           "manual";
-      environment = postValidationWorkerEnv;
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];
       requires =
@@ -1087,7 +1096,6 @@ let
       hostname = "pipeline";
       queues = [ "pipeline" ];
       pool = cfg.runtime.workerPools.pipeline;
-      environment = postValidationWorkerEnv;
     };
     ffmpeg = mkWorker {
       unitName = "lx-annotate-celery-ffmpeg-worker";
@@ -1096,7 +1104,6 @@ let
       pool = cfg.runtime.workerPools.ffmpeg;
       mode = cfg.runtime.ffmpegWorker.mode;
       timeoutStopSec = cfg.runtime.ffmpegWorker.timeoutStopSec;
-      environment = postValidationWorkerEnv;
       cudaVisibleDevices = cfg.runtime.ffmpegWorker.cudaVisibleDevices;
     };
     inference = mkWorker {
@@ -1105,7 +1112,6 @@ let
       queues = [ "inference" ];
       pool = cfg.runtime.workerPools.inference;
       mode = cfg.runtime.inferenceWorker.mode;
-      environment = inferenceWorkerEnv;
       cudaVisibleDevices = cfg.runtime.inferenceWorker.cudaVisibleDevices;
     };
     training = mkWorker {
@@ -1114,7 +1120,6 @@ let
       queues = [ "model_training" ];
       pool = cfg.runtime.workerPools.training;
       mode = cfg.runtime.trainingWorker.mode;
-      environment = trainingWorkerEnv;
       cudaVisibleDevices = cfg.runtime.trainingWorker.cudaVisibleDevices;
     };
     llm-inference = mkWorker {
@@ -1250,6 +1255,7 @@ let
       )
     ) workerConfigs
   );
+  # Request-aware resource control and runtime environment preparation.
   ffmpegStreamThrottleScript = pkgs.writeShellScript "lx-annotate-ffmpeg-stream-throttle" ''
     set -euo pipefail
 
@@ -1380,6 +1386,7 @@ let
     rm -f "$tmp_file"
   '';
 
+  # Maintenance commands and storage recovery adapters.
   dataCleanupScript = pkgs.writeShellScriptBin "runLxAnnotateDataCleanup" ''
     set -euo pipefail
 
@@ -1588,6 +1595,7 @@ let
     lxAnnotateEncryptedDataMountScript
     lxAnnotateEncryptedDataUmountScript
     ;
+  # Explicit interface shared by the individual service modules.
   subserviceContext = args // {
     inherit
       alwaysWorkerServiceUnits
@@ -1652,41 +1660,43 @@ let
       ;
   };
   workerSubservices = import ./subservices/workers.nix { ctx = subserviceContext; };
-  subserviceModules = [
-    (import ./subservices/lx-annotate-runtime-env.nix { ctx = subserviceContext; })
-    (import ./subservices/lx-annotate-wheel-runtime.nix { ctx = subserviceContext; })
-    (import ./subservices/lx-dtypes-kb-bootstrap.nix { ctx = subserviceContext; })
-    (import ./subservices/lx-annotate-data-recovery.nix { ctx = subserviceContext; })
-    (import ./subservices/lx-annotate-migrate.nix { ctx = subserviceContext; })
-    (import ./subservices/lx-annotate-load-base-data.nix { ctx = subserviceContext; })
-    (import ./subservices/lx-annotate-center-admin-bootstrap.nix { ctx = subserviceContext; })
-    (import ./subservices/lx-annotate-hub-node-provisioning.nix { ctx = subserviceContext; })
-    (import ./subservices/lx-annotate-hub-envelope-key-preflight.nix { ctx = subserviceContext; })
-    (import ./subservices/lx-annotate-encrypted-data.nix { ctx = subserviceContext; })
-    (import ./subservices/lx-annotate-filewatcher.nix { ctx = subserviceContext; })
-    (import ./subservices/lx-annotate-hub-export-recovery.nix { ctx = subserviceContext; })
-    (import ./subservices/lx-annotate-hub-export-health.nix { ctx = subserviceContext; })
-    (import ./subservices/lx-annotate-identity-salts.nix { ctx = subserviceContext; })
-    (import ./subservices/lx-annotate-identity-salt-migration.nix { ctx = subserviceContext; })
-    (import ./subservices/lx-annotate-sap-import.nix { ctx = subserviceContext; })
-    (import ./subservices/lx-annotate-export-frames.nix { ctx = subserviceContext; })
-    (import ./subservices/lx-annotate.nix { ctx = subserviceContext; })
-    (import ./subservices/lx-annotate-master-key-check.nix { ctx = subserviceContext; })
-    (import ./subservices/lx-annotate-preflight.nix { ctx = subserviceContext; })
-    (import ./subservices/lx-annotate-storage-migration.nix { ctx = subserviceContext; })
-    (import ./subservices/lx-annotate-hls-materialization.nix { ctx = subserviceContext; })
-    (import ./subservices/lx-annotate-hls-backfill.nix { ctx = subserviceContext; })
-    (import ./subservices/lx-annotate-data-cleanup.nix { ctx = subserviceContext; })
-    (import ./subservices/lx-annotate-emergency-storage-relief.nix { ctx = subserviceContext; })
-    (import ./subservices/lx-annotate-hub-backup.nix { ctx = subserviceContext; })
-    (import ./subservices/lx-annotate-acceptance.nix { ctx = subserviceContext; })
-    (import ./subservices/lx-annotate-ffmpeg-stream-throttle.nix { ctx = subserviceContext; })
-    (import ./subservices/lx-annotate-ffmpeg-stream-throttle-reset.nix { ctx = subserviceContext; })
-    (import ./subservices/lx-annotate-request-throttle.nix { ctx = subserviceContext; })
-    (import ./subservices/integrations/move-my-files.nix { ctx = subserviceContext; })
-    (import ./subservices/integrations/nginx.nix { ctx = subserviceContext; })
-  ]
-  ++ workerSubservices;
+  # Keep this explicit list in sync with the service ownership map.
+  subserviceModules =
+    map (modulePath: import modulePath { ctx = subserviceContext; }) [
+      ./subservices/lx-annotate-runtime-env.nix
+      ./subservices/lx-annotate-wheel-runtime.nix
+      ./subservices/lx-dtypes-kb-bootstrap.nix
+      ./subservices/lx-annotate-data-recovery.nix
+      ./subservices/lx-annotate-migrate.nix
+      ./subservices/lx-annotate-load-base-data.nix
+      ./subservices/lx-annotate-center-admin-bootstrap.nix
+      ./subservices/lx-annotate-hub-node-provisioning.nix
+      ./subservices/lx-annotate-hub-envelope-key-preflight.nix
+      ./subservices/lx-annotate-encrypted-data.nix
+      ./subservices/lx-annotate-filewatcher.nix
+      ./subservices/lx-annotate-hub-export-recovery.nix
+      ./subservices/lx-annotate-hub-export-health.nix
+      ./subservices/lx-annotate-identity-salts.nix
+      ./subservices/lx-annotate-identity-salt-migration.nix
+      ./subservices/lx-annotate-sap-import.nix
+      ./subservices/lx-annotate-export-frames.nix
+      ./subservices/lx-annotate.nix
+      ./subservices/lx-annotate-master-key-check.nix
+      ./subservices/lx-annotate-preflight.nix
+      ./subservices/lx-annotate-storage-migration.nix
+      ./subservices/lx-annotate-hls-materialization.nix
+      ./subservices/lx-annotate-hls-backfill.nix
+      ./subservices/lx-annotate-data-cleanup.nix
+      ./subservices/lx-annotate-emergency-storage-relief.nix
+      ./subservices/lx-annotate-hub-backup.nix
+      ./subservices/lx-annotate-acceptance.nix
+      ./subservices/lx-annotate-ffmpeg-stream-throttle.nix
+      ./subservices/lx-annotate-ffmpeg-stream-throttle-reset.nix
+      ./subservices/lx-annotate-request-throttle.nix
+      ./subservices/integrations/move-my-files.nix
+      ./subservices/integrations/nginx.nix
+    ]
+    ++ workerSubservices;
 in
 {
   config = mkIf cfg.enable (

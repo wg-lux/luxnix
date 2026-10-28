@@ -66,7 +66,10 @@ in
       deps = [
         "specialfs"
       ]
-      ++ optional (config.system.activationScripts ? setupSecretsForUsers) "setupSecretsForUsers";
+      ++ optional (config.system.activationScripts ? setupSecretsForUsers) "setupSecretsForUsers"
+      ++ optional (
+        config.system.activationScripts ? luxnixPrepareBootAccountHashes
+      ) "luxnixPrepareBootAccountHashes";
       text = ''
         admin_password_file=${lib.escapeShellArg cfg.passwordFile}
         if [ ! -f "$admin_password_file" ] || [ ! -s "$admin_password_file" ]; then
@@ -78,6 +81,11 @@ in
           0:400|0:600) ;;
           *) echo "ERROR: admin password hash must be root-owned with mode 0400 or 0600." >&2; exit 1 ;;
         esac
+        # Deny the public retired shared credential; it is never a fallback.
+        if ${pkgs.gnugrep}/bin/grep -qxF '$6$yC9hyVoZEYLlzjbZ$pILBYLOZBlplgoYL9L.dyIKPGPrcW2ifd1I3ffRAYIwsv8B.pA76Eo6OUq71gJJKl8kGyBsmlbKwnGcKQEpoa.' "$admin_password_file"; then
+          echo "ERROR: retired shared admin password is not permitted; provision a unique hash." >&2
+          exit 1
+        fi
         # Only supported modern crypt encodings, exactly one nonempty line.
         # Neither the hash nor its value is ever emitted in diagnostics.
         if ! ${pkgs.gnugrep}/bin/grep -qxE '\$6\$(rounds=[0-9]+\$)?[./A-Za-z0-9]{1,16}\$[./A-Za-z0-9]{86}|\$y\$[./A-Za-z0-9]+\$[./A-Za-z0-9]+\$[./A-Za-z0-9]{43}' "$admin_password_file" ||

@@ -29,6 +29,7 @@ with ctx;
     ++ managedSecretsSetupUnits
     ++ encryptionServiceUnits;
     restartTriggers = [ effectiveRuntimePackage ];
+    stopIfChanged = false;
     unitConfig = encryptedDataMountUnitConfig;
     environment = commonExtraEnv;
     serviceConfig = {

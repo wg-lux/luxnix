@@ -7,12 +7,24 @@ instruction to reinstall, repartition, format containers or repeat migration.
 
 ## Current rollout gate
 
+For the current operator-controlled profile, use
+[local OpenBao enrollment and password guidance](openbao-local.md#passwords-initial-enrollment-and-resets)
+and [storage startup](operator-unlocked-storage.md#boot-with-operator-passphrase-unlock).
+Installing the OpenBao tool does not set a password. Direct LUKS passphrases,
+the OpenBao boot passphrase and the administrator password are separate.
+There is no implemented OpenBao passphrase-reset command; `rotate-unlock`
+rotates an AppRole SecretID. Inspect live status before deciding whether initial
+enrollment or recovery is required. gc-10 follows the common EndoReg passphrase
+seal profile, with no host-specific exception.
+
 **Production unattended rollout is blocked.** Follow R0-R5 in
 `boot-encryption-acceptance.yml`; gc-10 is a reference for its hardware class,
 not an exception to the group profile. Sections 1-5 below describe a future
 procedure after those gates pass. They do not authorize enrollment, keyslot
 changes, activation or reboot now. Signed boot without authenticated root/Nix
-contents cannot satisfy ENC-09.
+contents cannot satisfy ENC-09. The future procedure below assumes an accepted
+group TPM-seal profile; it must not be executed unchanged with the current
+`seal = "passphrase"` default. The current role still rejects unattended unlock.
 
 Before firmware or credential changes, verify the effective live unlock method
 (`passphrase` versus an older `tpm2` generation), booted/current/profile targets,
@@ -27,11 +39,12 @@ the rest of the fleet, with Secure Boot disabled by default; the steps below app
 resumed. Data migration remains disabled.
 Do not select `local-openbao` until the enrollment and adoption steps pass.
 
-The live preflight found a TPM, disabled firmware Secure Boot, no measured
+Historical preparation observations from 2026-10-26 (not current live status):
+the preflight found a TPM, disabled firmware Secure Boot, no measured
 UKI, closed storage and inactive PostgreSQL/application. The running generation
-does not provide the new enrollment tools. Controller signing custody and
-public enrollment files have since been created by the operator. These are blockers
-to unattended startup, not steps already completed by this runbook.
+did not provide the new enrollment tools. Controller signing custody and
+public enrollment files were subsequently created by the operator. Recheck
+the running generation, tools and enrollment before using this procedure.
 
 Validation resumed on 2026-10-26 after controller storage cleanup: the table
 of contents was regenerated, all 26 documentation checks passed, and Nix quality
@@ -210,8 +223,10 @@ after adoption an old direct-TPM profile may require explicit recovery.
 
 Use the retained container recovery passphrases from a private console and the
 documented [storage recovery workflow](operator-unlocked-storage.md). After
-firmware/TPM changes, restore access and reseal through the supported enrollment
-procedure; do not overwrite conflicting credentials. A lost OpenBao static
+firmware/TPM changes, restore access through verified recovery custody and a
+separately reviewed resealing procedure. Automated recovery/re-seeding remains
+unimplemented; ordinary enrollment does not overwrite conflicting credentials.
+A lost OpenBao static
 seal key requires its escrowed copy, not merely OpenBao recovery shares.
 
 If console enrollment cannot be completed today, unattended cold startup is

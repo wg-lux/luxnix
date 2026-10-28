@@ -282,7 +282,7 @@ commands:
     documentation: docs/operator-unlocked-storage.md
 
   - id: openbao-local
-    summary: Show status of, enroll, adopt volumes into, or rotate the boot credential of host-local OpenBao; escrow precedes every dependent step.
+    summary: Show status of, enroll, adopt volumes into, or rotate the unlock AppRole credential of host-local OpenBao; escrow precedes every dependent step.
     risk: sensitive-remote-state
     operator_confirmation_required: true
     usage: >-
@@ -291,8 +291,10 @@ commands:
     implementation: lx_administration/storage/local_enrollment.py
     documentation: docs/openbao-local.md
     effects:
-      - Without --apply, read-only status, TPM/Secure Boot preflight and keyslot plans only.
+      - Without --apply, read-only status and escrow-file presence; adopt also reports keyslot plans and rollout checks deployment prerequisites. Status is not successful preflight or recovery verification.
       - enroll writes credentials for the configured TPM or passphrase seal under /var/lib/openbao-bootstrap and initializes a missing local store once.
+      - Passphrase enrollment asks for a new passphrase only on first setup; repeat enrollment verifies the existing passphrase and never replaces the seal record.
+      - rotate-unlock replaces the unlock AppRole SecretID, not the boot passphrase, static seal key or LUKS passphrases. Passphrase reset is not implemented.
       - adopt adds one OpenBao keyslot and removes systemd-tpm2 tokens; recovery keyslots, data and LUKS UUIDs are preserved.
       - Escrow records go to the admin vault and the separate --recovery-host; existing records are never replaced.
       - rollout enrolls, provisions missing volumes or adopts existing ones, then starts encrypted pre-copy; --cutover explicitly stops writers for final

@@ -23,7 +23,6 @@ let
   ];
 
   baseDevelopment = with pkgs; [
-    # vscode-fhs
     nixfmt
     ripgrep
     cacert
@@ -93,8 +92,8 @@ let
       pciutils
       libva
 
-      vdpauinfo # sudo vainfo
-      libva-utils # sudo vainfo
+      vdpauinfo
+      libva-utils
     ];
 
 in
@@ -124,17 +123,10 @@ in
     office = mkBoolOpt false "Add Office Packages to custom packages";
     kdePlasma = mkBoolOpt false "Add KDE Plasma Packages to custom packages";
     baseDevelopment = mkBoolOpt false "Add Base Development Packages to custom packages";
-    cuda = mkBoolOpt false "Add CUDA packages to custom packages";
-    # NCCL is built from source when the exact derivation is not cached.
-    # Keep it opt-in for native consumers; Python wheels manage their own NCCL.
-    # Diagnosis and opt-in procedure: docs/guides/cuda-source-builds.md.
     videoEditing = mkBoolOpt false "Add Video Editing packages to custom packages";
     visuals = mkBoolOpt false "Add Visuals packages to custom packages";
     dev03 = mkBoolOpt false "Add dev03 packages to custom packages";
     protonmail = mkBoolOpt false "Add Protonmail packages to custom packages";
-    ld = {
-      enable = mkBoolOpt true "Enable nix-ld";
-    };
     cloud = mkBoolOpt false "Add Cloud packages to custom packages";
     hardwareAcceleration = mkBoolOpt false "Add Hardware Acceleration packages to custom packages";
   };
@@ -150,18 +142,12 @@ in
     (mkIf cfg.enable {
       luxnix.packages.roles.custom-packages = customPackages;
 
-      cli.programs.nix-ld = {
-        enable = lib.mkForce cfg.ld.enable;
-      };
-
       programs.obs-studio = {
-        enable = cfg.videoEditing;
+        enable = mkDefault cfg.videoEditing;
         # The pinned OBS recipe already adds driver runpaths and builds NVENC.
         # Avoid the redundant CUDA hook, which changes the cached derivation.
         package = mkDefault (pkgs.obs-studio.override { cudaSupport = false; });
       };
-
-      programs.thunderbird.enable = false; # cfg.office;
 
       hardware.graphics = {
         enable = lib.mkDefault cfg.hardwareAcceleration;
@@ -169,7 +155,6 @@ in
           pkgs.intel-media-driver
         ];
       };
-
     })
   ];
 }

@@ -272,7 +272,7 @@ in
 
     package = mkOption {
       type = types.package;
-      default = pkgs.nextcloud30;
+      default = pkgs.nextcloud33;
       description = "The Nextcloud package to install";
     };
 

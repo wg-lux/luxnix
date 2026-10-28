@@ -116,6 +116,24 @@ Their deployment policy (central nodes, allowed hosts, API settings and database
 identity) belongs in inventory; reusable option defaults belong in the roles.
 This avoids a second fleet policy hidden in an optional profile.
 
+`roles.base-server` composes `roles.common` and development packages without
+selecting a desktop. `roles.gpu-server` builds on that baseline. Existing
+`base_server` and `gpu_server` inventory groups explicitly enable
+`roles.desktop` to preserve their deployed desktop environment. New server
+profiles can use the baseline without Plasma, audio or Bluetooth; those modules
+are opt-in. The standalone `lx-test` host explicitly retains its Plasma/audio
+configuration.
+
+`roles.common` owns shared admin SSH access. Server roles inherit it instead of
+adding the same key again. `services.luxnix.podman` owns Podman behavior,
+including container DNS and Docker compatibility. The former
+`services.virtualisation.podman.enable` option is a compatibility alias; new
+configuration should use the canonical switch. The former
+`luxnix.generic-settings.virtualization.podman.*` options also forward to this
+module, including Docker socket and default-network settings. Setting
+`dockerDropIn = false` disables Docker compatibility and, by default, its socket without disabling
+Podman. `dockerSocketEnable` allows an explicit independent socket choice.
+
 ## Feature-Oriented Modules
 
 For larger features, keep the feature directory cohesive. The `lx-annotate-local` module is the current model: options, config, runtime context, and scripts live together under one service directory. Use that pattern before spreading one feature across unrelated files.

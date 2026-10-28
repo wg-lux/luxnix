@@ -1,19 +1,19 @@
 args: {
-  imports = [
-    (import ./options/enable.nix args)
-    (import ./options/debug.nix args)
-    (import ./options/runtime.nix args)
-    (import ./options/monitoring.nix args)
-    (import ./options/django.nix args)
-    (import ./options/database.nix args)
-    (import ./options/data-recovery.nix args)
-    (import ./options/center-admin-bootstrap.nix args)
-    (import ./options/streamable-migration.nix args)
-    (import ./options/hls-materialization.nix args)
-    (import ./options/hls-backfill.nix args)
-    (import ./options/data-cleanup.nix args)
-    (import ./options/storage-relief.nix args)
-    (import ./options/hub.nix args)
-    (import ./options/remote-access.nix args)
+  imports = map (modulePath: import modulePath args) [
+    ./options/enable.nix
+    ./options/debug.nix
+    ./options/runtime.nix
+    ./options/monitoring.nix
+    ./options/django.nix
+    ./options/database.nix
+    ./options/data-recovery.nix
+    ./options/center-admin-bootstrap.nix
+    ./options/streamable-migration.nix
+    ./options/hls-materialization.nix
+    ./options/hls-backfill.nix
+    ./options/data-cleanup.nix
+    ./options/storage-relief.nix
+    ./options/hub.nix
+    ./options/remote-access.nix
   ];
 }

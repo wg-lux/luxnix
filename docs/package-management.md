@@ -7,6 +7,17 @@ It defines the existing optional bundles and combines `luxnix.packages.shared`,
 `environment.systemPackages` contribution. These three lists work even when
 `roles.custom-packages.enable` is false; that switch controls the existing bundles.
 
+Package selection does not force nix-ld or disable Thunderbird. Use
+`cli.programs.nix-ld.enable` (default `true`) and
+`cli.programs.nix-ld.extraLibraries` for loader policy, and the corresponding
+`programs.*` options for applications. The former
+`roles.custom-packages.ld.enable` switch has been removed.
+
+The unused `roles.custom-packages.cuda` option has also been removed. NVIDIA
+hardware policy remains under `luxnix.generic-settings.gpu.nvidia`; native CUDA
+packages can be selected through the package scopes below. Add a library to
+nix-ld only through its explicit `extraLibraries` interface.
+
 ## Choose one owner
 
 | Scope | Edit here | Selection |

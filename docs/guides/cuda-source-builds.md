@@ -43,7 +43,15 @@ state or resolve recorded blockers.
 
 **Limits:** These are current unauthenticated probes, not proof of cache availability at the time of the failed build. The supplied log does not show the builder's effective substituter configuration.
 
-## Mitigation
+## Current configuration
+
+The historical `roles.custom-packages.cuda` and `cudaNccl` switches described
+below no longer exist. Select required native CUDA packages through
+`luxnix.packages.machine` and required loader libraries through
+`cli.programs.nix-ld.extraLibraries`; see [package ownership](https://github.com/wg-lux/luxnix/blob/main/docs/package-management.md).
+The following mitigation and commands describe the recorded revision only.
+
+## Historical mitigation
 
 **Implementation:** `modules/nixos/roles/custom-packages/default.nix`
 

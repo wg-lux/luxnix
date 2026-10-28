@@ -2,7 +2,7 @@
 
 `roles.custom-packages` is the canonical owner for optional, host-wide package
 bundles. Shared development tools belong in `baseDevelopment`; desktop,
-office, GPU, cloud, and host-specific additions belong in their corresponding
+office, cloud, and host-specific additions belong in their corresponding
 opt-in bundle. Hosts select bundles through the role options instead of
 declaring the same packages in host or service modules.
 
@@ -30,7 +30,12 @@ priority; `mkDefault` on the final lists would discard the extra caches. The
 CUDA cache is `https://cache.nixos-cuda.org`; its retired Cachix URL is removed
 from both the daemon defaults and the flake settings.
 
-`cli.programs.nix-ld` owns its library set. Installing a command-line package
+`cli.programs.nix-ld` owns its enable switch and library set. The package role
+does not force loader policy or disable Thunderbird. The unused `cuda` toggle
+and the duplicate `ld.enable` toggle have been removed; use explicit package
+selections and `cli.programs.nix-ld.enable` instead.
+
+Installing a command-line package
 through the lists above does not add it to the dynamic loader's library path;
 use its explicit `extraLibraries` interface only for a required library.
 

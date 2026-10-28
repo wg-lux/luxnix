@@ -23,7 +23,6 @@ in
       ];
       description = "List of additional packages to install.";
     };
-
   };
 
   config = mkIf cfg.enable {
@@ -36,30 +35,23 @@ in
         "d /etc/user-passwords 0700 admin users -"
       ];
     };
-    security.rtkit.enable = lib.mkDefault true;
-    programs.coolercontrol.enable = true;
 
     roles = {
       postgres.default.enable = lib.mkDefault true;
       custom-packages.enable = lib.mkDefault true;
       managed-secrets.enable = lib.mkDefault true;
     };
-    # services.luxnix.syncthing.enable = lib.mkDefault true;
 
     services = {
-      luxnix.podman = {
-        enable = lib.mkDefault true;
-      };
-      virtualisation.podman.enable = true;
+      luxnix.podman.enable = lib.mkDefault true;
 
-      ########### MOVE TO MAINTENANCE BOOTMODE
       # TODO (common-role owner): restrict authorized SSH keys to the VPN subnet;
       # next action is to add the firewall/source-address option before moving
       # this access to maintenance boot mode.
       ssh = {
         enable = true;
         authorizedKeys = [
-          # just adds authorized keys for admin user, does not enable ssh!
+          # This list grants admin access; services.ssh controls the SSH service.
           "${config.luxnix.generic-settings.rootIdED25519}"
         ];
       };
@@ -74,14 +66,15 @@ in
 
     cli.programs = {
       nh.enable = true;
-      nix-ld.enable = true;
     };
 
     security = {
+      rtkit.enable = lib.mkDefault true;
       sops.enable = true;
     };
 
     programs = {
+      coolercontrol.enable = true;
       zsh.enable = true;
       command-not-found.enable = true;
     };

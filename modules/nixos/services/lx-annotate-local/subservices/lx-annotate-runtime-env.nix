@@ -16,6 +16,7 @@ with ctx;
     ++ localPostgresSetupUnits;
     wants = managedSecretsSetupUnits ++ localPostgresSetupUnits;
     requires = managedSecretsSetupUnits ++ localPostgresSetupUnits;
+    stopIfChanged = false;
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;

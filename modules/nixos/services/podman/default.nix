@@ -17,6 +17,9 @@ in
     podmanCompose = mkBoolOpt false "Enable podman-compose";
     # Enable podman-docker
     dockerDropIn = mkBoolOpt true "Enable podman as docker drop-in replacement";
+    dockerSocketEnable = mkBoolOpt cfg.dockerDropIn "Enable the Docker-compatible socket";
+    dnsEnabled = mkBoolOpt true "Enable DNS for the default container network";
+    defaultNetworkSettings = mkOpt types.attrs { } "Additional default container network settings";
     nvidia = mkBoolOpt cudaSupport "Enable NVIDIA support";
     networkSocket = mkBoolOpt false "Enable network socket";
     extraPackages = mkOpt (types.listOf types.package) [ ] "Additional packages to install";
@@ -39,14 +42,17 @@ in
         inherit (cfg) enable;
         # Create a `docker` alias for podman, to use it as a drop-in replacement
         inherit (cfg) extraPackages;
-        dockerSocket.enable = cfg.dockerDropIn;
+        dockerSocket.enable = cfg.dockerSocketEnable;
         dockerCompat = cfg.dockerDropIn;
         autoPrune = {
           enable = cfg.autoPrune;
           flags = cfg.autoPruneFlags;
         };
         # Required for containers under podman-compose to be able to talk to each other.
-        # defaultNetwork.settings.dns_enabled = true;
+        defaultNetwork.settings = {
+          dns_enabled = cfg.dnsEnabled;
+        }
+        // cfg.defaultNetworkSettings;
         networkSocket = {
           enable = cfg.networkSocket;
           # tls.cert = "PATH_TO_CERT";

@@ -54,6 +54,33 @@ host_nixos:
   boot.kernel.sysctl."net.core.rmem_max": "16777216"
 ```
 
+### Generated system layout
+
+Each generated `systems/x86_64-linux/<host>/default.nix` is one nested
+attribute tree built from all four namespaces, sorted by option path with
+`roles`, `services`, and `luxnix` first. A branch with several children is
+rendered as a nested set and a single-child branch stays a dotted path, so
+every key is bound once per attribute set (statix W20 stays clean):
+
+```nix
+roles = {
+  common.enable = true;
+
+  custom-packages = {
+    cloud = true;
+    enable = true;
+  };
+};
+```
+
+When a path is nested below another configured path, for example a host-level
+`storage.operatorUnlocked.bindMounts."/srv"` below a group-level
+`storage.operatorUnlocked.bindMounts` expression, the nested path is rendered
+in a later layer and merged with `lib.recursiveUpdate`. An exact duplicate
+option path, including the same option set through two namespaces such as
+`host_services` and `host_nixos`, fails rendering instead of being silently
+overridden.
+
 Native YAML booleans, numbers, lists, and mappings render as Nix values.
 Strings that are already Nix expressions, such as `pkgs.linuxPackages_6_6` or
 `lib.mkForce "/home/admin/luxnix"`, are preserved as raw expressions. Use raw

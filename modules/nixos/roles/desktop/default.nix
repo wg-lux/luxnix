@@ -14,15 +14,11 @@ in
   };
 
   config = mkIf cfg.enable {
-    boot.binfmt.emulatedSystems = [
-      # "aarch64-linux"
-    ];
+    boot.binfmt.emulatedSystems = [ ];
 
     roles = {
       common.enable = true;
-      desktop.addons = {
-        plasma.enable = true;
-      };
+      desktop.addons.plasma.enable = true;
       custom-packages = {
         baseDevelopment = true;
         kdePlasma = true;

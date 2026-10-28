@@ -26,8 +26,12 @@
   roles = {
     aglnet.client.enable = lib.mkForce false;
     common.enable = true;
+    # Retain this integration host's existing graphical session explicitly.
+    desktop.addons.plasma.enable = true;
     custom-packages.enable = true;
   };
+
+  hardware.audio.enable = true;
 
   services = {
     nginx.enable = true;

@@ -11,7 +11,7 @@ let
 in
 {
   options.hardware.audio = with types; {
-    enable = mkBoolOpt true "Enable or disable hardware audio support";
+    enable = mkBoolOpt false "Enable or disable hardware audio support";
   };
 
   config = mkIf cfg.enable {

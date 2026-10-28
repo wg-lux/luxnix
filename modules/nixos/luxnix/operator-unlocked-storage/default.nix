@@ -339,8 +339,6 @@ in
         deps = [ "specialfs" ];
         text = "${migrationCommand} accounts";
       };
-      luxnixValidateAdminPasswordFile.deps = [ "luxnixPrepareBootAccountHashes" ];
-      luxnixValidateClientPasswordFile.deps = [ "luxnixPrepareBootAccountHashes" ];
     };
     systemd = {
       services =

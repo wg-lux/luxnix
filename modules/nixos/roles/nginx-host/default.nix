@@ -181,7 +181,7 @@ in
           mkOpt types.str "https://${keycloakConfig.domain}/realms/master"
             "OIDC issuer URL for the Keycloak realm";
         redirectURL =
-          mkOpt types.str "https://${glm52Config.domain}/oauth2/callback"
+          mkOpt types.str "https://${cfg.glm52.domain}/oauth2/callback"
             "OAuth2 callback URL registered on the Keycloak client";
         emailDomains = mkOpt (types.listOf types.str) [ "*" ] "Allowed email domains for Keycloak users";
         allowedGroups = mkOpt (types.nullOr (
@@ -251,7 +251,7 @@ in
   };
 
   config = mkIf cfg.enable {
-    # systemd.tmpfile.rule to make sure /etc/nginx-host exists
+    # Create the state directory before preparing TLS files.
     systemd = {
       tmpfiles.rules = [
         "d ${nginxStateDir} 0700 nginx nginx -"
@@ -355,7 +355,7 @@ in
     );
 
     services = {
-      # if cfg.testPage is enabled, we should set up services.luxnix.testPage using our settings
+      # Forward the role settings to the test-page service.
       luxnix.testPage = {
         enable = cfg.testPage.enable;
         port = cfg.testPage.port;
@@ -447,17 +447,6 @@ in
               sslCertificate = nginx_cert_path;
               sslCertificateKey = nginx_key_path;
 
-              # locations."/whiteboard/" = {
-              #   proxyPass = "http://${nextcloudConfig.vpnIp}:3002/";
-              #   proxy_http_version = "1.1";
-              #   proxyWebsockets = true; #
-              #   # proxy_set_header Upgrade $http_upgrade;
-              #   # proxy_set_header Connection "Upgrade";
-              #   extraConfig = all-extraConfig + ''
-              #     proxy_set_header Upgrade $http_upgrade
-              #     proxy_set_header Connection "Upgrade"'';
-              # };
-
               locations."/" = {
                 proxyPass = "http://${nextcloudConfig.vpnIp}/";
                 extraConfig = all-extraConfig;
@@ -518,25 +507,3 @@ in
 
   };
 }
-
-# keycloak = {
-#   enable = mkBoolOpt false "Enable Keycloak routing";
-#   domain = mkOpt types.str "keycloak.endo-reg.net" "Keycloak domain";
-#   adminDomain = mkOpt types.str "keycloak-admin.endo-reg.net" "Keycloak admin domain";
-#   port = mkOpt types.port 9080 "Keycloak HTTP port";
-# };
-
-##### FOR REFERENCE
-# "drive-intern.endo-reg.net" = {
-# forceSSL = true;
-# sslCertificate = sslCertificatePath;
-# sslCertificateKey = sslCertificateKeyPath;
-# locations."/" = {
-#     proxyPass = "https://${agl-network-config.services.synology-drive.ip}:${toString agl-network-config.services.synology-drive.port}";
-#     extraConfig = all-extraConfig +  intern-endoreg-net-extraConfig;
-#     proxyWebsockets = true;
-# };
-# extraConfig = ''
-#     client_max_body_size 100000M;
-# '';
-# };

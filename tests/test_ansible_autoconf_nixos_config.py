@@ -14,6 +14,7 @@ from lx_administration.autoconf.nix.template_renderer import (
     nix_literal,
     nix_string,
     render_nix_template,
+    split_attr_path,
 )
 from lx_administration.autoconf.nix.utils import write_nix_file
 from lx_administration.models import MergedHostVars
@@ -268,21 +269,20 @@ def test_system_template_renders_ansible_driven_top_level_nixos(tmp_path):
     assert "settings.mutable" not in rendered
     assert "./hardware-extra.nix" in rendered
     assert (
-        """networking.firewall.allowedTCPPorts = [
-        22
-        443
-      ];"""
+        """  networking.firewall = {
+    allowedTCPPorts = [
+      22
+      443
+    ];
+    trustedInterfaces = [
+      "wg0"
+      "eth0"
+    ];
+  };"""
         in rendered
     )
-    assert (
-        '''networking.firewall.trustedInterfaces = [
-        "wg0"
-        "eth0"
-      ];'''
-        in rendered
-    )
-    assert 'boot.kernel.sysctl."net.core.rmem_max" = 16777216;' in rendered
-    assert "programs.zsh.enable = true;" in rendered
+    assert '  boot.kernel.sysctl."net.core.rmem_max" = 16777216;' in rendered
+    assert "  programs.zsh.enable = true;" in rendered
 
     subprocess.run(
         ["nix-instantiate", "--parse", str(output_file)],
@@ -324,3 +324,140 @@ def test_system_template_preserves_nested_lists_in_raw_service_expressions(
         check=True,
         stdout=subprocess.DEVNULL,
     )
+
+
+def test_system_template_layers_paths_nested_below_an_expression(tmp_path):
+    if shutil.which("nix-instantiate") is None:
+        pytest.skip("nix-instantiate is not available")
+
+    rendered = render_nix_template(
+        "conf/nix-templates/systems/x86_64-linux/main",
+        "default.nix.j2",
+        {
+            "hostname": "node-01",
+            "role_configs": {},
+            "service_configs": {},
+            "luxnix_configs": {
+                "storage.bindMounts": 'lib.recursiveUpdate { "/a" = 1; } { "/b" = 2; }',
+                'storage.bindMounts."/c"': 3,
+                "storage.enable": True,
+            },
+            "nixos_configs": {},
+            "import_configs": [],
+        },
+    )
+    output_file = tmp_path / "default.nix"
+    write_nix_file(rendered, output_file)
+
+    assert "lib.foldl' lib.recursiveUpdate" in rendered
+    base, overlay = rendered.split("# Paths nested below an option set above")
+    assert "luxnix.storage = {" in base
+    assert "    enable = true;" in base
+    assert 'luxnix.storage.bindMounts."/c" = 3;' in overlay
+    evaluated = subprocess.run(
+        [
+            "nix-instantiate",
+            "--eval",
+            "--strict",
+            "--json",
+            "--expr",
+            # Minimal stand-in for nixpkgs lib so the test needs no NIX_PATH.
+            "let recursiveUpdate = a: b: a // builtins.mapAttrs (n: v: "
+            "if builtins.isAttrs v && builtins.isAttrs (a.${n} or null) "
+            "then recursiveUpdate a.${n} v else v) b; "
+            "lib = { inherit recursiveUpdate; foldl' = builtins.foldl'; }; in "
+            f"(import {output_file} {{ inherit lib; pkgs = null; modulesPath = /.; }})"
+            ".luxnix.storage.bindMounts",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert evaluated.stdout.strip() == '{"/a":1,"/b":2,"/c":3}'
+
+
+def test_system_template_without_nested_paths_is_a_plain_attribute_set():
+    rendered = render_nix_template(
+        "conf/nix-templates/systems/x86_64-linux/main",
+        "default.nix.j2",
+        {
+            "hostname": "node-01",
+            "role_configs": {"common.enable": True},
+            "service_configs": {},
+            "luxnix_configs": {"dns.enable": True},
+            "nixos_configs": {},
+            "import_configs": [],
+        },
+    )
+
+    assert "recursiveUpdate" not in rendered
+    assert "  roles.common.enable = true;\n\n  luxnix.dns.enable = true;" in rendered
+
+
+def test_system_template_binds_each_key_once_per_attribute_set():
+    rendered = render_nix_template(
+        "conf/nix-templates/systems/x86_64-linux/main",
+        "default.nix.j2",
+        {
+            "hostname": "node-01",
+            "role_configs": {
+                "custom-packages.enable": True,
+                "custom-packages.cloud": True,
+                "common.enable": True,
+            },
+            "service_configs": {},
+            "luxnix_configs": {},
+            "nixos_configs": {"services.openssh.enable": True},
+            "import_configs": [],
+        },
+    )
+
+    assert (
+        """  roles = {
+    common.enable = true;
+
+    custom-packages = {
+      cloud = true;
+      enable = true;
+    };
+  };"""
+        in rendered
+    )
+    # Top-level NixOS options merge into the matching namespace.
+    assert "  services.openssh.enable = true;" in rendered
+    assert rendered.count("services") == 1
+
+
+def test_system_template_rejects_duplicate_option_paths():
+    with pytest.raises(ValueError, match="Duplicate Nix option path"):
+        render_nix_template(
+            "conf/nix-templates/systems/x86_64-linux/main",
+            "default.nix.j2",
+            {
+                "hostname": "node-01",
+                "role_configs": {},
+                "service_configs": {"openssh.enable": True},
+                "luxnix_configs": {},
+                "nixos_configs": {"services.openssh.enable": False},
+                "import_configs": [],
+            },
+        )
+
+
+@pytest.mark.parametrize(
+    ("path", "segments"),
+    (
+        ("a.b", ("a", "b")),
+        ('sysctl."net.core.rmem_max"', ("sysctl", '"net.core.rmem_max"')),
+        ('hosts."${config.vault.vpnIp}".x', ("hosts", '"${config.vault.vpnIp}"', "x")),
+        ('ops."spiffe://endoreg/hub/gs-02"', ("ops", '"spiffe://endoreg/hub/gs-02"')),
+    ),
+)
+def test_split_attr_path_keeps_quoted_segments(path, segments):
+    assert split_attr_path(path) == segments
+
+
+@pytest.mark.parametrize("path", ("a..b", 'a."b', "a.", 'a."${x".b'))
+def test_split_attr_path_rejects_malformed_paths(path):
+    with pytest.raises(ValueError):
+        split_attr_path(path)

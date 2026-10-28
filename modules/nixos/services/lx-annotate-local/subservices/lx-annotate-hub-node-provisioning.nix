@@ -20,6 +20,7 @@ with ctx;
           "lx-annotate.service"
           "lx-annotate-celery-hub-transfer-worker.service"
         ];
+        stopIfChanged = false;
         serviceConfig = {
           Type = "oneshot";
           RemainAfterExit = true;

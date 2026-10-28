@@ -19,15 +19,24 @@ deletion. Readiness evidence belongs to
 
 ## Structure
 
-- [`default.nix`](default.nix): thin wrapper that assembles the runtime context, script exports, and split submodules.
+- [`default.nix`](default.nix): thin wrapper that assembles the runtime context and passes it to the option and configuration modules.
 - [`runtime-context.nix`](runtime-context.nix): canonical derived runtime paths, environment values, defaults, and helper functions shared by the module.
-- [`options.nix`](options.nix): compatibility aggregator for the public option surface.
+- [`options.nix`](options.nix): explicit list of option modules, imported with the same module arguments.
 - [`options/`](options/): one readable module per top-level configuration group; public option paths remain under `services.luxnix.lxAnnotateLocal`.
 - [`config.nix`](config.nix): centralized shared configuration, assertions, secret wiring, and the explicit context passed to subservices.
 - [`worker.nix`](worker.nix): typed internal worker constructor; see [worker configuration shapes](Workers.md) for fields, validation, and extension rules.
 - [`subservices/`](subservices/): one systemd service per leaf file. A matching timer or path unit stays beside the service it triggers; `workers.nix` is only an aggregator.
 - [`scripts.nix`](scripts.nix): shell-script derivations used by the service units.
 - [`scripts/env.nix`](scripts/env.nix): single source of truth for shared lx-annotate runtime environment variables.
+
+Read `default.nix`, then `runtime-context.nix` and `config.nix` to follow
+composition. The sections in `config.nix` separate proxy policy, wheel
+preparation, shared environment, hub provisioning, service defaults, workers
+and maintenance. Its explicit subservice list passes the same context to each
+leaf; import order does not define startup order. Startup dependencies belong
+to the units' `after`, `wants` and `requires` declarations. Worker records inherit
+the empty environment default from `worker.nix`; declare an environment only
+when a pool needs additional values.
 
 ## OCR runtime dependencies
 
@@ -388,9 +397,9 @@ mount unit.
 | `lx-annotate-encrypted-data.service`               | optional root oneshot, remains active | Opens the configured LUKS device, mounts it at `runtime.encryptedDataDir`, fixes owner/mode on the mount point, and closes it again on stop. Enabled by `runtime.managedEncryptedData.enable`.                                                                                                                                  |
 | `lx-annotate-data-recovery.service`                | manual oneshot, exposed by default    | Normal startup uses the canonical runtime root without invoking legacy recovery. `dataRecovery.runBeforeStartup = true` explicitly restores the startup dependency for a reviewed migration with compatible recovery commands. The current backend removed `migrate_data_dir`; do not enable this legacy path for that release. |
 | `lx-annotate-preflight.service`                    | explicit diagnostic oneshot           | Runs comprehensive checks when requested directly or through live acceptance. It does not block normal web, worker, or HLS startup and does not cache a previous successful diagnostic run.                                                                                                                                     |
-| `lx-annotate-migrate.service`                      | oneshot                               | Runs `lx-annotate-manage migrate --noinput` against the effective runtime package. On failure it applies the reviewed legacy-history repair and retries once; unrelated or unrepaired failures remain fatal. It is ordered before base-data loading, encrypted-storage validation, and the web service.                         |
+| `lx-annotate-migrate.service`                      | oneshot, remains active               | Runs `lx-annotate-manage migrate --noinput` against the effective runtime package. On failure it applies the reviewed legacy-history repair and retries once; unrelated or unrepaired failures remain fatal. It is ordered before base-data loading, encrypted-storage validation, and the web service.                         |
 | `lx-annotate-terminology-bootstrap.service`        | best-effort oneshot in wheel mode     | After the web service starts, independently registers the packaged `dgvs_reporting`, `mst_3_0`, and `star_upper_gi` bundles. A new registry activates `star_upper_gi`; an existing active selection is preserved. No LX-Annotate startup unit wants, requires, or waits for this attempt.                                       |
-| `lx-annotate-load-base-data.service`               | oneshot                               | Runs `lx-annotate-load-base-data --reconcile-legacy` after successful migrations. Fresh imports and bounded legacy reconciliation are idempotent; failures block dependent startup. Requires a backend release supporting the flag. See [startup contract](../../../../docs/guides/lx-annotate-wheel-startup.md).              |
+| `lx-annotate-load-base-data.service`               | oneshot, remains active               | Runs `lx-annotate-load-base-data --reconcile-legacy` after successful migrations. Fresh imports and bounded legacy reconciliation are idempotent; failures block dependent startup. Requires a backend release supporting the flag. See [startup contract](../../../../docs/guides/lx-annotate-wheel-startup.md).              |
 | `lx-annotate-master-key-check.service`             | oneshot, remains active               | Runs `lx-annotate-manage verify_encrypted_storage` with the deployed environment. The web service and workers require this check so a wrong or missing application master key fails closed before user traffic or background processing starts.                                                                                 |
 | `lx-annotate-center-admin-bootstrap.service`       | temporary oneshot                     | When `centerAdminBootstrap.username` is set, runs the audited `bootstrap_center_admin` command after migrations, base-data loading, and encrypted-storage validation. It refuses users without the exact synchronized `center_scope:admin` group. Clear the option after a successful bootstrap deployment.                     |
 | `lx-annotate.service` / `lx-annotate-boot.service` | long-running web service              | Starts the ASGI/web entrypoint on `127.0.0.1:${django.port}`. It requires the runtime env, base data, master-key check, managed secrets, encrypted data, and local Redis/PostgreSQL units when those local services are in use.                                                                                                 |

@@ -46,20 +46,26 @@ in
       }
     ];
 
-    system.activationScripts.luxnixValidateClientPasswordFile =
-      mkIf (cfg.requireUsablePasswordFile && cfg.hashedPasswordFile != null)
-        {
-          deps = [ "etc" ];
-          text = ''
-            set -euo pipefail
-            client_password_file=${lib.escapeShellArg cfg.hashedPasswordFile}
-            if [ ! -s "$client_password_file" ]; then
-              echo "ERROR: client user password hash file is missing or empty: $client_password_file" >&2
-              echo "Refusing activation to avoid switching into a generation with an unusable client password." >&2
-              exit 1
-            fi
-          '';
-        };
+    system.activationScripts = mkIf (cfg.requireUsablePasswordFile && cfg.hashedPasswordFile != null) {
+      users.deps = [ "luxnixValidateClientPasswordFile" ];
+      luxnixValidateClientPasswordFile = {
+        deps = [
+          "specialfs"
+        ]
+        ++ optional (config.system.activationScripts ? setupSecretsForUsers) "setupSecretsForUsers"
+        ++ optional (
+          config.system.activationScripts ? luxnixPrepareBootAccountHashes
+        ) "luxnixPrepareBootAccountHashes";
+        text = ''
+          client_password_file=${lib.escapeShellArg cfg.hashedPasswordFile}
+          if [ ! -s "$client_password_file" ]; then
+            echo "ERROR: client user password hash file is missing or empty: $client_password_file" >&2
+            echo "Refusing activation to avoid switching into a generation with an unusable client password." >&2
+            exit 1
+          fi
+        '';
+      };
+    };
 
     users.users.${cfg.name} = {
       isNormalUser = true;

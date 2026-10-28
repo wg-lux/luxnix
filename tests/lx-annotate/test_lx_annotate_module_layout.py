@@ -33,7 +33,18 @@ def test_each_subservice_leaf_owns_one_documented_service() -> None:
         path for path in SUBSERVICE_DIR.rglob("*.nix") if path.name not in {"workers.nix", "lx-annotate-request-throttle.nix"}
     )
 
-    assert len(leaf_modules) == 40
+    config_source = (SERVICE_DIR / "config.nix").read_text(encoding="utf-8")
+    aggregator_source = (SUBSERVICE_DIR / "workers.nix").read_text(encoding="utf-8")
+    imported = [
+        (base / path).resolve()
+        for base, source, pattern in (
+            (SERVICE_DIR, config_source, r"\./subservices/[\w/-]+\.nix"),
+            (SUBSERVICE_DIR, aggregator_source, r"\./workers/[\w/-]+\.nix"),
+        )
+        for path in re.findall(pattern, source)
+    ]
+    assert len(imported) == len(set(imported)), "Duplicate subservice imports"
+    assert set(imported) == set(SUBSERVICE_DIR.rglob("*.nix")), "Unregistered or missing subservices"
     for module in leaf_modules:
         source = module.read_text(encoding="utf-8")
         relative_path = module.relative_to(SERVICE_DIR)
@@ -56,8 +67,6 @@ def test_each_subservice_leaf_owns_one_documented_service() -> None:
         else:
             assert len(service_assignments) == 1, relative_path
 
-    aggregator_source = (SUBSERVICE_DIR / "workers.nix").read_text(encoding="utf-8")
-    config_source = (SERVICE_DIR / "config.nix").read_text(encoding="utf-8")
     assert "systemd.services." not in aggregator_source
     assert re.search(r"^\s+systemd\.services\.", config_source, re.MULTILINE) is None
 

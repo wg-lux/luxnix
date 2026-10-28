@@ -281,3 +281,133 @@ def test_gs_02_volatile_redis_follow_up_has_a_durable_reference() -> None:
 
     assert runbook in inventory
     assert (REPO_ROOT / runbook).is_file()
+
+
+@pytest.mark.skipif(shutil.which("nix") is None, reason="Nix evaluation required")
+def test_role_controls_have_one_owner_and_allow_overrides() -> None:
+    expression = r"""
+      let
+        f = builtins.getFlake ("git+file://" + builtins.toString ./.);
+        lib = f.inputs.nixpkgs.lib;
+        evaluate = settings: (f.nixosConfigurations.gc-02.extendModules {
+          modules = [ settings ];
+        }).config;
+        noDocker = evaluate { services.luxnix.podman.dockerDropIn = false; };
+        noPodman = evaluate { services.luxnix.podman.enable = false; };
+        legacy = evaluate { services.virtualisation.podman.enable = false; };
+        generic = evaluate {
+          luxnix.generic-settings.virtualization.podman.enable = false;
+        };
+        network = evaluate {
+          luxnix.generic-settings.virtualization.podman.dnsEnabled = false;
+          luxnix.generic-settings.virtualization.podman.socketEnable = false;
+          luxnix.generic-settings.virtualization.podman.extraConfig = {
+            internal = true;
+          };
+        };
+        programs = evaluate {
+          cli.programs.nix-ld.enable = false;
+          programs.thunderbird.enable = true;
+          programs.obs-studio.enable = true;
+        };
+        # Isolate the actual base-server module from this host's desktop choices.
+        base = (lib.evalModules {
+          modules = [
+            ./modules/nixos/roles/base-server/default.nix
+            { options = {
+                roles.common.enable = lib.mkEnableOption "common";
+                roles.custom-packages.baseDevelopment = lib.mkEnableOption "tools";
+                roles.desktop.enable = lib.mkEnableOption "desktop";
+                services = lib.mkOption { type = lib.types.attrs; default = {}; };
+              };
+              config.roles.base-server.enable = true;
+            }
+          ];
+          specialArgs.lib = lib.extend (_: _: { luxnix = {}; });
+        }).config;
+        proxy = settings: (f.nixosConfigurations.s-02.extendModules {
+          modules = [
+            { roles.nginxHost.glm52.domain = "proxy.example.invalid"; } settings
+          ];
+        }).config.roles.nginxHost.glm52;
+        headless = (f.nixosConfigurations.s-01.extendModules {
+          modules = [ { roles.desktop.enable = lib.mkForce false; } ];
+        }).config;
+      in {
+        docker = [ noDocker.virtualisation.podman.enable
+          noDocker.virtualisation.podman.dockerCompat
+          noDocker.virtualisation.podman.dockerSocket.enable
+          noDocker.virtualisation.podman.defaultNetwork.settings.dns_enabled ];
+        disabled = [ noPodman.virtualisation.podman.enable
+          legacy.virtualisation.podman.enable generic.virtualisation.podman.enable ];
+        network = [ network.virtualisation.podman.defaultNetwork.settings.dns_enabled
+          network.virtualisation.podman.defaultNetwork.settings.internal
+          network.virtualisation.podman.dockerSocket.enable ];
+        programs = [ programs.programs.nix-ld.enable
+          programs.programs.thunderbird.enable
+          programs.programs.obs-studio.enable ];
+        base = [ base.roles.common.enable base.roles.desktop.enable
+          base.roles.custom-packages.baseDevelopment ];
+        headless = [ headless.services.desktopManager.plasma6.enable
+          headless.hardware.audio.enable headless.hardware.bluetooth.enable ];
+        callback = (proxy {}).oauth2.redirectURL;
+        explicitCallback = (proxy {
+          roles.nginxHost.glm52.oauth2.redirectURL = "https://login.example.invalid/callback";
+        }).oauth2.redirectURL;
+        retiredCuda = builtins.hasAttr "cuda"
+          f.nixosConfigurations.gc-02.options.roles.custom-packages;
+      }
+    """
+    result = subprocess.run(
+        ["nix", "eval", "--impure", "--json", "--expr", expression],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=240,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    data = json.loads(result.stdout)
+    assert data["docker"] == [True, False, False, True]
+    assert data["disabled"] == [False, False, False]
+    assert data["network"] == [False, True, False]
+    assert data["programs"] == [False, True, True]
+    assert data["base"] == [True, False, True]
+    assert data["headless"] == [False, False, False]
+    assert data["callback"] == "https://proxy.example.invalid/oauth2/callback"
+    assert data["explicitCallback"] == "https://login.example.invalid/callback"
+    assert data["retiredCuda"] is False
+
+
+@pytest.mark.skipif(shutil.which("nix") is None, reason="Nix evaluation required")
+def test_nextcloud_uses_supported_sequential_upgrade_package() -> None:
+    expression = r"""
+      let
+        f = builtins.getFlake ("git+file://" + builtins.toString ./.);
+        host = f.nixosConfigurations.s-03;
+        selected = host.config.services.nextcloud.package;
+      in {
+        enabled = host.config.services.nextcloud.enable;
+        version = selected.version;
+        vulnerabilities = selected.meta.knownVulnerabilities;
+        matchesRole = selected.drvPath
+          == host.config.roles.nextcloudHost.package.drvPath;
+        matchesDefault = selected.drvPath
+          == host.options.roles.nextcloudHost.package.default.drvPath;
+        matchesPinned = selected.drvPath == host.pkgs.nextcloud33.drvPath;
+      }
+    """
+    result = subprocess.run(
+        ["nix", "eval", "--impure", "--json", "--expr", expression],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=180,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    data = json.loads(result.stdout)
+    assert data["enabled"] is True
+    assert data["version"].startswith("33.")
+    assert data["vulnerabilities"] == []
+    assert data["matchesRole"] and data["matchesDefault"] and data["matchesPinned"]

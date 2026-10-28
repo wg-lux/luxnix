@@ -1,6 +1,8 @@
 group_roles:
   aglnet.client.enable: "true"
   base_server.enable: "true"
+  # Preserve the existing desktop deployment independently of the server role.
+  desktop.enable: "true"
   gpu_server.enable: "true"
 group_services:
   # Every GPU server receives the immutable application monitoring contract.

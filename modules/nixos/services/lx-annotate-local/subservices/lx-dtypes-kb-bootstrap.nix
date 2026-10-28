@@ -15,6 +15,7 @@ with ctx;
     ]
     ++ encryptionServiceUnits;
     restartTriggers = [ effectiveRuntimePackage ];
+    stopIfChanged = false;
     unitConfig = encryptedDataMountUnitConfig;
   };
 }

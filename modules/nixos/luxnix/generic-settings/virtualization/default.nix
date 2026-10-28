@@ -22,23 +22,25 @@ let
 
 in
 {
+  # Compatibility inputs delegate to the canonical container module.
+  imports =
+    mapAttrsToList
+      (
+        old: new:
+        lib.mkRenamedOptionModule
+          [ "luxnix" "generic-settings" "virtualization" "podman" old ]
+          [ "services" "luxnix" "podman" new ]
+      )
+      {
+        enable = "enable";
+        dockerCompat = "dockerDropIn";
+        socketEnable = "dockerSocketEnable";
+        dnsEnabled = "dnsEnabled";
+        extraConfig = "defaultNetworkSettings";
+      };
+
   options.luxnix.generic-settings.virtualization = {
     enable = mkEnableOption "Enable virtualization configuration";
-
-    podman = {
-      enable = mkBoolOpt true "Enable Podman containerization";
-      dockerCompat = mkBoolOpt true "Enable Docker compatibility layer";
-      socketEnable = mkBoolOpt true "Enable Docker socket compatibility";
-      dnsEnabled = mkBoolOpt true "Enable DNS for default network";
-
-      extraConfig = mkOption {
-        type = types.attrs;
-        default = { };
-        description = ''
-          Additional configuration options for Podman.
-        '';
-      };
-    };
 
     kvm = {
       enable = mkBoolOpt false "Enable KVM virtualization";
@@ -217,26 +219,9 @@ in
   };
 
   config = mkIf cfg.enable {
-    # Enable core virtualization services based on configuration
-    # Use luxnix.podman if nvidia is available for container toolkit support
     services = {
-      luxnix.podman.enable = mkIf (
-        cfg.podman.enable
-        && (
-          (config.luxnix.nvidia-default.enable or false)
-          || (config.luxnix.nvidia-prime.enable or false)
-          || (config.luxnix.generic-settings.gpu.nvidia.enable or false)
-        )
-      ) true;
+      luxnix.podman.enable = mkDefault true;
       virtualisation = {
-        podman.enable = mkIf (
-          cfg.podman.enable
-          && !(
-            (config.luxnix.nvidia-default.enable or false)
-            || (config.luxnix.nvidia-prime.enable or false)
-            || (config.luxnix.generic-settings.gpu.nvidia.enable or false)
-          )
-        ) true;
         kvm.enable = mkIf cfg.kvm.enable false;
         vfio.enable = mkIf cfg.vfio.enable false;
       };
@@ -247,19 +232,6 @@ in
 
     # Configure virtualization services
     virtualisation = mkMerge [
-      # Configure Podman
-      (mkIf cfg.podman.enable {
-        podman = {
-          enable = true;
-          dockerSocket.enable = cfg.podman.socketEnable;
-          dockerCompat = cfg.podman.dockerCompat;
-          defaultNetwork.settings = {
-            dns_enabled = cfg.podman.dnsEnabled;
-          }
-          // cfg.podman.extraConfig;
-        };
-      })
-
       # Configure KVM
       (mkIf cfg.kvm.enable {
         kvmgt.enable = cfg.kvm.kvmgt;

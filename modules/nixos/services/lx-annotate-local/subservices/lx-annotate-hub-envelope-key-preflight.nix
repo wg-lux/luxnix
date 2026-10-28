@@ -10,6 +10,7 @@ with ctx;
         after = [ "systemd-tmpfiles-setup.service" ] ++ managedSecretsSetupUnits;
         wants = managedSecretsSetupUnits;
         requires = managedSecretsSetupUnits;
+        stopIfChanged = false;
         serviceConfig = {
           Type = "oneshot";
           RemainAfterExit = true;

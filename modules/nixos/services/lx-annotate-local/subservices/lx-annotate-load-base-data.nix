@@ -11,8 +11,10 @@ with ctx;
     before = [
       "lx-annotate-master-key-check.service"
     ];
+    stopIfChanged = false;
     serviceConfig = {
       Type = "oneshot";
+      RemainAfterExit = true;
       ExecStart = loadBaseDataServiceScript;
       TimeoutStartSec = "10min";
     };

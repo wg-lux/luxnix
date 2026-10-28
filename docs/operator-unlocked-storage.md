@@ -12,8 +12,9 @@ directories, apply directory permissions and then start the database and
 application. Startup never creates or formats a missing container. Migration is
 an independent option and is disabled in the gc-10 pilot (ENC-25).
 
-Every host, including gc-10, currently uses the default `unlockMethod =
-"passphrase"`: an operator enters each container's passphrase at boot.
+The repository selects `unlockMethod = "passphrase"` for the fleet, including
+gc-10: an operator enters each container's passphrase at boot. Verify the
+deployed generation separately; source configuration does not prove live state.
 TPM-bound unlock is paused until root integrity (ENC-09) is solved, because
 PCR 7 without Secure Boot and an integrity-protected root releases the key to
 any boot. Before selecting `tpm2` again, each existing container must
@@ -48,6 +49,14 @@ root/Nix-store code or enforce approved-version rollback. ENC-06/12 remain
 unverified; this implementation is not a release of the strong acceptance profile.
 
 ### Boot with operator passphrase unlock
+
+These are the existing **LUKS container passphrases**, not an OpenBao password
+or the Linux login password. Installing OpenBao does not change them. Initial
+OpenBao enrollment, repeat enrollment and password-reset limitations are
+documented in [Passwords, initial enrollment and resets](openbao-local.md#passwords-initial-enrollment-and-resets).
+`openbao-local rotate-unlock` does not change any LUKS passphrase. Any LUKS
+credential change requires verified access/recovery and an authorized keyslot
+and recovery-custody update; do not remove a working slot first.
 
 The shared `roles.endoreg-client` role requires encrypted operator storage and
 operator-controlled unlock: either `unlockMethod = "passphrase"`, or
@@ -182,12 +191,16 @@ storage checks. The original source directories are retained throughout.
 `devenv tasks run tests:operator-storage-migration-vm` exercises the packaged
 units with real LUKS, mounts, final-delta copying and reboot receipt reuse.
 
-Account activation happens before application-volume unlock. The fleet policy
-uses root-only boot-available files under `/var/lib/luxnix-account` for the admin
-and enabled client account hashes. Activation copies each existing validated
-hash once, preserves subsequent password rotations, and retains strict account
-validation. These are the same one-way hashes needed by `/etc/shadow`, never
-plaintext passwords, Vault keys or unlock passphrases.
+Account activation follows **prepare hashes → validate enabled accounts → update
+users**, before application-volume unlock. Inventory selects boot-available
+hash paths under `/var/lib/luxnix-account`; storage copies existing hashes once
+and preserves subsequent rotations. Local-user policy selects the file or SOPS
+source; each account module owns its validator and waits for configured hash
+preparation and SOPS provisioning. Admin validation is mandatory. Client
+validation exists only when the client account is enabled, requires a usable
+password file and has a configured path; a disabled client needs no secret or
+validator. These are the one-way hashes needed by `/etc/shadow`, never plaintext
+passwords, Vault keys or unlock passphrases.
 
 Migration retains the original sources. **Plaintext originals and filesystem
 snapshots are not erased by switching mounts.** Complete an approved cleanup and

@@ -28,6 +28,18 @@ def recovery_policy():
           deps = c.system.activationScripts.users.deps;
           validationDeps =
             c.system.activationScripts.luxnixValidateAdminPasswordFile.deps;
+          clientScript =
+            if c.system.activationScripts ? luxnixValidateClientPasswordFile
+            then c.system.activationScripts.luxnixValidateClientPasswordFile else null;
+          clientFile = c.user.client.hashedPasswordFile;
+          clientSecret = builtins.hasAttr
+            c.security.luxnix.local-users.clientPassword.sops.secretName c.sops.secrets;
+          # Traverse the real dependency graph without rendering unrelated services.
+          activationOrder = lib.textClosureList (lib.mapAttrs (name: value: {
+            deps = value.deps or [];
+            text = name;
+          }) (builtins.removeAttrs c.system.activationScripts [ "script" ]))
+            [ "users" ];
           passwordAuth = c.services.openssh.settings.PasswordAuthentication;
           keyCount = builtins.length c.users.users.admin.openssh.authorizedKeys.keys;
           failures = map (a: a.message)
@@ -37,6 +49,26 @@ def recovery_policy():
           summarize (host.extendModules { modules = [ module ]; }).config;
       in {
         default = summarize host.config;
+        server = summarize flake.nixosConfigurations.s-03.config;
+        disabledClient = summarize (flake.nixosConfigurations.s-03.extendModules {
+          modules = [{ security.luxnix.local-users.clientPassword.source = "sops"; }];
+        }).config;
+        optionalClient = change {
+          security.luxnix.local-users.clientPassword.requireUsableFile = false;
+        };
+        noClientFile = change {
+          user.client.hashedPasswordFile = lib.mkForce null;
+          users.mutableUsers = lib.mkForce true;
+        };
+        noPreparation = change {
+          luxnix.storage.operatorUnlocked.migration.accountHashes = lib.mkForce {};
+        };
+        clientSops = change {
+          security.luxnix.local-users.clientPassword = {
+            source = "sops";
+            sops.sopsFile = ./flake.lock;
+          };
+        };
         recovery = change {
           user.admin.passwordFile = lib.mkForce "/var/lib/luxnix-recovery/admin.hash";
         };
@@ -209,3 +241,79 @@ def test_preexisting_shared_fallback_is_rejected(recovery_policy, tmp_path):
     assert "retired shared admin password" in result.stderr
     assert retired_hash not in result.stdout + result.stderr
     assert path.read_text() == retired_hash + "\n"
+
+
+@pytest.mark.parametrize(
+    "case", ["server", "disabledClient", "optionalClient", "noClientFile"]
+)
+def test_absent_client_validation_does_not_create_partial_script(recovery_policy, case):
+    policy = recovery_policy[case]
+    assert policy["clientScript"] is None
+    assert "luxnixValidateClientPasswordFile" not in policy["deps"]
+    assert policy["clientSecret"] is False
+    assert policy["activationOrder"][-1] == "users"
+    assert policy["failures"] == []
+
+
+def test_password_producers_precede_validators_and_account_updates(recovery_policy):
+    for case in ("default", "clientSops"):
+        policy = recovery_policy[case]
+        client = policy["clientScript"]
+        assert client["text"]
+        assert "luxnixValidateClientPasswordFile" in policy["deps"]
+        assert "etc" not in client["deps"]
+        assert "luxnixPrepareBootAccountHashes" in client["deps"]
+        assert "luxnixPrepareBootAccountHashes" in policy["validationDeps"]
+        order = policy["activationOrder"]
+        for validator in (
+            "luxnixValidateAdminPasswordFile",
+            "luxnixValidateClientPasswordFile",
+        ):
+            assert order.index("luxnixPrepareBootAccountHashes") < order.index(
+                validator
+            )
+            assert order.index(validator) < order.index("users")
+    assert recovery_policy["clientSops"]["clientSecret"] is True
+    assert (
+        "setupSecretsForUsers" in recovery_policy["clientSops"]["clientScript"]["deps"]
+    )
+    unprepared = recovery_policy["noPreparation"]
+    assert "luxnixPrepareBootAccountHashes" not in unprepared["validationDeps"]
+    assert "luxnixPrepareBootAccountHashes" not in unprepared["clientScript"]["deps"]
+    assert unprepared["activationOrder"][-1] == "users"
+
+
+@pytest.mark.parametrize("present", [False, True])
+def test_client_validator_aborts_for_missing_or_empty_file(
+    recovery_policy, tmp_path, present
+):
+    path = tmp_path / "client.hash"
+    if present:
+        path.touch()
+    policy = recovery_policy["default"]
+    script = policy["clientScript"]["text"].replace(policy["clientFile"], str(path))
+    result = subprocess.run(["bash", "-c", script], text=True, capture_output=True)
+    assert result.returncode != 0
+    assert "Refusing activation" in result.stderr
+    assert path.exists() == present
+
+
+def test_client_validator_accepts_existing_hash_without_changing_shell_options(
+    recovery_policy, tmp_path, generated_hash
+):
+    path = tmp_path / "client.hash"
+    path.write_text(generated_hash + "\n")
+    policy = recovery_policy["default"]
+    script = policy["clientScript"]["text"].replace(policy["clientFile"], str(path))
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            "before=$(set +o)\n" + script + '\n[[ "$before" == "$(set +o)" ]]',
+        ],
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == result.stderr == ""
+    assert path.read_text() == generated_hash + "\n"

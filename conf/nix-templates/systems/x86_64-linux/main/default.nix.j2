@@ -1,10 +1,34 @@
 # {{ hostname }}/default.nix
+{#
+  All option paths are merged into one nested attribute tree, sorted by path,
+  with `roles`, `services` and `luxnix` first. A branch with several children
+  becomes a nested set; a single-child branch stays a dotted path. Each key is
+  therefore bound once per attribute set, and an exact duplicate option path
+  fails rendering instead of being silently overridden.
 
+  A path nested below another configured path (for example
+  `bindMounts."/srv"` below an expression-valued `bindMounts`) cannot share
+  that attribute set, so it is rendered into an overlay layer and merged with
+  `lib.recursiveUpdate`. Line wrapping is left to the nixfmt pass of the
+  Autoconf pipeline.
+#}
+{% set sections = [("roles.", role_configs), ("services.", service_configs), ("luxnix.", luxnix_configs), ("", nixos_configs)] -%}
+{% set layers = sections | nix_attr_layers(("roles", "services", "luxnix")) -%}
 {% set usage = namespace(config=false) -%}
-{% for value in role_configs.values() %}{% if "config." in (value | nix) %}{% set usage.config = true %}{% endif %}{% endfor -%}
-{% for value in service_configs.values() %}{% if "config." in (value | nix) %}{% set usage.config = true %}{% endif %}{% endfor -%}
-{% for value in luxnix_configs.values() %}{% if "config." in (value | nix) %}{% set usage.config = true %}{% endif %}{% endfor -%}
-{% for value in nixos_configs.values() %}{% if "config." in (value | nix) %}{% set usage.config = true %}{% endif %}{% endfor -%}
+{% for _prefix, configs in sections %}{% for value in configs.values() %}{% if "config." in (value | nix) %}{% set usage.config = true %}{% endif %}{% endfor %}{% endfor -%}
+{% macro bindings(entries, pad) -%}
+{% for entry in entries %}{% if not loop.first and (pad | length == 2 or entry.children or loop.previtem.children) %}
+{% endif %}{% if entry.children %}{{ pad }}{{ entry.name }} = {
+{{ bindings(entry.children, pad ~ "  ") }}{{ pad }}};
+{% elif entry.value is string and '\n' in entry.value %}{{ pad }}{{ entry.name }} = ''
+{{ entry.value | trim | indent(pad | length + 2, true) }}
+{{ pad }}'';
+{% elif entry.value is sequence and entry.value is not string and entry.value %}{{ pad }}{{ entry.name }} = [
+{% for item in entry.value %}{{ pad }}  {{ item | nix }}
+{% endfor %}{{ pad }}];
+{% else %}{{ pad }}{{ entry.name }} = {{ entry.value | nix }};
+{% endif %}{% endfor %}
+{%- endmacro -%}
 {
 {% if usage.config %}  config,
 {% endif %}  pkgs,
@@ -13,70 +37,21 @@
   ...
 }:
 
-lib.foldl' lib.recursiveUpdate
+{% if layers | length > 1 %}lib.foldl' lib.recursiveUpdate
+{% endif %}{
+  imports = [
+    (modulesPath + "/installer/scan/not-detected.nix")
+    ../host-common.nix
+    ./boot-decryption-config.nix
+    ./disks.nix
+{% for import_expr in import_configs %}    {{ import_expr }}
+{% endfor %}  ];
+{% if layers %}
+
+{{ bindings(layers[0], "  ") }}{% endif %}}
+{% if layers | length > 1 %}[
+{% for layer in layers[1:] %}  # Paths nested below an option set above; merged with lib.recursiveUpdate.
   {
-    imports = [
-      (modulesPath + "/installer/scan/not-detected.nix")
-      ../host-common.nix
-      ./boot-decryption-config.nix
-      ./disks.nix
-{% for import_expr in import_configs %}      {{ import_expr }}
-{% endfor %}    ];
-  }
-  [
-    { }
-{% for role_str, role_value in role_configs.items() %}    {
-{% if role_value is string and '\n' in role_value %}      roles.{{ role_str }} = ''
-{{ role_value | trim | indent(8, true) }}
-      '';
-{% elif role_value | trim == "[]" %}      roles.{{ role_str }} = [ ];
-{% elif role_value | trim == "{}" %}      roles.{{ role_str }} = { };
-{% elif role_value is sequence and role_value is not string %}      roles.{{ role_str }} = [
-{% for role_item in role_value %}        {{ role_item | nix }}
-{% endfor %}      ];
-{% elif role_str | length + (role_value | nix | length) > 84 %}      roles.{{ role_str }} =
-        {{ role_value | nix }};
-{% else %}      roles.{{ role_str }} = {{ role_value | nix }};
-{% endif %}    }
-{% endfor %}{% for service_str, service_value in service_configs.items() %}    {
-{% if service_value is string and '\n' in service_value %}      services.{{ service_str }} = ''
-{{ service_value | trim | indent(8, true) }}
-      '';
-{% elif service_value | trim == "[]" %}      services.{{ service_str }} = [ ];
-{% elif service_value | trim == "{}" %}      services.{{ service_str }} = { };
-{% elif service_value is sequence and service_value is not string %}      services.{{ service_str }} = [
-{% for service_item in service_value %}        {{ service_item | nix }}
-{% endfor %}      ];
-{% elif service_value | trim | first == "[" %}      services.{{ service_str }} =
-        {{ service_value | trim }};
-{% elif service_str | length + (service_value | nix | length) > 81 %}      services.{{ service_str }} =
-        {{ service_value | nix }};
-{% else %}      services.{{ service_str }} = {{ service_value | nix }};
-{% endif %}    }
-{% endfor %}{% for luxnix_str, luxnix_value in luxnix_configs.items() %}    {
-{% if luxnix_value is string and '\n' in luxnix_value %}      luxnix.{{ luxnix_str }} = ''
-{{ luxnix_value | trim | indent(8, true) }}
-      '';
-{% elif luxnix_value | trim == "[]" %}      luxnix.{{ luxnix_str }} = [ ];
-{% elif luxnix_value | trim == "{}" %}      luxnix.{{ luxnix_str }} = { };
-{% elif luxnix_value is sequence and luxnix_value is not string %}      luxnix.{{ luxnix_str }} = [
-{% for luxnix_item in luxnix_value %}        {{ luxnix_item | nix }}
-{% endfor %}      ];
-{% elif luxnix_str | length + (luxnix_value | nix | length) > 83 %}      luxnix.{{ luxnix_str }} =
-        {{ luxnix_value | nix }};
-{% else %}      luxnix.{{ luxnix_str }} = {{ luxnix_value | nix }};
-{% endif %}    }
-{% endfor %}{% for nixos_str, nixos_value in nixos_configs.items() %}    {
-{% if nixos_value is string and '\n' in nixos_value %}      {{ nixos_str }} = ''
-{{ nixos_value | trim | indent(8, true) }}
-      '';
-{% elif nixos_value | trim == "[]" %}      {{ nixos_str }} = [ ];
-{% elif nixos_value | trim == "{}" %}      {{ nixos_str }} = { };
-{% elif nixos_value is sequence and nixos_value is not string %}      {{ nixos_str }} = [
-{% for nixos_item in nixos_value %}        {{ nixos_item | nix }}
-{% endfor %}      ];
-{% elif nixos_str | length + (nixos_value | nix | length) > 90 %}      {{ nixos_str }} =
-        {{ nixos_value | nix }};
-{% else %}      {{ nixos_str }} = {{ nixos_value | nix }};
-{% endif %}    }
-{% endfor %}  ]{{ "\n" }}
+{{ bindings(layer, "    ") }}  }
+{% endfor %}]
+{% endif %}

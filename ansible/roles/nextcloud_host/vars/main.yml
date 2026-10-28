@@ -5,9 +5,9 @@ nextcloud_host_garage_cred_src: "{{ lx_vault_dir_src }}//secrets/system_password
 
 nextcloud_host_roles:
   nextcloudHost.enable: "true"
-  # nextcloud 31 (31.0.14) is EOL and marked insecure in the pinned nixpkgs.
-  # Nextcloud majors must be upgraded one step at a time: 31 -> 32.
-  nextcloudHost.package: "pkgs.nextcloud32"
+  # Nextcloud 32 is EOL and marked insecure in the pinned nixpkgs.
+  # Nextcloud majors must be upgraded one step at a time: 32 -> 33.
+  nextcloudHost.package: "pkgs.nextcloud33"
   nextcloudHost.passwordFilePath: '"/etc/secrets/vault/SCRT_roles_system_password_nextcloud_host_password"'
   # Object store: local single-node Garage (MinIO was removed from nixpkgs in
   # 26.05). The access-key ID below is not secret; the matching secret key,

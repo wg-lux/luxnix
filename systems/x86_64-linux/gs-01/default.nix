@@ -8,541 +8,406 @@
   ...
 }:
 
-lib.foldl' lib.recursiveUpdate
-  {
-    imports = [
-      (modulesPath + "/installer/scan/not-detected.nix")
-      ../host-common.nix
-      ./boot-decryption-config.nix
-      ./disks.nix
-    ];
-  }
-  [
-    { }
-    {
-      roles.aglnet.client.enable = true;
-    }
-    {
-      roles.base-server.enable = true;
-    }
-    {
-      roles.common.enable = true;
-    }
-    {
-      roles.custom-packages.cloud = true;
-    }
-    {
-      roles.custom-packages.enable = true;
-    }
-    {
-      roles.endoreg-client.api.djangoAllowedHosts = [
-        "localhost"
-        "127.0.0.1"
-        "172.16.255.106"
-        "172.16.255.230"
-      ];
-    }
-    {
-      roles.endoreg-client.api.httpProtocol = "https";
-    }
-    {
-      roles.endoreg-client.api.language = "en-us";
-    }
-    {
-      roles.endoreg-client.api.logLevel = "WARNING";
-    }
-    {
-      roles.endoreg-client.api.maxRequestSize = "50G";
-    }
-    {
-      roles.endoreg-client.api.settingsProfile = "prod";
-    }
-    {
-      roles.endoreg-client.centralNodes = [
+{
+  imports = [
+    (modulesPath + "/installer/scan/not-detected.nix")
+    ../host-common.nix
+    ./boot-decryption-config.nix
+    ./disks.nix
+  ];
+
+  roles = {
+    aglnet.client.enable = true;
+    base-server.enable = true;
+    common.enable = true;
+
+    custom-packages = {
+      cloud = true;
+      enable = true;
+    };
+
+    desktop.enable = true;
+
+    endoreg-client = {
+      api = {
+        djangoAllowedHosts = [
+          "localhost"
+          "127.0.0.1"
+          "172.16.255.106"
+          "172.16.255.230"
+        ];
+        httpProtocol = "https";
+        language = "en-us";
+        logLevel = "WARNING";
+        maxRequestSize = "50G";
+        settingsProfile = "prod";
+      };
+
+      centralNodes = [
         "gs-02"
       ];
-    }
-    {
-      roles.endoreg-client.enable = true;
-    }
-    {
-      roles.gpu-server.enable = true;
-    }
-    {
-      roles.ssh-access.dev-01.enable = true;
-    }
-    {
-      roles.ssh-access.dev-01.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK";
-    }
-    {
-      roles.ssh-access.dev-03.enable = true;
-    }
-    {
-      roles.ssh-access.dev-03.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAVt7FP3BCARMRyL791VauxIPd3t8nVm4A49VVpL9FUj";
-    }
-    {
-      roles.ssh-access.dev-04.enable = true;
-    }
-    {
-      roles.ssh-access.dev-04.idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICSpoZVcX+K6NdrfqcUVPTU8Ljqlp83YDzzEHjTHU2NO flippos@inexen9";
-    }
-    {
-      services.luxnix.lxAnnotateLocal.database.host =
-        config.luxnix.generic-settings.network.psqlMain.vpnIp;
-    }
-    {
-      services.luxnix.lxAnnotateLocal.database.ownership = "external";
-    }
-    {
-      services.luxnix.lxAnnotateLocal.database.port =
-        config.luxnix.generic-settings.network.psqlMain.port;
-    }
-    {
-      services.luxnix.lxAnnotateLocal.runtime.celeryBroker.secureTransportConfirmed = true;
-    }
-    {
-      services.luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl =
-        "redis://${config.luxnix.generic-settings.network.redis.vpnIp}:${toString config.luxnix.generic-settings.network.redis.port}/1";
-    }
-    {
-      services.luxnix.lxAnnotateLocal.runtime.ffmpegWorker.cudaVisibleDevices = "0";
-    }
-    {
-      services.luxnix.lxAnnotateLocal.runtime.hlsEncodingProfile = "clinical_h264_nvenc_cq_v1";
-    }
-    {
-      services.luxnix.lxAnnotateLocal.runtime.llmInferenceWorker.mode = "always";
-    }
-    {
-      services.luxnix.lxAnnotateLocal.runtime.monitoring.enable = true;
-    }
-    {
-      services.luxnix.lxAnnotateLocal.runtime.trainingWorker.cudaVisibleDevices = "0";
-    }
-    {
-      services.luxnix.lxAnnotateLocal.runtime.trainingWorker.mode = "manual";
-    }
-    {
-      services.luxnix.ollama.acceleration = "cuda";
-    }
-    {
-      services.luxnix.ollama.enable = true;
-    }
-    {
-      services.luxnix.ollama.enableModelBootstrap = false;
-    }
-    {
-      services.luxnix.ollama.models = [ "gemma4:e2b" ];
-    }
-    {
-      services.ollama.host = "0.0.0.0";
-    }
-    {
-      services.wg-lux-mcp.enable = true;
-    }
-    {
-      services.luxnix.hubStorage.node.enable = true;
-    }
-    {
-      services.luxnix.hubStorage.node.identity = "gs-01";
-    }
-    {
-      services.luxnix.hubStorage.node.network.allowedHubAddresses = [ "172.16.255.22" ];
-    }
-    {
-      services.luxnix.hubStorage.node.network.allowedHubIdentities = [ "spiffe://endoreg/hub/gs-02" ];
-    }
-    {
-      services.luxnix.hubStorage.node.network.hubIdentityOperations."spiffe://endoreg/hub/gs-02" = [
-        "health"
-        "capacity"
-        "inventory"
-        "store"
-        "fetch_ciphertext"
-        "fetch_plaintext"
-        "verify"
-        "delete"
-      ];
-    }
-    {
-      services.luxnix.hubStorage.node.network.interface = "tun0";
-    }
-    {
-      services.luxnix.hubStorage.node.network.listenAddress = "172.16.255.21";
-    }
-    {
-      services.luxnix.hubStorage.node.recipientPrivateIdentityFiles = [
-        "/etc/secrets/vault/hub-storage/gs-01-recipient-current.pem"
-      ];
-    }
-    {
-      services.luxnix.hubStorage.node.storage.encryptedDevice = "/dev/mapper/gs-01-storage";
-    }
-    {
-      services.luxnix.hubStorage.node.storage.mountPoint = "/archive";
-    }
-    {
-      services.luxnix.hubStorage.node.tls.caCertificateFile = "/etc/secrets/vault/hub-storage/ca.pem";
-    }
-    {
-      services.luxnix.hubStorage.node.tls.certificateFile =
-        "/etc/secrets/vault/hub-storage/gs-01-server.crt";
-    }
-    {
-      services.luxnix.hubStorage.node.tls.keyFile = "/etc/secrets/vault/hub-storage/gs-01-server.key";
-    }
-    {
-      luxnix.dns.enable = true;
-    }
-    {
-      luxnix.generic-settings.smtpPwdFilePath = "/etc/secrets/vault/smtp_pwd";
-    }
-    {
-      luxnix.generic-settings.smtpUserFilePath = "/etc/secrets/vault/smtp_user";
-    }
-    {
-      luxnix.generic-settings.sslCertificateKeyPath = "/etc/secrets/vault/ssl_key";
-    }
-    {
-      luxnix.generic-settings.sslCertificatePath = "/etc/secrets/vault/ssl_cert";
-    }
-    {
-      luxnix.generic-settings.adminVpnIp = "172.16.255.106";
-    }
-    {
-      luxnix.generic-settings.enable = true;
-    }
-    {
-      luxnix.generic-settings.gpu.nvidia.driver = "stable";
-    }
-    {
-      luxnix.generic-settings.gpu.nvidia.enable = true;
-    }
-    {
-      luxnix.generic-settings.language = "english";
-    }
-    {
-      luxnix.generic-settings.linux.kernelPackages = pkgs.linuxPackages_6_12;
-    }
-    {
-      luxnix.generic-settings.linux.rmemMax = 7500000;
-    }
-    {
-      luxnix.generic-settings.linux.wmemMax = 7500000;
-    }
-    {
-      luxnix.generic-settings.network.glm52.domain = "glm.endo-reg.net";
-    }
-    {
-      luxnix.generic-settings.network.glm52.port = 8088;
-    }
-    {
-      luxnix.generic-settings.network.hosts.c-01.ip-vpn = "172.16.255.131";
-    }
-    {
-      luxnix.generic-settings.network.hosts.gc-01.domains = [
-        "gc-01.intern"
-        "lx-annotate.local"
-      ];
-    }
-    {
-      luxnix.generic-settings.network.hosts.gc-01.ip-vpn = "172.16.255.101";
-    }
-    {
-      luxnix.generic-settings.network.hosts.gc-02.domains = [
-        "gc-02.intern"
-        "lx-annotate.local"
-      ];
-    }
-    {
-      luxnix.generic-settings.network.hosts.gc-02.ip-vpn = "172.16.255.102";
-    }
-    {
-      luxnix.generic-settings.network.hosts.gc-03.domains = [
-        "gc-03.intern"
-        "lx-annotate.local"
-      ];
-    }
-    {
-      luxnix.generic-settings.network.hosts.gc-03.ip-vpn = "172.16.255.103";
-    }
-    {
-      luxnix.generic-settings.network.hosts.gc-04.domains = [
-        "gc-04.intern"
-        "lx-annotate.local"
-      ];
-    }
-    {
-      luxnix.generic-settings.network.hosts.gc-04.ip-vpn = "172.16.255.104";
-    }
-    {
-      luxnix.generic-settings.network.hosts.gc-05.domains = [
-        "gc-05.intern"
-        "lx-annotate.local"
-      ];
-    }
-    {
-      luxnix.generic-settings.network.hosts.gc-05.ip-vpn = "172.16.255.105";
-    }
-    {
-      luxnix.generic-settings.network.hosts.gc-06.domains = [
-        "gc-06.intern"
-        "lx-annotate.local"
-      ];
-    }
-    {
-      luxnix.generic-settings.network.hosts.gc-06.ip-local = "172.31.179.8";
-    }
-    {
-      luxnix.generic-settings.network.hosts.gc-06.ip-vpn = "172.16.255.106";
-    }
-    {
-      luxnix.generic-settings.network.hosts.gc-06.syncthing-id =
-        "MJU2YAF-4IXFRSS-I3JHU2Z-6LUSSTN-L6BR5HS-PLS6ACJ-4E2X2UQ-5AVBUAQ";
-    }
-    {
-      luxnix.generic-settings.network.hosts.gc-07.domains = [
-        "gc-07.intern"
-        "lx-annotate.local"
-      ];
-    }
-    {
-      luxnix.generic-settings.network.hosts.gc-07.ip-vpn = "172.16.255.107";
-    }
-    {
-      luxnix.generic-settings.network.hosts.gc-08.domains = [
-        "gc-08.intern"
-        "lx-annotate.local"
-      ];
-    }
-    {
-      luxnix.generic-settings.network.hosts.gc-08.ip-vpn = "172.16.255.108";
-    }
-    {
-      luxnix.generic-settings.network.hosts.gc-09.domains = [
-        "gc-09.intern"
-        "lx-annotate.local"
-      ];
-    }
-    {
-      luxnix.generic-settings.network.hosts.gc-09.ip-vpn = "172.16.255.109";
-    }
-    {
-      luxnix.generic-settings.network.hosts.gc-10.domains = [
-        "gc-10.intern"
-        "lx-annotate.local"
-      ];
-    }
-    {
-      luxnix.generic-settings.network.hosts.gc-10.ip-vpn = "172.16.255.110";
-    }
-    {
-      luxnix.generic-settings.network.hosts.gs-01.domains = [
-        "gs-01.intern"
-      ];
-    }
-    {
-      luxnix.generic-settings.network.hosts.gs-01.ip-local = "192.168.0.228";
-    }
-    {
-      luxnix.generic-settings.network.hosts.gs-01.ip-vpn = "172.16.255.21";
-    }
-    {
-      luxnix.generic-settings.network.hosts.gs-01.network-cluster = "L2";
-    }
-    {
-      luxnix.generic-settings.network.hosts.gs-01.syncthing-id =
-        "X2KFB5D-HJWUNFK-GS6TP7A-GV4TGEF-ZYH3RHL-AWWJIW4-76SSCHP-YIMUUAA";
-    }
-    {
-      luxnix.generic-settings.network.hosts.gs-02.domains = [
-        "glm.endo-reg.net"
-        "gs-02.intern"
-        "vault.endo-reg.net"
-      ];
-    }
-    {
-      luxnix.generic-settings.network.hosts.gs-02.ip-local = "192.168.0.56";
-    }
-    {
-      luxnix.generic-settings.network.hosts.gs-02.ip-vpn = "172.16.255.22";
-    }
-    {
-      luxnix.generic-settings.network.hosts.gs-02.network-cluster = "L2";
-    }
-    {
-      luxnix.generic-settings.network.hosts.gs-02.syncthing-id =
-        "XSAKTSB-36K6OY4-NEPJ2K4-WHGZF2D-EMDOMFQ-Q5DEVO6-2BYD2MS-JWPFVQ4";
-    }
-    {
-      luxnix.generic-settings.network.hosts.s-01.domains = [
-        "s-01.intern"
-      ];
-    }
-    {
-      luxnix.generic-settings.network.hosts.s-01.ip-local = "192.168.179.1";
-    }
-    {
-      luxnix.generic-settings.network.hosts.s-01.ip-vpn = "172.16.255.1";
-    }
-    {
-      luxnix.generic-settings.network.hosts.s-01.network-cluster = "L1";
-    }
-    {
-      luxnix.generic-settings.network.hosts.s-01.syncthing-id =
-        "WTGG7YQ-AGGOG6H-PQPA54T-HQRCF4P-2T52JSI-OQTIBUG-JUCC45Y-MBCB4QS";
-    }
-    {
-      luxnix.generic-settings.network.hosts.s-02.domains = [
-        "nginx.endo-reg.net"
-        "cloud.endo-reg.net"
-        "keycloak.endo-reg.net"
-        "s-02.intern"
-      ];
-    }
-    {
-      luxnix.generic-settings.network.hosts.s-02.ip-local = "192.168.179.2";
-    }
-    {
-      luxnix.generic-settings.network.hosts.s-02.ip-vpn = "172.16.255.12";
-    }
-    {
-      luxnix.generic-settings.network.hosts.s-02.network-cluster = "L1";
-    }
-    {
-      luxnix.generic-settings.network.hosts.s-02.syncthing-id =
-        "GF7EOBC-UVEYSV7-BK77MKA-DIK62JP-TPVG4M3-3NUUWS7-B724MAI-OK2J7AW";
-    }
-    {
-      luxnix.generic-settings.network.hosts.s-03.domains = [
-        "s-03.intern"
-      ];
-    }
-    {
-      luxnix.generic-settings.network.hosts.s-03.ip-local = "192.168.179.3";
-    }
-    {
-      luxnix.generic-settings.network.hosts.s-03.ip-vpn = "172.16.255.13";
-    }
-    {
-      luxnix.generic-settings.network.hosts.s-03.network-cluster = "L1";
-    }
-    {
-      luxnix.generic-settings.network.hosts.s-03.syncthing-id =
-        "MLC6QP7-MI5RMNB-H7JCOTE-ODXOCV7-UIIOMUS-ZRJULS7-5ZLD2LB-LYZVZAF";
-    }
-    {
-      luxnix.generic-settings.network.hosts.s-04.domains = [
-        "s-04.intern"
-      ];
-    }
-    {
-      luxnix.generic-settings.network.hosts.s-04.ip-local = "192.168.0.194";
-    }
-    {
-      luxnix.generic-settings.network.hosts.s-04.ip-vpn = "172.16.255.14";
-    }
-    {
-      luxnix.generic-settings.network.keycloak.adminDomain = "adminKeycloak.endo-reg.net";
-    }
-    {
-      luxnix.generic-settings.network.keycloak.domain = "keycloak.endo-reg.net";
-    }
-    {
-      luxnix.generic-settings.network.keycloak.port = 8443;
-    }
-    {
-      luxnix.generic-settings.network.nextcloud.domain = "cloud.endo-reg.net";
-    }
-    {
-      luxnix.generic-settings.network.psqlMain.port = 5432;
-    }
-    {
-      luxnix.generic-settings.network.psqlTest.domain = "psql-test.endo-reg.net";
-    }
-    {
-      luxnix.generic-settings.network.serviceHosts.glm52 = "gs-02";
-    }
-    {
-      luxnix.generic-settings.network.serviceHosts.keycloak = "s-02";
-    }
-    {
-      luxnix.generic-settings.network.serviceHosts.nextcloud = "s-03";
-    }
-    {
-      luxnix.generic-settings.network.serviceHosts.nginx = "s-02";
-    }
-    {
-      luxnix.generic-settings.network.serviceHosts.openvpn = "s-01";
-    }
-    {
-      luxnix.generic-settings.network.serviceHosts.psqlMain = "gs-02";
-    }
-    {
-      luxnix.generic-settings.network.serviceHosts.psqlTest = "s-04";
-    }
-    {
-      luxnix.generic-settings.network.serviceHosts.redis = "s-04";
-    }
-    {
-      luxnix.generic-settings.network.serviceHosts.vault = "gs-02";
-    }
-    {
-      luxnix.generic-settings.network.syncthing.enable = true;
-    }
-    {
-      luxnix.generic-settings.network.syncthing.extraFlags = [ ];
-    }
-    {
-      luxnix.generic-settings.postgres.enable = true;
-    }
-    {
-      luxnix.generic-settings.sensitiveServiceGroupName = "sensitiveServices";
-    }
-    {
-      luxnix.generic-settings.traefikHostDomain = "traefik.endo-reg.net";
-    }
-    {
-      luxnix.generic-settings.traefikHostIp = "172.16.255.12";
-    }
-    {
-      luxnix.generic-settings.transferCaPath = "/var/lib/lx-annotate/ssl/transfer_ca.crt";
-    }
-    {
-      luxnix.generic-settings.virtualization.enable = true;
-    }
-    {
-      luxnix.generic-settings.virtualization.kvm = { };
-    }
-    {
-      luxnix.generic-settings.virtualization.podman = { };
-    }
-    {
-      luxnix.generic-settings.virtualization.supportedArchitectures = [ ];
-    }
-    {
-      luxnix.generic-settings.virtualization.userGroups = [ ];
-    }
-    {
-      luxnix.generic-settings.virtualization.vfio = { };
-    }
-    {
-      luxnix.generic-settings.vpnSubnet = "172.16.255.0/24";
-    }
-    {
-      luxnix.maintenance.autoUpdates.dates = "17:00";
-    }
-    {
-      luxnix.maintenance.autoUpdates.flake = "github:wg-lux/luxnix/prototype";
-    }
-    {
-      luxnix.maintenance.autoUpdates.operation = "switch";
-    }
-    {
-      luxnix.packages.shared = [ ];
-    }
-    {
-      luxnix.storage.operatorUnlocked.bindMounts = lib.foldl' lib.recursiveUpdate { } [
+      enable = true;
+    };
+
+    gpu-server.enable = true;
+
+    ssh-access = {
+      dev-01 = {
+        enable = true;
+        idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEh2Bg+mSSvA80ALScpb81Q9ZaBFdacdxJZtAfZpwYkK";
+      };
+
+      dev-03 = {
+        enable = true;
+        idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAVt7FP3BCARMRyL791VauxIPd3t8nVm4A49VVpL9FUj";
+      };
+
+      dev-04 = {
+        enable = true;
+        idEd25519 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICSpoZVcX+K6NdrfqcUVPTU8Ljqlp83YDzzEHjTHU2NO flippos@inexen9";
+      };
+    };
+  };
+
+  services = {
+    luxnix = {
+      hubStorage.node = {
+        enable = true;
+        identity = "gs-01";
+
+        network = {
+          allowedHubAddresses = [ "172.16.255.22" ];
+          allowedHubIdentities = [ "spiffe://endoreg/hub/gs-02" ];
+          hubIdentityOperations."spiffe://endoreg/hub/gs-02" = [
+            "health"
+            "capacity"
+            "inventory"
+            "store"
+            "fetch_ciphertext"
+            "fetch_plaintext"
+            "verify"
+            "delete"
+          ];
+          interface = "tun0";
+          listenAddress = "172.16.255.21";
+        };
+
+        recipientPrivateIdentityFiles = [ "/etc/secrets/vault/hub-storage/gs-01-recipient-current.pem" ];
+
+        storage = {
+          encryptedDevice = "/dev/mapper/gs-01-storage";
+          mountPoint = "/archive";
+        };
+
+        tls = {
+          caCertificateFile = "/etc/secrets/vault/hub-storage/ca.pem";
+          certificateFile = "/etc/secrets/vault/hub-storage/gs-01-server.crt";
+          keyFile = "/etc/secrets/vault/hub-storage/gs-01-server.key";
+        };
+      };
+
+      lxAnnotateLocal = {
+        database = {
+          host = config.luxnix.generic-settings.network.psqlMain.vpnIp;
+          ownership = "external";
+          port = config.luxnix.generic-settings.network.psqlMain.port;
+        };
+
+        runtime = {
+          celeryBroker.secureTransportConfirmed = true;
+          externalServices.redisUrl = "redis://${config.luxnix.generic-settings.network.redis.vpnIp}:${toString config.luxnix.generic-settings.network.redis.port}/1";
+          ffmpegWorker.cudaVisibleDevices = "0";
+          hlsEncodingProfile = "clinical_h264_nvenc_cq_v1";
+          llmInferenceWorker.mode = "always";
+          monitoring.enable = true;
+
+          trainingWorker = {
+            cudaVisibleDevices = "0";
+            mode = "manual";
+          };
+        };
+      };
+
+      ollama = {
+        acceleration = "cuda";
+        enable = true;
+        enableModelBootstrap = false;
+        models = [ "gemma4:e2b" ];
+      };
+    };
+
+    ollama.host = "0.0.0.0";
+    wg-lux-mcp.enable = true;
+  };
+
+  luxnix = {
+    boot-decryption-stick-gs-01.enable = true;
+    dns.enable = true;
+
+    generic-settings = {
+      adminVpnIp = "172.16.255.106";
+      enable = true;
+
+      gpu.nvidia = {
+        driver = "stable";
+        enable = true;
+      };
+
+      hostPlatform = "x86_64-linux";
+      language = "english";
+
+      linux = {
+        cpuMicrocode = "amd";
+
+        initrd = {
+          availableKernelModules = [
+            "xhci_pci"
+            "ahci"
+            "mpt3sas"
+            "usb_storage"
+            "usbhid"
+            "sd_mod"
+          ];
+          kernelModules = [
+            "nfs"
+            "dm-snapshot"
+          ];
+          supportedFilesystems = [
+            "nfs"
+          ];
+        };
+
+        kernelModules = [
+          "kvm-amd"
+        ];
+        kernelModulesBlacklist = [ ];
+        kernelPackages = pkgs.linuxPackages_6_12;
+        kernelParams = [ ];
+        resumeDevice = "/dev/disk/by-label/nixos";
+        rmemMax = 7500000;
+        supportedFilesystems = [
+          "btrfs"
+        ];
+        wmemMax = 7500000;
+      };
+
+      network = {
+        glm52 = {
+          domain = "glm.endo-reg.net";
+          port = 8088;
+        };
+
+        hosts = {
+          c-01.ip-vpn = "172.16.255.131";
+
+          gc-01 = {
+            domains = [
+              "gc-01.intern"
+              "lx-annotate.local"
+            ];
+            ip-vpn = "172.16.255.101";
+          };
+
+          gc-02 = {
+            domains = [
+              "gc-02.intern"
+              "lx-annotate.local"
+            ];
+            ip-vpn = "172.16.255.102";
+          };
+
+          gc-03 = {
+            domains = [
+              "gc-03.intern"
+              "lx-annotate.local"
+            ];
+            ip-vpn = "172.16.255.103";
+          };
+
+          gc-04 = {
+            domains = [
+              "gc-04.intern"
+              "lx-annotate.local"
+            ];
+            ip-vpn = "172.16.255.104";
+          };
+
+          gc-05 = {
+            domains = [
+              "gc-05.intern"
+              "lx-annotate.local"
+            ];
+            ip-vpn = "172.16.255.105";
+          };
+
+          gc-06 = {
+            domains = [
+              "gc-06.intern"
+              "lx-annotate.local"
+            ];
+            ip-local = "172.31.179.8";
+            ip-vpn = "172.16.255.106";
+            syncthing-id = "MJU2YAF-4IXFRSS-I3JHU2Z-6LUSSTN-L6BR5HS-PLS6ACJ-4E2X2UQ-5AVBUAQ";
+          };
+
+          gc-07 = {
+            domains = [
+              "gc-07.intern"
+              "lx-annotate.local"
+            ];
+            ip-vpn = "172.16.255.107";
+          };
+
+          gc-08 = {
+            domains = [
+              "gc-08.intern"
+              "lx-annotate.local"
+            ];
+            ip-vpn = "172.16.255.108";
+          };
+
+          gc-09 = {
+            domains = [
+              "gc-09.intern"
+              "lx-annotate.local"
+            ];
+            ip-vpn = "172.16.255.109";
+          };
+
+          gc-10 = {
+            domains = [
+              "gc-10.intern"
+              "lx-annotate.local"
+            ];
+            ip-vpn = "172.16.255.110";
+          };
+
+          gs-01 = {
+            domains = [
+              "gs-01.intern"
+            ];
+            ip-local = "192.168.0.228";
+            ip-vpn = "172.16.255.21";
+            network-cluster = "L2";
+            syncthing-id = "X2KFB5D-HJWUNFK-GS6TP7A-GV4TGEF-ZYH3RHL-AWWJIW4-76SSCHP-YIMUUAA";
+          };
+
+          gs-02 = {
+            domains = [
+              "glm.endo-reg.net"
+              "gs-02.intern"
+              "vault.endo-reg.net"
+            ];
+            ip-local = "192.168.0.56";
+            ip-vpn = "172.16.255.22";
+            network-cluster = "L2";
+            syncthing-id = "XSAKTSB-36K6OY4-NEPJ2K4-WHGZF2D-EMDOMFQ-Q5DEVO6-2BYD2MS-JWPFVQ4";
+          };
+
+          s-01 = {
+            domains = [
+              "s-01.intern"
+            ];
+            ip-local = "192.168.179.1";
+            ip-vpn = "172.16.255.1";
+            network-cluster = "L1";
+            syncthing-id = "WTGG7YQ-AGGOG6H-PQPA54T-HQRCF4P-2T52JSI-OQTIBUG-JUCC45Y-MBCB4QS";
+          };
+
+          s-02 = {
+            domains = [
+              "nginx.endo-reg.net"
+              "cloud.endo-reg.net"
+              "keycloak.endo-reg.net"
+              "s-02.intern"
+            ];
+            ip-local = "192.168.179.2";
+            ip-vpn = "172.16.255.12";
+            network-cluster = "L1";
+            syncthing-id = "GF7EOBC-UVEYSV7-BK77MKA-DIK62JP-TPVG4M3-3NUUWS7-B724MAI-OK2J7AW";
+          };
+
+          s-03 = {
+            domains = [
+              "s-03.intern"
+            ];
+            ip-local = "192.168.179.3";
+            ip-vpn = "172.16.255.13";
+            network-cluster = "L1";
+            syncthing-id = "MLC6QP7-MI5RMNB-H7JCOTE-ODXOCV7-UIIOMUS-ZRJULS7-5ZLD2LB-LYZVZAF";
+          };
+
+          s-04 = {
+            domains = [
+              "s-04.intern"
+            ];
+            ip-local = "192.168.0.194";
+            ip-vpn = "172.16.255.14";
+          };
+        };
+
+        keycloak = {
+          adminDomain = "adminKeycloak.endo-reg.net";
+          domain = "keycloak.endo-reg.net";
+          port = 8443;
+        };
+
+        nextcloud.domain = "cloud.endo-reg.net";
+        psqlMain.port = 5432;
+        psqlTest.domain = "psql-test.endo-reg.net";
+
+        serviceHosts = {
+          glm52 = "gs-02";
+          keycloak = "s-02";
+          nextcloud = "s-03";
+          nginx = "s-02";
+          openvpn = "s-01";
+          psqlMain = "gs-02";
+          psqlTest = "s-04";
+          redis = "s-04";
+          vault = "gs-02";
+        };
+
+        syncthing = {
+          enable = true;
+          extraFlags = [ ];
+        };
+      };
+
+      postgres.enable = true;
+      sensitiveServiceGroupName = "sensitiveServices";
+      smtpPwdFilePath = "/etc/secrets/vault/smtp_pwd";
+      smtpUserFilePath = "/etc/secrets/vault/smtp_user";
+      sslCertificateKeyPath = "/etc/secrets/vault/ssl_key";
+      sslCertificatePath = "/etc/secrets/vault/ssl_cert";
+      systemStateVersion = "23.11";
+      traefikHostDomain = "traefik.endo-reg.net";
+      traefikHostIp = "172.16.255.12";
+      transferCaPath = "/var/lib/lx-annotate/ssl/transfer_ca.crt";
+
+      virtualization = {
+        enable = true;
+        kvm = { };
+        podman = { };
+        supportedArchitectures = [ ];
+        userGroups = [ ];
+        vfio = { };
+      };
+
+      vpnSubnet = "172.16.255.0/24";
+    };
+
+    maintenance.autoUpdates = {
+      dates = "17:00";
+      flake = "github:wg-lux/luxnix/prototype";
+      operation = "switch";
+    };
+
+    nvidia-prime.enable = lib.mkForce false;
+    packages.shared = [ ];
+
+    storage.operatorUnlocked = {
+      bindMounts = lib.foldl' lib.recursiveUpdate { } [
         {
           "/etc/secrets" = {
             volume = "luxnix-secrets";
@@ -590,12 +455,8 @@ lib.foldl' lib.recursiveUpdate
           };
         })
       ];
-    }
-    {
-      luxnix.storage.operatorUnlocked.enable = true;
-    }
-    {
-      luxnix.storage.operatorUnlocked.guardedServices = lib.id (
+      enable = true;
+      guardedServices = lib.id (
         let
           app = config.services.luxnix.lxAnnotateLocal;
           secrets = [
@@ -656,28 +517,24 @@ lib.foldl' lib.recursiveUpdate
           }
         )
       );
-    }
-    {
-      luxnix.storage.operatorUnlocked.migration.accountHashes =
-        lib.recursiveUpdate
-          { "/var/lib/luxnix-account/admin-password.hash" = config.luxnix.vault.adminPasswordHashedFile; }
-          (
-            lib.optionalAttrs config.user.client.enable {
-              "/var/lib/luxnix-account/client-password.hash" =
-                "${config.luxnix.vault.dir}/SCRT_client_user_password_hash";
-            }
-          );
-    }
-    {
-      luxnix.storage.operatorUnlocked.migration.enable = true;
-    }
-    {
-      luxnix.storage.operatorUnlocked.startupServices = lib.filter (
+
+      migration = {
+        accountHashes =
+          lib.recursiveUpdate
+            { "/var/lib/luxnix-account/admin-password.hash" = config.luxnix.vault.adminPasswordHashedFile; }
+            (
+              lib.optionalAttrs config.user.client.enable {
+                "/var/lib/luxnix-account/client-password.hash" =
+                  "${config.luxnix.vault.dir}/SCRT_client_user_password_hash";
+              }
+            );
+        enable = true;
+      };
+
+      startupServices = lib.filter (
         name: builtins.elem "multi-user.target" config.systemd.services.${name}.wantedBy
       ) (builtins.attrNames config.luxnix.storage.operatorUnlocked.guardedServices);
-    }
-    {
-      luxnix.storage.operatorUnlocked.volumes =
+      volumes =
         lib.recursiveUpdate
           {
             luxnix-secrets = {
@@ -701,95 +558,26 @@ lib.foldl' lib.recursiveUpdate
                 };
               }
           );
-    }
-    {
-      luxnix.vault.dir = "/etc/secrets/vault";
-    }
-    {
-      luxnix.vault.enable = true;
-    }
-    {
-      luxnix.vault.key = "/etc/secrets/.key";
-    }
-    {
-      luxnix.vault.psk = "/etc/secrets/.psk";
-    }
-    {
-      luxnix.boot-decryption-stick-gs-01.enable = true;
-    }
-    {
-      luxnix.generic-settings.hostPlatform = "x86_64-linux";
-    }
-    {
-      luxnix.generic-settings.linux.cpuMicrocode = "amd";
-    }
-    {
-      luxnix.generic-settings.linux.initrd.availableKernelModules = [
-        "xhci_pci"
-        "ahci"
-        "mpt3sas"
-        "usb_storage"
-        "usbhid"
-        "sd_mod"
-      ];
-    }
-    {
-      luxnix.generic-settings.linux.initrd.kernelModules = [
-        "nfs"
-        "dm-snapshot"
-      ];
-    }
-    {
-      luxnix.generic-settings.linux.initrd.supportedFilesystems = [
-        "nfs"
-      ];
-    }
-    {
-      luxnix.generic-settings.linux.kernelModules = [
-        "kvm-amd"
-      ];
-    }
-    {
-      luxnix.generic-settings.linux.kernelModulesBlacklist = [ ];
-    }
-    {
-      luxnix.generic-settings.linux.kernelParams = [ ];
-    }
-    {
-      luxnix.generic-settings.linux.resumeDevice = "/dev/disk/by-label/nixos";
-    }
-    {
-      luxnix.generic-settings.linux.supportedFilesystems = [
-        "btrfs"
-      ];
-    }
-    {
-      luxnix.generic-settings.systemStateVersion = "23.11";
-    }
-    {
-      luxnix.nvidia-prime.enable = lib.mkForce false;
-    }
-    {
-      hardware.nvidia.powerManagement.enable = true;
-    }
-    {
-      hardware.nvidia.powerManagement.finegrained = false;
-    }
-    {
-      programs.nix-ld.enable = true;
-    }
-    {
-      security.luxnix.local-users.adminPassword.hashedFile =
-        "/var/lib/luxnix-account/admin-password.hash";
-    }
-    {
-      security.luxnix.local-users.clientPassword.hashedFile =
-        "/var/lib/luxnix-account/client-password.hash";
-    }
-    {
-      security.luxnix.local-users.enable = true;
-    }
-    {
-      xdg.menus.enable = true;
-    }
-  ]
+    };
+
+    vault = {
+      dir = "/etc/secrets/vault";
+      enable = true;
+      key = "/etc/secrets/.key";
+      psk = "/etc/secrets/.psk";
+    };
+  };
+
+  hardware.nvidia.powerManagement = {
+    enable = true;
+    finegrained = false;
+  };
+
+  security.luxnix.local-users = {
+    adminPassword.hashedFile = "/var/lib/luxnix-account/admin-password.hash";
+    clientPassword.hashedFile = "/var/lib/luxnix-account/client-password.hash";
+    enable = true;
+  };
+
+  xdg.menus.enable = true;
+}

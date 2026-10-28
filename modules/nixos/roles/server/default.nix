@@ -15,15 +15,10 @@ in
   };
 
   config = mkIf cfg.enable {
-    roles = {
-      common.enable = true;
-    };
+    roles.common.enable = true;
 
     services = {
-      ssh.enable = true;
-      luxnix = {
-        avahi.enable = true;
-      };
+      luxnix.avahi.enable = true;
 
       getty.autologinUser = "nixos";
       openiscsi = {
@@ -47,19 +42,17 @@ in
       stub-ld.enable = lib.mkDefault false;
     };
 
-    security = {
-      sudo = {
-        wheelNeedsPassword = false;
-        # Only allow members of the wheel group to execute sudo by setting the executable’s permissions accordingly. This prevents users that are not members of wheel from exploiting vulnerabilities in sudo such as CVE-2021-3156.
-        execWheelOnly = true;
-        # Don't lecture the user. Less mutable state.
-        extraConfig = ''
-          Defaults lecture = never
-        '';
-      };
+    security.sudo = {
+      wheelNeedsPassword = false;
+      # Restrict execution to wheel members to limit exposure to sudo vulnerabilities.
+      execWheelOnly = true;
+      # Don't lecture the user. Less mutable state.
+      extraConfig = ''
+        Defaults lecture = never
+      '';
     };
 
-    # Notice this also disables --help for some commands such es nixos-rebuild
+    # This also disables --help for some commands, such as nixos-rebuild.
     documentation = {
       enable = lib.mkDefault false;
       info.enable = lib.mkDefault false;
@@ -104,11 +97,10 @@ in
       };
     };
 
-    # use TCP BBR has significantly increased throughput and reduced latency for connections
+    # Use BBR congestion control with fair queueing.
     boot.kernel.sysctl = {
       "net.core.default_qdisc" = "fq";
       "net.ipv4.tcp_congestion_control" = "bbr";
     };
-
   };
 }

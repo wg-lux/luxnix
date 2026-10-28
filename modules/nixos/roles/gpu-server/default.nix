@@ -13,18 +13,15 @@ in
     enable = mkBoolOpt false ''
       Enable gpu server configuration.
       Enables roles:
-      - desktop
+      - base-server
       - aglnet.client
     '';
   };
 
   config = mkIf cfg.enable {
-
     roles = {
       aglnet.client.enable = true;
       base-server.enable = true;
-      custom-packages.cuda = true;
-
     };
   };
 }

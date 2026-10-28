@@ -93,11 +93,11 @@ sudo journalctl -u lx-annotate-master-key-check.service -n 200 --no-pager
 Manually rerun one-shot checks:
 
 ```bash
-sudo systemctl start lx-annotate-runtime-env.service
-sudo systemctl start lx-annotate-wheel-runtime.service
-sudo systemctl start lx-annotate-migrate.service
-sudo systemctl start lx-annotate-load-base-data.service
-sudo systemctl start lx-annotate-master-key-check.service
+sudo systemctl restart lx-annotate-runtime-env.service
+sudo systemctl restart lx-annotate-wheel-runtime.service
+sudo systemctl restart lx-annotate-migrate.service
+sudo systemctl restart lx-annotate-load-base-data.service
+sudo systemctl restart lx-annotate-master-key-check.service
 sudo systemctl restart lx-annotate-terminology-bootstrap.service
 sudo systemctl start lx-annotate-acceptance.service
 sudo journalctl -u lx-annotate-acceptance.service -n 200 --no-pager
@@ -105,22 +105,43 @@ sudo journalctl -u lx-annotate-acceptance.service -n 200 --no-pager
 
 In wheel mode, `lx-annotate-wheel-runtime.service` is the only startup unit
 permitted to install or upgrade packages in the shared virtual environment.
-It is intentionally inactive after a successful run so every application-start
-transaction rechecks the currently selected wheel instead of accepting a
-successful run retained from an older release. The wheel hash stamp makes an
-already prepared runtime a no-op.
-Migration, web, worker, and maintenance entrypoints validate the prepared
-runtime and fail closed if its release stamp is absent or stale. If package
-installation fails, repair and restart the wheel-runtime unit before retrying
+Wheel preparation, migrations and base-data loading remain active after a
+successful run, so they run once per generation. Timer- and path-triggered
+units therefore do not repeat them on every trigger. Migration, web, worker,
+and maintenance entrypoints still validate the prepared runtime and fail closed
+if its release stamp is absent or stale. Because `start` does not rerun an
+active unit, use `restart` to repeat a preparation step. If package installation
+fails, repair and restart the wheel-runtime unit before retrying
 `lx-annotate-migrate.service`; do not run `pip` concurrently with application
 units.
+
+### Switch lifecycle
+
+The startup-preparation units `lx-annotate-runtime-env`,
+`lx-annotate-wheel-runtime`, `lx-annotate-migrate`,
+`lx-annotate-load-base-data`, `lx-annotate-master-key-check`,
+`lx-dtypes-kb-bootstrap`, `lx-annotate-hub-node-provisioning` and
+`lx-annotate-hub-envelope-key-preflight` use `stopIfChanged = false`. A NixOS
+switch restarts them after `daemon-reload` instead of stopping them before
+activation. Otherwise, while the switch waits for the web service and workers
+to stop, a timer or path trigger can queue preparation from the outgoing
+generation. That run fails the new release check, and every start job the
+switch merged into it fails with `dependency`, leaving the web service down
+after the switch. The restart propagates through `Requires=`, so application
+units stop before the new wheel is installed and start again afterwards.
+
+Triggered jobs that fire during the stop phase still run from the outgoing
+generation against the outgoing wheel, and the post-reload restart stops them.
+If a switch was interrupted after reloading, entrypoints report
+"wheel runtime is not prepared"; rerun the switch or restart the
+wheel-runtime unit as shown below.
 
 The package-provided `lx-dtypes-kb-bootstrap.service` must also require and
 follow wheel preparation. If an interrupted upgrade leaves it failed with
 "wheel runtime is not prepared", an authorized operator can recover in order:
 
 ```bash
-sudo systemctl start lx-annotate-wheel-runtime.service &&
+sudo systemctl restart lx-annotate-wheel-runtime.service &&
 sudo systemctl start lx-dtypes-kb-bootstrap.service &&
 sudo systemctl start lx-annotate.service
 ```

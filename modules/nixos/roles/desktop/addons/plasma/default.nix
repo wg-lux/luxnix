@@ -10,7 +10,7 @@ let
 in
 {
   options.roles.desktop.addons.plasma = with types; {
-    enable = mkBoolOpt true "Enable or disable the plasma DE.";
+    enable = mkBoolOpt false "Enable or disable the plasma DE.";
   };
 
   config = mkIf cfg.enable {

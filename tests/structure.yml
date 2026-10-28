@@ -11,6 +11,9 @@ boundaries:
   - Source checks do not prove deployment readiness
   - Nix evaluation and VM tests are separate from the fast Python lane
 entrypoints:
+  - name: role-centralization
+    file: test_repository_architecture_contract.py
+    purpose: Evaluate Podman and program overrides, independent server composition and proxy callback defaults.
   - name: root-integrity-vm
     file: nixtest/root_integrity_vm_test.nix
     purpose: Disposable verified-store boot and tamper prototype with a synthetic release marker.

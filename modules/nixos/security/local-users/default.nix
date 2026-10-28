@@ -148,7 +148,10 @@ in
           message = "Shared admin password fallback is removed. Provision a unique root-only runtime hash file.";
         }
         {
-          assertion = clientPassword.source != "sops" || clientPassword.sops.sopsFile != null;
+          assertion =
+            !config.user.client.enable
+            || clientPassword.source != "sops"
+            || clientPassword.sops.sopsFile != null;
           message = "security.luxnix.local-users.clientPassword.sops.sopsFile must be set when source = \"sops\".";
         }
         {
@@ -189,7 +192,7 @@ in
       };
     })
 
-    (mkIf (clientPassword.source == "sops") {
+    (mkIf (config.user.client.enable && clientPassword.source == "sops") {
       sops.secrets.${clientPassword.sops.secretName} = {
         neededForUsers = true;
       }

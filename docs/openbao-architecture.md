@@ -45,10 +45,13 @@ Boot, unusable TPMs, detected virtualization and unrecognized platform TPM drive
 These checks do not establish hardware attestation or approval of firmware keys.
 
 Independent local unlock during a gs-02 outage remains the existing decision.
-It also permits an intact approved stolen host to unlock: there is no offline
+The target unattended TPM profile also permits an intact approved stolen host
+to unlock: there is no offline
 remote kill switch. Console, recovery-shell, external-boot and DMA/debug access
-therefore need physical testing. A required operator factor or online permission
-would change that architecture and needs an explicit owner decision.
+therefore need physical testing. The currently supported passphrase-seal profile
+requires an operator factor and does not provide unattended unlock. Requiring
+online permission would change the independent-unlock architecture and needs
+an explicit owner decision.
 
 No PCR set, integrity tool or image layout is selected by this update. The
 options below remain spike candidates. Recovery custody currently documented on

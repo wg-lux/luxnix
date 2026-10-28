@@ -10,6 +10,12 @@ boundaries:
 - Shared defaults can affect the entire fleet
 - Shared contributor tools belong in roles/custom-packages
 entrypoints:
+- name: podman
+  file: services/podman/default.nix
+  purpose: Own container DNS, Docker compatibility and NVIDIA integration; legacy Podman switches are aliases.
+- name: base-server
+  file: roles/base-server/default.nix
+  purpose: Compose the common baseline and development tools without selecting a desktop; inventory selects existing server desktops explicitly.
 - name: endoreg-client-safety
   file: roles/endoreg-client/default.nix
   purpose: Require encrypted storage and reject unaccepted unattended unlock for every EndoReg client role consumer.

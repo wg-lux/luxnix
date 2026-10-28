@@ -26,8 +26,10 @@ in
       "lx-annotate-master-key-check.service"
       "lx-annotate.service"
     ];
+    stopIfChanged = false;
     serviceConfig = {
       Type = "oneshot";
+      RemainAfterExit = true;
       ExecStart = migrateWithLegacyHistoryFallback;
       TimeoutStartSec = "2h";
     };

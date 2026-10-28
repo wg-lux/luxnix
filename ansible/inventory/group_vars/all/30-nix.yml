@@ -11,7 +11,6 @@ group_services:
 
 group_nixos:
   xdg.menus.enable: 'true'
-  programs.nix-ld.enable: 'true'
 
 group_luxnix:
   maintenance.autoUpdates.operation: '"switch"'
