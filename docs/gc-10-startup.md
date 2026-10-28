@@ -25,6 +25,23 @@ path. Prepare an empty root-owned mode `0500` target under the unlocked
 application storage before first activation; never hide or move existing
 exports implicitly. The bind mount hides that nonwritable underlying directory.
 
+On first adoption, an existing temporary bind at the export path prevents the
+automount from starting and can block web and FFmpeg worker startup. Confirm
+that no export is running and keep those consumers stopped while replacing
+the temporary bind. On gc-10, stop only the export mount, start its automount,
+then start the consumers:
+
+```sh
+sudo systemctl stop 'var-lib-lx\x2dannotate-data-storage-frame_annotation_exports.mount'
+sudo systemctl start 'var-lib-lx\x2dannotate-data-storage-frame_annotation_exports.automount'
+sudo systemctl start --no-block lx-annotate.service lx-annotate-celery-ffmpeg-worker.service
+```
+
+Do not unmount the Backup filesystem, move export files, or force an unmount.
+If the export mount is busy, stop and identify its active consumer first.
+Check both service states and confirm the automount is active before resuming
+exports; `--no-block` only schedules startup and does not prove readiness.
+
 Review both the Backup mount and export mount with `findmnt` before exporting.
 Stop export activity before removing the disk. After reconnecting, clear a
 failed `gc10-backup-exports-prepare.service` and export mount with
