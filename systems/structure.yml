@@ -10,6 +10,9 @@ boundaries:
   - Do not import reusable modules directly across host entry points
   - Regenerate Autoconf-managed default.nix files from canonical inputs
 entrypoints:
+  - name: gc-10-local-backup-exports
+    file: x86_64-linux/gc-10/backup-exports.nix
+    purpose: Bind only annotation exports to the operator-authorized local Backup disk with UUID validation and fail-closed automount access.
   - name: shared-baseline
     file: x86_64-linux/host-common.nix
     purpose: Inspect shared baseline ownership and interfaces.

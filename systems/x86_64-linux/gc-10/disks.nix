@@ -8,6 +8,8 @@ let
   swapSize = "64G"; # Adjusted swap size
 in
 {
+  imports = [ ./backup-exports.nix ];
+
   disko.devices = {
     disk = {
       # Primary System Disk

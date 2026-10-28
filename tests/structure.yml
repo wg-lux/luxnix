@@ -11,6 +11,9 @@ boundaries:
   - Source checks do not prove deployment readiness
   - Nix evaluation and VM tests are separate from the fast Python lane
 entrypoints:
+  - name: gc-10-backup-exports
+    file: lx-annotate/test_gc10_backup_exports.py
+    purpose: Evaluate host-only export mount dependencies and reject missing or wrong Backup identity before filesystem writes.
   - name: storage-login-access-vm
     file: nixtest/storage_login_access_vm_test.nix
     purpose: Exercise real PAM logins, OpenBao and LUKS across lock, logout and cold boot.

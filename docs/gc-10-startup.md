@@ -7,6 +7,34 @@ instruction to reinstall, repartition, format containers or repeat migration.
 
 ## Current rollout gate
 
+### Local Backup export exception
+
+The operator explicitly authorized unencrypted local annotation export copies
+on gc-10's existing Backup disk. This exception applies only to
+`/var/lib/lx-annotate/data/storage/frame_annotation_exports`, bound from
+`/run/media/admin/Backup-24-11/lx-annotate-exports`; imports, keys, database
+storage and other hosts retain their existing boundaries. Scope and evidence
+remain in `feature-tracking/lx_annotate_environment_lifecycle_audit.yaml`,
+criterion `gc10_local_backup_exports`.
+
+The host-owned `backup-exports.nix` mounts the existing filesystem by UUID,
+verifies its identity before creating the service-owned child, and activates
+the bind on access. Missing media fails export access without writing to the
+application disk. It neither formats the disk nor changes its existing mount
+path. Prepare an empty root-owned mode `0500` target under the unlocked
+application storage before first activation; never hide or move existing
+exports implicitly. The bind mount hides that nonwritable underlying directory.
+
+Review both the Backup mount and export mount with `findmnt` before exporting.
+Stop export activity before removing the disk. After reconnecting, clear a
+failed `gc10-backup-exports-prepare.service` and export mount with
+`systemctl reset-failed`, then retry access. Do not stop the export automount
+while application consumers run. Ordinary startup does not require the disk
+until an export accesses its path. The external copies are plaintext and must
+remain under the operator's local physical control.
+
+### Encrypted application startup
+
 For the current operator-controlled profile, use
 [local OpenBao enrollment and password guidance](openbao-local.md#passwords-initial-enrollment-and-resets)
 and [storage startup](operator-unlocked-storage.md#boot-with-operator-passphrase-unlock).

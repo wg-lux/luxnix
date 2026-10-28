@@ -20,6 +20,48 @@ source_documents:
   disposition: reference
   note: Repository-level contribution and package ownership policy.
 definition_of_done:
+- id: gc10_local_backup_exports
+  category: operations
+  title: gc-10 exports use the explicitly authorized local Backup disk
+  acceptance:
+  - Only frame_annotation_exports is bound to the existing Backup filesystem by UUID; no formatting or
+    other storage routing changes occur.
+  - The operator explicitly permits unencrypted local export copies on this disk; this host-only exception
+    does not apply to imports, keys or other hosts.
+  - Missing or wrong mounted media fails before export directory creation; an automount and root-owned
+    nonwritable underlay prevent fallback to the application disk.
+  - The existing removable mount path is preserved; focused evaluation and missing/wrong-device guard
+    tests pass before activation.
+  required: true
+  verification:
+    kind: command
+    command:
+    - .devenv/state/venv/bin/python
+    - -m
+    - pytest
+    - tests/lx-annotate/test_gc10_backup_exports.py
+    - -q
+    timeout_seconds: 300
+  assessment:
+    status: in_progress
+    evidence:
+    - kind: test
+      reference: tests/lx-annotate/test_gc10_backup_exports.py
+    - kind: code
+      reference: systems/x86_64-linux/gc-10/backup-exports.nix
+    - kind: command
+      reference: '2026-10-28: test_gc10_backup_exports.py: 6 passed; Pyright 0 errors/0 warnings; Ruff
+        and nixfmt passed; structure lint 23 manifests and tracker validate 11 definitions passed.'
+    - kind: command
+      reference: '2026-10-28: gc-10 system.build.toplevel.drvPath evaluation passed: /nix/store/8gv26qg05ymv7m5i2sn03v6626d89j6x-nixos-system-gc-10-26.05.20261021.da6dc0e.drv;
+        no build or activation performed.'
+    - kind: command
+      reference: '2026-10-28: documentation contract suite: 26 passed.'
+    note: gc-10-only local plaintext export exception configured and tested; no activation or destructive
+      disk changes by this implementation. Live unplug/reconnect acceptance and full production readiness
+      remain separate.
+    assessed_by: codex-catalog-review-20261028
+    assessed_at: '2026-10-28T18:38:27.701812Z'
 - id: continuous_format_folder_ingestion
   category: functionality
   title: Four workflow folders cover supported formats with continuous triggers
