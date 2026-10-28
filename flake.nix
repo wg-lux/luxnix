@@ -251,6 +251,12 @@
         openbao-local = inputs.nixpkgs.legacyPackages.${system}.testers.runNixOSTest (
           import ./tests/nixtest/openbao_local_vm_test.nix { repoRoot = ./.; }
         );
+        openbao-local-passphrase = inputs.nixpkgs.legacyPackages.${system}.testers.runNixOSTest (
+          import ./tests/nixtest/openbao_local_vm_test.nix {
+            repoRoot = ./.;
+            sealMode = "passphrase";
+          }
+        );
         openbao-release = inputs.nixpkgs.legacyPackages.${system}.testers.runNixOSTest (
           import ./tests/nixtest/openbao_vm_test.nix { repoRoot = ./.; }
         );

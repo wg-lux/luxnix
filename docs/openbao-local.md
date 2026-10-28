@@ -1,5 +1,56 @@
 # Local OpenBao implementation
 
+## Seal selection and passphrase operation
+
+The shared EndoReg profile selects `luxnix.openbao.local.seal = "passphrase"`.
+There are no gc-09 or gc-10 exceptions. The generic module also supports an
+explicit `"tpm"` seal, with the platform restrictions described below. Enabling
+the tool does not change `storage.operatorUnlocked.unlockMethod`; switching to
+`"local-openbao"` remains a separate step after enrollment and volume adoption.
+
+For the passphrase seal, `openbao-local enroll --apply` asks twice for a boot
+passphrase. The already escrowed random seal key is wrapped using scrypt and
+an encrypt-then-MAC construction and stored in root-only
+`/var/lib/openbao-bootstrap/seal-passphrase.json`. The passphrase is not stored.
+Bootstrap AppRole credentials use the systemd host key; they become useful only
+after the operator unseals OpenBao. TPM and Secure Boot admission apply only to
+the TPM mode. This operator-controlled mode does not establish protection from
+modified boot code capturing the passphrase.
+
+The installed enrollment command verifies protected runtime storage and swap
+before reading its input and disables core dumps. The boot prompt requires the
+same preflight, ordered after swap activation, and cannot swap its own memory.
+After successful passphrase verification, the key and a MAC binding it to the
+exact wrapped record are staged in the private tmpfs directory
+`/run/luxnix-openbao-seal`. OpenBao receives the key through `LoadCredential`.
+The prompt retries up to five times and waits indefinitely for each answer.
+An administrator can answer remotely with `sudo systemd-tty-ask-password-agent`.
+After exhausted attempts, restart `openbao-local-seal-key.service`, then start
+the required storage unlock units. Rebuilds reuse this boot's verified key.
+
+The pre-switch gate requires private files, a valid record, the matching staged
+key and receipt, an unsealed local API, and successful systemd loading of both
+credentials. A changed record or missing receipt blocks activation. Restore the
+correct record or repeat `openbao-local enroll --apply` with the same passphrase;
+this rechecks both escrows, restages the key and starts the existing service
+without reinitializing it. Do not bypass
+the gate or remove existing Raft state. A partially staged enrollment can be
+retried with the same passphrase and escrowed key.
+
+Changing a seal option is not a migration. Status requires the selected seal
+file before claiming enrollment, and the controller rejects an existing store
+without it before making changes. Retain the original mode for any existing
+store until a separately reviewed recovery/migration procedure is available.
+Independent recovery custody remains mandatory. Ordered locking, passphrase
+rotation and recovery/re-seed automation remain release gates.
+
+`devenv tasks run tests:openbao-local-vm` runs both the TPM and passphrase checks.
+The passphrase lane uses the real enrollment wrapper, systemd credentials,
+OpenBao and LUKS, and exercises a cold boot with wrong and correct answers.
+These disposable VM checks do not establish physical host acceptance.
+
+## TPM implementation and existing acceptance gates
+
 The target is described in [OpenBao architecture](openbao-architecture.md).
 `luxnix.openbao.local.enable` now defines a separate `openbao-local.service`.
 It is disabled by default pending enrollment and acceptance. Existing
@@ -65,9 +116,9 @@ machine identity differs from both the target and the controller.
 These describe implemented mechanisms, not production approval. Follow R0-R5 in
 `boot-encryption-acceptance.yml` first. Keep production on operator passphrase
 unlock until integrity, enforcement, lock/recovery and physical acceptance pass.
-Enrollment, bootstrap and local-OpenBao activation require live Secure Boot,
+In TPM mode, enrollment, bootstrap and local-OpenBao activation require live Secure Boot,
 a usable TPM 2.0, a recognized platform TPM driver and no detected virtualization.
-These requirements cannot be disabled by a host option. Unknown platforms fail
+These TPM-mode requirements cannot be disabled by a host option. Unknown platforms fail
 closed; driver and virtualization detection are not cryptographic attestation
 against a concealed hypervisor and do not verify the intended firmware signer.
 The EndoReg client role also rejects unattended unlock until authenticated

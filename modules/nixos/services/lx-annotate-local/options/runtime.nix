@@ -26,44 +26,6 @@ let
         versionMatch = builtins.match ".*lx_annotate-([^-]+)-.*[.]whl" wheelFileName;
       in
       if versionMatch == null then "" else elemAt versionMatch 0;
-  frameExtractionWorkerType = types.submodule {
-    options = {
-      mode = mkOption {
-        type = types.enum [
-          "maintenance-window"
-          "always"
-          "manual"
-        ];
-        default = "maintenance-window";
-        description = "Scheduling mode for export-stage frame extraction. Maintenance-window keeps bounded frame materialization out of foreground hours by default.";
-      };
-      onCalendar = mkOption {
-        type = types.str;
-        default = "*-*-* 22:00:00";
-        description = "systemd OnCalendar schedule used when frame extraction runs in maintenance-window mode.";
-      };
-      runtimeMaxSec = mkOption {
-        type = types.str;
-        default = "7h";
-        description = "Maximum runtime for one maintenance-window frame extraction worker activation.";
-      };
-      timeoutStopSec = mkOption {
-        type = types.str;
-        default = "45min";
-        description = "Grace period for stopping the frame extraction worker before systemd sends a final kill signal.";
-      };
-      randomizedDelaySec = mkOption {
-        type = types.str;
-        default = "5m";
-        description = "Randomized delay applied to the maintenance-window timer.";
-      };
-      persistentTimer = mkOption {
-        type = types.bool;
-        default = true;
-        description = "Whether missed maintenance-window timer activations should run after boot.";
-      };
-    };
-  };
   ffmpegWorkerType = types.submodule {
     options = {
       mode = mkOption {
@@ -290,8 +252,8 @@ in
           wheelPath = mkOption {
             type = types.nullOr types.path;
             default = pkgs.fetchurl {
-              url = "https://files.pythonhosted.org/packages/ef/7f/a4839214f7084d1acd87f4510d945abd31fd02cfd75841450b309289c703/lx_annotate-1.6.4-py3-none-any.whl";
-              hash = "sha256-d+fj0gympk6fuwGapuBuPP9dOXpWUlDXwxaKV9InsXQ=";
+              url = "https://files.pythonhosted.org/packages/4c/2f/011270081995463da484a6f1e495e98c191698558e1be560058db4be28b0/lx_annotate-1.6.5-py3-none-any.whl";
+              hash = "sha256-cN9Fc1BGUM6K2kIZjgnYYvzwh1jcPrebLaqWC3B9kSg=";
             };
             description = "Path to the lx-annotate wheel artifact used in wheel mode.";
           };
@@ -690,11 +652,6 @@ in
             includeHubTransfer = true;
           };
 
-          frameExtractionWorker = mkOption {
-            type = frameExtractionWorkerType;
-            default = { };
-            description = "Scheduling policy for the dedicated FFmpeg frame extraction Celery worker.";
-          };
           ffmpegWorker = mkOption {
             type = ffmpegWorkerType;
             default = { };

@@ -6,6 +6,7 @@ summary: LuxNix deployment composition for the upstream LX-Annotate application.
 responsibilities:
 - Reject retired file-free identity delivery and preserve established local identity storage.
 - Own service options, runtime environment contracts and systemd composition
+- Supply the immutable report-embedding model path to the shared application environment.
 - Coordinate workers, storage, secret handles and hub interfaces
 boundaries:
 - Application business logic belongs in the upstream wheel
@@ -32,6 +33,7 @@ entrypoints:
   purpose: Inspect runtime context ownership and interfaces.
 dependencies:
   internal:
+  - packages/report-embedding-model
   - scripts
   - lx_administration
   - ansible

@@ -464,7 +464,6 @@ Timer-scheduled workers are started by their matching timer, and workers in
 | ---------------------------------------------------- | -------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `lx-annotate-celery-worker.service`                  | always                     | `maintenance,default` | General maintenance/default work, including post-validation behavior selected by `VIDEO_POST_VALIDATION_JOB_MODE=celery`.                                      |
 | `lx-annotate-celery-pipeline-worker.service`         | always                     | `pipeline`            | Upload, import, anonymization, and other pipeline jobs separated from the default queue.                                                                       |
-| `lx-annotate-celery-frame-extraction-worker.service` | `maintenance-window` timer | `frame_extraction`    | FFmpeg frame extraction and post-validation rebuild work. The default policy starts it from a timer at 22:00 and caps each activation with `RuntimeMaxSec=7h`. |
 | `lx-annotate-celery-ffmpeg-worker.service`           | always                     | `ffmpeg_media`        | Heavy FFmpeg media processing with its own CPU, memory, IO, and OOM scoring profile.                                                                           |
 | `lx-annotate-celery-inference-worker.service`        | always                     | `inference`           | Temporal inference jobs with stream-backed frame input and optional `CUDA_VISIBLE_DEVICES`.                                                                    |
 | `lx-annotate-celery-training-worker.service`         | manual                     | `model_training`      | GPU model-training jobs using `runtime.modelTrainingStagingRoot`; exports `CUDA_VISIBLE_DEVICES`, defaulting to `0`.                                           |
@@ -586,32 +585,16 @@ explicit Jobs in Kubernetes-shaped deployments.
 the Celery worker, so worker sizing can be changed without changing web service
 limits.
 
-## Frame Extraction Maintenance Windows
+## Frame Exports
 
-FFmpeg frame extraction and post-validation rebuilds are isolated on the
-`frame_extraction` Celery queue. By default,
-`runtime.frameExtractionWorker.mode = "maintenance-window"` keeps queued frame
-jobs in Redis during normal service hours and starts
-`lx-annotate-celery-frame-extraction-worker.service` from a systemd timer at
-22:00 local time. The service is capped by `runtimeMaxSec = "7h"` so the window
-ends before the morning workload.
-
-Useful controls:
-
-```bash
-systemctl status lx-annotate-celery-frame-extraction-worker.timer
-systemctl list-timers | grep frame-extraction
-systemctl start lx-annotate-celery-frame-extraction-worker.service
-systemctl stop lx-annotate-celery-frame-extraction-worker.service
-```
-
-Set `runtime.frameExtractionWorker.mode = "always"` to restore the previous
-boot-started continuous worker, or `"manual"` to disable both timer and boot
-autostart. The local Redis broker uses append-only persistence so queued
-frame-extraction tasks survive ordinary Redis or host restarts. Production
-deployments must use an lx-annotate/endoreg_db build with Celery late-ack,
-worker-lost redelivery, and frame rollback support before enabling deferred
-frame extraction.
+There is no frame extraction worker or `frame_extraction` Celery queue. Frame
+files are export-only: the lx-annotate export panel calls
+`media/videos/export-annotated/`, which extracts the requested frames by their
+persisted presentation timestamps inside the web request, and operator batch
+exports run the oneshot `lx-annotate-export-frames.service`. Neither path uses
+Celery. The former `runtime.frameExtractionWorker` and
+`runtime.workerPools.frameExtraction` options are removed and fail evaluation
+with an explanatory message if still set.
 
 ## Cluster-Oriented Mode
 
@@ -1059,7 +1042,6 @@ The expected startup order is:
 6. `lx-annotate-boot.service`
 7. `lx-annotate-celery-worker.service`
 8. `lx-annotate-celery-pipeline-worker.service`
-9. `lx-annotate-celery-frame-extraction-worker.timer`
 
 Useful verification commands:
 
@@ -1072,8 +1054,6 @@ systemctl status lx-annotate-load-base-data.service
 systemctl status lx-annotate-boot.service
 systemctl status lx-annotate-celery-worker.service
 systemctl status lx-annotate-celery-pipeline-worker.service
-systemctl status lx-annotate-celery-frame-extraction-worker.timer
-systemctl status lx-annotate-celery-frame-extraction-worker.service
 systemctl status lx-annotate-emergency-storage-relief.service
 systemctl status lx-annotate-hub-backup.service
 systemctl status lx-annotate-hub-backup.timer

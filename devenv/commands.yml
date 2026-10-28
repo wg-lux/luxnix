@@ -1,3 +1,4 @@
+---
 # Human- and machine-readable catalog for Devenv shell wrappers and tasks.
 # Run these from the repository root. Inside an active shell, shell-wrapper
 # names can be used directly; tasks keep their explicit `devenv tasks run`
@@ -291,10 +292,11 @@ commands:
     documentation: docs/openbao-local.md
     effects:
       - Without --apply, read-only status, TPM/Secure Boot preflight and keyslot plans only.
-      - enroll writes TPM-sealed credentials under /var/lib/openbao-bootstrap and initializes a missing local store once.
+      - enroll writes credentials for the configured TPM or passphrase seal under /var/lib/openbao-bootstrap and initializes a missing local store once.
       - adopt adds one OpenBao keyslot and removes systemd-tpm2 tokens; recovery keyslots, data and LUKS UUIDs are preserved.
       - Escrow records go to the admin vault and the separate --recovery-host; existing records are never replaced.
-      - rollout enrolls, provisions missing volumes or adopts existing ones, then starts encrypted pre-copy; --cutover explicitly stops writers for final verification and bind activation.
+      - rollout enrolls, provisions missing volumes or adopts existing ones, then starts encrypted pre-copy; --cutover explicitly stops writers for final
+        verification and bind activation.
 
 # Tasks are listed separately because they are invoked through `devenv tasks`
 # rather than the shell-wrapper namespace above.
@@ -325,7 +327,7 @@ tasks:
       - Uses only synthetic release markers; no host mounts, production credentials or firmware changes.
       - VM evidence does not establish firmware authentication, hardware TPM policy or fleet readiness.
   - id: tests:openbao-local-vm
-    summary: Verify local OpenBao bootstrap with real systemd credentials on disposable software TPMs.
+    summary: Verify local OpenBao TPM and passphrase seals, enrollment and cold-boot unlock in disposable VMs.
     risk: local-state
     operator_confirmation_required: false
     usage: devenv tasks run tests:openbao-local-vm
@@ -536,4 +538,3 @@ native_commands:
     effects:
       - Updates the system profile and boot default; running services retain their configuration.
       - The nhb alias uses LUXNIX_FLAKE and LUXNIX_HOST; reboot is a separate authorized action.
-

@@ -1,3 +1,4 @@
+---
 version: 1
 kind: prototype-test-specification
 status: vm_prototype_passed_not_production_accepted
@@ -30,16 +31,20 @@ matrix:
     expected: Offline corruption of a required superblock causes a kernel verity error and no console release marker during a 15-second observation.
   - case: hash-block-tamper
     status: passed_vm
-    expected: Corrupt the first hash-tree block without changing the verity header; require a kernel metadata corruption error and no release marker for 15 seconds.
+    expected: Corrupt the first hash-tree block without changing the verity header; require a kernel metadata corruption error and no release marker for 15
+      seconds.
   - case: store-substitution
     status: passed_vm
-    expected: Replace the complete data partition with an independently formatted ext4 filesystem, retain the original UKI/hash tree/GPT, and require kernel data corruption with no release marker for 15 seconds.
+    expected: Replace the complete data partition with an independently formatted ext4 filesystem, retain the original UKI/hash tree/GPT, and require kernel
+      data corruption with no release marker for 15 seconds.
   - case: volatile-unit-executable-override
     status: passed_vm
-    expected: Direct writes beneath store-backed units fail; a demonstrated privileged runtime replacement of the volatile unit directory and executable is discarded on reboot, including unit environment overrides.
+    expected: Direct writes beneath store-backed units fail; a demonstrated privileged runtime replacement of the volatile unit directory and executable is
+      discarded on reboot, including unit environment overrides.
   - case: original-image-recovery
     status: passed_vm
-    expected: After rejected tamper boots, explicitly select a fresh overlay of the original image and verify release through its verity mapping; no automatic fallback.
+    expected: After rejected tamper boots, explicitly select a fresh overlay of the original image and verify release through its verity mapping; no automatic
+      fallback.
   - case: writable-override
     status: planned
     expected: Exercise persistent systemd, environment, loader and executable injection paths.
@@ -56,9 +61,11 @@ limitations:
   - No hardware TPM, real secrets, OpenBao release, fleet deployment or post-unlock application integrity is established.
   - Anti-rollback and production recovery policy remain separate decisions.
 verification:
-  date: '2026-10-27'
+  date: "2026-10-27"
   command: devenv tasks run tests:root-integrity-vm
   direct_command: nix build .#checks.x86_64-linux.root-integrity --no-link -L
-  result: Passed; driver script 104.91 seconds. Data corruption and whole-store substitution reported corrupted data block 2; hash-tree corruption reported corrupted metadata block 1. No release marker appeared during each 15-second negative observation; explicit original-image recovery passed.
-  scope: Volatile unit/executable/environment override reset is exercised; persistent production injection, authenticated updates, retired-generation policy and signed UKI acceptance remain open.
+  result: Passed; driver script 104.91 seconds. Data corruption and whole-store substitution reported corrupted data block 2; hash-tree corruption reported
+    corrupted metadata block 1. No release marker appeared during each 15-second negative observation; explicit original-image recovery passed.
+  scope: Volatile unit/executable/environment override reset is exercised; persistent production injection, authenticated updates, retired-generation policy and
+    signed UKI acceptance remain open.
   fixture_failures_resolved: EROFS discovery stalled; ext4 uses standard probing. Serial marker and QEMU reboot setup corrected.

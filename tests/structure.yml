@@ -1,3 +1,4 @@
+---
 version: 1
 tier: domain
 path: tests
@@ -42,7 +43,8 @@ entrypoints:
     purpose: Real dm-verity tamper and authenticated synthetic recovery tests; not hardware or full boot evidence.
   - name: openbao-local-vm
     file: nixtest/openbao_local_vm_test.nix
-    purpose: Exercise real systemd TPM-only credentials and isolated local OpenBao auto-unseal.
+    purpose: Exercise TPM credentials and explicit passphrase enrollment, isolated OpenBao, cold boot and volume unlock through the openbao-local and
+      openbao-local-passphrase checks.
   - name: openbao-local-guest
     file: nixtest/openbao_local_guest.py
     purpose: Initialize disposable test state and verify local API readiness without emitting secrets.

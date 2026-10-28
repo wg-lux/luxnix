@@ -10,6 +10,9 @@ boundaries:
   - Ordinary shared contributor tools belong in roles/custom-packages
   - Do not traverse bundled font or wheel payloads for context discovery
 entrypoints:
+  - name: report-embedding-model
+    file: report-embedding-model/default.nix
+    purpose: Hash-pinned offline German report-embedding model data and licenses, independent of Python releases.
   - name: installer
     file: install/default.nix
     purpose: Inspect installer ownership and interfaces.

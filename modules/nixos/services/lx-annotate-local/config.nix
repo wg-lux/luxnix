@@ -649,17 +649,6 @@ let
           required = true;
         }
       ]
-      ++ lib.optionals (cfg.runtime.frameExtractionWorker.mode != "manual") [
-        {
-          key = "worker_frame_extraction";
-          unit =
-            if cfg.runtime.frameExtractionWorker.mode == "always" then
-              "lx-annotate-celery-frame-extraction-worker.service"
-            else
-              "lx-annotate-celery-frame-extraction-worker.timer";
-          required = true;
-        }
-      ]
       ++ lib.optionals (cfg.runtime.inferenceWorker.mode == "always") [
         {
           key = "worker_inference";
@@ -1099,23 +1088,6 @@ let
       queues = [ "pipeline" ];
       pool = cfg.runtime.workerPools.pipeline;
       environment = postValidationWorkerEnv;
-    };
-    frame-extraction = mkWorker {
-      unitName = "lx-annotate-celery-frame-extraction-worker";
-      hostname = "frame-extraction";
-      queues = [ "frame_extraction" ];
-      pool = cfg.runtime.workerPools.frameExtraction;
-      mode =
-        if cfg.runtime.frameExtractionWorker.mode == "maintenance-window" then
-          "timer"
-        else
-          cfg.runtime.frameExtractionWorker.mode;
-      environment = postValidationWorkerEnv;
-      onCalendar = cfg.runtime.frameExtractionWorker.onCalendar;
-      randomizedDelaySec = cfg.runtime.frameExtractionWorker.randomizedDelaySec;
-      persistentTimer = cfg.runtime.frameExtractionWorker.persistentTimer;
-      runtimeMaxSec = cfg.runtime.frameExtractionWorker.runtimeMaxSec;
-      timeoutStopSec = cfg.runtime.frameExtractionWorker.timeoutStopSec;
     };
     ffmpeg = mkWorker {
       unitName = "lx-annotate-celery-ffmpeg-worker";

@@ -3,7 +3,7 @@
 Controller side of luxnix-openbao-local (openbao_enroll.py). Every secret that
 can open a store or a volume is authenticated in the admin vault and on an
 independent recovery host before the host may depend on it: the seal key before
-it is TPM-sealed, the recovery key and provisioner credential before the root
+it is TPM-sealed or wrapped by the operator's boot passphrase, the recovery key and provisioner credential before the root
 token is revoked. Without --apply only read-only status and plans are shown.
 Records are keyed by inventory host; machine-id is an attribute only.
 """
@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import base64
 import fcntl
+import getpass
 import hashlib
 import json
 import os
@@ -77,6 +78,14 @@ class EnrollmentError(RuntimeError):
     """An operator-safe diagnostic without credential values."""
 
 
+def ask_boot_passphrase(host: str) -> str:
+    """Typed by the operator; it wraps the escrowed seal key and is never stored."""
+    first = getpass.getpass(f"Boot passphrase for local OpenBao on {host}: ")
+    if getpass.getpass("Repeat the boot passphrase: ") != first:
+        raise EnrollmentError("Boot passphrases do not match")
+    return first
+
+
 def escrow_path(vault: Path, host: str, item: str) -> Path:
     return vault / ESCROW_ROOT / host / (item + ".vault")
 
@@ -130,6 +139,7 @@ class Controller:
         self.vault_key = vault_key
         self.machine_id = machine_id
         self.local = local
+        self.ask_passphrase = ask_boot_passphrase
 
     def tool(self, *args, request: dict | None = None) -> dict:
         data = b"" if request is None else json.dumps(request).encode()
@@ -149,22 +159,31 @@ class Controller:
 
     def enroll(self) -> dict:
         status = self.tool("preflight")
+        if status.get("initialized") and status.get("seal_credential") is False:
+            raise EnrollmentError("Existing store lacks the selected seal; retain its original seal mode and use recovery for an explicit migration")
         if status["enrolled"]:
             existing = load_escrow(self.vault, self.vault_key, self.host, "enrollment")
             if existing is None:
                 raise EnrollmentError("Host is enrolled but no enrollment escrow exists; use recovery")
             escrow(self.vault, self.vault_key, existing, self.export("enrollment"))
-            return {"host": self.host, "enrolled": True, "escrow_verified": True}
+            if self.local.get("seal") != "passphrase":
+                return {"host": self.host, "enrolled": True, "escrow_verified": True}
         # 1. Seal key: escrowed before the host ever depends on it.
         seal = load_escrow(self.vault, self.vault_key, self.host, "seal-key")
         if seal is None:
-            if status["initialized"]:
+            if status["initialized"] or status["enrolled"]:
                 raise EnrollmentError("Host has a local store but no escrowed seal key; use recovery")
             seal = self.record("seal-key", seal_key=base64.b64encode(secrets.token_bytes(32)).decode())
         if seal["seal_key_id"] != self.local["sealKeyId"]:
             raise EnrollmentError("Escrowed seal key id differs from the declared sealKeyId")
         escrow(self.vault, self.vault_key, seal, self.export("seal-key"))
-        self.tool("seal", request={"seal_key": seal["seal_key"]})
+        request = {"seal_key": seal["seal_key"]}
+        if self.local.get("seal") == "passphrase":
+            # The escrowed seal key stays the recovery path; the passphrase only wraps it.
+            request["seal_passphrase"] = self.ask_passphrase(self.host)
+        self.tool("seal", request=request)
+        if status["enrolled"]:
+            return {"host": self.host, "enrolled": True, "escrow_verified": True}
         # 2. Initialize (or resume), then escrow recovery key and provisioner.
         material = self.tool("initialize")["escrow"]
         record = self.record("enrollment", **material)

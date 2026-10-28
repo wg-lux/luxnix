@@ -199,3 +199,88 @@ def test_every_mutation_rejects_platform_before_writes(host, phase, missing, tmp
     assert host.calls == []
     assert host.sealed == {}
     assert not host.paths["BOOT"].exists()
+
+
+# Passphrase seal: no platform gate; the boot passphrase wraps the escrowed key.
+
+BOOT_PASSPHRASE = "correct horse battery"
+
+
+@pytest.fixture
+def passphrase_host(host, tmp_path, monkeypatch):
+    monkeypatch.setattr(enroll, "SEAL_WRAP", host.paths["BOOT"] / "seal-passphrase.json")
+    monkeypatch.setattr(enroll, "SEAL_RUNTIME", tmp_path / "run" / "seal.key")
+    bindings = []
+
+    def seal(name, plaintext, target, key="tpm2"):
+        bindings.append(key)
+        target.parent.mkdir(exist_ok=True)
+        target.write_bytes(b"ciphertext")
+        host.sealed[target.name] = plaintext
+    monkeypatch.setattr(enroll, "seal_credential", seal)
+    client = dict(host.host.client, wrap_seal_key=local.wrap_seal_key,
+                  unwrap_seal_key=local.unwrap_seal_key, write_private=local.write_private,
+                  read_private=lambda path: path.read_bytes(), stage_verified_seal=local.stage_verified_seal)
+    monkeypatch.setattr(local, "read_private", lambda path: path.read_bytes())
+    host.tpm.present = False
+    host.platform.update(secure_boot=False, physical_tpm=False)
+    return SimpleNamespace(host=enroll.Host("gc-10", client, "passphrase"), bindings=bindings,
+                           tmp=tmp_path)
+
+
+def test_passphrase_seal_needs_no_tpm_or_secure_boot(passphrase_host):
+    status = passphrase_host.host.preflight()
+    assert status["seal"] == "passphrase" and not status["secure_boot"]
+
+
+def test_passphrase_seal_wraps_escrowed_key_and_stages_it(passphrase_host):
+    result = passphrase_host.host.seal({"seal_key": KEY, "seal_passphrase": BOOT_PASSPHRASE})
+    assert result == {"sealed": True}
+    record = json.loads(enroll.SEAL_WRAP.read_bytes())
+    assert local.unwrap_seal_key(record, BOOT_PASSPHRASE.encode()) == base64.b64decode(KEY)
+    assert BOOT_PASSPHRASE not in enroll.SEAL_WRAP.read_text() and KEY not in enroll.SEAL_WRAP.read_text()
+    assert enroll.SEAL_RUNTIME.read_bytes() == base64.b64decode(KEY)
+    # A rerun verifies instead of replacing the record.
+    before = enroll.SEAL_WRAP.read_bytes()
+    passphrase_host.host.seal({"seal_key": KEY, "seal_passphrase": BOOT_PASSPHRASE})
+    assert enroll.SEAL_WRAP.read_bytes() == before
+
+
+def test_passphrase_seal_rerun_rejects_other_passphrase_or_key(passphrase_host):
+    host = passphrase_host.host
+    host.seal({"seal_key": KEY, "seal_passphrase": BOOT_PASSPHRASE})
+    with pytest.raises(enroll.EnrollError, match="seal-passphrase-rejected"):
+        host.seal({"seal_key": KEY, "seal_passphrase": "another long passphrase"})
+    other = base64.b64encode(bytes(32)).decode()
+    with pytest.raises(enroll.EnrollError, match="different key"):
+        host.seal({"seal_key": other, "seal_passphrase": BOOT_PASSPHRASE})
+
+
+def test_passphrase_seal_refuses_store_without_record_and_weak_passphrase(passphrase_host):
+    with pytest.raises(enroll.EnrollError, match="at least"):
+        passphrase_host.host.seal({"seal_key": KEY, "seal_passphrase": "short"})
+    enroll.RAFT.write_bytes(b"store")
+    with pytest.raises(enroll.EnrollError, match="without its seal record"):
+        passphrase_host.host.seal({"seal_key": KEY, "seal_passphrase": BOOT_PASSPHRASE})
+
+
+def test_passphrase_seal_binds_bootstrap_credentials_to_host_key(passphrase_host):
+    passphrase_host.host._seal("volume.unlock", b"{}", enroll.UNLOCK)
+    assert passphrase_host.bindings == ["host"]
+
+
+def test_existing_tpm_store_is_not_enrolled_under_passphrase_mode(passphrase_host):
+    enroll.RAFT.touch()
+    enroll.BOOT.mkdir()
+    enroll.SEAL.write_bytes(b"existing TPM credential")
+    enroll.UNLOCK.touch()
+    status = passphrase_host.host.status()
+    assert not status["enrolled"] and not status["seal_credential"]
+    with pytest.raises(enroll.EnrollError, match="use recovery"):
+        passphrase_host.host.seal({"seal_key": KEY, "seal_passphrase": BOOT_PASSPHRASE})
+
+
+def test_enrollment_rejects_foreign_staged_key(passphrase_host):
+    local.write_private(enroll.SEAL_RUNTIME, bytes(32))
+    with pytest.raises(ValueError, match="does not match"):
+        passphrase_host.host.seal({"seal_key": KEY, "seal_passphrase": BOOT_PASSPHRASE})

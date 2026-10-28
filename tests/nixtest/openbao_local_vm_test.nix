@@ -1,9 +1,17 @@
-{ repoRoot, ... }:
 {
-  name = "openbao-local";
+  repoRoot,
+  sealMode ? "tpm",
+  ...
+}:
+let
+  passphrase = sealMode == "passphrase";
+in
+{
+  name = "openbao-local-${sealMode}";
   nodes = {
     server =
       {
+        config,
         lib,
         pkgs,
         ...
@@ -31,7 +39,10 @@
           useEFIBoot = true;
           memorySize = 2048;
         };
-        luxnix.openbao.local.enable = true;
+        luxnix.openbao.local = {
+          enable = true;
+          seal = sealMode;
+        };
         luxnix.storage.operatorUnlocked = {
           enable = true;
           unlockMethod = "local-openbao";
@@ -50,22 +61,35 @@
         };
         # The disposable guest boots before enrollment; production hosts only
         # activate this profile after the pre-switch gate passes.
-        systemd.services.openbao-local.wantedBy = lib.mkForce [ ];
-        systemd.services.openbao-local-preflight.serviceConfig.ExecStart = lib.mkForce (
-          pkgs.writeShellScript "openbao-local-test-preflight" ''
-            set -eu
-            export PATH=${
-              lib.makeBinPath [
-                pkgs.systemd
-                pkgs.util-linux
-              ]
-            }
-            ${pkgs.python3}/bin/python ${repoRoot + "/lx_administration/secret_storage.py"} --allow-runtime /run
-            exec ${pkgs.python3}/bin/python ${
-              repoRoot + "/lx_administration/storage/openbao_local.py"
-            } /var/lib/openbao-bootstrap/seal.cred
-          ''
-        );
+        systemd.services = {
+          openbao-local.wantedBy = lib.mkForce [ ];
+          # Only the disposable fixture enables boot unlock after its enrollment.
+          fixture-boot-unlock = lib.mkIf passphrase {
+            wantedBy = [ "multi-user.target" ];
+            serviceConfig = {
+              Type = "oneshot";
+              ExecCondition = "${pkgs.coreutils}/bin/test -f /var/lib/openbao-vm-fixture/boot-ready";
+              ExecStart = "${pkgs.systemd}/bin/systemctl --no-block start luxnix-storage-unlock-test.service";
+            };
+          };
+          openbao-local-preflight.serviceConfig.ExecStart = lib.mkIf (!passphrase) (
+            lib.mkForce (
+              pkgs.writeShellScript "openbao-local-test-preflight" ''
+                set -eu
+                export PATH=${
+                  lib.makeBinPath [
+                    pkgs.systemd
+                    pkgs.util-linux
+                  ]
+                }
+                ${pkgs.python3}/bin/python ${repoRoot + "/lx_administration/secret_storage.py"} --allow-runtime /run
+                exec ${pkgs.python3}/bin/python ${
+                  repoRoot + "/lx_administration/storage/openbao_local.py"
+                } /var/lib/openbao-bootstrap/seal.cred
+              ''
+            )
+          );
+        };
         environment = {
           systemPackages = [
             pkgs.python3
@@ -74,7 +98,10 @@
           ];
           etc = {
             "local-client.py".source = repoRoot + "/lx_administration/storage/openbao_local.py";
-            "test-client.py".source = testClient;
+            "test-client.py".source =
+              if passphrase then repoRoot + "/lx_administration/storage/openbao_local.py" else testClient;
+            "fixture-seal".text = sealMode;
+            "openbao-activation-gate".source = config.system.preSwitchChecks.openbaoLocalPreflight;
             "local-guest.py".source = ./openbao_local_guest.py;
             "migration.py".source = repoRoot + "/lx_administration/storage/operator_migration.py";
             "cutover.py".source = repoRoot + "/lx_administration/storage/cutover.py";
@@ -91,24 +118,41 @@
   };
   testScript = ''
     start_all()
+    passphrase = ${if passphrase then "True" else "False"}
     server.wait_for_unit("multi-user.target")
     other.wait_for_unit("multi-user.target")
-    server.fail("systemctl start openbao-local.service")
-    with subtest("production enrollment rejects the software TPM without mutations"):
+    if passphrase:
+      with subtest("plaintext swap blocks enrollment and prompt before key handling"):
+        server.succeed("fallocate -l 32M /var/lib/test.swap; chmod 600 /var/lib/test.swap; mkswap /var/lib/test.swap; swapon /var/lib/test.swap")
+        server.fail("luxnix-openbao-local preflight")
+        server.fail("systemctl start openbao-local-seal-key.service")
+        server.succeed("test $(systemctl show --value -p ExecMainStartTimestampMonotonic openbao-local-seal-key.service) = 0")
+        server.fail("test -e /run/luxnix-openbao-seal/seal.key")
+        server.succeed("swapoff /var/lib/test.swap; systemctl reset-failed")
+    if not passphrase:
+      server.fail("systemctl start openbao-local.service")
+    with subtest("production TPM enrollment rejects the software TPM without mutations"):
+      if not passphrase:
         server.fail("luxnix-openbao-local preflight > /run/preflight.out 2>&1")
         server.succeed("cat /run/preflight.out; grep tpm-not-physical /run/preflight.out")
         server.fail("test -e /var/lib/openbao-bootstrap/seal.cred")
     server.succeed("python /etc/local-guest.py prepare")
-    server.fail("python /etc/local-client.py /run/local-test/host.cred")
-    server.fail("python /etc/local-client.py /run/local-test/pcr0.cred")
+    if not passphrase:
+        server.fail("python /etc/local-client.py /run/local-test/host.cred")
+        server.fail("python /etc/local-client.py /run/local-test/pcr0.cred")
 
     with subtest("enrollment with explicitly isolated platform fixture"):
         server.succeed("python /etc/local-guest.py enroll")
-        server.succeed("python /etc/local-client.py /var/lib/openbao-bootstrap/seal.cred")
-        server.succeed("python /etc/local-client.py /var/lib/openbao-bootstrap/volume-unlock.cred")
+        if not passphrase:
+            server.succeed("python /etc/local-client.py /var/lib/openbao-bootstrap/seal.cred")
+            server.succeed("python /etc/local-client.py /var/lib/openbao-bootstrap/volume-unlock.cred")
+        else:
+            server.succeed("python /etc/local-client.py --verify-seal")
+            server.succeed("python /etc/local-guest.py tamper-check")
         server.succeed("test -z \"$(ss -ltnH 'sport = :8310 or sport = :8311')\"")
 
     with subtest("a copied store credential does not unseal on another TPM"):
+      if not passphrase:
         # Ciphertext only crosses the driver; plaintext stays inside the disposable guest.
         server.succeed("cp /var/lib/openbao-bootstrap/seal.cred /tmp/shared/copied.cred")
         other.succeed("cp /tmp/shared/copied.cred /run/copied.cred")
@@ -129,6 +173,23 @@
         server.succeed("cryptsetup close test")
         server.succeed("systemctl restart openbao-local")
         server.succeed("systemctl start luxnix-storage-unlock-test")
+        server.succeed("cryptsetup close test")
+
+    if passphrase:
+      with subtest("cold boot requires passphrase; a wrong answer releases no volume"):
+        server.succeed("touch /var/lib/openbao-vm-fixture/boot-ready")
+        server.shutdown()
+        server.start()
+        server.wait_until_succeeds("python /etc/local-guest.py pending")
+        server.fail("test -e /dev/mapper/test")
+        server.succeed("python /etc/local-guest.py answer wrong")
+        server.wait_until_succeeds("python /etc/local-guest.py pending")
+        server.fail("test -e /dev/mapper/test")
+        server.succeed("python /etc/local-guest.py answer correct")
+        server.wait_until_succeeds("test -e /dev/mapper/test")
+        server.succeed("test $(systemctl show --value -p Result luxnix-storage-unlock-test.service) = success")
+        server.succeed("python /etc/local-guest.py check-data")
+        server.succeed("python /etc/local-client.py --verify-seal")
         server.succeed("cryptsetup close test")
 
     with subtest("unlock credential rotation"):

@@ -156,12 +156,6 @@ def _gc_02_contract() -> dict[str, Any]:
             // {
               Environment = envList cfg.systemd.services."lx-annotate-celery-pipeline-worker".environment;
             };
-          frameWorker = cfg.systemd.services."lx-annotate-celery-frame-extraction-worker";
-          frameWorkerConfig =
-            frameWorker.serviceConfig
-            // {
-              Environment = envList frameWorker.environment;
-            };
           inferenceWorkerConfig =
             cfg.systemd.services."lx-annotate-celery-inference-worker".serviceConfig
             // {
@@ -193,7 +187,6 @@ def _gc_02_contract() -> dict[str, Any]:
           celeryServices = {
             default = defaultWorkerConfig;
             pipeline = pipelineWorkerConfig;
-            frameExtraction = frameWorkerConfig;
             inference = inferenceWorkerConfig;
             training = trainingWorkerConfig;
           };
@@ -221,27 +214,20 @@ def _gc_02_contract() -> dict[str, Any]:
             workerLimits = lxCfg.runtime.workerLimits;
             workerPools = lxCfg.runtime.workerPools;
             workerModes = {
-              frameExtraction = lxCfg.runtime.frameExtractionWorker.mode;
               inference = lxCfg.runtime.inferenceWorker.mode;
               training = lxCfg.runtime.trainingWorker.mode;
             };
             services = {
               maintenance = defaultWorkerConfig;
               pipeline = pipelineWorkerConfig;
-              frameExtraction = frameWorkerConfig;
               inference = inferenceWorkerConfig;
               training = trainingWorkerConfig;
             };
           };
-          frameExtractionWorkerDefault = {
-            mode = lxCfg.runtime.frameExtractionWorker.mode;
-            serviceWantedBy = frameWorker.wantedBy;
-            servicePartOf = frameWorker.partOf or [];
-            serviceRequires = frameWorker.requires;
-            restart = frameWorkerConfig.Restart;
-            runtimeMaxSec = frameWorkerConfig.RuntimeMaxSec or null;
-            timeoutStopSec = frameWorkerConfig.TimeoutStopSec or null;
+          frameExtractionWorkerRemoved = {
+            serviceExists = builtins.hasAttr "lx-annotate-celery-frame-extraction-worker" cfg.systemd.services;
             timerExists = builtins.hasAttr "lx-annotate-celery-frame-extraction-worker" cfg.systemd.timers;
+            queueEnv = builtins.hasAttr "CELERY_FRAME_EXTRACTION_QUEUE" cfg.systemd.services."lx-annotate-celery-worker".environment;
           };
           localRedis = {
             redis = {
@@ -497,31 +483,17 @@ def _gc_02_extended_contracts() -> dict[str, Any]:
               })
             ];
           }).config;
-          frameAlwaysCfg = (gc02.extendModules {
+          removedRoleOptionCfg = (gc02.extendModules {
             modules = [
               ({ ... }: {
                 roles.endoreg-client.lxAnnotate.runtime.frameExtractionWorker.mode = "always";
               })
             ];
           }).config;
-          frameManualCfg = (gc02.extendModules {
+          removedPoolOptionCfg = (gc02.extendModules {
             modules = [
               ({ ... }: {
-                roles.endoreg-client.lxAnnotate.runtime.frameExtractionWorker.mode = "manual";
-              })
-            ];
-          }).config;
-          frameTimerCfg = (gc02.extendModules {
-            modules = [
-              ({ ... }: {
-                roles.endoreg-client.lxAnnotate.runtime.frameExtractionWorker = {
-                  mode = "maintenance-window";
-                  onCalendar = "Sun 02:00:00";
-                  runtimeMaxSec = "2h";
-                  timeoutStopSec = "20min";
-                  randomizedDelaySec = "0";
-                  persistentTimer = false;
-                };
+                services.luxnix.lxAnnotateLocal.runtime.workerPools.frameExtraction.concurrency = 1;
               })
             ];
           }).config;
@@ -645,27 +617,9 @@ def _gc_02_extended_contracts() -> dict[str, Any]:
             workerAfter = externalPostgresCfg.systemd.services."lx-annotate-celery-worker".after;
           };
           redissBroker = redissBrokerCfg.services.luxnix.lxAnnotateLocal.runtime.celeryBroker;
-          frameAlways = {
-            timerExists = builtins.hasAttr "lx-annotate-celery-frame-extraction-worker" frameAlwaysCfg.systemd.timers;
-            wantedBy = frameAlwaysCfg.systemd.services."lx-annotate-celery-frame-extraction-worker".wantedBy;
-            partOf = frameAlwaysCfg.systemd.services."lx-annotate-celery-frame-extraction-worker".partOf or [];
-            requires = frameAlwaysCfg.systemd.services."lx-annotate-celery-frame-extraction-worker".requires;
-            restart = frameAlwaysCfg.systemd.services."lx-annotate-celery-frame-extraction-worker".serviceConfig.Restart;
-            runtimeMaxSec = frameAlwaysCfg.systemd.services."lx-annotate-celery-frame-extraction-worker".serviceConfig.RuntimeMaxSec or null;
-            timeoutStopSec = frameAlwaysCfg.systemd.services."lx-annotate-celery-frame-extraction-worker".serviceConfig.TimeoutStopSec or null;
-          };
-          frameManual = {
-            timerExists = builtins.hasAttr "lx-annotate-celery-frame-extraction-worker" frameManualCfg.systemd.timers;
-            wantedBy = frameManualCfg.systemd.services."lx-annotate-celery-frame-extraction-worker".wantedBy;
-            requires = frameManualCfg.systemd.services."lx-annotate-celery-frame-extraction-worker".requires;
-            restart = frameManualCfg.systemd.services."lx-annotate-celery-frame-extraction-worker".serviceConfig.Restart;
-            runtimeMaxSec = frameManualCfg.systemd.services."lx-annotate-celery-frame-extraction-worker".serviceConfig.RuntimeMaxSec or null;
-          };
-          frameTimer = {
-            roleOptions = frameTimerCfg.roles.endoreg-client.lxAnnotate.runtime.frameExtractionWorker;
-            serviceOptions = frameTimerCfg.services.luxnix.lxAnnotateLocal.runtime.frameExtractionWorker;
-            serviceConfig = frameTimerCfg.systemd.services."lx-annotate-celery-frame-extraction-worker".serviceConfig;
-            timerConfig = frameTimerCfg.systemd.timers."lx-annotate-celery-frame-extraction-worker".timerConfig;
+          removedFrameExtractionOptions = {
+            roleOptionEvaluates = (builtins.tryEval (builtins.deepSeq removedRoleOptionCfg.system.build.toplevel.drvPath true)).success;
+            poolOptionEvaluates = (builtins.tryEval (builtins.deepSeq removedPoolOptionCfg.system.build.toplevel.drvPath true)).success;
           };
           inferenceWorker = let service = inferenceCfg.systemd.services."lx-annotate-celery-inference-worker"; in {
             roleWorker = inferenceCfg.roles.endoreg-client.lxAnnotate.runtime.inferenceWorker;
@@ -937,7 +891,6 @@ def test_lx_annotate_dedicated_celery_workers_follow_pool_contract() -> None:
     expected_workers = {
         "maintenance": ("maintenance", "maintenance,default"),
         "pipeline": ("pipeline", "pipeline"),
-        "frameExtraction": ("frame-extraction", "frame_extraction"),
         "inference": ("inference", "inference"),
         "training": ("model-training", "model_training"),
     }
@@ -955,7 +908,7 @@ def test_lx_annotate_dedicated_celery_workers_follow_pool_contract() -> None:
         env = dict(value.split("=", 1) for value in service_config["Environment"])
         assert env["LD_LIBRARY_PATH"].split(":")[0] == "/run/opengl-driver/lib"
 
-    for worker_name in ("pipeline", "frameExtraction", "inference", "training"):
+    for worker_name in ("pipeline", "inference", "training"):
         service_config = services[worker_name]
         pool = pools[worker_name]
         assert service_config["MemoryHigh"] == pool["memoryHigh"]
@@ -972,11 +925,10 @@ def test_lx_annotate_dedicated_celery_workers_follow_pool_contract() -> None:
     assert maintenance["Nice"] == maintenance_pool["nice"]
     assert maintenance["OOMScoreAdjust"] == maintenance_pool["oomScoreAdjust"]
     assert evaluated["workerModes"] == {
-        "frameExtraction": "always",
         "inference": "always",
         "training": "manual",
     }
-    assert services["frameExtraction"]["Restart"] == "on-failure"
+    assert "frameExtraction" not in pools
     assert services["inference"]["Restart"] == "on-failure"
     assert services["training"]["Restart"] == "no"
 
@@ -1155,7 +1107,7 @@ def test_wheel_migrate_and_load_base_data_services_run_before_web() -> None:
 
 
 def test_lx_annotate_wheel_celery_worker_exports_shared_runtime_env() -> None:
-    for name in ("default", "pipeline", "frameExtraction", "inference", "training"):
+    for name in ("default", "pipeline", "inference", "training"):
         service = _gc_02_contract()["celeryServices"][name]
         environment = dict(value.split("=", 1) for value in service["Environment"])
         assert environment["LX_RUNTIME_ROOT"] == "/var/lib/lx-annotate/data"
@@ -1169,7 +1121,6 @@ def test_lx_annotate_celery_worker_service_config_evaluates() -> None:
     services = _gc_02_contract()["celeryServices"]
     service_config = services["default"]
     pipeline_config = services["pipeline"]
-    frame_extraction_config = services["frameExtraction"]
     inference_config = services["inference"]
 
     assert service_config["WorkingDirectory"] == "/var/lib/lx-annotate/data"
@@ -1184,16 +1135,8 @@ def test_lx_annotate_celery_worker_service_config_evaluates() -> None:
         in _gc_02_contract()["localRedis"]["workerAfter"]
     )
     assert "--queues=pipeline" in pipeline_config["ExecStart"]
-    assert "--queues=frame_extraction" in frame_extraction_config["ExecStart"]
     assert "--queues=inference" in inference_config["ExecStart"]
     assert pipeline_config["CPUQuota"] == "45%"
-    assert frame_extraction_config["CPUQuota"] == "55%"
-    assert frame_extraction_config["MemoryHigh"] == "3G"
-    assert frame_extraction_config["MemoryMax"] == "5G"
-    assert frame_extraction_config["Nice"] == 18
-    assert frame_extraction_config["Restart"] == "on-failure"
-    assert frame_extraction_config["RuntimeMaxSec"] == "7h"
-    assert frame_extraction_config["TimeoutStopSec"] == "45min"
     assert inference_config["CPUQuota"] == "250%"
     assert inference_config["MemoryHigh"] == "12G"
     assert inference_config["MemoryMax"] == "16G"
@@ -1305,53 +1248,24 @@ def test_lx_annotate_hls_backfill_defers_during_active_imports() -> None:
     assert "UploadJob.objects.filter" in module_source
     for status in ("pending", "processing", "retrying"):
         assert status in module_source
-def test_lx_annotate_frame_extraction_worker_defaults_to_always_on() -> None:
-    evaluated = _gc_02_contract()["frameExtractionWorkerDefault"]
+def test_lx_annotate_frame_extraction_worker_is_removed() -> None:
+    evaluated = _gc_02_contract()["frameExtractionWorkerRemoved"]
 
-    assert evaluated["mode"] == "always"
-    assert evaluated["serviceWantedBy"] == ["multi-user.target"]
-    assert evaluated["servicePartOf"] == []
-    assert "lx-annotate-master-key-check.service" in evaluated["serviceRequires"]
-    assert "lx-annotate-load-base-data.service" in evaluated["serviceRequires"]
-    assert evaluated["restart"] == "on-failure"
-    assert evaluated["runtimeMaxSec"] == "7h"
-    assert evaluated["timeoutStopSec"] == "45min"
-    assert evaluated["timerExists"] is False
+    # Frame files are export-only; exports never use a Celery queue.
+    assert evaluated == {
+        "serviceExists": False,
+        "timerExists": False,
+        "queueEnv": False,
+    }
 
 
-def test_lx_annotate_frame_extraction_worker_always_mode_preserves_boot_start() -> None:
-    evaluated = _gc_02_extended_contracts()["frameAlways"]
+def test_removed_frame_extraction_options_fail_evaluation() -> None:
+    evaluated = _gc_02_extended_contracts()["removedFrameExtractionOptions"]
 
-    assert evaluated["timerExists"] is False
-    assert evaluated["wantedBy"] == ["multi-user.target"]
-    assert evaluated["partOf"] == []
-    assert "lx-annotate-master-key-check.service" in evaluated["requires"]
-    assert "lx-annotate-load-base-data.service" in evaluated["requires"]
-    assert evaluated["restart"] == "on-failure"
-    assert evaluated["runtimeMaxSec"] == "7h"
-    assert evaluated["timeoutStopSec"] == "45min"
-
-
-def test_lx_annotate_frame_extraction_worker_manual_mode_has_no_autostart() -> None:
-    evaluated = _gc_02_extended_contracts()["frameManual"]
-
-    assert evaluated["timerExists"] is False
-    assert evaluated["wantedBy"] == []
-    assert "lx-annotate-master-key-check.service" in evaluated["requires"]
-    assert "lx-annotate-load-base-data.service" in evaluated["requires"]
-    assert evaluated["restart"] == "no"
-    assert evaluated["runtimeMaxSec"] == "7h"
-
-
-def test_endoreg_client_frame_extraction_worker_options_flow_to_service_timer() -> None:
-    evaluated = _gc_02_extended_contracts()["frameTimer"]
-
-    assert evaluated["serviceOptions"] == evaluated["roleOptions"]
-    assert evaluated["serviceConfig"]["RuntimeMaxSec"] == "2h"
-    assert evaluated["serviceConfig"]["TimeoutStopSec"] == "20min"
-    assert evaluated["timerConfig"]["OnCalendar"] == "Sun 02:00:00"
-    assert evaluated["timerConfig"]["RandomizedDelaySec"] == "0"
-    assert evaluated["timerConfig"]["Persistent"] is False
+    assert evaluated == {
+        "roleOptionEvaluates": False,
+        "poolOptionEvaluates": False,
+    }
 
 
 def test_endoreg_client_inference_worker_options_flow_to_service() -> None:

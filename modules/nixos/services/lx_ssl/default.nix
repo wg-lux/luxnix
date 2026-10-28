@@ -108,6 +108,11 @@ in
             || ! ${pkgs.openssl}/bin/openssl x509 -in "${sslCertPath}" -noout -checkend 86400; then
             certificate_valid=false
           fi
+          if [ "$certificate_valid" = true ] \
+            && ! ${pkgs.openssl}/bin/openssl x509 -in "${sslCertPath}" -noout -ext basicConstraints \
+              | ${pkgs.gnugrep}/bin/grep -q 'CA:FALSE'; then
+            certificate_valid=false
+          fi
           ${lib.concatMapStringsSep "\n" (name: ''
             if [ "$certificate_valid" = true ] \
               && ! ${pkgs.openssl}/bin/openssl x509 -in "${sslCertPath}" -noout -checkhost ${lib.escapeShellArg name}; then
@@ -126,6 +131,9 @@ in
               -keyout "$key_tmp" \
               -out "$cert_tmp" \
               -subj "/CN=${annotateCfg.django.hostname}" \
+              -addext 'basicConstraints=critical,CA:FALSE' \
+              -addext 'keyUsage=critical,digitalSignature,keyEncipherment' \
+              -addext 'extendedKeyUsage=serverAuth' \
               -addext ${lib.escapeShellArg "subjectAltName=${certificateSubjectAltName}"}
 
             chown root:nginx "$key_tmp" "$cert_tmp"

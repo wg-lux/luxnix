@@ -71,6 +71,8 @@ let
     pkgs.util-linux
   ];
   unlockName = name: "luxnix-storage-unlock-${name}";
+  containerVolumes = lib.filterAttrs (_: v: v.container != null) cfg.volumes;
+  passphraseBoot = cfg.unlockMethod == "passphrase";
   checkName = name: "luxnix-storage-check-${name}";
   volumeMounts = lib.mapAttrs' (
     name: volume:
@@ -136,7 +138,7 @@ in
     openbaoUnlockCredential = lib.mkOption {
       type = absolutePath;
       default = "/var/lib/openbao-bootstrap/volume-unlock.cred";
-      description = "TPM-only encrypted read-only AppRole credential named volume.unlock, written by enrollment; never a provisioning credential.";
+      description = "Encrypted read-only AppRole credential named volume.unlock, written by enrollment (TPM-bound under the TPM seal); never a provisioning credential.";
     };
     migration = {
       enable = lib.mkOption {
@@ -419,7 +421,25 @@ in
           lib.nameValuePair (unlockName name) {
             description = "Unlock operator storage ${name}";
             requires = lib.optional (cfg.unlockMethod == "local-openbao") "openbao-local.service";
-            after = lib.optional (cfg.unlockMethod == "local-openbao") "openbao-local.service";
+            # Passphrase mode prompts during boot, before the login screen, one
+            # container at a time so a shared passphrase is entered once.
+            wantedBy = lib.optional passphraseBoot "multi-user.target";
+            before = lib.optionals passphraseBoot [
+              "display-manager.service"
+              "plymouth-quit.service"
+              "plymouth-quit-wait.service"
+            ];
+            after =
+              lib.optional (cfg.unlockMethod == "local-openbao") "openbao-local.service"
+              ++ lib.optionals passphraseBoot (
+                [
+                  "local-fs.target"
+                  "swap.target"
+                ]
+                ++ map (other: "${unlockName other}.service") (
+                  builtins.filter (other: other < name) (builtins.attrNames containerVolumes)
+                )
+              );
             path = migrationPath;
             unitConfig = {
               DefaultDependencies = false;
@@ -436,12 +456,14 @@ in
               ) "volume.unlock:${cfg.openbaoUnlockCredential}";
               ExecStartPre = lib.optionals (cfg.unlockMethod == "local-openbao") [
                 "${pkgs.python3}/bin/python ${../../../../lx_administration/secret_storage.py} --allow-runtime /run"
-                "${pkgs.python3}/bin/python ${../../../../lx_administration/storage/openbao_local.py} ${cfg.openbaoUnlockCredential}"
+                "${pkgs.python3}/bin/python ${../../../../lx_administration/storage/openbao_local.py} --seal ${
+                  lib.attrByPath [ "luxnix" "openbao" "local" "seal" ] "tpm" config
+                } ${cfg.openbaoUnlockCredential}"
               ];
               ExecStart = "${migrationCommand} unlock ${lib.escapeShellArg name}";
             };
           }
-        ) (lib.filterAttrs (_: v: v.container != null) cfg.volumes);
+        ) containerVolumes;
 
       sleep.settings.Sleep = {
         AllowHibernation = false;

@@ -96,6 +96,30 @@ def test_rerun_reuses_escrowed_seal_key(custody):
     assert len(set(host.seal_keys)) == 1
 
 
+def test_passphrase_reenrollment_restages_without_reinitializing(custody):
+    events = []
+    host = FakeHost(events)
+    task = controller(custody, host, FakeRecovery(events))
+    task.local = dict(LOCAL, seal="passphrase")
+    task.ask_passphrase = lambda _: "disposable boot passphrase"
+    task.enroll()
+    host.enrolled = True
+    events.clear()
+    task.enroll()
+    assert [event for event in events if event[0] == "host"] == [("host", "preflight"), ("host", "seal")]
+    assert len(set(host.seal_keys)) == 1
+
+
+def test_missing_selected_seal_blocks_before_escrow_or_mutation(custody, monkeypatch):
+    events = []
+    task = controller(custody, FakeHost(events), FakeRecovery(events))
+    monkeypatch.setattr(task, "tool", lambda _: {"initialized": True, "seal_credential": False, "enrolled": False})
+    with pytest.raises(le.EnrollmentError, match="selected seal"):
+        task.enroll()
+    assert not events
+    assert not custody[0].exists()
+
+
 def test_failed_export_blocks_seal_and_confirm(custody):
     events = []
     with pytest.raises(le.EnrollmentError, match="export"):
@@ -212,3 +236,27 @@ def test_rollout_disabled_configuration_blocks_before_remote_calls(custody):
     task = controller(custody, SimpleNamespace(call=lambda *a, **k: pytest.fail('remote call reached')), None)
     with pytest.raises(le.EnrollmentError, match='migration enabled'):
         task.rollout({}, None, migration_enabled=False)
+
+
+class RecordingHost(FakeHost):
+    def __init__(self, events):
+        super().__init__(events)
+        self.requests = []
+
+    def call(self, args, data=b"", privileged=False, relay_error=False):
+        if args[1] == "seal":
+            self.requests.append(json.loads(data))
+        return super().call(args, data, privileged, relay_error)
+
+
+@pytest.mark.parametrize("seal, expected", [("passphrase", True), ("tpm", False)])
+def test_boot_passphrase_is_sent_only_for_passphrase_seal_and_never_escrowed(custody, seal, expected):
+    events = []
+    host, recovery = RecordingHost(events), FakeRecovery(events)
+    vault, key = custody
+    instance = le.Controller("gc-10", host, recovery, vault, key, "1" * 32, dict(LOCAL, seal=seal))
+    instance.ask_passphrase = lambda name: "correct horse battery"
+    instance.enroll()
+    assert ("seal_passphrase" in host.requests[0]) is expected
+    for item in ("seal-key", "enrollment"):
+        assert "correct horse battery" not in json.dumps(le.load_escrow(vault, key, "gc-10", item))

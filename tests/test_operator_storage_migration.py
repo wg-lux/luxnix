@@ -443,3 +443,64 @@ def test_public_local_provision_checks_platform_before_allocation(
         task.provision("data", record)
     assert state.calls == []
     assert not container.exists()
+
+
+@pytest.fixture
+def passphrase_layout(tmp_path, monkeypatch):
+    container = tmp_path / "data.luks"
+    container.write_bytes(b"preserved encrypted volume")
+    task = migration.Migration({"unlockMethod": "passphrase",
+        "volumes": {"data": {"container": str(container), "device": "/dev/mapper/test-never-created"}}},
+        SimpleNamespace(_require_protected_swap=lambda: None))
+    return container, task
+
+
+def test_passphrase_boot_prompt_reuses_cached_answer_first(passphrase_layout, monkeypatch):
+    container, task = passphrase_layout
+    calls = []
+    def run(*args, **kwargs):
+        calls.append((args, kwargs.get("input")))
+        return b"shared-test-passphrase\n" if args[0] == "systemd-ask-password" else b""
+    monkeypatch.setattr(migration, "run", run)
+    task.unlock("data")
+    assert [c[0] for c in calls] == [
+        ("cryptsetup", "isLuks", str(container)),
+        ("systemd-ask-password", "--timeout=0", "--keyname=luxnix-operator-storage", "--accept-cached",
+         "Unlock test-never-created:"),
+        ("cryptsetup", "open", "--type", "luks", "--key-file=-", str(container), "test-never-created"),
+    ]
+    # The passphrase reaches cryptsetup on stdin only, never as an argument.
+    assert calls[-1][1] == b"shared-test-passphrase"
+    assert container.read_bytes() == b"preserved encrypted volume"
+
+
+def test_passphrase_boot_prompt_asks_again_after_wrong_answer(passphrase_layout, monkeypatch):
+    container, task = passphrase_layout
+    answers = iter([b"stale-cached\n", b"typo\n", b"correct\n"])
+    asks = []
+    def run(*args, input=None, **kwargs):
+        if args[0] == "systemd-ask-password":
+            asks.append(args)
+            return next(answers)
+        if args[1] == "open" and input != b"correct":
+            raise migration.MigrationError("cryptsetup failed")
+        return b""
+    monkeypatch.setattr(migration, "run", run)
+    task.unlock("data")
+    assert ["--accept-cached" in a for a in asks] == [True, False, False]
+
+
+def test_passphrase_boot_prompt_fails_closed_after_attempts(passphrase_layout, monkeypatch):
+    _, task = passphrase_layout
+    asks = []
+    def run(*args, **kwargs):
+        if args[0] == "systemd-ask-password":
+            asks.append(args)
+            return b"wrong\n"
+        if args[1] == "open":
+            raise migration.MigrationError("cryptsetup failed")
+        return b""
+    monkeypatch.setattr(migration, "run", run)
+    with pytest.raises(migration.MigrationError, match="No valid passphrase"):
+        task.unlock("data")
+    assert len(asks) == migration.PASSPHRASE_ATTEMPTS

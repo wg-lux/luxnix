@@ -148,7 +148,14 @@ in
             message = "EndoReg clients require encrypted operator storage for secrets and application data.";
           }
           {
-            assertion = config.luxnix.storage.operatorUnlocked.unlockMethod == "passphrase";
+            # Operator passphrase at boot: directly per container, or once to unseal
+            # local OpenBao, which then releases the container keys.
+            assertion =
+              config.luxnix.storage.operatorUnlocked.unlockMethod == "passphrase"
+              || (
+                config.luxnix.storage.operatorUnlocked.unlockMethod == "local-openbao"
+                && config.luxnix.openbao.local.seal == "passphrase"
+              );
             message = "EndoReg unattended unlock is blocked until authenticated system and application runtime acceptance is implemented.";
           }
         ];
@@ -156,6 +163,7 @@ in
         luxnix = {
           # Storage settings
           storage.enable = mkDefault true;
+          openbao.local.seal = mkDefault "passphrase";
           nvidia-prime.enable = true;
 
           # Development clients must remain usable while the central Vault host is

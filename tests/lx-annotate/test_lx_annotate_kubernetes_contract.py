@@ -45,7 +45,7 @@ def test_lx_annotate_kubernetes_web_worker_and_migration_shapes_exist() -> None:
     assert "name: lx-annotate-web" in source
     assert "name: lx-annotate-worker-maintenance" in source
     assert "name: lx-annotate-worker-pipeline" in source
-    assert "name: lx-annotate-worker-frame-extraction" in source
+    assert "lx-annotate-worker-frame-extraction" not in source
     assert "name: lx-annotate-worker-inference" in source
     assert "name: lx-annotate-worker-training" in source
     assert "replicas: 0" in source
@@ -67,9 +67,9 @@ def test_lx_annotate_kubernetes_uses_external_services_and_shared_secrets() -> N
     assert "rediss://redis.lx-annotate.svc.cluster.local:6379/1" in source
     assert "CELERY_DEFAULT_QUEUE: default" in source
     assert "CELERY_PIPELINE_QUEUE: pipeline" in source
-    assert "CELERY_FRAME_EXTRACTION_QUEUE: frame_extraction" in source
+    assert "CELERY_FRAME_EXTRACTION" not in source
     assert "CELERY_INFERENCE_QUEUE: inference" in source
-    assert 'CELERY_FRAME_EXTRACTION_REQUIRE_SECURE_TRANSPORT: "true"' in source
+    assert 'CELERY_FFMPEG_MEDIA_REQUIRE_SECURE_TRANSPORT: "true"' in source
     assert 'CELERY_BROKER_SECURE_TRANSPORT_CONFIRMED: "false"' in source
     assert "VIDEO_TEMPORAL_INFERENCE_JOB_MODE: celery" in source
     assert "LX_ANNOTATE_MASTER_KEY_FILE: /run/secrets/lx-annotate/master-key" in source
@@ -98,7 +98,6 @@ def test_lx_annotate_kubernetes_web_probes_and_resources_are_declared() -> None:
     assert "celery -A lx_annotate.celery:app worker" in worker
     assert '--queues="${CELERY_MAINTENANCE_QUEUE},${CELERY_DEFAULT_QUEUE}"' in worker
     assert '--queues="${CELERY_PIPELINE_QUEUE}"' in worker
-    assert '--queues="${CELERY_FRAME_EXTRACTION_QUEUE}"' in worker
     assert '--queues="${CELERY_INFERENCE_QUEUE}"' in worker
     assert '--queues="${CELERY_TRAINING_QUEUE}"' in worker
     assert "--prefetch-multiplier=1" in worker

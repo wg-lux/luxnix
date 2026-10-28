@@ -8,6 +8,20 @@ import pytest
 from nix_eval_helpers import REPO_ROOT, eval_json
 
 
+def test_report_embedding_model_reaches_web_and_workers() -> None:
+    paths = eval_json('''
+      let
+        flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
+        cfg = flake.nixosConfigurations.gc-02.config;
+      in map (name:
+        cfg.systemd.services.${name}.environment.ENDOREG_REPORT_EMBEDDING_MODEL_PATH
+      ) [ "lx-annotate" "lx-annotate-celery-worker" "lx-annotate-celery-pipeline-worker" ]
+    ''')
+    assert len(set(paths)) == 1
+    assert paths[0].startswith("/nix/store/")
+    assert paths[0].endswith("-de-core-news-lg-3.8.0-data")
+
+
 @pytest.mark.parametrize("custom_prefix", [None, "/srv/ocr/tessdata"])
 def test_gc_02_ocr_runtime_contract(custom_prefix: str | None) -> None:
     override = (
@@ -99,7 +113,6 @@ def test_gc_10_media_tools_execute_in_service_path() -> None:
           services = map (name: host.config.systemd.services.${name}.environment.PATH) [
             "lx-annotate"
             "lx-annotate-celery-pipeline-worker"
-            "lx-annotate-celery-frame-extraction-worker"
             "lx-annotate-celery-ffmpeg-worker"
           ];
         }

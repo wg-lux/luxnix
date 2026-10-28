@@ -94,8 +94,8 @@
   };
 
   "tests:openbao-local-vm" = {
-    description = "Verify local OpenBao TPM credentials and auto-unseal in disposable VMs";
-    exec = "nix build .#checks.x86_64-linux.openbao-local --no-link -L";
+    description = "Verify local OpenBao TPM and passphrase seals in disposable VMs";
+    exec = "nix build .#checks.x86_64-linux.openbao-local .#checks.x86_64-linux.openbao-local-passphrase --no-link -L";
   };
 
   "tests:operator-storage-migration-vm" = {

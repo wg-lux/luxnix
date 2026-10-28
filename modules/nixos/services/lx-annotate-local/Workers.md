@@ -118,7 +118,6 @@ The unit column omits `.service`; the pool column names `runtime.workerPools` ke
 | maintenance | `lx-annotate-celery-worker` | `maintenance` | `maintenance`, `default` | `maintenance` |
 | hub-transfer | `lx-annotate-celery-hub-transfer-worker` | `hub-transfer` | `hub_transfer` | `hubTransfer` |
 | pipeline | `lx-annotate-celery-pipeline-worker` | `pipeline` | `pipeline` | `pipeline` |
-| frame-extraction | `lx-annotate-celery-frame-extraction-worker` | `frame-extraction` | `frame_extraction` | `frameExtraction` |
 | ffmpeg | `lx-annotate-celery-ffmpeg-worker` | `ffmpeg-media` | `ffmpeg_media` | `ffmpeg` |
 | inference | `lx-annotate-celery-inference-worker` | `inference` | `inference` | `inference` |
 | training | `lx-annotate-celery-training-worker` | `model-training` | `model_training` | `training` |

@@ -56,6 +56,9 @@ def hosts():
           migration = c.luxnix.storage.operatorUnlocked.migration.enable;
           unlockMethod = c.luxnix.storage.operatorUnlocked.unlockMethod;
           unlockTimeout = c.systemd.services.luxnix-storage-unlock-luxnix-app-storage.serviceConfig.TimeoutStartSec;
+          unlockBoot = builtins.mapAttrs (_: v: { inherit (v) wantedBy before after; })
+            (f.inputs.nixpkgs.lib.filterAttrs (n: _: f.inputs.nixpkgs.lib.hasPrefix "luxnix-storage-unlock-" n)
+            c.systemd.services);
           enabled = c.luxnix.storage.operatorUnlocked.enable;
           storageUnits = builtins.filter (n: f.inputs.nixpkgs.lib.hasPrefix "luxnix-storage-" n)
             (builtins.attrNames c.systemd.services);
@@ -77,6 +80,7 @@ def hosts():
         }]; }).config; }
         // { "gc-09-local-openbao" = inspectConfig (f.nixosConfigurations.gc-09.extendModules { modules = [{
           luxnix.storage.operatorUnlocked.unlockMethod = f.inputs.nixpkgs.lib.mkForce "local-openbao";
+          luxnix.openbao.local.seal = f.inputs.nixpkgs.lib.mkForce "tpm";
         }]; }).config; }
     '''
     result = subprocess.run(
@@ -166,6 +170,17 @@ def test_gc10_uses_fleet_unlock_migration_and_boot_account_hashes(hosts):
     # Operator unlock waits for the passphrase; the 90s bound applies to TPM unlock.
     assert c["unlockTimeout"] == "infinity"
     assert hosts["gc-10-tpm2"]["unlockTimeout"] == "90s"
+    # The operator answers the boot prompt; no manual start command is needed.
+    secrets = c["unlockBoot"]["luxnix-storage-unlock-luxnix-secrets"]
+    app = c["unlockBoot"]["luxnix-storage-unlock-luxnix-app-storage"]
+    for unit in (secrets, app):
+        assert unit["wantedBy"] == ["multi-user.target"]
+        assert {"display-manager.service", "plymouth-quit.service", "plymouth-quit-wait.service"} <= set(unit["before"])
+    # Serialized prompts let a shared passphrase be entered once.
+    assert "luxnix-storage-unlock-luxnix-app-storage.service" in secrets["after"]
+    assert "luxnix-storage-unlock-luxnix-secrets.service" not in app["after"]
+    for unit in hosts["gc-10-tpm2"]["unlockBoot"].values():
+        assert unit["wantedBy"] == [] and unit["before"] == []
     assert {
         "luxnix-storage-unlock-luxnix-secrets",
         "luxnix-storage-unlock-luxnix-app-storage",

@@ -25,6 +25,10 @@ else:
     import cutover as staged_copy
 
 
+PASSPHRASE_ATTEMPTS = 5
+PASSPHRASE_KEYNAME = "luxnix-operator-storage"
+
+
 class MigrationError(RuntimeError):
     pass
 
@@ -97,8 +101,19 @@ class Migration:
         if not container.is_file():
             raise MigrationError("Container missing; startup never provisions or formats storage")
         run("cryptsetup", "isLuks", str(container))
-        key = run("systemd-ask-password", "--timeout=0", f"Unlock {mapping}:").rstrip(b"\n")
-        run("cryptsetup", "open", "--type", "luks", "--key-file=-", str(container), mapping, input=key)
+        # The boot prompt caches the answer in the kernel keyring, so containers
+        # sharing one passphrase ask once; a wrong or stale answer asks again.
+        for attempt in range(PASSPHRASE_ATTEMPTS):
+            ask = ["systemd-ask-password", "--timeout=0", f"--keyname={PASSPHRASE_KEYNAME}"]
+            if attempt == 0:
+                ask.append("--accept-cached")
+            key = run(*ask, f"Unlock {mapping}:").rstrip(b"\n")
+            try:
+                run("cryptsetup", "open", "--type", "luks", "--key-file=-", str(container), mapping, input=key)
+                return
+            except MigrationError:
+                continue
+        raise MigrationError(f"No valid passphrase for {mapping} after {PASSPHRASE_ATTEMPTS} attempts")
 
     def provision(self, name, record):
         """Explicit operation only, after the controller has verified both escrows."""

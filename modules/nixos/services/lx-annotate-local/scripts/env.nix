@@ -73,7 +73,6 @@ rec {
 
   celeryDefaultQueueName = "default";
   celeryPipelineQueueName = "pipeline";
-  celeryFrameExtractionQueueName = "frame_extraction";
   celeryFfmpegMediaQueueName = "ffmpeg_media";
   celeryInferenceQueueName = "inference";
   celeryTrainingQueueName = "model_training";
@@ -98,6 +97,9 @@ rec {
   };
 
   commonEnv = {
+    ENDOREG_REPORT_EMBEDDING_MODEL_PATH = toString (
+      pkgs.callPackage ../../../../../packages/report-embedding-model { }
+    );
     LX_RUNTIME_ROOT = envDataDir;
     HOME_DIR = endoreg-service-user-home;
     WORKING_DIR = runtimeWorkingDir;
@@ -163,14 +165,12 @@ rec {
     CELERY_VISIBILITY_TIMEOUT_SECONDS = toString cfg.runtime.celeryBroker.visibilityTimeoutSeconds;
     CELERY_DEFAULT_QUEUE = celeryDefaultQueueName;
     CELERY_PIPELINE_QUEUE = celeryPipelineQueueName;
-    CELERY_FRAME_EXTRACTION_QUEUE = celeryFrameExtractionQueueName;
     CELERY_FFMPEG_MEDIA_QUEUE = celeryFfmpegMediaQueueName;
     CELERY_INFERENCE_QUEUE = celeryInferenceQueueName;
     CELERY_TRAINING_QUEUE = celeryTrainingQueueName;
     CELERY_LLM_INFERENCE_QUEUE = celeryLlmInferenceQueueName;
     CELERY_MAINTENANCE_QUEUE = celeryMaintenanceQueueName;
     CELERY_HUB_TRANSFER_QUEUE = celeryHubTransferQueueName;
-    CELERY_FRAME_EXTRACTION_REQUIRE_SECURE_TRANSPORT = boolString cfg.runtime.celeryBroker.requireSecureTransport;
     CELERY_FFMPEG_MEDIA_REQUIRE_SECURE_TRANSPORT = boolString cfg.runtime.celeryBroker.requireSecureTransport;
     CELERY_BROKER_SECURE_TRANSPORT_CONFIRMED = boolString cfg.runtime.celeryBroker.secureTransportConfirmed;
     MODEL_TRAINING_JOB_MODE = "celery";

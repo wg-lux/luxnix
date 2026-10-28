@@ -85,19 +85,6 @@ mkOption {
         };
         description = "Celery pool for bounded FFmpeg media reprocessing.";
       };
-      frameExtraction = mkOption {
-        type = workerPoolType;
-        default = {
-          concurrency = 1;
-          maxTasksPerChild = 1;
-          memoryHigh = "3G";
-          memoryMax = "5G";
-          cpuQuota = "55%";
-          nice = 18;
-          oomScoreAdjust = 850;
-        };
-        description = "Celery pool for FFmpeg frame extraction and post-validation rebuilds.";
-      };
       inference = mkOption {
         type = workerPoolType;
         default = {

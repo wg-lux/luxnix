@@ -193,7 +193,6 @@ def test_nixos_worker_scope_and_runtime_contract():
         legacy = runtime.ffmpegStreamThrottle.enable;
         workers = builtins.map (name: s.${name}.serviceConfig.Slice or "system.slice") [
           "lx-annotate-celery-ffmpeg-worker" "lx-annotate-celery-pipeline-worker"
-          "lx-annotate-celery-frame-extraction-worker"
           "lx-annotate-celery-inference-worker"
           "lx-annotate-celery-training-worker" "lx-annotate-celery-llm-inference-worker"
           "lx-annotate-celery-worker" "lx-annotate-celery-hub-transfer-worker"
@@ -214,7 +213,7 @@ def test_nixos_worker_scope_and_runtime_contract():
 
     value = json.loads(result.stdout)
     assert value["enabled"] and value["tail"] == 2 and not value["legacy"]
-    assert value["workers"] == ["lx-annotate-background.slice"] * 12
+    assert value["workers"] == ["lx-annotate-background.slice"] * 11
     assert value["foreground"] == ["system.slice"] * 3
     assert value["directory"] == "/run/lx-annotate-request-throttle"
     assert "--tail-seconds" in value["controller"]

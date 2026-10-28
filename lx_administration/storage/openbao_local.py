@@ -6,9 +6,12 @@ unseal and authenticate it. Unknown formats fail closed (systemd v260 layout).
 
 import argparse
 import base64
+import hashlib
+import hmac
 import http.client
 import json
 import re
+import secrets
 import socket
 import time
 import os
@@ -20,6 +23,13 @@ import sys
 
 TPM_ONLY = bytes.fromhex("0c7cc07b117645919c4b0bea08bc20fe")
 SOCKET = "/run/openbao-local/api.sock"
+# Passphrase seal: the escrowed seal key is stored wrapped by the boot passphrase
+# and staged on tmpfs only after the operator answered the boot prompt.
+SEAL_WRAP = Path("/var/lib/openbao-bootstrap/seal-passphrase.json")
+SEAL_RUNTIME = Path("/run/luxnix-openbao-seal/seal.key")
+SCRYPT = {"n": 2**17, "r": 8, "p": 1}
+MIN_PASSPHRASE = 12
+PASSPHRASE_ATTEMPTS = 5
 SECURE_BOOT = Path(
     "/sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c"
 )
@@ -92,8 +102,126 @@ def read_private(path: Path) -> bytes:
         return data
 
 
-def preflight(credential: Path) -> None:
-    validate_credential(read_private(credential))
+def preflight(credential: Path, seal: str = "tpm") -> None:
+    data = read_private(credential)
+    # A passphrase-sealed store protects its AppRole credential through the seal:
+    # without the boot passphrase the credential cannot reach any record.
+    if seal == "tpm":
+        validate_credential(data)
+
+
+def key_check(key: bytes) -> str:
+    return hashlib.sha256(b"luxnix-openbao-seal-check-v1" + key).hexdigest()
+
+
+def _kek(passphrase: bytes, salt: bytes) -> bytes:
+    return hashlib.scrypt(passphrase, salt=salt, maxmem=2**28, dklen=64, **SCRYPT)
+
+
+def wrap_seal_key(key: bytes, passphrase: bytes) -> dict:
+    """Encrypt-then-MAC with a fresh salt, so each pad is used exactly once."""
+    if len(key) != 32:
+        raise ValueError("Seal key must contain 32 bytes")
+    if len(passphrase) < MIN_PASSPHRASE:
+        raise ValueError(f"Boot passphrase must contain at least {MIN_PASSPHRASE} characters")
+    salt = secrets.token_bytes(32)
+    kek = _kek(passphrase, salt)
+    pad = hmac.new(kek[:32], b"luxnix-openbao-seal-wrap-v1", hashlib.sha256).digest()
+    wrapped = bytes(a ^ b for a, b in zip(key, pad))
+    tag = hmac.new(kek[32:], salt + wrapped, hashlib.sha256).digest()
+    encode = lambda value: base64.b64encode(value).decode()
+    return {"version": 1, "kdf": "scrypt", **SCRYPT, "salt": encode(salt),
+            "wrapped": encode(wrapped), "tag": encode(tag), "key_check": key_check(key)}
+
+
+def validate_seal_record(record: dict) -> None:
+    # Fixed parameters: a tampered record cannot select a cheaper or exhausting KDF.
+    if not isinstance(record, dict) or record.get("version") != 1 or record.get("kdf") != "scrypt" or any(
+            record.get(name) != value for name, value in SCRYPT.items()):
+        raise ValueError("Unsupported seal passphrase record")
+    try:
+        if any(len(base64.b64decode(record[name], validate=True)) != 32
+               for name in ("salt", "wrapped", "tag")) or not re.fullmatch(r"[0-9a-f]{64}", record["key_check"]):
+            raise ValueError("Invalid seal passphrase record")
+    except (KeyError, TypeError) as exc:
+        raise ValueError("Invalid seal passphrase record") from exc
+
+
+def unwrap_seal_key(record: dict, passphrase: bytes) -> bytes:
+    validate_seal_record(record)
+    salt = base64.b64decode(record["salt"], validate=True)
+    wrapped = base64.b64decode(record["wrapped"], validate=True)
+    kek = _kek(passphrase, salt)
+    tag = hmac.new(kek[32:], salt + wrapped, hashlib.sha256).digest()
+    if not hmac.compare_digest(tag, base64.b64decode(record["tag"], validate=True)):
+        raise ValueError("wrong-passphrase")
+    pad = hmac.new(kek[:32], b"luxnix-openbao-seal-wrap-v1", hashlib.sha256).digest()
+    key = bytes(a ^ b for a, b in zip(wrapped, pad))
+    if len(key) != 32 or not hmac.compare_digest(key_check(key), record["key_check"]):
+        raise ValueError("Seal passphrase record is inconsistent")
+    return key
+
+
+def write_private(path: Path, data: bytes) -> None:
+    """Create a root-only file atomically; never follows or replaces a symlink."""
+    path.parent.mkdir(mode=0o700, exist_ok=True)
+    temporary = path.with_name(path.name + ".new")
+    temporary.unlink(missing_ok=True)
+    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "wb") as stream:
+        stream.write(data)
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.replace(temporary, path)
+    fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def seal_receipt(record: dict, key: bytes) -> bytes:
+    return hmac.digest(key, json.dumps(record, sort_keys=True).encode(), "sha256")
+
+
+def stage_verified_seal(record: dict, key: bytes, target=SEAL_RUNTIME) -> None:
+    """Called only after wrapping or authenticating this exact record and key."""
+    if target.exists() and not hmac.compare_digest(read_private(target), key):
+        raise ValueError("Staged seal key does not match this store")
+    write_private(target, key)
+    write_private(target.with_suffix(".receipt"), seal_receipt(record, key))
+
+
+def verify_staged_seal(record_path=SEAL_WRAP, target=SEAL_RUNTIME) -> None:
+    record = json.loads(read_private(record_path))
+    validate_seal_record(record)
+    key = read_private(target)
+    if len(key) != 32 or not hmac.compare_digest(key_check(key), record["key_check"]):
+        raise ValueError("Staged seal key does not match this store")
+    if not hmac.compare_digest(read_private(target.with_suffix(".receipt")), seal_receipt(record, key)):
+        raise ValueError("Seal record was not authenticated at this boot; rerun the seal phase")
+
+
+def stage_seal_key(record_path=SEAL_WRAP, target=SEAL_RUNTIME, attempts=PASSPHRASE_ATTEMPTS):
+    """Boot prompt: verify the passphrase, then stage the seal key on tmpfs."""
+    record = json.loads(read_private(record_path))
+    validate_seal_record(record)
+    if target.exists():
+        # An OpenBao restart reuses the key verified at this boot.
+        verify_staged_seal(record_path, target)
+        return
+    for _ in range(attempts):
+        passphrase = subprocess.run(
+            ["systemd-ask-password", "--timeout=0", "Unlock local OpenBao:"],
+            capture_output=True, check=True, timeout=None,
+        ).stdout.rstrip(b"\n")
+        try:
+            key = unwrap_seal_key(record, passphrase)
+        except ValueError:
+            continue
+        stage_verified_seal(record, key, target)
+        return
+    raise ValueError(f"No valid boot passphrase after {attempts} attempts")
 
 
 class LocalConnection(http.client.HTTPConnection):
@@ -214,16 +342,24 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("credential", type=Path, nargs="?")
     parser.add_argument("--platform-only", action="store_true")
+    parser.add_argument("--stage-seal", action="store_true")
+    parser.add_argument("--verify-seal", action="store_true")
+    parser.add_argument("--seal", choices=["tpm", "passphrase"], default="tpm")
     args = parser.parse_args()
     try:
         if args.platform_only:
             platform_preflight()
+        elif args.stage_seal:
+            stage_seal_key()
+        elif args.verify_seal:
+            verify_staged_seal()
+            wait_unsealed(5)
         elif args.credential is not None:
-            preflight(args.credential)
+            preflight(args.credential, args.seal)
         else:
-            parser.error("credential or --platform-only is required")
+            parser.error("credential, --stage-seal or --platform-only is required")
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
-        if args.platform_only and isinstance(exc, ValueError):
+        if (args.platform_only or args.stage_seal) and isinstance(exc, ValueError):
             print(str(exc), file=sys.stderr)
         print("Local OpenBao bootstrap validation failed; no fallback", file=sys.stderr)
         return 1

@@ -35,7 +35,6 @@ def test_diagnostic_preflight_does_not_block_web_and_always_on_workers() -> None
             [
               "lx-annotate-celery-worker"
               "lx-annotate-celery-pipeline-worker"
-              "lx-annotate-celery-frame-extraction-worker"
               "lx-annotate-celery-ffmpeg-worker"
               "lx-annotate-celery-inference-worker"
             ];

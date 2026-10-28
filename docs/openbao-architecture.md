@@ -2,6 +2,9 @@
 # OpenBao target architecture: local volume unlock, central identity provisioning
 
 Status: partially implemented, not accepted for production unattended unlock.
+The shared EndoReg profile supports operator-controlled local OpenBao with
+`seal = "passphrase"`, uniformly across hosts. This is not TPM auto-unseal and
+does not satisfy unattended-unlock gates. See [seal operation](openbao-local.md#seal-selection-and-passphrase-operation).
 Architecture decided on 2026-10-26; rollout revised on 2026-10-27 from the
 owner-supplied offline-theft recommendations. Acceptance criteria: `boot-encryption-acceptance.yml` (schema 1.3),
 whose `evidence_policy` defines which evidence counts. Readiness stays in the
@@ -37,7 +40,7 @@ The current pilot target is gc-09. Safety policy is owned by the shared
 `roles.endoreg-client` role, including its GPU and hub consumers; the pilot has
 no weaker host override. The role requires encrypted storage and rejects
 unattended unlock while authenticated system and application runtime integration
-is missing. Enrollment and local OpenBao startup also reject disabled Secure
+is missing. TPM-mode enrollment and local OpenBao startup also reject disabled Secure
 Boot, unusable TPMs, detected virtualization and unrecognized platform TPM drivers.
 These checks do not establish hardware attestation or approval of firmware keys.
 

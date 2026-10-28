@@ -417,6 +417,13 @@ The Home Manager Firefox module now imports the root-owned public copy at
 `ImportEnterpriseRoots` alone does not provide this trust on Linux.
 The private key remains in the restricted server directory.
 
+The generated server certificate explicitly uses `CA:FALSE` and `serverAuth`.
+Older certificates marked `CA:TRUE` cause Firefox's
+`MOZILLA_PKIX_ERROR_CA_CERT_USED_AS_END_ENTITY`. The generator replaces these
+on its next start, even if their hostname and expiry are otherwise valid.
+Activate the corrected service configuration through the reviewed deployment
+workflow, then fully restart Firefox to import the replacement public certificate.
+
 Deploy the updated Home Manager configuration as well as the service's NixOS
 configuration using the normal reviewed deployment workflow. Once
 `generate-lx-ssl.service` and Nginx have started, fully quit and reopen Firefox.

@@ -27,7 +27,6 @@ services=(
   lx-annotate-manage.service
   lx-annotate-celery-pipeline-worker.service
   lx-annotate-celery-ffmpeg-worker.service
-  lx-annotate-celery-frame-extraction-worker.service
   lx-annotate-celery-worker.service
   lx-annotate-celery-inference-worker.service
 )
@@ -37,7 +36,6 @@ queues=(
   maintenance
   pipeline
   ffmpeg_media
-  frame_extraction
   inference
   llm_inference
   model_training
@@ -126,7 +124,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 failure_pattern='error|failed|failure|traceback|exception|unsupportedoperation|integrity_lost|ffprobe|framecleaner|anonymiz|timeout|killed|oom|finalize_failure|content-hash|videometa|could not download|raised unexpected|runtimeerror|oserror'
-pipeline_pattern='Task endoreg_db\.|process_upload_job|video_temporal_inference|frame_extraction|ffmpeg|anonymiz|VideoMeta|finalize|integrity|content-hash|could not download|UnsupportedOperation|raised unexpected|succeeded|received'
+pipeline_pattern='Task endoreg_db\.|process_upload_job|video_temporal_inference|ffmpeg|anonymiz|VideoMeta|finalize|integrity|content-hash|could not download|UnsupportedOperation|raised unexpected|succeeded|received'
 
 journal_args=()
 for service in "${services[@]}"; do

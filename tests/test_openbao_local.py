@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import struct
 import subprocess
+from types import SimpleNamespace
 
 import pytest
 
@@ -63,6 +64,8 @@ def test_local_and_hub_are_independent():
         luxnix.openbao.enable = true;
         # Production platform prerequisites are mandatory for enrollment.
         system.boot.secureBoot = f.inputs.nixpkgs.lib.mkForce true;
+        # Explicit TPM wiring; the common EndoReg profile uses a passphrase seal.
+        luxnix.openbao.local.seal = f.inputs.nixpkgs.lib.mkForce "tpm";
         luxnix.storage.operatorUnlocked = {
           unlockMethod = "local-openbao";
           migration.enable = f.inputs.nixpkgs.lib.mkForce false;
@@ -302,3 +305,144 @@ def test_missing_tpm_and_wrong_tpm_version_rejected(platform):
     (tpm / "tpm_version_major").write_text("1")
     with pytest.raises(ValueError, match="tpm-not-physical"):
         local.platform_preflight()
+
+
+# Passphrase seal (class unit): wrap format and boot staging with a mocked prompt.
+
+SEAL_KEY = bytes(range(32))
+BOOT_PASSPHRASE = b"correct horse battery"
+
+
+def test_seal_wrap_round_trip_and_wrong_passphrase():
+    record = local.wrap_seal_key(SEAL_KEY, BOOT_PASSPHRASE)
+    assert local.unwrap_seal_key(record, BOOT_PASSPHRASE) == SEAL_KEY
+    assert SEAL_KEY.hex() not in json.dumps(record)
+    with pytest.raises(ValueError, match="wrong-passphrase"):
+        local.unwrap_seal_key(record, b"wrong horse battery")
+    # A fresh salt per wrap: the same key and passphrase never repeat a pad.
+    assert local.wrap_seal_key(SEAL_KEY, BOOT_PASSPHRASE)["wrapped"] != record["wrapped"]
+
+
+def test_seal_wrap_rejects_weak_passphrase_and_tampered_records():
+    with pytest.raises(ValueError, match="at least"):
+        local.wrap_seal_key(SEAL_KEY, b"short")
+    record = local.wrap_seal_key(SEAL_KEY, BOOT_PASSPHRASE)
+    with pytest.raises(ValueError, match="Unsupported"):
+        local.unwrap_seal_key(dict(record, n=2**10), BOOT_PASSPHRASE)
+    with pytest.raises(ValueError, match="wrong-passphrase"):
+        local.unwrap_seal_key(dict(record, wrapped=local.wrap_seal_key(
+            bytes(32), BOOT_PASSPHRASE)["wrapped"]), BOOT_PASSPHRASE)
+
+
+@pytest.fixture
+def staging(tmp_path, monkeypatch):
+    record = tmp_path / "seal-passphrase.json"
+    record.write_text(json.dumps(local.wrap_seal_key(SEAL_KEY, BOOT_PASSPHRASE)))
+    # Ownership checks need root; they are covered by read_private's own tests.
+    monkeypatch.setattr(local, "read_private", lambda path: Path(path).read_bytes())
+    answers = []
+
+    def run(args, **kwargs):
+        assert args[0] == "systemd-ask-password" and "--timeout=0" in args
+        return SimpleNamespace(stdout=answers.pop(0) + b"\n")
+    monkeypatch.setattr(local.subprocess, "run", run)
+    return SimpleNamespace(record=record, target=tmp_path / "run" / "seal.key", answers=answers)
+
+
+def test_boot_prompt_retries_then_stages_private_key(staging):
+    staging.answers.extend([b"typo in passphrase", BOOT_PASSPHRASE])
+    local.stage_seal_key(staging.record, staging.target)
+    assert staging.target.read_bytes() == SEAL_KEY
+    assert staging.target.stat().st_mode & 0o777 == 0o600
+    assert staging.target.parent.stat().st_mode & 0o777 == 0o700
+    assert not staging.answers
+    # An OpenBao restart reuses the verified key without asking again.
+    local.stage_seal_key(staging.record, staging.target)
+
+
+def test_boot_prompt_fails_closed_and_rejects_foreign_staged_key(staging):
+    staging.answers.extend([b"wrong passphrase"] * local.PASSPHRASE_ATTEMPTS)
+    with pytest.raises(ValueError, match="No valid boot passphrase"):
+        local.stage_seal_key(staging.record, staging.target)
+    assert not staging.target.exists()
+    staging.target.parent.mkdir()
+    staging.target.write_bytes(bytes(32))
+    with pytest.raises(ValueError, match="does not match"):
+        local.stage_seal_key(staging.record, staging.target)
+
+
+def test_passphrase_seal_profile_prompts_once_before_login():
+    """Explicit passphrase profile: guarded prompt and authenticated switch gate."""
+    expression = r"""
+    let
+      f = builtins.getFlake ("git+file://" + builtins.toString ./.);
+      lib = f.inputs.nixpkgs.lib;
+      c = (f.nixosConfigurations.gc-10.extendModules { modules = [{
+        luxnix.storage.operatorUnlocked.unlockMethod = lib.mkForce "local-openbao";
+        luxnix.openbao.local.seal = lib.mkForce "passphrase";
+      }]; }).config;
+      s = c.systemd.services;
+    in {
+      errors = map (a: a.message) (builtins.filter (a: !a.assertion) c.assertions);
+      seal = c.luxnix.openbao.local.seal;
+      tpm2 = c.security.tpm2.enable;
+      prompt = { inherit (s.openbao-local-seal-key) before after requires; inherit (s.openbao-local-seal-key.serviceConfig) ExecStart TimeoutStartSec MemorySwapMax MemoryZSwapMax; };
+      gate = builtins.readFile c.system.preSwitchChecks.openbaoLocalPreflight;
+      fleetSeals = map (host: host.config.luxnix.openbao.local.seal)
+        (builtins.filter (host: host.config.roles.endoreg-client.enable) (builtins.attrValues f.nixosConfigurations));
+      bao = { inherit (s.openbao-local) wantedBy requires; credentials = s.openbao-local.serviceConfig.LoadCredential;
+              encrypted = s.openbao-local.serviceConfig.LoadCredentialEncrypted; };
+      preflight = builtins.readFile s.openbao-local-preflight.serviceConfig.ExecStart;
+      unlockPre = s.luxnix-storage-unlock-luxnix-secrets.serviceConfig.ExecStartPre;
+      enrollTool = builtins.readFile "${builtins.head (builtins.filter (p: (p.name or "") == "luxnix-openbao-local") c.environment.systemPackages)}/bin/luxnix-openbao-local";
+    }
+    """
+    result = subprocess.run(
+        ["nix", "eval", "--impure", "--json", "--expr", expression],
+        cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True, timeout=600,
+    )
+    assert result.returncode == 0, result.stderr
+    data = json.loads(result.stdout)
+    assert data["errors"] == [] and data["seal"] == "passphrase" and data["tpm2"] is False
+    assert {"display-manager.service", "plymouth-quit.service"} <= set(data["prompt"]["before"])
+    assert data["prompt"]["ExecStart"].endswith("--stage-seal")
+    assert data["prompt"]["TimeoutStartSec"] == "infinity"
+    assert data["fleetSeals"] and set(data["fleetSeals"]) == {"passphrase"}
+    assert "openbao-local-preflight.service" in data["prompt"]["requires"]
+    assert {"swap.target", "openbao-local-preflight.service"} <= set(data["prompt"]["after"])
+    assert data["prompt"]["MemorySwapMax"] == data["prompt"]["MemoryZSwapMax"] == 0
+    assert "--verify-seal" in data["gate"] and "LoadCredential=seal.key:" in data["gate"]
+    assert data["bao"]["wantedBy"] == ["multi-user.target"]
+    assert "openbao-local-seal-key.service" in data["bao"]["requires"]
+    assert data["bao"]["credentials"] == ["seal.key:/run/luxnix-openbao-seal/seal.key"]
+    assert data["bao"]["encrypted"] == []
+    assert "--platform-only" not in data["preflight"]
+    assert any("--seal passphrase" in line for line in data["unlockPre"])
+    assert "--seal passphrase" in data["enrollTool"]
+    assert data["enrollTool"].index("openbao-local-runtime-preflight") < data["enrollTool"].index("openbao_enroll.py")
+
+
+def test_activation_rejects_modified_record_and_missing_receipt(staging):
+    staging.answers.append(BOOT_PASSPHRASE)
+    local.stage_seal_key(staging.record, staging.target)
+    local.verify_staged_seal(staging.record, staging.target)
+    original = staging.record.read_bytes()
+    record = json.loads(original)
+    record["tag"] = base64.b64encode(bytes(32)).decode()
+    staging.record.write_text(json.dumps(record))
+    with pytest.raises(ValueError, match="not authenticated"):
+        local.verify_staged_seal(staging.record, staging.target)
+    staging.record.write_bytes(original)
+    staging.target.with_suffix(".receipt").unlink()
+    with pytest.raises(FileNotFoundError):
+        local.verify_staged_seal(staging.record, staging.target)
+
+
+@pytest.mark.parametrize("field,value", [("salt", "AA=="), ("wrapped", "AA=="), ("key_check", None), ("tag", None)])
+def test_malformed_seal_record_rejected_before_prompt(staging, field, value):
+    record = json.loads(staging.record.read_bytes())
+    record[field] = value
+    staging.record.write_text(json.dumps(record))
+    with pytest.raises(ValueError):
+        local.stage_seal_key(staging.record, staging.target)
+    assert not staging.target.exists()

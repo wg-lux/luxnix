@@ -3,6 +3,19 @@
 When debugging lx-annotate workflows, the issue could lie in various parts of the dependencies.
 Therefore, it might be necessary to publish especially lx-anonymizer and endoreg-db before publishing a new version of lx-annotate with a fix.
 
+## Report embedding model
+
+`packages/report-embedding-model/default.nix` fetches the SHA-256-pinned German
+`de_core_news_lg` 3.8.0 wheel at Nix build time and extracts its model data and
+licenses into the store. The shared runtime environment sets
+`ENDOREG_REPORT_EMBEDDING_MODEL_PATH` for web, worker and maintenance processes.
+No inference-time network access or separate Python model installation is needed.
+Keep this public immutable asset outside clinical storage and outside endoreg-db
+wheel/source archives; the large vectors exceed the project's PyPI upload limit.
+The backend validates German language, model revision and 300 vector dimensions.
+Changing this model requires coordinating its identity and quality checks with
+endoreg-db; changing the application release does not require a new model download.
+
 ## lx-data-models
 
 If a issue arises in one of the contracts its probably from lx-data-models. Also if something goes wrong in the api related to the reporting functionality of lx-annotate look here. https://github.com/wg-lux/lx-data-models .

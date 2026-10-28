@@ -5,6 +5,7 @@ the guest; only pass/fail and the tool's ERROR line reach the driver log.
 """
 
 import base64
+import configparser
 import fcntl
 import hashlib
 import importlib.util
@@ -12,13 +13,18 @@ import json
 import os
 from pathlib import Path
 import secrets
+import socket
 import subprocess
 import sys
+import time
 
 spec = importlib.util.spec_from_file_location("client", "/etc/test-client.py")
 client = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(client)
-ROOT = Path("/run/local-test")
+SEAL_MODE = Path("/etc/fixture-seal").read_text().strip()
+# Synthetic VM-only recovery material survives the cold-boot test.
+ROOT = Path("/var/lib/openbao-vm-fixture" if SEAL_MODE == "passphrase" else "/run/local-test")
+BOOT_PASSPHRASE = "disposable VM boot passphrase"
 BOOT = Path("/var/lib/openbao-bootstrap")
 CONTAINER = Path("/var/lib/test.luks")
 UUID = "11111111-1111-1111-1111-111111111111"
@@ -35,10 +41,10 @@ def run(*args, data=None):
 def tool(*args, request=None, reason=None):
     """Run luxnix-openbao-local; with reason, require a failure naming it."""
     data = b"" if request is None else json.dumps(request).encode()
-    result = subprocess.run(
-        ["python", "-I", "/etc/enrollment.py", "--client", "/etc/test-client.py",
-         "--hostname", "server", *args], input=data, capture_output=True
-    )
+    prefix = (["luxnix-openbao-local"] if SEAL_MODE == "passphrase" else
+              ["python", "-I", "/etc/enrollment.py", "--client", "/etc/test-client.py",
+               "--hostname", "server"])
+    result = subprocess.run(prefix + list(args), input=data, capture_output=True)
     error = result.stderr.decode(errors="replace").strip().splitlines()[-1:] or [""]
     if reason is not None:
         assert result.returncode != 0, f"{args[0]} unexpectedly succeeded"
@@ -162,11 +168,13 @@ elif command == "enroll":
     tool("convert-volume", *VOLUME, request={}, reason="Enrollment must be complete")
     tool("initialize", reason="Seal credential missing")
     seal = private("seal.json")
+    if SEAL_MODE == "passphrase":
+        seal["seal_passphrase"] = BOOT_PASSPHRASE
     tool("seal", request=seal)
     tool("seal", request=seal)
     tool(
         "seal",
-        request={"seal_key": base64.b64encode(bytes(32)).decode()},
+        request=dict(seal, seal_key=base64.b64encode(bytes(32)).decode()),
         reason="never replaced",
     )
     # Concurrent mutations of the same host are rejected, not interleaved.
@@ -198,6 +206,11 @@ elif command == "enroll":
     tool("initialize", reason="never reinitializes")
     status = tool("status")
     assert status["enrolled"] and not status["pending_escrow"], status
+    if SEAL_MODE == "passphrase":
+        # A lost staging receipt is repaired by verified enrollment, never init.
+        Path("/run/luxnix-openbao-seal/seal.receipt").unlink()
+        tool("seal", request=seal)
+        run("/etc/openbao-activation-gate")
 
 elif command == "adopt":
     escrow = private("escrow.json")
@@ -260,7 +273,7 @@ elif command == "provision":
               "luks_uuid": native_uuid, "origin": "new",
               "recovery_passphrase": secrets.token_hex(32),
               "provisioner": private("escrow.json")["provisioner"]}
-    host = enrollment.Host("server", vars(client))
+    host = enrollment.Host("server", vars(client), SEAL_MODE)
     task = migration.Migration({"unlockMethod": "local-openbao", "binds": {},
         "volumes": {"fresh": {"container": record["container"], "device": "/dev/mapper/fresh",
                               "luksUUID": native_uuid, "minimumSizeMiB": 64}}}, None)
@@ -285,6 +298,43 @@ elif command == "provision":
     assert [t["type"] for t in metadata["tokens"].values()] == ["luxnix-openbao"]
     assert run("blkid", "-s", "TYPE", "-o", "value", "/dev/mapper/fresh").strip() == b"ext4"
     run("cryptsetup", "close", "fresh")
+
+elif command == "tamper-check":
+    record = BOOT / "seal-passphrase.json"
+    original = record.read_bytes()
+    try:
+        modified = json.loads(original)
+        modified["tag"] = base64.b64encode(bytes(32)).decode()
+        record.write_text(json.dumps(modified))
+        result = subprocess.run(["/etc/openbao-activation-gate"], capture_output=True)
+        assert result.returncode != 0, "Modified record passed activation verification"
+        record.write_bytes(original)
+        record.chmod(0o644)
+        result = subprocess.run(["/etc/openbao-activation-gate"], capture_output=True)
+        assert result.returncode != 0, "Public record passed activation verification"
+    finally:
+        record.write_bytes(original)
+        record.chmod(0o600)
+    run("/etc/openbao-activation-gate")
+
+elif command in ("pending", "answer"):
+    requests = []
+    for path in Path("/run/systemd/ask-password").glob("ask.*"):
+        request = configparser.ConfigParser(interpolation=None)
+        request.read(path)
+        if request.get("Ask", "Message", fallback="") == "Unlock local OpenBao:":
+            requests.append((path, request["Ask"]["Socket"]))
+    assert len(requests) == 1, "Expected one local OpenBao password request"
+    if command == "answer":
+        path, address = requests[0]
+        answer = BOOT_PASSPHRASE if sys.argv[2] == "correct" else "wrong passphrase"
+        with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as reply:
+            reply.sendto(b"+" + answer.encode() + b"\0", address)
+        for _ in range(100):
+            if not path.exists():
+                break
+            time.sleep(0.05)
+        assert not path.exists(), "Password request did not complete"
 
 elif command == "check-data":
     assert data_digest("test") == private("before.json")["digest"]

@@ -27,6 +27,9 @@ import time
 BOOT = Path("/var/lib/openbao-bootstrap")
 RAFT = Path("/var/lib/openbao-local/raft/raft.db")
 SEAL = BOOT / "seal.cred"
+# Passphrase seal: the wrapped seal key and its tmpfs staging after a verified prompt.
+SEAL_WRAP = BOOT / "seal-passphrase.json"
+SEAL_RUNTIME = Path("/run/luxnix-openbao-seal/seal.key")
 UNLOCK = BOOT / "volume-unlock.cred"
 # Root token and recovery key between initialization and confirmed escrow.
 PENDING = BOOT / "pending-enrollment.cred"
@@ -61,13 +64,13 @@ def pipe(secret: bytes) -> int:
     return read
 
 
-def seal_credential(name: str, plaintext: bytes, target: Path) -> None:
-    """TPM-only, PCR 7; written atomically and never replaced."""
+def seal_credential(name: str, plaintext: bytes, target: Path, key: str = "tpm2") -> None:
+    """TPM-only with PCR 7, or host key under the passphrase seal; atomic, never replaced."""
     BOOT.mkdir(mode=0o700, exist_ok=True)
     temporary = target.with_suffix(".new")
     temporary.unlink(missing_ok=True)
-    run("systemd-creds", "encrypt", "--with-key=tpm2", "--tpm2-pcrs=7", f"--name={name}",
-        "-", temporary, data=plaintext)
+    binding = ["--with-key=tpm2", "--tpm2-pcrs=7"] if key == "tpm2" else ["--with-key=host"]
+    run("systemd-creds", "encrypt", *binding, f"--name={name}", "-", temporary, data=plaintext)
     os.chmod(temporary, 0o600)
     os.link(temporary, target)
     temporary.unlink()
@@ -83,11 +86,22 @@ def escrow_digest(escrow: dict) -> str:
 
 
 class Host:
-    def __init__(self, hostname: str, client: dict):
+    def __init__(self, hostname: str, client: dict, seal: str = "tpm"):
         if not NAME.fullmatch(hostname):
             raise EnrollError("Invalid inventory host name")
+        if seal not in ("tpm", "passphrase"):
+            raise EnrollError("Unknown seal mode")
         self.hostname = hostname
         self.client = client
+        self.seal_mode = seal
+
+    def _seal(self, name: str, plaintext: bytes, target: Path) -> None:
+        # Under the passphrase seal, bootstrap credentials are worthless without
+        # the boot passphrase, so they need no TPM or Secure Boot binding.
+        if self.seal_mode == "tpm":
+            seal_credential(name, plaintext, target)
+        else:
+            seal_credential(name, plaintext, target, key="host")
 
     def api(self, method, path, data=None, token=None):
         try:
@@ -118,15 +132,20 @@ class Host:
         return {
             "host": self.hostname,
             **self.client["platform_status"](),
-            "seal_credential": SEAL.is_file(),
+            "seal": self.seal_mode,
+            "seal_credential": (SEAL if self.seal_mode == "tpm" else SEAL_WRAP).is_file(),
             "unlock_credential": UNLOCK.is_file(),
             "initialized": RAFT.is_file(),
             "pending_escrow": PENDING.is_file(),
-            "enrolled": RAFT.is_file() and UNLOCK.is_file() and not PENDING.exists(),
+            "enrolled": RAFT.is_file() and UNLOCK.is_file() and not PENDING.exists()
+                        and (SEAL if self.seal_mode == "tpm" else SEAL_WRAP).is_file(),
         }
 
     def preflight(self) -> dict:
         """Live checks on every mutating phase; inventory assertions are not enough."""
+        if self.seal_mode == "passphrase":
+            # The operator's boot passphrase, not the platform, protects this store.
+            return self.status()
         try:
             self.client["platform_preflight"]()
         except (ValueError, OSError, subprocess.SubprocessError) as exc:
@@ -142,19 +161,48 @@ class Host:
         key = base64.b64decode(request["seal_key"], validate=True)
         if len(key) != 32:
             raise EnrollError("Seal key must contain 32 bytes")
+        if self.seal_mode == "passphrase":
+            return self._seal_passphrase(key, request["seal_passphrase"].encode())
         if SEAL.exists():
             if not secrets.compare_digest(unseal_credential("seal.key", SEAL), key):
                 raise EnrollError("Existing seal credential holds a different key; never replaced")
         elif RAFT.exists():
             raise EnrollError("A local store exists without its seal credential; use recovery, not enrollment")
         else:
-            seal_credential("seal.key", key, SEAL)
+            self._seal("seal.key", key, SEAL)
+        return {"sealed": True}
+
+    def _seal_passphrase(self, key: bytes, passphrase: bytes) -> dict:
+        wrap, unwrap = self.client["wrap_seal_key"], self.client["unwrap_seal_key"]
+        if SEAL_WRAP.exists():
+            try:
+                record = json.loads(self.client["read_private"](SEAL_WRAP))
+                stored = unwrap(record, passphrase)
+            except ValueError:
+                raise EnrollError("seal-passphrase-rejected: the boot passphrase does not open this store") from None
+            if not secrets.compare_digest(stored, key):
+                raise EnrollError("Existing passphrase record holds a different key; never replaced")
+        elif RAFT.exists():
+            raise EnrollError("A local store exists without its seal record; use recovery, not enrollment")
+        else:
+            try:
+                record = wrap(key, passphrase)
+            except ValueError as exc:
+                raise EnrollError(str(exc)) from None
+            self.client["write_private"](SEAL_WRAP, json.dumps(record, sort_keys=True).encode())
+        # Enrollment runs over SSH; stage the verified key so no console prompt is needed.
+        self.client["stage_verified_seal"](record, key, SEAL_RUNTIME)
+        if RAFT.is_file() and UNLOCK.is_file() and not PENDING.exists():
+            self._start("openbao-local.service")
+            self.wait_unsealed()
         return {"sealed": True}
 
     def initialize(self) -> dict:
         self.preflight()
-        if not SEAL.is_file():
+        if not (SEAL if self.seal_mode == "tpm" else SEAL_WRAP).is_file():
             raise EnrollError("Seal credential missing; run the seal phase first")
+        if self.seal_mode == "passphrase" and not SEAL_RUNTIME.is_file():
+            raise EnrollError("Seal key not staged; rerun enrollment so the seal phase verifies the passphrase")
         if PENDING.is_file():
             pending = json.loads(unseal_credential("pending.json", PENDING))
             self._start("openbao-local.service")
@@ -172,7 +220,7 @@ class Host:
             response = self.api("POST", "sys/init", {"recovery_shares": 1, "recovery_threshold": 1})
             pending = {"root_token": response["root_token"],
                        "recovery_key": response["recovery_keys_base64"][0]}
-            seal_credential("pending.json", json.dumps(pending).encode(), PENDING)
+            self._seal("pending.json", json.dumps(pending).encode(), PENDING)
             self._stop("openbao-local-initialize.service")
             self._start("openbao-local.service")
         self.wait_unsealed()
@@ -218,9 +266,9 @@ class Host:
                  dict(common, token_policies=[PROVISIONER_ROLE],
                       token_ttl="15m", token_max_ttl="30m"), token)
         if not UNLOCK.exists():
-            seal_credential("volume.unlock", self._issue(UNLOCK_ROLE, token), UNLOCK)
+            self._seal("volume.unlock", self._issue(UNLOCK_ROLE, token), UNLOCK)
         if not PENDING_PROVISIONER.exists():
-            seal_credential("provisioner.json", self._issue(PROVISIONER_ROLE, token),
+            self._seal("provisioner.json", self._issue(PROVISIONER_ROLE, token),
                             PENDING_PROVISIONER)
         return json.loads(unseal_credential("provisioner.json", PENDING_PROVISIONER))
 
@@ -425,7 +473,7 @@ class Host:
                    "accessor": issued["secret_id_accessor"]}
             replacement = UNLOCK.with_name("volume-unlock.rotating")
             replacement.unlink(missing_ok=True)
-            seal_credential("volume.unlock", json.dumps(new).encode(), replacement)
+            self._seal("volume.unlock", json.dumps(new).encode(), replacement)
             probe = self._login(new)
             self.api("POST", "auth/token/revoke-self", {}, probe)
             os.replace(replacement, UNLOCK)
@@ -471,6 +519,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--client", type=Path, required=True)
     parser.add_argument("--hostname", required=True)
+    parser.add_argument("--seal", choices=["tpm", "passphrase"], default="tpm")
     parser.add_argument("command", choices=["status", "preflight", "plan-volume", *sorted(MUTATING)])
     parser.add_argument("--volume")
     parser.add_argument("--container")
@@ -480,7 +529,7 @@ def main(argv=None) -> int:
     try:
         if os.geteuid() != 0:
             raise EnrollError("Run as root")
-        host = Host(args.hostname, runpy.run_path(str(args.client)))
+        host = Host(args.hostname, runpy.run_path(str(args.client)), args.seal)
         request = json.loads(sys.stdin.buffer.read(65536) or b"{}") if args.command in {
             "seal", "confirm", "convert-volume", "rotate-unlock"} else {}
         LOCK.parent.mkdir(mode=0o755, exist_ok=True)

@@ -42,11 +42,11 @@ def test_monitoring_inventory_has_only_fixed_service_and_storage_keys() -> None:
         "worker_default",
         "worker_pipeline",
         "worker_ffmpeg",
-        "worker_frame_extraction",
         "scheduler",
         "reverse_proxy",
     ):
         assert f'key = "{service_key}";' in config
+    assert 'key = "worker_frame_extraction";' not in config
     for storage_key in (
         "protected_data",
         "application_storage",

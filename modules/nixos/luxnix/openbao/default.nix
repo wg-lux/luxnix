@@ -11,6 +11,10 @@ let
   # Volume unlock depends on the local store only once the storage profile says so;
   # before that, enrollment can install and use the tool without a boot dependency.
   localRequired = (storage.enable or false) && (storage.unlockMethod or "") == "local-openbao";
+  # Passphrase seal: the operator's boot passphrase unwraps the seal key; no TPM binding.
+  passphraseSeal = localCfg.seal == "passphrase";
+  stagedSealKey = "/run/luxnix-openbao-seal/seal.key";
+  localClient = ../../../../lx_administration/storage/openbao_local.py;
   # Match the pinned upstream sandbox for both independently owned instances.
   hardening = {
     CapabilityBoundingSet = "";
@@ -78,7 +82,7 @@ let
         }
       ];
     };
-  localPreflight = pkgs.writeShellScript "openbao-local-preflight" ''
+  localRuntimePreflight = pkgs.writeShellScript "openbao-local-runtime-preflight" ''
     set -eu
     ulimit -c 0
     export PATH=${
@@ -87,9 +91,16 @@ let
         pkgs.util-linux
       ]
     }
-    ${pkgs.python3}/bin/python ${../../../../lx_administration/storage/openbao_local.py} --platform-only
     ${pkgs.python3}/bin/python ${../../../../lx_administration/secret_storage.py} --allow-runtime /run
-    exec ${pkgs.python3}/bin/python ${../../../../lx_administration/storage/openbao_local.py} ${lib.escapeShellArg localCfg.sealCredentialFile}
+  '';
+  localPreflight = pkgs.writeShellScript "openbao-local-preflight" ''
+    set -eu
+    ${localRuntimePreflight}
+    export PATH=${lib.makeBinPath [ pkgs.systemd ]}
+    ${lib.optionalString (!passphraseSeal) "${pkgs.python3}/bin/python ${localClient} --platform-only"}
+    ${lib.optionalString (!passphraseSeal)
+      "exec ${pkgs.python3}/bin/python ${localClient} ${lib.escapeShellArg localCfg.sealCredentialFile}"
+    }
   '';
   # ENC-21: refuse activation of an unlock profile the host cannot satisfy now,
   # instead of failing at the next boot. Live checks, never inventory facts.
@@ -99,12 +110,18 @@ let
     fail() { echo "local OpenBao activation blocked: $1" >&2; exit 1; }
     [ -f /var/lib/openbao-local/raft/raft.db ] || fail not-enrolled
     [ ! -e /var/lib/openbao-bootstrap/pending-enrollment.cred ] || fail escrow-unconfirmed
+    ${lib.optionalString passphraseSeal "[ -f /var/lib/openbao-bootstrap/seal-passphrase.json ] || fail seal-passphrase-missing"}
     ${localPreflight} || fail credential-not-tpm
-    ${pkgs.python3}/bin/python ${../../../../lx_administration/storage/openbao_local.py} \
+    ${lib.optionalString passphraseSeal "${pkgs.python3}/bin/python ${localClient} --verify-seal || fail seal-passphrase-unverified"}
+    ${pkgs.python3}/bin/python ${localClient} --seal ${localCfg.seal} \
       ${lib.escapeShellArg storage.openbaoUnlockCredential} || fail credential-not-tpm
     ${pkgs.systemd}/bin/systemd-run --wait --collect --quiet \
       --property=Type=oneshot --property=LimitCORE=0 \
-      --property=${lib.escapeShellArg "LoadCredentialEncrypted=seal.key:${localCfg.sealCredentialFile}"} \
+      ${
+        lib.optionalString (!passphraseSeal)
+          "--property=${lib.escapeShellArg "LoadCredentialEncrypted=seal.key:${localCfg.sealCredentialFile}"}"
+        + lib.optionalString passphraseSeal "--property=${lib.escapeShellArg "LoadCredential=seal.key:${stagedSealKey}"}"
+      } \
       --property=${lib.escapeShellArg "LoadCredentialEncrypted=volume.unlock:${storage.openbaoUnlockCredential}"} \
       ${pkgs.coreutils}/bin/true || fail credential-rejected
   '';
@@ -120,7 +137,8 @@ let
       User = "openbao-local";
       Group = "openbao-local";
       ExecStart = "${lib.getExe pkgs.openbao} server -config ${localSettings unit}";
-      LoadCredentialEncrypted = [ "seal.key:${localCfg.sealCredentialFile}" ];
+      LoadCredentialEncrypted = lib.optional (!passphraseSeal) "seal.key:${localCfg.sealCredentialFile}";
+      LoadCredential = lib.optional passphraseSeal "seal.key:${stagedSealKey}";
       StateDirectory = "openbao-local";
       StateDirectoryMode = "0700";
       RuntimeDirectory = "openbao-local";
@@ -151,9 +169,12 @@ let
       pkgs.systemd
     ];
     text = ''
+      ulimit -c 0
+      ${localRuntimePreflight}
       exec ${pkgs.python3}/bin/python3 -I ${../../../../lx_administration/storage/openbao_enroll.py} \
-        --client ${../../../../lx_administration/storage/openbao_local.py} \
+        --client ${localClient} \
         --hostname ${lib.escapeShellArg config.networking.hostName} \
+        --seal ${localCfg.seal} \
         "$@"
     '';
   };
@@ -162,7 +183,15 @@ in
   options.luxnix.openbao = {
     enable = lib.mkEnableOption "isolated OpenBao hub backend";
     local = {
-      enable = lib.mkEnableOption "independent TPM-sealed local OpenBao (enrollment required)";
+      enable = lib.mkEnableOption "independent local OpenBao (enrollment required)";
+      seal = lib.mkOption {
+        type = lib.types.enum [
+          "tpm"
+          "passphrase"
+        ];
+        default = "tpm";
+        description = "tpm: TPM/PCR 7-sealed key, requires Secure Boot. passphrase: the operator's boot passphrase unwraps the escrowed seal key.";
+      };
       sealCredentialFile = lib.mkOption {
         type = lib.types.str;
         default = "/var/lib/openbao-bootstrap/seal.cred";
@@ -278,7 +307,7 @@ in
           message = "Local OpenBao bootstrap must be outside operator-unlocked storage.";
         }
       ];
-      security.tpm2.enable = true;
+      security.tpm2.enable = lib.mkIf (!passphraseSeal) true;
       users.groups.openbao-local = { };
       users.users.openbao-local = {
         isSystemUser = true;
@@ -290,6 +319,7 @@ in
       environment.systemPackages = [ enrollTool ];
       systemd.services = {
         openbao-local-preflight = {
+          after = [ "swap.target" ];
           before = [ "openbao-local.service" ];
           serviceConfig = {
             Type = "oneshot";
@@ -298,12 +328,45 @@ in
             LimitCORE = 0;
           };
         };
+        # Boot prompt before the login screen; enrollment stages the key over SSH instead.
+        openbao-local-seal-key = lib.mkIf passphraseSeal {
+          description = "Ask the boot passphrase for local OpenBao";
+          path = [ pkgs.systemd ];
+          unitConfig.DefaultDependencies = false;
+          requires = [ "openbao-local-preflight.service" ];
+          after = [
+            "local-fs.target"
+            "swap.target"
+            "openbao-local-preflight.service"
+          ];
+          before = [
+            "display-manager.service"
+            "plymouth-quit.service"
+            "plymouth-quit-wait.service"
+          ];
+          serviceConfig = {
+            Type = "oneshot";
+            RemainAfterExit = true;
+            UMask = "0077";
+            LimitCORE = 0;
+            MemorySwapMax = 0;
+            MemoryZSwapMax = 0;
+            TimeoutStartSec = "infinity";
+            ExecStart = "${pkgs.python3}/bin/python ${localClient} --stage-seal";
+          };
+        };
         openbao-local = {
-          description = "Independent TPM-sealed local OpenBao";
+          description = "Independent local OpenBao";
           # Before the storage profile switches, only enrollment starts the service.
           wantedBy = lib.optional localRequired "multi-user.target";
-          requires = [ "openbao-local-preflight.service" ];
-          after = [ "openbao-local-preflight.service" ];
+          requires = [
+            "openbao-local-preflight.service"
+          ]
+          ++ lib.optional passphraseSeal "openbao-local-seal-key.service";
+          after = [
+            "openbao-local-preflight.service"
+          ]
+          ++ lib.optional passphraseSeal "openbao-local-seal-key.service";
           conflicts = [ "openbao-local-initialize.service" ];
           restartIfChanged = false;
           unitConfig.AssertPathExists = "/var/lib/openbao-local/raft/raft.db";

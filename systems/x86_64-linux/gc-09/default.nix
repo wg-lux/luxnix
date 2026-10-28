@@ -641,7 +641,6 @@ lib.foldl' lib.recursiveUpdate
             "worker"
             "pipeline-worker"
             "ffmpeg-worker"
-            "frame-extraction-worker"
             "inference-worker"
             "llm-inference-worker"
             "training-worker"

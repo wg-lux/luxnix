@@ -193,7 +193,6 @@ The service defines these worker units:
 
 - `lx-annotate-celery-worker.service`: `maintenance,default`
 - `lx-annotate-celery-pipeline-worker.service`: `pipeline`
-- `lx-annotate-celery-frame-extraction-worker.service`: `frame_extraction`
 - `lx-annotate-celery-ffmpeg-worker.service`: `ffmpeg_media`
 - `lx-annotate-celery-inference-worker.service`: `inference`
 - `lx-annotate-celery-training-worker.service`: `model_training`
@@ -203,7 +202,6 @@ The service defines these worker units:
 sudo systemctl status \
   lx-annotate-celery-worker.service \
   lx-annotate-celery-pipeline-worker.service \
-  lx-annotate-celery-frame-extraction-worker.service \
   lx-annotate-celery-ffmpeg-worker.service \
   lx-annotate-celery-inference-worker.service \
   lx-annotate-celery-training-worker.service \
@@ -213,7 +211,6 @@ sudo systemctl status \
 ```bash
 sudo journalctl -u lx-annotate-celery-worker.service -n 200 --no-pager
 sudo journalctl -u lx-annotate-celery-pipeline-worker.service -n 200 --no-pager
-sudo journalctl -u lx-annotate-celery-frame-extraction-worker.service -n 200 --no-pager
 sudo journalctl -u lx-annotate-celery-ffmpeg-worker.service -n 200 --no-pager
 sudo journalctl -u lx-annotate-celery-inference-worker.service -n 200 --no-pager
 sudo journalctl -u lx-annotate-celery-training-worker.service -n 200 --no-pager
@@ -229,16 +226,6 @@ sudo systemctl show lx-annotate.service -p MemoryCurrent -p MemoryHigh -p Memory
 sudo systemctl show lx-annotate-celery-worker.service -p MemoryCurrent -p MemoryHigh -p MemoryMax -p CPUUsageNSec -p CPUQuotaPerSecUSec -p TasksCurrent
 sudo systemctl show lx-annotate-celery-ffmpeg-worker.service -p MemoryCurrent -p MemoryHigh -p MemoryMax -p CPUUsageNSec -p CPUQuotaPerSecUSec -p IOWeight -p TasksCurrent
 ps -eo pid,ppid,user,stat,pcpu,pmem,etime,cmd | grep -E 'lx-annotate|celery|uvicorn|gunicorn' | grep -v grep
-```
-
-Frame extraction timer mode:
-
-```bash
-sudo systemctl status lx-annotate-celery-frame-extraction-worker.timer
-sudo systemctl list-timers 'lx-annotate-celery-frame-extraction-worker*' --all
-sudo journalctl -u lx-annotate-celery-frame-extraction-worker.timer -n 100 --no-pager
-sudo systemctl start lx-annotate-celery-frame-extraction-worker.service
-sudo systemctl stop lx-annotate-celery-frame-extraction-worker.service
 ```
 
 API request throttling (the default):
@@ -295,7 +282,6 @@ redis-cli -h 127.0.0.1 -p 6379 INFO stats
 redis-cli -h 127.0.0.1 -p 6379 LLEN default
 redis-cli -h 127.0.0.1 -p 6379 LLEN maintenance
 redis-cli -h 127.0.0.1 -p 6379 LLEN pipeline
-redis-cli -h 127.0.0.1 -p 6379 LLEN frame_extraction
 redis-cli -h 127.0.0.1 -p 6379 LLEN ffmpeg_media
 redis-cli -h 127.0.0.1 -p 6379 LLEN inference
 redis-cli -h 127.0.0.1 -p 6379 LLEN model_training
@@ -306,7 +292,7 @@ redis-cli -h 127.0.0.1 -p 6379 KEYS '*unacked*'
 Queue watch:
 
 ```bash
-watch -n 5 "redis-cli -h 127.0.0.1 -p 6379 LLEN default; redis-cli -h 127.0.0.1 -p 6379 LLEN pipeline; redis-cli -h 127.0.0.1 -p 6379 LLEN frame_extraction; redis-cli -h 127.0.0.1 -p 6379 LLEN ffmpeg_media; redis-cli -h 127.0.0.1 -p 6379 LLEN inference; redis-cli -h 127.0.0.1 -p 6379 LLEN model_training; redis-cli -h 127.0.0.1 -p 6379 LLEN llm_inference"
+watch -n 5 "redis-cli -h 127.0.0.1 -p 6379 LLEN default; redis-cli -h 127.0.0.1 -p 6379 LLEN pipeline; redis-cli -h 127.0.0.1 -p 6379 LLEN ffmpeg_media; redis-cli -h 127.0.0.1 -p 6379 LLEN inference; redis-cli -h 127.0.0.1 -p 6379 LLEN model_training; redis-cli -h 127.0.0.1 -p 6379 LLEN llm_inference"
 ```
 
 ## Celery broker settings warnings
@@ -673,7 +659,6 @@ nixos-option services.luxnix.lxAnnotateLocal.runtime.mode
 nixos-option services.luxnix.lxAnnotateLocal.runtime.encryptedDataDir
 nixos-option services.luxnix.lxAnnotateLocal.runtime.externalServices.redisUrl
 nixos-option services.luxnix.lxAnnotateLocal.database
-nixos-option services.luxnix.lxAnnotateLocal.runtime.frameExtractionWorker.mode
 nixos-option services.luxnix.lxAnnotateLocal.runtime.ffmpegWorker.mode
 nixos-option services.luxnix.lxAnnotateLocal.runtime.inferenceWorker.mode
 nixos-option services.luxnix.lxAnnotateLocal.runtime.trainingWorker.mode

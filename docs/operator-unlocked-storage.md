@@ -50,32 +50,30 @@ unverified; this implementation is not a release of the strong acceptance profil
 ### Boot with operator passphrase unlock
 
 The shared `roles.endoreg-client` role requires encrypted operator storage and
-`unlockMethod = "passphrase"`; evaluation fails for any other method. A boot
-then needs two separate credentials:
+operator-controlled unlock: either `unlockMethod = "passphrase"`, or
+`unlockMethod = "local-openbao"` with the shared passphrase seal. The latter
+requires [OpenBao enrollment and adoption](openbao-local.md#seal-selection-and-passphrase-operation)
+and asks once to unseal OpenBao. Direct container passphrase unlock at boot
+needs two separate credentials and no commands:
 
-1. **Laptop login.** The machine boots to the normal desktop login. The account
-   password logs the user in but never unlocks storage. Until step 2,
-   PostgreSQL, lx-annotate and its workers stay queued and the encrypted
-   directories are not mounted.
-2. **Operator unlock.** An operator with administrator rights opens a terminal
-   on the laptop (or an SSH session) and runs:
+1. **Operator unlock.** During boot, the boot splash (or the console when no
+   splash is configured) asks `Unlock luxnix-app-storage:` and then
+   `Unlock luxnix-secrets:`. When both containers share a passphrase, the first
+   answer is reused and the second prompt is skipped. The login screen stays
+   hidden until the prompts are answered.
+2. **Startup.** Each container opens, its mounts are checked as dm-crypt
+   backed, and PostgreSQL, lx-annotate and its workers start on the decrypted
+   storage.
+3. **Laptop login.** The normal desktop login appears. The account password
+   logs the user in; it never unlocks storage.
 
-   ```bash
-   sudo luxnix-operator-storage start
-   ```
-
-   The helper answers the pending password requests and asks once per
-   container (`Unlock luxnix-secrets:`, `Unlock luxnix-app-storage:`). If the
-   boot splash shows the same prompt before the login screen, it can be
-   answered there instead.
-3. **Startup.** Each container opens, its mounts are checked as dm-crypt
-   backed, and then PostgreSQL, lx-annotate and its workers start on the
-   decrypted storage.
-
-The unlock waits without a time limit. A wrong passphrase fails that unit;
-rerun the command. It uses `start`, not `restart`: already open containers and
-already migrated data are reused, and healthy services are not restarted. This
-sequence has not yet been verified by a reboot on physical hardware.
+The prompt waits without a time limit. A wrong passphrase asks again, up to
+five attempts per container; after that the unit fails and lx-annotate does
+not start, so reboot to get a fresh prompt. SSH is available during the
+prompt: for a remote reboot, an administrator can answer it with
+`sudo systemd-tty-ask-password-agent`. Already open containers are reused
+without a prompt, so a rebuild or switch never asks again. This sequence has
+not yet been verified by a reboot on physical hardware.
 
 For inspection or unlock only:
 

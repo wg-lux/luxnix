@@ -44,49 +44,6 @@ let
       };
     };
   };
-  frameExtractionWorkerType = types.submodule {
-    options = {
-      mode = mkOption {
-        type = types.enum [
-          "maintenance-window"
-          "always"
-          "manual"
-        ];
-        default = "always";
-        description = "Scheduling mode for the dedicated FFmpeg frame extraction Celery worker.";
-      };
-
-      onCalendar = mkOption {
-        type = types.str;
-        default = "*-*-* 22:00:00";
-        description = "systemd OnCalendar schedule used when frame extraction runs in maintenance-window mode.";
-      };
-
-      runtimeMaxSec = mkOption {
-        type = types.str;
-        default = "7h";
-        description = "Maximum runtime for one maintenance-window frame extraction worker activation.";
-      };
-
-      timeoutStopSec = mkOption {
-        type = types.str;
-        default = "45min";
-        description = "Grace period for stopping the frame extraction worker before systemd sends a final kill signal.";
-      };
-
-      randomizedDelaySec = mkOption {
-        type = types.str;
-        default = "5m";
-        description = "Randomized delay applied to the maintenance-window timer.";
-      };
-
-      persistentTimer = mkOption {
-        type = types.bool;
-        default = true;
-        description = "Whether missed maintenance-window timer activations should run after boot.";
-      };
-    };
-  };
   ffmpegWorkerType = types.submodule {
     options = {
       mode = mkOption {
@@ -558,12 +515,6 @@ let
     workers = {
       workerPools = import ../../services/lx-annotate-local/worker-pools.nix { inherit lib; };
 
-      frameExtractionWorker = mkOption {
-        type = frameExtractionWorkerType;
-        default = { };
-        description = "Scheduling policy for the dedicated FFmpeg frame extraction Celery worker.";
-      };
-
       ffmpegWorker = mkOption {
         type = ffmpegWorkerType;
         default = { };
@@ -738,7 +689,6 @@ let
         workerLimits = lib.mkDefault runtimeCfg.workerLimits;
         workerStartupDelaySec = lib.mkDefault runtimeCfg.workerStartupDelaySec;
         workerPools = lib.mkDefault runtimeCfg.workerPools;
-        frameExtractionWorker = lib.mkDefault runtimeCfg.frameExtractionWorker;
         ffmpegWorker = lib.mkDefault runtimeCfg.ffmpegWorker;
         ffmpegStreamThrottle = lib.mkDefault runtimeCfg.ffmpegStreamThrottle;
         inferenceWorker = lib.mkDefault runtimeCfg.inferenceWorker;
