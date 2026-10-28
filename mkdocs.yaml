@@ -107,6 +107,7 @@ nav:
       - Setup and Bootstrap: vault-setup.md
       - OpenBao Hub and Vault Migration: openbao.md
       - Local OpenBao Bootstrap: openbao-local.md
+      - Login and Remote Storage Access: storage-login-access.md
       - OpenBao Target Architecture: openbao-architecture.md
       - Root Integrity Prototype: root-integrity-prototype.md
       - TPM Release Client: tpm-release-client.md

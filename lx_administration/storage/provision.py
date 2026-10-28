@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import re
+import resource
 import secrets
 import shlex
 import subprocess
@@ -110,7 +111,7 @@ class Remote:
 
 
 def escrow_record(vault, vault_key, record, export):
-    """Publish once, authenticate both copies, and never replace recovery material."""
+    """Publish once, authenticate selected custody, never replace recovery material."""
     root = ensure_private_directory(vault / 'storage-recovery' / record['machine_id'])
     target = root / (record['volume'] + '.vault')
     expected = json.dumps(record, sort_keys=True).encode()
@@ -127,8 +128,7 @@ def escrow_record(vault, vault_key, record, export):
     finally:
         os.close(fd)
     ciphertext = target.read_bytes()
-    returned = export(ciphertext)
-    if returned != ciphertext:
+    if export is not None and export(ciphertext) != ciphertext:
         raise ProvisionError('Independent recovery export did not return the stored ciphertext')
     # Equality to authenticated ciphertext is also checked after remote durable publication.
     return target
@@ -139,7 +139,9 @@ def main(argv=None):
     parser.add_argument('action', choices=['escrow', 'provision'])
     parser.add_argument('--host', required=True)
     parser.add_argument('--volume', required=True)
-    parser.add_argument('--recovery-host', required=True)
+    parser.add_argument('--recovery-host')
+    parser.add_argument('--controller-only-custody', action='store_true',
+                        help='escrow only: explicitly defer the independent recovery copy')
     parser.add_argument('--backend', choices=['tpm2', 'local-openbao'],
                         help='Explicit deploy-time backend; does not change the boot unlock policy')
     parser.add_argument('--vault-dir', type=Path, default=Path.home() / '.lxv')
@@ -148,7 +150,12 @@ def main(argv=None):
     parser.add_argument('--sudo-password-file', type=Path)
     parser.add_argument('--apply', action='store_true')
     args = parser.parse_args(argv)
-    for value in [args.host, args.volume, args.recovery_host]:
+    if args.controller_only_custody:
+        if args.action != 'escrow' or args.recovery_host:
+            parser.error('--controller-only-custody requires escrow without --recovery-host')
+    elif not args.recovery_host:
+        parser.error('--recovery-host is required unless explicitly escrowing on the controller only')
+    for value in [args.host, args.volume, args.recovery_host or 'x']:
         if not re.fullmatch('[a-z0-9][a-z0-9-]*', value):
             parser.error('Host and volume names must be canonical inventory identifiers')
     config = AutoconfConfig.load(DEFAULT_CONFIG_PATH)
@@ -160,9 +167,9 @@ def main(argv=None):
             raise ProvisionError('Host is not in the inventory')
         return Remote(str(entry.ansible_host), password)
     target = remote(args.host, args.sudo_password_file)
-    recovery = remote(args.recovery_host)
+    recovery = None if args.controller_only_custody else remote(args.recovery_host)
     machine_id = target.machine_id()
-    if recovery.machine_id() in {machine_id, Path('/etc/machine-id').read_text().strip()}:
+    if recovery is not None and recovery.machine_id() in {machine_id, Path('/etc/machine-id').read_text().strip()}:
         raise ProvisionError('Emergency export must be on a separate host from both target and admin vault')
     expression = f'.#nixosConfigurations.{args.host}.config.luxnix.storage.operatorUnlocked.volumes.{args.volume}'
     result = subprocess.run(['nix', 'eval', '--json', expression], capture_output=True, check=True)
@@ -184,6 +191,7 @@ def main(argv=None):
         return
     if not args.vault_dir.is_dir():
         raise ProvisionError('Existing admin vault directory is required')
+    resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
     encrypted_storage(args.vault_key, allow_runtime=True)
     Vault.load_dir(str(args.vault_dir), str(args.vault_key)).validate_local_key()
     lock_dir = ensure_private_directory(args.vault_dir / 'storage-recovery')
@@ -215,9 +223,11 @@ def main(argv=None):
         if exists:
             target.call(['cryptsetup', 'open', '--test-passphrase', '--key-file=-', container],
                         record['recovery_passphrase'].encode(), privileged=True)
-        destination = f'{args.recovery_host}:~/.luxnix-recovery/{machine_id}/{record["luks_uuid"]}.vault'
+        destination = (f'{args.recovery_host}:~/.luxnix-recovery/{machine_id}/{record["luks_uuid"]}.vault'
+                       if recovery is not None else None)
         primary = escrow_record(args.vault_dir, args.vault_key, record,
-            lambda ciphertext: recovery.call(['python3', '-c', EXPORT, machine_id, record['luks_uuid']], ciphertext))
+            (lambda ciphertext: recovery.call(['python3', '-c', EXPORT, machine_id, record['luks_uuid']], ciphertext))
+            if recovery is not None else None)
         if args.action == 'provision':
             request = dict(record, primary_escrow=str(primary), emergency_export=destination)
             backend = args.backend

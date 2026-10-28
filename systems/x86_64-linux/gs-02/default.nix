@@ -538,6 +538,7 @@ lib.foldl' lib.recursiveUpdate
       };
 
       nvidia-prime.enable = lib.mkForce false;
+      openbao.local.enable = true;
       packages.shared = [ ];
 
       storage.operatorUnlocked = {

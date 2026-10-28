@@ -51,6 +51,7 @@
   - [Setup and Bootstrap](docs/vault-setup.md)
   - [OpenBao Hub and Vault Migration](docs/openbao.md)
   - [Local OpenBao Bootstrap](docs/openbao-local.md)
+  - [Login and Remote Storage Access](docs/storage-login-access.md)
   - [OpenBao Target Architecture](docs/openbao-architecture.md)
   - [Root Integrity Prototype](docs/root-integrity-prototype.md)
   - [TPM Release Client](docs/tpm-release-client.md)

@@ -10,6 +10,9 @@ boundaries:
   - Do not mount or alter live storage during context validation
   - Preserve encrypted storage and hub authentication boundaries
 entrypoints:
+  - name: login-access
+    file: login_access.py
+    purpose: Coordinate root-only OpenBao login credentials, guarded service startup and non-forced storage locking.
   - name: cutover
     file: cutover.py
     purpose: Background pre-copy and short-stop cutover into encrypted storage without modifying sources.

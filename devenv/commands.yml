@@ -277,7 +277,9 @@ commands:
     summary: Escrow a per-volume recovery credential in the admin vault and on an independent host before explicit TPM container creation.
     risk: sensitive-remote-state
     operator_confirmation_required: true
-    usage: devenv shell storage-provision <escrow|provision> --host <host> --volume <volume> --recovery-host <host> [--backend tpm2|local-openbao] [--apply]
+    usage: devenv shell storage-provision <escrow|provision> --host <host> --volume <volume> [--recovery-host <host> | --controller-only-custody] [--backend tpm2|local-openbao] [--apply]
+    effects:
+      - Controller-only custody is an explicit escrow-only option; provisioning still requires independent recovery.
     implementation: lx_administration/storage/provision.py
     documentation: docs/operator-unlocked-storage.md
 
@@ -288,6 +290,7 @@ commands:
     usage: >-
       devenv shell openbao-local <status|enroll|adopt|rotate-unlock|rollout>
       --limit <host-or-group> [--volume <volume>] [--recovery-host <host>] [--apply] [--cutover]
+      [--controller-only-custody] [--generate-boot-passphrase]
     implementation: lx_administration/storage/local_enrollment.py
     documentation: docs/openbao-local.md
     effects:
@@ -297,6 +300,7 @@ commands:
       - rotate-unlock replaces the unlock AppRole SecretID, not the boot passphrase, static seal key or LUKS passphrases. Passphrase reset is not implemented.
       - adopt adds one OpenBao keyslot and removes systemd-tpm2 tokens; recovery keyslots, data and LUKS UUIDs are preserved.
       - Escrow records go to the admin vault and the separate --recovery-host; existing records are never replaced.
+      - Explicit enroll-only --controller-only-custody defers the independent copy; --generate-boot-passphrase saves a random password encrypted in the same vault before use and reuses it on retry.
       - rollout enrolls, provisions missing volumes or adopts existing ones, then starts encrypted pre-copy; --cutover explicitly stops writers for final
         verification and bind activation.
 

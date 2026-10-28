@@ -10,6 +10,9 @@ boundaries:
 - Shared defaults can affect the entire fleet
 - Shared contributor tools belong in roles/custom-packages
 entrypoints:
+- name: storage-login-access
+  file: luxnix/storage-access/default.nix
+  purpose: Authenticate per-account OpenBao wraps at login and serialize remote storage lock/unlock without logout shutdown.
 - name: podman
   file: services/podman/default.nix
   purpose: Own container DNS, Docker compatibility and NVIDIA integration; legacy Podman switches are aliases.

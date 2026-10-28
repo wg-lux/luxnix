@@ -396,6 +396,7 @@
       operation = "switch";
     };
 
+    openbao.local.enable = true;
     packages.shared = [ ];
 
     storage.operatorUnlocked = {

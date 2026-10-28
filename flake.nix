@@ -257,6 +257,9 @@
             sealMode = "passphrase";
           }
         );
+        storage-login-access = inputs.nixpkgs.legacyPackages.${system}.testers.runNixOSTest (
+          import ./tests/nixtest/storage_login_access_vm_test.nix { repoRoot = ./.; }
+        );
         openbao-release = inputs.nixpkgs.legacyPackages.${system}.testers.runNixOSTest (
           import ./tests/nixtest/openbao_vm_test.nix { repoRoot = ./.; }
         );

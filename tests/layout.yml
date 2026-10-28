@@ -24,6 +24,10 @@ python_suites:
     scope: Optional CUDA environment probes, outside the default pytest suite.
     command: devenv tasks run env:setup-cuda
 nix_suites:
+  - id: storage-login-access
+    path: tests/nixtest/storage_login_access_vm_test.nix
+    scope: Real PAM/OpenBao/LUKS login unlock, remote locking, private roots and cold boot.
+    command: nix build .#checks.x86_64-linux.storage-login-access --no-link
   - id: root-integrity
     path: tests/nixtest/root_integrity_vm_test.nix
     scope: Isolated dm-verity store boot and tamper prototype; no hardware or production acceptance.

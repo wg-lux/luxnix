@@ -143,6 +143,7 @@ ansible_roles:
   - "nginx_host"
 
 host_luxnix:
+  openbao.local.enable: "true"
   storage.operatorUnlocked.volumes.luxnix-secrets.mountPoint: '"/var/lib/luxnix-vault-pki"'
   storage.operatorUnlocked.volumes.luxnix-secrets.device: '"/dev/mapper/luxnix-vault-pki"'
   storage.operatorUnlocked.volumes.luxnix-secrets.container: '"/var/lib/luxnix-vault-tls.luks"'

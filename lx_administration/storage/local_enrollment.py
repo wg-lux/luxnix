@@ -1,11 +1,13 @@
 """Cataloged, inventory-scoped local OpenBao enrollment with escrow before use.
 
 Controller side of luxnix-openbao-local (openbao_enroll.py). Every secret that
-can open a store or a volume is authenticated in the admin vault and on an
-independent recovery host before the host may depend on it: the seal key before
+can open a store or a volume is authenticated in the admin vault and, by default,
+on an independent recovery host before the host may depend on it: the seal key before
 it is TPM-sealed or wrapped by the operator's boot passphrase, the recovery key and provisioner credential before the root
 token is revoked. Without --apply only read-only status and plans are shown.
 Records are keyed by inventory host; machine-id is an attribute only.
+Explicit controller-only enrollment defers the independent copy, not vault
+authentication. Generated boot passphrases are escrowed before use as well.
 """
 from __future__ import annotations
 
@@ -18,6 +20,7 @@ import json
 import os
 from pathlib import Path
 import re
+import resource
 import secrets
 import subprocess
 import sys
@@ -42,7 +45,7 @@ LOCAL_EXPORT = r'''
 import fcntl, os, re, sys, tempfile
 from pathlib import Path
 host, item = sys.argv[1:]
-assert re.fullmatch(r'[a-z0-9][a-z0-9-]*', host) and item in ('seal-key', 'enrollment')
+assert re.fullmatch(r'[a-z0-9][a-z0-9-]*', host) and item in ('seal-key', 'enrollment', 'boot-passphrase')
 data = sys.stdin.buffer.read()
 assert data.startswith(b'$ANSIBLE_VAULT;1.2;AES256;luxnix-master\n')
 root = Path.home() / '.luxnix-recovery'
@@ -101,7 +104,7 @@ def load_escrow(vault: Path, vault_key: Path, host: str, item: str) -> dict | No
 
 
 def escrow(vault: Path, vault_key: Path, record: dict, export) -> Path:
-    """Publish once, authenticate both copies, never replace existing material."""
+    """Publish once, authenticate selected custody, never replace existing material."""
     target = escrow_path(vault, record["host"], record["item"])
     ensure_private_directory(target.parent)
     expected = json.dumps(record, sort_keys=True).encode()
@@ -118,7 +121,7 @@ def escrow(vault: Path, vault_key: Path, record: dict, export) -> Path:
     finally:
         os.close(fd)
     ciphertext = target.read_bytes()
-    if export(ciphertext) != ciphertext:
+    if export is not None and export(ciphertext) != ciphertext:
         raise EnrollmentError("Independent recovery export did not return the stored ciphertext")
     return target
 
@@ -131,7 +134,8 @@ def digest(escrow_material: dict) -> str:
 class Controller:
     """One host at a time; every phase is safe to repeat after an interruption."""
 
-    def __init__(self, host, target, recovery, vault, vault_key, machine_id, local):
+    def __init__(self, host, target, recovery, vault, vault_key, machine_id, local,
+                 *, controller_only=False, generate_boot_passphrase=False):
         self.host = host
         self.target = target
         self.recovery = recovery
@@ -140,6 +144,8 @@ class Controller:
         self.machine_id = machine_id
         self.local = local
         self.ask_passphrase = ask_boot_passphrase
+        self.controller_only = controller_only
+        self.generate_boot_passphrase = generate_boot_passphrase
 
     def tool(self, *args, request: dict | None = None) -> dict:
         data = b"" if request is None else json.dumps(request).encode()
@@ -150,8 +156,25 @@ class Controller:
         return result
 
     def export(self, item):
+        if self.controller_only:
+            return None
+        if self.recovery is None:
+            raise EnrollmentError("Independent recovery host is required")
         return lambda ciphertext: self.recovery.call(["python3", "-c", LOCAL_EXPORT, self.host, item],
                                                      ciphertext)
+
+    def boot_passphrase(self, status):
+        if not self.generate_boot_passphrase:
+            return self.ask_passphrase(self.host)
+        record = load_escrow(self.vault, self.vault_key, self.host, "boot-passphrase")
+        if record is None:
+            if any(status.get(field) for field in ("seal_credential", "initialized", "enrolled")):
+                raise EnrollmentError("Existing seal has no saved boot passphrase; generation cannot reset it")
+            record = self.record("boot-passphrase", passphrase=secrets.token_urlsafe(48))
+        if record.get("machine_id") != self.machine_id or record.get("seal_key_id") != self.local["sealKeyId"]:
+            raise EnrollmentError("Boot passphrase escrow belongs to a different machine or seal")
+        escrow(self.vault, self.vault_key, record, self.export("boot-passphrase"))
+        return record["passphrase"]
 
     def record(self, item: str, **values) -> dict:
         return {"schema_version": 1, "host": self.host, "item": item, "machine_id": self.machine_id,
@@ -180,7 +203,7 @@ class Controller:
         request = {"seal_key": seal["seal_key"]}
         if self.local.get("seal") == "passphrase":
             # The escrowed seal key stays the recovery path; the passphrase only wraps it.
-            request["seal_passphrase"] = self.ask_passphrase(self.host)
+            request["seal_passphrase"] = self.boot_passphrase(status)
         self.tool("seal", request=request)
         if status["enrolled"]:
             return {"host": self.host, "enrolled": True, "escrow_verified": True}
@@ -287,12 +310,20 @@ def main(argv=None):
     parser.add_argument("--limit", required=True, help="Inventory host or group")
     parser.add_argument("--volume", action="append", default=[], help="adopt only; default all declared")
     parser.add_argument("--recovery-host", help="Independent emergency export host")
+    parser.add_argument("--controller-only-custody", action="store_true",
+                        help="enroll only: explicitly defer independent recovery; keep authenticated escrow on this controller")
+    parser.add_argument("--generate-boot-passphrase", action="store_true",
+                        help="enroll only: generate and escrow a new boot passphrase, or reuse the saved one")
     parser.add_argument("--vault-dir", type=Path, default=Path.home() / ".lxv")
     parser.add_argument("--vault-key", type=Path, default=Path.home() / ".lxv.key")
     parser.add_argument("--sudo-password-file", type=Path)
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--cutover", action="store_true", help="rollout only: stop writers for the final verified copy")
     args = parser.parse_args(argv)
+    if args.controller_only_custody and (args.recovery_host or args.action != "enroll"):
+        parser.error("--controller-only-custody requires enroll without --recovery-host")
+    if args.generate_boot_passphrase and args.action != "enroll":
+        parser.error("--generate-boot-passphrase requires enroll")
     if args.cutover and args.action != "rollout":
         parser.error("--cutover requires rollout")
     if args.action == "rollout" and args.volume:
@@ -313,13 +344,14 @@ def main(argv=None):
     hosts = select_hosts(inventory, args.limit)
     mutating = args.apply and args.action != "status"
     if mutating:
-        if not args.recovery_host or args.recovery_host in hosts:
+        resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+        if not args.controller_only_custody and (not args.recovery_host or args.recovery_host in hosts):
             raise EnrollmentError("--recovery-host must name a separate inventory host")
         if not args.vault_dir.is_dir():
             raise EnrollmentError("Existing admin vault directory is required")
         encrypted_storage(args.vault_key, allow_runtime=True)
         Vault.load_dir(str(args.vault_dir), str(args.vault_key)).validate_local_key()
-        recovery = remote(args.recovery_host)
+        recovery = None if args.controller_only_custody else remote(args.recovery_host)
         controller_id = Path("/etc/machine-id").read_text().strip()
         lock_dir = ensure_private_directory(args.vault_dir / ESCROW_ROOT)
         lock = (lock_dir / ".lock").open("a")
@@ -332,10 +364,12 @@ def main(argv=None):
                 raise EnrollmentError("luxnix.openbao.local.enable is not deployed for this host")
             target = remote(host, args.sudo_password_file)
             machine_id = target.machine_id()
-            if mutating and recovery.machine_id() in {machine_id, controller_id}:
+            if mutating and recovery is not None and recovery.machine_id() in {machine_id, controller_id}:
                 raise EnrollmentError("Emergency export must be separate from target and admin vault")
             controller = Controller(host, target, recovery if mutating else None,
-                                    args.vault_dir, args.vault_key, machine_id, local)
+                                    args.vault_dir, args.vault_key, machine_id, local,
+                                    controller_only=args.controller_only_custody,
+                                    generate_boot_passphrase=args.generate_boot_passphrase)
             if args.action in {"adopt", "rollout"}:
                 volumes = nix_eval(host, "luxnix.storage.operatorUnlocked.volumes")
             if not mutating:
@@ -371,6 +405,7 @@ def main(argv=None):
                 result = {"host": host, "volumes": [
                     controller.adopt(name, volumes[name], apply=True)
                     for name in (args.volume or sorted(volumes))]}
+            result["custody"] = "controller-only" if args.controller_only_custody else "independent-recovery"
             print(json.dumps(result, sort_keys=True))
         except (EnrollmentError, ProvisionError, OSError, ValueError, KeyError,
                 subprocess.SubprocessError) as exc:

@@ -380,6 +380,7 @@ def test_passphrase_seal_profile_prompts_once_before_login():
       c = (f.nixosConfigurations.gc-10.extendModules { modules = [{
         luxnix.storage.operatorUnlocked.unlockMethod = lib.mkForce "local-openbao";
         luxnix.openbao.local.seal = lib.mkForce "passphrase";
+        luxnix.storage.loginAccess.enable = false; # Explicit legacy boot-prompt profile.
       }]; }).config;
       s = c.systemd.services;
     in {

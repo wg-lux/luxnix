@@ -1,5 +1,8 @@
 # Local OpenBao implementation
 
+For account-password login unlock and remote sudo lock/unlock after enrollment,
+see [Login and remote storage access](storage-login-access.md).
+
 ## Seal selection and passphrase operation
 
 The shared EndoReg profile selects `luxnix.openbao.local.seal = "passphrase"`.
@@ -11,7 +14,7 @@ the tool does not change `storage.operatorUnlocked.unlockMethod`; switching to
 For the passphrase seal, `openbao-local enroll --apply` asks twice for a boot
 passphrase. The already escrowed random seal key is wrapped using scrypt and
 an encrypt-then-MAC construction and stored in root-only
-`/var/lib/openbao-bootstrap/seal-passphrase.json`. The passphrase is not stored.
+`/var/lib/openbao-bootstrap/seal-passphrase.json`. By default the passphrase is not stored. The explicit generated-password option below saves it only as authenticated vault ciphertext.
 Bootstrap AppRole credentials use the systemd host key; they become useful only
 after the operator unseals OpenBao. TPM and Secure Boot admission apply only to
 the TPM mode. This operator-controlled mode does not establish protection from
@@ -41,7 +44,7 @@ Changing a seal option is not a migration. Status requires the selected seal
 file before claiming enrollment, and the controller rejects an existing store
 without it before making changes. Retain the original mode for any existing
 store until a separately reviewed recovery/migration procedure is available.
-Independent recovery custody remains mandatory. Ordered locking, passphrase
+Independent recovery custody remains the default and a production acceptance requirement; the explicit temporary enrollment option below defers it. Physical-host locking acceptance, passphrase
 rotation and recovery/re-seed automation remain release gates.
 
 `devenv tasks run tests:openbao-local-vm` runs both the TPM and passphrase checks.
@@ -56,9 +59,9 @@ create a boot passphrase, and the local API has no interactive password login.
 
 | Credential | Purpose | How it is established |
 | --- | --- | --- |
-| OpenBao boot passphrase | Unwraps the local static seal key in passphrase mode | Chosen by the operator during initial enrollment; never stored as plaintext or escrowed as a passphrase. |
+| OpenBao boot passphrase | Unwraps the local static seal key in passphrase mode | Chosen interactively, or generated and encrypted with the explicit option below; never stored as plaintext. |
 | LUKS recovery passphrase | Opens one existing encrypted container independently of OpenBao | Established when that container was provisioned; tested and escrowed before adoption. |
-| Linux login/sudo password | Authenticates the administrator to the host | Managed separately; does not unlock OpenBao or LUKS. |
+| Linux login/sudo password | Authenticates the administrator to the host | Managed separately; can unwrap an enrolled account seal in the opt-in login-access profile. |
 | OpenBao AppRole credential | Authorizes access to volume-key records after OpenBao is unsealed | Issued during enrollment; `rotate-unlock` replaces the unlock SecretID. |
 
 Check the deployed host before choosing an operation, using a reviewed checkout
@@ -164,6 +167,79 @@ checks its deployment prerequisites. Status includes platform observations but
 is not a successful mutating preflight or a recovery verification. A wave stops at the
 first failed host. `--recovery-host` must be a separate inventory host whose
 machine identity differs from both the target and the controller.
+
+### Temporary controller-only enrollment custody
+
+When explicitly authorized by the operator, enrollment can temporarily keep all
+recovery material on the controller (gc-02 for the current operation):
+
+```bash
+devenv shell openbao-local enroll --limit gc-10 \
+  --controller-only-custody --generate-boot-passphrase \
+  --sudo-password-file /home/admin/pwd_gc-10.txt --apply
+```
+
+This enroll-only option does not change adoption, provisioning or rollout
+requirements. It authenticates and durably publishes encrypted records in
+`~/.lxv/openbao-local/<host>/`: `seal-key.vault`, `boot-passphrase.vault` and
+`enrollment.vault`. The latter contains the recovery key and provisioning
+credential; the initial root token is revoked after confirmation. A generated
+password is reused on retry and cannot replace an existing unknown password.
+No password is printed or passed in command arguments. Output explicitly reports
+`custody: controller-only`; loss of gc-02 and its vault key can prevent recovery.
+
+To add independent custody later, repeat enrollment with `--recovery-host` and
+`--generate-boot-passphrase`, omitting `--controller-only-custody`. This verifies
+and exports the saved material without reinitializing the store. Existing LUKS
+recovery credentials and Linux passwords remain separate; enrollment does not
+change them, adopt containers, or activate a different boot profile.
+
+Existing container recovery can also be escrowed temporarily on gc-02 using
+`storage-provision escrow --host <host> --volume <volume>
+--controller-only-custody --existing-key-file <private-file>
+--sudo-password-file <private-file> --apply`. The command first verifies the
+credential against the actual LUKS container without opening or modifying it.
+It writes authenticated ciphertext to
+`~/.lxv/storage-recovery/<machine-id>/<volume>.vault` and reports a null
+`emergency_export`. Provisioning cannot use this exception.
+
+On 2026-10-28, the three SSH-accessible inventory hosts, gc-09, gc-10 and gs-02,
+completed local passphrase enrollment with `enrolled=true` and
+`pending_escrow=false`. All nine OpenBao escrow records authenticated in gc-02's
+vault. A repeat enrollment on gc-10 also succeeded without reinitialization.
+
+| Host | Local OpenBao custody | Existing LUKS recovery custody |
+| --- | --- | --- |
+| gc-09 | Seal key, generated boot password, recovery key and provisioner | Both containers verified and escrowed |
+| gc-10 | Seal key, generated boot password, recovery key and provisioner | Both containers verified and escrowed |
+| gs-02 | Seal key, generated boot password, recovery key and provisioner | Application container verified; Vault TLS credential unresolved |
+
+Both supplied gs-02 recovery files failed the existing Vault TLS container
+check. The additional file was nonempty and also failed with its exact trailing
+bytes preserved. The mounted TLS container contains existing data. No replacement password was invented, and no container was
+reformatted. No independent copy, volume adoption, storage-profile cutover or
+reboot was performed by these operations. The remaining inventory hosts did not
+accept the controller's SSH connection; gc-02 remains the custody controller.
+
+To avoid an application upgrade, gc-09 and gs-02 use retained enrollment releases
+under `/home/admin/luxnix-enrollment-20261028` on each target. The corresponding
+controller worktrees are under
+`/home/admin/luxnix-releases/openbao-enrollment-20261028/<host>-active`.
+gc-09 release `0852897f26d86c057e0cb081c0c734e5c531956a` preserves its deployed
+source snapshot, including previously hand-edited mount and swap settings now
+represented in canonical inventory. gs-02 release
+`556d5b7c45d07e1b2f9aa770165207b3ceb46908` starts from its running revision.
+Both retain the existing flake lock and LX-Annotate 1.6.1. Native host builds,
+activation plans, unchanged filesystem tables/kernel/SSH configuration and fresh
+SSH access were checked. The old baseline's repository-wide Ansible lint failed
+on pre-existing manifest indentation; it was skipped for these release commits.
+Nix-quality and structure hooks passed.
+
+Both activations ultimately exited successfully and active/persistent generations
+match. gs-02 initially exited 4 because its admin user manager stopped answering
+reload requests. After operator approval, `user@1000.service` was restarted and
+activation retried successfully. The user manager reports `running`; the
+application, PostgreSQL, central Vault and local OpenBao services remain active.
 
 ### Rollout stages
 

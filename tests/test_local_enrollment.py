@@ -96,6 +96,40 @@ def test_rerun_reuses_escrowed_seal_key(custody):
     assert len(set(host.seal_keys)) == 1
 
 
+def test_controller_only_generated_password_is_encrypted_and_resumable(custody):
+    events = []
+    host = RecordingHost(events)
+    vault, key = custody
+    task = le.Controller("gc-10", host, None, vault, key, "1" * 32,
+                         dict(LOCAL, seal="passphrase"), controller_only=True,
+                         generate_boot_passphrase=True)
+    task.enroll()
+    host.enrolled = True
+    task.enroll()
+    password = le.load_escrow(vault, key, "gc-10", "boot-passphrase")["passphrase"]
+    assert len(password) >= 64
+    assert all(request["seal_passphrase"] == password for request in host.requests)
+    assert not any(event[0] == "export" for event in events)
+    for item in ("seal-key", "enrollment", "boot-passphrase"):
+        path = le.escrow_path(vault, "gc-10", item)
+        assert password.encode() not in path.read_bytes()
+        assert path.stat().st_mode & 0o777 == 0o600
+    assert [event for event in events if event == ("host", "initialize")] == [("host", "initialize")]
+
+
+def test_generated_password_never_resets_existing_seal(custody):
+    task = controller(custody, None, None)
+    task.controller_only = task.generate_boot_passphrase = True
+    with pytest.raises(le.EnrollmentError, match="cannot reset"):
+        task.boot_passphrase({"seal_credential": True})
+    assert not custody[0].exists()
+
+
+def test_missing_recovery_is_not_implicitly_controller_only(custody):
+    with pytest.raises(le.EnrollmentError, match="recovery host"):
+        controller(custody, FakeHost([]), None).enroll()
+
+
 def test_passphrase_reenrollment_restages_without_reinitializing(custody):
     events = []
     host = FakeHost(events)

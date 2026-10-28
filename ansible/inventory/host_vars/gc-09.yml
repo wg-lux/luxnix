@@ -31,6 +31,7 @@ host_nixos:
 extra_secret_names: []
 
 host_luxnix:
+  openbao.local.enable: "true"
   # Vault enrollment verified by the operator (2026-10-23); the center identity
   # salt requires fail-closed machine authentication.
   vault.client.auth.deferUntilProvisioned: "false"

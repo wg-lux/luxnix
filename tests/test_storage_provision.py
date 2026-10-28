@@ -54,6 +54,24 @@ def test_failed_export_preserves_primary_for_retry(custody):
         provision.escrow_record(vault, key, record, lambda data: data[:-1])
 
 
+def test_controller_only_escrow_can_later_export_same_ciphertext(custody):
+    vault, key, record = custody
+    path = provision.escrow_record(vault, key, record, None)
+    before = path.read_bytes()
+    assert json.loads(secret.decrypt_secret(path, key)) == record
+    assert record['recovery_passphrase'].encode() not in before
+    assert provision.escrow_record(vault, key, record, lambda data: data) == path
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize('extra', [[], ['--controller-only-custody'],
+                                  ['--controller-only-custody', '--recovery-host', 'gs-02']])
+def test_provision_cannot_defer_independent_recovery(extra):
+    with pytest.raises(SystemExit) as exc:
+        provision.main(['provision', '--host', 'gc-10', '--volume', 'data', *extra])
+    assert exc.value.code == 2
+
+
 def test_emergency_publisher_repeats_but_never_overwrites(custody, tmp_path):
     vault, key, record = custody
     ciphertext = secret._encrypt_bytes(json.dumps(record).encode(), key, secret.MASTER_VAULT_ID)

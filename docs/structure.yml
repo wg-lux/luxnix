@@ -10,6 +10,9 @@ boundaries:
 - Do not create parallel readiness trackers
 - Do not include secrets or local host facts in guides
 entrypoints:
+- name: storage-login-access
+  file: storage-login-access.md
+  purpose: Account-bound OpenBao login unlock, remote sudo lock/unlock and private backing roots.
 - name: root-integrity-prototype
   file: root-integrity-prototype.md
   purpose: Verified-store research prototype, production trust-path map and remaining authentication gaps.
