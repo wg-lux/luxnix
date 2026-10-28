@@ -142,6 +142,17 @@ in
     in
     mkMerge [
       {
+        assertions = [
+          {
+            assertion = config.luxnix.storage.operatorUnlocked.enable;
+            message = "EndoReg clients require encrypted operator storage for secrets and application data.";
+          }
+          {
+            assertion = config.luxnix.storage.operatorUnlocked.unlockMethod == "passphrase";
+            message = "EndoReg unattended unlock is blocked until authenticated system and application runtime acceptance is implemented.";
+          }
+        ];
+
         luxnix = {
           # Storage settings
           storage.enable = mkDefault true;

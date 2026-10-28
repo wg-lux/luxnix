@@ -8,10 +8,22 @@
         pkgs,
         ...
       }:
+      let
+        # Only this disposable fixture replaces platform admission. Production
+        # binaries have no option to accept swtpm or disabled Secure Boot.
+        testClient = pkgs.writeText "openbao-local-test-client.py" ''
+          import runpy
+          globals().update(runpy.run_path("${repoRoot + "/lx_administration/storage/openbao_local.py"}"))
+          def platform_preflight():
+              status = platform_status()
+              assert status["tpm2"], "fixture requires a usable software TPM"
+              return status
+        '';
+      in
       {
         imports = [
-          "${repoRoot}/modules/nixos/luxnix/openbao"
-          "${repoRoot}/modules/nixos/luxnix/operator-unlocked-storage"
+          (repoRoot + "/modules/nixos/luxnix/openbao")
+          (repoRoot + "/modules/nixos/luxnix/operator-unlocked-storage")
         ];
         virtualisation = {
           tpm.enable = true;
@@ -39,6 +51,21 @@
         # The disposable guest boots before enrollment; production hosts only
         # activate this profile after the pre-switch gate passes.
         systemd.services.openbao-local.wantedBy = lib.mkForce [ ];
+        systemd.services.openbao-local-preflight.serviceConfig.ExecStart = lib.mkForce (
+          pkgs.writeShellScript "openbao-local-test-preflight" ''
+            set -eu
+            export PATH=${
+              lib.makeBinPath [
+                pkgs.systemd
+                pkgs.util-linux
+              ]
+            }
+            ${pkgs.python3}/bin/python ${repoRoot + "/lx_administration/secret_storage.py"} --allow-runtime /run
+            exec ${pkgs.python3}/bin/python ${
+              repoRoot + "/lx_administration/storage/openbao_local.py"
+            } /var/lib/openbao-bootstrap/seal.cred
+          ''
+        );
         environment = {
           systemPackages = [
             pkgs.python3
@@ -46,11 +73,12 @@
             pkgs.e2fsprogs
           ];
           etc = {
-            "local-client.py".source = "${repoRoot}/lx_administration/storage/openbao_local.py";
+            "local-client.py".source = repoRoot + "/lx_administration/storage/openbao_local.py";
+            "test-client.py".source = testClient;
             "local-guest.py".source = ./openbao_local_guest.py;
-            "migration.py".source = "${repoRoot}/lx_administration/storage/operator_migration.py";
-            "cutover.py".source = "${repoRoot}/lx_administration/storage/cutover.py";
-            "enrollment.py".source = "${repoRoot}/lx_administration/storage/openbao_enroll.py";
+            "migration.py".source = repoRoot + "/lx_administration/storage/operator_migration.py";
+            "cutover.py".source = repoRoot + "/lx_administration/storage/cutover.py";
+            "enrollment.py".source = repoRoot + "/lx_administration/storage/openbao_enroll.py";
           };
         };
         system.stateVersion = "26.05";
@@ -66,11 +94,15 @@
     server.wait_for_unit("multi-user.target")
     other.wait_for_unit("multi-user.target")
     server.fail("systemctl start openbao-local.service")
+    with subtest("production enrollment rejects the software TPM without mutations"):
+        server.fail("luxnix-openbao-local preflight > /run/preflight.out 2>&1")
+        server.succeed("cat /run/preflight.out; grep tpm-not-physical /run/preflight.out")
+        server.fail("test -e /var/lib/openbao-bootstrap/seal.cred")
     server.succeed("python /etc/local-guest.py prepare")
     server.fail("python /etc/local-client.py /run/local-test/host.cred")
     server.fail("python /etc/local-client.py /run/local-test/pcr0.cred")
 
-    with subtest("enrollment through the cataloged host tool"):
+    with subtest("enrollment with explicitly isolated platform fixture"):
         server.succeed("python /etc/local-guest.py enroll")
         server.succeed("python /etc/local-client.py /var/lib/openbao-bootstrap/seal.cred")
         server.succeed("python /etc/local-client.py /var/lib/openbao-bootstrap/volume-unlock.cred")

@@ -17,6 +17,8 @@ let
   publicFile = name: publicDir + "/${name}";
   provisioned = builtins.pathExists (publicFile "db.pem");
   certificate = "/etc/luxnix/secure-boot/db.pem";
+  # The first boot installation runs before /etc is activated.
+  verificationCertificate = if provisioned then publicFile "db.pem" else certificate;
   # Never created: lzbt fails instead of signing when an artifact is missing.
   absentPrivateKey = "/run/luxnix-secure-boot/no-private-key-on-host";
 
@@ -31,8 +33,8 @@ let
         pkgs.sbsigntool
       ]
     }
-    if [ ! -s ${certificate} ]; then
-      echo "ERROR: fleet Secure Boot certificate ${certificate} is not provisioned; see docs/secure-boot.md." >&2
+    if [ ! -s ${verificationCertificate} ]; then
+      echo "ERROR: fleet Secure Boot certificate ${verificationCertificate} is not provisioned; see docs/secure-boot.md." >&2
       exit 1
     fi
     if [ -e ${absentPrivateKey} ]; then
@@ -40,15 +42,28 @@ let
       exit 1
     fi
     PATH=${config.systemd.package}/lib/systemd:$PATH
+    # Select the pending generation and already signed rollback generations.
+    # Legacy unsigned profiles cannot be signed by this keyless host.
+    profiles=()
+    current_profile="$(basename "$(readlink /nix/var/nix/profiles/system)")"
+    for profile in /nix/var/nix/profiles/system-*-link; do
+      name="$(basename "$profile")"
+      generation="''${name#system-}"
+      generation="''${generation%-link}"
+      if [ "$name" = "$current_profile" ] || compgen -G "${esp}/EFI/Linux/nixos-generation-$generation-*.efi" >/dev/null; then
+        profiles+=("$profile")
+      fi
+    done
+    [ "''${#profiles[@]}" -gt 0 ] || exit 1
     install_generations() {
       ${lanzaboote.installCommand} \
         ${
           lib.escapeShellArgs [
-            "--public-key=${certificate}"
+            "--public-key=${verificationCertificate}"
             "--private-key=${absentPrivateKey}"
             esp
           ]
-        } /nix/var/nix/profiles/system-*-link
+        } "''${profiles[@]}"
     }
     if ! install_generations; then
       echo "ERROR: the new generation has no controller signature. On the deploy controller run:" >&2
@@ -59,7 +74,7 @@ let
     find ${esp}/EFI -type f \( -ipath '${esp}/EFI/Linux/*.efi' -o -ipath '${esp}/EFI/systemd/*.efi' \
       -o -ipath '${esp}/EFI/BOOT/*.efi' \) -print0 |
       while IFS= read -r -d "" image; do
-        sbverify --cert ${certificate} "$image" >/dev/null 2>&1 || {
+        sbverify --cert ${verificationCertificate} "$image" >/dev/null 2>&1 || {
           echo "ERROR: $image is not signed by the fleet Secure Boot key." >&2
           exit 1
         }
@@ -90,7 +105,7 @@ let
         import)
           [ "$#" -eq 2 ] || usage
           exec python3 -I ${../../../../lx_administration/secure_boot.py} import \
-            --esp ${esp} --cert ${certificate} "$2"
+            --esp ${esp} --cert ${verificationCertificate} "$2"
           ;;
         enroll-firmware)
           [ "$#" -eq 1 ] || usage
@@ -100,9 +115,25 @@ let
           done
           # Enrolling keys before the boot chain is signed would leave the host unbootable.
           for image in ${esp}/EFI/BOOT/BOOTX64.EFI ${esp}/EFI/systemd/systemd-bootx64.efi; do
-            sbverify --cert ${certificate} "$image" >/dev/null 2>&1 \
+            sbverify --cert ${verificationCertificate} "$image" >/dev/null 2>&1 \
               || die "$image is not signed; sign and install a generation first."
           done
+          # A signed loader alone is insufficient: systemd-boot discovers the
+          # installed UKI for the current system profile under EFI/Linux.
+          current_profile="$(basename "$(readlink /nix/var/nix/profiles/system)")"
+          [[ "$current_profile" =~ ^system-([0-9]+)-link$ ]] || die "Invalid current system profile."
+          generation="''${BASH_REMATCH[1]}"
+          shopt -s nullglob
+          stubs=(${esp}/EFI/Linux/nixos-generation-"$generation"-*.efi)
+          shopt -u nullglob
+          verified_stub=false
+          for stub in "''${stubs[@]}"; do
+            if [ -f "$stub" ] && sbverify --cert ${verificationCertificate} "$stub" >/dev/null 2>&1; then
+              verified_stub=true
+              break
+            fi
+          done
+          "$verified_stub" || die "Current system generation has no signed installed boot stub."
           efivars=/sys/firmware/efi/efivars
           setup_mode="$(od -An -t u1 -j4 -N1 "$efivars/SetupMode-8be4df61-93ca-11d2-aa0d-00e098032b8c" | tr -d ' ')"
           [ "$setup_mode" = 1 ] || die "Firmware is not in Secure Boot setup mode."

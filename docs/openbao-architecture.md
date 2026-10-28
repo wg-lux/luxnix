@@ -1,10 +1,56 @@
 
 # OpenBao target architecture: local volume unlock, central identity provisioning
 
-Status: plan, not implemented or accepted. Decided by the repository owner on
-2026-10-26. Acceptance criteria: `boot-encryption-acceptance.yml` (schema 1.3),
+Status: partially implemented, not accepted for production unattended unlock.
+Architecture decided on 2026-10-26; rollout revised on 2026-10-27 from the
+owner-supplied offline-theft recommendations. Acceptance criteria: `boot-encryption-acceptance.yml` (schema 1.3),
 whose `evidence_policy` defines which evidence counts. Readiness stays in the
 secret lifecycle feature tracker.
+
+## Rollout gates (2026-10-27)
+
+Offline theft protection is the primary objective: modifying boot components,
+root or the Nix store must not give altered code volume keys. Production
+unattended unlock requires Secure Boot **and authenticated executed system
+contents**. A signed UKI or PCR 7 alone cannot pass ENC-09. The updated catalog
+removes the alternative of accepting that gap as the production default.
+
+The ordered work, responsible roles and exit evidence are canonical in
+`boot-encryption-acceptance.yml` under `rollout_plan`:
+
+| Gate | Required outcome |
+|---|---|
+| R0: baseline and custody | Verify effective live unlock, firmware keys, existing credentials and recovery outside both gs-02 and the target. |
+| R1: integrity spike | Map the whole trusted execution path and writable overrides; demonstrate authenticated contents, safe updates/rollbacks and failure before release. |
+| R2: production enforcement | Physical TPM and live Secure Boot checks at enrollment, activation and before installer disk changes; integrate external signing and interruption handling. |
+| R3: lock and recovery | Ordered close, explicit recovery/re-seed, independent restore and salt custody/receipt gates. |
+| R4: physical references | gc-09 pilot for its class, then every other class; tamper, outage, cold boot and recovery tests with named assessors. |
+| R5: fleet waves | Same group profile, bounded inventory waves and stop on failure; no premature group switch or gc-10 production exception. |
+
+The working tree currently selects passphrase unlock throughout the fleet and
+leaves Secure Boot disabled by default. gc-10 has enrollment tooling enabled;
+this does not prove enrollment or live settings. Keep operator-controlled unlock
+until the gates pass. Existing enrollment, adoption, provisioning and controller
+signing are implementation progress, not physical acceptance.
+
+The current pilot target is gc-09. Safety policy is owned by the shared
+`roles.endoreg-client` role, including its GPU and hub consumers; the pilot has
+no weaker host override. The role requires encrypted storage and rejects
+unattended unlock while authenticated system and application runtime integration
+is missing. Enrollment and local OpenBao startup also reject disabled Secure
+Boot, unusable TPMs, detected virtualization and unrecognized platform TPM drivers.
+These checks do not establish hardware attestation or approval of firmware keys.
+
+Independent local unlock during a gs-02 outage remains the existing decision.
+It also permits an intact approved stolen host to unlock: there is no offline
+remote kill switch. Console, recovery-shell, external-boot and DMA/debug access
+therefore need physical testing. A required operator factor or online permission
+would change that architecture and needs an explicit owner decision.
+
+No PCR set, integrity tool or image layout is selected by this update. The
+options below remain spike candidates. Recovery custody currently documented on
+gs-02 is insufficient for the new independent-copy gate: verify an encrypted
+copy outside both gs-02 and the target, with recoverable decryption custody.
 
 ## Roles
 
@@ -49,8 +95,8 @@ the host key (`--with-key=host`, or `auto` without a TPM) must be rejected
 before OpenBao starts. That key is `/var/lib/systemd/credential.secret` on the
 same unencrypted root, so a disk copy would decrypt it. The seal key is
 escrowed to the admin vault and the emergency export before the first
-initialization. Static seal support in 2.6.4 must be confirmed in a VM test;
-so far it is only inferred from strings in the binary.
+initialization. Static seal support in 2.6.4 has recorded VM evidence in
+[local implementation](openbao-local.md); physical acceptance remains open.
 
 **Access.** Clients use a private Unix socket. On 2026-10-26 the repository
 owner approved a TCP listener solely inside a private network namespace:
@@ -119,7 +165,10 @@ always resumable. It is never treated as "never reformat, stuck".
 
 The plan shows each keyslot and token change before execution.
 
-### Rollout decisions (owner, 2026-10-26)
+### Earlier rollout decisions (owner, 2026-10-26)
+
+The R0-R5 gates above now govern production release. The VM integration
+threshold below is necessary but no longer sufficient to switch the group.
 
 - **Missing containers are created on the next update,** but only through the
   cataloged deploy command. The controller escrows the recovery passphrase to
@@ -347,6 +396,12 @@ This is a functional VM test, not gs-02 recovery evidence.
 
 ### 4. Integrity path for ENC-09
 
+The isolated [root-integrity prototype](root-integrity-prototype.md) now has a
+source trust-path map and a dedicated VM test. It uses the pinned NixOS image
+builder for a verified store and volatile root. Its unsigned UKI is an assumed
+trusted fixture, and its release probe is synthetic; it does not establish
+production boot authentication or close ENC-09.
+
 Recommend a verified image deployment: owner-authorized Secure Boot -> signed
 UKI (kernel, initrd, embedded command line and authenticated root-image digest)
 -> read-only dm-verity system image -> TPM release only under the approved boot
@@ -402,10 +457,11 @@ and Secure Boot work retains its own tests and locks. No skipped or mocked test
 is counted as hardware evidence; the encryption fixture substitutes only the
 storage-location guard for disposable test keys.
 
-The next implementation gates are: choose approved salt custody, integrate
-verified-copy receipts before identity migration, finish the external signer,
-exercise hub recovery with real custodians, then prototype signed verified
-system images and anti-rollback before claiming ENC-09. Each gate remains open
+The current order is R0-R5 above. Controller signing now exists in
+[the Secure Boot workflow](secure-boot.md); deployment integration and physical
+acceptance remain open. Prototype integrity before choosing the production
+policy; resolve salt custody and verified-copy receipts before identity migration,
+and exercise hub recovery in its separate migration workstream. Each gate remains open
 until its positive, negative and interruption tests pass at the required class.
 
 Validation for this research/test update (2026-10-26):

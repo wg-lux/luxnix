@@ -158,6 +158,8 @@ def test_rollout_orders_provision_adoption_and_explicit_cutover(custody, monkeyp
     events = []
     class Target:
         def call(self, args, data=b'', **kwargs):
+            if args[:2] == ['systemctl', 'show']:
+                return b'loaded\n'
             if args[0] == 'sh':
                 return b'present' if args[-1].endswith('old.luks') else b''
             events.append(tuple(args))
@@ -168,10 +170,10 @@ def test_rollout_orders_provision_adoption_and_explicit_cutover(custody, monkeyp
     monkeypatch.setattr(task, 'adopt', lambda name, *a, **k: events.append(('adopt', name, k['open_mapping'])))
     volumes = {name: {'container': '/private/' + name + '.luks', 'luksUUID': '1' * 36}
                for name in ('new', 'old')}
-    plan = task.rollout(volumes, None)
+    plan = task.rollout(volumes, None, migration_enabled=True)
     assert [p['action'] for p in plan['volumes']] == ['provision', 'adopt']
     assert events == []
-    task.rollout(volumes, lambda name: events.append(('provision', name)), apply=True, cutover=True)
+    task.rollout(volumes, lambda name: events.append(('provision', name)), apply=True, cutover=True, migration_enabled=True)
     assert events == ['enroll', ('provision', 'new'), ('adopt', 'old', True),
                       ('systemctl', 'start', 'luxnix-storage-precopy.service'),
                       ('systemctl', 'start', 'luxnix-storage-cutover.service')]
@@ -179,12 +181,34 @@ def test_rollout_orders_provision_adoption_and_explicit_cutover(custody, monkeyp
 
 def test_rollout_failure_never_starts_precopy_or_stops_writers(custody, monkeypatch):
     calls = []
-    target = SimpleNamespace(call=lambda args, **kw: calls.append(args) or b'')
+    target = SimpleNamespace(call=lambda args, **kw: calls.append(args) or
+                             (b'loaded\n' if args[:2] == ['systemctl', 'show'] else b''))
     task = controller(custody, target, None)
     monkeypatch.setattr(task, 'tool', lambda *a, **k: {'enrolled': True})
     monkeypatch.setattr(task, 'enroll', lambda: None)
     def fail(name):
         raise le.EnrollmentError('independent export unavailable')
     with pytest.raises(le.EnrollmentError, match='export'):
-        task.rollout({'data': {'container': '/private/data.luks', 'luksUUID': '1' * 36}}, fail, apply=True, cutover=True)
-    assert not any(c[0] == 'systemctl' for c in calls)
+        task.rollout({'data': {'container': '/private/data.luks', 'luksUUID': '1' * 36}}, fail, apply=True, cutover=True, migration_enabled=True)
+    assert not any(c[:2] == ['systemctl', 'start'] for c in calls)
+
+
+@pytest.mark.parametrize('missing', ['luxnix-storage-precopy.service', 'luxnix-storage-cutover.service'])
+@pytest.mark.parametrize('apply', [False, True])
+def test_rollout_missing_deployed_unit_blocks_before_mutations(custody, monkeypatch, missing, apply):
+    calls = []
+    def call(args, **kwargs):
+        calls.append(args)
+        return b'not-found\n' if args[-1] == missing else b'loaded\n'
+    task = controller(custody, SimpleNamespace(call=call), None)
+    monkeypatch.setattr(task, 'tool', lambda *a, **k: pytest.fail('enrollment preflight reached'))
+    monkeypatch.setattr(task, 'enroll', lambda: pytest.fail('enrollment reached'))
+    with pytest.raises(le.EnrollmentError, match=missing):
+        task.rollout({}, lambda name: pytest.fail('provision reached'), apply=apply, migration_enabled=True)
+    assert all(c[:2] == ['systemctl', 'show'] for c in calls)
+
+
+def test_rollout_disabled_configuration_blocks_before_remote_calls(custody):
+    task = controller(custody, SimpleNamespace(call=lambda *a, **k: pytest.fail('remote call reached')), None)
+    with pytest.raises(le.EnrollmentError, match='migration enabled'):
+        task.rollout({}, None, migration_enabled=False)

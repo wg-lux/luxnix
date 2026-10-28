@@ -88,6 +88,11 @@
     exec = "nix build .#checks.x86_64-linux.bao-migration --no-link -L";
   };
 
+  "tests:root-integrity-vm" = {
+    description = "Verify immutable system-store boot and tamper rejection in a disposable VM";
+    exec = "nix build .#checks.x86_64-linux.root-integrity --no-link -L";
+  };
+
   "tests:openbao-local-vm" = {
     description = "Verify local OpenBao TPM credentials and auto-unseal in disposable VMs";
     exec = "nix build .#checks.x86_64-linux.openbao-local --no-link -L";

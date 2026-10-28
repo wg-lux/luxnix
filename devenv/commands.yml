@@ -193,6 +193,15 @@ commands:
     implementation: scripts/check-connectivity.sh
     documentation: ansible/playbooks/readme.md
 
+  - id: storage-readiness
+    summary: Read host identity, boot generations, firmware state, mounts and service state without credentials or mutations.
+    risk: remote-read-only
+    operator_confirmation_required: false
+    usage: devenv shell storage-readiness --limit <host-or-group>
+    implementation: scripts/run-ansible-playbook.sh
+    playbook: ansible/playbooks/storage-readiness.yml
+    documentation: docs/root-integrity-prototype.md
+
   - id: lx-annotate-streamable-migration
     summary: Run the deployed LX-Annotate streamable-storage migration helper.
     risk: remote-state
@@ -304,6 +313,17 @@ tasks:
     usage: devenv tasks run tests:bao-migration-vm
     implementation: devenv/tasks.nix
     documentation: docs/openbao.md
+  - id: tests:root-integrity-vm
+    summary: Exercise kernel-enforced verified-store boot and tamper rejection in a disposable image.
+    risk: local-state
+    operator_confirmation_required: false
+    usage: devenv tasks run tests:root-integrity-vm
+    implementation: tests/nixtest/root_integrity_vm_test.nix
+    documentation: docs/root-integrity-prototype.md
+    effects:
+      - Builds and boots a disposable image with an unsigned UKI carrying its verity store hash.
+      - Uses only synthetic release markers; no host mounts, production credentials or firmware changes.
+      - VM evidence does not establish firmware authentication, hardware TPM policy or fleet readiness.
   - id: tests:openbao-local-vm
     summary: Verify local OpenBao bootstrap with real systemd credentials on disposable software TPMs.
     risk: local-state

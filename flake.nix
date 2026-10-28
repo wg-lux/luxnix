@@ -245,6 +245,9 @@
         bao-migration = inputs.nixpkgs.legacyPackages.${system}.testers.runNixOSTest (
           import ./tests/nixtest/bao_migration_vm_test.nix { repoRoot = ./.; }
         );
+        root-integrity = inputs.nixpkgs.legacyPackages.${system}.testers.runNixOSTest (
+          import ./tests/nixtest/root_integrity_vm_test.nix { repoRoot = ./.; }
+        );
         openbao-local = inputs.nixpkgs.legacyPackages.${system}.testers.runNixOSTest (
           import ./tests/nixtest/openbao_local_vm_test.nix { repoRoot = ./.; }
         );

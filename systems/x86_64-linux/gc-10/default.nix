@@ -785,9 +785,6 @@ lib.foldl' lib.recursiveUpdate
       };
     }
     {
-      luxnix.storage.operatorUnlocked.unlockMethod = "tpm2";
-    }
-    {
       luxnix.storage.operatorUnlocked.volumes.luxnix-app-storage.container =
         "/data/raid01/luxnix-app-storage.luks";
     }
@@ -823,9 +820,6 @@ lib.foldl' lib.recursiveUpdate
     }
     {
       security.luxnix.local-users.enable = true;
-    }
-    {
-      system.boot.secureBoot = true;
     }
     {
       xdg.menus.enable = true;

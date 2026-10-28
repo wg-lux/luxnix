@@ -23,6 +23,13 @@
   check-connectivity.package = pkgs.zsh;
   check-connectivity.exec = ''./scripts/check-connectivity.sh "$@"'';
 
+  storage-readiness.package = pkgs.zsh;
+  storage-readiness.exec = ''
+    ANSIBLE_CONFIG=conf/connectivity-ansible.cfg ANSIBLE_HOST_KEY_CHECKING=True LUXNIX_UV_BIN=${pkgs.uv}/bin/uv \
+      bash scripts/run-ansible-playbook.sh ansible/playbooks/storage-readiness.yml \
+      -i ansible/inventory/hosts.ini "$@"
+  '';
+
   lx-annotate-streamable-migration.package = pkgs.zsh;
   lx-annotate-streamable-migration.exec = ''./scripts/lx-annotate-streamable-migration.sh "$@"'';
 

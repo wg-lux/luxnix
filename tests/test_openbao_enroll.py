@@ -12,6 +12,7 @@ from types import SimpleNamespace
 import pytest
 
 from lx_administration.storage import openbao_enroll as enroll
+from lx_administration.storage import openbao_local as local
 
 UUID = "11111111-1111-1111-1111-111111111111"
 KEY = base64.b64encode(bytes(range(32))).decode()
@@ -28,7 +29,6 @@ def host(tmp_path, monkeypatch):
         "PENDING": boot / "pending-enrollment.cred",
         "PENDING_PROVISIONER": boot / "pending-provisioner.cred",
         "LOCK": tmp_path / "lock",
-        "SECURE_BOOT": tmp_path / "SecureBoot",
     }
     for name, value in paths.items():
         monkeypatch.setattr(enroll, name, value)
@@ -54,9 +54,15 @@ def host(tmp_path, monkeypatch):
 
     client = {"call": api_call, "DeniedError": RuntimeError, "wait_unsealed": lambda t: None,
               "login": lambda c: "token"}
-    instance = enroll.Host("gc-10", client, require_secure_boot=True)
-    paths["SECURE_BOOT"].write_bytes(b"\x06\x00\x00\x00\x01")
-    return SimpleNamespace(host=instance, paths=paths, sealed=sealed, tpm=tpm, calls=calls)
+    platform = {"physical_tpm": True, "secure_boot": True, "secure_boot_required": True}
+    monkeypatch.setattr(
+        local, "platform_status", lambda: dict(platform, tpm2=tpm.present)
+    )
+    client.update(platform_status=local.platform_status,
+                  platform_preflight=local.platform_preflight)
+    instance = enroll.Host("gc-10", client)
+    return SimpleNamespace(host=instance, paths=paths, sealed=sealed,
+                           tpm=tpm, calls=calls, platform=platform)
 
 
 def test_preflight_fails_closed_without_tpm_or_secure_boot(host):
@@ -64,7 +70,7 @@ def test_preflight_fails_closed_without_tpm_or_secure_boot(host):
     with pytest.raises(enroll.EnrollError, match="tpm-missing"):
         host.host.preflight()
     host.tpm.present = True
-    host.paths["SECURE_BOOT"].write_bytes(b"\x06\x00\x00\x00\x00")
+    host.platform["secure_boot"] = False
     with pytest.raises(enroll.EnrollError, match="secure-boot-disabled"):
         host.host.preflight()
     # Mutating phases repeat the live check; nothing is sealed.
@@ -176,3 +182,20 @@ def test_missing_record_for_enrolled_volume_is_never_recreated(host, monkeypatch
         host.host.volume_record('data', UUID, {'role_id': 'test'}, '/test.luks')
     assert not any(method == 'POST' and path.startswith('volume-release') for method, path in calls)
     assert calls[-1] == ('POST', 'auth/token/revoke-self')
+
+
+@pytest.mark.parametrize(
+    "phase", ["seal", "initialize", "confirm", "convert_volume", "rotate_unlock"]
+)
+@pytest.mark.parametrize("missing", ["physical_tpm", "secure_boot"])
+def test_every_mutation_rejects_platform_before_writes(host, phase, missing, tmp_path):
+    host.platform[missing] = False
+    args = {"seal": ({"seal_key": KEY},), "initialize": (), "confirm": ({},),
+            "convert_volume": ("data", str(tmp_path / "absent"), UUID, {}),
+            "rotate_unlock": ({},)}
+    reason = "tpm-not-physical" if missing == "physical_tpm" else "secure-boot-disabled"
+    with pytest.raises(enroll.EnrollError, match=reason):
+        getattr(host.host, phase)(*args[phase])
+    assert host.calls == []
+    assert host.sealed == {}
+    assert not host.paths["BOOT"].exists()

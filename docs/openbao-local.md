@@ -26,7 +26,8 @@ The bootstrap validator permits only the systemd TPM-only credential format
 and requires PCR 7 in its authenticated header. It rejects host-key, null-key,
 unknown-format and PCR-unbound credentials. Header checks follow the
 [systemd v260 format](https://github.com/systemd/systemd/blob/v260/src/shared/creds-util.c);
-they do not replace authenticated decryption. The boot preflight only validates ciphertext. Systemd authenticates and unseals
+they do not replace authenticated decryption. Boot preflight checks the live
+platform and ciphertext policy. Systemd authenticates and unseals
 `seal.key` when loading service credentials. Once the storage profile uses
 local OpenBao, a NixOS `preSwitchChecks` gate runs the filter and a transient
 systemd credential-load probe before switching (rollout stage 5 below); it never
@@ -61,12 +62,23 @@ machine identity differs from both the target and the controller.
 
 ### Rollout stages
 
+These describe implemented mechanisms, not production approval. Follow R0-R5 in
+`boot-encryption-acceptance.yml` first. Keep production on operator passphrase
+unlock until integrity, enforcement, lock/recovery and physical acceptance pass.
+Enrollment, bootstrap and local-OpenBao activation require live Secure Boot,
+a usable TPM 2.0, a recognized platform TPM driver and no detected virtualization.
+These requirements cannot be disabled by a host option. Unknown platforms fail
+closed; driver and virtualization detection are not cryptographic attestation
+against a concealed hypervisor and do not verify the intended firmware signer.
+The EndoReg client role also rejects unattended unlock until authenticated
+system and application runtime acceptance is implemented. swtpm remains isolated
+test evidence only; its fixture override is not installed by the production module.
+
 1. **Install the tool.** Deploy `luxnix.openbao.local.enable = true` with the
    existing unlock method. The service is then not started at boot, and no
    activation gate applies yet.
 2. **Enroll.** `openbao-local enroll --apply` runs these phases, each live-checking
-   the TPM and, where the profile declares `system.boot.secureBoot`, firmware
-   Secure Boot:
+   the production TPM/platform prerequisites and firmware Secure Boot:
    1. *seal key*: generate 32 random bytes, or reuse the escrowed ones, and escrow
       them in the admin vault (`openbao-local/<host>/seal-key.vault`) and on the
       recovery host. Then the host writes
@@ -99,8 +111,9 @@ machine identity differs from both the target and the controller.
    and its keyslot, and test-opens both remaining secrets again. Recovery
    keyslots, data and UUIDs remain unchanged. Missing or UUID-mismatched
    containers are refused; adoption never formats or provisions.
-5. **Switch the profile.** Set `storage.operatorUnlocked.unlockMethod =
-   "local-openbao"` (with declared LUKS UUIDs).
+5. **Switch the profile after acceptance.** Through the gated group rollout,
+   set `storage.operatorUnlocked.unlockMethod = "local-openbao"` (with declared
+   LUKS UUIDs).
    `openbao-local.service` is then wanted at boot, and the pre-switch gate
    `openbaoLocalPreflight` refuses activation with a named reason:
    `tpm-missing`, `secure-boot-disabled`, `not-enrolled`, `escrow-unconfirmed`,
@@ -117,6 +130,12 @@ concurrent attempts fail with `conflict`. Controller runs serialize on
 replaced; a conflicting record stops the run.
 
 ### Integrated deployment
+
+Planning and applying `rollout` require migration enabled in the selected
+configuration and both pre-copy/cutover units loaded on the target. The command
+checks these prerequisites before enrollment or volume changes. gc-10 currently
+has migration disabled; use its existing-container procedure after acceptance,
+not a migration rollout.
 
 `devenv shell openbao-local rollout --limit <host-or-group> --recovery-host <host>`
 plans enrollment and every declared volume. Add `--apply` to enroll, authenticate
@@ -163,8 +182,8 @@ seal key is reused. Any other stop resumes automatically on rerun.
   and re-seed commands; fleet status aggregation with hub state (W2).
 - Installer pre-partition TPM gating (W3), hardware acceptance kit (W5) and
   Vault migration (W4).
-- Software-TPM rejection in production (ENC-06 hardware) is not implemented;
-  `systemd-creds has-tpm2` accepts swtpm with UEFI firmware.
+- Physical TPM assurance and intended firmware-key verification (ENC-06) remain
+  hardware acceptance requirements despite the live platform rejection checks.
 - PCR 7 alone is not root/Nix-store integrity (ENC-09).
 
 These are release blockers. Successful VM runs and parser tests do not

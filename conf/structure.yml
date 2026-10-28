@@ -10,6 +10,9 @@ boundaries:
 - Do not patch generated Nix output for template changes
 - Do not weaken host identity verification
 entrypoints:
+- name: secure-boot-public-certificate
+  file: secure-boot/db.pem
+  purpose: Public fleet signing certificate; adjacent auth files enroll firmware trust. Private signing keys stay outside the repository.
 - name: system-template
   file: nix-templates/systems/x86_64-linux/main/default.nix.j2
   purpose: Inspect system template ownership and interfaces.

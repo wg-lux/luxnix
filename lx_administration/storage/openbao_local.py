@@ -15,10 +15,51 @@ import os
 from pathlib import Path
 import stat
 import struct
+import subprocess
 import sys
 
 TPM_ONLY = bytes.fromhex("0c7cc07b117645919c4b0bea08bc20fe")
 SOCKET = "/run/openbao-local/api.sock"
+SECURE_BOOT = Path(
+    "/sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c"
+)
+TPM = Path("/sys/class/tpm/tpm0")
+
+
+def platform_status() -> dict:
+    """Read live prerequisites, never infer them from inventory declarations.
+
+    Known virtualization and non-platform drivers are rejected. This is not
+    remote attestation or proof against a hypervisor that conceals itself.
+    """
+    tpm = subprocess.run(["systemd-creds", "has-tpm2"], capture_output=True, timeout=15)
+    virtual = subprocess.run(["systemd-detect-virt"], capture_output=True, timeout=15)
+    try:
+        secure_boot = SECURE_BOOT.read_bytes()[4:] == b"\x01"
+    except OSError:
+        secure_boot = False
+    try:
+        physical = (
+            virtual.returncode == 1 and virtual.stdout.strip() == b"none"
+            and (TPM / "tpm_version_major").read_text().strip() == "2"
+            and (TPM / "device/driver").resolve(strict=True).name
+            in {"tpm_crb", "tpm_tis"}
+        )
+    except OSError:
+        physical = False
+    return {"tpm2": tpm.returncode == 0, "physical_tpm": physical,
+            "secure_boot": secure_boot, "secure_boot_required": True}
+
+
+def platform_preflight() -> dict:
+    status = platform_status()
+    if not status["tpm2"]:
+        raise ValueError("tpm-missing: no usable TPM 2.0; no fallback")
+    if not status["physical_tpm"]:
+        raise ValueError("tpm-not-physical: virtualized or unrecognized TPM platform")
+    if not status["secure_boot"]:
+        raise ValueError("secure-boot-disabled: firmware Secure Boot is required")
+    return status
 
 
 class DeniedError(RuntimeError):
@@ -171,11 +212,19 @@ def volume_key(machine, volume, luks_uuid, credential_file, timeout=60, socket_p
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("credential", type=Path)
+    parser.add_argument("credential", type=Path, nargs="?")
+    parser.add_argument("--platform-only", action="store_true")
     args = parser.parse_args()
     try:
-        preflight(args.credential)
-    except (OSError, ValueError):
+        if args.platform_only:
+            platform_preflight()
+        elif args.credential is not None:
+            preflight(args.credential)
+        else:
+            parser.error("credential or --platform-only is required")
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        if args.platform_only and isinstance(exc, ValueError):
+            print(str(exc), file=sys.stderr)
         print("Local OpenBao bootstrap validation failed; no fallback", file=sys.stderr)
         return 1
     return 0

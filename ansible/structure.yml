@@ -11,6 +11,9 @@ boundaries:
   - Local CMDB facts are sensitive and must not be committed
   - Remote changes require explicit target authorization and connectivity checks
 entrypoints:
+  - name: storage-readiness
+    file: playbooks/storage-readiness.yml
+    purpose: Read public boot and storage metadata through an explicitly limited inventory target without accessing credentials.
   - name: operator-unlocked-secrets
     file: inventory/group_vars/operator_unlocked_secrets.yml
     purpose: Fleet-default TPM-unlocked volumes, startup migration, bind destinations and guarded consumers.

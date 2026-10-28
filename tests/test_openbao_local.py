@@ -61,6 +61,8 @@ def test_local_and_hub_are_independent():
       c = (base.extendModules { modules = [{
         luxnix.openbao.local.enable = true;
         luxnix.openbao.enable = true;
+        # Production platform prerequisites are mandatory for enrollment.
+        system.boot.secureBoot = f.inputs.nixpkgs.lib.mkForce true;
         luxnix.storage.operatorUnlocked = {
           unlockMethod = "local-openbao";
           migration.enable = f.inputs.nixpkgs.lib.mkForce false;
@@ -119,7 +121,12 @@ def test_local_and_hub_are_independent():
         timeout=180,
     )
     data = json.loads(result.stdout)
-    assert data["errors"] == []
+    # Shared EndoReg policy deliberately blocks unattended production profiles;
+    # this evaluation still verifies independent service wiring beneath the gate.
+    assert data["errors"] == [
+        "EndoReg unattended unlock is blocked until authenticated system and "
+        "application runtime acceptance is implemented."
+    ]
     assert data["defaultEnabled"] is False
     for settings in data["fleet"].values():
         if settings["unlockMethod"] != "local-openbao":
@@ -144,8 +151,7 @@ def test_local_and_hub_are_independent():
         "volume.unlock:/var/lib/openbao-bootstrap/volume-unlock.cred"
     ]
     assert data["wantedBy"] == ["multi-user.target"]
-    # gs-02 inherits system.boot.secureBoot from the group profile.
-    assert len(data["tool"]) == 1 and "--require-secure-boot" in data["tool"][0]
+    assert len(data["tool"]) == 1 and "--require-secure-boot" not in data["tool"][0]
     assert data["staged"] == {"wantedBy": [], "gated": False, "tool": True}
 
 
@@ -231,3 +237,68 @@ def test_unseal_wait_is_bounded(monkeypatch):
     with pytest.raises(ValueError, match="deadline"):
         local.volume_key("host", "data", "a-b", "/run/credential", timeout=0)
     assert not any(c[1] == "auth/approle/login" for c in bao.calls)
+
+
+@pytest.fixture
+def platform(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    tpm = tmp_path / "tpm0"
+    (tpm / "device").mkdir(parents=True)
+    (tpm / "tpm_version_major").write_text("2")
+    driver = tmp_path / "drivers/tpm_crb"
+    driver.mkdir(parents=True)
+    (tpm / "device/driver").symlink_to(driver)
+    secure_boot = tmp_path / "SecureBoot"
+    secure_boot.write_bytes(b"\x06\x00\x00\x00\x01")
+    monkeypatch.setattr(local, "TPM", tpm)
+    monkeypatch.setattr(local, "SECURE_BOOT", secure_boot)
+    results = {"systemd-creds": (0, b"yes"), "systemd-detect-virt": (1, b"none\n")}
+    def run(args, **kwargs):
+        code, out = results[args[0]]
+        return SimpleNamespace(returncode=code, stdout=out)
+    monkeypatch.setattr(local.subprocess, "run", run)
+    return tpm, secure_boot, results
+
+
+def test_physical_platform_requires_live_secure_boot(platform):
+    tpm, secure_boot, results = platform
+    assert local.platform_preflight()["physical_tpm"] is True
+    secure_boot.write_bytes(b"\x06\x00\x00\x00\x00")
+    with pytest.raises(ValueError, match="secure-boot-disabled"):
+        local.platform_preflight()
+    secure_boot.unlink()
+    with pytest.raises(ValueError, match="secure-boot-disabled"):
+        local.platform_preflight()
+
+
+@pytest.mark.parametrize(
+    "virtual", [(0, b"kvm"), (0, b"docker"), (1, b""), (2, b"none")]
+)
+def test_virtual_or_failed_detection_rejected(platform, virtual):
+    platform[2]["systemd-detect-virt"] = virtual
+    with pytest.raises(ValueError, match="tpm-not-physical"):
+        local.platform_preflight()
+
+
+@pytest.mark.parametrize("driver", ["tpm_vtpm_proxy", "tpm_tis_spi", "unknown"])
+def test_unknown_or_software_tpm_driver_rejected(platform, driver):
+    tpm, _, _ = platform
+    link = tpm / "device/driver"
+    target = link.resolve().parent / driver
+    target.mkdir()
+    link.unlink()
+    link.symlink_to(target)
+    with pytest.raises(ValueError, match="tpm-not-physical"):
+        local.platform_preflight()
+
+
+def test_missing_tpm_and_wrong_tpm_version_rejected(platform):
+    tpm, _, results = platform
+    results["systemd-creds"] = (1, b"partial")
+    with pytest.raises(ValueError, match="tpm-missing"):
+        local.platform_preflight()
+    results["systemd-creds"] = (0, b"yes")
+    (tpm / "tpm_version_major").write_text("1")
+    with pytest.raises(ValueError, match="tpm-not-physical"):
+        local.platform_preflight()

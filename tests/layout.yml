@@ -24,6 +24,10 @@ python_suites:
     scope: Optional CUDA environment probes, outside the default pytest suite.
     command: devenv tasks run env:setup-cuda
 nix_suites:
+  - id: root-integrity
+    path: tests/nixtest/root_integrity_vm_test.nix
+    scope: Isolated dm-verity store boot and tamper prototype; no hardware or production acceptance.
+    command: devenv tasks run tests:root-integrity-vm
   - id: nixtest
     path: tests/nixtest
     scope: Vault, SSH reachability, and lx-annotate safety contracts.

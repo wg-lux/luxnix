@@ -22,6 +22,7 @@
   - [Access Management](docs/access-management.md)
 - **Deployment and Testing**
   - [Deployment Guide](docs/deployment-guide.md)
+  - [gc-10 Automatic Startup](docs/gc-10-startup.md)
   - [Activation Failure Recovery](docs/activation-failure-recovery.md)
   - [External Storage Detection](docs/external-storage-detection.md)
   - [Hardware Setup](docs/hardware-setup.md)
@@ -51,6 +52,7 @@
   - [OpenBao Hub and Vault Migration](docs/openbao.md)
   - [Local OpenBao Bootstrap](docs/openbao-local.md)
   - [OpenBao Target Architecture](docs/openbao-architecture.md)
+  - [Root Integrity Prototype](docs/root-integrity-prototype.md)
   - [TPM Release Client](docs/tpm-release-client.md)
   - [Maintainer Notes](docs/vault-maintainer-operations.md)
   - [Admin Password Creation and Rotation](docs/admin-passwords.md)

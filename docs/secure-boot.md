@@ -1,7 +1,9 @@
 # Fleet Secure Boot with a controller-held key
 
-Every host in `operator_unlocked_secrets` (the same members as `active_clients`)
-sets `system.boot.secureBoot = true`. The NixOS module
+`system.boot.secureBoot` is opt-in and currently disabled fleet-wide: hosts
+use operator passphrase unlock, which does not depend on the boot chain.
+Secure Boot only becomes meaningful together with TPM-bound unattended unlock,
+and that path stays blocked on root integrity (ENC-09). When enabled, the NixOS module
 `modules/nixos/system/boot` replaces systemd-boot with
 [lanzaboote](https://github.com/nix-community/lanzaboote) `v1.2.0`.
 
@@ -86,8 +88,8 @@ means every host needs new keys enrolled in firmware.
    sudo luxnix-boot-artifacts enroll-firmware
    ```
 
-   It refuses unless the loaders on the ESP verify against `db.pem` and the
-   firmware is in setup mode. It writes db, KEK and then PK.
+   It refuses unless both loaders and an installed stub for the current profile
+   generation verify against `db.pem` and the firmware is in setup mode. It writes db, KEK and then PK.
 4. Reboot, enable Secure Boot if needed, and confirm
    `bootctl status` reports `Secure Boot: enabled (user)`.
 5. Only after that, enroll TPM-bound unlock according to

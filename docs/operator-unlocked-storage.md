@@ -12,8 +12,11 @@ directories, apply directory permissions and then start the database and
 application. Startup never creates or formats a missing container. Migration is
 an independent option and is disabled in the gc-10 pilot (ENC-25).
 
-The gc-10 pilot selects `unlockMethod = "tpm2"`; other hosts retain their prior
-passphrase policy until individually enrolled and accepted. Each existing container must
+Every host, including gc-10, currently uses the default `unlockMethod =
+"passphrase"`: an operator enters each container's passphrase at boot.
+TPM-bound unlock is paused until root integrity (ENC-09) is solved, because
+PCR 7 without Secure Boot and an integrity-protected root releases the key to
+any boot. Before selecting `tpm2` again, each existing container must
 first be enrolled on its own host, with a trusted signed boot chain and UEFI
 Secure Boot enabled. In a private terminal, run once per configured mapping:
 
@@ -44,16 +47,35 @@ PCR 7 and signed boot alone do not establish integrity of arbitrary persistent
 root/Nix-store code or enforce approved-version rollback. ENC-06/12 remain
 unverified; this implementation is not a release of the strong acceptance profile.
 
-Explicit `unlockMethod = "passphrase"` remains available for existing-volume unlock and
-recovery. In that mode, use an interactive SSH terminal and:
+### Boot with operator passphrase unlock
 
-```bash
-sudo luxnix-operator-storage start
-```
+The shared `roles.endoreg-client` role requires encrypted operator storage and
+`unlockMethod = "passphrase"`; evaluation fails for any other method. A boot
+then needs two separate credentials:
 
-In passphrase mode, the helper provides a private password agent and starts configured
-boot-time consumers. It uses `start`, not `restart`. Already open containers and
-already migrated data are reused; healthy services are not restarted.
+1. **Laptop login.** The machine boots to the normal desktop login. The account
+   password logs the user in but never unlocks storage. Until step 2,
+   PostgreSQL, lx-annotate and its workers stay queued and the encrypted
+   directories are not mounted.
+2. **Operator unlock.** An operator with administrator rights opens a terminal
+   on the laptop (or an SSH session) and runs:
+
+   ```bash
+   sudo luxnix-operator-storage start
+   ```
+
+   The helper answers the pending password requests and asks once per
+   container (`Unlock luxnix-secrets:`, `Unlock luxnix-app-storage:`). If the
+   boot splash shows the same prompt before the login screen, it can be
+   answered there instead.
+3. **Startup.** Each container opens, its mounts are checked as dm-crypt
+   backed, and then PostgreSQL, lx-annotate and its workers start on the
+   decrypted storage.
+
+The unlock waits without a time limit. A wrong passphrase fails that unit;
+rerun the command. It uses `start`, not `restart`: already open containers and
+already migrated data are reused, and healthy services are not restarted. This
+sequence has not yet been verified by a reboot on physical hardware.
 
 For inspection or unlock only:
 
@@ -69,12 +91,14 @@ new volume. It stores an authenticated Ansible Vault record under
 `~/.lxv/storage-recovery/<machine-id>/<volume>.vault`, using the existing admin
 vault key. The record binds host, machine ID, container path and native LUKS UUID.
 An encrypted copy is published on the selected independent recovery host under
-`~/.luxnix-recovery/<machine-id>/<luks-uuid>.vault`; the pilot uses gs-02.
+`~/.luxnix-recovery/<machine-id>/<luks-uuid>.vault`. The current gc-09 pilot uses
+gs-01, designated by the operator as the dedicated recovery host outside both
+gc-09 and gs-02. This designation does not establish a verified backup or restore.
 Only ciphertext is sent to that host. Keep the admin vault key separately in
 custodian recovery custody; it is not included with the export.
 
 `devenv shell storage-provision provision --host gc-10 --volume luxnix-app-storage
---recovery-host gs-02` previews the exact target. `--apply` explicitly authorizes
+--recovery-host gs-01` previews the exact target. `--apply` explicitly authorizes
 the operation after both recovery copies are authenticated. It uses the deployed
 `luxnix-storage-provision` helper, which requires Secure Boot and authenticated
 recovery custody. The legacy `tpm2` backend enrolls a TPM token. Select
@@ -97,6 +121,15 @@ changed. Both workflows accept `--sudo-password-file <private-file>` when sudo
 authentication is required, and refuse unprotected credential files. Omit
 `--apply` for inspection only. Copying authenticated ciphertext is not proof of
 replacement-hardware recovery or completed ENC-16/17 acceptance.
+
+For gc-09's existing containers, inspect each recovery plan with
+`devenv shell storage-provision escrow --host gc-09 --volume luxnix-secrets --recovery-host gs-01`
+and repeat with `--volume luxnix-app-storage`. The command may require the
+documented private sudo-password file even for inspection because it reads the
+LUKS UUID. Applying escrow requires the existing credential in protected storage
+and operator authorization; it must not generate a replacement passphrase.
+Keep deployment and reboot blocked until both credentials and independently
+decryptable custody have been verified. Never put credentials in chat or arguments.
 
 ## Separately authorized migration
 
@@ -222,12 +255,12 @@ wheel pin is updated.
 ## Deployment and verification
 
 gc-10 uses the shared operator-unlocked storage workflow, including unlock
-services, verified migration and boot-available account hashes. Its application
+services and boot-available account hashes; migration is disabled. Its application
 container remains on `/data/raid01`; the existing no-disk-swap policy is retained.
 The temporary host-specific disable gate has been removed.
 
-Normal app startup automatically unlocks enrolled TPM volumes. No separate helper
-command is required for routine starts or rebuilds. Retain offline recovery
+After each boot, follow [Boot with operator passphrase unlock](#boot-with-operator-passphrase-unlock)
+to unlock the volumes and start the configured consumers. Retain offline recovery
 passphrases; do not store unlock keys on plaintext root storage.
 
 Before first activation, verify recovery credentials and independent backups,

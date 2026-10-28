@@ -7,25 +7,37 @@ instruction to reinstall, repartition, format containers or repeat migration.
 
 ## Current rollout gate
 
+**Production unattended rollout is blocked.** Follow R0-R5 in
+`boot-encryption-acceptance.yml`; gc-10 is a reference for its hardware class,
+not an exception to the group profile. Sections 1-5 below describe a future
+procedure after those gates pass. They do not authorize enrollment, keyslot
+changes, activation or reboot now. Signed boot without authenticated root/Nix
+contents cannot satisfy ENC-09.
+
+Before firmware or credential changes, verify the effective live unlock method
+(`passphrase` versus an older `tpm2` generation), booted/current/profile targets,
+Secure Boot state and intended enrolled-key fingerprints. Inventory existing
+TPM credentials, LUKS slots/UUIDs and recovery references without exporting
+secret values. Preserve the known-working unlock path until acceptance.
+
 Preparation on 2026-10-26 enables `openbao.local.enable` in gc-10's inventory.
-This installs enrollment tools; it does **not** enroll OpenBao or change the
-existing `tpm2` unlock selection. Data migration remains disabled.
+This installs enrollment tools; it does **not** enroll OpenBao. Since
+2026-10-27 the repository configures gc-10 for operator passphrase unlock like
+the rest of the fleet, with Secure Boot disabled by default; the steps below apply only once TPM unlock is
+resumed. Data migration remains disabled.
 Do not select `local-openbao` until the enrollment and adoption steps pass.
 
 The live preflight found a TPM, disabled firmware Secure Boot, no measured
 UKI, closed storage and inactive PostgreSQL/application. The running generation
 does not provide the new enrollment tools. Controller signing custody and
-public enrollment files must be created before deployment. These are blockers
+public enrollment files have since been created by the operator. These are blockers
 to unattended startup, not steps already completed by this runbook.
 
-Validation handoff: inventory rendering and Nix evaluation passed with no
-failed assertions; local OpenBao has no boot target until profile adoption.
-Nix quality and structure validation passed. The controller then reported
-ENOSPC during Devenv GC-root and table-of-contents publication; the full build
-was interrupted without a successful result. Documentation contracts passed
-25 checks with one stale-TOC failure. Regenerate the TOC and rerun validation
-after resolving controller storage. The storage/enrollment owner also requires
-final verification of the concurrently changing implementation before deployment.
+Validation resumed on 2026-10-26 after controller storage cleanup: the table
+of contents was regenerated, all 26 documentation checks passed, and Nix quality
+and structure checks passed. Public signing material is now provisioned; the
+operator confirmed independent archive and passphrase custody. The full build,
+physical enrollment and boot acceptance remain required before activation.
 
 PCR 7 binding and signed boot do not authenticate the writable root/Nix store.
 ENC-09 remains a separate release blocker: this procedure alone does not prove
@@ -48,6 +60,10 @@ Recovery custody is the encrypted admin vault on gc-02 (`~/.lxv`) and an
 independent encrypted export on gs-02 (`~/.luxnix-recovery`). The controller's
 vault key must also have an independently recoverable custody arrangement;
 ciphertext alone is not recovery. Do not copy its plaintext key to gc-10.
+This recorded layout still depends on gs-02 for the emergency export. Before
+R0 passes, verify an additional encrypted recovery copy outside both gs-02 and
+gc-10, including the local seal trust anchor and independently recoverable keys.
+No such copy was verified in this planning update.
 
 Private controller inputs are `/home/admin/pwd_gc-10.txt` for sudo,
 `/home/admin/Desktop/token-gc-10-enc.txt` for application-container recovery,
@@ -80,10 +96,9 @@ Rebuild after adding those public files, since they change the closure.
 Follow the [deployment workflow](deployment-guide.md) to stage this exact
 gc-10 closure, then `devenv shell secure-boot-sign gc-10` and finish the boot
 installation as documented. The first keyless install can refuse an unsigned
-generation: that is not successful deployment. The host must have the
-`luxnix-boot-artifacts` import helper available for controller signing; if the
-old generation lacks it, resolve that bootstrap prerequisite before attempting
-the signing sequence. Do not reboot into a partially installed generation.
+generation: that is not successful deployment. Controller signing invokes the import helper from the exact new system
+closure, which verifies against its build-time public certificate. This works
+before the old system has the helper or the new `/etc` tree. Do not reboot into a partially installed generation.
 
 ## 2. Enroll firmware, then local OpenBao
 
@@ -135,12 +150,16 @@ policy will no longer match the adopted volumes.
 
 ## 4. Enable unattended startup
 
-Change only gc-10's canonical inventory value to
-`storage.operatorUnlocked.unlockMethod: '"local-openbao"'`, retaining
-`openbao.local.enable: "true"`, `migration.enable: "false"`, both UUIDs and the
-`/data/raid01` dependency. Regenerate with the [Autoconf workflow](autoconf.md),
-review the gc-10 output, rebuild and sign this new closure, then activate it.
-The `openbaoLocalPreflight` check must pass without bypasses.
+After R1-R4 and the required human assessments pass, prepare the bounded R5
+inventory wave using the same accepted group profile. Do not introduce a gc-10
+host-only `local-openbao` override. Every selected host must have verified
+enrollment, recovery, declared UUIDs and adoption/provisioning before switching;
+keep remaining hosts on operator unlock until the group change is safe.
+Use canonical YAML inputs and the [Autoconf workflow](autoconf.md), review
+rendered outputs, build and sign the exact closure, and require
+`openbaoLocalPreflight` without bypasses. Preserve gc-10's disabled migration,
+existing UUIDs and `/data/raid01` dependency. A group-default change remains
+blocked while any affected host is unprepared.
 
 Normal boot then starts local OpenBao, releases UUID-bound volume keys,
 opens LUKS, mounts the guarded paths and starts application dependencies.

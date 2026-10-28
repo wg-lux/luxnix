@@ -15,7 +15,7 @@ import secrets
 import subprocess
 import sys
 
-spec = importlib.util.spec_from_file_location("client", "/etc/local-client.py")
+spec = importlib.util.spec_from_file_location("client", "/etc/test-client.py")
 client = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(client)
 ROOT = Path("/run/local-test")
@@ -36,7 +36,8 @@ def tool(*args, request=None, reason=None):
     """Run luxnix-openbao-local; with reason, require a failure naming it."""
     data = b"" if request is None else json.dumps(request).encode()
     result = subprocess.run(
-        ["luxnix-openbao-local", *args], input=data, capture_output=True
+        ["python", "-I", "/etc/enrollment.py", "--client", "/etc/test-client.py",
+         "--hostname", "server", *args], input=data, capture_output=True
     )
     error = result.stderr.decode(errors="replace").strip().splitlines()[-1:] or [""]
     if reason is not None:
@@ -157,8 +158,7 @@ if command == "prepare":
     assert "systemd-tpm2" in private("before.json")["tokens"]
 
 elif command == "enroll":
-    # Explicit Secure Boot policy is enforced live; this VM has none.
-    tool("--require-secure-boot", "preflight", reason="secure-boot-disabled")
+    # Production admission is tested separately; this is the isolated software-TPM client.
     tool("convert-volume", *VOLUME, request={}, reason="Enrollment must be complete")
     tool("initialize", reason="Seal credential missing")
     seal = private("seal.json")
@@ -260,7 +260,7 @@ elif command == "provision":
               "luks_uuid": native_uuid, "origin": "new",
               "recovery_passphrase": secrets.token_hex(32),
               "provisioner": private("escrow.json")["provisioner"]}
-    host = enrollment.Host("server", vars(client), require_secure_boot=False)
+    host = enrollment.Host("server", vars(client))
     task = migration.Migration({"unlockMethod": "local-openbao", "binds": {},
         "volumes": {"fresh": {"container": record["container"], "device": "/dev/mapper/fresh",
                               "luksUUID": native_uuid, "minimumSizeMiB": 64}}}, None)

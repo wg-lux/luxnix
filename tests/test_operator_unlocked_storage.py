@@ -30,7 +30,8 @@ def hosts():
     expression = r'''
       let
         f = builtins.getFlake ("git+file://" + builtins.toString ./.);
-        inspect = name: let c = f.nixosConfigurations.${name}.config; in {
+        inspect = name: inspectConfig f.nixosConfigurations.${name}.config;
+        inspectConfig = c: {
           mounts = builtins.mapAttrs (_: v: {
             inherit (v) device options depends;
           }) c.fileSystems;
@@ -70,6 +71,13 @@ def hosts():
         };
       in builtins.listToAttrs (map (name: { inherit name; value = inspect name; })
         [ "gc-09" "gc-10" "gc-08" ])
+        # Unattended start is only reachable through the TPM unlock path.
+        // { "gc-10-tpm2" = inspectConfig (f.nixosConfigurations.gc-10.extendModules { modules = [{
+          luxnix.storage.operatorUnlocked.unlockMethod = f.inputs.nixpkgs.lib.mkForce "tpm2";
+        }]; }).config; }
+        // { "gc-09-local-openbao" = inspectConfig (f.nixosConfigurations.gc-09.extendModules { modules = [{
+          luxnix.storage.operatorUnlocked.unlockMethod = f.inputs.nixpkgs.lib.mkForce "local-openbao";
+        }]; }).config; }
     '''
     result = subprocess.run(
         ["nix", "eval", "--impure", "--json", "--expr", expression],
@@ -154,8 +162,10 @@ def test_host_specific_storage_and_unselected_host(hosts):
 def test_gc10_uses_fleet_unlock_migration_and_boot_account_hashes(hosts):
     c = hosts["gc-10"]
     assert c["enabled"] and not c["migration"]
-    assert c["unlockMethod"] == "tpm2"
-    assert c["unlockTimeout"] == "90s"
+    assert c["unlockMethod"] == "passphrase"
+    # Operator unlock waits for the passphrase; the 90s bound applies to TPM unlock.
+    assert c["unlockTimeout"] == "infinity"
+    assert hosts["gc-10-tpm2"]["unlockTimeout"] == "90s"
     assert {
         "luxnix-storage-unlock-luxnix-secrets",
         "luxnix-storage-unlock-luxnix-app-storage",
@@ -164,6 +174,14 @@ def test_gc10_uses_fleet_unlock_migration_and_boot_account_hashes(hosts):
     assert c["copiesAccountHashes"]
     assert c["helper"] is not None
     assert "/data/raid01" in c["mounts"]["/var/lib/luxnix-app-storage"]["depends"]
+
+
+@pytest.mark.parametrize("profile", ["gc-10-tpm2", "gc-09-local-openbao"])
+def test_endoreg_role_rejects_unaccepted_unattended_unlock(hosts, profile):
+    assert (
+        "EndoReg unattended unlock is blocked until authenticated system and application runtime acceptance is implemented."
+        in hosts[profile]["assertions"]
+    )
 
 
 @pytest.mark.skipif(shutil.which("nix") is None, reason="Nix evaluation required")
@@ -252,10 +270,11 @@ def test_generic_module_layout_merging_and_invalid_configuration():
     assert not data["rawDevice"]["success"]
 
 
+@pytest.mark.parametrize("profile", ["gc-10", "gc-10-tpm2"])
 @pytest.mark.parametrize("mismatch", [False, True])
-def test_packaged_start_preserves_healthy_services_and_rejects_wrong_mapping(hosts, tmp_path, mismatch):
+def test_packaged_start_preserves_healthy_services_and_rejects_wrong_mapping(hosts, tmp_path, mismatch, profile):
     """Execute the packaged CLI with device/systemctl probes isolated from the host."""
-    helper = hosts["gc-10"]["helper"]
+    helper = hosts[profile]["helper"]
     result = subprocess.run(
         ["nix", "build", "--no-link", helper["derivation"] + "^out"],
         capture_output=True, text=True, timeout=240,
@@ -265,9 +284,13 @@ def test_packaged_start_preserves_healthy_services_and_rejects_wrong_mapping(hos
     mocks.mkdir()
     scripts = {
         "id": "echo 0",
-        "systemd-tty-ask-password-agent": "exit 0",
+        "systemd-tty-ask-password-agent": 'printf "%s\\n" "$@" > "$AGENT_LOG"',
         "realpath": 'printf "%s\\n" "$2"',
-        "systemctl": 'printf "%s\\n" "$@" >> "$CALL_LOG"',
+        "systemctl": '''if [ "$PASSPHRASE" = 1 ]; then
+  for i in 1 2 3 4 5; do [ -f "$AGENT_LOG" ] && break; sleep 0.1; done
+  [ -f "$AGENT_LOG" ] || exit 98
+fi
+printf "%s\\n" "$@" >> "$CALL_LOG"''',
         "cryptsetup": '''[ "$1" = status ] || exit 99
 if [ "$MISMATCH" = 1 ]; then
   echo "loop: /wrong-container"
@@ -292,11 +315,18 @@ fi''',
     executable.write_text(source)
     executable.chmod(0o700)
     calls = tmp_path / "calls"
-    run = subprocess.run(
-        [str(executable), "start"], stdin=subprocess.DEVNULL, capture_output=True, text=True,
-        env={**os.environ, "CALL_LOG": str(calls), "MISMATCH": str(int(mismatch))},
-        timeout=20,
-    )
+    agent = tmp_path / "agent"
+    master, slave = os.openpty()
+    try:
+        run = subprocess.run(
+            [str(executable), "start"], stdin=slave, capture_output=True, text=True,
+            env={**os.environ, "CALL_LOG": str(calls), "AGENT_LOG": str(agent),
+                 "PASSPHRASE": str(int(profile == "gc-10")), "MISMATCH": str(int(mismatch))},
+            timeout=20,
+        )
+    finally:
+        os.close(master)
+        os.close(slave)
     if mismatch:
         assert run.returncode != 0
         assert "mismatched mapping" in run.stderr
@@ -304,8 +334,10 @@ fi''',
     else:
         assert run.returncode == 0, run.stderr
         assert calls.read_text().splitlines() == [
-            "start", *[name + ".service" for name in hosts["gc-10"]["startup"]]
+            "start", *[name + ".service" for name in hosts[profile]["startup"]]
         ]
+        if profile == "gc-10":
+            assert agent.read_text().splitlines() == ["--watch"]
 
 
 def test_fleet_inventory_defaults_and_all_host_assertions():
@@ -321,6 +353,7 @@ def test_fleet_inventory_defaults_and_all_host_assertions():
         enabled = c.luxnix.storage.operatorUnlocked.enable;
         migration = c.luxnix.storage.operatorUnlocked.migration.enable;
         unlockMethod = c.luxnix.storage.operatorUnlocked.unlockMethod;
+        clientRole = c.roles.endoreg-client.enable;
         failures = map (a: a.message) (builtins.filter (a: !a.assertion) c.assertions);
         baselineFailures = map (a: a.message) (builtins.filter (a: !a.assertion)
           (f.nixosConfigurations.${name}.extendModules { modules = [{ luxnix.storage.operatorUnlocked.enable = f.inputs.nixpkgs.lib.mkForce false; }]; }).config.assertions);
@@ -336,11 +369,14 @@ def test_fleet_inventory_defaults_and_all_host_assertions():
     for host, settings in json.loads(result.stdout).items():
         assert settings["enabled"], host
         assert settings["migration"] == (host != "gc-10"), host
-        assert settings["unlockMethod"] == ("tpm2" if host == "gc-10" else "passphrase"), host
-        assert settings["failures"] == settings["baselineFailures"], (host, settings["failures"])
+        assert settings["unlockMethod"] == "passphrase", host
+        expected = settings["failures"] + ([
+            "EndoReg clients require encrypted operator storage for secrets and application data."
+        ] if settings["clientRole"] else [])
+        assert sorted(settings["baselineFailures"]) == sorted(expected), (host, settings)
         if host == "gc-10":
             assert settings["prepare"] is None
-            assert all("x-systemd.device-timeout=90s" in options for options in settings["mountOptions"])
+            assert all("x-systemd.device-timeout=infinity" in options for options in settings["mountOptions"])
             continue
         assert "operator_migration.py" in settings["prepare"]
         assert settings["dependencies"]["DefaultDependencies"] is False

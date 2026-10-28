@@ -357,7 +357,7 @@ def sign_host(host: str, flake: Path, custody: Path, inventory: Path) -> None:
                     "-t",
                     *ssh,
                     "sudo",
-                    "luxnix-boot-artifacts",
+                    f"{toplevel}/sw/bin/luxnix-boot-artifacts",
                     "import",
                     f"{remote}/artifacts.tar",
                 ],

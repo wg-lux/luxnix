@@ -419,3 +419,27 @@ def test_local_provision_recovers_an_unpublished_allocation(local_provision):
     assert container.exists()
     assert not Path(str(container) + '.allocating').exists()
     assert all(c[-1].endswith('.allocating') for c in state.calls if c[:2] == ('cryptsetup', 'luksFormat'))
+
+
+@pytest.mark.parametrize("reason", ["tpm-not-physical", "secure-boot-disabled"])
+def test_public_local_provision_checks_platform_before_allocation(
+    local_provision, monkeypatch, reason
+):
+    import runpy
+    from lx_administration.storage import openbao_enroll
+
+    task, record, _, state, container = local_provision
+    task.config.update(localOpenbaoEnabled=True, openbaoEnroll="enroll.py",
+                       openbaoClient="client.py")
+    record["machine_id"] = Path("/etc/machine-id").read_text().strip()
+    monkeypatch.setattr(migration, "require_secure_boot", lambda: None)
+    def refuse():
+        raise ValueError(reason)
+    def load(path):
+        return (vars(openbao_enroll) if path == "enroll.py"
+                else {"platform_preflight": refuse})
+    monkeypatch.setattr(runpy, "run_path", load)
+    with pytest.raises(migration.MigrationError, match=reason):
+        task.provision("data", record)
+    assert state.calls == []
+    assert not container.exists()

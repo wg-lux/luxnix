@@ -127,7 +127,9 @@ class Migration:
             if record.get("host") != self.config["machine"] or record.get("container") != str(container):
                 raise MigrationError("Provision request does not match the declared host and container")
             enrollment = runpy.run_path(self.config["openbaoEnroll"])
-            host = enrollment["Host"](self.config["machine"], runpy.run_path(self.config["openbaoClient"]), True)
+            host = enrollment["Host"](
+                self.config["machine"], runpy.run_path(self.config["openbaoClient"])
+            )
             try:
                 self.provision_local(name, record, host, key, expected_uuid)
             except enrollment["EnrollError"] as exc:

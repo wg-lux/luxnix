@@ -1,0 +1,66 @@
+---
+- name: Read the selected host storage and boot baseline
+  hosts: all
+  gather_facts: false
+  become: false
+  tasks:
+    - name: Collect public readiness metadata without reading credentials
+      ansible.builtin.command:
+        argv:
+          - /run/current-system/sw/bin/python3
+          - -c
+          - |
+            import json
+            import pathlib
+            import socket
+            import subprocess
+
+            def probe(*argv):
+                try:
+                    result = subprocess.run(argv, capture_output=True, text=True, timeout=30)
+                    return {"exit": result.returncode, "output": result.stdout.strip(),
+                            "error": result.stderr.strip()}
+                except (OSError, subprocess.TimeoutExpired) as error:
+                    return {"exit": None, "error": type(error).__name__}
+
+            def link(path):
+                p = pathlib.Path(path)
+                return str(p.resolve()) if p.exists() else None
+
+            firmware = pathlib.Path("/sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c")
+            try:
+                raw = firmware.read_bytes()
+                secure_boot = raw[4] == 1 if len(raw) == 5 else "invalid-variable"
+            except OSError as error:
+                secure_boot = type(error).__name__
+            report = {
+                "host": socket.gethostname(),
+                "generations": {p: link(p) for p in ["/run/current-system", "/run/booted-system",
+                                                      "/nix/var/nix/profiles/system"]},
+                "secure_boot": secure_boot,
+                "tpm_driver": link("/sys/class/tpm/tpm0/device/driver"),
+                "virtualization": probe("systemd-detect-virt"),
+                "block_devices": probe("lsblk", "--json", "--output", "NAME,TYPE,FSTYPE,UUID,MOUNTPOINTS"),
+                "mounts": {path: probe("findmnt", "--json", "--mountpoint", path,
+                                       "--output", "TARGET,SOURCE,FSTYPE,OPTIONS") for path in [
+                    "/", "/nix/store", "/etc/secrets", "/etc/secrets/vault",
+                    "/var/lib/luxnix-secrets", "/var/lib/luxnix-app-storage",
+                    "/var/lib/postgresql", "/var/lib/lx-annotate"]},
+                "swap": probe("swapon", "--show", "--noheadings", "--output", "NAME,TYPE"),
+                "services": {unit: probe("systemctl", "is-active", unit) for unit in [
+                    "sshd", "postgresql", "lx-annotate", "lx-annotate-celery-worker",
+                    "openbao-local", "luxnix-storage-migrate"]},
+            }
+            print(json.dumps(report, sort_keys=True))
+      register: storage_readiness
+      changed_when: false
+      check_mode: false
+
+    - name: Require the inventory identity to match the responding host
+      ansible.builtin.assert:
+        that: (storage_readiness.stdout | from_json).host == inventory_hostname
+        fail_msg: Refusing readiness evidence from a different host.
+
+    - name: Report baseline without claiming recovery or production acceptance
+      ansible.builtin.debug:
+        msg: "{{ storage_readiness.stdout | from_json }}"

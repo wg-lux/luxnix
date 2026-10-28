@@ -33,7 +33,6 @@ PENDING = BOOT / "pending-enrollment.cred"
 # The provisioner SecretID issued for escrow; reused on resume so escrow is stable.
 PENDING_PROVISIONER = BOOT / "pending-provisioner.cred"
 LOCK = Path("/run/lock/luxnix-operator-migration")
-SECURE_BOOT = Path("/sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c")
 TOKEN_TYPE = "luxnix-openbao"
 UNLOCK_ROLE = "volume-unlock"
 PROVISIONER_ROLE = "volume-provisioner"
@@ -84,12 +83,11 @@ def escrow_digest(escrow: dict) -> str:
 
 
 class Host:
-    def __init__(self, hostname: str, client: dict, require_secure_boot: bool):
+    def __init__(self, hostname: str, client: dict):
         if not NAME.fullmatch(hostname):
             raise EnrollError("Invalid inventory host name")
         self.hostname = hostname
         self.client = client
-        self.require_secure_boot = require_secure_boot
 
     def api(self, method, path, data=None, token=None):
         try:
@@ -117,13 +115,9 @@ class Host:
     # Status and preflight -------------------------------------------------
 
     def status(self) -> dict:
-        tpm = subprocess.run(["systemd-creds", "has-tpm2"], capture_output=True).returncode == 0
-        secure_boot = SECURE_BOOT.is_file() and SECURE_BOOT.read_bytes()[4:] == b"\x01"
         return {
             "host": self.hostname,
-            "tpm2": tpm,
-            "secure_boot": secure_boot,
-            "secure_boot_required": self.require_secure_boot,
+            **self.client["platform_status"](),
             "seal_credential": SEAL.is_file(),
             "unlock_credential": UNLOCK.is_file(),
             "initialized": RAFT.is_file(),
@@ -133,12 +127,13 @@ class Host:
 
     def preflight(self) -> dict:
         """Live checks on every mutating phase; inventory assertions are not enough."""
-        status = self.status()
-        if not status["tpm2"]:
-            raise EnrollError("tpm-missing: no usable TPM 2.0; enrollment never falls back")
-        if self.require_secure_boot and not status["secure_boot"]:
-            raise EnrollError("secure-boot-disabled: enroll firmware keys before local OpenBao")
-        return status
+        try:
+            self.client["platform_preflight"]()
+        except (ValueError, OSError, subprocess.SubprocessError) as exc:
+            detail = (str(exc) if isinstance(exc, ValueError)
+                      else "platform-check-failed")
+            raise EnrollError(detail) from None
+        return self.status()
 
     # Enrollment -------------------------------------------------------------
 
@@ -248,6 +243,7 @@ class Host:
                          {"secret_id_accessor": accessor}, token)
 
     def confirm(self, request: dict) -> dict:
+        self.preflight()
         if not PENDING.is_file() or not PENDING_PROVISIONER.is_file():
             raise EnrollError("No pending enrollment")
         pending = json.loads(unseal_credential("pending.json", PENDING))
@@ -475,7 +471,6 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--client", type=Path, required=True)
     parser.add_argument("--hostname", required=True)
-    parser.add_argument("--require-secure-boot", action="store_true")
     parser.add_argument("command", choices=["status", "preflight", "plan-volume", *sorted(MUTATING)])
     parser.add_argument("--volume")
     parser.add_argument("--container")
@@ -485,7 +480,7 @@ def main(argv=None) -> int:
     try:
         if os.geteuid() != 0:
             raise EnrollError("Run as root")
-        host = Host(args.hostname, runpy.run_path(str(args.client)), args.require_secure_boot)
+        host = Host(args.hostname, runpy.run_path(str(args.client)))
         request = json.loads(sys.stdin.buffer.read(65536) or b"{}") if args.command in {
             "seal", "confirm", "convert-volume", "rotate-unlock"} else {}
         LOCK.parent.mkdir(mode=0o755, exist_ok=True)
@@ -512,7 +507,7 @@ def main(argv=None) -> int:
                 result = host.convert_volume(args.volume, args.container, args.luks_uuid, request)
             else:
                 result = host.rotate_unlock(request)
-    except (EnrollError, KeyError, ValueError, OSError) as exc:
+    except (EnrollError, KeyError, ValueError, OSError, subprocess.SubprocessError) as exc:
         detail = str(exc) if isinstance(exc, EnrollError) else type(exc).__name__
         if isinstance(exc, KeyError) and exc.args and isinstance(exc.args[0], str) \
                 and NAME.fullmatch(exc.args[0].replace("_", "-")):

@@ -26,10 +26,8 @@ host_nixos:
 extra_secret_names: []
 
 host_luxnix:
-  # Install enrollment tooling first; select local-openbao only after adoption.
+  # Enrollment tooling only; unlock stays on the fleet passphrase default until ENC-09.
   openbao.local.enable: "true"
-  # ENC-24/25: pilot unlock is independent of data migration.
-  storage.operatorUnlocked.unlockMethod: '"tpm2"'
   storage.operatorUnlocked.migration.enable: "false"
   storage.operatorUnlocked.volumes.luxnix-app-storage.luksUUID: '"f5869d54-4ea5-407c-a690-7238fe79cd6b"'
   storage.operatorUnlocked.volumes.luxnix-secrets.luksUUID: '"dc53d362-e6e2-43ee-9cbf-4726d55c3055"'

@@ -11,8 +11,6 @@ let
   # Volume unlock depends on the local store only once the storage profile says so;
   # before that, enrollment can install and use the tool without a boot dependency.
   localRequired = (storage.enable or false) && (storage.unlockMethod or "") == "local-openbao";
-  # The fleet profile declares Secure Boot; the live firmware state must match it.
-  requireSecureBoot = config.system.boot.secureBoot or false;
   # Match the pinned upstream sandbox for both independently owned instances.
   hardening = {
     CapabilityBoundingSet = "";
@@ -81,6 +79,7 @@ let
       ];
     };
   localPreflight = pkgs.writeShellScript "openbao-local-preflight" ''
+    set -eu
     ulimit -c 0
     export PATH=${
       lib.makeBinPath [
@@ -88,6 +87,7 @@ let
         pkgs.util-linux
       ]
     }
+    ${pkgs.python3}/bin/python ${../../../../lx_administration/storage/openbao_local.py} --platform-only
     ${pkgs.python3}/bin/python ${../../../../lx_administration/secret_storage.py} --allow-runtime /run
     exec ${pkgs.python3}/bin/python ${../../../../lx_administration/storage/openbao_local.py} ${lib.escapeShellArg localCfg.sealCredentialFile}
   '';
@@ -97,12 +97,6 @@ let
     set -eu
     ulimit -c 0
     fail() { echo "local OpenBao activation blocked: $1" >&2; exit 1; }
-    ${pkgs.systemd}/bin/systemd-creds has-tpm2 >/dev/null || fail tpm-missing
-    ${lib.optionalString requireSecureBoot ''
-      sb=/sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c
-      [ "$(${pkgs.coreutils}/bin/od -An -tx1 -j4 -N1 "$sb" 2>/dev/null | ${pkgs.coreutils}/bin/tr -d ' ')" = 01 ] \
-        || fail secure-boot-disabled
-    ''}
     [ -f /var/lib/openbao-local/raft/raft.db ] || fail not-enrolled
     [ ! -e /var/lib/openbao-bootstrap/pending-enrollment.cred ] || fail escrow-unconfirmed
     ${localPreflight} || fail credential-not-tpm
@@ -160,7 +154,7 @@ let
       exec ${pkgs.python3}/bin/python3 -I ${../../../../lx_administration/storage/openbao_enroll.py} \
         --client ${../../../../lx_administration/storage/openbao_local.py} \
         --hostname ${lib.escapeShellArg config.networking.hostName} \
-        ${lib.optionalString requireSecureBoot "--require-secure-boot"} "$@"
+        "$@"
     '';
   };
 in

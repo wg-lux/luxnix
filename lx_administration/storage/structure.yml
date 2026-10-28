@@ -18,7 +18,7 @@ entrypoints:
     purpose: Idempotent allowlisted KV v2 provisioning with CAS and verified target-only operation after Vault retirement.
   - name: openbao-local
     file: openbao_local.py
-    purpose: Validate TPM-only PCR-bound bootstrap credentials without initializing state.
+    purpose: Require live Secure Boot and recognized non-virtual TPM admission; validate TPM-only PCR-bound bootstrap credentials without initializing state.
   - name: storage-provision
     file: provision.py
     purpose: Escrow recovery in the existing encrypted admin vault and an independent host before explicit inventory-scoped provisioning.

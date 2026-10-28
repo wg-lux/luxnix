@@ -10,6 +10,9 @@ boundaries:
 - Do not create parallel readiness trackers
 - Do not include secrets or local host facts in guides
 entrypoints:
+- name: root-integrity-prototype
+  file: root-integrity-prototype.md
+  purpose: Verified-store research prototype, production trust-path map and remaining authentication gaps.
 - name: gc-10-startup
   file: gc-10-startup.md
   purpose: Ordered gc-10 signing, enrollment, automatic startup and recovery runbook.

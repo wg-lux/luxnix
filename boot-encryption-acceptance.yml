@@ -3,7 +3,7 @@ catalog_id: fleet_volume_encryption
 title: Flottenverschlüsselung mit hostlokalem OpenBao und zentraler Identitätsprovisionierung im Hub
 language: de
 created_date: '2026-10-26'
-revised_date: '2026-10-26'
+revised_date: '2026-10-27'
 status: proposed_not_verified
 architecture: docs/openbao-architecture.md
 implementation_update:
@@ -14,9 +14,14 @@ implementation_update:
   requirement_change: Ersetzt die zentrale Freigabe jedes Volume-Schlüssels durch gs-02 (Schema 1.1). Die Ablösung
     von HashiCorp Vault ist Ziel nach abgenommener Migration.
   state: partially_implemented_not_deployed
-  current_runtime: Fleet defaults remain unchanged. The working tree now includes an opt-in local OpenBao service,
-    TPM-only credential validation, pre-switch checks and UUID-bound local unlock. Enrollment, installer gating,
-    ordered lock, recovery and Vault migration remain incomplete; no fleet acceptance is claimed.
+  current_runtime: >-
+    As of 2026-10-27 the working tree selects operator passphrase unlock fleet-wide,
+    including gc-10, and leaves Secure Boot disabled by default. Local enrollment,
+    adoption, resumable provisioning and integrated rollout tooling exist, as does
+    controller signing. Live platform checks reject disabled Secure Boot and known
+    virtualized or unrecognized TPM platforms. Installer enforcement, physical TPM assurance, ordered
+    locking, recovery/re-seed and authenticated root integrity remain release gates.
+    Repository configuration is not evidence of the effective live host state.
   implementation_reference: docs/openbao-local.md
 purpose: Jeder Host betreibt ein unabhängiges lokales OpenBao mit Raft und TPM-gebundenem Auto-Unseal für die
   Container-Schlüssel. Ein zentrales OpenBao auf gs-02 übernimmt Maschinen-Enrollment, PKI und die Auslieferung
@@ -115,6 +120,122 @@ profiles:
   applies_to: Alle Hosts
   description: Expliziter Recovery-Befehl mit unabhängig verwahrtem Material für TPM-Verlust, Verlust des lokalen
     OpenBao und LUKS-Recovery. Nie ein automatischer Rückfall und kein wählbarer unlockMethod-Wert.
+rollout_plan:
+  date: '2026-10-27'
+  pilot:
+    host: gc-09
+    recovery_host: gs-01
+    recovery_host_selection: Operator designated gs-01 on 2026-10-27; ciphertext custody only, with independently recoverable decryption-key custody.
+    recovery_host_connectivity:
+      command: devenv shell check-connectivity gs-01
+      result: Failed on 2026-10-27 with exit 4; inventory SSH connection timed out, changed=0. Restore reachability before recovery inspection or escrow.
+    policy_owner: modules/nixos/roles/endoreg-client/default.nix
+    scope: Shared EndoReg client safety; no host-specific security exception or fleet acceptance from one pilot.
+    authorization: Read-only inspection authorized; each deployment and reboot requires explicit operator approval.
+    recovery: Operator confirmed console access on 2026-10-27; recovery passphrase and independent encrypted custody are not yet verified, so deployment and reboot remain blocked.
+    baseline_command: devenv shell storage-readiness --limit gc-09
+    baseline_observation: >-
+      Read-only inspection on 2026-10-27 found active encrypted data mappings,
+      application, PostgreSQL and worker; Secure Boot disabled, platform TPM driver
+      present, no detected virtualization, current/profile equal but booted generation
+      older. This does not prove recovery custody or reboot acceptance. Raw host facts
+      remain local under ignored logs/ and are not committed.
+  authority: User-requested planning update from the supplied offline-theft recommendations; no hardware acceptance granted.
+  primary_objective: >-
+    A stolen powered-off host must not release volume keys to modified boot,
+    root or Nix-store code. Secure Boot and authenticated executed system contents
+    are mandatory before production unattended unlock; PCR 7 or a signed UKI alone is insufficient.
+  offline_authority: >-
+    Retain the existing local-unlock decision: enrolled hosts may unlock while
+    gs-02 is unreachable. Hub revocation affects online identities, not offline
+    volume access. Requiring an offline kill switch needs a new online or operator factor decision.
+  baseline:
+    source: Working tree inspected on 2026-10-27; no remote inspection or deployment in this update.
+    configured: Group and gc-10 use passphrase; Secure Boot is opt-in and disabled by default; gc-10 has enrollment tooling enabled.
+    observed_history: Last recorded gc-10 preflight found TPM present and firmware Secure Boot disabled; recheck live before changes.
+    implemented_not_accepted:
+    - Controller-held signing and public enrollment material (docs/secure-boot.md); private custody is operator-reported, not inspected here.
+    - Local static-seal enrollment, dedicated-keyslot adoption, credential rotation and deployment orchestration (docs/openbao-local.md).
+    evidence_limit: Existing VM/unit results are historical evidence; physical tamper, cold boot and recovery acceptance remain open.
+  gates:
+  - id: R0
+    owner_role: Deployment operator and recovery custodian
+    action: >-
+      Preserve operator-controlled unlock. Record effective live unlock method,
+      booted/current/profile generations, firmware Secure Boot and enrolled public-key
+      fingerprints. Inventory TPM-bound credentials, LUKS UUIDs/keyslots and recovery
+      custody before any firmware or resealing operation; never record secret values.
+    exit: >-
+      Reviewed baseline and tested recovery access, with an encrypted independent
+      recovery copy outside both gs-02 and the target, including independently recoverable decryption custody.
+    criteria: [ENC-01, ENC-18, ENC-19]
+  - id: R1
+    owner_role: Boot/integrity maintainer and security assessor
+    action: >-
+      Map every binary, library, interpreter, unit, configuration, credential loader
+      and privileged consumer that can receive the seal key or unlocked data.
+      Prototype authenticated immutable root/system contents in an isolated VM.
+      Define writable-state overrides, update and authorized rollback policy,
+      retired-generation rejection, recovery and failure behavior before key release.
+    exit: >-
+      Reviewed integrity design and executable positive, negative and interruption
+      tests. Select PCR policy and tooling only from this evidence; no mandated PCR
+      set, Keylime, dm-verity or UKI layout. Verification failure must prevent key
+      release or execution of altered code before any volume opens.
+    criteria: [ENC-09]
+  - id: R2
+    owner_role: Enrollment/installer maintainer and signing custodian
+    action: >-
+      Enforce physical TPM 2.0 and live enabled Secure Boot with intended keys on
+      production enrollment and activation, and before installer disk changes.
+      Reject software TPMs outside explicitly isolated tests. Integrate reviewed
+      controller signing into rebuild-host-boot and rebuild-host-switch, including
+      interrupted installation; keep signing private keys off all fleet hosts and automatically unlocked volumes.
+    exit: >-
+      Negative and interruption tests reject missing/unusable/software TPMs, disabled
+      Secure Boot, wrong signer and altered artifacts without disk/service changes.
+      Document signing custodians and independently encrypted signing-key recovery.
+    criteria: [ENC-06, ENC-10, ENC-21, ENC-22]
+  - id: R3
+    owner_role: Storage maintainer and recovery custodian
+    action: >-
+      Complete explicit lock/shutdown ordering and operator-driven recovery/re-seed.
+      Test busy mappings, interruption, TPM loss/clear, changed machine-id and lost
+      Raft state; verify UUIDs, data, separate recovery/OpenBao slots and recovery
+      with both gs-02 and the target unavailable. Resolve independent salt custody
+      and verified-copy receipts before enabling identity migration.
+    exit: >-
+      Reviewable functional failure/retry evidence, independent restore readback
+      and cataloged procedures; no automatic recovery fallback or replacement store.
+    criteria: [ENC-08, ENC-18, ENC-19, ENC-20, ENC-23]
+  - id: R4
+    owner_role: Hardware operator and named human security assessor
+    action: >-
+      After R1-R3, validate gc-09 for its hardware class and a physical reference
+      host for every other class. Tamper separately with boot artifacts, command
+      line, root/Nix-store binaries, units, configuration and writable injection
+      paths. Test approved updates/rollbacks, retired images, firmware/TPM changes,
+      recovery and cold boot with gs-02/VPN/DNS unavailable. Test console/recovery
+      shell, external boot and DMA/debug exposure against access to an intact unlocked host.
+    exit: >-
+      Hardware-class records include firmware/key fingerprints, revision, locked
+      inputs, approved artifacts, positive/negative results and mutation witnesses;
+      satisfy catalog boot counts and recovery budgets. gc-09 alone cannot approve the fleet.
+    criteria: [ENC-06, ENC-09, ENC-25, ENC-26]
+  - id: R5
+    owner_role: Fleet release owner
+    action: >-
+      Only after all required criteria have evidence and a named human assessment,
+      deploy in bounded inventory waves with the same group security profile.
+      Authenticate escrow before provisioning/adoption, verify each host's cold boot,
+      mounts and application data, and stop a wave at the first failure. No gc-10
+      host-only production exception. Keep remaining hosts on operator unlock until enrollment passes.
+    exit: >-
+      No group-default switch until every selected host is prepared and accepted;
+      remaining enrollment work blocks a premature group-wide change. Rollback
+      preserves recovery access and accounts for keyslot changes outside NixOS generations.
+    criteria: [ENC-01, ENC-03, ENC-21, ENC-24, ENC-25, ENC-26]
+  separate_workstream: HashiCorp Vault remains authoritative until independent hub migration and recovery gates pass.
 proposed_measurements:
   disclaimer: Vor Umsetzung im Abnahmeplan festlegen. Abweichungen werden mit Hardwareklasse und Begründung versioniert.
   reference_host_cold_boots_per_hardware_class: 5
@@ -288,11 +409,13 @@ acceptance_criteria:
 - id: ENC-09
   category: Schutz
   title: Integrität der ausgeführten Entsperr- und Folgekomponenten
-  requirement: Der Code, der den lokalen Seal-Schlüssel erhält und danach auf Secrets oder Nutzdaten zugreift, ist
-    gegen Offline-Manipulation der unverschlüsselten Root geschützt. Alternativ ist das Restrisiko für das Standardprofil
-    ausdrücklich bewertet und vom Eigentümer freigegeben. Signierte UKIs oder PCR 7 allein gelten nicht als Nachweis
-    für die Integrität beliebiger Root- oder Nix-Store-Inhalte. Weil die Entsperrung lokal und unbeaufsichtigt erfolgt,
-    trägt dieses Kriterium den gesamten Schutz eines ausgeschalteten gestohlenen Geräts.
+  requirement: >-
+    Code receiving the local seal key or accessing unlocked secrets/data must be
+    protected against offline root/Nix-store modification. Secure Boot and
+    authenticated executed system contents are mandatory before production
+    unattended unlock (rollout decision 2026-10-27). Signed UKIs or PCR 7 alone
+    do not authenticate arbitrary root/Nix-store contents. Local unattended
+    release relies on this integrity boundary for protection of a stolen powered-off host.
   verification:
   - (hardware) Manipulationen an Bootimage, Startparametern, OpenBao-Binary, Entsperrlogik und relevanten Nix-Store-Pfaden
     verhindern das Entsiegeln oder nachweislich die Ausführung des manipulierten Codes.
@@ -617,6 +740,89 @@ fleet_checks:
   pass_condition: Jeder MUSS-Punkt ist mit einem reproduzierbaren Nachweis der verlangten Evidenzklasse verknüpft;
     unbekannte Eigenschaften bleiben offen.
 repository_review:
+  gc09_shared_role_readiness_2026_10_27:
+    state: blocked_not_production_ready
+    assessor: codex-perf-01a17c79
+    implementation: modules/nixos/roles/endoreg-client/default.nix
+    scope: Shared EndoReg clients including GPU and hub consumers; gc-09 is only the pilot target.
+    completed:
+    - Role evaluation rejects disabled encrypted storage and unaccepted unattended unlock; no host bypass option.
+    - Enrollment, confirmation, bootstrap and activation use unconditional live Secure Boot and recognized non-virtual TPM platform checks.
+    - Read-only inventory-scoped storage-readiness command checks host identity and reports boot, mount and service metadata without credentials.
+    verification:
+    - command: python -m pytest -q tests/test_operator_unlocked_storage.py
+      result: 12 passed, including fleet assertions and denial of both unattended methods.
+    - command: python -m pytest -q tests/test_openbao_local.py tests/test_openbao_enroll.py tests/test_local_enrollment.py
+      result: 60 passed; live platform denial and all mutating enrollment phases covered.
+    - command: python -m pytest -q tests/test_operator_storage_migration.py
+      result: 30 passed, including public provisioning dispatch rejection before allocation.
+    - command: devenv tasks run tests:openbao-local-vm
+      result: Final-source run passed in 233 seconds, including production swtpm rejection and isolated enrollment, adoption, interrupted provisioning, rotation and recovery paths.
+    - command: python -m pytest -q tests/test_devenv_command_catalog.py tests/test_repository_architecture_contract.py tests/test_documentation_contract.py tests/test_test_layout_contract.py
+      result: 66 passed.
+    - command: devenv shell storage-readiness --limit gc-09
+      result: Passed identity validation; changed=0, failed=0. Raw metadata stays under ignored logs/.
+    - command: nix build .#nixosConfigurations.gc-09.config.system.build.toplevel --no-link
+      result: Passed after source edits stabilized; no activation or deployment performed.
+    remaining_gates:
+    - gate: R0
+      owner_role: gc-09 operator and independent recovery custodian
+      blocker: Console confirmed; existing recovery credential and independently decryptable encrypted backup are not verified. No deployment or reboot authorization granted.
+    - gate: R1
+      owner_role: EndoReg boot and application maintainers
+      blocker: Authenticated production UKI/root/application runtime, persistent override restrictions and update/rollback policy are absent; unsigned VM results cannot replace them.
+    - gate: R2
+      owner_role: Installer maintainer and firmware signing custodian
+      blocker: Pre-partition installer enforcement, intended firmware signer verification and physical TPM assurance remain open; platform detection is not cryptographic attestation.
+    - gate: R3
+      owner_role: Storage maintainer and recovery custodian
+      blocker: Ordered explicit lock, recovery/re-seed and independent restore acceptance remain open.
+    - gate: R4-R5
+      owner_role: Hardware operator and named human release assessor
+      blocker: Hardware tamper, outage, cold-boot and recovery evidence followed by bounded fleet waves; no automatic production approval from source tests.
+  root_integrity_prototype_2026_10_27:
+    state: vm_prototype_passed_not_production_accepted
+    implementation: tests/nixtest/root_integrity_vm_test.nix
+    specification: tests/root-integrity.yml
+    trust_path_map: docs/root-integrity-prototype.md
+    command: devenv tasks run tests:root-integrity-vm
+    scope: Isolated kernel dm-verity store with volatile root, UKI-pinned hash and synthetic release probe.
+    trust_assumption: The unsigned UKI is a trusted fixture; firmware authentication and hardware TPM policy are not established.
+    acceptance: R1 prototype evidence only; ENC-09 and R0-R5 remain open until their required evidence and human assessment exist.
+    verification:
+    - class: vm
+      command: nix build .#checks.x86_64-linux.root-integrity --no-link -L
+      result: Passed; expanded driver 104.91 seconds. Read-only ext4 dm-verity, volatile policy/unit/executable/environment reset, data/hash corruption, whole-store substitution and explicit original-image recovery. Each tampered boot requires a kernel integrity error and no release marker for 15 seconds.
+    - class: eval
+      command: python -m pytest -q tests/test_root_integrity.py
+      result: 1 passed, 0 failed, 0 skipped; unrelated isolated source edits leave the image derivation unchanged.
+    unresolved: Unsigned UKI fixture, actual OpenBao/TPM release, full tamper matrix, authenticated updates, anti-rollback and physical acceptance.
+  first_deploy_review_2026_10_27:
+    reviewers: Three gpt-6.1-terra subagents with parent integration review.
+    scope: First operator-passphrase deployment; no unattended-unlock or hardware acceptance.
+    corrections:
+    - Rollout rejects disabled migration or unloaded pre-copy/cutover units before enrollment or volume mutation.
+    - Controller setup and volume evaluation are shared across plan/apply; rollout no longer carries the unsupported per-volume selector branch.
+    - Firmware enrollment requires a verified installed stub for the current profile generation as well as verified loaders.
+    - gc-10 guidance now states passphrase unlock and disabled migration; the packaged helper is exercised for both passphrase and TPM profiles.
+    remaining_gates:
+    - Confirm effective live host state, recovery and application compatibility before the separately authorized first deployment.
+    - Signed-stub generation matching does not prove exact profile identity or presence of its kernel/initrd; physical boot verification remains required.
+    - Production unattended unlock still requires R0-R5, including root integrity, physical TPM enforcement, ordered lock and independent recovery/re-seed.
+    evidence_policy: Local tests/builds demonstrate repository staging only; no host activation, firmware enrollment or readiness status change.
+    verification:
+    - command: python -m pytest -q tests/test_local_enrollment.py tests/test_openbao_enroll.py tests/test_operator_unlocked_storage.py tests/test_secure_boot.py tests/test_secure_boot_controller.py
+      result: 45 passed, 0 failed, 0 skipped; passlib deprecation and old temporary-directory cleanup warnings.
+    - command: python -m pytest -q tests/test_devenv_command_catalog.py tests/test_shell_alias_contract.py
+      result: 30 passed, 0 failed, 0 skipped; old temporary-directory cleanup warnings.
+    - command: nix build '.#nixosConfigurations.gc-10.config.system.build.toplevel' --no-link
+      result: Passed; no activation.
+    - command: devenv tasks run autoconf:check nix-quality:generators
+      result: Passed.
+    - command: devenv tasks run docs:check nix-quality:check
+      result: Passed.
+    - command: python scripts/lint_structure.py
+      result: Passed; 23 manifests.
   reviewed_at: '2026-10-26'
   scope: Statisches Lesen von Commit 0a0d547b und dem gestagten Arbeitsbaum auf lx-annotate_ollama, ergänzt um Nix-Evaluierung,
     den OpenBao-VM-Test und swtpm-Tests. Kein Remote-Zugriff, kein Deployment, keine Änderung am bestehenden Vault.
@@ -691,11 +897,12 @@ repository_review:
     reference: secrets-management.yml
   baseline_deviations:
   - field: secure_boot_enabled
-    working_tree: system.boot.secureBoot = true für die gesamte Gruppe über group_nixos (lanzaboote, Schlüsselring
-      auf luxnix-secrets). Der Firmware-Zustand ist unbekannt.
+    working_tree: Seit 2026-10-27 nicht mehr gesetzt; Gruppen-Default ist false. Lanzaboote und Signierpfad bleiben
+      opt-in. Der Firmware-Zustand ist unbekannt.
     reference: ansible/inventory/group_vars/operator_unlocked_secrets.yml
   - field: unlock_method
-    working_tree: unlockMethod = "tpm2" nur für gc-10 über host_vars; Gruppen-Default ist passphrase
+    working_tree: Seit 2026-10-27 flottenweit passphrase (Operator-Entsperrung), auch gc-10; openbao.local bleibt
+      auf gc-10 nur als Enrollment-Werkzeug aktiv
     reference: ansible/inventory/host_vars/gc-10.yml
   - field: root_filesystem
     head: Root von gc-10 ist unverschlüsseltes btrfs
@@ -836,7 +1043,14 @@ repository_review:
     wurde gegen den gepinnten Quellcode v2.6.4 geprüft (docs/openbao.md); der Static Seal ist nur anhand von Zeichenketten
     im Binary vermutet.
 architecture_decisions:
-  authoritative_date: '2026-10-26'
+  authoritative_date: '2026-10-27'
+  offline_theft_rollout_2026_10_27:
+    requested_by: repository_owner_in_chat
+    scope: Planning update; no implementation acceptance or deployment authorization.
+    decision: Secure Boot plus authenticated executed root/system contents are required before production unattended unlock.
+    supersedes: ENC-09 residual-risk alternative and rollout_2026_10_26.inventory_switch as a sufficient release gate.
+    rollout: rollout_plan
+    offline_unlock: Retains the existing independent local unlock decision, including its lack of offline remote revocation.
   local_transport:
     decision_date: '2026-10-26'
     approved_by: repository_owner_in_chat
@@ -884,7 +1098,7 @@ architecture_decisions:
       (adopt)
     verification: tests/nixtest/openbao_local_vm_test.nix (Klasse vm)
     acceptance: VM-Nachweis für Übernahme, Idempotenz und erhaltene Daten/UUID; Hardware- und Flottenabnahme offen.
-  status: planned_not_implemented_not_deployed
+  status: partially_implemented_not_accepted_not_deployed
 implementation_choices_not_prescribed:
 - Konkretes TPM-Enrollment-Werkzeug oder konkrete PCR-Nummern, sofern ENC-06 und ENC-09 erfüllt sind
 - Static Seal mit TPM-versiegeltem Credential oder PKCS#11-Seal

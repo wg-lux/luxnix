@@ -10,6 +10,15 @@ boundaries:
   - Source checks do not prove deployment readiness
   - Nix evaluation and VM tests are separate from the fast Python lane
 entrypoints:
+  - name: root-integrity-vm
+    file: nixtest/root_integrity_vm_test.nix
+    purpose: Disposable verified-store boot and tamper prototype with a synthetic release marker.
+  - name: root-integrity-source-isolation
+    file: test_root_integrity.py
+    purpose: Evaluate that unrelated local files cannot change the prototype image dependency.
+  - name: root-integrity-specification
+    file: root-integrity.yml
+    purpose: Source trust-boundary test expectations and explicit evidence limits; not readiness state.
   - name: storage-cutover
     file: test_storage_cutover.py
     purpose: Unit tests with real rsync for resumable pre-copy, verified cutover and preserved sources.
@@ -39,7 +48,7 @@ entrypoints:
     purpose: Initialize disposable test state and verify local API readiness without emitting secrets.
   - name: openbao-local
     file: test_openbao_local.py
-    purpose: Verify TPM bootstrap policy rejection and independent local/hub service evaluation.
+    purpose: Verify production platform and TPM bootstrap policy rejection with independent local/hub service evaluation.
   - name: tpm-release
     file: test_tpm_release.py
     purpose: swtpm-backed TPM identity and mTLS release client contract.

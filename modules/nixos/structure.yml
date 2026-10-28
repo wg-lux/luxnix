@@ -10,6 +10,9 @@ boundaries:
 - Shared defaults can affect the entire fleet
 - Shared contributor tools belong in roles/custom-packages
 entrypoints:
+- name: endoreg-client-safety
+  file: roles/endoreg-client/default.nix
+  purpose: Require encrypted storage and reject unaccepted unattended unlock for every EndoReg client role consumer.
 - name: openbao
   file: luxnix/openbao/default.nix
   purpose: Separate opt-in encrypted TLS hub and TPM-sealed local Raft instances.

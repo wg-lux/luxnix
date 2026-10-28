@@ -204,8 +204,14 @@ class Controller:
         self.tool("preflight")
         return dict(self.tool("rotate-unlock", request={"provisioner": self.provisioner()}), host=self.host)
 
-    def rollout(self, volumes, provision_missing, *, apply=False, cutover=False) -> dict:
+    def rollout(self, volumes, provision_missing, *, migration_enabled, apply=False, cutover=False) -> dict:
         """One ordered wave: enroll, provision/adopt, pre-copy, optional final cutover."""
+        if not migration_enabled:
+            raise EnrollmentError("Rollout requires operator storage migration enabled in the selected configuration")
+        for unit in ("luxnix-storage-precopy.service", "luxnix-storage-cutover.service"):
+            state = self.target.call(["systemctl", "show", "--property=LoadState", "--value", unit])
+            if state.strip() != b"loaded":
+                raise EnrollmentError(f"Rollout requires deployed unit {unit} (load state: {state.decode(errors='replace').strip()})")
         status = self.tool("preflight")
         plans = []
         for name, volume in volumes.items():
@@ -307,24 +313,25 @@ def main(argv=None):
                 raise EnrollmentError("luxnix.openbao.local.enable is not deployed for this host")
             target = remote(host, args.sudo_password_file)
             machine_id = target.machine_id()
+            if mutating and recovery.machine_id() in {machine_id, controller_id}:
+                raise EnrollmentError("Emergency export must be separate from target and admin vault")
+            controller = Controller(host, target, recovery if mutating else None,
+                                    args.vault_dir, args.vault_key, machine_id, local)
+            if args.action in {"adopt", "rollout"}:
+                volumes = nix_eval(host, "luxnix.storage.operatorUnlocked.volumes")
             if not mutating:
-                controller = Controller(host, target, None, args.vault_dir, args.vault_key, machine_id, local)
                 status = controller.tool("status")
                 if args.action == "adopt":
-                    volumes = nix_eval(host, "luxnix.storage.operatorUnlocked.volumes")
                     status["plans"] = [controller.adopt(name, volumes[name], apply=False)
                                        for name in (args.volume or sorted(volumes))]
                 elif args.action == "rollout":
-                    volumes = nix_eval(host, "luxnix.storage.operatorUnlocked.volumes")
-                    status = controller.rollout({name: volumes[name] for name in (args.volume or sorted(volumes))},
-                                                None, cutover=args.cutover)
+                    status = controller.rollout(dict(sorted(volumes.items())),
+                                                None, cutover=args.cutover, migration_enabled=nix_eval(
+                                                    host, "luxnix.storage.operatorUnlocked.migration.enable"))
                 status["escrow"] = {item: escrow_path(args.vault_dir, host, item).exists()
                                     for item in ("seal-key", "enrollment")}
                 print(json.dumps(dict(status, action=args.action, apply=False), sort_keys=True))
                 continue
-            if recovery.machine_id() in {machine_id, controller_id}:
-                raise EnrollmentError("Emergency export must be separate from target and admin vault")
-            controller = Controller(host, target, recovery, args.vault_dir, args.vault_key, machine_id, local)
             if args.action == "enroll":
                 result = controller.enroll()
             elif args.action == "rotate-unlock":
@@ -338,11 +345,10 @@ def main(argv=None):
                     if args.sudo_password_file:
                         options += ['--sudo-password-file', str(args.sudo_password_file)]
                     provision_volume(options)
-                volumes = nix_eval(host, "luxnix.storage.operatorUnlocked.volumes")
-                result = controller.rollout({name: volumes[name] for name in (args.volume or sorted(volumes))},
-                                            provision_missing, apply=True, cutover=args.cutover)
+                result = controller.rollout(dict(sorted(volumes.items())),
+                                            provision_missing, apply=True, cutover=args.cutover,
+                                            migration_enabled=nix_eval(host, "luxnix.storage.operatorUnlocked.migration.enable"))
             else:
-                volumes = nix_eval(host, "luxnix.storage.operatorUnlocked.volumes")
                 result = {"host": host, "volumes": [
                     controller.adopt(name, volumes[name], apply=True)
                     for name in (args.volume or sorted(volumes))]}
