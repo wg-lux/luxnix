@@ -177,7 +177,7 @@ def test_api_failure_is_redacted_and_credentials_go_to_stdin(monkeypatch):
 
 
 def test_reconciliation_and_enrollment_check_containment_before_mutation():
-    source = (ROOT / "modules/nixos/luxnix/vault/default.nix").read_text()
+    source = (ROOT / "modules/nixos/luxnix/vault/tools/hub-sites.nix").read_text()
     reconcile = source.split("      reconcile_site() {", 1)[1].split(
         "  hubSiteLifecycleTool", 1
     )[0]

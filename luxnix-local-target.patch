@@ -1,0 +1,473 @@
+diff --git a/devenv/commands.yml b/devenv/commands.yml
+index 32f28ad53b299143be8d44934ee68c6ef17e10fe..b13a16ad926c5cef7091dceee43eb3d25ec8cd18 100644
+--- a/devenv/commands.yml
++++ b/devenv/commands.yml
+@@ -277,9 +277,10 @@ commands:
+     summary: Escrow a per-volume recovery credential in the admin vault and on an independent host before explicit encrypted container creation.
+     risk: sensitive-remote-state
+     operator_confirmation_required: true
+-    usage: devenv shell storage-provision <escrow|provision> --host <host> --volume <volume> [--recovery-host <host> | --controller-only-custody] [--backend passphrase|tpm2|local-openbao] [--apply]
++    usage: devenv shell storage-provision <escrow|provision> --host <host> --volume <volume> [--recovery-host <host> | --controller-only-custody] [--backend passphrase|tpm2|local-openbao] [--local-target] [--apply]
+     effects:
+       - Controller-only custody is an explicit escrow-only option; provisioning still requires independent recovery.
++      - The explicit local-target option requires the inventory host to match the local hostname; recovery remains remote and privileged target commands still require sudo.
+       - Passphrase provisioning requires the host's passphrase unlock policy and leaves the mapping open; subsequent boots use the escrowed passphrase.
+     implementation: lx_administration/storage/provision.py
+     documentation: docs/operator-unlocked-storage.md
+diff --git a/docs/operator-unlocked-storage.md b/docs/operator-unlocked-storage.md
+index 7d64c13027e93119998f128ecdcc42df1d6d9de6..a5a219bc9d27929fc37e22cc0fcd5c8bb8b03207 100644
+--- a/docs/operator-unlocked-storage.md
++++ b/docs/operator-unlocked-storage.md
+@@ -180,6 +180,42 @@ is already complete, `sudo luxnix-operator-storage start` uses the normal startu
+ path. Re-run the normal system switch and require success before considering
+ deployment complete.
+ 
++### Provisioning from the target itself
++
++Use `--local-target` when the controller is the target host. The selected
++inventory host must exist and exactly match the local OS hostname. The preview
++reports `"local_target": true` and reads the local machine ID. Target commands
++then execute locally, while the recovery connection still uses SSH with strict
++host-key checking. Without this option, the controller continues to use SSH for
++the target; an SSH failure never selects local execution automatically.
++
++For example, run the following as the normal administrator **on gc-02**, with
++gs-02 selected as the independent recovery host:
++
++```bash
++devenv shell storage-provision provision --host gc-02 --volume luxnix-app-storage --backend passphrase --recovery-host gs-02 --local-target
++```
++
++Review the preview before adding `--apply`. Both the target and the controller
++may be gc-02; the recovery host must be a different machine from both. Running
++this command on gs-02 is rejected. The same local transport is available for
++`storage-provision escrow` when recording an existing local volume.
++
++Run the controller as the normal administrator so it uses that account's
++existing admin vault and SSH identity. Privileged local operations still use
++sudo. Immediately before applying, authenticate with `sudo -v`; if the local
++sudo policy still requires a password file, supply the existing
++`--sudo-password-file` option with a private file on verified encrypted or
++runtime storage. A failure to obtain sudo stops the operation. The controller
++does not publish recovery passphrases in command arguments or diagnostics.
++
++Local execution uses the same installed `luxnix-storage-provision` helper as
++remote execution. The earlier host-helper deployment requirement still applies.
++Both recovery copies must authenticate before that helper runs; the existing
++machine, container and provisioning-receipt checks remain in force. This option
++does not change SSH authorization, create an admin vault, unlock an existing
++container automatically, or migrate source data during a preview.
++
+ ### Unlocking a newly provisioned passphrase volume after reboot
+ 
+ The generated recovery passphrase is also this volume's manual unlock credential.
+diff --git a/lx_administration/storage/provision.py b/lx_administration/storage/provision.py
+index 12301432205671b455da90abcf7acc63335bb173..ac51256976d0fd5d7b46601bd62679e1c9990ffb 100644
+--- a/lx_administration/storage/provision.py
++++ b/lx_administration/storage/provision.py
+@@ -14,6 +14,7 @@ import re
+ import resource
+ import secrets
+ import shlex
++import socket
+ import subprocess
+ import uuid
+ 
+@@ -71,6 +72,8 @@ with (root / '.lock').open('a') as lock:
+ 
+ 
+ class Remote:
++    operation = 'Remote operation'
++
+     def __init__(self, address, sudo_password_file=None):
+         self.ssh = ['ssh', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes',
+                     '-o', 'ConnectTimeout=10', '-o', 'ServerAliveInterval=30',
+@@ -78,10 +81,14 @@ class Remote:
+         self.password_file = sudo_password_file
+         self.password_required = None
+ 
++    def _run(self, args, data=b'', timeout=600):
++        return subprocess.run(self.ssh + [shlex.join(args)], input=data,
++                              capture_output=True, timeout=timeout)
++
+     def call(self, args, data=b'', privileged=False, relay_error=False):
+         if privileged:
+             if self.password_required is None:
+-                probe = subprocess.run(self.ssh + ['sudo -n true'], capture_output=True, timeout=30)
++                probe = self._run(['sudo', '-n', 'true'], timeout=30)
+                 self.password_required = probe.returncode != 0
+             if self.password_required:
+                 if self.password_file is None:
+@@ -93,14 +100,14 @@ class Remote:
+                 args = ['sudo', '-k', '-S', '-p', '', *args]
+             else:
+                 args = ['sudo', '-n', *args]
+-        result = subprocess.run(self.ssh + [shlex.join(args)], input=data, capture_output=True, timeout=600)
++        result = self._run(args, data=data)
+         if result.returncode:
+             # Remote diagnostics may contain credential-bearing input. Relay only the
+             # single ERROR line of a LuxNix tool that builds it without secret values.
+             lines = result.stderr.decode(errors='replace').strip().splitlines()
+             if relay_error and lines and re.fullmatch(r'ERROR: [A-Za-z0-9 ,.:;/_()-]{1,200}', lines[-1]):
+-                raise ProvisionError(f'Remote operation failed: {lines[-1][7:]}')
+-            raise ProvisionError(f'Remote operation failed (exit {result.returncode})')
++                raise ProvisionError(f'{self.operation} failed: {lines[-1][7:]}')
++            raise ProvisionError(f'{self.operation} failed (exit {result.returncode})')
+         return result.stdout
+ 
+     def machine_id(self):
+@@ -110,6 +117,24 @@ class Remote:
+         return value
+ 
+ 
++class Local(Remote):
++    """Reuse target privilege and stdin handling without an SSH connection."""
++
++    operation = 'Local operation'
++
++    def __init__(self, host, sudo_password_file=None):
++        if socket.gethostname() != host:
++            raise ProvisionError(
++                '--local-target requires the local hostname to match --host'
++            )
++        self.password_file = sudo_password_file
++        self.password_required = None
++
++    def _run(self, args, data=b'', timeout=600):
++        return subprocess.run(args, input=data, capture_output=True,
++                              timeout=timeout)
++
++
+ def escrow_record(vault, vault_key, record, export):
+     """Publish once, authenticate selected custody, never replace recovery material."""
+     root = ensure_private_directory(vault / 'storage-recovery' / record['machine_id'])
+@@ -144,6 +169,8 @@ def main(argv=None):
+                         help='escrow only: explicitly defer the independent recovery copy')
+     parser.add_argument('--backend', choices=['passphrase', 'tpm2', 'local-openbao'],
+                         help='Explicit deploy-time backend; does not change the boot unlock policy')
++    parser.add_argument('--local-target', action='store_true',
++                        help='Run target commands locally; --host must match the local hostname')
+     parser.add_argument('--vault-dir', type=Path, default=Path.home() / '.lxv')
+     parser.add_argument('--vault-key', type=Path, default=Path.home() / '.lxv.key')
+     parser.add_argument('--existing-key-file', type=Path)
+@@ -161,13 +188,15 @@ def main(argv=None):
+     config = AutoconfConfig.load(DEFAULT_CONFIG_PATH)
+     inventory = AnsibleInventory.load_from_hosts_ini(
+         config.ansible_root / 'inventory/hosts.ini', config.inventory_subnet)
+-    def remote(host, password=None):
++    def connection(host, password=None, *, local=False):
+         entry = inventory.get_host_by_name(host)
+         if entry is None:
+             raise ProvisionError('Host is not in the inventory')
++        if local:
++            return Local(host, password)
+         return Remote(str(entry.ansible_host), password)
+-    target = remote(args.host, args.sudo_password_file)
+-    recovery = None if args.controller_only_custody else remote(args.recovery_host)
++    target = connection(args.host, args.sudo_password_file, local=args.local_target)
++    recovery = None if args.controller_only_custody else connection(args.recovery_host)
+     machine_id = target.machine_id()
+     if recovery is not None and recovery.machine_id() in {machine_id, Path('/etc/machine-id').read_text().strip()}:
+         raise ProvisionError('Emergency export must be on a separate host from both target and admin vault')
+@@ -205,6 +234,8 @@ def main(argv=None):
+                'recovery_host': args.recovery_host, 'action': args.action}
+     if backend is not None:
+         summary['backend'] = backend
++    if args.local_target:
++        summary['local_target'] = True
+     if not args.apply:
+         print(json.dumps(summary, sort_keys=True))
+         return
+@@ -240,6 +271,7 @@ def main(argv=None):
+             record.pop('exists')
+             record.pop('action')
+             record.pop('backend', None)
++            record.pop('local_target', None)
+         if exists:
+             target.call(['cryptsetup', 'open', '--test-passphrase', '--key-file=-', container],
+                         record['recovery_passphrase'].encode(), privileged=True)
+diff --git a/lx_administration/storage/structure.yml b/lx_administration/storage/structure.yml
+index 3f44230fad62297f5835001731010ac0a2611347..b9f6d4b9fbf0797b728d7dd5f494975f9e9ec750 100644
+--- a/lx_administration/storage/structure.yml
++++ b/lx_administration/storage/structure.yml
+@@ -24,7 +24,7 @@ entrypoints:
+     purpose: Validate explicit TPM admission or passphrase-wrapped seals with authenticated runtime staging; never initialize state at boot.
+   - name: storage-provision
+     file: provision.py
+-    purpose: Escrow recovery in the existing encrypted admin vault and an independent host before explicit passphrase, TPM or local OpenBao provisioning.
++    purpose: Escrow recovery in the existing encrypted admin vault and an independent host before explicit local or SSH-targeted passphrase, TPM or local OpenBao provisioning.
+   - name: tpm-release
+     file: tpm_release.py
+     purpose: Create and verify the non-exportable TPM client identity and fetch one volume release over mTLS.
+diff --git a/tests/test_storage_provision.py b/tests/test_storage_provision.py
+index 6eb0f7ab4848dcb564b18cb9016b9bd32390e9c7..ee95197579be40719132668a360dedb9cadc6050 100644
+--- a/tests/test_storage_provision.py
++++ b/tests/test_storage_provision.py
+@@ -98,7 +98,8 @@ def controller(custody, monkeypatch):
+     vault.mkdir(mode=0o700)
+     state = SimpleNamespace(method='passphrase', exists=False, machine_id='1' * 32,
+                             luks_uuid=None, requests=[], exports=[], events=[],
+-                            fail_export=False)
++                            fail_export=False, connections=[], local_calls=[],
++                            recovery_machine_id='2' * 32)
+     volume = {'container': '/var/lib/test-volume.luks', 'luksUUID': None}
+     config = SimpleNamespace(ansible_root=Path('/test-inventory'),
+                              inventory_subnet='test')
+@@ -113,21 +114,56 @@ def controller(custody, monkeypatch):
+     monkeypatch.setattr(provision, 'Vault', SimpleNamespace(load_dir=lambda *args:
+         SimpleNamespace(validate_local_key=lambda:
+                         state.events.append('vault-authenticated'))))
++    monkeypatch.setattr(provision.socket, 'gethostname', lambda: 'test-host')
++
++    def target_call(args, data=b'', privileged=False):
++        if args[0] == 'sh':
++            return b'yes' if state.exists else b'no'
++        assert privileged
++        if args[:2] == ['cryptsetup', 'luksUUID']:
++            return state.luks_uuid.encode()
++        if args[:3] == ['cryptsetup', 'open', '--test-passphrase']:
++            assert data == state.requests[-1]['recovery_passphrase'].encode()
++            return b''
++        assert args == ['luxnix-storage-provision', 'test-volume']
++        request = json.loads(data)
++        primary = Path(request['primary_escrow'])
++        assert primary.read_bytes() == state.exports[-1]
++        saved = json.loads(secret.decrypt_secret(primary, key))
++        assert saved['recovery_passphrase'] == request['recovery_passphrase']
++        assert request['emergency_export'].startswith('recovery-host:')
++        state.events.append('provision')
++        state.requests.append(request)
++        state.exists = True
++        state.luks_uuid = request['luks_uuid']
++        return b''
+ 
+     def evaluate(args, **kwargs):
+-        assert args[:3] == ['nix', 'eval', '--json']
+-        if args[3].endswith('.volumes.test-volume'):
+-            return SimpleNamespace(stdout=json.dumps(volume).encode())
+-        assert args[3].endswith('.unlockMethod')
+-        return SimpleNamespace(stdout=json.dumps(state.method).encode())
++        if args[:3] == ['nix', 'eval', '--json']:
++            if args[3].endswith('.volumes.test-volume'):
++                return SimpleNamespace(stdout=json.dumps(volume).encode())
++            assert args[3].endswith('.unlockMethod')
++            return SimpleNamespace(stdout=json.dumps(state.method).encode())
++        state.local_calls.append(args)
++        if args == ['cat', '/etc/machine-id']:
++            output = state.machine_id.encode()
++        elif args == ['sudo', '-n', 'true']:
++            output = b''
++        elif args[:2] == ['sudo', '-n']:
++            output = target_call(args[2:], kwargs['input'], privileged=True)
++        else:
++            output = target_call(args, kwargs['input'])
++        return SimpleNamespace(returncode=0, stdout=output, stderr=b'')
+     monkeypatch.setattr(provision.subprocess, 'run', evaluate)
+ 
+     class Remote:
+         def __init__(self, name, password=None):
+             self.name = name
++            state.connections.append(name)
+ 
+         def machine_id(self):
+-            return state.machine_id if self.name == 'test-host' else '2' * 32
++            return (state.machine_id if self.name == 'test-host'
++                    else state.recovery_machine_id)
+ 
+         def call(self, args, data=b'', privileged=False):
+             if self.name == 'recovery-host':
+@@ -138,26 +174,7 @@ def controller(custody, monkeypatch):
+                     raise provision.ProvisionError('Recovery host unavailable')
+                 state.exports.append(data)
+                 return data
+-            if args[0] == 'sh':
+-                return b'yes' if state.exists else b'no'
+-            assert privileged
+-            if args[:2] == ['cryptsetup', 'luksUUID']:
+-                return state.luks_uuid.encode()
+-            if args[:3] == ['cryptsetup', 'open', '--test-passphrase']:
+-                assert data == state.requests[-1]['recovery_passphrase'].encode()
+-                return b''
+-            assert args == ['luxnix-storage-provision', 'test-volume']
+-            request = json.loads(data)
+-            primary = Path(request['primary_escrow'])
+-            assert primary.read_bytes() == state.exports[-1]
+-            saved = json.loads(secret.decrypt_secret(primary, key))
+-            assert saved['recovery_passphrase'] == request['recovery_passphrase']
+-            assert request['emergency_export'].startswith('recovery-host:')
+-            state.events.append('provision')
+-            state.requests.append(request)
+-            state.exists = True
+-            state.luks_uuid = request['luks_uuid']
+-            return b''
++            return target_call(args, data, privileged)
+ 
+     monkeypatch.setattr(provision, 'Remote', Remote)
+     args = ['provision', '--host', 'test-host', '--volume', 'test-volume',
+@@ -166,7 +183,8 @@ def controller(custody, monkeypatch):
+     return args, state, vault, key
+ 
+ 
+-@pytest.mark.parametrize('extra', [[], ['--backend', 'passphrase']])
++@pytest.mark.parametrize('extra', [
++    [], ['--backend', 'passphrase'], ['--local-target']])
+ def test_passphrase_provision_preview_reports_backend_without_custody_or_host_writes(
+     controller, capsys, extra
+ ):
+@@ -175,14 +193,26 @@ def test_passphrase_provision_preview_reports_backend_without_custody_or_host_wr
+     plan = json.loads(capsys.readouterr().out)
+     assert plan['backend'] == 'passphrase'
+     assert plan['exists'] is False
++    if '--local-target' in extra:
++        assert plan['local_target'] is True
++        assert state.connections == ['recovery-host']
++        assert not any(command[0] == 'sudo' for command in state.local_calls)
++    else:
++        assert 'local_target' not in plan
++        assert state.connections == ['test-host', 'recovery-host']
++        assert state.local_calls == []
+     assert state.requests == state.exports == state.events == []
+     assert not (vault / 'storage-recovery').exists()
+ 
+ 
++@pytest.mark.parametrize('local', [False, True])
+ def test_passphrase_controller_verifies_both_escrows_then_provisions_same_identity(
+-    controller, capsys
++    controller, capsys, local
+ ):
+     args, state, vault, key = controller
++    if local:
++        args.append('--local-target')
++        state.machine_id = Path('/etc/machine-id').read_text().strip()
+     for _ in range(2):
+         provision.main([*args, '--apply'])
+     assert state.events == [
+@@ -193,13 +223,20 @@ def test_passphrase_controller_verifies_both_escrows_then_provisions_same_identi
+     primary = vault / 'storage-recovery' / state.machine_id / 'test-volume.vault'
+     record = json.loads(secret.decrypt_secret(primary, key))
+     assert 'backend' not in record
++    assert 'local_target' not in record
++    assert state.connections == (['recovery-host'] if local else
++                                 ['test-host', 'recovery-host']) * 2
+     assert record['recovery_passphrase'] not in capsys.readouterr().out
+ 
+ 
++@pytest.mark.parametrize('local', [False, True])
+ def test_passphrase_controller_never_provisions_without_verified_independent_export(
+-    controller
++    controller, local
+ ):
+     args, state, vault, key = controller
++    if local:
++        args.append('--local-target')
++        state.machine_id = Path('/etc/machine-id').read_text().strip()
+     state.fail_export = True
+     with pytest.raises(provision.ProvisionError, match='Recovery host'):
+         provision.main([*args, '--apply'])
+@@ -223,3 +260,106 @@ def test_controller_rejects_passphrase_policy_override_before_escrow(
+         provision.main([*args, '--backend', 'passphrase', '--apply'])
+     assert state.requests == state.exports == state.events == []
+     assert not (vault / 'storage-recovery').exists()
++
++
++@pytest.fixture
++def local_process(monkeypatch):
++    state = SimpleNamespace(calls=[], sudo_required=False, returncode=0,
++                            stdout=b'public output', stderr=b'')
++    monkeypatch.setattr(provision.socket, 'gethostname', lambda: 'test-host')
++    def run(args, **kwargs):
++        state.calls.append((args, kwargs))
++        if args == ['sudo', '-n', 'true']:
++            return SimpleNamespace(returncode=int(state.sudo_required),
++                                   stdout=b'', stderr=b'')
++        return SimpleNamespace(returncode=state.returncode,
++                               stdout=state.stdout, stderr=state.stderr)
++    monkeypatch.setattr(provision.subprocess, 'run', run)
++    return state
++
++
++def test_local_argv_stdin_and_remote_ssh_quoting_remain_distinct(local_process):
++    args = ['printf', '%s', 'literal space', '$(must-not-run)']
++    data = b'synthetic stdin payload'
++    assert provision.Local('test-host').call(args, data) == b'public output'
++    local_args, options = local_process.calls[-1]
++    assert local_args == args
++    assert options['input'] == data
++    assert options['capture_output'] is True
++    assert options['timeout'] == 600
++    provision.Remote('172.16.255.102').call(args, data)
++    remote_args, options = local_process.calls[-1]
++    assert remote_args[0] == 'ssh'
++    assert remote_args[-2] == 'admin@172.16.255.102'
++    assert remote_args[-1] == "printf %s 'literal space' '$(must-not-run)'"
++    assert options['input'] == data
++
++
++@pytest.mark.parametrize('password_required', [False, True])
++def test_local_privileged_calls_use_existing_sudo_and_private_stdin_policy(
++    local_process, tmp_path, monkeypatch, password_required
++):
++    local_process.sudo_required = password_required
++    password = tmp_path / 'sudo-password'
++    password.write_bytes(b'synthetic-sudo-password\n')
++    password.chmod(0o600)
++    checked = []
++    monkeypatch.setattr(provision, 'encrypted_storage',
++                        lambda path, **kwargs: checked.append(path))
++    target = provision.Local('test-host', password)
++    for _ in range(2):
++        target.call(['luxnix-storage-provision', 'test-volume'],
++                    b'synthetic request', privileged=True)
++    assert local_process.calls[0][0] == ['sudo', '-n', 'true']
++    assert local_process.calls[0][1]['timeout'] == 30
++    assert len(local_process.calls) == 3
++    prefix = ['sudo', '-k', '-S', '-p', ''] if password_required else ['sudo', '-n']
++    for args, options in local_process.calls[1:]:
++        assert args == [*prefix, 'luxnix-storage-provision', 'test-volume']
++        assert 'synthetic-sudo-password' not in ' '.join(args)
++        expected = b'synthetic request'
++        if password_required:
++            expected = b'synthetic-sudo-password\n' + expected
++        assert options['input'] == expected
++    assert checked == ([password, password] if password_required else [])
++
++
++def test_local_failure_redacts_subprocess_input_and_diagnostics(local_process):
++    local_process.returncode = 1
++    local_process.stderr = b'failure involving synthetic-secret-content'
++    with pytest.raises(provision.ProvisionError) as exc:
++        provision.Local('test-host').call(['test-command'],
++                                           b'synthetic-secret-content')
++    assert 'synthetic-secret-content' not in str(exc.value)
++    assert 'exit 1' in str(exc.value)
++
++
++def test_local_target_requires_exact_os_hostname_before_execution(local_process):
++    with pytest.raises(provision.ProvisionError):
++        provision.Local('test-host.example')
++    assert local_process.calls == []
++
++
++def test_local_machine_identity_requires_valid_machine_id(local_process):
++    local_process.stdout = b'invalid-machine-id\n'
++    with pytest.raises(provision.ProvisionError, match='machine identity'):
++        provision.Local('test-host').machine_id()
++    assert [args for args, _ in local_process.calls] == [['cat', '/etc/machine-id']]
++
++
++@pytest.mark.parametrize(('local', 'same_as'), [
++    (False, 'target'), (False, 'controller'), (True, 'target')])
++def test_recovery_host_must_differ_from_target_and_controller(
++    controller, local, same_as
++):
++    args, state, vault, _ = controller
++    controller_id = Path('/etc/machine-id').read_text().strip()
++    if local:
++        args.append('--local-target')
++        state.machine_id = controller_id
++    state.recovery_machine_id = (state.machine_id if same_as == 'target'
++                                 else controller_id)
++    with pytest.raises(provision.ProvisionError, match='separate host'):
++        provision.main([*args, '--apply'])
++    assert state.requests == state.exports == state.events == []
++    assert not (vault / 'storage-recovery').exists()

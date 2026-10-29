@@ -274,12 +274,14 @@ commands:
     documentation: docs/hardware-setup.md
 
   - id: storage-provision
-    summary: Escrow a per-volume recovery credential in the admin vault and on an independent host before explicit TPM container creation.
+    summary: Escrow a per-volume recovery credential in the admin vault and on an independent host before explicit encrypted container creation.
     risk: sensitive-remote-state
     operator_confirmation_required: true
-    usage: devenv shell storage-provision <escrow|provision> --host <host> --volume <volume> [--recovery-host <host> | --controller-only-custody] [--backend tpm2|local-openbao] [--apply]
+    usage: devenv shell storage-provision <escrow|provision> --host <host> --volume <volume> [--recovery-host <host> | --controller-only-custody] [--backend passphrase|tpm2|local-openbao] [--local-target] [--apply]
     effects:
       - Controller-only custody is an explicit escrow-only option; provisioning still requires independent recovery.
+      - The explicit local-target option requires the inventory host to match the local hostname; recovery remains remote and privileged target commands still require sudo.
+      - Passphrase provisioning requires the host's passphrase unlock policy and leaves the mapping open; subsequent boots use the escrowed passphrase.
     implementation: lx_administration/storage/provision.py
     documentation: docs/operator-unlocked-storage.md
 

@@ -1,0 +1,739 @@
+diff --git a/devenv/commands.yml b/devenv/commands.yml
+index 71057df2ac37dbd85c5de38101eb7edce8b67de3..32f28ad53b299143be8d44934ee68c6ef17e10fe 100644
+--- a/devenv/commands.yml
++++ b/devenv/commands.yml
+@@ -274,12 +274,13 @@ commands:
+     documentation: docs/hardware-setup.md
+ 
+   - id: storage-provision
+-    summary: Escrow a per-volume recovery credential in the admin vault and on an independent host before explicit TPM container creation.
++    summary: Escrow a per-volume recovery credential in the admin vault and on an independent host before explicit encrypted container creation.
+     risk: sensitive-remote-state
+     operator_confirmation_required: true
+-    usage: devenv shell storage-provision <escrow|provision> --host <host> --volume <volume> [--recovery-host <host> | --controller-only-custody] [--backend tpm2|local-openbao] [--apply]
++    usage: devenv shell storage-provision <escrow|provision> --host <host> --volume <volume> [--recovery-host <host> | --controller-only-custody] [--backend passphrase|tpm2|local-openbao] [--apply]
+     effects:
+       - Controller-only custody is an explicit escrow-only option; provisioning still requires independent recovery.
++      - Passphrase provisioning requires the host's passphrase unlock policy and leaves the mapping open; subsequent boots use the escrowed passphrase.
+     implementation: lx_administration/storage/provision.py
+     documentation: docs/operator-unlocked-storage.md
+ 
+diff --git a/docs/operator-unlocked-storage.md b/docs/operator-unlocked-storage.md
+index 75555a0cece50a0c60ae732abfe39c250284533e..7d64c13027e93119998f128ecdcc42df1d6d9de6 100644
+--- a/docs/operator-unlocked-storage.md
++++ b/docs/operator-unlocked-storage.md
+@@ -107,19 +107,116 @@ custodian recovery custody; it is not included with the export.
+ `devenv shell storage-provision provision --host gc-10 --volume luxnix-app-storage
+ --recovery-host gs-01` previews the exact target. `--apply` explicitly authorizes
+ the operation after both recovery copies are authenticated. It uses the deployed
+-`luxnix-storage-provision` helper, which requires Secure Boot and authenticated
+-recovery custody. The legacy `tpm2` backend enrolls a TPM token. Select
+-`--backend local-openbao` for a host with the local OpenBao tool installed and
+-its enrollment escrow confirmed. This deploy-time choice does not change its
+-boot unlock policy.
+-
+-The local backend writes and reads back an independent UUID-bound OpenBao key
+-before allocation. It formats an unpublished private allocation with the
+-escrowed recovery passphrase, publishes only a valid authenticated LUKS header,
+-adds the OpenBao keyslot, and creates ext4 only for the authenticated new-volume
+-request. A retry resumes the same record, UUID and keyslots. A partial allocation
+-is private staging; an existing published container is never reformatted. The
+-mapping stays open for subsequent pre-copy. Boot never invokes this workflow.
++`luxnix-storage-provision` helper. The preview includes the selected backend,
++which defaults to the host's configured unlock method:
++
++| Backend | Prerequisites and result |
++| --- | --- |
++| `passphrase` | Requires the configured `passphrase` unlock policy. Creates the volume with its escrowed random passphrase; it does not require Secure Boot or enroll a TPM/OpenBao key. |
++| `tpm2` | Requires Secure Boot and enrolls a TPM token. |
++| `local-openbao` | Requires Secure Boot, the installed local OpenBao tools and authenticated enrollment escrow. Adds an independent OpenBao keyslot. |
++
++An explicit `--backend` choice does not change the boot unlock policy. Both
++controller and host reject passphrase provisioning under a TPM or local OpenBao
++boot policy.
++
++The passphrase and local OpenBao backends format an unpublished private
++allocation with the escrowed recovery passphrase and publish only a valid
++authenticated LUKS header. They create ext4 only for the authenticated new-volume
++request. Existing published containers require a matching in-progress or completed
++provisioning receipt; an unknown container is never adopted or reformatted by
++this path. A retry resumes the same record and UUID. A partial allocation is
++private staging. The local backend also writes and reads back its independent
++UUID-bound OpenBao key before allocation and adds its keyslot before creating
++the filesystem. The mapping stays open for subsequent pre-copy. Boot never
++invokes this workflow.
++
++### A missing container on a passphrase host
++
++`Container missing; startup never provisions or formats storage` means the
++declared container is missing at its configured path. First establish whether
++this is initial provisioning or an existing volume whose backing mount or
++container needs recovery. Restore that mount or container when existing data
++is expected. Restarting the unlock service does not create storage.
++
++For initial provisioning, install this revision's host helper through the normal
++[existing-host deployment workflow](deployment-guide.md), and use the same
++revision on the controller before applying provisioning. A switch that reports
++failed storage services is not a completed deployment; repeat it successfully
++after storage preparation.
++
++For gc-02, preview the declared application volume from the controller, replacing
++`<recovery-host>` with the selected independent recovery custodian:
++
++```bash
++devenv shell check-connectivity gc-02
++devenv shell storage-provision provision --host gc-02 \
++  --volume luxnix-app-storage --backend passphrase --recovery-host <recovery-host>
++```
++
++Review the host, machine ID, container path, existence flag and backend. Repeat
++the provisioning command with `--apply` to authenticate recovery custody, create
++the missing container and filesystem, and open the mapping. Inspect
++`sudo luxnix-operator-storage status` on gc-02 and provision `luxnix-secrets` in
++the same way if that declared volume is also missing. A successful repeat reuses
++the existing escrow and matching provisioning state; do not delete records or
++containers to force a fresh run.
++
++Allocation retains the existing capacity check: each new volume reserves the
++greater of its configured minimum (8 GiB by default) or twice its source-data
++size plus 256 MiB, with another 256 MiB of free-space reserve. A capacity failure
++requires space or layout changes; retries do not bypass it.
++
++Once both volumes are ready, perform the existing final migration on gc-02:
++
++```bash
++sudo systemctl start luxnix-storage-cutover.service
++sudo luxnix-operator-storage status
++```
++
++Cutover stops configured writers, verifies the final copy, activates the encrypted
++bind mounts and restarts consumers. Source directories are retained. If migration
++is already complete, `sudo luxnix-operator-storage start` uses the normal startup
++path. Re-run the normal system switch and require success before considering
++deployment complete.
++
++### Unlocking a newly provisioned passphrase volume after reboot
++
++The generated recovery passphrase is also this volume's manual unlock credential.
++It is independent of the Linux login password and other volumes' passphrases.
++Provisioning leaves the mapping open, but a later boot needs this credential at
++the systemd password prompt. Over SSH, use
++`sudo systemd-tty-ask-password-agent` to answer the prompt on the target host.
++
++The controller prints the non-secret `primary_escrow` path after provisioning.
++To read that record in a private operator terminal, substitute that exact path
++below. Use the same admin vault key supplied during provisioning; the example
++uses its default location. Decryption validates the protected key storage and
++authenticates the record. This deliberately displays the credential on the
++controlling terminal, so use an unrecorded session and keep it out of chat and logs.
++Enter the development environment with `devenv shell`, then run:
++
++```bash
++uv run python - /path/from/primary_escrow <<'PY'
++import json
++from pathlib import Path
++import resource
++import sys
++from lx_administration.models.vault.secret import decrypt_secret
++
++resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
++record = json.loads(decrypt_secret(Path(sys.argv[1]), Path.home() / ".lxv.key"))
++with open("/dev/tty", "w") as terminal:
++    print(f"Host: {record['host']}; volume: {record['volume']}", file=terminal)
++    print(f"Container: {record['container']}; LUKS UUID: {record['luks_uuid']}", file=terminal)
++    print(record["recovery_passphrase"], file=terminal)
++PY
++```
++
++Confirm the displayed identity matches the intended volume before using its
++passphrase. Verify this readback and independent recovery custody before rebooting.
++
++### Escrowing existing volumes
+ 
+ For existing containers, use `storage-provision escrow` with the same host,
+ volume and recovery-host arguments plus `--existing-key-file <private-file>`.
+diff --git a/lx_administration/storage/operator_migration.py b/lx_administration/storage/operator_migration.py
+index ef900b0ad5404d7f433170978fc78fb8198c8f28..743de4f7d170b5f612a33affceab7691bb489f9b 100644
+--- a/lx_administration/storage/operator_migration.py
++++ b/lx_administration/storage/operator_migration.py
+@@ -117,9 +117,14 @@ class Migration:
+ 
+     def provision(self, name, record):
+         """Explicit operation only, after the controller has verified both escrows."""
+-        method = record.get("backend", self.config.get("unlockMethod"))
+-        if method not in ("tpm2", "local-openbao"):
+-            raise MigrationError("Automatic provisioning requires the explicit TPM policy")
++        configured_method = self.config.get("unlockMethod", "passphrase")
++        method = record.get("backend", configured_method)
++        if method not in ("passphrase", "tpm2", "local-openbao"):
++            raise MigrationError("Unsupported storage provisioning backend")
++        if method == "passphrase" and configured_method != "passphrase":
++            raise MigrationError(
++                "Passphrase provisioning requires the configured passphrase unlock policy"
++            )
+         volume = self.config["volumes"][name]
+         container = plain_path(volume["container"])
+         expected_uuid = str(uuid.UUID(record["luks_uuid"]))
+@@ -132,21 +137,28 @@ class Migration:
+         key = record["recovery_passphrase"].encode("ascii")
+         if len(key) != 64 or any(c not in b"0123456789abcdef" for c in key):
+             raise MigrationError("Provisioning requires a random 256-bit recovery passphrase")
++        if method in ("passphrase", "local-openbao"):
++            if (record.get("host") != self.config["machine"]
++                    or record.get("container") != str(container)):
++                raise MigrationError(
++                    "Provision request does not match the declared host and container"
++                )
+         self.verifier._require_protected_swap()
++        if method == "passphrase":
++            self.provision_container(name, record, key, expected_uuid)
++            return
+         require_secure_boot()
+         if method == "local-openbao":
+             if not self.config.get("localOpenbaoEnabled"):
+                 raise MigrationError("Local OpenBao must be installed before deploy-time provisioning")
+             if volume.get("luksUUID") != expected_uuid:
+                 raise MigrationError("Local OpenBao provisioning requires a declared LUKS UUID")
+-            if record.get("host") != self.config["machine"] or record.get("container") != str(container):
+-                raise MigrationError("Provision request does not match the declared host and container")
+             enrollment = runpy.run_path(self.config["openbaoEnroll"])
+             host = enrollment["Host"](
+                 self.config["machine"], runpy.run_path(self.config["openbaoClient"])
+             )
+             try:
+-                self.provision_local(name, record, host, key, expected_uuid)
++                self.provision_container(name, record, key, expected_uuid, openbao=host)
+             except enrollment["EnrollError"] as exc:
+                 raise MigrationError(str(exc)) from None
+             return
+@@ -196,7 +208,7 @@ class Migration:
+         finally:
+             os.close(fd)
+ 
+-    def provision_local(self, name, record, host, recovery, expected_uuid):
++    def provision_container(self, name, record, recovery, expected_uuid, *, openbao=None):
+         """Resume only authenticated LUKS state; never reformat an existing file."""
+         volume = self.config["volumes"][name]
+         container = plain_path(volume["container"])
+@@ -209,8 +221,14 @@ class Migration:
+             raise MigrationError("Conflicting completed provisioning receipt")
+         if pending.exists() and json.loads(pending.read_text()) != identity:
+             raise MigrationError("Conflicting in-progress provisioning receipt")
+-        # Authenticate the service and persist its independent key before allocation.
+-        host.volume_record(name, expected_uuid, record["provisioner"], str(container) if container.exists() else None)
++        if container.exists() and not marker.exists() and not pending.exists():
++            raise MigrationError(
++                "Existing container has no matching provisioning receipt; never reformat it"
++            )
++        if openbao is not None:
++            # Authenticate and persist the independent key before allocation.
++            openbao.volume_record(name, expected_uuid, record["provisioner"],
++                                  str(container) if container.exists() else None)
+         if container.exists():
+             if run("cryptsetup", "luksUUID", str(container)).decode().strip() != expected_uuid:
+                 raise MigrationError("Existing container UUID differs; never reformat it")
+@@ -244,10 +262,8 @@ class Migration:
+             os.link(temporary, container)
+             temporary.unlink()
+             run("sync", "-f", str(container.parent))
+-        # A valid authenticated LUKS header can resume after any completed format.
+-        if not marker.exists() and not pending.exists():
+-            atomic_json(pending, identity)
+-        host.convert_volume(name, str(container), expected_uuid, record)
++        if openbao is not None:
++            openbao.convert_volume(name, str(container), expected_uuid, record)
+         mapping = volume["device"].removeprefix("/dev/mapper/")
+         opened = not Path(volume["device"]).exists()
+         if not opened:
+diff --git a/lx_administration/storage/provision.py b/lx_administration/storage/provision.py
+index 97cd0c8d860603419eef6e99c1a06e088f6d382f..12301432205671b455da90abcf7acc63335bb173 100644
+--- a/lx_administration/storage/provision.py
++++ b/lx_administration/storage/provision.py
+@@ -142,7 +142,7 @@ def main(argv=None):
+     parser.add_argument('--recovery-host')
+     parser.add_argument('--controller-only-custody', action='store_true',
+                         help='escrow only: explicitly defer the independent recovery copy')
+-    parser.add_argument('--backend', choices=['tpm2', 'local-openbao'],
++    parser.add_argument('--backend', choices=['passphrase', 'tpm2', 'local-openbao'],
+                         help='Explicit deploy-time backend; does not change the boot unlock policy')
+     parser.add_argument('--vault-dir', type=Path, default=Path.home() / '.lxv')
+     parser.add_argument('--vault-key', type=Path, default=Path.home() / '.lxv.key')
+@@ -183,9 +183,28 @@ def main(argv=None):
+         native_uuid = str(uuid.UUID(native_uuid))
+     if args.action == 'escrow' and not exists:
+         raise ProvisionError('Existing-volume escrow requires a LUKS container')
++    backend = None
++    if args.action == 'provision':
++        mode_expression = (
++            f'.#nixosConfigurations.{args.host}'
++            '.config.luxnix.storage.operatorUnlocked.unlockMethod'
++        )
++        mode = subprocess.run(['nix', 'eval', '--json',
++            mode_expression],
++            capture_output=True, check=True)
++        configured_method = json.loads(mode.stdout)
++        backend = args.backend or configured_method
++        if backend not in ('passphrase', 'tpm2', 'local-openbao'):
++            raise ProvisionError('Unsupported storage provisioning backend')
++        if backend == 'passphrase' and configured_method != 'passphrase':
++            raise ProvisionError(
++                'Passphrase provisioning requires the configured passphrase unlock policy'
++            )
+     summary = {'host': args.host, 'machine_id': machine_id, 'volume': args.volume,
+                'container': container, 'exists': exists, 'luks_uuid': native_uuid,
+                'recovery_host': args.recovery_host, 'action': args.action}
++    if backend is not None:
++        summary['backend'] = backend
+     if not args.apply:
+         print(json.dumps(summary, sort_keys=True))
+         return
+@@ -220,6 +239,7 @@ def main(argv=None):
+                           recovery_passphrase=key, origin='existing' if exists else 'new')
+             record.pop('exists')
+             record.pop('action')
++            record.pop('backend', None)
+         if exists:
+             target.call(['cryptsetup', 'open', '--test-passphrase', '--key-file=-', container],
+                         record['recovery_passphrase'].encode(), privileged=True)
+@@ -230,12 +250,6 @@ def main(argv=None):
+             if recovery is not None else None)
+         if args.action == 'provision':
+             request = dict(record, primary_escrow=str(primary), emergency_export=destination)
+-            backend = args.backend
+-            if backend is None:
+-                mode = subprocess.run(['nix', 'eval', '--json',
+-                    f'.#nixosConfigurations.{args.host}.config.luxnix.storage.operatorUnlocked.unlockMethod'],
+-                    capture_output=True, check=True)
+-                backend = json.loads(mode.stdout)
+             request['backend'] = backend
+             if backend == 'local-openbao':
+                 from lx_administration.storage.local_enrollment import load_escrow
+diff --git a/lx_administration/storage/structure.yml b/lx_administration/storage/structure.yml
+index 495f6610dad59ae42e0a09628e863c019a9f96a3..3f44230fad62297f5835001731010ac0a2611347 100644
+--- a/lx_administration/storage/structure.yml
++++ b/lx_administration/storage/structure.yml
+@@ -24,13 +24,13 @@ entrypoints:
+     purpose: Validate explicit TPM admission or passphrase-wrapped seals with authenticated runtime staging; never initialize state at boot.
+   - name: storage-provision
+     file: provision.py
+-    purpose: Escrow recovery in the existing encrypted admin vault and an independent host before explicit inventory-scoped provisioning.
++    purpose: Escrow recovery in the existing encrypted admin vault and an independent host before explicit passphrase, TPM or local OpenBao provisioning.
+   - name: tpm-release
+     file: tpm_release.py
+     purpose: Create and verify the non-exportable TPM client identity and fetch one volume release over mTLS.
+   - name: operator-migration
+     file: operator_migration.py
+-    purpose: Unlock enrolled TPM containers or provision passphrase containers and verify resumable startup copies without overwriting populated storage.
++    purpose: Unlock existing containers, explicitly provision escrowed new volumes and verify resumable copies without formatting at startup or overwriting populated storage.
+   - name: manager
+     file: manager.py
+     purpose: Inspect manager ownership and interfaces.
+diff --git a/tests/nixtest/openbao_local_guest.py b/tests/nixtest/openbao_local_guest.py
+index 9c62d0141cbb97bc38dfb3aaf95603ecde1f2d7b..819dd82c7c2f330468b986f8e1e6953bcf7acaca 100644
+--- a/tests/nixtest/openbao_local_guest.py
++++ b/tests/nixtest/openbao_local_guest.py
+@@ -285,14 +285,16 @@ elif command == "provision":
+         return original(*args, **kwargs)
+     migration.run = interrupted
+     try:
+-        task.provision_local("fresh", record, host, record["recovery_passphrase"].encode(), native_uuid)
++        task.provision_container("fresh", record, record["recovery_passphrase"].encode(),
++                                 native_uuid, openbao=host)
+     except migration.MigrationError as exc:
+         assert "injected" in str(exc)
+     else:
+         raise AssertionError("Provisioning interruption not exercised")
+     migration.run = original
+     for _ in range(2):
+-        task.provision_local("fresh", record, host, record["recovery_passphrase"].encode(), native_uuid)
++        task.provision_container("fresh", record, record["recovery_passphrase"].encode(),
++                                 native_uuid, openbao=host)
+     metadata = json.loads(run("cryptsetup", "luksDump", "--dump-json-metadata", record["container"]))
+     assert len(metadata["keyslots"]) == 2
+     assert [t["type"] for t in metadata["tokens"].values()] == ["luxnix-openbao"]
+diff --git a/tests/test_operator_storage_migration.py b/tests/test_operator_storage_migration.py
+index 0857975c3fddef182ba8b3bf90cecf6671763660..786eb8059616fc6296c0f417f0ec8d5b15e3ce2a 100644
+--- a/tests/test_operator_storage_migration.py
++++ b/tests/test_operator_storage_migration.py
+@@ -346,9 +346,11 @@ def local_provision(tmp_path, monkeypatch):
+               'host': 'test-host', 'container': str(container), 'origin': 'new',
+               'recovery_passphrase': 'a' * 64, 'provisioner': {'role_id': 'test-role'},
+               'primary_escrow': 'verified-test', 'emergency_export': 'verified-test-independent'}
+-    state = SimpleNamespace(fs=False, formatted=False, calls=[], fail=None)
++    state = SimpleNamespace(fs=False, filesystem='ext4', formatted=False,
++                            calls=[], inputs=[], fail=None)
+     def command(*args, **kwargs):
+         state.calls.append(args)
++        state.inputs.append(kwargs.get('input'))
+         if args[:2] == ('cryptsetup', 'luksUUID'):
+             return expected_uuid.encode()
+         if args[:2] == ('cryptsetup', 'luksFormat'):
+@@ -365,7 +367,8 @@ def local_provision(tmp_path, monkeypatch):
+     def probe(args, **kwargs):
+         if args[:2] == ['cryptsetup', 'isLuks']:
+             return SimpleNamespace(returncode=0 if state.formatted else 1, stdout=b'')
+-        return SimpleNamespace(returncode=0 if state.fs else 2, stdout=b'ext4' if state.fs else b'')
++        return SimpleNamespace(returncode=0 if state.fs else 2,
++                               stdout=state.filesystem.encode() if state.fs else b'')
+     monkeypatch.setattr(migration.subprocess, 'run', probe)
+     host = SimpleNamespace(
+         volume_record=lambda *a: state.calls.append(('record',)) or b'x' * 32,
+@@ -377,12 +380,14 @@ def test_local_provision_resumes_without_tpm_token_or_reformat(local_provision):
+     task, record, host, state, container = local_provision
+     state.fail = 'mkfs'
+     with pytest.raises(migration.MigrationError, match='interrupted'):
+-        task.provision_local('data', record, host, record['recovery_passphrase'].encode(), record['luks_uuid'])
++        task.provision_container('data', record, record['recovery_passphrase'].encode(),
++                                 record['luks_uuid'], openbao=host)
+     assert container.exists()
+     assert not container.with_suffix('.luks.provisioned.json').exists()
+     state.fail = None
+     for _ in range(2):
+-        task.provision_local('data', record, host, record['recovery_passphrase'].encode(), record['luks_uuid'])
++        task.provision_container('data', record, record['recovery_passphrase'].encode(),
++                                 record['luks_uuid'], openbao=host)
+     assert sum(c[:2] == ('cryptsetup', 'luksFormat') for c in state.calls) == 1
+     assert state.calls.index(('record',)) < next(i for i,c in enumerate(state.calls) if c[:2] == ('cryptsetup', 'luksFormat'))
+     assert not any(c[0] == 'systemd-cryptenroll' for c in state.calls)
+@@ -395,13 +400,17 @@ def test_local_provision_refuses_foreign_uuid_and_existing_volume_escrow(local_p
+     task, record, host, state, container = local_provision
+     record['origin'] = 'existing'
+     with pytest.raises(migration.MigrationError, match='adopt existing'):
+-        task.provision_local('data', record, host, b'a' * 64, record['luks_uuid'])
++        task.provision_container('data', record, b'a' * 64,
++                                 record['luks_uuid'], openbao=host)
+     assert not container.exists()
+     record['origin'] = 'new'
+     container.write_bytes(b'foreign encrypted data')
++    identity = {key: record[key] for key in ('machine_id', 'volume', 'luks_uuid')}
++    migration.atomic_json(container.with_suffix('.luks.provisioning.json'), identity)
+     monkeypatch.setattr(migration, 'run', lambda *a, **k: b'foreign-uuid')
+     with pytest.raises(migration.MigrationError, match='never reformat'):
+-        task.provision_local('data', record, host, b'a' * 64, record['luks_uuid'])
++        task.provision_container('data', record, b'a' * 64,
++                                 record['luks_uuid'], openbao=host)
+     assert container.read_bytes() == b'foreign encrypted data'
+ 
+ 
+@@ -450,11 +459,13 @@ def test_local_provision_recovers_an_unpublished_allocation(local_provision):
+     task, record, host, state, container = local_provision
+     state.fail = 'format'
+     with pytest.raises(migration.MigrationError, match='allocation'):
+-        task.provision_local('data', record, host, b'a' * 64, record['luks_uuid'])
++        task.provision_container('data', record, b'a' * 64,
++                                 record['luks_uuid'], openbao=host)
+     assert not container.exists()
+     assert Path(str(container) + '.allocating').exists()
+     state.fail = None
+-    task.provision_local('data', record, host, b'a' * 64, record['luks_uuid'])
++    task.provision_container('data', record, b'a' * 64,
++                             record['luks_uuid'], openbao=host)
+     assert container.exists()
+     assert not Path(str(container) + '.allocating').exists()
+     assert all(c[-1].endswith('.allocating') for c in state.calls if c[:2] == ('cryptsetup', 'luksFormat'))
+@@ -484,6 +495,152 @@ def test_public_local_provision_checks_platform_before_allocation(
+     assert not container.exists()
+ 
+ 
++@pytest.fixture
++def passphrase_provision(local_provision, monkeypatch):
++    task, record, _, state, container = local_provision
++    task.config['unlockMethod'] = 'passphrase'
++    task.config['volumes']['data']['luksUUID'] = None
++    record.update(backend='passphrase',
++                  machine_id=Path('/etc/machine-id').read_text().strip())
++    record.pop('provisioner')
++    monkeypatch.setattr(
++        migration, 'require_secure_boot',
++        lambda: pytest.fail('Passphrase provisioning must not require Secure Boot'))
++    monkeypatch.setattr(
++        migration.runpy, 'run_path',
++        lambda _: pytest.fail('Passphrase provisioning must not contact OpenBao'))
++    return task, record, state, container
++
++
++def test_public_passphrase_provision_creates_once_using_only_escrowed_key(
++    passphrase_provision
++):
++    task, record, state, container = passphrase_provision
++    for _ in range(2):
++        task.provision('data', record)
++    assert container.stat().st_mode & 0o777 == 0o600
++    assert sum(c[:2] == ('cryptsetup', 'luksFormat') for c in state.calls) == 1
++    assert sum(c[0] == 'mkfs.ext4' for c in state.calls) == 1
++    assert not any(c[0] in ('systemd-cryptenroll', 'record', 'keyslot')
++                   for c in state.calls)
++    for command, data in zip(state.calls, state.inputs):
++        assert record['recovery_passphrase'] not in ' '.join(command)
++        if '--key-file=-' in command:
++            assert data == record['recovery_passphrase'].encode()
++    receipt = json.loads(container.with_suffix('.luks.provisioned.json').read_text())
++    assert receipt == {
++        key: record[key] for key in ('machine_id', 'volume', 'luks_uuid')}
++    assert not container.with_suffix('.luks.provisioning.json').exists()
++
++
++@pytest.mark.parametrize('failure', ['format', 'mkfs'])
++def test_public_passphrase_provision_resumes_without_reformatting_published_container(
++    passphrase_provision, failure
++):
++    task, record, state, container = passphrase_provision
++    state.fail = failure
++    with pytest.raises(migration.MigrationError, match='interrupted'):
++        task.provision('data', record)
++    assert container.exists() == (failure == 'mkfs')
++    assert container.with_suffix('.luks.provisioning.json').exists()
++    assert not container.with_suffix('.luks.provisioned.json').exists()
++    state.fail = None
++    task.provision('data', record)
++    assert container.with_suffix('.luks.provisioned.json').exists()
++    assert not Path(str(container) + '.allocating').exists()
++    assert all(c[-1].endswith('.allocating') for c in state.calls
++               if c[:2] == ('cryptsetup', 'luksFormat'))
++    formats = sum(c[:2] == ('cryptsetup', 'luksFormat') for c in state.calls)
++    assert formats == (2 if failure == 'format' else 1)
++
++
++@pytest.mark.parametrize('method', ['tpm2', 'local-openbao'])
++def test_passphrase_backend_cannot_bypass_configured_unlock_policy(
++    passphrase_provision, method
++):
++    task, record, state, container = passphrase_provision
++    task.config['unlockMethod'] = method
++    with pytest.raises(migration.MigrationError):
++        task.provision('data', record)
++    assert state.calls == []
++    assert not container.exists()
++
++
++@pytest.mark.parametrize(('field', 'value'), [
++    ('machine_id', 'another-machine'), ('volume', 'other-volume'),
++    ('host', 'other-host'),
++    ('container', '/var/lib/other-container.luks'), ('primary_escrow', None),
++    ('emergency_export', None), ('recovery_passphrase', 'invalid'),
++    ('origin', 'existing'),
++])
++def test_passphrase_provision_rejects_invalid_identity_or_custody_before_allocation(
++    passphrase_provision, field, value
++):
++    task, record, state, container = passphrase_provision
++    record[field] = value
++    with pytest.raises(migration.MigrationError):
++        task.provision('data', record)
++    assert state.calls == []
++    assert not container.exists()
++    assert not Path(str(container) + '.allocating').exists()
++
++
++@pytest.mark.parametrize('obstacle', [
++    'mapping', 'container', 'pending-receipt', 'completed-receipt'])
++def test_passphrase_provision_preserves_conflicting_existing_state(
++    passphrase_provision, obstacle
++):
++    task, record, state, container = passphrase_provision
++    if obstacle == 'mapping':
++        existing = Path(task.config['volumes']['data']['device'])
++        existing.write_bytes(b'occupied mapping')
++    elif obstacle == 'container':
++        existing = container
++        existing.write_bytes(b'existing storage without provisioning ownership')
++    else:
++        suffix = ('.luks.provisioning.json' if obstacle == 'pending-receipt'
++                  else '.luks.provisioned.json')
++        existing = container.with_suffix(suffix)
++        existing.write_text(json.dumps({'machine_id': 'another-machine'}))
++    before = existing.read_bytes()
++    with pytest.raises(migration.MigrationError):
++        task.provision('data', record)
++    assert existing.read_bytes() == before
++    assert not any(c[:2] == ('cryptsetup', 'luksFormat') or c[0] == 'mkfs.ext4'
++                   for c in state.calls)
++
++
++def test_passphrase_provision_rejects_an_unexpected_filesystem_on_resume(
++    passphrase_provision
++):
++    task, record, state, container = passphrase_provision
++    state.fail = 'mkfs'
++    with pytest.raises(migration.MigrationError):
++        task.provision('data', record)
++    state.fail = None
++    state.fs = True
++    state.filesystem = 'xfs'
++    before = len(state.calls)
++    with pytest.raises(migration.MigrationError, match='filesystem'):
++        task.provision('data', record)
++    assert not any(c[:2] == ('cryptsetup', 'luksFormat') or c[0] == 'mkfs.ext4'
++                   for c in state.calls[before:])
++    assert not container.with_suffix('.luks.provisioned.json').exists()
++
++
++def test_passphrase_provision_never_recreates_filesystem_after_completed_receipt(
++    passphrase_provision
++):
++    task, record, state, _ = passphrase_provision
++    task.provision('data', record)
++    state.fs = False
++    before = len(state.calls)
++    with pytest.raises(migration.MigrationError, match='filesystem'):
++        task.provision('data', record)
++    assert not any(c[:2] == ('cryptsetup', 'luksFormat') or c[0] == 'mkfs.ext4'
++                   for c in state.calls[before:])
++
++
+ @pytest.fixture
+ def passphrase_layout(tmp_path, monkeypatch):
+     container = tmp_path / "data.luks"
+diff --git a/tests/test_storage_provision.py b/tests/test_storage_provision.py
+index a3ec88ac7a199d11b65a9cc1021bc3164db42c96..6eb0f7ab4848dcb564b18cb9016b9bd32390e9c7 100644
+--- a/tests/test_storage_provision.py
++++ b/tests/test_storage_provision.py
+@@ -1,10 +1,10 @@
+ """Recovery custody uses real Ansible encryption and disposable synthetic data."""
+ import json
+-import os
+ from pathlib import Path
+ import secrets
+ import subprocess
+ import sys
++from types import SimpleNamespace
+ import uuid
+ 
+ import pytest
+@@ -90,3 +90,136 @@ def test_emergency_publisher_repeats_but_never_overwrites(custody, tmp_path):
+     assert subprocess.run(command, input=changed, capture_output=True).returncode != 0
+     assert target.read_bytes() == ciphertext
+     assert subprocess.run(command, input=b'plaintext', capture_output=True).returncode != 0
++
++
++@pytest.fixture
++def controller(custody, monkeypatch):
++    vault, key, _ = custody
++    vault.mkdir(mode=0o700)
++    state = SimpleNamespace(method='passphrase', exists=False, machine_id='1' * 32,
++                            luks_uuid=None, requests=[], exports=[], events=[],
++                            fail_export=False)
++    volume = {'container': '/var/lib/test-volume.luks', 'luksUUID': None}
++    config = SimpleNamespace(ansible_root=Path('/test-inventory'),
++                             inventory_subnet='test')
++    inventory = SimpleNamespace(get_host_by_name=lambda name: (
++        SimpleNamespace(ansible_host=name)
++        if name in ('test-host', 'recovery-host') else None))
++    monkeypatch.setattr(provision, 'AutoconfConfig',
++                        SimpleNamespace(load=lambda _: config))
++    monkeypatch.setattr(provision, 'AnsibleInventory',
++                        SimpleNamespace(load_from_hosts_ini=lambda *args: inventory))
++    monkeypatch.setattr(provision, 'encrypted_storage', lambda *args, **kwargs: None)
++    monkeypatch.setattr(provision, 'Vault', SimpleNamespace(load_dir=lambda *args:
++        SimpleNamespace(validate_local_key=lambda:
++                        state.events.append('vault-authenticated'))))
++
++    def evaluate(args, **kwargs):
++        assert args[:3] == ['nix', 'eval', '--json']
++        if args[3].endswith('.volumes.test-volume'):
++            return SimpleNamespace(stdout=json.dumps(volume).encode())
++        assert args[3].endswith('.unlockMethod')
++        return SimpleNamespace(stdout=json.dumps(state.method).encode())
++    monkeypatch.setattr(provision.subprocess, 'run', evaluate)
++
++    class Remote:
++        def __init__(self, name, password=None):
++            self.name = name
++
++        def machine_id(self):
++            return state.machine_id if self.name == 'test-host' else '2' * 32
++
++        def call(self, args, data=b'', privileged=False):
++            if self.name == 'recovery-host':
++                assert args[:3] == ['python3', '-c', provision.EXPORT]
++                assert data.startswith(b'$ANSIBLE_VAULT;1.2;AES256;luxnix-master\n')
++                state.events.append('independent-export')
++                if state.fail_export:
++                    raise provision.ProvisionError('Recovery host unavailable')
++                state.exports.append(data)
++                return data
++            if args[0] == 'sh':
++                return b'yes' if state.exists else b'no'
++            assert privileged
++            if args[:2] == ['cryptsetup', 'luksUUID']:
++                return state.luks_uuid.encode()
++            if args[:3] == ['cryptsetup', 'open', '--test-passphrase']:
++                assert data == state.requests[-1]['recovery_passphrase'].encode()
++                return b''
++            assert args == ['luxnix-storage-provision', 'test-volume']
++            request = json.loads(data)
++            primary = Path(request['primary_escrow'])
++            assert primary.read_bytes() == state.exports[-1]
++            saved = json.loads(secret.decrypt_secret(primary, key))
++            assert saved['recovery_passphrase'] == request['recovery_passphrase']
++            assert request['emergency_export'].startswith('recovery-host:')
++            state.events.append('provision')
++            state.requests.append(request)
++            state.exists = True
++            state.luks_uuid = request['luks_uuid']
++            return b''
++
++    monkeypatch.setattr(provision, 'Remote', Remote)
++    args = ['provision', '--host', 'test-host', '--volume', 'test-volume',
++            '--recovery-host', 'recovery-host', '--vault-dir', str(vault),
++            '--vault-key', str(key)]
++    return args, state, vault, key
++
++
++@pytest.mark.parametrize('extra', [[], ['--backend', 'passphrase']])
++def test_passphrase_provision_preview_reports_backend_without_custody_or_host_writes(
++    controller, capsys, extra
++):
++    args, state, vault, _ = controller
++    provision.main([*args, *extra])
++    plan = json.loads(capsys.readouterr().out)
++    assert plan['backend'] == 'passphrase'
++    assert plan['exists'] is False
++    assert state.requests == state.exports == state.events == []
++    assert not (vault / 'storage-recovery').exists()
++
++
++def test_passphrase_controller_verifies_both_escrows_then_provisions_same_identity(
++    controller, capsys
++):
++    args, state, vault, key = controller
++    for _ in range(2):
++        provision.main([*args, '--apply'])
++    assert state.events == [
++        'vault-authenticated', 'independent-export', 'provision'] * 2
++    assert state.requests[0] == state.requests[1]
++    assert state.requests[0]['backend'] == 'passphrase'
++    assert state.exports[0] == state.exports[1]
++    primary = vault / 'storage-recovery' / state.machine_id / 'test-volume.vault'
++    record = json.loads(secret.decrypt_secret(primary, key))
++    assert 'backend' not in record
++    assert record['recovery_passphrase'] not in capsys.readouterr().out
++
++
++def test_passphrase_controller_never_provisions_without_verified_independent_export(
++    controller
++):
++    args, state, vault, key = controller
++    state.fail_export = True
++    with pytest.raises(provision.ProvisionError, match='Recovery host'):
++        provision.main([*args, '--apply'])
++    primary = vault / 'storage-recovery' / state.machine_id / 'test-volume.vault'
++    preserved = primary.read_bytes()
++    assert state.requests == []
++    state.fail_export = False
++    provision.main([*args, '--apply'])
++    assert primary.read_bytes() == preserved
++    saved = json.loads(secret.decrypt_secret(primary, key))
++    assert state.requests[0]['recovery_passphrase'] == saved['recovery_passphrase']
++
++
++@pytest.mark.parametrize('method', ['tpm2', 'local-openbao'])
++def test_controller_rejects_passphrase_policy_override_before_escrow(
++    controller, method
++):
++    args, state, vault, _ = controller
++    state.method = method
++    with pytest.raises(provision.ProvisionError):
++        provision.main([*args, '--backend', 'passphrase', '--apply'])
++    assert state.requests == state.exports == state.events == []
++    assert not (vault / 'storage-recovery').exists()

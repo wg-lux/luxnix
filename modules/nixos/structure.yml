@@ -39,7 +39,7 @@ entrypoints:
   purpose: Bootloader selection; keyless lanzaboote install verifying controller-signed artifacts against the public fleet certificate.
 - name: vault-secret-lifecycle
   file: luxnix/vault/default.nix
-  purpose: Machine authentication, guarded Vault credentials and mount-gated manually unlocked server TLS storage.
+  purpose: Machine authentication, guarded Vault credentials and mount-gated manually unlocked server TLS storage. Wiring only; shared values in context.nix, per-domain scripts in tools/ (auth, server, hub-pki, hub-sites, client), options.nix and config.nix.
 - name: ca-trust
   file: luxnix/ca-trust/default.nix
   purpose: Fleet CA bundle distrust list, build-time bundle verification and certifi repair command.

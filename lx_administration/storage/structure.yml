@@ -24,13 +24,13 @@ entrypoints:
     purpose: Validate explicit TPM admission or passphrase-wrapped seals with authenticated runtime staging; never initialize state at boot.
   - name: storage-provision
     file: provision.py
-    purpose: Escrow recovery in the existing encrypted admin vault and an independent host before explicit inventory-scoped provisioning.
+    purpose: Escrow recovery in the existing encrypted admin vault and an independent host before explicit local or SSH-targeted passphrase, TPM or local OpenBao provisioning.
   - name: tpm-release
     file: tpm_release.py
     purpose: Create and verify the non-exportable TPM client identity and fetch one volume release over mTLS.
   - name: operator-migration
     file: operator_migration.py
-    purpose: Unlock enrolled TPM containers or provision passphrase containers and verify resumable startup copies without overwriting populated storage.
+    purpose: Unlock existing containers, explicitly provision escrowed new volumes and verify resumable copies without formatting at startup or overwriting populated storage.
   - name: manager
     file: manager.py
     purpose: Inspect manager ownership and interfaces.

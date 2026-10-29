@@ -408,3 +408,32 @@ def test_client_hash_source_is_accepted_by_account_provisioning():
     migration = (ROOT / "lx_administration/storage/operator_migration.py").read_text()
     assert "stat.S_IMODE(info.st_mode) in (0o400, 0o600)" in migration
     assert int(permissions.group(1), 8) in (0o400, 0o600)
+
+
+def test_backing_mount_failure_cannot_block_remote_boot():
+    """A missing data disk must leave networking and SSH reachable on gc-10."""
+    if shutil.which("nix") is None:
+        pytest.skip("Nix evaluation required")
+    expression = r'''
+      let
+        f = builtins.getFlake ("git+file://" + builtins.toString ./.);
+        c = f.nixosConfigurations.gc-10.config;
+      in {
+        emergency = c.systemd.enableEmergencyMode;
+        raid = c.fileSystems."/data/raid01".options;
+        unlock = c.systemd.services.luxnix-storage-unlock-luxnix-app-storage.unitConfig.RequiresMountsFor;
+        sshdAfter = c.systemd.services.sshd.after;
+        vpnAfter = c.systemd.services.openvpn-aglnet.after;
+      }
+    '''
+    result = subprocess.run(
+        ["nix", "eval", "--impure", "--json", "--expr", expression],
+        cwd=ROOT, text=True, capture_output=True, timeout=300,
+    )
+    assert result.returncode == 0, result.stderr
+    c = json.loads(result.stdout)
+    assert c["emergency"] is False
+    assert "nofail" in c["raid"]
+    assert c["unlock"] == ["/data/raid01"]
+    for after in (c["sshdAfter"], c["vpnAfter"]):
+        assert not any(unit.startswith("luxnix-storage-") or unit.endswith(".mount") for unit in after)

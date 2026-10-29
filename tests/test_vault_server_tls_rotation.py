@@ -182,7 +182,7 @@ def test_vault_leaf_rotation_preserves_ca_and_rejects_ca_replacement(
 
 def test_vault_tls_uses_central_yaml_and_a_testable_maintenance_script() -> None:
     host_vars = (REPO_ROOT / "ansible/inventory/host_vars/gs-02.yml").read_text()
-    module = (REPO_ROOT / "modules/nixos/luxnix/vault/default.nix").read_text()
+    module = (REPO_ROOT / "modules/nixos/luxnix/vault/tools/server.nix").read_text()
 
     assert "vault.server.managedTls.enable" in host_vars
     assert "/var/lib/luxnix-vault-pki/ca.crt" in host_vars

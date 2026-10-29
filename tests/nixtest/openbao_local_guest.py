@@ -285,14 +285,16 @@ elif command == "provision":
         return original(*args, **kwargs)
     migration.run = interrupted
     try:
-        task.provision_local("fresh", record, host, record["recovery_passphrase"].encode(), native_uuid)
+        task.provision_container("fresh", record, record["recovery_passphrase"].encode(),
+                                 native_uuid, openbao=host)
     except migration.MigrationError as exc:
         assert "injected" in str(exc)
     else:
         raise AssertionError("Provisioning interruption not exercised")
     migration.run = original
     for _ in range(2):
-        task.provision_local("fresh", record, host, record["recovery_passphrase"].encode(), native_uuid)
+        task.provision_container("fresh", record, record["recovery_passphrase"].encode(),
+                                 native_uuid, openbao=host)
     metadata = json.loads(run("cryptsetup", "luksDump", "--dump-json-metadata", record["container"]))
     assert len(metadata["keyslots"]) == 2
     assert [t["type"] for t in metadata["tokens"].values()] == ["luxnix-openbao"]

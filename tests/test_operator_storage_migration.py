@@ -346,9 +346,11 @@ def local_provision(tmp_path, monkeypatch):
               'host': 'test-host', 'container': str(container), 'origin': 'new',
               'recovery_passphrase': 'a' * 64, 'provisioner': {'role_id': 'test-role'},
               'primary_escrow': 'verified-test', 'emergency_export': 'verified-test-independent'}
-    state = SimpleNamespace(fs=False, formatted=False, calls=[], fail=None)
+    state = SimpleNamespace(fs=False, filesystem='ext4', formatted=False,
+                            calls=[], inputs=[], fail=None)
     def command(*args, **kwargs):
         state.calls.append(args)
+        state.inputs.append(kwargs.get('input'))
         if args[:2] == ('cryptsetup', 'luksUUID'):
             return expected_uuid.encode()
         if args[:2] == ('cryptsetup', 'luksFormat'):
@@ -365,7 +367,8 @@ def local_provision(tmp_path, monkeypatch):
     def probe(args, **kwargs):
         if args[:2] == ['cryptsetup', 'isLuks']:
             return SimpleNamespace(returncode=0 if state.formatted else 1, stdout=b'')
-        return SimpleNamespace(returncode=0 if state.fs else 2, stdout=b'ext4' if state.fs else b'')
+        return SimpleNamespace(returncode=0 if state.fs else 2,
+                               stdout=state.filesystem.encode() if state.fs else b'')
     monkeypatch.setattr(migration.subprocess, 'run', probe)
     host = SimpleNamespace(
         volume_record=lambda *a: state.calls.append(('record',)) or b'x' * 32,
@@ -377,12 +380,14 @@ def test_local_provision_resumes_without_tpm_token_or_reformat(local_provision):
     task, record, host, state, container = local_provision
     state.fail = 'mkfs'
     with pytest.raises(migration.MigrationError, match='interrupted'):
-        task.provision_local('data', record, host, record['recovery_passphrase'].encode(), record['luks_uuid'])
+        task.provision_container('data', record, record['recovery_passphrase'].encode(),
+                                 record['luks_uuid'], openbao=host)
     assert container.exists()
     assert not container.with_suffix('.luks.provisioned.json').exists()
     state.fail = None
     for _ in range(2):
-        task.provision_local('data', record, host, record['recovery_passphrase'].encode(), record['luks_uuid'])
+        task.provision_container('data', record, record['recovery_passphrase'].encode(),
+                                 record['luks_uuid'], openbao=host)
     assert sum(c[:2] == ('cryptsetup', 'luksFormat') for c in state.calls) == 1
     assert state.calls.index(('record',)) < next(i for i,c in enumerate(state.calls) if c[:2] == ('cryptsetup', 'luksFormat'))
     assert not any(c[0] == 'systemd-cryptenroll' for c in state.calls)
@@ -395,13 +400,17 @@ def test_local_provision_refuses_foreign_uuid_and_existing_volume_escrow(local_p
     task, record, host, state, container = local_provision
     record['origin'] = 'existing'
     with pytest.raises(migration.MigrationError, match='adopt existing'):
-        task.provision_local('data', record, host, b'a' * 64, record['luks_uuid'])
+        task.provision_container('data', record, b'a' * 64,
+                                 record['luks_uuid'], openbao=host)
     assert not container.exists()
     record['origin'] = 'new'
     container.write_bytes(b'foreign encrypted data')
+    identity = {key: record[key] for key in ('machine_id', 'volume', 'luks_uuid')}
+    migration.atomic_json(container.with_suffix('.luks.provisioning.json'), identity)
     monkeypatch.setattr(migration, 'run', lambda *a, **k: b'foreign-uuid')
     with pytest.raises(migration.MigrationError, match='never reformat'):
-        task.provision_local('data', record, host, b'a' * 64, record['luks_uuid'])
+        task.provision_container('data', record, b'a' * 64,
+                                 record['luks_uuid'], openbao=host)
     assert container.read_bytes() == b'foreign encrypted data'
 
 
@@ -450,11 +459,13 @@ def test_local_provision_recovers_an_unpublished_allocation(local_provision):
     task, record, host, state, container = local_provision
     state.fail = 'format'
     with pytest.raises(migration.MigrationError, match='allocation'):
-        task.provision_local('data', record, host, b'a' * 64, record['luks_uuid'])
+        task.provision_container('data', record, b'a' * 64,
+                                 record['luks_uuid'], openbao=host)
     assert not container.exists()
     assert Path(str(container) + '.allocating').exists()
     state.fail = None
-    task.provision_local('data', record, host, b'a' * 64, record['luks_uuid'])
+    task.provision_container('data', record, b'a' * 64,
+                             record['luks_uuid'], openbao=host)
     assert container.exists()
     assert not Path(str(container) + '.allocating').exists()
     assert all(c[-1].endswith('.allocating') for c in state.calls if c[:2] == ('cryptsetup', 'luksFormat'))
@@ -482,6 +493,152 @@ def test_public_local_provision_checks_platform_before_allocation(
         task.provision("data", record)
     assert state.calls == []
     assert not container.exists()
+
+
+@pytest.fixture
+def passphrase_provision(local_provision, monkeypatch):
+    task, record, _, state, container = local_provision
+    task.config['unlockMethod'] = 'passphrase'
+    task.config['volumes']['data']['luksUUID'] = None
+    record.update(backend='passphrase',
+                  machine_id=Path('/etc/machine-id').read_text().strip())
+    record.pop('provisioner')
+    monkeypatch.setattr(
+        migration, 'require_secure_boot',
+        lambda: pytest.fail('Passphrase provisioning must not require Secure Boot'))
+    monkeypatch.setattr(
+        migration.runpy, 'run_path',
+        lambda _: pytest.fail('Passphrase provisioning must not contact OpenBao'))
+    return task, record, state, container
+
+
+def test_public_passphrase_provision_creates_once_using_only_escrowed_key(
+    passphrase_provision
+):
+    task, record, state, container = passphrase_provision
+    for _ in range(2):
+        task.provision('data', record)
+    assert container.stat().st_mode & 0o777 == 0o600
+    assert sum(c[:2] == ('cryptsetup', 'luksFormat') for c in state.calls) == 1
+    assert sum(c[0] == 'mkfs.ext4' for c in state.calls) == 1
+    assert not any(c[0] in ('systemd-cryptenroll', 'record', 'keyslot')
+                   for c in state.calls)
+    for command, data in zip(state.calls, state.inputs):
+        assert record['recovery_passphrase'] not in ' '.join(command)
+        if '--key-file=-' in command:
+            assert data == record['recovery_passphrase'].encode()
+    receipt = json.loads(container.with_suffix('.luks.provisioned.json').read_text())
+    assert receipt == {
+        key: record[key] for key in ('machine_id', 'volume', 'luks_uuid')}
+    assert not container.with_suffix('.luks.provisioning.json').exists()
+
+
+@pytest.mark.parametrize('failure', ['format', 'mkfs'])
+def test_public_passphrase_provision_resumes_without_reformatting_published_container(
+    passphrase_provision, failure
+):
+    task, record, state, container = passphrase_provision
+    state.fail = failure
+    with pytest.raises(migration.MigrationError, match='interrupted'):
+        task.provision('data', record)
+    assert container.exists() == (failure == 'mkfs')
+    assert container.with_suffix('.luks.provisioning.json').exists()
+    assert not container.with_suffix('.luks.provisioned.json').exists()
+    state.fail = None
+    task.provision('data', record)
+    assert container.with_suffix('.luks.provisioned.json').exists()
+    assert not Path(str(container) + '.allocating').exists()
+    assert all(c[-1].endswith('.allocating') for c in state.calls
+               if c[:2] == ('cryptsetup', 'luksFormat'))
+    formats = sum(c[:2] == ('cryptsetup', 'luksFormat') for c in state.calls)
+    assert formats == (2 if failure == 'format' else 1)
+
+
+@pytest.mark.parametrize('method', ['tpm2', 'local-openbao'])
+def test_passphrase_backend_cannot_bypass_configured_unlock_policy(
+    passphrase_provision, method
+):
+    task, record, state, container = passphrase_provision
+    task.config['unlockMethod'] = method
+    with pytest.raises(migration.MigrationError):
+        task.provision('data', record)
+    assert state.calls == []
+    assert not container.exists()
+
+
+@pytest.mark.parametrize(('field', 'value'), [
+    ('machine_id', 'another-machine'), ('volume', 'other-volume'),
+    ('host', 'other-host'),
+    ('container', '/var/lib/other-container.luks'), ('primary_escrow', None),
+    ('emergency_export', None), ('recovery_passphrase', 'invalid'),
+    ('origin', 'existing'),
+])
+def test_passphrase_provision_rejects_invalid_identity_or_custody_before_allocation(
+    passphrase_provision, field, value
+):
+    task, record, state, container = passphrase_provision
+    record[field] = value
+    with pytest.raises(migration.MigrationError):
+        task.provision('data', record)
+    assert state.calls == []
+    assert not container.exists()
+    assert not Path(str(container) + '.allocating').exists()
+
+
+@pytest.mark.parametrize('obstacle', [
+    'mapping', 'container', 'pending-receipt', 'completed-receipt'])
+def test_passphrase_provision_preserves_conflicting_existing_state(
+    passphrase_provision, obstacle
+):
+    task, record, state, container = passphrase_provision
+    if obstacle == 'mapping':
+        existing = Path(task.config['volumes']['data']['device'])
+        existing.write_bytes(b'occupied mapping')
+    elif obstacle == 'container':
+        existing = container
+        existing.write_bytes(b'existing storage without provisioning ownership')
+    else:
+        suffix = ('.luks.provisioning.json' if obstacle == 'pending-receipt'
+                  else '.luks.provisioned.json')
+        existing = container.with_suffix(suffix)
+        existing.write_text(json.dumps({'machine_id': 'another-machine'}))
+    before = existing.read_bytes()
+    with pytest.raises(migration.MigrationError):
+        task.provision('data', record)
+    assert existing.read_bytes() == before
+    assert not any(c[:2] == ('cryptsetup', 'luksFormat') or c[0] == 'mkfs.ext4'
+                   for c in state.calls)
+
+
+def test_passphrase_provision_rejects_an_unexpected_filesystem_on_resume(
+    passphrase_provision
+):
+    task, record, state, container = passphrase_provision
+    state.fail = 'mkfs'
+    with pytest.raises(migration.MigrationError):
+        task.provision('data', record)
+    state.fail = None
+    state.fs = True
+    state.filesystem = 'xfs'
+    before = len(state.calls)
+    with pytest.raises(migration.MigrationError, match='filesystem'):
+        task.provision('data', record)
+    assert not any(c[:2] == ('cryptsetup', 'luksFormat') or c[0] == 'mkfs.ext4'
+                   for c in state.calls[before:])
+    assert not container.with_suffix('.luks.provisioned.json').exists()
+
+
+def test_passphrase_provision_never_recreates_filesystem_after_completed_receipt(
+    passphrase_provision
+):
+    task, record, state, _ = passphrase_provision
+    task.provision('data', record)
+    state.fs = False
+    before = len(state.calls)
+    with pytest.raises(migration.MigrationError, match='filesystem'):
+        task.provision('data', record)
+    assert not any(c[:2] == ('cryptsetup', 'luksFormat') or c[0] == 'mkfs.ext4'
+                   for c in state.calls[before:])
 
 
 @pytest.fixture

@@ -838,9 +838,9 @@ repository_review:
     - item: Volumes luxnix-secrets und luxnix-app-storage; der App-Container von gc-10 liegt unter /data/raid01
       reference: systems/x86_64-linux/gc-10/default.nix
     - item: secret_id_ttl=0, secret_id_num_uses=0, token_ttl=1h, token_max_ttl=4h
-      reference: modules/nixos/luxnix/vault/default.nix
+      reference: modules/nixos/luxnix/vault/tools/hub-sites.nix
     - item: vault-auth-setup ist ein Oneshot-Dienst; allowOffline = true
-      reference: modules/nixos/luxnix/vault/default.nix
+      reference: modules/nixos/luxnix/vault/config.nix
     - item: gs-02 betreibt Vault; dessen Daten liegen auf einem operator-unlocked Volume von gs-02 selbst
       reference: systems/x86_64-linux/gs-02/default.nix
     - item: Identity Salts sind quellenlokal außer für freigegebene gemeinsame Center (derzeit university_hospital_wuerzburg)

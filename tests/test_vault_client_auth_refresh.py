@@ -15,7 +15,7 @@ HELPER = ROOT / "scripts/vault/refresh-client-auth.sh"
 
 @pytest.mark.parametrize("outcome", ["ready", "offline-cached", "auth-rejected"])
 def test_enrollment_status_requires_fresh_authentication(tmp_path, outcome):
-    source = (ROOT / "modules/nixos/luxnix/vault/default.nix").read_text()
+    source = (ROOT / "modules/nixos/luxnix/vault/tools/auth.nix").read_text()
     condition = source.split("  vaultAuthProvisioningConditionScript =", 1)[1]
     script = condition.split("    write_status()", 1)[1].split("    missing=0", 1)[0]
     script = "write_status()" + script
@@ -153,7 +153,7 @@ print('test-only-fresh-token')
 
 
 def test_issuance_refreshes_after_cache_check_and_before_vault_write():
-    source = (ROOT / "modules/nixos/luxnix/vault/default.nix").read_text()
+    source = (ROOT / "modules/nixos/luxnix/vault/tools/client.nix").read_text()
     issue = source.split("  issueHubClientCertificateScript =", 1)[1].split(
         "  vaultAuthSetupScript =", 1
     )[0]
@@ -170,7 +170,7 @@ def test_issuance_refreshes_after_cache_check_and_before_vault_write():
 def test_force_marker_bypasses_valid_cache_and_survives_failure(
     tmp_path, forced, failed
 ):
-    source = (ROOT / "modules/nixos/luxnix/vault/default.nix").read_text()
+    source = (ROOT / "modules/nixos/luxnix/vault/tools/client.nix").read_text()
     issue = source.split("  issueHubClientCertificateScript =", 1)[1].split(
         "  publishHubClientCaScript =", 1
     )[0]

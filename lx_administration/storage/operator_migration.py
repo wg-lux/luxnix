@@ -117,9 +117,14 @@ class Migration:
 
     def provision(self, name, record):
         """Explicit operation only, after the controller has verified both escrows."""
-        method = record.get("backend", self.config.get("unlockMethod"))
-        if method not in ("tpm2", "local-openbao"):
-            raise MigrationError("Automatic provisioning requires the explicit TPM policy")
+        configured_method = self.config.get("unlockMethod", "passphrase")
+        method = record.get("backend", configured_method)
+        if method not in ("passphrase", "tpm2", "local-openbao"):
+            raise MigrationError("Unsupported storage provisioning backend")
+        if method == "passphrase" and configured_method != "passphrase":
+            raise MigrationError(
+                "Passphrase provisioning requires the configured passphrase unlock policy"
+            )
         volume = self.config["volumes"][name]
         container = plain_path(volume["container"])
         expected_uuid = str(uuid.UUID(record["luks_uuid"]))
@@ -132,21 +137,28 @@ class Migration:
         key = record["recovery_passphrase"].encode("ascii")
         if len(key) != 64 or any(c not in b"0123456789abcdef" for c in key):
             raise MigrationError("Provisioning requires a random 256-bit recovery passphrase")
+        if method in ("passphrase", "local-openbao"):
+            if (record.get("host") != self.config["machine"]
+                    or record.get("container") != str(container)):
+                raise MigrationError(
+                    "Provision request does not match the declared host and container"
+                )
         self.verifier._require_protected_swap()
+        if method == "passphrase":
+            self.provision_container(name, record, key, expected_uuid)
+            return
         require_secure_boot()
         if method == "local-openbao":
             if not self.config.get("localOpenbaoEnabled"):
                 raise MigrationError("Local OpenBao must be installed before deploy-time provisioning")
             if volume.get("luksUUID") != expected_uuid:
                 raise MigrationError("Local OpenBao provisioning requires a declared LUKS UUID")
-            if record.get("host") != self.config["machine"] or record.get("container") != str(container):
-                raise MigrationError("Provision request does not match the declared host and container")
             enrollment = runpy.run_path(self.config["openbaoEnroll"])
             host = enrollment["Host"](
                 self.config["machine"], runpy.run_path(self.config["openbaoClient"])
             )
             try:
-                self.provision_local(name, record, host, key, expected_uuid)
+                self.provision_container(name, record, key, expected_uuid, openbao=host)
             except enrollment["EnrollError"] as exc:
                 raise MigrationError(str(exc)) from None
             return
@@ -196,7 +208,7 @@ class Migration:
         finally:
             os.close(fd)
 
-    def provision_local(self, name, record, host, recovery, expected_uuid):
+    def provision_container(self, name, record, recovery, expected_uuid, *, openbao=None):
         """Resume only authenticated LUKS state; never reformat an existing file."""
         volume = self.config["volumes"][name]
         container = plain_path(volume["container"])
@@ -209,8 +221,14 @@ class Migration:
             raise MigrationError("Conflicting completed provisioning receipt")
         if pending.exists() and json.loads(pending.read_text()) != identity:
             raise MigrationError("Conflicting in-progress provisioning receipt")
-        # Authenticate the service and persist its independent key before allocation.
-        host.volume_record(name, expected_uuid, record["provisioner"], str(container) if container.exists() else None)
+        if container.exists() and not marker.exists() and not pending.exists():
+            raise MigrationError(
+                "Existing container has no matching provisioning receipt; never reformat it"
+            )
+        if openbao is not None:
+            # Authenticate and persist the independent key before allocation.
+            openbao.volume_record(name, expected_uuid, record["provisioner"],
+                                  str(container) if container.exists() else None)
         if container.exists():
             if run("cryptsetup", "luksUUID", str(container)).decode().strip() != expected_uuid:
                 raise MigrationError("Existing container UUID differs; never reformat it")
@@ -244,10 +262,8 @@ class Migration:
             os.link(temporary, container)
             temporary.unlink()
             run("sync", "-f", str(container.parent))
-        # A valid authenticated LUKS header can resume after any completed format.
-        if not marker.exists() and not pending.exists():
-            atomic_json(pending, identity)
-        host.convert_volume(name, str(container), expected_uuid, record)
+        if openbao is not None:
+            openbao.convert_volume(name, str(container), expected_uuid, record)
         mapping = volume["device"].removeprefix("/dev/mapper/")
         opened = not Path(volume["device"]).exists()
         if not opened:

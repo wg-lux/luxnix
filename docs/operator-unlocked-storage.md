@@ -107,19 +107,152 @@ custodian recovery custody; it is not included with the export.
 `devenv shell storage-provision provision --host gc-10 --volume luxnix-app-storage
 --recovery-host gs-01` previews the exact target. `--apply` explicitly authorizes
 the operation after both recovery copies are authenticated. It uses the deployed
-`luxnix-storage-provision` helper, which requires Secure Boot and authenticated
-recovery custody. The legacy `tpm2` backend enrolls a TPM token. Select
-`--backend local-openbao` for a host with the local OpenBao tool installed and
-its enrollment escrow confirmed. This deploy-time choice does not change its
-boot unlock policy.
+`luxnix-storage-provision` helper. The preview includes the selected backend,
+which defaults to the host's configured unlock method:
 
-The local backend writes and reads back an independent UUID-bound OpenBao key
-before allocation. It formats an unpublished private allocation with the
-escrowed recovery passphrase, publishes only a valid authenticated LUKS header,
-adds the OpenBao keyslot, and creates ext4 only for the authenticated new-volume
-request. A retry resumes the same record, UUID and keyslots. A partial allocation
-is private staging; an existing published container is never reformatted. The
-mapping stays open for subsequent pre-copy. Boot never invokes this workflow.
+| Backend | Prerequisites and result |
+| --- | --- |
+| `passphrase` | Requires the configured `passphrase` unlock policy. Creates the volume with its escrowed random passphrase; it does not require Secure Boot or enroll a TPM/OpenBao key. |
+| `tpm2` | Requires Secure Boot and enrolls a TPM token. |
+| `local-openbao` | Requires Secure Boot, the installed local OpenBao tools and authenticated enrollment escrow. Adds an independent OpenBao keyslot. |
+
+An explicit `--backend` choice does not change the boot unlock policy. Both
+controller and host reject passphrase provisioning under a TPM or local OpenBao
+boot policy.
+
+The passphrase and local OpenBao backends format an unpublished private
+allocation with the escrowed recovery passphrase and publish only a valid
+authenticated LUKS header. They create ext4 only for the authenticated new-volume
+request. Existing published containers require a matching in-progress or completed
+provisioning receipt; an unknown container is never adopted or reformatted by
+this path. A retry resumes the same record and UUID. A partial allocation is
+private staging. The local backend also writes and reads back its independent
+UUID-bound OpenBao key before allocation and adds its keyslot before creating
+the filesystem. The mapping stays open for subsequent pre-copy. Boot never
+invokes this workflow.
+
+### A missing container on a passphrase host
+
+`Container missing; startup never provisions or formats storage` means the
+declared container is missing at its configured path. First establish whether
+this is initial provisioning or an existing volume whose backing mount or
+container needs recovery. Restore that mount or container when existing data
+is expected. Restarting the unlock service does not create storage.
+
+For initial provisioning, install this revision's host helper through the normal
+[existing-host deployment workflow](deployment-guide.md), and use the same
+revision on the controller before applying provisioning. A switch that reports
+failed storage services is not a completed deployment; repeat it successfully
+after storage preparation.
+
+For gc-02, preview the declared application volume from the controller, replacing
+`<recovery-host>` with the selected independent recovery custodian:
+
+```bash
+devenv shell check-connectivity gc-02
+devenv shell storage-provision provision --host gc-02 \
+  --volume luxnix-app-storage --backend passphrase --recovery-host <recovery-host>
+```
+
+Review the host, machine ID, container path, existence flag and backend. Repeat
+the provisioning command with `--apply` to authenticate recovery custody, create
+the missing container and filesystem, and open the mapping. Inspect
+`sudo luxnix-operator-storage status` on gc-02 and provision `luxnix-secrets` in
+the same way if that declared volume is also missing. A successful repeat reuses
+the existing escrow and matching provisioning state; do not delete records or
+containers to force a fresh run.
+
+Allocation retains the existing capacity check: each new volume reserves the
+greater of its configured minimum (8 GiB by default) or twice its source-data
+size plus 256 MiB, with another 256 MiB of free-space reserve. A capacity failure
+requires space or layout changes; retries do not bypass it.
+
+Once both volumes are ready, perform the existing final migration on gc-02:
+
+```bash
+sudo systemctl start luxnix-storage-cutover.service
+sudo luxnix-operator-storage status
+```
+
+Cutover stops configured writers, verifies the final copy, activates the encrypted
+bind mounts and restarts consumers. Source directories are retained. If migration
+is already complete, `sudo luxnix-operator-storage start` uses the normal startup
+path. Re-run the normal system switch and require success before considering
+deployment complete.
+
+### Provisioning from the target itself
+
+Use `--local-target` when the controller is the target host. The selected
+inventory host must exist and exactly match the local OS hostname. The preview
+reports `"local_target": true` and reads the local machine ID. Target commands
+then execute locally, while the recovery connection still uses SSH with strict
+host-key checking. Without this option, the controller continues to use SSH for
+the target; an SSH failure never selects local execution automatically.
+
+For example, run the following as the normal administrator **on gc-02**, with
+gs-02 selected as the independent recovery host:
+
+```bash
+devenv shell storage-provision provision --host gc-02 --volume luxnix-app-storage --backend passphrase --recovery-host gs-02 --local-target
+```
+
+Review the preview before adding `--apply`. Both the target and the controller
+may be gc-02; the recovery host must be a different machine from both. Running
+this command on gs-02 is rejected. The same local transport is available for
+`storage-provision escrow` when recording an existing local volume.
+
+Run the controller as the normal administrator so it uses that account's
+existing admin vault and SSH identity. Privileged local operations still use
+sudo. Immediately before applying, authenticate with `sudo -v`; if the local
+sudo policy still requires a password file, supply the existing
+`--sudo-password-file` option with a private file on verified encrypted or
+runtime storage. A failure to obtain sudo stops the operation. The controller
+does not publish recovery passphrases in command arguments or diagnostics.
+
+Local execution uses the same installed `luxnix-storage-provision` helper as
+remote execution. The earlier host-helper deployment requirement still applies.
+Both recovery copies must authenticate before that helper runs; the existing
+machine, container and provisioning-receipt checks remain in force. This option
+does not change SSH authorization, create an admin vault, unlock an existing
+container automatically, or migrate source data during a preview.
+
+### Unlocking a newly provisioned passphrase volume after reboot
+
+The generated recovery passphrase is also this volume's manual unlock credential.
+It is independent of the Linux login password and other volumes' passphrases.
+Provisioning leaves the mapping open, but a later boot needs this credential at
+the systemd password prompt. Over SSH, use
+`sudo systemd-tty-ask-password-agent` to answer the prompt on the target host.
+
+The controller prints the non-secret `primary_escrow` path after provisioning.
+To read that record in a private operator terminal, substitute that exact path
+below. Use the same admin vault key supplied during provisioning; the example
+uses its default location. Decryption validates the protected key storage and
+authenticates the record. This deliberately displays the credential on the
+controlling terminal, so use an unrecorded session and keep it out of chat and logs.
+Enter the development environment with `devenv shell`, then run:
+
+```bash
+uv run python - /path/from/primary_escrow <<'PY'
+import json
+from pathlib import Path
+import resource
+import sys
+from lx_administration.models.vault.secret import decrypt_secret
+
+resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+record = json.loads(decrypt_secret(Path(sys.argv[1]), Path.home() / ".lxv.key"))
+with open("/dev/tty", "w") as terminal:
+    print(f"Host: {record['host']}; volume: {record['volume']}", file=terminal)
+    print(f"Container: {record['container']}; LUKS UUID: {record['luks_uuid']}", file=terminal)
+    print(record["recovery_passphrase"], file=terminal)
+PY
+```
+
+Confirm the displayed identity matches the intended volume before using its
+passphrase. Verify this readback and independent recovery custody before rebooting.
+
+### Escrowing existing volumes
 
 For existing containers, use `storage-provision escrow` with the same host,
 volume and recovery-host arguments plus `--existing-key-file <private-file>`.
@@ -253,6 +386,14 @@ subdirectories are retained by host YAML overrides.
 Backing filesystems such as gc-10's `/data/raid01` are started from declared
 mount dependencies. Routine startup does not require manual root repartitioning,
 directory creation or individual bind-mount commands.
+
+A failing backing disk never stops boot before networking and SSH. The module
+marks every `volumes.<name>.depends` mount `nofail`, so only the unlock unit
+requires it (`RequiresMountsFor`), and disables emergency mode
+(`systemd.enableEmergencyMode = false`): a failed mount no longer ends in a
+console `sulogin` shell. The affected volume, and the guarded services on it,
+stay unavailable and fail closed; repair remotely over SSH. `depends` must not
+name `/`, `/nix` or `/boot`.
 
 ## Application-side verification (lx-annotate)
 

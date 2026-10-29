@@ -122,6 +122,20 @@ let
       depends = lib.unique ([ volume.mountPoint ] ++ parents target);
     }
   ) cfg.bindMounts;
+  # A missing or degraded backing disk must never stop boot before networking
+  # and SSH: only the unlock unit pulls it in (RequiresMountsFor), not local-fs.
+  backingPaths = lib.unique (
+    lib.concatMap (volume: volume.depends) (builtins.attrValues cfg.volumes)
+  );
+  bootCriticalPaths = [
+    "/"
+    "/nix"
+    "/nix/store"
+    "/boot"
+  ];
+  backingMounts = lib.genAttrs backingPaths (_: {
+    options = [ "nofail" ];
+  });
 in
 {
   options.luxnix.storage.operatorUnlocked = {
@@ -330,8 +344,19 @@ in
         );
         message = "Guarded services require nonempty lists of configured storage mount points.";
       }
+      {
+        assertion = !lib.any (path: builtins.elem path bootCriticalPaths) backingPaths;
+        message = "Operator storage volume depends must be dedicated data mounts, not /, /nix or /boot.";
+      }
     ];
-    fileSystems = volumeMounts // bindMounts;
+    fileSystems = lib.mkMerge [
+      (volumeMounts // bindMounts)
+      backingMounts
+    ];
+    # Remote sites have no verified console: a failed mount must not stop boot
+    # in a sulogin shell before networking and SSH. Guarded consumers still
+    # require their encrypted mounts and fail closed individually.
+    systemd.enableEmergencyMode = lib.mkDefault false;
     # Preserve configured encrypted swap. The runtime verifier rejects plaintext
     # partitions/files and zram writeback before any guarded consumer starts.
     system.activationScripts = lib.mkIf (cfg.migration.accountHashes != { }) {

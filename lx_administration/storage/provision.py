@@ -14,6 +14,7 @@ import re
 import resource
 import secrets
 import shlex
+import socket
 import subprocess
 import uuid
 
@@ -71,6 +72,8 @@ with (root / '.lock').open('a') as lock:
 
 
 class Remote:
+    operation = 'Remote operation'
+
     def __init__(self, address, sudo_password_file=None):
         self.ssh = ['ssh', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes',
                     '-o', 'ConnectTimeout=10', '-o', 'ServerAliveInterval=30',
@@ -78,10 +81,14 @@ class Remote:
         self.password_file = sudo_password_file
         self.password_required = None
 
+    def _run(self, args, data=b'', timeout=600):
+        return subprocess.run(self.ssh + [shlex.join(args)], input=data,
+                              capture_output=True, timeout=timeout)
+
     def call(self, args, data=b'', privileged=False, relay_error=False):
         if privileged:
             if self.password_required is None:
-                probe = subprocess.run(self.ssh + ['sudo -n true'], capture_output=True, timeout=30)
+                probe = self._run(['sudo', '-n', 'true'], timeout=30)
                 self.password_required = probe.returncode != 0
             if self.password_required:
                 if self.password_file is None:
@@ -93,14 +100,14 @@ class Remote:
                 args = ['sudo', '-k', '-S', '-p', '', *args]
             else:
                 args = ['sudo', '-n', *args]
-        result = subprocess.run(self.ssh + [shlex.join(args)], input=data, capture_output=True, timeout=600)
+        result = self._run(args, data=data)
         if result.returncode:
             # Remote diagnostics may contain credential-bearing input. Relay only the
             # single ERROR line of a LuxNix tool that builds it without secret values.
             lines = result.stderr.decode(errors='replace').strip().splitlines()
             if relay_error and lines and re.fullmatch(r'ERROR: [A-Za-z0-9 ,.:;/_()-]{1,200}', lines[-1]):
-                raise ProvisionError(f'Remote operation failed: {lines[-1][7:]}')
-            raise ProvisionError(f'Remote operation failed (exit {result.returncode})')
+                raise ProvisionError(f'{self.operation} failed: {lines[-1][7:]}')
+            raise ProvisionError(f'{self.operation} failed (exit {result.returncode})')
         return result.stdout
 
     def machine_id(self):
@@ -108,6 +115,24 @@ class Remote:
         if not re.fullmatch('[0-9a-f]{32}', value):
             raise ProvisionError('Invalid machine identity')
         return value
+
+
+class Local(Remote):
+    """Reuse target privilege and stdin handling without an SSH connection."""
+
+    operation = 'Local operation'
+
+    def __init__(self, host, sudo_password_file=None):
+        if socket.gethostname() != host:
+            raise ProvisionError(
+                '--local-target requires the local hostname to match --host'
+            )
+        self.password_file = sudo_password_file
+        self.password_required = None
+
+    def _run(self, args, data=b'', timeout=600):
+        return subprocess.run(args, input=data, capture_output=True,
+                              timeout=timeout)
 
 
 def escrow_record(vault, vault_key, record, export):
@@ -142,8 +167,10 @@ def main(argv=None):
     parser.add_argument('--recovery-host')
     parser.add_argument('--controller-only-custody', action='store_true',
                         help='escrow only: explicitly defer the independent recovery copy')
-    parser.add_argument('--backend', choices=['tpm2', 'local-openbao'],
+    parser.add_argument('--backend', choices=['passphrase', 'tpm2', 'local-openbao'],
                         help='Explicit deploy-time backend; does not change the boot unlock policy')
+    parser.add_argument('--local-target', action='store_true',
+                        help='Run target commands locally; --host must match the local hostname')
     parser.add_argument('--vault-dir', type=Path, default=Path.home() / '.lxv')
     parser.add_argument('--vault-key', type=Path, default=Path.home() / '.lxv.key')
     parser.add_argument('--existing-key-file', type=Path)
@@ -161,13 +188,15 @@ def main(argv=None):
     config = AutoconfConfig.load(DEFAULT_CONFIG_PATH)
     inventory = AnsibleInventory.load_from_hosts_ini(
         config.ansible_root / 'inventory/hosts.ini', config.inventory_subnet)
-    def remote(host, password=None):
+    def connection(host, password=None, *, local=False):
         entry = inventory.get_host_by_name(host)
         if entry is None:
             raise ProvisionError('Host is not in the inventory')
+        if local:
+            return Local(host, password)
         return Remote(str(entry.ansible_host), password)
-    target = remote(args.host, args.sudo_password_file)
-    recovery = None if args.controller_only_custody else remote(args.recovery_host)
+    target = connection(args.host, args.sudo_password_file, local=args.local_target)
+    recovery = None if args.controller_only_custody else connection(args.recovery_host)
     machine_id = target.machine_id()
     if recovery is not None and recovery.machine_id() in {machine_id, Path('/etc/machine-id').read_text().strip()}:
         raise ProvisionError('Emergency export must be on a separate host from both target and admin vault')
@@ -183,9 +212,30 @@ def main(argv=None):
         native_uuid = str(uuid.UUID(native_uuid))
     if args.action == 'escrow' and not exists:
         raise ProvisionError('Existing-volume escrow requires a LUKS container')
+    backend = None
+    if args.action == 'provision':
+        mode_expression = (
+            f'.#nixosConfigurations.{args.host}'
+            '.config.luxnix.storage.operatorUnlocked.unlockMethod'
+        )
+        mode = subprocess.run(['nix', 'eval', '--json',
+            mode_expression],
+            capture_output=True, check=True)
+        configured_method = json.loads(mode.stdout)
+        backend = args.backend or configured_method
+        if backend not in ('passphrase', 'tpm2', 'local-openbao'):
+            raise ProvisionError('Unsupported storage provisioning backend')
+        if backend == 'passphrase' and configured_method != 'passphrase':
+            raise ProvisionError(
+                'Passphrase provisioning requires the configured passphrase unlock policy'
+            )
     summary = {'host': args.host, 'machine_id': machine_id, 'volume': args.volume,
                'container': container, 'exists': exists, 'luks_uuid': native_uuid,
                'recovery_host': args.recovery_host, 'action': args.action}
+    if backend is not None:
+        summary['backend'] = backend
+    if args.local_target:
+        summary['local_target'] = True
     if not args.apply:
         print(json.dumps(summary, sort_keys=True))
         return
@@ -220,6 +270,8 @@ def main(argv=None):
                           recovery_passphrase=key, origin='existing' if exists else 'new')
             record.pop('exists')
             record.pop('action')
+            record.pop('backend', None)
+            record.pop('local_target', None)
         if exists:
             target.call(['cryptsetup', 'open', '--test-passphrase', '--key-file=-', container],
                         record['recovery_passphrase'].encode(), privileged=True)
@@ -230,12 +282,6 @@ def main(argv=None):
             if recovery is not None else None)
         if args.action == 'provision':
             request = dict(record, primary_escrow=str(primary), emergency_export=destination)
-            backend = args.backend
-            if backend is None:
-                mode = subprocess.run(['nix', 'eval', '--json',
-                    f'.#nixosConfigurations.{args.host}.config.luxnix.storage.operatorUnlocked.unlockMethod'],
-                    capture_output=True, check=True)
-                backend = json.loads(mode.stdout)
             request['backend'] = backend
             if backend == 'local-openbao':
                 from lx_administration.storage.local_enrollment import load_escrow
