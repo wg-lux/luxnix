@@ -252,8 +252,8 @@ in
           wheelPath = mkOption {
             type = types.nullOr types.path;
             default = pkgs.fetchurl {
-              url = "https://files.pythonhosted.org/packages/20/3c/1dd6a8183768884c969f816aa21fef8fcec38307c89746f64d975a5c42d9/lx_annotate-1.7.1-py3-none-any.whl";
-              hash = "sha256-kyRse/KedNXFh5B8eYqm8g0dQvacRk2V/hh6HyKbzbw=";
+              url = "https://files.pythonhosted.org/packages/a2/18/5364bdd8635b8afbfd431ad9dc409fde765ed61b8e6f0a06c454d9870bb6/lx_annotate-1.7.2-py3-none-any.whl";
+              hash = "sha256-TPL3/SL+aFOaMS6nCUM2Af1mMzj5dFnPGZHk1cI3FSo=";
             };
             description = "Path to the lx-annotate wheel artifact used in wheel mode.";
           };
