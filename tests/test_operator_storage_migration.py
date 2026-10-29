@@ -1,4 +1,5 @@
 """Exercise real rsync copies on disposable files; never open or format a device."""
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -111,16 +112,54 @@ def test_existing_container_is_never_formatted(tmp_path, monkeypatch):
     assert container.read_bytes() == b"existing content must not be overwritten"
 
 
-def test_account_hash_copy_preserves_bytes_and_existing_rotations(tmp_path):
+def test_account_hash_copy_preserves_bytes_and_follows_source(tmp_path):
     source, target = tmp_path / "source", tmp_path / "boot" / "account.hash"
     source.write_bytes(b"existing account hash\n")
     source.chmod(0o600)
     migration.prepare_accounts({str(target): str(source)})
     assert target.read_bytes() == source.read_bytes()
     assert target.stat().st_mode & 0o777 == 0o600
-    target.write_bytes(b"subsequent rotation\n")
+    source.write_bytes(b"rotated account hash\n")
     migration.prepare_accounts({str(target): str(source)})
-    assert target.read_bytes() == b"subsequent rotation\n"
+    assert target.read_bytes() == b"rotated account hash\n"
+    assert target.stat().st_mode & 0o777 == 0o600
+    assert sorted(p.name for p in target.parent.iterdir()) == ["account.hash"]
+
+
+def test_account_hash_copy_keeps_target_while_source_is_locked_or_unsafe(tmp_path):
+    source, target = tmp_path / "source", tmp_path / "boot" / "account.hash"
+    target.parent.mkdir()
+    target.write_bytes(b"current account hash\n")
+    migration.prepare_accounts({str(target): str(source)})
+    assert target.read_bytes() == b"current account hash\n"
+    source.write_bytes(b"group readable hash\n")
+    source.chmod(0o640)
+    migration.prepare_accounts({str(target): str(source)})
+    assert target.read_bytes() == b"current account hash\n"
+
+
+def test_account_hash_copy_never_replaces_target_with_retired_hash(tmp_path, monkeypatch):
+    # A disposable stand-in; the real retired credential is not kept in tests.
+    retired = b"$6$standin$retired-credential"
+    monkeypatch.setattr(
+        migration, "RETIRED_ACCOUNT_HASH_DIGESTS", frozenset({hashlib.sha256(retired).hexdigest()})
+    )
+    source, target = tmp_path / "source", tmp_path / "boot" / "account.hash"
+    target.parent.mkdir()
+    target.write_bytes(b"unique account hash\n")
+    source.write_bytes(retired + b"\n")
+    source.chmod(0o600)
+    migration.prepare_accounts({str(target): str(source)})
+    assert target.read_bytes() == b"unique account hash\n"
+
+
+def test_missing_account_hash_copy_still_requires_private_source(tmp_path):
+    source, target = tmp_path / "source", tmp_path / "boot" / "account.hash"
+    source.write_bytes(b"group readable hash\n")
+    source.chmod(0o640)
+    with pytest.raises(migration.MigrationError):
+        migration.prepare_accounts({str(target): str(source)})
+    assert not target.exists()
 
 
 @pytest.mark.parametrize("method", ["passphrase", "tpm2"])

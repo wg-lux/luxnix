@@ -1,5 +1,6 @@
 """Evaluate real host policy and execute its validation snippet without activation."""
 
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -228,19 +229,20 @@ def test_multiple_hash_lines_are_rejected(recovery_policy, tmp_path, generated_h
     assert generated_hash not in result.stdout + result.stderr
 
 
-def test_preexisting_shared_fallback_is_rejected(recovery_policy, tmp_path):
-    # Public retired credential, kept only as a rejection fixture.
-    retired_hash = (
-        "$6$yC9hyVoZEYLlzjbZ$pILBYLOZBlplgoYL9L.dyIKPGPrcW2ifd1I3ffRA"
-        "YIwsv8B.pA76Eo6OUq71gJJKl8kGyBsmlbKwnGcKQEpoa."
+def test_preexisting_shared_fallback_is_rejected(recovery_policy, tmp_path, generated_hash):
+    # The policy keeps only a SHA-256 fingerprint of the retired credential.
+    # Substitute a disposable hash's fingerprint to exercise the same check.
+    policy = dict(recovery_policy["default"])
+    digests = re.findall(r"\b[0-9a-f]{64}\b", policy["script"])
+    assert len(digests) == 1
+    policy["script"] = policy["script"].replace(
+        digests[0], hashlib.sha256(generated_hash.encode()).hexdigest()
     )
-    result, path = run_validation(
-        recovery_policy["default"], tmp_path, retired_hash + "\n"
-    )
+    result, path = run_validation(policy, tmp_path, generated_hash + "\n")
     assert result.returncode != 0
     assert "retired shared admin password" in result.stderr
-    assert retired_hash not in result.stdout + result.stderr
-    assert path.read_text() == retired_hash + "\n"
+    assert generated_hash not in result.stdout + result.stderr
+    assert path.read_text() == generated_hash + "\n"
 
 
 @pytest.mark.parametrize(
@@ -317,3 +319,48 @@ def test_client_validator_accepts_existing_hash_without_changing_shell_options(
     assert result.returncode == 0, result.stderr
     assert result.stdout == result.stderr == ""
     assert path.read_text() == generated_hash + "\n"
+
+
+@pytest.mark.parametrize(
+    "action, tool_succeeds, accepted",
+    [("switch", True, True), ("test", True, True), ("switch", False, False), ("", True, False)],
+)
+def test_missing_hash_prompts_only_during_switch_or_test(
+    recovery_policy, tmp_path, generated_hash, action, tool_succeeds, accepted
+):
+    policy = dict(recovery_policy["default"])
+    tools = re.findall(r"/nix/store/[^ /]+/bin/luxnix-admin-password", policy["script"])
+    assert len(set(tools)) == 1
+    password_file = tmp_path / "admin.hash"
+    # Stand-in for the interactive tool: writes a disposable hash, never prompts.
+    tool = tmp_path / "luxnix-admin-password"
+    tool.write_text(
+        "#!/bin/sh\n"
+        '[ "$LUXNIX_ADMIN_PASSWORD_FROM_ACTIVATION" = 1 ] || exit 3\n'
+        + (
+            f"printf '%s\\n' {shlex.quote(generated_hash)} > {shlex.quote(str(password_file))}\n"
+            f"chmod 0600 {shlex.quote(str(password_file))}\n"
+            if tool_succeeds
+            else "exit 1\n"
+        )
+    )
+    tool.chmod(0o700)
+    policy["script"] = policy["script"].replace(tools[0], str(tool))
+    script = policy["script"].replace(policy["file"], str(password_file))
+    metadata_tool = tmp_path / "stat-metadata"
+    metadata_tool.write_text("#!/bin/sh\nprintf '0:600\\n'\n")
+    metadata_tool.chmod(0o700)
+    script = re.sub(r"/nix/store/[^ /]+/bin/stat", shlex.quote(str(metadata_tool)), script)
+    result = subprocess.run(
+        ["bash", "-c", script],
+        text=True,
+        capture_output=True,
+        env={"PATH": "/run/current-system/sw/bin:/usr/bin:/bin", "NIXOS_ACTION": action},
+    )
+    assert (result.returncode == 0) == accepted, result.stderr
+    if accepted:
+        assert password_file.read_text() == generated_hash + "\n"
+        assert "asking for a new password" in result.stderr
+    else:
+        assert "luxnix-admin-password" in result.stderr
+    assert generated_hash not in result.stdout + result.stderr

@@ -369,20 +369,58 @@ class Migration:
 
 
 
+# SHA-256 of the publicly known former fleet admin hash; mirrors modules/nixos/user/admin.
+RETIRED_ACCOUNT_HASH_DIGESTS = frozenset({
+    "a396e38d2c16276942366260dfc8e88ccef88e5df8915d50e688aca7e1502bba",
+})
+
+
+def private_source(source):
+    info = source.stat()
+    return stat.S_ISREG(info.st_mode) and info.st_uid == os.geteuid() and stat.S_IMODE(info.st_mode) in (0o400, 0o600)
+
+
+def write_account_hash(target, content):
+    temporary = target.with_name(f".{target.name}.{uuid.uuid4().hex}")
+    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, target)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
+
+
 def prepare_accounts(accounts):
+    """Keep each boot copy equal to its source whenever the source is readable.
+
+    The source lives on operator-unlocked storage and is absent before unlock;
+    the existing copy then stays authoritative. An existing copy is never
+    replaced by an unsafe source or by a retired hash.
+    """
     for target, source in accounts.items():
         target, source = plain_path(target), plain_path(source)
         if target.exists():
+            if not source.exists():
+                continue
+            if not private_source(source):
+                print(f"WARNING: keeping {target}: its source is not a private root-owned regular file.", file=sys.stderr)
+                continue
+            content = source.read_bytes()
+            if content == target.read_bytes():
+                continue
+            if hashlib.sha256(content.strip()).hexdigest() in RETIRED_ACCOUNT_HASH_DIGESTS:
+                print(f"WARNING: keeping {target}: its source contains a retired shared hash.", file=sys.stderr)
+                continue
+            write_account_hash(target, content)
             continue
-        info = source.stat()
-        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) not in (0o400, 0o600):
+        if not private_source(source):
             raise MigrationError("Boot account hash source must be a private root-owned regular file")
         target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-        with os.fdopen(fd, "wb") as stream:
-            stream.write(source.read_bytes())
-            stream.flush()
-            os.fsync(stream.fileno())
+        write_account_hash(target, source.read_bytes())
 
 
 def main():

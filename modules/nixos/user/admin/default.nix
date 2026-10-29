@@ -13,6 +13,103 @@ let
     if (config.users.groups ? sslCert) then config.users.groups.sslCert.name else null;
   passwordFile = config.luxnix.vault.adminPasswordHashedFile;
   sensitiveServicesGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
+  # SHA-256 of the public retired shared admin hash and that hash's salt; the
+  # credential itself is not kept here. Mirrors lx_administration/storage/operator_migration.py.
+  retiredAdminHashSha256 = "a396e38d2c16276942366260dfc8e88ccef88e5df8915d50e688aca7e1502bba";
+  retiredAdminSalt = "yC9hyVoZEYLlzjbZ";
+
+  # Interactive replacement for a missing, malformed or retired admin hash. It
+  # asks on the current terminal or through systemd password agents and never
+  # takes the password from arguments or the environment.
+  adminPasswordTool = pkgs.writeShellApplication {
+    name = "luxnix-admin-password";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.openssl
+      pkgs.shadow
+      pkgs.systemd
+    ];
+    text = ''
+      umask 077
+      if [ "$(id -u)" -ne 0 ]; then
+        echo "ERROR: run as root: sudo luxnix-admin-password" >&2
+        exit 2
+      fi
+      # shellcheck disable=SC2209
+      account=${escapeShellArg cfg.name}
+      host=${escapeShellArg config.networking.hostName}
+      boot_hash_file=${escapeShellArg cfg.passwordFile}
+      vault_hash_file=${escapeShellArg config.luxnix.vault.adminPasswordHashedFile}
+      vault_password_file=${escapeShellArg config.luxnix.vault.adminPasswordFile}
+      retired_salt=${escapeShellArg retiredAdminSalt}
+      retired_digest=${escapeShellArg retiredAdminHashSha256}
+
+      # Plaintext may only be written to unlocked encrypted storage.
+      encrypted() {
+        PATH="${makeBinPath [ pkgs.util-linux ]}:$PATH" \
+          ${pkgs.python3}/bin/python3 ${../../../../lx_administration/secret_storage.py} \
+          --allow-runtime "$1" >/dev/null 2>&1
+      }
+
+      write_private() {
+        local directory temporary
+        directory="$(dirname "$1")"
+        [ -d "$directory" ] || mkdir -m 0700 "$directory"
+        temporary="$(mktemp "$directory/.luxnix-admin-password.XXXXXX")"
+        printf '%s\n' "$2" > "$temporary"
+        chown root:root "$temporary"
+        chmod 0600 "$temporary"
+        mv -f "$temporary" "$1"
+      }
+
+      ask() {
+        systemd-ask-password --timeout=300 --id="luxnix-admin-password:$host" "$1"
+      }
+
+      echo "Set a new password for '$account' on $host." >&2
+      echo "If no prompt appears here, answer it within 5 minutes from another terminal on $host: sudo systemd-tty-ask-password-agent" >&2
+      for _ in 1 2 3; do
+        if ! password="$(ask "New password for $account on $host:")" ||
+           ! repeat="$(ask "Repeat the new password for $account on $host:")"; then
+          echo "ERROR: no password was entered." >&2
+          exit 1
+        fi
+        if [ "$password" != "$repeat" ]; then
+          echo "The passwords do not match." >&2
+          continue
+        fi
+        if [ "$(printf '%s' "$password" | LC_ALL=C wc -c)" -lt 12 ]; then
+          echo "Use at least 12 bytes." >&2
+          continue
+        fi
+        if [ "$(printf '%s\n' "$password" | openssl passwd -6 -salt "$retired_salt" -stdin | tr -d '\n' | sha256sum | cut -d ' ' -f 1)" = "$retired_digest" ]; then
+          echo "This is the retired shared password; choose a unique one." >&2
+          continue
+        fi
+        hash="$(printf '%s\n' "$password" | openssl passwd -6 -stdin)"
+
+        write_private "$boot_hash_file" "$hash"
+        if [ "$vault_hash_file" != "$boot_hash_file" ] && encrypted "$vault_hash_file"; then
+          write_private "$vault_hash_file" "$hash"
+        fi
+        if encrypted "$vault_password_file"; then
+          write_private "$vault_password_file" "$password"
+        else
+          echo "NOTE: $vault_password_file is not on unlocked encrypted storage and was left unchanged." >&2
+        fi
+        unset password repeat
+        # NixOS activation applies the hash right after this tool returns.
+        if [ "''${LUXNIX_ADMIN_PASSWORD_FROM_ACTIVATION:-}" != 1 ]; then
+          printf '%s:%s\n' "$account" "$hash" | chpasswd -e
+        fi
+        echo "New password for '$account' installed in $boot_hash_file." >&2
+        echo "Store it in the password manager and import it into the controller vault (docs/admin-passwords.md); otherwise sync-secrets redeploys the older pair." >&2
+        exit 0
+      done
+      echo "ERROR: no acceptable password after three attempts." >&2
+      exit 1
+    '';
+  };
 
   # passwordFile = "/etc/user-passwords/${cfg.name}_hashed";
 in
@@ -59,6 +156,8 @@ in
       }
     ];
 
+    environment.systemPackages = [ adminPasswordTool ];
+
     # Abort the entire activation before users can change /etc/shadow. Keep the
     # existing account and independent authorized SSH keys available on failure.
     system.activationScripts.users.deps = [ "luxnixValidateAdminPasswordFile" ];
@@ -71,28 +170,58 @@ in
         config.system.activationScripts ? luxnixPrepareBootAccountHashes
       ) "luxnixPrepareBootAccountHashes";
       text = ''
-        admin_password_file=${lib.escapeShellArg cfg.passwordFile}
-        if [ ! -f "$admin_password_file" ] || [ ! -s "$admin_password_file" ]; then
-          echo "ERROR: admin password hash file is missing, empty, or not a regular file; refusing account activation." >&2
-          exit 1
-        fi
-        admin_password_metadata=$(${pkgs.coreutils}/bin/stat -Lc '%u:%a' -- "$admin_password_file") || exit 1
-        case "$admin_password_metadata" in
-          0:400|0:600) ;;
-          *) echo "ERROR: admin password hash must be root-owned with mode 0400 or 0600." >&2; exit 1 ;;
-        esac
-        # Deny the public retired shared credential; it is never a fallback.
-        if ${pkgs.gnugrep}/bin/grep -qxF '$6$yC9hyVoZEYLlzjbZ$pILBYLOZBlplgoYL9L.dyIKPGPrcW2ifd1I3ffRAYIwsv8B.pA76Eo6OUq71gJJKl8kGyBsmlbKwnGcKQEpoa.' "$admin_password_file"; then
-          echo "ERROR: retired shared admin password is not permitted; provision a unique hash." >&2
-          exit 1
-        fi
-        # Only supported modern crypt encodings, exactly one nonempty line.
-        # Neither the hash nor its value is ever emitted in diagnostics.
-        if ! ${pkgs.gnugrep}/bin/grep -qxE '\$6\$(rounds=[0-9]+\$)?[./A-Za-z0-9]{1,16}\$[./A-Za-z0-9]{86}|\$y\$[./A-Za-z0-9]+\$[./A-Za-z0-9]+\$[./A-Za-z0-9]{43}' "$admin_password_file" ||
-           [ "$(${pkgs.gawk}/bin/awk 'END { print NR }' "$admin_password_file")" -ne 1 ]; then
-          echo "ERROR: admin password file must contain one SHA-512 crypt or yescrypt hash; refusing account activation." >&2
-          exit 1
-        fi
+                admin_password_file=${lib.escapeShellArg cfg.passwordFile}
+                # Prints why the hash must be replaced, or nothing when it is usable.
+                # Fails for files that must not be replaced automatically.
+                luxnix_admin_password_problem() {
+                  if [ -e "$admin_password_file" ] && [ ! -f "$admin_password_file" ]; then
+                    echo "ERROR: admin password hash path is not a regular file; refusing account activation." >&2
+                    return 1
+                  fi
+                  if [ ! -s "$admin_password_file" ]; then
+                    echo "missing or empty"
+                    return 0
+                  fi
+                  case "$(${pkgs.coreutils}/bin/stat -Lc '%u:%a' -- "$admin_password_file")" in
+                    0:400|0:600) ;;
+                    *) echo "ERROR: admin password hash must be root-owned with mode 0400 or 0600." >&2; return 1 ;;
+                  esac
+                  # Deny the public retired shared credential; it is never a fallback.
+                  if [ "$(${pkgs.coreutils}/bin/head -n 1 "$admin_password_file" | ${pkgs.coreutils}/bin/tr -d '
+        ' | ${pkgs.coreutils}/bin/sha256sum | ${pkgs.coreutils}/bin/cut -d ' ' -f 1)" = ${retiredAdminHashSha256} ]; then
+                    echo "the retired shared admin password"
+                    return 0
+                  fi
+                  # Only supported modern crypt encodings, exactly one nonempty line.
+                  # Neither the hash nor its value is ever emitted in diagnostics.
+                  if ! ${pkgs.gnugrep}/bin/grep -qxE '\$6\$(rounds=[0-9]+\$)?[./A-Za-z0-9]{1,16}\$[./A-Za-z0-9]{86}|\$y\$[./A-Za-z0-9]+\$[./A-Za-z0-9]+\$[./A-Za-z0-9]{43}' "$admin_password_file" ||
+                     [ "$(${pkgs.gawk}/bin/awk 'END { print NR }' "$admin_password_file")" -ne 1 ]; then
+                    echo "not one SHA-512 crypt or yescrypt hash"
+                  fi
+                }
+                if ! admin_password_reason="$(luxnix_admin_password_problem)"; then
+                  exit 1
+                fi
+                if [ -n "$admin_password_reason" ]; then
+                  # Interactive switch/test only; boot-time activation has no prompt.
+                  case "''${NIXOS_ACTION:-}" in
+                    switch|test)
+                      echo "Admin password hash is $admin_password_reason; asking for a new password." >&2
+                      if ! LUXNIX_ADMIN_PASSWORD_FROM_ACTIVATION=1 ${adminPasswordTool}/bin/luxnix-admin-password; then
+                        echo "ERROR: no new admin password was set; refusing account activation. Run 'sudo luxnix-admin-password', then switch again." >&2
+                        exit 1
+                      fi
+                      if ! admin_password_reason="$(luxnix_admin_password_problem)" || [ -n "$admin_password_reason" ]; then
+                        echo "ERROR: the new admin password hash is invalid; refusing account activation." >&2
+                        exit 1
+                      fi
+                      ;;
+                    *)
+                      echo "ERROR: admin password hash is $admin_password_reason; refusing account activation. Run 'sudo luxnix-admin-password', then switch again." >&2
+                      exit 1
+                      ;;
+                  esac
+                fi
       '';
     };
     users.users.${cfg.name} = {

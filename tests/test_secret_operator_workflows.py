@@ -524,3 +524,97 @@ def test_local_rotation_loads_canonical_vars_and_rejects_wrong_machine(
     assert (result.returncode == 0) == correct_host, result.stdout + result.stderr
     if not correct_host:
         assert "Local activation must select this machine" in result.stdout
+
+
+@pytest.mark.parametrize(
+    "configured, boot_copy",
+    [
+        ({"path": "/etc/secrets/vault/SCRT_local_password_admin_password_hash", "accounts": {}}, ""),
+        (
+            {
+                "path": "/var/lib/luxnix-account/admin-password.hash",
+                "accounts": {
+                    "/var/lib/luxnix-account/admin-password.hash":
+                        "/etc/secrets/vault/SCRT_local_password_admin_password_hash"
+                },
+            },
+            "/var/lib/luxnix-account/admin-password.hash",
+        ),
+        (
+            {
+                "path": "/var/lib/luxnix-account/admin-password.hash",
+                "accounts": {"/var/lib/luxnix-account/admin-password.hash": "/tmp/other"},
+            },
+            None,
+        ),
+    ],
+)
+def test_rotation_resolves_boot_account_copy_from_declared_source(
+    tmp_path, configured, boot_copy
+):
+    source = ROOT / "ansible/playbooks/rotate_admin_passwords.yml"
+    original = yaml.safe_load(source.read_text())[0]
+    names = {
+        "Resolve the canonical vault hash and the hash file activation validates",
+        "Refuse SOPS paths or noncanonical overrides",
+        "Select the boot account copy to replace alongside the vault file",
+    }
+    resolution = [task for task in original["pre_tasks"] if task["name"] in names]
+    assert len(resolution) == 3
+    play = tmp_path / "resolve.yml"
+    play.write_text(
+        yaml.safe_dump(
+            [
+                {
+                    "hosts": "localhost",
+                    "connection": "local",
+                    "gather_facts": False,
+                    "vars_files": [
+                        str((source.parent / f).resolve()) for f in original["vars_files"]
+                    ],
+                    "vars": {
+                        "secret_dir": "/etc/secrets",
+                        "rotation_configured_name": {"stdout": "admin"},
+                        "rotation_configured_path": {"stdout": json.dumps(configured)},
+                    },
+                    "tasks": resolution
+                    + [
+                        {
+                            "name": "Report selected copy",
+                            "ansible.builtin.assert": {
+                                "that": ["rotation_boot_copy == expected_boot_copy"]
+                            },
+                            "vars": {"expected_boot_copy": boot_copy or ""},
+                        }
+                    ],
+                }
+            ]
+        )
+    )
+    config = tmp_path / "ansible.cfg"
+    config.write_text("[defaults]\n")
+    env = {k: v for k, v in os.environ.items() if not k.startswith("ANSIBLE_")}
+    result = subprocess.run(
+        ["ansible-playbook", "-i", "localhost,", str(play)],
+        env={**env, "ANSIBLE_CONFIG": str(config)},
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert (result.returncode == 0) == (boot_copy is not None), result.stdout + result.stderr
+    if boot_copy is None:
+        assert "boot account copy whose declared source" in result.stdout
+
+
+def test_rotation_replaces_boot_copy_before_the_live_account():
+    play = yaml.safe_load(
+        (ROOT / "ansible/playbooks/rotate_admin_passwords.yml").read_text()
+    )[0]
+    tasks = play["tasks"][0]["block"]
+    boot = next(i for i, t in enumerate(tasks) if t.get("name", "").startswith("Replace the boot account copy"))
+    update = next(i for i, t in enumerate(tasks) if "ansible.builtin.user" in t)
+    copy = tasks[boot]["ansible.builtin.copy"]
+    assert boot < update
+    assert copy["dest"] == "{{ rotation_boot_copy }}"
+    assert copy["mode"] == "0600" and copy["owner"] == "root" and copy["group"] == "root"
+    assert tasks[boot]["when"] == "rotation_boot_copy | length > 0"

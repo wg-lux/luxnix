@@ -406,5 +406,5 @@ def test_client_hash_source_is_accepted_by_account_provisioning():
     permissions = re.search(r'^\s*permissions = "([0-7]+)";', block.group(1), re.M)
     assert permissions, "client_user_password_hash permissions not found"
     migration = (ROOT / "lx_administration/storage/operator_migration.py").read_text()
-    assert "stat.S_IMODE(info.st_mode) not in (0o400, 0o600)" in migration
+    assert "stat.S_IMODE(info.st_mode) in (0o400, 0o600)" in migration
     assert int(permissions.group(1), 8) in (0o400, 0o600)
