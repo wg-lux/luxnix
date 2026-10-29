@@ -214,11 +214,23 @@ backups. Until then, do not claim that all historical plaintext has disappeared.
 | `enable` | Opt-in reusable module; enabled by the fleet inventory for active machines. |
 | `unlockMethod` | `local-openbao` (target, after enrollment and adoption), or legacy `tpm2`/`passphrase`; independent of provisioning and migration. |
 | `migration.enable` | Controls copying existing data only; false for the gc-10 pilot. Unlock services remain available when disabled. |
-| `migration.accountHashes` | Boot-available hash destination to existing hash source; never generates account credentials. |
+| `migration.accountHashes` | Boot-available hash destination to existing hash source; never generates account credentials. Each source must be a root-owned regular file with mode 0400 or 0600. |
 | `volumes` | Mapping device, mount point, filesystem, optional container path, minimum size, `noexec` and backing-filesystem dependencies. |
 | `bindMounts` | Logical destination to volume name and relative preserved directory. |
 | `guardedServices` | Existing executable service names to required mount points; nested mounts are included. |
 | `startupServices` | Guarded consumers started by the helper; timer/manual-only jobs retain their schedules. |
+
+Before the managed-secrets client hash became 0600, it was created as 0640.
+Account hashes are provisioned during activation, before the deployed
+managed-secrets unit can correct that mode. A host whose switch fails with
+`Boot account hash source must be a private root-owned regular file` therefore
+needs one root-only copy before the first switch to the fixed revision:
+
+```bash
+sudo install -m 600 -o root -g root \
+  /etc/secrets/vault/SCRT_client_user_password_hash \
+  /var/lib/luxnix-account/client-password.hash
+```
 
 Only newly created container files use automatic ext4 provisioning. Other
 filesystems can use externally prepared mappings with `container = null`.

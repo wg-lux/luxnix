@@ -396,3 +396,15 @@ def test_fleet_inventory_defaults_and_all_host_assertions():
         assert "operator_migration.py" in settings["prepare"]
         assert settings["dependencies"]["DefaultDependencies"] is False
         assert all("x-systemd.device-timeout=infinity" in options for options in settings["mountOptions"])
+
+
+def test_client_hash_source_is_accepted_by_account_provisioning():
+    """managed-secrets must create the client hash with a mode prepare_accounts accepts."""
+    module = (ROOT / "modules/nixos/roles/managed-secrets/default.nix").read_text()
+    block = re.search(r"\n    client_user_password_hash = \{\n(.*?)\n    \};\n", module, re.S)
+    assert block, "client_user_password_hash definition not found"
+    permissions = re.search(r'^\s*permissions = "([0-7]+)";', block.group(1), re.M)
+    assert permissions, "client_user_password_hash permissions not found"
+    migration = (ROOT / "lx_administration/storage/operator_migration.py").read_text()
+    assert "stat.S_IMODE(info.st_mode) not in (0o400, 0o600)" in migration
+    assert int(permissions.group(1), 8) in (0o400, 0o600)

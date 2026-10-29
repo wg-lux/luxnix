@@ -181,7 +181,9 @@ sudo systemctl status vault-auth-setup.service
 
 - All secrets are generated using cryptographically secure methods (`openssl rand`)
 - Refreshed secrets are written atomically to reduce partial-write risk
-- Files are created with restrictive permissions (640)
+- Files are created with restrictive permissions (640); `client_user_password_hash`
+  is root-only (600) because operator-storage account hash provisioning refuses
+  group-readable sources
 - Owner: `root`, Group: `sensitive-service-group`
 - Directory structure uses proper permissions (700 for `/etc/secrets`, 750 for `/etc/secrets/vault`)
 

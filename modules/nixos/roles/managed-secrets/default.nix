@@ -142,7 +142,9 @@ let
       '';
       owner = "root";
       group = sensitiveServiceGroupName;
-      permissions = "640";
+      # Read only by root account activation; operator-storage account hash
+      # provisioning refuses sources that are not mode 0400/0600.
+      permissions = "600";
       description = "Client user password hash";
       customScript = true;
     };
