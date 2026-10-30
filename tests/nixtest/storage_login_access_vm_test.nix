@@ -46,6 +46,7 @@ in
       pamServices = [ "login" ];
     };
     luxnix.storage.operatorUnlocked = {
+      layout = "legacy-containers";
       volumes = lib.mkForce {
         test = {
           container = "/var/lib/test.luks";

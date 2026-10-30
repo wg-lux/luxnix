@@ -16,7 +16,7 @@ entrypoints:
     purpose: Read public boot and storage metadata through an explicitly limited inventory target without accessing credentials.
   - name: operator-unlocked-secrets
     file: inventory/group_vars/operator_unlocked_secrets.yml
-    purpose: Fleet-default TPM-unlocked volumes, startup migration, bind destinations and guarded consumers.
+    purpose: Fleet guarded consumers and temporary legacy-container recovery metadata; final storage uses boot LUKS.
   - name: shared-packages
     file: inventory/group_vars/all/70-packages.yml
     purpose: Fleet-wide package additions consumed by the central package module.

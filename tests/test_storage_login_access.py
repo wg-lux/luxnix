@@ -143,6 +143,7 @@ def test_real_host_login_profile_and_private_mount_dependencies():
       let f = builtins.getFlake "git+file:///home/admin/luxnix";
           lib = f.inputs.nixpkgs.lib;
           c = (f.nixosConfigurations.gc-10.extendModules { modules = [{
+            luxnix.storage.operatorUnlocked.layout = "legacy-containers";
             luxnix.storage.operatorUnlocked.unlockMethod = lib.mkForce "local-openbao";
           }]; }).config;
       in {

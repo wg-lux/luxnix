@@ -11,6 +11,12 @@ boundaries:
   - Source checks do not prove deployment readiness
   - Nix evaluation and VM tests are separate from the fast Python lane
 entrypoints:
+  - name: boot-storage
+    file: test_boot_storage.py
+    purpose: Verify fleet boot LUKS declarations and read-only recovery failure checks.
+  - name: boot-storage-vm
+    file: nixtest/boot_storage_vm_test.nix
+    purpose: Disposable encrypted root cold boot, automatic secondary unlock and missing-key write rejection.
   - name: gc-10-backup-exports
     file: lx-annotate/test_gc10_backup_exports.py
     purpose: Evaluate host-only export mount dependencies and reject missing or wrong Backup identity before filesystem writes.

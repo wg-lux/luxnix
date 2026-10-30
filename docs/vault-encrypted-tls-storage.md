@@ -1,5 +1,10 @@
 # Encrypted Vault TLS and managed-secret storage on gs-02
 
+> Legacy migration only (`layout = "legacy-containers"`). The final fleet uses
+> [boot LUKS storage](boot-storage-migration.md); it disables this inner container
+> while preserving Vault identities and application secrets. The instructions below
+> apply only to explicitly retained unmigrated installations.
+
 This migrates the **existing** server CA and leaf into a manually unlocked
 LUKS2 container. It does not initialize Vault, replace its CA, rotate identity
 salts, repartition a disk, or move the barrier-encrypted Raft data in

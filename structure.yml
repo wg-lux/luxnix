@@ -12,7 +12,7 @@ boundaries:
 entrypoints:
   - name: boot-encryption-acceptance
     file: boot-encryption-acceptance.yml
-    purpose: Fleet encryption acceptance for local TPM-sealed OpenBao, central identity provisioning and independent recovery.
+    purpose: Boot LUKS acceptance requirements and explicitly superseded container/OpenBao evidence.
   - name: secret-rotation-catalog
     file: secrets-management.yml
     purpose: Canonical cross-repository secret ownership and ordered rotation gates.

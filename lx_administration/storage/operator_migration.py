@@ -101,6 +101,9 @@ class Migration:
         if not container.is_file():
             raise MigrationError("Container missing; startup never provisions or formats storage")
         run("cryptsetup", "isLuks", str(container))
+        if volume.get("keyFile"):
+            self.unlock_with_key_file(volume["keyFile"], container, mapping)
+            return
         # The boot prompt caches the answer in the kernel keyring, so containers
         # sharing one passphrase ask once; a wrong or stale answer asks again.
         for attempt in range(PASSPHRASE_ATTEMPTS):
@@ -114,6 +117,23 @@ class Migration:
             except MigrationError:
                 continue
         raise MigrationError(f"No valid passphrase for {mapping} after {PASSPHRASE_ATTEMPTS} attempts")
+
+    @staticmethod
+    def unlock_with_key_file(key_file, container, mapping):
+        """Open with the key sops-nix installed after the secrets volume opened.
+
+        Never falls back to a prompt: a missing or rejected key is reported and
+        the recovery passphrase stays available through luxnix-operator-storage.
+        """
+        recovery = f"recover with: sudo luxnix-operator-storage open {mapping}"
+        path = Path(key_file)
+        # sops-nix publishes secrets as symlinks into its runtime generation.
+        if not path.is_absolute() or not path.exists() or not private_source(path.resolve()):
+            raise MigrationError(f"Automatic unlock key for {mapping} is missing or not private; {recovery}")
+        try:
+            run("cryptsetup", "open", "--type", "luks", f"--key-file={path.resolve()}", str(container), mapping)
+        except MigrationError as exc:
+            raise MigrationError(f"Automatic unlock key for {mapping} was rejected; {recovery}") from exc
 
     def provision(self, name, record):
         """Explicit operation only, after the controller has verified both escrows."""

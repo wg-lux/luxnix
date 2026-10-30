@@ -10,6 +10,9 @@ boundaries:
   - Do not mount or alter live storage during context validation
   - Preserve encrypted storage and hub authentication boundaries
 entrypoints:
+  - name: boot-storage
+    file: boot.py
+    purpose: Read-only actual mount identity, Btrfs member and protected key checks before activation or consumers.
   - name: login-access
     file: login_access.py
     purpose: Coordinate root-only OpenBao login credentials, guarded service startup and non-forced storage locking.

@@ -24,6 +24,10 @@ python_suites:
     scope: Optional CUDA environment probes, outside the default pytest suite.
     command: devenv tasks run env:setup-cuda
 nix_suites:
+  - id: boot-storage
+    path: tests/nixtest/boot_storage_vm_test.nix
+    scope: Cold boot root unlock, stage-2 data unlock, key retention and failure behavior on disposable disks.
+    command: nix build .#checks.x86_64-linux.boot-storage --no-link -L
   - id: storage-login-access
     path: tests/nixtest/storage_login_access_vm_test.nix
     scope: Real PAM/OpenBao/LUKS login unlock, remote locking, private roots and cold boot.

@@ -46,7 +46,9 @@
   - [gs-02 Local Redis Recovery](docs/operations/gs-02-local-redis-broker.md)
 - **Vault**
   - [Machine Setup Secrets Checklist](docs/machine-secrets-checklist.md)
-  - [Manually Unlocked Site Storage](docs/operator-unlocked-storage.md)
+  - [Boot LUKS Storage Migration](docs/boot-storage-migration.md)
+  - [Legacy Container Storage](docs/operator-unlocked-storage.md)
+  - [Application Secrets with sops-nix](docs/sops-application-secrets.md)
   - [Fleet Secure Boot](docs/secure-boot.md)
   - [Setup and Bootstrap](docs/vault-setup.md)
   - [OpenBao Hub and Vault Migration](docs/openbao.md)

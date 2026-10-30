@@ -10,6 +10,9 @@ boundaries:
   - Do not import reusable modules directly across host entry points
   - Regenerate Autoconf-managed default.nix files from canonical inputs
 entrypoints:
+  - name: encrypted-layout
+    file: x86_64-linux/encrypted-layout.nix
+    purpose: Apply the shared LUKS2 root and stage-2 data policy to host-owned disk layouts; legacy mode is migration-only.
   - name: gc-10-local-backup-exports
     file: x86_64-linux/gc-10/backup-exports.nix
     purpose: Bind only annotation exports to the operator-authorized local Backup disk with UUID validation and fail-closed automount access.

@@ -10,6 +10,9 @@ boundaries:
 - Do not create parallel readiness trackers
 - Do not include secrets or local host facts in guides
 entrypoints:
+- name: boot-storage-migration
+  file: boot-storage-migration.md
+  purpose: Backup, reprovision, restore and physical acceptance for boot-time LUKS2 storage.
 - name: storage-login-access
   file: storage-login-access.md
   purpose: Account-bound OpenBao login unlock, remote sudo lock/unlock and private backing roots.
@@ -34,6 +37,9 @@ entrypoints:
 - name: operator-unlocked-storage
   file: operator-unlocked-storage.md
   purpose: Reusable manual-unlock module, gc-09/gc-10 mount contracts, migration gates and reboot recovery.
+- name: sops-application-secrets
+  file: sops-application-secrets.md
+  purpose: Production setup path for moving host-export application secrets to sops-nix with a per-host age key on operator storage.
 - name: secure-boot
   file: secure-boot.md
   purpose: Fleet Secure Boot with a controller-held key; custody, per-generation signing, host import and firmware enrollment.

@@ -67,6 +67,7 @@ def test_local_and_hub_are_independent():
         # Explicit TPM wiring; the common EndoReg profile uses a passphrase seal.
         luxnix.openbao.local.seal = f.inputs.nixpkgs.lib.mkForce "tpm";
         luxnix.storage.operatorUnlocked = {
+          layout = "legacy-containers";
           unlockMethod = "local-openbao";
           migration.enable = f.inputs.nixpkgs.lib.mkForce false;
           volumes = f.inputs.nixpkgs.lib.mkForce { luxnix-secrets = {
@@ -378,7 +379,8 @@ def test_passphrase_seal_profile_prompts_once_before_login():
       f = builtins.getFlake ("git+file://" + builtins.toString ./.);
       lib = f.inputs.nixpkgs.lib;
       c = (f.nixosConfigurations.gc-10.extendModules { modules = [{
-        luxnix.storage.operatorUnlocked.unlockMethod = lib.mkForce "local-openbao";
+        luxnix.storage.operatorUnlocked.layout = "legacy-containers";
+            luxnix.storage.operatorUnlocked.unlockMethod = lib.mkForce "local-openbao";
         luxnix.openbao.local.seal = lib.mkForce "passphrase";
         luxnix.storage.loginAccess.enable = false; # Explicit legacy boot-prompt profile.
       }]; }).config;
@@ -387,7 +389,7 @@ def test_passphrase_seal_profile_prompts_once_before_login():
       errors = map (a: a.message) (builtins.filter (a: !a.assertion) c.assertions);
       seal = c.luxnix.openbao.local.seal;
       tpm2 = c.security.tpm2.enable;
-      prompt = { inherit (s.openbao-local-seal-key) before after requires; inherit (s.openbao-local-seal-key.serviceConfig) ExecStart TimeoutStartSec MemorySwapMax MemoryZSwapMax; };
+      prompt = { inherit (s.openbao-local-seal-key) before after requires unitConfig; inherit (s.openbao-local-seal-key.serviceConfig) ExecStart TimeoutStartSec TimeoutStopSec MemorySwapMax MemoryZSwapMax; };
       gate = builtins.readFile c.system.preSwitchChecks.openbaoLocalPreflight;
       fleetSeals = map (host: host.config.luxnix.openbao.local.seal)
         (builtins.filter (host: host.config.roles.endoreg-client.enable) (builtins.attrValues f.nixosConfigurations));
@@ -407,7 +409,9 @@ def test_passphrase_seal_profile_prompts_once_before_login():
     assert data["errors"] == [] and data["seal"] == "passphrase" and data["tpm2"] is False
     assert {"display-manager.service", "plymouth-quit.service"} <= set(data["prompt"]["before"])
     assert data["prompt"]["ExecStart"].endswith("--stage-seal")
-    assert data["prompt"]["TimeoutStartSec"] == "infinity"
+    assert data["prompt"]["TimeoutStartSec"] == "90s"
+    assert data["prompt"]["TimeoutStopSec"] == "10s"
+    assert data["prompt"]["unitConfig"]["JobTimeoutSec"] == "120s"
     assert data["fleetSeals"] and set(data["fleetSeals"]) == {"passphrase"}
     assert "openbao-local-preflight.service" in data["prompt"]["requires"]
     assert {"swap.target", "openbao-local-preflight.service"} <= set(data["prompt"]["after"])

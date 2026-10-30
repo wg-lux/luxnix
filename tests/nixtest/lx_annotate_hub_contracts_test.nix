@@ -20,7 +20,14 @@ let
     )
   );
   lxAnnotateEnvScripts = "${repoRoot}/modules/nixos/services/lx-annotate-local/scripts/env.nix";
-  vaultConfig = "${repoRoot}/modules/nixos/luxnix/vault/default.nix";
+  # The vault module is split across files; contracts read all of them.
+  vaultConfig = pkgs.writeText "vault-module.nix" (
+    builtins.concatStringsSep "\n" (
+      map builtins.readFile (
+        pkgs.lib.filesystem.listFilesRecursive "${repoRoot}/modules/nixos/luxnix/vault"
+      )
+    )
+  );
 in
 {
   suites."lx-annotate hub contracts" = {

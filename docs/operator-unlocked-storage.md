@@ -1,3 +1,8 @@
+> Storage layout update: [Boot LUKS migration](boot-storage-migration.md) is the
+> current fleet design. Container unlock, login unlock and local OpenBao storage
+> enrollment below apply only to explicit `legacy-containers` recovery mode.
+> Existing identity provisioning remains independent.
+
 # Encrypted storage and automatic startup
 
 Encrypted storage is configured for every
@@ -76,9 +81,17 @@ needs two separate credentials and no commands:
 3. **Laptop login.** The normal desktop login appears. The account password
    logs the user in; it never unlocks storage.
 
-The prompt waits without a time limit. A wrong passphrase asks again, up to
-five attempts per container; after that the unit fails and lx-annotate does
-not start, so reboot to get a fresh prompt. SSH is available during the
+Each unlock service has a 90-second execution timeout and a 120-second job
+timeout, including waits for another container or backing mount. Termination
+has a further 10-second bound; mapping-device waits are limited to 90 seconds.
+An unanswered or hidden prompt therefore cannot indefinitely hold the splash
+or login ordering. A wrong passphrase asks again, up to five attempts within
+that time budget. On failure, storage-dependent services remain unavailable;
+no plaintext fallback or automatic formatting is allowed. After logging in,
+retry with `sudo luxnix-operator-storage start` in a private terminal. This
+starts the password agent and the guarded consumers; no reboot is required.
+The alternative OpenBao boot-seal prompt uses the same 90/120-second bounds.
+These bounds apply to the storage unlock chain, not to unrelated boot failures. SSH is available during the
 prompt: for a remote reboot, an administrator can answer it with
 `sudo systemd-tty-ask-password-agent`. Already open containers are reused
 without a prompt, so a rebuild or switch never asks again. This sequence has
@@ -90,6 +103,36 @@ For inspection or unlock only:
 sudo luxnix-operator-storage status
 sudo luxnix-operator-storage open
 ```
+
+### Local boot-timeout validation (2026-10-30)
+
+The local fix bounds both container unlock and the alternative OpenBao seal
+prompt. Regression coverage in `tests/test_operator_unlocked_storage.py` and
+`tests/test_openbao_local.py` checks the evaluated timeouts. The existing
+`operator-storage-migration` VM check now includes a separate locked-boot node:
+an unanswered real LUKS prompt must time out, reach the display-manager milestone
+and SSH listener, leave its guarded consumer stopped, and allow later recovery.
+This checks an isolated login milestone, not the physical Predator splash.
+
+Validation is **blocked**, not deployment-ready:
+
+- `pytest -q tests/test_documentation_contract.py`: 26 passed.
+- `nix-instantiate --parse` passed for both changed modules and the VM test.
+- `python scripts/lint_structure.py`: 23 manifests passed.
+- `nix eval '.#nixosConfigurations.gc-10.config.system.build.toplevel.drvPath'`
+  and the evaluated storage tests fail while copying sources into the Nix store:
+  `No space left on device` during rename, despite reported free disk space.
+- `devenv tasks run tests:operator-storage-migration-vm` and `docs:check` cannot
+  create their GC root for the same reason; the documentation test was run
+  directly using the existing environment instead.
+- `pytest -q tests/test_operator_storage_migration.py tests/test_documentation_contract.py --tb=short`:
+  80 passed, 5 failed (atomic rename ENOSPC and rsync exit 23); it is not a passing suite.
+
+Repair local filesystem capacity/metadata, then rerun the evaluated tests, VM
+check and gc-10 build before deploying. No physical reboot validation, remote
+activation, credential change or storage cleanup was performed. Without the
+boot journal, this change addresses a confirmed indefinite-wait mechanism but
+does not establish the cause of the reported hardware hang.
 
 ## Explicit provisioning and recovery custody
 
@@ -394,6 +437,55 @@ requires it (`RequiresMountsFor`), and disables emergency mode
 console `sulogin` shell. The affected volume, and the guarded services on it,
 stay unavailable and fail closed; repair remotely over SSH. `depends` must not
 name `/`, `/nix` or `/boot`.
+
+## Application secrets with sops-nix
+
+`security.sops.operatorStorageKey` replaces sync-secrets for an explicit list of
+host-export application secrets. It is off by default and not enabled on any
+host yet. The intended experience is one storage prompt and one normal login:
+
+1. Local staff enter the storage passphrase for `luxnix-secrets`. This first
+   unlock never depends on sops.
+2. The volume opens, making the host's age key
+   `/var/lib/luxnix-secrets/sops-age/keys.txt` available.
+3. `sops-install-secrets.service` installs the listed secrets. It runs as a
+   normal service after the unlock, never during early boot, and verifies that
+   the key directory is on encrypted storage with protected swap.
+4. A volume with `keyFile` (for example `luxnix-app-storage`) opens from its
+   installed key, then the database and application start. These steps do not
+   hold back the login screen; a failure leaves them stopped with an error
+   naming the recovery command.
+5. The person signs in with their own account password.
+
+The migrated sops secrets remain protected while `luxnix-secrets` is locked:
+no SSH host key or other offline-readable identity can decrypt them. This does
+not protect unrelated files on an unencrypted root filesystem.
+
+### Setup and options
+
+Follow the production runbook
+[Application secrets with sops-nix](sops-application-secrets.md); it is the only
+supported setup path. The relevant options under
+`security.sops.operatorStorageKey` are:
+
+| Option | Purpose |
+| --- | --- |
+| `enable` | Age key on the operator volume; no SSH-key decryption; installs `luxnix-sops-storage`. |
+| `secretsRepository.url`, `.rev` | Private repository pinned in inventory, fetched only when the host uses secrets. |
+| `applicationSecrets.<name>` | Export names owned by sops; installed at `/etc/secrets/vault/<name>`; skipped by sync-secrets. |
+| `volumeKeys.<volume>` | `"staged"` installs the key while the volume prompts; `"active"` unlocks with it. |
+| `consumers` | Services that require installed secrets. |
+
+Evaluation fails for a `keyFile` that is not a declared sops secret, a volume
+key on the age key volume, `neededForUsers` secrets and account passwords.
+
+`services.luxnix.lxAnnotateLocal.runtime.sopsMasterKey.enable` declares the
+application secret `lx_annotate_master_key` at
+`/run/secrets/lx_annotate_master_key` and exports that path as
+`LX_ANNOTATE_MASTER_KEY_FILE`, the key lx-annotate uses for its encrypted
+storage backend. It is the one application secret not installed under
+`/etc/secrets/vault`: the master-key gate rejects symlinks, and sops-nix
+installs its default path as a regular file.
 
 ## Application-side verification (lx-annotate)
 

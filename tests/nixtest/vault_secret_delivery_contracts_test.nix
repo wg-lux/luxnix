@@ -5,7 +5,14 @@
   ...
 }:
 let
-  vaultModule = "${repoRoot}/modules/nixos/luxnix/vault/default.nix";
+  # The vault module is split across files; contracts read all of them.
+  vaultModule = pkgs.writeText "vault-module.nix" (
+    builtins.concatStringsSep "\n" (
+      map builtins.readFile (
+        pkgs.lib.filesystem.listFilesRecursive "${repoRoot}/modules/nixos/luxnix/vault"
+      )
+    )
+  );
   vaultAuthClassifier = "${repoRoot}/scripts/vault/classify-auth-error.sh";
   vaultServerTlsScript = "${repoRoot}/scripts/vault/maintain-server-tls.sh";
   managedSecretsModule = "${repoRoot}/modules/nixos/roles/managed-secrets/default.nix";

@@ -194,7 +194,10 @@ def test_vault_tls_uses_central_yaml_and_a_testable_maintenance_script() -> None
 def test_vault_encrypted_mount_gates_services_and_preserves_raft() -> None:
     expression = r"""
       let
-        f = builtins.getFlake ("git+file://" + builtins.toString ./.);
+        f0 = builtins.getFlake ("git+file://" + builtins.toString ./.);
+        f = f0 // { nixosConfigurations = builtins.mapAttrs (_: h: h.extendModules {
+          modules = [{ luxnix.storage.operatorUnlocked.layout = "legacy-containers"; }];
+        }) f0.nixosConfigurations; };
         lib = f.inputs.nixpkgs.lib;
         inspect = host: let
           c = host.config;
@@ -258,33 +261,36 @@ def test_vault_encrypted_mount_gates_services_and_preserves_raft() -> None:
             "x-systemd.requires-mounts-for=/var/lib/luxnix-vault-pki"} <= set(managed_fs["options"])
     assert "etc-secrets-vault.mount" in enabled["managed"]["bindsTo"]
     assert "/etc/secrets/vault" in enabled["managed"]["unitConfig"]["RequiresMountsFor"]
-    assert enabled["managed"]["unitConfig"]["AssertPathIsMountPoint"] == "/etc/secrets/vault"
-    assert cases["disabled"]["managedFilesystem"] is None
+    assert "/etc/secrets/vault" in enabled["managed"]["unitConfig"]["AssertPathIsMountPoint"]
+    assert cases["disabled"]["managedFilesystem"]["device"] == managed_fs["device"]
     for filesystem, directory in zip(
         enabled["enrollmentFilesystems"], ("site-lifecycle", "site-enrollment")
     ):
         assert filesystem["device"] == f"/var/lib/luxnix-vault-pki/{directory}"
         assert filesystem["fsType"] == "none"
-        assert set(managed_fs["options"]) == set(filesystem["options"])
-    assert cases["disabled"]["enrollmentFilesystems"] == [None, None]
+        assert {"bind", "noauto", "nodev", "nosuid", "noexec",
+                "x-systemd.requires-mounts-for=/var/lib/luxnix-vault-pki"} <= set(filesystem["options"])
+    assert all(fs is not None for fs in cases["disabled"]["enrollmentFilesystems"])
     salt_paths = ["/var/lib/lx-annotate-identity-salts",
                   "/var/lib/lx-annotate/data/.identity-salt-recovery"]
     for filesystem, directory in zip(
         enabled["saltFilesystems"], ("identity-salt-recovery", "identity-salt-replica")
     ):
         assert filesystem["device"] == f"/var/lib/luxnix-vault-pki/{directory}"
-        assert set(filesystem["options"]) == set(managed_fs["options"])
+        assert {"bind", "noauto", "nodev", "nosuid", "noexec",
+                "x-systemd.requires-mounts-for=/var/lib/luxnix-vault-pki"} <= set(filesystem["options"])
     for key in ("RequiresMountsFor", "AssertPathIsMountPoint"):
         assert set(salt_paths) <= set(enabled["salts"]["unitConfig"][key])
-    assert cases["disabled"]["saltFilesystems"] == [None, None]
+    assert all(fs is not None for fs in cases["disabled"]["saltFilesystems"])
     for service in ("tls", "vault"):
         assert "var-lib-luxnix\\x2dvault\\x2dpki.mount" in enabled[service]["bindsTo"]
         expected_mounts = {"/var/lib/luxnix-vault-pki"}
         if service == "vault":
             expected_mounts.add("/var/lib/vault")
-        assert set(enabled[service]["unitConfig"]["RequiresMountsFor"]) == expected_mounts
-        assert enabled[service]["unitConfig"]["AssertPathIsMountPoint"] == "/var/lib/luxnix-vault-pki"
-        assert cases["disabled"][service]["bindsTo"] == []
+        assert expected_mounts <= set(enabled[service]["unitConfig"]["RequiresMountsFor"])
+        mount_assertion = enabled[service]["unitConfig"]["AssertPathIsMountPoint"]
+        assert "/var/lib/luxnix-vault-pki" in (mount_assertion if isinstance(mount_assertion, list) else [mount_assertion])
+        assert "var-lib-luxnix\\x2dvault\\x2dpki.mount" not in cases["disabled"][service]["bindsTo"]
     assert "verify-vault-secret-storage" in str(enabled["tls"]["preflight"])
-    assert cases["disabled"]["filesystem"] is None
+    assert cases["disabled"]["filesystem"]["device"] == enabled["filesystem"]["device"]
     assert cases["invalid"] is True

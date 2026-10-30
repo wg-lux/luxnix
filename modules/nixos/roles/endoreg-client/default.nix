@@ -151,7 +151,8 @@ in
             # Operator passphrase at boot: directly per container, or once to unseal
             # local OpenBao, which then releases the container keys.
             assertion =
-              config.luxnix.storage.operatorUnlocked.unlockMethod == "passphrase"
+              config.luxnix.storage.operatorUnlocked.layout == "boot-luks"
+              || config.luxnix.storage.operatorUnlocked.unlockMethod == "passphrase"
               || (
                 config.luxnix.storage.operatorUnlocked.unlockMethod == "local-openbao"
                 && config.luxnix.openbao.local.seal == "passphrase"

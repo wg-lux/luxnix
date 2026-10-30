@@ -700,3 +700,31 @@ def test_passphrase_boot_prompt_fails_closed_after_attempts(passphrase_layout, m
     with pytest.raises(migration.MigrationError, match="No valid passphrase"):
         task.unlock("data")
     assert len(asks) == migration.PASSPHRASE_ATTEMPTS
+
+
+def test_key_file_unlock_uses_installed_key_and_never_prompts(tmp_path, monkeypatch):
+    key, container = tmp_path / "key", tmp_path / "container"
+    key.write_bytes(b"enrolled key")
+    key.chmod(0o400)
+    calls = []
+    monkeypatch.setattr(migration, "run", lambda *args, **kwargs: calls.append(args) or b"")
+    migration.Migration.unlock_with_key_file(str(key), container, "luxnix-app-storage")
+    assert calls == [("cryptsetup", "open", "--type", "luks", f"--key-file={key}", str(container), "luxnix-app-storage")]
+    assert not any("systemd-ask-password" in call for call in calls)
+
+
+@pytest.mark.parametrize("problem", ["missing", "readable", "rejected"])
+def test_key_file_unlock_failures_name_the_recovery_command(tmp_path, monkeypatch, problem):
+    key, container = tmp_path / "key", tmp_path / "container"
+    if problem != "missing":
+        key.write_bytes(b"enrolled key")
+        key.chmod(0o444 if problem == "readable" else 0o400)
+
+    def run(*args, **kwargs):
+        if problem == "rejected":
+            raise migration.MigrationError("cryptsetup failed (exit 2); sources retained")
+        return b""
+
+    monkeypatch.setattr(migration, "run", run)
+    with pytest.raises(migration.MigrationError, match="luxnix-operator-storage open luxnix-app-storage"):
+        migration.Migration.unlock_with_key_file(str(key), container, "luxnix-app-storage")

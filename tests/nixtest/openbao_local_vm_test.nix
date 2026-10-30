@@ -44,6 +44,7 @@ in
           seal = sealMode;
         };
         luxnix.storage.operatorUnlocked = {
+          layout = "legacy-containers";
           enable = true;
           unlockMethod = "local-openbao";
           migration.enable = false;

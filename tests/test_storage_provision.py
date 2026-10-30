@@ -96,7 +96,7 @@ def test_emergency_publisher_repeats_but_never_overwrites(custody, tmp_path):
 def controller(custody, monkeypatch):
     vault, key, _ = custody
     vault.mkdir(mode=0o700)
-    state = SimpleNamespace(method='passphrase', exists=False, machine_id='1' * 32,
+    state = SimpleNamespace(layout='legacy-containers', method='passphrase', exists=False, machine_id='1' * 32,
                             luks_uuid=None, requests=[], exports=[], events=[],
                             fail_export=False, connections=[], local_calls=[],
                             recovery_machine_id='2' * 32)
@@ -140,6 +140,8 @@ def controller(custody, monkeypatch):
 
     def evaluate(args, **kwargs):
         if args[:3] == ['nix', 'eval', '--json']:
+            if args[-1].endswith('.layout'):
+                return SimpleNamespace(stdout=json.dumps(state.layout).encode())
             if args[3].endswith('.volumes.test-volume'):
                 return SimpleNamespace(stdout=json.dumps(volume).encode())
             assert args[3].endswith('.unlockMethod')
@@ -363,3 +365,12 @@ def test_recovery_host_must_differ_from_target_and_controller(
         provision.main([*args, '--apply'])
     assert state.requests == state.exports == state.events == []
     assert not (vault / 'storage-recovery').exists()
+
+
+def test_boot_luks_rejects_container_creation_before_connections(controller):
+    args, state, vault, _ = controller
+    state.layout = 'boot-luks'
+    with pytest.raises(provision.ProvisionError, match='retired'):
+        provision.main([*args, '--apply'])
+    assert state.connections == []
+    assert state.requests == []

@@ -1,3 +1,4 @@
+{ config, lib, ... }:
 let
   # Primary NVMe (EFI + swap + Btrfs root)
   primaryNVME = "/dev/disk/by-id/nvme-KINGSTON_SFYRD4000G_50026B7686F7C454";
@@ -15,7 +16,7 @@ let
   # Swap size on the primary NVMe swap partition
   swapSize = "16G";
 in
-{
+(import ../encrypted-layout.nix { inherit config lib; }) {
   disko.devices = {
     disk = {
       ########################################################################

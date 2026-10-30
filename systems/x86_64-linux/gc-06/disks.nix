@@ -1,9 +1,10 @@
+{ config, lib, ... }:
 let
   # --- User-configurable Disk Identifiers ---
   systemDiskId = "/dev/disk/by-id/nvme-SAMSUNG_MZVL81T0HELB-00BTW_S7HZNX0X331248";
   swapSize = "32G"; # Adjusted swap size
 in
-{
+(import ../encrypted-layout.nix { inherit config lib; }) {
   disko.devices = {
     disk = {
       # Primary System Disk (only disk)
@@ -39,7 +40,7 @@ in
               name = "root_os"; # Nix attr name
               size = "100%"; # Use remaining space
               content = {
-                # Directly BTRFS, no LUKS
+                # Filesystem payload; the shared boot policy wraps it in LUKS2.
                 type = "btrfs";
                 extraArgs = [
                   "-f"

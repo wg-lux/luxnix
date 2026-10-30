@@ -29,7 +29,10 @@ def hosts():
         pytest.skip("Nix evaluation required")
     expression = r'''
       let
-        f = builtins.getFlake ("git+file://" + builtins.toString ./.);
+        f0 = builtins.getFlake ("git+file://" + builtins.toString ./.);
+        f = f0 // { nixosConfigurations = builtins.mapAttrs (_: h: h.extendModules {
+          modules = [{ luxnix.storage.operatorUnlocked.layout = "legacy-containers"; }];
+        }) f0.nixosConfigurations; };
         inspect = name: inspectConfig f.nixosConfigurations.${name}.config;
         inspectConfig = c: {
           mounts = builtins.mapAttrs (_: v: {
@@ -56,7 +59,7 @@ def hosts():
           migration = c.luxnix.storage.operatorUnlocked.migration.enable;
           unlockMethod = c.luxnix.storage.operatorUnlocked.unlockMethod;
           unlockTimeout = c.systemd.services.luxnix-storage-unlock-luxnix-app-storage.serviceConfig.TimeoutStartSec;
-          unlockBoot = builtins.mapAttrs (_: v: { inherit (v) wantedBy before after; })
+          unlockBoot = builtins.mapAttrs (_: v: { inherit (v) wantedBy before after unitConfig serviceConfig; })
             (f.inputs.nixpkgs.lib.filterAttrs (n: _: f.inputs.nixpkgs.lib.hasPrefix "luxnix-storage-unlock-" n)
             c.systemd.services);
           enabled = c.luxnix.storage.operatorUnlocked.enable;
@@ -167,14 +170,17 @@ def test_gc10_uses_fleet_unlock_migration_and_boot_account_hashes(hosts):
     c = hosts["gc-10"]
     assert c["enabled"] and not c["migration"]
     assert c["unlockMethod"] == "passphrase"
-    # Operator unlock waits for the passphrase; the 90s bound applies to TPM unlock.
-    assert c["unlockTimeout"] == "infinity"
+    # Unanswered prompts cannot hold the splash/login indefinitely.
+    assert c["unlockTimeout"] == "90s"
     assert hosts["gc-10-tpm2"]["unlockTimeout"] == "90s"
     # The operator answers the boot prompt; no manual start command is needed.
     secrets = c["unlockBoot"]["luxnix-storage-unlock-luxnix-secrets"]
     app = c["unlockBoot"]["luxnix-storage-unlock-luxnix-app-storage"]
     for unit in (secrets, app):
         assert unit["wantedBy"] == ["multi-user.target"]
+        assert unit["unitConfig"]["JobTimeoutSec"] == "120s"
+        assert unit["serviceConfig"]["TimeoutStartSec"] == "90s"
+        assert unit["serviceConfig"]["TimeoutStopSec"] == "10s"
         assert {"display-manager.service", "plymouth-quit.service", "plymouth-quit-wait.service"} <= set(unit["before"])
     # Serialized prompts let a shared passphrase be entered once.
     assert "luxnix-storage-unlock-luxnix-app-storage.service" in secrets["after"]
@@ -189,6 +195,8 @@ def test_gc10_uses_fleet_unlock_migration_and_boot_account_hashes(hosts):
     assert c["copiesAccountHashes"]
     assert c["helper"] is not None
     assert "/data/raid01" in c["mounts"]["/var/lib/luxnix-app-storage"]["depends"]
+    for path in (SECRETS, "/var/lib/luxnix-app-storage"):
+        assert "x-systemd.device-timeout=90s" in c["mounts"][path]["options"]
 
 
 @pytest.mark.parametrize("profile", ["gc-10-tpm2", "gc-09-local-openbao"])
@@ -203,7 +211,10 @@ def test_endoreg_role_rejects_unaccepted_unattended_unlock(hosts, profile):
 def test_generic_module_layout_merging_and_invalid_configuration():
     expression = r'''
       let
-        f = builtins.getFlake ("git+file://" + builtins.toString ./.);
+        f0 = builtins.getFlake ("git+file://" + builtins.toString ./.);
+        f = f0 // { nixosConfigurations = builtins.mapAttrs (_: h: h.extendModules {
+          modules = [{ luxnix.storage.operatorUnlocked.layout = "legacy-containers"; }];
+        }) f0.nixosConfigurations; };
         lib = f.inputs.nixpkgs.lib;
         evaluate = additions: (lib.nixosSystem {
           system = "x86_64-linux";
@@ -217,6 +228,7 @@ def test_generic_module_layout_merging_and_invalid_configuration():
               serviceConfig.PrivateDevices = true;
             };
             luxnix.storage.operatorUnlocked = {
+              layout = "legacy-containers";
               enable = true;
               volumes.archive = { mountPoint = "/srv/private"; noexec = true; };
               bindMounts = {
@@ -243,7 +255,8 @@ def test_generic_module_layout_merging_and_invalid_configuration():
         missingService = failed { luxnix.storage.operatorUnlocked.guardedServices.typo = [ "/srv/app" ]; };
         disabledService = failed { systemd.services.consumer.enable = false; };
         missingStartup = failed { luxnix.storage.operatorUnlocked.startupServices = [ "typo" ]; };
-        independentTpm = failed { luxnix.storage.operatorUnlocked = { unlockMethod = "tpm2"; migration.enable = false; }; };
+        independentTpm = failed { luxnix.storage.operatorUnlocked = {
+              layout = "legacy-containers"; unlockMethod = "tpm2"; migration.enable = false; }; };
         valid = builtins.all (a: a.assertion) c.assertions;
         disabledMounts = builtins.attrNames disabled.fileSystems;
         disabledServices = builtins.attrNames disabled.systemd.services;
@@ -363,7 +376,10 @@ def test_fleet_inventory_defaults_and_all_host_assertions():
     fleet = members("active_clients")
     assert members("operator_unlocked_secrets") == fleet
     expression = r'''
-      let f = builtins.getFlake ("git+file://" + builtins.toString ./.);
+      let f0 = builtins.getFlake ("git+file://" + builtins.toString ./.);
+        f = f0 // { nixosConfigurations = builtins.mapAttrs (_: h: h.extendModules {
+          modules = [{ luxnix.storage.operatorUnlocked.layout = "legacy-containers"; }];
+        }) f0.nixosConfigurations; };
       inspect = name: let c = f.nixosConfigurations.${name}.config; in {
         enabled = c.luxnix.storage.operatorUnlocked.enable;
         migration = c.luxnix.storage.operatorUnlocked.migration.enable;
@@ -391,11 +407,11 @@ def test_fleet_inventory_defaults_and_all_host_assertions():
         assert sorted(settings["baselineFailures"]) == sorted(expected), (host, settings)
         if host == "gc-10":
             assert settings["prepare"] is None
-            assert all("x-systemd.device-timeout=infinity" in options for options in settings["mountOptions"])
+            assert all("x-systemd.device-timeout=90s" in options for options in settings["mountOptions"])
             continue
         assert "operator_migration.py" in settings["prepare"]
         assert settings["dependencies"]["DefaultDependencies"] is False
-        assert all("x-systemd.device-timeout=infinity" in options for options in settings["mountOptions"])
+        assert all("x-systemd.device-timeout=90s" in options for options in settings["mountOptions"])
 
 
 def test_client_hash_source_is_accepted_by_account_provisioning():
@@ -416,7 +432,10 @@ def test_backing_mount_failure_cannot_block_remote_boot():
         pytest.skip("Nix evaluation required")
     expression = r'''
       let
-        f = builtins.getFlake ("git+file://" + builtins.toString ./.);
+        f0 = builtins.getFlake ("git+file://" + builtins.toString ./.);
+        f = f0 // { nixosConfigurations = builtins.mapAttrs (_: h: h.extendModules {
+          modules = [{ luxnix.storage.operatorUnlocked.layout = "legacy-containers"; }];
+        }) f0.nixosConfigurations; };
         c = f.nixosConfigurations.gc-10.config;
       in {
         emergency = c.systemd.enableEmergencyMode;

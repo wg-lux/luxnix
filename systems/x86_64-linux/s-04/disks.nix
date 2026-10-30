@@ -1,3 +1,4 @@
+{ config, lib, ... }:
 let
   # System disk (KOWIN 256GB SSD)
   systemDiskId = "/dev/disk/by-id/ata-KOWIN_KAE2000A256NS47_001B230300103264";
@@ -7,7 +8,7 @@ let
 
   swapSize = "16G"; # Adjust as needed
 in
-{
+(import ../encrypted-layout.nix { inherit config lib; }) {
   disko.devices = {
     disk = {
       system_disk = {

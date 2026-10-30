@@ -1,4 +1,5 @@
-{
+{ config, lib, ... }:
+(import ../encrypted-layout.nix { inherit config lib; }) {
   disko.devices = {
     disk = {
       nvme0n1 = {

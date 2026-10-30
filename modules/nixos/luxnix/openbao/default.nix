@@ -10,7 +10,10 @@ let
   storage = config.luxnix.storage.operatorUnlocked or { };
   # Volume unlock depends on the local store only once the storage profile says so;
   # before that, enrollment can install and use the tool without a boot dependency.
-  localRequired = (storage.enable or false) && (storage.unlockMethod or "") == "local-openbao";
+  localRequired =
+    (storage.enable or false)
+    && storage.layout == "legacy-containers"
+    && (storage.unlockMethod or "") == "local-openbao";
   # Passphrase seal: the operator's boot passphrase unwraps the seal key; no TPM binding.
   passphraseSeal = localCfg.seal == "passphrase";
   stagedSealKey = "/run/luxnix-openbao-seal/seal.key";
@@ -332,7 +335,10 @@ in
         openbao-local-seal-key = lib.mkIf passphraseSeal {
           description = "Ask the boot passphrase for local OpenBao";
           path = [ pkgs.systemd ];
-          unitConfig.DefaultDependencies = false;
+          unitConfig = {
+            DefaultDependencies = false;
+            JobTimeoutSec = "120s";
+          };
           requires = [ "openbao-local-preflight.service" ];
           after = [
             "local-fs.target"
@@ -351,7 +357,8 @@ in
             LimitCORE = 0;
             MemorySwapMax = 0;
             MemoryZSwapMax = 0;
-            TimeoutStartSec = "infinity";
+            TimeoutStartSec = "90s";
+            TimeoutStopSec = "10s";
             ExecStart = "${pkgs.python3}/bin/python ${localClient} --stage-seal";
           };
         };

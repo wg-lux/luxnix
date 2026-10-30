@@ -10,6 +10,9 @@ boundaries:
 - Shared defaults can affect the entire fleet
 - Shared contributor tools belong in roles/custom-packages
 entrypoints:
+- name: boot-storage
+  file: luxnix/operator-unlocked-storage/boot.nix
+  purpose: Boot LUKS crypttab, runtime storage verification and pre-switch migration gate.
 - name: storage-login-access
   file: luxnix/storage-access/default.nix
   purpose: Authenticate per-account OpenBao wraps at login and serialize remote storage lock/unlock without logout shutdown.
@@ -30,10 +33,10 @@ entrypoints:
   purpose: Opt-in TPM-bound client identity and release fetch command; not wired into unlock.
 - name: operator-unlocked-storage
   file: luxnix/operator-unlocked-storage/default.nix
-  purpose: Reusable encrypted volumes, TPM or recovery unlock, nested binds and verified consumer gates.
+  purpose: Shared boot LUKS policy and explicitly selected legacy-container migration compatibility.
 - name: operator-storage-helper
   file: luxnix/operator-storage-helper/default.nix
-  purpose: Per-volume status, recovery unlock, TPM enrollment and LUKS header-backup commands.
+  purpose: Legacy-container recovery helper; omitted from boot-LUKS systems.
 - name: secure-boot
   file: system/boot/default.nix
   purpose: Bootloader selection; keyless lanzaboote install verifying controller-signed artifacts against the public fleet certificate.

@@ -185,6 +185,12 @@ def main(argv=None):
     for value in [args.host, args.volume, args.recovery_host or 'x']:
         if not re.fullmatch('[a-z0-9][a-z0-9-]*', value):
             parser.error('Host and volume names must be canonical inventory identifiers')
+    if args.action == 'provision':
+        layout = subprocess.run(['nix', 'eval', '--json',
+            f'.#nixosConfigurations.{args.host}.config.luxnix.storage.operatorUnlocked.layout'],
+            capture_output=True, check=True)
+        if json.loads(layout.stdout) != 'legacy-containers':
+            raise ProvisionError('Container provisioning is retired for boot-luks; follow docs/boot-storage-migration.md')
     config = AutoconfConfig.load(DEFAULT_CONFIG_PATH)
     inventory = AnsibleInventory.load_from_hosts_ini(
         config.ansible_root / 'inventory/hosts.ini', config.inventory_subnet)

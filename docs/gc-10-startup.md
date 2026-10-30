@@ -1,3 +1,8 @@
+> Storage layout update: [Boot LUKS migration](boot-storage-migration.md) is the
+> current fleet design. Container unlock, login unlock and local OpenBao storage
+> enrollment below apply only to explicit `legacy-containers` recovery mode.
+> Existing identity provisioning remains independent.
+
 # gc-10 automatic startup runbook
 
 Target: `gc-10`, inventory address `172.16.255.110`. Run controller commands

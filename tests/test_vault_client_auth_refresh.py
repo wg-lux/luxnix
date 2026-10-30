@@ -3,6 +3,7 @@
 import os
 import json
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import shlex
@@ -54,8 +55,10 @@ def test_enrollment_status_requires_fresh_authentication(tmp_path, outcome):
     assert (tmp_path / "vault.token").exists() == (outcome == "ready")
     assert not list(tmp_path.glob(".vault-auth-error.*"))
     assert "test-only-sensitive" not in result.stderr
-    unit = source.split("services.vault-auth-setup =", 1)[1]
-    assert 'else\n              vaultAuthProvisioningConditionScript;' in unit
+    # The unit is declared in config.nix since the vault module split.
+    config = (ROOT / "modules/nixos/luxnix/vault/config.nix").read_text()
+    unit = config.split("services.vault-auth-setup =", 1)[1]
+    assert re.search(r"else\s+vaultAuthProvisioningConditionScript;", unit)
 
 
 def test_certificate_service_can_resolve_authentication_tools():

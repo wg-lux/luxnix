@@ -1,3 +1,4 @@
+{ config, lib, ... }:
 let
   # --- User-configurable Disk Identifiers ---
   # System disk (approx. 500GB)
@@ -11,7 +12,7 @@ let
 
   swapSize = "64G";
 in
-{
+(import ../encrypted-layout.nix { inherit config lib; }) {
   disko.devices = {
     disk = {
       # Primary System Disk

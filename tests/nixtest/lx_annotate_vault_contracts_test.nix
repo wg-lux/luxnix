@@ -5,7 +5,14 @@
   ...
 }:
 let
-  vaultModule = "${repoRoot}/modules/nixos/luxnix/vault/default.nix";
+  # The vault module is split across files; contracts read all of them.
+  vaultModule = pkgs.writeText "vault-module.nix" (
+    builtins.concatStringsSep "\n" (
+      map builtins.readFile (
+        pkgs.lib.filesystem.listFilesRecursive "${repoRoot}/modules/nixos/luxnix/vault"
+      )
+    )
+  );
   managedSecretsModule = "${repoRoot}/modules/nixos/roles/managed-secrets/default.nix";
   endoregClientModule = "${repoRoot}/modules/nixos/roles/endoreg-client/default.nix";
   clientUserModule = "${repoRoot}/modules/nixos/user/client/default.nix";

@@ -1,12 +1,14 @@
+# Historical container criteria below are superseded for storage by boot_luks_revision.
+# Identity provisioning evidence remains applicable; no physical migration is claimed.
 ---
 schema_version: "1.3"
 catalog_id: fleet_volume_encryption
-title: Flottenverschlüsselung mit hostlokalem OpenBao und zentraler Identitätsprovisionierung im Hub
+title: Boot LUKS2 fleet storage; historical OpenBao container acceptance retained below
 language: de
 created_date: "2026-10-26"
-revised_date: "2026-10-27"
-status: proposed_not_verified
-architecture: docs/openbao-architecture.md
+revised_date: "2026-10-30"
+status: superseded_storage_architecture
+architecture: docs/boot-storage-migration.md
 implementation_update:
   date: "2026-10-26"
   selected_backend: OpenBao
@@ -1075,3 +1077,17 @@ sources:
     title: Vault audit devices
     url: https://developer.hashicorp.com/vault/docs/audit
     supports: Ist kein Audit-Device beschreibbar, werden Anfragen abgelehnt; OpenBao übernimmt dieses Verhalten.
+
+boot_luks_revision:
+  date: '2026-10-30'
+  status: repository_work_not_physical_acceptance
+  supersedes: Local OpenBao/TPM container-unlock architecture above; retain prior evidence as historical only.
+  design: One LUKS2 root unlock, stage-2 keyfile data unlock, unchanged application encryption and identities.
+  runbook: docs/boot-storage-migration.md
+  required_acceptance:
+    - Verify actual encrypted root and every separate data/RAID member, not just declarations.
+    - Offline cold boot with one unlock and automatic service startup.
+    - Missing disk or key prevents writes under mountpoints with bounded recovery errors.
+    - Existing keys survive activation, reboot and a normal signed update.
+    - Independent root/data recovery and application backup decryption succeed.
+    - gc-10 disk swap remains disabled; all other active swap is protected.

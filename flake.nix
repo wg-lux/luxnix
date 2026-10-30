@@ -228,6 +228,8 @@
           nixtests = ntlib.mkNixtest {
             modules = ntlib.autodiscover {
               dir = ./tests/nixtest;
+              # *_vm_test.nix files are NixOS VM tests imported as flake checks.
+              pattern = ".*([^_]..|_[^v].|_v[^m])_test\\.nix";
             };
             args = {
               inherit pkgs ntlib;
@@ -239,6 +241,11 @@
 
       nixtestChecks = builtins.mapAttrs (system: packages: {
         inherit (packages) nixtests;
+        boot-storage = import ./tests/nixtest/boot_storage_vm_test.nix {
+          pkgs = inputs.nixpkgs.legacyPackages.${system};
+          inherit (inputs) disko;
+          repoRoot = ./.;
+        };
         operator-storage-migration = inputs.nixpkgs.legacyPackages.${system}.testers.runNixOSTest (
           import ./tests/nixtest/operator_storage_migration_vm_test.nix { repoRoot = ./.; }
         );

@@ -102,7 +102,9 @@ nav:
       - gs-02 Local Redis Recovery: operations/gs-02-local-redis-broker.md
   - Vault:
       - Machine Setup Secrets Checklist: machine-secrets-checklist.md
-      - Manually Unlocked Site Storage: operator-unlocked-storage.md
+      - Boot LUKS Storage Migration: boot-storage-migration.md
+      - Legacy Container Storage: operator-unlocked-storage.md
+      - Application Secrets with sops-nix: sops-application-secrets.md
       - Fleet Secure Boot: secure-boot.md
       - Setup and Bootstrap: vault-setup.md
       - OpenBao Hub and Vault Migration: openbao.md

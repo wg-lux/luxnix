@@ -72,6 +72,9 @@ let
   ];
   unlockName = name: "luxnix-storage-unlock-${name}";
   containerVolumes = lib.filterAttrs (_: v: v.container != null) cfg.volumes;
+  # Containers whose enrolled key sops-nix installs once the prompted volumes are open.
+  keyFileVolumes = lib.filterAttrs (_: v: v.keyFile != null) containerVolumes;
+  promptVolumes = lib.filterAttrs (_: v: v.keyFile == null) containerVolumes;
   passphraseBoot = cfg.unlockMethod == "passphrase";
   checkName = name: "luxnix-storage-check-${name}";
   volumeMounts = lib.mapAttrs' (
@@ -83,14 +86,7 @@ let
         "noauto"
         "nodev"
         "nosuid"
-        "x-systemd.device-timeout=${
-          if volume.container == null then
-            "10s"
-          else if cfg.unlockMethod != "passphrase" then
-            "90s"
-          else
-            "infinity"
-        }"
+        "x-systemd.device-timeout=${if volume.container == null then "10s" else "90s"}"
       ]
       ++ lib.optional volume.noexec "noexec"
       ++ lib.optionals (volume.container != null) [
@@ -138,7 +134,17 @@ let
   });
 in
 {
+  imports = [ ./boot.nix ];
+
   options.luxnix.storage.operatorUnlocked = {
+    layout = lib.mkOption {
+      type = lib.types.enum [
+        "boot-luks"
+        "legacy-containers"
+      ];
+      default = "boot-luks";
+      description = "Fleet boot LUKS layout; legacy-containers is temporary recovery compatibility only.";
+    };
     enable = lib.mkEnableOption "encrypted storage and guarded consumers";
     unlockMethod = lib.mkOption {
       type = lib.types.enum [
@@ -184,6 +190,15 @@ in
                 );
                 default = null;
                 description = "Expected native LUKS UUID, recorded when adopting an existing volume or after explicit provisioning.";
+              };
+              keyFile = lib.mkOption {
+                type = lib.types.nullOr absolutePath;
+                default = null;
+                description = ''
+                  sops-nix secret path holding an enrolled LUKS key for this container.
+                  The volume then opens automatically after sops-install-secrets instead
+                  of prompting; its recovery passphrase keyslot must be retained.
+                '';
               };
               minimumSizeMiB = lib.mkOption {
                 type = lib.types.ints.positive;
@@ -253,7 +268,7 @@ in
     };
   };
 
-  config = lib.mkIf cfg.enable {
+  config = lib.mkIf (cfg.enable && cfg.layout == "legacy-containers") {
     environment.systemPackages = [
       (pkgs.writeShellApplication {
         name = "luxnix-storage-provision";
@@ -343,6 +358,25 @@ in
           builtins.attrValues cfg.guardedServices
         );
         message = "Guarded services require nonempty lists of configured storage mount points.";
+      }
+      {
+        assertion = keyFileVolumes == { } || cfg.unlockMethod == "passphrase";
+        message = "Operator storage key files require unlockMethod = \"passphrase\" for the first volume.";
+      }
+      {
+        assertion = lib.all (
+          volume: lib.any (secret: secret.path == volume.keyFile) (builtins.attrValues config.sops.secrets)
+        ) (builtins.attrValues keyFileVolumes);
+        message = "Each operator storage keyFile must be the path of a declared sops-nix secret.";
+      }
+      {
+        assertion =
+          keyFileVolumes == { }
+          || (
+            config.security.sops.operatorStorageKey.enable
+            && promptVolumes ? ${config.security.sops.operatorStorageKey.volume}
+          );
+        message = "Operator storage key files require security.sops.operatorStorageKey on a passphrase-prompted volume; a key-file volume cannot hold its own sops key.";
       }
       {
         assertion = !lib.any (path: builtins.elem path bootCriticalPaths) backingPaths;
@@ -441,38 +475,52 @@ in
         }
         // lib.mapAttrs' (
           name: volume:
+          let
+            prompted = passphraseBoot && volume.keyFile == null;
+          in
           lib.nameValuePair (unlockName name) {
             description = "Unlock operator storage ${name}";
-            requires = lib.optional (cfg.unlockMethod == "local-openbao") "openbao-local.service";
+            requires =
+              lib.optional (cfg.unlockMethod == "local-openbao") "openbao-local.service"
+              ++ lib.optional (volume.keyFile != null) "sops-install-secrets.service";
             # Passphrase mode prompts during boot, before the login screen, one
-            # container at a time so a shared passphrase is entered once.
+            # container at a time so a shared passphrase is entered once. Key-file
+            # volumes open afterwards without holding back the login screen.
+            # Unanswered prompts must release the splash/login ordering on timeout.
             wantedBy = lib.optional passphraseBoot "multi-user.target";
-            before = lib.optionals passphraseBoot [
+            before = lib.optionals prompted [
               "display-manager.service"
               "plymouth-quit.service"
               "plymouth-quit-wait.service"
             ];
             after =
               lib.optional (cfg.unlockMethod == "local-openbao") "openbao-local.service"
+              ++ lib.optionals passphraseBoot [
+                "local-fs.target"
+                "swap.target"
+              ]
               ++ lib.optionals passphraseBoot (
-                [
-                  "local-fs.target"
-                  "swap.target"
-                ]
-                ++ map (other: "${unlockName other}.service") (
-                  builtins.filter (other: other < name) (builtins.attrNames containerVolumes)
+                map (other: "${unlockName other}.service") (
+                  if prompted then
+                    builtins.filter (other: other < name) (builtins.attrNames promptVolumes)
+                  else
+                    builtins.attrNames promptVolumes
                 )
-              );
+              )
+              ++ lib.optional (volume.keyFile != null) "sops-install-secrets.service";
             path = migrationPath;
             unitConfig = {
               DefaultDependencies = false;
               RequiresMountsFor = volume.depends;
+              # Include time queued behind another prompt or an unavailable disk.
+              JobTimeoutSec = "120s";
             };
             serviceConfig = {
               Type = "oneshot";
               RemainAfterExit = false;
               UMask = "0077";
-              TimeoutStartSec = if cfg.unlockMethod != "passphrase" then "90s" else "infinity";
+              TimeoutStartSec = "90s";
+              TimeoutStopSec = "10s";
               LimitCORE = 0;
               LoadCredentialEncrypted = lib.optional (
                 cfg.unlockMethod == "local-openbao"

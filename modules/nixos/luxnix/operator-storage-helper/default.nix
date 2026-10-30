@@ -219,7 +219,7 @@ let
   };
 in
 {
-  config = lib.mkIf cfg.enable {
+  config = lib.mkIf (cfg.enable && cfg.layout == "legacy-containers") {
     environment.systemPackages = [ storageTool ];
   };
 }

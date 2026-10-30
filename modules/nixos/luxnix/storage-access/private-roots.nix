@@ -12,7 +12,7 @@ let
   mountUnit = path: "${utils.escapeSystemdPath path}.mount";
 in
 {
-  config = lib.mkIf storage.enable {
+  config = lib.mkIf (storage.enable && storage.layout == "legacy-containers") {
     # Do not put these paths in global tmpfiles: that can pull locked mounts
     # into sysinit. Prepare the empty roots independently of mount activation.
     system.activationScripts.luxnixPrivateStorageRoots = {

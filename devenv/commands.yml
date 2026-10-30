@@ -12,6 +12,18 @@ risk_levels_source: ../luxnix.yml#risk_levels
 # marked operator_confirmation_required. The field does not imply that the
 # underlying wrapper implements its own prompt.
 commands:
+  - id: install-prepared-encrypted-system
+    summary: Install a reviewed closure onto already provisioned and restored encrypted storage from trusted installer media.
+    risk: destructive-local
+    operator_confirmation_required: true
+    usage: nixos-install --root /mnt --system <reviewed-built-system-closure> --no-root-passwd
+    documentation: docs/boot-storage-migration.md
+    prerequisites:
+      - Independently verified backups, recovery credentials, serials and complete mounted target graph.
+      - Existing identities, application keys, account hashes and consistent database restored.
+    effects:
+      - Installs the boot configuration; does not authorize formatting or rerunning a disk phase.
+
   - id: check-secret-rotation
     summary: Validate the central rotation catalog against three source checkouts and display ordered gates.
     risk: read-only
@@ -274,7 +286,7 @@ commands:
     documentation: docs/hardware-setup.md
 
   - id: storage-provision
-    summary: Escrow a per-volume recovery credential in the admin vault and on an independent host before explicit encrypted container creation.
+    summary: Legacy migration only; escrow old container recovery credentials. Container provisioning rejects boot-luks hosts.
     risk: sensitive-remote-state
     operator_confirmation_required: true
     usage: devenv shell storage-provision <escrow|provision> --host <host> --volume <volume> [--recovery-host <host> | --controller-only-custody] [--backend passphrase|tpm2|local-openbao] [--local-target] [--apply]

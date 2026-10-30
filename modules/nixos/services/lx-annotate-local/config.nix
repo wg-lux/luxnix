@@ -572,11 +572,16 @@ let
   hubEnvelopePreflightServiceUnits = lib.optionals (
     cfg.hub.transferApi.enable || cfg.hub.outboundTransfer.enable
   ) [ "lx-annotate-hub-envelope-key-preflight.service" ];
+  # Units that install host secrets read by lx-annotate; every key reader orders after them.
   managedSecretsSetupUnits =
-    lib.optionals (lib.attrByPath [ "roles" "managed-secrets" "enable" ] false config)
-      [
-        "managed-secrets-setup.service"
-      ];
+    lib.optionals (lib.attrByPath [ "roles" "managed-secrets" "enable" ] false config) [
+      "managed-secrets-setup.service"
+    ]
+    ++ lib.optional cfg.runtime.sopsMasterKey.enable "sops-install-secrets.service";
+  # The default sops-nix location is a regular file on its ramfs, not a symlink,
+  # so the master-key gate's non-symlink check still holds.
+  sopsMasterKeyName = "lx_annotate_master_key";
+  sopsMasterKeyPath = "/run/secrets/${sopsMasterKeyName}";
 
   isLocalPostgresHost =
     host: host == "localhost" || host == "127.0.0.1" || host == "::1" || host == cfg.django.hostname;
@@ -1709,6 +1714,20 @@ in
             cfg.django.enrollLegacyDefaultSalt && !cfg.django.identitySaltViaSecretSpec
           ) (mkDefault "/etc/secrets/vault/lx_annotate_identity_keyring.yml");
 
+          # sync-secrets and managed-secrets never write this name; sops-nix owns it.
+          security.sops.operatorStorageKey.applicationSecrets.${sopsMasterKeyName} =
+            mkIf cfg.runtime.sopsMasterKey.enable
+              {
+                path = sopsMasterKeyPath;
+                owner = endoreg-service-user-name;
+                group = endoreg-service-group-name;
+                mode = "0400";
+                restartUnits = [
+                  "lx-annotate-master-key-check.service"
+                  "lx-annotate.service"
+                ];
+              };
+
           environment.etc."lx-annotate/monitoring.json" = mkIf cfg.runtime.monitoring.enable {
             source = monitoringConfig;
             mode = "0444";
@@ -1965,6 +1984,20 @@ in
             }
             {
               assertion =
+                !cfg.runtime.sopsMasterKey.enable
+                || (
+                  config.security.sops.operatorStorageKey.enable
+                  && !cfg.runtime.clustered.enable
+                  && !(
+                    cfg.runtime.vaultManagedEncryptedData.enable
+                    && cfg.runtime.vaultManagedEncryptedData.manageMasterKey
+                  )
+                  && cfg.runtime.masterKeyFile == sopsMasterKeyPath
+                );
+              message = "services.luxnix.lxAnnotateLocal.runtime.sopsMasterKey requires security.sops.operatorStorageKey, excludes clustered and Vault master-key delivery, and owns runtime.masterKeyFile (${sopsMasterKeyPath}).";
+            }
+            {
+              assertion =
                 cfg.runtime.masterKeyFile != null
                 || cfg.runtime.autoGenerateMasterKey
                 || (
@@ -2195,6 +2228,7 @@ in
                   mkIf
                     (
                       cfg.runtime.autoGenerateMasterKey
+                      && !cfg.runtime.sopsMasterKey.enable
                       && !cfg.runtime.vaultManagedEncryptedData.enable
                       && (
                         cfg.runtime.masterKeyFile == null
@@ -2207,7 +2241,14 @@ in
                       group = endoreg-service-group-name;
                       permissions = "600";
                       description = "Per-machine application master key for lx-annotate encrypted storage";
-                      generator = "${pkgs.openssl}/bin/openssl rand -base64 32 | tr -d '\n'";
+                      generator =
+                        if
+                          config.luxnix.storage.operatorUnlocked.enable
+                          && config.luxnix.storage.operatorUnlocked.layout == "boot-luks"
+                        then
+                          "echo 'Missing application master key: restore the existing key before startup' >&2; exit 1"
+                        else
+                          "${pkgs.openssl}/bin/openssl rand -base64 32 | tr -d '\n'";
                     };
 
                 lx_annotate_luks_key = mkIf cfg.runtime.vaultManagedEncryptedData.enable {
@@ -2339,7 +2380,9 @@ in
                     ]);
                   };
                   masterKeyFile = mkDefault (
-                    if cfg.runtime.clustered.enable && cfg.runtime.clustered.sharedMasterKeyFile != null then
+                    if cfg.runtime.sopsMasterKey.enable then
+                      sopsMasterKeyPath
+                    else if cfg.runtime.clustered.enable && cfg.runtime.clustered.sharedMasterKeyFile != null then
                       cfg.runtime.clustered.sharedMasterKeyFile
                     else if
                       cfg.runtime.vaultManagedEncryptedData.enable
