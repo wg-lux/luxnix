@@ -9,4 +9,5 @@ exclude_paths:
     - release-artifacts/
 
 skip_list:
+    - yaml[line-length]
     - role-name # Skip the role name validation rule

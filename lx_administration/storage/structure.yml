@@ -33,7 +33,8 @@ entrypoints:
     purpose: Create and verify the non-exportable TPM client identity and fetch one volume release over mTLS.
   - name: operator-migration
     file: operator_migration.py
-    purpose: Unlock existing containers, explicitly provision escrowed new volumes and verify resumable copies without formatting at startup or overwriting populated storage.
+    purpose: > Unlock existing containers, explicitly provision escrowed new volumes
+          and verify resumable copies without formatting at startup or overwriting storage.
   - name: manager
     file: manager.py
     purpose: Inspect manager ownership and interfaces.
