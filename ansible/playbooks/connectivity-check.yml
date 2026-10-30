@@ -1,0 +1,41 @@
+---
+- name: Connectivity validation
+  hosts: all
+  gather_facts: false
+  serial: 1
+
+  tasks:
+    - name: Initialize connectivity status fact
+      ansible.builtin.set_fact:
+        connectivity_status: {}
+
+    - name: Perform connectivity probes
+      block:
+        - name: Ping target host
+          ansible.builtin.ping:
+          register: ping_result
+
+        - name: Run a no-op command to confirm SSH connectivity
+          ansible.builtin.command: whoami
+          register: whoami_result
+          changed_when: false
+
+        - name: Record successful connectivity details
+          ansible.builtin.set_fact:
+            connectivity_status:
+              host: "{{ inventory_hostname }}"
+              status: "reachable"
+              remote_user: "{{ whoami_result.stdout | default('unknown user') }}"
+              ping: "{{ ping_result.ping | default('ok') }}"
+
+      rescue:
+        - name: Record connectivity failure details
+          ansible.builtin.set_fact:
+            connectivity_status:
+              host: "{{ inventory_hostname }}"
+              status: "error"
+              error: "{{ ansible_failed_result.msg | default(ansible_failed_result | to_nice_json) }}"
+
+    - name: Report connectivity status
+      ansible.builtin.debug:
+        msg: "{{ connectivity_status }}"

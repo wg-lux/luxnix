@@ -1,0 +1,88 @@
+version: 1
+tier: domain
+path: modules/nixos
+parent: ../structure.yml
+summary: System options, atomic service modules, roles, and profiles consumed by hosts.
+responsibilities:
+- Define reusable system behavior and service runtime dependencies
+- Bundle defaults through roles and profiles
+boundaries:
+- Shared defaults can affect the entire fleet
+- Shared contributor tools belong in roles/custom-packages
+entrypoints:
+- name: boot-storage
+  file: luxnix/operator-unlocked-storage/boot.nix
+  purpose: Boot LUKS crypttab, runtime storage verification and pre-switch migration gate.
+- name: storage-login-access
+  file: luxnix/storage-access/default.nix
+  purpose: Authenticate per-account OpenBao wraps at login and serialize remote storage lock/unlock without logout shutdown.
+- name: podman
+  file: services/podman/default.nix
+  purpose: Own container DNS, Docker compatibility and NVIDIA integration; legacy Podman switches are aliases.
+- name: base-server
+  file: roles/base-server/default.nix
+  purpose: Compose the common baseline and development tools without selecting a desktop; inventory selects existing server desktops explicitly.
+- name: endoreg-client-safety
+  file: roles/endoreg-client/default.nix
+  purpose: Require encrypted storage and reject unaccepted unattended unlock for every EndoReg client role consumer.
+- name: openbao
+  file: luxnix/openbao/default.nix
+  purpose: Separate opt-in encrypted TLS hub and TPM-sealed local Raft instances.
+- name: tpm-release-client
+  file: luxnix/tpm-release-client/default.nix
+  purpose: Opt-in TPM-bound client identity and release fetch command; not wired into unlock.
+- name: operator-unlocked-storage
+  file: luxnix/operator-unlocked-storage/default.nix
+  purpose: Shared boot LUKS policy and explicitly selected legacy-container migration compatibility.
+- name: operator-storage-helper
+  file: luxnix/operator-storage-helper/default.nix
+  purpose: Legacy-container recovery helper; omitted from boot-LUKS systems.
+- name: secure-boot
+  file: system/boot/default.nix
+  purpose: Bootloader selection; keyless lanzaboote install verifying controller-signed artifacts against the public fleet certificate.
+- name: vault-secret-lifecycle
+  file: luxnix/vault/default.nix
+  purpose: Machine authentication, guarded Vault credentials and mount-gated manually unlocked server TLS storage. Wiring only; shared values in context.nix, per-domain scripts in tools/ (auth, server, hub-pki, hub-sites, client), options.nix and config.nix.
+- name: ca-trust
+  file: luxnix/ca-trust/default.nix
+  purpose: Fleet CA bundle distrust list, build-time bundle verification and certifi repair command.
+- name: managed-secret-publication
+  file: roles/managed-secrets/default.nix
+  purpose: Fail-closed authenticated refresh and encrypted/runtime storage verification.
+- name: development-packages
+  file: roles/custom-packages/default.nix
+  purpose: Own optional bundles and shared, role and machine package aggregation.
+- name: winapps-service
+  file: services/winapps/default.nix
+  purpose: Opt-in systemd-managed dockur/windows container (loopback RDP) for the WinApps client.
+- name: client-profile
+  file: profiles/endoreg-client/default.nix
+  purpose: Inspect client profile ownership and interfaces.
+- name: hub-profile
+  file: profiles/endoreg-central-hub/default.nix
+  purpose: Inspect hub profile ownership and interfaces.
+dependencies:
+  internal:
+  - packages
+  - lx_administration
+  - lx_administration
+  external:
+  - NixOS
+  - systemd
+  - Vault
+  - SOPS
+submodules:
+- name: lx-annotate-local
+  path: services/lx-annotate-local
+  manifest: services/lx-annotate-local/structure.yml
+  summary: LuxNix deployment composition for the upstream LX-Annotate application.
+contracts:
+- name: operator-unlocked-storage
+  doc: ../../docs/operator-unlocked-storage.md
+- name: architecture
+  doc: ../../docs/architecture.md
+- name: README
+  doc: roles/managed-secrets/README.md
+tests:
+  directory: ../../tests
+  command: python -m pytest -q tests/test_repository_architecture_contract.py tests/test_network_service_contract.py

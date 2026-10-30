@@ -1,0 +1,62 @@
+version: 1
+tier: service
+path: modules/nixos/services/lx-annotate-local
+parent: ../../structure.yml
+summary: LuxNix deployment composition for the upstream LX-Annotate application.
+responsibilities:
+- Reject retired file-free identity delivery and preserve established local identity storage.
+- Own service options, runtime environment contracts and systemd composition
+- Supply the immutable report-embedding model path to the shared application environment.
+- Coordinate workers, storage, secret handles and hub interfaces
+boundaries:
+- Application business logic belongs in the upstream wheel
+- Runtime dependency versions belong to the selected application artifact, not independent source inputs
+- Preserve database ownership, encrypted storage and least-privilege secret contracts
+entrypoints:
+- name: wheel-python-repair
+  file: scripts/wheel-python-repair.py
+  purpose: Rebind the wheel virtualenv to configured Python while preserving downgrade evidence.
+- name: identity-salt-enrollment
+  file: subservices/lx-annotate-identity-salts.nix
+  purpose: Package the shared storage verifier, preserve local generations and enroll managed center salts.
+- name: module
+  file: default.nix
+  purpose: Inspect module ownership and interfaces.
+- name: options
+  file: options.nix
+  purpose: Inspect options ownership and interfaces.
+- name: composition
+  file: config.nix
+  purpose: Inspect composition ownership and interfaces.
+- name: runtime-context
+  file: runtime-context.nix
+  purpose: Inspect runtime context ownership and interfaces.
+dependencies:
+  internal:
+  - packages/report-embedding-model
+  - scripts
+  - lx_administration
+  - ansible
+  - kubernetes
+  external:
+  - LX-Annotate wheel
+  - Django
+  - PostgreSQL
+  - systemd
+  - FFmpeg and FFprobe
+  - Tesseract
+  - Vault
+  - mTLS
+submodules: []
+contracts:
+- name: wheel-deployment-and-application-ownership-handoff
+  doc: OWNERSHIP.md
+- name: Workers
+  doc: Workers.md
+- name: Diagnostics
+  doc: Diagnostics.md
+- name: database-ownership
+  doc: ../../../../docs/database-ownership.md
+tests:
+  directory: ../../../../tests/lx-annotate
+  command: python -m pytest -q tests/lx-annotate/test_lx_annotate_module_layout.py tests/lx-annotate/test_database_ownership.py

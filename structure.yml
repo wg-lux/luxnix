@@ -1,0 +1,131 @@
+version: 1
+tier: root
+path: .
+parent: null
+summary: Reproducible multi-host NixOS infrastructure and its contributor workflows.
+responsibilities:
+  - Route tasks to the smallest owning domain
+  - Preserve canonical ownership and deployment risk metadata in luxnix.yml
+boundaries:
+  - Do not edit generated host or home output instead of inventory and templates
+  - Do not activate hosts or expose secrets during context inspection
+entrypoints:
+  - name: boot-encryption-acceptance
+    file: boot-encryption-acceptance.yml
+    purpose: Boot LUKS acceptance requirements and explicitly superseded container/OpenBao evidence.
+  - name: secret-rotation-catalog
+    file: secrets-management.yml
+    purpose: Canonical cross-repository secret ownership and ordered rotation gates.
+  - name: project-map
+    file: luxnix.yml
+    purpose: Inspect project map ownership and interfaces.
+  - name: flake
+    file: flake.nix
+    purpose: Inspect flake ownership and interfaces.
+  - name: overlays
+    file: overlays/hyprpanel/default.nix
+    purpose: Inspect overlays ownership and interfaces.
+  - name: winapps-overlay
+    file: overlays/winapps/default.nix
+    purpose: Expose the pinned IMGW client with its adjacent Nix installer compatibility patch.
+  - name: shells
+    file: shells/default/default.nix
+    purpose: Inspect shells ownership and interfaces.
+  - name: topology
+    file: topology/default.nix
+    purpose: Inspect topology ownership and interfaces.
+  - name: tmux
+    file: tmux/config.yml
+    purpose: Inspect tmux ownership and interfaces.
+  - name: ci
+    file: .github/workflows/nix-quality.yml
+    purpose: Inspect ci ownership and interfaces.
+  - name: legacy-autodocs-status
+    file: autodocs/status.yml
+    purpose: Inspect legacy autodocs status ownership and interfaces.
+  - name: release-provenance
+    file: release-artifacts/lx-annotate/1.2.2/manifest.yml
+    purpose: Inspect release provenance ownership and interfaces.
+dependencies:
+  internal: []
+  external:
+    - Nix flakes
+    - Snowfall
+    - NixOS
+    - Home Manager
+submodules:
+  - name: ansible
+    path: ansible
+    manifest: ansible/structure.yml
+    summary: Canonical host inventory, variable precedence, and guarded deployment playbooks.
+  - name: autoconf
+    path: autoconf
+    manifest: autoconf/structure.yml
+    summary: Centralized pipeline options; generated inventory and merged variables are derived local outputs.
+  - name: conf
+    path: conf
+    manifest: conf/structure.yml
+    summary: Canonical rendering templates and controller-side configuration contracts.
+  - name: devenv
+    path: devenv
+    manifest: devenv/structure.yml
+    summary: Contributor shell composition, task definitions, and the supported command catalog.
+  - name: docs
+    path: docs
+    manifest: docs/structure.yml
+    summary: Maintained architecture, contributor guidance, and operator runbooks.
+  - name: feature-tracking
+    path: feature-tracking
+    manifest: feature-tracking/structure.yml
+    summary: Authoritative readiness evidence, feature locks, and agent message coordination.
+  - name: systems
+    path: systems
+    manifest: systems/structure.yml
+    summary: Snowfall host entry points and adjacent host-owned hardware or disk configuration.
+  - name: homes
+    path: homes
+    manifest: homes/structure.yml
+    summary: Generated Snowfall Home Manager entry points for user and host combinations.
+  - name: modules
+    path: modules
+    manifest: modules/structure.yml
+    summary: Reusable infrastructure behavior split between NixOS and Home Manager ownership.
+  - name: lx_administration
+    path: lx_administration
+    manifest: lx_administration/structure.yml
+    summary: Python administration libraries for generation, inventory, secrets and storage.
+  - name: scripts
+    path: scripts
+    manifest: scripts/structure.yml
+    summary: Operational frontends and repository validation tools invoked by canonical wrappers.
+  - name: tests
+    path: tests
+    manifest: tests/structure.yml
+    summary: Root-scoped Python contracts, service suites and explicit Nix evaluation or VM lanes.
+  - name: wg-lux-mcp
+    path: wg-lux-mcp
+    manifest: wg-lux-mcp/structure.yml
+    summary: Independent read-only OAuth-protected MCP context service for allowlisted repositories.
+  - name: kubernetes
+    path: kubernetes
+    manifest: kubernetes/structure.yml
+    summary: Alternative declarative LX-Annotate deployment manifests.
+  - name: lib
+    path: lib
+    manifest: lib/structure.yml
+    summary: Snowfall support libraries and explicit documentation or database utilities.
+  - name: packages
+    path: packages
+    manifest: packages/structure.yml
+    summary: Project-specific Nix derivations and packaged resources.
+contracts:
+  - name: AGENTS
+    doc: AGENTS.md
+  - name: luxnix
+    doc: luxnix.yml
+tests:
+  directory: tests
+  command: python scripts/lint_structure.py
+context_policy:
+  small_directories: Overlays, shells, topology, tmux, CI, preserved autodocs and release provenance use root entrypoints; no per-leaf manifests.
+  local_artifacts: cmdb and ansible/cmdb are local-sensitive; never use them as agent context dumps.

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Run gc-02 Recovery Cleanup
+Comment=Free journal, temporary, and unreachable Nix store data on gc-02
+Exec=pkexec /run/media/admin/LX-USB-03/gc-02-recovery-cleanup.sh
+Icon=drive-harddisk
+Terminal=false
+StartupNotify=true

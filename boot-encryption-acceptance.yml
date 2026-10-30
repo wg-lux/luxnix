@@ -1,0 +1,1093 @@
+# Historical container criteria below are superseded for storage by boot_luks_revision.
+# Identity provisioning evidence remains applicable; no physical migration is claimed.
+---
+schema_version: "1.3"
+catalog_id: fleet_volume_encryption
+title: Boot LUKS2 fleet storage; historical OpenBao container acceptance retained below
+language: de
+created_date: "2026-10-26"
+revised_date: "2026-10-30"
+status: superseded_storage_architecture
+architecture: docs/boot-storage-migration.md
+implementation_update:
+  date: "2026-10-26"
+  selected_backend: OpenBao
+  scope: Lokales OpenBao auf jedem Host für die Container-Entsperrung; separates zentrales OpenBao auf gs-02 für die Identitätsprovisionierung, die heute
+    HashiCorp Vault übernimmt.
+  requirement_change: Ersetzt die zentrale Freigabe jedes Volume-Schlüssels durch gs-02 (Schema 1.1). Die Ablösung von HashiCorp Vault ist Ziel nach
+    abgenommener Migration.
+  state: partially_implemented_not_deployed
+  current_runtime: >-
+    As of 2026-10-27 the working tree selects operator passphrase unlock fleet-wide,
+    including gc-10, and leaves Secure Boot disabled by default. Local enrollment,
+    adoption, resumable provisioning and integrated rollout tooling exist, as does
+    controller signing. Live platform checks reject disabled Secure Boot and known
+    virtualized or unrecognized TPM platforms. Installer enforcement, physical TPM assurance, ordered
+    locking, recovery/re-seed and authenticated root integrity remain release gates.
+    Repository configuration is not evidence of the effective live host state.
+  implementation_reference: docs/openbao-local.md
+purpose: Jeder Host betreibt ein unabhängiges lokales OpenBao mit Raft und TPM-gebundenem Auto-Unseal für die Container-Schlüssel. Ein zentrales OpenBao auf
+  gs-02 übernimmt Maschinen-Enrollment, PKI und die Auslieferung gemeinsamer Center-Salts von HashiCorp Vault. Ein fehlendes oder unbrauchbares TPM blockiert
+  Installation und Aktivierung; es gibt keinen Software-Rückfall.
+acceptance_principle:
+  - Ein einziges Gruppenprofil gilt flottenweit. host_vars enthalten Hardwarefakten, keine schwächeren Ausnahmen.
+  - Jeder Host besitzt einen eigenen Raft-Speicher. Clients sind weder Voter noch Replikat im Raft des Hubs.
+  - Das TPM schützt den Seal-Vertrauensanker des lokalen OpenBao. OpenBao verschlüsselt die Container-Schlüssel in Raft. Das TPM ist kein Speicher-Backend.
+  - Das zentrale OpenBao provisioniert Maschinen- und Anwendungsidentitäten, Policies und PKI. Nach dem Enrollment verhindert ein Hub-Ausfall die lokale
+    Entsperrung nicht.
+  - Ein fehlendes, deaktiviertes oder unbrauchbares TPM blockiert die Installation vor Plattenänderungen und die Aktivierung vor Dienständerungen. Ein
+    automatischer Software-Rückfall ist unzulässig.
+  - Vorhandene Container, Recovery-Keyslots und Anwendungsschlüssel bleiben unverändert. Ein Start initialisiert nie einen Ersatzspeicher für OpenBao und
+    formatiert nie fehlende Volumes. Fehlende deklarierte Container legt ausschließlich der katalogisierte Deploy-Befehl an, nachdem der Controller das Escrow
+    geprüft hat (Eigentümerentscheidung 2026-10-26).
+  - Regulärer Shutdown und explizites Sperren stoppen Schreiber, hängen Binds und Dateisysteme aus, schließen LUKS und stoppen erst danach das lokale OpenBao.
+    Rebuilds lassen offene Volumes offen.
+  - Enrollment, Provisionierung und Migration laufen über katalogisierte, inventarbezogene Abläufe.
+normative_note: Anforderungen und Zahlenwerte sind Vorschläge für dieses Vorhaben, keine Herstellerzusagen oder Industriestandards. Alle Kriterien mit
+  required_for fleet_release sind MUSS-Kriterien. Nicht verfügbare Fähigkeiten dürfen nicht als erfüllt ausgewiesen werden.
+evidence_policy:
+  purpose: Verhindert, dass Kriterien durch Umformulierung, schwache Tests oder unpassende Evidenzklassen als erfüllt erscheinen. Gilt für Menschen und Agenten.
+  criterion_changes: Anforderungen und Verifikationen ändern sich nur durch eine datierte Eigentümerentscheidung in architecture_decisions. Ein Kriterium wird
+    nie an eine vorhandene Implementierung angepasst, damit sie besteht.
+  evidence_classes:
+    - id: static
+      meaning: Lesen, Linting, Strukturprüfung, Textverträge
+    - id: unit
+      meaning: Python- oder Shell-Tests mit gemockten Systemaufrufen
+    - id: eval
+      meaning: Nix-Evaluierung und Build
+    - id: vm
+      meaning: NixOS-VM, swtpm oder vTPM, synthetische Daten
+    - id: hardware
+      meaning: Physischer Referenzhost je Hardwareklasse mit dokumentierter Firmware, NixOS-Revision und flake.lock
+  rules:
+    - Jede Verifikation nennt ihre Mindestklasse. Was Boot, TPM-Bindung, Kaltstart, Recovery oder Manipulation betrifft, verlangt die Klasse hardware. vm und
+      unit belegen nur Logik und Protokoll.
+    - Übersprungene, als xfail markierte oder abgewählte Tests sind kein Bestehen. Ergebnisse nennen passed, failed und skipped getrennt.
+    - Tests, die Quelltext, Nix-Dateien oder Dokumentation nach Zeichenketten durchsuchen, sind nur Klasse static und nie Funktionsnachweis.
+    - Jede Sicherheitsaussage braucht einen Negativtest, der ohne die Schutzmaßnahme fehlschlägt. Eine Mutationsprobe (Schutz entfernen, Test muss rot werden)
+      wird für blocking-Befunde dokumentiert.
+    - Ein Test, der einen bekannten Fehler als gewolltes Verhalten festschreibt, ist kein Nachweis und wird als Befund geführt.
+    - Quality-Baselines werden nicht angehoben, Prüfungen nicht abgeschwächt und keine Flags wie --allow-partial, --force oder Mock-Umgebungsvariablen
+      eingeführt, um ein Gate zu bestehen.
+    - Status verified im Feature-Tracker setzt eine benannte menschliche Bewertungsperson voraus. Agenten setzen höchstens in_progress oder blocked und tragen
+      Evidenz mit Klasse ein.
+    - Ein Befund in repository_review wird nur mit Testreferenz und Evidenzklasse geschlossen, nie durch Löschen.
+verification_note: Die gc-10-Bestandsaufnahme stammt vom Nutzer. Der ursprüngliche Review war statisch. Die OpenBao-Prüfung vom 2026-10-26 umfasst
+  Nix-Evaluierung und einen isolierten NixOS-VM-Test (Klasse vm); Ergebnisse und Grenzen stehen in repository_review. Keine Host-Aktivierung und keine
+  Hardware-Abnahme.
+scope:
+  fleet_group: operator_unlocked_secrets
+  fleet_group_source: ansible/inventory/hosts.ini
+  platform: NixOS mit LUKS2-Containern der Module operator-unlocked-storage und operator-storage-helper
+  key_provider: Lokales OpenBao auf jedem Host; gs-02 ist zusätzlich zentrale Identitätsinstanz
+  key_service_constraints:
+    - Lokale und zentrale OpenBao-Instanz haben getrennten Zustand, Seal, Listener, Audit und Policies, auch auf gs-02.
+    - Lokaler Zustand und Bootstrap-Material sind vor den Containern verfügbar, die sie entsperren. Kein Bootstrap-Geheimnis liegt in diesen Containern.
+    - Der TPM-gebundene Auto-Unseal wird mit der gepinnten OpenBao-Version nachgewiesen. Kandidat ist der Static Seal mit einem Schlüssel aus einem
+      TPM2-versiegelten systemd-Credential; PKCS#11 ist Alternative. Ein nur mit dem Host-Schlüssel verschlüsseltes Credential ist unzulässig, weil dieser
+      Schlüssel auf der unverschlüsselten Root liegt.
+    - Auf Clients läuft kein Enterprise-Feature von HashiCorp Vault oder OpenBao als Voraussetzung.
+    - HashiCorp Vault bleibt nur während der gestuften Migration in Betrieb. Bestehende Anwendungsschnittstellen bleiben kompatibel, bis alle Konsumenten
+      umgestellt sind.
+    - Der verschlüsselte Ansible-Admin-Vault und der unabhängige Notfallexport bleiben Recovery-Verwahrung. Sie sind nicht der abzulösende Vault-Server.
+    - Identity Salts bleiben quellenlokal gemäß secrets-management.yml (identity_salt). Das zentrale OpenBao übernimmt nur die heutige Vault-Aufgabe,
+      Center-Salts für freigegebene gemeinsame Center auszuliefern.
+  out_of_scope:
+    - Windows/BitLocker- und macOS/FileVault-Adapter
+    - Eigene Verwaltungsoberfläche oder Verwaltungsserver im Stil von GravityZone
+    - Mandantenübergreifende Verwaltung
+    - Datenmigration oder Neuformatierung vorhandener Volumes
+    - Zentrale Hinterlegung von Machine Salts, Patienten- oder Untersuchungshashes
+profiles:
+  - id: local_openbao_tpm
+    applies_to: Alle Hosts in operator_unlocked_secrets, einschließlich gs-02 für seine eigenen Volumes
+    description: Unabhängiges lokales OpenBao mit Raft, TPM-gebundenem Auto-Unseal, privatem Unix-Socket und an die LUKS-UUID gebundenen Container-Einträgen.
+  - id: hub_identity_authority
+    applies_to: Rolle gs-02
+    description: Zusätzliche zentrale OpenBao-Instanz für Maschinen- und Anwendungsidentitäten, PKI und Autorisierung. Keine Voraussetzung für den Kaltstart
+      eines enrollten Hosts. Ihr Zustand liegt auf einem Volume von gs-02, das dessen lokales OpenBao öffnet.
+  - id: operator_recovery
+    applies_to: Alle Hosts
+    description: Expliziter Recovery-Befehl mit unabhängig verwahrtem Material für TPM-Verlust, Verlust des lokalen OpenBao und LUKS-Recovery. Nie ein
+      automatischer Rückfall und kein wählbarer unlockMethod-Wert.
+rollout_plan:
+  date: "2026-10-27"
+  pilot:
+    host: gc-09
+    recovery_host: gs-01
+    recovery_host_selection: Operator designated gs-01 on 2026-10-27; ciphertext custody only, with independently recoverable decryption-key custody.
+    recovery_host_connectivity:
+      command: devenv shell check-connectivity gs-01
+      result: Failed on 2026-10-27 with exit 4; inventory SSH connection timed out, changed=0. Restore reachability before recovery inspection or escrow.
+    policy_owner: modules/nixos/roles/endoreg-client/default.nix
+    scope: Shared EndoReg client safety; no host-specific security exception or fleet acceptance from one pilot.
+    authorization: Read-only inspection authorized; each deployment and reboot requires explicit operator approval.
+    recovery: Operator confirmed console access on 2026-10-27; recovery passphrase and independent encrypted custody are not yet verified, so deployment and
+      reboot remain blocked.
+    baseline_command: devenv shell storage-readiness --limit gc-09
+    baseline_observation: >-
+      Read-only inspection on 2026-10-27 found active encrypted data mappings,
+      application, PostgreSQL and worker; Secure Boot disabled, platform TPM driver
+      present, no detected virtualization, current/profile equal but booted generation
+      older. This does not prove recovery custody or reboot acceptance. Raw host facts
+      remain local under ignored logs/ and are not committed.
+  authority: User-requested planning update from the supplied offline-theft recommendations; no hardware acceptance granted.
+  primary_objective: >-
+    A stolen powered-off host must not release volume keys to modified boot,
+    root or Nix-store code. Secure Boot and authenticated executed system contents
+    are mandatory before production unattended unlock; PCR 7 or a signed UKI alone is insufficient.
+  offline_authority: >-
+    Retain the existing local-unlock decision: enrolled hosts may unlock while
+    gs-02 is unreachable. Hub revocation affects online identities, not offline
+    volume access. Requiring an offline kill switch needs a new online or operator factor decision.
+  baseline:
+    source: Working tree inspected on 2026-10-27; no remote inspection or deployment in this update.
+    configured: Group and gc-10 use passphrase; Secure Boot is opt-in and disabled by default; gc-10 has enrollment tooling enabled.
+    observed_history: Last recorded gc-10 preflight found TPM present and firmware Secure Boot disabled; recheck live before changes.
+    implemented_not_accepted:
+      - Controller-held signing and public enrollment material (docs/secure-boot.md); private custody is operator-reported, not inspected here.
+      - Local static-seal enrollment, dedicated-keyslot adoption, credential rotation and deployment orchestration (docs/openbao-local.md).
+    evidence_limit: Existing VM/unit results are historical evidence; physical tamper, cold boot and recovery acceptance remain open.
+  gates:
+    - id: R0
+      owner_role: Deployment operator and recovery custodian
+      action: >-
+        Preserve operator-controlled unlock. Record effective live unlock method,
+        booted/current/profile generations, firmware Secure Boot and enrolled public-key
+        fingerprints. Inventory TPM-bound credentials, LUKS UUIDs/keyslots and recovery
+        custody before any firmware or resealing operation; never record secret values.
+      exit: >-
+        Reviewed baseline and tested recovery access, with an encrypted independent
+        recovery copy outside both gs-02 and the target, including independently recoverable decryption custody.
+      criteria: [ENC-01, ENC-18, ENC-19]
+    - id: R1
+      owner_role: Boot/integrity maintainer and security assessor
+      action: >-
+        Map every binary, library, interpreter, unit, configuration, credential loader
+        and privileged consumer that can receive the seal key or unlocked data.
+        Prototype authenticated immutable root/system contents in an isolated VM.
+        Define writable-state overrides, update and authorized rollback policy,
+        retired-generation rejection, recovery and failure behavior before key release.
+      exit: >-
+        Reviewed integrity design and executable positive, negative and interruption
+        tests. Select PCR policy and tooling only from this evidence; no mandated PCR
+        set, Keylime, dm-verity or UKI layout. Verification failure must prevent key
+        release or execution of altered code before any volume opens.
+      criteria: [ENC-09]
+    - id: R2
+      owner_role: Enrollment/installer maintainer and signing custodian
+      action: >-
+        Enforce physical TPM 2.0 and live enabled Secure Boot with intended keys on
+        production enrollment and activation, and before installer disk changes.
+        Reject software TPMs outside explicitly isolated tests. Integrate reviewed
+        controller signing into rebuild-host-boot and rebuild-host-switch, including
+        interrupted installation; keep signing private keys off all fleet hosts and automatically unlocked volumes.
+      exit: >-
+        Negative and interruption tests reject missing/unusable/software TPMs, disabled
+        Secure Boot, wrong signer and altered artifacts without disk/service changes.
+        Document signing custodians and independently encrypted signing-key recovery.
+      criteria: [ENC-06, ENC-10, ENC-21, ENC-22]
+    - id: R3
+      owner_role: Storage maintainer and recovery custodian
+      action: >-
+        Complete explicit lock/shutdown ordering and operator-driven recovery/re-seed.
+        Test busy mappings, interruption, TPM loss/clear, changed machine-id and lost
+        Raft state; verify UUIDs, data, separate recovery/OpenBao slots and recovery
+        with both gs-02 and the target unavailable. Resolve independent salt custody
+        and verified-copy receipts before enabling identity migration.
+      exit: >-
+        Reviewable functional failure/retry evidence, independent restore readback
+        and cataloged procedures; no automatic recovery fallback or replacement store.
+      criteria: [ENC-08, ENC-18, ENC-19, ENC-20, ENC-23]
+    - id: R4
+      owner_role: Hardware operator and named human security assessor
+      action: >-
+        After R1-R3, validate gc-09 for its hardware class and a physical reference
+        host for every other class. Tamper separately with boot artifacts, command
+        line, root/Nix-store binaries, units, configuration and writable injection
+        paths. Test approved updates/rollbacks, retired images, firmware/TPM changes,
+        recovery and cold boot with gs-02/VPN/DNS unavailable. Test console/recovery
+        shell, external boot and DMA/debug exposure against access to an intact unlocked host.
+      exit: >-
+        Hardware-class records include firmware/key fingerprints, revision, locked
+        inputs, approved artifacts, positive/negative results and mutation witnesses;
+        satisfy catalog boot counts and recovery budgets. gc-09 alone cannot approve the fleet.
+      criteria: [ENC-06, ENC-09, ENC-25, ENC-26]
+    - id: R5
+      owner_role: Fleet release owner
+      action: >-
+        Only after all required criteria have evidence and a named human assessment,
+        deploy in bounded inventory waves with the same group security profile.
+        Authenticate escrow before provisioning/adoption, verify each host's cold boot,
+        mounts and application data, and stop a wave at the first failure. No gc-10
+        host-only production exception. Keep remaining hosts on operator unlock until enrollment passes.
+      exit: >-
+        No group-default switch until every selected host is prepared and accepted;
+        remaining enrollment work blocks a premature group-wide change. Rollback
+        preserves recovery access and accounts for keyslot changes outside NixOS generations.
+      criteria: [ENC-01, ENC-03, ENC-21, ENC-24, ENC-25, ENC-26]
+  separate_workstream: HashiCorp Vault remains authoritative until independent hub migration and recovery gates pass.
+proposed_measurements:
+  disclaimer: Vor Umsetzung im Abnahmeplan festlegen. Abweichungen werden mit Hardwareklasse und Begründung versioniert.
+  reference_host_cold_boots_per_hardware_class: 5
+  reference_host_normal_reboots_per_hardware_class: 3
+  unattended_reboots_per_fleet_host: 1
+  unlock_timeout_seconds: 90
+  unlock_timeout_start: Sobald das TPM verfügbar ist. Die Grenze umfasst Start und Entsiegeln des lokalen OpenBao sowie das Öffnen aller Container.
+  hub_revocation_effect_seconds: 300
+  hub_restart_recovery_minutes: 30
+  recovery_target_minutes: 30
+  recovery_timer_start: Ab autorisierter Verfügbarkeit des Recovery-Materials und einer funktionsfähigen Wiederherstellungsumgebung. Ein separater
+    Backup-Restore braucht eine eigene RTO/RPO.
+  note: Die Zeitgrenze für die Volume-Entsperrung ist keine Zusage für Datenbank-Recovery oder vollständige Anwendungsbereitschaft.
+user_reported_gc10_baseline:
+  source: Bestandsaufnahme im Nutzerbeitrag vom 2026-10-26; hier nicht unabhängig auf dem Host verifiziert. gc-10 dient nur als Referenzhost seiner
+    Hardwareklasse, nicht als Pilotumfang.
+  volumes:
+    - luxnix-secrets
+    - luxnix-app-storage
+  approle_directory: /etc/secrets/vault/hub-pki/
+  approle_storage: Bind-Mount aus luxnix-secrets
+  secret_id_ttl: 0
+  secret_id_num_uses: 0
+  authentication_service: vault-auth-setup.service (Oneshot)
+  token_ttl: 1h
+  token_max_ttl: 4h
+  application_secret_interfaces:
+    - DJANGO_SECRET_KEY_FILE
+    - DJANGO_DB_PASSWORD_FILE
+    - LX_ANNOTATE_MASTER_KEY_FILE
+  startup_ordering: operatorUnlocked.guardedServices
+  missing_primary_capability: Unbeaufsichtigte Entsperrung der verschlüsselten Volumes
+  secure_boot_enabled: false
+  tpm2_hardware_present: unknown
+  vault_host: gs-02
+  vault_unseal: manual
+  allow_offline: true
+  migration_policy: disabled
+  integration_hardening_note: Eine SecretID-CIDR-Bindung an die vom Vault-Server beobachtete VPN-Quelladresse ist ein separates Härtungsthema. Sie ersetzt weder
+    Geräteidentität noch Volume-Freigabe.
+acceptance_criteria:
+  - id: ENC-01
+    category: Standardisierung
+    title: Ein einheitliches, versioniertes Flottenprofil
+    requirement: Die Lösung ist in den bestehenden Speichermodulen und einem OpenBao-Modul je Rolle umgesetzt und wird ausschließlich über group_vars der Gruppe
+      operator_unlocked_secrets aktiviert. host_vars setzen nur Hardwarefakten wie Containerpfade oder Abhängigkeiten, weder Entsperrmethode noch Schutzprofil.
+      Die Rolle hub_identity_authority ergibt sich aus der Inventarrolle, nicht aus einer Host-Ausnahme.
+    verification:
+      - (eval) Eine Nix-Evaluierung aller Hosts der Gruppe zeigt für jeden Host dasselbe Profil.
+      - (eval) Ein Test schlägt fehl, sobald ein host_vars-Eintrag Entsperrmethode oder Schutzprofil überschreibt.
+      - (static) Generierte Host-Dateien stimmen mit autoconf:generate überein; es gibt keine Handänderungen.
+    required_for:
+      - fleet_release
+  - id: ENC-02
+    category: Standardisierung
+    title: Explizite Fähigkeiten je Hardwareklasse
+    requirement: Für jede Hardwareklasse der Flotte werden TPM 2.0, Secure Boot und unbeaufsichtigter Kaltstart vor der Ausrollung erfasst. Ein Host, der das
+      Profil nicht erfüllt, bricht vor der Aktivierung mit Begründung ab. Es gibt keine stille Abschwächung und keinen Rückfall auf ein schwächeres Profil.
+    verification:
+      - (static) Jeder Host der Gruppe ist einer Hardwareklasse mit dokumentierten Fähigkeiten zugeordnet.
+      - (eval) Fehlende oder ungetestete Fähigkeiten werden maschinenlesbar als unsupported, unavailable oder unverified gemeldet.
+      - (hardware) Ein vorbereiteter Einzelneustart zählt nicht als Kaltstartnachweis.
+    required_for:
+      - fleet_release
+  - id: ENC-03
+    category: Standardisierung
+    title: Vorhandene Volumes übernehmen
+    requirement: Bestehende LUKS2-Container werden ohne Entschlüsselung, Formatierung oder Datenmigration übernommen. LUKS-UUID und Keyslot-/Token-Bestand
+      werden je Host erfasst. Hostnamen und Labels allein gelten nicht als sichere Identität.
+    verification:
+      - (vm) Ein Vorher-/Nachher-Abgleich bestätigt unveränderte Nutzdaten, LUKS-UUIDs und erhaltene Recovery-Keyslots mit echtem cryptsetup.
+      - (unit) Jede Keyslot- oder Token-Änderung erscheint vor der Ausführung im Änderungsplan.
+      - (vm) Ein fehlender deklarierter Container wird nur über den katalogisierten Deploy-Befehl angelegt, und erst nachdem die Recovery-Passphrase in
+        Admin-Vault und Notfallexport authentisiert ist. Ein normaler Start, ein Rebuild und eine Aktivierung legen nie an.
+      - (unit) Ein unerwarteter Container (andere UUID, kein LUKS, fremde Quittung) führt zu einem erklärten Abbruch.
+    required_for:
+      - fleet_release
+  - id: ENC-04
+    category: Standardisierung
+    title: Vorschau und Konfliktprüfung vor der Flottenänderung
+    requirement: Vor jeder Ausrollung zeigt eine Vorschau den betroffenen Hostbestand, das Profil je Host, den Neustartbedarf und Hosts, die vor der Aktivierung
+      abbrechen würden. Richtlinienversion und Ausrollwelle sind nachvollziehbar.
+    verification:
+      - (eval) Vorschau und tatsächlich ausgeführter Änderungsumfang stimmen überein.
+      - (eval) Hosts außerhalb der gewählten Welle bleiben unverändert.
+      - (unit) Nicht freigegebene Richtlinienversionen werden zurückgewiesen.
+    required_for:
+      - fleet_release
+  - id: ENC-05
+    category: Lokale Schlüsselfreigabe
+    title: Das lokale OpenBao verwaltet die Container-Freigabe
+    requirement: Jeder Host liest seine je Container eindeutigen Schlüssel aus seinem eigenen OpenBao-Raft, gebunden an Host und native LUKS-UUID. Ein
+      Hub-Ausfall verhindert die Entsperrung eines enrollten Hosts nicht. Im Profil existiert kein Keyslot oder Token, der den Container ohne das lokale OpenBao
+      automatisch öffnet (zum Beispiel ein systemd-tpm2-Token).
+    verification:
+      - (vm) Ein echtes lokales OpenBao gibt nur den vorgesehenen Eintrag für Host, Volume und UUID frei. Falsche Identität, vertauschte UUID und fehlender
+        Schlüssel schlagen geschlossen fehl.
+      - (hardware) Ein enrollter Host startet kalt bei unerreichbarem Hub; weder ein zentrales Token noch ein zwischengespeicherter Klartext-Volume-Schlüssel
+        wird benötigt.
+      - (vm) Die Provisionierung speichert einen neuen Schlüssel dauerhaft im lokalen OpenBao und in der unabhängigen Recovery-Verwahrung und prüft beides,
+        bevor ein neuer Container formatiert wird. Vorhandene Container werden ohne Formatierung übernommen.
+      - (vm) luksDump zeigt nach Provisionierung und Übernahme keinen systemd-tpm2-Token und keinen anderen automatisch nutzbaren Keyslot außer dem
+        OpenBao-Keyslot; der Recovery-Keyslot bleibt.
+      - (eval) Kein Client tritt dem Raft des Hubs bei oder erhält Zugriff auf den Speicher eines anderen Hosts.
+    required_for:
+      - fleet_release
+  - id: ENC-06
+    category: Lokale Schlüsselfreigabe
+    title: Verpflichtendes nutzbares TPM und hardwaregebundener Bootstrap
+    requirement: Jeder Host benötigt ein funktionsfähiges TPM 2.0. Das TPM schützt den Auto-Unseal des lokalen OpenBao und die hardwaregebundene Identität für
+      das Hub-Enrollment. Eine Kopie der Platte allein liefert keine nutzbaren Bootstrap-Credentials.
+    verification:
+      - (vm) Der katalogisierte Installer bricht vor der Partitionierung ab, wenn das TPM fehlt, deaktiviert, unbrauchbar ist oder die deklarierte Policy nicht
+        erfüllt.
+      - (vm) Aktivierung und Bootstrap wiederholen die Live-Prüfung des TPM; Inventar-Assertions allein genügen nicht. Die Prüfung schlägt fehl und wird nie per
+        Condition übersprungen.
+      - (hardware) Ein kopierter lokaler Raft-Speicher samt Credential-Verzeichnis entsiegelt auf einem anderen TPM nicht.
+      - (vm) Ein Seal-Credential, das nur mit dem Host-Schlüssel verschlüsselt ist, wird beim Start abgelehnt (Negativtest mit Mutationsprobe).
+      - (hardware) Das Enrollment prüft die vorgesehene Hardware und lehnt Software-TPMs in Produktion ab. swtpm-Tests bleiben Testevidenz.
+      - (vm) Die Hub-Identität ist gepinnt und das Maschinen-Enrollment authentisiert; kein TOFU und kein Klartext-Bootstrap-Geheimnis auf unverschlüsseltem
+        Speicher.
+    required_for:
+      - fleet_release
+  - id: ENC-07
+    category: Lokale Schlüsselfreigabe
+    title: Kreisfreier lokaler Start und getrennte Hub-Rolle
+    requirement: Zustand des lokalen OpenBao, TPM-Metadaten und Bootstrap-Credentials sind vor den operator-unlocked Containern verfügbar. Die zentrale Instanz
+      auf dem Hub hat eigene Dienst-, Zustands- und Seal-Identitäten und nimmt nicht an der lokalen Kaltstart-Entsperrung teil.
+    verification:
+      - (eval) Der Abhängigkeitsgraph zeigt TPM -> lokales OpenBao -> entsiegelt -> LUKS -> Mounts -> Datenbank/Anwendung ohne Rückkante.
+      - (eval) Lokale und zentrale Instanz auf gs-02 kollidieren weder bei Socket, Port, Datenverzeichnis noch Credential.
+      - (vm) Ein Hub- oder VPN-Ausfall nach dem Enrollment verhindert die lokale Entsperrung nicht; die Identitätserneuerung meldet einen eigenen degradierten
+        Zustand.
+    required_for:
+      - fleet_release
+  - id: ENC-08
+    category: Lokale Schlüsselfreigabe
+    title: Lokales und zentrales OpenBao unabhängig betreiben und wiederherstellen
+    requirement: Lokaler Auto-Unseal und zentrale Identitätsverfügbarkeit haben getrennte Recovery-, Backup- und Audit-Verträge. Single-Node-Raft ist
+      Persistenz, keine Redundanz. Der lokale Speicher ist ersetzbar, weil die Recovery-Verwahrung jeden Container öffnen kann.
+    verification:
+      - (vm) Ein Neustart des lokalen OpenBao entsiegelt über dasselbe TPM, erhält die Daten und braucht keinen zentralen Dienst. Die Entsperrung wartet auf
+        sealed=false, nicht nur auf die Dienstbereitschaft.
+      - (hardware) Nach einem TPM-Tausch wird das lokale OpenBao mit unabhängig verwahrtem Material neu aufgesetzt; Containerinhalte und UUIDs werden geprüft.
+      - (vm) Die zentrale Identitätsprovisionierung und ihr Issuer-Zustand werden getrennt wiederhergestellt; ein Single-Node-SLA ist dokumentiert oder ein
+        Quorum-Ausfall getestet.
+      - (vm) Audit-Ausfall, volle Platte, verschlüsselte Aufbewahrung außerhalb des Hosts und Wiederherstellung sind für beide Rollen geprüft. Ein volles
+        Audit-Device auf dem Client wird überwacht, weil es den Boot blockiert.
+      - (vm) Explizites Sperren und Shutdown stoppen Konsumenten, hängen Dateisysteme aus und schließen Mappings, bevor das lokale OpenBao stoppt. Belegte
+        Mappings führen ohne erzwungenes Aushängen zu einem Fehler.
+      - (vm) Rebuilds lassen Mounts offen. Ein versiegeltes OpenBao wird nie als gesperrtes LUKS gemeldet.
+    required_for:
+      - fleet_release
+  - id: ENC-09
+    category: Schutz
+    title: Integrität der ausgeführten Entsperr- und Folgekomponenten
+    requirement: >-
+      Code receiving the local seal key or accessing unlocked secrets/data must be
+      protected against offline root/Nix-store modification. Secure Boot and
+      authenticated executed system contents are mandatory before production
+      unattended unlock (rollout decision 2026-10-27). Signed UKIs or PCR 7 alone
+      do not authenticate arbitrary root/Nix-store contents. Local unattended
+      release relies on this integrity boundary for protection of a stolen powered-off host.
+    verification:
+      - (hardware) Manipulationen an Bootimage, Startparametern, OpenBao-Binary, Entsperrlogik und relevanten Nix-Store-Pfaden verhindern das Entsiegeln oder
+        nachweislich die Ausführung des manipulierten Codes.
+      - (static) Ein schwächeres Profil wird als eingeschränkt gekennzeichnet und erfüllt dieses Kriterium nicht stillschweigend.
+      - (static) Das Prüfprotokoll unterscheidet ruhende Daten von einem bereits entsperrten, laufend kompromittierten System.
+    required_for:
+      - fleet_release
+  - id: ENC-10
+    category: Schutz
+    title: Secrets im Betrieb und in persistenten Kopien schützen
+    requirement: Entsperrschlüssel, Seal-Schlüssel, SecretIDs und vollständige Tokens erscheinen nicht in Versionsverwaltung, Nix-Store, Kommandozeilen,
+      normalen Logs, Ansible-Ausgaben oder Diagnoseexporten. Secure-Boot-Signierschlüssel liegen nicht auf einem Volume, das ohne Operator automatisch geöffnet
+      wird.
+    verification:
+      - (vm) Diagnose-, Prozessargument-, Build-, Log- und Ansible-Ausgabeprüfungen mit synthetischen Test-Secrets finden keine Werte.
+      - (vm) Ein unberechtigter lokaler Benutzer kann den OpenBao-Socket, die Credentials und Test-Secrets weder auf dem Client noch auf gs-02 lesen.
+      - (static) Der Ablageort der Signierschlüssel ist dokumentiert und vom automatisch entsperrten Volume getrennt.
+      - (static) Secure-Boot-Signierschlüssel bilden eine eigene Schlüsselklasse mit eigenem Signiervorgang und eigenen Berechtigungen. Clients erhalten nur
+        signierte Artefakte und öffentliche Prüfgrundlagen.
+    required_for:
+      - fleet_release
+  - id: ENC-11
+    category: Start und Betrieb
+    title: Echte unbeaufsichtigte Startfälle
+    requirement: Ein Host im Profil local_openbao_tpm öffnet alle erforderlichen Volumes ohne Benutzeranmeldung, PIN-Eingabe, SSH-Eingriff oder vorbereiteten
+      Einzelneustart, auch wenn gs-02 nicht erreichbar ist.
+    verification:
+      - (hardware) Je Hardwareklasse bestehen am Referenzhost fünf Kaltstarts nach vollständigem Ausschalten und drei normale Neustarts, davon mindestens einer
+        bei unerreichbarem Hub.
+      - (hardware) Jeder Host der Gruppe besteht nach der Ausrollung mindestens einen unbeaufsichtigten Neustart.
+      - (vm) Ein isolierter Test mit synthetischen Daten prüft das Verhalten nach ungeplantem Stromverlust, einschließlich Raft-Konsistenz des lokalen OpenBao;
+        kein produktiver Datenbestand wird absichtlich gefährdet.
+      - (static) Ein Erfolg beim Rebuild, Resume oder einmalig authentisierten Neustart ersetzt keinen Kaltstarttest.
+    required_for:
+      - fleet_release
+  - id: ENC-12
+    category: Start und Betrieb
+    title: Bereitschaft anhand der richtigen persistenten Daten
+    requirement: Abhängige Dienste starten erst, wenn die erwarteten Volumes entsperrt, anhand ihrer LUKS-UUID verifiziert, korrekt gemountet und die
+      erforderlichen Secrets verfügbar sind. Ein vorhandenes leeres Verzeichnis genügt nicht als Mountnachweis.
+    verification:
+      - (vm) Bei gesperrtem, fehlendem oder falsch zugeordnetem Volume starten PostgreSQL, Vault, das zentrale OpenBao und LX-Annotate nicht auf
+        Ersatzverzeichnissen.
+      - (vm) Nach erfolgreichem Start werden der bestehende Datenbestand und die bestehenden Anwendungsdaten verwendet.
+    required_for:
+      - fleet_release
+  - id: ENC-13
+    category: Start und Betrieb
+    title: Definierter Fehlerzustand mit begrenzter Wartezeit
+    requirement: Fehlendes TPM, abgelehntes Seal-Credential, versiegeltes oder fehlendes lokales OpenBao, fehlender Eintrag, abgelehnter Keyslot, falsche Policy
+      und fehlendes Volume erzeugen unterscheidbare Fehler. Die Daten bleiben gesperrt und abhängige Dienste blockiert. Die Startsequenz wartet nur bis zur
+      konfigurierten Grenze. Es gibt keine Passwortabfrage und keinen anderen Rückfall.
+    verification:
+      - (vm) Jedes Fehlerszenario ergibt innerhalb von unlock_timeout_seconds einen maschinenlesbaren Zustand mit Ursache.
+      - (vm) Es werden weder leere Schlüssel noch Klartext-Ersatzspeicher, Passwortabfragen oder still abgeschwächte Profile verwendet.
+      - (vm) Nach Behebung der Ursache öffnet ein dokumentierter Wiederholungsweg die Volumes ohne Neustart.
+    required_for:
+      - fleet_release
+  - id: ENC-14
+    category: Start und Betrieb
+    title: Rebuilds, Updates und Rollback beherrschen
+    requirement: rebuild-host-switch und rebuild-host-boot halten bereits geöffnete Volumes offen und starten das lokale OpenBao nicht ungeplant neu. System-,
+      Firmware-, OpenBao- und Boot-Updates haben einen freigegebenen Ablauf für TPM-Bindung, Neustart und Recovery. Ein nicht autorisierter Rollback oder eine
+      manipulierte Version erhält keinen Seal-Schlüssel.
+    verification:
+      - (vm) Ein unveränderter und ein üblicher Rebuild schließen die Datenvolumes nicht.
+      - (hardware) Ein freigegebenes Update samt Änderung der PCR-Werte und sein genehmigter Rollback funktionieren gemäß Policy oder erreichen den vorgesehenen
+        Recovery-Zustand.
+      - (vm) Ein OpenBao-Versionswechsel erhält den Raft-Bestand oder bricht vor der Aktivierung ab.
+      - (static) Eine erforderliche vorübergehende Schutz-Aussetzung ist sichtbar, auf einen Neustart begrenzt und wird nachweislich beendet.
+    required_for:
+      - fleet_release
+  - id: ENC-15
+    category: Widerruf und Offline
+    title: Hub-Widerruf und lokales Sperren sind getrennt
+    requirement: Der Hub widerruft zentrale Identitätsausstellung und Autorisierung. Die lokale Schlüsselfreigabe ist davon unabhängig. Für ein ausgeschaltetes
+      oder offline betriebenes Gerät gibt es keinen sofortigen Fernwiderruf der Volume-Schlüssel; das ist eine akzeptierte Grenze dieses Profils.
+    verification:
+      - (vm) Widerrufene zentrale Identitäten und ihre bestehenden Tokens werden innerhalb von hub_revocation_effect_seconds abgelehnt.
+      - (vm) Zustellung und Bestätigung eines Widerrufs werden je Host gemeldet; offline Hosts bleiben ausstehend und werden nicht fälschlich als gesperrt
+        angezeigt.
+      - (vm) Ein lokaler Sperrbefehl stoppt Schreiber und schließt LUKS. Bereits gelesene Daten und unabhängige Recovery-Keyslots liegen ausdrücklich außerhalb
+        eines rückwirkenden Widerrufs.
+      - (static) Es wird nicht behauptet, dass das Löschen einer Cert-Rolle allein ausgestellte Tokens widerruft oder entfernte Volumes schließt.
+    required_for:
+      - fleet_release
+  - id: ENC-16
+    category: Widerruf und Offline
+    title: Lokale Entsperrung und Identitätserneuerung getrennt
+    requirement: Das lokale OpenBao entsperrt einen enrollten Host ohne Hub. Der Anwendungsstart mit vorhandenen Secrets und die Gültigkeit von
+      Identitätszertifikaten werden getrennt bewertet; fehlgeschlagene Hub-Erneuerungen haben eigene Zustände degraded oder expired.
+    verification:
+      - (vm) Nur-Hub-Ausfall, Ausfall des lokalen OpenBao und kombinierter Ausfall werden getestet; lokale Schlüssel werden nie aus einem Klartext-Cache
+        ersetzt.
+      - (vm) Eine frische Identitätsausstellung wird bei offline Hub nicht als erfolgreich gemeldet; abgelaufene Identitäten verlängern ihr Vertrauen nicht
+        stillschweigend.
+    required_for:
+      - fleet_release
+  - id: ENC-17
+    category: Widerruf und Offline
+    title: Anwendungstokens über beide OpenBao-Rollen
+    requirement: Anwendungszugriffe auf lokales oder zentrales OpenBao bleiben über initiale und maximale Token-TTL hinaus durch begrenzte Erneuerung oder
+      Re-Authentisierung autorisiert.
+    verification:
+      - (vm) Verkürzte TTL und Max-TTL werden mit den echten Konsumenten und mindestens zwei Erneuerungszyklen geprüft.
+      - (vm) Volume-Entsperrung und Anwendungstokens haben getrennte Least-Privilege-Policies; es gibt kein dauerhaftes gemeinsames Flotten-Token.
+      - (vm) Anwendungs-Dateischnittstellen und Schlüsselbytes bleiben bei der Migration erhalten; ein Backend-Wechsel ist keine Schlüsselrotation.
+    required_for:
+      - application_secret_lifecycle
+  - id: ENC-18
+    category: Recovery
+    title: Recovery ohne gs-02, ohne Vault und ohne lokales OpenBao praktisch nachweisen
+    requirement: Für jedes Volume jedes Flottenhosts existiert ein geprüfter, autorisierter Recovery-Weg, der weder gs-02, Vault, das lokale OpenBao noch die
+      devenv-Umgebung voraussetzt. Vorhandene Passphrase-Keyslots bleiben erhalten.
+    verification:
+      - (hardware) Je Hardwareklasse werden die Testvolumes bei gelöschtem TPM und fehlendem lokalem OpenBao mit nativen cryptsetup-Werkzeugen über den
+        Recovery-Weg geöffnet.
+      - (static) Berechtigte Personen beziehen das Recovery-Material über einen von gs-02 unabhängigen Notfallweg.
+      - (vm) Ein Re-Seed-Befehl baut nach der Recovery ein neues lokales OpenBao und neue Keyslots auf und entfernt den alten OpenBao-Keyslot erst nach
+        erfolgreicher Testöffnung.
+      - (static) Der Wiederherstellungsplan berücksichtigt beschädigte LUKS-Header (header-backup).
+      - (vm) Es gibt drei getrennte Recovery-Wege. (1) Zentrales OpenBao mit Seal-Material, Datenbestand, Audit und Policies auf Ersatzhardware. (2) Lokales
+        OpenBao per Re-Seed. (3) LUKS-Recovery je Volume. Das Material für Weg 3 liegt nicht als automatischer Rückfall auf dem Client.
+    required_for:
+      - fleet_release
+  - id: ENC-19
+    category: Recovery
+    title: Recovery-Material geschützt hinterlegen
+    requirement: Recovery-Material ist eindeutig Inventarhost, LUKS-UUID und Keyslot zugeordnet; die machine-id ist nur ein zusätzliches Merkmal, weil sie sich
+      bei Neuinstallation ändert. secrets-management.yml und die Feature-Tracker speichern nur Referenzen und Prüfstatus, keine Werte. Der Notfallbestand wird
+      nach jeder Änderung aktualisiert.
+    verification:
+      - (vm) Zentrale Hinterlegung und Notfallweg enthalten nachweislich aktuelles Material und sind nach einer simulierten Neuinstallation auffindbar.
+      - (vm) Unberechtigte Rollen können das Material weder lesen noch exportieren.
+    required_for:
+      - fleet_release
+  - id: ENC-20
+    category: Recovery
+    title: Provisionierung, Enrollment und Rotation idempotent und unterbrechungssicher
+    requirement: Provisionierung, lokale OpenBao-Initialisierung, Hub-Enrollment, Wechsel der Hardwarebindung und Rotation sind wiederholbar und nach einem
+      Abbruch an jeder Phasengrenze fortsetzbar. Ein geprüfter Zugangs- oder Recovery-Weg wird erst entfernt, wenn der neue Zustand und die Hinterlegung
+      gesichert sind.
+    verification:
+      - (vm) Dreifaches Ausführen desselben Vorgangs erzeugt keine zusätzlichen Keyslots, Einträge oder Tokens und keine Datenänderung.
+      - (vm) Unterbrechungen an jeder dokumentierten Phasengrenze führen beim nächsten Lauf zu einem validierten Endzustand; ein dauerhaftes Steckenbleiben gilt
+        als Fehler.
+      - (vm) Zwei gleichzeitig gestartete Mutationen desselben Volumes werden serialisiert oder mit eindeutigem Konflikt abgewiesen.
+      - (vm) Kein Lauf entfernt den letzten nutzbaren Zugang.
+      - >-
+        (vm) Drei Rotationen sind beschrieben und geprüft: (1) Rotation des lokalen Seal-Schlüssels per Seal-Migration ohne Änderung an LUKS; (2) Ersatz
+        des LUKS-Keyslot-Geheimnisses, wobei das alte Geheimnis danach am Volume ungültig ist; (3) Wechsel des Volume-Masterkeys als eigener, separat
+        freigegebener Vorgang.
+    required_for:
+      - fleet_release
+  - id: ENC-21
+    category: Deployment-Integration
+    title: Ausrollung ausschließlich über bestehende Deploymentbefehle
+    requirement: >-
+      Konfiguration und Ausrollung verwenden den Ablauf: Inventar, autoconf:check, autoconf:generate, Nix-Build, check-connectivity, TPM-Preflight,
+      danach rebuild-host-boot beziehungsweise rebuild-host-switch oder run-ansible --limit. Es gibt keine host-spezifischen Befehlsvarianten für die
+      Verschlüsselung.
+    verification:
+      - (static) Der vollständige Ausrollablauf einer Welle ist mit den Befehls-IDs aus devenv/commands.yml dokumentiert und reproduzierbar.
+      - (static) devenv/commands.yml enthält für die Verschlüsselung keine hostnamensgebundenen Varianten.
+      - (vm) Hosts, deren Voraussetzungen fehlen (TPM, Secure Boot, initialisiertes lokales OpenBao), brechen vor der Aktivierung ab, nicht erst beim nächsten
+        Boot.
+    required_for:
+      - fleet_release
+  - id: ENC-22
+    category: Deployment-Integration
+    title: Betriebsschritte als katalogisierte Befehle
+    requirement: Jeder Betriebsschritt ist als Eintrag in devenv/commands.yml mit Risikoklasse aus luxnix.yml, operator_confirmation_required, Implementierung
+      und Dokumentation erfasst und auf einen Host oder eine Inventargruppe anwendbar. Das betrifft TPM-Preflight, Initialisierung des lokalen OpenBao,
+      Hub-Enrollment, Container-Provisionierung und -Übernahme, flottenweite Statusabfrage, Rotation, Widerruf, Recovery und Re-Seed.
+    verification:
+      - (vm) Jeder Schritt lässt sich mit --limit für einen einzelnen Host und für die Gruppe operator_unlocked_secrets ausführen.
+      - (vm) Sensible Schritte nutzen die bestehenden Schutzmechanismen (Operatorbestätigung, gepinntes SSH, privates tmpfs auf dem Controller) und geben keine
+        Schlüsselwerte aus.
+      - (vm) Die flottenweite Statusabfrage zeigt je Host Profil, Seal-Zustand des lokalen OpenBao, Enrollment-Zustand am Hub, Sperr-/Mountzustand,
+        Recovery-Prüfstatus und Alter des letzten Nachweises.
+    required_for:
+      - fleet_release
+  - id: ENC-23
+    category: Deployment-Integration
+    title: Entsperrung und Datenmigration unabhängig
+    requirement: Aktivierung, Änderung, Ausfall oder Recovery der Entsperrung lösen keine Datenmigration, keine Neuinitialisierung einer Datenbank, keine
+      Formatierung und keine Ersatzschlüsselerzeugung aus. Datenmigration und Identity-Salt-Migration haben eigene Schalter und eigene Freigaben.
+    verification:
+      - (vm) Alle Start-, Update-, Fehler- und Recovery-Fälle belegen, dass kein Migrationsauftrag gestartet wurde.
+      - (vm) Ein nicht gemountetes Datenverzeichnis führt zu einem blockierten Dienst und nicht zu einer neuen leeren Installation.
+      - (vm) Die automatische Identity-Salt-Migration startet nur, wenn die aktive Generation in mindestens zwei getrennten Fehlerdomänen dauerhaft verwahrt und
+        geprüft ist.
+      - (vm) Die Datenmigration in neu angelegte Container läuft als eigener Auftrag. Sie kopiert im Hintergrund vor, während die Schreiber laufen, und schaltet
+        erst nach einem Stopp aller Schreiber mit exakter Abschlusskopie, leerer Prüf-Differenz und Quittung um. Die Quelle bleibt unverändert; die Stoppdauer
+        wird je Host protokolliert.
+      - (vm) Scheitert die Abschlusskopie, bleiben die Binds inaktiv und die Schreiber laufen wieder auf der unveränderten Quelle.
+    required_for:
+      - fleet_release
+  - id: ENC-24
+    category: Deployment-Integration
+    title: Bestehende Secret-Provider und Dateischnittstellen weiterverwenden
+    requirement: Die Lösung erfordert keine Anwendungsänderung. Bis zur Migration bleiben AppRole-Dateien, vault-auth-setup und die *_FILE-Schnittstellen nach
+      dem Volume-Mount unverändert nutzbar; danach liefert das zentrale OpenBao dieselben Dateischnittstellen.
+    verification:
+      - (vm) Ein Integrationstest startet vault-auth-setup und LX-Annotate nach der lokalen Entsperrung mit den bestehenden Dateischnittstellen.
+    required_for:
+      - fleet_release
+  - id: ENC-25
+    category: Nachweise
+    title: Reale Tests je Hardwareklasse
+    requirement: Jede zugesagte Fähigkeit hat ein reproduzierbares Prüfprotokoll mit Hardwareklasse, Firmware, NixOS-Revision, flake.lock, OpenBao-Version und
+      Policy-Version sowie einem positiven und einem negativen Fall, nach evidence_policy.
+    verification:
+      - (static) Eine VM mit vTPM oder swtpm belegt nur ihren Gastpfad und nicht den Schutz physischer Hosts.
+      - (static) Linting und statische Tests werden ergänzend ausgewiesen und nicht als Boot- oder Recovery-Nachweis gezählt.
+    required_for:
+      - fleet_release
+  - id: ENC-26
+    category: Nachweise
+    title: Bedienbare Runbooks und konsistente Dokumentation
+    requirement: Ausrollung, TPM-Preflight, Initialisierung des lokalen OpenBao, Hub-Enrollment, Statusprüfung, Kaltstart, Hub-Ausfall, Recovery, Re-Seed,
+      Rotation, Widerruf, Update/Rollback und Außerbetriebnahme sind in docs/operator-unlocked-storage.md, docs/openbao.md und docs/deployment-guide.md
+      beschrieben. Dabei werden die Befehls-IDs aus devenv/commands.yml verwendet.
+    verification:
+      - (hardware) Eine zweite, mit dem Verfahren vertraute Person führt Recovery und Re-Seed auf einem Testsystem ohne improvisierte Zusatzschritte aus.
+      - (static) secrets-management.yml enthält nur Referenzen; structure.yml-Dateien sind bei geänderten Zuständigkeitsgrenzen angepasst; python
+        scripts/lint_structure.py und docs:check laufen erfolgreich.
+    required_for:
+      - fleet_release
+fleet_checks:
+  - id: FL-01
+    title: Flottenprofil und Hardwareklassen
+    criteria:
+      - ENC-01
+      - ENC-02
+      - ENC-04
+    pass_condition: Alle Hosts der Gruppe evaluieren mit demselben Profil; jede Hardwareklasse ist erfasst; die Vorschau stimmt mit der Ausführung überein.
+  - id: FL-02
+    title: Lokale Freigabe, TPM-Pflicht und Hub-Trennung
+    criteria:
+      - ENC-05
+      - ENC-06
+      - ENC-07
+      - ENC-08
+    pass_condition: Container öffnen nur über das lokale OpenBao; kein TPM-Token oder anderer automatischer Umweg existiert; Plattenkopien und fremde TPMs
+      entsiegeln nicht; der Startgraph ist kreisfrei; Neustart und Recovery beider Rollen sind geprobt.
+  - id: FL-03
+    title: Unbeaufsichtigter Start und Bereitschaft
+    criteria:
+      - ENC-11
+      - ENC-12
+    pass_condition: Die Referenzhosts bestehen die Kaltstart- und Neustartzahlen, auch bei unerreichbarem Hub; jeder Flottenhost besteht mindestens einen
+      unbeaufsichtigten Neustart mit unveränderten persistenten Daten.
+  - id: FL-04
+    title: Fehler, Manipulation und Secrets
+    criteria:
+      - ENC-09
+      - ENC-10
+      - ENC-13
+    pass_condition: Manipulation, fehlendes TPM, abgelehntes Credential und versiegeltes OpenBao erzeugen den erwarteten gesperrten Zustand ohne Rückfall; keine
+      Test-Secrets in Logs oder Artefakten.
+  - id: FL-05
+    title: Updates, Widerruf und Offlinebetrieb
+    criteria:
+      - ENC-14
+      - ENC-15
+      - ENC-16
+    pass_condition: Rebuilds halten Volumes offen; Updates mit PCR-Änderung folgen dem freigegebenen Ablauf; ein Hub-Widerruf wirkt innerhalb des Zeitlimits;
+      Offlinezustände sind ehrlich gemeldet.
+  - id: FL-06
+    title: Recovery und Rotation
+    criteria:
+      - ENC-18
+      - ENC-19
+      - ENC-20
+    pass_condition: Recovery gelingt ohne gs-02, Vault und lokales OpenBao; Re-Seed und wiederholte Abläufe sind idempotent und fortsetzbar; der Notfallbestand
+      ist aktuell.
+  - id: FL-07
+    title: Deployment-Integration und Bestand
+    criteria:
+      - ENC-03
+      - ENC-21
+      - ENC-22
+      - ENC-23
+      - ENC-24
+    pass_condition: Die Ausrollung läuft ausschließlich über katalogisierte Befehle; Daten, Keyslots und AppRole-Dateien bleiben erhalten; es wird keine
+      Migration gestartet.
+  - id: FL-08
+    title: Dokumentation und Nachweise
+    criteria:
+      - ENC-25
+      - ENC-26
+    pass_condition: Jeder MUSS-Punkt ist mit einem reproduzierbaren Nachweis der verlangten Evidenzklasse verknüpft; unbekannte Eigenschaften bleiben offen.
+repository_review:
+  gc09_shared_role_readiness_2026_10_27:
+    state: blocked_not_production_ready
+    assessor: codex-perf-01a17c79
+    implementation: modules/nixos/roles/endoreg-client/default.nix
+    scope: Shared EndoReg clients including GPU and hub consumers; gc-09 is only the pilot target.
+    completed:
+      - Role evaluation rejects disabled encrypted storage and unaccepted unattended unlock; no host bypass option.
+      - Enrollment, confirmation, bootstrap and activation use unconditional live Secure Boot and recognized non-virtual TPM platform checks.
+      - Read-only inventory-scoped storage-readiness command checks host identity and reports boot, mount and service metadata without credentials.
+    verification:
+      - command: python -m pytest -q tests/test_operator_unlocked_storage.py
+        result: 12 passed, including fleet assertions and denial of both unattended methods.
+      - command: python -m pytest -q tests/test_openbao_local.py tests/test_openbao_enroll.py tests/test_local_enrollment.py
+        result: 60 passed; live platform denial and all mutating enrollment phases covered.
+      - command: python -m pytest -q tests/test_operator_storage_migration.py
+        result: 30 passed, including public provisioning dispatch rejection before allocation.
+      - command: devenv tasks run tests:openbao-local-vm
+        result: Final-source run passed in 233 seconds, including production swtpm rejection and isolated enrollment, adoption, interrupted provisioning,
+          rotation and recovery paths.
+      - command: python -m pytest -q tests/test_devenv_command_catalog.py tests/test_repository_architecture_contract.py tests/test_documentation_contract.py
+          tests/test_test_layout_contract.py
+        result: 66 passed.
+      - command: devenv shell storage-readiness --limit gc-09
+        result: Passed identity validation; changed=0, failed=0. Raw metadata stays under ignored logs/.
+      - command: nix build .#nixosConfigurations.gc-09.config.system.build.toplevel --no-link
+        result: Passed after source edits stabilized; no activation or deployment performed.
+    remaining_gates:
+      - gate: R0
+        owner_role: gc-09 operator and independent recovery custodian
+        blocker: Console confirmed; existing recovery credential and independently decryptable encrypted backup are not verified. No deployment or reboot
+          authorization granted.
+      - gate: R1
+        owner_role: EndoReg boot and application maintainers
+        blocker: Authenticated production UKI/root/application runtime, persistent override restrictions and update/rollback policy are absent; unsigned VM
+          results cannot replace them.
+      - gate: R2
+        owner_role: Installer maintainer and firmware signing custodian
+        blocker: Pre-partition installer enforcement, intended firmware signer verification and physical TPM assurance remain open; platform detection is not
+          cryptographic attestation.
+      - gate: R3
+        owner_role: Storage maintainer and recovery custodian
+        blocker: Ordered explicit lock, recovery/re-seed and independent restore acceptance remain open.
+      - gate: R4-R5
+        owner_role: Hardware operator and named human release assessor
+        blocker: Hardware tamper, outage, cold-boot and recovery evidence followed by bounded fleet waves; no automatic production approval from source tests.
+  root_integrity_prototype_2026_10_27:
+    state: vm_prototype_passed_not_production_accepted
+    implementation: tests/nixtest/root_integrity_vm_test.nix
+    specification: tests/root-integrity.yml
+    trust_path_map: docs/root-integrity-prototype.md
+    command: devenv tasks run tests:root-integrity-vm
+    scope: Isolated kernel dm-verity store with volatile root, UKI-pinned hash and synthetic release probe.
+    trust_assumption: The unsigned UKI is a trusted fixture; firmware authentication and hardware TPM policy are not established.
+    acceptance: R1 prototype evidence only; ENC-09 and R0-R5 remain open until their required evidence and human assessment exist.
+    verification:
+      - class: vm
+        command: nix build .#checks.x86_64-linux.root-integrity --no-link -L
+        result: Passed; expanded driver 104.91 seconds. Read-only ext4 dm-verity, volatile policy/unit/executable/environment reset, data/hash corruption,
+          whole-store substitution and explicit original-image recovery. Each tampered boot requires a kernel integrity error and no release marker for 15
+          seconds.
+      - class: eval
+        command: python -m pytest -q tests/test_root_integrity.py
+        result: 1 passed, 0 failed, 0 skipped; unrelated isolated source edits leave the image derivation unchanged.
+    unresolved: Unsigned UKI fixture, actual OpenBao/TPM release, full tamper matrix, authenticated updates, anti-rollback and physical acceptance.
+  first_deploy_review_2026_10_27:
+    reviewers: Three gpt-6.1-terra subagents with parent integration review.
+    scope: First operator-passphrase deployment; no unattended-unlock or hardware acceptance.
+    corrections:
+      - Rollout rejects disabled migration or unloaded pre-copy/cutover units before enrollment or volume mutation.
+      - Controller setup and volume evaluation are shared across plan/apply; rollout no longer carries the unsupported per-volume selector branch.
+      - Firmware enrollment requires a verified installed stub for the current profile generation as well as verified loaders.
+      - gc-10 guidance now states passphrase unlock and disabled migration; the packaged helper is exercised for both passphrase and TPM profiles.
+    remaining_gates:
+      - Confirm effective live host state, recovery and application compatibility before the separately authorized first deployment.
+      - Signed-stub generation matching does not prove exact profile identity or presence of its kernel/initrd; physical boot verification remains required.
+      - Production unattended unlock still requires R0-R5, including root integrity, physical TPM enforcement, ordered lock and independent recovery/re-seed.
+    evidence_policy: Local tests/builds demonstrate repository staging only; no host activation, firmware enrollment or readiness status change.
+    verification:
+      - command: python -m pytest -q tests/test_local_enrollment.py tests/test_openbao_enroll.py tests/test_operator_unlocked_storage.py
+          tests/test_secure_boot.py tests/test_secure_boot_controller.py
+        result: 45 passed, 0 failed, 0 skipped; passlib deprecation and old temporary-directory cleanup warnings.
+      - command: python -m pytest -q tests/test_devenv_command_catalog.py tests/test_shell_alias_contract.py
+        result: 30 passed, 0 failed, 0 skipped; old temporary-directory cleanup warnings.
+      - command: nix build '.#nixosConfigurations.gc-10.config.system.build.toplevel' --no-link
+        result: Passed; no activation.
+      - command: devenv tasks run autoconf:check nix-quality:generators
+        result: Passed.
+      - command: devenv tasks run docs:check nix-quality:check
+        result: Passed.
+      - command: python scripts/lint_structure.py
+        result: Passed; 23 manifests.
+  reviewed_at: "2026-10-26"
+  scope: Statisches Lesen von Commit 0a0d547b und dem gestagten Arbeitsbaum auf lx-annotate_ollama, ergänzt um Nix-Evaluierung, den OpenBao-VM-Test und
+    swtpm-Tests. Kein Remote-Zugriff, kein Deployment, keine Änderung am bestehenden Vault.
+  note: Befunde zum Arbeitsbaum beschreiben laufende Arbeit und sind keine Abnahmeevidenz. Befunde aus Schema 1.1 zur zentralen Freigabe sind als historisch
+    markiert.
+  backend_verification:
+    date: "2026-10-26"
+    scope: Isolierte lokale VM mit Dateizertifikaten ohne TPM (Klasse vm). Belegt das zentrale Backend der früheren Architektur; für das lokale OpenBao gibt es
+      noch keinen Nachweis.
+    package: OpenBao 2.6.4 aus dem bestehenden flake.lock
+    assessed_by: codex-openbao-vm-20261026
+    test_derivation: /nix/store/nzqn4rni0884pww3byq7np35iwx54j24-vm-test-run-openbao-release.drv
+    commands:
+      - command: pytest tests/test_openbao.py
+        result: Exit 0; 2 passed
+      - command: devenv tasks run tests:openbao-vm
+        result: Exit 0; vollständiger VM-Test erfolgreich, Testskript 80.72 Sekunden
+      - command: devenv tasks run nix-quality:check
+        result: Exit 0
+      - command: devenv tasks run docs:check
+        result: Exit 0
+      - command: python scripts/lint_structure.py
+        result: Exit 0; 23 Manifeste
+      - command: pytest -q tests/test_devenv_command_catalog.py
+        result: Exit 1; 22 passed, 2 failed; bestehende native rebuild-host-Einträge widersprechen Wrapper-Tests
+      - command: ./feature-tracking/tracker.py validate
+        result: Exit 0; 11 Feature-Definitionen gültig
+      - command: ./feature-tracking/tracker.py check luxnix_secret_lifecycle_readiness
+        result: Exit 1; bestehende Bereitschaft 0/13, nicht produktionsreif
+    blockers:
+      - Befehlskatalog-Vertrag für die vorhandenen nativen rebuild-host-switch/boot-Einträge ist nicht erfüllt.
+      - Übergreifende Secret-Lifecycle-Bereitschaft bleibt offen; keine Tracker-Abnahmen geändert.
+    references:
+      - tests/nixtest/openbao_vm_test.nix
+      - tests/nixtest/openbao_release.py
+  secure_boot_verification:
+    date: "2026-10-26"
+    scope: Statische Nix-Evaluierung des lanzaboote-Install-Hooks (Klasse eval), kein Boot-Nachweis.
+    assessed_by: claude-secure-boot
+    commands:
+      - command: pytest tests/test_secure_boot.py
+        result: Exit 0; 4 passed
+  cutover_verification:
+    date: "2026-10-26"
+    scope: lx_administration/storage/cutover.py mit echtem rsync auf Wegwerfverzeichnissen (Klasse unit). Noch nicht in operator_migration.py und die
+      systemd-Units integriert; kein VM- oder Hardwarenachweis.
+    assessed_by: claude-tpm-client-20261026
+    commands:
+      - command: pytest tests/test_storage_cutover.py
+        result: Exit 0; 7 passed, 0 skipped
+      - command: Mutationsprobe (ohne --delete, ohne Abschlussprüfung, ohne Abweichungsprüfung beim Übernehmen, ohne Staging-Modusprüfung)
+        result: jede Mutation 1 failed, 6 passed; Original wiederhergestellt, 7 passed
+  tpm_client_verification:
+    date: "2026-10-26"
+    scope: luxnix-tpm-release gegen zwei swtpm-Instanzen und einen synthetischen mTLS-Server (Klasse vm). Für die Hub-Anmeldung weiterverwendbar; kein Lauf
+      gegen echtes OpenBao und keine Hardware.
+    assessed_by: claude-tpm-client-20261026
+    commands:
+      - command: pytest tests/test_tpm_release.py
+        result: Exit 0; 3 passed, 0 skipped; Mutationsprobe für --disable und Steuerzeichenprüfung rot
+  baseline_confirmed:
+    - item: Volumes luxnix-secrets und luxnix-app-storage; der App-Container von gc-10 liegt unter /data/raid01
+      reference: systems/x86_64-linux/gc-10/default.nix
+    - item: secret_id_ttl=0, secret_id_num_uses=0, token_ttl=1h, token_max_ttl=4h
+      reference: modules/nixos/luxnix/vault/tools/hub-sites.nix
+    - item: vault-auth-setup ist ein Oneshot-Dienst; allowOffline = true
+      reference: modules/nixos/luxnix/vault/config.nix
+    - item: gs-02 betreibt Vault; dessen Daten liegen auf einem operator-unlocked Volume von gs-02 selbst
+      reference: systems/x86_64-linux/gs-02/default.nix
+    - item: Identity Salts sind quellenlokal außer für freigegebene gemeinsame Center (derzeit university_hospital_wuerzburg)
+      reference: secrets-management.yml
+  baseline_deviations:
+    - field: secure_boot_enabled
+      working_tree: Seit 2026-10-27 nicht mehr gesetzt; Gruppen-Default ist false. Lanzaboote und Signierpfad bleiben opt-in. Der Firmware-Zustand ist
+        unbekannt.
+      reference: ansible/inventory/group_vars/operator_unlocked_secrets.yml
+    - field: unlock_method
+      working_tree: Seit 2026-10-27 flottenweit passphrase (Operator-Entsperrung), auch gc-10; openbao.local bleibt auf gc-10 nur als Enrollment-Werkzeug aktiv
+      reference: ansible/inventory/host_vars/gc-10.yml
+    - field: root_filesystem
+      head: Root von gc-10 ist unverschlüsseltes btrfs
+      reference: systems/x86_64-linux/gc-10/disks.nix
+  criterion_findings:
+    - criterion: ENC-05
+      status: not_met
+      severity: blocking
+      finding: Ein lokales OpenBao ist nicht implementiert. provision() legt einen systemd-tpm2-Token mit PCR 7 an; dieser öffnet den Container ohne OpenBao und
+        widerspricht dem Profil.
+      references:
+        - lx_administration/storage/operator_migration.py
+    - criterion: ENC-06
+      status: open
+      severity: blocking
+      finding: Der verworfene Prototyp lud den Seal-Schlüssel per LoadCredentialEncrypted, prüfte aber nur die Länge von 32 Byte. Ein mit dem Host-Schlüssel
+        verschlüsseltes Credential wäre mit einer Plattenkopie entschlüsselbar. Die Neuimplementierung braucht eine erzwungene TPM2-Versiegelung samt
+        Negativtest.
+      references:
+        - docs/openbao-architecture.md
+    - criterion: ENC-13
+      status: not_met
+      severity: blocking
+      finding: unlockMethod erlaubt passphrase (Default) und tpm2; eine Inventar-Änderung stuft ohne Fehler herab, und unlock() enthält weiter die
+        Passwortabfrage.
+      references:
+        - modules/nixos/luxnix/operator-unlocked-storage/default.nix
+        - lx_administration/storage/operator_migration.py
+    - criterion: ENC-23
+      status: not_met
+      severity: blocking
+      finding: Alle drei Identity-Salt-Kopien liegen auf luxnix-secrets, also in einer Fehlerdomäne; das Hub-Backup schließt die Recovery-Kopie aus. Der
+        stündliche Timer lx-annotate-identity-salt-migration (--apply --allow-partial) kann Identitäten auf eine Generation umstellen, die nur in diesem
+        Container existiert.
+      references:
+        - ansible/inventory/group_vars/operator_unlocked_secrets.yml
+        - modules/nixos/services/lx-annotate-local/subservices/lx-annotate-identity-salt-migration.nix
+        - modules/nixos/services/lx-annotate-local/subservices/lx-annotate-identity-salts.nix
+    - criterion: ENC-20
+      status: not_met
+      severity: review
+      finding: Ein Abbruch von provision() zwischen luksFormat und Receipt bleibt dauerhaft bei never reformat stehen. tests/test_operator_storage_migration.py
+        schreibt dieses Steckenbleiben als gewolltes Verhalten fest (evidence_policy). enroll-tpm2 prüft nicht auf einen vorhandenen Token und belegt bei jedem
+        Aufruf einen weiteren Keyslot.
+      references:
+        - lx_administration/storage/operator_migration.py
+        - tests/test_operator_storage_migration.py
+    - criterion: ENC-19
+      status: not_met
+      severity: review
+      finding: Recovery-Datensätze sind an /etc/machine-id gebunden, die sich bei Neuinstallation ändert.
+      references:
+        - lx_administration/storage/provision.py
+    - criterion: ENC-01
+      status: not_met
+      severity: review
+      finding: unlockMethod wird nur für gc-10 in host_vars gesetzt und verletzt damit das Gruppenprofil. system.boot.secureBoot steht einmal in group_nixos von
+        operator_unlocked_secrets und ist Teil des Gruppenprofils, kein Verstoß.
+    - criterion: ENC-09
+      status: not_met
+      severity: blocking
+      finding: PCR 7 bindet nicht an Kernel, Initrd, Kommandozeile oder Nix-Store, und Root ist unverschlüsselt. Mit lokaler unbeaufsichtigter Entsperrung
+        erhält manipulierter Code nach dem Boot den Seal-Schlüssel.
+    - criterion: ENC-10
+      status: not_met
+      severity: review
+      finding: Die lanzaboote-Signierschlüssel liegen auf luxnix-secrets, also auf dem Volume, das automatisch entsperrt werden soll. lanzaboote v1.2.0 signiert
+        nur mit einem lokalen Schlüsselpaar (sbsign mit Schlüsseldatei); ein entfernter oder PKCS#11-Signierer existiert nicht. Damit Clients nur signierte
+        Artefakte erhalten, braucht LuxNix einen zentralen Signierschritt außerhalb des Hosts, dessen Ergebnis der Install-Hook gegen db.pem prüft. Der Ort des
+        Signierens ist eine offene Eigentümerentscheidung.
+      references:
+        - modules/nixos/system/boot/default.nix
+    - criterion: ENC-21
+      status: not_met
+      severity: review
+      finding: devenv/commands.yml enthält beim Eintrag rebuild-host-switch die hostgebundene Variante gc10_install; tests/test_devenv_command_catalog.py
+        schlägt mit 2 Fehlern fehl. Der Install-Hook bricht vor dem Signieren ab, wenn der Schlüsselring gesperrt ist oder fehlt, und installiert nie
+        unsignierte Images; das Firmware-Enrollment von Secure Boot ist aber ein manueller Schritt je Host ohne katalogisierten Befehl. Ein Abbruch vor der
+        Aktivierung bei fehlendem Secure Boot ist damit nicht erfüllt.
+      references:
+        - devenv/commands.yml
+    - criterion: ENC-22
+      status: not_met
+      severity: review
+      finding: Für TPM-Preflight, lokale Initialisierung, Re-Seed und flottenweiten Status existieren keine katalogisierten Befehle.
+    - criterion: ENC-03
+      status: open
+      severity: review
+      finding: Die Provisionierungstests mocken cryptsetup vollständig (Klasse unit). Sie belegen keine erhaltenen Nutzdaten oder Keyslots.
+      references:
+        - tests/test_operator_storage_migration.py
+    - criterion: ENC-25
+      status: open
+      severity: review
+      finding: Mehrere Nix-abhängige Tests überspringen sich ohne Nix per pytest.skip. Ergebnisse müssen skipped getrennt ausweisen.
+      references:
+        - tests/test_operator_unlocked_storage.py
+        - tests/test_secure_boot.py
+  historical_findings_schema_1_1:
+    - ENC-07 VPN-Zugangsdaten unter /etc/openvpn betrafen die zentrale Freigabe; für die lokale Entsperrung entfällt die Abhängigkeit, für das Hub-Enrollment
+      bleibt sie bestehen.
+    - ENC-08 zweites Shamir-Unseal auf gs-02 gilt nun nur für das zentrale OpenBao; es blockiert keinen Client-Boot.
+    - ENC-15 Accessor-Widerruf und Rollenentzug wurden im VM-Test des zentralen Backends belegt und gelten für die Hub-Identitäten weiter.
+  decisions_required:
+    - topic: Seal-Mechanismus des lokalen OpenBao
+      recommendation: Static Seal mit 32-Byte-Schlüssel aus systemd-creds encrypt --with-key=tpm2 und expliziter PCR-Policy; Ablehnung jedes nicht
+        TPM-versiegelten Credentials. Den Seal-Schlüssel vor der ersten Initialisierung in Admin-Vault und Notfallexport verwahren.
+      open: Unterstützung des Static Seal in 2.6.4 im VM-Test belegen; PCR-Auswahl gemeinsam mit ENC-09 festlegen.
+      status: recommended_not_decided
+    - topic: Unseal des zentralen OpenBao auf gs-02
+      recommendation: Shamir mit Custodians beibehalten; Clients booten unabhängig. Ein TPM-Static-Seal auch für den Hub ist eine eigene Entscheidung.
+      status: recommended_not_decided
+    - topic: Dauerhaftigkeit der Machine Salts
+      owner: Center identity custodian und endoreg-db maintainer
+      recommendation: Innerhalb des quellenlokalen Vertrags eine zweite Fehlerdomäne nutzen, etwa eine Kopie auf luxnix-app-storage, das auf gc-10 auf einer
+        anderen Platte liegt. Eine verschlüsselte Hinterlegung in der Recovery-Verwahrung ändert den Vertrag und braucht die Zustimmung der Eigentümer. Bis zur
+        Entscheidung startet die automatische Salt-Migration nur nach geprüfter Verwahrung in zwei Fehlerdomänen.
+      status: open_owner_decision
+    - topic: Secure-Boot-Signierschlüssel
+      recommendation: Eigene Schlüsselklasse und eigener Signiervorgang, getrennt von der Volume-Entsperrung; der private Schlüssel liegt nicht auf einem
+        automatisch entsperrten Volume (ENC-10).
+      status: recommended_not_decided
+    - topic: Integrität von Root und Nix-Store
+      recommendation: Einen nachgewiesenen Integritätspfad wählen, weil sonst ein manipuliertes, aber gebootetes System den Seal-Schlüssel erhält. Keylime ist
+        eine mögliche Attestierungskomponente; für die lokale Entsperrung zählt vor allem eine signierte PCR-Policy über das gesamte gestartete System.
+      status: recommended_not_decided
+  recommendation_source: Eigentümerentscheidungen vom 2026-10-26 und Review in docs/openbao-architecture.md. OpenBao-Storage wurde gegen den gepinnten Quellcode
+    v2.6.4 geprüft (docs/openbao.md); der Static Seal ist nur anhand von Zeichenketten im Binary vermutet.
+architecture_decisions:
+  authoritative_date: "2026-10-27"
+  offline_theft_rollout_2026_10_27:
+    requested_by: repository_owner_in_chat
+    scope: Planning update; no implementation acceptance or deployment authorization.
+    decision: Secure Boot plus authenticated executed root/system contents are required before production unattended unlock.
+    supersedes: ENC-09 residual-risk alternative and rollout_2026_10_26.inventory_switch as a sufficient release gate.
+    rollout: rollout_plan
+    offline_unlock: Retains the existing independent local unlock decision, including its lack of offline remote revocation.
+  local_transport:
+    decision_date: "2026-10-26"
+    approved_by: repository_owner_in_chat
+    decision: TCP is permitted only inside a private network namespace; local clients retain the private Unix socket.
+    reason: OpenBao 2.6.4 requires a TCP listener to synthesize Raft cluster addresses; Unix-only initialization fails.
+    implementation: modules/nixos/luxnix/openbao/default.nix
+    verification: tests/nixtest/openbao_local_vm_test.nix
+    acceptance: Local VM lane passed; hardware and fleet acceptance remain pending. No other criterion is waived.
+
+  local_role: Verwahrung der Container-Schlüssel, unabhängiges Raft, TPM-gebundener Seal, automatische Entsperrung und geordnetes Sperren.
+  hub_role: Maschinen- und Anwendungsidentitäten, PKI, Policies, Online-Widerruf und Auslieferung der Center-Salts für freigegebene gemeinsame Center;
+    Nachfolger der entsprechenden HashiCorp-Vault-Funktionen.
+  tpm_missing: Installation und Aktivierung blockieren; kein Rückfall.
+  hashicorp_vault: Ablösung nach abgenommener Kompatibilität, Datenübernahme, Issuer-Wechsel, Recovery und vollständiger Flottenmigration.
+  identity_salts: Quellenlokal gemäß secrets-management.yml. Das zentrale OpenBao zentralisiert weder Machine Salts noch Patienten- oder Untersuchungshashes.
+  rollout_2026_10_26:
+    decided_by: Repository-Eigentümer
+    provisioning: Alle Hosts der Gruppe legen fehlende deklarierte Container beim nächsten Update über den katalogisierten Deploy-Befehl an. Der Controller
+      verwahrt zuerst die Recovery-Passphrase in Admin-Vault und Notfallexport; danach legt der Host den Container an und speichert das Entsperrgeheimnis im
+      TPM-gesiegelten lokalen OpenBao.
+    gc10_adoption: gc-10 behält seine bestehenden Container. Die vorhandene Passphrase wird als Eintrag im lokalen OpenBao gespeichert und zusätzlich in
+      Admin-Vault und Notfallexport verwahrt.
+    gc10_consequence: Auf gc-10 sind Entsperrgeheimnis und Recovery-Passphrase damit identisch. Eine Offenlegung eines Eintrags trifft beide Wege. Folgeschritt
+      nach Abnahme ist ein eigener OpenBao-Keyslot und die Rotation der Passphrase (ENC-20, Rotation 2).
+    migration: Vorkopie im Hintergrund bei laufenden Schreibern, danach kurzer Stopp aller Schreiber, exakte Abschlusskopie, Prüfung, Umbenennung, Quittung,
+      Aktivierung der Binds, Start der Schreiber.
+    tpm_missing: Das Update bricht vor jeder Änderung ab; der Host bleibt im bisherigen Zustand.
+    inventory_switch: Die Gruppe wird erst auf unlockMethod local-openbao umgestellt, wenn Enrollment, Provisionierung im Deploy-Befehl und Cutover integriert
+      und im VM-Test belegt sind. Ein früheres Umschalten würde Hosts ohne initialisiertes lokales OpenBao gesperrt starten.
+  adoption_dedicated_keyslot_2026_10_26:
+    decided_by: Repository-Eigentümer (Chat vom 2026-10-26)
+    supersedes: rollout_2026_10_26.gc10_adoption und rollout_2026_10_26.gc10_consequence
+    decision: Bestehende Container erhalten bei der Übernahme sofort einen eigenen OpenBao-Keyslot mit einem zufälligen 256-Bit-Geheimnis. Der Eintrag im
+      lokalen OpenBao ist dieses Geheimnis, nicht die Recovery-Passphrase. Der Recovery-Keyslot bleibt unverändert; systemd-tpm2-Token und ihre Keyslots werden
+      entfernt. Die vorhandene Passphrase wird vorher über storage-provision escrow in Admin-Vault und Notfallexport verwahrt.
+    reason: Eine Offenlegung des Entsperreintrags betrifft damit nicht den Recovery-Weg; Entsperrgeheimnis und Recovery-Passphrase sind nie identisch.
+    implementation: lx_administration/storage/openbao_enroll.py (convert-volume), lx_administration/storage/local_enrollment.py (adopt)
+    verification: tests/nixtest/openbao_local_vm_test.nix (Klasse vm)
+    acceptance: VM-Nachweis für Übernahme, Idempotenz und erhaltene Daten/UUID; Hardware- und Flottenabnahme offen.
+  status: partially_implemented_not_accepted_not_deployed
+implementation_choices_not_prescribed:
+  - Konkretes TPM-Enrollment-Werkzeug oder konkrete PCR-Nummern, sofern ENC-06 und ENC-09 erfüllt sind
+  - Static Seal mit TPM-versiegeltem Credential oder PKCS#11-Seal
+  - Single-Node-Raft oder späterer redundanter Betrieb des zentralen OpenBao
+  - lanzaboote als zwingender oder allein ausreichender Integritätsnachweis
+  - Vault Agent beziehungsweise OpenBao Agent statt eines geeigneten Reauthentisierungsdienstes
+  - Keylime oder ein anderes Attestierungsverfahren
+repository_touchpoints_for_later_implementation:
+  - ansible/inventory/group_vars/operator_unlocked_secrets.yml
+  - modules/nixos/luxnix/openbao/ (getrennte Module für lokale und zentrale Rolle)
+  - modules/nixos/luxnix/operator-unlocked-storage/default.nix
+  - modules/nixos/luxnix/operator-storage-helper/default.nix
+  - lx_administration/storage/ (Entsperren, Provisionierung, OpenBao-Client)
+  - modules/nixos/services/lx-annotate-local/subservices/lx-annotate-identity-salt-migration.nix
+  - devenv/commands.yml
+  - ansible/playbooks/ (Preflight, Enrollment, Status, Widerruf für Gruppen)
+  - docs/operator-unlocked-storage.md
+  - docs/openbao.md
+  - docs/deployment-guide.md
+  - secrets-management.yml
+  - Betroffene structure.yml-Dateien bei geänderten Zuständigkeitsgrenzen
+sources:
+  - id: systemd_cryptenroll
+    title: systemd-cryptenroll
+    url: https://www.freedesktop.org/software/systemd/man/latest/systemd-cryptenroll.html
+    supports: LUKS2, TPM, Recovery und direkte oder signierte PCR-Policies.
+  - id: systemd_creds
+    title: systemd-creds
+    url: https://www.freedesktop.org/software/systemd/man/latest/systemd-creds.html
+    supports: Credential-Verschlüsselung mit Host-Schlüssel, TPM2 oder beidem; nur TPM2-Versiegelung schützt gegen eine Kopie der Root-Platte.
+  - id: systemd_rootfs
+    title: Boot Components & Root File System Discovery
+    url: https://systemd.io/ROOTFS_DISCOVERY/
+    supports: Getrennte Authentisierung von Bootloader, UKI und Root-/Usr-Dateisystem.
+  - id: openbao_cert_auth
+    title: OpenBao TLS certificate auth
+    url: https://openbao.org/docs/auth/cert/
+    supports: Zertifikats-Anmeldung als Grundlage einer TPM-gebundenen Geräteidentität am Hub.
+  - id: openbao_migration
+    title: OpenBao migration guide
+    url: https://openbao.org/docs/guides/migration/
+    supports: Migration von Vault nur für einen konkret getesteten Versionspfad beschrieben.
+  - id: vault_audit
+    title: Vault audit devices
+    url: https://developer.hashicorp.com/vault/docs/audit
+    supports: Ist kein Audit-Device beschreibbar, werden Anfragen abgelehnt; OpenBao übernimmt dieses Verhalten.
+
+boot_luks_revision:
+  date: '2026-10-30'
+  status: repository_work_not_physical_acceptance
+  supersedes: Local OpenBao/TPM container-unlock architecture above; retain prior evidence as historical only.
+  design: One LUKS2 root unlock, stage-2 keyfile data unlock, unchanged application encryption and identities.
+  runbook: docs/boot-storage-migration.md
+  required_acceptance:
+    - Verify actual encrypted root and every separate data/RAID member, not just declarations.
+    - Offline cold boot with one unlock and automatic service startup.
+    - Missing disk or key prevents writes under mountpoints with bounded recovery errors.
+    - Existing keys survive activation, reboot and a normal signed update.
+    - Independent root/data recovery and application backup decryption succeed.
+    - gc-10 disk swap remains disabled; all other active swap is protected.

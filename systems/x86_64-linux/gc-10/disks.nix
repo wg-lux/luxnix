@@ -1,3 +1,4 @@
+{ config, lib, ... }:
 let
   # --- User-configurable Disk Identifiers ---
   # System disk (approx. 500GB)
@@ -5,11 +6,11 @@ let
 
   dataDisk1Id = "/dev/disk/by-id/nvme-Micron_3400_MTFDKBA1T0TFH_213330EC4FFF";
 
-
-
   swapSize = "64G"; # Adjusted swap size
 in
-{
+(import ../encrypted-layout.nix { inherit config lib; }) {
+  imports = [ ./backup-exports.nix ];
+
   disko.devices = {
     disk = {
       # Primary System Disk
@@ -45,7 +46,7 @@ in
               name = "root_os"; # Nix attr name
               size = "100%"; # Use remaining space
               content = {
-                # Directly BTRFS, no LUKS
+                # Filesystem payload; the shared boot policy wraps it in LUKS2.
                 type = "btrfs";
                 extraArgs = [
                   "-f"
@@ -126,6 +127,12 @@ in
                       "noatime"
                     ];
                   };
+                }
+                // lib.optionalAttrs (config.luxnix.storage.operatorUnlocked.layout == "boot-luks") {
+                  # Preserve the existing data-disk placement without an inner container.
+                  application.mountpoint = "/var/lib/lx-annotate";
+                  postgresql.mountpoint = "/var/lib/postgresql";
+                  postgresql-backups.mountpoint = "/var/backup/postgresql";
                 };
               };
             };

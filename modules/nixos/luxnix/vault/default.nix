@@ -1,67 +1,27 @@
+# Vault server, client enrollment and hub PKI.
+#
+# context.nix holds shared settings. Each tools/ file adds the scripts of one
+# domain and may use the context plus every tools/ file listed before it.
+# options.nix and config.nix receive the complete context.
 {
   lib,
   pkgs,
   config,
   ...
 }:
-with lib; 
-with lib.luxnix; let
-  cfg = config.luxnix.vault;
-  adminName = config.user.admin.name;
-  sensitiveServiceGroupName = config.luxnix.generic-settings.sensitiveServiceGroupName;
-
-  sslCertGroupName = "sslCert";
-
-in {
-  options.luxnix.vault = {
-    enable = mkEnableOption "Enable Default Vault configuration";
-    dir = mkOption {
-      default = "${config.luxnix.generic-settings.secretDir}/vault";
-      type = types.str;
-      description = "The directory where Vault configuration files are stored";
-    };
-
-    adminPasswordFile = mkOption {
-      default = "${config.luxnix.vault.dir}/SCRT_local_password_${adminName}_password";
-      type = types.str;
-      description = "The path to the admin password file";
-    };
-
-    adminPasswordHashedFile = mkOption {
-      default = "${config.luxnix.vault.adminPasswordFile}_hash";
-      type = types.str;
-      description = "The path to the admin password hashed file";
-    };
-
-    key = mkOption { # DEPRECATED ?
-      default = "${config.luxnix.generic-settings.secretDir}/.key";
-      type = types.str;
-      description = "The path to the key file";
-    };
-
-    psk = mkOption {
-      default = "${config.luxnix.generic-settings.secretDir}/.psk";
-      type = types.str;
-      description = "The path to the psk file";
-    };
-
-    sslCert = mkOption {
-      default = "${cfg.dir}/ssl_cert";
-      type = types.str;
-      description = "Path to SSL certificate in vault";
-    };
-
-    sslKey = mkOption {
-      default = "${cfg.dir}/ssl_key";
-      type = types.str;
-      description = "Path to SSL key in vault";
-    };
-
-  };
-
-
-  config = mkIf cfg.enable {
-    # Vault directory is now managed by the managed-secrets role
-    # No tmpfiles rules needed here
-  };
+let
+  args = { inherit lib pkgs config; };
+  ctx =
+    lib.foldl' (acc: file: acc // import file (args // { ctx = acc; })) (import ./context.nix args)
+      [
+        ./tools/auth.nix
+        ./tools/server.nix
+        ./tools/hub-pki.nix
+        ./tools/hub-sites.nix
+        ./tools/client.nix
+      ];
+in
+{
+  options.luxnix.vault = import ./options.nix (args // { inherit ctx; });
+  config = import ./config.nix (args // { inherit ctx; });
 }

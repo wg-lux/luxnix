@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>LX Terminology</title>
+<h1>LX Terminology packages</h1>
+<p>Public versioned ZIP downloads for LX applications. Import validates a package before use.</p>
+<ul id="packages"></ul>
+<h2>Publish a package</h2>
+<p>Published files are publicly accessible. A published name/version cannot be replaced.</p>
+<form id="upload">
+<label>Upload token <input id="token" type="password" autocomplete="off" required></label>
+<label>Terminology ZIP <input id="file" type="file" accept=".zip" required></label>
+<button>Publish</button></form><p id="status" role="status"></p>
+<script>
+async function load() {
+  const response = await fetch('/api/packages');
+  if (!response.ok) throw new Error(`Catalog: HTTP ${response.status}`);
+  const {packages} = await response.json();
+  document.querySelector('#packages').replaceChildren(...packages.map(pkg => {
+    const li = document.createElement('li');
+    const a = document.createElement('a');
+    a.href = pkg.url; a.textContent = `${pkg.name} · ${pkg.version}`;
+    li.append(a); return li;
+  }));
+}
+const status = document.querySelector('#status');
+document.querySelector('#upload').addEventListener('submit', async event => {
+  event.preventDefault();
+  const button = event.target.querySelector('button'); button.disabled = true;
+  try {
+    const response = await fetch('/api/packages', {method:'POST',
+      headers:{Authorization:`Bearer ${document.querySelector('#token').value}`, 'Content-Type':'application/zip'},
+      body:document.querySelector('#file').files[0]});
+    if (!response.ok) throw new Error(`Upload: HTTP ${response.status}`);
+    const pkg = await response.json();
+    status.textContent = `Published: ${pkg.url}`;
+    await load();
+  } catch (error) { status.textContent = error.message; }
+  finally { button.disabled = false; document.querySelector('#token').value = ''; }
+});
+load().catch(error => { status.textContent = error.message; });
+</script></html>

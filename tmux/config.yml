@@ -1,0 +1,16 @@
+schema_version: 1
+
+inventory:
+  path: ../ansible/inventory/hosts.ini
+  default_group: tmux_hosts
+  default_user: admin
+
+sessions:
+  workspace:
+    name: all-luxnix-dir
+    local_command: zsh
+    remote_command: cd ~/luxnix-production && direnv allow && exec zsh -l
+  monitor:
+    name: ssh-servers
+    local_command: htop
+    remote_command: exec htop

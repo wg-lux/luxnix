@@ -1,0 +1,53 @@
+version: 1
+tier: domain
+path: ansible
+parent: ../structure.yml
+summary: Canonical host inventory, variable precedence, and guarded deployment playbooks.
+responsibilities:
+  - Own inventory membership and shared or host-specific variables
+  - Deliver configuration through reviewed playbooks
+  - Enroll hub sites with pinned SSH, per-host hidden sudo prompts and protected Vault token handling
+boundaries:
+  - Local CMDB facts are sensitive and must not be committed
+  - Remote changes require explicit target authorization and connectivity checks
+entrypoints:
+  - name: storage-readiness
+    file: playbooks/storage-readiness.yml
+    purpose: Read public boot and storage metadata through an explicitly limited inventory target without accessing credentials.
+  - name: operator-unlocked-secrets
+    file: inventory/group_vars/operator_unlocked_secrets.yml
+    purpose: Fleet guarded consumers and temporary legacy-container recovery metadata; final storage uses boot LUKS.
+  - name: shared-packages
+    file: inventory/group_vars/all/70-packages.yml
+    purpose: Fleet-wide package additions consumed by the central package module.
+  - name: secret-storage-preflight
+    file: playbooks/tasks/verify_secret_storage.yml
+    purpose: Gate secret sources, destinations and Ansible plaintext staging through the shared encrypted-storage verifier.
+  - name: inventory
+    file: inventory/hosts.ini
+    purpose: Inspect inventory ownership and interfaces.
+  - name: home-inventory
+    file: inventory/home-hosts.yml
+    purpose: Inspect home inventory ownership and interfaces.
+  - name: deployment
+    file: site.yml
+    purpose: Inspect deployment ownership and interfaces.
+dependencies:
+  internal:
+    - autoconf
+    - conf
+    - scripts
+    - lx_administration
+  external:
+    - Ansible
+    - SSH
+    - Vault
+submodules: []
+contracts:
+  - name: README
+    doc: inventory/group_vars/README.md
+  - name: readme
+    doc: playbooks/readme.md
+tests:
+  directory: ../tests
+  command: python -m pytest -q tests/test_inventory_contract.py tests/test_ansible_inventory.py

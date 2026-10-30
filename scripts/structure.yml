@@ -1,0 +1,55 @@
+version: 1
+tier: tool
+path: scripts
+parent: ../structure.yml
+summary: Operational frontends and repository validation tools invoked by canonical wrappers.
+responsibilities:
+  - Expose guarded inventory-aware administration commands
+  - Validate repository quality and context drift
+boundaries:
+  - Do not bypass documented Devenv wrappers for sensitive operations
+  - Manual destructive operations require reviewed targets and explicit authorization
+entrypoints:
+  - name: identity-secrets-runtime
+    file: run-identity-secrets.py
+    purpose: Retired central identity delivery entrypoint; rejects before credentials or network access.
+  - name: secret-storage-verifier
+    file: verify-secret-storage.py
+    purpose: Verify all encrypted block ancestry, reject active swap, and explicitly permit runtime tmpfs.
+  - name: identity-salt-provisioning
+    file: provision-identity-salts.py
+    purpose: Preserve encrypted local identity salts and enroll managed center sources; reject retired bundle enrollment.
+  - name: secret-rotation-check
+    file: check-secret-rotation.py
+    purpose: Validate public cross-repository source contracts without secret or runtime access.
+  - name: structure-linter
+    file: lint_structure.py
+    purpose: Inspect structure linter ownership and interfaces.
+  - name: autoconf
+    file: autoconf-pipeline.py
+    purpose: Inspect autoconf ownership and interfaces.
+  - name: nix-quality
+    file: nix-quality.py
+    purpose: Inspect nix quality ownership and interfaces.
+  - name: manual-operation-catalog
+    file: manual-operations.yml
+    purpose: Inspect manual operation catalog ownership and interfaces.
+dependencies:
+  internal:
+    - lx_administration
+    - devenv
+    - ansible
+  external:
+    - Python
+    - Bash
+    - Nix
+    - SSH
+submodules: []
+contracts:
+  - name: manual-operations
+    doc: manual-operations.yml
+  - name: commands
+    doc: ../devenv/commands.yml
+tests:
+  directory: ../tests
+  command: python -m pytest -q tests/test_structure.py tests/test_secret_operator_workflows.py

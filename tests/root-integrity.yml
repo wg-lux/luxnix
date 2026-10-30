@@ -1,0 +1,71 @@
+---
+version: 1
+kind: prototype-test-specification
+status: vm_prototype_passed_not_production_accepted
+scope: Disposable VM only; synthetic release sentinel, no production secrets or host store.
+entrypoint: devenv tasks run tests:root-integrity-vm
+evidence_classes:
+  source: Repository source establishes intended wiring only.
+  eval: Nix evaluation of the actual image dependency; no boot proof.
+  vm: Observed disposable VM result; does not prove hardware or deployment.
+  production: Host-specific firmware, credential, runtime and recovery evidence required separately.
+fixture:
+  store: ext4 Nix closure with dm-verity data and hash devices
+  root_hash: Embedded in unsigned UKI; fixture does not authenticate the UKI.
+  root: tmpfs with reconstructed etc
+  release: Synthetic sentinel; OpenBao binary and helper source are present but no OpenBao release is performed.
+matrix:
+  - case: source-dependency-isolation
+    status: passed_eval
+    expected: Editing an unrelated isolated fixture file changes neither helper source nor image derivation.
+    command: python -m pytest -q tests/test_root_integrity.py
+    result: 1 passed, 0 failed, 0 skipped.
+  - case: baseline-readonly
+    status: passed_vm
+    expected: Boot, release sentinel, verify readonly ext4 verity mapping and tmpfs root.
+  - case: volatile-policy-and-reboot
+    status: passed_vm
+    expected: Changed policy rejects service restart; reboot restores policy and discards volatile state.
+  - case: ext4-superblock-tamper
+    status: passed_vm
+    expected: Offline corruption of a required superblock causes a kernel verity error and no console release marker during a 15-second observation.
+  - case: hash-block-tamper
+    status: passed_vm
+    expected: Corrupt the first hash-tree block without changing the verity header; require a kernel metadata corruption error and no release marker for 15
+      seconds.
+  - case: store-substitution
+    status: passed_vm
+    expected: Replace the complete data partition with an independently formatted ext4 filesystem, retain the original UKI/hash tree/GPT, and require kernel
+      data corruption with no release marker for 15 seconds.
+  - case: volatile-unit-executable-override
+    status: passed_vm
+    expected: Direct writes beneath store-backed units fail; a demonstrated privileged runtime replacement of the volatile unit directory and executable is
+      discarded on reboot, including unit environment overrides.
+  - case: original-image-recovery
+    status: passed_vm
+    expected: After rejected tamper boots, explicitly select a fresh overlay of the original image and verify release through its verity mapping; no automatic
+      fallback.
+  - case: writable-override
+    status: planned
+    expected: Exercise persistent systemd, environment, loader and executable injection paths.
+  - case: update-rollback-recovery
+    status: planned
+    expected: Exercise matching and mismatched pairs, authorized rollback and recovery without silent unverified fallback.
+  - case: forged-uki-and-rehashed-store
+    status: planned
+    expected: Authenticate the UKI under an explicitly tested signing policy.
+limitations:
+  - Passed VM cases do not establish hardware or production acceptance.
+  - Verity checks blocks on access; unread corruption may remain undetected before release.
+  - An unsigned fixture does not authenticate the UKI or prove Secure Boot.
+  - No hardware TPM, real secrets, OpenBao release, fleet deployment or post-unlock application integrity is established.
+  - Anti-rollback and production recovery policy remain separate decisions.
+verification:
+  date: "2026-10-27"
+  command: devenv tasks run tests:root-integrity-vm
+  direct_command: nix build .#checks.x86_64-linux.root-integrity --no-link -L
+  result: Passed; driver script 104.91 seconds. Data corruption and whole-store substitution reported corrupted data block 2; hash-tree corruption reported
+    corrupted metadata block 1. No release marker appeared during each 15-second negative observation; explicit original-image recovery passed.
+  scope: Volatile unit/executable/environment override reset is exercised; persistent production injection, authenticated updates, retired-generation policy and
+    signed UKI acceptance remain open.
+  fixture_failures_resolved: EROFS discovery stalled; ext4 uses standard probing. Serial marker and QEMU reboot setup corrected.

@@ -1,3 +1,0 @@
-echo Running Table of Contents update...
-python generate-toc.py
-echo Task finished

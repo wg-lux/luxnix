@@ -1,40 +1,37 @@
 # inventory/host_vars/gc-09.yml
 ---
+luxnix_dev_repo: "/home/admin/luxnix"
 template_name: "main"
 
 host_roles:
   custom_packages.baseDevelopment: "true"
+  endoreg-client.defaultCenterKey: "university_hospital_wuerzburg"
 
-host_services: {}
+host_services:
+  luxnix.ollama.enable: "true"
+  luxnix.ollama.acceleration: '"cuda"'
+  luxnix.ollama.enableModelBootstrap: "true"
+  luxnix.lxAnnotateLocal.runtime.llmInferenceWorker.mode: '"always"'
+  luxnix.lxAnnotateLocal.django.enrollLegacyDefaultSalt: "true"
+  # Würzburg shares one center salt; differing local salts stay as historical keys.
+  luxnix.lxAnnotateLocal.django.centerIdentitySalt: "true"
+
+host_nixos:
+  # Existing migrated-host policy; other fleet hosts retain their encrypted swap.
+  swapDevices: "lib.mkForce [ ]"
+  systemd.generators.systemd-gpt-auto-generator: '"/dev/null"'
+  # Do not consume queued reports until the configured local model exists.
+  systemd.services.lx-annotate-celery-llm-inference-worker.after:
+    '[ "ollama-create-lx-gemma4-e2b-json.service" ]'
+  systemd.services.lx-annotate-celery-llm-inference-worker.requires:
+    '[ "ollama-create-lx-gemma4-e2b-json.service" ]'
+  nix.settings.max_jobs: 1
+  nix.settings.cores: 4
 
 extra_secret_names: []
 
 host_luxnix:
-  generic_settings.configurationPathRelative: '"luxnix"'
-  generic_settings.configurationPath: 'lib.mkForce "/home/admin/luxnix"'
-
-  generic_settings.hostPlatform: '"x86_64-linux"'
-  generic_settings.systemStateVersion: '"23.11"'
-
-  generic_settings.linux.cpuMicrocode: '"intel"'
-  generic_settings.linux.kernelModules:
-    - "kvm-intel"
-  generic_settings.linux.initrd.supportedFilesystems:
-    - "nfs"
-  generic_settings.linux.initrd.kernelModules:
-    - "nfs"
-  generic_settings.linux.initrd.availableKernelModules:
-    - "xhci_pci"
-    - "ahci"
-    - "nvme"
-    - "usb_storage"
-    - "sd_mod"
-  generic_settings.linux.supportedFilesystems:
-    - "btrfs"
-  generic_settings.linux.resumeDevice: '"/dev/disk/by-label/nixos"'
-  generic_settings.linux.kernelParams: []
-  generic_settings.linux.kernelModulesBlacklist: []
-
-  nvidia_prime.nvidiaBusId: '"PCI:1:0:0"'
-  nvidia_prime.onboardBusId: '"PCI:0:2:0"'
-  nvidia_prime.onboardGpuType: '"intel"'
+  openbao.local.enable: "true"
+  # Vault enrollment verified by the operator (2026-10-23); the center identity
+  # salt requires fail-closed machine authentication.
+  vault.client.auth.deferUntilProvisioned: "false"

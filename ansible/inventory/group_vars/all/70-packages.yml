@@ -1,0 +1,4 @@
+# Fleet-wide optional packages. Role bundles stay in roles/custom-packages.
+# See docs/package-management.md for role, host and custom-flake examples.
+group_luxnix:
+  packages.shared: []

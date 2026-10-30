@@ -5,9 +5,11 @@
   ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.roles.common;
-in {
+in
+{
   options.roles.common = {
     enable = mkEnableOption "Enable common configuration";
     packages = mkOption {
@@ -17,33 +19,42 @@ in {
         parted
         cryptsetup
         lsof
-        e2fsprogs
         nix-prefetch-scripts
       ];
       description = "List of additional packages to install.";
     };
-
   };
 
   config = mkIf cfg.enable {
-    environment.systemPackages = cfg.packages;
-    
-    systemd.services.NetworkManager-wait-online.enable = lib.mkForce false;
-    systemd.services.systemd-networkd-wait-online.enable = lib.mkForce false;
-    security.rtkit.enable = lib.mkDefault true;
-    programs.coolercontrol.enable = true;
+    luxnix.packages.roles.common = cfg.packages;
 
-    systemd.tmpfiles.rules = [
-      "d /etc/user-passwords 0700 admin users -"
-    ];
+    systemd = {
+      services.NetworkManager-wait-online.enable = lib.mkForce false;
+      services.systemd-networkd-wait-online.enable = lib.mkForce false;
+      tmpfiles.rules = [
+        "d /etc/user-passwords 0700 admin users -"
+      ];
+    };
 
-    roles.postgres.default.enable = lib.mkDefault true; 
-    roles.custom-packages.enable = lib.mkDefault true;
-    roles.managed-secrets.enable = lib.mkDefault true;
-    # services.luxnix.syncthing.enable = lib.mkDefault true;
+    roles = {
+      postgres.default.enable = lib.mkDefault true;
+      custom-packages.enable = lib.mkDefault true;
+      managed-secrets.enable = lib.mkDefault true;
+    };
 
-    services.luxnix.podman = {
-      enable = lib.mkDefault true;
+    services = {
+      luxnix.podman.enable = lib.mkDefault true;
+
+      # TODO (common-role owner): restrict authorized SSH keys to the VPN subnet;
+      # next action is to add the firewall/source-address option before moving
+      # this access to maintenance boot mode.
+      ssh = {
+        enable = true;
+        authorizedKeys = [
+          # This list grants admin access; services.ssh controls the SSH service.
+          "${config.luxnix.generic-settings.rootIdED25519}"
+        ];
+      };
     };
 
     hardware = {
@@ -52,40 +63,30 @@ in {
     };
 
     nixpkgs.hostPlatform = config.luxnix.generic-settings.hostPlatform;
-    
+
     cli.programs = {
       nh.enable = true;
-      nix-ld.enable = true;
     };
 
     security = {
+      rtkit.enable = lib.mkDefault true;
       sops.enable = true;
     };
 
     programs = {
+      coolercontrol.enable = true;
       zsh.enable = true;
       command-not-found.enable = true;
     };
 
-    services.virtualisation.podman.enable = true;
-
-
-    ########### MOVE TO MAINTENANCE BOOTMODE
-    #TODO limit to vpn subnet
-    services.ssh = {
-      enable = true;
-      authorizedKeys = [
-        # just adds authorized keys for admin user, does not enable ssh!
-        "${config.luxnix.generic-settings.rootIdED25519}"
-      ];
-    };
-
     system = {
       nix.enable = true;
-      boot.enable = true;
-      boot.secureBoot = false;
+      boot = {
+        enable = true;
+        secureBoot = mkDefault false;
+        plymouth = true;
+      };
       locale.enable = true;
-      boot.plymouth = true;
     };
   };
 }

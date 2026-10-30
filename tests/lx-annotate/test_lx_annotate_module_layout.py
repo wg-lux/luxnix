@@ -1,0 +1,95 @@
+from __future__ import annotations
+
+from pathlib import Path
+import re
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SERVICE_DIR = REPO_ROOT / "modules/nixos/services/lx-annotate-local"
+SUBSERVICE_DIR = SERVICE_DIR / "subservices"
+OPTIONS_DIR = SERVICE_DIR / "options"
+
+EXPECTED_OPTION_GROUPS = {
+    "center-admin-bootstrap": "centerAdminBootstrap",
+    "database": "database",
+    "data-cleanup": "dataCleanup",
+    "data-recovery": "dataRecovery",
+    "debug": "debug",
+    "django": "django",
+    "enable": "enable",
+    "hls-backfill": "hlsBackfill",
+    "hls-materialization": "hlsMaterialization",
+    "hub": "hub",
+    "monitoring": "runtime.monitoring",
+    "remote-access": "remoteAccess",
+    "runtime": "runtime",
+    "storage-relief": "storageRelief",
+    "streamable-migration": "streamableMigration",
+}
+
+
+def test_each_subservice_leaf_owns_one_documented_service() -> None:
+    leaf_modules = sorted(
+        path for path in SUBSERVICE_DIR.rglob("*.nix") if path.name not in {"workers.nix", "lx-annotate-request-throttle.nix"}
+    )
+
+    config_source = (SERVICE_DIR / "config.nix").read_text(encoding="utf-8")
+    aggregator_source = (SUBSERVICE_DIR / "workers.nix").read_text(encoding="utf-8")
+    imported = [
+        (base / path).resolve()
+        for base, source, pattern in (
+            (SERVICE_DIR, config_source, r"\./subservices/[\w/-]+\.nix"),
+            (SUBSERVICE_DIR, aggregator_source, r"\./workers/[\w/-]+\.nix"),
+        )
+        for path in re.findall(pattern, source)
+    ]
+    assert len(imported) == len(set(imported)), "Duplicate subservice imports"
+    assert set(imported) == set(SUBSERVICE_DIR.rglob("*.nix")), "Unregistered or missing subservices"
+    for module in leaf_modules:
+        source = module.read_text(encoding="utf-8")
+        relative_path = module.relative_to(SERVICE_DIR)
+        assert source.startswith("# Purpose:"), relative_path
+        assert "\n# Command:" in source, relative_path
+        service_assignments = re.findall(
+            r"^\s+(?:systemd\.)?services\.[A-Za-z0-9_-]+(?:\.serviceConfig)?\s*=",
+            source,
+            re.MULTILINE,
+        )
+        if module.name == "lx-annotate-identity-salts.nix":
+            # Provisioning owns one service and adds an explicit consumer dependency.
+            assert len(service_assignments) == 2, relative_path
+            assert re.search(
+                r'services\.lx-annotate-runtime-env = \{\s*'
+                r'after = \[ "lx-annotate-identity-salts.service" \];\s*'
+                r'requires = \[ "lx-annotate-identity-salts.service" \];\s*\};',
+                source,
+            ), relative_path
+        else:
+            assert len(service_assignments) == 1, relative_path
+
+    assert "systemd.services." not in aggregator_source
+    assert re.search(r"^\s+systemd\.services\.", config_source, re.MULTILINE) is None
+
+
+def test_option_aggregator_exposes_one_readable_module_per_group() -> None:
+    aggregator_source = (SERVICE_DIR / "options.nix").read_text(encoding="utf-8")
+    option_modules = sorted(OPTIONS_DIR.glob("*.nix"))
+
+    assert {path.stem for path in option_modules} == set(EXPECTED_OPTION_GROUPS)
+    for module in option_modules:
+        public_name = EXPECTED_OPTION_GROUPS[module.stem]
+        source = module.read_text(encoding="utf-8")
+        option_root = "options.services.luxnix.lxAnnotateLocal"
+        direct_assignment = re.findall(
+            rf"^\s+{re.escape(option_root + '.' + public_name)}\s*=",
+            source,
+            re.MULTILINE,
+        )
+        if direct_assignment:
+            assert len(direct_assignment) == 1
+        else:
+            assert f"{option_root} = {{" in source
+            assert len(re.findall(rf"^    {re.escape(public_name)} = ", source, re.MULTILINE)) == 1
+        assert f"./options/{module.name}" in aggregator_source
+
+    assert "options.services.luxnix.lxAnnotateLocal" not in aggregator_source

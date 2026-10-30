@@ -1,4 +1,4 @@
-{ lib, cfg, hostConfigs, hostname, syncthingHome, ownNetworkCluster, ... }:
+_:
 
 {
   # Options section

@@ -1,0 +1,41 @@
+version: 1
+tier: tool
+path: devenv
+parent: ../structure.yml
+summary: Contributor shell composition, task definitions, and the supported command catalog.
+responsibilities:
+  - Provide shared contributor tooling and canonical task wrappers
+  - Classify command effects and operator confirmation requirements
+boundaries:
+  - Do not duplicate package lists or Python toolchains
+  - Shell entry must not perform remote deployment or secret synchronization
+entrypoints:
+  - name: composition
+    file: default.nix
+    purpose: Inspect composition ownership and interfaces.
+  - name: tasks
+    file: tasks.nix
+    purpose: Inspect tasks ownership and interfaces.
+  - name: wrappers
+    file: scripts.nix
+    purpose: Inspect wrappers ownership and interfaces.
+  - name: catalog
+    file: commands.yml
+    purpose: Inspect catalog ownership and interfaces.
+dependencies:
+  internal:
+    - scripts
+    - tests
+  external:
+    - Devenv
+    - uv
+    - Nix
+submodules: []
+contracts:
+  - name: commands
+    doc: commands.yml
+  - name: development
+    doc: ../docs/development.md
+tests:
+  directory: ../tests
+  command: python -m pytest -q tests/test_devenv_command_catalog.py

@@ -1,0 +1,38 @@
+version: 1
+tier: domain
+path: lib
+parent: ../structure.yml
+summary: Snowfall support libraries and explicit documentation or database utilities.
+responsibilities:
+  - Provide reusable deployment and module helpers
+  - Generate documentation indices from canonical navigation
+boundaries:
+  - Do not invoke database migration during documentation validation
+  - Do not hand-edit the generated documentation index
+entrypoints:
+  - name: deploy
+    file: deploy/default.nix
+    purpose: Inspect deploy ownership and interfaces.
+  - name: module
+    file: module/default.nix
+    purpose: Inspect module ownership and interfaces.
+  - name: toc-generator
+    file: toc-generator/generate-toc.py
+    purpose: Inspect toc generator ownership and interfaces.
+dependencies:
+  internal:
+    - docs
+    - systems
+  external:
+    - Snowfall
+    - deploy-rs
+    - PyYAML
+submodules: []
+contracts:
+  - name: architecture
+    doc: ../docs/architecture.md
+  - name: documentation
+    doc: ../docs/documentation.md
+tests:
+  directory: ../tests
+  command: python -m pytest -q tests/test_documentation_contract.py

@@ -1,0 +1,30 @@
+version: 1
+tier: domain
+path: autoconf
+parent: ../structure.yml
+summary: Centralized pipeline options; generated inventory and merged variables are derived local outputs.
+responsibilities:
+  - Own generator paths and inventory-wide parsing options
+  - Describe generation inputs and output lifecycle
+boundaries:
+  - Do not hand-edit generated inventory or merged variables
+  - Local facts and private reports must remain outside source control
+entrypoints:
+  - name: options
+    file: config.yml
+    purpose: Inspect options ownership and interfaces.
+dependencies:
+  internal:
+    - ansible
+    - conf
+    - lx_administration/autoconf
+  external:
+    - YAML
+    - Jinja2
+submodules: []
+contracts:
+  - name: autoconf
+    doc: ../docs/autoconf.md
+tests:
+  directory: ../tests
+  command: python -m pytest -q tests/test_autoconf_config.py tests/test_autoconf_layout.py

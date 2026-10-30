@@ -1,0 +1,18 @@
+{
+  "task_status": "complete",
+  "findings": [
+    {
+      "claim": "Each systemd unit can move to one named subservice module with same-name timers or paths colocated.",
+      "source": "modules/nixos/services/lx-annotate-local/config.nix:2177",
+      "confidence": "high"
+    },
+    {
+      "claim": "Worker services need individual modules while their shared factory may remain centralized.",
+      "source": "modules/nixos/services/lx-annotate-local/subservices/workers.nix:8",
+      "confidence": "high"
+    }
+  ],
+  "gaps": [
+    "The upstream lx-annotate web ExecStart remains owned by the pinned application NixOS module."
+  ]
+}

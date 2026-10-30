@@ -1,0 +1,84 @@
+version: 1
+tier: domain
+path: docs
+parent: ../structure.yml
+summary: Maintained architecture, contributor guidance, and operator runbooks.
+responsibilities:
+- Document ownership and operational risks
+- Maintain navigation through mkdocs.yaml and regenerate the derived table of contents
+boundaries:
+- Do not create parallel readiness trackers
+- Do not include secrets or local host facts in guides
+entrypoints:
+- name: boot-storage-migration
+  file: boot-storage-migration.md
+  purpose: Backup, reprovision, restore and physical acceptance for boot-time LUKS2 storage.
+- name: storage-login-access
+  file: storage-login-access.md
+  purpose: Account-bound OpenBao login unlock, remote sudo lock/unlock and private backing roots.
+- name: root-integrity-prototype
+  file: root-integrity-prototype.md
+  purpose: Verified-store research prototype, production trust-path map and remaining authentication gaps.
+- name: gc-10-startup
+  file: gc-10-startup.md
+  purpose: Ordered gc-10 signing, enrollment, automatic startup and recovery runbook.
+- name: openbao-local
+  file: openbao-local.md
+  purpose: Local OpenBao bootstrap implementation and remaining migration gates.
+- name: openbao
+  file: openbao.md
+  purpose: Isolated hub backend, client compatibility and staged Vault migration gates.
+- name: openbao-architecture
+  file: openbao-architecture.md
+  purpose: Decided target of local TPM-sealed OpenBao for volume unlock and hub OpenBao for identity provisioning, with ordering rules and known weaknesses.
+- name: tpm-release-client
+  file: tpm-release-client.md
+  purpose: TPM-bound release client identity, fetch protocol, exit classes and open integration gates.
+- name: operator-unlocked-storage
+  file: operator-unlocked-storage.md
+  purpose: Reusable manual-unlock module, gc-09/gc-10 mount contracts, migration gates and reboot recovery.
+- name: sops-application-secrets
+  file: sops-application-secrets.md
+  purpose: Production setup path for moving host-export application secrets to sops-nix with a per-host age key on operator storage.
+- name: secure-boot
+  file: secure-boot.md
+  purpose: Fleet Secure Boot with a controller-held key; custody, per-generation signing, host import and firmware enrollment.
+- name: vault-encrypted-tls-storage
+  file: vault-encrypted-tls-storage.md
+  purpose: Preserve gs-02 TLS, managed secrets and enrollment state in manually unlocked LUKS storage, including bind-mount activation and interrupted-migration recovery.
+- name: package-management
+  file: package-management.md
+  purpose: Canonical package ownership and installation workflow.
+- name: machine-secrets-checklist
+  file: machine-secrets-checklist.md
+  purpose: Machine provisioning inputs, secret lifecycle ownership, and acceptance gates.
+- name: secret-rotation
+  file: secret-rotation.md
+  purpose: Canonical catalog usage and application/credential ownership boundaries.
+- name: center-identity-salt-activation
+  file: center-identity-salt-activation.md
+  purpose: Operator runbook for shared center identity salt activation, recovery and hub continuity.
+- name: documentation-home
+  file: index.md
+  purpose: Inspect documentation home ownership and interfaces.
+- name: architecture
+  file: architecture.md
+  purpose: Inspect architecture ownership and interfaces.
+- name: context-protocol
+  file: agent_context.md
+  purpose: Inspect context protocol ownership and interfaces.
+dependencies:
+  internal:
+  - feature-tracking
+  external:
+  - MkDocs
+  - Markdown
+submodules: []
+contracts:
+- name: documentation
+  doc: documentation.md
+- name: agent_context
+  doc: agent_context.md
+tests:
+  directory: ../tests
+  command: python -m pytest -q tests/test_documentation_contract.py
