@@ -1,8 +1,11 @@
 # Boot LUKS storage: migration and recovery
 
+Start with the [short operator checklist](boot-storage-operator.md). Use this guide
+for the detailed procedures and evidence requirements linked from each step.
+
 ## Architecture and scope
 
-The final fleet layout is `luxnix.storage.operatorUnlocked.layout = "boot-luks"`
+The default encrypted fleet layout is `luxnix.storage.operatorUnlocked.layout = "boot-luks"`
 (the default). EFI remains unencrypted. One LUKS2 root mapping opens in the
 systemd initrd with the operator credential. Root contains `/nix`, homes,
 persistent logs, temporary files, service secrets and secondary disk keyfiles.
@@ -42,6 +45,196 @@ Exports and remote backups are independent protection boundaries. In particular,
 gc-10 retains the explicitly authorized plaintext annotation-export disk; it is
 not suitable for application data, keys, database backups or recovery bundles.
 Remote backups need their own encryption, credentials, retention and restore tests.
+
+## Unencrypted OS installation
+
+Select this mode explicitly to install and boot LuxNix before provisioning
+protected application storage. The OS disk, homes and logs are readable offline.
+Keep secrets and protected application data on their configured encrypted volumes;
+leave those services guarded until the volumes are provisioned and unlocked.
+
+1. In `ansible/inventory/host_vars/<host>.yml`, select:
+
+   ```yaml
+   host_luxnix:
+     storage.operatorUnlocked.enable: "true"
+     storage.operatorUnlocked.layout: '"unencrypted-root"'
+     storage.operatorUnlocked.migration.enable: "false"
+   ```
+
+   Use the [Autoconf workflow](autoconf.md) to render, review and regenerate. Check
+   the evaluated root device and secondary disks before approving provisioning.
+   Leave existing host selections unchanged unless that host is the target.
+2. In the private install specification add `root_encryption: none`. For new,
+   empty disks also set `installation: fresh` and `source_retention: new-disks`.
+   Keep the host, hardware UUID and exact disk identities. For existing data,
+   retain `installation: migration` (the default) and its backup/restore evidence.
+3. Follow the [operator checklist](boot-storage-operator.md). Stage the existing
+   or newly issued root-private administrator hash before installation. Keep the
+   controller's credentials and install evidence on independent encrypted media.
+   The fresh path asks for `recovery` and `prepared` assessments, then physical
+   `acceptance`; do not invent source backups for an empty new machine.
+4. Confirm the displayed `UNENCRYPTED` installation choice. Boot and use normal
+   administrator SSH; there is no early disk-unlock prompt. Verify login and
+   reboot recovery. Provision protected volumes later using the existing
+   [storage provisioning guide](operator-unlocked-storage.md#explicit-provisioning-and-recovery-custody).
+   After verifying those volumes, set
+   `storage.operatorUnlocked.autoStartProtectedServices: "true"` in host YAML,
+   regenerate and deploy the reviewed configuration. Until then, keep protected
+   services deferred; an explicit start still requires their encrypted mounts.
+
+The installer verifies the actual root device and rejects an encrypted root for
+this mode. It never decrypts, reformats or silently changes an existing disk.
+Other declared disk encryption and protected-service guards remain in force.
+Selecting unencrypted root does not make a host encryption-ready or waive
+application data protection. Restore encrypted-root selection only with a separate
+reviewed reprovisioning and restore plan.
+
+## Guided operator workflow
+
+Keep using the existing system until the operator has tested recovery. The
+workflow never erases a disk, replaces a volume key or reboots a computer. It can
+install the reviewed system only after the separate preparation steps below.
+If a check says **Stop**, keep the disks and recovery copies and ask the named
+operator to resolve that check. Do not disable a guard or change an evidence
+answer just to continue. Reverting a repository change is possible; reverting
+disk formatting requires retained disks or a tested whole-disk restore.
+
+The operator uses `devenv shell boot-storage-migration --help` from the reviewed
+checkout. `plan`, `status`, `attest`, `prepare-access`, `check` and `install` are separate actions;
+there is no "do everything" or automatic rollback action. Only `install` changes
+the target's boot installation, and it requires an interactive confirmation
+containing the selected host and plan identifier. Formatting, key enrollment,
+restoration, firmware changes and reboot remain separately authorized operations.
+
+1. **Select the computer and disks.** Prepare a private YAML specification on
+   encrypted controller storage. It contains `schema_version: 1`, `host`,
+   `checkout` (the absolute durable clean release checkout), `hardware_uuid`
+   (the target's independently recorded DMI product UUID), `source_retention`
+   (`old-disks` or `whole-disk-image` for migration), and `disks`.
+   Optional `root_encryption` defaults to `luks2`; select `none` only with the
+   matching `unencrypted-root` host configuration. Optional `installation`
+   defaults to `migration`; select `fresh` with `source_retention: new-disks`
+   only for empty new disks. Each disk has its exact
+   `/dev/disk/by-id/` `path`, `serial` and integer `size_bytes`. These are real
+   operator observations, never values copied from an example. The selected
+   disk paths must exactly match the evaluated layout. Prepare any intended
+   inventory change through Autoconf and review it before creating the plan.
+2. **Create the plan.** Run `devenv shell boot-storage-migration plan --spec
+   <private-spec.yml> --state <private-state-directory>`. The parent directory
+   must already be private and encrypted. This builds the selected closure and
+   binds the plan to its source revision, lockfile, layout and disk selection.
+   It does not contact or change the target. Repeating the same plan is safe;
+   a different selection needs a new state directory.
+3. **Record actual recovery, backup and restore results.** Complete the runbook
+   steps below, then use `devenv shell boot-storage-migration attest --state
+   <private-state-directory> --stage <stage> --evidence <private-report.json>
+   --assessor <reviewer>`. Stages are ordered: `recovery`, `backup`, `restore`,
+   `prepared`, then physical `acceptance` after installation. Fresh installation
+   uses only `recovery`, `prepared`, then `acceptance`; use the exact check names
+   from `status`. Evidence is a
+   named human assessment, not an automatically proven restore. Each JSON
+   report contains exactly `schema_version: 1`, `plan_id`, `stage`, `checks`
+   and a nonempty `artifacts` list of private absolute report/manifest paths.
+   `status` lists the required check names for each stage; each must reflect a
+   genuinely completed check. Migration recovery evidence must include exactly one fresh
+   readiness admission JSON report collected through the pinned SSH workflow
+   below. Save the report object itself, not the surrounding Ansible output.
+   The gate verifies its content hash, host, observation time and admission
+   probes again. Its source disk selection can differ from replacement disks
+   in the installation plan. Never put credentials or
+   decryption keys in these reports. Artifact hashes bind the evidence to the
+   plan; changed artifacts invalidate it. Pre-install assessments expire after
+   24 hours and must be reassessed with updated evidence, not merely re-submitted.
+4. **Check preparation from the trusted installer.** Preserve the state and
+   evidence on independent encrypted storage, with the same absolute paths and
+   appropriate root ownership when used as root. Preserve the clean checkout
+   at its planned path and make the built closure available in the installer.
+   `check --state <private-state-directory> --stage provision` checks the applicable recovery,
+   backup and restore prerequisites plus the actual hardware selection. Selected
+   target disks must be unmounted with no open mappings at this stage. It
+   performs no formatting and does not grant permission to format. After
+   separately authorized provisioning, key enrollment and restoration, record
+   `prepared` evidence and run the same command with `--stage install`. Before
+   that assessment, run `prepare-access --state <private-state-directory>` from
+   the trusted installer. It copies a missing administrator password hash from
+   the configured restored secret, and prepares a missing dedicated initrd SSH
+   host identity when remote unlock is selected. Existing credentials are
+   validated and preserved. Installation checks administrator hash format,
+   private encrypted storage, normal-user/wheel membership and explicit SSH
+   authorized keys before and after installation; it does not test a live login.
+5. **Install only the prepared target.** From the trusted installer, use the
+   guarded native command `python -m lx_administration.storage.boot_migration
+   install --state <private-state-directory>` with the reviewed Python package
+   and its dependencies available. It verifies the actual target mount graph,
+   encrypted ancestry, secondary keys and disk identities before invoking the
+   fixed install-only command. The operator sees the selected disks and confirms
+   the exact plan. A machine-wide lock prevents concurrent installers even
+   across different plan directories. It does not activate the old running
+   system or reboot.
+6. **Accept the physical result.** Complete the cold-boot, application and
+   recovery checks below before recording `acceptance`. Keep old disks and
+   backups until a named operator approves retention changes separately.
+
+Use `devenv shell boot-storage-migration status --state
+<private-state-directory>` to see the recorded steps. A successful installation
+is not repeated on retry. If an installation was interrupted, normal retry is
+blocked: inspect its actual state, record `install-recovery` evidence and only
+then use `install --retry-interrupted`. That retry runs the same install-only
+operation and rechecks the target; it never formats or selects a different
+closure. Do not delete the state directory to bypass interruption handling.
+
+Secure Boot is a separate explicit policy. The installer must not downgrade
+it silently. Use the [signing workflow](secure-boot.md) for supported existing
+signed installations; an unsupported signed first-install procedure is a
+blocker. Historical OpenBao/TPM enrollment is not a prerequisite for current
+operator-passphrase boot encryption.
+
+### Remote SSH root unlock
+
+Remote unlock is opt-in; no fleet host is enabled by this change. Configure
+`luxnix.storage.operatorUnlocked.remoteUnlock` through the canonical host YAML
+and regenerate normally. Set `enable`, the exact `interface`, required NIC
+`kernelModules`, a static CIDR `address`, optional `gateway`, explicit management
+`allowedSources` CIDRs and dedicated Ed25519 `authorizedKeys`. The default SSH
+port is 2222. These keys grant only the interactive disk-unlock prompt; shell
+commands, forwarding and inherited normal-login keys are disabled. Root waits
+without a timeout or passphrase attempt limit in this mode, so an operator can
+reconnect after a mistaken passphrase. Console unlock remains available.
+
+`prepare-access` creates the dedicated host key once on encrypted target root
+and prints its public key. Pin it in the operator's known_hosts through the
+trusted installer channel before connecting. Then use SSH with strict host-key
+checking and a terminal (`ssh -tt -p 2222 root@<configured-address>`), enter the
+root disk credential, and reconnect to normal SSH after boot. Test this from the
+actual management network before relying on unattended power restoration.
+
+The dedicated SSH host private key is included in the unencrypted initrd. Never
+reuse a normal host or login key for this purpose. Use a trusted management
+network and protect the boot chain. The current controller-held Secure Boot
+signing workflow rejects host-local initrd secrets, so combining it with this
+remote-unlock mode is currently unsupported; do not disable that assertion or
+silently downgrade Secure Boot. Hardware, firmware and network recovery still
+need a physical acceptance test.
+
+### Readiness observations versus admission
+
+`devenv shell storage-readiness --limit <host>` retains the diagnostic observation
+mode. A successful observation only means the report was collected. For an
+enforced baseline, pass a private YAML request with `-e @<private-request.yml>`:
+`storage_readiness_mode: admit`, `storage_expected_host`,
+`storage_expected_layout` (`legacy-containers`, `unencrypted-root` or `boot-luks`) and
+`storage_expected_serials` (the exact list of all attached physical disk serials).
+Admission requires one selected host and administrator access. Missing probes,
+wrong identities, mismatched boot generations or active swap reject admission.
+This intentionally conservative migration baseline requires no active swap,
+even though normal runtime supports encrypted swap. It makes no swap changes.
+
+Boot-LUKS admission calls the installed verifier, including read-only secondary
+key tests. It may access protected keys but never prints their contents. Reports
+include observation time, boot identity and a content hash; keep them private.
+Admission is not proof of independent recovery, restore usability or permission
+to erase disks. The prepared-target installer performs fresh machine checks.
 
 ## Before touching a production disk
 
@@ -87,6 +280,146 @@ in-place conversion or overwrite the only working LUKS header.
    keys, including data encrypted before rotations. Compare protected manifests
    and ownership. Retain the backup and old storage until production acceptance.
 
+## Snapshot backups from the existing gc-09 and gc-10 installations
+
+For these two hosts, `devenv shell storage-migration-snapshot` preserves the existing mounted
+Btrfs subvolumes without changing their layouts. It briefly masks and stops
+application/database writers, freezes mounted inner filesystems while snapshotting
+their backing storage, then unfreezes and restores previously active services.
+Inactive services remain inactive. Review free space first: retained snapshots
+consume additional space as the original filesystems change. Keep the source
+snapshots until independently verified restore acceptance; no automatic cleanup
+or storage cutover is performed.
+
+One host-wide lock serializes snapshot operations, including different snapshot
+identifiers. A completed retry validates the original source and retained
+read-only snapshots and returns unchanged. A partial run is retained and never
+combined with a later snapshot window. Use the same wrapper and identifier with
+`-e migration_snapshot_action=status` to inspect it. The host systemd supervisor runs journal recovery automatically after a crash,
+SSH disconnect or runtime timeout, with bounded retries. It kills remaining
+snapshot children before thawing and restarting services. OpenBao must actually
+be initialized and unsealed before its dependent writers restart. If automatic
+recovery remains unsuccessful, inspect status and explicitly select `-e migration_snapshot_action=recover` to restore
+only the journaled writer and freeze state. Recovery refuses changed source
+identities and leaves writers stopped if thawing fails. Then choose a new
+snapshot identifier. Do not remove journals, snapshots or locks to force a retry.
+Old journals created before this recovery protocol require manual review.
+
+Run connectivity first, then the snapshot wrapper with an explicit host, unique
+identifier and the existing private sudo-password file on encrypted controller
+storage. Use `-e ansible_become_user=root`. Never send passwords through chat or
+command arguments.
+
+New backups use **dedicated native age identities**, separate from SSH login.
+The operator selects private directories on encrypted controller storage and
+independent encrypted custodian media, then runs:
+
+```sh
+devenv shell storage-recovery-custody prepare \
+  --identity <controller-age-identity> \
+  --custodian-identity <independent-age-identity>
+```
+
+The command creates only missing identities, refuses replacement, checks that
+the two locations share no physical disk, and proves both identities can decrypt
+a freshly encrypted challenge. A repeated `prepare` preserves existing valid
+keys. `verify` with the same arguments repeats the storage and cryptographic
+checks without generating keys. The custodian must also be able to unlock the
+independent media without the original controller; a successful device probe
+cannot establish that human recovery capability.
+
+`devenv shell storage-migration-backup` accepts the host and snapshot identifier,
+an exact existing backup mountpoint, `--identity <controller-age-identity>`,
+`--custodian-identity <independent-age-identity>` and the private sudo-password
+file. See `devenv/commands.yml` for the complete arguments. Both identity media
+must be available for the automated verification. The wrapper reads only the
+recorded read-only snapshots and encrypts compressed Btrfs streams to both public
+recipients. The backup disk itself may be plaintext because only ciphertext is
+written; neither private identity may be stored there unencrypted.
+
+Each archive is fully decrypted and checked against its stream hash with **each**
+identity before publication. `.partial` files are not accepted backups.
+`receipt.json` records components and verified custody. Reruns authenticate
+completed archives with both identities and refuse to overwrite incomplete ones.
+Changing recipients does not rewrite old archives: retain the previous identities
+and backups, and use a new snapshot identifier for subsequent backups.
+
+For gc-09's operator-selected local external disk,
+`ansible/playbooks/storage-local-backup.yml` receives only two distinct public
+native age recipients, `backup_recipient` and `backup_custodian_recipient`. It
+verifies the exact mounted filesystem UUID and writes new root-private
+directories without modifying existing files. The
+`luxnix-local-migration-backup.service` job creates `.unverified` ciphertext;
+these files are not accepted backups. For each component, run the standalone
+archive tool's `--verify` operation once with each recorded identity supplied on
+stdin. It keeps the identity in an anonymous RAM descriptor, rejects disk
+swap/writeback and authenticates the whole archive. Only after both recipients
+have passed does it publish the archive. Never save an identity on gc-09's
+plaintext root. Verification and creation hold the same receipt lock.
+
+These are **filesystem snapshots, not whole-disk images**: they cover root, home,
+Nix, persist and logs, plus gc-10's data filesystem. They preserve existing inner
+container files, including their headers. Unmounted unrelated subvolumes and
+external export disks are outside that scope. Preserve EFI/partition metadata
+and controller `.lxv` custody separately. Do not reuse source disks on the basis
+of these archives alone; retain old disks or obtain the full-disk images required
+above. PostgreSQL/media restore tests are still mandatory.
+
+A supplementary host copy of a dedicated age identity can be made with the
+operator-authorized `ansible/playbooks/storage-backup-identity-escrow.yml`, through
+`scripts/run-secret-playbook.sh` and an explicit single-host `--limit`. Supply a
+private variables file containing `recovery_expected_host`, `recovery_mount`,
+`backup_custody_id`, `backup_identity_source` and `backup_identity_recipient`.
+The recovery host must match the selected inventory host; the mount must already
+be encrypted and mounted. The public recipient must match the native age identity.
+The playbook preserves it at
+`<recovery_mount>/storage-recovery/<backup_custody_id>/identity.agekey`, root-owned
+0400, refuses a different existing file and verifies bytes and recipient after
+copying. The operator chooses a custody scope that describes the backups it
+protects; there is no implicit `gc-02` scope or default SSH private key. This
+supplementary host copy does not replace independent offline custody.
+
+**Existing SSH-encrypted backups remain recoverable with their original private
+SSH identity.** The new workflow neither deletes that identity nor re-encrypts old
+archives. Revoking its SSH login authorization does not invalidate decryption;
+losing the private bytes does. Retain old encrypted identity copies until old
+archives have passed independent restore and their retention is explicitly
+ended. The host-local tool supports `--legacy-ssh-identity --verify <component>`
+only for checking existing legacy archives. It does not create new SSH-encrypted
+backups. Old copies already stored on gs-02 are not removed by the new playbook;
+review their access and SSH authorization separately without discarding backup
+recovery material.
+
+On an isolated encrypted Btrfs restore target, decrypt each archive with
+`age -d -i <the-corresponding-identity>`, decompress with `gzip -d`, and feed it to
+`btrfs receive <restore-directory>` using a pipeline that checks every exit code.
+Restore to an empty test directory, never over a production filesystem. Restore
+legacy containers with their original recovery credentials; independent age
+copies of those records can be prepared as described in
+[Recovery custody](operator-unlocked-storage.md#explicit-provisioning-and-recovery-custody).
+Then restore their logical contents into the final encrypted layout. Archive
+authentication proves transport and decryption, not database/media usability.
+
+### Reusing the original NVMe
+
+After restore tests pass, shut down normally and boot the trusted recovery stick.
+Identify the original NVMe by its recorded serial, not its current `/dev/nvme*`
+number. Keep every source partition unmounted and disable installer automounting
+and disk swap. Mount only the independently identified backup disk. Stream the
+**entire source device**, including GPT and EFI, through compression and age
+encryption into a new exclusively created archive; check every pipeline exit
+status and retain partial output on failure. Record the raw byte count and SHA256
+while reading. Fully decrypt and decompress the archive to a second byte count
+and hash, and require an exact match before treating it as recoverable. Never
+write a plaintext image or recovery private identity onto the external disk.
+
+Keep this image, the snapshot backups and their independent recovery identity
+until restored PostgreSQL, old encrypted media and cold-boot acceptance pass.
+Once the NVMe is formatted, rollback requires restoring its whole-disk image
+from trusted recovery media; selecting an older NixOS generation cannot restore
+the old partition layout or data. Preserve any new writes separately before
+rolling back, since restoring the image discards them.
+
 ## Reprovision and restore (explicit destructive operator action)
 
 1. Review the evaluated Disko layout for the exact host against serials and the
@@ -95,7 +428,12 @@ in-place conversion or overwrite the only working LUKS header.
    Ensure trusted installation media can unlock the restored system and verify
    Secure Boot signatures where enabled. Record all mountpoints and crypttab
    entries from evaluation before any destructive command.
-2. On the authorized replacement disks only, run the reviewed destructive Disko
+   Test the one-time USB boot menu from the local console before erasing storage.
+   Possessing a recovery stick does not prove firmware permits booting it. If an
+   unknown firmware password blocks recovery, retain the working installation;
+   do not reset firmware or disable Secure Boot as a migration workaround.
+2. On the authorized replacement disks only (or an explicitly approved reused
+   disk after its offline whole-disk image has been verified), run the reviewed destructive Disko
    provisioning workflow to create the complete layout (EFI, LUKS2 root and all
    data members). Disko uses prompted recovery credentials at this stage, not
    runtime keyfiles. Verify all member mappings are open before Btrfs array
@@ -126,7 +464,7 @@ in-place conversion or overwrite the only working LUKS header.
    the target serials again:
 
    ```sh
-   nixos-install --root /mnt --system <reviewed-built-system-closure> --no-root-passwd
+   python -m lx_administration.storage.boot_migration install --state <private-state-directory>
    ```
 
    This must run from the trusted installer, not the running old host. It must
@@ -136,13 +474,18 @@ in-place conversion or overwrite the only working LUKS header.
    identity, applicationSecrets, consumers and pinned ciphertext. Data unlock keys
    are now local root-owned keyfiles, independent of SOPS installation. Do not run the general `nixos-anywhere` command with its
    default disk phase against this prepared installation. From the installed
-   target run `luxnix-verify-boot-storage`; inspect every mapping, `findmnt` and
+   target run `luxnix-verify-boot-storage`; it binds each secondary key to the raw
+   device and open LUKS2 mapping and tests the enrolled key without changing
+   slots or mappings. A wrong key on an already open mapping therefore blocks
+   the normal pre-switch check. Runtime consumer guards use `--mounted-storage`
+   to check current mounts and permissions without repeated key derivation;
+   that option does not prove next-boot unlock. Inspect every mapping, `findmnt` and
    `swapon --show`. Inspect the built initrd and EFI to confirm that neither
    secondary key contents nor private age identities were embedded.
 
 ## Acceptance, recovery and rollback limits
 
-Cold boot with networking disconnected. Enter one root credential, confirm data
+For boot-luks, cold boot with networking disconnected. Enter one root credential, confirm data
 mappings open without further prompts, SOPS installation succeeds locally where
 used, and normal login/database/application services start. Check service status,
 query the restored database and decrypt old media. Existing optional remote
@@ -173,6 +516,30 @@ a disk format, restore missing keys or reconcile diverged databases.
 
 ## Temporary compatibility and removal
 
+gc-09 and gc-10 currently select `legacy-containers` explicitly in canonical host
+inventory. Both remain unmigrated in repository acceptance; inspect the live
+host before making any claim about its root storage. For gc-10, no recovery
+console is available for its plaintext-root reprovision.
+Its original encrypted application and secrets containers remain mandatory;
+this exception does not authorize plaintext application startup or claim root
+protection. Disk swap stays disabled. The bounded
+`ansible/playbooks/storage-legacy-recovery.yml` workflow preserves the existing
+checkout, creates a retained release worktree, compares its built closure to the
+controller build, validates original container UUIDs and recovery credentials,
+and uses the host-local `luxnix-safe-activate` worker without rebooting. A fresh
+SSH connection must acknowledge completion before its watchdog expires. Automatic
+rollback requires matching stateful compatibility manifests or an operator
+assessment bound to the exact old/new closures and recovery evidence; it never
+blindly rolls a database back across migrations. Run it through
+`scripts/run-secret-playbook.sh` with an explicit gc-10 limit and private tmpfs
+recovery variables; never put recovery passphrases in command arguments. Its
+`--skip-tags activate` phase only prepares the release and opens authenticated
+existing mappings. Verify the contained database and original application keys
+before the separately selected activation phase. No missing container is created.
+
+Remove the exception only after console-
+assisted reprovision and verified restore; the final fleet architecture is unchanged.
+
 `layout = "legacy-containers"` is an explicit maintenance/recovery exception for
 an unmigrated host. Set it through the canonical host inventory, for example:
 
@@ -192,8 +559,8 @@ architecture and must not be used to claim root encryption. Current container
 metadata remains solely to support this migration and prevent loss of recovery
 information. Do not activate boot-luks on an old disk layout to try to convert it.
 
-Remove the legacy implementation, container inventory metadata and legacy tests
-only after every fleet host has verified boot-LUKS acceptance and old storage has
+Keep shared container support while any host selects `unencrypted-root`.
+Remove legacy-only migration metadata and tests only after every fleet host has verified boot-LUKS acceptance and old storage has
 reached its approved retention limit. No host is marked physically migrated by
 this repository change. OpenBao identity provisioning and LX-Annotate encryption
 remain independent; local OpenBao storage-unlock enrollment is superseded.
@@ -205,6 +572,7 @@ The focused source/probe lane is:
 ```sh
 python -m pytest -q tests/test_boot_storage.py tests/test_managed_secret_storage.py tests/test_operator_storage_migration.py
 nix build .#checks.x86_64-linux.boot-storage --no-link -L
+nix build .#checks.x86_64-linux.boot-storage-remote --no-link -L
 nix build .#nixosConfigurations.gc-10.config.system.build.toplevel --no-link
 nix build .#nixosConfigurations.gs-02.config.system.build.toplevel --no-link
 devenv tasks run nix-quality:check

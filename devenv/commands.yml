@@ -12,18 +12,6 @@ risk_levels_source: ../luxnix.yml#risk_levels
 # marked operator_confirmation_required. The field does not imply that the
 # underlying wrapper implements its own prompt.
 commands:
-  - id: install-prepared-encrypted-system
-    summary: Install a reviewed closure onto already provisioned and restored encrypted storage from trusted installer media.
-    risk: destructive-local
-    operator_confirmation_required: true
-    usage: nixos-install --root /mnt --system <reviewed-built-system-closure> --no-root-passwd
-    documentation: docs/boot-storage-migration.md
-    prerequisites:
-      - Independently verified backups, recovery credentials, serials and complete mounted target graph.
-      - Existing identities, application keys, account hashes and consistent database restored.
-    effects:
-      - Installs the boot configuration; does not authorize formatting or rerunning a disk phase.
-
   - id: check-secret-rotation
     summary: Validate the central rotation catalog against three source checkouts and display ordered gates.
     risk: read-only
@@ -194,9 +182,17 @@ commands:
     summary: Sign one host's reviewed generation on the controller and import the signed boot artifacts.
     risk: remote-state
     operator_confirmation_required: true
-    usage: devenv shell secure-boot-sign <host>
+    usage: devenv shell secure-boot-sign <host> [--finish boot|switch] [--rollback-receipt <protected-target-receipt>]
     implementation: lx_administration/secure_boot.py
     documentation: docs/secure-boot.md
+    prerequisites:
+      - Clean durable reviewed checkout with canonical inventory, pinned SSH identity and successful connectivity check.
+      - Host profile exactly matches the controller-built closure; interactive host and generation confirmation.
+    effects:
+      - Imports verified signed artifacts; identical imports are safe to repeat and conflicts fail before replacement.
+      - Optional finish boot registers the next boot; finish switch activates services and checks the active closure. Neither reboots.
+      - Checks actual firmware signer and current unlock health; detached completion has a host-local watchdog and fresh SSH acknowledgement.
+      - Identical stateful compatibility manifests allow automatic rollback; differing or legacy footprints need an exact-closure compatibility assessment.
 
   - id: check-connectivity
     summary: Check SSH connectivity to a selected inventory host or group.
@@ -206,14 +202,75 @@ commands:
     implementation: scripts/check-connectivity.sh
     documentation: ansible/playbooks/readme.md
 
+  - id: storage-migration-snapshot
+    summary: Quiesce application writers and preserve existing Btrfs storage as read-only migration snapshots.
+    risk: sensitive-remote-state
+    operator_confirmation_required: true
+    usage: devenv shell storage-migration-snapshot --limit <gc-09-or-gc-10> -e migration_snapshot_id=<id> -e ansible_become_user=root --become-password-file <private-file>
+    implementation: lx_administration/storage/snapshot.py
+    playbook: ansible/playbooks/storage-migration-snapshot.yml
+    documentation: docs/boot-storage-migration.md
+    effects:
+      - Temporarily masks and stops application writers, then restores previously active services.
+      - Freezes mounted legacy filesystems only during snapshot creation and unfreezes in cleanup.
+      - Prearmed systemd cleanup survives controller disconnect or helper termination and retries journal recovery; OpenBao must be unsealed before dependent writers restart.
+      - Preserves read-only snapshots and a plan; never formats, activates, reboots or deletes sources.
+
+  - id: storage-migration-backup
+    summary: Encrypt and authenticate existing migration snapshots on a mounted backup filesystem.
+    risk: sensitive-remote-state
+    operator_confirmation_required: true
+    usage: devenv shell storage-migration-backup --host <gc-09-or-gc-10> --snapshot-id <id> --destination <mountpoint> --identity <dedicated-age-identity> --custodian-identity <independent-age-identity> --sudo-password-file <private-file>
+    implementation: lx_administration/storage/migration_backup.py
+    documentation: docs/boot-storage-migration.md
+    effects:
+      - Reads immutable snapshots over pinned SSH and writes only age ciphertext to the backup filesystem.
+      - Uses dedicated controller and independent custodian age identities, never a login SSH key for new archives.
+      - Authenticates every complete archive with both identities before publication; incomplete artifacts are retained as partial files.
+      - Does not establish application restore acceptance or independent recovery-key custody.
+
   - id: storage-readiness
-    summary: Read host identity, boot generations, firmware state, mounts and service state without credentials or mutations.
-    risk: remote-read-only
+    summary: Observe storage or explicitly require a fail-closed privileged baseline for one selected host.
+    risk: sensitive-read-only
     operator_confirmation_required: false
-    usage: devenv shell storage-readiness --limit <host-or-group>
+    usage: devenv shell storage-readiness --limit <host-or-group> [-e @<private-admission-request.yml>]
     implementation: scripts/run-ansible-playbook.sh
     playbook: ansible/playbooks/storage-readiness.yml
-    documentation: docs/root-integrity-prototype.md
+    documentation: docs/boot-storage-migration.md
+    effects:
+      - Observation is the unprivileged default; admission requires one host, its existing layout and exact attached disk serials.
+      - Admission uses root to inspect storage and test existing keys without disclosing them; changes no storage or services.
+      - Successful baseline admission does not approve installation, recovery custody or backup restore.
+
+  - id: boot-storage-migration
+    summary: Plan, record reviewed evidence and install an explicitly selected encrypted or unencrypted-root target.
+    risk: destructive-local
+    operator_confirmation_required: true
+    usage: devenv shell boot-storage-migration <plan|status|attest|check|prepare-access|install> [arguments...]
+    implementation: lx_administration/storage/boot_migration.py
+    documentation: docs/boot-storage-migration.md
+    prerequisites:
+      - Operator-selected host, durable clean checkout, exact disk identities and independent recovery custody.
+      - Install requires ordered reviewed evidence, mode-specific target validation and an interactive exact-plan confirmation.
+    effects:
+      - Plan and attest create protected local records; status is observational and check verifies prerequisites.
+      - Prepare-access restores only a missing admin hash from its valid restored source and creates the dedicated early-boot SSH identity once; never replaces existing credentials.
+      - Install invokes only nixos-install for the pinned closure; never formats, generates volume keys, restores application data or reboots.
+      - Interrupted installation blocks retry until separately reviewed recovery evidence; no automatic destructive rollback.
+      - Unencrypted root requires matching explicit host and plan selections plus typed UNENCRYPTED confirmation; encrypted defaults and protected service guards remain.
+      - Fresh installation on verified empty new disks requires recovery and preparation evidence without fictitious source-backup assessments.
+
+  - id: storage-recovery-custody
+    summary: Prepare and cryptographically verify dedicated independently decryptable recovery custody without changing hosts or volumes.
+    risk: sensitive-local-state
+    operator_confirmation_required: true
+    usage: devenv shell storage-recovery-custody <prepare|verify|export-vault-record> [arguments...]
+    implementation: lx_administration/storage/recovery_custody.py
+    documentation: docs/boot-storage-migration.md
+    effects:
+      - Explicit prepare creates missing native age identities on operator-selected independent encrypted storage and verifies both with challenge decryption.
+      - Optional vault policy automatically exports and re-verifies independent recovery envelopes before provisioning; original records remain usable.
+      - Verify repeats physical ancestry and cryptographic checks; no key replacement, login-key export, remote operation or old-archive deletion.
 
   - id: lx-annotate-streamable-migration
     summary: Run the deployed LX-Annotate streamable-storage migration helper.
@@ -296,6 +353,19 @@ commands:
       - Passphrase provisioning requires the host's passphrase unlock policy and leaves the mapping open; subsequent boots use the escrowed passphrase.
     implementation: lx_administration/storage/provision.py
     documentation: docs/operator-unlocked-storage.md
+
+  - id: storage-provision-setup
+    summary: Interactive, resumable guide that checks every storage-provision prerequisite and applies only after typed confirmation.
+    risk: sensitive-remote-state
+    operator_confirmation_required: true
+    usage: devenv shell storage-provision-setup [--host <host>] [--volume <volume>] [--recovery-host <host>] [--backend passphrase|tpm2|local-openbao] [--sudo-password-file <private-file>]
+    implementation: lx_administration/storage/provision_setup.py
+    documentation: docs/operator-unlocked-storage.md
+    effects:
+      - Lists only inventory hosts with legacy-container layouts and declared container volumes; boot-luks hosts are refused.
+      - Read-only checks first; connectivity, target sudo, encrypted admin vault and the controller preview, which must match the choices.
+      - Applies only through storage-provision provision --apply after the operator types the host name; never formats existing data, deletes or reboots.
+      - Stores non-secret answers and completion receipts privately under the XDG state directory; repeat runs re-verify and resume.
 
   - id: openbao-local
     summary: Show status of, enroll, adopt volumes into, or rotate the unlock AppRole credential of host-local OpenBao; escrow precedes every dependent step.
@@ -529,6 +599,20 @@ tasks:
 
 # Native host operations deliberately run outside the Devenv shell.
 native_commands:
+  - id: install-prepared-encrypted-system
+    summary: Install a reviewed closure onto prepared storage in its explicitly selected root-encryption mode from trusted installer media.
+    risk: destructive-local
+    operator_confirmation_required: true
+    usage: python -m lx_administration.storage.boot_migration install --state <private-state-directory>
+    implementation: lx_administration/storage/boot_migration.py
+    documentation: docs/boot-storage-migration.md
+    prerequisites:
+      - Mode-appropriate recovery evidence, exact disk identities and complete required target mounts; fresh installation requires verified empty new disks.
+      - Administrator credentials staged; migration additionally requires restored identities, application keys and consistent data on protected storage.
+      - Run the guarded installer from trusted media; direct nixos-install bypasses the evidence workflow and is not the supported migration entrypoint.
+    effects:
+      - Installs the boot configuration; does not authorize formatting or rerunning a disk phase.
+
   - id: rebuild-host-switch
     summary: Persist and activate the reviewed configuration using native NixOS switching.
     risk: remote-state

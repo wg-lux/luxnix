@@ -1,6 +1,9 @@
 > Storage layout update: [Boot LUKS migration](boot-storage-migration.md) is the
 > current fleet design. Container unlock, login unlock and local OpenBao storage
-> enrollment below apply only to explicit `legacy-containers` recovery mode.
+> enrollment below apply to explicit `legacy-containers` recovery mode and
+> [unencrypted-root installations](boot-storage-migration.md#unencrypted-os-installation).
+> For unencrypted root, provision and verify protected volumes before setting
+> `autoStartProtectedServices = true`; initial OS startup defers these services.
 > Existing identity provisioning remains independent.
 
 # Encrypted storage and automatic startup
@@ -144,12 +147,102 @@ An encrypted copy is published on the selected independent recovery host under
 `~/.luxnix-recovery/<machine-id>/<luks-uuid>.vault`. The current gc-09 pilot uses
 gs-01, designated by the operator as the dedicated recovery host outside both
 gc-09 and gs-02. This designation does not establish a verified backup or restore.
-Only ciphertext is sent to that host. Keep the admin vault key separately in
-custodian recovery custody; it is not included with the export.
+Only ciphertext is sent to that host. Those two copies still use the same admin
+vault key, so they alone do not protect against losing that key. Existing copies
+remain unchanged and usable; new provisioning also requires an independently
+decryptable native age envelope.
+
+Before applying provisioning, select private directories on encrypted controller
+storage and independent encrypted custodian media. The custodian must be able to
+unlock that media without the original controller. Run:
+
+```bash
+devenv shell storage-recovery-custody prepare \
+  --identity <controller-age-identity> \
+  --custodian-identity <independent-age-identity> \
+  --vault-dir <existing-admin-vault> \
+  --export-directory <independent-encrypted-directory>
+```
+
+This creates missing dedicated native age identities without replacing existing
+ones, checks that custody locations share no physical disk and tests decryption
+with both identities. It saves the explicit custody selection in
+`<vault-dir>/storage-recovery/custody.json`; a conflicting selection needs review
+and is never silently substituted. Neither identity is an SSH login key. Use
+`devenv shell storage-recovery-custody verify --identity <controller-age-identity>
+--custodian-identity <independent-age-identity>` to repeat the cryptographic and
+storage checks without creating keys.
+
+With that policy configured, the normal escrow step automatically encrypts each
+identity-bound recovery record for the independent custodian and publishes it
+under `<export-directory>/<machine-id>/<luks-uuid>.age`. It verifies full
+decryption against the original record before provisioning and on every repeat.
+The adjacent receipt records ciphertext hashes, public recipient, volume identity
+and verification time, never a recovery passphrase. Missing or changed custody
+does not authorize target changes. The original admin-vault record and recovery
+host copy are retained. Keep the independent media and its unlocking credential
+under the custodian's recovery procedure; software cannot prove that physical
+custody will survive a disaster.
+
+For existing records, the same independent copy can be prepared or reverified
+without provisioning a volume:
+
+```bash
+devenv shell storage-recovery-custody export-vault-record \
+  --source <existing-volume.vault> --vault-key <existing-admin-vault-key> \
+  --custodian-identity <independent-age-identity> \
+  --destination <independent-encrypted-directory/volume.age>
+```
+
+The command decrypts the existing record in memory, publishes only age
+ciphertext, checks custodian readback and refuses to replace a different existing
+envelope. It does not export the admin vault key or alter LUKS slots. After loss
+of the controller or admin vault key, the custodian can decrypt this envelope
+using its dedicated identity. `--controller-only-custody` remains available for
+the explicit initial escrow step; it is not evidence of independent recovery and
+cannot authorize provisioning. Do not delete old keys or records to force a
+retry or change custody.
+
+### Guided setup
+
+Operators who prefer prompts over flags can run the following from the repository root:
+
+```bash
+devenv shell storage-provision-setup
+```
+
+The guide offers only hosts that are in both the inventory and the flake and
+that use the `legacy-containers` layout. Boot-luks hosts are directed to
+`boot-storage-migration`. It then asks for the volume, the unlock backend
+(defaulting to the host's configured policy) and an independent recovery host.
+After that it checks, without changing anything:
+
+1. SSH connectivity to each remote host, using `check-connectivity`.
+2. Target sudo. A local target uses `sudo -v`; a remote target may need a
+   private `--sudo-password-file`.
+3. That the admin vault opens and its key is on encrypted storage. The
+   `local-openbao` backend also requires its enrollment escrow.
+4. The controller preview, which must match every choice.
+
+The guide stops if a container already exists that it did not start
+provisioning. It applies only after the operator types the host name, by
+invoking the same `storage-provision provision --apply` shown on screen. All
+guards described below remain authoritative.
+
+The guide keeps non-secret answers and the resulting LUKS UUID and escrow paths in
+`$XDG_STATE_HOME/luxnix/storage-provision-setup/<host>--<volume>.json`, which
+defaults to `~/.local/state`. The file has mode 0600. A per-volume lock
+prevents concurrent runs. Re-running is safe: the guide offers the saved
+answers, repeats every check and resumes through the controller's existing
+escrow and provisioning receipts. A completed volume is only re-verified.
+Ctrl-C, or any failed check, stops without changing anything further. Deleting
+the state file removes only remembered answers; it never affects escrow or
+containers.
 
 `devenv shell storage-provision provision --host gc-10 --volume luxnix-app-storage
 --recovery-host gs-01` previews the exact target. `--apply` explicitly authorizes
-the operation after both recovery copies are authenticated. It uses the deployed
+the operation after the configured independent age envelope and existing vault
+recovery copies are authenticated. It uses the deployed
 `luxnix-storage-provision` helper. The preview includes the selected backend,
 which defaults to the host's configured unlock method:
 

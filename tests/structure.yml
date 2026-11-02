@@ -11,12 +11,42 @@ boundaries:
   - Source checks do not prove deployment readiness
   - Nix evaluation and VM tests are separate from the fast Python lane
 entrypoints:
+  - name: unencrypted-storage-vm
+    file: nixtest/unencrypted_storage_vm_test.nix
+    purpose: Install plain root, authenticate SSH and reject protected writers before container provisioning.
+  - name: unencrypted-storage
+    file: test_unencrypted_storage.py
+    purpose: Verify explicit plain root selection preserves encrypted consumers and rejects early unlock.
+  - name: remote-boot-access
+    file: test_remote_boot_access.py
+    purpose: Evaluate restricted initrd SSH and verify restored administrator credentials before installation.
+  - name: acknowledged-activation
+    file: test_activation.py
+    purpose: Exercise detached activation acknowledgement, compatibility checks and watchdog recovery.
+  - name: independent-custody
+    file: test_recovery_custody.py
+    purpose: Exercise independent age custody, legacy preservation and authenticated two-recipient backups.
+  - name: sudo-payload-isolation
+    file: test_storage_sudo_transport.py
+    purpose: Prove failed sudo authentication cannot consume secret operation payloads.
+  - name: boot-migration
+    file: test_boot_migration.py
+    purpose: Reject stale migration evidence, wrong targets and unsafe or uncertain installation retries.
+  - name: storage-readiness
+    file: test_storage_readiness.py
+    purpose: Exercise mandatory probe failures, explicit layout and disk identity admission.
+  - name: secure-boot-workflow
+    file: test_secure_boot_workflow.py
+    purpose: Reject stale signing generations and partial artifact conflicts before activation or replacement.
+  - name: storage-migration-backup
+    file: test_storage_migration_backup.py
+    purpose: Authenticate encrypted recovery archives and test snapshot failure cleanup and refusal boundaries.
   - name: boot-storage
     file: test_boot_storage.py
     purpose: Verify fleet boot LUKS declarations and read-only recovery failure checks.
   - name: boot-storage-vm
     file: nixtest/boot_storage_vm_test.nix
-    purpose: Disposable encrypted root cold boot, automatic secondary unlock and missing-key write rejection.
+    purpose: Disposable encrypted root console/SSH unlock, retry, automatic secondary unlock and missing-key write rejection.
   - name: gc-10-backup-exports
     file: lx-annotate/test_gc10_backup_exports.py
     purpose: Evaluate host-only export mount dependencies and reject missing or wrong Backup identity before filesystem writes.
@@ -84,6 +114,9 @@ entrypoints:
   - name: storage-recovery-escrow
     file: test_storage_provision.py
     purpose: Verify authenticated encrypted recovery copies, independent export, retries and conflict rejection.
+  - name: storage-provision-setup
+    file: test_storage_provision_setup.py
+    purpose: Verify guided provisioning refuses boot-luks hosts, mismatched previews and unconfirmed apply, and resumes from private non-secret state.
   - name: operator-storage-migration-vm
     file: nixtest/operator_storage_migration_vm_test.nix
     purpose: Verify actual LUKS copy, mount ordering, post-mount permissions and receipt reuse after reboot.

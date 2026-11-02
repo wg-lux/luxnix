@@ -521,6 +521,7 @@ lib.foldl' lib.recursiveUpdate
             }
           )
         );
+        layout = "legacy-containers";
 
         migration = {
           accountHashes =

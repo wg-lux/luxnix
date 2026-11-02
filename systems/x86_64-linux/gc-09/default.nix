@@ -510,6 +510,7 @@
           }
         )
       );
+      layout = "legacy-containers";
 
       migration = {
         accountHashes =

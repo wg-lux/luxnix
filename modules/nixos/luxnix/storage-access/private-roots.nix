@@ -8,11 +8,15 @@
 }:
 let
   storage = config.luxnix.storage.operatorUnlocked;
+  containerLayout = builtins.elem storage.layout [
+    "legacy-containers"
+    "unencrypted-root"
+  ];
   permissions = name: "luxnix-storage-permissions-${name}";
   mountUnit = path: "${utils.escapeSystemdPath path}.mount";
 in
 {
-  config = lib.mkIf (storage.enable && storage.layout == "legacy-containers") {
+  config = lib.mkIf (storage.enable && containerLayout) {
     # Do not put these paths in global tmpfiles: that can pull locked mounts
     # into sysinit. Prepare the empty roots independently of mount activation.
     system.activationScripts.luxnixPrivateStorageRoots = {

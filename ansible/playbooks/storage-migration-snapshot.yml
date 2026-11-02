@@ -1,0 +1,88 @@
+---
+- name: Preserve a quiesced storage migration source without formatting or activation
+  hosts: all
+  gather_facts: false
+  become: true
+  become_user: root
+  vars:
+    migration_snapshot_helper: /run/luxnix-snapshot/{{ (lookup('file', '../../lx_administration/storage/snapshot.py') ~ lookup('file', '../../lx_administration/storage/openbao_local.py')) | hash('sha256') }}
+  tasks:
+    - name: Require explicitly reviewed migration targets and snapshot identifier
+      ansible.builtin.assert:
+        that:
+          - ansible_play_hosts_all | length == 1
+          - ansible_limit | default('') == inventory_hostname
+          - inventory_hostname in ['gc-09', 'gc-10']
+          - migration_snapshot_id is match('^[a-z0-9][a-z0-9-]{5,60}$')
+          - migration_snapshot_action | default('snapshot') in ['snapshot', 'recover', 'status']
+
+    - name: Prepare private content-addressed supervision helpers
+      ansible.builtin.file:
+        path: '{{ migration_snapshot_helper }}'
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+      when: migration_snapshot_action | default('snapshot') != 'status'
+
+    - name: Stage the exact reviewed helper and existing OpenBao health contract
+      ansible.builtin.copy:
+        content: "{{ lookup('file', '../../lx_administration/storage/' ~ item) }}"
+        dest: '{{ migration_snapshot_helper }}/{{ item }}'
+        owner: root
+        group: root
+        mode: '0600'
+      loop: [snapshot.py, openbao_local.py]
+      when: migration_snapshot_action | default('snapshot') != 'status'
+
+    - name: Run supervised snapshot with prearmed cleanup independent of SSH
+      ansible.builtin.command:
+        argv:
+          - systemd-run
+          - --quiet
+          - --wait
+          - --pipe
+          - --collect
+          - '--unit=luxnix-snapshot-{{ migration_snapshot_id }}'
+          - --property=Type=exec
+          - --property=KillMode=control-group
+          - --property=RuntimeMaxSec=1800
+          - --property=TimeoutStopSec=600
+          - '--property=ExecStopPost=/run/current-system/sw/bin/python3 {{ migration_snapshot_helper }}/snapshot.py {{ inventory_hostname }} {{ migration_snapshot_id }} recover-auto'
+          - /run/current-system/sw/bin/python3
+          - '{{ migration_snapshot_helper }}/snapshot.py'
+          - '{{ inventory_hostname }}'
+          - '{{ migration_snapshot_id }}'
+          - '{{ migration_snapshot_action | default("snapshot") }}'
+      register: supervised_snapshot
+      changed_when: supervised_snapshot.rc == 0 and (supervised_snapshot.stdout | from_json).changed | bool
+      failed_when: false
+      no_log: true
+      when: migration_snapshot_action | default('snapshot') != 'status'
+
+    - name: Read final retained journal after worker and automatic cleanup finish
+      ansible.builtin.command:
+        argv:
+          - /run/current-system/sw/bin/python3
+          - '-'
+          - '{{ inventory_hostname }}'
+          - '{{ migration_snapshot_id }}'
+          - status
+        stdin: "{{ lookup('file', '../../lx_administration/storage/snapshot.py') }}"
+      register: migration_snapshot
+      changed_when: false
+      # Operational metadata and any command errors stay out of Ansible logs.
+      no_log: true
+
+    - name: Report preserved source locations without claiming restore acceptance
+      ansible.builtin.debug:
+        msg: '{{ migration_snapshot.stdout | from_json }}'
+
+    - name: Report unsuccessful snapshot separately from automatic service recovery
+      ansible.builtin.assert:
+        that: supervised_snapshot.rc == 0
+        fail_msg: >-
+          Snapshot did not complete successfully. Automatic cleanup attempted three
+          bounded recoveries; inspect the journal above. Retain all source storage
+          and use a new identifier only after recovery completes.
+      when: migration_snapshot_action | default('snapshot') != 'status'

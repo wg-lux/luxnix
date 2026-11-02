@@ -12,7 +12,11 @@ let
   # before that, enrollment can install and use the tool without a boot dependency.
   localRequired =
     (storage.enable or false)
-    && storage.layout == "legacy-containers"
+    && (storage.autoStartProtectedServices or true)
+    && builtins.elem storage.layout [
+      "legacy-containers"
+      "unencrypted-root"
+    ]
     && (storage.unlockMethod or "") == "local-openbao";
   # Passphrase seal: the operator's boot passphrase unwraps the seal key; no TPM binding.
   passphraseSeal = localCfg.seal == "passphrase";

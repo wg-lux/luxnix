@@ -10,6 +10,24 @@ boundaries:
   - Do not mount or alter live storage during context validation
   - Preserve encrypted storage and hub authentication boundaries
 entrypoints:
+  - name: independent-recovery-custody
+    file: recovery_custody.py
+    purpose: Prepare dedicated age identities and verify independently decryptable recovery envelopes without replacing originals.
+  - name: boot-migration
+    file: boot_migration.py
+    purpose: Bind explicit encrypted/plain-root and fresh/migration plans to hardware checks, reviewed evidence and idempotent install-only actions.
+  - name: storage-readiness
+    file: readiness.py
+    purpose: Collect observations or reject incomplete host, layout and disk-identity admission without changing storage.
+  - name: migration-archive
+    file: migration_archive.py
+    purpose: Shared streaming encryption and authenticated archive verification, including RAM-only identity use for host-local backup recovery.
+  - name: migration-snapshot
+    file: snapshot.py
+    purpose: Quiesce selected application writers, preserve read-only Btrfs snapshots and restore prior service state.
+  - name: migration-backup
+    file: migration_backup.py
+    purpose: Stream inventory-scoped snapshots into authenticated age archives without deleting or restoring storage.
   - name: boot-storage
     file: boot.py
     purpose: Read-only actual mount identity, Btrfs member and protected key checks before activation or consumers.
@@ -28,13 +46,17 @@ entrypoints:
   - name: storage-provision
     file: provision.py
     purpose: Escrow recovery in the existing encrypted admin vault and an independent host before explicit local or SSH-targeted passphrase, TPM or local OpenBao provisioning.
+  - name: storage-provision-setup
+    file: provision_setup.py
+    purpose: Interactive, resumable operator guide that runs read-only prerequisite checks and delegates every change to storage-provision after typed confirmation.
   - name: tpm-release
     file: tpm_release.py
     purpose: Create and verify the non-exportable TPM client identity and fetch one volume release over mTLS.
   - name: operator-migration
     file: operator_migration.py
-    purpose: > Unlock existing containers, explicitly provision escrowed new volumes
-          and verify resumable copies without formatting at startup or overwriting storage.
+    purpose: >-
+      Unlock existing containers, explicitly provision escrowed new volumes
+      and verify resumable copies without formatting at startup or overwriting storage.
   - name: manager
     file: manager.py
     purpose: Inspect manager ownership and interfaces.

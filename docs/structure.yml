@@ -10,6 +10,12 @@ boundaries:
 - Do not create parallel readiness trackers
 - Do not include secrets or local host facts in guides
 entrypoints:
+- name: operator-change-notes
+  file: changelog.md
+  purpose: Operator actions for storage workflow updates, existing installations and interrupted migrations.
+- name: boot-storage-operator
+  file: boot-storage-operator.md
+  purpose: Short ordered operator checklist for preparation, installation, SSH unlock and recovery.
 - name: boot-storage-migration
   file: boot-storage-migration.md
   purpose: Backup, reprovision, restore and physical acceptance for boot-time LUKS2 storage.

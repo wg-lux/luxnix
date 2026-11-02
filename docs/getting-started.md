@@ -60,6 +60,11 @@ configuration; connectivity checks and subsequent steps concern deployment.
 
 ## Install a host
 
+Choose the root layout before installation. Keep `boot-luks` for encrypted root,
+or explicitly select [unencrypted-root](boot-storage-migration.md#unencrypted-os-installation).
+Use the [guarded operator checklist](boot-storage-operator.md) for prepared-target
+installation. Never run the disk-formatting command below on a restored target.
+
 The following steps can replace the target's operating system and partition its
 disks. Confirm backups, recovery access, the selected host and address, and the
 reviewed repository revision before installation. For local development only,

@@ -10,6 +10,9 @@ boundaries:
   - Do not import upstream LX-Annotate business logic
   - Do not introduce secret or storage side effects at import time
 entrypoints:
+  - name: acknowledged-activation
+    file: activation.py
+    purpose: Detached activation with compatibility-bound rollback and fresh authenticated acknowledgement.
   - name: secret-storage-boundary
     file: secret_storage.py
     purpose: Verify encrypted device ancestry and non-swappable runtime boundaries before plaintext secret access.

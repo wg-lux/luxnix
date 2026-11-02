@@ -1,8 +1,15 @@
 # LuxNix Documentation
 
-Choose a guide by the task you want to complete. New contributors can start
-with Development; operators installing a machine should use Getting Started.
-Clinical staff should use the Central Hub Transfer guide under Operations.
+Choose the task below; you do not need to read every guide.
+
+| Your task | Start here |
+| --- | --- |
+| Use a machine while an upgrade is planned | Ask your operator for the maintenance window and when work can resume. You do not need to run migration commands. |
+| Install a machine for the first time | [Operator checklist](boot-storage-operator.md): preparation, installation, login and recovery. |
+| Continue an interrupted installation | [Resume instructions](changelog.md#continue-an-installation-or-migration): retain the existing plan and inspect its status. |
+| Update an existing machine | [Change notes](changelog.md): choose the instructions for its current storage state. |
+| Review the technical safeguards | [Migration reference](boot-storage-migration.md): evidence, commands and acceptance requirements. |
+| Develop or maintain LuxNix | [Development](development.md) and [architecture](architecture.md). |
 
 These Markdown guides can be read in the repository browser or from a local
 checkout. Use the same branch or commit as the configuration you are working
@@ -28,9 +35,7 @@ for canonical invocations and risk labels.
 
 - [Getting Started](./getting-started.md): first installation, prerequisites, and preflight checks.
 - [Machine Setup Secrets Checklist](./machine-secrets-checklist.md): credentials to deliver, locally provisioned material, role-specific requirements, and acceptance gates.
-- [Development](./development.md): local development environment and contributor workflow.
 - [Nix Quality](./nix-quality.md): formatting, lint, generator, and flake-quality checks.
-- [Architecture](./architecture.md): repository layout, profile/role rules, and introspection workflow.
 - [Autoconf and Local Inventory](./autoconf.md): centralized options, safe fact refresh, private reports, and configuration generation.
 - [Deployment Guide](./deployment-guide.md): deployment details and host setup reference.
 
@@ -44,6 +49,7 @@ for canonical invocations and risk labels.
 - [System Feature Tracking](./system-feature-tracking.md): immutable feature specifications, assessment state, migration, and recovery.
 
 ## Operations
+
 
 - [Activation failure recovery](activation-failure-recovery.md): NVIDIA driver and Vault certificate failures.
 - [External storage detection](external-storage-detection.md): discovery, enrollment boundaries, and diagnostic states.

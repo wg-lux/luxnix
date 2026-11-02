@@ -12,10 +12,13 @@ import os
 from pathlib import Path
 import re
 import resource
+import selectors
 import secrets
 import shlex
 import socket
+import stat
 import subprocess
+import time
 import uuid
 
 from lx_administration.autoconf import AutoconfConfig, DEFAULT_CONFIG_PATH
@@ -71,6 +74,57 @@ with (root / '.lock').open('a') as lock:
 '''
 
 
+READY = b'LUXNIX-PRIVILEGE-READY\n'
+# sudo sees only its password pipe. The elevated process independently opens an
+# anonymous payload pipe owned by its supervisor; no sudo timestamp is reused.
+PRIVILEGED_STDIN = r'''
+import json, os, sys
+fd = os.open(sys.argv[1], os.O_RDONLY)
+os.dup2(fd, 0)
+os.close(fd)
+os.write(1, b'LUXNIX-PRIVILEGE-READY\n')
+argv = json.loads(sys.argv[2])
+os.execvp(argv[0], argv)
+'''
+SUDO_SUPERVISOR = r'''
+import json, os, subprocess, sys, threading
+password = sys.stdin.buffer.readline(4097)
+if not password.endswith(b'\n') or len(password) > 4096:
+    sys.exit(2)
+read_fd, write_fd = os.pipe()
+bootstrap = __BOOTSTRAP__
+command = ['python3', '-c', bootstrap, f'/proc/{os.getpid()}/fd/{read_fd}', sys.argv[2]]
+prefix = ['sudo', '-k', '-S', '-p', ''] if sys.argv[1] == 'password' else ['sudo', '-n']
+child = subprocess.Popen(prefix + command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+try:
+    child.stdin.write(password if sys.argv[1] == 'password' else b'')
+    child.stdin.close()
+    password = None
+    ready = b'LUXNIX-PRIVILEGE-READY\n'
+    if child.stdout.read(len(ready)) != ready:
+        sys.exit(child.wait() or 1)
+    sys.stdout.buffer.write(ready)
+    sys.stdout.buffer.flush()
+    def send():
+        try:
+            with os.fdopen(write_fd, 'wb', buffering=0) as output:
+                while data := sys.stdin.buffer.read(65536):
+                    output.write(data)
+        except BrokenPipeError:
+            pass
+    threading.Thread(target=send, daemon=True).start()
+    while data := child.stdout.read(65536):
+        sys.stdout.buffer.write(data)
+        sys.stdout.buffer.flush()
+    sys.exit(child.wait())
+finally:
+    os.close(read_fd)
+    if child.poll() is None:
+        child.kill()
+        child.wait()
+'''.replace('__BOOTSTRAP__', repr(PRIVILEGED_STDIN))
+
+
 class Remote:
     operation = 'Remote operation'
 
@@ -85,22 +139,64 @@ class Remote:
         return subprocess.run(self.ssh + [shlex.join(args)], input=data,
                               capture_output=True, timeout=timeout)
 
+    def _popen(self, args):
+        return subprocess.Popen(self.ssh + [shlex.join(args)], stdin=subprocess.PIPE,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    def open_stream(self, args, privileged=True, timeout=30):
+        """Return a payload-only stream after successful privilege authentication."""
+        if not privileged:
+            return self._popen(args)
+        if self.password_required is None:
+            self.password_required = self._run(['sudo', '-n', 'true'], timeout=30).returncode != 0
+        password = b''
+        if self.password_required:
+            if self.password_file is None:
+                raise ProvisionError('A private sudo-password file is required for this target')
+            encrypted_storage(self.password_file, allow_runtime=True)
+            info = self.password_file.lstat()
+            if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid()
+                    or info.st_mode & 0o077 or info.st_size > 4096):
+                raise ProvisionError('Sudo-password file must be private, owned by the operator and not a symlink')
+            password = self.password_file.read_bytes().rstrip(b'\r\n')
+            if not password or b'\n' in password or b'\r' in password or len(password) > 4095:
+                raise ProvisionError('Sudo-password file must contain exactly one nonempty password line')
+        process = self._popen(['python3', '-c', SUDO_SUPERVISOR,
+                               'password' if self.password_required else 'noninteractive', json.dumps(args)])
+        try:
+            process.stdin.write(password + b'\n')
+            process.stdin.flush()
+            deadline, received = time.monotonic() + timeout, b''
+            with selectors.DefaultSelector() as selector:
+                selector.register(process.stdout, selectors.EVENT_READ)
+                while len(received) < len(READY):
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0 or not selector.select(remaining):
+                        raise ProvisionError('Sudo authentication timed out; no operation payload was sent')
+                    chunk = os.read(process.stdout.fileno(), len(READY) - len(received))
+                    if not chunk:
+                        raise ProvisionError('Sudo authentication failed; no operation payload was sent. Correct the password before retrying')
+                    received += chunk
+            if received != READY:
+                raise ProvisionError('Unexpected privilege response; no operation payload was sent')
+            return process
+        except BaseException:
+            process.kill()
+            process.communicate()
+            raise
+
     def call(self, args, data=b'', privileged=False, relay_error=False):
         if privileged:
-            if self.password_required is None:
-                probe = self._run(['sudo', '-n', 'true'], timeout=30)
-                self.password_required = probe.returncode != 0
-            if self.password_required:
-                if self.password_file is None:
-                    raise ProvisionError('A private sudo-password file is required for this target')
-                encrypted_storage(self.password_file, allow_runtime=True)
-                if self.password_file.is_symlink() or self.password_file.stat().st_mode & 0o077:
-                    raise ProvisionError('Sudo-password file must be private and not a symlink')
-                data = self.password_file.read_bytes().rstrip(b'\r\n') + b'\n' + data
-                args = ['sudo', '-k', '-S', '-p', '', *args]
-            else:
-                args = ['sudo', '-n', *args]
-        result = self._run(args, data=data)
+            process = self.open_stream(args)
+            try:
+                stdout, stderr = process.communicate(data, timeout=600)
+            except BaseException:
+                process.kill()
+                process.communicate()
+                raise
+            result = subprocess.CompletedProcess(args, process.returncode, stdout, stderr)
+        else:
+            result = self._run(args, data=data)
         if result.returncode:
             # Remote diagnostics may contain credential-bearing input. Relay only the
             # single ERROR line of a LuxNix tool that builds it without secret values.
@@ -134,8 +230,18 @@ class Local(Remote):
         return subprocess.run(args, input=data, capture_output=True,
                               timeout=timeout)
 
+    def _popen(self, args):
+        return subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE)
 
-def escrow_record(vault, vault_key, record, export):
+
+def require_independent_custody(vault):
+    if not (vault / 'storage-recovery/custody.json').is_file():
+        raise ProvisionError('Prepare independent age custody with storage-recovery-custody prepare --vault-dir and --export-directory before provisioning; existing vault copies remain usable')
+    return True
+
+
+def escrow_record(vault, vault_key, record, export, *, independent_required=False):
     """Publish once, authenticate selected custody, never replace recovery material."""
     root = ensure_private_directory(vault / 'storage-recovery' / record['machine_id'])
     target = root / (record['volume'] + '.vault')
@@ -155,6 +261,9 @@ def escrow_record(vault, vault_key, record, export):
     ciphertext = target.read_bytes()
     if export is not None and export(ciphertext) != ciphertext:
         raise ProvisionError('Independent recovery export did not return the stored ciphertext')
+    if independent_required or (vault / 'storage-recovery/custody.json').exists():
+        from lx_administration.storage.recovery_custody import export_configured
+        export_configured(vault, vault_key, target)
     # Equality to authenticated ciphertext is also checked after remote durable publication.
     return target
 
@@ -189,7 +298,7 @@ def main(argv=None):
         layout = subprocess.run(['nix', 'eval', '--json',
             f'.#nixosConfigurations.{args.host}.config.luxnix.storage.operatorUnlocked.layout'],
             capture_output=True, check=True)
-        if json.loads(layout.stdout) != 'legacy-containers':
+        if json.loads(layout.stdout) not in {'legacy-containers', 'unencrypted-root'}:
             raise ProvisionError('Container provisioning is retired for boot-luks; follow docs/boot-storage-migration.md')
     config = AutoconfConfig.load(DEFAULT_CONFIG_PATH)
     inventory = AnsibleInventory.load_from_hosts_ini(
@@ -247,6 +356,7 @@ def main(argv=None):
         return
     if not args.vault_dir.is_dir():
         raise ProvisionError('Existing admin vault directory is required')
+    independent_required = args.action == 'provision' and require_independent_custody(args.vault_dir)
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
     encrypted_storage(args.vault_key, allow_runtime=True)
     Vault.load_dir(str(args.vault_dir), str(args.vault_key)).validate_local_key()
@@ -285,7 +395,7 @@ def main(argv=None):
                        if recovery is not None else None)
         primary = escrow_record(args.vault_dir, args.vault_key, record,
             (lambda ciphertext: recovery.call(['python3', '-c', EXPORT, machine_id, record['luks_uuid']], ciphertext))
-            if recovery is not None else None)
+            if recovery is not None else None, independent_required=independent_required)
         if args.action == 'provision':
             request = dict(record, primary_escrow=str(primary), emergency_export=destination)
             request['backend'] = backend

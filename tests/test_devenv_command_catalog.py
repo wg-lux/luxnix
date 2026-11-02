@@ -628,9 +628,15 @@ def test_native_host_commands_have_separate_validated_catalog() -> None:
     assert {entry["id"] for entry in native} == {
         "rebuild-host-switch",
         "rebuild-host-boot",
+        "install-prepared-encrypted-system",
     }
-    assert len(native) == 2
-    for entry in native:
+    assert len(native) == 3
+    install = next(entry for entry in native if entry["id"] == "install-prepared-encrypted-system")
+    assert install["risk"] == "destructive-local"
+    assert install["operator_confirmation_required"] is True
+    assert install["usage"] == "python -m lx_administration.storage.boot_migration install --state <private-state-directory>"
+    assert len(install["prerequisites"]) >= 2
+    for entry in (entry for entry in native if entry["id"].startswith("rebuild-host-")):
         action = entry["id"].removeprefix("rebuild-host-")
         assert (
             entry["usage"] == f"sudo nixos-rebuild {action} --flake '<checkout>#<host>'"

@@ -1,9 +1,11 @@
 # Fleet Secure Boot with a controller-held key
 
-`system.boot.secureBoot` is opt-in and currently disabled fleet-wide: hosts
-use operator passphrase unlock, which does not depend on the boot chain.
-Secure Boot only becomes meaningful together with TPM-bound unattended unlock,
-and that path stays blocked on root integrity (ENC-09). When enabled, the NixOS module
+`system.boot.secureBoot` is opt-in and currently disabled in the fleet configuration.
+The current storage design uses an operator passphrase for boot LUKS; the earlier
+local OpenBao/TPM unlock architecture is historical. Secure Boot also protects the
+boot code that receives an operator's passphrase. Encryption alone does not
+authenticate that code or arbitrary root filesystem contents. TPM unattended
+unlock remains blocked on root integrity (ENC-09). When enabled, the NixOS module
 `modules/nixos/system/boot` replaces systemd-boot with
 [lanzaboote](https://github.com/nix-community/lanzaboote) `v1.2.0`.
 
@@ -56,6 +58,48 @@ splits installation:
    hook then re-verifies every stub and loader on the ESP, because lzbt does
    not re-check already installed stubs.
 
+For the guarded controller path, use `devenv shell secure-boot-sign <host>
+--finish boot` to import and register the reviewed generation for the next start,
+or explicitly select `--finish switch` to activate services now. The command
+requires a clean durable checkout, its canonical inventory, a successful
+connectivity check, matching hostname and reviewed generation, then asks you to
+type the host and generation before delivery. It rechecks the source and profile
+before import and the profile before and after completion. Completion runs in a
+host-local systemd worker with a prearmed rollback watchdog and requires a fresh
+SSH connection to acknowledge success. `switch` also checks
+the active system. Neither choice reboots the host. Without `--finish`, the
+existing import-only behavior remains, with the same delivery safeguards.
+
+The importer verifies that the signing certificate is actually enrolled in the
+firmware db; completion requires Secure Boot enabled. It publishes and flushes
+kernel/initrd payloads before boot stubs, preserves an existing fallback EFI
+loader and retains immutable generation files. Updating that retained fallback
+requires a separately reviewed operation. These ordering rules reduce partial
+publication risk; they do not make a FAT ESP power-loss atomic.
+
+Completion checks the current storage-unlock path, including actual OpenBao
+unsealed state and existing TPM credentials where applicable. It does not reseal
+TPM credentials automatically or prove they survive future PCR/firmware changes.
+The watchdog can restore only a compatible generation: matching stateful
+manifests permit this automatically. Otherwise `--rollback-receipt` names a
+root-private target-side assessment binding the exact previous/target closures,
+assessor and hashed recovery evidence. The receipt is JSON with exactly `version: 1`, `previous` and `target`
+(absolute system store paths), nonempty `assessor`, `safe_without_data_restore:
+true`, `evidence` (absolute root-private evidence file) and its `sha256`. Both
+files must be root-owned, private and free of symlinks. This is an explicit
+operator assessment, not an automatically generated safety claim. Never assert
+compatibility across a database migration without evidence.
+The worker has a bounded runtime and the watchdog runs on the host after SSH
+loss; neither can run while the machine is powered off. Retained boot entries
+and independently tested recovery remain necessary.
+
+An interrupted import can be retried with the same reviewed generation. Imports
+are serialized and conflicting immutable artifacts are rejected before any file
+replacement. An interrupted completion is not success: inspect the profile and
+boot entries, then rerun the same authorized operation. Never select another
+generation automatically or remove the previous recovery entry. A failed signing
+step does not undo the earlier profile change made by `nixos-rebuild`.
+
 Kernel and initrd are not signed themselves; the signed stub pins their
 hashes. `boot.initrd.secrets` is rejected at evaluation because the controller
 cannot reproduce host-local initrd content.
@@ -92,8 +136,10 @@ means every host needs new keys enrolled in firmware.
    generation verify against `db.pem` and the firmware is in setup mode. It writes db, KEK and then PK.
 4. Reboot, enable Secure Boot if needed, and confirm
    `bootctl status` reports `Secure Boot: enabled (user)`.
-5. Only after that, enroll TPM-bound unlock according to
-   [Encrypted storage](operator-unlocked-storage.md).
+5. Record the actual firmware status and enrolled certificate fingerprints, then
+   complete the cold-boot and recovery checks in
+   [Boot LUKS migration](boot-storage-migration.md). Do not enroll historical
+   OpenBao/TPM unlock as part of this workflow.
 
 A firmware reset to factory keys, a firmware update that changes the Secure
 Boot databases, or a key replacement changes PCR 7. Any TPM binding to PCR 7
@@ -101,9 +147,12 @@ then needs recovery and re-enrollment.
 
 ## Fresh installation
 
-`nixos-anywhere` and installer images cannot run controller signing during
-installation. Install with `system.boot.secureBoot = false` for that host,
-then enable it and follow the steps above.
+The guarded boot-storage installer must not silently disable Secure Boot to
+complete an installation. A closure that enables it requires a separately
+reviewed signed-install procedure; stop if that procedure is unavailable.
+Passphrase-only installations must explicitly record their boot policy and its
+limitations. Firmware enrollment and any later policy change require their own
+operator authorization and tested recovery media.
 
 ## Current limits
 

@@ -246,6 +246,17 @@
           inherit (inputs) disko;
           repoRoot = ./.;
         };
+        unencrypted-storage = import ./tests/nixtest/unencrypted_storage_vm_test.nix {
+          pkgs = inputs.nixpkgs.legacyPackages.${system};
+          inherit (inputs) disko;
+          repoRoot = ./.;
+        };
+        boot-storage-remote = import ./tests/nixtest/boot_storage_vm_test.nix {
+          pkgs = inputs.nixpkgs.legacyPackages.${system};
+          inherit (inputs) disko;
+          repoRoot = ./.;
+          remoteUnlockTest = true;
+        };
         operator-storage-migration = inputs.nixpkgs.legacyPackages.${system}.testers.runNixOSTest (
           import ./tests/nixtest/operator_storage_migration_vm_test.nix { repoRoot = ./.; }
         );

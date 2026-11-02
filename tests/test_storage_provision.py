@@ -92,11 +92,14 @@ def test_emergency_publisher_repeats_but_never_overwrites(custody, tmp_path):
     assert subprocess.run(command, input=b'plaintext', capture_output=True).returncode != 0
 
 
-@pytest.fixture
-def controller(custody, monkeypatch):
+@pytest.fixture(params=["legacy-containers", "unencrypted-root"])
+def controller(custody, monkeypatch, request):
     vault, key, _ = custody
     vault.mkdir(mode=0o700)
-    state = SimpleNamespace(layout='legacy-containers', method='passphrase', exists=False, machine_id='1' * 32,
+    # Independent native-age custody has its own real-crypto test lane; these
+    # controller tests isolate the existing vault/export/target sequence.
+    monkeypatch.setattr(provision, 'require_independent_custody', lambda *_: None)
+    state = SimpleNamespace(layout=request.param, method='passphrase', exists=False, machine_id='1' * 32,
                             luks_uuid=None, requests=[], exports=[], events=[],
                             fail_export=False, connections=[], local_calls=[],
                             recovery_machine_id='2' * 32)
@@ -157,6 +160,18 @@ def controller(custody, monkeypatch):
             output = target_call(args, kwargs['input'])
         return SimpleNamespace(returncode=0, stdout=output, stderr=b'')
     monkeypatch.setattr(provision.subprocess, 'run', evaluate)
+
+    # Controller tests model an already authenticated payload stream. The real
+    # privilege handshake and password isolation run in test_storage_sudo_transport.
+    def local_stream(self, args, privileged=True, timeout=30):
+        assert privileged
+        state.local_calls.append(['authenticated-stream', *args])
+        class Stream:
+            returncode = 0
+            def communicate(self, data, timeout):
+                return target_call(args, data, privileged=True), b''
+        return Stream()
+    monkeypatch.setattr(provision.Local, 'open_stream', local_stream)
 
     class Remote:
         def __init__(self, name, password=None):
@@ -297,33 +312,25 @@ def test_local_argv_stdin_and_remote_ssh_quoting_remain_distinct(local_process):
     assert options['input'] == data
 
 
-@pytest.mark.parametrize('password_required', [False, True])
-def test_local_privileged_calls_use_existing_sudo_and_private_stdin_policy(
-    local_process, tmp_path, monkeypatch, password_required
-):
-    local_process.sudo_required = password_required
-    password = tmp_path / 'sudo-password'
-    password.write_bytes(b'synthetic-sudo-password\n')
-    password.chmod(0o600)
-    checked = []
-    monkeypatch.setattr(provision, 'encrypted_storage',
-                        lambda path, **kwargs: checked.append(path))
-    target = provision.Local('test-host', password)
+def test_local_privileged_calls_send_only_payload_after_authenticated_stream(local_process, monkeypatch):
+    sent = []
+    class Stream:
+        returncode = 0
+        def communicate(self, data, timeout):
+            sent.append(data)
+            return b'public output', b''
+    target = provision.Local('test-host')
+    calls = []
+    def ready(args):
+        calls.append(args)
+        return Stream()
+    monkeypatch.setattr(target, 'open_stream', ready)
     for _ in range(2):
-        target.call(['luxnix-storage-provision', 'test-volume'],
-                    b'synthetic request', privileged=True)
-    assert local_process.calls[0][0] == ['sudo', '-n', 'true']
-    assert local_process.calls[0][1]['timeout'] == 30
-    assert len(local_process.calls) == 3
-    prefix = ['sudo', '-k', '-S', '-p', ''] if password_required else ['sudo', '-n']
-    for args, options in local_process.calls[1:]:
-        assert args == [*prefix, 'luxnix-storage-provision', 'test-volume']
-        assert 'synthetic-sudo-password' not in ' '.join(args)
-        expected = b'synthetic request'
-        if password_required:
-            expected = b'synthetic-sudo-password\n' + expected
-        assert options['input'] == expected
-    assert checked == ([password, password] if password_required else [])
+        assert target.call(['luxnix-storage-provision', 'test-volume'],
+                           b'synthetic request', privileged=True) == b'public output'
+    assert calls == [['luxnix-storage-provision', 'test-volume']] * 2
+    assert sent == [b'synthetic request'] * 2
+    assert not local_process.calls
 
 
 def test_local_failure_redacts_subprocess_input_and_diagnostics(local_process):

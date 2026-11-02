@@ -23,12 +23,27 @@
   check-connectivity.package = pkgs.zsh;
   check-connectivity.exec = ''./scripts/check-connectivity.sh "$@"'';
 
+  storage-migration-snapshot.package = pkgs.zsh;
+  storage-migration-snapshot.exec = ''
+    ANSIBLE_CONFIG=conf/connectivity-ansible.cfg ANSIBLE_HOST_KEY_CHECKING=True LUXNIX_UV_BIN=${pkgs.uv}/bin/uv \
+      bash scripts/run-ansible-playbook.sh ansible/playbooks/storage-migration-snapshot.yml \
+      -i ansible/inventory/hosts.ini "$@"
+  '';
+
+  storage-migration-backup.package = pkgs.zsh;
+  storage-migration-backup.exec = ''${pkgs.uv}/bin/uv run python -m lx_administration.storage.migration_backup "$@"'';
+
   storage-readiness.package = pkgs.zsh;
   storage-readiness.exec = ''
     ANSIBLE_CONFIG=conf/connectivity-ansible.cfg ANSIBLE_HOST_KEY_CHECKING=True LUXNIX_UV_BIN=${pkgs.uv}/bin/uv \
       bash scripts/run-ansible-playbook.sh ansible/playbooks/storage-readiness.yml \
       -i ansible/inventory/hosts.ini "$@"
   '';
+
+  boot-storage-migration.package = pkgs.zsh;
+  boot-storage-migration.exec = ''${pkgs.uv}/bin/uv run python -m lx_administration.storage.boot_migration "$@"'';
+  storage-recovery-custody.package = pkgs.zsh;
+  storage-recovery-custody.exec = ''${pkgs.uv}/bin/uv run python -m lx_administration.storage.recovery_custody "$@"'';
 
   lx-annotate-streamable-migration.package = pkgs.zsh;
   lx-annotate-streamable-migration.exec = ''./scripts/lx-annotate-streamable-migration.sh "$@"'';
@@ -94,6 +109,8 @@
   # Local storage
   storage-provision.package = pkgs.zsh;
   storage-provision.exec = ''${pkgs.uv}/bin/uv run python -m lx_administration.storage.provision "$@"'';
+  storage-provision-setup.package = pkgs.zsh;
+  storage-provision-setup.exec = ''${pkgs.uv}/bin/uv run python -m lx_administration.storage.provision_setup "$@"'';
   openbao-local.package = pkgs.zsh;
   openbao-local.exec = ''${pkgs.uv}/bin/uv run python -m lx_administration.storage.local_enrollment "$@"'';
   mount-persisting-storage.package = pkgs.zsh;

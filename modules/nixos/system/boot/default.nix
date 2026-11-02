@@ -102,6 +102,10 @@ let
       [ "$(id -u)" -eq 0 ] || die "Run as root (sudo)."
       [ "$#" -ge 1 ] || usage
       case "$1" in
+        verify-firmware)
+          [ "$#" -eq 1 ] || usage
+          exec python3 -I ${../../../../lx_administration/secure_boot.py} verify-firmware --cert ${verificationCertificate}
+          ;;
         import)
           [ "$#" -eq 2 ] || usage
           exec python3 -I ${../../../../lx_administration/secure_boot.py} import \
@@ -179,18 +183,72 @@ in
       }
     ];
 
-    environment.etc = mkIf (cfg.secureBoot && provisioned) (
-      lib.genAttrs
-        [
-          "luxnix/secure-boot/db.pem"
-          "luxnix/secure-boot/PK.auth"
-          "luxnix/secure-boot/KEK.auth"
-          "luxnix/secure-boot/db.auth"
-        ]
-        (name: {
-          source = publicFile (baseNameOf name);
-        })
-    );
+    environment.etc = lib.mkMerge [
+      {
+        "luxnix/activation-compatibility.json".text = builtins.toJSON {
+          version = 1;
+          activation =
+            lib.mapAttrs
+              (_: value: builtins.hashString "sha256" (if builtins.isString value then value else value.text))
+              (
+                lib.filterAttrs (
+                  name: _:
+                  !(builtins.elem name [
+                    "etc"
+                    "binsh"
+                    "specialfs"
+                    "script"
+                  ])
+                ) config.system.activationScripts
+              );
+          units = lib.mapAttrs (_: value: builtins.hashString "sha256" value.text) (
+            lib.filterAttrs (
+              name: _:
+              !(builtins.elem name [
+                "sshd.service"
+                "firewall.service"
+                "nftables.service"
+                "systemd-networkd.service"
+                "NetworkManager.service"
+              ])
+            ) config.systemd.units
+          );
+          etc = lib.mapAttrs (_: value: builtins.hashString "sha256" (builtins.toString value.source)) (
+            lib.filterAttrs (
+              name: _:
+              !(builtins.elem name [
+                "luxnix/activation-compatibility.json"
+                "nix/registry.json"
+                "os-release"
+                "lsb-release"
+              ])
+              && !(lib.any (prefix: lib.hasPrefix prefix name) [
+                "ssh/"
+                "systemd/"
+                "NetworkManager/"
+              ])
+            ) config.environment.etc
+          );
+          filesystems = builtins.hashString "sha256" (
+            builtins.toJSON (
+              lib.mapAttrs (_: value: { inherit (value) device fsType options; }) config.fileSystems
+            )
+          );
+        };
+      }
+      (mkIf (cfg.secureBoot && provisioned) (
+        lib.genAttrs
+          [
+            "luxnix/secure-boot/db.pem"
+            "luxnix/secure-boot/PK.auth"
+            "luxnix/secure-boot/KEK.auth"
+            "luxnix/secure-boot/db.auth"
+          ]
+          (name: {
+            source = publicFile (baseNameOf name);
+          })
+      ))
+    ];
 
     environment.systemPackages =
       with pkgs;
@@ -199,6 +257,39 @@ in
         efitools
         efivar
         fwupd
+        (pkgs.writeShellApplication {
+          name = "luxnix-safe-activate";
+          runtimeInputs = [
+            pkgs.python3
+            pkgs.nix
+            pkgs.systemd
+          ];
+          text = ''exec python3 ${../../../../lx_administration/activation.py} "$@"'';
+        })
+        (pkgs.writeShellApplication {
+          name = "luxnix-check-unlock-health";
+          runtimeInputs = [
+            pkgs.cryptsetup
+            pkgs.systemd
+          ];
+          text =
+            let
+              storage = config.luxnix.storage.operatorUnlocked;
+            in
+            if !storage.enable then
+              "exit 0"
+            else if storage.layout == "boot-luks" then
+              config.system.preSwitchChecks.encryptedStorage
+            else if storage.unlockMethod == "local-openbao" then
+              config.system.preSwitchChecks.openbaoLocalPreflight
+            else if storage.unlockMethod == "tpm2" then
+              lib.concatMapStringsSep "\n" (
+                volume:
+                "cryptsetup open --test-passphrase --token-only --token-type systemd-tpm2 --external-tokens-path ${pkgs.systemd}/lib/cryptsetup ${lib.escapeShellArg volume.container}"
+              ) (builtins.attrValues storage.volumes)
+            else
+              "exit 0";
+        })
       ]
       ++ lib.optionals cfg.secureBoot [
         sbctl

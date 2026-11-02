@@ -59,6 +59,7 @@ markdown_extensions:
 
 nav:
   - Home: index.md
+  - Operator Change Notes: changelog.md
   - Start Here:
       - Getting Started: getting-started.md
       - Development: development.md
@@ -102,6 +103,7 @@ nav:
       - gs-02 Local Redis Recovery: operations/gs-02-local-redis-broker.md
   - Vault:
       - Machine Setup Secrets Checklist: machine-secrets-checklist.md
+      - Boot Encryption Operator Checklist: boot-storage-operator.md
       - Boot LUKS Storage Migration: boot-storage-migration.md
       - Legacy Container Storage: operator-unlocked-storage.md
       - Application Secrets with sops-nix: sops-application-secrets.md

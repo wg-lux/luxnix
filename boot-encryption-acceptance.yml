@@ -983,7 +983,17 @@ repository_review:
   recommendation_source: Eigentümerentscheidungen vom 2026-10-26 und Review in docs/openbao-architecture.md. OpenBao-Storage wurde gegen den gepinnten Quellcode
     v2.6.4 geprüft (docs/openbao.md); der Static Seal ist nur anhand von Zeichenketten im Binary vermutet.
 architecture_decisions:
-  authoritative_date: "2026-10-27"
+  authoritative_date: "2026-11-02"
+  explicit_unencrypted_installation_2026_11_02:
+    requested_by: repository_owner_in_chat
+    decision: Permit explicitly selected unencrypted-root installation; retain boot-luks as the default and never silently downgrade an existing encrypted root.
+    scope: OS installation and administrator access before protected application storage is provisioned; no production deployment authorization.
+    selection: Matching host layout and root_encryption none in the immutable install plan, with explicit UNENCRYPTED confirmation.
+    fresh_installation: Verified empty new disks use recovery and preparation evidence without fictitious source backup or restore assessments.
+    protected_data: Retain container mount and encryption guards; defer protected services until their volumes are ready and automatic startup is explicitly enabled.
+    acceptance: Unencrypted OS installation is not encrypted-fleet acceptance; all encrypted release criteria remain applicable when claiming that assurance.
+    documentation: docs/boot-storage-migration.md
+    verification: tests/nixtest/unencrypted_storage_vm_test.nix
   offline_theft_rollout_2026_10_27:
     requested_by: repository_owner_in_chat
     scope: Planning update; no implementation acceptance or deployment authorization.
@@ -1084,6 +1094,24 @@ boot_luks_revision:
   supersedes: Local OpenBao/TPM container-unlock architecture above; retain prior evidence as historical only.
   design: One LUKS2 root unlock, stage-2 keyfile data unlock, unchanged application encryption and identities.
   runbook: docs/boot-storage-migration.md
+  guarded_workflow:
+    implementation: lx_administration/storage/boot_migration.py
+    command_catalog: devenv/commands.yml
+    readiness: lx_administration/storage/readiness.py
+    evidence_class: repository_implementation_requires_physical_acceptance
+    operator_policy: >-
+      Explicit host, immutable release and disk identities; ordered named recovery,
+      backup and restore assessments precede migration install-only execution. Fresh
+      installation on verified new disks uses recovery and preparation assessments.
+      Root encryption is explicit; see architecture_decisions.explicit_unencrypted_installation_2026_11_02. No automatic
+      formatting, replacement keys, reboot or destructive rollback. Interrupted work
+      requires explicit recovery review. Human attestations are not automated proof.
+    tests:
+      - tests/test_boot_migration.py
+      - tests/test_storage_readiness.py
+      - tests/test_boot_storage.py
+      - tests/test_storage_migration_backup.py
+      - tests/test_secure_boot_workflow.py
   required_acceptance:
     - Verify actual encrypted root and every separate data/RAID member, not just declarations.
     - Offline cold boot with one unlock and automatic service startup.

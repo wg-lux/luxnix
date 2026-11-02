@@ -11,6 +11,18 @@ boundaries:
   - Local CMDB facts are sensitive and must not be committed
   - Remote changes require explicit target authorization and connectivity checks
 entrypoints:
+  - name: storage-local-backup
+    file: playbooks/storage-local-backup.yml
+    purpose: Create encrypted snapshot archives on the approved gc-09 local external filesystem without sending a private key.
+  - name: storage-legacy-recovery
+    file: playbooks/storage-legacy-recovery.yml
+    purpose: Retain a reviewed gc-10 release, authenticate existing containers and activate only the explicit maintenance profile without rebooting.
+  - name: storage-backup-identity-escrow
+    file: playbooks/storage-backup-identity-escrow.yml
+    purpose: Preserve the existing controller backup identity on independently protected gs-02 storage without replacing keys.
+  - name: storage-migration-snapshot
+    file: playbooks/storage-migration-snapshot.yml
+    purpose: Explicitly preserve gc-09 or gc-10 migration sources with short application downtime.
   - name: storage-readiness
     file: playbooks/storage-readiness.yml
     purpose: Read public boot and storage metadata through an explicitly limited inventory target without accessing credentials.

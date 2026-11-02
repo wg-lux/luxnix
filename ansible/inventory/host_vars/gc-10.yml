@@ -26,6 +26,10 @@ host_nixos:
 extra_secret_names: []
 
 host_luxnix:
+  # Temporary maintenance profile: installed root/data remain plaintext.
+  # Retain encrypted application/secrets containers until console-assisted
+  # reprovision and verified restore; see docs/boot-storage-migration.md.
+  storage.operatorUnlocked.layout: '"legacy-containers"'
   # Enrollment tooling only; unlock stays on the fleet passphrase default until ENC-09.
   openbao.local.enable: "true"
   storage.operatorUnlocked.migration.enable: "false"

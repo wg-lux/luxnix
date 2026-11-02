@@ -3,9 +3,11 @@
   pkgs,
   disko,
   repoRoot,
+  remoteUnlockTest ? false,
 }:
 let
   key = "/etc/luks-keys/lx-data.key";
+  sshFixtures = pkgs.path + "/nixos/tests/initrd-network-ssh";
   raw = {
     disko.devices.disk = {
       system = {
@@ -72,10 +74,14 @@ let
 in
 disko.lib.testLib.makeDiskoTest {
   inherit pkgs;
-  name = "boot-storage";
+  name = if remoteUnlockTest then "boot-storage-remote" else "boot-storage";
   disko-config = raw;
   enableOCR = true;
   extraInstallerConfig = { pkgs, ... }: {
+    environment.etc."test-initrd-host-key" = pkgs.lib.mkIf remoteUnlockTest {
+      source = sshFixtures + "/ssh_host_ed25519_key";
+      mode = "0600";
+    };
     system.activationScripts.testSecondaryKey = ''
       install -d -m 0700 /etc/luks-keys
       ${pkgs.coreutils}/bin/head -c 64 /dev/urandom > ${key}
@@ -84,6 +90,9 @@ disko.lib.testLib.makeDiskoTest {
   };
   postDisko = ''
     machine.succeed("install -d -m 0700 /mnt/etc/luks-keys; cp -p ${key} /mnt${key}")
+  ''
+  + pkgs.lib.optionalString remoteUnlockTest ''
+    machine.succeed("install -d -m 0700 /mnt/etc/luxnix/initrd-ssh; install -m 0600 /etc/test-initrd-host-key /mnt/etc/luxnix/initrd-ssh/ssh_host_ed25519_key")
   '';
   extraSystemConfig = { lib, pkgs, ... }: {
     imports = [ "${repoRoot}/modules/nixos/luxnix/operator-unlocked-storage" ];
@@ -104,10 +113,25 @@ disko.lib.testLib.makeDiskoTest {
     config = {
       # Disko's generic test harness embeds a synthetic root key; this test must
       # actually exercise a console prompt instead.
-      boot.initrd.secrets = lib.mkForce { };
+      boot.initrd.secrets = lib.mkForce (
+        lib.optionalAttrs remoteUnlockTest {
+          "/etc/luxnix/initrd-ssh/ssh_host_ed25519_key" = null;
+        }
+      );
       luxnix.storage.operatorUnlocked = {
         enable = true;
         guardedServices.writer = [ "/srv/data" ];
+        remoteUnlock = lib.mkIf remoteUnlockTest {
+          enable = true;
+          interface = "eth0";
+          kernelModules = [
+            "virtio_net"
+            "e1000"
+          ];
+          address = "10.0.2.15/24";
+          allowedSources = [ "10.0.2.2/32" ];
+          authorizedKeys = [ (lib.fileContents (sshFixtures + "/id_ed25519.pub")) ];
+        };
       };
       systemd.services.writer = {
         wantedBy = [ "multi-user.target" ];
@@ -122,12 +146,51 @@ disko.lib.testLib.makeDiskoTest {
       specialisation.updated.configuration.environment.etc."storage-update-test".text = "updated";
     };
   };
-  bootCommands = ''
-    machine.wait_for_console_text("Please enter passphrase")
-    machine.send_chars("secretsecret\n")
-  '';
+  bootCommands =
+    if remoteUnlockTest then
+      ''
+        import os, select, shutil, subprocess, tempfile, time
+        machine.wait_for_console_text("Please enter passphrase")
+        machine.wait_for_console_text("Server listening on 10.0.2.15 port 2222")
+        machine.forward_port(22444, 2222)
+        with tempfile.TemporaryDirectory() as directory:
+            identity = directory + "/operator"
+            shutil.copyfile("${sshFixtures}/id_ed25519", identity)
+            os.chmod(identity, 0o600)
+            known = directory + "/known_hosts"
+            with open(known, "w") as stream:
+                stream.write("[127.0.0.1]:22444 " + open("${sshFixtures}/ssh_host_ed25519_key.pub").read())
+            command = ["${pkgs.openssh}/bin/ssh", "-tt", "-p", "22444", "-i", identity,
+                       "-o", "StrictHostKeyChecking=yes", "-o", "UserKnownHostsFile=" + known,
+                       "-o", "IdentitiesOnly=yes", "root@127.0.0.1", "touch /unauthorized-shell-command"]
+            def enter_passphrase(value):
+                with subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                      stderr=subprocess.STDOUT) as client:
+                    assert client.stdout is not None
+                    output = b""
+                    deadline = time.monotonic() + 30
+                    while b"(cryptroot):" not in output:
+                        assert time.monotonic() < deadline, output.decode(errors="replace")
+                        ready, _, _ = select.select([client.stdout], [], [], 1)
+                        if ready:
+                            chunk = os.read(client.stdout.fileno(), 4096)
+                            assert chunk, output.decode(errors="replace")
+                            output += chunk
+                    assert b"This connection cannot run other commands" in output
+                    client.communicate((value + "\n").encode(), timeout=30)
+            # A failed disk passphrase leaves SSH available for another operator attempt.
+            enter_passphrase("wrong-test-passphrase")
+            time.sleep(3)
+            enter_passphrase("secretsecret")
+      ''
+    else
+      ''
+        machine.wait_for_console_text("Please enter passphrase")
+        machine.send_chars("secretsecret\n")
+      '';
   extraTestScript = ''
     machine.wait_for_unit("writer.service")
+    machine.fail("test -e /unauthorized-shell-command")
     machine.succeed("luxnix-verify-boot-storage")
     fingerprint = machine.succeed("sha256sum ${key}")
     machine.succeed("/run/current-system/bin/switch-to-configuration test")

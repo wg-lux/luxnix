@@ -1,66 +1,51 @@
 ---
-- name: Read the selected host storage and boot baseline
+- name: Inspect storage without changing the selected computer
   hosts: all
   gather_facts: false
   become: false
   tasks:
-    - name: Collect public readiness metadata without reading credentials
+    - name: Require an explicit target and a complete admission request
+      ansible.builtin.assert:
+        that:
+          - ansible_limit | default('') | length > 0
+          - storage_readiness_mode | default('observe') in ['observe', 'admit']
+          - >-
+            storage_readiness_mode | default('observe') != 'admit' or
+            (ansible_play_hosts_all | length == 1 and
+             storage_expected_host | default('') == inventory_hostname and
+             storage_expected_layout | default('') in ['legacy-containers', 'unencrypted-root', 'boot-luks'] and
+             storage_expected_serials | default([]) | length > 0)
+        fail_msg: >-
+          Select one computer, its existing layout and the reviewed serial numbers of
+          every attached disk for admission. Observation mode does not authorize migration.
+
+    - name: Collect observations and evaluate the requested storage admission
       ansible.builtin.command:
-        argv:
-          - /run/current-system/sw/bin/python3
-          - -c
-          - |
-            import json
-            import pathlib
-            import socket
-            import subprocess
-
-            def probe(*argv):
-                try:
-                    result = subprocess.run(argv, capture_output=True, text=True, timeout=30)
-                    return {"exit": result.returncode, "output": result.stdout.strip(),
-                            "error": result.stderr.strip()}
-                except (OSError, subprocess.TimeoutExpired) as error:
-                    return {"exit": None, "error": type(error).__name__}
-
-            def link(path):
-                p = pathlib.Path(path)
-                return str(p.resolve()) if p.exists() else None
-
-            firmware = pathlib.Path("/sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c")
-            try:
-                raw = firmware.read_bytes()
-                secure_boot = raw[4] == 1 if len(raw) == 5 else "invalid-variable"
-            except OSError as error:
-                secure_boot = type(error).__name__
-            report = {
-                "host": socket.gethostname(),
-                "generations": {p: link(p) for p in ["/run/current-system", "/run/booted-system",
-                                                      "/nix/var/nix/profiles/system"]},
-                "secure_boot": secure_boot,
-                "tpm_driver": link("/sys/class/tpm/tpm0/device/driver"),
-                "virtualization": probe("systemd-detect-virt"),
-                "block_devices": probe("lsblk", "--json", "--output", "NAME,TYPE,FSTYPE,UUID,MOUNTPOINTS"),
-                "mounts": {path: probe("findmnt", "--json", "--mountpoint", path,
-                                       "--output", "TARGET,SOURCE,FSTYPE,OPTIONS") for path in [
-                    "/", "/nix/store", "/etc/secrets", "/etc/secrets/vault",
-                    "/var/lib/luxnix-secrets", "/var/lib/luxnix-app-storage",
-                    "/var/lib/postgresql", "/var/lib/lx-annotate"]},
-                "swap": probe("swapon", "--show", "--noheadings", "--output", "NAME,TYPE"),
-                "services": {unit: probe("systemctl", "is-active", unit) for unit in [
-                    "sshd", "postgresql", "lx-annotate", "lx-annotate-celery-worker",
-                    "openbao-local", "luxnix-storage-migrate"]},
-            }
-            print(json.dumps(report, sort_keys=True))
+        argv: >-
+          {{ ['/run/current-system/sw/bin/python3', '-', '--expected-host',
+              storage_expected_host | default(inventory_hostname), '--mode',
+              storage_readiness_mode | default('observe'), '--expected-serials',
+              storage_expected_serials | default([]) | to_json]
+             + (['--expected-layout', storage_expected_layout]
+                if storage_expected_layout is defined else []) }}
+        stdin: "{{ lookup('file', '../../lx_administration/storage/readiness.py') }}"
+      become: "{{ storage_readiness_mode | default('observe') == 'admit' }}"
+      become_user: root
       register: storage_readiness
       changed_when: false
+      failed_when: false
       check_mode: false
 
-    - name: Require the inventory identity to match the responding host
-      ansible.builtin.assert:
-        that: (storage_readiness.stdout | from_json).host == inventory_hostname
-        fail_msg: Refusing readiness evidence from a different host.
-
-    - name: Report baseline without claiming recovery or production acceptance
+    - name: Report observations with explicit admission reasons
       ansible.builtin.debug:
         msg: "{{ storage_readiness.stdout | from_json }}"
+      when: storage_readiness.stdout | default('') | length > 0
+
+    - name: Stop when identity or required admission checks failed
+      ansible.builtin.assert:
+        that:
+          - storage_readiness.rc == 0
+          - (storage_readiness.stdout | from_json).host == inventory_hostname
+        fail_msg: >-
+          Storage admission failed. Review the reasons above with the operator;
+          no storage, keys, services or boot settings were changed.

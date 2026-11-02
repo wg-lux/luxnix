@@ -1,0 +1,70 @@
+---
+- name: Create ciphertext backups on the explicitly selected gc-09 external disk
+  hosts: all
+  gather_facts: false
+  become: true
+  become_user: root
+  tasks:
+    - name: Require the approved host and existing destination
+      ansible.builtin.assert:
+        that:
+          - inventory_hostname == 'gc-09'
+          - migration_snapshot_id is match('^[a-z0-9][a-z0-9-]{5,60}$')
+          - backup_recipient is match('^age1[0-9a-z]{58}$')
+          - backup_custodian_recipient is match('^age1[0-9a-z]{58}$')
+          - backup_recipient != backup_custodian_recipient
+          - backup_age_package is match('^/nix/store/[a-z0-9]{32}-age-')
+          - backup_destination is match('^/run/media/admin/[^/]+$')
+          - backup_destination_uuid is match('^[0-9a-f-]{36}$')
+
+    - name: Create the directory for public backup tooling
+      ansible.builtin.file:
+        path: /var/lib/luxnix-migration-tools
+        state: directory
+        mode: '0700'
+
+    - name: Install the reviewed public streaming tool
+      ansible.builtin.copy:
+        src: '{{ playbook_dir }}/../../lx_administration/storage/migration_archive.py'
+        dest: /var/lib/luxnix-migration-tools/archive.py
+        owner: root
+        group: root
+        mode: '0600'
+
+    - name: Retain the reviewed age package without changing the system profile
+      ansible.builtin.command:
+        argv: [nix-store, --add-root, /var/lib/luxnix-migration-tools/age, --realise, '{{ backup_age_package }}']
+      changed_when: true
+
+    - name: Check for a failed previous launch
+      ansible.builtin.command: systemctl is-failed luxnix-local-migration-backup.service
+      register: previous_backup
+      failed_when: previous_backup.rc not in [0, 1, 4]
+      changed_when: false
+
+    - name: Clear only a failed transient launch before a reviewed retry
+      ansible.builtin.command: systemctl reset-failed luxnix-local-migration-backup.service
+      changed_when: false
+      when: previous_backup.rc == 0
+
+    - name: Start the retained backup job without transporting a private identity
+      ansible.builtin.command:
+        argv:
+          - systemd-run
+          - --unit=luxnix-local-migration-backup
+          - --property=UMask=0077
+          - --property=Nice=10
+          - "--setenv=PATH={{ backup_age_package }}/bin:/run/current-system/sw/bin:/run/wrappers/bin"
+          - /run/current-system/sw/bin/python3
+          - /var/lib/luxnix-migration-tools/archive.py
+          - --snapshot-id
+          - '{{ migration_snapshot_id }}'
+          - --destination
+          - '{{ backup_destination }}'
+          - --destination-uuid
+          - '{{ backup_destination_uuid }}'
+          - --recipient
+          - '{{ backup_recipient }}'
+          - --custodian-recipient
+          - '{{ backup_custodian_recipient }}'
+      changed_when: true

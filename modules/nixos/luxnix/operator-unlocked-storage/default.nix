@@ -8,6 +8,10 @@
 }:
 let
   cfg = config.luxnix.storage.operatorUnlocked;
+  containerLayout = builtins.elem cfg.layout [
+    "legacy-containers"
+    "unencrypted-root"
+  ];
   inherit (utils) escapeSystemdPath;
   cleanParts =
     path:
@@ -141,11 +145,17 @@ in
       type = lib.types.enum [
         "boot-luks"
         "legacy-containers"
+        "unencrypted-root"
       ];
       default = "boot-luks";
-      description = "Fleet boot LUKS layout; legacy-containers is temporary recovery compatibility only.";
+      description = "Boot LUKS by default; unencrypted-root explicitly selects plain root with protected data containers; legacy-containers preserves migration compatibility.";
     };
     enable = lib.mkEnableOption "encrypted storage and guarded consumers";
+    autoStartProtectedServices = lib.mkOption {
+      type = lib.types.bool;
+      default = cfg.layout != "unencrypted-root";
+      description = "Start guarded consumers and container unlocks automatically. Enable after provisioning protected storage on an explicitly unencrypted root.";
+    };
     unlockMethod = lib.mkOption {
       type = lib.types.enum [
         "passphrase"
@@ -268,7 +278,7 @@ in
     };
   };
 
-  config = lib.mkIf (cfg.enable && cfg.layout == "legacy-containers") {
+  config = lib.mkIf (cfg.enable && containerLayout) {
     environment.systemPackages = [
       (pkgs.writeShellApplication {
         name = "luxnix-storage-provision";
@@ -281,6 +291,10 @@ in
     ];
     security.tpm2.enable = lib.mkIf (cfg.unlockMethod == "tpm2") true;
     assertions = [
+      {
+        assertion = cfg.layout != "unencrypted-root" || !cfg.remoteUnlock.enable;
+        message = "Unencrypted root has no early disk-unlock prompt; disable remoteUnlock.";
+      }
       {
         assertion =
           cfg.unlockMethod != "local-openbao"
@@ -324,7 +338,7 @@ in
         message = "Operator-unlocked startupServices must name guarded services.";
       }
       {
-        assertion = cfg.volumes != { };
+        assertion = cfg.volumes != { } || (cfg.layout == "unencrypted-root" && cfg.guardedServices == { });
         message = "Operator-unlocked storage requires at least one volume.";
       }
       {
@@ -404,6 +418,9 @@ in
         lib.mapAttrs (
           name: paths:
           (guard paths)
+          // lib.optionalAttrs (!cfg.autoStartProtectedServices) {
+            wantedBy = lib.mkForce [ ];
+          }
           // {
             requires = [ "${checkName name}.service" ];
             after = [ "${checkName name}.service" ];
@@ -487,7 +504,7 @@ in
             # container at a time so a shared passphrase is entered once. Key-file
             # volumes open afterwards without holding back the login screen.
             # Unanswered prompts must release the splash/login ordering on timeout.
-            wantedBy = lib.optional passphraseBoot "multi-user.target";
+            wantedBy = lib.optional (passphraseBoot && cfg.autoStartProtectedServices) "multi-user.target";
             before = lib.optionals prompted [
               "display-manager.service"
               "plymouth-quit.service"

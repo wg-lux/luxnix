@@ -107,7 +107,10 @@ in
     enable = lib.mkEnableOption "password-login and remote OpenBao storage access" // {
       default =
         (lib.attrByPath [ "roles" "endoreg-client" "enable" ] false config)
-        && storage.layout == "legacy-containers"
+        && builtins.elem storage.layout [
+          "legacy-containers"
+          "unencrypted-root"
+        ]
         && storage.unlockMethod == "local-openbao"
         && config.luxnix.openbao.local.seal == "passphrase";
     };
