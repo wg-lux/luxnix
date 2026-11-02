@@ -1,4 +1,4 @@
-"""OCR dependencies must survive wheel deployment without a system profile link."""
+"""Native media dependencies survive wheel deployment without a system profile link."""
 
 import shutil
 import subprocess
@@ -9,14 +9,16 @@ from nix_eval_helpers import REPO_ROOT, eval_json
 
 
 def test_report_embedding_model_reaches_web_and_workers() -> None:
-    paths = eval_json('''
+    paths = eval_json("""
       let
         flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
         cfg = flake.nixosConfigurations.gc-02.config;
       in map (name:
         cfg.systemd.services.${name}.environment.ENDOREG_REPORT_EMBEDDING_MODEL_PATH
-      ) [ "lx-annotate" "lx-annotate-celery-worker" "lx-annotate-celery-pipeline-worker" ]
-    ''')
+      ) [
+        "lx-annotate" "lx-annotate-celery-worker" "lx-annotate-celery-pipeline-worker"
+      ]
+    """)
     assert len(set(paths)) == 1
     assert paths[0].startswith("/nix/store/")
     assert paths[0].endswith("-de-core-news-lg-3.8.0-data")
@@ -183,3 +185,69 @@ def test_gc_02_tesseract_package_contains_required_languages() -> None:
         text=True,
     )
     assert {"deu", "eng"} <= set(languages.stdout.splitlines())
+
+
+@pytest.mark.parametrize("host_name", ["gc-02", "gc-10"])
+def test_libmagic_classifies_pdf_in_web_and_worker_runtime(host_name: str) -> None:
+    result = eval_json(
+        """
+        let
+          flake = builtins.getFlake "__LUXNIX_FLAKE_URI__";
+          host = flake.nixosConfigurations.HOST_NAME;
+        in {
+          library = toString (host.pkgs.lib.getLib host.pkgs.file);
+          python = "${host.pkgs.python312}/bin/python";
+          services = map (name:
+            host.config.systemd.services.${name}.environment.LD_LIBRARY_PATH
+          ) [
+            "lx-annotate"
+            "lx-annotate-celery-worker"
+            "lx-annotate-celery-pipeline-worker"
+          ];
+        }
+        """.replace("HOST_NAME", host_name)
+    )
+    subprocess.run(
+        [
+            "nix",
+            "build",
+            "--no-link",
+            f"git+file://{REPO_ROOT}#nixosConfigurations.{host_name}.pkgs.file",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
+    )
+    for library_path in result["services"]:
+        assert f"{result['library']}/lib" in library_path.split(":")
+        subprocess.run(
+            [
+                result["python"],
+                "-I",
+                "-S",
+                "-c",
+                r"""
+import ctypes
+library = ctypes.CDLL("libmagic.so.1")
+library.magic_open.restype = ctypes.c_void_p
+library.magic_load.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+library.magic_buffer.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_size_t]
+library.magic_buffer.restype = ctypes.c_char_p
+library.magic_close.argtypes = [ctypes.c_void_p]
+cookie = library.magic_open(0x10)
+assert cookie
+try:
+    assert library.magic_load(cookie, None) == 0
+    content = b"%PDF-1.4\n%%EOF\n"
+    assert library.magic_buffer(cookie, content, len(content)) == b"application/pdf"
+finally:
+    library.magic_close(cookie)
+                """,
+            ],
+            env={"LD_LIBRARY_PATH": library_path},
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )

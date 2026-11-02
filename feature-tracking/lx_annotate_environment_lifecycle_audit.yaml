@@ -170,6 +170,8 @@ definition_of_done:
   category: operations
   title: Systemd and interactive maintenance receive one contract
   acceptance:
+  - Web, Celery workers and maintenance wrappers share the hard native libmagic dependency through the
+    service runtime library path; content-based upload validation never falls back to filenames.
   - Base-data startup and the repository migration helper explicitly enable bounded legacy catalogue reconciliation
     after schema migrations; fresh imports and repeated starts preserve IDs and receipts, while unrelated
     conflicts fail the unit without partial database changes or a success stamp.
@@ -204,6 +206,13 @@ definition_of_done:
         Evaluation target gc-02 selects lx-annotate 1.4.0 wheel SHA256 b91e7fc3e0e70999f39c179860236514a98912f34cd6e3637b36d9d6c56e1adf;
         no updated backend artifact produced. Locked lx-annotate input 7e2ce39085863c6aae5afbe3ad9b10466694ec75.
         nix eval gc-02 system.build.toplevel.drvPath succeeded: /nix/store/qbnmpv5xpkqr1vp88kmk51mj21nlxvii-nixos-system-gc-02-26.05.20260905.6713828.drv.'
+    - kind: test
+      reference: 'tests/lx-annotate/test_lx_annotate_ocr_runtime.py: 8 passed in 53.07s; gc-02/gc-10 real
+        ctypes libmagic PDF classification under evaluated service LD_LIBRARY_PATH without inherited environment.'
+    - kind: command
+      reference: 'Endoreg source integration under the evaluated gc-02 service runtime: 109 passed, 1
+        separately verified case deselected, 9 subtests; declared local devenv libmagic PDF/text probe
+        passed and its entire upload endpoint suite passed 35 tests and 9 subtests. No deployment.'
     note: 'The rendered file and systemd unit environment are similar but not identical, and wrapper compatibility
       exports create a second effective contract.
 
@@ -216,9 +225,15 @@ definition_of_done:
       tests: 39 passed. gc-02 whole-system drvPath evaluation passed after a source-change-during-evaluation
       retry. Documentation check, Nix parsing/formatting, Ruff and diff checks passed. Coordinated backend
       release supporting the flag is required. No build, activation, runtime package installation or production
-      database mutation performed. Existing environment parity blockers remain open.'
-    assessed_by: codex-study-definitions-20260929
-    assessed_at: '2026-09-29T13:46:12.277809Z'
+      database mutation performed. Existing environment parity blockers remain open.
+
+      2026-11-02: The hard native libmagic dependency is now supplied through the shared runtimeLibraryPackages
+      list. Evaluated web, maintenance and pipeline worker paths match on gc-02 and gc-10, and actual
+      isolated native PDF classification succeeds. The complete native/OCR contract file passed 8 tests
+      in 53.07 seconds. Existing environment parity blockers remain unchanged; no host was activated or
+      production configuration applied.'
+    assessed_by: codex-storage-review-20261102
+    assessed_at: '2026-11-02T14:17:21.231481Z'
 - id: django_conversion_complete
   category: functionality
   title: Every application value becomes a typed Django setting

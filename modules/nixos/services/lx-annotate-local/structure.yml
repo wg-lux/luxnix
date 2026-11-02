@@ -45,6 +45,7 @@ dependencies:
   - systemd
   - FFmpeg and FFprobe
   - Tesseract
+  - libmagic
   - Vault
   - mTLS
 submodules: []

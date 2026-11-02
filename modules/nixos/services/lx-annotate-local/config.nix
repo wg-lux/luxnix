@@ -592,6 +592,7 @@ let
   brokerUrlUsesSecureTransport =
     url: url != null && (lib.hasPrefix "rediss:" url || lib.hasPrefix "amqps:" url);
   runtimeLibraryPackages = [
+    pkgs.file
     pkgs.stdenv.cc.cc.lib
     pkgs.libglvnd
     pkgs.zlib
