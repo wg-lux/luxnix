@@ -150,6 +150,9 @@ entrypoints:
   - name: operator-storage-migration
     file: test_operator_storage_migration.py
     purpose: Exercise startup copy integrity, existing destination conflicts, receipts and exclusive container creation.
+  - name: storage-boot-ordering
+    file: test_storage_boot_ordering.py
+    purpose: Evaluate gc-09's legacy storage graph against boot ordering cycles and mandatory nested-bind identity gates.
   - name: operator-unlocked-storage
     file: test_operator_unlocked_storage.py
     purpose: Evaluate reusable storage validation, dependency gates, disabled isolation and generated site layouts.

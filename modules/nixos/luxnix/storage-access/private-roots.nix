@@ -44,9 +44,18 @@ in
         name: volume:
         lib.nameValuePair (permissions name) {
           description = "Restrict the ${name} backing root to sudo/root";
+          # The bind mounts require this service. Default dependencies would
+          # order it after basic.target, and so order those mounts after
+          # sysinit/local-fs: an ordering cycle that makes systemd delete
+          # D-Bus, tmpfiles and local-fs jobs at boot.
+          unitConfig.DefaultDependencies = false;
           bindsTo = [ (mountUnit volume.mountPoint) ];
           after = [ (mountUnit volume.mountPoint) ];
-          before = map mountUnit (
+          conflicts = [ "shutdown.target" ];
+          before = [
+            "shutdown.target"
+          ]
+          ++ map mountUnit (
             builtins.attrNames (lib.filterAttrs (_: b: b.volume == name) storage.bindMounts)
           );
           serviceConfig = {

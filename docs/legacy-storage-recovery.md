@@ -8,8 +8,12 @@ an installation, enrollment or provisioning path.
 
 | Host | Repository configuration | Old live storage to preserve |
 | --- | --- | --- |
-| gc-09 | `layout = "legacy-containers"`, local OpenBao tool installed | `luxnix-secrets` and `luxnix-app-storage` containers |
-| gc-10 | `layout = "legacy-containers"`, local OpenBao tool installed | Containers listed in [gc-10](#gc-10) |
+| gc-09 | `boot-luks` since 2026-11-03; the installed generation still runs containers | `luxnix-secrets` and `luxnix-app-storage` containers |
+| gc-10 | `boot-luks` since 2026-11-03; the installed generation still runs containers | Containers listed in [gc-10](#gc-10) |
+
+gc-09 and gc-10 can no longer be rebuilt in place from the repository: the
+boot-storage pre-switch check rejects their plaintext root. Until reinstall, the
+units described below exist only in their currently installed generations.
 | gs-02 | `boot-luks`; the Vault TLS container option evaluates off | `/var/lib/luxnix-vault-tls.luks` holding Vault PKI and managed secrets |
 
 The repository describes intent, not live state. Inspect the host before

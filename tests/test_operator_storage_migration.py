@@ -787,3 +787,65 @@ def test_restack_rejects_mount_without_required_hardening(shadowed, monkeypatch)
     monkeypatch.setattr(migration, "run", weak)
     with pytest.raises(migration.MigrationError, match="verification"):
         migration.restack_binds(config)
+
+
+def _visible(state, path, mount):
+    path.mkdir(mode=0o700, exist_ok=True)
+    state.ids[str(path)] = mount
+
+
+def test_verify_accepts_configured_identity_and_protections(shadowed):
+    config, volume, secrets, vault, state = shadowed
+    migration.restack_binds(config)
+    migration.verify_mounts(config, [str(volume), str(secrets), str(vault)])
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        ({"source": "/dev/mapper/other-encrypted"}, "unexpected filesystem"),
+        ({"root": "/host-secrets"}, "unexpected filesystem"),
+        ({"options": ["rw", "nosuid", "nodev"]}, "noexec"),
+    ],
+    ids=["other-encrypted-filesystem", "wrong-subdirectory", "missing-protection"],
+)
+def test_verify_rejects_wrong_identity_or_protection(shadowed, change, message):
+    config, _, _, vault, state = shadowed
+    _visible(state, vault, 30)
+    state.table[30].update(change)
+    with pytest.raises(migration.MigrationError, match=message):
+        migration.verify_mounts(config, [str(vault)])
+
+
+def test_verify_rejects_hidden_and_unconfigured_paths(shadowed):
+    config, _, _, vault, _ = shadowed
+    with pytest.raises(migration.MigrationError, match="not mounted as configured"):
+        migration.verify_mounts(config, [str(vault)])
+    with pytest.raises(migration.MigrationError, match="not a configured"):
+        migration.verify_mounts(config, ["/var/lib/postgresql"])
+    with pytest.raises(migration.MigrationError, match="No storage paths"):
+        migration.verify_mounts(config, [])
+
+
+def test_restack_rejection_is_enforced_by_consumer_verification(shadowed):
+    """A rejected restack leaves the wrong mount in place; the consumer gate must still fail."""
+    config, _, secrets, vault, state = shadowed
+    _visible(state, vault, 30)
+    state.table[30]["source"] = "/dev/mapper/other-encrypted"
+    with pytest.raises(migration.MigrationError, match="unexpected filesystem"):
+        migration.restack_binds(config)
+    assert state.mounts == [] and 30 in state.table
+    with pytest.raises(migration.MigrationError, match="unexpected filesystem"):
+        migration.verify_mounts(config, config["guarded"]["vault-auth-setup"])
+    migration.verify_mounts(config, [str(secrets)])  # Unrelated healthy mount still passes.
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [["verify"], ["unlock"], ["unlock", "a", "b"], ["provision"], ["restack", "extra"], ["prepare", "x"]],
+)
+def test_cli_rejects_wrong_operand_counts(tmp_path, monkeypatch, argv):
+    monkeypatch.setattr(migration.sys, "argv", ["operator_migration.py", str(tmp_path / "unused.json"), *argv])
+    with pytest.raises(SystemExit) as raised:
+        migration.main()
+    assert raised.value.code == 2

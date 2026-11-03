@@ -392,11 +392,9 @@
     maintenance.autoUpdates = {
       dates = "17:00";
       enable = false;
-      flake = "github:wg-lux/luxnix/prototype";
-      operation = "switch";
+      operation = "boot";
     };
 
-    openbao.local.enable = true;
     packages.shared = [ ];
 
     storage.operatorUnlocked = {
@@ -510,7 +508,6 @@
           }
         )
       );
-      layout = "legacy-containers";
 
       migration = {
         accountHashes =

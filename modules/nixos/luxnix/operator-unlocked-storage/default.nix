@@ -88,8 +88,12 @@ let
     lib.nameValuePair volume.mountPoint {
       inherit (volume) device fsType;
       depends = lib.unique (volume.depends ++ parents volume.mountPoint);
+      # nofail: without it even noauto mounts are ordered before local-fs.target,
+      # while their unlock runs after it, which closes a boot ordering cycle.
+      # Consumers still bind to these mounts and fail closed individually.
       options = [
         "noauto"
+        "nofail"
         "nodev"
         "nosuid"
         "x-systemd.device-timeout=${if volume.container == null then "10s" else "90s"}"
@@ -113,6 +117,7 @@ let
       options = [
         "bind"
         "noauto"
+        "nofail"
         "nodev"
         "nosuid"
       ]
@@ -435,7 +440,8 @@ in
           lib.nameValuePair (checkName name) (
             (guard paths)
             // lib.optionalAttrs (nestedBinds != [ ]) {
-              # Wants, not Requires: the mount-point assertion stays the gate.
+              # Wants, not Requires: a rejected restack of an unrelated bind must
+              # not block healthy consumers. Affected consumers are gated below.
               wants = [ "${restackName}.service" ];
               after = [ "${restackName}.service" ];
             }
@@ -452,6 +458,14 @@ in
                   lib.escapeShellArgs (map (path: "--prefix=${path}") paths)
                 }";
                 ExecStart = "${pkgs.python3}/bin/python ${../../../../lx_administration/secret_storage.py} ${lib.escapeShellArgs paths}";
+              }
+              // lib.optionalAttrs (lib.any (path: builtins.elem path nestedBinds) paths) {
+                # Mandatory for consumers of a nested bind: a mount that restack
+                # rejected stays present, and encrypted ancestry alone would
+                # accept a different encrypted filesystem or subdirectory.
+                ExecStartPre = "${migrationCommand} verify ${
+                  lib.escapeShellArgs (builtins.filter (path: builtins.elem path mountPaths) paths)
+                }";
               };
             }
           )

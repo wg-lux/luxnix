@@ -415,8 +415,39 @@ def _visible_mount(config, table, path):
         return False
     entry = table.get(own)
     if entry is None or (entry["source"], entry["root"]) != _expected_mount(config, path):
-        raise MigrationError(f"{path} carries an unexpected filesystem; refusing to restack")
+        raise MigrationError(f"{path} carries an unexpected filesystem")
     return True
+
+
+def _required_options(config, path):
+    """Mount protections the Nix module declares for a configured volume or bind."""
+    volume = next(
+        (v for v in config["volumes"].values() if v["mountPoint"] == path),
+        None,
+    ) or config["volumes"][config["binds"][path]["volume"]]
+    return ["nodev", "nosuid"] + (["noexec"] if volume.get("noexec") else [])
+
+
+def verify_mounts(config, paths):
+    """Fail unless every path is visibly mounted with its configured identity and protections.
+
+    Encrypted ancestry alone is not enough: a different encrypted filesystem,
+    or the wrong subdirectory of the right one, must not become a consumer's
+    state. Read-only; it never mounts, unmounts or creates anything.
+    """
+    if not paths:
+        raise MigrationError("No storage paths to verify")
+    table = mount_table()
+    for path in paths:
+        if path not in config["binds"] and not any(
+            v["mountPoint"] == path for v in config["volumes"].values()
+        ):
+            raise MigrationError(f"{path} is not a configured operator storage mount")
+        if not _visible_mount(config, table, path):
+            raise MigrationError(f"{path} is not mounted as configured")
+        missing = set(_required_options(config, path)) - set(table[mount_id(Path(path))]["options"])
+        if missing:
+            raise MigrationError(f"{path} lacks required mount options: {','.join(sorted(missing))}")
 
 
 def restack_binds(config):
@@ -459,7 +490,7 @@ def restack_binds(config):
             if mountpoint.parent.is_symlink() or mount_id(mountpoint.parent) != mount_id(Path(parent)):
                 raise MigrationError(f"{target} would not be created inside {parent}")
             mountpoint.mkdir(mode=0o700)
-        options = ["nodev", "nosuid"] + (["noexec"] if volume.get("noexec") else [])
+        options = _required_options(config, target)
         run("mount", "--bind", "-o", ",".join(options), str(source), target)
         table = mount_table()
         if not _visible_mount(config, table, target) or not set(options) <= set(
@@ -527,9 +558,20 @@ def prepare_accounts(accounts):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("config", type=Path)
-    parser.add_argument("action", choices=["unlock", "prepare", "precopy", "cutover", "accounts", "provision", "restack"])
-    parser.add_argument("volume", nargs="?")
+    parser.add_argument(
+        "action", choices=["unlock", "prepare", "precopy", "cutover", "accounts", "provision", "restack", "verify"]
+    )
+    parser.add_argument("operands", nargs="*")
     args = parser.parse_args()
+    if args.action == "verify":
+        if not args.operands:
+            parser.error("verify requires at least one path")
+    elif args.action in {"unlock", "provision"}:
+        if len(args.operands) != 1:
+            parser.error(f"{args.action} requires exactly one volume")
+    elif args.operands:
+        parser.error(f"{args.action} takes no operands")
+    args.volume = args.operands[0] if args.action in {"unlock", "provision"} else None
     config = json.loads(args.config.read_text())
     spec = importlib.util.spec_from_file_location("storage_verifier", config["verifier"])
     verifier = importlib.util.module_from_spec(spec)
@@ -540,6 +582,10 @@ def main():
         if os.geteuid() != 0:
             raise MigrationError("Run as root")
         os.umask(0o077)
+        if args.action == "verify":
+            # Read-only gate: never queue behind an unlock prompt holding the lock.
+            verify_mounts(config, args.operands)
+            return
         # /run is runtime-only; this lock contains no passphrase or secret data.
         Path("/run/lock").mkdir(mode=0o755, exist_ok=True)
         with open("/run/lock/luxnix-operator-migration", "a") as lock:

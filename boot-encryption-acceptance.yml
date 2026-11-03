@@ -984,6 +984,19 @@ repository_review:
     v2.6.4 geprüft (docs/openbao.md); der Static Seal ist nur anhand von Zeichenketten im Binary vermutet.
 architecture_decisions:
   authoritative_date: "2026-11-03"
+  legacy_host_configuration_exception_removed_2026_11_03:
+    requested_by: repository_owner_in_chat
+    decision: gc-09 and gc-10 carry no legacy-containers inventory override; they evaluate as boot-luks like every other fleet host, with local OpenBao disabled.
+    supersedes: The repository-configuration part of single_storage_path_2026_11_02 retained_recovery_hosts. Its retirement_gate still governs the old live data.
+    live_state: Both installed systems still run plaintext root with the old containers. The repository change converts no storage and is not physical acceptance.
+    activation_guard: The boot-storage pre-switch check rejects switch and boot onto a plaintext root, so the new configuration cannot be activated on the old disks. Never bypass it with NIXOS_NO_CHECK.
+    retained_recovery: Keep containers, LUKS headers, recovery passphrases and container metadata until restore and cold-boot acceptance; the legacy module and its tests remain for that recovery.
+    recorded_container_uuids:
+      gc-10:
+        luxnix-app-storage: f5869d54-4ea5-407c-a690-7238fe79cd6b
+        luxnix-secrets: dc53d362-e6e2-43ee-9cbf-4726d55c3055
+    gc10_former_app_container: /data/raid01/luxnix-app-storage.luks
+    authorization: Repository configuration only; reprovisioning each host remains a separate console-attended destructive operation.
   gc10_application_raid_below_luks_2026_11_03:
     requested_by: repository_owner_in_chat
     decision: Application/data NVMe partition, one-member MD RAID1, LUKS2, then one Btrfs filesystem with application and PostgreSQL subvolumes.

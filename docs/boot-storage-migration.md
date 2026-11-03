@@ -632,8 +632,13 @@ a disk format, restore missing keys or reconcile diverged databases.
 
 ## Temporary compatibility and removal
 
-gc-09 and gc-10 currently select `legacy-containers` explicitly in canonical host
-inventory. Both remain unmigrated in repository acceptance; inspect the live
+Since the owner decision of 2026-11-03, gc-09 and gc-10 select `boot-luks` like
+every other host; no inventory override selects `legacy-containers`. Their
+installed systems are unchanged: plaintext root with the old containers, until
+each host is reprovisioned with this procedure. The boot-storage pre-switch check
+rejects `switch` and `boot` onto a plaintext root, so a rebuild on the old disks
+fails before the bootloader changes. Never bypass it with `NIXOS_NO_CHECK=1`.
+Both remain unmigrated in repository acceptance; inspect the live
 host before making any claim about its root storage. For gc-10, no recovery
 console is available for its plaintext-root reprovision.
 Its original encrypted application and secrets containers remain mandatory;

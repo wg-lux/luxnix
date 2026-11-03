@@ -55,7 +55,8 @@ def test_existing_recovery_is_bounded_to_two_hosts():
     )
     assert result.returncode == 0, result.stderr
     configuration = json.loads(result.stdout)
-    assert configuration["legacy"] == ["gc-09", "gc-10"]
+    # Owner decision 2026-11-03: no inventory host keeps the legacy layout.
+    assert configuration["legacy"] == []
     assert any(
         "recovery compatibility for gc-09/gc-10 only" in f
         for f in configuration["failures"]

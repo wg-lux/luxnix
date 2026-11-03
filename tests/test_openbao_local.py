@@ -383,6 +383,12 @@ def test_passphrase_seal_profile_prompts_once_before_login():
             luxnix.storage.operatorUnlocked.unlockMethod = lib.mkForce "local-openbao";
         luxnix.openbao.local.seal = lib.mkForce "passphrase";
         luxnix.storage.loginAccess.enable = false; # Explicit legacy boot-prompt profile.
+        # Inventory no longer enables it for gc-10 (owner decision 2026-11-03).
+        luxnix.openbao.local.enable = true;
+        luxnix.storage.operatorUnlocked.volumes = {
+          luxnix-app-storage.luksUUID = "f5869d54-4ea5-407c-a690-7238fe79cd6b";
+          luxnix-secrets.luksUUID = "dc53d362-e6e2-43ee-9cbf-4726d55c3055";
+        };
       }]; }).config;
       s = c.systemd.services;
     in {

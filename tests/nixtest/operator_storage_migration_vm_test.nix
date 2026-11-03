@@ -10,9 +10,32 @@ let
     }:
     {
       imports = [ "${repoRoot}/modules/nixos/luxnix/operator-unlocked-storage" ];
+      # Legacy containers are only accepted on the gc-09/gc-10 recovery hosts.
+      networking.hostName = lib.mkForce "gc-09";
       # The VM module replaces fileSystems; retain the module-generated test mounts.
       virtualisation.fileSystems =
         (import "${repoRoot}/modules/nixos/luxnix/operator-unlocked-storage" {
+          inherit
+            config
+            lib
+            pkgs
+            utils
+            ;
+        }).config.content.fileSystems;
+    };
+  # gc-09 shape: the real permission services order nested binds at boot.
+  privateRootsNode =
+    {
+      config,
+      lib,
+      pkgs,
+      utils,
+      ...
+    }:
+    {
+      imports = [ "${repoRoot}/modules/nixos/luxnix/storage-access/private-roots.nix" ];
+      virtualisation.fileSystems =
+        (import "${repoRoot}/modules/nixos/luxnix/storage-access/private-roots.nix" {
           inherit
             config
             lib
@@ -56,7 +79,10 @@ in
     system.stateVersion = "26.05";
   };
   nodes.locked = { lib, pkgs, ... }: {
-    imports = [ storageNode ];
+    imports = [
+      storageNode
+      privateRootsNode
+    ];
     environment.systemPackages = [
       pkgs.cryptsetup
       pkgs.e2fsprogs
@@ -69,7 +95,20 @@ in
         container = "/root/pending.luks";
         mountPoint = "/srv/pending";
       };
-      guardedServices.locked-consumer = [ "/srv/pending" ];
+      bindMounts = {
+        "/srv/data" = {
+          volume = "pending";
+          directory = "data";
+        };
+        "/srv/data/nested" = {
+          volume = "pending";
+          directory = "nested";
+        };
+      };
+      guardedServices.locked-consumer = [
+        "/srv/pending"
+        "/srv/data"
+      ];
     };
     # Exercise the actual prompt timeout quickly; host evaluation checks 90/120s.
     systemd.services = {
@@ -79,7 +118,7 @@ in
       };
       locked-consumer = {
         wantedBy = [ "multi-user.target" ];
-        script = "touch /srv/pending/consumer-started";
+        script = "test -d /srv/data/nested && touch /srv/pending/consumer-started";
         serviceConfig.Type = "oneshot";
         serviceConfig.RemainAfterExit = true;
       };
@@ -128,13 +167,19 @@ in
     locked.succeed("dd if=/dev/urandom of=/root/test-key bs=32 count=1 status=none; chmod 600 /root/test-key")
     locked.succeed("truncate -s 64M /root/pending.luks")
     locked.succeed("cryptsetup luksFormat --type luks2 --batch-mode --key-file /root/test-key /root/pending.luks")
-    locked.succeed("cryptsetup open --key-file /root/test-key /root/pending.luks pending; mkfs.ext4 -q /dev/mapper/pending; cryptsetup close pending")
+    locked.succeed("cryptsetup open --key-file /root/test-key /root/pending.luks pending; mkfs.ext4 -q /dev/mapper/pending")
+    locked.succeed("mkdir -p /run/seed; mount /dev/mapper/pending /run/seed; mkdir -m 0700 /run/seed/data /run/seed/nested; umount /run/seed; cryptsetup close pending")
     locked.shutdown()
     locked.start()
     locked.wait_for_unit("multi-user.target", timeout=60)
     # No answer to the real systemd password request: login and SSH still recover.
     locked.succeed("test -e /run/login-reached")
     locked.wait_for_open_port(22)
+    # Nested binds required by permission services must not close a boot cycle.
+    journal = locked.succeed("journalctl -b -o cat")
+    assert "ordering cycle" not in journal, "systemd reported a boot ordering cycle"
+    assert "to break ordering cycle" not in journal, "systemd deleted boot jobs"
+    locked.succeed("systemctl is-active dbus.service")
     locked.succeed("systemctl is-failed luxnix-storage-unlock-pending.service")
     assert locked.succeed("systemctl show luxnix-storage-unlock-pending.service -p Result --value").strip() == "timeout"
     locked.fail("test -e /dev/mapper/pending")
@@ -144,5 +189,13 @@ in
     locked.succeed("cryptsetup open --key-file /root/test-key /root/pending.luks pending")
     locked.succeed("systemctl start locked-consumer.service")
     locked.succeed("mountpoint /srv/pending; test -e /srv/pending/consumer-started")
+    locked.succeed("mountpoint /srv/data/nested")
+    # The right encrypted filesystem with the wrong subdirectory passes encrypted
+    # ancestry; the mandatory identity gate must still keep the consumer down.
+    locked.succeed("systemctl stop locked-consumer.service; rm /srv/pending/consumer-started")
+    locked.succeed("umount /srv/data/nested; mount --bind -o nodev,nosuid /srv/pending/data /srv/data/nested")
+    locked.fail("systemctl start locked-consumer.service")
+    locked.fail("test -e /srv/pending/consumer-started")
+    assert "unexpected filesystem" in locked.succeed("journalctl -b -u luxnix-storage-check-locked-consumer.service -o cat")
   '';
 }

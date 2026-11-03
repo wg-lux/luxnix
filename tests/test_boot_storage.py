@@ -359,27 +359,32 @@ def test_wrong_btrfs_subvolume_is_not_accepted(monkeypatch):
         boot.verify_mount("/srv/data", "/dev/mapper/data", "btrfs", "subvol=application")
 
 
-def test_gc10_explicit_legacy_maintenance_profile():
+@pytest.mark.parametrize("host", ["gc-09", "gc-10"])
+def test_former_legacy_hosts_use_fleet_boot_luks(host):
+    """Owner decision 2026-11-03: gc-09/gc-10 carry no legacy-container exception."""
     expression = r'''
     let f = builtins.getFlake ("git+file://" + builtins.toString ./.);
-        c = f.nixosConfigurations.gc-10.config;
+        c = f.nixosConfigurations.HOST.config;
     in { layout = c.luxnix.storage.operatorUnlocked.layout;
-         migration = c.luxnix.storage.operatorUnlocked.migration.enable;
-         root = c.fileSystems."/".device;
-         swap = c.swapDevices;
-         app = c.fileSystems."/var/lib/lx-annotate".device;
-         guard = c.systemd.services.luxnix-storage-check-lx-annotate.serviceConfig.ExecStart;
+         root = c.boot.initrd.luks.devices.cryptroot.device;
+         openbao = c.luxnix.openbao.local.enable;
+         legacyUnits = builtins.filter (n: builtins.elem n [ "luxnix-storage-restack"
+           "luxnix-storage-migrate" "luxnix-storage-unlock-luxnix-secrets" ])
+           (builtins.attrNames c.systemd.services);
+         secretsBind = c.fileSystems ? "/etc/secrets";
+         preSwitch = c.system.preSwitchChecks ? encryptedStorage;
          failures = map (a: a.message) (builtins.filter (a: !a.assertion) c.assertions); }
-    '''
+    '''.replace("HOST", host)
     result = subprocess.run(['nix', 'eval', '--impure', '--json', '--expr', expression],
-                            cwd=ROOT, capture_output=True, text=True, timeout=180)
+                            cwd=ROOT, capture_output=True, text=True, timeout=300)
     assert result.returncode == 0, result.stderr
     state = json.loads(result.stdout)
-    assert state['layout'] == 'legacy-containers'
-    assert state['migration'] is False and state['swap'] == []
-    assert state['root'] != '/dev/mapper/cryptroot'
-    assert state['app'] == '/var/lib/luxnix-app-storage/application'
-    assert 'secret_storage.py' in state['guard']
+    assert state['layout'] == 'boot-luks'
+    assert state['root'] == '/dev/disk/by-partlabel/nixos_root'
+    assert state['openbao'] is False
+    assert state['legacyUnits'] == [] and state['secretsBind'] is False
+    # Blocks switch/boot onto the still-plaintext installed disks.
+    assert state['preSwitch'] is True
     assert state['failures'] == []
 
 
@@ -412,25 +417,26 @@ def test_bind_requires_exact_source_directory_not_only_encrypted_device(
         assert not checked
 
 
-def test_gc10_legacy_layout_does_not_create_raid():
+def test_gc10_data_disk_is_one_luks_mapping_over_md_raid():
     expression = r'''
       let f = builtins.getFlake ("git+file://" + builtins.toString ./.);
           c = f.nixosConfigurations.gc-10.config;
       in {
-        layout = c.luxnix.storage.operatorUnlocked.layout;
         arrays = builtins.attrNames c.disko.devices.mdadm;
-        data = c.disko.devices.disk.data_raid01_disk1.content.partitions.data_part.content.type;
-        root = c.fileSystems."/".device;
+        member = c.disko.devices.disk.data_raid01_disk1.content.partitions.data_part.content.type;
+        array = c.disko.devices.mdadm.application.content.type;
+        crypttab = c.environment.etc.crypttab.text;
+        app = c.fileSystems."/var/lib/lx-annotate".device;
       }
     '''
     result = subprocess.run(["nix", "eval", "--impure", "--json", "--expr", expression],
                             cwd=ROOT, capture_output=True, text=True, timeout=300)
     assert result.returncode == 0, result.stderr
     config = json.loads(result.stdout)
-    assert config["layout"] == "legacy-containers"
-    assert config["arrays"] == []
-    assert config["data"] == "btrfs"
-    assert config["root"] != "/dev/mapper/cryptroot"
+    assert config["arrays"] == ["application"]
+    assert config["member"] == "mdraid" and config["array"] == "luks"
+    assert "/etc/luks-keys/lx-md-application.key" in config["crypttab"]
+    assert config["app"] != "/var/lib/luxnix-app-storage/application"
 
 
 def test_boot_luks_can_defer_guarded_service_startup():

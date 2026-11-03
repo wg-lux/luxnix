@@ -35,6 +35,13 @@ with ctx;
       };
     };
     paths.lx-annotate-filewatcher = {
+      # Watched paths imply RequiresMountsFor= on encrypted storage. Default
+      # dependencies would order this before paths.target and basic.target,
+      # holding networking and SSH behind an operator unlock prompt.
+      unitConfig.DefaultDependencies = false;
+      after = [ "sysinit.target" ];
+      conflicts = [ "shutdown.target" ];
+      before = [ "shutdown.target" ];
       description = "Trigger LX-Annotate file watcher when import files arrive";
       wantedBy = [ "multi-user.target" ];
       pathConfig = {
