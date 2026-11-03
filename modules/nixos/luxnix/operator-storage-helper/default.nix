@@ -210,7 +210,9 @@ let
           [ "$#" -eq 0 ] || usage
           ${lib.optionalString (cfg.startupServices == [ ]) ''die "No startupServices configured."''}
           cmd_open
-          systemctl --no-ask-password start ${lib.escapeShellArgs (map (name: "${name}.service") cfg.startupServices)}
+          systemctl --no-ask-password start ${
+            lib.escapeShellArgs (map (name: "${name}.service") cfg.startupServices)
+          }
           ;;
         header-backup) cmd_header_backup "$@" ;;
         *) usage ;;

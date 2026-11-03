@@ -180,6 +180,12 @@ def test_fleet_boot_contract():
       }]; }) fleet;
     in builtins.mapAttrs (_: h: let c = h.config; in {
       root = c.fileSystems."/".device;
+      arrays = builtins.mapAttrs (_: a: {
+        inherit (a) level;
+        inherit (a.content) type name device;
+        filesystem = a.content.content.type;
+      }) c.disko.devices.mdadm;
+      swraid = c.boot.swraid.enable;
       swap = map (s: s.device) c.swapDevices;
       initrd = builtins.attrNames c.boot.initrd.luks.devices;
       crypttab = c.environment.etc.crypttab.text;
@@ -188,6 +194,10 @@ def test_fleet_boot_contract():
       mountOptions = builtins.mapAttrs (_: fs: fs.options) c.fileSystems;
       units = builtins.attrNames c.systemd.services;
       guard = c.system.preSwitchChecks.encryptedStorage;
+      rootPrompt = c.boot.initrd.luks.devices.cryptroot.crypttabExtraOpts;
+      splash = c.boot.plymouth.enable;
+      initrdUnits = builtins.attrNames c.boot.initrd.systemd.services;
+      menuTimeout = c.boot.loader.timeout;
       failures = map (a: a.message) (builtins.filter (a: !a.assertion) c.assertions);
     }) hosts
     '''
@@ -206,12 +216,24 @@ def test_fleet_boot_contract():
         assert not any(u.startswith("luxnix-storage-unlock-") for u in cfg["units"])
         assert "luxnix-storage-migrate" not in cfg["units"]
         assert "luxnix-verify-boot-storage" in cfg["guard"]
+        # Splash prompt without time or attempt limit; restart reaches older generations.
+        assert {"timeout=0", "tries=0"} <= set(cfg["rootPrompt"]), host
+        assert "x-systemd.device-timeout=0" in cfg["mountOptions"]["/"], host
+        assert cfg["splash"], host
+        assert {"luxnix-reboot-to-boot-menu", "luxnix-unlock-recovery-hint"} <= set(cfg["initrdUnits"]), host
+        assert cfg["menuTimeout"] and cfg["menuTimeout"] > 0, host
         for line in cfg["crypttab"].splitlines():
             if line:
                 assert "/etc/luks-keys/" in line and "headless" in line
     assert hosts["gc-10"]["swap"] == []
     for path in ["/var/lib/lx-annotate", "/var/lib/postgresql", "/var/backup/postgresql"]:
-        assert hosts["gc-10"]["devices"][path] == "/dev/mapper/lx-data_raid01_disk1-data_part"
+        assert hosts["gc-10"]["devices"][path] == "/dev/mapper/lx-md-application"
+    assert hosts["gc-10"]["arrays"] == {"application": {
+        "level": 1, "type": "luks", "name": "lx-md-application",
+        "device": "/dev/md/application", "filesystem": "btrfs",
+    }}
+    assert hosts["gc-10"]["swraid"]
+    assert "/dev/md/application" in hosts["gc-10"]["crypttab"]
     assert "archive_hdd" in hosts["gs-02"]["crypttab"]
     options = hosts["gs-02"]["mountOptions"]
     def dependencies(mount):
@@ -221,6 +243,22 @@ def test_fleet_boot_contract():
     assert "primary" in dependencies("/data2")[0]
     assert len(dependencies("/archive")) == 4
     assert all("hdd" in option for option in dependencies("/archive"))
+
+
+def test_boot_luks_requires_splash_password_screen():
+    expression = r'''
+    let
+      f = builtins.getFlake ("git+file://" + builtins.toString ./.);
+      lib = f.inputs.nixpkgs.lib;
+      c = (f.nixosConfigurations.gc-02.extendModules { modules = [{
+        system.boot.plymouth = lib.mkForce false;
+      }]; }).config;
+    in map (a: a.message) (builtins.filter (a: !a.assertion) c.assertions)
+    '''
+    result = subprocess.run(["nix", "eval", "--impure", "--json", "--expr", expression],
+                            cwd=ROOT, capture_output=True, text=True, timeout=300)
+    assert result.returncode == 0, result.stderr
+    assert any("Plymouth splash screen" in m for m in json.loads(result.stdout))
 
 
 
@@ -372,3 +410,24 @@ def test_bind_requires_exact_source_directory_not_only_encrypted_device(
         with pytest.raises(ValueError, match="bind source root"):
             boot.verify_mount(str(target), str(source), "none")
         assert not checked
+
+
+def test_gc10_legacy_layout_does_not_create_raid():
+    expression = r'''
+      let f = builtins.getFlake ("git+file://" + builtins.toString ./.);
+          c = f.nixosConfigurations.gc-10.config;
+      in {
+        layout = c.luxnix.storage.operatorUnlocked.layout;
+        arrays = builtins.attrNames c.disko.devices.mdadm;
+        data = c.disko.devices.disk.data_raid01_disk1.content.partitions.data_part.content.type;
+        root = c.fileSystems."/".device;
+      }
+    '''
+    result = subprocess.run(["nix", "eval", "--impure", "--json", "--expr", expression],
+                            cwd=ROOT, capture_output=True, text=True, timeout=300)
+    assert result.returncode == 0, result.stderr
+    config = json.loads(result.stdout)
+    assert config["layout"] == "legacy-containers"
+    assert config["arrays"] == []
+    assert config["data"] == "btrfs"
+    assert config["root"] != "/dev/mapper/cryptroot"

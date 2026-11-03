@@ -12,7 +12,7 @@ boundaries:
 entrypoints:
   - name: encrypted-layout
     file: x86_64-linux/encrypted-layout.nix
-    purpose: Apply the sole production LUKS2 policy to host-owned layouts while retaining legacy recovery declarations.
+    purpose: Apply LUKS2 to host-owned partitions or assembled MD arrays while retaining legacy recovery declarations.
   - name: gc-10-local-backup-exports
     file: x86_64-linux/gc-10/backup-exports.nix
     purpose: Bind only annotation exports to the operator-authorized local Backup disk with UUID validation and fail-closed automount access.

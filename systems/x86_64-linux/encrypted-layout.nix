@@ -20,10 +20,9 @@ let
   # Multi-device Btrfs must be formatted on mappings, never raw member partitions.
   rawMembers = map (p: "/dev/disk/by-partlabel/${p.label}") partitions;
   cryptMembers = map (p: "/dev/mapper/${p.name}") partitions;
-  transform =
-    disk: part: p:
+  encrypt =
+    mappingName: old:
     let
-      old = p.content or null;
       fs = if old != null && old.type == "luks" then old.content else old;
       isRoot =
         fs != null
@@ -31,8 +30,7 @@ let
           (fs.mountpoint or "") == "/"
           || lib.any (s: (s.mountpoint or "") == "/") (builtins.attrValues (fs.subvolumes or { }))
         );
-      isEfi = (p.type or "") == "EF00";
-      name = if isRoot then "cryptroot" else mapping disk part;
+      name = if isRoot then "cryptroot" else mappingName;
       content =
         if fs == null then
           null
@@ -42,25 +40,23 @@ let
             extraArgs = map (arg: lib.replaceStrings rawMembers cryptMembers arg) fs.extraArgs;
           };
     in
-    if isEfi then
+    {
+      type = "luks";
+      inherit name content;
+      extraFormatArgs = [
+        "--type"
+        "luks2"
+      ];
+      initrdUnlock = isRoot;
+      # Provision with a recovery credential; enroll data keys on encrypted root.
+      settings = if isRoot && old != null && old.type == "luks" then old.settings or { } else { };
+    };
+  transform =
+    disk: part: p:
+    if (p.type or "") == "EF00" || ((p.content or null) != null && p.content.type == "mdraid") then
       p
     else
-      p
-      // {
-        content = {
-          type = "luks";
-          inherit name content;
-          extraFormatArgs = [
-            "--type"
-            "luks2"
-          ];
-          initrdUnlock = isRoot;
-          # Explicit Disko provisioning uses a recovery passphrase. Independent
-          # runtime data keys are enrolled afterwards on the mounted encrypted root.
-          settings = if isRoot && old != null && old.type == "luks" then old.settings or { } else { };
-
-        };
-      };
+      p // { content = encrypt (mapping disk part) (p.content or null); };
   transformed = lib.mapAttrs (
     disk: value:
     value
@@ -81,6 +77,14 @@ in
         disko = layout.disko // {
           devices = layout.disko.devices // {
             disk = transformed;
+            # MD assembles raw members first; one LUKS mapping covers each array.
+            mdadm = lib.mapAttrs (
+              name: array:
+              array
+              // lib.optionalAttrs ((array.content or null) != null) {
+                content = encrypt "lx-md-${name}" array.content;
+              }
+            ) (layout.disko.devices.mdadm or { });
           };
         };
       }

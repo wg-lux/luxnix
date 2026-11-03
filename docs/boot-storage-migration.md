@@ -18,10 +18,16 @@ integrity protection for arbitrary root filesystem contents.
 
 Host disk definitions own device identifiers and subvolumes. The shared
 `systems/x86_64-linux/encrypted-layout.nix` applies the same LUKS2 policy to all
-15 operator-storage hosts, including every member of multi-device Btrfs arrays.
+15 operator-storage hosts. For MD RAID, raw members assemble first and LUKS2
+wraps the array; existing multi-device Btrfs declarations retain their per-member
+encryption until separately migrated.
 The shared storage module creates crypttab and guarded service dependencies.
-gc-10 keeps application, PostgreSQL and database-backup state on its second disk
-as directly mounted Btrfs subvolumes. Other host layouts retain their declared
+gc-10's boot-LUKS target uses its application/data NVMe partition as a one-member
+MD RAID1 array (`/dev/md/application`), then LUKS2 (`lx-md-application`), then
+one Btrfs filesystem. Application, PostgreSQL and database-backup paths are
+subvolumes of that filesystem, without separate encrypted/plaintext partitions
+or inner container files. Its system NVMe remains separate, with encrypted root
+holding the application array's unlock key. Other host layouts retain their declared
 data filesystems. Application paths stay unchanged, but become ordinary directories instead of
 inner container mounts. PostgreSQL data/WAL/backups, LX-Annotate media, frames,
 processing state, keys, retained salts, caches and local logs belong on this
@@ -46,8 +52,50 @@ or install a bootloader manually on an unmigrated host.
 
 Exports and remote backups are independent protection boundaries. In particular,
 gc-10 retains the explicitly authorized plaintext annotation-export disk; it is
-not suitable for application data, keys, database backups or recovery bundles.
+not a production application backend. The owner separately authorized a plaintext
+migration backup on `Backup-24-11`; treat that temporary copy, including keys and
+database state, as sensitive recovery material under physical custody.
 Remote backups need their own encryption, credentials, retention and restore tests.
+
+### gc-10 reconstruction and future mirroring
+
+A one-member RAID1 provides no disk-failure redundancy. A later mirror requires
+a separately reviewed member-addition and array-growth operation on a suitable
+second disk; do not rerun Disko against an array containing live data. Encryption
+stays above the array, so adding a member does not introduce another passphrase.
+
+The current legacy profile remains unchanged. A configuration switch cannot
+convert its existing filesystem into this MD/LUKS target. Before reusing either
+disk, finish and verify the independent backup, preserve old-only application
+files, and demonstrate restoration of application data, a consistent PostgreSQL
+cluster and the original application keys/salts. Preserve independent root/data
+unlock recovery material as well. The earlier checksum-based delta plan only
+applies while retaining the old application filesystem; a new filesystem needs
+the complete required dataset restored once. Remove the old container only after
+restored application checks and cold-boot acceptance succeed.
+
+This layering follows the [cryptsetup RAID guidance](https://gitlab.com/cryptsetup/cryptsetup/-/blob/main/FAQ.md)
+and uses [Linux MD](https://docs.kernel.org/admin-guide/md.html) below encryption.
+
+## Splash unlock and generation recovery
+
+Non-technical users unlock root on the Plymouth splash screen, which the
+initrd shows before the normal system starts; a boot-LUKS host without
+`system.boot.plymouth` fails evaluation. The root prompt and root device wait
+without time or attempt limits (`timeout=0`, `tries=0`,
+`x-systemd.device-timeout=0`), because an exhausted prompt leaves no system
+to continue into. The screen shows a hint to press Ctrl+Alt+Del. In the initrd
+this restart first runs `bootctl set-timeout-oneshot menu-force`, so the next
+systemd-boot menu waits for a choice; select an older generation there for
+debugging. Each normal boot also shows the menu for the configured
+`boot.loader.timeout`. If the EFI variable cannot be written, the restart still
+proceeds and the normal menu timeout applies; the failure is in the initrd journal.
+
+Older generations share the same encrypted root and prompt. Generations from
+before a host's boot-LUKS cutover expect the previous disk layout and are not a
+recovery path after migration. The hint text is English, and the splash relies
+on the firmware framebuffer until the full system loads GPU drivers; verify
+both on each host's physical cold boot.
 
 ## Single production path and retained recovery
 

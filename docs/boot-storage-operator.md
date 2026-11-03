@@ -95,7 +95,11 @@ ssh -tt -p 2222 -i <operator-key> -o StrictHostKeyChecking=yes root@<unlock-addr
 
 Enter the disk credential. After boot, reconnect using normal administrator
 SSH. If you mistype the disk credential, reconnect and wait for the next prompt.
-For console unlock, enter the same disk credential at the local prompt.
+For local unlock, enter the same disk credential on the graphical password
+screen (Plymouth splash). It waits without a time or attempt limit. To recover,
+press Ctrl+Alt+Del there: the computer restarts and the boot menu stays open
+until an entry is chosen, so an older system generation can be started for
+debugging. See [splash unlock and recovery](boot-storage-migration.md#splash-unlock-and-generation-recovery).
 
 Verify administrator login and cold-boot recovery. For restored applications,
 verify data mounts, database queries and old-data decryption. Complete the applicable

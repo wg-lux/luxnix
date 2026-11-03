@@ -22,15 +22,22 @@ let
     done
   '';
   enabled = cfg.enable && cfg.layout == "boot-luks";
+  recoveryHint = "Problems? Press Ctrl+Alt+Del and choose an older system in the menu.";
   mountUnit = path: "${utils.escapeSystemdPath path}.mount";
-  luks = lib.concatLists (
-    lib.mapAttrsToList (
-      _: disk:
-      lib.mapAttrsToList (_: p: p.content) (
-        lib.filterAttrs (_: p: p.content != null && p.content.type == "luks") disk.content.partitions
+  luks =
+    lib.concatLists (
+      lib.mapAttrsToList (
+        _: disk:
+        lib.mapAttrsToList (_: p: p.content) (
+          lib.filterAttrs (_: p: p.content != null && p.content.type == "luks") disk.content.partitions
+        )
+      ) (lib.attrByPath [ "disko" "devices" "disk" ] { } config)
+    )
+    ++ lib.mapAttrsToList (_: array: array.content) (
+      lib.filterAttrs (_: array: array.content != null && array.content.type == "luks") (
+        lib.attrByPath [ "disko" "devices" "mdadm" ] { } config
       )
-    ) (lib.attrByPath [ "disko" "devices" "disk" ] { } config)
-  );
+    );
   secondary = builtins.filter (
     v:
     !v.initrdUnlock
@@ -223,22 +230,58 @@ in
             assertion = lib.all (v: !(builtins.hasAttr v.name config.boot.initrd.luks.devices)) secondary;
             message = "Secondary keys must never be consumed or copied by the initrd.";
           }
+          {
+            assertion = config.boot.plymouth.enable;
+            message = "Boot LUKS asks for the root passphrase on the Plymouth splash screen; enable system.boot.plymouth.";
+          }
         ];
         luxnix = lib.optionalAttrs (options.luxnix ? vault) {
           vault.server.managedTls.encryptedStorage = lib.mkForce false;
         };
-        boot.initrd.systemd.enable = true;
-        boot.initrd.luks.devices.cryptroot.crypttabExtraOpts =
-          if remote.enable then
-            [
-              "timeout=0"
-              "tries=0"
-            ]
-          else
-            [
-              "timeout=90s"
-              "tries=3"
+        # The splash prompt waits without a time or attempt limit: an exhausted
+        # prompt leaves no bootable system. Recovery is a restart into the boot
+        # menu (Ctrl+Alt+Del), which then waits for an older generation choice.
+        boot.initrd = {
+          luks.devices.cryptroot.crypttabExtraOpts = [
+            "timeout=0"
+            "tries=0"
+          ];
+          systemd = {
+            enable = true;
+            storePaths = [
+              "${config.boot.initrd.systemd.package}/bin/bootctl"
+              (lib.getExe' config.boot.plymouth.package "plymouth")
             ];
+            # ctrl-alt-del.target aliases reboot.target in the initrd.
+            services.luxnix-reboot-to-boot-menu = {
+              description = "Keep the boot menu open after a restart from the disk password screen";
+              wantedBy = [ "reboot.target" ];
+              before = [ "systemd-reboot.service" ];
+              unitConfig.DefaultDependencies = false;
+              serviceConfig = {
+                Type = "oneshot";
+                ExecStart = "${config.boot.initrd.systemd.package}/bin/bootctl set-timeout-oneshot menu-force";
+              };
+            };
+            services.luxnix-unlock-recovery-hint = {
+              description = "Show the restart hint on the disk password screen";
+              wantedBy = [ "initrd.target" ];
+              after = [ "plymouth-start.service" ];
+              conflicts = [ "initrd-switch-root.target" ];
+              before = [ "initrd-switch-root.target" ];
+              unitConfig = {
+                DefaultDependencies = false;
+                ConditionPathExists = "/run/plymouth/pid";
+              };
+              serviceConfig = {
+                Type = "oneshot";
+                RemainAfterExit = true;
+                ExecStart = "${lib.getExe' config.boot.plymouth.package "plymouth"} display-message --text=${lib.escapeShellArg recoveryHint}";
+                ExecStop = "${lib.getExe' config.boot.plymouth.package "plymouth"} hide-message --text=${lib.escapeShellArg recoveryHint}";
+              };
+            };
+          };
+        };
         # systemd's stage-2 generator reads these keys only after encrypted root opens.
         environment.etc.crypttab.text =
           lib.concatMapStringsSep "\n" (
@@ -299,15 +342,19 @@ in
           ) cfg.guardedServices)
         ];
         # Data failures do not hide the console behind an unbounded graphical wait.
-        fileSystems = lib.genAttrs dataMounts (mount: {
-          options = [
-            "nofail"
-            "x-systemd.device-timeout=30s"
-          ]
-          ++ map (v: "x-systemd.requires=systemd-cryptsetup@${utils.escapeSystemdPath v.name}.service") (
-            membersFor mount
-          );
-        });
+        fileSystems =
+          lib.genAttrs dataMounts (mount: {
+            options = [
+              "nofail"
+              "x-systemd.device-timeout=30s"
+            ]
+            ++ map (v: "x-systemd.requires=systemd-cryptsetup@${utils.escapeSystemdPath v.name}.service") (
+              membersFor mount
+            );
+          })
+          // {
+            "/".options = [ "x-systemd.device-timeout=0" ];
+          };
         systemd.sleep.settings.Sleep = {
           AllowHibernation = false;
           AllowHybridSleep = false;
@@ -391,7 +438,6 @@ in
             '';
           };
         };
-        fileSystems."/".options = [ "x-systemd.device-timeout=0" ];
       })
     ]
   );

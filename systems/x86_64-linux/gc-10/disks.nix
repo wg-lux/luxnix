@@ -1,12 +1,37 @@
 { config, lib, ... }:
 let
   # --- User-configurable Disk Identifiers ---
-  # System disk (approx. 500GB)
+  # System disk (approx. 1 TB)
   systemDiskId = "/dev/disk/by-id/nvme-CT1000P1SSD8_2006E289C950";
 
   dataDisk1Id = "/dev/disk/by-id/nvme-Micron_3400_MTFDKBA1T0TFH_213330EC4FFF";
 
-  swapSize = "64G"; # Adjusted swap size
+  swapSize = "64G"; # Existing partition; disk swap remains disabled.
+  bootLuks = config.luxnix.storage.operatorUnlocked.layout == "boot-luks";
+  dataFilesystem = {
+    type = "btrfs";
+    extraArgs = [
+      "-f"
+      "-L"
+      "data_raid01"
+    ];
+    subvolumes = {
+      "storage" = {
+        mountpoint = "/data/raid01";
+        mountOptions = [
+          "subvol=storage"
+          "compress=zstd"
+          "noatime"
+        ];
+      };
+    }
+    // lib.optionalAttrs bootLuks {
+      # Preserve the existing data-disk placement without an inner container.
+      application.mountpoint = "/var/lib/lx-annotate";
+      postgresql.mountpoint = "/var/lib/postgresql";
+      postgresql-backups.mountpoint = "/var/backup/postgresql";
+    };
+  };
 in
 (import ../encrypted-layout.nix { inherit config lib; }) {
   imports = [ ./backup-exports.nix ];
@@ -101,7 +126,7 @@ in
         };
       };
 
-      # Data Disk 01 (single disk, no RAID)
+      # Legacy filesystem stays untouched; the install target uses one-member MD RAID1.
       data_raid01_disk1 = {
         device = dataDisk1Id;
         type = "disk";
@@ -111,35 +136,28 @@ in
             data_part = {
               label = "btrfs_data01_p1"; # GPT Label for the partition
               size = "100%";
-              content = {
-                type = "btrfs";
-                extraArgs = [
-                  "-f"
-                  "-L"
-                  "data_raid01"
-                ];
-                subvolumes = {
-                  "storage" = {
-                    mountpoint = "/data/raid01";
-                    mountOptions = [
-                      "subvol=storage"
-                      "compress=zstd"
-                      "noatime"
-                    ];
-                  };
-                }
-                // lib.optionalAttrs (config.luxnix.storage.operatorUnlocked.layout == "boot-luks") {
-                  # Preserve the existing data-disk placement without an inner container.
-                  application.mountpoint = "/var/lib/lx-annotate";
-                  postgresql.mountpoint = "/var/lib/postgresql";
-                  postgresql-backups.mountpoint = "/var/backup/postgresql";
-                };
-              };
+              type = if bootLuks then "FD00" else "8300";
+              content =
+                if bootLuks then
+                  {
+                    type = "mdraid";
+                    name = "application";
+                  }
+                else
+                  dataFilesystem;
             };
           };
         };
       };
 
+    };
+    mdadm = lib.optionalAttrs bootLuks {
+      application = {
+        type = "mdadm";
+        level = 1;
+        metadata = "1.2";
+        content = dataFilesystem;
+      };
     };
   };
 
