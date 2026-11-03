@@ -12,6 +12,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import stat
 import subprocess
@@ -359,6 +360,115 @@ class Migration:
                 run("sync", "-f", str(item.stage))
 
 
+MOUNTINFO = Path("/proc/self/mountinfo")
+FDINFO = Path("/proc/self/fdinfo")
+
+
+def _unescape_mount_field(value):
+    return re.sub(r"\\([0-7]{3})", lambda match: chr(int(match.group(1), 8)), value)
+
+
+def mount_table():
+    """Return kernel mount entries by mount ID; path strings alone are ambiguous."""
+    entries = {}
+    for line in MOUNTINFO.read_text().splitlines():
+        left, _, right = line.partition(" - ")
+        fields, tail = left.split(), right.split()
+        if len(fields) < 6 or len(tail) < 2:
+            raise MigrationError("Unreadable kernel mount table")
+        entries[int(fields[0])] = {
+            "root": _unescape_mount_field(fields[3]),
+            "target": _unescape_mount_field(fields[4]),
+            "options": fields[5].split(","),
+            "source": _unescape_mount_field(tail[1]),
+        }
+    return entries
+
+
+def mount_id(path):
+    """Kernel mount ID of the directory itself; symlinks are rejected, never followed."""
+    fd = os.open(path, os.O_PATH | os.O_NOFOLLOW | os.O_DIRECTORY)
+    try:
+        for line in (FDINFO / str(fd)).read_text().splitlines():
+            if line.startswith("mnt_id:"):
+                return int(line.split()[1])
+    finally:
+        os.close(fd)
+    raise MigrationError("Kernel mount identity is unavailable")
+
+
+def _expected_mount(config, path):
+    for volume in config["volumes"].values():
+        if volume["mountPoint"] == path:
+            return volume["device"], "/"
+    bind = config["binds"][path]
+    return config["volumes"][bind["volume"]]["device"], "/" + bind["directory"]
+
+
+def _visible_mount(config, table, path):
+    """True only when the path itself is a mount point carrying its configured filesystem."""
+    target = Path(path)
+    if not target.exists() or target.is_symlink():
+        return False
+    own = mount_id(target)
+    if own == mount_id(target.parent):
+        return False
+    entry = table.get(own)
+    if entry is None or (entry["source"], entry["root"]) != _expected_mount(config, path):
+        raise MigrationError(f"{path} carries an unexpected filesystem; refusing to restack")
+    return True
+
+
+def restack_binds(config):
+    """Remount nested binds hidden when their parent bind was mounted afterwards.
+
+    A live switch can add a parent bind (for example /etc/secrets) below an
+    already mounted child (/etc/secrets/vault). systemd then mounts the parent
+    over the child, keeps reporting the child unit active, and the guarded
+    consumers fail AssertPathIsMountPoint. Only that state is repaired, only on
+    top of a verified encrypted parent, and only while no affected writer runs.
+    The hidden stale entry stays attached below the parent until the next boot.
+    """
+    paths = [v["mountPoint"] for v in config["volumes"].values()] + list(config["binds"])
+    table = mount_table()
+    for target in sorted(config["binds"], key=lambda p: len(Path(p).parts)):
+        ancestors = [p for p in paths if target.startswith(p + "/")]
+        if not ancestors:
+            continue
+        if not any(entry["target"] == target for entry in table.values()):
+            continue  # Not mounted at all: its regular mount unit owns that path.
+        if _visible_mount(config, table, target):
+            continue
+        parent = max(ancestors, key=len)
+        bind = config["binds"][target]
+        volume = config["volumes"][bind["volume"]]
+        if not _visible_mount(config, table, parent) or not _visible_mount(config, table, volume["mountPoint"]):
+            raise MigrationError(f"{target} is hidden, but its encrypted parent is not mounted as configured")
+        for name, guarded in config["guarded"].items():
+            if target in guarded and int(
+                run("systemctl", "show", "--value", "-p", "MainPID", name + ".service").strip() or b"0"
+            ):
+                raise MigrationError(f"{name} is running on hidden {target}; stop it before restacking")
+        source = plain_path(volume["mountPoint"]) / bind["directory"]
+        if source.is_symlink() or not source.is_dir():
+            raise MigrationError(f"Bind source for {target} is missing; refusing to create it")
+        mountpoint = Path(target)
+        if mountpoint.is_symlink() or (mountpoint.exists() and not mountpoint.is_dir()):
+            raise MigrationError(f"{target} is not a plain directory")
+        if not mountpoint.exists():
+            if mountpoint.parent.is_symlink() or mount_id(mountpoint.parent) != mount_id(Path(parent)):
+                raise MigrationError(f"{target} would not be created inside {parent}")
+            mountpoint.mkdir(mode=0o700)
+        options = ["nodev", "nosuid"] + (["noexec"] if volume.get("noexec") else [])
+        run("mount", "--bind", "-o", ",".join(options), str(source), target)
+        table = mount_table()
+        if not _visible_mount(config, table, target) or not set(options) <= set(
+            table[mount_id(mountpoint)]["options"]
+        ):
+            raise MigrationError(f"Restacked {target} failed verification")
+        print(f"Restacked hidden {target} above {parent}.", file=sys.stderr)
+
+
 
 # SHA-256 of the publicly known former fleet admin hash; mirrors modules/nixos/user/admin.
 RETIRED_ACCOUNT_HASH_DIGESTS = frozenset({
@@ -417,7 +527,7 @@ def prepare_accounts(accounts):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("config", type=Path)
-    parser.add_argument("action", choices=["unlock", "prepare", "precopy", "cutover", "accounts", "provision"])
+    parser.add_argument("action", choices=["unlock", "prepare", "precopy", "cutover", "accounts", "provision", "restack"])
     parser.add_argument("volume", nargs="?")
     args = parser.parse_args()
     config = json.loads(args.config.read_text())
@@ -441,6 +551,8 @@ def main():
                 migration.provision(args.volume, json.loads(sys.stdin.buffer.read(16384)))
             elif args.action == "accounts":
                 prepare_accounts(config["accounts"])
+            elif args.action == "restack":
+                restack_binds(config)
             elif args.action == "precopy":
                 migration.precopy()
             elif args.action == "cutover":

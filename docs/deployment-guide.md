@@ -314,26 +314,11 @@ restore any host-specific files from the approved backup, and repeat the
 preflight before another activation. Do not remove temporary worktrees or GC
 roots until recovery is no longer needed.
 
-### Local OpenBao volume unlock (not yet a fleet default)
+### Encrypted storage
 
-Hosts in `operator_unlocked_secrets` move to host-local OpenBao unlock in
-stages. Each stage uses cataloged commands and is limited by `--limit`:
-
-1. `devenv shell check-connectivity <host-or-group>`.
-2. Deploy `luxnix.openbao.local.enable = true` through the inventory and the
-   normal `autoconf` and rebuild flow.
-3. `devenv shell openbao-local enroll --limit <host-or-group> --recovery-host <host>`,
-   which only plans, then the same command with `--apply`.
-4. `devenv shell storage-provision escrow` per volume, then
-   `devenv shell openbao-local adopt --limit <host> --recovery-host <host>`, first
-   without and then with `--apply`.
-5. Switch `storage.operatorUnlocked.unlockMethod` to `"local-openbao"`. The
-   pre-switch gate refuses activation on hosts that lack a TPM, Secure Boot,
-   enrollment or a valid credential.
-
-Details, failure reasons and resumption are in
-[local OpenBao](openbao-local.md#enrollment-and-volume-adoption). Hardware and
-fleet acceptance are still open.
+Every host uses [boot LUKS storage](boot-storage-operator.md). Hosts that still
+run the older container layout are covered by
+[unmigrated hosts](legacy-storage-recovery.md) until they are reinstalled.
 
 ## 7. Add a new host checklist
 

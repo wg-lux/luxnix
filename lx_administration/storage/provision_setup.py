@@ -39,7 +39,7 @@ STORAGE_EXPRESSION = (
     'luksUUID = v.luksUUID; }) c.volumes; }'
 )
 CONTROLLER = [sys.executable, '-m', 'lx_administration.storage.provision']
-DOCUMENTATION = 'docs/operator-unlocked-storage.md'
+DOCUMENTATION = 'docs/legacy-storage-recovery.md'
 
 
 class SetupStopped(RuntimeError):

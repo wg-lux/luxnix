@@ -25,7 +25,7 @@ implementation_update:
     virtualized or unrecognized TPM platforms. Installer enforcement, physical TPM assurance, ordered
     locking, recovery/re-seed and authenticated root integrity remain release gates.
     Repository configuration is not evidence of the effective live host state.
-  implementation_reference: docs/openbao-local.md
+  implementation_reference: docs/legacy-storage-recovery.md
 purpose: Jeder Host betreibt ein unabhängiges lokales OpenBao mit Raft und TPM-gebundenem Auto-Unseal für die Container-Schlüssel. Ein zentrales OpenBao auf
   gs-02 übernimmt Maschinen-Enrollment, PKI und die Auslieferung gemeinsamer Center-Salts von HashiCorp Vault. Ein fehlendes oder unbrauchbares TPM blockiert
   Installation und Aktivierung; es gibt keinen Software-Rückfall.
@@ -147,7 +147,7 @@ rollout_plan:
     observed_history: Last recorded gc-10 preflight found TPM present and firmware Secure Boot disabled; recheck live before changes.
     implemented_not_accepted:
       - Controller-held signing and public enrollment material (docs/secure-boot.md); private custody is operator-reported, not inspected here.
-      - Local static-seal enrollment, dedicated-keyslot adoption, credential rotation and deployment orchestration (docs/openbao-local.md).
+      - Local static-seal enrollment, dedicated-keyslot adoption, credential rotation and deployment orchestration (retired; git show da58d1be:docs/openbao-local.md).
     evidence_limit: Existing VM/unit results are historical evidence; physical tamper, cold boot and recovery acceptance remain open.
   gates:
     - id: R0
@@ -612,7 +612,7 @@ acceptance_criteria:
     category: Nachweise
     title: Bedienbare Runbooks und konsistente Dokumentation
     requirement: Ausrollung, TPM-Preflight, Initialisierung des lokalen OpenBao, Hub-Enrollment, Statusprüfung, Kaltstart, Hub-Ausfall, Recovery, Re-Seed,
-      Rotation, Widerruf, Update/Rollback und Außerbetriebnahme sind in docs/operator-unlocked-storage.md, docs/openbao.md und docs/deployment-guide.md
+      Rotation, Widerruf, Update/Rollback und Außerbetriebnahme sind in docs/legacy-storage-recovery.md, docs/boot-storage-migration.md, docs/openbao.md und docs/deployment-guide.md
       beschrieben. Dabei werden die Befehls-IDs aus devenv/commands.yml verwendet.
     verification:
       - (hardware) Eine zweite, mit dem Verfahren vertraute Person führt Recovery und Re-Seed auf einem Testsystem ohne improvisierte Zusatzschritte aus.
@@ -873,7 +873,7 @@ repository_review:
         verschlüsseltes Credential wäre mit einer Plattenkopie entschlüsselbar. Die Neuimplementierung braucht eine erzwungene TPM2-Versiegelung samt
         Negativtest.
       references:
-        - docs/openbao-architecture.md
+        - git show da58d1be:docs/openbao-architecture.md
     - criterion: ENC-13
       status: not_met
       severity: blocking
@@ -980,7 +980,7 @@ repository_review:
       recommendation: Einen nachgewiesenen Integritätspfad wählen, weil sonst ein manipuliertes, aber gebootetes System den Seal-Schlüssel erhält. Keylime ist
         eine mögliche Attestierungskomponente; für die lokale Entsperrung zählt vor allem eine signierte PCR-Policy über das gesamte gestartete System.
       status: recommended_not_decided
-  recommendation_source: Eigentümerentscheidungen vom 2026-10-26 und Review in docs/openbao-architecture.md. OpenBao-Storage wurde gegen den gepinnten Quellcode
+  recommendation_source: Eigentümerentscheidungen vom 2026-10-26 und Review in git show da58d1be:docs/openbao-architecture.md. OpenBao-Storage wurde gegen den gepinnten Quellcode
     v2.6.4 geprüft (docs/openbao.md); der Static Seal ist nur anhand von Zeichenketten im Binary vermutet.
 architecture_decisions:
   authoritative_date: "2026-11-03"
@@ -1079,7 +1079,7 @@ repository_touchpoints_for_later_implementation:
   - modules/nixos/services/lx-annotate-local/subservices/lx-annotate-identity-salt-migration.nix
   - devenv/commands.yml
   - ansible/playbooks/ (Preflight, Enrollment, Status, Widerruf für Gruppen)
-  - docs/operator-unlocked-storage.md
+  - docs/legacy-storage-recovery.md
   - docs/openbao.md
   - docs/deployment-guide.md
   - secrets-management.yml

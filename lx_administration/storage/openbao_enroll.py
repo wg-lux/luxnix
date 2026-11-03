@@ -216,7 +216,7 @@ class Host:
             if self.seal_status().get("initialized") is not False:
                 # Interrupted between sys/init and the pending credential: the store's
                 # recovery key was never escrowed. Only an operator may discard it.
-                raise EnrollError("interrupted-initialization: unescrowed store; see docs/openbao-local.md")
+                raise EnrollError("interrupted-initialization: unescrowed store; see docs/legacy-storage-recovery.md")
             response = self.api("POST", "sys/init", {"recovery_shares": 1, "recovery_threshold": 1})
             pending = {"root_token": response["root_token"],
                        "recovery_key": response["recovery_keys_base64"][0]}

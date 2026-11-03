@@ -23,7 +23,6 @@
   - [Access Management](docs/access-management.md)
 - **Deployment and Testing**
   - [Deployment Guide](docs/deployment-guide.md)
-  - [gc-10 Automatic Startup](docs/gc-10-startup.md)
   - [Activation Failure Recovery](docs/activation-failure-recovery.md)
   - [External Storage Detection](docs/external-storage-detection.md)
   - [Hardware Setup](docs/hardware-setup.md)
@@ -49,16 +48,12 @@
   - [Machine Setup Secrets Checklist](docs/machine-secrets-checklist.md)
   - [Boot Encryption Operator Checklist](docs/boot-storage-operator.md)
   - [Boot LUKS Storage Migration](docs/boot-storage-migration.md)
-  - [Legacy Container Storage](docs/operator-unlocked-storage.md)
+  - [Unmigrated Hosts (Legacy Storage)](docs/legacy-storage-recovery.md)
   - [Application Secrets with sops-nix](docs/sops-application-secrets.md)
   - [Fleet Secure Boot](docs/secure-boot.md)
   - [Setup and Bootstrap](docs/vault-setup.md)
   - [OpenBao Hub and Vault Migration](docs/openbao.md)
-  - [Local OpenBao Bootstrap](docs/openbao-local.md)
-  - [Login and Remote Storage Access](docs/storage-login-access.md)
-  - [OpenBao Target Architecture](docs/openbao-architecture.md)
   - [Root Integrity Prototype](docs/root-integrity-prototype.md)
-  - [TPM Release Client](docs/tpm-release-client.md)
   - [Maintainer Notes](docs/vault-maintainer-operations.md)
   - [Admin Password Creation and Rotation](docs/admin-passwords.md)
   - [Coordinated Secret Rotation](docs/secret-rotation.md)
@@ -67,7 +62,6 @@
   - [Hub Export Consumer Walkthrough](docs/lx-annotate-hub-export-mtls-consumer-walkthrough.md)
   - [Owner Operations](docs/vault-owner-immediate-actions.md)
   - [Server Rebuild](docs/vault-server-rebuild.md)
-  - [Encrypted Server TLS Storage](docs/vault-encrypted-tls-storage.md)
 - **Clinical Operations**
   - [Central Hub Transfer](docs/clinical-hub-transfer-guide.md)
 - **Diagnostics and Reviews**

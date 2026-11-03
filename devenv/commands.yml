@@ -353,7 +353,7 @@ commands:
       - The explicit local-target option requires the inventory host to match the local hostname; recovery remains remote and privileged target commands still require sudo.
       - Passphrase provisioning requires the host's passphrase unlock policy and leaves the mapping open; subsequent boots use the escrowed passphrase.
     implementation: lx_administration/storage/provision.py
-    documentation: docs/operator-unlocked-storage.md
+    documentation: docs/legacy-storage-recovery.md
 
   - id: storage-provision-setup
     summary: Interactive, resumable guide that checks every storage-provision prerequisite and applies only after typed confirmation.
@@ -361,7 +361,7 @@ commands:
     operator_confirmation_required: true
     usage: devenv shell storage-provision-setup [--host <host>] [--volume <volume>] [--recovery-host <host>] [--backend passphrase] [--sudo-password-file <private-file>]
     implementation: lx_administration/storage/provision_setup.py
-    documentation: docs/operator-unlocked-storage.md
+    documentation: docs/legacy-storage-recovery.md
     effects:
       - Limits selection to gc-09/gc-10 legacy-container migration; plain-root and boot-luks targets are refused.
       - Read-only checks first; connectivity, target sudo, encrypted admin vault and the controller preview, which must match the choices.
@@ -374,7 +374,7 @@ commands:
     operator_confirmation_required: true
     usage: devenv shell openbao-local <status|rotate-unlock> --limit <host-or-group> [--recovery-host <host>] [--apply]
     implementation: lx_administration/storage/local_enrollment.py
-    documentation: docs/openbao-local.md
+    documentation: docs/legacy-storage-recovery.md
     effects:
       - Read-only legacy enrollment/adoption/rollout previews remain inspectable; their apply actions are rejected before remote calls.
       - rotate-unlock replaces the unlock AppRole SecretID, not the boot passphrase, seal key or LUKS passphrases.
@@ -397,7 +397,7 @@ tasks:
     operator_confirmation_required: false
     usage: devenv tasks run tests:operator-storage-migration-vm
     implementation: tests/nixtest/operator_storage_migration_vm_test.nix
-    documentation: docs/operator-unlocked-storage.md
+    documentation: docs/legacy-storage-recovery.md
   - id: tests:bao-migration-vm
     summary: Exercise Vault to OpenBao provisioning, retries and absent-source behavior with real TLS services.
     risk: local-state
@@ -422,7 +422,7 @@ tasks:
     operator_confirmation_required: false
     usage: devenv tasks run tests:openbao-local-vm
     implementation: devenv/tasks.nix
-    documentation: docs/openbao-local.md
+    documentation: docs/legacy-storage-recovery.md
   - id: tests:openbao-vm
     summary: Verify isolated OpenBao release, authorization, revocation, audit and reseal in a disposable VM.
     risk: local-state

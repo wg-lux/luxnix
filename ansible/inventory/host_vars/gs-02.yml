@@ -168,7 +168,7 @@ host_luxnix:
   vault.server.tlsKeyFile: '"/var/lib/luxnix-vault-pki/server.key"'
   vault.server.caCertFile: '"/var/lib/luxnix-vault-pki/ca.crt"'
   vault.server.managedTls.enable: "true"
-  # Operator-unlocked LUKS container; see docs/vault-encrypted-tls-storage.md.
+  # Operator-unlocked LUKS container; see docs/legacy-storage-recovery.md.
   vault.server.managedTls.encryptedStorage: "true"
   vault.server.managedTls.serverCommonName: '"vault.endo-reg.net"'
   vault.server.managedTls.dnsNames:

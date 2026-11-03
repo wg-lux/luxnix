@@ -680,3 +680,110 @@ def test_key_file_unlock_failures_name_the_recovery_command(tmp_path, monkeypatc
     monkeypatch.setattr(migration, "run", run)
     with pytest.raises(migration.MigrationError, match="luxnix-operator-storage open luxnix-app-storage"):
         migration.Migration.unlock_with_key_file(str(key), container, "luxnix-app-storage")
+
+
+@pytest.fixture
+def shadowed(tmp_path, monkeypatch):
+    """gc-09 state: /etc/secrets was mounted after, and over, /etc/secrets/vault."""
+    volume = tmp_path / "luxnix-secrets"
+    (volume / "host-secrets").mkdir(parents=True)
+    (volume / "managed-secrets").mkdir()
+    secrets = tmp_path / "etc" / "secrets"
+    secrets.mkdir(parents=True)
+    vault = secrets / "vault"
+    device = "/dev/mapper/luxnix-secrets"
+    config = {
+        "volumes": {"luxnix-secrets": {"mountPoint": str(volume), "device": device, "noexec": True}},
+        "binds": {
+            str(secrets): {"volume": "luxnix-secrets", "directory": "host-secrets"},
+            str(vault): {"volume": "luxnix-secrets", "directory": "managed-secrets"},
+        },
+        "guarded": {"vault-auth-setup": [str(secrets), str(vault)], "postgresql": ["/var/lib/postgresql"]},
+    }
+    entry = lambda target, root: {"target": target, "root": root, "source": device,
+                                  "options": ["rw", "nosuid", "nodev", "noexec"]}
+    state = SimpleNamespace(
+        table={10: entry(str(volume), "/"), 20: entry(str(secrets), "/host-secrets"),
+               30: entry(str(vault), "/managed-secrets")},  # 30 is hidden below 20.
+        ids={str(volume): 10, str(secrets): 20}, mounts=[], running=set())
+
+    def mount_id(path):
+        for candidate in [Path(path), *Path(path).parents]:
+            if str(candidate) in state.ids:
+                return state.ids[str(candidate)]
+        return 1
+
+    def run(*args, **kwargs):
+        if args[0] == "systemctl":
+            return b"42\n" if args[-1].removesuffix(".service") in state.running else b"0\n"
+        assert args[:2] == ("mount", "--bind")
+        state.mounts.append(args)
+        state.table[40] = entry(args[-1], "/" + Path(args[-2]).name)
+        state.ids[args[-1]] = 40
+        return b""
+
+    monkeypatch.setattr(migration, "mount_table", lambda: dict(state.table))
+    monkeypatch.setattr(migration, "mount_id", mount_id)
+    monkeypatch.setattr(migration, "run", run)
+    return config, volume, secrets, vault, state
+
+
+def test_restack_remounts_hidden_child_on_verified_encrypted_parent(shadowed):
+    config, volume, _, vault, state = shadowed
+    migration.restack_binds(config)
+    assert state.mounts == [("mount", "--bind", "-o", "nodev,nosuid,noexec",
+                             str(volume / "managed-secrets"), str(vault))]
+    assert vault.is_dir() and vault.stat().st_mode & 0o777 == 0o700
+    migration.restack_binds(config)  # Idempotent once visible.
+    assert len(state.mounts) == 1
+
+
+def test_restack_leaves_visible_or_unmounted_children_to_systemd(shadowed):
+    config, _, _, vault, state = shadowed
+    del state.table[30]
+    migration.restack_binds(config)
+    assert state.mounts == [] and not vault.exists()
+
+
+def test_restack_refuses_while_affected_writer_runs(shadowed):
+    config, _, _, vault, state = shadowed
+    state.running.add("vault-auth-setup")
+    with pytest.raises(migration.MigrationError, match="vault-auth-setup"):
+        migration.restack_binds(config)
+    assert state.mounts == [] and not vault.exists()
+
+
+def test_restack_ignores_unrelated_running_writer(shadowed):
+    config, _, _, _, state = shadowed
+    state.running.add("postgresql")
+    migration.restack_binds(config)
+    assert len(state.mounts) == 1
+
+
+def test_restack_refuses_unexpected_parent_filesystem(shadowed):
+    config, _, _, vault, state = shadowed
+    state.table[20]["source"] = "/dev/nvme0n1p3"
+    with pytest.raises(migration.MigrationError, match="unexpected filesystem"):
+        migration.restack_binds(config)
+    assert state.mounts == [] and not vault.exists()
+
+
+def test_restack_never_creates_missing_bind_source(shadowed):
+    config, volume, _, vault, state = shadowed
+    (volume / "managed-secrets").rmdir()
+    with pytest.raises(migration.MigrationError, match="missing"):
+        migration.restack_binds(config)
+    assert state.mounts == [] and not (volume / "managed-secrets").exists() and not vault.exists()
+
+
+def test_restack_rejects_mount_without_required_hardening(shadowed, monkeypatch):
+    config, _, _, _, state = shadowed
+    original = migration.run
+    def weak(*args, **kwargs):
+        result = original(*args, **kwargs)
+        if args[0] == "mount":
+            state.table[40]["options"] = ["rw"]
+        return result
+    monkeypatch.setattr(migration, "run", weak)
+    with pytest.raises(migration.MigrationError, match="verification"):
+        migration.restack_binds(config)

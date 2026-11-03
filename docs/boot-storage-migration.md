@@ -458,7 +458,7 @@ On an isolated encrypted Btrfs restore target, decrypt each archive with
 Restore to an empty test directory, never over a production filesystem. Restore
 legacy containers with their original recovery credentials; independent age
 copies of those records can be prepared as described in
-[Recovery custody](operator-unlocked-storage.md#explicit-provisioning-and-recovery-custody).
+[Recovery credentials](legacy-storage-recovery.md#recovery-credentials).
 Then restore their logical contents into the final encrypted layout. Archive
 authentication proves transport and decryption, not database/media usability.
 

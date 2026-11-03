@@ -86,7 +86,7 @@ submodules:
   summary: LuxNix deployment composition for the upstream LX-Annotate application.
 contracts:
 - name: operator-unlocked-storage
-  doc: ../../docs/operator-unlocked-storage.md
+  doc: ../../docs/legacy-storage-recovery.md
 - name: architecture
   doc: ../../docs/architecture.md
 - name: README

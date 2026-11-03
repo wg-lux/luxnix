@@ -131,8 +131,8 @@ disables disk swap and automatic GPT swap discovery while retaining RAM-only
 zram. It configures the reusable `luxnix.storage.operatorUnlocked` module,
 including the separate `luxnix-app-storage` mapping and
 application/PostgreSQL binds; gc-10 retains its second-disk dependency and
-separate client-PKI bind. See [Manually Unlocked Site Storage](operator-unlocked-storage.md)
-for the complete mount contract and activation/reboot procedure. Declaring these
+separate client-PKI bind. See [unmigrated hosts](legacy-storage-recovery.md)
+for the unlock and reboot procedure. Declaring these
 mounts does not create containers or migrate existing data.
 
 Before activating this group, format and unlock the newly prepared container,
@@ -286,5 +286,4 @@ CA-verified client certificates and keys, PostgreSQL `SELECT 1`, running web and
 transfer workers, and validated HTTPS 302/200 for the login redirect/frontend
 manifest. The live setup still uses interim units; native activation of the
 reusable module and reboot recovery remain untested. See
-[Manually Unlocked Site Storage](operator-unlocked-storage.md) for deployment
-gates and the existing collation-version warning.
+[unmigrated hosts](legacy-storage-recovery.md) for startup troubleshooting.

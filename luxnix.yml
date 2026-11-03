@@ -406,3 +406,10 @@ documentation_replacements:
   lx-vault-readme.md: docs/vault-setup.md
   postgres-lx-annotate-setup.md: docs/database-ownership.md
   scripts/autoconf-pipeline.md: docs/autoconf.md
+  docs/operator-unlocked-storage.md: docs/legacy-storage-recovery.md
+  docs/openbao-local.md: docs/legacy-storage-recovery.md
+  docs/vault-encrypted-tls-storage.md: docs/legacy-storage-recovery.md
+  docs/gc-10-startup.md: docs/legacy-storage-recovery.md
+  docs/openbao-architecture.md: docs/boot-storage-migration.md
+  docs/storage-login-access.md: docs/boot-storage-migration.md
+  docs/tpm-release-client.md: docs/boot-storage-migration.md

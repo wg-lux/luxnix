@@ -272,5 +272,5 @@ With an authorized reboot window and someone at the host:
 | Build fails: `Failed to fetch git repository` | The deploy key is not registered, or the pinned commit does not exist. |
 | Age key lost (volume replaced) | Run `luxnix-sops-storage init` again, update the recipient in `.sops.yaml`, re-encrypt with `sops updatekeys hosts/<host>.yaml`, pin the new commit. |
 
-The startup ordering, safeguards and option reference are in
-[Manually unlocked site storage](operator-unlocked-storage.md#application-secrets-with-sops-nix).
+The option reference is `security.sops.operatorStorageKey` in
+`modules/nixos/security/sops/default.nix`.

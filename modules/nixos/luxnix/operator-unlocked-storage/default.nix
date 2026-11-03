@@ -36,6 +36,10 @@ let
       paths ++ builtins.filter (path: lib.any (parent: lib.hasPrefix "${parent}/" path) paths) mountPaths
     )
   ) cfg.guardedServices;
+  # Bind targets below another configured mount; a live switch can mount the
+  # parent over an already mounted child and hide it (see restack_binds).
+  nestedBinds = builtins.filter (target: parents target != [ ]) (builtins.attrNames cfg.bindMounts);
+  restackName = "luxnix-storage-restack";
   guard = paths: {
     bindsTo = map (path: "${escapeSystemdPath path}.mount") paths;
     unitConfig.RequiresMountsFor = paths;
@@ -52,6 +56,7 @@ let
       binds = cfg.bindMounts;
       bindUnits = map (path: "${escapeSystemdPath path}.mount") (builtins.attrNames cfg.bindMounts);
       writers = builtins.attrNames cfg.guardedServices;
+      guarded = services;
       inherit (cfg) startupServices;
       accounts = cfg.migration.accountHashes;
       verifier = ../../../../lx_administration/secret_storage.py;
@@ -429,6 +434,11 @@ in
           name: paths:
           lib.nameValuePair (checkName name) (
             (guard paths)
+            // lib.optionalAttrs (nestedBinds != [ ]) {
+              # Wants, not Requires: the mount-point assertion stays the gate.
+              wants = [ "${restackName}.service" ];
+              after = [ "${restackName}.service" ];
+            }
             // {
               description = "Verify encrypted storage before ${name}";
               # A separate root check also works for consumers with PrivateDevices or User=.
@@ -446,6 +456,21 @@ in
             }
           )
         ) services
+        // lib.optionalAttrs (nestedBinds != [ ]) {
+          ${restackName} = {
+            description = "Remount nested encrypted binds hidden by a later parent mount";
+            # Ordering only: never pulls in, unlocks or migrates storage itself.
+            # Invalid targets are reported by the bind-target assertion, not by escaping.
+            after = map (path: "${escapeSystemdPath path}.mount") (builtins.filter absolutePath.check mountPaths);
+            path = migrationPath;
+            serviceConfig = {
+              Type = "oneshot";
+              UMask = "0077";
+              LimitCORE = 0;
+              ExecStart = "${migrationCommand} restack";
+            };
+          };
+        }
         // lib.optionalAttrs cfg.migration.enable {
           luxnix-storage-precopy = {
             description = "Pre-copy live sources into private encrypted staging";

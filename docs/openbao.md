@@ -4,14 +4,12 @@
 package (currently 2.6.4). It is disabled by default. Existing Vault services,
 AppRole files, application secret interfaces and storage are unchanged.
 
-The target architecture is defined in
-[OpenBao target architecture](openbao-architecture.md) and accepted against
-`boot-encryption-acceptance.yml` (schema 1.3). Volumes unlock through a
-host-local, TPM-sealed OpenBao; this module is the central hub instance on
-gs-02 for host identities, PKI and allowlisted center salts. The central
-volume-release scenario exercised by the VM test below belongs to the earlier
-architecture. Its KV, cert-auth, single-use token and revocation results still
-apply to hub identity provisioning, but no longer to volume unlock.
+Volumes unlock through [boot LUKS](boot-storage-migration.md), not through
+OpenBao. This module is the possible future central hub instance on gs-02 for
+host identities, PKI and allowlisted center salts. The central volume-release
+scenario exercised by the VM test below belongs to a retired design. Its KV,
+cert-auth, single-use token and revocation results still apply to hub identity
+provisioning, but not to volume unlock.
 
 Before enabling the backend through canonical inventory, declare an encrypted
 mount or bind at `/var/lib/openbao`, and supply runtime TLS certificate and key
