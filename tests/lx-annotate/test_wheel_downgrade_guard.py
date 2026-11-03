@@ -133,17 +133,21 @@ def test_constraints_publish_exact_local_versions_atomically(
     assert list(tmp_path.iterdir()) == [target]
 
 
-def test_install_uses_one_admitted_hashed_closure() -> None:
+def test_installs_use_separate_validated_constraints() -> None:
     source = (MODULE_ROOT / "config.nix").read_text()
     guard_position = source.index("${wheelDowngradeGuard}/guard.py")
-    installs = [line for line in source.splitlines()
-                if '/bin/pip"}' in line and " install " in line]
-    assert len(installs) == 1
-    assert source.index(installs[0]) > guard_position
-    install = source[source.index(installs[0]):].split("\n\n", 1)[0]
-    assert '--require-hashes --only-binary=:all:' in install
-    assert '--requirement "$wheelhouse_path/requirements.txt"' in install
-    assert '--constraint "$application_constraints"' in install
+    installs = [
+        line
+        for line in source.splitlines()
+        if '/bin/pip"}' in line and " install " in line
+    ]
+    assert len(installs) == 3
+    assert all(source.index(line) > guard_position for line in installs)
+    assert all(
+        '--constraint "$application_constraints"' in line for line in installs[:2]
+    )
+    assert '--constraint "$override_constraints"' in installs[2]
+    assert "--force-reinstall" in installs[2]
 
 
 def test_schema_compatibility_precedes_migration_and_legacy_repair() -> None:
@@ -293,7 +297,7 @@ def test_check_only_does_not_write_constraints(
     assert list(tmp_path.iterdir()) == []
 
 
-def test_locked_preparation_and_custom_wheelhouse_do_not_need_network() -> None:
+def test_online_preparation_waits_for_network_and_offline_does_not() -> None:
     rendered = eval_json("""
       let
         f = builtins.getFlake "__LUXNIX_FLAKE_URI__";
@@ -313,8 +317,8 @@ def test_locked_preparation_and_custom_wheelhouse_do_not_need_network() -> None:
           c.environment.etc."luxnix/activation-compatibility.json".text;
       }
     """)
-    assert "network-online.target" not in rendered["onlineAfter"]
-    assert "network-online.target" not in rendered["onlineWants"]
+    assert "network-online.target" in rendered["onlineAfter"]
+    assert "network-online.target" in rendered["onlineWants"]
     assert "network-online.target" not in rendered["offlineAfter"]
     assert "lx-annotate-runtime-env.service" in rendered["requires"]
     # Acknowledged activation now binds rollback to the evaluated stateful footprint.
@@ -354,34 +358,3 @@ def test_managed_deployment_detects_unpersisted_activation(tmp_path: Path, persi
     )
     result = subprocess.run(["sh", "-c", script], capture_output=True, text=True)
     assert (result.returncode == 0) == (persisted == "active")
-
-
-def test_transitive_candidates_are_retained_in_constraints():
-    assert guard.validate_report(report("celery", "5.6.0"), {}) == {
-        "celery": guard.Version("5.6.0")
-    }
-
-
-@pytest.mark.parametrize("damage", [None, "hash", "version", "unhashed", "duplicate"])
-def test_hashed_closure_binds_exact_application_bytes(tmp_path, damage):
-    import hashlib
-
-    wheel = tmp_path / "selected.whl"
-    wheel.write_bytes(b"synthetic-wheel-bytes")
-    digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
-    line = f"lx_annotate==1.7.2 --hash=sha256:{digest}"
-    if damage == "hash":
-        line = line.replace(digest, "0" * 64)
-    elif damage == "version":
-        line = line.replace("1.7.2", "1.7.1")
-    elif damage == "unhashed":
-        line = "lx_annotate==1.7.2"
-    elif damage == "duplicate":
-        line += "\n" + line
-    requirements = tmp_path / "requirements.txt"
-    requirements.write_text(line + "\n")
-    if damage:
-        with pytest.raises(ValueError):
-            guard.validate_requirements(requirements, wheel, "1.7.2")
-    else:
-        guard.validate_requirements(requirements, wheel, "1.7.2")

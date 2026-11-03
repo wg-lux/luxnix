@@ -161,6 +161,7 @@ let
   wheelhousePath =
     if cfg.runtime.wheelhousePath == null then "" else toString cfg.runtime.wheelhousePath;
   wheelDependencyOverrides = cfg.runtime.wheelDependencyOverrides;
+  wheelDependencyOverrideArgs = lib.concatStringsSep " " wheelDependencyOverrides;
   mediaRuntimePackages = [
     cfg.runtime.tesseractPackage
     pkgs.ffmpeg-headless
@@ -295,6 +296,7 @@ let
       local expected_package_version=${lib.escapeShellArg packageVersion}
       local wheel_hash=""
       local wheelhouse_hash="no-wheelhouse"
+      local wheel_dependency_overrides=${lib.escapeShellArg wheelDependencyOverrideArgs}
       local wheel_dependency_overrides_hash=${lib.escapeShellArg wheelDependencyOverrideHash}
       local pip_install_args=""
       local wheel_install_stamp_file=${lib.escapeShellArg "${runtimeRootPath}/.wheel-install.sha256"}
@@ -305,7 +307,7 @@ let
       local install_hash=""
       local installed_package_version=""
       local install_allowed="''${LX_ANNOTATE_WHEEL_INSTALL_ALLOWED:-true}"
-      local wheel_installer_revision="wheel-console-contract-v9-locked-closure"
+      local wheel_installer_revision="wheel-console-contract-v8-configured-python"
       local venv_created="false"
       local python_changed="false"
       local pip_cache_dir=${lib.escapeShellArg "${runtimeRootPath}/pip-cache"}
@@ -334,24 +336,20 @@ let
       canonical_wheel_name="$(basename "$wheel_path" | sed -E 's/^[a-z0-9]{32}-//')"
       staged_wheel_path=${lib.escapeShellArg runtimeRootPath}'/'"$canonical_wheel_name"
 
-      if [ -z "$wheelhouse_path" ] || [ ! -f "$wheelhouse_path/requirements.txt" ]; then
-        echo "ERROR: A reviewed wheelhouse with hashed requirements.txt is required." >&2
-        exit 1
+      if [ -n "$wheelhouse_path" ]; then
+        if [ ! -d "$wheelhouse_path" ]; then
+          echo "ERROR: Configured runtime.wheelhousePath does not exist: $wheelhouse_path" >&2
+          exit 1
+        fi
+        wheelhouse_hash="$(
+          (
+            find "$wheelhouse_path" -maxdepth 1 -type f \( -name '*.whl' -o -name '*.tar.gz' -o -name '*.zip' \) -print0 \
+              | sort -z \
+              | xargs -0 -r sha256sum
+          ) | sha256sum | cut -d ' ' -f1
+        )"
+        pip_install_args="--no-index --find-links $wheelhouse_path"
       fi
-      wheelhouse_path="$(readlink -f "$wheelhouse_path")"
-      case "$wheelhouse_path" in
-        /nix/store/*)
-          # Its immutable derivation binds every artifact and the source build environment.
-          wheelhouse_hash="$(printf '%s' "$wheelhouse_path" | sha256sum | cut -d ' ' -f1)"
-          ;;
-        *)
-          wheelhouse_hash="$(
-            find -L "$wheelhouse_path" -maxdepth 1 -type f -print0 \
-              | sort -z | xargs -0 -r sha256sum | sha256sum | cut -d ' ' -f1
-          )"
-          ;;
-      esac
-      pip_install_args="--no-index --find-links $wheelhouse_path"
 
       install_hash="$(
         printf '%s\n%s\n%s\n%s\n%s\n%s\n' \
@@ -394,20 +392,20 @@ let
         install -m 0640 "$wheel_path" "$staged_wheel_path"
         export PIP_CACHE_DIR="$pip_cache_dir"
         export PIP_DISABLE_PIP_VERSION_CHECK=1
-        # Admit the complete locked install before changing the shared environment.
+        # Resolve both install steps before changing the shared environment.
         # shellcheck disable=SC2086
         ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/python"} ${wheelDowngradeGuard}/guard.py \
           --wheel "$staged_wheel_path" --expected-version "$expected_package_version" \
           --overrides-json ${lib.escapeShellArg (builtins.toJSON wheelDependencyOverrides)} \
-          --requirements "$wheelhouse_path/requirements.txt" \
           --application-constraints "$application_constraints" --override-constraints "$override_constraints" \
           -- $pip_install_args
-        # The reviewed list pins every dependency and hash, including overrides.
         # shellcheck disable=SC2086
-        ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/pip"} install --upgrade --force-reinstall $pip_install_args \
-          --require-hashes --only-binary=:all: --requirement "$wheelhouse_path/requirements.txt" \
-          --constraint "$application_constraints"
-
+        ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/pip"} install --upgrade $pip_install_args "$staged_wheel_path" --constraint "$application_constraints"
+        ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/pip"} install --force-reinstall --no-deps "$staged_wheel_path" --constraint "$application_constraints"
+        if [ -n "$wheel_dependency_overrides" ]; then
+          # shellcheck disable=SC2086
+          ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/pip"} install --upgrade --no-deps $pip_install_args $wheel_dependency_overrides --force-reinstall --constraint "$override_constraints"
+        fi
       fi
 
       # pip restores certifi's bundled cacert.pem on every install; relink it

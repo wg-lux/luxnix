@@ -15,17 +15,14 @@ Release dependency selection was refreshed on 2026-11-03:
 - LuxNix selects `lx_annotate-1.7.3-py3-none-any.whl` with SRI
   `sha256-8i+igfpZK9DvYnhuVygFNnhJYJ541/92ZkqW8oXR1uQ=`. Earlier installed-artifact
   provisioning evidence remains specific to its tested 1.7.2 digest.
-- [wheelhouse.nix](wheelhouse.nix) uses `pyproject.toml` and `uv.lock` from the
-  hash-pinned matching release source archive (`runtime.wheelProjectSource`).
-  It checks source/wheel version, Python requirements and active dependency parity,
-  then runs `uv export --locked --offline` to reject a stale lock. Only production
-  dependencies and their requested extras are selected for Python 3.12 Linux;
-  default development groups and project extras such as `dev` are excluded.
-  Artifact URLs and SHA256 hashes come from the upstream lock. Source-only
-  dependencies build offline using locked Nix tooling. The wheelhouse build also
-  checks the full hashed installation plan with offline pip before it can succeed. The old
-  [dependencies.yml](../../../../release-artifacts/lx-annotate/1.7.2/dependencies.yml)
-  is historical evidence and is no longer a build input.
+- Dependency installation follows the selected wheel's `Requires-Dist` metadata,
+  generated from the application's `pyproject.toml`. `runtime.wheelhousePath`
+  defaults to null, restoring the installation workflow from commit `8c0c8e5a`.
+  Pip resolves and downloads dependencies during runtime preparation, using the
+  persistent pip cache. An explicitly supplied wheelhouse enables offline
+  installation with `--no-index --find-links`. No separate YAML dependency
+  catalog or source archive is required. The existing guard admits the resolver
+  plan and rejects protected-package downgrades before installation.
 - Per operator direction, `/home/admin/endoreg-db` is implementation context for
   the next application release (1.7.3). At inspection it declared backend 1.7.7
   and contained local changes. Its source lock is not a compatible application
@@ -202,16 +199,12 @@ uv run --with django==6.0.3 --with celery==5.6.3 --with pydantic==2.14.2 pytest 
 ```
 
 The explicit lane fails if the wheel digest differs. Ordinary root discovery
-skips it when no artifact is supplied. For a release change, select both the
-hash-pinned `runtime.wheelPath` and matching `runtime.wheelProjectSource` archive.
-The source must include its current `pyproject.toml` and `uv.lock`; missing or stale
-locks and source/wheel mismatches fail during wheelhouse evaluation, before
-activation. Evaluation realizes a small dependency-selection derivation (IFD).
-Build the wheelhouse and verify a complete offline `pip install --dry-run --ignore-installed
---require-hashes --only-binary=:all:` plan. Review the resulting dependency changes;
-never substitute a mutable source checkout or silently resolve online at startup.
-Custom `runtime.wheelhousePath` values must contain a complete hashed
-`requirements.txt` binding the configured application bytes. Dependency overrides
-must already be represented in that closure. The runtime stamp binds the
-immutable wheelhouse derivation (or custom directory contents), interpreter,
-application digest and installer revision.
+skips it when no artifact is supplied. For a release change, select the hash-pinned
+`runtime.wheelPath`. Its packaged metadata is the dependency source of truth;
+an unrelated source checkout or independently maintained catalog must not replace it.
+The default online preparation waits for `network-online.target`. For an explicit
+offline deployment, provide a compatible `runtime.wheelhousePath` containing the
+required dependency artifacts and any configured overrides. The runtime stamp
+binds the application digest, interpreter, wheelhouse contents, overrides and
+installer revision. Default online resolution does not provide a complete hashed
+transitive dependency lock; retain that distinction when assessing reproducibility.

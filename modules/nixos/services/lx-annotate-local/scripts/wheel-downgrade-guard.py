@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 from email.parser import BytesParser
-import hashlib
 from importlib.metadata import PackageNotFoundError, version
 import json
 from pathlib import Path
@@ -87,7 +86,7 @@ def validate_report(
         candidate = Version(metadata["version"])
         if name in PROTECTED_PACKAGES:
             reject_downgrade(name, candidate, installed)
-        selected[name] = candidate
+            selected[name] = candidate
     return selected
 
 
@@ -185,42 +184,11 @@ def write_constraints(destination: Path, selected: dict[str, Version]) -> None:
     )
 
 
-def validate_requirements(path: Path, wheel: Path, expected: str) -> None:
-    """The wheelhouse must bind every requirement and the selected application bytes."""
-    requirements = {}
-    for line in path.read_text().splitlines():
-        if not line.strip() or line.lstrip().startswith("#"):
-            continue
-        match = re.fullmatch(
-            r"([A-Za-z0-9_.-]+)==([^\s;]+)((?: --hash=sha256:[0-9a-f]{64})+)",
-            line.strip(),
-        )
-        if match is None:
-            raise ValueError(
-                "Wheelhouse requirements must have exact versions and SHA256 hashes"
-            )
-        name, version_text, hashes = match.groups()
-        name = canonicalize_name(name)
-        if name in requirements:
-            raise ValueError("Duplicate wheelhouse requirement")
-        requirements[name] = (Version(version_text), hashes.split())
-    with wheel.open("rb") as stream:
-        digest = hashlib.file_digest(stream, "sha256").hexdigest()
-    application = requirements.get("lx-annotate")
-    if (
-        application is None
-        or application[0] != Version(expected)
-        or f"--hash=sha256:{digest}" not in application[1]
-    ):
-        raise ValueError("Wheelhouse does not bind the selected application wheel")
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--wheel", type=Path, required=True)
     parser.add_argument("--expected-version", required=True)
     parser.add_argument("--overrides-json", default="[]")
-    parser.add_argument("--requirements", type=Path)
     parser.add_argument("--application-constraints", type=Path)
     parser.add_argument("--override-constraints", type=Path)
     parser.add_argument(
@@ -242,18 +210,7 @@ def main() -> None:
     ):
         raise ValueError("Dependency overrides must be a list of requirements")
     pip_args = args.pip_args[1:] if args.pip_args[:1] == ["--"] else args.pip_args
-    if args.requirements is not None:
-        validate_requirements(args.requirements, args.wheel, args.expected_version)
-        pip_args = [
-            *pip_args,
-            "--requirement",
-            str(args.requirements),
-            "--only-binary=:all:",
-            "--force-reinstall",
-        ]
-    application_plan = check_plan(
-        [] if args.requirements is not None else [str(args.wheel)], pip_args, installed
-    )
+    application_plan = check_plan([str(args.wheel)], pip_args, installed)
     override_plan = dict(application_plan)
     if overrides:
         # Compare overrides against both the original environment and the

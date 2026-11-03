@@ -296,24 +296,11 @@ in
             };
             description = "Additional lx-annotate environment variables merged into the generated systemd environment. Use this for secretspec keys that do not need a dedicated LuxNix option.";
           };
-          wheelProjectSource = mkOption {
-            type = types.path;
-            default = pkgs.fetchzip {
-              url = "https://files.pythonhosted.org/packages/3c/15/5854e358869e910cbf52e7c6a00167de059a8900608f47a8f4344a881e50/lx_annotate-1.7.3.tar.gz";
-              sha256 = "0wydx9kaf08jylgwsybxn2gs4fqqcpzb8skppb5wiv7sxf4mrqss";
-            };
-            description = "Matching application source containing pyproject.toml and uv.lock. The default uses the hash-pinned release source archive; version and dependencies must match wheelPath.";
-          };
           wheelhousePath = mkOption {
             type = types.nullOr types.path;
-            default =
-              (import ../wheelhouse.nix {
-                inherit pkgs lib;
-                projectSource = cfg.runtime.wheelProjectSource;
-                applicationWheel = cfg.runtime.wheelPath;
-              }).wheelhouse;
+            default = null;
             example = "/var/lib/lx-annotate/artifacts/wheelhouse";
-            description = "Immutable wheelhouse derived from the matching application's pyproject.toml and validated uv.lock, with hashed requirements.txt. Source-only dependencies build offline using locked Nix tooling. Custom releases must select matching wheelPath and wheelProjectSource or supply a complete reviewed wheelhouse.";
+            description = "Optional directory containing prebuilt dependency wheels. When set, wheel installs run with --no-index --find-links so the service does not resolve/download dependencies from the network during startup.";
           };
           wheelDependencyOverrides = mkOption {
             type = types.listOf types.str;

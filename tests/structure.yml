@@ -11,9 +11,6 @@ boundaries:
   - Source checks do not prove deployment readiness
   - Nix evaluation and VM tests are separate from the fast Python lane
 entrypoints:
-  - name: application-wheelhouse
-    file: lx-annotate/test_wheelhouse_lock.py
-    purpose: Reject source/wheel drift, stale locks and incompatible artifacts while retaining production extras and excluding development dependencies.
   - name: installed-node-provisioning
     file: lx-annotate/test_installed_node_provisioning.py
     purpose: Install the digest-bound selected wheel and verify existing-center policy, aliases, idempotence, secret rotation and SQLite transaction rollback.
