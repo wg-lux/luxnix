@@ -66,24 +66,32 @@ let
         systemd-ask-password --timeout=300 --id="luxnix-admin-password:$host" "$1"
       }
 
+      # Callers such as nh buffer activation stderr until the switch ends, so the
+      # prompt text is the only feedback an agent shows: repeat rejections there.
+      reject() {
+        notice="Rejected: $1. "
+        echo "$notice" >&2
+      }
+
       echo "Set a new password for '$account' on $host." >&2
       echo "If no prompt appears here, answer it within 5 minutes from another terminal on $host: sudo systemd-tty-ask-password-agent" >&2
-      for _ in 1 2 3; do
-        if ! password="$(ask "New password for $account on $host:")" ||
+      notice=""
+      for attempt in 1 2 3; do
+        if ! password="$(ask "''${notice}New password for $account on $host (attempt $attempt/3; at least 12 bytes; not the retired shared password, which may still be your current sudo password):")" ||
            ! repeat="$(ask "Repeat the new password for $account on $host:")"; then
           echo "ERROR: no password was entered." >&2
           exit 1
         fi
         if [ "$password" != "$repeat" ]; then
-          echo "The passwords do not match." >&2
+          reject "the two entries did not match"
           continue
         fi
         if [ "$(printf '%s' "$password" | LC_ALL=C wc -c)" -lt 12 ]; then
-          echo "Use at least 12 bytes." >&2
+          reject "shorter than 12 bytes"
           continue
         fi
         if [ "$(printf '%s\n' "$password" | openssl passwd -6 -salt "$retired_salt" -stdin | tr -d '\n' | sha256sum | cut -d ' ' -f 1)" = "$retired_digest" ]; then
-          echo "This is the retired shared password; choose a unique one." >&2
+          reject "that is the retired shared password; choose a unique one"
           continue
         fi
         hash="$(printf '%s\n' "$password" | openssl passwd -6 -stdin)"
@@ -106,7 +114,7 @@ let
         echo "Store it in the password manager and import it into the controller vault (docs/admin-passwords.md); otherwise sync-secrets redeploys the older pair." >&2
         exit 0
       done
-      echo "ERROR: no acceptable password after three attempts." >&2
+      echo "ERROR: no acceptable password after three attempts (last: ''${notice:-none})." >&2
       exit 1
     '';
   };

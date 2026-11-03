@@ -91,7 +91,10 @@ or login ordering. A wrong passphrase asks again, up to five attempts within
 that time budget. On failure, storage-dependent services remain unavailable;
 no plaintext fallback or automatic formatting is allowed. After logging in,
 retry with `sudo luxnix-operator-storage start` in a private terminal. This
-starts the password agent and the guarded consumers; no reboot is required.
+starts one password agent and the guarded consumers; no reboot is required.
+Enter each volume's storage passphrase at its prompt. A prompt repeated after
+an attempt can indicate a rejected passphrase; verify the volume's recovery
+record in a private terminal as described below.
 The alternative OpenBao boot-seal prompt uses the same 90/120-second bounds.
 These bounds apply to the storage unlock chain, not to unrelated boot failures. SSH is available during the
 prompt: for a remote reboot, an administrator can answer it with

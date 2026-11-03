@@ -302,7 +302,8 @@ def test_generic_module_layout_merging_and_invalid_configuration():
 
 @pytest.mark.parametrize("profile", ["gc-10", "gc-10-tpm2"])
 @pytest.mark.parametrize("mismatch", [False, True])
-def test_packaged_start_preserves_healthy_services_and_rejects_wrong_mapping(hosts, tmp_path, mismatch, profile):
+@pytest.mark.parametrize("locked", [False, True])
+def test_packaged_start_preserves_healthy_services_and_rejects_wrong_mapping(hosts, tmp_path, mismatch, locked, profile):
     """Execute the packaged CLI with device/systemctl probes isolated from the host."""
     helper = hosts[profile]["helper"]
     result = subprocess.run(
@@ -322,6 +323,7 @@ def test_packaged_start_preserves_healthy_services_and_rejects_wrong_mapping(hos
 fi
 printf "%s\\n" "$@" >> "$CALL_LOG"''',
         "cryptsetup": '''[ "$1" = status ] || exit 99
+if [ "$LOCKED" = 1 ] && [ "$MISMATCH" = 0 ]; then exit 1; fi
 if [ "$MISMATCH" = 1 ]; then
   echo "loop: /wrong-container"
 elif [ "$2" = luxnix-app-storage ]; then
@@ -351,7 +353,8 @@ fi''',
         run = subprocess.run(
             [str(executable), "start"], stdin=slave, capture_output=True, text=True,
             env={**os.environ, "CALL_LOG": str(calls), "AGENT_LOG": str(agent),
-                 "PASSPHRASE": str(int(profile == "gc-10")), "MISMATCH": str(int(mismatch))},
+                 "PASSPHRASE": str(int(profile == "gc-10")), "MISMATCH": str(int(mismatch)),
+                 "LOCKED": str(int(locked))},
             timeout=20,
         )
     finally:
@@ -363,8 +366,15 @@ fi''',
         assert not calls.exists()
     else:
         assert run.returncode == 0, run.stderr
-        assert calls.read_text().splitlines() == [
-            "start", *[name + ".service" for name in hosts[profile]["startup"]]
+        lines = calls.read_text().splitlines()
+        for index, line in enumerate(lines):
+            if line == "start":
+                assert lines[index - 1] == "--no-ask-password"
+        if locked:
+            assert "luxnix-storage-unlock-luxnix-app-storage.service" in lines
+            assert "luxnix-storage-unlock-luxnix-secrets.service" in lines
+        assert lines[-len(hosts[profile]["startup"]) - 2:] == [
+            "--no-ask-password", "start", *[name + ".service" for name in hosts[profile]["startup"]]
         ]
         if profile == "gc-10":
             assert agent.read_text().splitlines() == ["--watch"]

@@ -129,7 +129,7 @@ let
                 if volume.depends == [ ] then
                   ":"
                 else
-                  "systemctl start "
+                  "systemctl --no-ask-password start "
                   + lib.escapeShellArgs (map (path: "${utils.escapeSystemdPath path}.mount") volume.depends)
               )
               + ";;\n"
@@ -140,7 +140,7 @@ let
             ${lib.concatStrings (
               lib.mapAttrsToList (
                 volumeName: volume:
-                "${lib.escapeShellArg (lib.removePrefix "/dev/mapper/" volume.device)}) systemctl start ${lib.escapeShellArg "luxnix-storage-unlock-${volumeName}.service"};;\n"
+                "${lib.escapeShellArg (lib.removePrefix "/dev/mapper/" volume.device)}) systemctl --no-ask-password start ${lib.escapeShellArg "luxnix-storage-unlock-${volumeName}.service"};;\n"
               ) (lib.filterAttrs (_: volume: volume.container != null) cfg.volumes)
             )}
             *) die "$name requires an externally opened mapping." ;;
@@ -210,7 +210,7 @@ let
           [ "$#" -eq 0 ] || usage
           ${lib.optionalString (cfg.startupServices == [ ]) ''die "No startupServices configured."''}
           cmd_open
-          systemctl start ${lib.escapeShellArgs (map (name: "${name}.service") cfg.startupServices)}
+          systemctl --no-ask-password start ${lib.escapeShellArgs (map (name: "${name}.service") cfg.startupServices)}
           ;;
         header-backup) cmd_header_backup "$@" ;;
         *) usage ;;

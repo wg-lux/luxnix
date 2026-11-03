@@ -436,6 +436,60 @@ rolling back, since restoring the image discards them.
 
 ## Reprovision and restore (explicit destructive operator action)
 
+### gc-10 cutover scope (operator decision, 2026-11-03)
+
+The requested migration includes the live backend, not only a backup. Reuse the
+two internal disks only after verified offline whole-disk images and a tested
+restore. For this migration the operator selected **plaintext backup archives**
+on the existing `Backup-24-11` filesystem, without an additional archive password.
+This is a host-specific exception to the encrypted-archive procedure above;
+do not run that procedure and describe its age ciphertext as plaintext. Raw disk
+images still contain the original encrypted containers and need the existing
+container credentials for recovery. Preserve those credentials until recovery
+retention ends. Keep backup access private and existing backup contents intact.
+
+Start by extracting the existing containers into a private plaintext file tree
+on the selected backup disk. This copy can precede the offline disk work: keep
+the original containers closed to writers, open separate read-only mappings,
+and verify file contents and metadata after copying. Preserve the originals.
+Do not interpret permission to copy data as permission to erase disks or remove
+containers. A verified file copy is a restore source; it becomes the live backend
+only after the separate path cutover and application checks below.
+
+The installed backend remains `boot-luks`: one root unlock at boot, with the
+secondary disk unlocked by its keyfile on encrypted root. Restore logical data
+from inside the old containers, preserving numeric ownership, permissions,
+ACLs, extended attributes, application keys and historical identity salts:
+
+| Legacy container directory | Live destination after restore |
+| --- | --- |
+| `luxnix-app-storage/application` | `/var/lib/lx-annotate` (data-disk Btrfs subvolume) |
+| `luxnix-app-storage/postgresql` | `/var/lib/postgresql` (data-disk Btrfs subvolume) |
+| `luxnix-app-storage/postgresql-backups` | `/var/backup/postgresql` (data-disk Btrfs subvolume) |
+| `luxnix-secrets/host-secrets` | `/etc/secrets` |
+| `luxnix-secrets/managed-secrets` | `/etc/secrets/vault` |
+| `luxnix-secrets/identity-salt-recovery` | `/var/lib/lx-annotate-identity-salts` |
+| `luxnix-secrets/identity-salt-replica` | `/var/lib/lx-annotate/data/.identity-salt-recovery` |
+| `luxnix-secrets/wheel-conf` | `/var/endoreg-service-user/lx-annotate-wheel/conf` |
+| `luxnix-secrets/hub-client-pki` | `/var/lib/lx-annotate/hub-pki` |
+
+Reconcile this table with the final evaluated bind metadata and actual source
+contents before copying. Restore nested destinations after their parent tree.
+Do not restore the `.luks` backing files or obsolete container mount directories
+into the new live filesystem. Keep their complete originals in the recovery
+images. Select `boot-luks`, disable local OpenBao enrollment tooling and leave
+legacy container migration disabled in the installation release. Shared legacy
+metadata stays available for other hosts and for detecting stale mounts.
+
+Retirement is complete only after the installed mount graph points at the new
+encrypted partitions, no legacy unlock units or container mounts remain active,
+PostgreSQL checks and historical-media decryption pass, and a cold boot starts
+the application after one storage prompt. The external backup is recovery
+storage, never the application's live backend. Do not delete recovery images or
+claim physical acceptance based on a configuration build.
+
+### Installation procedure
+
 1. Review the evaluated Disko layout for the exact host against serials and the
    recorded installed layout. Build the system on a durable reviewed checkout;
    a temporary verification checkout must never become the production source.

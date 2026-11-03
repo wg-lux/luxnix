@@ -328,7 +328,11 @@ fingerprint of the retired hash, never the credential. The tool asks twice on
 the current terminal, or through systemd password agents when activation has no
 terminal (for example under `nixos-rebuild`): answer from another terminal on
 the host with `sudo systemd-tty-ask-password-agent` within 5 minutes. It
-requires at least 12 bytes, rejects the retired password, and writes a SHA-512
+requires at least 12 bytes, rejects the retired password, and allows three
+attempts. Each prompt states these rules and repeats why the previous attempt
+was rejected, because wrappers such as `nh` show activation output only after
+the switch ends. When the current hash is the retired one, the current `sudo`
+password is that retired password and is rejected. The tool writes a SHA-512
 crypt hash to `user.admin.passwordFile` as `root:root 0600`. When
 `/etc/secrets/vault` is on unlocked encrypted storage, it also updates the vault
 hash and plaintext files there. Wrong ownership or mode, or a path that is not a
