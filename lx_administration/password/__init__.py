@@ -15,7 +15,7 @@ _EXPORTS = {
 
 
 def __getattr__(name: str) -> object:
-    """Resolve password helpers without importing Faker and Passlib eagerly."""
+    """Resolve password helpers without importing Passlib eagerly."""
     return resolve_lazy_export(
         name,
         package_name=__name__,

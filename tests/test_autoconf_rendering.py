@@ -611,3 +611,63 @@ def test_home_renderer_renders_all_hosts_before_writing(monkeypatch, tmp_path):
 
     assert not (tmp_path / "output").exists()
     assert "sensitive invalid value" not in str(error.value)
+
+
+def test_publication_preflights_all_destinations_before_changing_any(tmp_path):
+    from lx_administration.autoconf.nix.utils import write_nix_outputs
+    first, second = tmp_path / 'first.nix', tmp_path / 'second.nix'
+    first.write_text('old first')
+    second.mkdir()
+    with pytest.raises(ValueError, match='regular file'):
+        write_nix_outputs([(first, 'new first'), (second, 'new second')], formatter_runner=lambda _: None)
+    assert first.read_text() == 'old first'
+    assert second.is_dir()
+
+
+def test_failed_second_publication_rolls_back_previous_files_and_deletions(tmp_path, monkeypatch):
+    from lx_administration.autoconf import publication
+    first, second, stale, added = [tmp_path / n for n in ('first', 'second', 'stale', 'added')]
+    for path in (first, second, stale):
+        path.write_text('old ' + path.name)
+    original = publication._replace
+    failures = []
+    def replace(source, target, mode):
+        if target == second and source.name.endswith('.new'):
+            failures.append(target)
+            raise OSError('injected second destination failure')
+        original(source, target, mode)
+    monkeypatch.setattr(publication, '_replace', replace)
+    with pytest.raises(OSError, match='second destination'):
+        publication.publish_files([(first, b'new first', 0o644), (stale, None, 0o600),
+                                   (added, b'added', 0o600), (second, b'new second', 0o644)])
+    assert failures == [second]
+    assert [p.read_text() for p in (first, second, stale)] == ['old first', 'old second', 'old stale']
+    assert not added.exists()
+    assert not (tmp_path / '.autoconf-publication').exists()
+
+
+def test_crashed_generation_recovers_before_next_reader(tmp_path):
+    import sys
+    from lx_administration.autoconf.publication import publication_lock
+    first, second = tmp_path / 'first', tmp_path / 'second'
+    first.write_text('old first')
+    second.write_text('old second')
+    source = r'''
+import os, sys
+from pathlib import Path
+from lx_administration.autoconf import publication
+root = Path(sys.argv[1])
+original = publication._replace
+def crash(source, target, mode):
+    original(source, target, mode)
+    os._exit(77)
+publication._replace = crash
+publication.publish_files([(root / 'first', b'new first', 0o644), (root / 'second', b'new second', 0o644)])
+'''
+    result = subprocess.run([sys.executable, '-c', source, str(tmp_path)])
+    assert result.returncode == 77
+    assert (tmp_path / '.autoconf-publication/plan.json').exists()
+    with publication_lock(tmp_path):
+        assert first.read_text() == 'old first'
+        assert second.read_text() == 'old second'
+    assert not (tmp_path / '.autoconf-publication').exists()

@@ -10,7 +10,7 @@ from lx_administration.logging import get_logger
 from ...password import PasswordGenerator
 from .config import OWNER_TYPES, SECRET_TYPES
 from .manager_utils import generate_secret_dir_path
-from .secret import Secret
+from .secret import Secret, _create_secret_files, validate_password_pairs
 
 if TYPE_CHECKING:
     from .manager import Vault
@@ -38,8 +38,8 @@ class SecretTemplate(BaseModel):
         vault_dir: str | Path = "~/.lxv/",
     ) -> Self:
         template = cls(name=name, owner_type=owner_type, secret_type=secret_type)
-        template.directory = template.get_secret_dir(Path(vault_dir)).as_posix()
         template.generator = template.get_secret_generator()
+        template.directory = template.get_secret_dir(Path(vault_dir)).as_posix()
 
         return template
 
@@ -47,6 +47,8 @@ class SecretTemplate(BaseModel):
         """Return the generator configured for this secret type."""
         if self.secret_type not in SECRET_TYPES:
             raise ValueError(f"Invalid secret_type: {self.secret_type}")
+        if self.secret_type not in {"password", "system_password"}:
+            raise ValueError(f"Unsupported generated secret type: {self.secret_type}")
         if self.secret_type == "password":
             return PasswordGenerator(mode="passphrase", num_words=4)
         return PasswordGenerator(mode="password", key_length=32)
@@ -71,62 +73,83 @@ class SecretTemplate(BaseModel):
             self.secret_type,
         )
 
+    def _secret_paths(self, vault: "Vault") -> list[Path]:
+        if Path(self.name).name != self.name or self.name in (".", ".."):
+            raise ValueError("Secret template name must be a single path component")
+        directory = (
+            self.get_secret_dir(Path(vault.dir))
+            if self.directory is None
+            else Path(self.directory).expanduser().absolute()
+        )
+        return [
+            directory / f"{self.name}_{suffix}"
+            for suffix in ("password", "password_hash")
+        ]
+
+    def _target_name(self, name: str, vault: "Vault") -> str:
+        for host in vault._require_inventory().all:
+            if host.hostname:
+                name = name.replace(f"@{host.hostname}", "")
+        return f"SCRT_{self.owner_type}_{self.secret_type}_{name}"
+
+    def check_persisted_state(self, vault: "Vault") -> bool:
+        """Admit only a wholly absent pair or a complete, matching encrypted pair."""
+        self.get_secret_generator()  # Never accept password material as a key/cert.
+        paths = self._secret_paths(vault)
+        names = [path.name for path in paths]
+        present = [Secret.check_exists(path.name, path, vault) for path in paths]
+        related = [item for item in vault.secrets if item.template_name == self.name]
+        if any(item.name not in names for item in related):
+            raise ValueError(f"Conflicting secret metadata for {self.name}")
+        if any(present) != all(present):
+            raise ValueError(
+                f"Incomplete credential pair for {self.name}; recovery required"
+            )
+        if self.secret_names != (names if any(present) else []):
+            raise ValueError(
+                f"Conflicting secret_names for {self.name}; recovery required"
+            )
+        for item in vault.secrets:
+            if item.name not in names:
+                continue
+            if (
+                item.template_name != self.name
+                or item.target_name != self._target_name(item.name, vault)
+                or item.owner_type != self.owner_type
+                or item.secret_type != self.secret_type
+                or item.local_vault_key != self.local_vault_key
+            ):
+                raise ValueError(f"Conflicting secret metadata for {self.name}")
+        if not any(present):
+            return False
+        validate_password_pairs(related, vault.key)
+        return True
+
     def create_or_update_secrets(
         self,
         vault: "Vault",
         logger: logging.Logger | None = None,
     ) -> bool:
-        """Materialize missing secrets and report whether the vault changed."""
+        """Create a new pair; inconsistent material requires explicit recovery."""
         logger = logger or get_logger("lx_vault__create_or_update_secrets")
         if self.generator is None:
             raise ValueError(f"SecretTemplate.generator is not set for {self.name}")
-
-        inventory = vault._require_inventory()
-        hostnames = [host.hostname for host in inventory.all if host.hostname]
+        vault._require_inventory()
+        if self.check_persisted_state(vault):
+            return False
+        paths = self._secret_paths(vault)
         results = self.generator.pipe()
-
-        if self.directory is None:
-            secret_dir = self.get_secret_dir(Path(vault.dir)).expanduser().resolve()
-        else:
-            secret_dir = Path(self.directory).expanduser().resolve()
-
-        generated_secrets = [
-            (f"{self.name}_{suffix}", secret_value) for suffix, secret_value in results
-        ]
-        self.secret_names = [name for name, _ in generated_secrets]
-        changed = False
-
-        for secret_name, secret_value in generated_secrets:
-            secret_file = secret_dir / secret_name
-            if Secret.check_exists(secret_name, str(secret_file), vault):
-                continue
-
-            Secret.create_secret(
-                secret=secret_value,
-                file=str(secret_file),
-                vault=vault,
-            )
-
-            target_secret_name = secret_name
-            for hostname in hostnames:
-                target_secret_name = target_secret_name.replace(f"@{hostname}", "")
-
-            if target_secret_name != secret_name:
-                logger.info(
-                    "Removed inventory hostname from secret target: %s -> %s",
-                    secret_name,
-                    target_secret_name,
-                )
-            target_name = (
-                f"SCRT_{self.owner_type}_{self.secret_type}_{target_secret_name}"
-            )
-            timestamp = datetime.now()
-            vault.secrets.append(
+        if [suffix for suffix, _ in results] != ["password", "password_hash"]:
+            raise ValueError("Generator must return a complete password/hash pair")
+        timestamp = datetime.now()
+        metadata = []
+        for path in paths:
+            metadata.append(
                 Secret(
-                    name=secret_name,
+                    name=path.name,
                     template_name=self.name,
-                    file=str(secret_file),
-                    target_name=target_name,
+                    file=str(path),
+                    target_name=self._target_name(path.name, vault),
                     owner_type=self.owner_type,
                     secret_type=self.secret_type,
                     local_vault_key=self.local_vault_key,
@@ -134,6 +157,11 @@ class SecretTemplate(BaseModel):
                     updated=timestamp,
                 )
             )
-            changed = True
-
-        return changed
+        _create_secret_files(
+            [(path, value) for path, (_, value) in zip(paths, results, strict=True)],
+            vault.key,
+        )
+        vault.secrets.extend(metadata)
+        self.secret_names = [path.name for path in paths]
+        logger.info("Created credential pair for template %s", self.name)
+        return True

@@ -27,7 +27,7 @@ import sys
 import tempfile
 
 IDENTIFIER = re.compile('[a-z0-9][a-z0-9-]*')
-BACKENDS = ('passphrase', 'tpm2', 'local-openbao')
+BACKENDS = ('passphrase',)
 BACKEND_HELP = {
     'passphrase': 'unlock with the escrowed passphrase (no Secure Boot needed)',
     'tpm2': 'TPM token; the host must already boot with Secure Boot',
@@ -264,13 +264,13 @@ def run(console, env, state, preset, vault_dir, vault_key):
     console.step(1, 'Choose the host')
     inventory = env.inventory_hosts()
     configured = set(env.nix_json('nixosConfigurations', 'builtins.attrNames'))
-    hosts = sorted(set(inventory) & configured)
+    hosts = sorted(set(inventory) & configured & {'gc-09', 'gc-10'})
     host = _identifier(preset.host or console.choose('Which host gets encrypted storage?', hosts), 'Host')
     if host not in hosts:
         raise SetupStopped(f'{host} is not both in the inventory and in the flake')
     storage = env.nix_json(f'nixosConfigurations.{host}.config.luxnix.storage.operatorUnlocked',
                            STORAGE_EXPRESSION)
-    if storage['layout'] not in {'legacy-containers', 'unencrypted-root'}:
+    if storage['layout'] != 'legacy-containers':
         raise SetupStopped(f'{host} uses the {storage["layout"]} layout; its storage is prepared with '
                            'devenv shell boot-storage-migration (docs/boot-storage-migration.md)')
     console.ok(f'{host} uses protected containers with the {storage["unlockMethod"]} unlock policy')

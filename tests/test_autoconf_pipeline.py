@@ -4,6 +4,8 @@ import importlib
 import inspect
 from unittest.mock import Mock
 
+import pytest
+
 from lx_administration.autoconf.config import AutoconfConfig
 from lx_administration.models.ansible.inventory import AnsibleInventory
 from tests.autoconf_test_support import write_config
@@ -47,7 +49,13 @@ def test_pipeline_uses_central_config(monkeypatch, tmp_path):
 
     assert received["subnet"] == "10.20.30."
     assert received["system_group"] == "active_clients"
-    assert received["render_config"] is config
+    staged = received["render_config"]
+    assert staged.ansible_root == config.ansible_root
+    assert staged.nix_templates == config.nix_templates
+    assert staged.output != config.output
+    assert staged.nix_output != config.nix_output
+    assert staged.inventory_subnet == config.inventory_subnet
+    assert staged.home_state_version == config.home_state_version
     assert received["render_logger"] is not None
     assert received["logger_name"] == "autoconf_pipeline"
     assert received["log_dir"] == config.log_dir
@@ -178,3 +186,73 @@ def test_canonical_pipeline_stages_have_complete_type_signatures() -> None:
             parameter.annotation is not inspect.Parameter.empty
             for parameter in signature.parameters.values()
         ), f"{stage.__module__}.{stage.__name__} has an untyped parameter"
+
+
+def test_failed_render_preserves_previous_intermediates_and_nix(monkeypatch, tmp_path):
+
+    pipeline = importlib.import_module("lx_administration.autoconf.main")
+    config = AutoconfConfig.load(write_config(tmp_path))
+    config.output.mkdir(parents=True)
+    old_inventory = config.output / "inventory.yml"
+    old_inventory.write_text("old inventory")
+    old_nix = config.nix_output / "systems/node/default.nix"
+    old_nix.parent.mkdir(parents=True)
+    old_nix.write_text("old nix")
+
+    def imported(_source, output, **kwargs):
+        output.mkdir(parents=True)
+        (output / "inventory.yml").write_text("new inventory")
+
+    def failed_render(staged, **kwargs):
+        assert old_inventory.read_text() == "old inventory"
+        assert old_nix.read_text() == "old nix"
+        raise RuntimeError("new home template is invalid")
+
+    monkeypatch.setattr(pipeline, "import_source_data", imported)
+    monkeypatch.setattr(pipeline, "build_home_merged_variables", lambda *a, **k: None)
+    monkeypatch.setattr(pipeline, "render_configurations", failed_render)
+    with pytest.raises(RuntimeError, match="home template"):
+        pipeline.run_pipeline(config)
+    assert old_inventory.read_text() == "old inventory"
+    assert old_nix.read_text() == "old nix"
+
+
+@pytest.mark.parametrize('fail_publication', [False, True])
+def test_generation_commits_intermediates_and_nix_together(monkeypatch, tmp_path, fail_publication):
+    from lx_administration.autoconf import publication
+    pipeline = importlib.import_module('lx_administration.autoconf.main')
+    config = AutoconfConfig.load(write_config(tmp_path))
+    config.output.mkdir(parents=True)
+    inventory = config.output / 'inventory.yml'
+    inventory.write_text('old inventory')
+    nix = config.nix_output / 'systems/node/default.nix'
+    nix.parent.mkdir(parents=True)
+    nix.write_text('old nix')
+    def imported(_source, output, **kwargs):
+        output.mkdir(parents=True)
+        (output / 'inventory.yml').write_text('new inventory')
+    def rendered(staged, **kwargs):
+        target = staged.nix_output / 'systems/node/default.nix'
+        target.parent.mkdir(parents=True)
+        target.write_text('new nix')
+    monkeypatch.setattr(pipeline, 'import_source_data', imported)
+    monkeypatch.setattr(pipeline, 'build_home_merged_variables', lambda *a, **k: None)
+    monkeypatch.setattr(pipeline, 'render_configurations', rendered)
+    original = publication._replace
+    def replace(source, target, mode):
+        if fail_publication and target == nix and source.name.endswith('.new'):
+            raise OSError('final Nix publication failed')
+        original(source, target, mode)
+    monkeypatch.setattr(publication, '_replace', replace)
+    if fail_publication:
+        with pytest.raises(OSError, match='final Nix publication failed'):
+            pipeline.run_pipeline(config)
+        assert inventory.read_text() == 'old inventory'
+        assert nix.read_text() == 'old nix'
+    else:
+        pipeline.run_pipeline(config)
+        assert inventory.read_text() == 'new inventory'
+        assert nix.read_text() == 'new nix'
+        assert inventory.stat().st_mode & 0o777 == 0o600
+        assert nix.stat().st_mode & 0o777 == 0o644
+    assert not (config.output / '.autoconf-publication').exists()

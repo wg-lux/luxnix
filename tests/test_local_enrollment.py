@@ -177,13 +177,14 @@ def test_conflicting_escrow_is_never_replaced(custody):
     assert le.load_escrow(vault, key, "gc-10", "seal-key")["seal_key"] == "a"
 
 
-def test_emergency_publisher_repeats_but_never_overwrites(custody, tmp_path):
+@pytest.mark.parametrize('optimization', [[], ['-O']])
+def test_emergency_publisher_repeats_but_never_overwrites(custody, tmp_path, optimization):
     vault, key = custody
     ciphertext = secret._encrypt_bytes(b"{}", key, secret.MASTER_VAULT_ID)
     home = tmp_path / "separate-host"
     home.mkdir()
     program = le.LOCAL_EXPORT.replace("Path.home()", "Path(" + repr(str(home)) + ")")
-    command = [sys.executable, "-c", program, "gc-10", "seal-key"]
+    command = [sys.executable, *optimization, "-c", program, "gc-10", "seal-key"]
     for _ in range(3):
         result = subprocess.run(command, input=ciphertext, capture_output=True)
         assert result.returncode == 0 and result.stdout == ciphertext
@@ -192,7 +193,7 @@ def test_emergency_publisher_repeats_but_never_overwrites(custody, tmp_path):
     changed = secret._encrypt_bytes(b"[]", key, secret.MASTER_VAULT_ID)
     assert subprocess.run(command, input=changed, capture_output=True).returncode != 0
     assert subprocess.run(command, input=b"plaintext", capture_output=True).returncode != 0
-    bad_item = [sys.executable, "-c", program, "gc-10", "../escape"]
+    bad_item = [sys.executable, *optimization, "-c", program, "gc-10", "../escape"]
     assert subprocess.run(bad_item, input=ciphertext, capture_output=True).returncode != 0
     assert target.read_bytes() == ciphertext
 
@@ -294,3 +295,21 @@ def test_boot_passphrase_is_sent_only_for_passphrase_seal_and_never_escrowed(cus
     assert ("seal_passphrase" in host.requests[0]) is expected
     for item in ("seal-key", "enrollment"):
         assert "correct horse battery" not in json.dumps(le.load_escrow(vault, key, "gc-10", item))
+
+
+@pytest.mark.parametrize("action", ["enroll", "adopt", "rollout"])
+def test_retired_apply_stops_before_remote_or_secret_access(
+    action, tmp_path, monkeypatch, capsys
+):
+    monkeypatch.setattr(le.AutoconfConfig, "load", lambda _: SimpleNamespace(
+        ansible_root=tmp_path, inventory_subnet="synthetic"))
+    monkeypatch.setattr(le.AnsibleInventory, "load_from_hosts_ini", lambda *a: None)
+    monkeypatch.setattr(le, "select_hosts", lambda *a: ["gc-10"])
+    def forbidden(*args, **kwargs):
+        pytest.fail("Retired enrollment attempted remote or secret access")
+    monkeypatch.setattr(le, "Remote", forbidden)
+    monkeypatch.setattr(le, "encrypted_storage", forbidden)
+    with pytest.raises(SystemExit) as stopped:
+        le.main([action, "--limit", "gc-10", "--apply"])
+    assert stopped.value.code == 2
+    assert "enrollment is retired" in capsys.readouterr().err

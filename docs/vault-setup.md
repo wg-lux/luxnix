@@ -41,6 +41,20 @@ All helper scripts ultimately use `lx_administration.models.vault.Vault`, which
 handles inventory discovery, template generation, PSK creation, and secret
 serialization.
 
+Template synchronization creates credentials only when both password and hash
+files and their metadata are wholly absent. Existing pairs must decrypt with the
+declared master key and contain a matching password and hash. Missing or orphaned
+ciphertext, duplicate or conflicting metadata, and mismatched pairs stop
+synchronization before new template credentials are written.
+
+Restore inconsistent pairs and metadata together from a verified backup before
+retrying. Preserve the original material for recovery; deleting a surviving
+component to trigger generation can sever access to existing consumers. New
+files are published exclusively. A handled publication failure removes only
+files created by that attempt; a process or power interruption can leave orphaned
+ciphertext that requires explicit recovery on the next run. Reviewed admin import
+and rotation remain separate operations.
+
 ## Legacy encryption-key migration
 
 ### Migrate legacy ciphertext before running the updated bootstrap

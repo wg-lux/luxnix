@@ -241,12 +241,21 @@
 
       nixtestChecks = builtins.mapAttrs (system: packages: {
         inherit (packages) nixtests;
+        hub-backup =
+          let
+            pkgs = inputs.nixpkgs.legacyPackages.${system};
+            tests = import ./tests/nixtest/lx_annotate_hub_backup_vm_test.nix {
+              inherit pkgs;
+              repoRoot = ./.;
+            };
+          in
+          pkgs.testers.runNixOSTest (
+            (builtins.head tests.suites."lx-annotate hub backup".tests).vmConfig
+            // {
+              name = "coordinated-hub-backup";
+            }
+          );
         boot-storage = import ./tests/nixtest/boot_storage_vm_test.nix {
-          pkgs = inputs.nixpkgs.legacyPackages.${system};
-          inherit (inputs) disko;
-          repoRoot = ./.;
-        };
-        unencrypted-storage = import ./tests/nixtest/unencrypted_storage_vm_test.nix {
           pkgs = inputs.nixpkgs.legacyPackages.${system};
           inherit (inputs) disko;
           repoRoot = ./.;

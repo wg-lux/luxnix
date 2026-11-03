@@ -165,12 +165,9 @@ class Vault(BaseModel):
         )
 
     def _validate_secret_templates(self) -> None:
-        """Validate templates uniquely by name and owner type."""
+        """Names are the existing lookup/export identity; reject collisions."""
         # Use a list of strings to satisfy Sequence[Hashable] for type checkers
-        unique_keys = [
-            f"{template.name}|{template.owner_type}"
-            for template in self.secret_templates
-        ]
+        unique_keys = [template.name for template in self.secret_templates]
         _assert_unique_list(unique_keys)
 
         for template in self.secret_templates:
@@ -185,6 +182,12 @@ class Vault(BaseModel):
         """Validate the vault by verifying secret templates and secrets."""
         self._validate_secret_templates()
         self._validate_secrets()
+        self.validate_credential_pairs()
+
+    def validate_credential_pairs(self) -> None:
+        from .secret import validate_password_pairs
+
+        validate_password_pairs(self.secrets, self.key)
 
     def load_inventory(self, inventory_file: str | Path) -> AnsibleInventory:
         """Load Ansible inventory from a file."""
@@ -214,6 +217,11 @@ class Vault(BaseModel):
     ) -> tuple[SecretTemplate, bool]:
         """Get a secret template by name or create one if it doesn't exist."""
         template = self.get_secret_template_by_name(name)
+        if template and (template.owner_type, template.secret_type) != (
+            owner_type,
+            secret_type,
+        ):
+            raise ValueError(f"Conflicting template identity for {name}")
 
         created = False
         if not template:
@@ -302,6 +310,8 @@ class Vault(BaseModel):
 
         for template in self.secret_templates:
             template.assert_valid()
+            template.check_persisted_state(self)
+        for template in self.secret_templates:
             template.create_or_update_secrets(vault=self, logger=logger)
 
     def _sync_client_psk(
@@ -358,10 +368,9 @@ class Vault(BaseModel):
         if not psk:
             return None
 
-        psk_path = Path(psk.file).expanduser().resolve()
-        if not psk_path.exists():
-            logger.warning("PSK file not found: %s", psk_path)
-            return None
+        # Metadata without its key is a recovery error, never permission to
+        # generate a replacement that cannot decrypt the client's material.
+        psk.validate_file()
 
         return psk
 
@@ -438,6 +447,7 @@ class Vault(BaseModel):
             self._export_secrets_locked(vault_dir, inventory, logger)
 
     def _export_secrets_locked(self, vault_dir, inventory, logger) -> None:
+        self.validate_credential_pairs()
         deploy_dir = vault_dir / "deploy"
         previous = vault_dir / ".deploy-previous"
         if previous.exists() or previous.is_symlink():
@@ -463,6 +473,8 @@ class Vault(BaseModel):
                 shutil.rmtree(previous)
 
     def _render_client_exports(self, deploy_dir, inventory, logger) -> None:
+        from .secret import validate_password_pairs
+
         hostnames = [h for h in inventory.get_hostnames() if h is not None]
         for hostname in hostnames:
             if (
@@ -508,6 +520,18 @@ class Vault(BaseModel):
                     raise RuntimeError(
                         f"Secret export failed for host {hostname}"
                     ) from None
+            # Validate the actual encrypted bundle, including a rotation that
+            # raced individual reads. Never publish a mixed password/hash pair.
+            validate_password_pairs(
+                [
+                    secret.model_copy(
+                        update={"file": str(host_secret_dir / secret.target_name)}
+                    )
+                    for secret in host_secrets
+                ],
+                psk_file,
+                psk.vault_id_prefix,
+            )
 
     def get_local_hostname(self) -> str:
         if self.local_hostname_override:
@@ -529,6 +553,7 @@ class Vault(BaseModel):
         _read_key(self.key)
         for secret in self.secrets:
             decrypt_secret(secret.file, self.key)
+        self.validate_credential_pairs()
 
     def get_local_vault_id(self) -> str:
         return self.get_vault_id_for_hostname(self.get_local_hostname())

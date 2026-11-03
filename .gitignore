@@ -22,6 +22,10 @@ luxnix.code-workspace
 !/ansible/cmdb/.gitkeep
 /ansible/.cmdb-refresh.*/
 logs/
+**/.autoconf-publication/
+**/.autoconf-publication.lock
+**/.autoconf-stage-*/
+**/.autoconf-pipeline-*/
 **.env
 test_wd/
 .codex

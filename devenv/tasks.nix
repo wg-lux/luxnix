@@ -108,6 +108,11 @@
     exec = "nix build .#checks.x86_64-linux.openbao-release --no-link -L";
   };
 
+  "python-quality:check" = {
+    description = "Reject new Python lint diagnostics against the reviewed baseline";
+    exec = "${pkgs.uv}/bin/uv run --locked python scripts/python-quality.py";
+  };
+
   # Nix quality
   "nix-quality:check" = {
     description = "Run fast Nix parse, deadnix, statix, nixfmt, and flake-checker checks";

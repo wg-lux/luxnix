@@ -7,7 +7,8 @@ from typing import Literal
 
 from lx_administration.logging import get_logger
 
-from ...password.files import write_private_text
+from ...secret_storage import encrypted_storage
+from ...utils.file_operations import atomic_create_file
 from .config import OWNER_TYPES, SECRET_TYPES
 
 
@@ -46,15 +47,18 @@ def generate_ansible_key(
     """Generate a new local Ansible Vault key."""
     from ...password import PasswordGenerator
 
-    key_path = Path(key_path).expanduser().resolve()
-    if key_path.exists():
+    key_path = Path(key_path).expanduser().absolute()
+    if key_path.exists() or key_path.is_symlink():
         raise FileExistsError(f"File {key_path} already exists")
-
+    if key_path.resolve() != key_path:
+        raise ValueError("Vault key path may not contain symlinks")
+    encrypted_storage(key_path)
     pg = PasswordGenerator(mode=mode, num_words=4)
-    results = pg.pipe()
-    passphrase = results[0][1]
-
-    write_private_text(key_path, passphrase)
+    value = (pg.generate_random_password() if mode == "password"
+             else pg.generate_random_passphrase())
+    atomic_create_file(
+        destination=key_path, content=[value.encode("utf-8")], file_mode=0o600
+    )
 
 
 def generate_secret_dir_path(

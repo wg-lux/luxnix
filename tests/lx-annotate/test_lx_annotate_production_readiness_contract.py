@@ -162,7 +162,7 @@ def test_hub_backup_publishes_database_and_media_as_one_restore_point(
     runtime_root.mkdir()
     credential_root.mkdir()
     (runtime_root / "processed-media.bin").write_bytes(b"anonymized-media")
-    (runtime_root / ".identity-salt-recovery").mkdir(mode=0o000)
+    (runtime_root / ".identity-salt-recovery").mkdir(mode=0o700)
     database_dump = credential_root / "hub-postgresql.sql.gz"
     with gzip.open(database_dump, "wb") as compressed:
         compressed.write(b"CREATE DATABASE hub_test;\n")
@@ -208,7 +208,10 @@ def test_hub_backup_publishes_database_and_media_as_one_restore_point(
     )
     assert built.returncode == 0, built.stderr
     backup_command = Path(built.stdout.strip()) / "bin/runLxAnnotateHubBackup"
-    environment = os.environ | {"CREDENTIALS_DIRECTORY": str(credential_root)}
+    environment = os.environ | {
+        "CREDENTIALS_DIRECTORY": str(credential_root),
+        "HUB_BACKUP_EXCLUSIONS": "[]",
+    }
     environment.pop("LD_LIBRARY_PATH", None)
 
     completed = subprocess.run(

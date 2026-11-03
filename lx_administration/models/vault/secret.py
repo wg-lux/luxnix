@@ -1,21 +1,21 @@
 import os
 import tempfile
 import warnings
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ansible.errors import AnsibleError
 from ansible.parsing.vault import VaultLib, VaultSecret
 from pydantic import BaseModel, ConfigDict
+from passlib.hash import sha512_crypt
 
 from ...permissions import PRIVATE_FILE_MODE, ensure_private_directory
 from ...secret_storage import encrypted_storage
-from .manager_utils import _get_by_name, _is_valid
+from .manager_utils import _get_by_name
 
 if TYPE_CHECKING:
     from .manager import Vault
-
 
 
 def _absolute_path(path: str | Path) -> Path:
@@ -78,7 +78,9 @@ def _encrypt_bytes(value: bytes, key: str | Path, vault_id: str) -> bytes:
         ) from None
 
 
-def _publish_ciphertext(data: bytes, target: Path, *, replace: bool = True) -> None:
+def _publish_ciphertext(
+    data: bytes, target: Path, *, replace: bool = True
+) -> tuple[int, int]:
     """Publish only encrypted bytes; migration uses an exclusive new destination."""
     ensure_private_directory(target.parent)
     descriptor, temporary_name = tempfile.mkstemp(
@@ -87,6 +89,7 @@ def _publish_ciphertext(data: bytes, target: Path, *, replace: bool = True) -> N
     temporary = Path(temporary_name)
     try:
         os.fchmod(descriptor, PRIVATE_FILE_MODE)
+        identity = os.fstat(descriptor)
         with os.fdopen(descriptor, "wb") as stream:
             stream.write(data)
             stream.flush()
@@ -95,8 +98,31 @@ def _publish_ciphertext(data: bytes, target: Path, *, replace: bool = True) -> N
             os.replace(temporary, target)
         else:
             os.link(temporary, target)
+        return identity.st_dev, identity.st_ino
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def _create_secret_files(values: list[tuple[Path, str]], key: str | Path) -> None:
+    """Publish a fresh pair exclusively; roll back owned files on error."""
+    encrypted = [
+        (path, _encrypt_bytes(value.encode("utf-8"), key, MASTER_VAULT_ID))
+        for path, value in values
+    ]
+    published: list[tuple[Path, tuple[int, int]]] = []
+    try:
+        for path, data in encrypted:
+            identity = _publish_ciphertext(data, path, replace=False)
+            published.append((path, identity))
+    except BaseException:
+        for path, identity in reversed(published):
+            try:
+                current = path.lstat()
+            except FileNotFoundError:
+                continue
+            if (current.st_dev, current.st_ino) == identity:
+                path.unlink()
+        raise
 
 
 def _encrypt_value_atomically(value: str, target: Path, key: str | Path) -> None:
@@ -105,6 +131,41 @@ def _encrypt_value_atomically(value: str, target: Path, key: str | Path) -> None
         decrypt_secret(target, key)
     encrypted = _encrypt_bytes(value.encode("utf-8"), key, MASTER_VAULT_ID)
     _publish_ciphertext(encrypted, target)
+
+
+def validate_password_pairs(secrets, key, vault_id=MASTER_VAULT_ID) -> None:
+    """Reject incomplete or mixed generated credentials before validation/export."""
+    pairs = {}
+    for secret in secrets:
+        if secret.secret_type not in {"password", "system_password"}:
+            continue
+        suffix = next(
+            (s for s in ("_password_hash", "_password") if secret.name.endswith(s)),
+            None,
+        )
+        if suffix is None:
+            continue  # Individually imported application secrets are not pairs.
+        identity = (
+            secret.name.removesuffix(suffix),
+            secret.owner_type,
+            secret.secret_type,
+            secret.template_name,
+        )
+        pair = pairs.setdefault(identity, {})
+        if suffix in pair:
+            raise ValueError("Duplicate credential pair metadata")
+        pair[suffix] = secret
+    for pair in pairs.values():
+        if set(pair) != {"_password", "_password_hash"}:
+            raise ValueError("Incomplete credential pair; recovery required")
+        password = decrypt_secret(pair["_password"].file, key, vault_id)
+        encoded = decrypt_secret(pair["_password_hash"].file, key, vault_id)
+        try:
+            matches = sha512_crypt.verify(password, encoded.decode("utf-8"))
+        except (ValueError, UnicodeError):
+            matches = False
+        if not matches:
+            raise ValueError("Credential pair does not match; recovery required")
 
 
 class Secret(BaseModel):
@@ -135,18 +196,28 @@ class Secret(BaseModel):
 
     @staticmethod
     def check_exists(name: str, file: str | Path, vault: "Vault") -> bool:
-        """Return whether both the secret metadata and encrypted file exist."""
-        file_exists = Path(file).exists()
-        metadata_exists = _get_by_name(vault.secrets, name) is not None
-        if file_exists == metadata_exists:
-            return file_exists
-
-        warnings.warn(
-            f"Secret file/metadata mismatch for {name}: file={file_exists}, "
-            f"metadata={metadata_exists}",
-            stacklevel=2,
-        )
-        return False
+        """Distinguish wholly absent state from inconsistent persisted material."""
+        target = _absolute_path(file)
+        metadata = _get_by_name(vault.secrets, name)
+        file_exists = target.exists() or target.is_symlink()
+        if file_exists != (metadata is not None):
+            raise ValueError(
+                f"Secret file/metadata mismatch for {name}; recovery required"
+            )
+        if target.resolve() != target:
+            raise ValueError(f"Secret path contains symlinks for {name}")
+        aliases = [
+            item
+            for item in vault.secrets
+            if _absolute_path(item.file).resolve() == target and item.name != name
+        ]
+        if aliases:
+            raise ValueError(f"Conflicting secret path for {name}")
+        if metadata is None:
+            return False
+        if _absolute_path(metadata.file) != target or not target.is_file():
+            raise ValueError(f"Conflicting secret file for {name}; recovery required")
+        return True
 
     def create_re_encrypted_file(
         self,
@@ -155,6 +226,7 @@ class Secret(BaseModel):
         vault: "Vault",
     ) -> Path:
         """Atomically create a private client-encrypted copy of this secret."""
+        vault.validate_credential_pairs()
         target_path = _absolute_path(target_file)
         plaintext = decrypt_secret(self.file, vault.key)
         key_path = _absolute_path(pre_shared_key_file)
@@ -188,7 +260,6 @@ class Secret(BaseModel):
         """Validate timestamps and require an existing encrypted secret file."""
         if self.created is None:
             raise ValueError(f"Secret.created is not set for {self.name}")
-
 
         secret_file = Path(self.file).expanduser().resolve()
         if not secret_file.is_file():

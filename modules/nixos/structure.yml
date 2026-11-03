@@ -10,6 +10,15 @@ boundaries:
 - Shared defaults can affect the entire fleet
 - Shared contributor tools belong in roles/custom-packages
 entrypoints:
+- name: reserved-boot-key-setup
+  file: luxnix/boot-decryption-stick/setup.py
+  purpose: Enroll boot keys only in an explicitly reserved unmounted key partition using memory-only staging.
+- name: shared-boot-key-module
+  file: luxnix/boot-decryption-stick/module.nix
+  purpose: Share setup policy and exact byte-length rendering across legacy boot-stick module names.
+- name: scheduled-upgrades
+  file: luxnix/maintenance/audo-update/default.nix
+  purpose: Restrict opt-in scheduled upgrades to reviewed immutable revisions staged for a separate operator reboot.
 - name: boot-storage
   file: luxnix/operator-unlocked-storage/boot.nix
   purpose: Boot LUKS crypttab, runtime storage verification and pre-switch migration gate.
@@ -64,7 +73,6 @@ entrypoints:
 dependencies:
   internal:
   - packages
-  - lx_administration
   - lx_administration
   external:
   - NixOS

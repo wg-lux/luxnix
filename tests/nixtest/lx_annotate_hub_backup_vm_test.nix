@@ -16,7 +16,17 @@ let
   mkHubBackupScripts =
     minimumFreeBytes:
     import "${repoRoot}/modules/nixos/services/lx-annotate-local/scripts/hub-backup.nix" {
-      config.networking.hostName = "hub-backup-vm";
+      config = {
+        networking.hostName = "hub-backup-vm";
+        user.endoreg-service-user = {
+          name = serviceUser;
+          group = serviceGroup;
+        };
+        services.postgresql.package = postgresqlPackage;
+        systemd.services.lx-annotate-test-writer.enable = true;
+        systemd.timers = { };
+      };
+      cfg.runtime.encryptedDataDir = backupRoot;
       inherit (pkgs) lib;
       inherit pkgs;
       cfg.hub.backup = {
@@ -49,6 +59,9 @@ in
 
             environment.systemPackages = [
               pkgs.coreutils
+              pkgs.cryptsetup
+              pkgs.e2fsprogs
+              pkgs.util-linux
               pkgs.gzip
               pkgs.jq
               postgresqlPackage
@@ -60,6 +73,7 @@ in
               package = postgresqlPackage;
             };
 
+            systemd.packages = [ hubBackupScripts.hubBackupStartBarrier ];
             systemd = {
               tmpfiles.rules = [
                 "d ${backupRoot} 0750 ${serviceUser} ${serviceGroup} - -"
@@ -71,6 +85,43 @@ in
               ];
 
               services = {
+                lx-annotate-test-writer = {
+                  serviceConfig = {
+                    ExecStart = "${pkgs.coreutils}/bin/sleep infinity";
+                    ExecStop = pkgs.writeShellScript "finish-synthetic-writer" ''
+                      set -eu
+                      printf '%s' stopped-media > ${runtimeRoot}/stopped-media.bin
+                      chown ${serviceUser}:${serviceGroup} ${runtimeRoot}/stopped-media.bin
+                      chmod 0640 ${runtimeRoot}/stopped-media.bin
+                      ${pkgs.util-linux}/bin/runuser -u postgres -- ${postgresqlPackage}/bin/psql \
+                        --dbname hub_restore_test --set ON_ERROR_STOP=1 \
+                        --command "UPDATE transfer_ledger SET resource_hash = 'stopped-media.bin';"
+                      rm -f ${runtimeRoot}/processed-media.bin
+                    '';
+                  };
+                };
+                hub-coordinated-backup = {
+                  serviceConfig = {
+                    Type = "oneshot";
+                    Group = serviceGroup;
+                    RuntimeDirectory = "luxnix-hub-backup";
+                    RuntimeDirectoryMode = "0710";
+                    RuntimeDirectoryPreserve = "yes";
+                    ExecStart = "${hubBackupScripts.hubBackupCoordinator}/bin/luxnix-hub-backup capture";
+                    ExecStopPost = "${hubBackupScripts.hubBackupCoordinator}/bin/luxnix-hub-backup recover";
+                  };
+                };
+                hub-coordinated-capacity-blocked = {
+                  serviceConfig = {
+                    Type = "oneshot";
+                    Group = serviceGroup;
+                    RuntimeDirectory = "luxnix-hub-backup";
+                    RuntimeDirectoryMode = "0710";
+                    RuntimeDirectoryPreserve = "yes";
+                    ExecStart = "${capacityBlockedHubBackupScripts.hubBackupCoordinator}/bin/luxnix-hub-backup capture";
+                    ExecStopPost = "${capacityBlockedHubBackupScripts.hubBackupCoordinator}/bin/luxnix-hub-backup recover";
+                  };
+                };
                 hub-backup-test-media = {
                   description = "Provision an anonymized processed-media fixture";
                   wantedBy = [ "multi-user.target" ];
@@ -147,6 +198,7 @@ in
                     User = serviceUser;
                     Group = serviceGroup;
                     ExecStart = "${hubBackupScripts.runLocalHubBackupScript}/bin/runLxAnnotateHubBackup";
+                    Environment = "HUB_BACKUP_EXCLUSIONS=[]";
                     LoadCredential = [
                       "hub-postgresql.sql.gz:${postgresqlBackupRoot}/all.sql.gz"
                     ];
@@ -172,6 +224,7 @@ in
                     User = serviceUser;
                     Group = serviceGroup;
                     ExecStart = "${capacityBlockedHubBackupScripts.runLocalHubBackupScript}/bin/runLxAnnotateHubBackup";
+                    Environment = "HUB_BACKUP_EXCLUSIONS=[]";
                     LoadCredential = [
                       "hub-postgresql.sql.gz:${postgresqlBackupRoot}/all.sql.gz"
                     ];
@@ -229,6 +282,23 @@ in
             machine.fail("systemctl start lx-annotate-hub-backup.service")
             machine.succeed("test \"$(readlink -f ${snapshotRoot}/latest)\" = \"$(cat /run/first-hub-restore-point)\"")
             machine.succeed("test -z \"$(find ${snapshotRoot} -maxdepth 1 -name '.pending-*' -print -quit)\"")
+
+            # Exercise the production coordinator with actual encrypted media,
+            # PostgreSQL, systemd stop/start conditions and a fresh logical dump.
+            machine.succeed("truncate -s 512M /var/lib/synthetic-backup.luks; printf test-key | cryptsetup luksFormat --batch-mode --type luks2 --key-file=- /var/lib/synthetic-backup.luks")
+            machine.succeed("printf test-key | cryptsetup open --key-file=- /var/lib/synthetic-backup.luks backup-test; mkfs.ext4 /dev/mapper/backup-test; mount /dev/mapper/backup-test ${backupRoot}")
+            machine.succeed("install -d -m 0750 -o ${serviceUser} -g ${serviceGroup} ${runtimeRoot} ${incomingRoot} ${snapshotRoot} ${manifestRoot}")
+            machine.succeed("systemctl start lx-annotate-test-writer.service; systemctl start hub-coordinated-backup.service")
+            machine.wait_for_unit("lx-annotate-test-writer.service")
+            machine.succeed("test ! -e /run/luxnix-hub-backup/recovery.json; test ! -e /run/luxnix-hub-backup/quiescing; test ! -e /run/luxnix-hub-backup/capture/hub-postgresql.sql.gz")
+            machine.succeed("test -f ${snapshotRoot}/latest/stopped-media.bin; test ! -e ${snapshotRoot}/latest/processed-media.bin")
+            machine.succeed("runuser -u postgres -- dropdb hub_restore_test; gzip -cd ${snapshotRoot}/latest/database/all.sql.gz | runuser -u postgres -- psql --dbname postgres")
+            machine.succeed("filename=$(runuser -u postgres -- psql --dbname hub_restore_test --tuples-only --no-align --command 'SELECT resource_hash FROM transfer_ledger'); test -f ${snapshotRoot}/latest/$filename")
+            machine.succeed("readlink -f ${snapshotRoot}/latest > /run/coordinated-restore-point")
+            machine.fail("systemctl start hub-coordinated-capacity-blocked.service")
+            machine.wait_for_unit("lx-annotate-test-writer.service")
+            machine.succeed("test \"$(readlink -f ${snapshotRoot}/latest)\" = \"$(cat /run/coordinated-restore-point)\"; test ! -e /run/luxnix-hub-backup/recovery.json")
+
           '';
         };
       }

@@ -984,7 +984,17 @@ repository_review:
     v2.6.4 geprüft (docs/openbao.md); der Static Seal ist nur anhand von Zeichenketten im Binary vermutet.
 architecture_decisions:
   authoritative_date: "2026-11-02"
+  single_storage_path_2026_11_02:
+    requested_by: repository_owner_in_chat
+    decision: Boot LUKS2 is the sole production installation path; retire unencrypted-root and freeze expansion of alternative disk-unlock backends.
+    supersedes: explicit_unencrypted_installation_2026_11_02 and all earlier normal container enrollment policies.
+    design: Root unlock, root-held secondary keys, stage-2 crypttab, shared kernel-backed verification and guarded services.
+    retained_recovery_hosts: [gc-09, gc-10]
+    retirement_gate: Physical migration, original-key custody, independent backup restore and cold-boot acceptance must precede recovery removal.
+    independent_boundaries: Application encryption, backup encryption and central identity provisioning remain separate.
+    authorization: Repository implementation only; no deployment, disk changes, keyslot removal or physical acceptance.
   explicit_unencrypted_installation_2026_11_02:
+    status: superseded_by_single_storage_path_2026_11_02
     requested_by: repository_owner_in_chat
     decision: Permit explicitly selected unencrypted-root installation; retain boot-luks as the default and never silently downgrade an existing encrypted root.
     scope: OS installation and administrator access before protected application storage is provisioned; no production deployment authorization.
@@ -993,7 +1003,7 @@ architecture_decisions:
     protected_data: Retain container mount and encryption guards; defer protected services until their volumes are ready and automatic startup is explicitly enabled.
     acceptance: Unencrypted OS installation is not encrypted-fleet acceptance; all encrypted release criteria remain applicable when claiming that assurance.
     documentation: docs/boot-storage-migration.md
-    verification: tests/nixtest/unencrypted_storage_vm_test.nix
+    verification: Historical plain-root VM evidence; this installation mode is now rejected.
   offline_theft_rollout_2026_10_27:
     requested_by: repository_owner_in_chat
     scope: Planning update; no implementation acceptance or deployment authorization.
@@ -1103,7 +1113,7 @@ boot_luks_revision:
       Explicit host, immutable release and disk identities; ordered named recovery,
       backup and restore assessments precede migration install-only execution. Fresh
       installation on verified new disks uses recovery and preparation assessments.
-      Root encryption is explicit; see architecture_decisions.explicit_unencrypted_installation_2026_11_02. No automatic
+      Root encryption must be LUKS2; see architecture_decisions.single_storage_path_2026_11_02. No automatic
       formatting, replacement keys, reboot or destructive rollback. Interrupted work
       requires explicit recovery review. Human attestations are not automated proof.
     tests:

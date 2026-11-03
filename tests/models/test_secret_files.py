@@ -61,8 +61,8 @@ def test_check_exists_requires_matching_file_and_metadata(tmp_path, vault):
     secret = _secret(target)
     assert Secret.check_exists(secret.name, target, vault) is False
     target.write_text("encrypted")
-    with pytest.warns(UserWarning, match="file=True, metadata=False"):
-        assert Secret.check_exists(secret.name, target, vault) is False
+    with pytest.raises(ValueError, match="file/metadata mismatch"):
+        Secret.check_exists(secret.name, target, vault)
     vault.secrets.append(secret)
     assert Secret.check_exists(secret.name, target, vault) is True
 

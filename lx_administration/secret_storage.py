@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import re
+import stat
 import subprocess
+import uuid
 
 SYS_BLOCK = Path("/sys/block")
+BTRFS_SYSFS = Path("/sys/fs/btrfs")
 _ZRAM_DEVICE = re.compile(r"/dev/(zram[0-9]+)")
 
 
@@ -31,7 +35,7 @@ def _protected(device: object) -> bool:
 
 def _mounted_filesystem(path: Path) -> dict:
     mount = _probe(
-        "findmnt", "--json", "--target", str(path), "--output", "SOURCE,FSTYPE"
+        "findmnt", "--json", "--target", str(path), "--output", "SOURCE,FSTYPE,UUID"
     )
     if not isinstance(mount, dict):
         raise ValueError("Invalid secret storage mount probe")
@@ -63,6 +67,57 @@ def _require_encrypted_device(source: object) -> None:
         or not all(_protected(device) for device in blockdevices)
     ):
         raise ValueError("Secret storage is not backed entirely by encrypted devices")
+
+
+def filesystem_devices(filesystem: dict) -> list[str]:
+    """Resolve every mounted Btrfs member from kernel evidence, never SOURCE alone."""
+    source = filesystem.get("source")
+    if not isinstance(source, str) or not source.startswith("/dev/"):
+        raise ValueError("Storage must be backed by a block device")
+    source = source.split("[", 1)[0]
+    if filesystem.get("fstype") != "btrfs":
+        return [source]
+    identifier = filesystem.get("uuid")
+    if not isinstance(identifier, str) or str(uuid.UUID(identifier)) != identifier:
+        raise ValueError("Invalid mounted Btrfs UUID")
+    root = BTRFS_SYSFS / identifier
+    members = sorted((root / "devices").iterdir())
+    # Missing devices have devinfo records but no devices symlink in sysfs.
+    metadata = list((root / "devinfo").iterdir())
+    if not members or len(members) != len(metadata):
+        raise ValueError("Incomplete Btrfs member evidence")
+    for device in metadata:
+        if (not device.is_dir() or not re.fullmatch(r"[0-9]+", device.name)
+                or (device / "missing").read_text().strip() != "0"):
+            raise ValueError("Missing or invalid Btrfs member")
+    numbers = set()
+    devices = []
+    for member in members:
+        if not member.is_dir():
+            raise ValueError("Invalid Btrfs member evidence")
+        number = (member / "dev").read_text().strip()
+        if not re.fullmatch(r"[1-9][0-9]*:(?:0|[1-9][0-9]*)", number):
+            raise ValueError("Missing or invalid Btrfs member device")
+        major, minor = map(int, number.split(":"))
+        device = f"/dev/block/{number}"
+        info = os.stat(device)
+        if (not stat.S_ISBLK(info.st_mode)
+                or (os.major(info.st_rdev), os.minor(info.st_rdev)) != (major, minor)
+                or info.st_rdev in numbers):
+            raise ValueError("Invalid Btrfs member block identity")
+        numbers.add(info.st_rdev)
+        devices.append(device)
+    if ".." in Path(source).parts:
+        raise ValueError("Invalid Btrfs source device")
+    info = os.stat(source)
+    if not stat.S_ISBLK(info.st_mode) or info.st_rdev not in numbers:
+        raise ValueError("Btrfs source does not match its kernel member set")
+    return devices
+
+
+def _require_encrypted_filesystem(filesystem: dict) -> None:
+    for device in filesystem_devices(filesystem):
+        _require_encrypted_device(device)
 
 
 def _zram_writeback_disabled(device: str) -> bool:
@@ -97,7 +152,7 @@ def _require_protected_swap() -> None:
         elif kind == "partition":
             _require_encrypted_device(name)
         elif kind == "file":
-            _require_encrypted_device(_mounted_filesystem(Path(name)).get("source"))
+            _require_encrypted_filesystem(_mounted_filesystem(Path(name)))
         else:
             raise ValueError("Plaintext secret handling requires encrypted swap")
 
@@ -119,7 +174,7 @@ def encrypted_storage(path: Path, *, allow_runtime: bool = False) -> None:
         return
     if filesystem.get("fstype") in {"tmpfs", "ramfs", "overlay"}:
         raise ValueError("Persistent secrets require encrypted block storage")
-    _require_encrypted_device(filesystem.get("source"))
+    _require_encrypted_filesystem(filesystem)
 
 
 def main() -> None:

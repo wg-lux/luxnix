@@ -8,28 +8,32 @@ remaining gaps, and the tests required before deleting an OS implementation.
 
 ## Source and artifact reference points
 
-References were collected on 2026-10-21 from dirty working trees; commit IDs
-identify their bases, not immutable copies of the uncommitted changes:
+Release dependency selection was refreshed on 2026-11-03:
 
-- `L/` means the LuxNix repository, `/home/admin/luxnix`, based on
-  `cda962d31bda2811cecdeaeb413c6c84f8a0063e`.
-- `A/` means the LX-Annotate repository, `/home/admin/dev/lx-annotate`, based on
-  `4937f274d7daef12439fceb006581432141de1d7`. Its working `pyproject.toml`
-  declares application `1.5.8` and `endoreg-db==1.5.8.dev1`; this checkout is
-  implementation context, not the selected deployment artifact.
-- LuxNix selects `lx_annotate-1.5.7-py3-none-any.whl` in
-  [options/runtime.nix](options/runtime.nix), `runtime.wheelPath`, with SRI
-  `sha256-lDL1JGOdG6Oyf8YL2WqGp1ENs69gZ8HIiv3NAxaq/ZE=`. The downloaded
-  artifact matched that digest. Its `METADATA` requires `endoreg-db==1.5.7`.
-- Its `entry_points.txt` contains `lx-annotate-recover-data`,
-  `lx-annotate-provision-hub-nodes`, `lx-annotate-storage-relief`,
-  `lx-annotate-acceptance`, and `lx-annotate-check-static`. Corresponding
-  recovery, provisioning, acceptance and asset-check modules are in the wheel.
-  Command presence does not establish behavior parity or migration safety.
-- `lx-annotate-bootstrap-terminology` is absent from this wheel. The current
-  integration uses the dependency-owned `lx-dtypes-kb-registry bootstrap`
-  command; do not revive the obsolete bootstrap implementation described in
-  earlier versions of this document.
+- `L/` means this LuxNix repository. `A/` means the LX-Annotate application
+  source checkout; source references below describe ownership, not release proof.
+- LuxNix selects `lx_annotate-1.7.3-py3-none-any.whl` with SRI
+  `sha256-8i+igfpZK9DvYnhuVygFNnhJYJ541/92ZkqW8oXR1uQ=`. Earlier installed-artifact
+  provisioning evidence remains specific to its tested 1.7.2 digest.
+- [wheelhouse.nix](wheelhouse.nix) uses `pyproject.toml` and `uv.lock` from the
+  hash-pinned matching release source archive (`runtime.wheelProjectSource`).
+  It checks source/wheel version, Python requirements and active dependency parity,
+  then runs `uv export --locked --offline` to reject a stale lock. Only production
+  dependencies and their requested extras are selected for Python 3.12 Linux;
+  default development groups and project extras such as `dev` are excluded.
+  Artifact URLs and SHA256 hashes come from the upstream lock. Source-only
+  dependencies build offline using locked Nix tooling. The old
+  [dependencies.yml](../../../../release-artifacts/lx-annotate/1.7.2/dependencies.yml)
+  is historical evidence and is no longer a build input.
+- Per operator direction, `/home/admin/endoreg-db` is implementation context for
+  the next application release (1.7.3). At inspection it declared backend 1.7.7
+  and contained local changes. Its source lock is not a compatible application
+  lock: its asgiref constraint is older than the selected application's minimum.
+  Neither that checkout nor the operator's successful gc-10 deployment identifies
+  the exact historical deployed dependency closure. No deployment was changed.
+- The selected wheel contains recovery, node provisioning, storage relief,
+  acceptance and static-check entrypoints. Command presence alone is insufficient
+  to delete an OS implementation. Terminology uses `lx-dtypes-kb-registry bootstrap`.
 
 Start in each repository's `structure.yml` and `AGENTS.md`. Relevant application
 manifests are `A/lx_annotate/structure.yml`, `A/lx_annotate/hub/structure.yml`,
@@ -71,29 +75,27 @@ immutable wheel-derived environment is a separate deployment improvement.
 - Interface: `lx-annotate-recover-data --target PATH --state-file PATH`, repeated
   `--source PATH`, and explicit force/repair controls. Pass existing state and
   marker locations; do not accidentally rerun one-time recovery after upgrade.
-- Gap: `_heavy_recovery` in the inspected wheel calls `migrate` without calling
-  `check_migration_compatibility`. The LuxNix wrapper currently performs that
-  check. Preserve it through a tested application-owned gate before replacement.
+- The selected 1.7.2 wheel calls `check_migration_compatibility` before `migrate`;
+  the former 1.5.7 blocker is closed. Replacement still needs installed-artifact
+  parity for legacy marker/state reuse, interrupted copy, retries, repair gates
+  and retained originals. The current generated recovery remains until that
+  broader contract is proven; the compatibility check is not a missing feature.
 - Keep mount access, unit ordering, service identity and legacy-root policy in
   LuxNix. Move recovery/repair eligibility, state publication and structured
   events into the existing application service using backend atomic wrappers.
 
 ### Hub node provisioning
 
-- OS implementation: [config.nix](config.nix), `hubNodeProvisioningData`,
-  `hubNodeProvisioningPython`, `hubNodeProvisioningScript`;
-  [subservices/lx-annotate-hub-node-provisioning.nix](subservices/lx-annotate-hub-node-provisioning.nix).
-- Existing application implementation:
-  `A/lx_annotate/management/commands/provision_hub_nodes.py`,
-  `A/lx_annotate/hub/node_provisioning.py` (`HubNodeSpec`, `provision_hub_nodes`).
-- The selected 1.5.7 wheel creates missing centers; LuxNix rejects them. Keep
-  the OS implementation until a released wheel supports the explicit
-  `--require-existing-centers` application policy. Then replace
-  `manage shell < generated.py` with
-  `lx-annotate-provision-hub-nodes --require-existing-centers --config PATH`
-  after JSON-alias, transaction and secret-rotation parity tests. Keep topology
-  JSON generation and file permissions in LuxNix; never put secret contents in
-  that JSON.
+- LuxNix generates topology JSON with secret-file handles and invokes
+  `lx-annotate-provision-hub-nodes --require-existing-centers --config PATH`.
+  The duplicate generated Python has been removed.
+- The selected wheel owns validation and the transaction through
+  `lx_annotate/hub/node_provisioning.py` and its management command.
+- `tests/lx-annotate/test_installed_node_provisioning.py` installs the digest-bound
+  wheel outside source checkouts and proves camelCase inputs, existing-center
+  rejection, repeat idempotence, secret rotation and rollback after a later
+  failure using real SQLite transactions and lightweight domain API models.
+  This is application-command parity, not the backend's full PostgreSQL suite.
 
 ### Acceptance and static assets
 
@@ -138,7 +140,7 @@ New command names below are proposals rather than installed interfaces.
 | SAP drop handling | `config.nix:sapImportServiceScript`; duplicated `A/nix/module.nix:sapImportScript`; [subservices/lx-annotate-sap-import.nix](subservices/lx-annotate-sap-import.nix) | Extend `A/lx_annotate/cli.py:import_sap` through an application service; the current command converts one input through `import_sap_is_h_zip`. | Package stable-file detection, collision handling, conversion, processed/failed transitions and retry policy. LuxNix retains path/timer triggers and directory grants. Test incomplete ZIPs, concurrent arrivals, repeated runs and failure moves. |
 | Legacy duplicate cleanup | `config.nix:dataCleanupScript`, `move_duplicate_tree`; [subservices/lx-annotate-data-cleanup.nix](subservices/lx-annotate-data-cleanup.nix) | Add a typed cleanup service near `A/lx_annotate/services/runtime_recovery.py`, composing backend filesystem APIs. | Move duplicate eligibility, archive collision rules, move/delete operations and audit events. Preserve ciphertext handling and active-root exclusion. LuxNix retains persisting-mount validation and schedule. Existing hub-export cleanup has different semantics and is not a drop-in replacement. |
 | Hub backup | [scripts/hub-backup.nix](scripts/hub-backup.nix): `runLocalHubBackupScript`; [subservices/lx-annotate-hub-backup.nix](subservices/lx-annotate-hub-backup.nix) | Add an application service and thin command, e.g. `lx-annotate-hub-backup`; use `A/docs/guides/secure-backup-disaster-recovery.md` as a contract reference. | Preserve pending snapshots, verified checksums/manifests, free-space reserves, database/media publication boundary, atomic latest pointer and retention. Keep database dump creation, credential delivery and mounted destination in LuxNix. Test interrupted publication and restore integrity. |
-| Authentication route policy | `config.nix:hubOidcMiddlewarePolicy` injects `sitecustomize.py` and mutates `endoreg_db.authz.middleware.PUBLIC_PREFIXES` through `PYTHONPATH`. | `A/lx_annotate/settings/settings_base.py`, `A/lx_annotate/urls.py`, `A/lx_annotate/api_urls.py`; coordinate with the backend middleware owner. | Replace runtime monkey-patching with a supported application/backend authentication contract. A public OIDC exception must still require the intended transfer authentication and mTLS. Test permitted and rejected route/method combinations before removing the patch. |
+| Authentication route policy | [scripts/hub-oidc-entrypoint.py](scripts/hub-oidc-entrypoint.py) explicitly validates and installs the compatibility policy before executing a wheel console entrypoint. Failures terminate startup; no global `sitecustomize` or policy `PYTHONPATH` injection remains. | `A/lx_annotate/settings/settings_base.py`, `A/lx_annotate/urls.py`, `A/lx_annotate/api_urls.py`; coordinate with the backend middleware owner. | The referenced backend source has native `NODE_AUTHENTICATED_PATH_PREFIXES`; installed-artifact route/method/transfer-authentication and mTLS parity remains required. Replace the remaining compatibility mutation only with a released application/backend contract, preserving transfer authentication and mTLS. Non-wheel hub transfers are rejected until that contract exists. Test permitted and rejected route/method combinations before removing the bridge. |
 | HLS dispatch policy | [scripts.nix](scripts.nix): `runLocalHlsMaterializationScript`; [subservices/lx-annotate-hls-materialization.nix](subservices/lx-annotate-hls-materialization.nix), [subservices/lx-annotate-hls-backfill.nix](subservices/lx-annotate-hls-backfill.nix) | Thin LX-Annotate adapter over installed backend `materialize_video_hls` and `migrate_media_storage`. | Keep processed-before-raw ordering, queued execution, artifact validation and rejection of unsafe force/inline operation in the application contract. LuxNix supplies the unit, timer and resources. Do not duplicate backend materialization algorithms. |
 | Runtime and key validation | [scripts.nix](scripts.nix): `runLocalMasterKeyCheckScript`; `config.nix:hubEnvelopeKeyPreflightScript`; [runtime-context.nix](runtime-context.nix), [scripts/env.nix](scripts/env.nix) | Existing `A/lx_annotate/settings/settings_base.py`, `A/lx_annotate/checks.py`, `A/lx_annotate/management/commands/verify_encrypted_storage.py`; backend runtime-path and cryptographic validators. | Centralize application path/default/cryptographic interpretation. Keep secret provisioning, host-specific owner/group checks and mount/device identity at the OS boundary. Application startup must still reject missing, malformed or unusable keys. |
 | Worker and monitoring contracts | `config.nix:workerConfigs`, `monitoringConfig`, `ffmpegStreamThrottleScript`; [worker.nix](worker.nix), [worker-pools.nix](worker-pools.nix) | `A/lx_annotate/celery.py`, `A/lx_annotate/monitoring/contracts.py`, `A/lx_annotate/monitoring/service.py`, `A/nix/module.nix` | Application owns task/queue semantics and health interpretation. OS owns concrete unit names, CPU/memory/GPU budgets and cgroup controls. Preserve web priority and aggregate background limits; do not move privileged `systemctl` operations into web code. |
@@ -189,3 +191,26 @@ Operational references: [LuxNix deployment guide](../../../../docs/deployment-gu
 `A/docs/guides/deployment-strategy.md`, `A/docs/guides/wheel-deployment.md`, and
 `A/feature-tracking/DeploymentSourceHygiene.yml`. Readiness remains in the
 existing feature trackers; this document does not create a second tracker.
+
+## Reproduce release-specific parity
+
+Set `LX_ANNOTATE_PARITY_WHEEL` to the realized selected wheel, then run:
+
+```bash
+uv run --with django==6.0.3 --with celery==5.6.3 --with pydantic==2.14.2 pytest -q tests/lx-annotate/test_installed_node_provisioning.py
+```
+
+The explicit lane fails if the wheel digest differs. Ordinary root discovery
+skips it when no artifact is supplied. For a release change, select both the
+hash-pinned `runtime.wheelPath` and matching `runtime.wheelProjectSource` archive.
+The source must include its current `pyproject.toml` and `uv.lock`; missing or stale
+locks and source/wheel mismatches fail during wheelhouse evaluation, before
+activation. Evaluation realizes a small dependency-selection derivation (IFD).
+Build the wheelhouse and verify a complete offline `pip install --dry-run --ignore-installed
+--require-hashes --only-binary=:all:` plan. Review the resulting dependency changes;
+never substitute a mutable source checkout or silently resolve online at startup.
+Custom `runtime.wheelhousePath` values must contain a complete hashed
+`requirements.txt` binding the configured application bytes. Dependency overrides
+must already be represented in that closure. The runtime stamp binds the
+immutable wheelhouse derivation (or custom directory contents), interpreter,
+application digest and installer revision.

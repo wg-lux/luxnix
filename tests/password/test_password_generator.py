@@ -64,17 +64,13 @@ class TestPasswordGenerator(unittest.TestCase):
         Test the generate_random_passphrase method.
         """
         passphrase = self.passphrase_gen.generate_random_passphrase()
-        self.assertEqual(len(passphrase.split("-")), 4)
+        self.assertEqual(
+            len(passphrase.split()), self.passphrase_gen.passphrase_word_count
+        )
 
-    def test_passphrase_rejects_fewer_slots_than_required_elements(self):
-        """Reject a word count that cannot fit digits and special characters."""
-        with self.assertRaisesRegex(ValueError, "word count must be at least 2"):
-            PasswordGenerator(
-                mode="passphrase",
-                num_words=1,
-                require_digits=True,
-                require_special=True,
-            )
+    def test_passphrase_rejects_nonpositive_word_count(self):
+        with self.assertRaises(ValueError):
+            PasswordGenerator(mode="passphrase", num_words=0)
 
     def test_pipe_password_mode(self):
         """Test the pipe method in password mode."""
@@ -93,7 +89,7 @@ class TestPasswordGenerator(unittest.TestCase):
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0][0], "password")
         self.assertEqual(result[1][0], "password_hash")
-        self.assertEqual(len(result[0][1].split("-")), 4)
+        self.assertEqual(len(result[0][1].split()), gen.passphrase_word_count)
 
     def test_create_password_hash(self):
         """
@@ -163,7 +159,7 @@ class TestPasswordGenerator(unittest.TestCase):
 
 
 def test_user_passphrase_file_honors_explicit_word_count(tmp_path, monkeypatch):
-    """Keep the historic word-count argument functional and validated."""
+    """Treat the historic count as a minimum while retaining the entropy floor."""
     monkeypatch.chdir(tmp_path)
     generator = PasswordGenerator(
         mode="passphrase",
@@ -172,14 +168,67 @@ def test_user_passphrase_file_honors_explicit_word_count(tmp_path, monkeypatch):
         require_special=False,
     )
 
-    generator.create_user_passphrase_file("admin", "example", n_words=6)
+    generator.create_user_passphrase_file("admin", "example", n_words=20)
 
     raw_secret = tmp_path / "secrets/user-passwords/admin@example_raw"
     hashed_secret = tmp_path / "secrets/user-passwords/admin@example_hashed"
-    assert len(raw_secret.read_text(encoding="utf-8").split("-")) == 6
+    assert len(raw_secret.read_text().split()) == 20
     assert stat.S_IMODE(raw_secret.stat().st_mode) == 0o600
     assert stat.S_IMODE(hashed_secret.stat().st_mode) == 0o600
 
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_passphrase_uses_uniform_word_draws_for_full_entropy_budget(monkeypatch):
+    from lx_administration.password import generator as module
+
+    draws = []
+    vocabulary = module.passphrase_words()
+
+    def choose(values):
+        draws.append(values)
+        return values[0]
+
+    monkeypatch.setattr(module.secrets, "choice", choose)
+    generator = PasswordGenerator(num_words=6, require_special=True)
+    phrase = generator.generate_random_passphrase()
+    assert generator.passphrase_word_count == 13
+    assert generator.passphrase_entropy_bits >= 128
+    assert draws.count(vocabulary) == 13
+    assert len(phrase.split()) == 15
+    assert phrase.startswith("Acid acid ")
+    assert any(c.islower() for c in phrase)
+    assert any(c.isdigit() for c in phrase)
+    assert any(c in string.punctuation.replace("-", "") for c in phrase)
+
+
+def test_passphrase_honors_long_minimum_without_replacing_words(monkeypatch):
+    from lx_administration.password import generator as module
+
+    monkeypatch.setattr(module.secrets, "choice", lambda values: values[0])
+    generator = PasswordGenerator(
+        num_words=16, min_length=200, require_digits=False, require_upper=False
+    )
+    phrase = generator.generate_random_passphrase()
+    assert len(phrase) >= 200
+    assert len(phrase.split()) >= 16
+    assert generator.passphrase_entropy_bits >= 128
+
+
+def test_altered_wordlist_fails_closed(monkeypatch):
+    from pathlib import Path
+    import pytest
+    from lx_administration.password import generator as module
+
+    original = Path.read_bytes
+    module.passphrase_words.cache_clear()
+    monkeypatch.setattr(
+        Path, "read_bytes",
+        lambda path: b"1111 tampered\n" if path.name == "eff_short_wordlist_1.txt"
+        else original(path),
+    )
+    with pytest.raises(ValueError, match="integrity"):
+        PasswordGenerator().generate_random_passphrase()
+    module.passphrase_words.cache_clear()

@@ -1,16 +1,37 @@
 from datetime import datetime
 import os
+import hashlib
+import math
+from functools import lru_cache
+from pathlib import Path
 import secrets
 import shutil
 import string
 
-from faker import Faker
 from passlib.hash import sha512_crypt  # type: ignore[import-untyped]
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 from typing import Literal
 
 from ..permissions import PRIVATE_FILE_MODE, ensure_private_directory
 from .files import write_private_text
+
+
+MIN_PASSPHRASE_ENTROPY_BITS = 128
+WORDLIST_SHA256 = "8f5ca830b8bffb6fe39c9736c024a00a6a6411adb3f83a9be8bfeeb6e067ae69"
+
+
+@lru_cache(maxsize=1)
+def passphrase_words() -> tuple[str, ...]:
+    """Load the pinned EFF list, refusing missing or altered package data."""
+    data = Path(__file__).with_name("eff_short_wordlist_1.txt").read_bytes()
+    if hashlib.sha256(data).hexdigest() != WORDLIST_SHA256:
+        raise ValueError("Passphrase wordlist integrity check failed")
+    words = tuple(line.split()[1] for line in data.decode().splitlines())
+    if (len(words) != 1296 or len(set(words)) != len(words)
+            or not all(w.isascii() and w.replace("-", "").isalpha()
+                       and w.islower() for w in words)):
+        raise ValueError("Invalid passphrase wordlist")
+    return words
 
 
 class PasswordGenerator(BaseModel):
@@ -18,8 +39,8 @@ class PasswordGenerator(BaseModel):
 
     mode: Literal["password", "passphrase"] = "passphrase"
     key_length: int = 32
-    min_length: int = 12
-    num_words: int = 4
+    min_length: int = Field(default=12, ge=1)
+    num_words: int = Field(default=4, ge=1)
     require_upper: bool = True
     require_lower: bool = True
     require_digits: bool = True
@@ -36,13 +57,6 @@ class PasswordGenerator(BaseModel):
             if self.key_length < minimum_length:
                 raise ValueError(
                     f"Password length must be at least {minimum_length}"
-                )
-        else:
-            required_elements = int(self.require_digits) + int(self.require_special)
-            minimum_words = max(1, required_elements)
-            if self.num_words < minimum_words:
-                raise ValueError(
-                    f"Passphrase word count must be at least {minimum_words}"
                 )
         return self
 
@@ -69,33 +83,38 @@ class PasswordGenerator(BaseModel):
         secrets.SystemRandom().shuffle(password)
         return "".join(password)
 
+    @property
+    def passphrase_word_count(self) -> int:
+        """Effective minimum word count; decorations never reduce entropy."""
+        entropy_words = math.ceil(
+            MIN_PASSPHRASE_ENTROPY_BITS / math.log2(len(passphrase_words()))
+        )
+        return max(self.num_words, entropy_words)
+
+    @property
+    def passphrase_entropy_bits(self) -> float:
+        """Conservative lower bound from uniform words alone, excluding suffixes."""
+        return self.passphrase_word_count * math.log2(len(passphrase_words()))
+
     def generate_random_passphrase(self) -> str:
-        """Generate a random passphrase with improved word selection."""
-        fake = Faker()
-        words: list[str] = []
-        total_words = self.num_words
+        """Choose at least 128 bits of words with the OS-backed secrets RNG.
 
-        # Reduce word count if we need to add digits/special chars
+        num_words is a minimum. Extra words satisfy min_length. Uppercase is a
+        reversible first-word transformation; remaining words stay lowercase.
+        Digits and punctuation append without replacing any random word.
+        """
+        vocabulary = passphrase_words()
+        words = [secrets.choice(vocabulary) for _ in range(self.passphrase_word_count)]
+        if self.require_upper:
+            words[0] = words[0].capitalize()
+        suffix = []
         if self.require_digits:
-            total_words -= 1
+            suffix.append(f"{secrets.randbelow(1000):03d}")
         if self.require_special:
-            total_words -= 1
-
-        while len(words) < total_words:
-            word = fake.word()
-            # Ensure word meets minimum quality standards
-            if len(word) >= 3 and word.isalpha():
-                words.append(word)
-
-        # Add required elements
-        if self.require_digits:
-            words.append(str(secrets.randbelow(1000)))
-        if self.require_special:
-            words.append(secrets.choice(string.punctuation))
-
-        # Shuffle words
-        secrets.SystemRandom().shuffle(words)
-        return "-".join(words)
+            suffix.append(secrets.choice(string.punctuation.replace("-", "")))
+        while len(" ".join(words + suffix)) < self.min_length:
+            words.append(secrets.choice(vocabulary))
+        return " ".join(words + suffix)
 
     def create_password_hash(self, password: str) -> str:
         """

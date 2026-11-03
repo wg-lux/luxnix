@@ -3,7 +3,7 @@
 template_name: "main"
 
 host_roles:
-  endoreg-client.enable: "true"
+  endoreg_client.enable: "true"
   endoreg-client.lxAi: "true"
   endoreg-client.database.port: config.services.postgresql.settings.port
   nginxHost.enable: "true"

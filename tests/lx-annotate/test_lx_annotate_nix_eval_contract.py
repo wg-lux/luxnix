@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+import subprocess
 from typing import Any
 
 from nix_eval_helpers import (
@@ -680,7 +681,13 @@ def _gc_02_extended_contracts() -> dict[str, Any]:
             hubBackupExecStart = hubTransferCfg.systemd.services.lx-annotate-hub-backup.serviceConfig.ExecStart;
             hubBackupAfter = hubTransferCfg.systemd.services.lx-annotate-hub-backup.after;
             hubBackupRequires = hubTransferCfg.systemd.services.lx-annotate-hub-backup.requires;
-            hubBackupCredentials = hubTransferCfg.systemd.services.lx-annotate-hub-backup.serviceConfig.LoadCredential;
+            hubBackupRecovery =
+              hubTransferCfg.systemd.services.lx-annotate-hub-backup.serviceConfig.ExecStopPost;
+            hubBackupBarrier = builtins.readFile (
+              toString (lib.findFirst
+                (p: lib.getName p == "lx-annotate-hub-backup-start-barrier") null
+                hubTransferCfg.systemd.packages)
+              + "/lib/systemd/system/lx-annotate.service.d/90-hub-backup.conf");
           };
           hubOutboundHealth = {
             execStart = hubOutboundCfg.systemd.services.lx-annotate-hub-export-health.serviceConfig.ExecStart;
@@ -827,9 +834,14 @@ def test_lx_annotate_generated_master_key_is_recoverable_runtime_contract() -> N
     assert secret["owner"] == "endoreg-service-user"
     assert secret["permissions"] == "600"
     assert "Per-machine application master key" in secret["description"]
-    assert "openssl" in secret["generator"]
-    assert "rand -base64 32" in secret["generator"]
-    assert "tr -d" in secret["generator"]
+    # Boot-LUKS migration must retain the existing application encryption key.
+    # The compatibility option still selects its record, never a replacement.
+    assert "openssl" not in secret["generator"]
+    refusal = subprocess.run(["bash", "-c", secret["generator"]],
+                             capture_output=True, text=True)
+    assert refusal.returncode == 1
+    assert refusal.stdout == ""
+    assert "restore the existing key before startup" in refusal.stderr
 
     assert data_recovery["enable"] is True
     assert data_recovery["serviceConfig"]["Type"] == "oneshot"
@@ -1584,12 +1596,12 @@ def test_hub_transfer_api_extend_modules_enables_nginx_and_backup_surfaces() -> 
         "/var/lib/lx-annotate/data/hub/backup/manifests " in rule
         for rule in evaluated["tmpfiles"]
     )
-    assert evaluated["hubBackupExecStart"].endswith("/bin/runLxAnnotateHubBackup")
-    assert "postgresqlBackup.service" in evaluated["hubBackupAfter"]
-    assert "postgresqlBackup.service" in evaluated["hubBackupRequires"]
-    assert evaluated["hubBackupCredentials"] == [
-        "hub-postgresql.sql.gz:/var/backup/postgresql/all.sql.gz"
-    ]
+    assert evaluated["hubBackupExecStart"].endswith("/bin/luxnix-hub-backup capture")
+    assert "postgresql.service" in evaluated["hubBackupAfter"]
+    assert "postgresql.service" in evaluated["hubBackupRequires"]
+    assert evaluated["hubBackupRecovery"].endswith("/bin/luxnix-hub-backup recover")
+    assert ("ConditionPathExists=!/run/luxnix-hub-backup/quiescing"
+            in evaluated["hubBackupBarrier"])
 
 
 def test_hub_outbound_health_timer_classifies_and_alerts_on_transfer_failures() -> None:

@@ -31,8 +31,11 @@ Memory temporary storage is acceptable only with encrypted or disabled disk
 swap. gc-10's declared swap partition is **not active**: its explicit empty
 swapDevices policy remains. Existing encrypted-root swapfiles remain encrypted.
 
-The verifier checks mounted device identity, encryption ancestry, Btrfs members,
-active swap and existing secondary key permissions. Missing storage stops service
+The shared kernel-backed verifier enumerates every Btrfs member (including
+missing-device state) for secrets, boot, installer and recovery custody. Boot
+additionally verifies LUKS2 identity and bind/subvolume identity. It checks
+active swap and existing secondary key permissions. Each secondary mount and
+consumer depends only on its own filesystem members and required protected paths. Missing storage stops service
 startup; dependencies also stop consumers before unmount. Secondary unlocks are
 headless and device waits bounded. Use the local console and `journalctl -b`
 for storage/recovery errors. No boot unit formats, migrates or generates keys.
@@ -46,49 +49,25 @@ gc-10 retains the explicitly authorized plaintext annotation-export disk; it is
 not suitable for application data, keys, database backups or recovery bundles.
 Remote backups need their own encryption, credentials, retention and restore tests.
 
-## Unencrypted OS installation
+## Single production path and retained recovery
 
-Select this mode explicitly to install and boot LuxNix before provisioning
-protected application storage. The OS disk, homes and logs are readable offline.
-Keep secrets and protected application data on their configured encrypted volumes;
-leave those services guarded until the volumes are provisioned and unlocked.
+The 2026-11-02 convergence decision supersedes the earlier plain-root installation
+policy. New installations require `boot-luks` and `root_encryption: luks2`.
+`unencrypted-root` plans and configurations are rejected; fresh encrypted installs
+still use `installation: fresh` and `source_retention: new-disks`.
 
-1. In `ansible/inventory/host_vars/<host>.yml`, select:
+Existing gc-09/gc-10 containers remain bounded recovery compatibility. Do not
+remove their decryptors, original keys or retained data until physical migration,
+independent backup restoration and cold-boot acceptance are recorded. Alternative
+TPM/container, network release and PAM unlock paths are frozen for new enrollment.
+Central identity provisioning, application encryption and backup encryption retain
+separate ownership and recovery requirements.
 
-   ```yaml
-   host_luxnix:
-     storage.operatorUnlocked.enable: "true"
-     storage.operatorUnlocked.layout: '"unencrypted-root"'
-     storage.operatorUnlocked.migration.enable: "false"
-   ```
-
-   Use the [Autoconf workflow](autoconf.md) to render, review and regenerate. Check
-   the evaluated root device and secondary disks before approving provisioning.
-   Leave existing host selections unchanged unless that host is the target.
-2. In the private install specification add `root_encryption: none`. For new,
-   empty disks also set `installation: fresh` and `source_retention: new-disks`.
-   Keep the host, hardware UUID and exact disk identities. For existing data,
-   retain `installation: migration` (the default) and its backup/restore evidence.
-3. Follow the [operator checklist](boot-storage-operator.md). Stage the existing
-   or newly issued root-private administrator hash before installation. Keep the
-   controller's credentials and install evidence on independent encrypted media.
-   The fresh path asks for `recovery` and `prepared` assessments, then physical
-   `acceptance`; do not invent source backups for an empty new machine.
-4. Confirm the displayed `UNENCRYPTED` installation choice. Boot and use normal
-   administrator SSH; there is no early disk-unlock prompt. Verify login and
-   reboot recovery. Provision protected volumes later using the existing
-   [storage provisioning guide](operator-unlocked-storage.md#explicit-provisioning-and-recovery-custody).
-   After verifying those volumes, set
-   `storage.operatorUnlocked.autoStartProtectedServices: "true"` in host YAML,
-   regenerate and deploy the reviewed configuration. Until then, keep protected
-   services deferred; an explicit start still requires their encrypted mounts.
-
-The installer verifies the actual root device and rejects an encrypted root for
-this mode. It never decrypts, reformats or silently changes an existing disk.
-Other declared disk encryption and protected-service guards remain in force.
-Selecting unencrypted root does not make a host encryption-ready or waive
-application data protection. Restore encrypted-root selection only with a separate
-reviewed reprovisioning and restore plan.
+The old raw-offset boot-key files on gc-02, gc-08 and s-01 through s-03 remain
+pending physical replacement and cold-boot evidence. They are not accepted as a
+hardened boot-key design. Existing command aliases now derive enrollment mappings
+from the selected host's evaluated initrd topology; do not infer targets from the
+alias name. Enrollment preserves existing output and original keyslots.
 
 ## Guided operator workflow
 
@@ -112,8 +91,7 @@ restoration, firmware changes and reboot remain separately authorized operations
    `checkout` (the absolute durable clean release checkout), `hardware_uuid`
    (the target's independently recorded DMI product UUID), `source_retention`
    (`old-disks` or `whole-disk-image` for migration), and `disks`.
-   Optional `root_encryption` defaults to `luks2`; select `none` only with the
-   matching `unencrypted-root` host configuration. Optional `installation`
+   Optional `root_encryption` must be `luks2`, matching the `boot-luks` host configuration. Optional `installation`
    defaults to `migration`; select `fresh` with `source_retention: new-disks`
    only for empty new disks. Each disk has its exact
    `/dev/disk/by-id/` `path`, `serial` and integer `size_bytes`. These are real
@@ -219,8 +197,14 @@ need a physical acceptance test.
 
 ### Readiness observations versus admission
 
-`devenv shell storage-readiness --limit <host>` retains the diagnostic observation
-mode. A successful observation only means the report was collected. For an
+`devenv shell storage-readiness --limit <host>` prints a summary with admission
+reasons. Full observations contain sensitive host facts and are suppressed from
+Ansible output. Set `storage_readiness_save_report: true` in the private request
+to retain the full JSON on the controller at
+`cmdb/storage-readiness/<host>.json`. The directory and report must remain owned
+by the controller user with private permissions; unsafe paths fail closed.
+This local artifact is gitignored. Use that JSON file for migration evidence.
+A successful observation only means the report was collected. For an
 enforced baseline, pass a private YAML request with `-e @<private-request.yml>`:
 `storage_readiness_mode: admit`, `storage_expected_host`,
 `storage_expected_layout` (`legacy-containers`, `unencrypted-root` or `boot-luks`) and
@@ -304,6 +288,12 @@ only the journaled writer and freeze state. Recovery refuses changed source
 identities and leaves writers stopped if thawing fails. Then choose a new
 snapshot identifier. Do not remove journals, snapshots or locks to force a retry.
 Old journals created before this recovery protocol require manual review.
+Recovery reconciles a journaled `pending_snapshot` before declaring success.
+An existing target must be a read-only Btrfs snapshot at the recorded path with
+the expected source parent UUID; its discovered identity is saved before reuse.
+An absent target means creation did not complete. An invalid or uncertain target
+keeps recovery blocked and writers gated for operator review, while thawing is
+still attempted. No orphan is silently ignored or automatically deleted.
 
 Run connectivity first, then the snapshot wrapper with an explicit host, unique
 identifier and the existing private sudo-password file on encrypted controller
@@ -339,8 +329,25 @@ written; neither private identity may be stored there unencrypted.
 
 Each archive is fully decrypted and checked against its stream hash with **each**
 identity before publication. `.partial` files are not accepted backups.
-`receipt.json` records components and verified custody. Reruns authenticate
-completed archives with both identities and refuse to overwrite incomplete ones.
+`receipt.json` binds components and custody to the complete source-plan digest
+and recipient set. Reruns reject changed plans, snapshot identities or recipients
+before replacing plan evidence or reusing components. Durable component metadata
+allows independently authenticated recovery after interruption between archive
+publication and receipt saving. Retain interrupted artifacts for verification;
+never delete them simply to force a retry.
+Controller reuse also requires the recorded producer code hash, source revision,
+identity paths and stable custody selection to match, and every component must
+carry the same plan binding. Fresh custody verification is saved separately from
+the original receipt. A changed tool or checkout therefore requires review of
+the retained backup; never edit provenance to bypass the check.
+For an existing published archive without completion metadata, explicitly select
+`--recover-existing`. The controller rereads the current read-only snapshot and
+requires both identities to decrypt to that exact compressed stream hash before
+adopting the archive. Host-local recovery combines `--recover-existing` with
+`--verify <component>` and verifies each recorded recipient separately through
+stdin. Supply both public recipients even during verification. Old receipts
+without plan binding require operator review; they are never silently relabeled
+as a backup of the current plan.
 Changing recipients does not rewrite old archives: retain the previous identities
 and backups, and use a new snapshot identifier for subsequent backups.
 
@@ -356,6 +363,13 @@ stdin. It keeps the identity in an anonymous RAM descriptor, rejects disk
 swap/writeback and authenticates the whole archive. Only after both recipients
 have passed does it publish the archive. Never save an identity on gc-09's
 plaintext root. Verification and creation hold the same receipt lock.
+
+Migration coverage and writer selection live in
+`lx_administration/storage/migration-policy.yml`. Review that policy whenever
+adding a host, protected mount or application writer. The coverage tests compare
+the policy with declared storage consumers; a newly declared protected path must
+be covered before taking a migration snapshot. Deploy the policy and its loader
+beside standalone snapshot and archive tools from the same reviewed checkout.
 
 These are **filesystem snapshots, not whole-disk images**: they cover root, home,
 Nix, persist and logs, plus gc-10's data filesystem. They preserve existing inner
@@ -559,7 +573,7 @@ architecture and must not be used to claim root encryption. Current container
 metadata remains solely to support this migration and prevent loss of recovery
 information. Do not activate boot-luks on an old disk layout to try to convert it.
 
-Keep shared container support while any host selects `unencrypted-root`.
+Retain container recovery only for gc-09/gc-10 until their physical acceptance gates pass.
 Remove legacy-only migration metadata and tests only after every fleet host has verified boot-LUKS acceptance and old storage has
 reached its approved retention limit. No host is marked physically migrated by
 this repository change. OpenBao identity provisioning and LX-Annotate encryption
@@ -586,3 +600,34 @@ or the fleet's Btrfs RAID hardware. Its Nix store is the test harness's shared
 read-only store. A VM result cannot substitute for the physical acceptance steps
 above. The fleet readiness tracker remains authoritative and must not be marked
 complete from these repository checks alone.
+
+## Coordinated hub snapshots
+
+The scheduled gs-02 hub backup pauses the declared LX-Annotate/LX-Dtypes writer
+services and timers. A systemd start condition prevents their automatic restart
+throughout capture. Only after all writers stop cleanly does the coordinator
+create a fresh PostgreSQL dump in root-controlled `/run`, copy protected media,
+verify checksums and atomically publish the restore point. A failed or timed-out
+writer prevents publication. This creates application downtime for the duration
+of capture; size and schedule must be assessed before deployment.
+
+The coordinator journals previously active units. Normal failure and systemd
+`ExecStopPost` recovery remove the temporary dump and restart that saved set.
+A failed restart leaves `/run/luxnix-hub-backup/recovery.json` for retry with the
+installed `luxnix-hub-backup recover` command under the normal authorized host
+maintenance workflow. Do not delete that journal to bypass recovery. Reboot
+clears this runtime state and returns to declaratively configured startup.
+
+Destinations must resolve physically beneath encrypted runtime storage, with no
+symlink or traversal escape and no overlapping destination trees. Mandatory
+rsync exclusions are derived from the actual destinations, including customized
+locations. These checks do not replace backup encryption, retention or restore
+acceptance. External/manual writers must also be quiesced; the unit set covers
+declaratively configured application writers, not arbitrary operator processes.
+A production restore and physical cold boot remain acceptance requirements.
+
+The disposable integration check is `nix build
+'.#checks.x86_64-linux.hub-backup' --no-link`. It exercises real PostgreSQL,
+LUKS2-backed media, writer stop/start and a capacity failure, and verifies that
+restored database references resolve within the captured media tree. It does
+not establish a clinical production restore or inventory all manual writers.

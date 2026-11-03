@@ -8,10 +8,7 @@
 }:
 let
   cfg = config.luxnix.storage.operatorUnlocked;
-  containerLayout = builtins.elem cfg.layout [
-    "legacy-containers"
-    "unencrypted-root"
-  ];
+  containerLayout = cfg.layout == "legacy-containers";
   inherit (utils) escapeSystemdPath;
   cleanParts =
     path:
@@ -145,16 +142,15 @@ in
       type = lib.types.enum [
         "boot-luks"
         "legacy-containers"
-        "unencrypted-root"
       ];
       default = "boot-luks";
-      description = "Boot LUKS by default; unencrypted-root explicitly selects plain root with protected data containers; legacy-containers preserves migration compatibility.";
+      description = "Boot LUKS is the production layout; legacy-containers preserves existing gc-09/gc-10 recovery until physical migration acceptance.";
     };
     enable = lib.mkEnableOption "encrypted storage and guarded consumers";
     autoStartProtectedServices = lib.mkOption {
       type = lib.types.bool;
-      default = cfg.layout != "unencrypted-root";
-      description = "Start guarded consumers and container unlocks automatically. Enable after provisioning protected storage on an explicitly unencrypted root.";
+      default = true;
+      description = "Start guarded consumers automatically after their existing encrypted storage is verified.";
     };
     unlockMethod = lib.mkOption {
       type = lib.types.enum [
@@ -292,8 +288,11 @@ in
     security.tpm2.enable = lib.mkIf (cfg.unlockMethod == "tpm2") true;
     assertions = [
       {
-        assertion = cfg.layout != "unencrypted-root" || !cfg.remoteUnlock.enable;
-        message = "Unencrypted root has no early disk-unlock prompt; disable remoteUnlock.";
+        assertion = builtins.elem config.networking.hostName [
+          "gc-09"
+          "gc-10"
+        ];
+        message = "Legacy containers are recovery compatibility for gc-09/gc-10 only; new installations require boot-luks.";
       }
       {
         assertion =
@@ -338,7 +337,7 @@ in
         message = "Operator-unlocked startupServices must name guarded services.";
       }
       {
-        assertion = cfg.volumes != { } || (cfg.layout == "unencrypted-root" && cfg.guardedServices == { });
+        assertion = cfg.volumes != { };
         message = "Operator-unlocked storage requires at least one volume.";
       }
       {

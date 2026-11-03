@@ -22,7 +22,23 @@ CONFIG_NIX = (
 )
 WHEEL_FILENAME = "0123456789abcdef0123456789abcdef-lx_annotate-0.0.3-py3-none-any.whl"
 CANONICAL_WHEEL_FILENAME = "lx_annotate-0.0.3-py3-none-any.whl"
-PIP_INSTALL_PREFIX = "pip:install --upgrade"
+PIP_INSTALL_PREFIX = "pip:install --upgrade --force-reinstall"
+
+
+@pytest.fixture(autouse=True)
+def reviewed_wheelhouse(tmp_path, monkeypatch):
+    directory = tmp_path / "reviewed-wheelhouse"
+    directory.mkdir()
+    (directory / "requirements.txt").write_text("synthetic hashed requirements\n")
+    monkeypatch.setenv("WHEELHOUSE_PATH", str(directory))
+
+
+def locked_install_call(root, wheelhouse=None):
+    directory = wheelhouse or Path(os.environ["WHEELHOUSE_PATH"])
+    return (f"{PIP_INSTALL_PREFIX} --no-index --find-links {directory}"
+            f" --require-hashes --only-binary=:all:"
+            f" --requirement {directory / 'requirements.txt'}"
+            f" --constraint {root / '.wheel-application.constraints'}")
 
 
 @pytest.mark.parametrize("broken", [False, True])
@@ -215,6 +231,7 @@ def test_operational_wrappers_use_prepared_wheel(
         '}\n'
         'lx_annotate_wheel_export_secret_env() { printf "env\\n" >> "$CALLS_LOG"; }\n'
         'lx_annotate_wheel_sync_static() { exit 92; }\n'
+        'lx_annotate_wheel_exec() { exec "$@"; }\n'
     )
     if runtime_state != "missing-command":
         _make_executable(runtime / "bin" / command,
@@ -334,13 +351,7 @@ def test_ensure_wheel_runtime_installed_mocks_venv_creation(tmp_path: Path):
     assert runtime_root.joinpath("pip-cache").is_dir()
     assert calls_log.read_text(encoding="utf-8").splitlines() == [
         f"python:-m venv {runtime_venv}",
-        f"{PIP_INSTALL_PREFIX} {runtime_root / CANONICAL_WHEEL_FILENAME}"
-        f" --constraint {runtime_root / '.wheel-application.constraints'}",
-        "pip:install --force-reinstall --no-deps "
-        f"{runtime_root / CANONICAL_WHEEL_FILENAME}"
-        f" --constraint {runtime_root / '.wheel-application.constraints'}",
-        f"{PIP_INSTALL_PREFIX} --no-deps endoreg-db==1.0.1.8 --force-reinstall"
-        f" --constraint {runtime_root / '.wheel-overrides.constraints'}",
+        locked_install_call(runtime_root),
     ]
     assert f"venv={runtime_venv}" in result.stdout
     assert f"app_root={runtime_wheel_root}" in result.stdout
@@ -471,13 +482,7 @@ def test_ensure_wheel_runtime_installed_skips_venv_creation_when_python_exists(
 
     assert result.returncode == 0, result.stderr
     assert calls_log.read_text(encoding="utf-8").splitlines() == [
-        f"{PIP_INSTALL_PREFIX} {runtime_root / CANONICAL_WHEEL_FILENAME}"
-        f" --constraint {runtime_root / '.wheel-application.constraints'}",
-        "pip:install --force-reinstall --no-deps "
-        f"{runtime_root / CANONICAL_WHEEL_FILENAME}"
-        f" --constraint {runtime_root / '.wheel-application.constraints'}",
-        f"{PIP_INSTALL_PREFIX} --no-deps endoreg-db==1.0.1.8 --force-reinstall"
-        f" --constraint {runtime_root / '.wheel-overrides.constraints'}",
+        locked_install_call(runtime_root),
     ]
 
 
@@ -570,22 +575,8 @@ def test_ensure_wheel_runtime_installed_serializes_concurrent_install(tmp_path: 
     assert result.returncode == 0, result.stderr
     calls = calls_log.read_text(encoding="utf-8").splitlines()
     assert calls.count(f"python:-m venv {runtime_venv}") == 1
-    expected_pip_call = (
-        f"{PIP_INSTALL_PREFIX} {runtime_root / CANONICAL_WHEEL_FILENAME}"
-        f" --constraint {runtime_root / '.wheel-application.constraints'}"
-    )
-    assert calls.count(expected_pip_call) == 1
-    expected_reinstall_call = (
-        "pip:install --force-reinstall --no-deps "
-        f"{runtime_root / CANONICAL_WHEEL_FILENAME}"
-        f" --constraint {runtime_root / '.wheel-application.constraints'}"
-    )
-    assert calls.count(expected_reinstall_call) == 1
-    expected_override_call = (
-        f"{PIP_INSTALL_PREFIX} --no-deps endoreg-db==1.0.1.8 --force-reinstall"
-        f" --constraint {runtime_root / '.wheel-overrides.constraints'}"
-    )
-    assert calls.count(expected_override_call) == 1
+    assert calls.count(locked_install_call(runtime_root)) == 1
+    assert sum(call.startswith("pip:install") for call in calls) == 1
 
 
 def test_ensure_wheel_runtime_installed_hashes_and_uses_wheelhouse(tmp_path: Path):
@@ -610,6 +601,7 @@ def test_ensure_wheel_runtime_installed_hashes_and_uses_wheelhouse(tmp_path: Pat
     wheel_file.write_bytes(b"fake-wheel")
     wheelhouse = tmp_path / "wheelhouse"
     wheelhouse.mkdir()
+    (wheelhouse / "requirements.txt").write_text("synthetic hashed requirements\n")
     wheelhouse.joinpath("dependency-1.0-py3-none-any.whl").write_bytes(b"dependency")
 
     script = textwrap.dedent(
@@ -641,16 +633,8 @@ def test_ensure_wheel_runtime_installed_hashes_and_uses_wheelhouse(tmp_path: Pat
     )
 
     assert result.returncode == 0, result.stderr
-    staged_wheel = runtime_root / CANONICAL_WHEEL_FILENAME
-    wheelhouse_args = f"--no-index --find-links {wheelhouse}"
     assert calls_log.read_text(encoding="utf-8").splitlines() == [
-        f"{PIP_INSTALL_PREFIX} {wheelhouse_args} {staged_wheel}"
-        f" --constraint {runtime_root / '.wheel-application.constraints'}",
-        f"pip:install --force-reinstall --no-deps {staged_wheel}"
-        f" --constraint {runtime_root / '.wheel-application.constraints'}",
-        f"{PIP_INSTALL_PREFIX} --no-deps {wheelhouse_args} "
-        "endoreg-db==1.0.1.8 --force-reinstall"
-        f" --constraint {runtime_root / '.wheel-overrides.constraints'}",
+        locked_install_call(runtime_root, wheelhouse)
     ]
 
 

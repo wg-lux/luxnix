@@ -54,6 +54,7 @@ def test_get_local_vault_id_with_path_requires_local_psk():
 def test_get_local_vault_id_with_path_includes_psk_file(tmp_path):
     psk_file = tmp_path / "client.psk"
     psk_file.write_text("key", encoding="utf-8")
+    psk_file.chmod(0o600)
     psk = PreSharedKey(name="client", file=str(psk_file))
     vault = Vault(local_hostname_override="client", pre_shared_keys=[psk])
 

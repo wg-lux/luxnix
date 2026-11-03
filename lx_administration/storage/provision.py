@@ -29,6 +29,7 @@ from lx_administration.models.vault.secret import (
 )
 from lx_administration.permissions import ensure_private_directory
 from lx_administration.secret_storage import encrypted_storage
+from lx_administration.storage.recovery_export import export_script
 
 
 class ProvisionError(RuntimeError):
@@ -36,43 +37,7 @@ class ProvisionError(RuntimeError):
 
 
 # No secret values are interpolated into this code or its arguments.
-EXPORT = r'''
-import fcntl, os, sys, tempfile
-from pathlib import Path
-machine, identifier = sys.argv[1:]
-import re
-assert re.fullmatch(r'[0-9a-f]{32}', machine)
-assert re.fullmatch(r'[0-9a-f-]{36}', identifier)
-data = sys.stdin.buffer.read()
-assert data.startswith(b'$ANSIBLE_VAULT;1.2;AES256;luxnix-master\n')
-root = Path.home() / '.luxnix-recovery'
-for directory in [root, root / machine]:
-    directory.mkdir(mode=0o700, exist_ok=True)
-    assert not directory.is_symlink()
-    info = directory.stat()
-    assert info.st_uid == os.geteuid() and info.st_mode & 0o777 == 0o700
-with (root / '.lock').open('a') as lock:
-    fcntl.flock(lock, fcntl.LOCK_EX)
-    target = root / machine / (identifier + '.vault')
-    assert not target.is_symlink()
-    if target.exists():
-        assert target.stat().st_mode & 0o777 == 0o600
-        assert target.read_bytes() == data, 'Conflicting recovery export'
-    else:
-        fd, temporary = tempfile.mkstemp(dir=target.parent, prefix='.recovery-')
-        try:
-            with os.fdopen(fd, 'wb') as stream:
-                stream.write(data)
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.link(temporary, target)
-        finally: os.unlink(temporary)
-    fd = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
-    try: os.fsync(fd)
-    finally: os.close(fd)
-    sys.stdout.buffer.write(target.read_bytes())
-'''
-
+EXPORT = export_script('volume')
 
 READY = b'LUXNIX-PRIVILEGE-READY\n'
 # sudo sees only its password pipe. The elevated process independently opens an
@@ -295,10 +260,16 @@ def main(argv=None):
         if not re.fullmatch('[a-z0-9][a-z0-9-]*', value):
             parser.error('Host and volume names must be canonical inventory identifiers')
     if args.action == 'provision':
+        if (args.host not in {'gc-09', 'gc-10'}
+                or args.backend not in {None, 'passphrase'}):
+            raise ProvisionError(
+                'New container enrollment is retired; '
+                'only gc-09/gc-10 passphrase migration remains'
+            )
         layout = subprocess.run(['nix', 'eval', '--json',
             f'.#nixosConfigurations.{args.host}.config.luxnix.storage.operatorUnlocked.layout'],
             capture_output=True, check=True)
-        if json.loads(layout.stdout) not in {'legacy-containers', 'unencrypted-root'}:
+        if json.loads(layout.stdout) != 'legacy-containers':
             raise ProvisionError('Container provisioning is retired for boot-luks; follow docs/boot-storage-migration.md')
     config = AutoconfConfig.load(DEFAULT_CONFIG_PATH)
     inventory = AnsibleInventory.load_from_hosts_ini(

@@ -17,12 +17,18 @@ injecting whole repositories or the entire project memory into every model call.
 
 - Keycloak authenticates callers; the MCP server validates signed access tokens.
 - Repository paths are configured explicitly and resolved beneath allowlisted roots.
+- A separate outbound path policy excludes sensitive paths even when committed;
+  repository tools read only regular committed Git blobs, never local checkout content.
 - Git operations are fixed read-only commands executed without a shell.
 - Context files are packaged with the service and cannot be changed through MCP.
 - Tools expose no database access, service control, arbitrary shell, or write operation.
 
 ## Provenance contract
 
-Discovery results should identify the repository, relative path, current commit, and
-line span whenever those values exist. Summaries are navigation aids; repository files
-remain authoritative.
+Repository discovery captures one commit and reads its immutable regular blobs.
+Results identify repository, relative path, commit, blob and line span where
+applicable. Dirty checkout contents are never attributed to HEAD. Internal Git
+enumeration is bounded independently of response budgets and fails explicitly on
+overflow. File prefixes are read with byte bounds; search reports oversized-file
+exclusions and rejects scans exceeding its total budget. Summaries are navigation
+aids; the identified committed blobs remain authoritative.

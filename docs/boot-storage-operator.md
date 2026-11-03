@@ -29,10 +29,8 @@ values from the approved plan rather than guessing from a disk's size or order.
 
 ## 1. Select storage and prepare recovery
 
-For encrypted root, keep the default `boot-luks` layout. For an unencrypted OS
-disk, select [unencrypted-root](boot-storage-migration.md#unencrypted-os-installation)
-in the host YAML and `root_encryption: none` in the private plan. Regenerate and
-review the host before planning. Protected-data services will remain guarded.
+Use `boot-luks` and `root_encryption: luks2`. Plain-root installation is retired.
+Regenerate and review the host before planning; retain existing recovery keys.
 
 For **new empty disks**, set `installation: fresh` and `source_retention: new-disks`.
 Test the installer and independent administrator access; record `recovery`.
@@ -87,10 +85,6 @@ Read the displayed machine and disks. Confirm only the approved plan. Wait for
 success before arranging the first reboot with the recovery operator present.
 
 ## 3. Boot and accept
-
-For unencrypted root, skip disk unlock and connect using normal administrator
-SSH. Confirm protected-data services cannot write while their storage is absent.
-Enable their automatic startup only after [provisioning and verification](boot-storage-migration.md#unencrypted-os-installation).
 
 For encrypted root with SSH unlock, use the configured management address,
 dedicated private SSH key and pinned host key:

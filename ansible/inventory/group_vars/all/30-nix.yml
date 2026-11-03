@@ -13,8 +13,8 @@ group_nixos:
   xdg.menus.enable: 'true'
 
 group_luxnix:
-  maintenance.autoUpdates.operation: '"switch"'
-  maintenance.autoUpdates.flake: '"github:wg-lux/luxnix/prototype"'
+  # Opt-in scheduling requires an explicitly reviewed immutable revision.
+  maintenance.autoUpdates.operation: '"boot"'
   maintenance.autoUpdates.dates: '"17:00"'
 
   # VPN addresses are derived from ansible_host in ../../hosts.ini.

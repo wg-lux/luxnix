@@ -1,4 +1,6 @@
-import warnings
+import os
+import re
+import stat
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Self
@@ -6,7 +8,8 @@ from typing import Self
 from pydantic import BaseModel, field_validator, model_validator
 
 from ...password import PasswordGenerator
-from ...password.files import write_private_text
+from ...secret_storage import encrypted_storage
+from ...utils.file_operations import atomic_create_file
 from ...permissions import ensure_private_directory
 
 DEFAULT_VALIDITY = timedelta(days=30)
@@ -66,21 +69,43 @@ class PreSharedKey(BaseModel):
         """Return the expanded absolute PSK path."""
         return Path(self.file).expanduser().resolve()
 
+    def validate_file(self) -> None:
+        """Require a usable existing key without reading or replacing its bytes."""
+        path = Path(self.file).expanduser().absolute()
+        if path.resolve() != path:
+            raise ValueError("PSK path may not contain symlinks")
+        encrypted_storage(path)
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        try:
+            info = os.fstat(fd)
+            if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid()
+                    or info.st_mode & 0o077 or info.st_size == 0):
+                raise ValueError("PSK must be a nonempty owned private regular file")
+        finally:
+            os.close(fd)
+
     @classmethod
     def generate(cls, name: str, psk_dir: str | Path) -> Self:
         """Generate and persist a new pre-shared key."""
-        psk_dir = Path(psk_dir).expanduser().resolve()
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.@-]*", name):
+            raise ValueError("Invalid PSK name")
+        psk_dir = Path(psk_dir).expanduser().absolute()
+        if psk_dir.resolve() != psk_dir:
+            raise ValueError("PSK directory may not contain symlinks")
         ensure_private_directory(psk_dir)
 
         psk_file = psk_dir / f"{name}.psk"
-        if psk_file.exists():
-            warnings.warn(f"PSK file already exists: {psk_file}", stacklevel=2)
+        if psk_file.exists() or psk_file.is_symlink():
+            raise FileExistsError(
+                "PSK already exists; recover metadata or rotate explicitly"
+            )
 
         pg = PasswordGenerator(mode="passphrase", num_words=6)
-        results = pg.pipe()
-        psk = results[0][1]
-
-        write_private_text(psk_file, psk)
+        psk = pg.generate_random_passphrase()
+        encrypted_storage(psk_file)
+        atomic_create_file(
+            destination=psk_file, content=[psk.encode("utf-8")], file_mode=0o600
+        )
 
         now = datetime.now()
         return cls(name=name, file=str(psk_file), created=now, updated=now)

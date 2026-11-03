@@ -6,11 +6,15 @@ summary: Typed encrypted vault lifecycle, secret identities and export contracts
 responsibilities:
   - Validate vault entries, host keys and secret templates
   - Support reviewed bootstrap and rotation workflows
+  - Reject incomplete or conflicting persisted credential pairs before generation
 boundaries:
   - Never log plaintext secrets or substitute placeholder keys
   - Do not bypass encrypted-at-rest or host identity boundaries
   - Key reads require the shared encrypted storage verifier; key writes use guarded private file publication
 entrypoints:
+  - name: exclusive-psk-publication
+    file: psk.py
+    purpose: Create new host PSKs exclusively and reject inconsistent reuse without replacing decryption keys.
   - name: manager
     file: manager.py
     purpose: Inspect manager ownership and interfaces.
@@ -19,7 +23,7 @@ entrypoints:
     purpose: Inspect configuration ownership and interfaces.
   - name: secret-contract
     file: secret.py
-    purpose: Inspect secret contract ownership and interfaces.
+    purpose: Validate persisted secret metadata and publish new ciphertext exclusively with owned-file rollback.
 dependencies:
   internal:
     - ansible

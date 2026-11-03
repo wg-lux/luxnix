@@ -72,33 +72,45 @@ let
     builtins.filter (
       mount: lib.any (path: mount == "/" || path == mount || lib.hasPrefix "${mount}/" path) paths
     ) (builtins.attrNames config.fileSystems);
-  dataMounts = lib.unique (
-    lib.concatMap (
+  volumeMounts =
+    v:
+    lib.optional (v.content != null && (v.content.mountpoint or null) != null) v.content.mountpoint
+    ++ map (s: s.mountpoint) (
+      builtins.attrValues (if v.content == null then { } else v.content.subvolumes or { })
+    );
+  # Btrfs format arguments name every additional member mapping.
+  membersFor =
+    mount:
+    builtins.filter (
       v:
-      lib.optional (v.content != null && (v.content.mountpoint or null) != null) v.content.mountpoint
-      ++ map (s: s.mountpoint) (
-        builtins.attrValues (if v.content == null then { } else v.content.subvolumes or { })
-      )
-    ) secondary
-  );
+      lib.any (
+        owner:
+        builtins.elem mount (volumeMounts owner)
+        && (v.name == owner.name || builtins.elem "/dev/mapper/${v.name}" (owner.content.extraArgs or [ ]))
+      ) secondary
+    ) secondary;
+  dataMounts = lib.unique (lib.concatMap volumeMounts secondary);
   allMounts = lib.unique (mountsFor paths ++ dataMounts);
-  spec = pkgs.writeText "boot-storage.json" (
-    builtins.toJSON {
-      mounts = lib.genAttrs allMounts (p: {
-        inherit (config.fileSystems.${p}) device fsType;
-        subvolume = lib.findFirst (o: lib.hasPrefix "subvol=" o) null config.fileSystems.${p}.options;
-      });
-      keys = map (v: {
-        path = keyFile v;
-        inherit (v) device;
-        mapping = v.name;
-      }) secondary;
-      inherit paths;
-      retiredMounts = builtins.filter (p: !(builtins.hasAttr p config.fileSystems)) (
-        builtins.attrNames cfg.bindMounts ++ map (v: v.mountPoint) (builtins.attrValues cfg.volumes)
-      );
-    }
-  );
+  storageSpec =
+    requiredPaths: mounts: keys:
+    pkgs.writeText "boot-storage.json" (
+      builtins.toJSON {
+        mounts = lib.genAttrs mounts (p: {
+          inherit (config.fileSystems.${p}) device fsType;
+          subvolume = lib.findFirst (o: lib.hasPrefix "subvol=" o) null config.fileSystems.${p}.options;
+        });
+        keys = map (v: {
+          path = keyFile v;
+          inherit (v) device;
+          mapping = v.name;
+        }) keys;
+        paths = requiredPaths;
+        retiredMounts = builtins.filter (p: !(builtins.hasAttr p config.fileSystems)) (
+          builtins.attrNames cfg.bindMounts ++ map (v: v.mountPoint) (builtins.attrValues cfg.volumes)
+        );
+      }
+    );
+  spec = storageSpec paths allMounts secondary;
   checker = pkgs.runCommand "boot-storage-checker" { } ''
     mkdir -p "$out"
     cp ${../../../../lx_administration/storage/boot.py} "$out/boot.py"
@@ -120,7 +132,7 @@ let
   guard =
     requiredPaths:
     let
-      mounts = lib.unique (allMounts ++ mountsFor requiredPaths);
+      mounts = mountsFor requiredPaths;
     in
     {
       requires = map mountUnit mounts;
@@ -177,6 +189,13 @@ in
     lib.mkMerge [
       {
         assertions = [
+          {
+            assertion =
+              cfg.unlockMethod == "passphrase"
+              && !(lib.attrByPath [ "luxnix" "tpmReleaseClient" "enable" ] false config);
+            message = "Boot LUKS uses independent root unlock; alternative disk-unlock backends are retired for new enrollment.";
+          }
+
           {
             assertion = lib.all (
               name:
@@ -260,26 +279,34 @@ in
             lib.nameValuePair (check name) (
               lib.recursiveUpdate (guard requiredPaths) {
                 description = "Verify mounted encrypted storage before ${name}; see storage migration runbook";
+                path = [
+                  pkgs.util-linux
+                  pkgs.cryptsetup
+                ];
                 serviceConfig = {
                   Type = "oneshot";
                   TimeoutStartSec = "45s";
                   # Actual crypttab opening tests keys at boot. Avoid repeating the
                   # expensive key derivation for every already-mounted consumer.
-                  ExecStart = "${lib.getExe verifier} --mounted-storage ${lib.escapeShellArgs requiredPaths}";
+                  ExecStart = "${pkgs.python3}/bin/python3 ${checker}/boot.py ${
+                    storageSpec requiredPaths (mountsFor requiredPaths) (
+                      lib.unique (lib.concatMap membersFor (mountsFor requiredPaths))
+                    )
+                  } --mounted-storage";
                 };
               }
             )
           ) cfg.guardedServices)
         ];
         # Data failures do not hide the console behind an unbounded graphical wait.
-        fileSystems = lib.genAttrs dataMounts (_: {
+        fileSystems = lib.genAttrs dataMounts (mount: {
           options = [
             "nofail"
             "x-systemd.device-timeout=30s"
           ]
-          ++ map (
-            v: "x-systemd.requires=systemd-cryptsetup@${utils.escapeSystemdPath v.name}.service"
-          ) secondary;
+          ++ map (v: "x-systemd.requires=systemd-cryptsetup@${utils.escapeSystemdPath v.name}.service") (
+            membersFor mount
+          );
         });
         systemd.sleep.settings.Sleep = {
           AllowHibernation = false;

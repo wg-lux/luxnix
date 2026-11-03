@@ -10,10 +10,46 @@ from types import SimpleNamespace
 
 import pytest
 
+from lx_administration import secret_storage
 from lx_administration.storage import recovery_custody as custody
 from lx_administration.storage import migration_archive as archive
 from lx_administration.storage import provision
 from lx_administration.models.vault import secret
+
+
+@pytest.mark.parametrize("incomplete", [False, True])
+def test_custody_disk_separation_uses_all_verified_members(
+    tmp_path, monkeypatch, incomplete
+):
+    filesystem = {"source": "/dev/mapper/first", "fstype": "btrfs"}
+    members = ["/dev/block/253:0", "/dev/block/253:1"]
+    checked = []
+
+    def verified_members(record):
+        assert record == filesystem
+        if incomplete:
+            raise ValueError("Incomplete Btrfs member evidence")
+        return members
+
+    def probe(args):
+        if args[0] == "findmnt":
+            return json.dumps({"filesystems": [filesystem]}).encode()
+        assert args[0] == "lsblk"
+        checked.append(args[-1])
+        return json.dumps({"blockdevices": [
+            {"type": "disk", "name": "/dev/disk" + str(members.index(args[-1]))}
+        ]}).encode()
+
+    assert custody.filesystem_devices is secret_storage.filesystem_devices
+    monkeypatch.setattr(custody, "filesystem_devices", verified_members)
+    monkeypatch.setattr(custody, "run", probe)
+    if incomplete:
+        with pytest.raises(ValueError, match="Incomplete"):
+            custody.storage_disks(tmp_path)
+        assert not checked
+    else:
+        assert custody.storage_disks(tmp_path) == {"/dev/disk0", "/dev/disk1"}
+        assert checked == members
 
 
 @pytest.fixture
@@ -207,11 +243,6 @@ def test_local_archive_needs_both_recipient_checks_before_publication(
     target = root / "root.btrfs.gz.age"
     item = archive.transfer(None, ["printf", "synthetic"], target, recipients, None)
     receipt_path = root / "receipt.json"
-    receipt_path.write_text(
-        json.dumps(
-            {"components": {"root": item}, "recipients": recipients, "complete": False}
-        )
-    )
     plan_path = tmp_path / "plan.json"
     mounts = {
         "root": "/",
@@ -239,6 +270,11 @@ def test_local_archive_needs_both_recipient_checks_before_publication(
             }
         )
     )
+    root.chmod(0o700)
+    receipt = archive.bind_receipt(root, json.loads(plan_path.read_text()), recipients)
+    item['source_plan_sha256'] = receipt['source_plan_sha256']
+    receipt['components']['root'] = item
+    archive.save_receipt(receipt_path, receipt)
     actual_output = archive.subprocess.check_output
 
     def output(args, **kwargs):
@@ -273,6 +309,8 @@ def test_local_archive_needs_both_recipient_checks_before_publication(
             "backup",
             "--recipient",
             recipients[0],
+            "--custodian-recipient",
+            recipients[1],
             "--verify",
             "root",
         ],
@@ -288,6 +326,18 @@ def test_local_archive_needs_both_recipient_checks_before_publication(
     monkeypatch.setattr(
         sys, "stdin", SimpleNamespace(buffer=io.BytesIO(secondary.read_bytes()))
     )
+    save = archive.save_receipt
+    def interrupted_receipt(path, value):
+        if path == receipt_path and value['components']['root']['authenticated']:
+            raise RuntimeError('power loss after publication')
+        return save(path, value)
+    monkeypatch.setattr(archive, 'save_receipt', interrupted_receipt)
+    with pytest.raises(RuntimeError, match='power loss'):
+        archive.local_main()
+    assert target.exists()
+    assert not json.loads(receipt_path.read_text())['components']['root']['authenticated']
+    monkeypatch.setattr(archive, 'save_receipt', save)
+    monkeypatch.setattr(sys, 'stdin', SimpleNamespace(buffer=io.BytesIO(secondary.read_bytes())))
     archive.local_main()
     assert target.exists()
     assert json.loads(receipt_path.read_text())["components"]["root"]["authenticated"]

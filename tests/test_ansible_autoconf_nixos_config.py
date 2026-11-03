@@ -461,3 +461,39 @@ def test_split_attr_path_keeps_quoted_segments(path, segments):
 def test_split_attr_path_rejects_malformed_paths(path):
     with pytest.raises(ValueError):
         split_attr_path(path)
+
+
+@pytest.mark.parametrize('value', [
+    '${builtins.toString (1 + 1)}',
+    'literal ${missing} with "quotes" and \\backslashes',
+    'line one\n${builtins.abort "must not execute"}\n',
+])
+def test_literal_strings_roundtrip_without_nix_interpolation(value):
+    if shutil.which('nix') is None:
+        pytest.skip('Nix evaluation required')
+    import json
+    for expression in (nix_string(value), nix_literal(value), nix_literal({'__nix_string__': value})):
+        result = subprocess.run(['nix', 'eval', '--json', '--expr', expression],
+                                capture_output=True, text=True)
+        assert result.returncode == 0, result.stderr
+        assert json.loads(result.stdout) == value
+
+
+def test_explicit_yaml_expression_and_literal_are_distinct():
+    assert nix_literal({'__nix_expression__': 'builtins.toString (1 + 1)'}) == 'builtins.toString (1 + 1)'
+    assert nix_literal({'__nix_string__': 'pkgs.hello'}) == '"pkgs.hello"'
+    assert nix_literal({'__nix_string__': 'true'}) == '"true"'
+    with pytest.raises(ValueError, match='nonempty'):
+        nix_literal({'__nix_expression__': ''})
+    with pytest.raises(TypeError, match='Expected Nix string'):
+        nix_literal({'__nix_string__': True})
+
+
+@pytest.mark.parametrize('value', [
+    {'__nix_string__': 'literal', 'other': 1},
+    {'__nix_expression__': 'true', 'other': 1},
+    {'__nix_string__': 'literal', '__nix_expression__': 'true'},
+])
+def test_explicit_nix_wrappers_reject_ambiguous_mappings(value):
+    with pytest.raises(ValueError, match='exactly one'):
+        nix_literal(value)

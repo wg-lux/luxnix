@@ -6,6 +6,8 @@ from pathlib import Path
 import pytest
 from lx_administration import activation as a
 
+REAL_LOCKED = a.locked
+
 
 @pytest.fixture
 def state(tmp_path, monkeypatch):
@@ -119,3 +121,137 @@ def test_watchdog_is_armed_before_worker_and_pending_retry_is_noop(state, monkey
     units=[args[1] for args in calls if args[0]=='systemd-run']
     assert units == ['--unit=luxnix-rollback-'+identifier,'--unit=luxnix-activate-'+identifier]
     assert sum(args[0]=='nix-store' for args in calls)==2
+
+
+def _rollback_commands(state, calls):
+    value, current, profile = state
+    def run(*args, **kwargs):
+        calls.append(args)
+        if args[:2] == ('systemctl', 'stop'):
+            raise ValueError('synthetic stop failure with private output withheld')
+        if args[0] == 'nix-env':
+            profile.unlink(); profile.symlink_to(args[-1])
+        if args[0] == '/nix/store/old/bin/switch-to-configuration':
+            current.unlink(); current.symlink_to('/nix/store/old')
+        return ''
+    return run
+
+
+@pytest.mark.parametrize('show_code', [0, 1, 4])
+def test_watchdog_rolls_back_when_worker_was_garbage_collected(state, monkeypatch, show_code):
+    from types import SimpleNamespace
+    value, current, profile = state
+    calls = []
+    monkeypatch.setattr(a, 'run', _rollback_commands(state, calls))
+    probes = []
+    def show(command, **kwargs):
+        probes.append(command)
+        return SimpleNamespace(returncode=show_code, stdout=(
+            'LoadState=not-found\nActiveState=inactive\nMainPID=0\nControlPID=0\n'))
+    monkeypatch.setattr(a.subprocess, 'run', show)
+    a.recover(value['id'])
+    assert a.load(value['id'])[1]['status'] == 'rolled-back'
+    assert str(profile.resolve()) == str(current.resolve()) == '/nix/store/old'
+    assert probes == [[
+        'systemctl', 'show', 'luxnix-activate-' + value['id'] + '.service', '--all',
+        '--property=LoadState', '--property=ActiveState', '--property=MainPID', '--property=ControlPID']]
+    before = (list(calls), list(probes))
+    a.recover(value['id'])
+    assert (calls, probes) == before
+
+
+@pytest.mark.parametrize('show_code,properties', [
+    (1, ''),  # An unavailable system bus is not an absent unit.
+    (1, 'LoadState=loaded\nActiveState=active\nMainPID=123\nControlPID=0\n'),
+    (0, 'LoadState=not-found\nActiveState=inactive\nMainPID=123\nControlPID=0\n'),
+    (0, 'LoadState=not-found\nActiveState=inactive\nMainPID=0\nControlPID=123\n'),
+    (2, 'LoadState=not-found\nActiveState=inactive\nMainPID=0\nControlPID=0\n'),
+    (0, 'LoadState=not-found\nActiveState=inactive\n'),
+    (0, 'LoadState=not-found\nActiveState=inactive\nMainPID=0\nControlPID=0\nMainPID=123\n'),
+])
+def test_stop_failure_cannot_roll_back_a_live_or_unknown_worker(state, monkeypatch, show_code, properties):
+    from types import SimpleNamespace
+    value, current, profile = state
+    calls = []
+    monkeypatch.setattr(a, 'run', _rollback_commands(state, calls))
+    monkeypatch.setattr(a.subprocess, 'run', lambda *args, **kwargs:
+                        SimpleNamespace(returncode=show_code, stdout=properties))
+    with pytest.raises(ValueError, match='rollback refused'):
+        a.recover(value['id'])
+    assert a.load(value['id'])[1]['status'] == 'pending'
+    assert str(profile.resolve()) == '/nix/store/new'
+    assert not any(command[0] == 'nix-env' for command in calls)
+
+
+@pytest.mark.parametrize('status', ['accepted', 'rolled-back'])
+def test_terminal_recovery_never_requires_a_worker_unit(state, monkeypatch, status):
+    value, _, _ = state
+    value['status'] = status
+    a.save(a.BASE / (value['id'] + '.json'), value)
+    monkeypatch.setattr(a, 'run', lambda *args, **kwargs: pytest.fail('terminal record touched systemd'))
+    a.recover(value['id'])
+    assert a.load(value['id'])[1]['status'] == status
+
+
+def test_successful_worker_stop_does_not_query_an_absent_unit(state, monkeypatch):
+    value, _, _ = state
+    calls = []
+    rollback = _rollback_commands(state, calls)
+    def run(*args, **kwargs):
+        if args[:2] == ('systemctl', 'stop'):
+            calls.append(args)
+            return ''
+        return rollback(*args, **kwargs)
+    monkeypatch.setattr(a, 'run', run)
+    monkeypatch.setattr(a.subprocess, 'run', lambda *args, **kwargs: pytest.fail('unexpected unit query'))
+    a.recover(value['id'])
+    assert a.load(value['id'])[1]['status'] == 'rolled-back'
+
+
+def test_watchdog_serializes_worker_stop_and_rollback_under_actual_state_lock(state, monkeypatch):
+    import subprocess
+    import sys
+    value, _, _ = state
+    # Use the real file-lock protocol without requiring a root test process.
+    monkeypatch.setattr(a, 'locked', REAL_LOCKED)
+    monkeypatch.setattr(a.os, 'geteuid', lambda: 0)
+    monkeypatch.setattr(
+        a, 'save', lambda path, record: path.write_text(json.dumps(record))
+    )
+    calls = []
+    rollback = _rollback_commands(state, calls)
+    def run(*args, **kwargs):
+        # A separate would-be start/ack publisher cannot acquire the state lock
+        # during worker termination or either rollback operation.
+        result = subprocess.run([sys.executable, '-c',
+            'import fcntl, sys; f = open(sys.argv[1], "a"); '
+            'fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)',
+            str(a.BASE / '.lock')], capture_output=True, text=True)
+        assert result.returncode != 0
+        assert 'BlockingIOError' in result.stderr
+        if args[:2] == ('systemctl', 'stop'):
+            calls.append(args)
+            return ''
+        return rollback(*args, **kwargs)
+    monkeypatch.setattr(a, 'run', run)
+    a.recover(value['id'])
+    assert a.load(value['id'])[1]['status'] == 'rolled-back'
+    # The lock is released after the complete rollback, permitting a later ack
+    # to inspect the terminal record rather than racing an active worker.
+    with a.locked():
+        assert a.load(value['id'])[1]['status'] == 'rolled-back'
+
+
+def test_missing_unit_confirmation_timeout_leaves_state_unchanged(state, monkeypatch):
+    import subprocess
+    value, _, profile = state
+    calls = []
+    monkeypatch.setattr(a, 'run', _rollback_commands(state, calls))
+    def show(*args, **kwargs):
+        raise subprocess.TimeoutExpired('systemctl show', kwargs['timeout'])
+    monkeypatch.setattr(a.subprocess, 'run', show)
+    with pytest.raises(subprocess.TimeoutExpired):
+        a.recover(value['id'])
+    assert a.load(value['id'])[1]['status'] == 'pending'
+    assert str(profile.resolve()) == '/nix/store/new'
+    assert not any(command[0] == 'nix-env' for command in calls)

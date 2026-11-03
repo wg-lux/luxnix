@@ -139,8 +139,10 @@ class Migration:
         """Explicit operation only, after the controller has verified both escrows."""
         configured_method = self.config.get("unlockMethod", "passphrase")
         method = record.get("backend", configured_method)
-        if method not in ("passphrase", "tpm2", "local-openbao"):
-            raise MigrationError("Unsupported storage provisioning backend")
+        if method != "passphrase":
+            raise MigrationError(
+                "Alternative container enrollment is retired; use boot LUKS2"
+            )
         if method == "passphrase" and configured_method != "passphrase":
             raise MigrationError(
                 "Passphrase provisioning requires the configured passphrase unlock policy"
@@ -157,60 +159,13 @@ class Migration:
         key = record["recovery_passphrase"].encode("ascii")
         if len(key) != 64 or any(c not in b"0123456789abcdef" for c in key):
             raise MigrationError("Provisioning requires a random 256-bit recovery passphrase")
-        if method in ("passphrase", "local-openbao"):
-            if (record.get("host") != self.config["machine"]
-                    or record.get("container") != str(container)):
-                raise MigrationError(
-                    "Provision request does not match the declared host and container"
-                )
-        self.verifier._require_protected_swap()
-        if method == "passphrase":
-            self.provision_container(name, record, key, expected_uuid)
-            return
-        require_secure_boot()
-        if method == "local-openbao":
-            if not self.config.get("localOpenbaoEnabled"):
-                raise MigrationError("Local OpenBao must be installed before deploy-time provisioning")
-            if volume.get("luksUUID") != expected_uuid:
-                raise MigrationError("Local OpenBao provisioning requires a declared LUKS UUID")
-            enrollment = runpy.run_path(self.config["openbaoEnroll"])
-            host = enrollment["Host"](
-                self.config["machine"], runpy.run_path(self.config["openbaoClient"])
+        if (record.get("host") != self.config["machine"]
+                or record.get("container") != str(container)):
+            raise MigrationError(
+                "Provision request does not match the declared host and container"
             )
-            try:
-                self.provision_container(name, record, key, expected_uuid, openbao=host)
-            except enrollment["EnrollError"] as exc:
-                raise MigrationError(str(exc)) from None
-            return
-        marker = container.with_suffix(container.suffix + ".provisioned.json")
-        identity = {"machine_id": record["machine_id"], "volume": name, "luks_uuid": expected_uuid}
-        if container.exists():
-            if (not marker.is_file() or json.loads(marker.read_text()) != identity
-                    or run("cryptsetup", "luksUUID", str(container)).decode().strip() != expected_uuid):
-                raise MigrationError("Existing container is not a completed matching provision; never reformat it")
-            run("cryptsetup", "open", "--test-passphrase", "--key-file=-", str(container), input=key)
-            return
-        if marker.exists() or Path(volume["device"]).exists():
-            raise MigrationError("Stale provisioning receipt or occupied mapping; inspect before provisioning")
-        self.allocate(name)
-        run("cryptsetup", "luksFormat", "--type", "luks2", "--batch-mode", "--uuid", expected_uuid,
-            "--key-file=-", str(container), input=key)
-        # The recovery key exists only in RAM here; independently encrypted copies
-        # were authenticated by the controller before this operation was invoked.
-        fd = os.memfd_create("luxnix-provision-key", os.MFD_CLOEXEC)
-        try:
-            os.fchmod(fd, 0o600)
-            os.write(fd, key)
-            os.lseek(fd, 0, os.SEEK_SET)
-            run("systemd-cryptenroll", f"--unlock-key-file=/proc/self/fd/{fd}", "--tpm2-device=auto",
-                "--tpm2-pcrs=7", "--tpm2-with-pin=no", str(container), pass_fds=(fd,))
-        finally:
-            os.close(fd)
-        self.unlock(name)
-        run("mkfs.ext4", "-q", volume["device"])
-        run("cryptsetup", "open", "--test-passphrase", "--key-file=-", str(container), input=key)
-        run("sync", "-f", str(container))
-        atomic_json(marker, identity)
+        self.verifier._require_protected_swap()
+        self.provision_container(name, record, key, expected_uuid)
 
     def allocate(self, name, container=None):
         volume = self.config["volumes"][name]

@@ -175,38 +175,12 @@ def test_missing_container_never_provisions_during_startup(tmp_path, monkeypatch
     assert not container.exists()
 
 
-def test_explicit_provision_uses_escrowed_key_and_never_reformats(tmp_path, monkeypatch):
-    container = tmp_path / "new.luks"
-    record = {"machine_id": Path('/etc/machine-id').read_text().strip(), "volume": "data",
-        "luks_uuid": "5d36ce47-893c-4fbc-9527-1cc6b420d2be", "recovery_passphrase": "a" * 64,
-        "primary_escrow": "test-vault-reference", "emergency_export": "test-independent-reference"}
-    calls = []
-    def run(*args, **kwargs):
-        calls.append((args, kwargs))
-        if args[0] == 'systemd-cryptenroll':
-            fd = kwargs['pass_fds'][0]
-            assert os.read(fd, 1000) == record['recovery_passphrase'].encode()
-        if args[:2] == ('cryptsetup', 'luksUUID'):
-            return record['luks_uuid'].encode()
-        return b''
-    monkeypatch.setattr(migration, 'run', run)
-    monkeypatch.setattr(migration, 'require_secure_boot', lambda: None)
-    monkeypatch.setattr(migration.os, 'posix_fallocate', lambda fd, offset, size: os.ftruncate(fd, size))
-    task = migration.Migration({'unlockMethod': 'tpm2', 'binds': {}, 'volumes': {'data': {
-        'container': str(container), 'device': '/dev/mapper/test-never-created', 'minimumSizeMiB': 1}}},
-        SimpleNamespace(_require_protected_swap=lambda: None))
-    monkeypatch.setattr(task, 'unlock', lambda name: None)
-    task.provision('data', record)
-    assert container.stat().st_mode & 0o777 == 0o600
-    assert sum(args[:2] == ('cryptsetup', 'luksFormat') for args, _ in calls) == 1
-    for args, _ in calls:
-        assert record['recovery_passphrase'] not in ' '.join(args)
-    task.provision('data', record)
-    assert sum(args[:2] == ('cryptsetup', 'luksFormat') for args, _ in calls) == 1
-    container.with_suffix('.luks.provisioned.json').unlink()
-    with pytest.raises(migration.MigrationError, match='never reformat'):
-        task.provision('data', record)
-    assert container.exists()
+@pytest.mark.parametrize("method", ["tpm2", "local-openbao"])
+def test_alternative_provision_rejected_before_mutation(tmp_path, monkeypatch, method):
+    task = migration.Migration({"unlockMethod": method}, None)
+    monkeypatch.setattr(migration, "run", lambda *a, **k: pytest.fail("mutation"))
+    with pytest.raises(migration.MigrationError, match="retired"):
+        task.provision("data", {})
 
 
 @pytest.fixture
@@ -471,28 +445,6 @@ def test_local_provision_recovers_an_unpublished_allocation(local_provision):
     assert all(c[-1].endswith('.allocating') for c in state.calls if c[:2] == ('cryptsetup', 'luksFormat'))
 
 
-@pytest.mark.parametrize("reason", ["tpm-not-physical", "secure-boot-disabled"])
-def test_public_local_provision_checks_platform_before_allocation(
-    local_provision, monkeypatch, reason
-):
-    import runpy
-    from lx_administration.storage import openbao_enroll
-
-    task, record, _, state, container = local_provision
-    task.config.update(localOpenbaoEnabled=True, openbaoEnroll="enroll.py",
-                       openbaoClient="client.py")
-    record["machine_id"] = Path("/etc/machine-id").read_text().strip()
-    monkeypatch.setattr(migration, "require_secure_boot", lambda: None)
-    def refuse():
-        raise ValueError(reason)
-    def load(path):
-        return (vars(openbao_enroll) if path == "enroll.py"
-                else {"platform_preflight": refuse})
-    monkeypatch.setattr(runpy, "run_path", load)
-    with pytest.raises(migration.MigrationError, match=reason):
-        task.provision("data", record)
-    assert state.calls == []
-    assert not container.exists()
 
 
 @pytest.fixture

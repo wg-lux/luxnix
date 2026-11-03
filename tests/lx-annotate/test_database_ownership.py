@@ -91,6 +91,9 @@ def contracts():
         wrongLocalName = inspect (extend {
           roles.endoreg-client.database.name = "not_provisioned";
         });
+        mismatchedProvisioner = inspect (extend {
+          roles.postgres.default.defaultDbName = "endoregDbCentral";
+        });
         wrongLocalPort = inspect (extend {
           roles.endoreg-client.database.port = 6544;
         });
@@ -112,6 +115,10 @@ def contracts():
           networking.hostName = lib.mkForce "ownership-test-hub";
           profiles.endoregCentralHub.enable = true;
           roles.postgres.default.defaultDbName = "endoregDbCentral";
+          roles.endoreg-client.database = {
+            name = "endoregDbCentral";
+            user = "endoregDbCentral";
+          };
         }));
       }
     """)
@@ -158,6 +165,7 @@ def test_legacy_endpoint_aliases_reach_application_environment(contracts):
         ("roleConflict", "database.host conflicts"),
         ("portConflict", "database.port conflicts"),
         ("wrongLocalName", "managed-local database"),
+        ("mismatchedProvisioner", "managed-local database"),
         ("wrongLocalPort", "managed-local database"),
         ("wrongLocalCredential", "managed-local database"),
         ("missingLocalProvisioner", "requires the local PostgreSQL role"),

@@ -12,6 +12,7 @@ from lx_administration.models import MergedHostVars
 from ..config import AutoconfConfig
 from ..errors import AutoconfPipelineError
 from ..layout import NixTemplateLayout
+from ..publication import publication_lock
 from .home import render_home_outputs
 from .template_renderer import render_nix_template
 from .utils import (
@@ -121,11 +122,16 @@ def render_configurations(
     logger: logging.Logger | None = None,
 ) -> None:
     """Render all outputs using the central Autoconf configuration."""
-    rendered_outputs = _render_configuration_outputs(config, logger=logger)
-    write_nix_outputs(
-        rendered_outputs,
-        logger=logger,
-    )
+    root = config.output
+    with publication_lock(root):
+        rendered_outputs = _render_configuration_outputs(config, logger=logger)
+        write_nix_outputs(
+            rendered_outputs,
+            logger=logger,
+            publication_root=root,
+            locked=True,
+            allowed_roots=(config.output, config.nix_output),
+        )
 
 
 def render_isolated_configurations(
@@ -153,7 +159,9 @@ def render_isolated_configurations(
         )
 
     isolated_config = replace(config, nix_output=output_root)
-    rendered_outputs = _render_configuration_outputs(isolated_config, logger=logger)
+    root = config.output
+    with publication_lock(root):
+        rendered_outputs = _render_configuration_outputs(isolated_config, logger=logger)
     write_new_nix_output_tree(
         rendered_outputs,
         output_root=output_root,

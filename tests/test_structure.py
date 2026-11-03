@@ -254,3 +254,11 @@ def test_cli_fails_for_missing_root_and_passes_from_other_directory(repo):
     )
     assert result.returncode == 1
     assert "root manifest" in result.stderr
+
+
+@pytest.mark.parametrize('kind', ['internal', 'external'])
+def test_duplicate_dependency_entries_are_rejected(repo, kind):
+    data = link_child(repo)
+    data['dependencies'][kind] = ['app', 'app']
+    write(repo, 'structure.yml', data)
+    assert f'duplicate dependencies.{kind}' in '\n'.join(VALIDATE(repo)[0])

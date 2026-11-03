@@ -25,7 +25,7 @@ entrypoints:
     purpose: Explicitly preserve gc-09 or gc-10 migration sources with short application downtime.
   - name: storage-readiness
     file: playbooks/storage-readiness.yml
-    purpose: Read public boot and storage metadata through an explicitly limited inventory target without accessing credentials.
+    purpose: Summarize storage admission and optionally retain full observations in private controller artifacts without exposing host facts in output.
   - name: operator-unlocked-secrets
     file: inventory/group_vars/operator_unlocked_secrets.yml
     purpose: Fleet guarded consumers and temporary legacy-container recovery metadata; final storage uses boot LUKS.

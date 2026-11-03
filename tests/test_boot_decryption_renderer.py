@@ -29,7 +29,7 @@ def _render(output: Path, *luks_devices: str) -> subprocess.CompletedProcess[str
         str(RENDERER),
         "--output",
         str(output),
-        "--usb-uuid",
+        "--key-partuuid",
         "12345678-1234-1234-1234-123456789abc",
         "--offset-bytes",
         "52428800",
@@ -80,7 +80,7 @@ def test_renderer_writes_a_formatted_parseable_file_to_the_explicit_path(
     assert '"cryptroot0" = {' in rendered
     assert '"cryptroot1" = {' in rendered
     assert (
-        'keyFile = "/dev/disk/by-uuid/12345678-1234-1234-1234-123456789abc";'
+        'keyFile = "/dev/disk/by-partuuid/12345678-1234-1234-1234-123456789abc";'
         in rendered
     )
     assert "keyFileOffset = 52428800;" in rendered
@@ -97,7 +97,7 @@ def test_renderer_rejects_invalid_input_without_creating_the_output(
             str(RENDERER),
             "--output",
             str(output),
-            "--usb-uuid",
+            "--key-partuuid",
             "not-a-uuid!",
             "--offset-bytes",
             "52428800",
@@ -120,19 +120,29 @@ def test_all_setup_scripts_delegate_to_the_shared_renderer_after_device_setup() 
     assert "pkgs.writeShellApplication" in renderer_module
     assert "pkgs.nixfmt" in renderer_module
 
-    expected_luks_devices = {
-        "single": ("cryptroot",),
-        "gs-01": ("cryptroot0", "cryptroot1", "cryptroot2"),
-        "gs-02": ("cryptroot0", "cryptroot1", "cryptroot2", "cryptroot3"),
-    }
-    for name, module_path in SETUP_MODULES.items():
+    for module_path in SETUP_MODULES.values():
         source = module_path.read_text(encoding="utf-8")
-        assert "rendererPath = import" in source
-        assert "rendererPath" in source.split("environment.systemPackages", 1)[1]
-        assert "luxnix-render-boot-decryption-config" in source
-        assert "cat <<EOF > $NIX_CONFIGURATION_OUTPUT" not in source
-        assert source.index("/bin/luxnix-render-boot-decryption-config") > source.index(
-            "cryptsetup luksAddKey"
-        )
-        for luks_device in expected_luks_devices[name]:
-            assert f"--luks-device {luks_device}" in source
+        assert 'import ' in source and 'module.nix' in source
+        assert 'mappings' not in source
+    shared = (SETUP_MODULES['single'].parent / 'module.nix').read_text()
+    assert '--block-size ${toString cfg.bs} --count ${toString cfg.count}' in shared
+    assert 'setup.py' in shared
+    assert 'config.boot.initrd.luks.devices' in shared
+
+
+def test_legacy_filesystem_uuid_contract_is_rejected(tmp_path):
+    result = subprocess.run(['bash', str(RENDERER), '--output', str(tmp_path / 'config.nix'),
+        '--usb-uuid', '12345678-1234-1234-1234-123456789abc', '--offset-bytes', '52428800',
+        '--keyfile-size', '4096', '--luks-device', 'cryptroot'], capture_output=True, text=True)
+    assert result.returncode == 2
+    assert not (tmp_path / 'config.nix').exists()
+
+
+def test_reserved_partition_allows_zero_offset(tmp_path):
+    output = tmp_path / 'config.nix'
+    result = subprocess.run(['bash', str(RENDERER), '--output', str(output),
+        '--key-partuuid', '12345678-1234-1234-1234-123456789abc', '--offset-bytes', '0',
+        '--keyfile-size', '8192', '--luks-device', 'cryptroot'], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    source = output.read_text()
+    assert 'keyFileOffset = 0;' in source and 'keyFileSize = 8192;' in source

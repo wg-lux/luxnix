@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "writer_patterns": [
+    "postgresql*", "postgres-endoreg-setup", "lx-annotate*", "redis-lx-annotate*",
+    "nginx", "openbao-local", "vault", "vault-auth-setup", "managed-secrets-setup",
+    "luxnix-vault-issue-hub-client-certificate"
+  ],
+  "snapshot_roots": {"/data/raid01": "/data/raid01/.luxnix-migration-snapshots"},
+  "inner_mounts": ["/var/lib/luxnix-app-storage", "/var/lib/luxnix-secrets"],
+  "hosts": {
+    "gc-09": {"root": "/", "home": "/home", "nix": "/nix", "persist": "/persist", "var-log": "/var/log"},
+    "gc-10": {"root": "/", "home": "/home", "nix": "/nix", "persist": "/persist", "var-log": "/var/log", "data-raid01": "/data/raid01"}
+  }
+}

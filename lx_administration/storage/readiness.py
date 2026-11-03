@@ -12,8 +12,10 @@ import json
 import os
 from pathlib import Path
 import socket
+import stat
 import subprocess
 import sys
+import uuid
 
 GENERATIONS = ('/run/current-system', '/run/booted-system', '/nix/var/nix/profiles/system')
 LEGACY_MOUNTS = ('/var/lib/luxnix-secrets', '/var/lib/luxnix-app-storage')
@@ -169,18 +171,85 @@ def evaluate(report: dict, expected_host: str, expected_layout: str,
             'notice': 'This is not permission to erase disks, proof of recoverable backups, or cold-boot acceptance.'}
 
 
+def summary(report, expected_host):
+    """Return only console-safe status; admission inputs remain private."""
+    admission = report.get('admission', {})
+    return {'host_matches': report['host'] == expected_host,
+            'admitted': admission.get('admitted', False),
+            'reasons': admission.get('reasons', [{'code': 'observation_only',
+                'message': 'Observations collected; admission was not requested.'}]),
+            'scope': 'storage-baseline-only'}
+
+
+def save_report(report, expected_host):
+    """Publish observations only in the controller's gitignored private directory."""
+    if (not expected_host or any(c not in 'abcdefghijklmnopqrstuvwxyz0123456789-' for c in expected_host)
+            or report.get('host') != expected_host):
+        raise ValueError('Invalid observation host identity')
+    root = Path(__file__).resolve().parents[2] / 'cmdb'
+    if root.resolve() != root:
+        raise ValueError('Observation directory may not contain symlinks')
+    parent = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    directory = None
+    temporary = '.' + uuid.uuid4().hex + '.pending'
+    created = False
+    try:
+        info = os.fstat(parent)
+        if info.st_uid != os.geteuid() or info.st_mode & 0o022:
+            raise ValueError('Observation parent must be owned by the controller user without shared writes')
+        try:
+            os.mkdir('storage-readiness', 0o700, dir_fd=parent)
+        except FileExistsError:
+            pass
+        directory = os.open('storage-readiness', os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
+        info = os.fstat(directory)
+        if info.st_uid != os.geteuid() or info.st_mode & 0o077:
+            raise ValueError('Observation directory must be owned by the controller user with mode 0700')
+        target = expected_host + '.json'
+        try:
+            info = os.stat(target, dir_fd=directory, follow_symlinks=False)
+        except FileNotFoundError:
+            pass
+        else:
+            if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077:
+                raise ValueError('Existing observation must be a private owned regular file')
+        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=directory)
+        created = True
+        with os.fdopen(fd, 'w') as stream:
+            json.dump(report, stream, sort_keys=True)
+            stream.write('\n')
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, target, src_dir_fd=directory, dst_dir_fd=directory)
+        created = False
+        os.fsync(directory)
+    finally:
+        if created:
+            os.unlink(temporary, dir_fd=directory)
+        if directory is not None:
+            os.close(directory)
+        os.close(parent)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--expected-host', required=True)
     parser.add_argument('--mode', choices=['observe', 'admit'], default='observe')
     parser.add_argument('--expected-layout', choices=['legacy-containers', 'unencrypted-root', 'boot-luks'])
     parser.add_argument('--expected-serials', type=json.loads, default=[])
+    parser.add_argument('--full-report', action='store_true',
+                        help='Private transport only; contains local-sensitive observations')
+    parser.add_argument('--save-report', action='store_true',
+                        help='Save stdin JSON to the controller cmdb/storage-readiness directory')
     args = parser.parse_args()
+    if args.save_report:
+        save_report(json.load(sys.stdin), args.expected_host)
+        return 0
     report = collect(args.expected_layout)
     report['report_sha256'] = hashlib.sha256(json.dumps(report, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
     if args.mode == 'admit':
         report['admission'] = evaluate(report, args.expected_host, args.expected_layout, args.expected_serials)
-    print(json.dumps(report, sort_keys=True))
+    print(json.dumps(report if args.full_report else summary(report, args.expected_host), sort_keys=True))
     return int(report['host'] != args.expected_host or
                (args.mode == 'admit' and not report['admission']['admitted']))
 

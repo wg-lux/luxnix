@@ -23,7 +23,7 @@ import time
 
 import yaml
 
-from lx_administration.secret_storage import encrypted_storage
+from lx_administration.secret_storage import encrypted_storage, filesystem_devices
 from lx_administration.storage.cutover import atomic_json
 
 STAGES = {
@@ -216,12 +216,12 @@ def evaluate(checkout: Path, host: str) -> dict:
     if (
         result["host"] != host
         or not result["enabled"]
-        or result["layout"] not in {"boot-luks", "unencrypted-root"}
+        or result["layout"] != "boot-luks"
         or result["failures"]
     ):
         raise MigrationError(
             "The reviewed host must evaluate without assertions and select "
-            "boot-luks or unencrypted-root; legacy maintenance is a separate workflow"
+            "boot-luks; legacy maintenance is a separate workflow"
         )
     if not CLOSURE.fullmatch(result["closure"]):
         raise MigrationError("Unexpected system closure path")
@@ -232,28 +232,17 @@ def fresh_install(spec: dict) -> bool:
     return spec.get("installation", "migration") == "fresh"
 
 
-def unencrypted(plan: dict) -> bool:
-    return plan.get("spec", {}).get("root_encryption", "luks2") == "none"
-
-
 def stage_order(plan: dict) -> tuple[str, ...]:
     return ("recovery", "prepared") if fresh_install(plan["spec"]) else ORDER
 
 
 def validate_selection(spec: dict, config: dict) -> None:
-    expected = (
-        "unencrypted-root"
-        if spec.get("root_encryption", "luks2") == "none"
-        else "boot-luks"
-    )
-    if config.get("layout") != expected:
+    if spec.get("root_encryption", "luks2") != "luks2":
+        raise MigrationError("New installations require root_encryption: luks2")
+    if config.get("layout") != "boot-luks":
         raise MigrationError(
             "Root encryption selection differs from the reviewed host; "
             "create a matching explicit plan"
-        )
-    if expected == "unencrypted-root" and config.get("remote_unlock", {}).get("enable"):
-        raise MigrationError(
-            "Unencrypted root must use normal SSH, not early-boot unlock"
         )
 
 
@@ -282,8 +271,8 @@ def validate_spec(spec: dict) -> None:
         or not HOST.fullmatch(spec["host"])
     ):
         raise MigrationError("Unsupported specification version or host name")
-    if spec.get("root_encryption", "luks2") not in {"luks2", "none"}:
-        raise MigrationError("Select root_encryption: luks2 or none explicitly")
+    if spec.get("root_encryption", "luks2") != "luks2":
+        raise MigrationError("New installations require root_encryption: luks2")
     if spec.get("installation", "migration") not in {"migration", "fresh"}:
         raise MigrationError("Select installation: migration or fresh")
     retention = (
@@ -442,15 +431,6 @@ def required_checks(stage: str, plan: dict) -> set[str]:
         elif stage == "prepared":
             required -= {"database_restored", "identities_restored"}
             required.add("initial_credentials_staged")
-    if unencrypted(plan):
-        if stage == "prepared":
-            required.discard("recovery_slots_tested")
-            required.add("unencrypted_root_approved")
-        elif stage == "acceptance":
-            required.discard("secondary_unlock_passed")
-            required.discard("application_verified")
-            required.add("administrator_login_verified")
-            required.add("protected_services_guarded")
     if stage == "backup" and plan["spec"]["source_retention"] == "whole-disk-image":
         required.add("whole_disk_image_verified")
     return required
@@ -676,16 +656,7 @@ def verify_independent_state(state: Path, progress: dict, disks: set[int]) -> No
             )
         )["filesystems"][0]
         source = mount["source"].split("[", 1)[0]
-        members = [source]
-        if mount["fstype"] == "btrfs":
-            from lx_administration.storage.boot import BTRFS_SYSFS
-
-            member_files = list((BTRFS_SYSFS / mount["uuid"] / "devices").glob("*/dev"))
-            if not member_files:
-                raise MigrationError(
-                    "Cannot verify independent evidence filesystem members"
-                )
-            members += ["/dev/block/" + m.read_text().strip() for m in member_files]
+        members = filesystem_devices(mount)
         if not source.startswith("/dev/") or any(
             device_disks(m) & disks for m in members
         ):
@@ -790,62 +761,17 @@ def verify_installer(disks: set[int]) -> None:
         raise MigrationError("Disable installer swap before handling restored secrets")
 
 
-def verify_plain_root(path: str) -> None:
-    """Reject an encrypted root; explicit plaintext plans never downgrade it."""
-    from lx_administration.storage import boot
-
-    record = mount_record(path)
-    devices = [record["source"].split("[", 1)[0]]
-    if record["fstype"] == "btrfs":
-        members = list((boot.BTRFS_SYSFS / record["uuid"] / "devices").glob("*/dev"))
-        if not members:
-            raise MigrationError("Missing Btrfs root members")
-        devices = ["/dev/block/" + member.read_text().strip() for member in members]
-    for device in devices:
-        tree = json.loads(
-            run("lsblk", "--json", "--inverse", "--output", "NAME,TYPE", device)
-        )["blockdevices"]
-        if not tree or any(item["type"] == "crypt" for item in walk(tree)):
-            raise MigrationError(
-                "Unencrypted installation cannot target an encrypted root; "
-                "retain its encryption and select the matching plan"
-            )
-
-
-def mount_present(path: str) -> bool:
-    result = subprocess.run(
-        ["findmnt", "--mountpoint", path, "--noheadings"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    if result.returncode not in {0, 1}:
-        raise MigrationError("Cannot determine whether protected storage is mounted")
-    return result.returncode == 0
-
-
 def verify_target(plan: dict, disks: set[int]) -> dict:
     # Reuse the same mount, Btrfs member, LUKS2 and key checks used at runtime.
     from lx_administration.storage import boot
 
     identities = {}
-    if unencrypted(plan):
-        verify_plain_root("/mnt")
     for mount, expected in plan["config"]["mounts"].items():
         if not mount.startswith("/") or ".." in Path(mount).parts:
             raise MigrationError("Unsafe evaluated mountpoint")
         path = "/mnt" + (mount if mount != "/" else "")
         if Path(path).resolve() != Path(path):
             raise MigrationError("A prepared target mount contains a symbolic link")
-        protected = mount in plan["config"].get("protected_mounts", [])
-        if (
-            unencrypted(plan)
-            and protected
-            and plan["config"].get("deferred_protected", False)
-            and mount not in {"/", "/boot"}
-            and "noauto" in expected["options"]
-            and not mount_present(path)
-        ):
-            continue  # An absent protected mount stays guarded at runtime.
         record = mount_record(path)
         source = record["source"].split("[", 1)[0]
         if expected["fsType"] == "tmpfs":
@@ -870,21 +796,18 @@ def verify_target(plan: dict, disks: set[int]) -> dict:
                 expected_device,
                 None if expected["fsType"] == "none" else expected["fsType"],
                 subvolume,
-                **({"encrypted": False} if unencrypted(plan) and not protected else {}),
             )
         if not device_disks(source) <= disks:
             raise MigrationError(
                 "A prepared mount uses a disk outside the operator selection"
             )
-        if record["fstype"] == "btrfs":
-            for member in (boot.BTRFS_SYSFS / record["uuid"] / "devices").glob("*/dev"):
-                if (
-                    not device_disks("/dev/block/" + member.read_text().strip())
-                    <= disks
-                ):
-                    raise MigrationError(
-                        "A Btrfs member is outside the selected target disks"
-                    )
+        if any(
+            not device_disks(member) <= disks
+            for member in filesystem_devices(record)
+        ):
+            raise MigrationError(
+                "A filesystem member is outside the selected target disks"
+            )
         identities[mount] = {
             "uuid": record["uuid"],
             "fsroot": record.get("fsroot"),
@@ -962,11 +885,7 @@ def verify_accounts(plan: dict, root: Path = Path("/mnt")) -> None:
             "Plan must contain an evaluated normal administrator account "
             "with sudo access and a password file"
         )
-    credential = (
-        target_private(admin["hash_file"], root, encrypted=False)
-        if unencrypted(plan)
-        else target_private(admin["hash_file"], root)
-    )
+    credential = target_private(admin["hash_file"], root)
     account_hash(credential)
     if not admin["keys"] or not all(
         isinstance(k, str) and "\n" not in k for k in admin["keys"]
@@ -1006,22 +925,8 @@ def prepare_access(state: Path, root: Path = Path("/mnt")) -> dict:
         from lx_administration.storage import boot
 
         root_config = plan["config"]["mounts"]["/"]
-        root_device = (
-            root_config["device"] if unencrypted(plan) else "/dev/mapper/cryptroot"
-        )
-        if unencrypted(plan):
-            verify_plain_root(str(root))
-            boot.verify_mount(
-                str(root),
-                root_device,
-                root_config["fsType"],
-                next(
-                    (o for o in root_config["options"] if o.startswith("subvol=")), None
-                ),
-                encrypted=False,
-            )
-        else:
-            boot.verify_mount(str(root), root_device, root_config["fsType"])
+        root_device = "/dev/mapper/cryptroot"
+        boot.verify_mount(str(root), root_device, root_config["fsType"])
         if not device_disks(root_device) <= disks:
             raise MigrationError("Prepared root is outside the selected disks")
         admin = plan["config"].get("admin")
@@ -1040,8 +945,7 @@ def prepare_access(state: Path, root: Path = Path("/mnt")) -> dict:
             parent = target.parent
             if parent.resolve() != parent:
                 raise MigrationError("Unsafe administrator credential directory")
-            if not unencrypted(plan):
-                encrypted_storage(parent)
+            encrypted_storage(parent)
             parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             fd = os.open(
                 target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600
@@ -1164,11 +1068,6 @@ def confirm(plan: dict) -> None:
             "unattended approval is not supported"
         )
     phrase = "INSTALL " + plan["spec"]["host"] + " " + plan["plan_id"][:12]
-    if unencrypted(plan):
-        phrase += " UNENCRYPTED"
-        print(
-            "Selected root encryption: NONE. Files on the OS disk are readable offline."
-        )
     print(
         "Install the reviewed system onto the prepared disks. Existing boot "
         "settings will change."

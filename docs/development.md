@@ -6,6 +6,32 @@ generation model, see [Autoconf and Local Inventory](./autoconf.md).
 
 ## Development environment commands
 
+LuxNix currently supports Python 3.12. The upper bound below 3.13 is deliberate
+while controller password hashing depends on Passlib's deprecated `crypt`
+compatibility. A maintained hashing-backend migration and installed-artifact
+tests are required before raising that bound; this change does not alter hashes.
+
+The base package contains storage-node runtime dependencies. Vault, Autoconf and
+playbook tooling use the `controller` extra (`uv sync --locked
+--no-default-groups --extra controller` for a controller-only environment).
+Use `uv sync --locked --no-default-groups` for the minimal runtime. The default
+`uv sync --locked` installs the `dev` group, which includes
+controller, test, documentation and lint tooling so existing contributor wrappers
+continue to work. `test`, `docs` and `profiling` are separate dependency groups;
+profiling tools are opt-in with `uv sync --locked --group profiling`. Ansible's full
+distribution is kept in the controller extra for its required collections;
+Ansible Core is a transitive dependency rather than a second direct declaration.
+
+Run `devenv tasks run python-quality:check` before submitting Python changes.
+`python-quality.yml` pins Ruff, scope and reviewed diagnostic fingerprints.
+The gate permits existing debt to decrease but rejects new diagnostics, even
+when another violation of the same rule was removed in the same file. After
+fixing debt, `uv run --locked python scripts/python-quality.py --ratchet` removes
+resolved fingerprints. It cannot add findings or raise the baseline. The initial
+baseline records the current working tree's debt; it is not a clean-lint claim.
+Prefer failure-path contract tests before consolidating operational helpers;
+do not merge their different lock, subprocess or storage semantics blindly.
+
 Enter the development shell with `devenv shell`. The `manage` wrapper provides
 the supported local modes and points deployment requests to the host-specific
 guide instead of guessing a target:

@@ -44,13 +44,13 @@ def test_inventory_group_and_role_names_use_exact_identity() -> None:
     assert not inventory.group_name_exists("active")
     assert not inventory.role_name_exists("ssl")
 
-    group = inventory.get_group_by_name("active", logger=Mock())
-    role = inventory.get_role_by_name("ssl", logger=Mock())
+    with pytest.raises(ValueError, match="Unknown inventory group 'active'"):
+        inventory.get_group_by_name("active", logger=Mock())
+    with pytest.raises(ValueError, match="Unknown inventory role 'ssl'"):
+        inventory.get_role_by_name("ssl", logger=Mock())
 
-    assert group.name == "active"
-    assert role.name == "ssl"
-    assert inventory.get_group_names() == ["active_clients", "active"]
-    assert inventory.get_role_names() == ["ssl_cert", "ssl"]
+    assert inventory.get_group_names() == ["active_clients"]
+    assert inventory.get_role_names() == ["ssl_cert"]
 
 
 def test_inventory_name_lookup_rejects_duplicate_exact_names() -> None:
@@ -198,3 +198,46 @@ def test_inventory_merge_rejects_invalid_membership_lists(
 
     with pytest.raises(ValueError, match=message):
         inventory.export_merged_host_vars("node-01")
+
+
+@pytest.mark.parametrize('membership,missing', [('ansible_groups', 'bas'), ('ansible_roles', 'servce')])
+@pytest.mark.parametrize('source', ['host', 'group', 'role'])
+def test_unknown_dependency_is_rejected_without_creating_definition(membership, missing, source):
+    from lx_administration.models.ansible.inventory import (
+        AnsibleInventoryGroup, AnsibleInventoryHost, AnsibleInventoryRole,
+    )
+    host = AnsibleInventoryHost(hostname='node-01', ansible_group_names=['base'],
+                                ansible_role_names=['service'])
+    group = AnsibleInventoryGroup(name='base')
+    role = AnsibleInventoryRole(name='service')
+    objects = {'host': host, 'group': group, 'role': role}
+    objects[source].vars[membership] = [missing]
+    inventory = AnsibleInventory(all=[host], groups=[group], roles=[role])
+    with pytest.raises(ValueError, match='Unknown inventory'):
+        inventory.export_merged_host_vars('node-01')
+    assert inventory.get_group_names() == ['base']
+    assert inventory.get_role_names() == ['service']
+
+
+def test_loading_explicit_group_and_role_sources_creates_definitions(tmp_path):
+    inventory_dir = tmp_path / 'inventory'
+    group_dir = inventory_dir / 'group_vars'
+    group_dir.mkdir(parents=True)
+    (group_dir / 'declared.yml').write_text('group_luxnix: {enabled: true}\n')
+    role_dir = inventory_dir / 'role_vars' / 'declared-role' / 'vars'
+    role_dir.mkdir(parents=True)
+    (role_dir / 'main.yml').write_text('role_luxnix: {enabled: true}\n')
+    inventory = AnsibleInventory()
+    inventory.load_group_vars(inventory_dir)
+    inventory.load_role_vars(inventory_dir)
+    assert inventory.get_group_by_name('declared').vars['group_luxnix']['enabled']
+    assert inventory.get_role_by_name('declared-role').vars['role_luxnix']['enabled']
+
+
+def test_inventory_without_all_header_loads_implicit_all_group(tmp_path):
+    hosts = tmp_path / 'inventory' / 'hosts.ini'
+    hosts.parent.mkdir()
+    hosts.write_text('[clients]\nnode-01 ansible_host=10.20.30.4\n')
+    inventory = AnsibleInventory.load_from_hosts_ini(hosts, subnet='10.20.30.')
+    assert inventory.get_group_by_name('all').name == 'all'
+    assert inventory.export_merged_host_vars('node-01')['group_luxnix']

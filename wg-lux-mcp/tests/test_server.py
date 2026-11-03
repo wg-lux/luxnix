@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import subprocess
 import json
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -338,7 +338,9 @@ def test_all_requested_capabilities(repository: Path) -> None:
 
             feature_list = await client.call_tool("list_features", {"provider": "lx-annotate"})
             assert feature_list.structured_content is not None
-            assert feature_list.structured_content["result"][0]["feature"]["id"] == "example_feature"
+            assert (
+                feature_list.structured_content["result"][0]["feature"]["id"] == "example_feature"
+            )
 
             feature = await client.call_tool(
                 "get_feature", {"provider": "lx-annotate", "feature_id": "example_feature"}
@@ -453,3 +455,145 @@ def test_rejects_unsafe_or_invalid_inputs(repository: Path, tmp_path: Path) -> N
             assert_tool_error(unsupported_tracker, "unknown deployed feature provider")
 
     anyio.run(run)
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        ".env",
+        ".env.production",
+        ".git/config",
+        "private/settings.py",
+        "secrets/config.yml",
+        "credentials.json",
+        "identity.key",
+    ],
+)
+def test_repository_allowlist_does_not_allow_sensitive_files(repository: Path, name: str):
+    from wg_lux_mcp.repo import RepositoryError
+    from wg_lux_mcp.tools.repos import read_text_file
+    from wg_lux_mcp.tools.search import search_code
+
+    target = repository / name
+    if not name.startswith(".git/"):
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("private_audit_marker", encoding="utf-8")
+        git(repository, "add", name)
+        git(repository, "commit", "-m", "Sensitive path policy fixture")
+    with pytest.raises(RepositoryError, match="Sensitive"):
+        read_text_file("lx-annotate", name)
+    assert search_code("lx-annotate", "private_audit_marker")["matches"] == []
+
+
+def test_content_uses_commit_not_dirty_index_or_local_files(repository: Path):
+    from wg_lux_mcp.tools.repos import get_pyproject, inspect_django_migrations, read_text_file
+    from wg_lux_mcp.tools.search import find_symbol, get_related_tests, search_code
+
+    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repository, text=True).strip()
+    (repository / "README.md").write_text("dirty_only_marker\n")
+    (repository / "example/models.py").write_text("def dirty_only_symbol(): pass\n")
+    (repository / "pyproject.toml").write_text('[project]\nname="dirty_only_marker"\n')
+    (repository / "tests/test_models.py").write_text("dirty_only_marker\n")
+    (repository / "demo_app/migrations/0002_dirty.py").write_text("dirty_only_marker")
+    (repository / "untracked.txt").write_text("private_audit_marker")
+    git(repository, "add", "example/models.py")
+    text = read_text_file("lx-annotate", "README.md")
+    assert text["text"] == "hello\n" and text["commit"] == head
+    assert len(text["blob"]) == 40
+    with pytest.raises(FileNotFoundError, match="selected commit"):
+        read_text_file("lx-annotate", "untracked.txt")
+    assert "example" in get_pyproject("lx-annotate")["text"]
+    assert inspect_django_migrations("lx-annotate", "demo_app") == [
+        "demo_app/migrations/0001_initial.py"
+    ]
+    assert search_code("lx-annotate", "dirty_only_marker")["matches"] == []
+    assert find_symbol("lx-annotate", "dirty_only_symbol")["matches"] == []
+    assert find_symbol("lx-annotate", "PatientExamination")["matches"]
+    related = get_related_tests("lx-annotate", "example/models.py")["matches"][0]
+    assert related["sources"][0]["commit"] == head
+    assert len(related["sources"][0]["blob"]) == 40
+
+
+def test_committed_and_worktree_symlinks_cannot_read_private_content(
+    repository: Path, tmp_path: Path
+):
+    from wg_lux_mcp.tools.repos import read_text_file
+
+    outside = tmp_path / "private.txt"
+    outside.write_text("outside_private_marker")
+    (repository / "link.md").symlink_to(outside)
+    git(repository, "add", "link.md")
+    git(repository, "commit", "-m", "Symlink fixture")
+    with pytest.raises(FileNotFoundError, match="public regular file"):
+        read_text_file("lx-annotate", "link.md")
+    (repository / "README.md").unlink()
+    (repository / "README.md").symlink_to(outside)
+    assert read_text_file("lx-annotate", "README.md")["text"] == "hello\n"
+
+
+def test_enumeration_is_independent_of_response_limit_and_never_partial(
+    repository: Path, monkeypatch
+):
+    from wg_lux_mcp import repo as boundary
+    from wg_lux_mcp.tools.search import search_code
+
+    for number in range(70):
+        (repository / f"component_{number:03}_long_filename.py").write_text("ordinary = 1\n")
+    (repository / "zzz_last_file.py").write_text("enumeration_end_marker = 1\n")
+    git(repository, "add", ".")
+    git(repository, "commit", "-m", "Large filename list")
+    monkeypatch.setattr(settings, "max_output_chars", 64)
+    matches = search_code("lx-annotate", "enumeration_end_marker")["matches"]
+    assert matches[0]["sources"][0]["path"] == "zzz_last_file.py"
+    monkeypatch.setattr(boundary, "MAX_TREE_BYTES", 100)
+    with pytest.raises(boundary.RepositoryError, match="no partial result"):
+        search_code("lx-annotate", "enumeration_end_marker")
+
+
+def test_git_response_overflow_is_explicit(repository: Path, monkeypatch):
+    from wg_lux_mcp.repo import RepositoryError, run_readonly
+
+    monkeypatch.setattr(settings, "max_output_chars", 10)
+    with pytest.raises(RepositoryError, match="limit"):
+        run_readonly(repository, ["git", "log", "--format=%H"])
+
+
+def test_large_file_read_is_bounded_before_loading(repository: Path, monkeypatch):
+    from wg_lux_mcp import repo as boundary
+    from wg_lux_mcp.tools import repos, search
+
+    data = "€" * 700_000
+    (repository / "large.md").write_text(data, encoding="utf-8")
+    git(repository, "add", "large.md")
+    git(repository, "commit", "-m", "Large blob fixture")
+    calls = []
+    original = repos.read_blob
+
+    def bounded(root, file, max_bytes, **kwargs):
+        result = original(root, file, max_bytes, **kwargs)
+        calls.append((max_bytes, len(result)))
+        return result
+
+    monkeypatch.setattr(repos, "read_blob", bounded)
+    result = repos.read_text_file("lx-annotate", "large.md", max_chars=9)
+    assert result["text"] == "€" * 9 and result["truncated"]
+    assert calls == [(40, 40)]
+    result = search.search_code("lx-annotate", "large_marker")
+    assert result["skipped_large_files"] == 1
+    # Read requests never need a complete tree or a complete file in memory.
+    assert boundary.MAX_TREE_BYTES > 40
+
+
+def test_unusual_filename_is_enumerated_without_splitting(repository: Path):
+    from wg_lux_mcp.tools.repos import read_text_file
+    from wg_lux_mcp.tools.search import search_code
+
+    name = "line\nbreak.py"
+    (repository / name).write_text("unusual_filename_marker = 1\n")
+    git(repository, "add", name)
+    git(repository, "commit", "-m", "NUL-delimited filename fixture")
+    assert read_text_file("lx-annotate", name)["text"].startswith("unusual_filename_marker")
+    assert (
+        search_code("lx-annotate", "unusual_filename_marker")["matches"][0]["sources"][0]["path"]
+        == name
+    )

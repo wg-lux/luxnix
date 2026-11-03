@@ -220,13 +220,14 @@ commands:
     summary: Encrypt and authenticate existing migration snapshots on a mounted backup filesystem.
     risk: sensitive-remote-state
     operator_confirmation_required: true
-    usage: devenv shell storage-migration-backup --host <gc-09-or-gc-10> --snapshot-id <id> --destination <mountpoint> --identity <dedicated-age-identity> --custodian-identity <independent-age-identity> --sudo-password-file <private-file>
+    usage: devenv shell storage-migration-backup --host <policy-host> --snapshot-id <id> --destination <mountpoint> --identity <dedicated-age-identity> --custodian-identity <independent-age-identity> --sudo-password-file <private-file> [--recover-existing]
     implementation: lx_administration/storage/migration_backup.py
     documentation: docs/boot-storage-migration.md
     effects:
       - Reads immutable snapshots over pinned SSH and writes only age ciphertext to the backup filesystem.
       - Uses dedicated controller and independent custodian age identities, never a login SSH key for new archives.
       - Authenticates every complete archive with both identities before publication; incomplete artifacts are retained as partial files.
+      - Binds receipts to the full snapshot plan and recipient set; explicit orphan recovery compares both decryptions with a fresh current source stream.
       - Does not establish application restore acceptance or independent recovery-key custody.
 
   - id: storage-readiness
@@ -243,7 +244,7 @@ commands:
       - Successful baseline admission does not approve installation, recovery custody or backup restore.
 
   - id: boot-storage-migration
-    summary: Plan, record reviewed evidence and install an explicitly selected encrypted or unencrypted-root target.
+    summary: Plan, record reviewed evidence and install the selected LUKS2 encrypted-root target.
     risk: destructive-local
     operator_confirmation_required: true
     usage: devenv shell boot-storage-migration <plan|status|attest|check|prepare-access|install> [arguments...]
@@ -257,7 +258,7 @@ commands:
       - Prepare-access restores only a missing admin hash from its valid restored source and creates the dedicated early-boot SSH identity once; never replaces existing credentials.
       - Install invokes only nixos-install for the pinned closure; never formats, generates volume keys, restores application data or reboots.
       - Interrupted installation blocks retry until separately reviewed recovery evidence; no automatic destructive rollback.
-      - Unencrypted root requires matching explicit host and plan selections plus typed UNENCRYPTED confirmation; encrypted defaults and protected service guards remain.
+      - New installation requires root_encryption luks2 and boot-luks; plain-root installation is retired.
       - Fresh installation on verified empty new disks requires recovery and preparation evidence without fictitious source-backup assessments.
 
   - id: storage-recovery-custody
@@ -346,7 +347,7 @@ commands:
     summary: Legacy migration only; escrow old container recovery credentials. Container provisioning rejects boot-luks hosts.
     risk: sensitive-remote-state
     operator_confirmation_required: true
-    usage: devenv shell storage-provision <escrow|provision> --host <host> --volume <volume> [--recovery-host <host> | --controller-only-custody] [--backend passphrase|tpm2|local-openbao] [--local-target] [--apply]
+    usage: devenv shell storage-provision <escrow|provision> --host <host> --volume <volume> [--recovery-host <host> | --controller-only-custody] [--backend passphrase] [--local-target] [--apply]
     effects:
       - Controller-only custody is an explicit escrow-only option; provisioning still requires independent recovery.
       - The explicit local-target option requires the inventory host to match the local hostname; recovery remains remote and privileged target commands still require sudo.
@@ -358,39 +359,38 @@ commands:
     summary: Interactive, resumable guide that checks every storage-provision prerequisite and applies only after typed confirmation.
     risk: sensitive-remote-state
     operator_confirmation_required: true
-    usage: devenv shell storage-provision-setup [--host <host>] [--volume <volume>] [--recovery-host <host>] [--backend passphrase|tpm2|local-openbao] [--sudo-password-file <private-file>]
+    usage: devenv shell storage-provision-setup [--host <host>] [--volume <volume>] [--recovery-host <host>] [--backend passphrase] [--sudo-password-file <private-file>]
     implementation: lx_administration/storage/provision_setup.py
     documentation: docs/operator-unlocked-storage.md
     effects:
-      - Lists only inventory hosts with legacy-container layouts and declared container volumes; boot-luks hosts are refused.
+      - Limits selection to gc-09/gc-10 legacy-container migration; plain-root and boot-luks targets are refused.
       - Read-only checks first; connectivity, target sudo, encrypted admin vault and the controller preview, which must match the choices.
       - Applies only through storage-provision provision --apply after the operator types the host name; never formats existing data, deletes or reboots.
       - Stores non-secret answers and completion receipts privately under the XDG state directory; repeat runs re-verify and resume.
 
   - id: openbao-local
-    summary: Show status of, enroll, adopt volumes into, or rotate the unlock AppRole credential of host-local OpenBao; escrow precedes every dependent step.
+    summary: Retained OpenBao disk-recovery status and unlock credential rotation; new enrollment is retired.
     risk: sensitive-remote-state
     operator_confirmation_required: true
-    usage: >-
-      devenv shell openbao-local <status|enroll|adopt|rotate-unlock|rollout>
-      --limit <host-or-group> [--volume <volume>] [--recovery-host <host>] [--apply] [--cutover]
-      [--controller-only-custody] [--generate-boot-passphrase]
+    usage: devenv shell openbao-local <status|rotate-unlock> --limit <host-or-group> [--recovery-host <host>] [--apply]
     implementation: lx_administration/storage/local_enrollment.py
     documentation: docs/openbao-local.md
     effects:
-      - Without --apply, read-only status and escrow-file presence; adopt also reports keyslot plans and rollout checks deployment prerequisites. Status is not successful preflight or recovery verification.
-      - enroll writes credentials for the configured TPM or passphrase seal under /var/lib/openbao-bootstrap and initializes a missing local store once.
-      - Passphrase enrollment asks for a new passphrase only on first setup; repeat enrollment verifies the existing passphrase and never replaces the seal record.
-      - rotate-unlock replaces the unlock AppRole SecretID, not the boot passphrase, static seal key or LUKS passphrases. Passphrase reset is not implemented.
-      - adopt adds one OpenBao keyslot and removes systemd-tpm2 tokens; recovery keyslots, data and LUKS UUIDs are preserved.
-      - Escrow records go to the admin vault and the separate --recovery-host; existing records are never replaced.
-      - Explicit enroll-only --controller-only-custody defers the independent copy; --generate-boot-passphrase saves a random password encrypted in the same vault before use and reuses it on retry.
-      - rollout enrolls, provisions missing volumes or adopts existing ones, then starts encrypted pre-copy; --cutover explicitly stops writers for final
-        verification and bind activation.
+      - Read-only legacy enrollment/adoption/rollout previews remain inspectable; their apply actions are rejected before remote calls.
+      - rotate-unlock replaces the unlock AppRole SecretID, not the boot passphrase, seal key or LUKS passphrases.
+      - Original escrow, recovery keyslots and data remain until physical migration and named acceptance.
 
 # Tasks are listed separately because they are invoked through `devenv tasks`
 # rather than the shell-wrapper namespace above.
 tasks:
+  - id: python-quality:check
+    summary: Reject new Python diagnostics while allowing reviewed debt to decrease.
+    risk: read-only
+    operator_confirmation_required: false
+    usage: devenv tasks run python-quality:check
+    implementation: scripts/python-quality.py
+    policy: python-quality.yml
+    documentation: docs/development.md
   - id: tests:operator-storage-migration-vm
     summary: Verify encrypted pre-copy, final cutover and receipt reuse after reboot.
     risk: local-state
@@ -618,7 +618,6 @@ native_commands:
     risk: remote-state
     operator_confirmation_required: true
     usage: sudo nixos-rebuild switch --flake '<checkout>#<host>'
-    gc10_install: sudo nixos-rebuild switch --flake /home/admin/luxnix#gc-10 --accept-flake-config
     execution_context: Run on the selected host; the checkout must contain the reviewed compatible application version.
     verification:
       - Require exit status zero and matching /run/current-system and /nix/var/nix/profiles/system targets.

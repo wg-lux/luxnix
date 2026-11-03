@@ -103,13 +103,11 @@ def test_lx_annotate_scripts_export_protected_storage_contract():
     assert 'DJANGO_DJANGO_DB_PASSWORD="$DJANGO_DB_PASSWORD"' in config_source
     assert "PIP_CACHE_DIR" in config_source
     assert "pip-cache" in config_source
-    assert "install --upgrade $pip_install_args" in config_source
+    assert "install --upgrade --force-reinstall $pip_install_args" in config_source
     assert "wheelDependencyOverrides = mkOption" in options_source
-    assert (
-        "install --upgrade --no-deps $pip_install_args $wheel_dependency_overrides"
-        in config_source
-    )
-    assert 'install --force-reinstall --no-deps "$staged_wheel_path"' in config_source
+    assert '--require-hashes --only-binary=:all:' in config_source
+    assert '--requirement "$wheelhouse_path/requirements.txt"' in config_source
+    assert '--constraint "$application_constraints"' in config_source
     assert "--no-cache-dir" not in config_source
     assert "package = effectiveRuntimePackage;" in config_source
     assert "make_entrypoint lx-annotate-web lx-annotate-web 1" in config_source
@@ -161,7 +159,8 @@ def test_lx_annotate_scripts_export_protected_storage_contract():
     )
     assert "LX_RUNTIME_ROOT = envDataDir;" in helper_source
     assert "commonExtraEnv =" in config_source
-    assert "// lib.optionalAttrs cfg.hub.transferApi.enable {" in config_source
+    assert "commonExtraEnv = commonEnv;" in config_source
+    assert 'writeTextDir "sitecustomize.py"' not in config_source
     assert (
         'DJANGO_SECRET_KEY_FILE = "${envConfDir}/django_secret_key";'
         in helper_source

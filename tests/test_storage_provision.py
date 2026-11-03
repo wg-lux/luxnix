@@ -1,5 +1,6 @@
 """Recovery custody uses real Ansible encryption and disposable synthetic data."""
 import json
+import os
 from pathlib import Path
 import secrets
 import subprocess
@@ -72,14 +73,15 @@ def test_provision_cannot_defer_independent_recovery(extra):
     assert exc.value.code == 2
 
 
-def test_emergency_publisher_repeats_but_never_overwrites(custody, tmp_path):
+@pytest.mark.parametrize('optimization', [[], ['-O']])
+def test_emergency_publisher_repeats_but_never_overwrites(custody, tmp_path, optimization):
     vault, key, record = custody
     ciphertext = secret._encrypt_bytes(json.dumps(record).encode(), key, secret.MASTER_VAULT_ID)
     export_home = tmp_path / 'separate-host'
     export_home.mkdir()
     # Execute the production publisher with only its home directory substituted.
     program = provision.EXPORT.replace('Path.home()', 'Path(' + repr(str(export_home)) + ')')
-    command = [sys.executable, '-c', program, record['machine_id'], record['luks_uuid']]
+    command = [sys.executable, *optimization, '-c', program, record['machine_id'], record['luks_uuid']]
     for _ in range(3):
         result = subprocess.run(command, input=ciphertext, capture_output=True)
         assert result.returncode == 0, result.stderr
@@ -92,7 +94,65 @@ def test_emergency_publisher_repeats_but_never_overwrites(custody, tmp_path):
     assert subprocess.run(command, input=b'plaintext', capture_output=True).returncode != 0
 
 
-@pytest.fixture(params=["legacy-containers", "unencrypted-root"])
+@pytest.mark.parametrize('optimization', [[], ['-O']])
+@pytest.mark.parametrize('kind', ['volume', 'openbao-local'])
+@pytest.mark.parametrize('fault', ['identity', 'ciphertext', 'directory-symlink',
+                                  'directory-mode', 'lock-symlink', 'lock-fifo',
+                                  'target-symlink', 'target-fifo', 'target-mode',
+                                  'target-hardlink'])
+def test_shared_recovery_publisher_rejects_unsafe_exports(
+    custody, tmp_path, optimization, kind, fault
+):
+    from lx_administration.storage.recovery_export import export_script
+    _, key, record = custody
+    ciphertext = secret._encrypt_bytes(b'{}', key, secret.MASTER_VAULT_ID)
+    home = tmp_path / 'recovery-host'
+    home.mkdir()
+    root = home / '.luxnix-recovery'
+    root.mkdir(mode=0o700)
+    owner, identifier = ((record['machine_id'], record['luks_uuid']) if kind == 'volume'
+                         else ('gc-10', 'seal-key'))
+    parent = root / owner if kind == 'volume' else root / kind / owner
+    parent.mkdir(mode=0o700, parents=True)
+    # parents=True uses default permissions for intermediate directories.
+    if kind == 'openbao-local':
+        parent.parent.chmod(0o700)
+    target = parent / (identifier + '.vault')
+    outside = tmp_path / 'untouched'
+    outside.write_bytes(b'preserved')
+    outside.chmod(0o600)
+    if fault == 'identity':
+        owner = '../escape'
+    elif fault == 'ciphertext':
+        ciphertext = b'$ANSIBLE_VAULT;1.2;AES256;luxnix-master\nplaintext\n'
+    elif fault == 'directory-symlink':
+        parent.rmdir()
+        parent.symlink_to(tmp_path, target_is_directory=True)
+    elif fault == 'directory-mode':
+        parent.chmod(0o755)
+    elif fault == 'lock-symlink':
+        (root / '.lock').symlink_to(outside)
+    elif fault == 'lock-fifo':
+        os.mkfifo(root / '.lock', mode=0o600)
+    elif fault == 'target-symlink':
+        target.symlink_to(outside)
+    elif fault == 'target-fifo':
+        os.mkfifo(target, mode=0o600)
+    elif fault == 'target-mode':
+        target.write_bytes(ciphertext)
+        target.chmod(0o644)
+    elif fault == 'target-hardlink':
+        os.link(outside, target)
+    program = export_script(kind).replace('Path.home()', 'Path(' + repr(str(home)) + ')')
+    result = subprocess.run([sys.executable, *optimization, '-c', program, owner, identifier],
+                            input=ciphertext, capture_output=True, timeout=5)
+    assert result.returncode != 0
+    assert result.stdout == b''
+    assert outside.read_bytes() == b'preserved'
+    assert not list(parent.glob('.recovery-*'))
+
+
+@pytest.fixture(params=["legacy-containers"])
 def controller(custody, monkeypatch, request):
     vault, key, _ = custody
     vault.mkdir(mode=0o700)
@@ -108,7 +168,7 @@ def controller(custody, monkeypatch, request):
                              inventory_subnet='test')
     inventory = SimpleNamespace(get_host_by_name=lambda name: (
         SimpleNamespace(ansible_host=name)
-        if name in ('test-host', 'recovery-host') else None))
+        if name in ('gc-10', 'recovery-host') else None))
     monkeypatch.setattr(provision, 'AutoconfConfig',
                         SimpleNamespace(load=lambda _: config))
     monkeypatch.setattr(provision, 'AnsibleInventory',
@@ -117,7 +177,7 @@ def controller(custody, monkeypatch, request):
     monkeypatch.setattr(provision, 'Vault', SimpleNamespace(load_dir=lambda *args:
         SimpleNamespace(validate_local_key=lambda:
                         state.events.append('vault-authenticated'))))
-    monkeypatch.setattr(provision.socket, 'gethostname', lambda: 'test-host')
+    monkeypatch.setattr(provision.socket, 'gethostname', lambda: 'gc-10')
 
     def target_call(args, data=b'', privileged=False):
         if args[0] == 'sh':
@@ -179,7 +239,7 @@ def controller(custody, monkeypatch, request):
             state.connections.append(name)
 
         def machine_id(self):
-            return (state.machine_id if self.name == 'test-host'
+            return (state.machine_id if self.name == 'gc-10'
                     else state.recovery_machine_id)
 
         def call(self, args, data=b'', privileged=False):
@@ -194,7 +254,7 @@ def controller(custody, monkeypatch, request):
             return target_call(args, data, privileged)
 
     monkeypatch.setattr(provision, 'Remote', Remote)
-    args = ['provision', '--host', 'test-host', '--volume', 'test-volume',
+    args = ['provision', '--host', 'gc-10', '--volume', 'test-volume',
             '--recovery-host', 'recovery-host', '--vault-dir', str(vault),
             '--vault-key', str(key)]
     return args, state, vault, key
@@ -216,7 +276,7 @@ def test_passphrase_provision_preview_reports_backend_without_custody_or_host_wr
         assert not any(command[0] == 'sudo' for command in state.local_calls)
     else:
         assert 'local_target' not in plan
-        assert state.connections == ['test-host', 'recovery-host']
+        assert state.connections == ['gc-10', 'recovery-host']
         assert state.local_calls == []
     assert state.requests == state.exports == state.events == []
     assert not (vault / 'storage-recovery').exists()
@@ -242,7 +302,7 @@ def test_passphrase_controller_verifies_both_escrows_then_provisions_same_identi
     assert 'backend' not in record
     assert 'local_target' not in record
     assert state.connections == (['recovery-host'] if local else
-                                 ['test-host', 'recovery-host']) * 2
+                                 ['gc-10', 'recovery-host']) * 2
     assert record['recovery_passphrase'] not in capsys.readouterr().out
 
 
@@ -283,7 +343,7 @@ def test_controller_rejects_passphrase_policy_override_before_escrow(
 def local_process(monkeypatch):
     state = SimpleNamespace(calls=[], sudo_required=False, returncode=0,
                             stdout=b'public output', stderr=b'')
-    monkeypatch.setattr(provision.socket, 'gethostname', lambda: 'test-host')
+    monkeypatch.setattr(provision.socket, 'gethostname', lambda: 'gc-10')
     def run(args, **kwargs):
         state.calls.append((args, kwargs))
         if args == ['sudo', '-n', 'true']:
@@ -298,7 +358,7 @@ def local_process(monkeypatch):
 def test_local_argv_stdin_and_remote_ssh_quoting_remain_distinct(local_process):
     args = ['printf', '%s', 'literal space', '$(must-not-run)']
     data = b'synthetic stdin payload'
-    assert provision.Local('test-host').call(args, data) == b'public output'
+    assert provision.Local('gc-10').call(args, data) == b'public output'
     local_args, options = local_process.calls[-1]
     assert local_args == args
     assert options['input'] == data
@@ -319,7 +379,7 @@ def test_local_privileged_calls_send_only_payload_after_authenticated_stream(loc
         def communicate(self, data, timeout):
             sent.append(data)
             return b'public output', b''
-    target = provision.Local('test-host')
+    target = provision.Local('gc-10')
     calls = []
     def ready(args):
         calls.append(args)
@@ -337,7 +397,7 @@ def test_local_failure_redacts_subprocess_input_and_diagnostics(local_process):
     local_process.returncode = 1
     local_process.stderr = b'failure involving synthetic-secret-content'
     with pytest.raises(provision.ProvisionError) as exc:
-        provision.Local('test-host').call(['test-command'],
+        provision.Local('gc-10').call(['test-command'],
                                            b'synthetic-secret-content')
     assert 'synthetic-secret-content' not in str(exc.value)
     assert 'exit 1' in str(exc.value)
@@ -345,14 +405,14 @@ def test_local_failure_redacts_subprocess_input_and_diagnostics(local_process):
 
 def test_local_target_requires_exact_os_hostname_before_execution(local_process):
     with pytest.raises(provision.ProvisionError):
-        provision.Local('test-host.example')
+        provision.Local('gc-10.example')
     assert local_process.calls == []
 
 
 def test_local_machine_identity_requires_valid_machine_id(local_process):
     local_process.stdout = b'invalid-machine-id\n'
     with pytest.raises(provision.ProvisionError, match='machine identity'):
-        provision.Local('test-host').machine_id()
+        provision.Local('gc-10').machine_id()
     assert [args for args, _ in local_process.calls] == [['cat', '/etc/machine-id']]
 
 
@@ -381,3 +441,22 @@ def test_boot_luks_rejects_container_creation_before_connections(controller):
         provision.main([*args, '--apply'])
     assert state.connections == []
     assert state.requests == []
+
+
+@pytest.mark.parametrize("host,layout,backend", [
+    ("gc-02", "legacy-containers", None),
+    ("gc-10", "unencrypted-root", None),
+    ("gc-10", "legacy-containers", "tpm2"),
+    ("gc-10", "legacy-containers", "local-openbao"),
+])
+def test_retired_container_enrollment_fails_before_connections(
+    controller, host, layout, backend
+):
+    args, state, _, _ = controller
+    args[args.index("--host") + 1] = host
+    state.layout = layout
+    if backend:
+        args += ["--backend", backend]
+    with pytest.raises(provision.ProvisionError, match="retired"):
+        provision.main(args + ["--apply"])
+    assert state.connections == state.requests == state.events == []

@@ -133,21 +133,17 @@ def test_constraints_publish_exact_local_versions_atomically(
     assert list(tmp_path.iterdir()) == [target]
 
 
-def test_installs_use_separate_validated_constraints() -> None:
+def test_install_uses_one_admitted_hashed_closure() -> None:
     source = (MODULE_ROOT / "config.nix").read_text()
     guard_position = source.index("${wheelDowngradeGuard}/guard.py")
-    installs = [
-        line
-        for line in source.splitlines()
-        if '/bin/pip"}' in line and " install " in line
-    ]
-    assert len(installs) == 3
-    assert all(source.index(line) > guard_position for line in installs)
-    assert all(
-        '--constraint "$application_constraints"' in line for line in installs[:2]
-    )
-    assert '--constraint "$override_constraints"' in installs[2]
-    assert "--force-reinstall" in installs[2]
+    installs = [line for line in source.splitlines()
+                if '/bin/pip"}' in line and " install " in line]
+    assert len(installs) == 1
+    assert source.index(installs[0]) > guard_position
+    install = source[source.index(installs[0]):].split("\n\n", 1)[0]
+    assert '--require-hashes --only-binary=:all:' in install
+    assert '--requirement "$wheelhouse_path/requirements.txt"' in install
+    assert '--constraint "$application_constraints"' in install
 
 
 def test_schema_compatibility_precedes_migration_and_legacy_repair() -> None:
@@ -297,7 +293,7 @@ def test_check_only_does_not_write_constraints(
     assert list(tmp_path.iterdir()) == []
 
 
-def test_online_preparation_waits_for_network_and_offline_does_not() -> None:
+def test_locked_preparation_and_custom_wheelhouse_do_not_need_network() -> None:
     rendered = eval_json("""
       let
         f = builtins.getFlake "__LUXNIX_FLAKE_URI__";
@@ -313,22 +309,24 @@ def test_online_preparation_waits_for_network_and_offline_does_not() -> None:
         onlineWants = c.systemd.services.lx-annotate-wheel-runtime.wants;
         offlineAfter = offline.systemd.services.lx-annotate-wheel-runtime.after;
         requires = c.systemd.services.lx-annotate-wheel-runtime.requires;
-        activationCheck = c.system.preSwitchChecks.lxAnnotatePersistentActivation;
+        activationCompatibility = builtins.fromJSON
+          c.environment.etc."luxnix/activation-compatibility.json".text;
       }
     """)
-    assert "network-online.target" in rendered["onlineAfter"]
-    assert "network-online.target" in rendered["onlineWants"]
+    assert "network-online.target" not in rendered["onlineAfter"]
+    assert "network-online.target" not in rendered["onlineWants"]
     assert "network-online.target" not in rendered["offlineAfter"]
     assert "lx-annotate-runtime-env.service" in rendered["requires"]
-    for action in ("test", "switch", "boot", "dry-activate"):
-        result = subprocess.run(
-            ["bash", "-euo", "pipefail", "-c", rendered["activationCheck"],
-             "_", "/incoming-system", action],
-            capture_output=True, text=True,
-        )
-        assert result.returncode == (1 if action == "test" else 0), result.stderr
-        if action == "test":
-            assert "nixos-rebuild switch" in result.stderr
+    # Acknowledged activation now binds rollback to the evaluated stateful footprint.
+    # Failure/acknowledgement behavior is exercised by tests/test_activation.py.
+    assert rendered["activationCompatibility"]["version"] == 1
+    assert set(rendered["activationCompatibility"]) == {
+        "version",
+        "activation",
+        "units",
+        "etc",
+        "filesystems",
+    }
 
 
 @pytest.mark.parametrize("persisted", ["active", "older", None])
@@ -337,7 +335,10 @@ def test_managed_deployment_detects_unpersisted_activation(tmp_path: Path, persi
         (REPO_ROOT / "ansible/roles/managed/handlers/main.yml").read_text()
     )
     deploy = next(item for item in handlers if item["name"] == "Run nho")
-    assert "sudo nixos-rebuild switch --flake" in deploy["ansible.builtin.expect"]["command"]
+    assert (
+        "sudo nixos-rebuild switch --flake"
+        in deploy["ansible.builtin.expect"]["command"]
+    )
     check = next(item for item in handlers if item.get("listen") == "Run nho")
     active = tmp_path / "active"
     active.mkdir()
@@ -346,8 +347,41 @@ def test_managed_deployment_detects_unpersisted_activation(tmp_path: Path, persi
     profile = tmp_path / "system"
     if persisted is not None:
         profile.symlink_to(tmp_path / persisted)
-    script = check["ansible.builtin.shell"].replace(
-        "/run/current-system", str(active)
-    ).replace("/nix/var/nix/profiles/system", str(profile))
+    script = (
+        check["ansible.builtin.shell"]
+        .replace("/run/current-system", str(active))
+        .replace("/nix/var/nix/profiles/system", str(profile))
+    )
     result = subprocess.run(["sh", "-c", script], capture_output=True, text=True)
     assert (result.returncode == 0) == (persisted == "active")
+
+
+def test_transitive_candidates_are_retained_in_constraints():
+    assert guard.validate_report(report("celery", "5.6.0"), {}) == {
+        "celery": guard.Version("5.6.0")
+    }
+
+
+@pytest.mark.parametrize("damage", [None, "hash", "version", "unhashed", "duplicate"])
+def test_hashed_closure_binds_exact_application_bytes(tmp_path, damage):
+    import hashlib
+
+    wheel = tmp_path / "selected.whl"
+    wheel.write_bytes(b"synthetic-wheel-bytes")
+    digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
+    line = f"lx_annotate==1.7.2 --hash=sha256:{digest}"
+    if damage == "hash":
+        line = line.replace(digest, "0" * 64)
+    elif damage == "version":
+        line = line.replace("1.7.2", "1.7.1")
+    elif damage == "unhashed":
+        line = "lx_annotate==1.7.2"
+    elif damage == "duplicate":
+        line += "\n" + line
+    requirements = tmp_path / "requirements.txt"
+    requirements.write_text(line + "\n")
+    if damage:
+        with pytest.raises(ValueError):
+            guard.validate_requirements(requirements, wheel, "1.7.2")
+    else:
+        guard.validate_requirements(requirements, wheel, "1.7.2")

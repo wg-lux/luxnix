@@ -75,11 +75,11 @@ def applied(env):
     return [argv for kind, argv in env.calls if kind == 'controller' and '--apply' in argv]
 
 
-@pytest.mark.parametrize("layout", ["legacy-containers", "unencrypted-root"])
+@pytest.mark.parametrize("layout", ["legacy-containers"])
 def test_guided_apply_uses_exact_controller_arguments_and_saves_private_state(tmp_path, layout):
     env = FakeEnv(storage=dict(STORAGE, layout=layout))
-    # host, backend (default), typed confirmation; gs-01 is the only valid recovery host
-    result, _ = go(env, ['gc-10', '', 'gc-10'], tmp_path)
+    # Typed confirmation; gs-01 is the only valid recovery host
+    result, _ = go(env, ['gc-10'], tmp_path)
     assert result['escrow_verified']
     assert applied(env) == [['provision', '--host', 'gc-10', '--volume', 'app', '--recovery-host',
                              'gs-01', '--backend', 'passphrase', '--apply']]
@@ -94,7 +94,7 @@ def test_guided_apply_uses_exact_controller_arguments_and_saves_private_state(tm
 def test_wrong_confirmation_never_applies(tmp_path):
     env = FakeEnv()
     with pytest.raises(setup.SetupStopped, match='Not confirmed'):
-        go(env, ['gc-10', '', 'gc-1'], tmp_path)
+        go(env, ['gc-1'], tmp_path)
     assert applied(env) == []
 
 
@@ -107,13 +107,14 @@ def test_interrupted_apply_preserves_resume_state_and_reports_possible_changes(t
         return original(argv)
     env.controller = interrupt
     with pytest.raises(setup.SetupStopped, match='may have created recovery copies'):
-        go(env, ['gc-10', '', 'gc-10'], tmp_path)
+        go(env, ['gc-10'], tmp_path)
     saved = json.loads((tmp_path / 'state/gc-10--app.json').read_text())
     assert saved['apply_started'] and not saved['completed']
 
 
-def test_boot_luks_hosts_are_refused_before_any_connection(tmp_path):
-    env = FakeEnv(storage=dict(STORAGE, layout='boot-luks'))
+@pytest.mark.parametrize("layout", ["boot-luks", "unencrypted-root"])
+def test_retired_targets_are_refused_before_any_connection(tmp_path, layout):
+    env = FakeEnv(storage=dict(STORAGE, layout=layout))
     with pytest.raises(setup.SetupStopped, match='boot-storage-migration'):
         go(env, ['gc-10'], tmp_path)
     assert env.calls == []
@@ -135,22 +136,22 @@ def test_preview_mismatch_stops(tmp_path):
     original = env.controller
     env.controller = lambda argv: dict(original(argv), container='/other.luks')
     with pytest.raises(setup.SetupStopped, match='does not match'):
-        go(env, ['gc-10', ''], tmp_path)
+        go(env, [], tmp_path)
     assert applied(env) == []
 
 
 def test_unknown_existing_container_is_protected(tmp_path):
     env = FakeEnv(exists=True)
     with pytest.raises(setup.SetupStopped, match='protect'):
-        go(env, ['gc-10', '', ''], tmp_path)
+        go(env, [''], tmp_path)
     assert applied(env) == []
 
 
 def test_rerun_reuses_answers_and_only_reverifies_completed_volume(tmp_path):
-    go(FakeEnv(), ['gc-10', '', 'gc-10'], tmp_path)
+    go(FakeEnv(), ['gc-10'], tmp_path)
     env = FakeEnv(exists=True)
-    # host, reuse saved answers (default yes), typed confirmation; no existing-container question
-    result, output = go(env, ['gc-10', '', 'gc-10'], tmp_path)
+    # Reuse answers and confirm; no existing-container question.
+    result, output = go(env, ['', 'gc-10'], tmp_path)
     assert result['luks_uuid'] == UUID
     assert any('only re-verifies' in line for line in output)
     assert len(applied(env)) == 1
@@ -159,7 +160,7 @@ def test_rerun_reuses_answers_and_only_reverifies_completed_volume(tmp_path):
 def test_failed_apply_records_resume_point(tmp_path):
     env = FakeEnv(apply_ok=False)
     with pytest.raises(setup.SetupStopped, match='resumes safely'):
-        go(env, ['gc-10', '', 'gc-10'], tmp_path)
+        go(env, ['gc-10'], tmp_path)
     saved = json.loads((tmp_path / 'state' / 'gc-10--app.json').read_text())
     assert saved['apply_started'] and not saved['completed']
 

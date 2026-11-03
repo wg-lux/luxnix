@@ -8,6 +8,7 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 
 from ..errors import AutoconfPipelineError
+from ..publication import publish_files
 
 RenderedNixOutput = tuple[Path, str]
 NixfmtRunner = Callable[[Path], None]
@@ -84,7 +85,7 @@ def write_nix_file(
 ) -> None:
     """Write one already-normalized rendered Nix file."""
     destination = Path(filepath)
-    destination.write_text(content, encoding="utf-8")
+    publish_files([(destination, content.encode("utf-8"), 0o644)])
 
 
 def write_nix_outputs(
@@ -92,16 +93,23 @@ def write_nix_outputs(
     logger: logging.Logger | None = None,
     *,
     formatter_runner: NixfmtRunner | None = None,
+    publication_root: Path | None = None,
+    locked: bool = False,
+    allowed_roots: tuple[Path, ...] | None = None,
 ) -> None:
     """Normalize every output, then publish the complete rendered sequence."""
     formatted_outputs = format_nix_outputs(
         outputs,
         formatter_runner=formatter_runner,
     )
-    for destination, content in formatted_outputs:
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        write_nix_file(content, destination, logger=logger)
-        if logger is not None:
+    publish_files(
+        [(path, content.encode("utf-8"), 0o644) for path, content in formatted_outputs],
+        root=publication_root,
+        locked=locked,
+        allowed_roots=allowed_roots,
+    )
+    if logger is not None:
+        for destination, _ in formatted_outputs:
             logger.info("Wrote generated Nix configuration: %s", destination)
 
 
@@ -142,8 +150,7 @@ def write_new_nix_output_tree(
         root.mkdir(parents=True, exist_ok=False)
     except FileExistsError as exc:
         raise AutoconfPipelineError(
-            "Isolated Nix render target must be a new directory: "
-            f"{root}"
+            f"Isolated Nix render target must be a new directory: {root}"
         ) from exc
 
     try:

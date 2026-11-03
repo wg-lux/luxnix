@@ -1,8 +1,11 @@
 """Exercise the shared storage verifier without inspecting live host secrets."""
 
 import json
+import os
 from pathlib import Path
+import stat
 import subprocess
+from types import SimpleNamespace
 
 import pytest
 
@@ -16,7 +19,7 @@ MODULE = ROOT / "modules/nixos/roles/managed-secrets/default.nix"
     "filesystem,devices,allow_runtime,success",
     [
         ("ext4", [{"type": "crypt"}], False, True),
-        ("btrfs", [{"type": "lvm", "children": [{"type": "crypt"}]}], False, True),
+        ("ext4", [{"type": "lvm", "children": [{"type": "crypt"}]}], False, True),
         (
             "ext4",
             [{"type": "raid", "children": [{"type": "crypt"}, {"type": "disk"}]}],
@@ -117,7 +120,7 @@ def _swap_probe(swaps, devices, filesystem_source="/dev/mapper/test[/swap]"):
         return json.dumps(
             {
                 "findmnt": {
-                    "filesystems": [{"fstype": "btrfs", "source": filesystem_source}]
+                    "filesystems": [{"fstype": "ext4", "source": filesystem_source}]
                 },
                 "lsblk": {"blockdevices": devices},
             }[command[0]]
@@ -162,6 +165,128 @@ def test_swap_must_not_reach_plaintext_storage(
     else:
         with pytest.raises(ValueError):
             storage._require_protected_swap()
+
+
+@pytest.fixture
+def btrfs_members(tmp_path, monkeypatch):
+    identifier = "4261572b-5aab-467a-b105-d7ab0beb9d7a"
+    root = tmp_path / "sysfs" / identifier
+    for index, number in enumerate(("253:0", "8:1"), 1):
+        member = root / "devices" / str(index)
+        member.mkdir(parents=True)
+        (member / "dev").write_text(number + "\n")
+        metadata = root / "devinfo" / str(index)
+        metadata.mkdir(parents=True)
+        (metadata / "missing").write_text("0\n")
+    monkeypatch.setattr(storage, "BTRFS_SYSFS", root.parent)
+    original_stat = os.stat
+
+    def block_stat(path, **kwargs):
+        path_string = str(path)
+        if path_string.startswith("/dev/"):
+            number = "8:1" if path_string == "/dev/block/8:1" else "253:0"
+            return SimpleNamespace(
+                st_mode=stat.S_IFBLK, st_rdev=os.makedev(*map(int, number.split(":")))
+            )
+        return original_stat(path, **kwargs)
+
+    monkeypatch.setattr(storage.os, "stat", block_stat)
+    return root, {
+        "source": "/dev/mapper/test[/secrets]", "fstype": "btrfs", "uuid": identifier
+    }
+
+
+@pytest.mark.parametrize("swapfile", [False, True])
+@pytest.mark.parametrize("second_type,success", [("crypt", True), ("part", False)])
+def test_all_btrfs_members_require_encryption(
+    tmp_path, monkeypatch, btrfs_members, swapfile, second_type, success
+):
+    _, filesystem = btrfs_members
+    checked = []
+
+    def probe(command, **kwargs):
+        if command[0] == "swapon":
+            return "/swap/file file\n" if swapfile else ""
+        if command[0] == "findmnt":
+            assert "SOURCE,FSTYPE,UUID" in command
+            return json.dumps({"filesystems": [filesystem]})
+        assert command[0] == "lsblk"
+        checked.append(command[-1])
+        kind = second_type if command[-1] == "/dev/block/8:1" else "crypt"
+        return json.dumps({"blockdevices": [{"type": kind}]})
+
+    monkeypatch.setattr(storage.subprocess, "check_output", probe)
+    operation = storage._require_protected_swap if swapfile else (
+        lambda: storage.encrypted_storage(tmp_path / "secret")
+    )
+    if success:
+        operation()
+    else:
+        with pytest.raises(ValueError, match="entirely by encrypted"):
+            operation()
+    assert set(checked) == {"/dev/block/253:0", "/dev/block/8:1"}
+    assert not (tmp_path / "secret").exists()
+
+
+@pytest.mark.parametrize("evidence", [
+    "uuid-missing", "uuid-traversal", "uuid-malformed", "members-empty",
+    "member-file", "dev-missing", "dev-zero", "dev-invalid", "dev-duplicate",
+    "metadata-absent", "metadata-extra", "metadata-missing", "metadata-invalid",
+    "node-regular", "node-wrong-number", "source-foreign", "source-regular",
+])
+def test_btrfs_requires_complete_kernel_member_evidence(
+    monkeypatch, btrfs_members, evidence
+):
+    root, filesystem = btrfs_members
+    member = root / "devices" / "2"
+    if evidence.startswith("uuid-"):
+        filesystem["uuid"] = {
+            "uuid-missing": None, "uuid-traversal": "../elsewhere",
+            "uuid-malformed": "not-a-uuid",
+        }[evidence]
+    elif evidence == "members-empty":
+        for path in (root / "devices").iterdir():
+            (path / "dev").unlink()
+            path.rmdir()
+    elif evidence == "member-file":
+        (member / "dev").unlink()
+        member.rmdir()
+        member.touch()
+    elif evidence == "dev-missing":
+        (member / "dev").unlink()
+    elif evidence.startswith("dev-"):
+        (member / "dev").write_text({
+            "dev-zero": "0:0", "dev-invalid": "8:1/../../x", "dev-duplicate": "253:0"
+        }[evidence])
+    elif evidence == "metadata-absent":
+        (root / "devinfo" / "2" / "missing").unlink()
+        (root / "devinfo" / "2").rmdir()
+    elif evidence == "metadata-extra":
+        (root / "devinfo" / "3").mkdir()
+        (root / "devinfo" / "3" / "missing").write_text("1")
+    elif evidence.startswith("metadata-"):
+        (root / "devinfo" / "2" / "missing").write_text(
+            "1" if evidence == "metadata-missing" else "unknown"
+        )
+    else:
+        original_stat = storage.os.stat
+
+        def invalid_stat(path, **kwargs):
+            if str(path) == (
+                "/dev/mapper/test" if evidence.startswith("source-")
+                else "/dev/block/8:1"
+            ):
+                return SimpleNamespace(
+                    st_mode=(
+                        stat.S_IFREG if evidence.endswith("regular") else stat.S_IFBLK
+                    ),
+                    st_rdev=os.makedev(8, 9),
+                )
+            return original_stat(path, **kwargs)
+
+        monkeypatch.setattr(storage.os, "stat", invalid_stat)
+    with pytest.raises((ValueError, OSError)):
+        storage.filesystem_devices(filesystem)
 
 
 def test_failed_probe_fails_closed(tmp_path, monkeypatch):

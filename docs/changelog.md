@@ -15,8 +15,15 @@ For help choosing a guide, use the [task-based documentation home](index.md).
   retries do not authorize formatting, replacement keys or an automatic reboot.
 - Encrypted-root recovery supports explicitly configured operator SSH unlock.
   Recovery custody must remain usable independently of the machine being restored.
-- An explicitly selected unencrypted OS can be installed before protected storage
-  is ready; protected services remain guarded and deferred.
+- The single-path decision supersedes plain-root installation. New installations
+  require boot LUKS2; existing gc-09/gc-10 recovery remains until physical acceptance.
+- Shared encryption checks now reject missing or plaintext Btrfs members.
+  Credential creation and every export reject incomplete or mismatched pairs.
+- Hub backups pause writers across a fresh database/media capture and restore
+  their prior state after failures. Plan for backup downtime before deployment.
+- LX-Annotate 1.7.2 installs from a complete hashed offline wheelhouse, including
+  pinned builds for source-only dependencies. Hub node provisioning delegates to
+  its tested installed command; recovery/authentication parity remains gated.
 - LXENC v2 adds authenticated file endings and safe range reads. Application
   rotation now upgrades v1 with the existing active key and supports repeatable
   resume. Follow the [EndoReg v1 and mid-migration instructions](https://github.com/wg-lux/endoreg-db/blob/main/docs/secret_rotation.md#v1-machines-and-interrupted-media-migrations)
@@ -63,19 +70,11 @@ For help choosing a guide, use the [task-based documentation home](index.md).
 5. Verify normal administrator access, a cold boot and restored applications.
    Record acceptance before separately approving removal of recovery copies.
 
-### Install before root encryption
+### New installations
 
-Select `unencrypted-root` in the host YAML and `root_encryption: none` in the
-private specification, then follow the
-[unencrypted OS installation procedure](boot-storage-migration.md#unencrypted-os-installation).
-Use `installation: fresh` only for verified empty new disks. For existing data,
-keep the migration backup and restore requirements.
-
-Boot and connect using normal administrator SSH. Leave protected services
-deferred until their encrypted volumes are provisioned, unlocked and verified;
-then explicitly enable their automatic startup. Keep protected data and recovery
-secrets off plain root. Selecting this mode does not decrypt an existing disk or
-waive application storage protection.
+Use `boot-luks` and `root_encryption: luks2`. The earlier plain-root policy is
+superseded. Fresh encrypted installations on verified empty disks retain their
+recovery and preparation gates without requiring a nonexistent source backup.
 
 ### Choose recovery access before installation
 

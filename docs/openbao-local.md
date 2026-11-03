@@ -1,7 +1,7 @@
-> Storage layout update: [Boot LUKS migration](boot-storage-migration.md) is the
-> current fleet design. Container unlock, login unlock and local OpenBao storage
-> enrollment below apply only to explicit `legacy-containers` recovery mode.
-> Existing identity provisioning remains independent.
+> New OpenBao disk enrollment, adoption and rollout are retired by the
+> [single storage path decision](boot-storage-migration.md#single-production-path-and-retained-recovery).
+> The procedures below describe retained recovery and historical contracts;
+> apply operations for new enrollment are blocked. Central identity is separate.
 
 # Local OpenBao implementation
 

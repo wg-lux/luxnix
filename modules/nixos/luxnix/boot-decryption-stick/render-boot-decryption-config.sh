@@ -4,8 +4,8 @@ usage() {
   cat >&2 <<'EOF'
 Usage: luxnix-render-boot-decryption-config \
   --output <absolute-path> \
-  --usb-uuid <uuid> \
-  --offset-bytes <positive-integer> \
+  --key-partuuid <uuid> \
+  --offset-bytes <nonnegative-integer> \
   --keyfile-size <positive-integer> \
   --luks-device <name> [--luks-device <name> ...]
 
@@ -27,7 +27,7 @@ require_positive_integer() {
 }
 
 output=""
-usb_uuid=""
+key_partuuid=""
 offset_bytes=""
 keyfile_size=""
 declare -a luks_devices=()
@@ -39,9 +39,9 @@ while [[ "$#" -gt 0 ]]; do
       output="$2"
       shift 2
       ;;
-    --usb-uuid)
-      [[ "$#" -ge 2 ]] || fail "--usb-uuid requires a value"
-      usb_uuid="$2"
+    --key-partuuid)
+      [[ "$#" -ge 2 ]] || fail "--key-partuuid requires a value"
+      key_partuuid="$2"
       shift 2
       ;;
     --offset-bytes)
@@ -70,10 +70,10 @@ while [[ "$#" -gt 0 ]]; do
 done
 
 [[ "$output" == /* ]] || fail "--output must be an absolute path"
-[[ -n "$usb_uuid" ]] || fail "--usb-uuid is required"
-[[ "$usb_uuid" =~ ^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$ ]] \
-  || fail "--usb-uuid must be a canonical UUID"
-require_positive_integer "--offset-bytes" "$offset_bytes"
+[[ -n "$key_partuuid" ]] || fail "--key-partuuid is required"
+[[ "$key_partuuid" =~ ^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$ ]] \
+  || fail "--key-partuuid must be a canonical UUID"
+[[ "$offset_bytes" =~ ^(0|[1-9][0-9]*)$ ]] || fail "--offset-bytes must be a nonnegative integer"
 require_positive_integer "--keyfile-size" "$keyfile_size"
 [[ "${#luks_devices[@]}" -gt 0 ]] || fail "at least one --luks-device is required"
 
@@ -102,7 +102,7 @@ EOF
   for luks_device in "${luks_devices[@]}"; do
     cat <<EOF
     "${luks_device}" = {
-      keyFile = "/dev/disk/by-uuid/${usb_uuid}";
+      keyFile = "/dev/disk/by-partuuid/${key_partuuid}";
       keyFileOffset = ${offset_bytes};
       keyFileSize = ${keyfile_size};
       preLVM = true;

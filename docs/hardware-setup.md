@@ -108,21 +108,50 @@ Do not rely on undocumented local paths like `etc/user-password/files`.
 
 ## Boot decryption setup
 
-LuxNix provides an interactive
-[`boot-decryption-stick` module](https://github.com/wg-lux/luxnix/blob/main/modules/nixos/luxnix/boot-decryption-stick/default.nix).
-Enable `luxnix.boot-decryption-stick`, rebuild the host, and run the generated
-`boot-decryption-stick-setup` command as root.
+LuxNix provides the opt-in `boot-decryption-stick` enrollment command and
+compatibility command names for gs-01 and gs-02. They share one implementation.
+The old ext4/raw-offset layout is unsafe and is no longer accepted. Do not rerun
+an old setup command, format an existing stick, or remove an enrolled keyslot to
+migrate it. Retain the old stick and independently tested recovery credentials
+until a separately prepared replacement has passed a real cold-boot test.
 
-The command can format the selected device and add a key to the LUKS volume.
-Verify the device path and keep a tested recovery key before confirming either
-operation.
+Prepare a **separate, dedicated GPT Linux-reserved partition** through a reviewed
+operator partitioning procedure. Its type GUID must be
+`8DA63339-0007-60C0-C436-083AC8230908`, its partition label `luxnix-boot-key`,
+and its selected key region all zero. It must have no filesystem/signatures,
+mounts or device holders. Enrollment never partitions, formats or mounts a disk.
+Never repurpose a filesystem partition by changing only its type or label.
+The stick contains an unencrypted unlock credential: physically protect it and
+keep independent recovery custody. A dedicated partition reserves the key bytes
+from filesystem allocation; it does not conceal those bytes.
 
-For a review-only configuration render, use the installed
-`luxnix-render-boot-decryption-config` command instead of the interactive
-setup command. It requires an explicit destination, UUID, offset, keyfile size,
-and LUKS mapping name; it applies `nixfmt` and never formats, mounts, or changes
-a device or key. See [Nix Quality](./nix-quality.md#generated-files) for an
-example.
+After enabling the appropriate module and rebuilding through the reviewed
+workflow, run its command as root with
+`--key-partition /dev/disk/by-partuuid/<reviewed-PARTUUID>`. Review the LUKS
+partition labels configured by that module and choose a new
+`configurationOutputPath`; existing output is preserved. Confirm the displayed
+PARTUUID explicitly. All swap must be disabled during enrollment. The key lives
+only in an anonymous RAM descriptor, is written and read back on the reserved
+partition, enrolled into each LUKS target and tested before configuration
+publication. It is never written to the invoking directory. The key length is
+exactly `bs * count` bytes; offsets are exact bytes within the reserved partition
+and never rounded by block size. `offsetM` now defaults to zero. An interrupted
+enrollment retains both the partition and existing keyslots for operator review;
+do not retry by replacing the key bytes. The pure renderer can reconstruct the
+configuration from the recorded PARTUUID, byte offset and total key size.
+
+For review-only rendering, use `luxnix-render-boot-decryption-config` with
+`--key-partuuid`, `--offset-bytes`, `--keyfile-size` and `--luks-device`.
+The removed `--usb-uuid` filesystem-offset contract fails closed. See
+[Nix Quality](./nix-quality.md#generated-files) for a disposable render example.
+
+The persisting-drive mount helper matches physical hardware serials exactly,
+selects the unique unlocked encrypted filesystem below that device, rejects
+ambiguous devices or multiple filesystem mappings and verifies the mounted block identity. It leaves filesystem
+selection to the device instead of forcing ext4. Persistent secret storage must
+also pass the shared encryption/swap verifier; unlock encrypted storage through
+the established workflow first. A mountpoint already in use by another device
+is an error, not successful setup.
 
 ## Manual recovery and provider templates
 

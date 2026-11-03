@@ -220,6 +220,8 @@ def test_generic_module_layout_merging_and_invalid_configuration():
           system = "x86_64-linux";
           modules = [ ./modules/nixos/luxnix/operator-unlocked-storage {
             system.stateVersion = "26.05";
+            # Generic recovery fixture must still select an accepted legacy host.
+            networking.hostName = "gc-10";
             boot.loader.grub.enable = false;
             fileSystems."/" = { device = "none"; fsType = "tmpfs"; };
             systemd.services.consumer = {
@@ -376,12 +378,10 @@ def test_fleet_inventory_defaults_and_all_host_assertions():
     fleet = members("active_clients")
     assert members("operator_unlocked_secrets") == fleet
     expression = r'''
-      let f0 = builtins.getFlake ("git+file://" + builtins.toString ./.);
-        f = f0 // { nixosConfigurations = builtins.mapAttrs (_: h: h.extendModules {
-          modules = [{ luxnix.storage.operatorUnlocked.layout = "legacy-containers"; }];
-        }) f0.nixosConfigurations; };
+      let f = builtins.getFlake ("git+file://" + builtins.toString ./.);
       inspect = name: let c = f.nixosConfigurations.${name}.config; in {
         enabled = c.luxnix.storage.operatorUnlocked.enable;
+        layout = c.luxnix.storage.operatorUnlocked.layout;
         migration = c.luxnix.storage.operatorUnlocked.migration.enable;
         unlockMethod = c.luxnix.storage.operatorUnlocked.unlockMethod;
         clientRole = c.roles.endoreg-client.enable;
@@ -391,7 +391,9 @@ def test_fleet_inventory_defaults_and_all_host_assertions():
         prepare = c.systemd.services.luxnix-storage-migrate.serviceConfig.ExecStart or null;
         dependencies = c.systemd.services.luxnix-storage-migrate.unitConfig or {};
         mountOptions = map (v: c.fileSystems.${v.mountPoint}.options)
-          (builtins.filter (v: v.container != null && c.luxnix.storage.operatorUnlocked.enable)
+          (builtins.filter (v: v.container != null
+            && c.luxnix.storage.operatorUnlocked.enable
+            && c.luxnix.storage.operatorUnlocked.layout == "legacy-containers")
             (builtins.attrValues c.luxnix.storage.operatorUnlocked.volumes));
       }; in builtins.listToAttrs (map (name: { inherit name; value = inspect name; }) FLEET)
     '''.replace("FLEET", "[ " + " ".join(json.dumps(name) for name in fleet) + " ]")
@@ -405,6 +407,14 @@ def test_fleet_inventory_defaults_and_all_host_assertions():
             "EndoReg clients require encrypted operator storage for secrets and application data."
         ] if settings["clientRole"] else [])
         assert sorted(settings["baselineFailures"]) == sorted(expected), (host, settings)
+        legacy = host in {"gc-09", "gc-10"}
+        assert settings["layout"] == (
+            "legacy-containers" if legacy else "boot-luks"
+        )
+        if not legacy:
+            assert settings["prepare"] is None
+            assert settings["mountOptions"] == []
+            continue
         if host == "gc-10":
             assert settings["prepare"] is None
             assert all("x-systemd.device-timeout=90s" in options for options in settings["mountOptions"])

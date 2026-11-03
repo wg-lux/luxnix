@@ -122,14 +122,9 @@ class AnsibleInventoryHost(BaseModel):
         self.facts = facts
 
     def init_ansible_role_names(self):
-        self.ansible_role_names = []
-
-        existing_role_names = self.vars.get("ansible_roles", [])
-
-        for _ in existing_role_names:
-            assert isinstance(_, str), f"Role name must be a string, got {_}"
-
-        self.ansible_role_names.extend(existing_role_names)
+        self.ansible_role_names = _membership_names(
+            self.vars, "ansible_roles", f"host {self.hostname}"
+        ).copy()
 
 
 class AnsibleInventoryGroup(BaseModel):
@@ -240,6 +235,7 @@ class AnsibleInventory(BaseModel):
         ansible_inventory_dir = file.parent
         ansible_root_dir = ansible_inventory_dir.parent
         inventory = cls(file=file.as_posix())
+        inventory.add_group_by_name("all")
         inventory.load_host_vars(ansible_inventory_dir=ansible_inventory_dir)
         group_name: str | None = None
         with open(file) as f:
@@ -360,8 +356,10 @@ class AnsibleInventory(BaseModel):
         assert host, f"No host found with name {hostname}"
 
         group_names, role_names = self._expand_membership_names(
-            host.ansible_group_names,
-            host.ansible_role_names,
+            host.ansible_group_names
+            + _membership_names(host.vars, "ansible_groups", f"host {hostname}"),
+            host.ansible_role_names
+            + _membership_names(host.vars, "ansible_roles", f"host {hostname}"),
         )
 
         group_vars: ConfigMapping = {}
@@ -418,34 +416,24 @@ class AnsibleInventory(BaseModel):
         return any(role.name == role_name for role in self.roles)
 
     def get_group_by_name(self, group_name: str, logger=None) -> AnsibleInventoryGroup:
-        """Return the exact group, creating it when it is not loaded yet."""
-        if logger is None:
-            logger = get_logger("AnsibleInventory-get_group_by_name", reset=True)
+        """Resolve an existing definition without changing inventory membership."""
         matches = [group for group in self.groups if group.name == group_name]
         if len(matches) > 1:
             raise ValueError(f"Multiple groups found with name {group_name}")
         if matches:
             return matches[0]
 
-        logger.warning("No group found with name %s; adding it", group_name)
-        group = AnsibleInventoryGroup(name=group_name)
-        self.groups.append(group)
-        return group
+        raise ValueError(f"Unknown inventory group {group_name!r}")
 
     def get_role_by_name(self, role_name: str, logger=None) -> AnsibleInventoryRole:
-        """Return the exact role, creating it when it is not loaded yet."""
-        if logger is None:
-            logger = get_logger("AnsibleInventory-get_role_by_name", reset=True)
+        """Resolve an existing definition without creating an empty role."""
         matches = [role for role in self.roles if role.name == role_name]
         if len(matches) > 1:
             raise ValueError(f"Multiple roles found with name {role_name}")
         if matches:
             return matches[0]
 
-        logger.warning("No role found with name %s; adding it", role_name)
-        role = AnsibleInventoryRole(name=role_name)
-        self.roles.append(role)
-        return role
+        raise ValueError(f"Unknown inventory role {role_name!r}")
 
     def host_name_exists(self, host_name: str):
         _host = [_ for _ in self.all if _.hostname == host_name]
@@ -528,6 +516,7 @@ class AnsibleInventory(BaseModel):
         role_vars = load_role_variable_sources(role_vars_dir)
 
         for role_name, vars in role_vars.items():
+            self.add_role_by_name(role_name)
             role = self.get_role_by_name(role_name)
             assert isinstance(vars, dict)
             role.vars = deep_update(role.vars or {}, vars)
@@ -538,6 +527,7 @@ class AnsibleInventory(BaseModel):
         group_vars = load_group_variable_sources(group_vars_dir)
 
         for group_name, vars in group_vars.items():
+            self.add_group_by_name(group_name)
             group = self.get_group_by_name(group_name)
             assert isinstance(vars, dict)
             group.vars = deep_update(group.vars, vars)

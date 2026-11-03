@@ -118,13 +118,13 @@ representative render outside the repository without touching a device:
 render_directory="$(mktemp -d)"
 luxnix-render-boot-decryption-config \
   --output "$render_directory/boot-decryption-config.nix" \
-  --usb-uuid 12345678-1234-1234-1234-123456789abc \
-  --offset-bytes 52428800 \
+  --key-partuuid 12345678-1234-1234-1234-123456789abc \
+  --offset-bytes 0 \
   --keyfile-size 4096 \
   --luks-device cryptroot
 ```
 
-Use the UUID, offset, keyfile size, and LUKS mapping names recorded for the
+Use the reserved partition PARTUUID, byte offset, total key size, and LUKS mapping names recorded for the
 actual host when rendering a real configuration. The renderer requires the
 output parent directory to exist and refuses malformed values.
 

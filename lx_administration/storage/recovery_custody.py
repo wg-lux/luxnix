@@ -20,7 +20,7 @@ import stat
 import subprocess
 import time
 
-from lx_administration.secret_storage import encrypted_storage
+from lx_administration.secret_storage import encrypted_storage, filesystem_devices
 from lx_administration.storage.cutover import atomic_json
 
 
@@ -81,12 +81,7 @@ def storage_disks(path: Path) -> set[str]:
     if len(mount) != 1:
         raise CustodyError("Ambiguous recovery storage")
     fs = mount[0]
-    sources = [fs["source"].split("[", 1)[0]]
-    if fs["fstype"] == "btrfs":
-        members = list((Path("/sys/fs/btrfs") / fs["uuid"] / "devices").glob("*/dev"))
-        if not members:
-            raise CustodyError("Cannot identify all recovery Btrfs members")
-        sources += ["/dev/block/" + p.read_text().strip() for p in members]
+    sources = filesystem_devices(fs)
     disks = set()
 
     def visit(nodes):

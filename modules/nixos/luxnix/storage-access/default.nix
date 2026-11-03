@@ -109,7 +109,6 @@ in
         (lib.attrByPath [ "roles" "endoreg-client" "enable" ] false config)
         && builtins.elem storage.layout [
           "legacy-containers"
-          "unencrypted-root"
         ]
         && storage.unlockMethod == "local-openbao"
         && config.luxnix.openbao.local.seal == "passphrase";

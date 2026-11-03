@@ -34,48 +34,14 @@ from lx_administration.models.vault.secret import (
 from lx_administration.permissions import ensure_private_directory
 from lx_administration.secret_storage import encrypted_storage
 from lx_administration.storage.provision import ProvisionError, Remote, escrow_record, EXPORT
+from lx_administration.storage.recovery_export import export_script
 
 FLEET_GROUP = "operator_unlocked_secrets"
 ESCROW_ROOT = "openbao-local"
 NAME = re.compile(r"[a-z0-9][a-z0-9-]*")
 
 # Publishes ciphertext under ~/.luxnix-recovery/openbao-local/<host>/<item>.vault.
-# No secret values are interpolated into this code or its arguments.
-LOCAL_EXPORT = r'''
-import fcntl, os, re, sys, tempfile
-from pathlib import Path
-host, item = sys.argv[1:]
-assert re.fullmatch(r'[a-z0-9][a-z0-9-]*', host) and item in ('seal-key', 'enrollment', 'boot-passphrase')
-data = sys.stdin.buffer.read()
-assert data.startswith(b'$ANSIBLE_VAULT;1.2;AES256;luxnix-master\n')
-root = Path.home() / '.luxnix-recovery'
-for directory in [root, root / 'openbao-local', root / 'openbao-local' / host]:
-    directory.mkdir(mode=0o700, exist_ok=True)
-    assert not directory.is_symlink()
-    info = directory.stat()
-    assert info.st_uid == os.geteuid() and info.st_mode & 0o777 == 0o700
-with (root / '.lock').open('a') as lock:
-    fcntl.flock(lock, fcntl.LOCK_EX)
-    target = root / 'openbao-local' / host / (item + '.vault')
-    assert not target.is_symlink()
-    if target.exists():
-        assert target.stat().st_mode & 0o777 == 0o600
-        assert target.read_bytes() == data, 'Conflicting recovery export'
-    else:
-        fd, temporary = tempfile.mkstemp(dir=target.parent, prefix='.recovery-')
-        try:
-            with os.fdopen(fd, 'wb') as stream:
-                stream.write(data)
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.link(temporary, target)
-        finally: os.unlink(temporary)
-    fd = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
-    try: os.fsync(fd)
-    finally: os.close(fd)
-    sys.stdout.buffer.write(target.read_bytes())
-'''
-
+LOCAL_EXPORT = export_script('openbao-local')
 
 class EnrollmentError(RuntimeError):
     """An operator-safe diagnostic without credential values."""
@@ -342,6 +308,8 @@ def main(argv=None):
         return Remote(str(entry.ansible_host), password)
 
     hosts = select_hosts(inventory, args.limit)
+    if args.apply and args.action in {"enroll", "adopt", "rollout"}:
+        parser.error("New local OpenBao disk enrollment is retired; use boot LUKS2")
     mutating = args.apply and args.action != "status"
     if mutating:
         resource.setrlimit(resource.RLIMIT_CORE, (0, 0))

@@ -450,35 +450,34 @@ def test_post_confirmation_evidence_change_stops_before_install(
     assert len(calls) == 2
 
 
-@pytest.mark.parametrize(
-    "mode,layout", [("luks2", "boot-luks"), ("none", "unencrypted-root")]
-)
-def test_root_mode_must_match_reviewed_release(mode, layout):
-    migration.validate_selection({"root_encryption": mode}, {"layout": layout})
-    other = "boot-luks" if layout == "unencrypted-root" else "unencrypted-root"
-    with pytest.raises(migration.MigrationError, match="selection differs"):
-        migration.validate_selection({"root_encryption": mode}, {"layout": other})
+def test_root_mode_requires_luks2(state):
+    _, plan, _ = state
+    migration.validate_selection({}, {"layout": "boot-luks"})
+    for mode in ("none", "unknown"):
+        with pytest.raises(migration.MigrationError, match="require root_encryption"):
+            migration.validate_selection(
+                {"root_encryption": mode}, {"layout": "boot-luks"}
+            )
+        with pytest.raises(migration.MigrationError, match="require root_encryption"):
+            migration.validate_spec(plan["spec"] | {"root_encryption": mode})
     with pytest.raises(migration.MigrationError, match="selection differs"):
         migration.validate_selection({}, {"layout": "unencrypted-root"})
 
 
-def test_fresh_plain_install_requires_no_source_restore_or_volume_keys(state):
+def test_fresh_encrypted_install_keeps_recovery_without_source_restore(state):
     _, plan, _ = state
     plan["spec"].update(
-        root_encryption="none", installation="fresh", source_retention="new-disks"
+        root_encryption="luks2", installation="fresh", source_retention="new-disks"
     )
     migration.validate_spec(plan["spec"])
     assert migration.stage_order(plan) == ("recovery", "prepared")
     prepared = migration.required_checks("prepared", plan)
-    assert {"initial_credentials_staged", "unencrypted_root_approved"} <= prepared
-    assert not {"recovery_slots_tested", "database_restored"} & prepared
+    assert {"initial_credentials_staged", "recovery_slots_tested"} <= prepared
+    assert "database_restored" not in prepared
     assert "new_disks_verified" in migration.required_checks("recovery", plan)
-    assert "protected_services_guarded" in migration.required_checks("acceptance", plan)
+    assert "secondary_unlock_passed" in migration.required_checks("acceptance", plan)
     with pytest.raises(migration.MigrationError, match="does not apply"):
         migration.required_checks("backup", plan)
-    plan["spec"]["installation"] = "migration"
-    with pytest.raises(migration.MigrationError, match="retention"):
-        migration.validate_spec(plan["spec"])
 
 
 def test_fresh_admission_does_not_require_a_nonexistent_source_host(
@@ -486,9 +485,9 @@ def test_fresh_admission_does_not_require_a_nonexistent_source_host(
 ):
     root, plan, progress = state
     plan["spec"].update(
-        root_encryption="none", installation="fresh", source_retention="new-disks"
+        root_encryption="luks2", installation="fresh", source_retention="new-disks"
     )
-    plan["config"]["layout"] = "unencrypted-root"
+    plan["config"]["layout"] = "boot-luks"
     plan["plan_id"] = migration.digest(
         {k: v for k, v in plan.items() if k != "plan_id"}
     )
@@ -533,158 +532,3 @@ def test_fresh_plan_cannot_treat_existing_filesystems_as_empty(
     )
     with pytest.raises(migration.MigrationError, match="empty new disks"):
         migration.verify_unmounted_targets(plan)
-
-
-@pytest.mark.parametrize("encrypted", [False, True])
-def test_explicit_plain_root_checks_actual_ancestry(monkeypatch, encrypted):
-    monkeypatch.setattr(
-        migration,
-        "mount_record",
-        lambda *a: {"source": "/dev/test", "fstype": "ext4", "uuid": "test"},
-    )
-    monkeypatch.setattr(
-        migration,
-        "run",
-        lambda *a: json.dumps(
-            {
-                "blockdevices": [
-                    {
-                        "type": "part",
-                        "children": [{"type": "crypt" if encrypted else "disk"}],
-                    }
-                ]
-            }
-        ),
-    )
-    if encrypted:
-        with pytest.raises(
-            migration.MigrationError, match="cannot target an encrypted root"
-        ):
-            migration.verify_plain_root("/mnt")
-    else:
-        migration.verify_plain_root("/mnt")
-
-
-def test_plain_root_has_explicit_confirmation(state, monkeypatch, capsys):
-    _, plan, _ = state
-    plan["spec"]["root_encryption"] = "none"
-    monkeypatch.setattr(migration.sys.stdin, "isatty", lambda: True)
-    phrase = "INSTALL gc-09 " + plan["plan_id"][:12]
-    monkeypatch.setattr("builtins.input", lambda _: phrase)
-    with pytest.raises(migration.MigrationError, match="cancelled"):
-        migration.confirm(plan)
-    monkeypatch.setattr("builtins.input", lambda _: phrase + " UNENCRYPTED")
-    migration.confirm(plan)
-    assert "readable offline" in capsys.readouterr().out
-
-
-def test_plain_root_only_exempts_the_boot_account_hash(state, tmp_path, monkeypatch):
-    _, plan, _ = state
-    plan["spec"]["root_encryption"] = "none"
-    path = tmp_path / "admin.hash"
-    path.write_bytes(b"$6$test$" + b"A" * 86 + b"\n")
-    plan["config"]["admin"] = {
-        "normal": True,
-        "wheel": True,
-        "hash_file": "/var/lib/luxnix-account/admin.hash",
-        "keys": ["ssh-ed25519 test"],
-    }
-    calls = []
-
-    def private(path_name, root, **kwargs):
-        calls.append((path_name, kwargs))
-        return path
-
-    monkeypatch.setattr(migration, "target_private", private)
-    migration.verify_accounts(plan)
-    assert calls == [(plan["config"]["admin"]["hash_file"], {"encrypted": False})]
-    plan["spec"]["root_encryption"] = "luks2"
-    migration.verify_accounts(plan)
-    assert calls[-1][1] == {}
-
-
-def test_plain_target_skips_only_declared_protected_noauto_mounts(state, monkeypatch):
-    from types import SimpleNamespace
-    from lx_administration.storage import boot
-
-    _, plan, _ = state
-    plan["spec"]["root_encryption"] = "none"
-    plan["config"].update(
-        layout="unencrypted-root",
-        protected_mounts=["/srv/protected"],
-        deferred_protected=True,
-        mounts={
-            "/": {"device": "/dev/test-root", "fsType": "ext4", "options": []},
-            "/boot": {"device": "/dev/test-efi", "fsType": "vfat", "options": []},
-            "/srv/protected": {
-                "device": "/dev/mapper/absent",
-                "fsType": "ext4",
-                "options": ["noauto"],
-            },
-        },
-    )
-
-    def mount(path):
-        assert path in {"/mnt", "/mnt/boot"}, "required unprepared mount"
-        return {
-            "source": "/dev/test-root" if path == "/mnt" else "/dev/test-efi",
-            "fstype": "ext4" if path == "/mnt" else "vfat",
-            "uuid": path,
-        }
-
-    monkeypatch.setattr(migration, "mount_record", mount)
-    monkeypatch.setattr(migration, "mount_present", lambda *a: False)
-    monkeypatch.setattr(
-        migration,
-        "run",
-        lambda *a: json.dumps(
-            {"blockdevices": [{"type": "part", "children": [{"type": "disk"}]}]}
-        ),
-    )
-    original_stat = os.stat
-    monkeypatch.setattr(
-        migration.os,
-        "stat",
-        lambda path, **kw: SimpleNamespace(st_rdev=1)
-        if str(path).startswith("/dev/test-")
-        else original_stat(path, **kw),
-    )
-    monkeypatch.setattr(migration, "device_disks", lambda *a: {1})
-    checks = []
-    monkeypatch.setattr(boot, "verify_mount", lambda *a, **kw: checks.append((a, kw)))
-    monkeypatch.setattr(migration, "verify_accounts", lambda *a: checks.append("admin"))
-    result = migration.verify_target(plan, {1})
-    assert set(result) == {"/", "/boot"}
-    assert checks[0][1] == {"encrypted": False} and checks[-1] == "admin"
-    plan["config"]["deferred_protected"] = False
-    with pytest.raises(AssertionError, match="required unprepared mount"):
-        migration.verify_target(plan, {1})
-    plan["config"]["deferred_protected"] = True
-    monkeypatch.setattr(migration, "mount_present", lambda *a: True)
-    with pytest.raises(AssertionError, match="required unprepared mount"):
-        migration.verify_target(plan, {1})
-    monkeypatch.setattr(migration, "mount_present", lambda *a: False)
-    plan["config"]["mounts"]["/srv/protected"]["options"] = []
-    with pytest.raises(AssertionError, match="required unprepared mount"):
-        migration.verify_target(plan, {1})
-
-
-@pytest.mark.parametrize("encrypted", [False, True])
-def test_mount_identity_is_required_in_both_install_modes(monkeypatch, encrypted):
-    from types import SimpleNamespace
-    from lx_administration.storage import boot
-
-    monkeypatch.setattr(
-        boot,
-        "probe",
-        lambda *a: {
-            "filesystems": [{"source": "/dev/actual", "fstype": "ext4", "uuid": "test"}]
-        },
-    )
-    monkeypatch.setattr(
-        boot.os,
-        "stat",
-        lambda path: SimpleNamespace(st_rdev=1 if path == "/dev/actual" else 2),
-    )
-    with pytest.raises(ValueError, match="Unexpected backing device"):
-        boot.verify_mount("/mnt", "/dev/wrong", "ext4", encrypted=encrypted)

@@ -185,6 +185,7 @@ def test_fleet_boot_contract():
       crypttab = c.environment.etc.crypttab.text;
       mounts = builtins.attrNames c.fileSystems;
       devices = builtins.mapAttrs (_: fs: fs.device) c.fileSystems;
+      mountOptions = builtins.mapAttrs (_: fs: fs.options) c.fileSystems;
       units = builtins.attrNames c.systemd.services;
       guard = c.system.preSwitchChecks.encryptedStorage;
       failures = map (a: a.message) (builtins.filter (a: !a.assertion) c.assertions);
@@ -212,20 +213,40 @@ def test_fleet_boot_contract():
     for path in ["/var/lib/lx-annotate", "/var/lib/postgresql", "/var/backup/postgresql"]:
         assert hosts["gc-10"]["devices"][path] == "/dev/mapper/lx-data_raid01_disk1-data_part"
     assert "archive_hdd" in hosts["gs-02"]["crypttab"]
+    options = hosts["gs-02"]["mountOptions"]
+    def dependencies(mount):
+        return [option for option in options[mount]
+                if option.startswith("x-systemd.requires=")]
+    assert len(dependencies("/data2")) == 1
+    assert "primary" in dependencies("/data2")[0]
+    assert len(dependencies("/archive")) == 4
+    assert all("hdd" in option for option in dependencies("/archive"))
 
 
-def test_every_btrfs_member_is_checked(tmp_path, monkeypatch):
-    fsid = "test-filesystem"
+
+@pytest.mark.parametrize("missing", [False, True])
+@pytest.mark.parametrize("encrypted", [False, True])
+def test_every_btrfs_member_is_checked(tmp_path, monkeypatch, missing, encrypted):
+    fsid = "4261572b-5aab-467a-b105-d7ab0beb9d7a"
     members = tmp_path / fsid / "devices"
     for name, number in [("first", "253:0"), ("second", "8:1")]:
         (members / name).mkdir(parents=True)
         (members / name / "dev").write_text(number)
-    monkeypatch.setattr(boot, "BTRFS_SYSFS", tmp_path)
+    for identifier in ("1", "2"):
+        metadata = tmp_path / fsid / "devinfo" / identifier
+        metadata.mkdir(parents=True)
+        (metadata / "missing").write_text("1" if missing else "0")
+    monkeypatch.setattr(secret_storage, "BTRFS_SYSFS", tmp_path)
     monkeypatch.setattr(boot, "probe", lambda *a: {"filesystems": [
         {"source": "/dev/mapper/data[/storage]", "fstype": "btrfs", "uuid": fsid}]})
     actual_stat = boot.os.stat
-    monkeypatch.setattr(boot.os, "stat", lambda p, **kw: SimpleNamespace(st_rdev=1)
-                        if str(p).startswith("/dev/") else actual_stat(p, **kw))
+    def block_stat(path, **kwargs):
+        if str(path).startswith("/dev/"):
+            return SimpleNamespace(st_mode=stat.S_IFBLK,
+                st_rdev=os.makedev(8, 1) if str(path) == "/dev/block/8:1"
+                else os.makedev(253, 0))
+        return actual_stat(path, **kwargs)
+    monkeypatch.setattr(boot.os, "stat", block_stat)
     monkeypatch.setattr(boot, "encrypted_storage", lambda *a, **kw: None)
     checked = []
     def verify(device):
@@ -233,9 +254,15 @@ def test_every_btrfs_member_is_checked(tmp_path, monkeypatch):
         if device == "/dev/block/8:1":
             raise ValueError("Unencrypted second member")
     monkeypatch.setattr(boot, "require_luks2", verify)
-    with pytest.raises(ValueError, match="second member"):
-        boot.verify_mount("/srv/data", "/dev/mapper/data")
-    assert "/dev/block/8:1" in checked
+    if missing or encrypted:
+        with pytest.raises(ValueError, match="Missing|second member"):
+            boot.verify_mount("/srv/data", "/dev/mapper/data", encrypted=encrypted)
+    else:
+        boot.verify_mount("/srv/data", "/dev/mapper/data", encrypted=encrypted)
+    assert bool(checked) == (encrypted and not missing)
+    if checked:
+        assert "/dev/block/8:1" in checked
+    assert boot.filesystem_devices is secret_storage.filesystem_devices
 
 
 def test_plain_dm_crypt_is_not_luks2(monkeypatch):
@@ -316,3 +343,32 @@ def test_gc10_explicit_legacy_maintenance_profile():
     assert state['app'] == '/var/lib/luxnix-app-storage/application'
     assert 'secret_storage.py' in state['guard']
     assert state['failures'] == []
+
+
+@pytest.mark.parametrize("same_directory", [False, True])
+def test_bind_requires_exact_source_directory_not_only_encrypted_device(
+    tmp_path, monkeypatch, same_directory
+):
+    source = tmp_path / "source"
+    source.mkdir()
+    target = tmp_path / "target"
+    target.mkdir()
+    monkeypatch.setattr(boot, "probe", lambda *a: {"filesystems": [{
+        "source": "/dev/mapper/data[/subvolume]", "fstype": "ext4",
+        "fsroot": "/subvolume/actual", "uuid": "synthetic",
+    }]})
+    monkeypatch.setattr(boot.os.path, "samefile", lambda *a: same_directory)
+    original_stat = boot.os.stat
+    monkeypatch.setattr(boot.os, "stat", lambda p, **kw:
+        SimpleNamespace(st_rdev=1) if str(p).startswith("/dev/")
+        else original_stat(p, **kw))
+    checked = []
+    monkeypatch.setattr(boot, "encrypted_storage", lambda p: checked.append(p))
+    monkeypatch.setattr(boot, "require_luks2", lambda p: checked.append(p))
+    if same_directory:
+        boot.verify_mount(str(target), str(source), "none")
+        assert checked == [target, "/dev/mapper/data"]
+    else:
+        with pytest.raises(ValueError, match="bind source root"):
+            boot.verify_mount(str(target), str(source), "none")
+        assert not checked

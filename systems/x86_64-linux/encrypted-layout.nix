@@ -5,9 +5,6 @@ let
   enabled =
     config.luxnix.storage.operatorUnlocked.enable
     && config.luxnix.storage.operatorUnlocked.layout == "boot-luks";
-  plainRoot =
-    config.luxnix.storage.operatorUnlocked.enable
-    && config.luxnix.storage.operatorUnlocked.layout == "unencrypted-root";
   disks = layout.disko.devices.disk;
   mapping = disk: part: "lx-${disk}-${part}";
   partitions = lib.concatLists (
@@ -45,10 +42,7 @@ let
             extraArgs = map (arg: lib.replaceStrings rawMembers cryptMembers arg) fs.extraArgs;
           };
     in
-    if plainRoot then
-      # This changes the provisioning declaration only; it never converts a disk.
-      if isRoot then p // { content = fs; } else p
-    else if isEfi then
+    if isEfi then
       p
     else
       p
@@ -80,8 +74,8 @@ in
 {
   imports = layout.imports or [ ];
   config = lib.mkMerge [
-    (lib.mkIf (!(enabled || plainRoot)) (builtins.removeAttrs layout [ "imports" ]))
-    (lib.mkIf (enabled || plainRoot) (
+    (lib.mkIf (!enabled) (builtins.removeAttrs layout [ "imports" ]))
+    (lib.mkIf enabled (
       (builtins.removeAttrs layout [ "imports" ])
       // {
         disko = layout.disko // {

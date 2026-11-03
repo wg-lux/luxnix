@@ -80,6 +80,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: DeterminateSystems/determinate-nix-action@v3
+      - name: Reject new Python quality debt
+        run: nix develop .#default --command uv run --locked python scripts/python-quality.py
       - name: Run repository and tracker contracts with locked dependencies
         run: >-
           nix develop .#default --command uv run --locked pytest -q

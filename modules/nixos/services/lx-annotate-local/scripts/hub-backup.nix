@@ -5,14 +5,66 @@
   cfg,
   ...
 }:
-{
+let
+  user = config.user.endoreg-service-user.name;
+  group = config.user.endoreg-service-user.group;
+  stateDir = "/run/luxnix-hub-backup";
+  writer =
+    name:
+    name != "lx-annotate-hub-backup"
+    && (
+      lib.hasPrefix "lx-annotate" name
+      || lib.hasPrefix "lx-dtypes" name
+      || name == "postgres-endoreg-setup"
+    );
+  hubBackupWriterServices = builtins.attrNames (
+    lib.filterAttrs (name: unit: writer name && unit.enable) config.systemd.services
+  );
+  hubBackupWriterTimers = builtins.attrNames (
+    lib.filterAttrs (name: unit: writer name && unit.enable) config.systemd.timers
+  );
+  writers =
+    map (name: "${name}.service") hubBackupWriterServices
+    ++ map (name: "${name}.timer") hubBackupWriterTimers;
+  helper = pkgs.runCommand "hub-backup-coordinator" { } ''
+    mkdir -p "$out"
+    cp ${./hub-backup.py} "$out/backup.py"
+    cp ${../../../../../lx_administration/secret_storage.py} "$out/secret_storage.py"
+  '';
+  capture = pkgs.writeShellScript "capture-hub-backup" ''
+    set -euo pipefail
+    umask 077
+    install -d -m 0750 -o root -g ${lib.escapeShellArg group} ${stateDir}/capture
+    trap 'rm -f ${stateDir}/capture/hub-postgresql.sql.gz' EXIT
+    ${pkgs.util-linux}/bin/runuser -u postgres -- ${config.services.postgresql.package}/bin/pg_dumpall \
+      | ${pkgs.gzip}/bin/gzip -c > ${stateDir}/capture/hub-postgresql.sql.gz
+    chgrp ${lib.escapeShellArg group} ${stateDir}/capture/hub-postgresql.sql.gz
+    chmod 0640 ${stateDir}/capture/hub-postgresql.sql.gz
+    ${pkgs.util-linux}/bin/runuser -u ${lib.escapeShellArg user} -- \
+      env CREDENTIALS_DIRECTORY=${stateDir}/capture HUB_BACKUP_EXCLUSIONS="$1" \
+      ${runLocalHubBackupScript}/bin/runLxAnnotateHubBackup
+  '';
+  specification = pkgs.writeText "hub-backup.json" (
+    builtins.toJSON {
+      protected_root = cfg.runtime.encryptedDataDir;
+      source = cfg.hub.backup.sourceRuntimeDir;
+      destinations = [
+        cfg.hub.backup.incomingDir
+        cfg.hub.backup.snapshotDir
+        cfg.hub.backup.manifestDir
+      ];
+      inherit writers;
+      journal = "${stateDir}/recovery.json";
+      capture_command = [ (toString capture) ];
+    }
+  );
   runLocalHubBackupScript = pkgs.writeShellScriptBin "runLxAnnotateHubBackup" ''
     set -euo pipefail
 
-    runtime_root="${cfg.hub.backup.sourceRuntimeDir}"
-    incoming_root="${cfg.hub.backup.incomingDir}"
-    snapshot_root="${cfg.hub.backup.snapshotDir}"
-    manifest_root="${cfg.hub.backup.manifestDir}"
+    runtime_root=${lib.escapeShellArg cfg.hub.backup.sourceRuntimeDir}
+    incoming_root=${lib.escapeShellArg cfg.hub.backup.incomingDir}
+    snapshot_root=${lib.escapeShellArg cfg.hub.backup.snapshotDir}
+    manifest_root=${lib.escapeShellArg cfg.hub.backup.manifestDir}
     database_dump_source="''${CREDENTIALS_DIRECTORY:?missing systemd credentials directory}/hub-postgresql.sql.gz"
     database_dump_relative="database/all.sql.gz"
     latest_link="$snapshot_root/latest"
@@ -73,13 +125,15 @@
       map (pattern: "rsync_cmd+=(--exclude ${lib.escapeShellArg pattern})") cfg.hub.backup.exclude
     )}
 
+    while IFS= read -r exclusion; do
+      rsync_cmd+=(--exclude "$exclusion")
+    done < <(printf '%s' "''${HUB_BACKUP_EXCLUSIONS:?missing coordinated capture exclusions}" | ${pkgs.jq}/bin/jq -r '.[]')
+
     rsync_cmd+=("$runtime_root/" "$pending_snapshot/")
     "''${rsync_cmd[@]}"
 
-    # systemd exposes the root-readable PostgreSQL dump as a private
-    # credential owned by this unprivileged service. Keep it in the same
-    # pending tree so database and media cross the publication boundary
-    # together.
+    # The coordinator captured this fresh dump while all application writers
+    # were stopped. Keep them stopped until this media copy is published.
     ${pkgs.coreutils}/bin/install -d -m 0750 "$pending_snapshot/database"
     ${pkgs.coreutils}/bin/install -m 0640 \
       "$database_dump_source" \
@@ -170,4 +224,28 @@
 
     echo "Hub backup completed and verified. snapshot=$completed_snapshot manifest=$manifest_file checksums=$checksum_file files=$file_count size_bytes=$size_bytes"
   '';
+in
+{
+  inherit runLocalHubBackupScript hubBackupWriterServices hubBackupWriterTimers;
+  hubBackupStartBarrier = pkgs.runCommand "lx-annotate-hub-backup-start-barrier" { } ''
+    ${lib.concatMapStringsSep "\n" (unit: ''
+      mkdir -p "$out/lib/systemd/system/${unit}.d"
+      printf '[Unit]\nConditionPathExists=!/run/luxnix-hub-backup/quiescing\n' \
+        > "$out/lib/systemd/system/${unit}.d/90-hub-backup.conf"
+    '') writers}
+  '';
+  hubBackupCoordinator = pkgs.writeShellApplication {
+    name = "luxnix-hub-backup";
+    runtimeInputs = [
+      pkgs.python3
+      pkgs.systemd
+      pkgs.util-linux
+      pkgs.coreutils
+      pkgs.gzip
+      pkgs.cryptsetup
+    ];
+    text = ''
+      exec python3 ${helper}/backup.py ${specification} "$@"
+    '';
+  };
 }

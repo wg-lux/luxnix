@@ -161,11 +161,15 @@ def validate(root: Path) -> tuple[list[str], int]:
                 values = deps.get(key)
                 if not isinstance(values, list) or not all(map(text, values)):
                     fail(manifest, f"dependencies.{key} must be a list of text")
-                elif key == "internal":
-                    for value in values:
-                        reference(
-                            manifest, value, "dependencies.internal", "directory", root
-                        )
+                else:
+                    if len(values) != len(set(values)):
+                        fail(manifest, f"duplicate dependencies.{key} entry")
+                    if key == "internal":
+                        for value in values:
+                            reference(
+                                manifest, value, "dependencies.internal",
+                                "directory", root
+                            )
         tests = data.get("tests")
         if not isinstance(tests, dict) or not text(tests.get("command")):
             fail(manifest, "tests must contain directory and nonempty command")

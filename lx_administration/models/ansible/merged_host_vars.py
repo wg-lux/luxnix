@@ -110,14 +110,18 @@ def _dictkey_replace_underscore_keys(
     config_data: dict[str, Any], logger=None
 ) -> dict[str, Any]:
     transformed_config_data: dict[str, Any] = {}
+    original_keys: dict[str, str] = {}
     for nix_key, value in config_data.items():
         transformed_key = _replace_unquoted_underscores(nix_key)
-        if nix_key != transformed_key:
-            if logger:
-                logger.info(f"Transforming key {nix_key} to {transformed_key}")
-            transformed_config_data[transformed_key] = value
-        else:
-            transformed_config_data[nix_key] = value
+        if transformed_key in original_keys:
+            raise ValueError(
+                f"Configuration keys {original_keys[transformed_key]!r} and "
+                f"{nix_key!r} normalize to the same Nix key {transformed_key!r}"
+            )
+        original_keys[transformed_key] = nix_key
+        if logger and nix_key != transformed_key:
+            logger.info(f"Transforming key {nix_key} to {transformed_key}")
+        transformed_config_data[transformed_key] = value
     return transformed_config_data
 
 

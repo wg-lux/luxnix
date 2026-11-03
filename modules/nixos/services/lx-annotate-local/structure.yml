@@ -13,6 +13,18 @@ boundaries:
 - Runtime dependency versions belong to the selected application artifact, not independent source inputs
 - Preserve database ownership, encrypted storage and least-privilege secret contracts
 entrypoints:
+- name: locked-wheelhouse
+  file: wheelhouse.nix
+  purpose: Materialize the matching application's pyproject.toml and uv.lock production closure and build source-only wheels offline with pinned Nix tooling.
+- name: application-lock-selection
+  file: scripts/wheelhouse-lock.py
+  purpose: Validate source/wheel dependency parity and export only compatible production artifacts from the unchanged upstream lock.
+- name: coordinated-hub-backup
+  file: scripts/hub-backup.py
+  purpose: Validate encrypted containment, quiesce writers across fresh database/media capture and recover prior unit state after interruption.
+- name: hub-oidc-startup
+  file: scripts/hub-oidc-entrypoint.py
+  purpose: Validate backend authentication compatibility in the wheel entrypoint before starting application code; failures abort startup.
 - name: wheel-python-repair
   file: scripts/wheel-python-repair.py
   purpose: Rebind the wheel virtualenv to configured Python while preserving downgrade evidence.

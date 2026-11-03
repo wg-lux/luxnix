@@ -6,6 +6,18 @@
 }:
 let
   inherit (lib) mkOption types;
+  backupPath = types.addCheck types.str (
+    path:
+    lib.hasPrefix "/" path
+    && lib.all (
+      part:
+      !builtins.elem part [
+        ""
+        "."
+        ".."
+      ]
+    ) (lib.splitString "/" (lib.removePrefix "/" path))
+  );
   inherit (lxAnnotateRuntime.paths)
     runtimeDataRootPath
     hubBackupIncomingPath
@@ -235,22 +247,22 @@ in
                   description = "Enable protected backup groundwork on the hub node. This provisions a landing area for inbound backups and periodic local runtime snapshots.";
                 };
                 incomingDir = mkOption {
-                  type = types.str;
+                  type = backupPath;
                   default = hubBackupIncomingPath;
                   description = "Protected landing directory for inbound backups staged on the hub node.";
                 };
                 snapshotDir = mkOption {
-                  type = types.str;
+                  type = backupPath;
                   default = hubBackupSnapshotPath;
                   description = "Protected directory where the hub node stores timestamped runtime snapshots.";
                 };
                 manifestDir = mkOption {
-                  type = types.str;
+                  type = backupPath;
                   default = hubBackupManifestPath;
                   description = "Protected directory for JSON manifests describing generated hub snapshots.";
                 };
                 sourceRuntimeDir = mkOption {
-                  type = types.str;
+                  type = backupPath;
                   default = runtimeDataRootPath;
                   description = "Runtime tree snapshotted by the hub backup service. This should remain the encrypted lx-annotate data root.";
                 };
@@ -276,11 +288,8 @@ in
                     "temp"
                     "frames"
                     "raw_frames"
-                    "hub/backup/incoming"
-                    "hub/backup/snapshots"
-                    "hub/backup/manifests"
                   ];
-                  description = "Paths excluded from hub runtime snapshots. Defaults omit disposable frame/temp output and the backup directories themselves.";
+                  description = "Paths excluded from hub runtime snapshots. Defaults omit disposable frame/temp output. The coordinator always excludes the physically validated backup destinations.";
                 };
               };
             };

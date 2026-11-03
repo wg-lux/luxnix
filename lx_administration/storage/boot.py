@@ -11,11 +11,14 @@ import subprocess
 import uuid
 
 if __package__:
-    from lx_administration.secret_storage import encrypted_storage, _require_encrypted_device
+    from lx_administration.secret_storage import (
+        encrypted_storage, filesystem_devices, _require_encrypted_device,
+    )
 else:
-    from secret_storage import encrypted_storage, _require_encrypted_device
+    from secret_storage import (
+        encrypted_storage, filesystem_devices, _require_encrypted_device,
+    )
 
-BTRFS_SYSFS = Path("/sys/fs/btrfs")
 BLOCK_SYSFS = Path("/sys/dev/block")
 
 
@@ -41,13 +44,15 @@ def require_luks2(device: str) -> None:
 def verify_mount(path: str, expected: str, expected_type: str | None = None,
                  subvolume: str | None = None, *,
                  encrypted: bool = True) -> None:
-    # Runtime callers retain encryption checks; only explicit install mode opts out.
+    # Read-only diagnostic callers may inspect plaintext; production uses encryption.
     records = probe("findmnt", "--json", "--mountpoint", path,
                     "--output", "SOURCE,FSTYPE,UUID,FSROOT")["filesystems"]
     if len(records) != 1:
         raise ValueError(f"Missing or ambiguous required mount: {path}")
     fs = records[0]
-    if expected_type is not None and fs["fstype"] != expected_type:
+    bind = not expected.startswith("/dev/") and expected_type != "tmpfs"
+    if (expected_type not in (None, "none" if bind else None)
+            and fs["fstype"] != expected_type):
         raise ValueError(f"Unexpected filesystem type at {path}")
     if subvolume is not None and fs.get("fsroot") != "/" + subvolume.removeprefix("subvol=").lstrip("/"):
         raise ValueError(f"Unexpected Btrfs subvolume at {path}")
@@ -55,28 +60,23 @@ def verify_mount(path: str, expected: str, expected_type: str | None = None,
         encrypted_storage(Path(path), allow_runtime=True)
         return
     source = fs["source"].split("[", 1)[0]
-    if not expected.startswith("/dev/"):
-        # Bind sources are directories; resolve their filesystem independently.
+    if bind:
+        # A matching disk alone would also accept a different directory/subvolume.
+        directory = Path(expected)
+        if (not directory.is_absolute() or ".." in directory.parts
+                or directory.resolve() != directory
+                or not os.path.samefile(path, expected)):
+            raise ValueError(f"Unexpected bind source root at {path}")
         expected = probe("findmnt", "--json", "--target", expected,
                          "--output", "SOURCE")["filesystems"][0]["source"].split("[", 1)[0]
     if os.stat(source).st_rdev != os.stat(expected).st_rdev:
         raise ValueError(f"Unexpected backing device at {path}")
     if encrypted:
         encrypted_storage(Path(path))
-        require_luks2(source)
-    # lsblk on a Btrfs mount's SOURCE only covers one member. Check all members
-    # from the kernel's mounted filesystem view; degraded/missing members fail.
-    if fs["fstype"] == "btrfs":
-        members = BTRFS_SYSFS / fs["uuid"] / "devices"
-        devices = list(members.glob("*/dev"))
-        if not devices:
-            raise ValueError(f"No Btrfs members at {path}")
-        for device in devices:
-            number = device.read_text().strip()
-            if number == "0:0":
-                raise ValueError(f"Missing Btrfs member at {path}")
-            if encrypted:
-                require_luks2(f"/dev/block/{number}")
+    # Install mode still rejects incomplete members; runtime requires LUKS2 too.
+    for device in filesystem_devices(fs):
+        if encrypted:
+            require_luks2(device)
 
 
 def reject_retired_mount(path: str) -> None:

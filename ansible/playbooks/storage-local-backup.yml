@@ -31,6 +31,17 @@
         group: root
         mode: '0600'
 
+    - name: Install the reviewed migration policy beside the streaming tool
+      ansible.builtin.copy:
+        src: '{{ playbook_dir }}/../../lx_administration/storage/{{ item }}'
+        dest: '/var/lib/luxnix-migration-tools/{{ item }}'
+        owner: root
+        group: root
+        mode: '0600'
+      loop:
+        - migration_policy.py
+        - migration-policy.yml
+
     - name: Retain the reviewed age package without changing the system profile
       ansible.builtin.command:
         argv: [nix-store, --add-root, /var/lib/luxnix-migration-tools/age, --realise, '{{ backup_age_package }}']

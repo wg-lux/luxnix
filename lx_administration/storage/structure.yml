@@ -10,12 +10,21 @@ boundaries:
   - Do not mount or alter live storage during context validation
   - Preserve encrypted storage and hub authentication boundaries
 entrypoints:
+  - name: recovery-export
+    file: recovery_export.py
+    purpose: Share explicit optimized-Python-safe validation and private publication of encrypted recovery records.
+  - name: migration-policy
+    file: migration_policy.py
+    purpose: Validate canonical writer and source coverage for snapshots and backup transport.
+  - name: migration-policy-input
+    file: migration-policy.yml
+    purpose: Declare reviewed migration hosts, protected source mounts and application writer units.
   - name: independent-recovery-custody
     file: recovery_custody.py
     purpose: Prepare dedicated age identities and verify independently decryptable recovery envelopes without replacing originals.
   - name: boot-migration
     file: boot_migration.py
-    purpose: Bind explicit encrypted/plain-root and fresh/migration plans to hardware checks, reviewed evidence and idempotent install-only actions.
+    purpose: Bind explicit LUKS2 fresh/migration plans to hardware checks, reviewed evidence and idempotent install-only actions.
   - name: storage-readiness
     file: readiness.py
     purpose: Collect observations or reject incomplete host, layout and disk-identity admission without changing storage.
@@ -45,7 +54,7 @@ entrypoints:
     purpose: Validate explicit TPM admission or passphrase-wrapped seals with authenticated runtime staging; never initialize state at boot.
   - name: storage-provision
     file: provision.py
-    purpose: Escrow recovery in the existing encrypted admin vault and an independent host before explicit local or SSH-targeted passphrase, TPM or local OpenBao provisioning.
+    purpose: Preserve existing recovery escrow and bound passphrase container provisioning to gc-09/gc-10 migration; reject alternative enrollment.
   - name: storage-provision-setup
     file: provision_setup.py
     purpose: Interactive, resumable operator guide that runs read-only prerequisite checks and delegates every change to storage-provision after typed confirmation.

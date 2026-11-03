@@ -15,7 +15,6 @@ let
     && (storage.autoStartProtectedServices or true)
     && builtins.elem storage.layout [
       "legacy-containers"
-      "unencrypted-root"
     ]
     && (storage.unlockMethod or "") == "local-openbao";
   # Passphrase seal: the operator's boot passphrase unwraps the seal key; no TPM binding.

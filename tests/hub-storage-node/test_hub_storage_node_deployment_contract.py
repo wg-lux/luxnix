@@ -8,8 +8,6 @@ from hub_storage_nix_eval_helpers import eval_json
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MODULE = REPO_ROOT / "modules/nixos/services/hub-storage-node/default.nix"
 PROFILE = REPO_ROOT / "modules/nixos/profiles/endoreg-storage-node/default.nix"
-GS01 = REPO_ROOT / "systems/x86_64-linux/gs-01/default.nix"
-GS02 = REPO_ROOT / "systems/x86_64-linux/gs-02/default.nix"
 GS01_INVENTORY = REPO_ROOT / "ansible/inventory/host_vars/gs-01.yml"
 
 
@@ -86,27 +84,34 @@ def test_storage_node_role_is_inactive_until_explicitly_enabled() -> None:
 
 
 def test_gs01_is_declared_as_gs02_only_storage_peer_with_balancing_gated() -> None:
-    gs01 = GS01.read_text(encoding="utf-8")
-    gs02 = GS02.read_text(encoding="utf-8")
-    gs01_inventory = GS01_INVENTORY.read_text(encoding="utf-8")
+    import yaml
 
-    assert 'hubStorage.node.identity = "gs-01"' in gs01
-    assert 'hubStorage.node.storage.mountPoint = "/archive"' in gs01
-    assert 'encryptedDevice = "/dev/mapper/gs-01-storage"' in gs01
-    assert 'listenAddress = "172.16.255.21"' in gs01
-    assert 'allowedHubAddresses = [ "172.16.255.22" ]' in gs01
-    assert 'allowedHubIdentities = [ "spiffe://endoreg/hub/gs-02" ]' in gs01
-    assert "hubStorage.hubClient.enable = true" in gs02
-    assert "hubStorage.hubClient.balancing.enable = false" in gs02
-    assert 'identity = "gs-01"' in gs02
-    assert 'endpoint = "https://gs-01.intern:9443"' in gs02
-    assert 'recipientPublicKeyFile = "/etc/secrets/vault/hub-storage/' in gs02
-    assert 'luxnix.hubStorage.node.enable: "true"' in gs01_inventory
-    assert "luxnix.hubStorage.node.identity: '\"gs-01\"'" in gs01_inventory
-    assert (
-        "luxnix.hubStorage.node.storage.encryptedDevice: "
-        "'\"/dev/mapper/gs-01-storage\"'"
-    ) in gs01_inventory
+    settings = eval_json('''
+      let f = builtins.getFlake "__LUXNIX_FLAKE_URI__";
+      in {
+        node = f.nixosConfigurations.gs-01.config.services.luxnix.hubStorage.node;
+        hub = f.nixosConfigurations.gs-02.config.services.luxnix.hubStorage.hubClient;
+      }
+    ''')
+    node, hub = settings["node"], settings["hub"]
+    assert node["enable"] is True
+    assert node["identity"] == "gs-01"
+    assert node["storage"]["mountPoint"] == "/archive"
+    assert node["storage"]["encryptedDevice"] == "/dev/mapper/gs-01-storage"
+    assert node["network"]["listenAddress"] == "172.16.255.21"
+    assert node["network"]["allowedHubAddresses"] == ["172.16.255.22"]
+    assert node["network"]["allowedHubIdentities"] == ["spiffe://endoreg/hub/gs-02"]
+    assert hub["enable"] is True
+    assert hub["balancing"]["enable"] is False
+    assert len(hub["nodes"]) == 1
+    peer = hub["nodes"][0]
+    assert peer["identity"] == "gs-01"
+    assert peer["endpoint"] == "https://gs-01.intern:9443"
+    assert peer["recipientPublicKeyFile"].startswith("/etc/secrets/vault/hub-storage/")
+    canonical = yaml.safe_load(GS01_INVENTORY.read_text())["host_services"]
+    assert canonical["luxnix.hubStorage.node.enable"] == "true"
+    assert canonical["luxnix.hubStorage.node.identity"] == '\"gs-01\"'
+    assert canonical["luxnix.hubStorage.node.storage.encryptedDevice"] == '\"/dev/mapper/gs-01-storage\"'
 
 
 def test_storage_node_fails_closed_on_mount_identity_network_and_capacity() -> None:

@@ -10,6 +10,12 @@ boundaries:
   - Do not edit generated host or home output instead of inventory and templates
   - Do not activate hosts or expose secrets during context inspection
 entrypoints:
+  - name: application-dependency-closure
+    file: release-artifacts/lx-annotate/1.7.2/dependencies.yml
+    purpose: Retain historical 1.7.2 dependency evidence; current wheelhouses use the matching application's pyproject.toml and uv.lock.
+  - name: python-quality-policy
+    file: python-quality.yml
+    purpose: Pin Python lint scope, Ruff version and reviewed diagnostic fingerprints.
   - name: boot-encryption-acceptance
     file: boot-encryption-acceptance.yml
     purpose: Boot LUKS acceptance requirements and explicitly superseded container/OpenBao evidence.

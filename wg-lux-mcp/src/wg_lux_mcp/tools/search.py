@@ -4,7 +4,14 @@ import ast
 import re
 from pathlib import Path
 
-from ..repo import resolve_repo, run_readonly
+from ..repo import (
+    CommittedFile,
+    RepositoryError,
+    committed_files,
+    public_path,
+    read_blob,
+    resolve_repo,
+)
 from .repos import repository_commit
 
 MAX_FILE_BYTES = 1_000_000
@@ -24,25 +31,20 @@ SEARCHABLE_SUFFIXES = {
 }
 
 
-def _tracked_files(root: Path, suffixes: set[str] | None = None) -> list[Path]:
-    raw = run_readonly(root, ["git", "ls-files", "-z"])
-    root = root.resolve()
-    paths: list[Path] = []
-    for relative in raw.split("\0"):
-        if not relative:
-            continue
-        path = root / relative
-        if suffixes is not None and path.suffix.lower() not in suffixes:
-            continue
-        try:
-            resolved = path.resolve()
-            if root not in resolved.parents or path.is_symlink():
-                continue
-            if resolved.is_file() and resolved.stat().st_size <= MAX_FILE_BYTES:
-                paths.append(resolved)
-        except OSError:
-            continue
-    return paths
+def _tracked_files(root: Path, commit: str, suffixes: set[str]) -> tuple[list[CommittedFile], int]:
+    files = [f for f in committed_files(root, commit) if Path(f.path).suffix.lower() in suffixes]
+    skipped = sum(f.size > MAX_FILE_BYTES for f in files)
+    selected = [f for f in files if f.size <= MAX_FILE_BYTES]
+    if sum(f.size for f in selected) > 64_000_000:
+        raise RepositoryError("Search exceeds its 64 MB scan budget; no partial result was used")
+    return selected, skipped
+
+
+def _text(root: Path, file: CommittedFile) -> str:
+    data = read_blob(root, file, MAX_FILE_BYTES)
+    if b"\0" in data:
+        raise UnicodeDecodeError("utf-8", data, 0, 1, "binary content")
+    return data.decode("utf-8")
 
 
 def _query_terms(query: str) -> list[str]:
@@ -52,12 +54,11 @@ def _query_terms(query: str) -> list[str]:
     return terms[:12]
 
 
-def _source(
-    repo: str, root: Path, path: Path, commit: str, start: int, end: int
-) -> dict[str, object]:
+def _source(repo: str, file: CommittedFile, commit: str, start: int, end: int) -> dict[str, object]:
     return {
         "repo": repo,
-        "path": str(path.relative_to(root)),
+        "path": file.path,
+        "blob": file.blob,
         "commit": commit,
         "lines": [start, end],
     }
@@ -70,32 +71,45 @@ def search_code(repo: str, query: str, max_results: int = 20) -> dict[str, objec
     terms = _query_terms(query)
     root = resolve_repo(repo)
     commit = repository_commit(repo, root)
-    matches: list[tuple[int, str, int, str, Path]] = []
+    matches: list[tuple[int, str, int, str, CommittedFile]] = []
+    files, skipped = _tracked_files(root, commit, SEARCHABLE_SUFFIXES)
+    match_count = 0
 
-    for path in _tracked_files(root, SEARCHABLE_SUFFIXES):
+    for path in files:
         try:
-            lines = path.read_text(encoding="utf-8").splitlines()
+            lines = _text(root, path).splitlines()
         except (OSError, UnicodeDecodeError):
             continue
-        relative = str(path.relative_to(root)).lower()
+        relative = path.path.lower()
         for number, line in enumerate(lines, start=1):
             lowered = line.lower()
             matched = sum(term in lowered for term in terms)
             path_matches = sum(term in relative for term in terms)
             if matched:
                 score = matched * 10 + path_matches * 3
+                match_count += 1
                 matches.append((score, relative, number, line.strip()[:240], path))
+                if len(matches) >= max_results * 2:
+                    matches.sort(key=lambda item: (-item[0], item[1], item[2]))
+                    del matches[max_results:]
 
     matches.sort(key=lambda item: (-item[0], item[1], item[2]))
     hits = [
         {
             "summary": snippet,
             "score": score,
-            "sources": [_source(repo, root, path, commit, number, number)],
+            "sources": [_source(repo, path, commit, number, number)],
         }
         for score, _, number, snippet, path in matches[:max_results]
     ]
-    return {"query": query, "repo": repo, "matches": hits, "truncated": len(matches) > max_results}
+    return {
+        "query": query,
+        "repo": repo,
+        "matches": hits,
+        "truncated": match_count > max_results,
+        "skipped_large_files": skipped,
+        "commit": commit,
+    }
 
 
 def _qualified_definitions(
@@ -123,9 +137,10 @@ def find_symbol(repo: str, symbol: str, max_results: int = 20) -> dict[str, obje
     expected = symbol.strip().lower()
     hits: list[dict[str, object]] = []
 
-    for path in _tracked_files(root, {".py"}):
+    files, skipped = _tracked_files(root, commit, {".py"})
+    for path in files:
         try:
-            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            tree = ast.parse(_text(root, path), filename=path.path)
         except (OSError, UnicodeDecodeError, SyntaxError):
             continue
         for qualified, node in _qualified_definitions(tree):
@@ -135,9 +150,10 @@ def find_symbol(repo: str, symbol: str, max_results: int = 20) -> dict[str, obje
                     {
                         "symbol": qualified,
                         "kind": type(node).__name__.removesuffix("Def").lower(),
-                        "summary": ast.get_docstring(node, clean=True)
-                        or f"Definition of {qualified}",
-                        "sources": [_source(repo, root, path, commit, node.lineno, end)],
+                        "summary": (
+                            ast.get_docstring(node, clean=True) or f"Definition of {qualified}"
+                        )[:500],
+                        "sources": [_source(repo, path, commit, node.lineno, end)],
                     }
                 )
     hits.sort(key=lambda hit: (str(hit["sources"][0]["path"]), str(hit["symbol"])))  # type: ignore[index]
@@ -146,6 +162,8 @@ def find_symbol(repo: str, symbol: str, max_results: int = 20) -> dict[str, obje
         "symbol": symbol,
         "matches": hits[:max_results],
         "truncated": len(hits) > max_results,
+        "skipped_large_files": skipped,
+        "commit": commit,
     }
 
 
@@ -154,39 +172,47 @@ def get_related_tests(repo: str, path: str, max_results: int = 20) -> dict[str, 
     if not 1 <= max_results <= 50:
         raise ValueError("max_results must be between 1 and 50")
     root = resolve_repo(repo)
-    requested = (root / path).resolve()
-    if requested != root and root not in requested.parents:
-        raise ValueError("Path escapes repository root")
+    requested = Path(public_path(path))
     commit = repository_commit(repo, root)
     stem = requested.stem.lower()
-    module = str(requested.relative_to(root).with_suffix("")).replace("/", ".").lower()
-    hits: list[tuple[int, Path, str]] = []
+    module = str(requested.with_suffix("")).replace("/", ".").lower()
+    hits: list[tuple[int, CommittedFile, str]] = []
 
-    for candidate in _tracked_files(root, {".py"}):
-        relative = str(candidate.relative_to(root)).lower()
-        if not (candidate.name.startswith("test_") or "/tests/" in f"/{relative}"):
+    files, skipped = _tracked_files(root, commit, {".py"})
+    for candidate in files:
+        relative = candidate.path.lower()
+        if not (Path(candidate.path).name.startswith("test_") or "/tests/" in f"/{relative}"):
             continue
         try:
-            text = candidate.read_text(encoding="utf-8")
+            text = _text(root, candidate)
         except (OSError, UnicodeDecodeError):
             continue
-        score = (10 if stem in candidate.stem.lower() else 0) + (5 if module in text.lower() else 0)
+        score = (10 if stem in Path(candidate.path).stem.lower() else 0) + (
+            5 if module in text.lower() else 0
+        )
         score += 3 if stem in text.lower() else 0
         if score:
             reason = (
                 "matching test filename"
-                if stem in candidate.stem.lower()
+                if stem in Path(candidate.path).stem.lower()
                 else "references source module"
             )
             hits.append((score, candidate, reason))
 
-    hits.sort(key=lambda item: (-item[0], str(item[1])))
+    hits.sort(key=lambda item: (-item[0], item[1].path))
     results = [
         {
             "summary": reason,
             "score": score,
-            "sources": [_source(repo, root, candidate, commit, 1, 1)],
+            "sources": [_source(repo, candidate, commit, 1, 1)],
         }
         for score, candidate, reason in hits[:max_results]
     ]
-    return {"repo": repo, "path": path, "matches": results, "truncated": len(hits) > max_results}
+    return {
+        "repo": repo,
+        "path": path,
+        "matches": results,
+        "truncated": len(hits) > max_results,
+        "skipped_large_files": skipped,
+        "commit": commit,
+    }

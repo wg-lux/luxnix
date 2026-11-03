@@ -10,6 +10,9 @@ boundaries:
   - Import and renderer layers must not pull in password or vault subsystems
   - Render comparisons outside the repository before replacing tracked output
 entrypoints:
+  - name: publication
+    file: publication.py
+    purpose: Journal generated file sets and recover interrupted publication under a shared reader/writer lock.
   - name: pipeline
     file: main.py
     purpose: Inspect pipeline ownership and interfaces.

@@ -68,8 +68,8 @@ Manager renderers therefore share one definition of their platform, host, and
 `default.nix` paths. All five filesystem layouts live together in
 `lx_administration.autoconf.layout`; `config.py` remains focused on loading and
 validating user options. The public `nix.render_configurations` stage receives
-the same `AutoconfConfig` object as the pipeline instead of duplicating its path
-and Home Manager options across function arguments.
+central configuration options, with isolated output paths while the full
+pipeline stages a candidate.
 
 Within the import stage, `imports/main.py` loads and validates source data,
 while `imports/artifacts.py` owns private staging and atomic publication of the
@@ -200,9 +200,32 @@ run_from_config(config)
 The pipeline runs these stages:
 
 1. Load the Ansible inventory, CMDB facts, roles, and variables.
-2. Write merged intermediate data below the configured Autoconf output path.
-3. Render system and Home Manager configurations from the configured template
-   directory into the configured Nix output path.
+2. Stage merged intermediate data privately without replacing current output.
+3. Render and format system and Home Manager configurations in that isolated
+   candidate, then publish intermediates and Nix output as one recoverable set.
+
+Publication uses a private `.autoconf-publication` journal and a shared lock in
+`paths.output`, with explicit admission of the configured intermediate and Nix
+output roots. A failed replacement rolls back the set; an interrupted
+process leaves the journal for recovery before the next cooperating reader or
+generation. Run the same canonical generation command again to recover. Do not
+remove the journal or deploy output while it remains. A conflicting external
+edit blocks recovery for operator review. Atomic replacement protects each file;
+external readers that bypass the lock can observe an in-progress generation
+across different directories and must wait for successful completion.
+
+Inventory dependency lookup is strict: define a group or role through its
+loader before referring to it. Misspelled or missing dependencies fail instead
+of becoming empty definitions. Underscores in option keys normalize to hyphens;
+distinct spellings that collapse to the same key are rejected, including across
+layers. Intentional overrides must retain the same input spelling.
+
+Literal Nix strings escape interpolation syntax such as `${...}`. For values
+that would otherwise be interpreted through the legacy raw-string convention,
+use an explicit YAML mapping: `__nix_string__: <literal>` or
+`__nix_expression__: <reviewed expression>`. Each wrapper must contain exactly
+one key. Existing canonical raw expressions remain compatible; do not put
+untrusted text in an expression wrapper.
 
 Run logs are written below `paths.output/logs`, independent of the invoking
 working directory. The directory uses mode `0700` and log files use mode

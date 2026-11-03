@@ -9,7 +9,7 @@ SECRET_TYPES = [
 ]
 
 
-LOCAL_USER_SECRET_TYPES = ["password", "id_ed25519", "id_rsa"]
+LOCAL_USER_SECRET_TYPES = ["password"]
 for _ in LOCAL_USER_SECRET_TYPES:
     assert _ in SECRET_TYPES, f"Invalid secret_type: {_}"
 

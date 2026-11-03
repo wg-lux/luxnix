@@ -1,51 +1,52 @@
-# Purpose: Define only the lx-annotate-hub-backup.service unit and its matching triggers.
-# Command: runLxAnnotateHubBackup.
+# One writer pause covers a fresh PostgreSQL dump and protected media capture.
 { ctx }:
 with ctx;
 {
-  systemd.services.lx-annotate-hub-backup = mkIf cfg.hub.backup.enable {
-    description = "Create coupled PostgreSQL and protected lx-annotate hub runtime snapshots";
-    after = [
-      "lx-annotate.service"
-      "postgresqlBackup.service"
-    ]
-    ++ encryptionServiceUnits;
-    wants = [ "lx-annotate.service" ] ++ encryptionServiceUnits;
-    requires = [ "postgresqlBackup.service" ] ++ encryptionServiceUnits;
-    unitConfig = encryptedDataMountUnitConfig;
-    serviceConfig = {
-      Type = "oneshot";
-      User = endoreg-service-user-name;
-      Group = endoreg-service-group-name;
-      WorkingDirectory = runtimeDataRootPath;
-      ExecStart = "${runLocalHubBackupScript}/bin/runLxAnnotateHubBackup";
-      LoadCredential = [
-        "hub-postgresql.sql.gz:${config.services.postgresqlBackup.location}/all.sql.gz"
-      ];
-      ReadWritePaths = [
-        envDataDir
-        cfg.hub.backup.incomingDir
-        cfg.hub.backup.snapshotDir
-        cfg.hub.backup.manifestDir
-        runtimeRootPath
-      ];
-    };
-    path = [
-      pkgs.coreutils
-      pkgs.findutils
-      pkgs.gzip
-      pkgs.jq
-      pkgs.rsync
-    ];
-  };
+  # systemd.packages merges drop-ins into the generated system unit directory.
+  systemd = {
+    packages = lib.optional cfg.hub.backup.enable hubBackupStartBarrier;
+    services = mkIf cfg.hub.backup.enable (
+      lib.mkMerge [
+        {
+          lx-annotate-hub-backup = {
+            description = "Capture a consistent PostgreSQL and protected hub runtime restore point";
+            after = [ "postgresql.service" ] ++ encryptionServiceUnits;
+            requires = [ "postgresql.service" ] ++ encryptionServiceUnits;
+            unitConfig = encryptedDataMountUnitConfig;
+            serviceConfig = {
+              Type = "oneshot";
+              User = "root";
+              Group = endoreg-service-group-name;
+              RuntimeDirectory = "luxnix-hub-backup";
+              RuntimeDirectoryMode = "0710";
+              RuntimeDirectoryPreserve = "yes";
+              TimeoutStartSec = "24h";
+              TimeoutStopSec = "10min";
+              WorkingDirectory = runtimeDataRootPath;
+              ExecStart = "${hubBackupCoordinator}/bin/luxnix-hub-backup capture";
+              ExecStopPost = "${hubBackupCoordinator}/bin/luxnix-hub-backup recover";
+              LimitCORE = 0;
+              UMask = "0077";
+            };
+          };
+        }
+      ]
+    );
 
-  systemd.timers.lx-annotate-hub-backup = mkIf cfg.hub.backup.enable {
-    description = "Periodic protected snapshots for the lx-annotate hub node";
-    wantedBy = [ "timers.target" ];
-    timerConfig = {
-      OnBootSec = "10m";
-      OnCalendar = cfg.hub.backup.onCalendar;
-      Unit = "lx-annotate-hub-backup.service";
-    };
+    timers = mkIf cfg.hub.backup.enable (
+      lib.mkMerge [
+        {
+          lx-annotate-hub-backup = {
+            description = "Periodic consistent protected hub snapshots";
+            wantedBy = [ "timers.target" ];
+            timerConfig = {
+              OnBootSec = "10m";
+              OnCalendar = cfg.hub.backup.onCalendar;
+              Unit = "lx-annotate-hub-backup.service";
+            };
+          };
+        }
+      ]
+    );
   };
 }

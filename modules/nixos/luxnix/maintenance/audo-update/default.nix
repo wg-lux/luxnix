@@ -12,7 +12,7 @@ let
 in
 {
   options.luxnix.maintenance.autoUpdates = with types; {
-    enable = mkBoolOpt false "Enable or disable the scheduled rebooting of the system";
+    enable = mkBoolOpt false "Stage a reviewed revision for a separately authorized reboot";
 
     dates = mkOption {
       type = with types; str;
@@ -21,27 +21,30 @@ in
     };
 
     operation = mkOption {
-      type = with types; str;
-      default = "boot"; # alternatively: update
-      description = "The operation to perform";
+      type = str;
+      default = "boot";
+      description = "Stage the reviewed system without live activation";
     };
 
     flake = mkOption {
       type = with types; str;
-      # TODO (maintenance owner): select a pinned production branch after the
-      # release workflow publishes and verifies that branch.
-      default = "github:wg-lux/luxnix";
-      description = "The flake to upgrade";
+      default = "";
+      description = "Reviewed github:wg-lux/luxnix/<full commit SHA> flake";
     };
 
   };
 
-  # TODO (maintenance owner): document timer inspection and rollback commands
-  # in the module runbook before enabling unattended upgrades on production hosts.
-  # sudo systemctl status nixos-upgrade.timer
-  # sudo systemctl status nixos-upgrade.service
-
   config = mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = builtins.match "github:wg-lux/luxnix/[0-9a-f]{40}" cfg.flake != null;
+        message = "Scheduled upgrades require an explicitly reviewed full LuxNix commit SHA.";
+      }
+      {
+        assertion = cfg.operation == "boot";
+        message = "Scheduled upgrades may only stage boot; activation requires operator review.";
+      }
+    ];
     system.autoUpgrade = {
       inherit (cfg)
         enable
@@ -51,10 +54,11 @@ in
         ;
       flags = [
         "-L"
+        "--no-update-lock-file"
       ];
       fixedRandomDelay = true;
       randomizedDelaySec = "30min";
-      allowReboot = true;
+      allowReboot = false;
     };
   };
 

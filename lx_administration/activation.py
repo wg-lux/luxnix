@@ -200,14 +200,36 @@ def acknowledge(identifier):
     run('systemctl', 'stop', 'luxnix-rollback-' + identifier + '.timer')
 
 
+def stop_activation_worker(identifier):
+    unit = 'luxnix-activate-' + identifier + '.service'
+    try:
+        run('systemctl', 'stop', unit)
+        return
+    except (ValueError, subprocess.TimeoutExpired):
+        # A transient unit may have been collected after RuntimeMaxSec expired.
+        # Do not interpret arbitrary stop/bus failures as proof it is gone.
+        expected = {'LoadState': 'not-found', 'ActiveState': 'inactive',
+                    'MainPID': '0', 'ControlPID': '0'}
+        result = subprocess.run(
+            ['systemctl', 'show', unit, '--all',
+             *('--property=' + name for name in expected)],
+            text=True, capture_output=True, timeout=30)
+        lines = result.stdout.splitlines()
+        fields = dict(line.split('=', 1) for line in lines if '=' in line)
+        if result.returncode in {0, 1, 4} and len(lines) == len(expected) and fields == expected:
+            return
+        raise ValueError('Activation worker could not be stopped or confirmed absent; rollback refused') from None
+
+
 def recover(identifier, stop_worker=True):
-    # The watchdog stops a stuck worker before restoring an approved compatible closure.
-    if stop_worker:
-        run('systemctl', 'stop', 'luxnix-activate-' + identifier + '.service')
     with locked(wait=True):
         path, value = load(identifier)
         if value['status'] in {'accepted', 'rolled-back'}:
             return
+        # Serialize state inspection, worker termination and rollback against
+        # start/ack/worker publication. Terminal records need no transient unit.
+        if stop_worker:
+            stop_activation_worker(identifier)
         value['status'] = 'recovering'
         save(path, value)
         run('nix-env', '--profile', str(PROFILE), '--set', value['previous'])

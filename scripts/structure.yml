@@ -10,6 +10,9 @@ boundaries:
   - Do not bypass documented Devenv wrappers for sensitive operations
   - Manual destructive operations require reviewed targets and explicit authorization
 entrypoints:
+  - name: python-quality
+    file: python-quality.py
+    purpose: Enforce fingerprinted Ruff debt without permitting new diagnostics or baseline increases.
   - name: identity-secrets-runtime
     file: run-identity-secrets.py
     purpose: Retired central identity delivery entrypoint; rejects before credentials or network access.

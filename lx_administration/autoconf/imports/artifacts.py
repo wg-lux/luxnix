@@ -1,6 +1,5 @@
 """Atomically publish validated Autoconf intermediate artifacts."""
 
-import os
 import tempfile
 from pathlib import Path
 
@@ -9,6 +8,7 @@ from lx_administration.permissions import ensure_private_directory
 from lx_administration.yaml import PRIVATE_FILE_MODE, dump_yaml, format_yaml
 
 from ..layout import AutoconfOutputLayout
+from ..publication import publication_lock, publish_files
 
 HostVariables = dict[str, object]
 ValidatedHosts = list[tuple[str, HostVariables]]
@@ -35,17 +35,23 @@ def _publish_merged_host_variables(
     validated_hosts: ValidatedHosts,
 ) -> None:
     """Publish a staged host set and then remove stale generated files."""
-    current_hostnames = {hostname for hostname, _ in validated_hosts}
-    ensure_private_directory(output_dir)
-    for hostname, _ in validated_hosts:
-        os.replace(
-            staging_dir / f"{hostname}.yml",
-            output_dir / f"{hostname}.yml",
+    with publication_lock(output_dir.parent):
+        current_hostnames = {hostname for hostname, _ in validated_hosts}
+        ensure_private_directory(output_dir)
+        outputs = [
+            (
+                output_dir / f"{hostname}.yml",
+                (staging_dir / f"{hostname}.yml").read_bytes(),
+                PRIVATE_FILE_MODE,
+            )
+            for hostname, _ in validated_hosts
+        ]
+        outputs.extend(
+            (stale_file, None, PRIVATE_FILE_MODE)
+            for stale_file in output_dir.glob("*.yml")
+            if stale_file.stem not in current_hostnames
         )
-
-    for stale_file in output_dir.glob("*.yml"):
-        if stale_file.stem not in current_hostnames:
-            stale_file.unlink()
+        publish_files(outputs, root=output_dir.parent, locked=True)
 
 
 def write_merged_host_variables(
@@ -85,9 +91,27 @@ def write_system_intermediates(
         )
         _stage_merged_host_variables(staged_merged_vars, validated_hosts)
 
-        os.replace(staged_inventory, layout.inventory_file)
-        _publish_merged_host_variables(
-            staged_merged_vars,
-            layout.system_vars_dir,
-            validated_hosts,
-        )
+        with publication_lock(autoconf_out):
+            ensure_private_directory(layout.system_vars_dir)
+            names = {hostname for hostname, _ in validated_hosts}
+            outputs = [
+                (
+                    layout.inventory_file,
+                    staged_inventory.read_bytes(),
+                    PRIVATE_FILE_MODE,
+                )
+            ]
+            outputs.extend(
+                (
+                    layout.system_vars_dir / f"{hostname}.yml",
+                    (staged_merged_vars / f"{hostname}.yml").read_bytes(),
+                    PRIVATE_FILE_MODE,
+                )
+                for hostname in names
+            )
+            outputs.extend(
+                (path, None, PRIVATE_FILE_MODE)
+                for path in layout.system_vars_dir.glob("*.yml")
+                if path.stem not in names
+            )
+            publish_files(outputs, root=autoconf_out, locked=True)

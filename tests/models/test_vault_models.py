@@ -73,11 +73,9 @@ class TestVaultModel(unittest.TestCase):
         mock_gethostname.return_value = "test-host"
         self.assertEqual(self.vault.get_local_vault_id(), "test-host")
 
-    @patch("pathlib.Path.exists")
     @patch("lx_administration.models.vault.PreSharedKey.generate")
-    def test_get_or_create_psk(self, mock_generate, mock_exists):
+    def test_get_or_create_psk(self, mock_generate):
         """Test get_or_create_psk method."""
-        mock_exists.return_value = True
         mock_psk = PreSharedKey(
             name="test-host",
             file=str(Path(self.test_dir) / "psk" / "test.psk"),
@@ -85,6 +83,9 @@ class TestVaultModel(unittest.TestCase):
             updated=datetime.now(),
             validity=timedelta(days=30),
         )
+        mock_psk.file_path.parent.mkdir(parents=True, exist_ok=True)
+        mock_psk.file_path.write_text("synthetic-existing-psk")
+        mock_psk.file_path.chmod(0o600)
         mock_generate.return_value = mock_psk
 
         # Test creating new PSK

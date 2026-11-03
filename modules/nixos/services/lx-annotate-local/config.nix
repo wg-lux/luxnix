@@ -161,7 +161,6 @@ let
   wheelhousePath =
     if cfg.runtime.wheelhousePath == null then "" else toString cfg.runtime.wheelhousePath;
   wheelDependencyOverrides = cfg.runtime.wheelDependencyOverrides;
-  wheelDependencyOverrideArgs = lib.concatStringsSep " " wheelDependencyOverrides;
   mediaRuntimePackages = [
     cfg.runtime.tesseractPackage
     pkgs.ffmpeg-headless
@@ -296,7 +295,6 @@ let
       local expected_package_version=${lib.escapeShellArg packageVersion}
       local wheel_hash=""
       local wheelhouse_hash="no-wheelhouse"
-      local wheel_dependency_overrides=${lib.escapeShellArg wheelDependencyOverrideArgs}
       local wheel_dependency_overrides_hash=${lib.escapeShellArg wheelDependencyOverrideHash}
       local pip_install_args=""
       local wheel_install_stamp_file=${lib.escapeShellArg "${runtimeRootPath}/.wheel-install.sha256"}
@@ -307,7 +305,7 @@ let
       local install_hash=""
       local installed_package_version=""
       local install_allowed="''${LX_ANNOTATE_WHEEL_INSTALL_ALLOWED:-true}"
-      local wheel_installer_revision="wheel-console-contract-v8-configured-python"
+      local wheel_installer_revision="wheel-console-contract-v9-locked-closure"
       local venv_created="false"
       local python_changed="false"
       local pip_cache_dir=${lib.escapeShellArg "${runtimeRootPath}/pip-cache"}
@@ -336,20 +334,24 @@ let
       canonical_wheel_name="$(basename "$wheel_path" | sed -E 's/^[a-z0-9]{32}-//')"
       staged_wheel_path=${lib.escapeShellArg runtimeRootPath}'/'"$canonical_wheel_name"
 
-      if [ -n "$wheelhouse_path" ]; then
-        if [ ! -d "$wheelhouse_path" ]; then
-          echo "ERROR: Configured runtime.wheelhousePath does not exist: $wheelhouse_path" >&2
-          exit 1
-        fi
-        wheelhouse_hash="$(
-          (
-            find "$wheelhouse_path" -maxdepth 1 -type f \( -name '*.whl' -o -name '*.tar.gz' -o -name '*.zip' \) -print0 \
-              | sort -z \
-              | xargs -0 -r sha256sum
-          ) | sha256sum | cut -d ' ' -f1
-        )"
-        pip_install_args="--no-index --find-links $wheelhouse_path"
+      if [ -z "$wheelhouse_path" ] || [ ! -f "$wheelhouse_path/requirements.txt" ]; then
+        echo "ERROR: A reviewed wheelhouse with hashed requirements.txt is required." >&2
+        exit 1
       fi
+      wheelhouse_path="$(readlink -f "$wheelhouse_path")"
+      case "$wheelhouse_path" in
+        /nix/store/*)
+          # Its immutable derivation binds every artifact and the source build environment.
+          wheelhouse_hash="$(printf '%s' "$wheelhouse_path" | sha256sum | cut -d ' ' -f1)"
+          ;;
+        *)
+          wheelhouse_hash="$(
+            find -L "$wheelhouse_path" -maxdepth 1 -type f -print0 \
+              | sort -z | xargs -0 -r sha256sum | sha256sum | cut -d ' ' -f1
+          )"
+          ;;
+      esac
+      pip_install_args="--no-index --find-links $wheelhouse_path"
 
       install_hash="$(
         printf '%s\n%s\n%s\n%s\n%s\n%s\n' \
@@ -392,20 +394,20 @@ let
         install -m 0640 "$wheel_path" "$staged_wheel_path"
         export PIP_CACHE_DIR="$pip_cache_dir"
         export PIP_DISABLE_PIP_VERSION_CHECK=1
-        # Resolve both install steps before changing the shared environment.
+        # Admit the complete locked install before changing the shared environment.
         # shellcheck disable=SC2086
         ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/python"} ${wheelDowngradeGuard}/guard.py \
           --wheel "$staged_wheel_path" --expected-version "$expected_package_version" \
           --overrides-json ${lib.escapeShellArg (builtins.toJSON wheelDependencyOverrides)} \
+          --requirements "$wheelhouse_path/requirements.txt" \
           --application-constraints "$application_constraints" --override-constraints "$override_constraints" \
           -- $pip_install_args
+        # The reviewed list pins every dependency and hash, including overrides.
         # shellcheck disable=SC2086
-        ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/pip"} install --upgrade $pip_install_args "$staged_wheel_path" --constraint "$application_constraints"
-        ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/pip"} install --force-reinstall --no-deps "$staged_wheel_path" --constraint "$application_constraints"
-        if [ -n "$wheel_dependency_overrides" ]; then
-          # shellcheck disable=SC2086
-          ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/pip"} install --upgrade --no-deps $pip_install_args $wheel_dependency_overrides --force-reinstall --constraint "$override_constraints"
-        fi
+        ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/pip"} install --upgrade --force-reinstall $pip_install_args \
+          --require-hashes --only-binary=:all: --requirement "$wheelhouse_path/requirements.txt" \
+          --constraint "$application_constraints"
+
       fi
 
       # pip restores certifi's bundled cacert.pem on every install; relink it
@@ -457,6 +459,13 @@ let
       find ${lib.escapeShellArg runtimeStaticRootPath} -type d -exec chmod 0750 {} +
       find ${lib.escapeShellArg runtimeStaticRootPath} -type f -exec chmod 0640 {} +
     }
+
+    lx_annotate_wheel_exec() {
+      if ${boolString cfg.hub.transferApi.enable}; then
+        exec ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/python"} ${./scripts/hub-oidc-entrypoint.py} "$@"
+      fi
+      exec "$@"
+    }
     EOF
     chmod +x "$out/libexec/lx-annotate-wheel-runtime-lib"
 
@@ -486,7 +495,7 @@ let
       echo "ERROR: Installed lx-annotate wheel does not expose console script: $target" >&2
       exit 1
     fi
-    exec ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin"}/"$target" "\$@"
+    lx_annotate_wheel_exec ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin"}/"$target" "\$@"
     EOF
       chmod +x "$out/bin/$name"
     }
@@ -748,35 +757,7 @@ let
     ffmpegTranscodeTimeoutSeconds
     llmInferenceWorkerEnv
     ;
-  hubOidcMiddlewarePolicy = pkgs.writeTextDir "sitecustomize.py" ''
-    import importlib.util
-    import json
-    import os
-    import sys
-
-    if importlib.util.find_spec("endoreg_db") is not None:
-        os.environ.setdefault(
-            "DJANGO_SETTINGS_MODULE",
-            "lx_annotate.settings.settings_prod",
-        )
-        from endoreg_db.authz import middleware
-
-        hub_transfer_prefix = "/api/media/hub/transfers/"
-        public_prefixes = getattr(middleware, "PUBLIC_PREFIXES", None)
-        if not isinstance(public_prefixes, tuple):
-            raise RuntimeError("endoreg_db OIDC middleware PUBLIC_PREFIXES contract is unavailable")
-        if hub_transfer_prefix not in public_prefixes:
-            middleware.PUBLIC_PREFIXES = (*public_prefixes, hub_transfer_prefix)
-        print(json.dumps({
-            "event": "hub.oidc_middleware_policy_installed",
-            "path_prefix": hub_transfer_prefix,
-        }, sort_keys=True), file=sys.stderr)
-  '';
-  commonExtraEnv =
-    commonEnv
-    // lib.optionalAttrs cfg.hub.transferApi.enable {
-      PYTHONPATH = toString hubOidcMiddlewarePolicy;
-    };
+  commonExtraEnv = commonEnv;
 
   encryptedDataMountUnitConfig = {
     RequiresMountsFor = [
@@ -811,60 +792,10 @@ let
     )
   );
 
-  hubNodeProvisioningPython = pkgs.writeText "lx-annotate-provision-hub-nodes.py" ''
-    import json
-    from pathlib import Path
-
-    from django.db import transaction
-    from endoreg_db.models import Center, NetworkNode
-
-    topology = json.loads(Path(${builtins.toJSON (toString hubNodeProvisioningData)}).read_text(encoding="utf-8"))
-
-    with transaction.atomic():
-        for spec in topology:
-            center = None
-            center_key = spec.get("centerKey")
-            if center_key:
-                center = Center.objects.filter(center_key=center_key).first()
-                if center is None:
-                    raise RuntimeError(f"Required Center.center_key is missing: {center_key}")
-
-            node, created = NetworkNode.objects.update_or_create(
-                node_key=spec["nodeKey"],
-                defaults={
-                    "display_name": spec["displayName"],
-                    "role": spec["role"],
-                    "base_url": spec.get("baseUrl", ""),
-                    "is_active": True,
-                    "owning_center": center,
-                },
-            )
-
-            secret_changed = False
-            secret_file = spec.get("sharedSecretFile")
-            if secret_file:
-                secret_path = Path(secret_file)
-                if not secret_path.is_file():
-                    raise RuntimeError(f"Required NetworkNode secret file is missing: {secret_path}")
-                secret = secret_path.read_text(encoding="utf-8").strip()
-                if not secret:
-                    raise RuntimeError(f"Required NetworkNode secret file is empty: {secret_path}")
-                if not node.check_shared_secret(secret):
-                    node.set_shared_secret(secret)
-                    node.save(update_fields=["shared_secret_hash", "updated_at"])
-                    secret_changed = True
-
-            print(json.dumps({
-                "event": "hub.node_provisioned",
-                "node_key": node.node_key,
-                "role": node.role,
-                "created": created,
-                "secret_changed": secret_changed,
-            }, sort_keys=True))
-  '';
   hubNodeProvisioningScript = pkgs.writeShellScript "lx-annotate-provision-hub-nodes" ''
     set -euo pipefail
-    exec ${effectiveRuntimePackage}/bin/lx-annotate-manage shell < ${hubNodeProvisioningPython}
+    exec ${effectiveRuntimePackage}/bin/lx-annotate-provision-hub-nodes \
+      --require-existing-centers --config ${hubNodeProvisioningData}
   '';
   hubEnvelopeKeyPreflightScript = pkgs.writeShellScript "lx-annotate-hub-envelope-key-preflight" ''
     set -euo pipefail
@@ -1595,7 +1526,13 @@ let
   '';
 
   hubBackupScripts = import ./scripts/hub-backup.nix args;
-  inherit (hubBackupScripts) runLocalHubBackupScript;
+  inherit (hubBackupScripts)
+    runLocalHubBackupScript
+    hubBackupCoordinator
+    hubBackupStartBarrier
+    hubBackupWriterServices
+    hubBackupWriterTimers
+    ;
   encryptedDataScripts = import ./scripts/encrypted-data.nix args;
   inherit (encryptedDataScripts)
     lxAnnotateEncryptedDataMountScript
@@ -1648,6 +1585,10 @@ let
       runLocalDataRecoveryScript
       runLocalHlsMaterializationScript
       runLocalHubBackupScript
+      hubBackupCoordinator
+      hubBackupStartBarrier
+      hubBackupWriterServices
+      hubBackupWriterTimers
       runLocalMasterKeyCheckScript
       runtime
       runtimeDataRootPath
@@ -2134,6 +2075,10 @@ in
                 !cfg.hub.transferApi.enable
                 || (cfg.hub.transferApi.mtlsMetaKey != "" && cfg.hub.transferApi.mtlsMetaValue != "");
               message = "services.luxnix.lxAnnotateLocal.hub.transferApi.enable requires non-empty mTLS meta key and value.";
+            }
+            {
+              assertion = !cfg.hub.transferApi.enable || useWheelRuntime;
+              message = "Hub transfer authentication requires the checked wheel entrypoint; non-wheel mode needs a supported backend route-policy contract.";
             }
             {
               assertion =

@@ -10,12 +10,18 @@ boundaries:
   - Do not import upstream LX-Annotate business logic
   - Do not introduce secret or storage side effects at import time
 entrypoints:
+  - name: credential-generation
+    file: password/generator.py
+    purpose: Generate OS-random passwords and passphrases with pinned vocabulary and an enforced entropy floor.
+  - name: passphrase-vocabulary
+    file: password/eff_short_wordlist_1.txt
+    purpose: Preserve the audited EFF short wordlist with checksum validation and packaged provenance.
   - name: acknowledged-activation
     file: activation.py
     purpose: Detached activation with compatibility-bound rollback and fresh authenticated acknowledgement.
   - name: secret-storage-boundary
     file: secret_storage.py
-    purpose: Verify encrypted device ancestry and non-swappable runtime boundaries before plaintext secret access.
+    purpose: Verify every mounted Btrfs member, encrypted device ancestry and protected swap before plaintext secret access.
   - name: secure-boot-signing
     file: secure_boot.py
     purpose: Controller-held fleet Secure Boot PKI custody, per-generation signing and host-side signed artifact import.
@@ -52,6 +58,8 @@ submodules:
     manifest: storage/structure.yml
     summary: Storage management and hub data-plane interfaces.
 contracts:
+  - name: wordlist-provenance
+    doc: password/WORDLIST.md
   - name: architecture
     doc: ../docs/architecture.md
 tests:

@@ -10,6 +10,9 @@ boundaries:
   - No arbitrary shell, writes, database access or service control through MCP
   - Use this service own dependency lock and test environment
 entrypoints:
+  - name: repository-boundary
+    file: src/wg_lux_mcp/repo.py
+    purpose: Enforce sensitive-path exclusions and bounded committed-blob access independently of repository allowlisting.
   - name: server
     file: src/wg_lux_mcp/asgi.py
     purpose: Inspect server ownership and interfaces.

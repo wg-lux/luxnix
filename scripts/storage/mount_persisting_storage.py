@@ -22,7 +22,6 @@ def main() -> int:
             mount_drive(
                 device,
                 sm.storage_persisting_mount_point,
-                filesystem="ext4",
             )
         except subprocess.CalledProcessError as exc:
             raise RuntimeError(

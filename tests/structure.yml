@@ -11,12 +11,42 @@ boundaries:
   - Source checks do not prove deployment readiness
   - Nix evaluation and VM tests are separate from the fast Python lane
 entrypoints:
-  - name: unencrypted-storage-vm
-    file: nixtest/unencrypted_storage_vm_test.nix
-    purpose: Install plain root, authenticate SSH and reject protected writers before container provisioning.
-  - name: unencrypted-storage
+  - name: application-wheelhouse
+    file: lx-annotate/test_wheelhouse_lock.py
+    purpose: Reject source/wheel drift, stale locks and incompatible artifacts while retaining production extras and excluding development dependencies.
+  - name: installed-node-provisioning
+    file: lx-annotate/test_installed_node_provisioning.py
+    purpose: Install the digest-bound selected wheel and verify existing-center policy, aliases, idempotence, secret rotation and SQLite transaction rollback.
+  - name: hub-backup-restore-vm
+    file: nixtest/lx_annotate_hub_backup_vm_test.nix
+    purpose: Restore actual PostgreSQL and encrypted media after coordinated writer shutdown and recover units after failed publication.
+  - name: hub-backup-coordination
+    file: lx-annotate/test_hub_backup_coordination.py
+    purpose: Reject escaped backup destinations and recover writer state around fresh database/media capture.
+  - name: python-quality-policy
+    file: test_python_quality.py
+    purpose: Reject substituted diagnostics and prove baseline updates can only lower existing debt.
+  - name: hub-authentication-startup
+    file: lx-annotate/test_hub_oidc_startup.py
+    purpose: Prove backend policy failures abort before the wheel application entrypoint and reject unchecked non-wheel hub startup.
+  - name: inventory-normalization
+    file: test_inventory_normalization.py
+    purpose: Reject normalized option collisions across inventory layers while preserving intentional overrides.
+  - name: reserved-boot-key
+    file: test_boot_stick_setup.py
+    purpose: Reject filesystem-backed boot keys and verify reserved partition identity and exact byte arithmetic.
+  - name: external-mount-identity
+    file: storage_manager/test_mount_identity.py
+    purpose: Require exact removable drive identity and encrypted storage before accepting an external mount.
+  - name: scheduled-upgrade-policy
+    file: test_scheduled_upgrade_policy.py
+    purpose: Evaluate pinned revision admission and forbid scheduled live activation or automatic reboot.
+  - name: migration-coverage-policy
+    file: test_storage_migration_policy.py
+    purpose: Compare canonical snapshot coverage with evaluated fleet writers and protected source mounts.
+  - name: retired-plain-root
     file: test_unencrypted_storage.py
-    purpose: Verify explicit plain root selection preserves encrypted consumers and rejects early unlock.
+    purpose: Reject retired plain-root installation and preserve bounded legacy recovery.
   - name: remote-boot-access
     file: test_remote_boot_access.py
     purpose: Evaluate restricted initrd SSH and verify restored administrator credentials before installation.

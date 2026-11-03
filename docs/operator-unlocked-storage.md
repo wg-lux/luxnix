@@ -1,10 +1,9 @@
-> Storage layout update: [Boot LUKS migration](boot-storage-migration.md) is the
-> current fleet design. Container unlock, login unlock and local OpenBao storage
-> enrollment below apply to explicit `legacy-containers` recovery mode and
-> [unencrypted-root installations](boot-storage-migration.md#unencrypted-os-installation).
-> For unencrypted root, provision and verify protected volumes before setting
-> `autoStartProtectedServices = true`; initial OS startup defers these services.
-> Existing identity provisioning remains independent.
+> [Boot LUKS2](boot-storage-migration.md) is the sole production installation
+> path. Container provisioning is bounded to gc-09/gc-10 passphrase migration;
+> alternative TPM/OpenBao enrollment and plain-root installations are retired.
+> Preserve original keys and data until physical migration and restore/cold-boot
+> acceptance. The procedures below retain recovery and historical context.
+> Central identity provisioning remains independent.
 
 # Encrypted storage and automatic startup
 

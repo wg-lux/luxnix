@@ -34,7 +34,7 @@ def _is_raw_nix_expression(value: str) -> bool:
 
 
 def _quote_nix_string(value: str) -> str:
-    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("${", "\\${")
     return f'"{escaped}"'
 
 
@@ -60,6 +60,16 @@ def nix_literal(value: object) -> str:
     if isinstance(value, list):
         return "[ " + " ".join(nix_literal(item) for item in value) + " ]"
     if isinstance(value, dict):
+        reserved = {"__nix_string__", "__nix_expression__"} & value.keys()
+        if reserved and (len(reserved) != 1 or len(value) != 1):
+            raise ValueError("Explicit Nix wrapper must contain exactly one reserved key")
+        if set(value) == {"__nix_string__"}:
+            return nix_string(value["__nix_string__"])
+        if set(value) == {"__nix_expression__"}:
+            expression = value["__nix_expression__"]
+            if not isinstance(expression, str) or not expression.strip():
+                raise ValueError("Explicit Nix expression must be nonempty text")
+            return expression
         assignments = [f"{key} = {nix_literal(item)};" for key, item in value.items()]
         return "{ " + " ".join(assignments) + " }"
     raise TypeError(f"Unsupported Nix literal type: {type(value).__name__}")

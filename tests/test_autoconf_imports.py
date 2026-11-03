@@ -384,3 +384,66 @@ def test_system_import_fails_explicitly_when_inventory_is_missing(tmp_path):
             system_group="active_clients",
             logger=Mock(),
         )
+
+
+def test_intermediate_set_rolls_back_inventory_on_host_publication_failure(tmp_path, monkeypatch):
+    from lx_administration.autoconf.imports.artifacts import write_system_intermediates
+    from lx_administration.autoconf import publication
+    output = tmp_path / 'autoconf'
+    merged = output / 'merged_vars'
+    merged.mkdir(parents=True)
+    inventory = output / 'inventory.yml'
+    host = merged / 'alpha.yml'
+    inventory.write_text('old inventory')
+    host.write_text('old host')
+    class Inventory:
+        def save_to_file(self, path, **kwargs):
+            path.write_text('new inventory')
+    original = publication._replace
+    def replace(source, target, mode):
+        if target == host and source.name.endswith('.new'):
+            raise OSError('host publication failed')
+        original(source, target, mode)
+    monkeypatch.setattr(publication, '_replace', replace)
+    with pytest.raises(OSError, match='host publication failed'):
+        write_system_intermediates(Inventory(), output, [('alpha', {'group_luxnix': {}})])
+    assert inventory.read_text() == 'old inventory'
+    assert host.read_text() == 'old host'
+
+
+def test_renderer_recovers_interrupted_standalone_home_publication(tmp_path, monkeypatch):
+    import subprocess
+    import sys
+    from types import SimpleNamespace
+    from lx_administration.autoconf.nix import main as renderer
+    output = tmp_path / 'autoconf'
+    homes = output / 'home_merged_vars'
+    homes.mkdir(parents=True)
+    alpha, beta = homes / 'alpha.yml', homes / 'beta.yml'
+    alpha.write_text('old alpha')
+    beta.write_text('old beta')
+    source = r'''
+import os, sys
+from pathlib import Path
+from lx_administration.autoconf import publication
+from lx_administration.autoconf.imports.artifacts import write_merged_host_variables
+original = publication._replace
+def crash(source, target, mode):
+    original(source, target, mode)
+    os._exit(77)
+publication._replace = crash
+write_merged_host_variables(Path(sys.argv[1]), [('alpha', {'host_home_roles': {'new': True}}),
+                                             ('beta', {'host_home_roles': {'new': True}})])
+'''
+    result = subprocess.run([sys.executable, '-c', source, str(homes)])
+    assert result.returncode == 77
+    assert (output / '.autoconf-publication/plan.json').exists()
+    assert not (homes / '.autoconf-publication').exists()
+    seen = []
+    def read_configurations(config, logger=None):
+        seen.append((alpha.read_text(), beta.read_text()))
+        return []
+    monkeypatch.setattr(renderer, '_render_configuration_outputs', read_configurations)
+    renderer.render_configurations(SimpleNamespace(output=output, nix_output=tmp_path / 'nix'))
+    assert seen == [('old alpha', 'old beta')]
+    assert not (output / '.autoconf-publication').exists()

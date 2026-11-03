@@ -33,7 +33,7 @@ Test with the MCP Inspector or the SDK client.
 - `list_repositories`: list the configured repository names.
 - `get_repo_status`: return the current branch, HEAD commit, and porcelain status.
 - `get_recent_commits`: return up to 50 recent commits, newest first.
-- `read_text_file`: read a bounded UTF-8 file below a repository root.
+- `read_text_file`: read a bounded UTF-8 prefix of a public regular file committed at HEAD.
 - `get_pyproject`: read a repository's `pyproject.toml` when present.
 - `inspect_django_migrations`: list migration files for a Django app without importing it.
 - `search_code`: find ranked code matches with repository, commit, path, and line provenance.
@@ -65,6 +65,26 @@ Repository discovery follows progressive disclosure: search for concepts, inspec
 matching symbols or related tests, and use `read_text_file` only when exact source is
 needed. Discovery results include lightweight provenance so clients can retain source
 coordinates without retaining large file contents.
+
+Repository allowlisting does not grant access to every file on disk. File,
+search, symbol, migration and project-metadata tools read committed regular-file
+blobs from one captured HEAD revision. They never return staged, untracked or
+modified working-tree contents, follow symlinks, or descend into submodules.
+Sources identify both the commit and Git blob; commit IDs remain reproducible
+even when a checkout changes during retrieval.
+
+A separate outbound path policy rejects `.git`, `.env` and `.env.*`, private
+key/credential names, encrypted vault/key file suffixes, and `secrets`, `private`,
+`cmdb`, SSH and GnuPG directories, including committed files in those locations.
+This is a path boundary, not a content classifier: repositories exposed by the
+service must still contain only reviewed public development material.
+
+UTF-8 reads are bounded before loading content. Internal Git enumeration has a
+separate 16 MB byte budget and fails explicitly when exceeded; response limits
+never silently truncate a filename list. Other Git responses also fail rather
+than returning partial structured data. Search scans at most 64 MB of eligible
+committed text and reports the number of files excluded by its 1 MB per-file
+limit as `skipped_large_files`. A scan-budget failure returns no partial matches.
 
 Feature tools resolve semantic `(provider, feature_id)` identities through the
 NixOS-generated `/etc/wg-lux/features/providers.json`. Immutable specifications come

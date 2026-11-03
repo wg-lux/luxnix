@@ -44,6 +44,20 @@ configuration, test environments, and short-lived artifact staging. They are
 not runtime dependencies and must not become an operator's source of truth.
 Secrets, clinical data, and durable audit evidence must never be stored there.
 
+### Scheduled upgrades
+
+Scheduled upgrades are disabled by default. Opting in requires an explicitly
+reviewed `github:wg-lux/luxnix/<full 40-character commit SHA>` in
+`maintenance.autoUpdates.flake`; branch names and an omitted revision fail
+admission. Set these options in canonical inventory YAML and regenerate through
+Autoconf. The schedule only stages `boot`, preserves the pinned lockfile and
+never reboots automatically. Build and review that revision before enabling the
+timer. Live activation and reboot remain separately authorized operator actions.
+Inspect `systemctl status nixos-upgrade.timer` and
+`systemctl status nixos-upgrade.service` before the planned reboot; retain the
+previous boot generation for recovery. Existing generated configurations with
+the old moving branch or `switch` selection must be regenerated before opting in.
+
 ### Release Worktrees
 
 A release worktree is justified when it provides a stable, named and reviewable
@@ -77,13 +91,14 @@ the approved audit-log location rather than leaving them in `/tmp`.
 
 Use `nixos-rebuild switch` for a persistent live update after the source, build,
 connectivity, and target checks above. Run on the explicitly selected host from
-the reviewed checkout. The canonical persistent install command for gc-10 is
-cataloged as `rebuild-host-switch` in `devenv/commands.yml`.
-Run it **on gc-10**, with the reviewed compatible application version in
-`/home/admin/luxnix`:
+the reviewed checkout. The generic native command is cataloged as `rebuild-host-switch` in
+`devenv/commands.yml`. Select the reviewed durable checkout and inventory host
+explicitly. Managed deployment and Secure Boot completion use the detached
+activation helper, compatibility evidence and fresh authenticated acknowledgement.
+Do not bypass that workflow with a copied machine-specific command.
 
 ```bash
-sudo nixos-rebuild switch --flake /home/admin/luxnix#gc-10 --accept-flake-config
+sudo nixos-rebuild switch --flake '<checkout>#<host>'
 readlink -e /run/current-system
 readlink -e /nix/var/nix/profiles/system
 systemctl --failed
@@ -105,7 +120,7 @@ verify `/run/booted-system` matches the intended closure after a scheduled reboo
 The managed Ansible handler checks active/profile equality after switching.
 
 For kernel or NVIDIA driver changes that cannot be activated safely live, use
-`sudo nixos-rebuild boot --flake .#gc-10` and reboot in an authorized maintenance
+`sudo nixos-rebuild boot --flake '<checkout>#<host>'` and reboot in an authorized maintenance
 window. The running generation is expected to differ until that reboot.
 
 Do not use `nixos-rebuild test` on wheel-mode LX-Annotate production hosts.
@@ -119,6 +134,13 @@ with `nixos-rebuild boot` without restarting running services. Both require
 Existing shells retain their old aliases until Home Manager is applied and a
 new shell is opened. Use the explicit command above for the first deployment.
 See the [NixOS switching documentation](https://github.com/NixOS/nixpkgs/blob/master/nixos/doc/manual/development/what-happens-during-a-system-switch.chapter.md).
+
+The detached activation watchdog serializes worker termination and rollback
+under the activation state lock. A worker already collected by systemd does not
+prevent rollback when a fresh query proves it absent and inactive. A live worker,
+failed systemd query or uncertain stop remains a blocker; inspect the retained
+record rather than starting concurrent recovery. Accepted and rolled-back
+records are terminal no-ops.
 
 ### SSH access during updates
 

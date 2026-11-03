@@ -106,6 +106,10 @@ For a locally provisioned central hub, explicitly align
 `roles.postgres.default.defaultDbName` with the application's database name and
 user (typically `endoregDbCentral`). Unsupported local combinations fail
 evaluation; this change does not rename databases or rotate existing passwords.
+Changing only the provisioner's name leaves an inconsistent application
+selection and is rejected. Tests of a renamed hub must set the application
+name and user to that same provisioned identity; hostname changes alone do not
+select or rename a database.
 Deployments using the former direct-service defaults must explicitly declare
 their existing endpoint and ownership before activation.
 
