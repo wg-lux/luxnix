@@ -22,7 +22,8 @@ Release dependency selection was refreshed on 2026-11-03:
   dependencies and their requested extras are selected for Python 3.12 Linux;
   default development groups and project extras such as `dev` are excluded.
   Artifact URLs and SHA256 hashes come from the upstream lock. Source-only
-  dependencies build offline using locked Nix tooling. The old
+  dependencies build offline using locked Nix tooling. The wheelhouse build also
+  checks the full hashed installation plan with offline pip before it can succeed. The old
   [dependencies.yml](../../../../release-artifacts/lx-annotate/1.7.2/dependencies.yml)
   is historical evidence and is no longer a build input.
 - Per operator direction, `/home/admin/endoreg-db` is implementation context for

@@ -52,9 +52,10 @@ let
   wheelhouse =
     pkgs.runCommand "lx-annotate-${lock.version}-locked-wheelhouse"
       {
-        nativeBuildInputs = [ pkgs.python312 ];
+        nativeBuildInputs = [ builder ];
       }
       ''
+        export HOME="$TMPDIR" PIP_DISABLE_PIP_VERSION_CHECK=1
         mkdir -p "$out"
         ln -s ${applicationWheel} "$out/${lock.applicationFilename}"
         ${lib.concatMapStringsSep "\n" (artifact: ''
@@ -77,6 +78,10 @@ let
             requirements.append(f"{name}=={version} --hash=sha256:{digest}\n")
         (root / "requirements.txt").write_text("".join(requirements))
         PY
+        python -m pip install --dry-run --ignore-installed --no-index \
+          --target "$TMPDIR/install-check" \
+          --find-links "$out" --require-hashes --only-binary=:all: \
+          --requirement "$out/requirements.txt"
       '';
 in
 {
