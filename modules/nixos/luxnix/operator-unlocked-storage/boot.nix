@@ -311,6 +311,9 @@ in
             name: requiredPaths:
             lib.mkMerge [
               (guard requiredPaths)
+              (lib.mkIf (!cfg.autoStartProtectedServices) {
+                wantedBy = lib.mkForce [ ];
+              })
               {
                 requires = [ "${check name}.service" ];
                 after = [ "${check name}.service" ];

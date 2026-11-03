@@ -431,3 +431,23 @@ def test_gc10_legacy_layout_does_not_create_raid():
     assert config["arrays"] == []
     assert config["data"] == "btrfs"
     assert config["root"] != "/dev/mapper/cryptroot"
+
+
+def test_boot_luks_can_defer_guarded_service_startup():
+    expression = r'''
+      let f = builtins.getFlake ("git+file://" + builtins.toString ./.);
+          c = (f.nixosConfigurations.gc-09.extendModules { modules = [{
+            luxnix.storage.operatorUnlocked = {
+              layout = f.inputs.nixpkgs.lib.mkForce "boot-luks";
+              autoStartProtectedServices = false;
+            };
+          }]; }).config;
+      in builtins.mapAttrs (name: _: c.systemd.services.${name}.wantedBy)
+        c.luxnix.storage.operatorUnlocked.guardedServices
+    '''
+    result = subprocess.run(["nix", "eval", "--impure", "--json", "--expr", expression],
+                            cwd=ROOT, capture_output=True, text=True, timeout=300)
+    assert result.returncode == 0, result.stderr
+    wanted = json.loads(result.stdout)
+    assert "lx-annotate" in wanted and "postgresql" in wanted
+    assert all(not targets for targets in wanted.values()), wanted

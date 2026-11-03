@@ -5,6 +5,7 @@
   repoRoot,
   remoteUnlockTest ? false,
   mdraidTest ? false,
+  deferStartupTest ? false,
 }:
 let
   key = "/etc/luks-keys/lx-data.key";
@@ -94,6 +95,8 @@ disko.lib.testLib.makeDiskoTest {
   name =
     if mdraidTest then
       "boot-storage-mdraid"
+    else if deferStartupTest then
+      "boot-storage-deferred"
     else if remoteUnlockTest then
       "boot-storage-remote"
     else
@@ -144,6 +147,7 @@ disko.lib.testLib.makeDiskoTest {
       );
       luxnix.storage.operatorUnlocked = {
         enable = true;
+        autoStartProtectedServices = !deferStartupTest;
         guardedServices.writer = [ "/srv/data" ];
         remoteUnlock = lib.mkIf remoteUnlockTest {
           enable = true;
@@ -220,7 +224,13 @@ disko.lib.testLib.makeDiskoTest {
       machine.fail("cryptsetup isLuks /dev/disk/by-partlabel/disk-data-data")
     ''
     + ''
-      machine.wait_for_unit("writer.service")
+      def wait_for_writer():
+          if ${if deferStartupTest then "True" else "False"}:
+              machine.fail("systemctl is-active writer.service")
+              machine.succeed("systemctl start writer.service")
+          machine.wait_for_unit("writer.service")
+
+      wait_for_writer()
       machine.fail("test -e /unauthorized-shell-command")
       machine.succeed("luxnix-verify-boot-storage")
       fingerprint = machine.succeed("sha256sum ${key}")
@@ -245,7 +255,7 @@ disko.lib.testLib.makeDiskoTest {
       machine.start()
       machine.wait_for_console_text("Please enter passphrase")
       machine.send_chars("secretsecret\n")
-      machine.wait_for_unit("writer.service")
+      wait_for_writer()
       assert machine.succeed("sha256sum ${key}") == fingerprint
       machine.succeed("test -f /etc/storage-update-test; luxnix-verify-boot-storage")
       machine.succeed("mv ${key} ${key}.saved")
@@ -254,6 +264,7 @@ disko.lib.testLib.makeDiskoTest {
       machine.wait_for_console_text("Please enter passphrase")
       machine.send_chars("secretsecret\n")
       machine.wait_for_unit("multi-user.target")
+      machine.fail("systemctl start writer.service")
       machine.fail("systemctl is-active writer.service")
       machine.fail("test -e /srv/data/writes")
       machine.succeed("mv ${key}.saved ${key}; systemctl reset-failed; systemctl start writer.service")
@@ -262,7 +273,7 @@ disko.lib.testLib.makeDiskoTest {
       machine.start()
       machine.wait_for_console_text("Please enter passphrase")
       machine.send_chars("recovery-test\n")
-      machine.wait_for_unit("writer.service")
+      wait_for_writer()
       machine.succeed("luxnix-verify-boot-storage")
     '';
 }

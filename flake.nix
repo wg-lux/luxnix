@@ -272,6 +272,12 @@
           repoRoot = ./.;
           remoteUnlockTest = true;
         };
+        boot-storage-deferred = import ./tests/nixtest/boot_storage_vm_test.nix {
+          pkgs = inputs.nixpkgs.legacyPackages.${system};
+          inherit (inputs) disko;
+          repoRoot = ./.;
+          deferStartupTest = true;
+        };
         operator-storage-migration = inputs.nixpkgs.legacyPackages.${system}.testers.runNixOSTest (
           import ./tests/nixtest/operator_storage_migration_vm_test.nix { repoRoot = ./.; }
         );
