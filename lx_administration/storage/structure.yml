@@ -10,6 +10,9 @@ boundaries:
   - Do not mount or alter live storage during context validation
   - Preserve encrypted storage and hub authentication boundaries
 entrypoints:
+  - name: boot-password-setup
+    file: boot_password.py
+    purpose: Prompt for root passphrase setup or changes, preserve recovery slots, and bind verification receipts to host and LUKS header before activation.
   - name: recovery-export
     file: recovery_export.py
     purpose: Share explicit optimized-Python-safe validation and private publication of encrypted recovery records.

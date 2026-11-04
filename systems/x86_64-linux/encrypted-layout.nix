@@ -95,7 +95,7 @@ let
       ];
       initrdUnlock = isRoot;
       # Provision with a recovery credential; enroll data keys on encrypted root.
-      settings = if isRoot && old != null && old.type == "luks" then old.settings or { } else { };
+      settings = { };
     };
   transform =
     disk: part: p:

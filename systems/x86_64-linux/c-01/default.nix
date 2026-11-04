@@ -12,7 +12,6 @@
   imports = [
     (modulesPath + "/installer/scan/not-detected.nix")
     ../host-common.nix
-    ./boot-decryption-config.nix
     ./disks.nix
   ];
 
@@ -274,8 +273,7 @@
 
     maintenance.autoUpdates = {
       dates = "17:00";
-      flake = "github:wg-lux/luxnix/prototype";
-      operation = "switch";
+      operation = "boot";
     };
 
     packages.shared = [ ];

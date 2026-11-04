@@ -181,7 +181,6 @@ host_luxnix:
   vault.server.hubPki.sharedIdentityCenters: '[ "university_hospital_wuerzburg" ]'
   vault.server.hubPki.caCertificateFile: '"/var/lib/lx-annotate/hub-pki/client-ca.pem"'
 
-  boot_decryption_stick_gs_01.enable: "true"
 
   generic_settings.hostPlatform: '"x86_64-linux"'
   generic_settings.systemStateVersion: '"23.11"'

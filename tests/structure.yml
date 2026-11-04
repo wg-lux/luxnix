@@ -11,6 +11,9 @@ boundaries:
   - Source checks do not prove deployment readiness
   - Nix evaluation and VM tests are separate from the fast Python lane
 entrypoints:
+  - name: boot-password-setup
+    file: test_boot_password.py
+    purpose: Verify interactive-only passphrase setup, receipt invalidation, identity binding, and recovery-slot preservation with disposable LUKS images.
   - name: installed-node-provisioning
     file: lx-annotate/test_installed_node_provisioning.py
     purpose: Install the digest-bound selected wheel and verify existing-center policy, aliases, idempotence, secret rotation and SQLite transaction rollback.

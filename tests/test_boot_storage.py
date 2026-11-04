@@ -195,6 +195,9 @@ def test_fleet_boot_contract():
       units = builtins.attrNames c.systemd.services;
       guard = c.system.preSwitchChecks.encryptedStorage;
       rootPrompt = c.boot.initrd.luks.devices.cryptroot.crypttabExtraOpts;
+      rootKeyFile = c.boot.initrd.luks.devices.cryptroot.keyFile;
+      bootKeyTools = builtins.filter (p: builtins.match ".*boot-decryption.*" (p.name or "") != null)
+        c.environment.systemPackages;
       splash = c.boot.plymouth.enable;
       initrdUnits = builtins.attrNames c.boot.initrd.systemd.services;
       menuTimeout = c.boot.loader.timeout;
@@ -223,6 +226,12 @@ def test_fleet_boot_contract():
         assert not any(u.startswith("luxnix-storage-unlock-") for u in cfg["units"])
         assert "luxnix-storage-migrate" not in cfg["units"]
         assert "luxnix-verify-boot-storage" in cfg["guard"]
+        assert "luxnix-setup-boot-password" in cfg["guard"]
+        assert 'case "$2" in' in cfg["guard"]
+        assert cfg["rootKeyFile"] is None, host
+        assert cfg["bootKeyTools"] == [], host
+        assert not any(option.startswith(("fido2-", "tpm2-", "pkcs11-", "keyfile-"))
+                       for option in cfg["rootPrompt"]), host
         # Splash prompt without time or attempt limit; restart reaches older generations.
         assert {"timeout=0", "tries=0"} <= set(cfg["rootPrompt"]), host
         assert "x-systemd.device-timeout=0" in cfg["mountOptions"]["/"], host
@@ -554,3 +563,47 @@ def test_mapper_names_survive_hardware_renaming_and_reject_collisions():
         "name": "luxnix-app-storage", "label": "existing-label", "valid": True,
     }
     assert state["collision"]["valid"] is False
+
+
+@pytest.mark.parametrize("override", [
+    'boot.initrd.luks.devices.cryptroot.keyFile = "/dev/disk/by-uuid/retired-key";',
+    'boot.initrd.luks.devices.cryptroot.crypttabExtraOpts = [ "fido2-device=auto" ];',
+    'luxnix.boot-decryption-stick.enable = true;',
+])
+def test_boot_luks_rejects_reintroduced_automatic_unlock(override):
+    expression = r'''
+      let f = builtins.getFlake ("git+file://" + builtins.toString ./.);
+          c = (f.nixosConfigurations.gc-02.extendModules { modules = [{ OVERRIDE }]; }).config;
+      in map (a: a.message) (builtins.filter (a: !a.assertion) c.assertions)
+    '''.replace("OVERRIDE", override)
+    result = subprocess.run(["nix", "eval", "--impure", "--json", "--expr", expression],
+                            cwd=ROOT, capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, result.stderr
+    assert any("Root unlock must prompt" in message or "enrollment is retired" in message
+               for message in json.loads(result.stdout))
+
+
+def test_password_setup_runs_only_for_persistent_activation(tmp_path):
+    expression = r'''
+      let f = builtins.getFlake ("git+file://" + builtins.toString ./.);
+      in f.nixosConfigurations.gc-02.config.system.preSwitchChecks.encryptedStorage
+    '''
+    result = subprocess.run(["nix", "eval", "--impure", "--raw", "--expr", expression],
+                            cwd=ROOT, capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, result.stderr
+    import re
+    script = re.sub(r"/nix/store/[^\s;]+/bin/luxnix-verify-boot-storage", 'test "$VERIFY" = pass', result.stdout)
+    script = re.sub(r"/nix/store/[^\s;]+/bin/luxnix-setup-boot-password", 'touch "$MARKER"', script)
+    marker = tmp_path / "prompted"
+    for action in ["build", "dry-activate", "test", "boot", "switch"]:
+        marker.unlink(missing_ok=True)
+        result = subprocess.run(["bash", "-ec", script, "check", "/nix/store/target", action],
+                                env={**os.environ, "VERIFY": "pass", "MARKER": str(marker)},
+                                capture_output=True, text=True)
+        assert result.returncode == 0, result.stderr
+        assert marker.exists() == (action in {"boot", "switch"})
+    marker.unlink(missing_ok=True)
+    result = subprocess.run(["bash", "-ec", script, "check", "/nix/store/target", "boot"],
+                            env={**os.environ, "VERIFY": "fail", "MARKER": str(marker)},
+                            capture_output=True, text=True)
+    assert result.returncode != 0 and not marker.exists()

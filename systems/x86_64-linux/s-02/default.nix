@@ -12,7 +12,6 @@
   imports = [
     (modulesPath + "/installer/scan/not-detected.nix")
     ../host-common.nix
-    ./boot-decryption-config.nix
     ./disks.nix
   ];
 
@@ -75,7 +74,6 @@
   };
 
   luxnix = {
-    boot-decryption-stick.enable = true;
     dns.enable = true;
 
     generic-settings = {
@@ -320,8 +318,7 @@
     maintenance.autoUpdates = {
       dates = "17:00";
       enable = false;
-      flake = "github:wg-lux/luxnix/prototype";
-      operation = "switch";
+      operation = "boot";
     };
 
     nvidia-prime.enable = false;

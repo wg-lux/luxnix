@@ -121,6 +121,8 @@ let
   checker = pkgs.runCommand "boot-storage-checker" { } ''
     mkdir -p "$out"
     cp ${../../../../lx_administration/storage/boot.py} "$out/boot.py"
+    cp ${../../../../lx_administration/storage/boot_password.py} "$out/boot_password.py"
+    cp ${../../../../lx_administration/storage/cutover.py} "$out/cutover.py"
     cp ${../../../../lx_administration/secret_storage.py} "$out/secret_storage.py"
   '';
   verifier = pkgs.writeShellApplication {
@@ -133,6 +135,18 @@ let
     ];
     text = ''
       exec python3 ${checker}/boot.py ${spec} "$@"
+    '';
+  };
+  setupPassword = pkgs.writeShellApplication {
+    name = "luxnix-setup-boot-password";
+    runtimeInputs = [
+      pkgs.python3
+      pkgs.util-linux
+      pkgs.cryptsetup
+    ];
+    text = ''
+      exec python3 ${checker}/boot_password.py \
+        --device ${lib.escapeShellArg config.boot.initrd.luks.devices.cryptroot.device} "$@"
     '';
   };
   check = name: "luxnix-storage-check-${name}";
@@ -234,6 +248,22 @@ in
             assertion = config.boot.plymouth.enable;
             message = "Boot LUKS asks for the root passphrase on the Plymouth splash screen; do not force boot.plymouth.enable off.";
           }
+          {
+            assertion =
+              config.boot.initrd.luks.devices.cryptroot.keyFile == null
+              && lib.all (
+                option:
+                !(lib.any (prefix: lib.hasPrefix prefix option) [
+                  "fido2-"
+                  "tpm2-"
+                  "pkcs11-"
+                  "keyfile-"
+                  "try-empty-password"
+                  "headless"
+                ])
+              ) config.boot.initrd.luks.devices.cryptroot.crypttabExtraOpts;
+            message = "Root unlock must prompt the operator; remove USB/key-file, token and unattended unlock options.";
+          }
         ];
         # The passphrase prompt follows the storage layout on every rebuild.
         boot.plymouth.enable = true;
@@ -290,9 +320,15 @@ in
             v: "${v.name} ${v.device} ${keyFile v} luks,nofail,headless,x-systemd.device-timeout=30s"
           ) secondary
           + "\n";
-        environment.systemPackages = [ verifier ];
+        environment.systemPackages = [
+          verifier
+          setupPassword
+        ];
         system.preSwitchChecks.encryptedStorage = ''
           ${lib.getExe verifier}
+          case "$2" in
+            boot|switch) ${lib.getExe setupPassword} ;;
+          esac
         '';
         systemd.services = lib.mkMerge [
           (lib.listToAttrs (

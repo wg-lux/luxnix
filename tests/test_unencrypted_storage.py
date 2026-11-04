@@ -30,21 +30,14 @@ def test_retired_plain_root_is_rejected(host):
     assert "unencrypted-root" in result.stderr and "type" in result.stderr
 
 
-def test_existing_recovery_is_bounded_to_two_hosts():
+def test_only_gc10_retains_legacy_containers():
     expression = """
       let f = builtins.getFlake ("git+file://" + toString ./.);
           lib = f.inputs.nixpkgs.lib;
-          bad = f.nixosConfigurations.gs-02.extendModules { modules = [{
-            luxnix.storage.operatorUnlocked.layout = lib.mkForce "legacy-containers";
-          }]; };
-      in {
-        legacy = builtins.attrNames (lib.filterAttrs (_: h:
+      in builtins.attrNames (lib.filterAttrs (_: h:
           h.config.luxnix.storage.operatorUnlocked.enable &&
           h.config.luxnix.storage.operatorUnlocked.layout == "legacy-containers")
-          f.nixosConfigurations);
-        failures = map (a: a.message)
-          (builtins.filter (a: !a.assertion) bad.config.assertions);
-      }
+          f.nixosConfigurations)
     """
     result = subprocess.run(
         ["nix", "eval", "--impure", "--json", "--expr", expression],
@@ -54,10 +47,6 @@ def test_existing_recovery_is_bounded_to_two_hosts():
         timeout=300,
     )
     assert result.returncode == 0, result.stderr
-    configuration = json.loads(result.stdout)
-    # Owner decision 2026-11-03: no inventory host keeps the legacy layout.
-    assert configuration["legacy"] == []
-    assert any(
-        "recovery compatibility for gc-09/gc-10 only" in f
-        for f in configuration["failures"]
-    )
+    # Owner decision 2026-11-04: gc-10 keeps its installed containers; every other
+    # inventory host selects boot-luks.
+    assert json.loads(result.stdout) == ["gc-10"]

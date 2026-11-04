@@ -30,7 +30,6 @@ host_services:
     "/etc/secrets/vault/hub-storage/gs-01-recipient-current.pem" ]'
 
 host_luxnix:
-  boot_decryption_stick_gs_01.enable: "true"
   nvidia_prime.enable: "lib.mkForce false"
   generic_settings.hostPlatform: '"x86_64-linux"'
   generic_settings.systemStateVersion: '"23.11"'

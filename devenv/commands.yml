@@ -613,6 +613,20 @@ native_commands:
     effects:
       - Installs the boot configuration; does not authorize formatting or rerunning a disk phase.
 
+  - id: setup-boot-password
+    summary: Prompt privately to verify or add a root disk passphrase while retaining existing recovery slots.
+    risk: sensitive-local-state
+    operator_confirmation_required: true
+    usage: sudo luxnix-setup-boot-password [--change]
+    execution_context: Run interactively on the selected installed boot-LUKS host, using the target generation's command before detached activation.
+    implementation: lx_administration/storage/boot_password.py
+    documentation: docs/boot-storage-migration.md
+    effects:
+      - Prompts at the first boot or switch rebuild and after LUKS header changes; --change prompts explicitly.
+      - Tests an existing password or adds a confirmed new password after verifying an existing recovery credential and backing up the header.
+      - Stores only a private host/UUID/header-bound verification receipt; never stores a password or removes keyslots.
+      - A missing private terminal blocks unprepared activation before bootloader changes; builds and dry activation do not enroll credentials.
+
   - id: rebuild-host-switch
     summary: Persist and activate the reviewed configuration using native NixOS switching.
     risk: remote-state
@@ -630,6 +644,7 @@ native_commands:
     effects:
       - Updates the persistent system profile and boot default and activates services.
       - The nho alias uses LUXNIX_FLAKE and LUXNIX_HOST; no intermediate test activation.
+      - Boot-LUKS passphrase setup prompts interactively if its verified host/header receipt is absent or stale.
 
   - id: rebuild-host-boot
     summary: Stage the reviewed configuration for the next boot without live activation.

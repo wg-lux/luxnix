@@ -53,6 +53,5 @@ group_luxnix:
   generic_settings.gpu.nvidia.enable: "true"
   generic_settings.gpu.nvidia.prime.enable: "true"
   generic_settings.gpu.nvidia.driver: '"production"'
-  boot_decryption_stick.enable: "true"
 
   maintenance.autoUpdates.enable: "false"

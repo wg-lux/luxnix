@@ -983,8 +983,17 @@ repository_review:
   recommendation_source: Eigentümerentscheidungen vom 2026-10-26 und Review in git show da58d1be:docs/openbao-architecture.md. OpenBao-Storage wurde gegen den gepinnten Quellcode
     v2.6.4 geprüft (docs/openbao.md); der Static Seal ist nur anhand von Zeichenketten im Binary vermutet.
 architecture_decisions:
-  authoritative_date: "2026-11-03"
+  authoritative_date: "2026-11-04"
+  gc10_legacy_containers_retained_2026_11_04:
+    requested_by: repository_owner_in_chat
+    decision: gc-10 retains its installed partitions and selects legacy-containers with passphrase unlock on the Plymouth splash; automatic migration stays disabled. gc-09 keeps boot-luks.
+    supersedes: The gc-10 part of legacy_host_configuration_exception_removed_2026_11_03, and the gc-09/gc-10 hostname restriction on legacy-containers.
+    scope: legacy-containers preserves existing encrypted containers on any host without repartitioning; boot-luks remains the default for new installations.
+    splash: Plymouth follows the storage layout on every rebuild; it is enabled for boot-luks and for boot-time container passphrases, otherwise off.
+    live_state: gc-10 root remains plaintext; only the container paths are encrypted. This is not boot-luks acceptance.
+    authorization: Repository configuration only; no disk changes, keyslot removal or physical acceptance.
   legacy_host_configuration_exception_removed_2026_11_03:
+    status: superseded_for_gc-10_by_gc10_legacy_containers_retained_2026_11_04
     requested_by: repository_owner_in_chat
     decision: gc-09 and gc-10 carry no legacy-containers inventory override; they evaluate as boot-luks like every other fleet host, with local OpenBao disabled.
     supersedes: The repository-configuration part of single_storage_path_2026_11_02 retained_recovery_hosts. Its retirement_gate still governs the old live data.

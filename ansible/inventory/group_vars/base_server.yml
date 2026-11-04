@@ -7,5 +7,4 @@ group_roles:
 group_services: {}
 group_luxnix:
   nvidia_prime.enable: "false"
-  boot_decryption_stick.enable: "true"
   maintenance.autoUpdates.enable: "false"

@@ -75,6 +75,16 @@ in
     };
   };
   config = lib.mkIf cfg.enable {
+    assertions = [
+      {
+        assertion =
+          !(
+            config.luxnix.storage.operatorUnlocked.enable
+            && config.luxnix.storage.operatorUnlocked.layout == "boot-luks"
+          );
+        message = "Boot LUKS requires an operator passphrase; USB/raw-offset boot-key enrollment is retired.";
+      }
+    ];
     environment.systemPackages = lib.optionals (mappings != [ ]) [
       setup
       renderer

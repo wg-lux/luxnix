@@ -13,7 +13,6 @@ lib.foldl' lib.recursiveUpdate
     imports = [
       (modulesPath + "/installer/scan/not-detected.nix")
       ../host-common.nix
-      ./boot-decryption-config.nix
       ./disks.nix
     ];
 
@@ -135,7 +134,6 @@ lib.foldl' lib.recursiveUpdate
     };
 
     luxnix = {
-      boot-decryption-stick.enable = true;
       dns.enable = true;
 
       generic-settings = {

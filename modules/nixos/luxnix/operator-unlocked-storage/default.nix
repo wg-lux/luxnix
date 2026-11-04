@@ -9,6 +9,9 @@
 let
   cfg = config.luxnix.storage.operatorUnlocked;
   containerLayout = cfg.layout == "legacy-containers";
+  # Only an unmigrated legacy host may leave live paths on its existing root.
+  unmigrated =
+    if cfg.enable && containerLayout && !cfg.migration.enable then cfg.unmigratedRootPaths else [ ];
   inherit (utils) escapeSystemdPath;
   cleanParts =
     path:
@@ -254,8 +257,14 @@ in
         )
       );
     };
+    unmigratedRootPaths = lib.mkOption {
+      type = lib.types.listOf absolutePath;
+      default = [ ];
+      description = "Bind targets that stay on the existing root of an unmigrated legacy-containers host until a console-attended migration; they are removed from bindMounts and guardedServices. Only valid with migration disabled.";
+    };
     bindMounts = lib.mkOption {
       default = { };
+      apply = binds: builtins.removeAttrs binds unmigrated;
       description = "Destination paths mapped to preserved directories inside a volume; nested targets are ordered automatically.";
       type = lib.types.attrsOf (
         lib.types.submodule {
@@ -280,323 +289,347 @@ in
     guardedServices = lib.mkOption {
       type = lib.types.attrsOf (lib.types.listOf absolutePath);
       default = { };
+      apply = builtins.mapAttrs (_: builtins.filter (path: !builtins.elem path unmigrated));
       description = "Service names without .service mapped to required mount points; configured nested mounts are included.";
     };
   };
 
-  config = lib.mkIf (cfg.enable && containerLayout) {
-    environment.systemPackages = [
-      (pkgs.writeShellApplication {
-        name = "luxnix-storage-provision";
-        runtimeInputs = migrationPath;
-        text = ''
-          [ "$#" -eq 1 ] || { echo "Usage: luxnix-storage-provision <volume> (escrowed request on stdin)" >&2; exit 2; }
-          exec ${migrationCommand} provision "$1"
-        '';
-      })
-    ];
-    security.tpm2.enable = lib.mkIf (cfg.unlockMethod == "tpm2") true;
-    # Boot-time container passphrases are answered on the splash; no prompt, no splash.
-    boot.plymouth.enable = lib.mkIf (passphraseBoot && promptVolumes != { }) true;
-    assertions = [
-      {
-        assertion =
-          cfg.unlockMethod != "local-openbao"
-          || (
-            config.luxnix.openbao.local.enable
-            && lib.all (v: v.container != null && v.luksUUID != null) (builtins.attrValues cfg.volumes)
-            && lib.hasPrefix "/var/lib/openbao-bootstrap/" cfg.openbaoUnlockCredential
-          );
-        message = "Local OpenBao unlock requires local service, UUID-bound containers and a pre-mount unlock credential.";
-      }
-      {
-        assertion =
-          !cfg.migration.enable
-          || lib.all (v: v.container == null || v.fsType == "ext4") (builtins.attrValues cfg.volumes);
-        message = "Automatic container provisioning supports ext4; use externally prepared mappings for other filesystems.";
-      }
-      {
-        assertion =
-          !cfg.migration.enable
-          || lib.all (
-            v:
-            lib.all (target: !(lib.hasPrefix "${target}/" v.mountPoint) && !(builtins.elem target v.depends)) (
-              builtins.attrNames cfg.bindMounts
+  config = lib.mkMerge [
+    {
+      assertions = [
+        {
+          assertion =
+            cfg.unmigratedRootPaths == [ ] || (cfg.enable && containerLayout && !cfg.migration.enable);
+          message = "unmigratedRootPaths is limited to legacy-containers hosts with migration disabled; boot-luks and migrating hosts protect every path.";
+        }
+        {
+          assertion = lib.all (
+            path:
+            !(builtins.elem path [
+              "/etc/secrets/vault"
+              "/var/lib/lx-annotate-identity-salts"
+              "/var/lib/lx-annotate/data/.identity-salt-recovery"
+            ])
+          ) cfg.unmigratedRootPaths;
+          message = "Managed secrets and identity salt copies must stay on encrypted storage; they cannot be unmigrated root paths.";
+        }
+      ];
+    }
+    (lib.mkIf (cfg.enable && containerLayout) {
+      environment.systemPackages = [
+        (pkgs.writeShellApplication {
+          name = "luxnix-storage-provision";
+          runtimeInputs = migrationPath;
+          text = ''
+            [ "$#" -eq 1 ] || { echo "Usage: luxnix-storage-provision <volume> (escrowed request on stdin)" >&2; exit 2; }
+            exec ${migrationCommand} provision "$1"
+          '';
+        })
+      ];
+      security.tpm2.enable = lib.mkIf (cfg.unlockMethod == "tpm2") true;
+      # Boot-time container passphrases are answered on the splash; no prompt, no splash.
+      boot.plymouth.enable = lib.mkIf (passphraseBoot && promptVolumes != { }) true;
+      assertions = [
+        {
+          assertion =
+            cfg.unlockMethod != "local-openbao"
+            || (
+              config.luxnix.openbao.local.enable
+              && lib.all (v: v.container != null && v.luksUUID != null) (builtins.attrValues cfg.volumes)
+              && lib.hasPrefix "/var/lib/openbao-bootstrap/" cfg.openbaoUnlockCredential
+            );
+          message = "Local OpenBao unlock requires local service, UUID-bound containers and a pre-mount unlock credential.";
+        }
+        {
+          assertion =
+            !cfg.migration.enable
+            || lib.all (v: v.container == null || v.fsType == "ext4") (builtins.attrValues cfg.volumes);
+          message = "Automatic container provisioning supports ext4; use externally prepared mappings for other filesystems.";
+        }
+        {
+          assertion =
+            !cfg.migration.enable
+            || lib.all (
+              v:
+              lib.all (target: !(lib.hasPrefix "${target}/" v.mountPoint) && !(builtins.elem target v.depends)) (
+                builtins.attrNames cfg.bindMounts
+              )
+            ) (builtins.attrValues cfg.volumes);
+          message = "Migration volume mounts must not depend on destination bind mounts.";
+        }
+        {
+          assertion = lib.all (
+            name:
+            config.systemd.services.${name}.enable
+            && (
+              (config.systemd.services.${name}.serviceConfig.ExecStart or "") != ""
+              || (config.systemd.services.${name}.script or "") != ""
             )
-          ) (builtins.attrValues cfg.volumes);
-        message = "Migration volume mounts must not depend on destination bind mounts.";
-      }
-      {
-        assertion = lib.all (
-          name:
-          config.systemd.services.${name}.enable
-          && (
-            (config.systemd.services.${name}.serviceConfig.ExecStart or "") != ""
-            || (config.systemd.services.${name}.script or "") != ""
-          )
-        ) (builtins.attrNames cfg.guardedServices);
-        message = "Every operator-unlocked guarded service must define an executable (check for typos or disabled services).";
-      }
-      {
-        assertion = lib.all (name: builtins.hasAttr name cfg.guardedServices) cfg.startupServices;
-        message = "Operator-unlocked startupServices must name guarded services.";
-      }
-      {
-        assertion = cfg.volumes != { };
-        message = "Operator-unlocked storage requires at least one volume.";
-      }
-      {
-        assertion = builtins.length mountPaths == builtins.length (lib.unique mountPaths);
-        message = "Operator-unlocked storage mount points must be unique.";
-      }
-      {
-        assertion = lib.all (path: absolutePath.check path) (builtins.attrNames cfg.bindMounts);
-        message = "Operator-unlocked bind targets must be normalized absolute paths.";
-      }
-      {
-        assertion = knownVolumes;
-        message = "Operator-unlocked binds must reference configured volumes.";
-      }
-      {
-        assertion =
-          !knownVolumes
-          || (lib.toposort (
-            before: after: builtins.elem before ((volumeMounts // bindMounts).${after}.depends ++ parents after)
-          ) mountPaths) ? result;
-        message = "Operator-unlocked storage mount dependencies must not contain cycles.";
-      }
-      {
-        assertion = lib.all (name: builtins.match "[A-Za-z0-9@_:-]+" name != null) (
-          builtins.attrNames cfg.guardedServices
-        );
-        message = "Guarded service names must be unit basenames without .service.";
-      }
-      {
-        assertion = lib.all (paths: paths != [ ] && lib.all (path: builtins.elem path mountPaths) paths) (
-          builtins.attrValues cfg.guardedServices
-        );
-        message = "Guarded services require nonempty lists of configured storage mount points.";
-      }
-      {
-        assertion = keyFileVolumes == { } || cfg.unlockMethod == "passphrase";
-        message = "Operator storage key files require unlockMethod = \"passphrase\" for the first volume.";
-      }
-      {
-        assertion = lib.all (
-          volume: lib.any (secret: secret.path == volume.keyFile) (builtins.attrValues config.sops.secrets)
-        ) (builtins.attrValues keyFileVolumes);
-        message = "Each operator storage keyFile must be the path of a declared sops-nix secret.";
-      }
-      {
-        assertion =
-          keyFileVolumes == { }
-          || (
-            config.security.sops.operatorStorageKey.enable
-            && promptVolumes ? ${config.security.sops.operatorStorageKey.volume}
+          ) (builtins.attrNames cfg.guardedServices);
+          message = "Every operator-unlocked guarded service must define an executable (check for typos or disabled services).";
+        }
+        {
+          assertion = lib.all (name: builtins.hasAttr name cfg.guardedServices) cfg.startupServices;
+          message = "Operator-unlocked startupServices must name guarded services.";
+        }
+        {
+          assertion = cfg.volumes != { };
+          message = "Operator-unlocked storage requires at least one volume.";
+        }
+        {
+          assertion = builtins.length mountPaths == builtins.length (lib.unique mountPaths);
+          message = "Operator-unlocked storage mount points must be unique.";
+        }
+        {
+          assertion = lib.all (path: absolutePath.check path) (builtins.attrNames cfg.bindMounts);
+          message = "Operator-unlocked bind targets must be normalized absolute paths.";
+        }
+        {
+          assertion = knownVolumes;
+          message = "Operator-unlocked binds must reference configured volumes.";
+        }
+        {
+          assertion =
+            !knownVolumes
+            || (lib.toposort (
+              before: after: builtins.elem before ((volumeMounts // bindMounts).${after}.depends ++ parents after)
+            ) mountPaths)
+              ? result;
+          message = "Operator-unlocked storage mount dependencies must not contain cycles.";
+        }
+        {
+          assertion = lib.all (name: builtins.match "[A-Za-z0-9@_:-]+" name != null) (
+            builtins.attrNames cfg.guardedServices
           );
-        message = "Operator storage key files require security.sops.operatorStorageKey on a passphrase-prompted volume; a key-file volume cannot hold its own sops key.";
-      }
-      {
-        assertion = !lib.any (path: builtins.elem path bootCriticalPaths) backingPaths;
-        message = "Operator storage volume depends must be dedicated data mounts, not /, /nix or /boot.";
-      }
-    ];
-    fileSystems = lib.mkMerge [
-      (volumeMounts // bindMounts)
-      backingMounts
-    ];
-    # Remote sites have no verified console: a failed mount must not stop boot
-    # in a sulogin shell before networking and SSH. Guarded consumers still
-    # require their encrypted mounts and fail closed individually.
-    systemd.enableEmergencyMode = lib.mkDefault false;
-    # Preserve configured encrypted swap. The runtime verifier rejects plaintext
-    # partitions/files and zram writeback before any guarded consumer starts.
-    system.activationScripts = lib.mkIf (cfg.migration.accountHashes != { }) {
-      luxnixPrepareBootAccountHashes = {
-        deps = [ "specialfs" ];
-        text = "${migrationCommand} accounts";
+          message = "Guarded service names must be unit basenames without .service.";
+        }
+        {
+          assertion = lib.all (paths: paths != [ ] && lib.all (path: builtins.elem path mountPaths) paths) (
+            builtins.attrValues cfg.guardedServices
+          );
+          message = "Guarded services require nonempty lists of configured storage mount points.";
+        }
+        {
+          assertion = keyFileVolumes == { } || cfg.unlockMethod == "passphrase";
+          message = "Operator storage key files require unlockMethod = \"passphrase\" for the first volume.";
+        }
+        {
+          assertion = lib.all (
+            volume: lib.any (secret: secret.path == volume.keyFile) (builtins.attrValues config.sops.secrets)
+          ) (builtins.attrValues keyFileVolumes);
+          message = "Each operator storage keyFile must be the path of a declared sops-nix secret.";
+        }
+        {
+          assertion =
+            keyFileVolumes == { }
+            || (
+              config.security.sops.operatorStorageKey.enable
+              && promptVolumes ? ${config.security.sops.operatorStorageKey.volume}
+            );
+          message = "Operator storage key files require security.sops.operatorStorageKey on a passphrase-prompted volume; a key-file volume cannot hold its own sops key.";
+        }
+        {
+          assertion = !lib.any (path: builtins.elem path bootCriticalPaths) backingPaths;
+          message = "Operator storage volume depends must be dedicated data mounts, not /, /nix or /boot.";
+        }
+      ];
+      fileSystems = lib.mkMerge [
+        (volumeMounts // bindMounts)
+        backingMounts
+      ];
+      # Remote sites have no verified console: a failed mount must not stop boot
+      # in a sulogin shell before networking and SSH. Guarded consumers still
+      # require their encrypted mounts and fail closed individually.
+      systemd.enableEmergencyMode = lib.mkDefault false;
+      # Preserve configured encrypted swap. The runtime verifier rejects plaintext
+      # partitions/files and zram writeback before any guarded consumer starts.
+      system.activationScripts = lib.mkIf (cfg.migration.accountHashes != { }) {
+        luxnixPrepareBootAccountHashes = {
+          deps = [ "specialfs" ];
+          text = "${migrationCommand} accounts";
+        };
       };
-    };
-    systemd = {
-      services =
-        lib.mapAttrs (
-          name: paths:
-          (guard paths)
-          // lib.optionalAttrs (!cfg.autoStartProtectedServices) {
-            wantedBy = lib.mkForce [ ];
-          }
-          // {
-            requires = [ "${checkName name}.service" ];
-            after = [ "${checkName name}.service" ];
-          }
-        ) services
-        // lib.mapAttrs' (
-          name: paths:
-          lib.nameValuePair (checkName name) (
+      systemd = {
+        services =
+          lib.mapAttrs (
+            name: paths:
             (guard paths)
-            // lib.optionalAttrs (nestedBinds != [ ]) {
-              # Wants, not Requires: a rejected restack of an unrelated bind must
-              # not block healthy consumers. Affected consumers are gated below.
-              wants = [ "${restackName}.service" ];
-              after = [ "${restackName}.service" ];
+            // lib.optionalAttrs (!cfg.autoStartProtectedServices) {
+              wantedBy = lib.mkForce [ ];
             }
             // {
-              description = "Verify encrypted storage before ${name}";
-              # A separate root check also works for consumers with PrivateDevices or User=.
-              # RemainAfterExit is deliberately false so a later start checks again.
-              path = [ pkgs.util-linux ];
+              requires = [ "${checkName name}.service" ];
+              after = [ "${checkName name}.service" ];
+            }
+          ) services
+          // lib.mapAttrs' (
+            name: paths:
+            lib.nameValuePair (checkName name) (
+              (guard paths)
+              // lib.optionalAttrs (nestedBinds != [ ]) {
+                # Wants, not Requires: a rejected restack of an unrelated bind must
+                # not block healthy consumers. Affected consumers are gated below.
+                wants = [ "${restackName}.service" ];
+                after = [ "${restackName}.service" ];
+              }
+              // {
+                description = "Verify encrypted storage before ${name}";
+                # A separate root check also works for consumers with PrivateDevices or User=.
+                # RemainAfterExit is deliberately false so a later start checks again.
+                path = [ pkgs.util-linux ];
+                serviceConfig = {
+                  Type = "oneshot";
+                  User = "root";
+                  UMask = "0077";
+                  ExecStartPost = "${pkgs.systemd}/bin/systemd-tmpfiles --create ${
+                    lib.escapeShellArgs (map (path: "--prefix=${path}") paths)
+                  }";
+                  ExecStart = "${pkgs.python3}/bin/python ${../../../../lx_administration/secret_storage.py} ${lib.escapeShellArgs paths}";
+                }
+                // lib.optionalAttrs (lib.any (path: builtins.elem path nestedBinds) paths) {
+                  # Mandatory for consumers of a nested bind: a mount that restack
+                  # rejected stays present, and encrypted ancestry alone would
+                  # accept a different encrypted filesystem or subdirectory.
+                  ExecStartPre = "${migrationCommand} verify ${
+                    lib.escapeShellArgs (builtins.filter (path: builtins.elem path mountPaths) paths)
+                  }";
+                };
+              }
+            )
+          ) services
+          // lib.optionalAttrs (nestedBinds != [ ]) {
+            ${restackName} = {
+              description = "Remount nested encrypted binds hidden by a later parent mount";
+              # Ordering only: never pulls in, unlocks or migrates storage itself.
+              # Invalid targets are reported by the bind-target assertion, not by escaping.
+              after = map (path: "${escapeSystemdPath path}.mount") (
+                builtins.filter absolutePath.check mountPaths
+              );
+              path = migrationPath;
               serviceConfig = {
                 Type = "oneshot";
-                User = "root";
                 UMask = "0077";
-                ExecStartPost = "${pkgs.systemd}/bin/systemd-tmpfiles --create ${
-                  lib.escapeShellArgs (map (path: "--prefix=${path}") paths)
-                }";
-                ExecStart = "${pkgs.python3}/bin/python ${../../../../lx_administration/secret_storage.py} ${lib.escapeShellArgs paths}";
-              }
-              // lib.optionalAttrs (lib.any (path: builtins.elem path nestedBinds) paths) {
-                # Mandatory for consumers of a nested bind: a mount that restack
-                # rejected stays present, and encrypted ancestry alone would
-                # accept a different encrypted filesystem or subdirectory.
-                ExecStartPre = "${migrationCommand} verify ${
-                  lib.escapeShellArgs (builtins.filter (path: builtins.elem path mountPaths) paths)
-                }";
+                LimitCORE = 0;
+                ExecStart = "${migrationCommand} restack";
               };
-            }
-          )
-        ) services
-        // lib.optionalAttrs (nestedBinds != [ ]) {
-          ${restackName} = {
-            description = "Remount nested encrypted binds hidden by a later parent mount";
-            # Ordering only: never pulls in, unlocks or migrates storage itself.
-            # Invalid targets are reported by the bind-target assertion, not by escaping.
-            after = map (path: "${escapeSystemdPath path}.mount") (
-              builtins.filter absolutePath.check mountPaths
-            );
-            path = migrationPath;
-            serviceConfig = {
-              Type = "oneshot";
-              UMask = "0077";
-              LimitCORE = 0;
-              ExecStart = "${migrationCommand} restack";
-            };
-          };
-        }
-        // lib.optionalAttrs cfg.migration.enable {
-          luxnix-storage-precopy = {
-            description = "Pre-copy live sources into private encrypted staging";
-            path = migrationPath;
-            requires = map (v: "${escapeSystemdPath v.mountPoint}.mount") (builtins.attrValues cfg.volumes);
-            after = map (v: "${escapeSystemdPath v.mountPoint}.mount") (builtins.attrValues cfg.volumes);
-            serviceConfig = {
-              Type = "oneshot";
-              UMask = "0077";
-              LimitCORE = 0;
-              TimeoutStartSec = "infinity";
-              ExecStart = "${migrationCommand} precopy";
-            };
-          };
-          luxnix-storage-cutover = {
-            description = "Stop writers, verify final copies and activate encrypted binds";
-            path = migrationPath;
-            requires = [ "luxnix-storage-precopy.service" ];
-            after = [ "luxnix-storage-precopy.service" ];
-            serviceConfig = {
-              Type = "oneshot";
-              UMask = "0077";
-              LimitCORE = 0;
-              TimeoutStartSec = "infinity";
-              ExecStart = "${migrationCommand} cutover";
-            };
-          };
-          luxnix-storage-migrate = {
-            description = "Migrate and verify data before encrypted bind mounts";
-            path = migrationPath;
-            unitConfig.DefaultDependencies = false;
-            bindsTo = map (v: "${escapeSystemdPath v.mountPoint}.mount") (builtins.attrValues cfg.volumes);
-            requires = map (v: "${escapeSystemdPath v.mountPoint}.mount") (builtins.attrValues cfg.volumes);
-            after = map (v: "${escapeSystemdPath v.mountPoint}.mount") (builtins.attrValues cfg.volumes);
-            serviceConfig = {
-              Type = "oneshot";
-              RemainAfterExit = true;
-              UMask = "0077";
-              TimeoutStartSec = "infinity";
-              ExecStart = "${migrationCommand} prepare";
-            };
-          };
-        }
-        // lib.mapAttrs' (
-          name: volume:
-          let
-            prompted = passphraseBoot && volume.keyFile == null;
-          in
-          lib.nameValuePair (unlockName name) {
-            description = "Unlock operator storage ${name}";
-            requires =
-              lib.optional (cfg.unlockMethod == "local-openbao") "openbao-local.service"
-              ++ lib.optional (volume.keyFile != null) "sops-install-secrets.service";
-            # Passphrase mode prompts during boot, before the login screen, one
-            # container at a time so a shared passphrase is entered once. Key-file
-            # volumes open afterwards without holding back the login screen.
-            # Unanswered prompts must release the splash/login ordering on timeout.
-            wantedBy = lib.optional (passphraseBoot && cfg.autoStartProtectedServices) "multi-user.target";
-            wants = lib.optional (prompted && config.boot.plymouth.enable) "systemd-ask-password-plymouth.path";
-            before = lib.optionals prompted [
-              "display-manager.service"
-              "plymouth-quit.service"
-              "plymouth-quit-wait.service"
-              # Its ExecStartPre stops the Plymouth agent, even while prompts wait.
-              "systemd-ask-password-wall.service"
-            ];
-            after =
-              lib.optional (cfg.unlockMethod == "local-openbao") "openbao-local.service"
-              ++ lib.optional (prompted && config.boot.plymouth.enable) "systemd-ask-password-plymouth.path"
-              ++ lib.optionals passphraseBoot [
-                "local-fs.target"
-                "swap.target"
-              ]
-              ++ lib.optionals passphraseBoot (
-                map (other: "${unlockName other}.service") (
-                  if prompted then
-                    builtins.filter (other: other < name) (builtins.attrNames promptVolumes)
-                  else
-                    builtins.attrNames promptVolumes
-                )
-              )
-              ++ lib.optional (volume.keyFile != null) "sops-install-secrets.service";
-            path = migrationPath;
-            unitConfig = {
-              DefaultDependencies = false;
-              RequiresMountsFor = volume.depends;
-              # Include time queued behind another prompt or an unavailable disk.
-              JobTimeoutSec = "120s";
-            };
-            serviceConfig = {
-              Type = "oneshot";
-              RemainAfterExit = false;
-              UMask = "0077";
-              TimeoutStartSec = "90s";
-              TimeoutStopSec = "10s";
-              LimitCORE = 0;
-              LoadCredentialEncrypted = lib.optional (
-                cfg.unlockMethod == "local-openbao"
-              ) "volume.unlock:${cfg.openbaoUnlockCredential}";
-              ExecStartPre = lib.optionals (cfg.unlockMethod == "local-openbao") [
-                "${pkgs.python3}/bin/python ${../../../../lx_administration/secret_storage.py} --allow-runtime /run"
-                "${pkgs.python3}/bin/python ${../../../../lx_administration/storage/openbao_local.py} --seal ${
-                  lib.attrByPath [ "luxnix" "openbao" "local" "seal" ] "tpm" config
-                } ${cfg.openbaoUnlockCredential}"
-              ];
-              ExecStart = "${migrationCommand} unlock ${lib.escapeShellArg name}";
             };
           }
-        ) containerVolumes;
+          // lib.optionalAttrs cfg.migration.enable {
+            luxnix-storage-precopy = {
+              description = "Pre-copy live sources into private encrypted staging";
+              path = migrationPath;
+              requires = map (v: "${escapeSystemdPath v.mountPoint}.mount") (builtins.attrValues cfg.volumes);
+              after = map (v: "${escapeSystemdPath v.mountPoint}.mount") (builtins.attrValues cfg.volumes);
+              serviceConfig = {
+                Type = "oneshot";
+                UMask = "0077";
+                LimitCORE = 0;
+                TimeoutStartSec = "infinity";
+                ExecStart = "${migrationCommand} precopy";
+              };
+            };
+            luxnix-storage-cutover = {
+              description = "Stop writers, verify final copies and activate encrypted binds";
+              path = migrationPath;
+              requires = [ "luxnix-storage-precopy.service" ];
+              after = [ "luxnix-storage-precopy.service" ];
+              serviceConfig = {
+                Type = "oneshot";
+                UMask = "0077";
+                LimitCORE = 0;
+                TimeoutStartSec = "infinity";
+                ExecStart = "${migrationCommand} cutover";
+              };
+            };
+            luxnix-storage-migrate = {
+              description = "Migrate and verify data before encrypted bind mounts";
+              path = migrationPath;
+              unitConfig.DefaultDependencies = false;
+              bindsTo = map (v: "${escapeSystemdPath v.mountPoint}.mount") (builtins.attrValues cfg.volumes);
+              requires = map (v: "${escapeSystemdPath v.mountPoint}.mount") (builtins.attrValues cfg.volumes);
+              after = map (v: "${escapeSystemdPath v.mountPoint}.mount") (builtins.attrValues cfg.volumes);
+              serviceConfig = {
+                Type = "oneshot";
+                RemainAfterExit = true;
+                UMask = "0077";
+                TimeoutStartSec = "infinity";
+                ExecStart = "${migrationCommand} prepare";
+              };
+            };
+          }
+          // lib.mapAttrs' (
+            name: volume:
+            let
+              prompted = passphraseBoot && volume.keyFile == null;
+            in
+            lib.nameValuePair (unlockName name) {
+              description = "Unlock operator storage ${name}";
+              requires =
+                lib.optional (cfg.unlockMethod == "local-openbao") "openbao-local.service"
+                ++ lib.optional (volume.keyFile != null) "sops-install-secrets.service";
+              # Passphrase mode prompts during boot, before the login screen, one
+              # container at a time so a shared passphrase is entered once. Key-file
+              # volumes open afterwards without holding back the login screen.
+              # Unanswered prompts must release the splash/login ordering on timeout.
+              wantedBy = lib.optional (passphraseBoot && cfg.autoStartProtectedServices) "multi-user.target";
+              wants = lib.optional (prompted && config.boot.plymouth.enable) "systemd-ask-password-plymouth.path";
+              before = lib.optionals prompted [
+                "display-manager.service"
+                "plymouth-quit.service"
+                "plymouth-quit-wait.service"
+                # Its ExecStartPre stops the Plymouth agent, even while prompts wait.
+                "systemd-ask-password-wall.service"
+              ];
+              after =
+                lib.optional (cfg.unlockMethod == "local-openbao") "openbao-local.service"
+                ++ lib.optional (prompted && config.boot.plymouth.enable) "systemd-ask-password-plymouth.path"
+                ++ lib.optionals passphraseBoot [
+                  "local-fs.target"
+                  "swap.target"
+                ]
+                ++ lib.optionals passphraseBoot (
+                  map (other: "${unlockName other}.service") (
+                    if prompted then
+                      builtins.filter (other: other < name) (builtins.attrNames promptVolumes)
+                    else
+                      builtins.attrNames promptVolumes
+                  )
+                )
+                ++ lib.optional (volume.keyFile != null) "sops-install-secrets.service";
+              path = migrationPath;
+              unitConfig = {
+                DefaultDependencies = false;
+                RequiresMountsFor = volume.depends;
+                # Include time queued behind another prompt or an unavailable disk.
+                JobTimeoutSec = "120s";
+              };
+              serviceConfig = {
+                Type = "oneshot";
+                RemainAfterExit = false;
+                UMask = "0077";
+                TimeoutStartSec = "90s";
+                TimeoutStopSec = "10s";
+                LimitCORE = 0;
+                LoadCredentialEncrypted = lib.optional (
+                  cfg.unlockMethod == "local-openbao"
+                ) "volume.unlock:${cfg.openbaoUnlockCredential}";
+                ExecStartPre = lib.optionals (cfg.unlockMethod == "local-openbao") [
+                  "${pkgs.python3}/bin/python ${../../../../lx_administration/secret_storage.py} --allow-runtime /run"
+                  "${pkgs.python3}/bin/python ${../../../../lx_administration/storage/openbao_local.py} --seal ${
+                    lib.attrByPath [ "luxnix" "openbao" "local" "seal" ] "tpm" config
+                  } ${cfg.openbaoUnlockCredential}"
+                ];
+                ExecStart = "${migrationCommand} unlock ${lib.escapeShellArg name}";
+              };
+            }
+          ) containerVolumes;
 
-      sleep.settings.Sleep = {
-        AllowHibernation = false;
-        AllowHybridSleep = false;
-        AllowSuspendThenHibernate = false;
+        sleep.settings.Sleep = {
+          AllowHibernation = false;
+          AllowHybridSleep = false;
+          AllowSuspendThenHibernate = false;
+        };
       };
-    };
-  };
+    })
+  ];
 }

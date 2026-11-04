@@ -79,6 +79,36 @@ and uses [Linux MD](https://docs.kernel.org/admin-guide/md.html) below encryptio
 
 ## Splash unlock and generation recovery
 
+### Password setup during rebuild
+
+Boot-LUKS hosts use a manually entered root passphrase. Old USB/raw-offset
+`boot-decryption-config.nix` imports and automatic FIDO settings are retired.
+The first `nixos-rebuild boot` or `switch` with this policy prompts privately
+for a boot disk password and its confirmation, before changing the bootloader.
+You can enter an existing password or choose a new one of at least 12 characters.
+Adding a new password also requires the existing disk/recovery password; the
+helper first backs up the LUKS header and retains all existing recovery slots.
+If you do not hold an existing password, recover access before rebuilding;
+an already open filesystem does not authorize adding a LUKS key by itself.
+
+After verification, ordinary rebuilds do not prompt again. A private receipt
+under `/var/lib/luxnix-boot-passphrase` binds the check to this host, disk UUID,
+and complete LUKS header/keyslot fingerprint. Header changes require verification
+again. Passwords are never written to this receipt, inventory or the Nix store.
+Login/sudo and KWallet passwords are not changed; a wallet with a different
+password can still ask for its existing password after desktop login.
+
+To choose another disk password later, run `sudo luxnix-setup-boot-password --change`.
+This adds a credential; removal of old recovery slots is a separate operation.
+For a detached deployment with no private terminal, first run the **target
+generation's** `sw/bin/luxnix-setup-boot-password` interactively on the target.
+Missing terminal or failed verification aborts activation; it never invents a
+password. `nix build` and `dry-activate` do not change keys or prompt for setup.
+Fresh installations still set their initial passphrase at the Disko prompt;
+this rebuild check verifies an existing installed LUKS2 root, never formats it.
+
+### Shared mapper names
+
 Mapper names are shared by storage role on every host: `cryptroot` for root,
 `cryptswap` for a separate swap partition, and `luxnix-app-storage` for a separate
 application filesystem. Existing secrets containers use `luxnix-secrets`.
