@@ -153,10 +153,9 @@ The storage pre-switch check continues to reject mismatched mappings or missing
 keys. gc-10's retained containers already use the common names and need no rename.
 
 Non-technical users unlock root on the Plymouth splash screen, which the
-initrd shows before the normal system starts. The shared `dark_planet` animated
-space theme keeps the actual
-volume prompt, masked password input and recovery messages visible. Theme assets
-come from the pinned nixpkgs package; only this theme is included in the initrd.
+initrd shows before the normal system starts. The shared built-in `details`
+theme uses plain text without animation for password entry and boot messages.
+The custom space-theme package is no longer included.
 Plymouth follows the storage layout on every rebuild: boot-LUKS hosts and hosts with boot-time container
 passphrases enable it, all other hosts leave it off. Forcing
 `boot.plymouth.enable` off on a boot-LUKS host fails evaluation. On a boot-LUKS

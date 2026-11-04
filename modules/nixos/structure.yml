@@ -48,7 +48,7 @@ entrypoints:
   purpose: Legacy-container recovery helper; omitted from boot-LUKS systems.
 - name: secure-boot
   file: system/boot/default.nix
-  purpose: Shared space splash and bootloader selection; keyless lanzaboote install verifying controller-signed artifacts against the public fleet certificate.
+  purpose: Plain-text Plymouth unlock and bootloader selection; keyless lanzaboote install verifying controller-signed artifacts against the public fleet certificate.
 - name: vault-secret-lifecycle
   file: luxnix/vault/default.nix
   purpose: Machine authentication, guarded Vault credentials and mount-gated manually unlocked server TLS storage. Wiring only; shared values in context.nix, per-domain scripts in tools/ (auth, server, hub-pki, hub-sites, client), options.nix and config.nix.
