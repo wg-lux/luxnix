@@ -629,8 +629,15 @@ def test_native_host_commands_have_separate_validated_catalog() -> None:
         "rebuild-host-switch",
         "rebuild-host-boot",
         "install-prepared-encrypted-system",
+        "setup-boot-password",
+        "luxnix-normalize-storage",
     }
-    assert len(native) == 3
+    assert len(native) == 5
+    for name in ("setup-boot-password", "luxnix-normalize-storage"):
+        entry = next(item for item in native if item["id"] == name)
+        assert entry["operator_confirmation_required"] is True
+        assert entry["usage"].startswith("sudo luxnix-")
+        assert (REPO_ROOT / entry["implementation"]).is_file()
     install = next(entry for entry in native if entry["id"] == "install-prepared-encrypted-system")
     assert install["risk"] == "destructive-local"
     assert install["operator_confirmation_required"] is True

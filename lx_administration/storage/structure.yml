@@ -10,6 +10,9 @@ boundaries:
   - Do not mount or alter live storage during context validation
   - Preserve encrypted storage and hub authentication boundaries
 entrypoints:
+  - name: disk-password-custody
+    file: password_custody.py
+    purpose: Privately prompt and disclose verified disk credentials once until acknowledged, with receipts bound to encrypted vault records.
   - name: boot-password-setup
     file: boot_password.py
     purpose: Prompt for root passphrase setup or changes, preserve recovery slots, and bind verification receipts to host and LUKS header before activation.
@@ -57,7 +60,7 @@ entrypoints:
     purpose: Validate explicit TPM admission or passphrase-wrapped seals with authenticated runtime staging; never initialize state at boot.
   - name: storage-provision
     file: provision.py
-    purpose: Preserve existing recovery escrow and bound passphrase container provisioning to gc-09/gc-10 migration; reject alternative enrollment.
+    purpose: Verify and escrow existing root or container passwords with independent recovery custody; retain bounded legacy provisioning without implicit formatting.
   - name: storage-provision-setup
     file: provision_setup.py
     purpose: Interactive, resumable operator guide that runs read-only prerequisite checks and delegates every change to storage-provision after typed confirmation.
@@ -68,7 +71,8 @@ entrypoints:
     file: operator_migration.py
     purpose: >-
       Unlock existing containers, explicitly provision escrowed new volumes
-      and verify resumable copies without formatting at startup or overwriting storage.
+      and verify resumable copies without formatting at startup or overwriting storage;
+      explicitly retire matching native mount overrides with backup and rollback.
   - name: manager
     file: manager.py
     purpose: Inspect manager ownership and interfaces.

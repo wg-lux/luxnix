@@ -6,6 +6,7 @@ source. The JSON contract contains paths only; passphrases never enter it.
 from __future__ import annotations
 
 import argparse
+import configparser
 import fcntl
 import hashlib
 import importlib.util
@@ -17,6 +18,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import tempfile
 import uuid
 import runpy
 
@@ -362,6 +364,167 @@ class Migration:
 
 MOUNTINFO = Path("/proc/self/mountinfo")
 FDINFO = Path("/proc/self/fdinfo")
+CONTROL_UNITS = Path("/etc/systemd/system.control")
+GENERATED_UNITS = Path("/run/systemd/generator")
+OVERRIDE_BACKUPS = Path("/var/lib/luxnix-storage-overrides")
+
+
+def normalize_mounts(config, *, apply=False):
+    """Retire declared native mount overrides without moving data."""
+    mounts = {
+        v["mountPoint"]: (v["device"], v["fsType"]) for v in config["volumes"].values()
+    }
+    for target, bind in config["binds"].items():
+        volume = config["volumes"][bind["volume"]]
+        mounts[target] = (str(Path(volume["mountPoint"]) / bind["directory"]), "none")
+    selected = []
+    for target, (source, filesystem) in mounts.items():
+        unit = (
+            run("systemd-escape", "--path", "--suffix=mount", target).decode().strip()
+        )
+        override, generated = CONTROL_UNITS / unit, GENERATED_UNITS / unit
+        if not override.exists() and not override.is_symlink():
+            continue
+        # Refuse foreign mounts, masks, symlinks and writable or non-root unit files.
+        for path in (override, generated):
+            info = path.lstat()
+            if (
+                path.resolve() != path
+                or not stat.S_ISREG(info.st_mode)
+                or info.st_uid != 0
+                or info.st_mode & 0o022
+            ):
+                raise MigrationError("Unsafe mount override or generated replacement")
+            definition = configparser.ConfigParser(interpolation=None, strict=False)
+            definition.optionxform = str
+            text = path.read_text()
+            try:
+                definition.read_string(text)
+            except configparser.Error:
+                raise MigrationError(
+                    "Cannot parse the declared mount definition"
+                ) from None
+            # systemd generators repeat dependency directives (including fsck).
+            # ConfigParser otherwise keeps only the last value of each key.
+            dependencies = {"Requires": [], "After": []}
+            section = None
+            for line in text.splitlines():
+                line = line.strip()
+                if line.startswith("["):
+                    section = line
+                if section == "[Unit]" and "=" in line:
+                    key, value = line.split("=", 1)
+                    if key in dependencies:
+                        if value.endswith("\\"):
+                            raise MigrationError(
+                                "Review multiline dependency overrides manually"
+                            )
+                        if not value:
+                            dependencies[key].clear()
+                        else:
+                            dependencies[key].extend(value.split())
+            mount = definition["Mount"]
+            if (
+                mount["What"] != source
+                or mount["Where"] != target
+                or mount.get("Type", "none") != filesystem
+            ):
+                raise MigrationError(
+                    "Mount override or replacement differs from declared storage"
+                )
+            if path == generated:
+                options = set(mount.get("Options", "").split(","))
+                if not set(_required_options(config, target)) <= options:
+                    raise MigrationError("Generated mount lacks declared protections")
+                if target not in config["binds"]:
+                    name = next(
+                        name
+                        for name, v in config["volumes"].items()
+                        if v["mountPoint"] == target
+                    )
+                    if config["volumes"][name].get("container"):
+                        unlock = f"luxnix-storage-unlock-{name}.service"
+                        if any(
+                            unlock not in dependencies[key]
+                            for key in ("Requires", "After")
+                        ):
+                            raise MigrationError(
+                                "Generated mount lacks unlock ordering"
+                            )
+        fragment = (
+            run("systemctl", "show", "--value", "-p", "FragmentPath", unit)
+            .decode()
+            .strip()
+        )
+        if fragment != str(override):
+            raise MigrationError(
+                "A different mount definition is active; inspect before normalization"
+            )
+        selected.append((override, generated))
+    print(
+        json.dumps(
+            {
+                "host": config["machine"],
+                "overrides": [str(p) for p, _ in selected],
+                "stop_writers": [name + ".service" for name in config["writers"]],
+            }
+        )
+    )
+    if not apply or not selected:
+        return
+    with open("/dev/tty", "w") as output, open("/dev/tty", "r") as reader:
+        if not reader.isatty():
+            raise MigrationError("A private interactive terminal is required")
+        output.write(
+            f"Retire only the listed mount overrides? Type {config['machine']}: "
+        )
+        output.flush()
+        if reader.readline().strip() != config["machine"]:
+            raise MigrationError("Mount normalization not confirmed")
+    for name in config["writers"]:
+        state = run(
+            "systemctl", "show", "--value", "-p", "ActiveState", name + ".service"
+        ).strip()
+        if state not in {b"inactive", b"failed"}:
+            raise MigrationError(
+                "Stop the listed storage writers before normalizing mount overrides"
+            )
+    root = plain_path(str(OVERRIDE_BACKUPS))
+    root.mkdir(mode=0o700, exist_ok=True)
+    if root.stat().st_uid != 0 or root.stat().st_mode & 0o077:
+        raise MigrationError("Mount override backup directory must be root-only")
+    backup = Path(tempfile.mkdtemp(prefix="native-mounts-", dir=root))
+    moved = []
+    try:
+        for override, generated in selected:
+            # Copy durably before unlinking; /etc and /var may be different filesystems.
+            saved = backup / override.name
+            shutil.copy2(override, saved)
+            run("sync", "-f", str(saved))
+            override.unlink()
+            moved.append((override, saved))
+        run("sync", "-f", str(CONTROL_UNITS))
+        run("systemctl", "daemon-reload")
+        for override, generated in selected:
+            actual = (
+                run("systemctl", "show", "--value", "-p", "FragmentPath", override.name)
+                .decode()
+                .strip()
+            )
+            if actual != str(generated):
+                raise MigrationError(
+                    "Generated mount did not take over; restoring native overrides"
+                )
+    except BaseException:
+        for override, saved in reversed(moved):
+            if not override.exists() and not override.is_symlink():
+                shutil.copy2(saved, override)
+        run("systemctl", "daemon-reload")
+        raise
+    print(
+        f"Mount definitions normalized; original files retained in {backup}. "
+        "No data or mounts changed."
+    )
 
 
 def _unescape_mount_field(value):
@@ -559,10 +722,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("config", type=Path)
     parser.add_argument(
-        "action", choices=["unlock", "prepare", "precopy", "cutover", "accounts", "provision", "restack", "verify"]
+        "action", choices=[
+            "unlock", "prepare", "precopy", "cutover", "accounts", "provision",
+            "restack", "verify", "normalize",
+        ]
     )
+    parser.add_argument("--apply", action="store_true")
     parser.add_argument("operands", nargs="*")
     args = parser.parse_args()
+    if args.apply and args.action != "normalize":
+        parser.error("--apply is only supported for normalize")
     if args.action == "verify":
         if not args.operands:
             parser.error("verify requires at least one path")
@@ -599,6 +768,8 @@ def main():
                 prepare_accounts(config["accounts"])
             elif args.action == "restack":
                 restack_binds(config)
+            elif args.action == "normalize":
+                normalize_mounts(config, apply=args.apply)
             elif args.action == "precopy":
                 migration.precopy()
             elif args.action == "cutover":

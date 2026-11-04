@@ -11,6 +11,9 @@ boundaries:
   - Source checks do not prove deployment readiness
   - Nix evaluation and VM tests are separate from the fast Python lane
 entrypoints:
+  - name: disk-password-custody
+    file: test_password_custody.py
+    purpose: Verify private one-time disclosure, acknowledgement binding and refusal to reveal credentials without a terminal.
   - name: boot-password-setup
     file: test_boot_password.py
     purpose: Verify interactive-only passphrase setup, receipt invalidation, identity binding, and recovery-slot preservation with disposable LUKS images.

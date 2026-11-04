@@ -94,6 +94,22 @@ binds, during a stopped-writer maintenance window; do not delete the whole
 `system.control` directory. A theme change or longer password timeout cannot
 repair a mount definition that still shadows the declared configuration.
 
+The shared helper now checks those replacements and preserves the old definitions:
+
+```bash
+sudo luxnix-normalize-storage          # preview exact overrides and writer units
+# Stop the writer services listed by the preview during a maintenance window.
+sudo luxnix-normalize-storage --apply  # confirm the displayed hostname
+sudo luxnix-operator-storage start
+```
+
+It rejects foreign sources, missing replacements and active writers. It keeps
+backups under `/var/lib/luxnix-storage-overrides`, reloads systemd, and restores
+the native files if replacement verification fails. It does not unmount, move
+data, rename disks or change keys. The standard secrets mapping remains
+`luxnix-secrets`, with `/etc/secrets` bound to `host-secrets` and
+`/etc/secrets/vault` bound to `managed-secrets` inside that volume.
+
 ### Hidden nested secret mounts
 
 A live switch can add a parent bind, such as `/etc/secrets`, while a child bind
@@ -147,6 +163,34 @@ same 90/120-second bounds; after exhausted attempts restart
   changes the boot passphrase, the seal key or any LUKS passphrase.
 
 ## Recovery credentials
+
+Use the shared setup command in an unrecorded private controller terminal:
+
+```bash
+devenv shell storage-provision setup --host gc-10 --volume luxnix-secrets --sudo-password-file /home/admin/pwd_gc-10.txt --apply
+devenv shell storage-provision setup --host gc-10 --volume luxnix-app-storage --sudo-password-file /home/admin/pwd_gc-10.txt --apply
+```
+
+Omit `--apply` for a read-only preview. Setup requires the previously configured
+`~/.lxv/storage-recovery/custody.json` selection from `storage-recovery-custody
+prepare`; it verifies the independent age envelope as well as the vault record.
+It tests a stored credential against the actual LUKS volume, or privately asks
+for the current password when no record exists. After verified escrow it shows
+the password once and asks you to type `SAVED`. Subsequent runs retest the key
+and recovery copies without redisplaying an acknowledged credential. Cancelling
+retains encrypted copies for retry. Wrong keys or conflicting identities stop
+the operation; existing records and keyslots are never replaced.
+
+`--existing-key-file` uses exact UTF-8 file bytes, including a deliberate newline,
+in setup mode. Never put a password on the command line. For an installed
+encrypted root, use the same command with its host and `--volume cryptroot`.
+New partition creation remains the explicit reviewed Disko installation step.
+
+`devenv shell storage-provision-setup` is the retained guided legacy provisioner;
+use `storage-provision setup` above for password custody on existing volumes.
+Contributor regression lanes are `devenv tasks run tests:operator-storage-migration-vm`
+and `devenv tasks run tests:openbao-local-vm`; these exercise disposable VM storage,
+not production enrollment or approval to reactivate a retired backend.
 
 Each container has a random recovery passphrase, which is also its manual
 unlock credential. It is stored as an authenticated Ansible Vault record under

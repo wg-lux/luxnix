@@ -1,5 +1,6 @@
 """Exercise real rsync copies on disposable files; never open or format a device."""
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -9,6 +10,155 @@ from types import SimpleNamespace
 import pytest
 
 from lx_administration.storage import operator_migration as migration
+
+
+@pytest.fixture
+def native_overrides(tmp_path, monkeypatch):
+    import builtins
+
+    control, generated, backups = (
+        tmp_path / name for name in ("control", "generated", "backups")
+    )
+    control.mkdir()
+    generated.mkdir()
+    monkeypatch.setattr(migration, "CONTROL_UNITS", control)
+    monkeypatch.setattr(migration, "GENERATED_UNITS", generated)
+    monkeypatch.setattr(migration, "OVERRIDE_BACKUPS", backups)
+    name = "var-lib-luxnix-secrets.mount"
+    header = (
+        "[Unit]\nRequires=luxnix-storage-unlock-luxnix-secrets.service\n"
+        "After=luxnix-storage-unlock-luxnix-secrets.service\n"
+        "Requires=systemd-fsck@device.service\nAfter=systemd-fsck@device.service\n"
+    )
+    mount = (
+        "[Mount]\nWhat=/dev/mapper/luxnix-secrets\nWhere=/var/lib/luxnix-secrets\n"
+        "Type=ext4\nOptions=nodev,nosuid,noexec\n"
+    )
+    (control / name).write_text("[Unit]\n" + mount)
+    (generated / name).write_text(header + mount)
+    (control / "unrelated.mount").write_text("preserve")
+    config = {
+        "machine": "example-host",
+        "writers": ["consumer"],
+        "binds": {},
+        "volumes": {
+            "luxnix-secrets": {
+                "mountPoint": "/var/lib/luxnix-secrets",
+                "device": "/dev/mapper/luxnix-secrets",
+                "fsType": "ext4",
+                "container": "/var/lib/secrets.luks",
+                "noexec": True,
+            }
+        },
+    }
+    state = SimpleNamespace(active=False, reloads=0, fail_reload=False, confirmed=True)
+
+    def run(*args, **kwargs):
+        if args[0] == "systemd-escape":
+            return name.encode()
+        if args[0] == "sync":
+            return b""
+        assert args[0] == "systemctl"
+        if args[1] == "daemon-reload":
+            state.reloads += 1
+            if state.fail_reload and state.reloads == 1:
+                raise migration.MigrationError("Synthetic reload failure")
+            return b""
+        if "ActiveState" in args:
+            return b"active" if state.active else b"inactive"
+        assert "FragmentPath" in args
+        return str(
+            (control if (control / name).exists() else generated) / name
+        ).encode()
+
+    monkeypatch.setattr(migration, "run", run)
+    original_open = builtins.open
+
+    class Terminal(io.StringIO):
+        def isatty(self):
+            return True
+
+    def open_file(path, mode="r", *args, **kwargs):
+        if str(path) == "/dev/tty":
+            return Terminal("example-host\n" if state.confirmed else "cancel\n")
+        return original_open(path, mode, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "open", open_file)
+    original_stat = Path.stat
+
+    def stat(path, **kwargs):
+        result = original_stat(path, **kwargs)
+        if path.is_relative_to(tmp_path):
+            fields = list(result)
+            fields[4] = 0  # Disposable fixture stands in for root-owned system files.
+            return os.stat_result(fields)
+        return result
+
+    monkeypatch.setattr(Path, "stat", stat)
+    return config, state, control / name, generated / name, backups
+
+
+def test_normalize_preview_then_retire_only_matching_override(native_overrides):
+    config, state, override, generated, backups = native_overrides
+    before = override.read_bytes()
+    migration.normalize_mounts(config)
+    assert override.read_bytes() == before and not backups.exists()
+    migration.normalize_mounts(config, apply=True)
+    assert not override.exists() and generated.exists()
+    assert (override.parent / "unrelated.mount").read_text() == "preserve"
+    assert next(backups.glob("*/" + override.name)).read_bytes() == before
+    migration.normalize_mounts(config, apply=True)
+    assert state.reloads == 1
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "active-writer",
+        "foreign-source",
+        "missing-replacement",
+        "missing-unlock",
+        "missing-protection",
+        "cancel",
+        "symlink",
+    ],
+)
+def test_normalize_rejects_unreviewed_or_unsafe_replacement(native_overrides, fault):
+    config, state, override, generated, backups = native_overrides
+    if fault == "active-writer":
+        state.active = True
+    elif fault == "foreign-source":
+        override.write_text(
+            override.read_text().replace("/dev/mapper/luxnix-secrets", "/dev/plain")
+        )
+    elif fault == "missing-replacement":
+        generated.unlink()
+    elif fault == "missing-unlock":
+        generated.write_text(generated.read_text().replace("Requires=", "Wants="))
+    elif fault == "missing-protection":
+        generated.write_text(generated.read_text().replace(",noexec", ""))
+    elif fault == "cancel":
+        state.confirmed = False
+    else:
+        override.unlink()
+        override.symlink_to(generated)
+    with pytest.raises((migration.MigrationError, FileNotFoundError)):
+        migration.normalize_mounts(config, apply=True)
+    assert override.exists() and not backups.exists()
+    assert state.reloads == 0
+
+
+def test_normalize_reload_failure_restores_override_and_retains_backup(
+    native_overrides,
+):
+    config, state, override, _, backups = native_overrides
+    before = override.read_bytes()
+    state.fail_reload = True
+    with pytest.raises(migration.MigrationError, match="reload failure"):
+        migration.normalize_mounts(config, apply=True)
+    assert override.read_bytes() == before
+    assert next(backups.glob("*/" + override.name)).read_bytes() == before
+    assert state.reloads == 2
 
 
 @pytest.fixture

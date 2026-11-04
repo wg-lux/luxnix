@@ -1,126 +1,95 @@
-# LuxNix installation: operator checklist
+# LuxNix storage: one operator workflow
 
-Use this checklist for one approved machine. Success means it boots, an
-administrator can log in, and restored applications can read their existing data.
-Keep recovery copies until those checks are recorded.
+Run controller commands from the reviewed LuxNix checkout in a private terminal
+(no screen sharing, session recording or terminal logging). Keep console access
+and trusted recovery media ready. Replace `<host>` and `<state>` with the approved
+inventory host and existing migration state directory; do not paste placeholders.
 
-If you use the application but do not administer the machine, ask the named
-operator for the maintenance window and confirmation before resuming work.
-If you are a first-time operator, have an experienced administrator prepare and
-review the disk plan with you before step 1. If work already started, use
-[resume instructions](changelog.md#continue-an-installation-or-migration) first.
+## Shared layout
 
-### Know where to run each command
-
-| Term | Meaning |
+| Purpose | Standard mapper / paths |
 | --- | --- |
-| Controller | The administrator's computer containing the reviewed LuxNix checkout. |
-| Target | The machine being installed; confirm its name and disk serials against the plan. |
-| Trusted installer | Recovery media booted on the target, separate from its installed OS. `root` means its administrator account. |
-| State directory | The saved plan and progress evidence. Keep this on independent encrypted storage and reuse it after interruptions. |
-| Root encryption | Protection for the operating-system disk. Application-file encryption is a separate layer. |
+| Encrypted root | `/dev/mapper/cryptroot` |
+| Separate application storage | `/dev/mapper/luxnix-app-storage` |
+| Separate secrets storage | `/dev/mapper/luxnix-secrets` |
+| Secrets consumed by applications | `/etc/secrets`, `/etc/secrets/vault` |
 
-Run controller commands from its reviewed LuxNix checkout. Replace `<host>` with
-the inventory name, `<spec>` with
-your [private disk-selection YAML](boot-storage-migration.md#guided-operator-workflow),
-and `<state>` with an absolute path on independent encrypted storage.
-Angle brackets mark values to replace; do not paste them literally. Obtain these
-values from the approved plan rather than guessing from a disk's size or order.
+New installations use the shared LUKS2 Disko layout with host-owned disk sizes.
+If RAID exists, encryption is above RAID. Secrets normally live directly on the
+encrypted root; a dedicated secrets filesystem uses `luxnix-secrets`.
+Retained containers, such as gc-10's, keep their files, UUIDs and data. Their
+standard bind paths are supplied by shared inventory. A rebuild never formats
+an existing disk, converts plaintext root, or moves secrets automatically.
 
-## 1. Select storage and prepare recovery
+## New installation or root migration
 
-Use `boot-luks` and `root_encryption: luks2`. Plain-root installation is retired.
-Regenerate and review the host before planning; retain existing recovery keys.
+First prepare the reviewed hardware plan and recovery evidence using the
+[installation guide](boot-storage-migration.md#guided-operator-workflow).
+A migration requires retained disks or a verified backup and restore test.
+Use the same saved state after an interruption; do not restart disk formatting.
 
-For **new empty disks**, set `installation: fresh` and `source_retention: new-disks`.
-Test the installer and independent administrator access; record `recovery`.
-For **migration**, retain old disks or a verified whole-disk image, authenticate
-backups and test a restore. Record `recovery`, `backup`, `restore`, including a
-fresh [source admission report](boot-storage-migration.md#readiness-observations-versus-admission).
-Use the [evidence procedure](boot-storage-migration.md#guided-operator-workflow)
-and the exact check names printed by `status`.
-
-Confirm the machine, address, disk serials, release revision and `flake.lock`:
+On the controller:
 
 ```sh
 devenv shell check-connectivity <host>
-devenv shell boot-storage-migration plan --spec <spec> --state <state>
 devenv shell boot-storage-migration status --state <state>
 ```
 
-Configure [early SSH unlock](boot-storage-migration.md#remote-ssh-root-unlock)
-only for encrypted root. Do not combine it with the current controller-held
-Secure Boot signer. Keep required Secure Boot policy and use console recovery.
-
-## 2. Prepare and install from trusted recovery media
-
-Run these commands **as root in the trusted installer**, with the reviewed Python
-package available. Preserve the checkout, state and evidence at their planned
-absolute paths; make the built system available locally.
+As root in the trusted installer, with the reviewed package and state available:
 
 ```sh
 python -m lx_administration.storage.boot_migration check --state <state> --stage provision
 ```
 
-After that check passes, provision only the approved disks using the reviewed
-layout; mount the target at `/mnt`. Stage valid administrator credentials using
-the [account guide](admin-passwords.md#6-install-on-a-new-machine).
-For a migration, [restore existing data and keys](boot-storage-migration.md#reprovision-and-restore-explicit-destructive-operator-action)
-into protected storage. Never restore protected application data onto plain root.
-Then run:
+Only after that passes, provision the approved disks with their reviewed Disko
+layout and mount the target at `/mnt`. Choose and record the prompted LUKS
+password in your password manager. Stage the administrator credential using
+[the account guide](admin-passwords.md#6-install-on-a-new-machine); it is separate
+from the disk password. Restore existing application keys, salts and data onto
+protected storage when migrating. Then run:
 
 ```sh
 python -m lx_administration.storage.boot_migration prepare-access --state <state>
 ```
 
-For SSH unlock, pin the printed public host key on the operator computer through
-this trusted installer session. Record the `prepared` assessment, then run:
+Record the `prepared` evidence from the guide, then:
 
 ```sh
 python -m lx_administration.storage.boot_migration check --state <state> --stage install
 python -m lx_administration.storage.boot_migration install --state <state>
 ```
 
-Read the displayed machine and disks. Confirm only the approved plan. Wait for
-success before arranging the first reboot with the recovery operator present.
+Confirm the displayed host and disks. Arrange the first boot with console
+recovery available; verify disk unlock, administrator login and application data.
 
-## 3. Boot and accept
+## Save and verify disk-password custody
 
-For encrypted root with SSH unlock, use the configured management address,
-dedicated private SSH key and pinned host key:
+After the installed host is reachable, use the controller's existing encrypted
+vault and configured independent recovery envelopes. The custody selection must
+already exist (`storage-recovery-custody prepare` in the installation guide).
 
 ```sh
-ssh -tt -p 2222 -i <operator-key> -o StrictHostKeyChecking=yes root@<unlock-address>
+devenv shell storage-provision setup --host <host> --volume cryptroot --apply
 ```
 
-Enter the disk credential. After boot, reconnect using normal administrator
-SSH. If you mistype the disk credential, reconnect and wait for the next prompt.
-For local unlock, enter the same disk credential on the graphical password
-screen (Plymouth splash). It waits without a time or attempt limit. To recover,
-press Ctrl+Alt+Del there: the computer restarts and the boot menu stays open
-until an entry is chosen, so an older system generation can be started for
-debugging. See [splash unlock and recovery](boot-storage-migration.md#splash-unlock-and-generation-recovery).
+Add `--sudo-password-file <private-file>` if passwordless sudo is unavailable.
+For retained containers replace `cryptroot` with `luxnix-secrets`, then repeat
+for `luxnix-app-storage`. Omit `--apply` to preview. Setup tests a stored key or
+asks privately for the current password, verifies both encrypted recovery copies,
+then shows it once and asks for `SAVED`. Acknowledged keys are not shown again.
+Wrong passwords or mismatched identities stop setup; no keys are removed.
 
-Verify administrator login and cold-boot recovery. For restored applications,
-verify data mounts, database queries and old-data decryption. Complete the applicable
-[cold-boot and recovery checks](boot-storage-migration.md#acceptance-recovery-and-rollback-limits),
-then record `acceptance`. Keep old disks and recovery copies until retention
-removal is separately approved.
+## Rebuilds and retained containers
 
-## If a step fails
+On an installed boot-LUKS host, `sudo luxnix-setup-boot-password` prepares the
+first activation; `--change` explicitly adds a new password while keeping recovery
+slots. It stores a verification receipt only. Controller custody above preserves
+the verified recovery password; it does not rotate or replace an existing record.
+Ordinary rebuilds with an unchanged LUKS header do not prompt again.
 
-- Keep the machine in its current state. Give the operator the failed step,
-  time, non-secret error and plan identifier through the approved support channel.
-  Do not include passwords, private keys, patient data or full environment dumps.
-- Run `status --state <state>` with the same migration command. Keep its state,
-  evidence and recovery copies; resolve the reported check before continuing.
-- After a snapshot interruption, let automatic cleanup finish; inspect snapshot
-  `status` and use [journal recovery](boot-storage-migration.md#snapshot-backups-from-the-existing-gc-09-and-gc-10-installations)
-  if writers remain stopped.
-- After an interrupted installation, review the target and record
-  `install-recovery` evidence before using `install --retry-interrupted`.
-- After lost SSH during activation, reconnect and inspect the retained operation
-  before retrying; follow [activation recovery](secure-boot.md#how-a-deployment-is-signed).
-- Never replace a missing existing volume key or rerun disk formatting to recover.
-  Use the retained disks or verified restore. A generation rollback cannot undo a
-  format or database migration.
+For retained containers, use `sudo luxnix-operator-storage start` to unlock and
+start consumers. For stale mount overrides, preview `sudo luxnix-normalize-storage`,
+stop its listed writers, then run `sudo luxnix-normalize-storage --apply` and
+restart consumers. See [the recovery guide](legacy-storage-recovery.md).
+Never bypass encrypted mount checks or erase a volume to fix a password failure.
+Keep recovery copies until cold boot, fresh login and old-data decryption pass.

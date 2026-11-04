@@ -30,6 +30,7 @@ from lx_administration.models.vault.secret import (
 from lx_administration.permissions import ensure_private_directory
 from lx_administration.secret_storage import encrypted_storage
 from lx_administration.storage.recovery_export import export_script
+from lx_administration.storage.password_custody import CustodyError
 
 
 class ProvisionError(RuntimeError):
@@ -235,7 +236,7 @@ def escrow_record(vault, vault_key, record, export, *, independent_required=Fals
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['escrow', 'provision'])
+    parser.add_argument('action', choices=['setup', 'escrow', 'provision'])
     parser.add_argument('--host', required=True)
     parser.add_argument('--volume', required=True)
     parser.add_argument('--recovery-host')
@@ -254,8 +255,10 @@ def main(argv=None):
     if args.controller_only_custody:
         if args.action != 'escrow' or args.recovery_host:
             parser.error('--controller-only-custody requires escrow without --recovery-host')
-    elif not args.recovery_host:
+    elif not args.recovery_host and args.action != 'setup':
         parser.error('--recovery-host is required unless explicitly escrowing on the controller only')
+    if args.action == 'setup' and args.backend:
+        parser.error('setup preserves keys and does not select an unlock backend')
     for value in [args.host, args.volume, args.recovery_host or 'x']:
         if not re.fullmatch('[a-z0-9][a-z0-9-]*', value):
             parser.error('Host and volume names must be canonical inventory identifiers')
@@ -282,22 +285,36 @@ def main(argv=None):
             return Local(host, password)
         return Remote(str(entry.ansible_host), password)
     target = connection(args.host, args.sudo_password_file, local=args.local_target)
-    recovery = None if args.controller_only_custody else connection(args.recovery_host)
+    recovery = connection(args.recovery_host) if args.recovery_host else None
     machine_id = target.machine_id()
     if recovery is not None and recovery.machine_id() in {machine_id, Path('/etc/machine-id').read_text().strip()}:
         raise ProvisionError('Emergency export must be on a separate host from both target and admin vault')
-    expression = f'.#nixosConfigurations.{args.host}.config.luxnix.storage.operatorUnlocked.volumes.{args.volume}'
+    root = args.volume == 'cryptroot' and args.action == 'setup'
+    prefix = f'.#nixosConfigurations.{args.host}.config.'
+    expression = prefix + (
+        'boot.initrd.luks.devices.cryptroot.device' if root else
+        f'luxnix.storage.operatorUnlocked.volumes.{args.volume}'
+    )
     result = subprocess.run(['nix', 'eval', '--json', expression], capture_output=True, check=True)
-    volume = json.loads(result.stdout)
+    value = json.loads(result.stdout)
+    volume = {'container': value} if root else value
     container = volume['container']
     if not container:
         raise ProvisionError('Provisioning requires a declared container path')
-    exists = target.call(['sh', '-c', 'if test -e "$1"; then echo yes; else echo no; fi', 'probe', container]).strip() == b'yes'
+    exists = target.call([
+        'sh', '-c', 'if test -e "$1"; then echo yes; else echo no; fi',
+        'probe', container,
+    ], privileged=args.action == 'setup').strip() == b'yes'
     native_uuid = target.call(['cryptsetup', 'luksUUID', container], privileged=True).decode().strip() if exists else None
     if native_uuid is not None:
         native_uuid = str(uuid.UUID(native_uuid))
-    if args.action == 'escrow' and not exists:
-        raise ProvisionError('Existing-volume escrow requires a LUKS container')
+        if volume.get('luksUUID') and native_uuid != volume['luksUUID']:
+            raise ProvisionError('Native LUKS UUID does not match the declared volume')
+    if args.action in {'escrow', 'setup'} and not exists:
+        raise ProvisionError(
+            'Password custody requires an existing LUKS volume; '
+            'install the reviewed Disko layout first'
+        )
     backend = None
     if args.action == 'provision':
         mode_expression = (
@@ -327,7 +344,10 @@ def main(argv=None):
         return
     if not args.vault_dir.is_dir():
         raise ProvisionError('Existing admin vault directory is required')
-    independent_required = args.action == 'provision' and require_independent_custody(args.vault_dir)
+    independent_required = (
+        args.action in {'provision', 'setup'}
+        and require_independent_custody(args.vault_dir)
+    )
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
     encrypted_storage(args.vault_key, allow_runtime=True)
     Vault.load_dir(str(args.vault_dir), str(args.vault_key)).validate_local_key()
@@ -346,11 +366,25 @@ def main(argv=None):
         else:
             if exists:
                 if args.existing_key_file is None:
-                    raise ProvisionError('Existing containers require their current recovery credential')
-                encrypted_storage(args.existing_key_file, allow_runtime=True)
-                if args.existing_key_file.is_symlink() or args.existing_key_file.stat().st_mode & 0o077:
-                    raise ProvisionError('Existing recovery credential file must be private')
-                key = args.existing_key_file.read_bytes().rstrip(b'\r\n').decode('ascii')
+                    if args.action != 'setup':
+                        raise ProvisionError(
+                            'Existing containers require their recovery credential'
+                        )
+                    from .password_custody import ask
+                    key = ask(args.host, args.volume)
+                else:
+                    encrypted_storage(args.existing_key_file, allow_runtime=True)
+                    from .boot_password import private
+                    private(args.existing_key_file)
+                    raw = args.existing_key_file.read_bytes()
+                    # setup uses exact file bytes, including a deliberate newline.
+                    key = (
+                        raw if args.action == 'setup' else raw.rstrip(b'\r\n')
+                    ).decode('utf-8')
+                if not key or len(key.encode()) > 512 or '\0' in key:
+                    raise ProvisionError(
+                        'Use a recovery passphrase of 1 to 512 UTF-8 bytes without NUL'
+                    )
             else:
                 key = secrets.token_hex(32)
             record = dict(summary, schema_version=1, luks_uuid=native_uuid or volume.get('luksUUID') or str(uuid.uuid4()),
@@ -367,6 +401,9 @@ def main(argv=None):
         primary = escrow_record(args.vault_dir, args.vault_key, record,
             (lambda ciphertext: recovery.call(['python3', '-c', EXPORT, machine_id, record['luks_uuid']], ciphertext))
             if recovery is not None else None, independent_required=independent_required)
+        if args.action == 'setup':
+            from .password_custody import acknowledge
+            acknowledge(primary, record)
         if args.action == 'provision':
             request = dict(record, primary_escrow=str(primary), emergency_export=destination)
             request['backend'] = backend
@@ -386,7 +423,10 @@ if __name__ == '__main__':
         main()
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
         # Do not print subprocess output, decrypted records, or validation payloads.
-        detail = str(exc) if isinstance(exc, ProvisionError) else type(exc).__name__
+        detail = (
+            str(exc) if isinstance(exc, (ProvisionError, CustodyError))
+            else type(exc).__name__
+        )
         print(f'ERROR: storage provisioning blocked: {detail}; no startup migration requested',
               file=__import__('sys').stderr)
         raise SystemExit(1) from None

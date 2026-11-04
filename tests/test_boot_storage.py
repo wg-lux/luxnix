@@ -531,7 +531,14 @@ def test_boot_luks_can_defer_guarded_service_startup():
     assert all(not targets for targets in wanted.values()), wanted
 
 
-def test_mapper_names_survive_hardware_renaming_and_reject_collisions():
+@pytest.mark.parametrize('mountpoint,name', [
+    ('/var/lib/lx-annotate', 'luxnix-app-storage'),
+    ('/var/lib/luxnix-app-storage', 'luxnix-app-storage'),
+    ('/var/lib/luxnix-secrets', 'luxnix-secrets'),
+    ('/etc/secrets', 'luxnix-secrets'),
+    ('/', 'cryptroot'),
+])
+def test_mapper_names_survive_hardware_renaming_and_reject_collisions(mountpoint, name):
     expression = r'''
       let f = builtins.getFlake ("git+file://" + builtins.toString ./.);
           lib = f.inputs.nixpkgs.lib;
@@ -558,12 +565,14 @@ def test_mapper_names_survive_hardware_renaming_and_reject_collisions():
            renamed = inspect "replacement_controller" "other_partition" false;
            collision = inspect "disk" "data" true; }
     '''
+    expression = expression.replace('mountpoint = "/var/lib/lx-annotate"',
+                                    "mountpoint = " + json.dumps(mountpoint))
     result = subprocess.run(["nix", "eval", "--impure", "--json", "--expr", expression],
                             cwd=ROOT, capture_output=True, text=True, timeout=120)
     assert result.returncode == 0, result.stderr
     state = json.loads(result.stdout)
     assert state["first"] == state["renamed"] == {
-        "name": "luxnix-app-storage", "label": "existing-label", "valid": True,
+        "name": name, "label": "existing-label", "valid": True,
     }
     assert state["collision"]["valid"] is False
 
