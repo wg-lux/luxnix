@@ -107,6 +107,34 @@ password. `nix build` and `dry-activate` do not change keys or prompt for setup.
 Fresh installations still set their initial passphrase at the Disko prompt;
 this rebuild check verifies an existing installed LUKS2 root, never formats it.
 
+If activation reports `Boot-password setup failed: UnsupportedOperation`, update
+to the fixed helper first: the old helper incorrectly opened the terminal in a
+mode requiring seek support. Changing terminals alone cannot fix that version.
+A **private terminal** is a normal interactive session you control, without
+terminal recording or screen sharing. Open Konsole on the affected machine,
+or press **Ctrl+Alt+F3** and log in. Over SSH, use `ssh -t admin@HOST`, replacing
+`HOST` with that machine's address. Run `tty`; expect `/dev/pts/N` or `/dev/ttyN`,
+not `not a tty`. No special terminal application or incognito mode is needed.
+
+From the updated checkout **on the affected host**, run these commands in order;
+stop if any command fails. Building first selects the fixed helper even when the
+running system still contains the broken one:
+
+```bash
+cd /home/admin/luxnix
+nix build ".#nixosConfigurations.$(hostname).config.system.build.toplevel" --out-link result-boot --accept-flake-config
+sudo ./result-boot/sw/bin/luxnix-setup-boot-password
+sudo nixos-rebuild boot --flake ".#$(hostname)" --accept-flake-config
+```
+
+The first sudo prompt asks for your login/sudo password. The helper then asks for
+the disk passphrase and confirmation; characters are hidden as you type. Choosing
+a new disk password additionally requires the existing disk/recovery password.
+Never put either password in a shell command or pipe it into this helper.
+Only reboot after staging succeeds, with console access ready for splash unlock.
+This helper applies to boot-LUKS root; gc-10's retained legacy containers continue
+using their existing unlock workflow.
+
 ### Shared mapper names
 
 Mapper names are shared by storage role on every host: `cryptroot` for root,
@@ -125,8 +153,11 @@ The storage pre-switch check continues to reject mismatched mappings or missing
 keys. gc-10's retained containers already use the common names and need no rename.
 
 Non-technical users unlock root on the Plymouth splash screen, which the
-initrd shows before the normal system starts. Plymouth follows the storage
-layout on every rebuild: boot-LUKS hosts and hosts with boot-time container
+initrd shows before the normal system starts. The shared `dark_planet` animated
+space theme keeps the actual
+volume prompt, masked password input and recovery messages visible. Theme assets
+come from the pinned nixpkgs package; only this theme is included in the initrd.
+Plymouth follows the storage layout on every rebuild: boot-LUKS hosts and hosts with boot-time container
 passphrases enable it, all other hosts leave it off. Forcing
 `boot.plymouth.enable` off on a boot-LUKS host fails evaluation. On a boot-LUKS
 Plasma host with a `user.client` account the same passphrase is the desktop

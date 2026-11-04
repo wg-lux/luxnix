@@ -106,7 +106,9 @@ def header_digest(device: str) -> str:
 
 def secret(prompt: str) -> bytes:
     # getpass's fallback echoes input: reject it, including under redirected stdin.
-    with open("/dev/tty", "r+") as terminal, warnings.catch_warnings():
+    # getpass opens its own input FD. Buffered read/write text mode requires
+    # seeking and fails on a real TTY with io.UnsupportedOperation.
+    with open("/dev/tty", "w") as terminal, warnings.catch_warnings():
         if not terminal.isatty():
             raise ValueError("A private interactive terminal is required")
         warnings.simplefilter("error", getpass.GetPassWarning)
@@ -246,10 +248,22 @@ def main() -> None:
         detail = str(exc) if type(exc) is ValueError else type(exc).__name__
         parser.exit(
             1,
-            "Boot-password setup failed: " + detail + ". "
-            "Use a private terminal on this host and rerun "
-            "luxnix-setup-boot-password from the target generation before activation. "
-            "No existing keyslots were removed.\n",
+            "Boot-password setup failed: " + detail + ".\n"
+            "No existing keyslots were removed. Do not reboot until staging succeeds.\n"
+            "Open Konsole on this host, log in on Ctrl+Alt+F3, or connect with "
+            "ssh -t admin@HOST (replace HOST with this machine).\n"
+            "Use a session you control without terminal recording or screen sharing; "
+            "password input is hidden. Run tty: it should print "
+            "/dev/pts/N or /dev/ttyN.\n"
+            "From your updated LuxNix checkout on this host, run:\n"
+            '  nix build ".#nixosConfigurations.$(hostname)'
+            '.config.system.build.toplevel" '
+            "--out-link result-boot --accept-flake-config\n"
+            "  sudo ./result-boot/sw/bin/luxnix-setup-boot-password\n"
+            '  sudo nixos-rebuild boot --flake ".#$(hostname)" --accept-flake-config\n'
+            "Enter the disk password and confirmation; a new password also needs "
+            "the existing disk/recovery password. Never put passwords in commands.\n"
+            "See docs/boot-storage-migration.md (Password setup during rebuild).\n",
         )
 
 

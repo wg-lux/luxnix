@@ -75,6 +75,25 @@ under `/etc/systemd/system.control` take precedence over generated units. Retire
 only the overrides that the reviewed configuration replaces, while writers are
 stopped.
 
+On gc-10, the 2026-11-04 boot ran the newly staged generation but still loaded
+old native `.mount` files from `/etc/systemd/system.control`. Those files omitted
+the generated unlock dependencies and `nofail`, making `local-fs.target` wait for
+a locked device while the unlock waited for `local-fs.target`. The 90-second
+device timeout left only 30 seconds of the queued unlock job before Plymouth
+stopped. This is stale host-local configuration, not evidence of a bad password
+or of the new generation failing to boot. Check the active definition with:
+
+```bash
+systemctl show 'var-lib-luxnix\x2dapp\x2dstorage.mount' -p FragmentPath
+systemctl cat 'var-lib-luxnix\x2dapp\x2dstorage.mount'
+```
+
+The reviewed fstab-backed replacement should load from `/run/systemd/generator/`.
+Preserve a backup and retire only matching interim overrides, including nested
+binds, during a stopped-writer maintenance window; do not delete the whole
+`system.control` directory. A theme change or longer password timeout cannot
+repair a mount definition that still shadows the declared configuration.
+
 ### Hidden nested secret mounts
 
 A live switch can add a parent bind, such as `/etc/secrets`, while a child bind

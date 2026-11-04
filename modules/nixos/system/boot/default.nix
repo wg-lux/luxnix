@@ -303,6 +303,25 @@ in
       ];
 
     boot = {
+      plymouth = {
+        theme = lib.mkDefault "dark_planet";
+        themePackages = lib.mkIf (config.boot.plymouth.theme == "dark_planet") [
+          (
+            (pkgs.adi1090x-plymouth-themes.override {
+              selected_themes = [ "dark_planet" ];
+            }).overrideAttrs
+            (old: {
+              installPhase = old.installPhase + ''
+                # Preserve the actual volume prompt instead of generic "Enter Password".
+                substituteInPlace $out/share/plymouth/themes/dark_planet/dark_planet.script \
+                  --replace-fail 'DisplayPasswordCallback(nil, bulletCount)' 'DisplayPasswordCallback(text, bulletCount)' \
+                  --replace-fail 'Image.Text("Enter Password", 1, 1, 1)' 'Image.Text(text, 1, 1, 1)'
+              '';
+            })
+          )
+        ];
+      };
+
       kernel.sysctl = {
         "net.core.rmem_max" = config.luxnix.generic-settings.linux.rmemMax;
         "net.core.wmem_max" = config.luxnix.generic-settings.linux.wmemMax;

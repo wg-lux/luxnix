@@ -3,8 +3,11 @@
 import json
 import os
 from pathlib import Path
+import pty
+import select
 import subprocess
 import sys
+import termios
 
 import pytest
 
@@ -178,6 +181,44 @@ def test_no_terminal_never_falls_back_to_echoed_stdin():
     assert b"Password input may be echoed" not in result.stderr
 
 
+def test_real_terminal_hides_password_with_redirected_output():
+    master, slave = pty.openpty()
+    # A real controlling TTY, with captured stdout/stderr like rebuild frontends.
+    program = """
+import fcntl, os, termios
+from lx_administration.storage.boot_password import secret
+os.setsid()
+fcntl.ioctl(0, termios.TIOCSCTTY, 0)
+assert secret('Boot password: ') == b'synthetic-terminal-password'
+print('verified')
+"""
+    process = subprocess.Popen(
+        [sys.executable, "-c", program],
+        stdin=slave,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    try:
+        assert select.select([master], [], [], 5)[0], "No terminal prompt"
+        output = os.read(master, 4096)
+        assert b"Boot password: " in output
+        assert not termios.tcgetattr(slave)[3] & termios.ECHO
+        os.write(master, b"synthetic-terminal-password\n")
+        stdout, stderr = process.communicate(timeout=5)
+        assert process.returncode == 0, stderr.decode()
+        assert stdout == b"verified\n" and not stderr
+        while select.select([master], [], [], 0)[0]:
+            output += os.read(master, 4096)
+        assert b"synthetic-terminal-password" not in output
+        assert termios.tcgetattr(slave)[3] & termios.ECHO
+    finally:
+        if process.poll() is None:
+            process.kill()
+        process.communicate()
+        os.close(master)
+        os.close(slave)
+
+
 def test_passphrase_is_only_passed_through_memory_fd(monkeypatch):
     def invoke(args, **kwargs):
         assert NEW.decode() not in " ".join(args)
@@ -188,6 +229,27 @@ def test_passphrase_is_only_passed_through_memory_fd(monkeypatch):
 
     monkeypatch.setattr(setup.subprocess, "run", invoke)
     assert setup.accepts("/dev/synthetic", NEW)
+
+
+def test_failure_explains_terminal_and_target_generation(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["setup", "--device", "/dev/synthetic"])
+    monkeypatch.setattr(setup.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(setup.os, "umask", lambda _: None)
+    monkeypatch.setattr(setup.resource, "setrlimit", lambda *args: None)
+
+    def no_terminal(*args, **kwargs):
+        raise OSError("synthetic-private-detail")
+
+    monkeypatch.setattr(setup, "prepare", no_terminal)
+    with pytest.raises(SystemExit) as result:
+        setup.main()
+    assert result.value.code == 1
+    error = capsys.readouterr().err
+    assert "synthetic-private-detail" not in error
+    assert "Ctrl+Alt+F3" in error and "ssh -t admin@HOST" in error
+    assert "sudo ./result-boot/sw/bin/luxnix-setup-boot-password" in error
+    assert 'sudo nixos-rebuild boot --flake ".#$(hostname)"' in error
+    assert "No existing keyslots were removed" in error
 
 
 def test_failed_add_keeps_recovery_and_has_no_success_receipt(disk, monkeypatch):
