@@ -1,5 +1,13 @@
 # Operator change notes
 
+## 2026-11-04 — NetworkManager startup
+
+The shared boot module explicitly starts `NetworkManager` and
+`NetworkManager-dispatcher` from `multi-user.target` when NetworkManager is enabled,
+following [nixpkgs PR #368791](https://github.com/NixOS/nixpkgs/pull/368791).
+The pinned nixpkgs already has these targets; this makes the local boot policy
+explicit and does not establish the cause of gc-09's network outage.
+
 ## Unreleased — 2026-11-02
 
 Use these instructions with the reviewed checkout for your machine. Start new

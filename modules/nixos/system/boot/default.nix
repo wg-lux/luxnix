@@ -167,6 +167,12 @@ in
 
   config = mkIf cfg.enable {
 
+    # Start networking independently of network.target (nixpkgs#368791).
+    systemd.services = mkIf config.networking.networkmanager.enable {
+      NetworkManager.wantedBy = lib.mkForce [ "multi-user.target" ];
+      NetworkManager-dispatcher.wantedBy = lib.mkForce [ "multi-user.target" ];
+    };
+
     assertions = lib.optionals cfg.secureBoot [
       {
         assertion =
