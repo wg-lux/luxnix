@@ -1,4 +1,5 @@
 """Prompt once for a verified boot passphrase, retaining existing recovery slots."""
+
 from __future__ import annotations
 
 import argparse
@@ -29,8 +30,12 @@ MACHINE_ID = Path("/etc/machine-id")
 def private(path: Path, *, directory: bool = False) -> None:
     info = path.lstat()
     kind = stat.S_ISDIR if directory else stat.S_ISREG
-    if (path.resolve() != path or not kind(info.st_mode)
-            or info.st_uid != os.geteuid() or info.st_mode & 0o077):
+    if (
+        path.resolve() != path
+        or not kind(info.st_mode)
+        or info.st_uid != os.geteuid()
+        or info.st_mode & 0o077
+    ):
         raise ValueError("Boot-password state must be private and contain no symlinks")
 
 
@@ -48,16 +53,29 @@ def key_fd(value: bytes):
 def cryptsetup(*args: str, pass_fds=()) -> subprocess.CompletedProcess:
     # Passwords are anonymous-memory FDs only, never argv, environment or output.
     return subprocess.run(
-        ["cryptsetup", *args], pass_fds=pass_fds, stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=120, check=False,
+        ["cryptsetup", *args],
+        pass_fds=pass_fds,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        timeout=120,
+        check=False,
     )
 
 
 def accepts(device: str, password: bytes) -> bool:
     with key_fd(password) as fd:
-        result = cryptsetup("open", "--type", "luks2", "--test-passphrase",
-                            "--batch-mode", "--key-file", f"/proc/self/fd/{fd}",
-                            device, pass_fds=(fd,))
+        result = cryptsetup(
+            "open",
+            "--type",
+            "luks2",
+            "--test-passphrase",
+            "--batch-mode",
+            "--key-file",
+            f"/proc/self/fd/{fd}",
+            device,
+            pass_fds=(fd,),
+        )
     if result.returncode not in (0, 2):
         raise ValueError("Could not test the existing LUKS keyslots")
     return result.returncode == 0
@@ -72,7 +90,9 @@ def header_digest(device: str) -> str:
     size = 2 * (4096 + int(metadata["config"]["json_size"]))
     size += int(metadata["config"]["keyslots_size"])
     if not 32768 <= size <= 128 * 1024 * 1024:
-        raise ValueError("Unsupported LUKS2 header extent; inspect before changing passwords")
+        raise ValueError(
+            "Unsupported LUKS2 header extent; inspect before changing passwords"
+        )
     digest = hashlib.sha256()
     with open(device, "rb", buffering=0) as stream:
         while size:
@@ -100,7 +120,9 @@ def add_password(device: str, password: bytes, previous: bytes, state: Path) -> 
     # A durable private header backup precedes the only header mutation. Never
     # remove existing slots, including the credential authorizing this addition.
     backup = Path(tempfile.mkdtemp(prefix="header-before-", dir=state)) / "luks.header"
-    if cryptsetup("luksHeaderBackup", device, "--header-backup-file", str(backup)).returncode:
+    if cryptsetup(
+        "luksHeaderBackup", device, "--header-backup-file", str(backup)
+    ).returncode:
         raise ValueError("LUKS header backup failed; password was not changed")
     os.chmod(backup, 0o600)
     with backup.open("rb") as stream:
@@ -112,11 +134,19 @@ def add_password(device: str, password: bytes, previous: bytes, state: Path) -> 
         finally:
             os.close(fd)
     with key_fd(previous) as old_fd, key_fd(password) as new_fd:
-        result = cryptsetup("luksAddKey", "--batch-mode", "--key-file",
-                            f"/proc/self/fd/{old_fd}", device,
-                            f"/proc/self/fd/{new_fd}", pass_fds=(old_fd, new_fd))
+        result = cryptsetup(
+            "luksAddKey",
+            "--batch-mode",
+            "--key-file",
+            f"/proc/self/fd/{old_fd}",
+            device,
+            f"/proc/self/fd/{new_fd}",
+            pass_fds=(old_fd, new_fd),
+        )
     if result.returncode:
-        raise ValueError("Could not add the passphrase; existing recovery slots were retained")
+        raise ValueError(
+            "Could not add the passphrase; existing recovery slots were retained"
+        )
     if not accepts(device, previous):
         raise ValueError("Recovery credential verification failed; do not reboot")
 
@@ -135,8 +165,12 @@ def prepare(device: str, *, change: bool = False) -> None:
         machine = MACHINE_ID.read_text().strip()
         if len(machine) != 32 or any(c not in "0123456789abcdef" for c in machine):
             raise ValueError("Missing or invalid machine identity")
-        expected = {"version": 1, "machine": machine, "uuid": identity[0],
-                    "header_sha256": header_digest(device)}
+        expected = {
+            "version": 1,
+            "machine": machine,
+            "uuid": identity[0],
+            "header_sha256": header_digest(device),
+        }
         receipt = STATE / "cryptroot.json"
         if receipt.exists() or receipt.is_symlink():
             private(receipt)
@@ -149,21 +183,33 @@ def prepare(device: str, *, change: bool = False) -> None:
         previous = None
         if not enrolled:
             if len(password.decode("utf-8")) < 12:
-                raise ValueError("A new disk passphrase must contain at least 12 characters")
-            previous = secret("Existing disk/recovery passphrase to authorize adding it: ")
+                raise ValueError(
+                    "A new disk passphrase must contain at least 12 characters"
+                )
+            previous = secret(
+                "Existing disk/recovery passphrase to authorize adding it: "
+            )
             if not accepts(device, previous):
                 raise ValueError("Existing credential was rejected; nothing changed")
-        if (boot.key_device(device, "cryptroot") != identity
-                or header_digest(device) != expected["header_sha256"]):
-            raise ValueError("Disk identity or keyslots changed during prompting; retry")
+        if (
+            boot.key_device(device, "cryptroot") != identity
+            or header_digest(device) != expected["header_sha256"]
+        ):
+            raise ValueError(
+                "Disk identity or keyslots changed during prompting; retry"
+            )
         if previous is not None:
             add_password(device, password, previous, STATE)
             expected["header_sha256"] = header_digest(device)
         if not accepts(device, password):
             raise ValueError("Boot passphrase verification failed; do not reboot")
-        if (boot.key_device(device, "cryptroot") != identity
-                or header_digest(device) != expected["header_sha256"]):
-            raise ValueError("Disk identity or keyslots changed during verification; retry")
+        if (
+            boot.key_device(device, "cryptroot") != identity
+            or header_digest(device) != expected["header_sha256"]
+        ):
+            raise ValueError(
+                "Disk identity or keyslots changed during verification; retry"
+            )
         pending = receipt.with_name(receipt.name + ".pending")
         if pending.exists() or pending.is_symlink():
             private(pending)
@@ -176,8 +222,11 @@ def prepare(device: str, *, change: bool = False) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--device", required=True)
-    parser.add_argument("--change", action="store_true",
-                        help="Prompt again to verify or add an operator-chosen passphrase")
+    parser.add_argument(
+        "--change",
+        action="store_true",
+        help="Prompt again to verify or add an operator-chosen passphrase",
+    )
     args = parser.parse_args()
     try:
         if os.geteuid() != 0:
@@ -185,13 +234,23 @@ def main() -> None:
         resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
         os.umask(0o077)
         prepare(args.device, change=args.change)
-    except (OSError, ValueError, KeyError, EOFError, KeyboardInterrupt,
-            getpass.GetPassWarning, subprocess.TimeoutExpired) as exc:
+    except (
+        OSError,
+        ValueError,
+        KeyError,
+        EOFError,
+        KeyboardInterrupt,
+        getpass.GetPassWarning,
+        subprocess.TimeoutExpired,
+    ) as exc:
         detail = str(exc) if type(exc) is ValueError else type(exc).__name__
-        parser.exit(1, "Boot-password setup failed: " + detail + ". "
-                    "Use a private terminal on this host and rerun "
-                    "luxnix-setup-boot-password from the target generation before activation. "
-                    "No existing keyslots were removed.\n")
+        parser.exit(
+            1,
+            "Boot-password setup failed: " + detail + ". "
+            "Use a private terminal on this host and rerun "
+            "luxnix-setup-boot-password from the target generation before activation. "
+            "No existing keyslots were removed.\n",
+        )
 
 
 if __name__ == "__main__":

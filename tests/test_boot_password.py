@@ -1,4 +1,5 @@
 """Real disposable LUKS keyslots; host mounts and interactive input are isolated."""
+
 import json
 import os
 from pathlib import Path
@@ -20,9 +21,18 @@ def disk(tmp_path, monkeypatch):
         stream.truncate(32 * 1024 * 1024)
     with setup.key_fd(OLD) as fd:
         result = setup.cryptsetup(
-            "luksFormat", "--type", "luks2", "--batch-mode", "--pbkdf", "pbkdf2",
-            "--pbkdf-force-iterations", "1000", "--key-file", f"/proc/self/fd/{fd}",
-            str(image), pass_fds=(fd,),
+            "luksFormat",
+            "--type",
+            "luks2",
+            "--batch-mode",
+            "--pbkdf",
+            "pbkdf2",
+            "--pbkdf-force-iterations",
+            "1000",
+            "--key-file",
+            f"/proc/self/fd/{fd}",
+            str(image),
+            pass_fds=(fd,),
         )
     assert result.returncode == 0
     machine = tmp_path / "machine-id"
@@ -41,7 +51,9 @@ def answers(monkeypatch, *values):
     monkeypatch.setattr(setup, "secret", lambda prompt: next(pending))
 
 
-def test_existing_password_proof_is_private_and_reused_without_prompt(disk, monkeypatch):
+def test_existing_password_proof_is_private_and_reused_without_prompt(
+    disk, monkeypatch
+):
     before = setup.header_digest(disk)
     answers(monkeypatch, OLD, OLD)
     setup.prepare(disk)
@@ -50,21 +62,29 @@ def test_existing_password_proof_is_private_and_reused_without_prompt(disk, monk
     assert OLD not in receipt.read_bytes()
     assert setup.header_digest(disk) == before
     assert not list(setup.STATE.glob("header-before-*"))
-    monkeypatch.setattr(setup, "secret", lambda prompt: pytest.fail("unexpected prompt"))
+    monkeypatch.setattr(
+        setup, "secret", lambda prompt: pytest.fail("unexpected prompt")
+    )
     setup.prepare(disk)
     assert setup.header_digest(disk) == before
 
 
-def test_addition_verifies_new_and_recovery_and_backs_up_before_change(disk, monkeypatch):
-    original = Path(disk).read_bytes()[:16 * 1024 * 1024]
-    before = json.loads(setup.cryptsetup("luksDump", "--dump-json-metadata", disk).stdout)
+def test_addition_verifies_new_and_recovery_and_backs_up_before_change(
+    disk, monkeypatch
+):
+    original = Path(disk).read_bytes()[: 16 * 1024 * 1024]
+    before = json.loads(
+        setup.cryptsetup("luksDump", "--dump-json-metadata", disk).stdout
+    )
     answers(monkeypatch, NEW, NEW, OLD)
     setup.prepare(disk)
     assert setup.accepts(disk, NEW) and setup.accepts(disk, OLD)
-    after = json.loads(setup.cryptsetup("luksDump", "--dump-json-metadata", disk).stdout)
+    after = json.loads(
+        setup.cryptsetup("luksDump", "--dump-json-metadata", disk).stdout
+    )
     assert after["keyslots"]["0"] == before["keyslots"]["0"]
     assert len(after["keyslots"]) == len(before["keyslots"]) + 1
-    backup, = setup.STATE.glob("header-before-*/luks.header")
+    (backup,) = setup.STATE.glob("header-before-*/luks.header")
     assert backup.read_bytes() == original
     assert backup.stat().st_mode & 0o777 == 0o600
     record = (setup.STATE / "cryptroot.json").read_bytes()
@@ -72,7 +92,9 @@ def test_addition_verifies_new_and_recovery_and_backs_up_before_change(disk, mon
 
 
 @pytest.mark.parametrize("values", [(NEW, OLD), (NEW, NEW, b"wrong-recovery")])
-def test_mismatch_and_wrong_authorization_never_modify_header(disk, monkeypatch, values):
+def test_mismatch_and_wrong_authorization_never_modify_header(
+    disk, monkeypatch, values
+):
     before = setup.header_digest(disk)
     answers(monkeypatch, *values)
     with pytest.raises(ValueError):
@@ -83,11 +105,16 @@ def test_mismatch_and_wrong_authorization_never_modify_header(disk, monkeypatch,
 
 
 @pytest.mark.parametrize("change", ["header", "machine", "explicit"])
-def test_changed_identity_header_or_explicit_change_requires_prompt(disk, monkeypatch, change):
+def test_changed_identity_header_or_explicit_change_requires_prompt(
+    disk, monkeypatch, change
+):
     answers(monkeypatch, OLD, OLD)
     setup.prepare(disk)
     if change == "header":
-        assert setup.cryptsetup("config", "--label", "synthetic-change", disk).returncode == 0
+        assert (
+            setup.cryptsetup("config", "--label", "synthetic-change", disk).returncode
+            == 0
+        )
     elif change == "machine":
         setup.MACHINE_ID.write_text("2" * 32)
     answers(monkeypatch)  # An exhausted input iterator proves a prompt was attempted.
@@ -98,8 +125,11 @@ def test_changed_identity_header_or_explicit_change_requires_prompt(disk, monkey
 def test_wrong_mapping_is_rejected_before_prompt(disk, monkeypatch):
     def wrong(*args):
         raise ValueError("wrong mapping")
+
     monkeypatch.setattr(setup.boot, "key_device", wrong)
-    monkeypatch.setattr(setup, "secret", lambda prompt: pytest.fail("prompt on wrong disk"))
+    monkeypatch.setattr(
+        setup, "secret", lambda prompt: pytest.fail("prompt on wrong disk")
+    )
     with pytest.raises(ValueError, match="wrong mapping"):
         setup.prepare(disk)
 
@@ -132,9 +162,16 @@ def test_unsafe_receipt_is_rejected(disk, monkeypatch, unsafe):
 
 def test_no_terminal_never_falls_back_to_echoed_stdin():
     result = subprocess.run(
-        [sys.executable, "-c", "from lx_administration.storage.boot_password import secret; "
-         "secret('private prompt: ')"], input=NEW + b"\n", capture_output=True,
-        start_new_session=True, check=False,
+        [
+            sys.executable,
+            "-c",
+            "from lx_administration.storage.boot_password import secret; "
+            "secret('private prompt: ')",
+        ],
+        input=NEW + b"\n",
+        capture_output=True,
+        start_new_session=True,
+        check=False,
     )
     assert result.returncode != 0
     assert NEW not in result.stdout + result.stderr
@@ -145,9 +182,10 @@ def test_passphrase_is_only_passed_through_memory_fd(monkeypatch):
     def invoke(args, **kwargs):
         assert NEW.decode() not in " ".join(args)
         assert "input" not in kwargs and "env" not in kwargs
-        fd, = kwargs["pass_fds"]
+        (fd,) = kwargs["pass_fds"]
         assert os.pread(fd, len(NEW), 0) == NEW
         return subprocess.CompletedProcess(args, 0, b"", b"")
+
     monkeypatch.setattr(setup.subprocess, "run", invoke)
     assert setup.accepts("/dev/synthetic", NEW)
 
@@ -155,10 +193,12 @@ def test_passphrase_is_only_passed_through_memory_fd(monkeypatch):
 def test_failed_add_keeps_recovery_and_has_no_success_receipt(disk, monkeypatch):
     before = setup.header_digest(disk)
     real = setup.cryptsetup
+
     def invoke(*args, **kwargs):
         if args[0] == "luksAddKey":
             return subprocess.CompletedProcess(args, 1, b"", b"")
         return real(*args, **kwargs)
+
     monkeypatch.setattr(setup, "cryptsetup", invoke)
     answers(monkeypatch, NEW, NEW, OLD)
     with pytest.raises(ValueError, match="Could not add"):
