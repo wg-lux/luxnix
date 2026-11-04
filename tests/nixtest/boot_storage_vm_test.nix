@@ -137,7 +137,11 @@ disko.lib.testLib.makeDiskoTest {
       };
     };
     config = {
-      boot.plymouth.enable = true;
+      # Boot LUKS enables Plymouth itself; match the fleet splash kernel parameters.
+      boot.kernelParams = [
+        "quiet"
+        "splash"
+      ];
       # Disko's generic test harness embeds a synthetic root key; this test must
       # actually exercise a console prompt instead.
       boot.initrd.secrets = lib.mkForce (
@@ -231,6 +235,10 @@ disko.lib.testLib.makeDiskoTest {
           machine.wait_for_unit("writer.service")
 
       wait_for_writer()
+      # The root passphrase must be answered on the Plymouth splash, not the bare console agent.
+      boot_log = machine.succeed("journalctl -b _PID=1 -o cat --no-pager")
+      assert "Started Forward Password Requests to Plymouth." in boot_log, boot_log
+      assert "Started Dispatch Password Requests to Console." not in boot_log, boot_log
       machine.fail("test -e /unauthorized-shell-command")
       machine.succeed("luxnix-verify-boot-storage")
       fingerprint = machine.succeed("sha256sum ${key}")

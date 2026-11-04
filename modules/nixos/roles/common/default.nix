@@ -84,7 +84,6 @@ in
       boot = {
         enable = true;
         secureBoot = mkDefault false;
-        plymouth = true;
       };
       locale.enable = true;
     };

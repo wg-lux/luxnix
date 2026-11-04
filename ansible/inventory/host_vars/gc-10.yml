@@ -26,6 +26,15 @@ host_nixos:
 extra_secret_names: []
 
 host_luxnix:
+  # Preserve the installed disks and unlock the existing containers at the splash.
+  storage.operatorUnlocked.layout: '"legacy-containers"'
+  storage.operatorUnlocked.migration.enable: "false"
+  storage.operatorUnlocked.volumes.luxnix-app-storage.luksUUID: '"f5869d54-4ea5-407c-a690-7238fe79cd6b"'
+  storage.operatorUnlocked.volumes.luxnix-secrets.luksUUID: '"dc53d362-e6e2-43ee-9cbf-4726d55c3055"'
+  storage.operatorUnlocked.volumes.luxnix-app-storage.container: '"/data/raid01/luxnix-app-storage.luks"'
+  storage.operatorUnlocked.volumes.luxnix-app-storage.depends: '[ "/data/raid01" ]'
+  storage.operatorUnlocked.bindMounts."/var/lib/lx-annotate/hub-pki": >-
+    { volume = "luxnix-secrets"; directory = "hub-client-pki"; }
   # Temporary bootstrap exception; set false after verified Vault enrollment.
   vault.client.auth.deferUntilProvisioned: "false"
 

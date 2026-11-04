@@ -154,7 +154,7 @@ in
         "legacy-containers"
       ];
       default = "boot-luks";
-      description = "Boot LUKS is the production layout; legacy-containers preserves existing gc-09/gc-10 recovery until physical migration acceptance.";
+      description = "Boot LUKS is the default layout; legacy-containers preserves existing encrypted containers on any host without repartitioning.";
     };
     enable = lib.mkEnableOption "encrypted storage and guarded consumers";
     autoStartProtectedServices = lib.mkOption {
@@ -296,14 +296,9 @@ in
       })
     ];
     security.tpm2.enable = lib.mkIf (cfg.unlockMethod == "tpm2") true;
+    # Boot-time container passphrases are answered on the splash; no prompt, no splash.
+    boot.plymouth.enable = lib.mkIf (passphraseBoot && promptVolumes != { }) true;
     assertions = [
-      {
-        assertion = builtins.elem config.networking.hostName [
-          "gc-09"
-          "gc-10"
-        ];
-        message = "Legacy containers are recovery compatibility for gc-09/gc-10 only; new installations require boot-luks.";
-      }
       {
         assertion =
           cfg.unlockMethod != "local-openbao"
@@ -475,7 +470,9 @@ in
             description = "Remount nested encrypted binds hidden by a later parent mount";
             # Ordering only: never pulls in, unlocks or migrates storage itself.
             # Invalid targets are reported by the bind-target assertion, not by escaping.
-            after = map (path: "${escapeSystemdPath path}.mount") (builtins.filter absolutePath.check mountPaths);
+            after = map (path: "${escapeSystemdPath path}.mount") (
+              builtins.filter absolutePath.check mountPaths
+            );
             path = migrationPath;
             serviceConfig = {
               Type = "oneshot";
@@ -543,13 +540,17 @@ in
             # volumes open afterwards without holding back the login screen.
             # Unanswered prompts must release the splash/login ordering on timeout.
             wantedBy = lib.optional (passphraseBoot && cfg.autoStartProtectedServices) "multi-user.target";
+            wants = lib.optional (prompted && config.boot.plymouth.enable) "systemd-ask-password-plymouth.path";
             before = lib.optionals prompted [
               "display-manager.service"
               "plymouth-quit.service"
               "plymouth-quit-wait.service"
+              # Its ExecStartPre stops the Plymouth agent, even while prompts wait.
+              "systemd-ask-password-wall.service"
             ];
             after =
               lib.optional (cfg.unlockMethod == "local-openbao") "openbao-local.service"
+              ++ lib.optional (prompted && config.boot.plymouth.enable) "systemd-ask-password-plymouth.path"
               ++ lib.optionals passphraseBoot [
                 "local-fs.target"
                 "swap.target"

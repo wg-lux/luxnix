@@ -30,19 +30,8 @@ def hosts():
     expression = r'''
       let
         f0 = builtins.getFlake ("git+file://" + builtins.toString ./.);
-        # Test-only legacy fixture: gc-10's former backing-disk container profile
-        # (inventory exception removed by owner decision 2026-11-03).
-        gc10Legacy = { lib, ... }: { luxnix.storage.operatorUnlocked = {
-          migration.enable = lib.mkForce false;
-          volumes.luxnix-app-storage = {
-            container = lib.mkForce "/data/raid01/luxnix-app-storage.luks";
-            depends = [ "/data/raid01" ];
-          };
-          bindMounts."/var/lib/lx-annotate/hub-pki" = { volume = "luxnix-secrets"; directory = "hub-client-pki"; };
-        }; };
         f = f0 // { nixosConfigurations = builtins.mapAttrs (n: h: h.extendModules {
-          modules = [{ luxnix.storage.operatorUnlocked.layout = "legacy-containers"; }]
-            ++ f0.inputs.nixpkgs.lib.optional (n == "gc-10") gc10Legacy;
+          modules = [{ luxnix.storage.operatorUnlocked.layout = "legacy-containers"; }];
         }) f0.nixosConfigurations; };
         inspect = name: inspectConfig f.nixosConfigurations.${name}.config;
         inspectConfig = c: {
@@ -70,7 +59,7 @@ def hosts():
           migration = c.luxnix.storage.operatorUnlocked.migration.enable;
           unlockMethod = c.luxnix.storage.operatorUnlocked.unlockMethod;
           unlockTimeout = c.systemd.services.luxnix-storage-unlock-luxnix-app-storage.serviceConfig.TimeoutStartSec;
-          unlockBoot = builtins.mapAttrs (_: v: { inherit (v) wantedBy before after unitConfig serviceConfig; })
+          unlockBoot = builtins.mapAttrs (_: v: { inherit (v) wantedBy wants before after unitConfig serviceConfig; })
             (f.inputs.nixpkgs.lib.filterAttrs (n: _: f.inputs.nixpkgs.lib.hasPrefix "luxnix-storage-unlock-" n)
             c.systemd.services);
           enabled = c.luxnix.storage.operatorUnlocked.enable;
@@ -189,10 +178,13 @@ def test_gc10_uses_fleet_unlock_migration_and_boot_account_hashes(hosts):
     app = c["unlockBoot"]["luxnix-storage-unlock-luxnix-app-storage"]
     for unit in (secrets, app):
         assert unit["wantedBy"] == ["multi-user.target"]
+        assert "systemd-ask-password-plymouth.path" in unit["wants"]
+        assert "systemd-ask-password-plymouth.path" in unit["after"]
         assert unit["unitConfig"]["JobTimeoutSec"] == "120s"
         assert unit["serviceConfig"]["TimeoutStartSec"] == "90s"
         assert unit["serviceConfig"]["TimeoutStopSec"] == "10s"
-        assert {"display-manager.service", "plymouth-quit.service", "plymouth-quit-wait.service"} <= set(unit["before"])
+        assert {"display-manager.service", "plymouth-quit.service", "plymouth-quit-wait.service",
+                "systemd-ask-password-wall.service"} <= set(unit["before"])
     # Serialized prompts let a shared passphrase be entered once.
     assert "luxnix-storage-unlock-luxnix-app-storage.service" in secrets["after"]
     assert "luxnix-storage-unlock-luxnix-secrets.service" not in app["after"]
@@ -223,27 +215,15 @@ def test_generic_module_layout_merging_and_invalid_configuration():
     expression = r'''
       let
         f0 = builtins.getFlake ("git+file://" + builtins.toString ./.);
-        # Test-only legacy fixture: gc-10's former backing-disk container profile
-        # (inventory exception removed by owner decision 2026-11-03).
-        gc10Legacy = { lib, ... }: { luxnix.storage.operatorUnlocked = {
-          migration.enable = lib.mkForce false;
-          volumes.luxnix-app-storage = {
-            container = lib.mkForce "/data/raid01/luxnix-app-storage.luks";
-            depends = [ "/data/raid01" ];
-          };
-          bindMounts."/var/lib/lx-annotate/hub-pki" = { volume = "luxnix-secrets"; directory = "hub-client-pki"; };
-        }; };
         f = f0 // { nixosConfigurations = builtins.mapAttrs (n: h: h.extendModules {
-          modules = [{ luxnix.storage.operatorUnlocked.layout = "legacy-containers"; }]
-            ++ f0.inputs.nixpkgs.lib.optional (n == "gc-10") gc10Legacy;
+          modules = [{ luxnix.storage.operatorUnlocked.layout = "legacy-containers"; }];
         }) f0.nixosConfigurations; };
         lib = f.inputs.nixpkgs.lib;
         evaluate = additions: (lib.nixosSystem {
           system = "x86_64-linux";
           modules = [ ./modules/nixos/luxnix/operator-unlocked-storage {
             system.stateVersion = "26.05";
-            # Generic recovery fixture must still select an accepted legacy host.
-            networking.hostName = "gc-10";
+            networking.hostName = "storage-fixture";
             boot.loader.grub.enable = false;
             fileSystems."/" = { device = "none"; fsType = "tmpfs"; };
             systemd.services.consumer = {
@@ -269,7 +249,16 @@ def test_generic_module_layout_merging_and_invalid_configuration():
         failed = extra: map (a: a.message) (builtins.filter (a: !a.assertion) (evaluate [extra]).assertions);
         checked = extra: builtins.tryEval (builtins.deepSeq (evaluate [extra]).fileSystems true);
         disabled = evaluate [{ luxnix.storage.operatorUnlocked.enable = lib.mkForce false; }];
+        prompted = evaluate [{ luxnix.storage.operatorUnlocked = {
+          migration.enable = false;
+          volumes.archive.container = "/var/lib/archive.luks";
+        }; }];
       in {
+        prompted = {
+          valid = builtins.all (a: a.assertion) prompted.assertions;
+          plymouth = prompted.boot.plymouth.enable;
+          before = prompted.systemd.services.luxnix-storage-unlock-archive.before;
+        };
         mounts = builtins.mapAttrs (_: v: { inherit (v) device depends options; }) c.fileSystems;
         consumer = { inherit (c.systemd.services.consumer) after requires bindsTo unitConfig; };
         check = c.systemd.services.luxnix-storage-check-consumer.serviceConfig;
@@ -300,6 +289,9 @@ def test_generic_module_layout_merging_and_invalid_configuration():
     assert result.returncode == 0, result.stderr
     data = json.loads(result.stdout)
     assert data["valid"]
+    assert data["prompted"]["valid"] and data["prompted"]["plymouth"]
+    assert {"display-manager.service", "plymouth-quit.service",
+            "systemd-ask-password-wall.service"} <= set(data["prompted"]["before"])
     assert data["swap"][0]["device"] == "/dev/disk/by-label/encrypted-swap"
     assert data["swap"][0]["randomEncryption"]["enable"]
     assert data["generator"] != "/dev/null"
@@ -438,10 +430,15 @@ def test_fleet_inventory_defaults_and_all_host_assertions():
             "EndoReg clients require encrypted operator storage for secrets and application data."
         ] if settings["clientRole"] else [])
         assert sorted(settings["baselineFailures"]) == sorted(expected), (host, settings)
-        # Owner decision 2026-11-03: no host keeps a legacy-container exception.
-        assert settings["layout"] == "boot-luks", host
+        # gc-10 retains its installed containers by owner decision 2026-11-04.
+        assert settings["layout"] == ("legacy-containers" if host == "gc-10" else "boot-luks"), host
         assert settings["prepare"] is None, host
-        assert settings["mountOptions"] == [], host
+        if host == "gc-10":
+            assert not settings["migration"]
+            assert len(settings["mountOptions"]) == 2
+            assert all({"noauto", "nofail"} <= set(options) for options in settings["mountOptions"])
+        else:
+            assert settings["mountOptions"] == [], host
 
 
 def test_client_hash_source_is_accepted_by_account_provisioning():
@@ -463,19 +460,8 @@ def test_backing_mount_failure_cannot_block_remote_boot():
     expression = r'''
       let
         f0 = builtins.getFlake ("git+file://" + builtins.toString ./.);
-        # Test-only legacy fixture: gc-10's former backing-disk container profile
-        # (inventory exception removed by owner decision 2026-11-03).
-        gc10Legacy = { lib, ... }: { luxnix.storage.operatorUnlocked = {
-          migration.enable = lib.mkForce false;
-          volumes.luxnix-app-storage = {
-            container = lib.mkForce "/data/raid01/luxnix-app-storage.luks";
-            depends = [ "/data/raid01" ];
-          };
-          bindMounts."/var/lib/lx-annotate/hub-pki" = { volume = "luxnix-secrets"; directory = "hub-client-pki"; };
-        }; };
         f = f0 // { nixosConfigurations = builtins.mapAttrs (n: h: h.extendModules {
-          modules = [{ luxnix.storage.operatorUnlocked.layout = "legacy-containers"; }]
-            ++ f0.inputs.nixpkgs.lib.optional (n == "gc-10") gc10Legacy;
+          modules = [{ luxnix.storage.operatorUnlocked.layout = "legacy-containers"; }];
         }) f0.nixosConfigurations; };
         c = f.nixosConfigurations.gc-10.config;
       in {

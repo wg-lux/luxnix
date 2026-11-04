@@ -160,7 +160,6 @@ in
 {
   options.system.boot = {
     enable = mkBoolOpt false "Whether or not to enable booting.";
-    plymouth = mkBoolOpt false "Whether or not to enable plymouth boot splash.";
     secureBoot = mkBoolOpt false "Whether or not to enable lanzaboote secure boot signed by the controller-held fleet key.";
     spaceManagement = mkBoolOpt true "Whether or not to enable boot space management and monitoring.";
   };
@@ -171,7 +170,7 @@ in
     systemd.services = {
       NetworkManager.wantedBy = lib.mkForce [ "multi-user.target" ];
       NetworkManager-dispatcher.wantedBy = lib.mkForce [ "multi-user.target" ];
-      openvpn.aglnet.wantedBy = lib.mkForce ["multi-user.target"];
+      openvpn-aglnet.wantedBy = lib.mkForce [ "multi-user.target" ];
     };
 
     assertions = lib.optionals cfg.secureBoot [
@@ -309,14 +308,13 @@ in
         "net.core.wmem_max" = config.luxnix.generic-settings.linux.wmemMax;
       };
 
-      kernelParams = lib.optionals cfg.plymouth [
+      kernelParams = lib.optionals config.boot.plymouth.enable [
         "quiet"
         "splash"
         "loglevel=3"
         "udev.log_level=0"
       ];
-      # initrd.verbose = lib.optionals cfg.plymouth false;
-      # consoleLogLevel = lib.optionals cfg.plymouth 0;
+
       initrd.systemd.enable = true;
 
       lanzaboote = mkIf cfg.secureBoot {
@@ -341,9 +339,6 @@ in
         };
       };
 
-      plymouth = {
-        enable = cfg.plymouth;
-      };
     };
 
     # Boot space management configuration

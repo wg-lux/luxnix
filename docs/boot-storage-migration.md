@@ -23,7 +23,7 @@ wraps the array; existing multi-device Btrfs declarations retain their per-membe
 encryption until separately migrated.
 The shared storage module creates crypttab and guarded service dependencies.
 gc-10's boot-LUKS target uses its application/data NVMe partition as a one-member
-MD RAID1 array (`/dev/md/application`), then LUKS2 (`lx-md-application`), then
+MD RAID1 array (`/dev/md/application`), then LUKS2 (`luxnix-app-storage`), then
 one Btrfs filesystem. Application, PostgreSQL and database-backup paths are
 subvolumes of that filesystem, without separate encrypted/plaintext partitions
 or inner container files. Its system NVMe remains separate, with encrypted root
@@ -79,9 +79,31 @@ and uses [Linux MD](https://docs.kernel.org/admin-guide/md.html) below encryptio
 
 ## Splash unlock and generation recovery
 
+Mapper names are shared by storage role on every host: `cryptroot` for root,
+`cryptswap` for a separate swap partition, and `luxnix-app-storage` for a separate
+application filesystem. Existing secrets containers use `luxnix-secrets`.
+Additional filesystems use `luxnix-data-<mount-path>` (slashes become hyphens);
+multi-device Btrfs members add `-member-N` in their declared member order.
+The shared layout rejects duplicate names. Physical disk IDs, partition labels,
+filesystem labels and LUKS UUIDs are not renamed by this policy.
+
+New installations create these mappings. On an already installed boot-LUKS host,
+first compare its open mappings and `/etc/luks-keys` with the evaluated target.
+Any old `lx-*` mappings and corresponding enrolled key files need a coordinated
+rename before activation; do not format disks or regenerate keys to fix a name.
+The storage pre-switch check continues to reject mismatched mappings or missing
+keys. gc-10's retained containers already use the common names and need no rename.
+
 Non-technical users unlock root on the Plymouth splash screen, which the
-initrd shows before the normal system starts; a boot-LUKS host without
-`system.boot.plymouth` fails evaluation. The root prompt and root device wait
+initrd shows before the normal system starts. Plymouth follows the storage
+layout on every rebuild: boot-LUKS hosts and hosts with boot-time container
+passphrases enable it, all other hosts leave it off. Forcing
+`boot.plymouth.enable` off on a boot-LUKS host fails evaluation. On a boot-LUKS
+Plasma host with a `user.client` account the same passphrase is the desktop
+login (hosts without one keep the SDDM password login): SDDM logs in that account, and KWallet opens with the passphrase that systemd
+caches in the kernel keyring (via `pam_systemd_loadkey`). The client account
+and its KWallet must therefore use the disk passphrase, and remote SSH unlock
+is rejected on these hosts so no unattended session opens. The root prompt and root device wait
 without time or attempt limits (`timeout=0`, `tries=0`,
 `x-systemd.device-timeout=0`), because an exhausted prompt leaves no system
 to continue into. The screen shows a hint to press Ctrl+Alt+Del. In the initrd
@@ -632,10 +654,11 @@ a disk format, restore missing keys or reconcile diverged databases.
 
 ## Temporary compatibility and removal
 
-Since the owner decision of 2026-11-03, gc-09 and gc-10 select `boot-luks` like
-every other host; no inventory override selects `legacy-containers`. Their
-installed systems are unchanged: plaintext root with the old containers, until
-each host is reprovisioned with this procedure. The boot-storage pre-switch check
+gc-09 selects `boot-luks` but still needs reprovisioning from its plaintext root.
+On 2026-11-04 the owner retained gc-10's existing partitions and restored its
+explicit `legacy-containers` profile with Plymouth passphrase unlock. Its
+automatic migration is disabled; normal rebuilds preserve the existing data.
+For hosts selecting `boot-luks`, the boot-storage pre-switch check
 rejects `switch` and `boot` onto a plaintext root, so a rebuild on the old disks
 fails before the bootloader changes. Never bypass it with `NIXOS_NO_CHECK=1`.
 Both remain unmigrated in repository acceptance; inspect the live

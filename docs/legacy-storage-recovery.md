@@ -1,7 +1,8 @@
 # Unmigrated hosts: legacy storage until boot-LUKS
 
-Every host follows one storage policy: [boot LUKS](boot-storage-migration.md),
-installed with the [operator checklist](boot-storage-operator.md). This page is
+The fleet target is [boot LUKS](boot-storage-migration.md), installed with the
+[operator checklist](boot-storage-operator.md). gc-10 explicitly retains its
+existing containers at the owner's request. This page is
 only for hosts that still run the older layout. It covers operating and
 recovering them until they are reinstalled, then it stops applying. It is not
 an installation, enrollment or provisioning path.
@@ -9,12 +10,12 @@ an installation, enrollment or provisioning path.
 | Host | Repository configuration | Old live storage to preserve |
 | --- | --- | --- |
 | gc-09 | `boot-luks` since 2026-11-03; the installed generation still runs containers | `luxnix-secrets` and `luxnix-app-storage` containers |
-| gc-10 | `boot-luks` since 2026-11-03; the installed generation still runs containers | Containers listed in [gc-10](#gc-10) |
-
-gc-09 and gc-10 can no longer be rebuilt in place from the repository: the
-boot-storage pre-switch check rejects their plaintext root. Until reinstall, the
-units described below exist only in their currently installed generations.
+| gc-10 | `legacy-containers`: preserve existing partitions and unlock through Plymouth | Containers listed in [gc-10](#gc-10) |
 | gs-02 | `boot-luks`; the Vault TLS container option evaluates off | `/var/lib/luxnix-vault-tls.luks` holding Vault PKI and managed secrets |
+
+gc-09 cannot be rebuilt in place with its plaintext root under the boot-LUKS
+policy. gc-10 explicitly retains its existing container layout; migration is
+disabled and rebuilding does not repartition or move application data.
 
 The repository describes intent, not live state. Inspect the host before
 acting. Do not activate the boot-LUKS configuration on an old disk layout: it
@@ -35,12 +36,23 @@ does not convert storage (see [temporary compatibility](boot-storage-migration.m
 
 ## Unlocking gc-09 and gc-10 at boot
 
+Unlock policy is shared across hosts, without a hostname allowlist. Selecting
+`legacy-containers` with passphrase-protected volumes enables Plymouth and
+orders their unlock before the display manager and password-agent shutdown.
+Inventory supplies the installed layout, container paths, UUIDs and mounts;
+passwords remain private operator credentials. This configuration never converts
+an existing plaintext partition into LUKS or provisions a new container at boot.
+
 The configured method is `unlockMethod = "passphrase"`. The boot splash, or the
 console, asks `Unlock luxnix-app-storage:` and then `Unlock luxnix-secrets:`.
 These are the LUKS container passphrases, not the login password and not an
 OpenBao password. When both containers share a passphrase, the second prompt is
 skipped. The volumes then open and PostgreSQL and LX-Annotate start. The account
 password only logs the user in.
+
+Container unlocks finish before `systemd-ask-password-wall.service` starts:
+its startup stops the Plymouth agent. Starting it earlier hides pending splash
+prompts and leaves the unlock services waiting until their timeout.
 
 Each unlock service is bounded: 90 seconds execution, 120 seconds job timeout,
 up to five attempts. On failure the storage-dependent services stay stopped and
@@ -179,6 +191,13 @@ storage. A header backup retains every keyslot present when it was created, so
 replace it after keyslot changes.
 
 ## gc-10
+
+The operator retained this layout on 2026-11-04. `/data/raid01` remains its
+existing Btrfs filesystem; Plymouth unlocks the container file inside it.
+The password supplied privately for this host was added to both containers,
+with the original recovery keyslots retained. Enter that password at the splash;
+the shared in-memory password cache lets the second container reuse it.
+No passphrase belongs in inventory, the Nix store, or an installed key file.
 
 | Volume | Existing container | Required LUKS UUID |
 | --- | --- | --- |

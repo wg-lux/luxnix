@@ -212,6 +212,13 @@ def test_fleet_boot_contract():
         assert cfg["failures"] == expected, (host, cfg["failures"])
         assert cfg["root"] == "/dev/mapper/cryptroot"
         assert cfg["initrd"] == ["cryptroot"], host
+        for device in cfg["swap"]:
+            if device.startswith("/dev/mapper/"):
+                assert device == "/dev/mapper/cryptswap", host
+        for line in cfg["crypttab"].splitlines():
+            if line:
+                name = line.split()[0]
+                assert name in {"cryptswap", "luxnix-app-storage", "luxnix-secrets"} or name.startswith("luxnix-data-"), (host, name)
         assert "/etc/secrets" not in cfg["mounts"]
         assert not any(u.startswith("luxnix-storage-unlock-") for u in cfg["units"])
         assert "luxnix-storage-migrate" not in cfg["units"]
@@ -227,9 +234,9 @@ def test_fleet_boot_contract():
                 assert "/etc/luks-keys/" in line and "headless" in line
     assert hosts["gc-10"]["swap"] == []
     for path in ["/var/lib/lx-annotate", "/var/lib/postgresql", "/var/backup/postgresql"]:
-        assert hosts["gc-10"]["devices"][path] == "/dev/mapper/lx-md-application"
+        assert hosts["gc-10"]["devices"][path] == "/dev/mapper/luxnix-app-storage"
     assert hosts["gc-10"]["arrays"] == {"application": {
-        "level": 1, "type": "luks", "name": "lx-md-application",
+        "level": 1, "type": "luks", "name": "luxnix-app-storage",
         "device": "/dev/md/application", "filesystem": "btrfs",
     }}
     assert hosts["gc-10"]["swraid"]
@@ -237,12 +244,12 @@ def test_fleet_boot_contract():
     assert "archive_hdd" in hosts["gs-02"]["crypttab"]
     options = hosts["gs-02"]["mountOptions"]
     def dependencies(mount):
-        return [option for option in options[mount]
+        return [option.replace(r"\x2d", "-") for option in options[mount]
                 if option.startswith("x-systemd.requires=")]
     assert len(dependencies("/data2")) == 1
-    assert "primary" in dependencies("/data2")[0]
+    assert "luxnix-data-data2" in dependencies("/data2")[0]
     assert len(dependencies("/archive")) == 4
-    assert all("hdd" in option for option in dependencies("/archive"))
+    assert all("luxnix-data-archive" in option for option in dependencies("/archive"))
 
 
 def test_boot_luks_requires_splash_password_screen():
@@ -251,7 +258,7 @@ def test_boot_luks_requires_splash_password_screen():
       f = builtins.getFlake ("git+file://" + builtins.toString ./.);
       lib = f.inputs.nixpkgs.lib;
       c = (f.nixosConfigurations.gc-02.extendModules { modules = [{
-        system.boot.plymouth = lib.mkForce false;
+        boot.plymouth.enable = lib.mkForce false;
       }]; }).config;
     in map (a: a.message) (builtins.filter (a: !a.assertion) c.assertions)
     '''
@@ -260,6 +267,57 @@ def test_boot_luks_requires_splash_password_screen():
     assert result.returncode == 0, result.stderr
     assert any("Plymouth splash screen" in m for m in json.loads(result.stdout))
 
+
+
+@pytest.mark.parametrize("host,splash,autologin", [
+    ("gc-02", True, True),     # boot LUKS, Plasma, client account
+    ("s-01", True, False),     # boot LUKS, Plasma, no client account
+    ("lx-test", False, False), # no operator-unlocked storage
+])
+def test_splash_and_wallet_unlock_follow_storage_layout(host, splash, autologin):
+    expression = r'''
+    let
+      f = builtins.getFlake ("git+file://" + builtins.toString ./.);
+      c = f.nixosConfigurations.HOST.config;
+    in {
+      splash = c.boot.plymouth.enable;
+      autologin = c.services.displayManager.autoLogin.enable;
+      user = c.services.displayManager.autoLogin.user;
+      client = c.user.client.name;
+      keyring = c.systemd.services.display-manager.serviceConfig.KeyringMode or null;
+      pam = c.security.pam.services.sddm-autologin.text;
+    }
+    '''.replace("HOST", host)
+    result = subprocess.run(["nix", "eval", "--impure", "--json", "--expr", expression],
+                            cwd=ROOT, capture_output=True, text=True, timeout=600)
+    assert result.returncode == 0, result.stderr
+    config = json.loads(result.stdout)
+    assert config["splash"] is splash
+    assert config["autologin"] is autologin
+    loadkey = "pam_systemd_loadkey.so" in config["pam"]
+    assert loadkey is autologin
+    if autologin:
+        assert config["user"] == config["client"]
+        assert config["keyring"] == "inherit"
+        auth = [line for line in config["pam"].splitlines() if line.startswith("auth ")]
+        assert "pam_systemd_loadkey.so" in auth[0]
+        assert "pam_kwallet5.so" in auth[-1]
+
+
+def test_wallet_autologin_rejects_remote_disk_unlock():
+    expression = r'''
+    let
+      f = builtins.getFlake ("git+file://" + builtins.toString ./.);
+      lib = f.inputs.nixpkgs.lib;
+      c = (f.nixosConfigurations.gc-02.extendModules { modules = [{
+        luxnix.storage.operatorUnlocked.remoteUnlock.enable = lib.mkForce true;
+      }]; }).config;
+    in map (a: a.message) (builtins.filter (a: !a.assertion) c.assertions)
+    '''
+    result = subprocess.run(["nix", "eval", "--impure", "--json", "--expr", expression],
+                            cwd=ROOT, capture_output=True, text=True, timeout=600)
+    assert result.returncode == 0, result.stderr
+    assert any("unattended session" in m for m in json.loads(result.stdout))
 
 
 @pytest.mark.parametrize("missing", [False, True])
@@ -359,9 +417,9 @@ def test_wrong_btrfs_subvolume_is_not_accepted(monkeypatch):
         boot.verify_mount("/srv/data", "/dev/mapper/data", "btrfs", "subvol=application")
 
 
-@pytest.mark.parametrize("host", ["gc-09", "gc-10"])
+@pytest.mark.parametrize("host", ["gc-09"])
 def test_former_legacy_hosts_use_fleet_boot_luks(host):
-    """Owner decision 2026-11-03: gc-09/gc-10 carry no legacy-container exception."""
+    """gc-09 targets boot LUKS; gc-10 retains its installed container layout."""
     expression = r'''
     let f = builtins.getFlake ("git+file://" + builtins.toString ./.);
         c = f.nixosConfigurations.HOST.config;
@@ -420,7 +478,9 @@ def test_bind_requires_exact_source_directory_not_only_encrypted_device(
 def test_gc10_data_disk_is_one_luks_mapping_over_md_raid():
     expression = r'''
       let f = builtins.getFlake ("git+file://" + builtins.toString ./.);
-          c = f.nixosConfigurations.gc-10.config;
+          c = (f.nixosConfigurations.gc-10.extendModules { modules = [{
+            luxnix.storage.operatorUnlocked.layout = f.inputs.nixpkgs.lib.mkForce "boot-luks";
+          }]; }).config;
       in {
         arrays = builtins.attrNames c.disko.devices.mdadm;
         member = c.disko.devices.disk.data_raid01_disk1.content.partitions.data_part.content.type;
@@ -435,7 +495,7 @@ def test_gc10_data_disk_is_one_luks_mapping_over_md_raid():
     config = json.loads(result.stdout)
     assert config["arrays"] == ["application"]
     assert config["member"] == "mdraid" and config["array"] == "luks"
-    assert "/etc/luks-keys/lx-md-application.key" in config["crypttab"]
+    assert "/etc/luks-keys/luxnix-app-storage.key" in config["crypttab"]
     assert config["app"] != "/var/lib/luxnix-app-storage/application"
 
 
@@ -457,3 +517,40 @@ def test_boot_luks_can_defer_guarded_service_startup():
     wanted = json.loads(result.stdout)
     assert "lx-annotate" in wanted and "postgresql" in wanted
     assert all(not targets for targets in wanted.values()), wanted
+
+
+def test_mapper_names_survive_hardware_renaming_and_reject_collisions():
+    expression = r'''
+      let f = builtins.getFlake ("git+file://" + builtins.toString ./.);
+          lib = f.inputs.nixpkgs.lib;
+          policy = import ./systems/x86_64-linux/encrypted-layout.nix {
+            inherit lib;
+            config.luxnix.storage.operatorUnlocked = { enable = true; layout = "boot-luks"; };
+          };
+          payload = { label = "existing-label"; content = {
+            type = "filesystem"; format = "ext4"; mountpoint = "/var/lib/lx-annotate";
+          }; };
+          inspect = disk: part: duplicate: let
+            c = (lib.evalModules { modules = [{ options = {
+              disko = lib.mkOption { type = lib.types.raw; };
+              assertions = lib.mkOption { type = lib.types.listOf lib.types.raw; };
+            }; } (policy { disko.devices.disk.${disk}.content.partitions =
+              { ${part} = payload; } // lib.optionalAttrs duplicate { second = payload; };
+            })]; }).config;
+          in {
+            name = c.disko.devices.disk.${disk}.content.partitions.${part}.content.name;
+            label = c.disko.devices.disk.${disk}.content.partitions.${part}.label;
+            valid = builtins.all (a: a.assertion) c.assertions;
+          };
+      in { first = inspect "nvme_system" "data" false;
+           renamed = inspect "replacement_controller" "other_partition" false;
+           collision = inspect "disk" "data" true; }
+    '''
+    result = subprocess.run(["nix", "eval", "--impure", "--json", "--expr", expression],
+                            cwd=ROOT, capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, result.stderr
+    state = json.loads(result.stdout)
+    assert state["first"] == state["renamed"] == {
+        "name": "luxnix-app-storage", "label": "existing-label", "valid": True,
+    }
+    assert state["collision"]["valid"] is False

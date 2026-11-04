@@ -232,9 +232,11 @@ in
           }
           {
             assertion = config.boot.plymouth.enable;
-            message = "Boot LUKS asks for the root passphrase on the Plymouth splash screen; enable system.boot.plymouth.";
+            message = "Boot LUKS asks for the root passphrase on the Plymouth splash screen; do not force boot.plymouth.enable off.";
           }
         ];
+        # The passphrase prompt follows the storage layout on every rebuild.
+        boot.plymouth.enable = true;
         luxnix = lib.optionalAttrs (options.luxnix ? vault) {
           vault.server.managedTls.encryptedStorage = lib.mkForce false;
         };

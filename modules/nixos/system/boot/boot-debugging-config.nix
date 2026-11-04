@@ -15,7 +15,6 @@ in
 {
   options.system.boot = {
     enable = mkBoolOpt false "Whether or not to enable booting.";
-    plymouth = mkBoolOpt false "Whether or not to enable plymouth boot splash.";
     secureBoot = mkBoolOpt false "Whether or not to enable secure boot.";
     spaceManagement = mkBoolOpt true "Whether or not to enable boot space management and monitoring.";
   };
@@ -44,8 +43,7 @@ in
         "loglevel=3"
         "udev.log_level=0"
       ];
-      # initrd.verbose = lib.optionals cfg.plymouth false;
-      # consoleLogLevel = lib.optionals cfg.plymouth 0;
+
       initrd.systemd.enable = true;
 
       # lanzaboote = mkIf cfg.secureBoot {
@@ -66,7 +64,7 @@ in
       };
 
       plymouth = {
-        enable = false;
+        enable = true;
         #cfg.plymouth;
       };
       consoleLogLevel = 7;
