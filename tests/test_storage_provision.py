@@ -164,6 +164,7 @@ def controller(custody, monkeypatch, request):
                             fail_export=False, connections=[], local_calls=[],
                             recovery_machine_id='2' * 32)
     volume = {'container': '/var/lib/test-volume.luks', 'luksUUID': None}
+    state.volume = volume
     config = SimpleNamespace(ansible_root=Path('/test-inventory'),
                              inventory_subnet='test')
     inventory = SimpleNamespace(get_host_by_name=lambda name: (
@@ -187,6 +188,9 @@ def controller(custody, monkeypatch, request):
             return state.luks_uuid.encode()
         if args[:3] == ['cryptsetup', 'open', '--test-passphrase']:
             assert data == state.requests[-1]['recovery_passphrase'].encode()
+            state.events.append('password-tested')
+            if getattr(state, 'reject_password', False):
+                raise provision.ProvisionError('Synthetic wrong password')
             return b''
         assert args == ['luxnix-storage-provision', 'test-volume']
         request = json.loads(data)
@@ -207,6 +211,10 @@ def controller(custody, monkeypatch, request):
                 return SimpleNamespace(stdout=json.dumps(state.layout).encode())
             if args[3].endswith('.volumes.test-volume'):
                 return SimpleNamespace(stdout=json.dumps(volume).encode())
+            if args[3].endswith('.boot.initrd.luks.devices.cryptroot.device'):
+                return SimpleNamespace(
+                    stdout=json.dumps('/dev/disk/by-partlabel/root').encode()
+                )
             assert args[3].endswith('.unlockMethod')
             return SimpleNamespace(stdout=json.dumps(state.method).encode())
         state.local_calls.append(args)
@@ -293,7 +301,8 @@ def test_passphrase_controller_verifies_both_escrows_then_provisions_same_identi
     for _ in range(2):
         provision.main([*args, '--apply'])
     assert state.events == [
-        'vault-authenticated', 'independent-export', 'provision'] * 2
+        'vault-authenticated', 'independent-export', 'provision',
+        'vault-authenticated', 'password-tested', 'independent-export', 'provision']
     assert state.requests[0] == state.requests[1]
     assert state.requests[0]['backend'] == 'passphrase'
     assert state.exports[0] == state.exports[1]
@@ -460,3 +469,109 @@ def test_retired_container_enrollment_fails_before_connections(
     with pytest.raises(provision.ProvisionError, match="retired"):
         provision.main(args + ["--apply"])
     assert state.connections == state.requests == state.events == []
+
+
+@pytest.fixture
+def password_setup(controller, monkeypatch):
+    from lx_administration.storage import password_custody, recovery_custody
+
+    args, state, vault, key = controller
+    args[0] = "setup"
+    index = args.index("--recovery-host")
+    del args[index : index + 2]
+    state.exists = True
+    state.luks_uuid = str(uuid.uuid4())
+    state.requests.append({"recovery_passphrase": "synthetic existing password"})
+    monkeypatch.setattr(
+        password_custody, "ask", lambda *args: state.requests[0]["recovery_passphrase"]
+    )
+    monkeypatch.setattr(
+        password_custody,
+        "acknowledge",
+        lambda *args: state.events.append("acknowledged"),
+    )
+    monkeypatch.setattr(provision, "require_independent_custody", lambda *_: True)
+
+    def export(vault, key, source):
+        assert (
+            json.loads(secret.decrypt_secret(source, key))["luks_uuid"]
+            == state.luks_uuid
+        )
+        state.events.append("age-export-verified")
+        if state.fail_export:
+            raise ValueError("Synthetic failed independent export")
+
+    monkeypatch.setattr(recovery_custody, "export_configured", export)
+    return args, state, vault, key
+
+
+@pytest.mark.parametrize("volume", ["test-volume", "cryptroot"])
+def test_setup_uses_verified_custody_before_reveal_and_reuses_known_password(
+    password_setup, monkeypatch, capsys, volume
+):
+    from lx_administration.storage import password_custody
+
+    args, state, vault, key = password_setup
+    args[args.index("--volume") + 1] = volume
+    provision.main(args + ["--apply"])
+    monkeypatch.setattr(
+        password_custody, "ask", lambda *a: pytest.fail("known password prompted again")
+    )
+    provision.main(args + ["--apply"])
+    assert (
+        state.events
+        == [
+            "vault-authenticated",
+            "password-tested",
+            "age-export-verified",
+            "acknowledged",
+        ]
+        * 2
+    )
+    record = json.loads(
+        secret.decrypt_secret(
+            vault / "storage-recovery" / state.machine_id / (volume + ".vault"), key
+        )
+    )
+    assert record["recovery_passphrase"] not in capsys.readouterr().out
+    assert len(state.requests) == 1  # No provisioning or keyslot mutation.
+
+
+@pytest.mark.parametrize(
+    "fault", ["wrong-password", "failed-export", "wrong-uuid", "missing-volume"]
+)
+def test_setup_failure_never_discloses_or_changes_volume(password_setup, fault):
+    args, state, vault, _ = password_setup
+    state.reject_password = fault == "wrong-password"
+    state.fail_export = fault == "failed-export"
+    state.volume["luksUUID"] = str(uuid.uuid4()) if fault == "wrong-uuid" else None
+    state.exists = fault != "missing-volume"
+    with pytest.raises((provision.ProvisionError, ValueError)):
+        provision.main(args + ["--apply"])
+    assert "acknowledged" not in state.events
+    assert len(state.requests) == 1
+    if fault != "failed-export":
+        assert not list(vault.rglob("*.vault"))
+
+
+def test_setup_key_file_uses_exact_bytes_including_newline(password_setup, tmp_path):
+    args, state, _, _ = password_setup
+    state.requests[0]["recovery_passphrase"] += "\n"
+    path = tmp_path / "synthetic-password"
+    path.write_bytes(state.requests[0]["recovery_passphrase"].encode())
+    path.chmod(0o600)
+    provision.main(args + ["--existing-key-file", str(path), "--apply"])
+    assert "password-tested" in state.events
+    assert path.read_bytes().endswith(b"\n")
+
+
+def test_setup_requires_configured_independent_custody(password_setup, monkeypatch):
+    args, state, _, _ = password_setup
+
+    def reject(*args):
+        raise provision.ProvisionError("Prepare independent age custody")
+
+    monkeypatch.setattr(provision, "require_independent_custody", reject)
+    with pytest.raises(provision.ProvisionError, match="independent age"):
+        provision.main(args + ["--apply"])
+    assert not state.events

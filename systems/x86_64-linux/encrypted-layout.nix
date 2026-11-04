@@ -23,7 +23,19 @@ let
       "cryptroot"
     else if fs.type == "swap" then
       "cryptswap"
-    else if builtins.elem "/var/lib/lx-annotate" (mounts fs) then
+    else if
+      lib.any (p: builtins.elem p (mounts fs)) [
+        "/etc/secrets"
+        "/var/lib/luxnix-secrets"
+      ]
+    then
+      "luxnix-secrets"
+    else if
+      lib.any (p: builtins.elem p (mounts fs)) [
+        "/var/lib/lx-annotate"
+        "/var/lib/luxnix-app-storage"
+      ]
+    then
       "luxnix-app-storage"
     else if mounts fs != [ ] then
       "luxnix-data-${

@@ -2,6 +2,7 @@
 conf/ansible.cfg
 result
 result/
+/result-*
 /autoconf/*
 !/autoconf/config.yml
 !/autoconf/structure.yml

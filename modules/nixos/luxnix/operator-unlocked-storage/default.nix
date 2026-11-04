@@ -318,6 +318,13 @@ in
     (lib.mkIf (cfg.enable && containerLayout) {
       environment.systemPackages = [
         (pkgs.writeShellApplication {
+          name = "luxnix-normalize-storage";
+          runtimeInputs = migrationPath;
+          text = ''
+            exec ${migrationCommand} normalize "$@"
+          '';
+        })
+        (pkgs.writeShellApplication {
           name = "luxnix-storage-provision";
           runtimeInputs = migrationPath;
           text = ''
@@ -393,8 +400,7 @@ in
             !knownVolumes
             || (lib.toposort (
               before: after: builtins.elem before ((volumeMounts // bindMounts).${after}.depends ++ parents after)
-            ) mountPaths)
-              ? result;
+            ) mountPaths) ? result;
           message = "Operator-unlocked storage mount dependencies must not contain cycles.";
         }
         {

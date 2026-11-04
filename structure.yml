@@ -131,4 +131,4 @@ tests:
   command: python scripts/lint_structure.py
 context_policy:
   small_directories: Overlays, shells, topology, tmux, CI, preserved autodocs and release provenance use root entrypoints; no per-leaf manifests.
-  local_artifacts: cmdb and ansible/cmdb are local-sensitive; never use them as agent context dumps.
+  local_artifacts: cmdb and ansible/cmdb are local-sensitive; never use them as agent context dumps. Root result and result-* links are local Nix build outputs, never repository inputs.
