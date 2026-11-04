@@ -319,29 +319,39 @@ unique root-owned, mode-`0600` or `0400` admin hash at the evaluated
 host export and authenticated installer channel. Explicit legacy fallback
 settings fail evaluation.
 
-### Interactive replacement during activation
+### Activation always fails closed on a bad hash
 
 When activation finds the admin hash missing, empty, malformed or equal to the
-retired shared credential, `switch` and `test` activations run
-`luxnix-admin-password` instead of failing. The repository keeps only a SHA-256
-fingerprint of the retired hash, never the credential. The tool asks twice on
-the current terminal, or through systemd password agents when activation has no
-terminal (for example under `nixos-rebuild`): answer from another terminal on
-the host with `sudo systemd-tty-ask-password-agent` within 5 minutes. It
-requires at least 12 bytes, rejects the retired password, and allows three
-attempts. Each prompt states these rules and repeats why the previous attempt
-was rejected, because wrappers such as `nh` show activation output only after
-the switch ends. When the current hash is the retired one, the current `sudo`
-password is that retired password and is rejected. The tool writes a SHA-512
-crypt hash to `user.admin.passwordFile` as `root:root 0600`. When
-`/etc/secrets/vault` is on unlocked encrypted storage, it also updates the vault
-hash and plaintext files there. Wrong ownership or mode, or a path that is not a
-regular file, still fails activation without a prompt.
+retired shared credential, it refuses account activation and exits before
+`/etc/shadow` is touched — for every `NIXOS_ACTION`, including `switch` and
+`test`, exactly like a plain boot. Activation never runs `luxnix-admin-password`
+itself and never prompts; it only names the command in its error message. This
+is deliberate: a prompt raised from inside an unattended or wrapper-driven
+switch (`nh`, Ansible, CI) is easy to miss or mis-answer, and answering it sets
+a brand-new live password nobody necessarily records — exactly the lockout this
+guide's recovery sections exist to undo. Wrong ownership or mode, or a path
+that is not a regular file, fails activation the same way. The repository keeps
+only a SHA-256 fingerprint of the retired hash, never the credential.
 
-Boot-time activation never prompts and keeps failing closed. Without an answer
-the switch fails as before; run `sudo luxnix-admin-password` and switch again.
-Run the same command at any time to replace the password; outside activation it
-also updates the live account.
+Run `sudo luxnix-admin-password` **deliberately, out of band, before** retrying
+the switch — never as a response to something activation itself raised. The
+tool asks twice on the current terminal, or through systemd password agents
+when invoked without one: answer from another terminal on the host with
+`sudo systemd-tty-ask-password-agent` within 5 minutes. It requires at least 12
+bytes, rejects the retired password, and allows three attempts, repeating why
+the previous attempt was rejected. When the current hash is the retired one,
+the current `sudo` password is that retired password and is rejected. The tool
+writes a SHA-512 crypt hash to `user.admin.passwordFile` as `root:root 0600` and
+immediately updates the live account itself. When `/etc/secrets/vault` is on
+unlocked encrypted storage, it also updates the vault hash and plaintext files
+there. Run the same command at any later time to replace the password outside
+activation too.
+
+The boot-copy migration (`luxnix.storage.operatorUnlocked.migration.accountHashes`)
+mirrors this: it never creates or overwrites a boot copy from a source that is
+the retired shared hash, whether or not a copy already exists. A retired or
+absent source simply leaves the boot copy as it was — missing stays missing —
+so activation always reports it as "missing", never silently inherits it.
 
 The new password exists only on that host. Store it in the password manager and
 import it into the controller vault with the steps above; otherwise

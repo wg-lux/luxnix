@@ -321,31 +321,21 @@ def test_client_validator_accepts_existing_hash_without_changing_shell_options(
     assert path.read_text() == generated_hash + "\n"
 
 
-@pytest.mark.parametrize(
-    "action, tool_succeeds, accepted",
-    [("switch", True, True), ("test", True, True), ("switch", False, False), ("", True, False)],
-)
-def test_missing_hash_prompts_only_during_switch_or_test(
-    recovery_policy, tmp_path, generated_hash, action, tool_succeeds, accepted
+def test_activation_never_invokes_the_interactive_tool(recovery_policy):
+    # Activation only ever names the tool in its error message; it must never
+    # shell out to it. A path match here would mean a prompt could still fire
+    # during an unattended switch and change the live account unrecorded.
+    policy = recovery_policy["default"]
+    assert not re.search(r"/nix/store/[^ /]+/bin/luxnix-admin-password", policy["script"])
+    assert "luxnix-admin-password" in policy["script"]
+
+
+@pytest.mark.parametrize("action", ["switch", "test", "", "boot"])
+def test_missing_hash_always_fails_closed_regardless_of_action(
+    recovery_policy, tmp_path, action
 ):
-    policy = dict(recovery_policy["default"])
-    tools = re.findall(r"/nix/store/[^ /]+/bin/luxnix-admin-password", policy["script"])
-    assert len(set(tools)) == 1
     password_file = tmp_path / "admin.hash"
-    # Stand-in for the interactive tool: writes a disposable hash, never prompts.
-    tool = tmp_path / "luxnix-admin-password"
-    tool.write_text(
-        "#!/bin/sh\n"
-        '[ "$LUXNIX_ADMIN_PASSWORD_FROM_ACTIVATION" = 1 ] || exit 3\n'
-        + (
-            f"printf '%s\\n' {shlex.quote(generated_hash)} > {shlex.quote(str(password_file))}\n"
-            f"chmod 0600 {shlex.quote(str(password_file))}\n"
-            if tool_succeeds
-            else "exit 1\n"
-        )
-    )
-    tool.chmod(0o700)
-    policy["script"] = policy["script"].replace(tools[0], str(tool))
+    policy = recovery_policy["default"]
     script = policy["script"].replace(policy["file"], str(password_file))
     metadata_tool = tmp_path / "stat-metadata"
     metadata_tool.write_text("#!/bin/sh\nprintf '0:600\\n'\n")
@@ -357,10 +347,6 @@ def test_missing_hash_prompts_only_during_switch_or_test(
         capture_output=True,
         env={"PATH": "/run/current-system/sw/bin:/usr/bin:/bin", "NIXOS_ACTION": action},
     )
-    assert (result.returncode == 0) == accepted, result.stderr
-    if accepted:
-        assert password_file.read_text() == generated_hash + "\n"
-        assert "asking for a new password" in result.stderr
-    else:
-        assert "luxnix-admin-password" in result.stderr
-    assert generated_hash not in result.stdout + result.stderr
+    assert result.returncode != 0
+    assert "luxnix-admin-password" in result.stderr
+    assert not password_file.exists()

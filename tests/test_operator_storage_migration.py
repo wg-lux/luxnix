@@ -312,6 +312,30 @@ def test_missing_account_hash_copy_still_requires_private_source(tmp_path):
     assert not target.exists()
 
 
+def test_first_time_account_hash_copy_is_never_provisioned_from_retired_hash(
+    tmp_path, monkeypatch
+):
+    # The gap this closes: a fresh boot copy must not silently inherit a
+    # retired shared hash just because no copy existed yet to protect.
+    retired = b"$6$standin$retired-credential"
+    monkeypatch.setattr(
+        migration, "RETIRED_ACCOUNT_HASH_DIGESTS", frozenset({hashlib.sha256(retired).hexdigest()})
+    )
+    source, target = tmp_path / "source", tmp_path / "boot" / "account.hash"
+    source.write_bytes(retired + b"\n")
+    source.chmod(0o600)
+    migration.prepare_accounts({str(target): str(source)})
+    assert not target.exists()
+
+
+def test_first_time_account_hash_copy_skips_when_source_is_absent(tmp_path):
+    # The source lives on operator-unlocked storage and can be absent before
+    # unlock; a missing source must be skipped, not crash the migration.
+    source, target = tmp_path / "source", tmp_path / "boot" / "account.hash"
+    migration.prepare_accounts({str(target): str(source)})
+    assert not target.exists()
+
+
 @pytest.mark.parametrize("method", ["passphrase", "tpm2"])
 def test_missing_container_never_provisions_during_startup(tmp_path, monkeypatch, method):
     container = tmp_path / "missing.luks"

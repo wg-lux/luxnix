@@ -18,9 +18,11 @@ let
   retiredAdminHashSha256 = "a396e38d2c16276942366260dfc8e88ccef88e5df8915d50e688aca7e1502bba";
   retiredAdminSalt = "yC9hyVoZEYLlzjbZ";
 
-  # Interactive replacement for a missing, malformed or retired admin hash. It
-  # asks on the current terminal or through systemd password agents and never
-  # takes the password from arguments or the environment.
+  # Manual, operator-run replacement for a missing, malformed or retired admin
+  # hash. Activation never invokes this itself; it only points at it in its
+  # error message. It asks on the current terminal or through systemd
+  # password agents and never takes the password from arguments or the
+  # environment.
   adminPasswordTool = pkgs.writeShellApplication {
     name = "luxnix-admin-password";
     runtimeInputs = [
@@ -66,8 +68,8 @@ let
         systemd-ask-password --timeout=300 --id="luxnix-admin-password:$host" "$1"
       }
 
-      # Callers such as nh buffer activation stderr until the switch ends, so the
-      # prompt text is the only feedback an agent shows: repeat rejections there.
+      # Repeat rejections in the prompt text itself: this tool is invoked
+      # directly by the operator, never from inside activation.
       reject() {
         notice="Rejected: $1. "
         echo "$notice" >&2
@@ -106,10 +108,7 @@ let
           echo "NOTE: $vault_password_file is not on unlocked encrypted storage and was left unchanged." >&2
         fi
         unset password repeat
-        # NixOS activation applies the hash right after this tool returns.
-        if [ "''${LUXNIX_ADMIN_PASSWORD_FROM_ACTIVATION:-}" != 1 ]; then
-          printf '%s:%s\n' "$account" "$hash" | chpasswd -e
-        fi
+        printf '%s:%s\n' "$account" "$hash" | chpasswd -e
         echo "New password for '$account' installed in $boot_hash_file." >&2
         echo "Store it in the password manager and import it into the controller vault (docs/admin-passwords.md); otherwise sync-secrets redeploys the older pair." >&2
         exit 0
@@ -211,24 +210,12 @@ in
                   exit 1
                 fi
                 if [ -n "$admin_password_reason" ]; then
-                  # Interactive switch/test only; boot-time activation has no prompt.
-                  case "''${NIXOS_ACTION:-}" in
-                    switch|test)
-                      echo "Admin password hash is $admin_password_reason; asking for a new password." >&2
-                      if ! LUXNIX_ADMIN_PASSWORD_FROM_ACTIVATION=1 ${adminPasswordTool}/bin/luxnix-admin-password; then
-                        echo "ERROR: no new admin password was set; refusing account activation. Run 'sudo luxnix-admin-password', then switch again." >&2
-                        exit 1
-                      fi
-                      if ! admin_password_reason="$(luxnix_admin_password_problem)" || [ -n "$admin_password_reason" ]; then
-                        echo "ERROR: the new admin password hash is invalid; refusing account activation." >&2
-                        exit 1
-                      fi
-                      ;;
-                    *)
-                      echo "ERROR: admin password hash is $admin_password_reason; refusing account activation. Run 'sudo luxnix-admin-password', then switch again." >&2
-                      exit 1
-                      ;;
-                  esac
+                  # Always fails closed, for every NIXOS_ACTION including switch and
+                  # test: activation never prompts and never changes the live account
+                  # on its own. Run 'sudo luxnix-admin-password' deliberately, out of
+                  # band, then switch again.
+                  echo "ERROR: admin password hash is $admin_password_reason; refusing account activation. Run 'sudo luxnix-admin-password', then switch again." >&2
+                  exit 1
                 fi
       '';
     };

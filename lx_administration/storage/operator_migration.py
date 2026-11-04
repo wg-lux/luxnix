@@ -693,8 +693,11 @@ def prepare_accounts(accounts):
     """Keep each boot copy equal to its source whenever the source is readable.
 
     The source lives on operator-unlocked storage and is absent before unlock;
-    the existing copy then stays authoritative. An existing copy is never
-    replaced by an unsafe source or by a retired hash.
+    the existing copy then stays authoritative. Neither an existing copy nor a
+    first-time copy is ever created from an unsafe source or a retired hash:
+    a retired source leaves the boot copy exactly as it was (absent, or
+    whatever it already held), so the admin activation guard always sees a
+    retired hash as "missing" rather than silently inheriting it.
     """
     for target, source in accounts.items():
         target, source = plain_path(target), plain_path(source)
@@ -712,10 +715,16 @@ def prepare_accounts(accounts):
                 continue
             write_account_hash(target, content)
             continue
+        if not source.exists():
+            continue
         if not private_source(source):
             raise MigrationError("Boot account hash source must be a private root-owned regular file")
+        content = source.read_bytes()
+        if hashlib.sha256(content.strip()).hexdigest() in RETIRED_ACCOUNT_HASH_DIGESTS:
+            print(f"WARNING: not provisioning {target}: its source contains a retired shared hash.", file=sys.stderr)
+            continue
         target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        write_account_hash(target, source.read_bytes())
+        write_account_hash(target, content)
 
 
 def main():
