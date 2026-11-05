@@ -85,8 +85,8 @@ Boot-LUKS hosts use a manually entered root passphrase. Old USB/raw-offset
 `boot-decryption-config.nix` imports and automatic FIDO settings are retired.
 The first `nixos-rebuild boot` or `switch` with this policy prompts privately
 for a boot disk password and its confirmation, before changing the bootloader.
-You can enter an existing password or choose a new one of at least 12 characters.
-Adding a new password also requires the existing disk/recovery password; the
+Ordinary staging only verifies an existing password. Adding a new password
+requires explicit `--change`, at least 12 characters and the existing disk/recovery password; the
 helper first backs up the LUKS header and retains all existing recovery slots.
 If you do not hold an existing password, recover access before rebuilding;
 an already open filesystem does not authorize adding a LUKS key by itself.
@@ -158,12 +158,18 @@ theme uses plain text without animation for password entry and boot messages.
 The custom space-theme package is no longer included.
 Plymouth follows the storage layout on every rebuild: boot-LUKS hosts and hosts with boot-time container
 passphrases enable it, all other hosts leave it off. Forcing
-`boot.plymouth.enable` off on a boot-LUKS host fails evaluation. On a boot-LUKS
-Plasma host with a `user.client` account the same passphrase is the desktop
-login (hosts without one keep the SDDM password login): SDDM logs in that account, and KWallet opens with the passphrase that systemd
-caches in the kernel keyring (via `pam_systemd_loadkey`). The client account
-and its KWallet must therefore use the disk passphrase, and remote SSH unlock
-is rejected on these hosts so no unattended session opens. The root prompt and root device wait
+`boot.plymouth.enable` off on a boot-LUKS host fails evaluation.
+
+Plasma desktops use the SDDM account chooser fleet-wide:
+`roles.desktop.addons.plasma.bootAutoLogin = false`. Enabling autologin is rejected.
+After local or approved remote LUKS unlock, select `admin` or `client-user` and
+enter that account's Linux password. The disk password is not passed to SDDM or
+KWallet. Account, LUKS and wallet passwords remain independent; boot and rebuild
+never rotate them. Existing account/password-file drift stops activation instead
+of replacing the live password; see [explicit rotation](admin-passwords.md#explicit-replacement-and-activation-safety).
+Neither selection relocks storage or requires application credentials to be
+copied between users. The application runs as its existing service principal.
+A wallet with a different password still requires its own password. The root prompt and root device wait
 without time or attempt limits (`timeout=0`, `tries=0`,
 `x-systemd.device-timeout=0`), because an exhausted prompt leaves no system
 to continue into. The screen shows a hint to press Ctrl+Alt+Del. In the initrd
@@ -657,7 +663,19 @@ claim physical acceptance based on a configuration build.
    existing SOPS age key at its configured path (generation remains disabled).
    Restore PostgreSQL consistently using the matching major version. Verify
    numeric service IDs and permissions before enabling any writers.
-6. Install the already built closure onto the prepared target using the local
+6. Before first installation, ensure the mounted target has its standard
+   root-owned `/var/lib` directory, then initialize its machine identity
+   with `systemd-machine-id-setup --root=/mnt` from the trusted installer. Do not
+   replace an existing identity on a restored installation. A bare chroot may
+   report `cryptsetup status` type `n/a` without udev metadata. Expose the trusted
+   installer's `/run/udev` at `/mnt/run/udev` through a read-only bind mount for
+   staging/installation, and remove that temporary mount during installer
+   teardown. Never accept `n/a` as proof of LUKS2. With its required mounts and
+   Nix store available, use `nixos-enter --root /mnt --
+   <built-closure>/sw/bin/luxnix-setup-boot-password` in a private terminal to
+   verify the existing disk password and stage its receipt. A missing
+   `/etc/machine-id` blocks staging; do not manufacture a receipt or bypass the
+   check. Then install the already built closure onto the prepared target using the local
    NixOS install-only workflow, after reviewing `findmnt -R /mnt` and confirming
    the target serials again:
 
@@ -739,7 +757,10 @@ blindly rolls a database back across migrations. Run it through
 recovery variables; never put recovery passphrases in command arguments. Its
 `--skip-tags activate` phase only prepares the release and opens authenticated
 existing mappings. Verify the contained database and original application keys
-before the separately selected activation phase. No missing container is created.
+before the separately selected activation phase. Select that phase by rerunning
+the whole playbook without tag selection: every earlier step is repeated and
+idempotent, and the playbook refuses `--tags activate` alone because it would
+skip the target, closure and mapping gates. No missing container is created.
 
 Remove the exception only after console-
 assisted reprovision and verified restore; the final fleet architecture is unchanged.
@@ -763,7 +784,8 @@ architecture and must not be used to claim root encryption. Current container
 metadata remains solely to support this migration and prevent loss of recovery
 information. Do not activate boot-luks on an old disk layout to try to convert it.
 
-Retain container recovery only for gc-09/gc-10 until their physical acceptance gates pass.
+Retain container recovery for each unmigrated host until its physical acceptance
+gates pass; see the [legacy host inventory](legacy-storage-recovery.md).
 Remove legacy-only migration metadata and tests only after every fleet host has verified boot-LUKS acceptance and old storage has
 reached its approved retention limit. No host is marked physically migrated by
 this repository change. OpenBao identity provisioning and LX-Annotate encryption

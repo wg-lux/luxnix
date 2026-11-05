@@ -689,33 +689,37 @@ def write_account_hash(target, content):
         raise
 
 
-def prepare_accounts(accounts):
-    """Keep each boot copy equal to its source whenever the source is readable.
+def account_hash(path):
+    """Validate one supported non-retired hash without disclosing its contents."""
+    value = path.read_bytes()
+    valid = (
+        rb"(\$6\$(rounds=[0-9]+\$)?[./A-Za-z0-9]{1,16}\$[./A-Za-z0-9]{86}|"
+        rb"\$y\$[./A-Za-z0-9]+\$[./A-Za-z0-9]+\$[./A-Za-z0-9]{43})\n?"
+    )
+    if (not re.fullmatch(valid, value)
+            or hashlib.sha256(value.strip()).hexdigest() in RETIRED_ACCOUNT_HASH_DIGESTS):
+        raise MigrationError("Account hash is missing, locked, malformed or retired")
+    return value
 
-    The source lives on operator-unlocked storage and is absent before unlock;
-    the existing copy then stays authoritative. An existing copy is never
-    replaced by an unsafe source or by a retired hash.
+
+def prepare_accounts(accounts):
+    """Initialize absent boot copies only; rotation is an explicit operator action.
+
+    Validate every selected credential before publishing any missing copies.
+    Existing copies remain authoritative even while stale vault exports are mounted.
     """
+    pending = []
     for target, source in accounts.items():
-        target, source = plain_path(target), plain_path(source)
-        if target.exists():
-            if not source.exists():
-                continue
-            if not private_source(source):
-                print(f"WARNING: keeping {target}: its source is not a private root-owned regular file.", file=sys.stderr)
-                continue
-            content = source.read_bytes()
-            if content == target.read_bytes():
-                continue
-            if hashlib.sha256(content.strip()).hexdigest() in RETIRED_ACCOUNT_HASH_DIGESTS:
-                print(f"WARNING: keeping {target}: its source contains a retired shared hash.", file=sys.stderr)
-                continue
-            write_account_hash(target, content)
-            continue
-        if not private_source(source):
-            raise MigrationError("Boot account hash source must be a private root-owned regular file")
+        target = plain_path(target)
+        selected = target if target.exists() else plain_path(source)
+        if not private_source(selected):
+            raise MigrationError("Boot account hash must be a private root-owned regular file")
+        content = account_hash(selected)
+        if selected != target:
+            pending.append((target, content))
+    for target, content in pending:
         target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        write_account_hash(target, source.read_bytes())
+        write_account_hash(target, content)
 
 
 def main():

@@ -115,6 +115,22 @@ disko.lib.testLib.makeDiskoTest {
     '';
   };
   postDisko = ''
+    # Fresh targets have no machine-id yet. Stage a real verified receipt before
+    # the install hook, replacing only the private prompt with a synthetic value.
+    machine.succeed("install -d -m 0755 /mnt/var/lib")
+    machine.succeed("${pkgs.systemd}/bin/systemd-machine-id-setup --root=/mnt")
+    machine.succeed("mkdir -p /mnt/nix/store; mount --bind /nix/store /mnt/nix/store; touch /mnt/etc/NIXOS")
+    # cryptsetup resolves mapping type through udev state; a bare chroot reports
+    # n/a even for LUKS2. Expose the installer metadata without granting writes.
+    machine.succeed("mkdir -p /mnt/run/udev; mount --bind /run/udev /mnt/run/udev; mount -o remount,bind,ro /mnt/run/udev")
+    stage_password = "import sys; sys.path.insert(0, '${repoRoot}'); from lx_administration.storage import boot_password as b; b.secret = lambda _: b'secretsecret'; b.prepare('/dev/disk/by-partlabel/disk-system-root')"
+    machine.succeed("nixos-enter --root /mnt -- ${pkgs.coreutils}/bin/env PATH=${
+      pkgs.lib.makeBinPath [
+        pkgs.util-linux
+        pkgs.cryptsetup
+      ]
+    } ${pkgs.python3}/bin/python3 -c " + shlex.quote(stage_password))
+    machine.succeed("umount /mnt/nix/store")
     machine.succeed("install -d -m 0700 /mnt/etc/luks-keys; cp -p ${key} /mnt${key}")
   ''
   + pkgs.lib.optionalString remoteUnlockTest ''

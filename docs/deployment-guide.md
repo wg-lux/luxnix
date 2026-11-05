@@ -316,9 +316,11 @@ roots until recovery is no longer needed.
 
 ### Encrypted storage
 
-Every host uses [boot LUKS storage](boot-storage-operator.md). Hosts that still
-run the older container layout are covered by
-[unmigrated hosts](legacy-storage-recovery.md) until they are reinstalled.
+The canonical client and server target is [boot LUKS storage](boot-storage-operator.md).
+Verify the actual disk layout before deployment: selecting this configuration
+does not encrypt an existing plaintext root. Hosts still using containers follow
+[legacy recovery](legacy-storage-recovery.md) until explicit reprovisioning and
+acceptance. Root unlock and application-secret delivery are separate gates.
 
 ## 7. Add a new host checklist
 

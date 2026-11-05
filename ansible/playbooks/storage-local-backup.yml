@@ -47,15 +47,17 @@
         argv: [nix-store, --add-root, /var/lib/luxnix-migration-tools/age, --realise, '{{ backup_age_package }}']
       changed_when: true
 
+    # Read-only: the retry decision needs is-failed's exact exit status, including
+    # 4 for a transient unit that no longer exists; the systemd module exposes none.
     - name: Check for a failed previous launch
-      ansible.builtin.command: systemctl is-failed luxnix-local-migration-backup.service
+      ansible.builtin.command: systemctl is-failed luxnix-local-migration-backup.service # noqa: command-instead-of-module
       register: previous_backup
       failed_when: previous_backup.rc not in [0, 1, 4]
       changed_when: false
 
     - name: Clear only a failed transient launch before a reviewed retry
       ansible.builtin.command: systemctl reset-failed luxnix-local-migration-backup.service
-      changed_when: false
+      changed_when: true
       when: previous_backup.rc == 0
 
     - name: Start the retained backup job without transporting a private identity

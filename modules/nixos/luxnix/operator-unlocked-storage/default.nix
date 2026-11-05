@@ -315,6 +315,14 @@ in
         }
       ];
     }
+    (lib.mkIf cfg.enable {
+      system.activationScripts = lib.mkIf (cfg.migration.accountHashes != { }) {
+        luxnixPrepareBootAccountHashes = {
+          deps = [ "specialfs" ];
+          text = "${migrationCommand} accounts || exit 1";
+        };
+      };
+    })
     (lib.mkIf (cfg.enable && containerLayout) {
       environment.systemPackages = [
         (pkgs.writeShellApplication {
@@ -449,12 +457,6 @@ in
       systemd.enableEmergencyMode = lib.mkDefault false;
       # Preserve configured encrypted swap. The runtime verifier rejects plaintext
       # partitions/files and zram writeback before any guarded consumer starts.
-      system.activationScripts = lib.mkIf (cfg.migration.accountHashes != { }) {
-        luxnixPrepareBootAccountHashes = {
-          deps = [ "specialfs" ];
-          text = "${migrationCommand} accounts";
-        };
-      };
       systemd = {
         services =
           lib.mapAttrs (

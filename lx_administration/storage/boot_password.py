@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import resource
+import shutil
 import stat
 import subprocess
 import tempfile
@@ -154,6 +155,10 @@ def add_password(device: str, password: bytes, previous: bytes, state: Path) -> 
 
 
 def prepare(device: str, *, change: bool = False) -> None:
+    # Check the complete executable contract before creating state or prompting.
+    for command in ("findmnt", "lsblk", "swapon", "cryptsetup"):
+        if shutil.which(command) is None:
+            raise ValueError(f"Missing required executable: {command}")
     boot.verify_mount("/", "/dev/mapper/cryptroot")
     boot.encrypted_storage(STATE.parent)
     STATE.mkdir(mode=0o700, exist_ok=True)
@@ -178,12 +183,14 @@ def prepare(device: str, *, change: bool = False) -> None:
             private(receipt)
             if not change and json.loads(receipt.read_text()) == expected:
                 return
-        password = secret("Boot disk passphrase (existing or new): ")
+        password = secret("Boot disk passphrase (new only with --change): ")
         if secret("Confirm boot disk passphrase: ") != password:
             raise ValueError("Passphrases do not match; nothing changed")
         enrolled = accepts(device, password)
         previous = None
         if not enrolled:
+            if not change:
+                raise ValueError("Existing disk passphrase rejected; adding a credential requires explicit --change")
             if len(password.decode("utf-8")) < 12:
                 raise ValueError(
                     "A new disk passphrase must contain at least 12 characters"
@@ -244,8 +251,12 @@ def main() -> None:
         KeyboardInterrupt,
         getpass.GetPassWarning,
         subprocess.TimeoutExpired,
+        subprocess.CalledProcessError,
     ) as exc:
         detail = str(exc) if type(exc) is ValueError else type(exc).__name__
+        if isinstance(exc, FileNotFoundError) and exc.filename:
+            # Paths identify the missing dependency; never include subprocess output.
+            detail = f"Missing file or executable: {exc.filename}"
         parser.exit(
             1,
             "Boot-password setup failed: " + detail + ".\n"
@@ -261,7 +272,7 @@ def main() -> None:
             "--out-link result-boot --accept-flake-config\n"
             "  sudo ./result-boot/sw/bin/luxnix-setup-boot-password\n"
             '  sudo nixos-rebuild boot --flake ".#$(hostname)" --accept-flake-config\n'
-            "Enter the disk password and confirmation; a new password also needs "
+            "Enter the existing disk password and confirmation; explicit --change also needs "
             "the existing disk/recovery password. Never put passwords in commands.\n"
             "See docs/boot-storage-migration.md (Password setup during rebuild).\n",
         )

@@ -255,6 +255,10 @@
               name = "coordinated-hub-backup";
             }
           );
+        boot-recovery = import ./tests/nixtest/boot_recovery_vm_test.nix {
+          pkgs = inputs.nixpkgs.legacyPackages.${system};
+          hostConfig = inputs.self.nixosConfigurations.gc-02.config;
+        };
         boot-storage = import ./tests/nixtest/boot_storage_vm_test.nix {
           pkgs = inputs.nixpkgs.legacyPackages.${system};
           inherit (inputs) disko;

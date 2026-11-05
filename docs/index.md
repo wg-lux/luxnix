@@ -4,6 +4,7 @@ Choose the task below; you do not need to read every guide.
 
 | Your task | Start here |
 | --- | --- |
+| Understand client and server encryption | [Canonical encryption contract](boot-storage-operator.md#shared-encryption-contract): shared layout, login, server unlock and acceptance. |
 | Use a machine while an upgrade is planned | Ask your operator for the maintenance window and when work can resume. You do not need to run migration commands. |
 | Install a machine for the first time | [Operator checklist](boot-storage-operator.md): preparation, installation, login and recovery. |
 | Continue an interrupted installation | [Resume instructions](changelog.md#continue-an-installation-or-migration): retain the existing plan and inspect its status. |
@@ -79,7 +80,7 @@ for canonical invocations and risk labels.
 
 - [LX Terminology package host](./guides/lx-terminology.md): public ZIP distribution, editor publication, runtime imports, and deployment prerequisites.
 - [Service Module Pattern](./deploying-services-lx-annotate-style.md): reusable pattern for Vault-backed service deployment.
-- [lx-annotate Encrypted Data](./lx-annotate-encrypted-data.md): hostname-scoped Vault delivery and LUKS mount flow for lx-annotate.
+- [lx-annotate Encrypted Data](./lx-annotate-encrypted-data.md): optional application-volume integration; not the canonical root-unlock path.
 - [lx-annotate Secure HLS](./lx-annotate-secure-hls.md): end-to-end encrypted video playback, deployment, hub boundary, readiness, and incident-response contract.
 - [lx-annotate Cluster Readiness](./lx-annotate-cluster-readiness.md): release flow, completed decisions, and remaining production gates.
 - [gs-02 Local Redis Broker Recovery](./operations/gs-02-local-redis-broker.md): preflight, activation, acceptance, rollback, and encrypted-persistence follow-up for the implemented but undeployed broker change.

@@ -128,10 +128,17 @@ definition_of_done:
         - check
       timeout_seconds: 1800
     assessment:
-      status: verified
+      status: blocked
       evidence:
-        - kind: command
-          reference: nix eval --json path:/home/admin/luxnix#nixosConfigurations.{gc-02,s-04,lx-test}.config.networking.hostName
-      note: Path-flake evaluation returned host names gc-02, s-04, and lx-test for workstation, server, and isolated test profiles.
-      assessed_by: codex-host-cleanup-20260831-b1
-      assessed_at: '2026-08-31T14:18:36.743843Z'
+      - kind: command
+        reference: nix eval --json path:/home/admin/luxnix#nixosConfigurations.{gc-02,s-04,lx-test}.config.networking.hostName
+      - kind: test
+        reference: tests/test_boot_storage.py::test_every_exported_host_uses_password_login
+      note: '2026-11-05 reconciliation: the August hostname-only evaluation is historical and does not establish
+        current full-profile validity. All 16 exported configurations resolve desktop autologin to false. gc-02/gc-09
+        final toplevel builds passed, but full assertion inspection reports s-04 blocked: Hub transfer requires
+        authenticated HTTPS CRL endpoints and an independently provisioned crlTlsCaFile. Fix and verify that
+        server profile before restoring verified status. Repository Nix quality also retains the unrelated storage-access/private-roots.nix
+        formatting failure; no full flake-check success is claimed.'
+      assessed_by: codex-boot-repair-20261104
+      assessed_at: '2026-11-05T08:44:13.978635Z'

@@ -80,7 +80,7 @@ def test_addition_verifies_new_and_recovery_and_backs_up_before_change(
         setup.cryptsetup("luksDump", "--dump-json-metadata", disk).stdout
     )
     answers(monkeypatch, NEW, NEW, OLD)
-    setup.prepare(disk)
+    setup.prepare(disk, change=True)
     assert setup.accepts(disk, NEW) and setup.accepts(disk, OLD)
     after = json.loads(
         setup.cryptsetup("luksDump", "--dump-json-metadata", disk).stdout
@@ -101,7 +101,7 @@ def test_mismatch_and_wrong_authorization_never_modify_header(
     before = setup.header_digest(disk)
     answers(monkeypatch, *values)
     with pytest.raises(ValueError):
-        setup.prepare(disk)
+        setup.prepare(disk, change=True)
     assert setup.header_digest(disk) == before
     assert not (setup.STATE / "cryptroot.json").exists()
     assert not list(setup.STATE.glob("header-before-*"))
@@ -143,7 +143,7 @@ def test_mapping_change_during_prompt_does_not_enroll(disk, monkeypatch):
     monkeypatch.setattr(setup.boot, "key_device", lambda *args: next(values))
     answers(monkeypatch, NEW, NEW, OLD)
     with pytest.raises(ValueError, match="identity or keyslots changed"):
-        setup.prepare(disk)
+        setup.prepare(disk, change=True)
     assert setup.header_digest(disk) == before
     assert not (setup.STATE / "cryptroot.json").exists()
 
@@ -264,8 +264,28 @@ def test_failed_add_keeps_recovery_and_has_no_success_receipt(disk, monkeypatch)
     monkeypatch.setattr(setup, "cryptsetup", invoke)
     answers(monkeypatch, NEW, NEW, OLD)
     with pytest.raises(ValueError, match="Could not add"):
-        setup.prepare(disk)
+        setup.prepare(disk, change=True)
     assert setup.accepts(disk, OLD)
     assert setup.header_digest(disk) == before
     assert list(setup.STATE.glob("header-before-*/luks.header"))
+    assert not (setup.STATE / "cryptroot.json").exists()
+
+
+@pytest.mark.parametrize("missing", ["findmnt", "lsblk", "swapon", "cryptsetup"])
+def test_missing_dependency_fails_before_state_or_keyslot_changes(tmp_path, monkeypatch, missing):
+    monkeypatch.setattr(setup, "STATE", tmp_path / "state")
+    monkeypatch.setattr(setup.shutil, "which", lambda name: None if name == missing else "/bin/" + name)
+    monkeypatch.setattr(setup.boot, "verify_mount", lambda *args: pytest.fail("must preflight first"))
+    with pytest.raises(ValueError, match="Missing required executable: " + missing):
+        setup.prepare("/dev/synthetic")
+    assert not setup.STATE.exists()
+
+
+def test_ordinary_staging_never_adds_a_new_password(disk, monkeypatch):
+    before = setup.header_digest(disk)
+    answers(monkeypatch, NEW, NEW)
+    with pytest.raises(ValueError, match="explicit --change"):
+        setup.prepare(disk)
+    assert setup.header_digest(disk) == before
+    assert setup.accepts(disk, OLD)
     assert not (setup.STATE / "cryptroot.json").exists()

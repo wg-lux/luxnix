@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import subprocess
 from types import SimpleNamespace
 
 import pytest
@@ -262,53 +263,60 @@ def test_existing_container_is_never_formatted(tmp_path, monkeypatch):
     assert container.read_bytes() == b"existing content must not be overwritten"
 
 
-def test_account_hash_copy_preserves_bytes_and_follows_source(tmp_path):
+@pytest.fixture
+def login_hashes():
+    return [subprocess.check_output(
+        ["openssl", "passwd", "-6", "-stdin"], input=password
+    ) for password in (b"synthetic-current-password", b"synthetic-rotated-password")]
+
+
+def test_account_hash_copy_is_initialized_once_and_preserves_rotation(tmp_path, login_hashes):
     source, target = tmp_path / "source", tmp_path / "boot" / "account.hash"
-    source.write_bytes(b"existing account hash\n")
+    source.write_bytes(login_hashes[0])
     source.chmod(0o600)
     migration.prepare_accounts({str(target): str(source)})
-    assert target.read_bytes() == source.read_bytes()
+    assert target.read_bytes() == login_hashes[0]
     assert target.stat().st_mode & 0o777 == 0o600
-    source.write_bytes(b"rotated account hash\n")
+    # Explicit operator rotation, followed by repeated activation with stale Vault.
+    migration.write_account_hash(target, login_hashes[1])
+    for _ in range(2):
+        migration.prepare_accounts({str(target): str(source)})
+        assert target.read_bytes() == login_hashes[1]
+    source.unlink()
     migration.prepare_accounts({str(target): str(source)})
-    assert target.read_bytes() == b"rotated account hash\n"
-    assert target.stat().st_mode & 0o777 == 0o600
+    assert target.read_bytes() == login_hashes[1]
     assert sorted(p.name for p in target.parent.iterdir()) == ["account.hash"]
 
 
-def test_account_hash_copy_keeps_target_while_source_is_locked_or_unsafe(tmp_path):
-    source, target = tmp_path / "source", tmp_path / "boot" / "account.hash"
-    target.parent.mkdir()
-    target.write_bytes(b"current account hash\n")
-    migration.prepare_accounts({str(target): str(source)})
-    assert target.read_bytes() == b"current account hash\n"
-    source.write_bytes(b"group readable hash\n")
-    source.chmod(0o640)
-    migration.prepare_accounts({str(target): str(source)})
-    assert target.read_bytes() == b"current account hash\n"
+@pytest.mark.parametrize("content", [b"", b"!\n", b"malformed\n", b"$6$invalid\n"])
+def test_account_preflight_rejects_bad_source_before_any_publication(tmp_path, login_hashes, content):
+    valid, bad = tmp_path / "valid", tmp_path / "bad"
+    valid.write_bytes(login_hashes[0])
+    bad.write_bytes(content)
+    for path in (valid, bad):
+        path.chmod(0o600)
+    targets = {str(tmp_path / "admin"): str(valid), str(tmp_path / "client"): str(bad)}
+    with pytest.raises(migration.MigrationError):
+        migration.prepare_accounts(targets)
+    assert not (tmp_path / "admin").exists()
+    assert not (tmp_path / "client").exists()
 
 
-def test_account_hash_copy_never_replaces_target_with_retired_hash(tmp_path, monkeypatch):
-    # A disposable stand-in; the real retired credential is not kept in tests.
-    retired = b"$6$standin$retired-credential"
-    monkeypatch.setattr(
-        migration, "RETIRED_ACCOUNT_HASH_DIGESTS", frozenset({hashlib.sha256(retired).hexdigest()})
-    )
-    source, target = tmp_path / "source", tmp_path / "boot" / "account.hash"
-    target.parent.mkdir()
-    target.write_bytes(b"unique account hash\n")
-    source.write_bytes(retired + b"\n")
-    source.chmod(0o600)
-    migration.prepare_accounts({str(target): str(source)})
-    assert target.read_bytes() == b"unique account hash\n"
-
-
-def test_missing_account_hash_copy_still_requires_private_source(tmp_path):
-    source, target = tmp_path / "source", tmp_path / "boot" / "account.hash"
-    source.write_bytes(b"group readable hash\n")
-    source.chmod(0o640)
+@pytest.mark.parametrize("existing", [False, True])
+def test_account_hash_rejects_unsafe_permissions(tmp_path, login_hashes, existing):
+    source, target = tmp_path / "source", tmp_path / "target"
+    selected = target if existing else source
+    selected.write_bytes(login_hashes[0])
+    selected.chmod(0o640)
     with pytest.raises(migration.MigrationError):
         migration.prepare_accounts({str(target): str(source)})
+    assert selected.read_bytes() == login_hashes[0]
+
+
+def test_account_hash_missing_source_does_not_create_target(tmp_path):
+    target = tmp_path / "target"
+    with pytest.raises(FileNotFoundError):
+        migration.prepare_accounts({str(target): str(tmp_path / "missing")})
     assert not target.exists()
 
 

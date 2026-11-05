@@ -41,10 +41,46 @@ in
   config = mkIf cfg.enable {
     assertions = [
       {
+        assertion = cfg.hashedPasswordFile == null || cfg.requireUsablePasswordFile;
+        message = "Client password file validation cannot be disabled.";
+      }
+      {
+        assertion =
+          config.users.users.${cfg.name}.hashedPasswordFile == cfg.hashedPasswordFile
+          && all (key: config.users.users.${cfg.name}.${key} == null) [
+            "password"
+            "hashedPassword"
+            "initialPassword"
+            "initialHashedPassword"
+          ];
+        message = "Client credentials must use the validated password file; direct user password overrides are refused.";
+      }
+      {
+        assertion =
+          !(any (name: builtins.hasAttr name cfg.extraOptions) [
+            "password"
+            "hashedPassword"
+            "hashedPasswordFile"
+            "initialPassword"
+            "initialHashedPassword"
+          ]);
+        message = "Configure client credentials through user.client.hashedPasswordFile; extraOptions must not override validation.";
+      }
+      {
+        assertion =
+          cfg.hashedPasswordFile == null
+          || (hasPrefix "/" cfg.hashedPasswordFile && !hasPrefix "/nix/store/" cfg.hashedPasswordFile);
+        message = "Client password file must be an absolute runtime path outside the Nix store.";
+      }
+      {
         assertion = config.users.mutableUsers || cfg.hashedPasswordFile != null;
         message = "user.client.hashedPasswordFile must be set when users.mutableUsers = false.";
       }
     ];
+
+    system.preSwitchChecks.clientCredential = mkIf (
+      cfg.requireUsablePasswordFile && cfg.hashedPasswordFile != null
+    ) config.system.activationScripts.luxnixValidateClientPasswordFile.text;
 
     system.activationScripts = mkIf (cfg.requireUsablePasswordFile && cfg.hashedPasswordFile != null) {
       users.deps = [ "luxnixValidateClientPasswordFile" ];
@@ -56,14 +92,11 @@ in
         ++ optional (
           config.system.activationScripts ? luxnixPrepareBootAccountHashes
         ) "luxnixPrepareBootAccountHashes";
-        text = ''
-          client_password_file=${lib.escapeShellArg cfg.hashedPasswordFile}
-          if [ ! -s "$client_password_file" ]; then
-            echo "ERROR: client user password hash file is missing or empty: $client_password_file" >&2
-            echo "Refusing activation to avoid switching into a generation with an unusable client password." >&2
-            exit 1
-          fi
-        '';
+        text = import ../password-check.nix {
+          inherit lib pkgs;
+          account = cfg.name;
+          passwordFile = cfg.hashedPasswordFile;
+        };
       };
     };
 

@@ -11,6 +11,9 @@ boundaries:
   - Source checks do not prove deployment readiness
   - Nix evaluation and VM tests are separate from the fast Python lane
 entrypoints:
+  - name: boot-recovery-vm
+    file: nixtest/boot_recovery_vm_test.nix
+    purpose: Exercise gc-02 credential validators, immutable-user PAM login, desktop chooser and delayed Vault dependency recovery in a disposable VM.
   - name: disk-password-custody
     file: test_password_custody.py
     purpose: Verify private one-time disclosure, acknowledgement binding and refusal to reveal credentials without a terminal.

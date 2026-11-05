@@ -858,24 +858,12 @@ def target_private(
 
 
 def account_hash(path: Path) -> bytes:
-    from lx_administration.storage.operator_migration import (
-        RETIRED_ACCOUNT_HASH_DIGESTS,
-    )
+    from lx_administration.storage import operator_migration
 
-    value = path.read_bytes()
-    valid = (
-        rb"(\$6\$(rounds=[0-9]+\$)?[./A-Za-z0-9]{1,16}\$[./A-Za-z0-9]{86}|"
-        rb"\$y\$[./A-Za-z0-9]+\$[./A-Za-z0-9]+\$[./A-Za-z0-9]{43})\n?"
-    )
-    if (
-        not re.fullmatch(valid, value)
-        or hashlib.sha256(value.strip()).hexdigest() in RETIRED_ACCOUNT_HASH_DIGESTS
-    ):
-        raise MigrationError(
-            "Restored administrator hash is missing, locked, malformed or retired; "
-            "restore the existing valid credential"
-        )
-    return value
+    try:
+        return operator_migration.account_hash(path)
+    except operator_migration.MigrationError as exc:
+        raise MigrationError("Restored administrator hash is missing, locked, malformed or retired") from exc
 
 
 def verify_accounts(plan: dict, root: Path = Path("/mnt")) -> None:

@@ -7,6 +7,8 @@ exclude_paths:
     # Non-Ansible YAML: feature-tracker coordination files and release manifests.
     - feature-tracking/
     - release-artifacts/
+    # Rewritten by the scripts/python-quality.py ratchet with yaml.safe_dump.
+    - python-quality.yml
 
 skip_list:
     - yaml[line-length]

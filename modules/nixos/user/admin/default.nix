@@ -66,8 +66,6 @@ let
         systemd-ask-password --timeout=300 --id="luxnix-admin-password:$host" "$1"
       }
 
-      # Callers such as nh buffer activation stderr until the switch ends, so the
-      # prompt text is the only feedback an agent shows: repeat rejections there.
       reject() {
         notice="Rejected: $1. "
         echo "$notice" >&2
@@ -106,10 +104,7 @@ let
           echo "NOTE: $vault_password_file is not on unlocked encrypted storage and was left unchanged." >&2
         fi
         unset password repeat
-        # NixOS activation applies the hash right after this tool returns.
-        if [ "''${LUXNIX_ADMIN_PASSWORD_FROM_ACTIVATION:-}" != 1 ]; then
-          printf '%s:%s\n' "$account" "$hash" | chpasswd -e
-        fi
+        printf '%s:%s\n' "$account" "$hash" | chpasswd -e
         echo "New password for '$account' installed in $boot_hash_file." >&2
         echo "Store it in the password manager and import it into the controller vault (docs/admin-passwords.md); otherwise sync-secrets redeploys the older pair." >&2
         exit 0
@@ -140,6 +135,17 @@ in
   config = {
     assertions = [
       {
+        assertion =
+          config.users.users.${cfg.name}.hashedPasswordFile == cfg.passwordFile
+          && all (key: config.users.users.${cfg.name}.${key} == null) [
+            "password"
+            "hashedPassword"
+            "initialPassword"
+            "initialHashedPassword"
+          ];
+        message = "Admin credentials must use the validated password file; direct user password overrides are refused.";
+      }
+      {
         assertion = !cfg.passwordFallback.enable && cfg.passwordFallback.hashedPassword == "";
         message = "Shared admin password fallback is removed. Provision a unique root-only runtime hash file, and verify independent SSH recovery before deployment.";
       }
@@ -168,69 +174,24 @@ in
 
     # Abort the entire activation before users can change /etc/shadow. Keep the
     # existing account and independent authorized SSH keys available on failure.
-    system.activationScripts.users.deps = [ "luxnixValidateAdminPasswordFile" ];
-    system.activationScripts.luxnixValidateAdminPasswordFile = {
-      deps = [
-        "specialfs"
-      ]
-      ++ optional (config.system.activationScripts ? setupSecretsForUsers) "setupSecretsForUsers"
-      ++ optional (
-        config.system.activationScripts ? luxnixPrepareBootAccountHashes
-      ) "luxnixPrepareBootAccountHashes";
-      text = ''
-                admin_password_file=${lib.escapeShellArg cfg.passwordFile}
-                # Prints why the hash must be replaced, or nothing when it is usable.
-                # Fails for files that must not be replaced automatically.
-                luxnix_admin_password_problem() {
-                  if [ -e "$admin_password_file" ] && [ ! -f "$admin_password_file" ]; then
-                    echo "ERROR: admin password hash path is not a regular file; refusing account activation." >&2
-                    return 1
-                  fi
-                  if [ ! -s "$admin_password_file" ]; then
-                    echo "missing or empty"
-                    return 0
-                  fi
-                  case "$(${pkgs.coreutils}/bin/stat -Lc '%u:%a' -- "$admin_password_file")" in
-                    0:400|0:600) ;;
-                    *) echo "ERROR: admin password hash must be root-owned with mode 0400 or 0600." >&2; return 1 ;;
-                  esac
-                  # Deny the public retired shared credential; it is never a fallback.
-                  if [ "$(${pkgs.coreutils}/bin/head -n 1 "$admin_password_file" | ${pkgs.coreutils}/bin/tr -d '
-        ' | ${pkgs.coreutils}/bin/sha256sum | ${pkgs.coreutils}/bin/cut -d ' ' -f 1)" = ${retiredAdminHashSha256} ]; then
-                    echo "the retired shared admin password"
-                    return 0
-                  fi
-                  # Only supported modern crypt encodings, exactly one nonempty line.
-                  # Neither the hash nor its value is ever emitted in diagnostics.
-                  if ! ${pkgs.gnugrep}/bin/grep -qxE '\$6\$(rounds=[0-9]+\$)?[./A-Za-z0-9]{1,16}\$[./A-Za-z0-9]{86}|\$y\$[./A-Za-z0-9]+\$[./A-Za-z0-9]+\$[./A-Za-z0-9]{43}' "$admin_password_file" ||
-                     [ "$(${pkgs.gawk}/bin/awk 'END { print NR }' "$admin_password_file")" -ne 1 ]; then
-                    echo "not one SHA-512 crypt or yescrypt hash"
-                  fi
-                }
-                if ! admin_password_reason="$(luxnix_admin_password_problem)"; then
-                  exit 1
-                fi
-                if [ -n "$admin_password_reason" ]; then
-                  # Interactive switch/test only; boot-time activation has no prompt.
-                  case "''${NIXOS_ACTION:-}" in
-                    switch|test)
-                      echo "Admin password hash is $admin_password_reason; asking for a new password." >&2
-                      if ! LUXNIX_ADMIN_PASSWORD_FROM_ACTIVATION=1 ${adminPasswordTool}/bin/luxnix-admin-password; then
-                        echo "ERROR: no new admin password was set; refusing account activation. Run 'sudo luxnix-admin-password', then switch again." >&2
-                        exit 1
-                      fi
-                      if ! admin_password_reason="$(luxnix_admin_password_problem)" || [ -n "$admin_password_reason" ]; then
-                        echo "ERROR: the new admin password hash is invalid; refusing account activation." >&2
-                        exit 1
-                      fi
-                      ;;
-                    *)
-                      echo "ERROR: admin password hash is $admin_password_reason; refusing account activation. Run 'sudo luxnix-admin-password', then switch again." >&2
-                      exit 1
-                      ;;
-                  esac
-                fi
-      '';
+    system = {
+      preSwitchChecks.adminCredential =
+        config.system.activationScripts.luxnixValidateAdminPasswordFile.text;
+      activationScripts.users.deps = [ "luxnixValidateAdminPasswordFile" ];
+      activationScripts.luxnixValidateAdminPasswordFile = {
+        deps = [
+          "specialfs"
+        ]
+        ++ optional (config.system.activationScripts ? setupSecretsForUsers) "setupSecretsForUsers"
+        ++ optional (
+          config.system.activationScripts ? luxnixPrepareBootAccountHashes
+        ) "luxnixPrepareBootAccountHashes";
+        text = import ../password-check.nix {
+          inherit lib pkgs;
+          account = cfg.name;
+          inherit (cfg) passwordFile;
+        };
+      };
     };
     users.users.${cfg.name} = {
       shell = pkgs.zsh;

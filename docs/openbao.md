@@ -22,12 +22,13 @@ The existing NixOS service avoids automatic restart during rebuilds; configurati
 changes requiring restart need a controlled restart and unseal ceremony.
 
 OpenBao [certificate authentication](https://openbao.org/docs/auth/cert/) can
-verify the client certificate. The boot client must separately use a non-exportable
-TPM key; a PEM key path or successful certificate login does not prove that.
+verify the client certificate. The retired boot-client prototype additionally
+required a non-exportable TPM key; certificate login alone did not prove that.
 Certificate login also does not establish root/Nix-store integrity, or enforce
-current device revocation on every subsequent key read. Enrollment, per-volume
-policies, audit operations, per-request revocation, integrity verification and deployment
-integration remain required before enabling client unlock.
+current device revocation on every subsequent key read. These are limitations of
+the retired volume-release prototype, not instructions to enable client unlock.
+New client and server storage follows the [canonical boot-LUKS workflow](boot-storage-operator.md);
+local OpenBao/TPM volume-unlock enrollment remains frozen.
 
 Server auto-unseal is a separate concern. OpenBao offers a
 [PKCS#11 seal](https://openbao.org/docs/2.6.x/configuration/seal/pkcs11/), but the

@@ -1,6 +1,14 @@
 # lx-annotate Encrypted Data on LuxNix
 
-This document describes how the LuxNix `lx-annotate` service handles encrypted local data, how Vault-based secret delivery is wired, and what host configuration is required to make the flow work safely on every node.
+For new clients and servers, start with the [canonical encryption contract](boot-storage-operator.md#shared-encryption-contract).
+Boot-LUKS root unlock and stage-2 data unlock do not depend on Vault.
+
+This page documents the **optional** `runtime.managedEncryptedData` and
+`runtime.vaultManagedEncryptedData` integration, both disabled by default.
+It is not a prerequisite for every node and must not replace or create a circular
+dependency in the canonical boot-storage path. The behavior and file paths below
+apply when this integration is explicitly enabled. Application master-key delivery
+and encrypted application artifacts remain separate from host volume encryption.
 
 ## Overview
 

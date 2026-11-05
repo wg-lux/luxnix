@@ -6,6 +6,7 @@ from pathlib import Path
 import stat
 import subprocess
 import sys
+import warnings
 from types import SimpleNamespace
 
 import pytest
@@ -282,7 +283,8 @@ def test_boot_luks_requires_splash_password_screen():
 
 
 @pytest.mark.parametrize("host,splash,autologin", [
-    ("gc-02", True, True),     # boot LUKS, Plasma, client account
+    ("gc-02", True, False),    # boot LUKS with explicit account chooser
+    ("gc-05", True, False),    # shared fleet chooser policy
     ("s-01", True, False),     # boot LUKS, Plasma, no client account
     ("lx-test", False, False), # no operator-unlocked storage
 ])
@@ -308,28 +310,52 @@ def test_splash_and_wallet_unlock_follow_storage_layout(host, splash, autologin)
     assert config["autologin"] is autologin
     loadkey = "pam_systemd_loadkey.so" in config["pam"]
     assert loadkey is autologin
-    if autologin:
-        assert config["user"] == config["client"]
-        assert config["keyring"] == "inherit"
-        auth = [line for line in config["pam"].splitlines() if line.startswith("auth ")]
-        assert "pam_systemd_loadkey.so" in auth[0]
-        assert "pam_kwallet5.so" in auth[-1]
+    assert config["keyring"] != "inherit"
 
 
-def test_wallet_autologin_rejects_remote_disk_unlock():
+@pytest.mark.parametrize("option", [
+    "roles.desktop.addons.plasma.bootAutoLogin",
+    "services.displayManager.autoLogin.enable",
+])
+def test_desktop_autologin_cannot_be_reenabled(option):
     expression = r'''
     let
       f = builtins.getFlake ("git+file://" + builtins.toString ./.);
       lib = f.inputs.nixpkgs.lib;
       c = (f.nixosConfigurations.gc-02.extendModules { modules = [{
+        OPTION = lib.mkForce true;
         luxnix.storage.operatorUnlocked.remoteUnlock.enable = lib.mkForce true;
       }]; }).config;
     in map (a: a.message) (builtins.filter (a: !a.assertion) c.assertions)
+    '''.replace("OPTION", option)
+    result = subprocess.run(["nix", "eval", "--impure", "--json", "--expr", expression],
+                            cwd=ROOT, capture_output=True, text=True, timeout=600)
+    assert result.returncode == 0, result.stderr
+    assert any("autologin is disabled fleet-wide" in m for m in json.loads(result.stdout))
+
+
+def test_every_exported_host_uses_password_login():
+    expression = r'''
+      let f = builtins.getFlake ("git+file://" + toString ./.);
+      in builtins.mapAttrs (_: h: let c = h.config; in {
+        auto = c.services.displayManager.autoLogin.enable;
+        bootAuto = c.roles.desktop.addons.plasma.bootAutoLogin;
+        failures = map (a: a.message) (builtins.filter (a: !a.assertion) c.assertions);
+      }) f.nixosConfigurations
     '''
     result = subprocess.run(["nix", "eval", "--impure", "--json", "--expr", expression],
                             cwd=ROOT, capture_output=True, text=True, timeout=600)
     assert result.returncode == 0, result.stderr
-    assert any("unattended session" in m for m in json.loads(result.stdout))
+    hosts = json.loads(result.stdout)
+    assert {"gc-02", "gc-09", "gc-10", "gs-02"} <= hosts.keys()
+    for name, policy in hosts.items():
+        assert not policy["auto"] and not policy["bootAuto"], name
+        login_failures = [message for message in policy["failures"]
+                          if any(word in message.lower() for word in
+                                 ("password", "autologin", "admin ", "client credentials"))]
+        assert login_failures == [], (name, login_failures)
+        if policy["failures"]:
+            warnings.warn(f"{name}: unrelated deployment assertions remain: {policy['failures']}")
 
 
 @pytest.mark.parametrize("missing", [False, True])
@@ -649,3 +675,24 @@ def test_password_setup_runs_only_for_persistent_activation(tmp_path):
         text=True,
     )
     assert result.returncode != 0 and not marker.exists()
+
+
+def test_gc02_authentication_retries_before_queueing_application():
+    expression = r'''
+      let f = builtins.getFlake ("git+file://" + toString ./.);
+          c = f.nixosConfigurations.gc-02.config;
+      in {
+        offline = c.luxnix.vault.client.allowOffline;
+        defer = c.luxnix.vault.client.auth.deferUntilProvisioned;
+        auth = c.systemd.services.vault-auth-setup.serviceConfig;
+      }
+    '''
+    result = subprocess.run(["nix", "eval", "--impure", "--json", "--expr", expression],
+                            cwd=ROOT, capture_output=True, text=True, timeout=300)
+    assert result.returncode == 0, result.stderr
+    value = json.loads(result.stdout)
+    assert value["offline"] is value["defer"] is False
+    assert value["auth"]["Restart"] == "on-failure"
+    assert value["auth"]["RestartSec"] == "30s"
+    assert value["auth"]["TimeoutStartSec"] == "45s"
+    assert value["auth"]["ExecStartPost"].endswith("/bin/systemctl --no-block start lx-annotate.service")

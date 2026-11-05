@@ -60,8 +60,8 @@ configuration; connectivity checks and subsequent steps concern deployment.
 
 ## Install a host
 
-Choose the root layout before installation. Keep `boot-luks` for encrypted root,
-or explicitly select [unencrypted-root](boot-storage-migration.md#unencrypted-os-installation).
+New client and server installations require `boot-luks` with LUKS2 root.
+The former `unencrypted-root` installation path is retired and rejected.
 Use the [guarded operator checklist](boot-storage-operator.md) for prepared-target
 installation. Never run the disk-formatting command below on a restored target.
 

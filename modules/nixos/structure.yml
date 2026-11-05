@@ -10,6 +10,9 @@ boundaries:
 - Shared defaults can affect the entire fleet
 - Shared contributor tools belong in roles/custom-packages
 entrypoints:
+- name: local-account-password-guard
+  file: user/password-check.nix
+  purpose: Share admin/client hash validation and reject automatic changes to existing local account passwords before activation.
 - name: reserved-boot-key-setup
   file: luxnix/boot-decryption-stick/setup.py
   purpose: Enroll boot keys only in an explicitly reserved unmounted key partition using memory-only staging.

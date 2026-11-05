@@ -42,6 +42,8 @@ let
       exit 1
     fi
     PATH=${config.systemd.package}/lib/systemd:$PATH
+    ${pkgs.python3}/bin/python3 -I ${../../../../lx_administration/secure_boot.py} \
+      verify-firmware --cert ${verificationCertificate}
     # Select the pending generation and already signed rollback generations.
     # Legacy unsigned profiles cannot be signed by this keyless host.
     profiles=()
@@ -55,6 +57,28 @@ let
       fi
     done
     [ "''${#profiles[@]}" -gt 0 ] || exit 1
+    verify_images() {
+    # lzbt does not re-verify installed stubs; every loader and stub must carry the fleet signature.
+    find ${esp}/EFI -type f \( -ipath '${esp}/EFI/Linux/*.efi' -o -ipath '${esp}/EFI/systemd/*.efi' \
+      -o -ipath '${esp}/EFI/BOOT/*.efi' \) -print0 |
+      while IFS= read -r -d "" image; do
+        sbverify --cert ${verificationCertificate} "$image" >/dev/null 2>&1 || {
+          echo "ERROR: $image is not signed by the fleet Secure Boot key." >&2
+          exit 1
+        }
+      done
+    }
+    # Reject missing or invalid staged signatures before lzbt can write the ESP.
+    for profile in "''${profiles[@]}"; do
+      name="$(basename "$profile")"
+      generation="''${name#system-}"
+      generation="''${generation%-link}"
+      if ! compgen -G "${esp}/EFI/Linux/nixos-generation-$generation-*.efi" >/dev/null; then
+        echo "ERROR: missing controller-signed generation $generation; refusing boot installation." >&2
+        exit 1
+      fi
+    done
+    verify_images
     install_generations() {
       ${lanzaboote.installCommand} \
         ${
@@ -70,15 +94,7 @@ let
       echo "  devenv shell secure-boot-sign ${config.networking.hostName}" >&2
       exit 1
     fi
-    # lzbt does not re-verify installed stubs; every loader and stub must carry the fleet signature.
-    find ${esp}/EFI -type f \( -ipath '${esp}/EFI/Linux/*.efi' -o -ipath '${esp}/EFI/systemd/*.efi' \
-      -o -ipath '${esp}/EFI/BOOT/*.efi' \) -print0 |
-      while IFS= read -r -d "" image; do
-        sbverify --cert ${verificationCertificate} "$image" >/dev/null 2>&1 || {
-          echo "ERROR: $image is not signed by the fleet Secure Boot key." >&2
-          exit 1
-        }
-      done
+    verify_images
   '';
 
   bootArtifacts = pkgs.writeShellApplication {
@@ -172,6 +188,19 @@ in
       NetworkManager-dispatcher.wantedBy = lib.mkForce [ "multi-user.target" ];
       openvpn-aglnet.wantedBy = lib.mkForce [ "multi-user.target" ];
     };
+
+    # Never replace a firmware-enforced boot chain with an unsigned configuration.
+    system.preSwitchChecks.secureBootPolicy = lib.mkIf (!cfg.secureBoot) ''
+      if [ -d /sys/firmware/efi ]; then
+        secure_boot_variable=/sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c
+        if [ ! -r "$secure_boot_variable" ] ||
+           [ "$(${pkgs.coreutils}/bin/stat -c %s "$secure_boot_variable")" != 5 ] ||
+           [ "$(${pkgs.coreutils}/bin/od -An -tu1 -j4 -N1 "$secure_boot_variable" | ${pkgs.coreutils}/bin/tr -d ' ')" != 0 ]; then
+          echo "ERROR: unsigned boot installation refused: firmware Secure Boot is enabled or unreadable. Review the existing enrolled signing identity." >&2
+          exit 1
+        fi
+      fi
+    '';
 
     assertions = lib.optionals cfg.secureBoot [
       {

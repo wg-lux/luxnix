@@ -4,6 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 import pytest
+import yaml
 from lx_administration import activation as a
 
 REAL_LOCKED = a.locked
@@ -255,3 +256,18 @@ def test_missing_unit_confirmation_timeout_leaves_state_unchanged(state, monkeyp
     assert a.load(value['id'])[1]['status'] == 'pending'
     assert str(profile.resolve()) == '/nix/store/new'
     assert not any(command[0] == 'nix-env' for command in calls)
+
+
+def test_legacy_recovery_activation_tag_cannot_skip_gates_or_fresh_login():
+    root = Path(__file__).parents[1]
+    playbook = root / 'ansible/playbooks/storage-legacy-recovery.yml'
+    tasks = yaml.safe_load(playbook.read_text())[0]['tasks']
+    selected = [task for task in tasks if 'activate' in task.get('tags', [])]
+
+    gate = selected[0]['ansible.builtin.assert']['that']
+    assert {'release_build is defined', 'opened_mappings is defined'} <= set(gate)
+    assert [task['name'] for task in selected[-3:]] == [
+        'Close cached SSH transport',
+        'Verify fresh SSH access',
+        'Acknowledge the exact activation only after a fresh SSH login',
+    ]

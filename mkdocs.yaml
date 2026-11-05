@@ -104,6 +104,9 @@ nav:
       - Machine Setup Secrets Checklist: machine-secrets-checklist.md
       - Boot Encryption Operator Checklist: boot-storage-operator.md
       - Boot LUKS Storage Migration: boot-storage-migration.md
+      - gc-02 Boot Repair and Recovery: guides/gc-02-boot-repair.md
+      - Boot and Storage Dos and Don'ts: boot-storage-dos-and-donts.md
+      - gc-10 Boot Applicability Review: guides/gc-10-boot-applicability.md
       - Unmigrated Hosts (Legacy Storage): legacy-storage-recovery.md
       - Application Secrets with sops-nix: sops-application-secrets.md
       - Fleet Secure Boot: secure-boot.md

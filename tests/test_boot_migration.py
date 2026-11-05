@@ -173,9 +173,9 @@ def test_whole_disk_retention_adds_required_proof(state):
     assert "whole_disk_image_verified" in migration.required_checks("backup", plan)
 
 
-def test_source_cleanliness_and_durable_path_are_required(tmp_path, monkeypatch):
+def test_source_cleanliness_and_durable_path_are_required(monkeypatch):
     with pytest.raises(migration.MigrationError, match="durable"):
-        migration.source_identity(tmp_path)
+        migration.source_identity(Path("/tmp/disposable-release"))
     monkeypatch.setattr(migration, "run", lambda *a, **k: " M file")
     with pytest.raises(migration.MigrationError, match="uncommitted"):
         migration.source_identity(Path("/home/admin/release"))

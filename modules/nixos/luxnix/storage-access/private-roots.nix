@@ -55,9 +55,7 @@ in
           before = [
             "shutdown.target"
           ]
-          ++ map mountUnit (
-            builtins.attrNames (lib.filterAttrs (_: b: b.volume == name) storage.bindMounts)
-          );
+          ++ map mountUnit (builtins.attrNames (lib.filterAttrs (_: b: b.volume == name) storage.bindMounts));
           serviceConfig = {
             Type = "oneshot";
             RemainAfterExit = true;

@@ -319,34 +319,40 @@ unique root-owned, mode-`0600` or `0400` admin hash at the evaluated
 host export and authenticated installer channel. Explicit legacy fallback
 settings fail evaluation.
 
-### Interactive replacement during activation
+### Explicit replacement and activation safety
 
-When activation finds the admin hash missing, empty, malformed or equal to the
-retired shared credential, `switch` and `test` activations run
-`luxnix-admin-password` instead of failing. The repository keeps only a SHA-256
-fingerprint of the retired hash, never the credential. The tool asks twice on
-the current terminal, or through systemd password agents when activation has no
-terminal (for example under `nixos-rebuild`): answer from another terminal on
-the host with `sudo systemd-tty-ask-password-agent` within 5 minutes. It
-requires at least 12 bytes, rejects the retired password, and allows three
-attempts. Each prompt states these rules and repeats why the previous attempt
-was rejected, because wrappers such as `nh` show activation output only after
-the switch ends. When the current hash is the retired one, the current `sudo`
-password is that retired password and is rejected. The tool writes a SHA-512
-crypt hash to `user.admin.passwordFile` as `root:root 0600`. When
-`/etc/secrets/vault` is on unlocked encrypted storage, it also updates the vault
-hash and plaintext files there. Wrong ownership or mode, or a path that is not a
-regular file, still fails activation without a prompt.
+Activation and pre-switch checks never prompt for or rotate a password. Missing,
+empty, malformed, retired or incorrectly owned credentials fail before account
+mutation or boot installation. From an independently authenticated recovery
+session, explicitly run `sudo luxnix-admin-password` only when rotation is intended.
+The tool prompts privately, writes the persistent boot hash and updates the live
+account. It also updates host Vault copies when their storage is encrypted.
 
-Boot-time activation never prompts and keeps failing closed. Without an answer
-the switch fails as before; run `sudo luxnix-admin-password` and switch again.
-Run the same command at any time to replace the password; outside activation it
-also updates the live account.
+`migration.accountHashes` initializes an **absent** boot copy from a private,
+validated source; an existing copy is authoritative and is never refreshed from
+Vault during activation. All selected hashes are validated before any absent
+copy is published. The shared admin/client validator also compares each valid
+file with the existing local shadow entry. Any difference (including a locked
+account) stops boot staging and activation; sync, SOPS refresh, source replacement
+or a rebuild cannot implicitly change the password. New accounts may consume
+explicitly provisioned credentials. Direct user-password overrides and disabling
+validation for a configured client password file are rejected.
 
-The new password exists only on that host. Store it in the password manager and
-import it into the controller vault with the steps above; otherwise
-sync-secrets redeploys the previous pair to `/etc/secrets/vault`, and the next
-activation copies a previous non-retired hash back into the boot copy.
+`passwd` is an explicit password-entry operation, but changes only shadow. A later
+rebuild refuses the mismatch instead of undoing that choice. Reconcile the
+persistent hash through the approved rotation/recovery workflow before rebuilding.
+Never delete a boot copy to resolve a stale Vault export: that would reinitialize
+it from the stale credential.
+
+After a local rotation, reconcile the controller using the paired import,
+validation and export procedure above. General secret synchronization can update
+the host's Vault copies, but cannot replace the persistent boot credential.
+The explicit rotation playbook updates both sources before shadow. Keep a separate
+recovery session until a fresh local login and a subsequent activation succeed.
+Both desktop accounts use the normal SDDM chooser fleet-wide. Client credentials
+follow the same initialize-once boot-copy and no-implicit-change rules; client
+password rotation must explicitly update its selected private hash and live
+account together. It does not modify LUKS keyslots or KWallet.
 
 For a fresh installation, use nixos-anywhere's documented
 [`--extra-files` staging tree](https://nix-community.github.io/nixos-anywhere/howtos/secrets.html).

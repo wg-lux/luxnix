@@ -29,6 +29,7 @@ def hosts():
           extend = extra: (system.extendModules { modules = [ extra ]; }).config;
         in {
           fleetSecureBoot = fleet.config.system.boot.secureBoot;
+          unsignedGuard = fleet.config.system.preSwitchChecks.secureBootPolicy;
           secureBoot = c.system.boot.secureBoot;
           lanzaboote = c.boot.lanzaboote.enable;
           publicKey = c.boot.lanzaboote.publicKeyFile;
@@ -81,8 +82,9 @@ def test_hosts_install_keyless_with_public_certificate_only(hosts, host):
         # First deployment must verify before the new /etc tree is activated.
         assert "--public-key=/nix/store/" in hook
         assert "sbverify --cert /nix/store/" in hook
-    # Installed stubs and loaders are re-verified after lzbt.
-    assert hook.index("install_generations; then") < hook.index("sbverify --cert")
+    assert hook.index("verify-firmware --cert") < hook.index("install_generations; then")
+    # Installed stubs and loaders are verified before and after lzbt.
+    assert hook.index("sbverify --cert") < hook.index("install_generations; then")
 
 
 @pytest.mark.parametrize("host", ["gc-02", "gc-10"])
@@ -109,7 +111,7 @@ def test_first_install_skips_unsigned_history_but_keeps_pending_and_signed(hosts
     (profiles / "system").symlink_to("system-3-link")
     (esp / "EFI/Linux/nixos-generation-2-existing.efi").touch()
     hook = hosts["gc-10"]["hook"]
-    selection = hook[hook.index("# Select the pending"):hook.index("install_generations()")]
+    selection = hook[hook.index("# Select the pending"):hook.index("verify_images()")]
     selection = selection.replace("/nix/var/nix/profiles", str(profiles)).replace("/boot/EFI", f"{esp}/EFI")
     result = subprocess.run(
         ["bash", "-euc", selection + '\nprintf "%s\\n" "${profiles[@]}"'],
@@ -155,3 +157,41 @@ def test_enrollment_requires_signed_stub_for_current_generation(hosts, tmp_path)
     assert check() != 0
     stub.write_text("signed")
     assert check() == 0
+
+
+@pytest.mark.parametrize("signature", [None, "unsigned", "signed"])
+def test_signature_gate_precedes_installer(hosts, tmp_path, signature):
+    """Execute the rendered preflight against disposable ESP files only."""
+    import shlex
+    esp = tmp_path / "esp"
+    linux = esp / "EFI/Linux"
+    linux.mkdir(parents=True)
+    if signature is not None:
+        (linux / "nixos-generation-3-current.efi").write_text(signature)
+    verifier = tmp_path / "sbverify"
+    verifier.write_text('#!/bin/sh\n[ "$(cat "$3")" = signed ]\n')
+    verifier.chmod(0o755)
+    hook = hosts["gc-02"]["hook"]
+    guard = hook[hook.index("verify_images() {"):hook.index("install_generations()")]
+    guard = guard.replace("/boot/EFI", f"{esp}/EFI")
+    marker = tmp_path / "installer-ran"
+    result = subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", 'profiles=(/profiles/system-3-link)\n' + guard
+         + "\ntouch " + shlex.quote(str(marker))],
+        env={**os.environ, "PATH": f"{tmp_path}:" + os.environ["PATH"]},
+        capture_output=True, text=True,
+    )
+    assert (result.returncode == 0) == (signature == "signed")
+    assert marker.exists() == (signature == "signed")
+
+
+@pytest.mark.parametrize("state,accepted", [(b"\x00", True), (b"\x01", False), (b"", False), (b"\x00\x01", False), (None, False)])
+def test_unsigned_install_rejected_when_firmware_enforces_signatures(hosts, tmp_path, state, accepted):
+    efi = tmp_path / "efi"
+    variable = efi / "efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c"
+    variable.parent.mkdir(parents=True)
+    if state is not None:
+        variable.write_bytes(b"\x07\x00\x00\x00" + state)
+    script = hosts["gc-02"]["unsignedGuard"].replace("/sys/firmware/efi", str(efi))
+    result = subprocess.run(["bash", "-eu", "-c", script], capture_output=True, text=True)
+    assert (result.returncode == 0) is accepted

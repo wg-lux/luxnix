@@ -4,6 +4,7 @@ luxnix_dev_repo: "/home/admin/dev/luxnix"
 template_name: "main"
 
 host_roles:
+  desktop.addons.plasma.bootAutoLogin: "false"
   postgres.default.automaticCollationRepair: "true"
   custom_packages.videoEditing: "true"
   custom_packages.baseDevelopment: "true"
@@ -35,6 +36,12 @@ host_services:
   ollama.host: '"0.0.0.0"'
 
 host_nixos:
+  # Boot may precede the VPN/Vault route. Retry authentication without accepting
+  # offline success, then queue dependent startup without blocking this unit.
+  systemd.services.vault-auth-setup.serviceConfig.Restart: '"on-failure"'
+  systemd.services.vault-auth-setup.serviceConfig.RestartSec: '"30s"'
+  systemd.services.vault-auth-setup.serviceConfig.TimeoutStartSec: '"45s"'
+  systemd.services.vault-auth-setup.serviceConfig.ExecStartPost: '"${pkgs.systemd}/bin/systemctl --no-block start lx-annotate.service"'
   # Daily desktop stalls showed sustained memory pressure without oomd coverage.
   # Recovery can kill a whole session if its applications share one cgroup.
   # Policy and post-activation checks: docs/guides/gc-02-memory-protection.md
@@ -75,6 +82,7 @@ host_luxnix:
   # Restore Vault authentication before activation; see the certificate-expiry
   # recovery procedure in docs/vault-hub-machine-enrollment.md.
   vault.client.auth.deferUntilProvisioned: "false"
+  vault.client.allowOffline: "false"
   generic_settings.hostPlatform: '"x86_64-linux"'
   generic_settings.systemStateVersion: '"23.11"'
 
