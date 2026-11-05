@@ -74,18 +74,33 @@ cold boot and recovery before proceeding to the next host.
    Preserve or explicitly re-enroll machine/application credentials even when
    application data is disposable.
 
-2. **Plan on the controller.** Set `boot_storage.state_root` once to an existing
-   private directory on independent storage; encryption is optional for journals
-   and non-secret evidence. Use storage supporting Unix ownership and permissions.
-   There is no target-disk or temporary fallback. Commit the reviewed configuration before planning. LuxNix derives
-   the journal directory as `state_root/<host>`; no separate spec file is needed.
-   Keep passwords, private keys and application backups in their separately
-   protected recovery storage, not in the journal directory:
+2. **Prepare recovery media and plan.** From the reviewed clean checkout on the
+   selected host, connect a USB/removable drive with an existing ext4, XFS or
+   Btrfs filesystem. `boot_storage.state_root` is `/recovery/luxnix-state`.
+   Run Devenv as your normal account; the helper requests sudo only for hardware
+   identity, mounting and directory creation:
 
    ```sh
-   devenv shell boot-storage-setup plan --host <host>
-   devenv shell boot-storage-setup next --host <host>
+   devenv shell boot-storage-setup setup-media --host <host>
+   devenv shell boot-storage-setup setup-media --host <host> --apply
    ```
+
+   Preview lists the selected filesystem without mounting. Apply verifies the
+   hardware UUID, excludes target/running-system disks, mounts at `/recovery`,
+   checks at least 1 GiB free for setup metadata and creates the private state
+   directory. It then creates/resumes the plan and reports the next evidence gate.
+   If several filesystems qualify, select a displayed path with `--device`.
+   Blank disks, unsupported filesystems and ambiguous UUIDs stop setup; nothing
+   is formatted. Existing files, mountpoints and state ownership are preserved;
+   an occupied or mismatched `/recovery` mount is rejected. On failure, mounts
+   remain available for inspection; rerunning does not erase or reset journals.
+
+   This prepares metadata storage, not an application backup. Encryption is
+   optional for journals and non-secret evidence; passwords, keys and application
+   backups retain their separate protection requirements. State lives under
+   `state_root/<host>`. If recovery media is already prepared (including on a
+   controller), use `boot-storage-setup plan --host <host>` directly. Use
+   `boot-storage-setup next --host <host>` to inspect the next step.
 
    Planning builds and pins both the system closure and Disko executable.
    Complete the reported recovery checks and record actual evidence through

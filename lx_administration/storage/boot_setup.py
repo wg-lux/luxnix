@@ -548,12 +548,24 @@ def main() -> None:
         required=True,
         choices=["old-disks", "whole-disk-image", "new-disks", "discard-approved"],
     )
-    for action in ("plan", "next", "advance", "recover", "attest", "status"):
+    for action in (
+        "plan",
+        "next",
+        "advance",
+        "recover",
+        "attest",
+        "status",
+        "setup-media",
+    ):
         command = sub.add_parser(action)
         command.add_argument("--host", required=True)
         command.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
-        if action in {"advance", "recover"}:
+        if action in {"advance", "recover", "setup-media"}:
             command.add_argument("--apply", action="store_true")
+        if action == "setup-media":
+            command.add_argument(
+                "--device", help="Select one detected external filesystem"
+            )
         if action in {"recover", "attest"}:
             command.add_argument("--assessor", required=True)
         if action == "attest":
@@ -580,6 +592,14 @@ def main() -> None:
                     end="",
                 )
                 return
+            case "setup-media":
+                from lx_administration.storage import recovery_media
+
+                recovery_media.setup(spec, state, apply=args.apply, device=args.device)
+                if not args.apply:
+                    return
+                migration.plan_spec(spec, state)
+                prepare(state)
             case "plan":
                 migration.plan_spec(spec, state)
                 prepare(state)

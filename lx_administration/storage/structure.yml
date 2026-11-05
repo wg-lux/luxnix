@@ -28,6 +28,9 @@ entrypoints:
   - name: independent-recovery-custody
     file: recovery_custody.py
     purpose: Prepare dedicated age identities and verify independently decryptable recovery envelopes without replacing originals.
+  - name: recovery-media
+    file: recovery_media.py
+    purpose: Discover existing external filesystems, verify independent writable recovery media and prepare private setup state without formatting.
   - name: boot-setup
     file: boot_setup.py
     purpose: Sequential setup, pinned one-time provisioning, typed journals and verified non-formatting recovery.
