@@ -46,11 +46,8 @@
   - [gs-02 Local Redis Recovery](docs/operations/gs-02-local-redis-broker.md)
 - **Vault**
   - [Machine Setup Secrets Checklist](docs/machine-secrets-checklist.md)
-  - [Boot Encryption Operator Checklist](docs/boot-storage-operator.md)
+  - [Root Encryption Quick Steps](docs/boot-storage-quickstart.md)
   - [Boot LUKS Storage Migration](docs/boot-storage-migration.md)
-  - [gc-02 Boot Repair and Recovery](docs/guides/gc-02-boot-repair.md)
-  - [Boot and Storage Dos and Don'ts](docs/boot-storage-dos-and-donts.md)
-  - [gc-10 Boot Applicability Review](docs/guides/gc-10-boot-applicability.md)
   - [Unmigrated Hosts (Legacy Storage)](docs/legacy-storage-recovery.md)
   - [Application Secrets with sops-nix](docs/sops-application-secrets.md)
   - [Fleet Secure Boot](docs/secure-boot.md)
@@ -68,6 +65,8 @@
 - **Clinical Operations**
   - [Central Hub Transfer](docs/clinical-hub-transfer-guide.md)
 - **Diagnostics and Reviews**
+  - [Historical gc-02 Boot Repair (2026-11-04)](docs/guides/gc-02-boot-repair.md)
+  - [Historical gc-10 Boot Review (2026-11-05)](docs/guides/gc-10-boot-applicability.md)
   - [gc-02 Memory Protection](docs/guides/gc-02-memory-protection.md)
   - [CUDA Source Builds](docs/guides/cuda-source-builds.md)
   - [Configuration Ownership Audit](docs/guides/lx-annotate-configuration-ownership-audit.md)

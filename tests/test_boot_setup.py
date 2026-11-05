@@ -644,3 +644,184 @@ def test_review_rejects_empty_or_changed_notes(state, monkeypatch, changed):
     with pytest.raises(migration.MigrationError, match="changed|actual test results"):
         setup.review(root, "operator", report)
     assert not list(root.glob("*-review-*.json"))
+
+
+@pytest.fixture
+def workflow_environment(state, monkeypatch):
+    from lx_administration.storage import recovery_media
+
+    root, plan, _ = state
+    calls = []
+    monkeypatch.setattr(setup.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(recovery_media, "setup", lambda *a, **k: calls.append("media"))
+    monkeypatch.setattr(migration, "plan_spec", lambda *a: calls.append("plan"))
+    monkeypatch.setattr(setup, "prepare", lambda *a: calls.append("journal"))
+    monkeypatch.setattr(setup, "show_step", lambda *a, **k: None)
+    return root, plan, calls
+
+
+def test_workflow_preview_never_prepares_or_reviews(workflow_environment, monkeypatch):
+    root, plan, calls = workflow_environment
+    monkeypatch.setattr(
+        setup,
+        "next_step",
+        lambda p: setup.NextStep(
+            action=setup.Action.ASSESS,
+            host="gc-09",
+            plan_id=plan["plan_id"],
+            reason="review",
+        ),
+    )
+    setup.run_workflow(plan["spec"], root, Path("/config"), apply=False)
+    assert calls == []
+
+
+def test_workflow_pauses_for_notes_then_installer(
+    workflow_environment, monkeypatch, capsys
+):
+    root, plan, calls = workflow_environment
+    step = setup.NextStep(
+        action=setup.Action.ASSESS,
+        host="gc-09",
+        plan_id=plan["plan_id"],
+        reason="review",
+        stage="recovery",
+    )
+    monkeypatch.setattr(setup, "next_step", lambda p: step)
+    setup.run_workflow(plan["spec"], root, Path("/config"), apply=True)
+    assert calls == ["media", "plan", "journal"]
+    assert "write the completed check results" in capsys.readouterr().out
+    (root / "recovery-notes.txt").write_text("Actual results")
+    monkeypatch.setattr("builtins.input", lambda prompt: "operator")
+
+    def reviewed(*args):
+        calls.append("review")
+        step.action = setup.Action.PROVISION
+        step.stage = None
+
+    monkeypatch.setattr(setup, "review", reviewed)
+    monkeypatch.setattr(setup.os, "geteuid", lambda: 1000)
+    setup.run_workflow(plan["spec"], root, Path("/config"), apply=True)
+    assert calls[-1] == "review"
+    assert "boot installer media" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "action", [setup.Action.RECOVER, setup.Action.INSTALL_RECOVERY]
+)
+def test_workflow_never_retries_interrupted_writes(
+    workflow_environment, monkeypatch, action
+):
+    root, plan, calls = workflow_environment
+    monkeypatch.setattr(
+        setup,
+        "next_step",
+        lambda p: setup.NextStep(
+            action=action, host="gc-09", plan_id=plan["plan_id"], reason="interrupted"
+        ),
+    )
+    monkeypatch.setattr(setup, "advance", lambda *a, **k: pytest.fail("must not retry"))
+    setup.run_workflow(plan["spec"], root, Path("/config"), apply=True)
+    assert calls == ["media", "plan", "journal"]
+
+
+def test_workflow_installs_then_stops_for_physical_boot(
+    workflow_environment, monkeypatch, capsys
+):
+    root, plan, calls = workflow_environment
+    monkeypatch.setattr(
+        setup,
+        "next_step",
+        lambda p: setup.NextStep(
+            action=setup.Action.INSTALL,
+            host="gc-09",
+            plan_id=plan["plan_id"],
+            reason="ready",
+        ),
+    )
+    monkeypatch.setattr(setup.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(migration, "mount_record", lambda p: {"fstype": "tmpfs"})
+    monkeypatch.setattr(setup, "advance", lambda *a, **k: calls.append("install"))
+    setup.run_workflow(plan["spec"], root, Path("/config"), apply=True)
+    assert calls[-1] == "install"
+    assert "No automatic reboot" in capsys.readouterr().out
+
+
+def test_current_host_matches_hostname_or_unique_installer_hardware(
+    monkeypatch, tmp_path
+):
+    from types import SimpleNamespace
+
+    settings = SimpleNamespace(hardware_uuid="known-hardware")
+    monkeypatch.setattr(
+        setup.AutoconfConfig,
+        "load",
+        lambda p: SimpleNamespace(
+            boot_storage=SimpleNamespace(hosts={"gc-09": settings})
+        ),
+    )
+    monkeypatch.setattr(setup.socket, "gethostname", lambda: "gc-09")
+    assert setup.current_host(Path("/config")) == "gc-09"
+    hardware = tmp_path / "uuid"
+    hardware.write_text("known-hardware")
+    monkeypatch.setattr(migration, "DMI_UUID", hardware)
+    monkeypatch.setattr(setup.socket, "gethostname", lambda: "nixos")
+    assert setup.current_host(Path("/config")) == "gc-09"
+    hardware.write_text("unknown-hardware")
+    with pytest.raises(migration.MigrationError, match="exactly one"):
+        setup.current_host(Path("/config"))
+
+
+def test_workflow_orders_provision_access_review_install(
+    workflow_environment, monkeypatch
+):
+    root, plan, calls = workflow_environment
+    stages = [setup.Action.PROVISION, setup.Action.PREPARE_ACCESS, setup.Action.INSTALL]
+    index = [0]
+    monkeypatch.setattr(
+        setup,
+        "next_step",
+        lambda p: setup.NextStep(
+            action=stages[index[0]],
+            stage="prepared" if index[0] == 1 else None,
+            host="gc-09",
+            plan_id=plan["plan_id"],
+            reason="ready",
+        ),
+    )
+    monkeypatch.setattr(setup.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(migration, "mount_record", lambda p: {"fstype": "tmpfs"})
+    monkeypatch.setattr("builtins.input", lambda prompt: "operator")
+    (root / "prepared-notes.txt").write_text("Actual prepared-target checks")
+
+    def advance(*args, **kwargs):
+        calls.append(stages[index[0]].value)
+        if index[0] == 0:
+            index[0] += 1
+
+    def review(*args):
+        calls.append("review")
+        index[0] += 1
+
+    monkeypatch.setattr(setup, "advance", advance)
+    monkeypatch.setattr(setup, "review", review)
+    setup.run_workflow(plan["spec"], root, Path("/config"), apply=True)
+    assert calls == [
+        "media",
+        "plan",
+        "journal",
+        "provision",
+        "prepare-access",
+        "review",
+        "install",
+    ]
+
+
+def test_workflow_apply_requires_terminal_before_media(
+    workflow_environment, monkeypatch
+):
+    root, plan, calls = workflow_environment
+    monkeypatch.setattr(setup.sys.stdin, "isatty", lambda: False)
+    with pytest.raises(migration.MigrationError, match="interactive terminal"):
+        setup.run_workflow(plan["spec"], root, Path("/config"), apply=True)
+    assert calls == []

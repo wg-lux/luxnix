@@ -161,6 +161,7 @@ let
       usage() {
         echo 'Usage: luxnix-setup-root-encryption [--setup-password]'
         echo 'Inspect the running root against this candidate; plaintext root requires reviewed provisioning.'
+        echo 'Preview installation from the reviewed LuxNix checkout: devenv tasks run boot-storage:setup'
         echo '--setup-password verifies an existing LUKS password only after the root check succeeds.'
         echo 'Never formats disks, opens mappings, changes keyslots or activates a generation.'
       }

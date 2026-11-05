@@ -27,7 +27,7 @@ required a non-exportable TPM key; certificate login alone did not prove that.
 Certificate login also does not establish root/Nix-store integrity, or enforce
 current device revocation on every subsequent key read. These are limitations of
 the retired volume-release prototype, not instructions to enable client unlock.
-New client and server storage follows the [canonical boot-LUKS workflow](boot-storage-operator.md);
+New client and server storage follows the [canonical boot-LUKS workflow](boot-storage-quickstart.md);
 local OpenBao/TPM volume-unlock enrollment remains frozen.
 
 Server auto-unseal is a separate concern. OpenBao offers a

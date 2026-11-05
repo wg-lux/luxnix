@@ -247,9 +247,9 @@ commands:
     summary: Guide root setup in order with pinned provisioning, typed erasure approval and non-destructive recovery.
     risk: destructive-local
     operator_confirmation_required: true
-    usage: devenv shell boot-storage-setup <observe|setup-media|plan|next|advance|recover|review|attest|status> --host <host> [--config <autoconf-yaml>] [--apply] [--assessor <admin>]
+    usage: devenv shell boot-storage-setup <observe|setup-media|run|plan|next|advance|recover|review|attest|status> --host <host> [--config <autoconf-yaml>] [--apply] [--assessor <admin>]
     implementation: lx_administration/storage/boot_setup.py
-    documentation: docs/boot-storage-operator.md
+    documentation: docs/boot-storage-migration.md
     prerequisites:
       - A clean durable release and private independent plan/evidence storage (encryption optional).
       - Provisioning runs only on the verified target in a trusted installer with fresh recovery evidence and unmounted selected disks.
@@ -524,6 +524,19 @@ tasks:
     usage: devenv tasks run initialize-environment:finished
     implementation: devenv/management.nix
     documentation: docs/development.md
+
+  - id: boot-storage:setup
+    summary: Preview or resume the current host's guarded boot-storage workflow in order.
+    risk: destructive-local
+    operator_confirmation_required: true
+    usage: devenv tasks run boot-storage:setup
+    implementation: devenv/tasks.nix
+    documentation: docs/boot-storage-quickstart.md
+    effects:
+      - Default is preview. LUXNIX_BOOT_SETUP_APPLY=1 enables sequential execution through a real controlling terminal.
+      - Selects the configured hostname or uniquely matching installer hardware UUID; never selects an arbitrary host.
+      - Prepares recovery media and plan, reviews existing operator notes, then delegates provisioning/access/install through existing gates.
+      - Pauses for missing notes, installer boot, interrupted-operation recovery and physical acceptance; no automatic reboot or formatting retry.
 
   - id: autoconf:check
     summary: Validate and show resolved Autoconf options without generating files.

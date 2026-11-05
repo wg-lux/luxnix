@@ -62,7 +62,7 @@ configuration; connectivity checks and subsequent steps concern deployment.
 
 New client and server installations require `boot-luks` with LUKS2 root.
 The former `unencrypted-root` installation path is retired and rejected.
-Use the [guarded operator checklist](boot-storage-operator.md) for prepared-target
+Use the [guarded operator checklist](boot-storage-quickstart.md) for prepared-target
 installation. Never run the disk-formatting command below on a restored target.
 
 The following steps can replace the target's operating system and partition its

@@ -316,7 +316,7 @@ roots until recovery is no longer needed.
 
 ### Encrypted storage
 
-The canonical client and server target is [boot LUKS storage](boot-storage-operator.md).
+The canonical client and server target is [boot LUKS storage](boot-storage-quickstart.md).
 Verify the actual disk layout before deployment: selecting this configuration
 does not encrypt an existing plaintext root. Hosts still using containers follow
 [legacy recovery](legacy-storage-recovery.md) until explicit reprovisioning and

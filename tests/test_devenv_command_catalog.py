@@ -664,27 +664,61 @@ def test_native_host_commands_have_separate_validated_catalog() -> None:
         )
 
 
-def test_direnv_reports_known_export_failure_without_evaluating_it(tmp_path):
+def test_direnv_uses_devenv_supplied_loader(tmp_path):
     fake = tmp_path / "devenv"
     fake.write_text(
-        '#!/bin/sh\nif [ "$1" = --version ]; then echo "devenv 1.11.1"; '
-        "else exit 99; fi\n"
+        '#!/bin/sh\ntest "$1" = direnvrc || exit 99\n'
+        "echo 'use() { test \"$1\" = devenv && echo loaded; }'\n"
     )
     fake.chmod(0o755)
     (tmp_path / ".env").write_text("")
     result = subprocess.run(
-        [
-            "bash",
-            "-c",
-            'log_error() { echo "$1" >&2; }; source "$1"',
-            "check",
-            str(REPO_ROOT / ".envrc"),
-        ],
+        ["bash", "-c", 'source "$1"', "check", str(REPO_ROOT / ".envrc")],
         cwd=tmp_path,
         env=os.environ | {"PATH": str(tmp_path) + ":" + os.environ["PATH"]},
         capture_output=True,
         text=True,
     )
-    assert result.returncode == 1
-    assert "Upgrade the Devenv CLI" in result.stderr
-    assert "Explicit devenv shell commands remain available" in result.stderr
+    assert result.returncode == 0
+    assert result.stdout.strip() == "loaded"
+
+
+def test_boot_setup_task_flag_preserves_real_terminal(tmp_path):
+    import pexpect
+
+    tasks = (REPO_ROOT / "devenv/tasks.nix").read_text()
+    body = re.search(
+        r'"boot-storage:setup" = \{.*?exec = \'\'(.*?)\n    \'\';', tasks, re.S
+    ).group(1)
+    tooling = tmp_path / "tooling"
+    (tooling / "bin").mkdir(parents=True)
+    fake = tooling / "bin/uv"
+    fake.write_text(
+        '#!/bin/sh\nprintf "%s\\n" "$@" > "$CAPTURE_FILE"\n'
+        'if [ "$LUXNIX_BOOT_SETUP_APPLY" = 1 ]; then '
+        "test -t 0 && test -t 1 && test -t 2; fi\n"
+    )
+    fake.chmod(0o755)
+    body = body.replace("${pkgs.uv}", str(tooling)).replace("''${", "${")
+    capture = tmp_path / "arguments"
+    env = os.environ | {"CAPTURE_FILE": str(capture), "LUXNIX_BOOT_SETUP_APPLY": "0"}
+    result = subprocess.run(
+        ["bash", "-c", body], env=env, capture_output=True, text=True
+    )
+    assert result.returncode == 0
+    assert (
+        "--current-host" in capture.read_text() and "--apply" not in capture.read_text()
+    )
+    capture.unlink()
+    env["LUXNIX_BOOT_SETUP_APPLY"] = "yes"
+    assert (
+        subprocess.run(["bash", "-c", body], env=env, capture_output=True).returncode
+        == 2
+    )
+    assert not capture.exists()
+    env["LUXNIX_BOOT_SETUP_APPLY"] = "1"
+    child = pexpect.spawn("bash", ["-c", body], env=env, encoding="utf-8", timeout=15)
+    child.expect(pexpect.EOF)
+    child.close()
+    assert child.exitstatus == 0
+    assert "--apply" in capture.read_text()

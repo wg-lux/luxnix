@@ -76,8 +76,9 @@ def verify_mount(path: str, expected: str, expected_type: str | None = None,
             raise ValueError(
                 f"Configured root device {expected} is missing; mounted root uses "
                 f"{source}. "
-                "Run the candidate generation's sw/bin/luxnix-setup-root-encryption "
-                "with sudo. A rebuild cannot encrypt a plaintext root"
+                "A rebuild cannot encrypt a plaintext root. From the reviewed "
+                "LuxNix checkout, run devenv tasks run boot-storage:setup to "
+                "preview the installation workflow; see docs/boot-storage-quickstart.md"
             ) from exc
         raise
     if os.stat(source).st_rdev != expected_info.st_rdev:
@@ -128,17 +129,25 @@ def setup_root(spec: dict) -> None:
         ) as probe_error:
             print(f"Current root is not verified as LUKS2: {probe_error}")
             print(
-                "If root is plaintext, use the reviewed backup/provision/restore "
-                "workflow; neither a rebuild nor a reboot encrypts it.\n1. Record "
-                "the target host, hardware UUID and exact disk IDs, serials and "
-                "sizes.\n2. Preserve recovery credentials and verify "
-                "backup/restore, or explicitly authorize a disposable installation "
-                "under the fresh-install contract.\n3. On the controller, use "
-                "devenv shell boot-storage-migration plan with a private --spec "
-                "YAML and --state directory; complete its recovery and provision "
-                "gates.\n4. Provision only the approved disks from trusted "
-                "installer media, enter the LUKS password, then prepare-access, "
-                "check and install through that saved plan."
+                "This helper only diagnoses root storage. For plaintext root, "
+                "complete these four phases; do not retry nh os boot yet.\n"
+                "1. PREVIEW: As your normal user in the reviewed clean LuxNix "
+                "checkout, connect the recovery drive and run:\n"
+                "   devenv tasks run boot-storage:setup\n"
+                "2. PREPARE: Run the same task with the apply flag:\n"
+                "   LUXNIX_BOOT_SETUP_APPLY=1 devenv tasks run boot-storage:setup\n"
+                "   Follow its recovery checklist and preserve credentials. "
+                "It pauses before formatting the installed system.\n"
+                "3. INSTALL: Boot trusted installer media. Keep the planned "
+                "checkout, Nix paths and private recovery state available; follow "
+                "the installer handoff in docs/boot-storage-migration.md. "
+                "Confirm the exact disks, enter the LUKS password and complete "
+                "credential preparation before confirming installation.\n"
+                "4. ACCEPT: Cold boot, test root unlock, desktop account "
+                "selection, admin recovery and application decryption; then "
+                "record acceptance with the same workflow.\n"
+                "Neither a rebuild nor a reboot encrypts plaintext root. "
+                "Keep the saved plan; never delete it to bypass a failed step."
             )
         else:
             print(
@@ -148,7 +157,7 @@ def setup_root(spec: dict) -> None:
                 "expected mapper name."
             )
         raise ValueError(
-            "Root setup is blocked. Follow docs/boot-storage-operator.md and "
+            "Root setup is blocked. Follow docs/boot-storage-quickstart.md and "
             "docs/boot-storage-migration.md#guided-operator-workflow; no storage "
             "was changed"
         ) from exc

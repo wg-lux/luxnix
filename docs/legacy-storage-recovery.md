@@ -1,7 +1,7 @@
 # Unmigrated hosts: legacy storage until boot-LUKS
 
 The fleet target is [boot LUKS](boot-storage-migration.md), installed with the
-[operator checklist](boot-storage-operator.md). gc-10 explicitly retains its
+[operator checklist](boot-storage-quickstart.md). gc-10 explicitly retains its
 existing containers at the owner's request. This page is
 only for hosts that still run the older layout. It covers operating and
 recovering them until they are reinstalled, then it stops applying. It is not
@@ -346,7 +346,7 @@ the original August CA after TLS maintenance had created a different one.
 1. Take snapshots and verified, restorable backups:
    [snapshot backups](boot-storage-migration.md#snapshot-backups-from-the-existing-gc-09-and-gc-10-installations)
    and, on gs-02, [coordinated hub snapshots](boot-storage-migration.md#coordinated-hub-snapshots).
-2. Reinstall with the [operator checklist](boot-storage-operator.md) and restore
+2. Reinstall with the [operator checklist](boot-storage-quickstart.md) and restore
    data and keys into the boot-LUKS layout.
 3. Pass cold-boot and [acceptance checks](boot-storage-migration.md#acceptance-recovery-and-rollback-limits).
 4. Remove the host's `legacy-containers` exception through Autoconf, keeping

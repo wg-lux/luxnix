@@ -1,5 +1,8 @@
 # gc-10 boot applicability review — 2026-11-05
 
+> Historical evidence only; generation numbers and host state below are dated observations.
+> For current installation steps use the [quickstart](https://github.com/wg-lux/luxnix/blob/main/docs/boot-storage-quickstart.md).
+
 ## Decision
 
 **Do not stage a new boot generation or schedule a reboot from the controller's

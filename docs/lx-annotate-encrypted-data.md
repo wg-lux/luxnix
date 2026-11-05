@@ -1,6 +1,6 @@
 # lx-annotate Encrypted Data on LuxNix
 
-For new clients and servers, start with the [canonical encryption contract](boot-storage-operator.md#shared-encryption-contract).
+For new clients and servers, start with the [canonical encryption contract](boot-storage-migration.md#shared-encryption-contract).
 Boot-LUKS root unlock and stage-2 data unlock do not depend on Vault.
 
 This page documents the **optional** `runtime.managedEncryptedData` and

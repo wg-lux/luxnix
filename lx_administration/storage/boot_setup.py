@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import re
 import shlex
+import socket
 import stat
 import subprocess
 import sys
@@ -679,6 +680,127 @@ def review(state: Path, assessor: str, report: Path) -> None:
     )
 
 
+def current_host(config_path: Path) -> str:
+    hosts = AutoconfConfig.load(config_path).boot_storage.hosts
+    hostname = socket.gethostname().split(".", 1)[0]
+    if hostname in hosts:
+        return hostname
+    # Live installers often have a generic hostname; match recorded hardware.
+    try:
+        hardware = migration.DMI_UUID.read_text().strip().lower()
+    except PermissionError as error:
+        raise migration.MigrationError(
+            f"No boot setup entry for {hostname}; hardware identification requires "
+            "read access to the DMI UUID. Select --host explicitly if needed."
+        ) from error
+    matches = [
+        host
+        for host, settings in hosts.items()
+        if settings.hardware_uuid.lower() == hardware
+    ]
+    if len(matches) != 1:
+        raise migration.MigrationError(
+            "Current hardware must match exactly one Autoconf boot_storage host"
+        )
+    return matches[0]
+
+
+def run_workflow(
+    spec: dict, state: Path, config: Path, *, apply: bool, device: str | None = None
+) -> None:
+    from lx_administration.storage import recovery_media
+
+    if apply and not sys.stdin.isatty():
+        raise migration.MigrationError("Apply requires a private interactive terminal")
+    if not apply:
+        if (state / "plan.json").exists():
+            show_step(next_step(state), state, config)
+        else:
+            recovery_media.setup(spec, state, apply=False, device=device)
+        print(
+            "Preview only. Set LUXNIX_BOOT_SETUP_APPLY=1 to run the task interactively."
+        )
+        return
+    recovery_media.setup(spec, state, apply=True, device=device)
+    migration.plan_spec(spec, state)
+    prepare(state)
+    visited = set()
+    while True:
+        step = next_step(state)
+        show_step(step, state, config)
+        marker = (step.action, step.stage)
+        if marker in visited:
+            raise migration.MigrationError(
+                "Workflow did not advance; inspect the saved state"
+            )
+        visited.add(marker)
+        if step.action in {Action.RECOVER, Action.INSTALL_RECOVERY}:
+            print(
+                "Paused: inspect the interrupted operation and use "
+                "the explicit recovery command."
+            )
+            return
+        if step.action in {Action.PROVISION, Action.INSTALL, Action.PREPARE_ACCESS}:
+            if os.geteuid() != 0 or migration.mount_record("/")["fstype"] not in {
+                "tmpfs",
+                "overlay",
+                "squashfs",
+            }:
+                print(
+                    "Paused: boot installer media and mount recovery at /recovery. "
+                    "Run the reviewed workflow as root there. "
+                    "Do not run sudo devenv on the installed system."
+                )
+                return
+            advance(state, apply=True)
+            if step.action == Action.INSTALL:
+                print(
+                    "Paused: perform physical cold-boot and application acceptance, "
+                    "then rerun this task. No automatic reboot."
+                )
+                return
+            if step.action == Action.PROVISION:
+                continue
+        elif step.action == Action.PREPARE:
+            prepare(state)
+            continue
+        if step.action in {Action.ASSESS, Action.PREPARE_ACCESS, Action.ACCEPT}:
+            if step.action == Action.ACCEPT:
+                with migration.locked_state(state):
+                    plan = migration.load_plan(state)
+                    progress = migration.load_progress(state, plan)
+                    try:
+                        migration.check_attestation(
+                            "acceptance", plan, progress, fresh=False
+                        )
+                    except (ValueError, OSError):
+                        pass  # Show the required human review below; never approve it.
+                    else:
+                        print(
+                            "Complete: physical acceptance is recorded. "
+                            "Retain recovery copies."
+                        )
+                        return
+            report = state / f"{step.stage}-notes.txt"
+            if not report.is_file():
+                print(
+                    f"Paused: write the completed check results to {report}, "
+                    "then rerun the same task. No assessment has been approved."
+                )
+                return
+            assessor = input(
+                "Name of the operator who performed/reviewed these checks: "
+            ).strip()
+            if not assessor:
+                raise migration.MigrationError(
+                    "An operator name is required; no review recorded"
+                )
+            review(state, assessor, report)
+            if step.action == Action.ACCEPT:
+                print("Complete: acceptance review recorded. Retain recovery copies.")
+                return
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="action", required=True)
@@ -707,18 +829,21 @@ def main() -> None:
         "status",
         "setup-media",
         "review",
+        "run",
     ):
         command = sub.add_parser(action)
-        command.add_argument("--host", required=True)
+        host_selection = command.add_mutually_exclusive_group(required=True)
+        host_selection.add_argument("--host")
+        host_selection.add_argument("--current-host", action="store_true")
         command.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
         command.add_argument(
             "--json",
             action="store_true",
             help="Print machine-readable next-step output",
         )
-        if action in {"advance", "recover", "setup-media"}:
+        if action in {"advance", "recover", "setup-media", "run"}:
             command.add_argument("--apply", action="store_true")
-        if action == "setup-media":
+        if action in {"setup-media", "run"}:
             command.add_argument(
                 "--device", help="Select one detected external filesystem"
             )
@@ -733,7 +858,8 @@ def main() -> None:
     os.umask(0o077)
     try:
         if args.action != "observe":
-            spec, state = configured_target(args.config, args.host)
+            host = current_host(args.config) if args.current_host else args.host
+            spec, state = configured_target(args.config, host)
         match args.action:
             case "observe":
                 print(
@@ -748,6 +874,11 @@ def main() -> None:
                         sort_keys=False,
                     ),
                     end="",
+                )
+                return
+            case "run":
+                run_workflow(
+                    spec, state, args.config, apply=args.apply, device=args.device
                 )
                 return
             case "setup-media":

@@ -736,7 +736,14 @@ def test_root_setup_explains_layout_mismatch_without_mutation(
     assert checked == ["/dev/member1", "/dev/member2"]
     assert "Mounted root: /dev/current[/root]" in output
     assert ("already uses LUKS2" in output) is encrypted
-    assert ("boot-storage-migration plan" in output) is not encrypted
+    assert ("devenv tasks run boot-storage:setup" in output) is not encrypted
+    assert "boot-storage-migration plan" not in output
+    assert "--spec" not in output and "--state" not in output
+    if not encrypted:
+        for phase in ("1. PREVIEW", "2. PREPARE", "3. INSTALL", "4. ACCEPT"):
+            assert phase in output
+        assert "LUXNIX_BOOT_SETUP_APPLY=1" in output
+        assert "pauses before formatting" in output
     assert "Root matches" not in output
 
 
@@ -789,9 +796,10 @@ def test_missing_cryptroot_gives_actionable_preswitch_error(monkeypatch):
         raise FileNotFoundError(path)
 
     monkeypatch.setattr(boot.os, "stat", missing)
-    with pytest.raises(ValueError, match="luxnix-setup-root-encryption") as error:
+    with pytest.raises(ValueError, match="devenv tasks run boot-storage:setup") as error:
         boot.verify_mount("/", "/dev/mapper/cryptroot", "btrfs", "root")
     assert "mounted root uses /dev/plain" in str(error.value)
+    assert "luxnix-setup-root-encryption" not in str(error.value)
 
 
 def test_packaged_root_setup_help_and_argument_safety():
@@ -821,6 +829,7 @@ def test_packaged_root_setup_help_and_argument_safety():
     result = subprocess.run([str(tool), "--help"], capture_output=True, text=True)
     assert result.returncode == 0
     assert "Never formats disks" in result.stdout
+    assert "devenv tasks run boot-storage:setup" in result.stdout
     for args in [["--change"], ["--setup-password", "extra"]]:
         result = subprocess.run([str(tool), *args], capture_output=True, text=True)
         assert result.returncode == 2

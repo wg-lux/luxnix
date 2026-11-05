@@ -11,7 +11,7 @@ explicit and does not establish the cause of gc-09's network outage.
 ## Unreleased — 2026-11-02
 
 Use these instructions with the reviewed checkout for your machine. Start new
-work with the [boot-storage operator checklist](boot-storage-operator.md).
+work with the [boot-storage operator checklist](boot-storage-quickstart.md).
 These changes do not migrate a running machine or establish physical acceptance.
 For help choosing a guide, use the [task-based documentation home](index.md).
 

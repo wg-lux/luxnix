@@ -1,11 +1,14 @@
 # gc-02 boot and authentication repair — 2026-11-04
 
+> Historical evidence only; generation numbers and host state below are dated observations.
+> For current installation steps use the [quickstart](https://github.com/wg-lux/luxnix/blob/main/docs/boot-storage-quickstart.md).
+
 > **2026-11-05 policy update:** desktop autologin is now disabled fleet-wide.
 > The shared admin/client guard refuses password-file drift against an existing
 > local account; rotation requires explicit confirmation or password entry.
 > Earlier host-specific autologin statements and test counts below describe the
 > previous candidate. Current policy: `docs/admin-passwords.md` (Explicit
-> replacement and activation safety) and `docs/boot-storage-operator.md`.
+> replacement and activation safety) and `docs/boot-storage-quickstart.md`.
 
 ## Scope and evidence
 
@@ -234,7 +237,7 @@ activation during this repair.
   `tests/test_boot_migration.py`; `flake.nix` and `tests/structure.yml` expose
   and document the new VM check.
 - Runbooks: `docs/admin-passwords.md`, `docs/boot-storage-migration.md`,
-  `docs/boot-storage-operator.md`, and this report. Navigation/context updates:
+  `docs/boot-storage-quickstart.md`, and this report. Navigation/context updates:
   `docs/structure.yml`, `mkdocs.yaml`, regenerated `TABLE_OF_CONTENTS.md`.
 
 ## Operator installation procedure — requires separate approval

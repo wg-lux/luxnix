@@ -10,21 +10,18 @@ boundaries:
 - Do not create parallel readiness trackers
 - Do not include secrets or local host facts in guides
 entrypoints:
-- name: boot-storage-dos-and-donts
-  file: boot-storage-dos-and-donts.md
-  purpose: Concise rules from the fleet audit and the gc-02, gc-09 and gc-10 boot reports.
+- name: boot-storage-quickstart
+  file: boot-storage-quickstart.md
+  purpose: Four-step operator checklist for root encryption preparation, installation and acceptance.
 - name: gc10-boot-applicability
   file: guides/gc-10-boot-applicability.md
-  purpose: Read-only gc-10 boot staging assessment against live storage, generation and activation evidence.
+  purpose: Historical read-only gc-10 boot staging assessment against live storage, generation and activation evidence.
 - name: gc02-boot-repair
   file: guides/gc-02-boot-repair.md
-  purpose: Evidence, credential flow and operator acceptance/recovery for the recovered gc-02 generation.
+  purpose: Historical evidence, credential flow and operator acceptance/recovery for the recovered gc-02 generation.
 - name: operator-change-notes
   file: changelog.md
   purpose: Operator actions for storage workflow updates, existing installations and interrupted migrations.
-- name: boot-storage-operator
-  file: boot-storage-operator.md
-  purpose: Short ordered operator checklist for preparation, installation, SSH unlock and recovery.
 - name: boot-storage-migration
   file: boot-storage-migration.md
   purpose: Backup, reprovision, restore and physical acceptance for boot-time LUKS2 storage.

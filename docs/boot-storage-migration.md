@@ -1,320 +1,205 @@
 # Boot LUKS storage: migration and recovery
 
-Start with the [short operator checklist](boot-storage-operator.md). Use this guide
-for the detailed procedures and evidence requirements linked from each step.
+For installation commands, use the [four-step checklist](boot-storage-quickstart.md).
+This reference covers layout, evidence gates, retained-data migration and recovery.
+Host reports describe dated observations; live checks and `boot-encryption-acceptance.yml`
+determine whether a host is accepted.
 
 ## Architecture and scope
 
-The default encrypted fleet layout is `luxnix.storage.operatorUnlocked.layout = "boot-luks"`
-(the default). EFI remains unencrypted. One LUKS2 root mapping opens in the
-systemd initrd with the operator credential. Root contains `/nix`, homes,
-persistent logs, temporary files, service secrets and secondary disk keyfiles.
-The stage-2 crypttab generator opens independent data mappings with those
-keyfiles. No secondary key is embedded in the initrd, EFI or Nix store. Normal
-boot requires neither Git nor a network key service. Authentication to the
-normal user account follows storage unlock; these credentials are independent.
-Secure Boot signing remains a separate boot policy. Encryption does not provide
-integrity protection for arbitrary root filesystem contents.
+- New clients and servers use `layout = "boot-luks"`: EFI, LUKS2 root, filesystem.
+  Root protects homes, `/nix`, logs, service secrets and secondary-volume keyfiles.
+- Root unlock requires an operator passphrase. Secondary filesystems unlock from
+  private keys on encrypted root; keys never belong in EFI, the initrd or Nix store.
+  Root unlock needs neither Git nor a network key service.
+- MD RAID assembles below LUKS2. Retained multi-device Btrfs requires encryption on
+  every member. Disk swap must be encrypted or disabled.
+- Missing storage blocks its consumers. Verification checks all filesystem members,
+  mount/subvolume identity, LUKS2, secondary keys and active swap.
+- A rebuild cannot encrypt plaintext root. Never bypass pre-switch checks or create
+  an unrelated mapper to satisfy them. No boot unit formats disks or generates keys.
+- Application encryption, original keys/salts, backup encryption and
+  [Secure Boot](secure-boot.md) remain separate requirements.
 
-Host disk definitions own device identifiers and subvolumes. The shared
-`systems/x86_64-linux/encrypted-layout.nix` applies the same LUKS2 policy to all
-15 operator-storage hosts. For MD RAID, raw members assemble first and LUKS2
-wraps the array; existing multi-device Btrfs declarations retain their per-member
-encryption until separately migrated.
-The shared storage module creates crypttab and guarded service dependencies.
-gc-10's boot-LUKS target uses its application/data NVMe partition as a one-member
-MD RAID1 array (`/dev/md/application`), then LUKS2 (`luxnix-app-storage`), then
-one Btrfs filesystem. Application, PostgreSQL and database-backup paths are
-subvolumes of that filesystem, without separate encrypted/plaintext partitions
-or inner container files. Its system NVMe remains separate, with encrypted root
-holding the application array's unlock key. Other host layouts retain their declared
-data filesystems. Application paths stay unchanged, but become ordinary directories instead of
-inner container mounts. PostgreSQL data/WAL/backups, LX-Annotate media, frames,
-processing state, keys, retained salts, caches and local logs belong on this
-protected storage. Alternate paths must be included in guardedServices and
-must resolve to encrypted storage; do not add plaintext independent disks.
-Memory temporary storage is acceptable only with encrypted or disabled disk
-swap. gc-10's declared swap partition is **not active**: its explicit empty
-swapDevices policy remains. Existing encrypted-root swapfiles remain encrypted.
+### Shared encryption contract
 
-The shared kernel-backed verifier enumerates every Btrfs member (including
-missing-device state) for secrets, boot, installer and recovery custody. Boot
-additionally verifies LUKS2 identity and bind/subvolume identity. It checks
-active swap and existing secondary key permissions. Each secondary mount and
-consumer depends only on its own filesystem members and required protected paths. Missing storage stops service
-startup; dependencies also stop consumers before unmount. Secondary unlocks are
-headless and device waits bounded. Use the local console and `journalctl -b`
-for storage/recovery errors. No boot unit formats, migrates or generates keys.
-The pre-switch check rejects an unencrypted or incompletely mounted installation
-before the normal NixOS switch/boot operation. A build, password prompt or warm
-activation does not prove physical encryption. Do not bypass pre-switch checks
-or install a bootloader manually on an unmigrated host.
+| Role | Mapping or behavior |
+| --- | --- |
+| Root | `cryptroot`; local Plymouth passphrase prompt |
+| Separate application storage | `luxnix-app-storage` |
+| Retained secrets container | `luxnix-secrets` |
+| Separate encrypted swap | `cryptswap` |
+| Desktop | SDDM account chooser; `roles.desktop.addons.plasma.bootAutoLogin = false` fleet-wide |
+| Headless server | Console unlock or explicitly configured [restricted initrd SSH](#remote-ssh-root-unlock) |
 
-Exports and remote backups are independent protection boundaries. In particular,
-gc-10 retains the explicitly authorized plaintext annotation-export disk; it is
-not a production application backend. The owner separately authorized a plaintext
-migration backup on `Backup-24-11`; treat that temporary copy, including keys and
-database state, as sensitive recovery material under physical custody.
-Remote backups need their own encryption, credentials, retention and restore tests.
+LUKS, Linux login and KWallet passwords are independent. Activation rejects account
+password drift; [explicit rotation](admin-passwords.md#explicit-replacement-and-activation-safety)
+requires user confirmation or password entry. Storage unlock does not transfer the
+disk password to login or change the application's service identity.
+Additional mappings use `luxnix-data-<mount-path>`, with `-member-N` for multiple
+members. Duplicate names fail evaluation. Coordinate existing mapper/keyfile
+renames before activation; never regenerate a key to repair a naming mismatch.
 
 ### gc-10 reconstruction and future mirroring
 
-A one-member RAID1 provides no disk-failure redundancy. A later mirror requires
-a separately reviewed member-addition and array-growth operation on a suitable
-second disk; do not rerun Disko against an array containing live data. Encryption
-stays above the array, so adding a member does not introduce another passphrase.
-
-The current legacy profile remains unchanged. A configuration switch cannot
-convert its existing filesystem into this MD/LUKS target. Before reusing either
-disk, finish and verify the independent backup, preserve old-only application
-files, and demonstrate restoration of application data, a consistent PostgreSQL
-cluster and the original application keys/salts. Preserve independent root/data
-unlock recovery material as well. The earlier checksum-based delta plan only
-applies while retaining the old application filesystem; a new filesystem needs
-the complete required dataset restored once. Remove the old container only after
-restored application checks and cold-boot acceptance succeed.
-
-This layering follows the [cryptsetup RAID guidance](https://gitlab.com/cryptsetup/cryptsetup/-/blob/main/FAQ.md)
-and uses [Linux MD](https://docs.kernel.org/admin-guide/md.html) below encryption.
+The boot-LUKS target has a separate system NVMe and a one-member MD RAID1
+application array, then LUKS2 and Btrfs subvolumes for application, PostgreSQL
+and backups. One member provides no redundancy. Future mirror addition requires
+a reviewed MD growth operation, never rerunning Disko over live data.
+The retained legacy layout cannot be converted by configuration activation.
+Preserve complete data, PostgreSQL, original keys/salts and independent unlock
+credentials before reprovisioning. The gc-10 export-disk and temporary plaintext
+backup exceptions do not authorize plaintext production application storage;
+see [cutover scope](#gc-10-cutover-scope-operator-decision-2026-11-03).
 
 ## Splash unlock and generation recovery
 
+Plymouth uses the plain-text `details` theme. Root unlock waits without a time or
+attempt limit. Ctrl+Alt+Del requests a persistent boot-menu choice for the next
+restart; if writing the EFI variable fails, the normal menu timeout applies.
+Retain a known-compatible generation, console access and independent SSH access.
+Compare `/run/current-system`, `/run/booted-system`, the system profile and
+bootloader default separately: failed activation can leave them different.
+Pre-migration generations cannot boot a newly repartitioned layout; a generation
+rollback does not reverse formatting or database migrations.
+
 ### Password setup during rebuild
 
-Boot-LUKS hosts use a manually entered root passphrase. Old USB/raw-offset
-`boot-decryption-config.nix` imports and automatic FIDO settings are retired.
-The first `nixos-rebuild boot` or `switch` with this policy prompts privately
-for a boot disk password and its confirmation, before changing the bootloader.
-Ordinary staging only verifies an existing password. Adding a new password
-requires explicit `--change`, at least 12 characters and the existing disk/recovery password; the
-helper first backs up the LUKS header and retains all existing recovery slots.
-If you do not hold an existing password, recover access before rebuilding;
-an already open filesystem does not authorize adding a LUKS key by itself.
+On an already encrypted host, build the exact reviewed candidate and use its
+helpers in a private interactive terminal (not a recorded/shared session):
 
-After verification, ordinary rebuilds do not prompt again. A private receipt
-under `/var/lib/luxnix-boot-passphrase` binds the check to this host, disk UUID,
-and complete LUKS header/keyslot fingerprint. Header changes require verification
-again. Passwords are never written to this receipt, inventory or the Nix store.
-Login/sudo and KWallet passwords are not changed; a wallet with a different
-password can still ask for its existing password after desktop login.
-
-To choose another disk password later, run `sudo luxnix-setup-boot-password --change`.
-This adds a credential; removal of old recovery slots is a separate operation.
-For a detached deployment with no private terminal, first run the **target
-generation's** `sw/bin/luxnix-setup-boot-password` interactively on the target.
-Missing terminal or failed verification aborts activation; it never invents a
-password. `nix build` and `dry-activate` do not change keys or prompt for setup.
-Fresh installations still set their initial passphrase at the Disko prompt;
-this rebuild check verifies an existing installed LUKS2 root, never formats it.
-
-If activation reports `Boot-password setup failed: UnsupportedOperation`, update
-to the fixed helper first: the old helper incorrectly opened the terminal in a
-mode requiring seek support. Changing terminals alone cannot fix that version.
-A **private terminal** is a normal interactive session you control, without
-terminal recording or screen sharing. Open Konsole on the affected machine,
-or press **Ctrl+Alt+F3** and log in. Over SSH, use `ssh -t admin@HOST`, replacing
-`HOST` with that machine's address. Run `tty`; expect `/dev/pts/N` or `/dev/ttyN`,
-not `not a tty`. No special terminal application or incognito mode is needed.
-
-From the updated checkout **on the affected host**, run these commands in order;
-stop if any command fails. Building first selects the fixed helper even when the
-running system still contains the broken one:
-
-```bash
-cd /home/admin/luxnix
-nix build ".#nixosConfigurations.$(hostname).config.system.build.toplevel" --out-link result-boot --accept-flake-config
-sudo ./result-boot/sw/bin/luxnix-setup-boot-password
-sudo nixos-rebuild boot --flake ".#$(hostname)" --accept-flake-config
+```sh
+sudo ./result/sw/bin/luxnix-setup-root-encryption --setup-password
+sudo ./result/sw/bin/luxnix-verify-boot-storage
 ```
 
-The first sudo prompt asks for your login/sudo password. The helper then asks for
-the disk passphrase and confirmation; characters are hidden as you type. Choosing
-a new disk password additionally requires the existing disk/recovery password.
-Never put either password in a shell command or pipe it into this helper.
-Only reboot after staging succeeds, with console access ready for splash unlock.
-This helper applies to boot-LUKS root; gc-10's retained legacy containers continue
-using their existing unlock workflow.
+Replace `./result` with the actual candidate result. Retry normal boot staging
+only after both checks pass. The first helper diagnoses the root and verifies
+an existing disk password; it cannot provision plaintext root. A root-only pass
+does not prove secondary-volume unlock or physical boot acceptance.
+Use the candidate helper when the installed helper is outdated.
 
-### Shared mapper names
-
-Mapper names are shared by storage role on every host: `cryptroot` for root,
-`cryptswap` for a separate swap partition, and `luxnix-app-storage` for a separate
-application filesystem. Existing secrets containers use `luxnix-secrets`.
-Additional filesystems use `luxnix-data-<mount-path>` (slashes become hyphens);
-multi-device Btrfs members add `-member-N` in their declared member order.
-The shared layout rejects duplicate names. Physical disk IDs, partition labels,
-filesystem labels and LUKS UUIDs are not renamed by this policy.
-
-New installations create these mappings. On an already installed boot-LUKS host,
-first compare its open mappings and `/etc/luks-keys` with the evaluated target.
-Any old `lx-*` mappings and corresponding enrolled key files need a coordinated
-rename before activation; do not format disks or regenerate keys to fix a name.
-The storage pre-switch check continues to reject mismatched mappings or missing
-keys. gc-10's retained containers already use the common names and need no rename.
-
-Non-technical users unlock root on the Plymouth splash screen, which the
-initrd shows before the normal system starts. The shared built-in `details`
-theme uses plain text without animation for password entry and boot messages.
-The custom space-theme package is no longer included.
-Plymouth follows the storage layout on every rebuild: boot-LUKS hosts and hosts with boot-time container
-passphrases enable it, all other hosts leave it off. Forcing
-`boot.plymouth.enable` off on a boot-LUKS host fails evaluation.
-
-Plasma desktops use the SDDM account chooser fleet-wide:
-`roles.desktop.addons.plasma.bootAutoLogin = false`. Enabling autologin is rejected.
-After local or approved remote LUKS unlock, select `admin` or `client-user` and
-enter that account's Linux password. The disk password is not passed to SDDM or
-KWallet. Account, LUKS and wallet passwords remain independent; boot and rebuild
-never rotate them. Existing account/password-file drift stops activation instead
-of replacing the live password; see [explicit rotation](admin-passwords.md#explicit-replacement-and-activation-safety).
-Neither selection relocks storage or requires application credentials to be
-copied between users. The application runs as its existing service principal.
-A wallet with a different password still requires its own password. The root prompt and root device wait
-without time or attempt limits (`timeout=0`, `tries=0`,
-`x-systemd.device-timeout=0`), because an exhausted prompt leaves no system
-to continue into. The screen shows a hint to press Ctrl+Alt+Del. In the initrd
-this restart first runs `bootctl set-timeout-oneshot menu-force`, so the next
-systemd-boot menu waits for a choice; select an older generation there for
-debugging. Each normal boot also shows the menu for the configured
-`boot.loader.timeout`. If the EFI variable cannot be written, the restart still
-proceeds and the normal menu timeout applies; the failure is in the initrd journal.
-
-Older generations share the same encrypted root and prompt. Generations from
-before a host's boot-LUKS cutover expect the previous disk layout and are not a
-recovery path after migration. The hint text is English, and the splash relies
-on the firmware framebuffer until the full system loads GPU drivers; verify
-both on each host's physical cold boot.
+Verification stores a private host/UUID/header-bound receipt under
+`/var/lib/luxnix-boot-passphrase`, never a password. Unchanged headers need no
+repeat prompt. Explicit `sudo luxnix-setup-boot-password --change` adds a password
+(at least 12 characters), requires an existing credential, backs up the header
+and preserves old slots. Missing terminal or failed verification aborts activation.
+Fresh installation sets the initial password at Disko's prompt. Rebuilds do not
+rotate Linux or wallet passwords.
 
 ## Single production path and retained recovery
 
-The 2026-11-02 convergence decision supersedes the earlier plain-root installation
-policy. New installations require `boot-luks` and `root_encryption: luks2`.
-`unencrypted-root` plans and configurations are rejected. Empty new disks use
-`installation: fresh` and `source_retention: new-disks`; explicitly approved
-disposable existing disks use `installation: disposable` and
-`source_retention: discard-approved`.
-
-Existing gc-09/gc-10 containers remain bounded recovery compatibility. Do not
-remove their decryptors, original keys or retained data until physical migration,
-independent backup restoration and cold-boot acceptance are recorded. Alternative
-TPM/container, network release and PAM unlock paths are frozen for new enrollment.
-Central identity provisioning, application encryption and backup encryption retain
-separate ownership and recovery requirements.
-
-The old raw-offset boot-key files on gc-02, gc-08 and s-01 through s-03 remain
-pending physical replacement and cold-boot evidence. They are not accepted as a
-hardened boot-key design. Existing command aliases now derive enrollment mappings
-from the selected host's evaluated initrd topology; do not infer targets from the
-alias name. Enrollment preserves existing output and original keyslots.
+New installations require `root_encryption: luks2`. Use `fresh/new-disks` for
+empty new disks, `disposable/discard-approved` only for approved disposable disks,
+and `migration/old-disks` or `migration/whole-disk-image` when retaining data.
+Preserve machine/application credentials even for disposable installations.
+Retain legacy containers and decryptors until migration and recovery retention
+are accepted. TPM/container/network-release/PAM enrollment is not a new-install
+path. Existing raw-offset boot-key installations still require physical acceptance;
+do not infer encryption or enrollment targets from command aliases.
 
 ## Guided operator workflow
 
-Keep using the existing system until the operator has tested recovery. The
-`boot-storage-migration` command never erases a disk, replaces a volume key or
-reboots a computer. It can install the reviewed system only after the separate
-preparation steps below.
-If a check says **Stop**, keep the disks and recovery copies and ask the named
-operator to resolve that check. Do not disable a guard or change an evidence
-answer just to continue. Reverting a repository change is possible; reverting
-disk formatting requires retained disks or a tested whole-disk restore.
+Use the [quickstart](boot-storage-quickstart.md) and `devenv shell boot-storage-setup` for normal
+operation. The task reads `autoconf/config.yml`; it does not require separate
+`--spec` or `--state` arguments.
 
-The operator uses `devenv shell boot-storage-migration --help` from the reviewed
-checkout. `plan`, `status`, `attest`, `prepare-access`, `check` and `install` are separate actions;
-there is no automatic rollback action. The companion
-`devenv shell boot-storage-setup` sequences these gates and can run the pinned
-Disko provisioner after separate explicit erase confirmation. See the
-[sequential commands and interruption recovery](boot-storage-operator.md#new-installation-or-root-migration).
-Only `install` changes the target's boot installation, and it requires an interactive confirmation
-containing the selected host and plan identifier. Formatting, key enrollment,
-restoration, firmware changes and reboot remain separately authorized operations.
+### Configuration and recovery media
 
-1. **Select the computer and disks.** Prepare a private YAML specification on
-   controller storage (encryption optional for plan/evidence metadata). It contains `schema_version: 1`, `host`,
-   `checkout` (the absolute durable clean release checkout), `hardware_uuid`
-   (the target's independently recorded DMI product UUID), `source_retention`
-   (`old-disks` or `whole-disk-image` for migration), and `disks`.
-   Optional `root_encryption` must be `luks2`, matching the `boot-luks` host configuration. Optional `installation`
-   defaults to `migration`; select `fresh` with `source_retention: new-disks`
-   only for empty new disks. For explicitly disposable existing disks select
-   `installation: disposable` with `source_retention: discard-approved`. Its
-   recovery checks require `selected_disks_disposal_authorized` and
-   `machine_and_application_credentials_preserved_or_reenrolled`, instead of
-   `new_disks_verified`; console, installer and independent credential tests
-   still apply. Each disk has its exact
-   `/dev/disk/by-id/` `path`, `serial` and integer `size_bytes`. These are real
-   operator observations, never values copied from an example. The selected
-   disk paths must exactly match the evaluated layout. Prepare any intended
-   inventory change through Autoconf and review it before creating the plan.
-2. **Create the plan.** Run `devenv shell boot-storage-migration plan --spec
-   <private-spec.yml> --state <private-state-directory>`. The parent directory
-   must already be private. This builds the selected closure and
-   Disko executable and binds the plan to its source revision, lockfile, layout, disk selection and
-   provisioner content digest.
-   It does not contact or change the target. Repeating the same plan is safe;
-   a different selection needs a new state directory.
-3. **Record actual recovery, backup and restore results.** Complete the runbook
-   steps below, then use `devenv shell boot-storage-migration attest --state
-   <private-state-directory> --stage <stage> --evidence <private-report.json>
-   --assessor <reviewer>`. Stages are ordered: `recovery`, `backup`, `restore`,
-   `prepared`, then physical `acceptance` after installation. Fresh and disposable
-   installations use only `recovery`, `prepared`, then `acceptance`; use the exact check names
-   from `status`. Evidence is a
-   named human assessment, not an automatically proven restore. Each JSON
-   report contains exactly `schema_version: 1`, `plan_id`, `stage`, `checks`
-   and a nonempty `artifacts` list of private absolute report/manifest paths.
-   `status` lists the required check names for each stage; each must reflect a
-   genuinely completed check. Migration recovery evidence must include exactly one fresh
-   readiness admission JSON report collected through the pinned SSH workflow
-   below. Save the report object itself, not the surrounding Ansible output.
-   The gate verifies its content hash, host, observation time and admission
-   probes again. Its source disk selection can differ from replacement disks
-   in the installation plan. Never put credentials or
-   decryption keys in these reports. Artifact hashes bind the evidence to the
-   plan; changed artifacts invalidate it. Pre-install assessments expire after
-   24 hours and must be reassessed with updated evidence, not merely re-submitted.
-4. **Check preparation from the trusted installer.** Preserve the state and
-   evidence on independent storage (encryption optional), with the same absolute paths and
-   appropriate root ownership when used as root. Preserve the clean checkout
-   at its planned path and make the built closure available in the installer.
-   `check --state <private-state-directory> --stage provision` checks the applicable recovery,
-   backup and restore prerequisites plus the actual hardware selection. Selected
-   target disks must be unmounted with no open mappings at this stage. It
-   performs no formatting and does not grant permission to format. After
-   separately authorized provisioning, key enrollment and restoration, record
-   `prepared` evidence and run the same command with `--stage install`. Before
-   that assessment, run `prepare-access --state <private-state-directory>` from
-   the trusted installer. It copies a missing administrator password hash from
-   the configured restored secret, and prepares a missing dedicated initrd SSH
-   host identity when remote unlock is selected. Existing credentials are
-   validated and preserved. Installation checks administrator hash format,
-   private encrypted storage, normal-user/wheel membership and explicit SSH
-   authorized keys before and after installation; it does not test a live login.
-5. **Install only the prepared target.** From the trusted installer, use the
-   guarded native command `python -m lx_administration.storage.boot_migration
-   install --state <private-state-directory>` with the reviewed Python package
-   and its dependencies available. It verifies the actual target mount graph,
-   encrypted ancestry, secondary keys and disk identities before invoking the
-   fixed install-only command. The operator sees the selected disks and confirms
-   the exact plan. A machine-wide lock prevents concurrent installers even
-   across different plan directories. It does not activate the old running
-   system or reboot.
-6. **Accept the physical result.** Complete the cold-boot, application and
-   recovery checks below before recording `acceptance`. Keep old disks and
-   backups until a named operator approves retention changes separately.
+- `paths.nix_output`: absolute path to the durable, reviewed, clean release checkout.
+- `boot_storage.hosts.<host>`: hardware UUID, `root_encryption`, installation mode,
+  retention and exact disk `path`, `serial`, `size_bytes`.
+- `boot_storage.state_root`: independent recovery directory; the media helper uses
+  `/recovery/luxnix-state` and stores each plan under its host name.
+- `--current-host` selects the configured hostname or a unique hardware-UUID match.
+  `--host`, `--config` and `--device` select explicit reviewed alternatives.
 
-Use `devenv shell boot-storage-migration status --state
-<private-state-directory>` to see the recorded steps. A successful installation
-is not repeated on retry. If an installation was interrupted, normal retry is
-blocked: inspect its actual state, record `install-recovery` evidence and only
-then use `install --retry-interrupted`. That retry runs the same install-only
-operation and rechecks the target; it never formats or selects a different
-closure. Do not delete the state directory to bypass interruption handling.
+Media preparation selects an existing USB/removable ext4, XFS or Btrfs filesystem,
+excludes system/target disks, checks at least 1 GiB free for metadata and mounts it
+at `/recovery`. Multiple candidates require `--device`; blank, unsupported or
+ambiguous media stop setup. Existing media is never formatted. This is journal
+storage, not an application backup. Encryption is optional for non-secret evidence;
+credentials and application backups keep their separate protection requirements.
 
-Secure Boot is a separate explicit policy. The installer must not downgrade
-it silently. Use the [signing workflow](secure-boot.md) for supported existing
-signed installations; an unsupported signed first-install procedure is a
-blocker. Historical OpenBao/TPM enrollment is not a prerequisite for current
-operator-passphrase boot encryption.
+Planning builds and pins the system closure and Disko executable, source revision,
+lockfile, hardware and provisioner digest. Keep that release unchanged; never reset
+a saved journal to accommodate a new checkout. Before installer boot, preserve the
+checkout, built artifacts and evidence independently at their planned paths.
+Installer state must be root-owned and private, outside `/mnt` and selected disks.
+Use the reviewed root Python environment there; do not run `sudo devenv` on the
+installed desktop. Trusted installer checks reject target-backed Nix stores,
+active swap, mounted target disks and conflicting mappings.
+
+### Evidence and advanced interface
+
+`next` displays required checks; `review --assessor <name> --report <private-notes>`
+asks for explicit confirmation of performed checks. Notes must be private,
+nonempty and contain no secrets. The task pauses for missing notes, credentials,
+installer boot or interrupted writes. It never invents evidence or reboots.
+
+The lower-level `devenv shell boot-storage-migration` interface remains available for reviewed
+automation: `plan --spec <private-spec.yml> --state <private-state-directory>`,
+`status`, `attest`, `prepare-access`, `check` and `install`. A native spec has
+`schema_version: 1`, `host`, `checkout`, `hardware_uuid`, `root_encryption`,
+`installation`, `source_retention` and the disk fields above.
+
+Stages are `recovery`, `backup`, `restore`, `prepared`, then physical `acceptance`.
+Fresh/disposable plans omit backup/restore stages, not credential preservation.
+Evidence JSON contains exactly `schema_version: 1`, `plan_id`, `stage`, `checks`
+and a nonempty `artifacts` list of private absolute paths. Use the check names from
+`status`; every result must be performed and true. Artifact hashes bind evidence
+to the plan. Pre-install assessments expire after 24 hours and require reassessment.
+Migration recovery requires exactly one fresh [readiness admission](#readiness-observations-versus-admission)
+JSON artifact; the simple notes-only review does not replace this report.
+
+From the trusted installer, `check --stage provision` verifies prerequisites
+without formatting. The setup workflow separately confirms erasure and runs pinned
+Disko. Restore/enroll credentials, then `prepare-access` prepares missing admin
+hashes and optional initrd SSH identity while preserving existing credentials.
+Record `prepared` evidence and pass `check --stage install` before the separate
+install confirmation. Installation verifies mounts, disk identities, secondary
+keys, admin hash and SSH configuration before and after the install-only command;
+it does not test a live login. A machine-wide lock prevents concurrent installers.
+Secure Boot must use the [supported signing workflow](secure-boot.md); unsupported
+signed first-install combinations remain blocked.
+
+### Interrupted setup
+
+Run `next --host <host>` using the same state. A completed format is never
+repeated. A running/interrupted provision blocks all automatic retries. Preserve
+`provision.json`: it records disk metadata and execution state, **not a backup**.
+Inspect the disks; repair/mount the intended complete layout from trusted media,
+then preview and explicitly accept it without rerunning Disko:
+
+```sh
+python -m lx_administration.storage.boot_setup recover --host <host> --assessor <admin>
+python -m lx_administration.storage.boot_setup recover --host <host> --assessor <admin> --apply
+```
+
+Recovery rechecks hardware, encrypted filesystems and evidence and requires an
+exact terminal confirmation. Incomplete or mismatched layouts remain blocked;
+restore retained disks/backups or arrange a separately reviewed reprovision.
+For an interrupted installation, follow the existing `install-recovery`
+assessment and `boot-storage-migration install --retry-interrupted` procedure.
+Never delete journals to bypass a blocked retry. Old boot generations cannot
+undo formatting or recover lost keys.
+
+### Save and verify disk-password custody
+
+After the installed host is reachable, use the controller's existing encrypted
+vault and configured independent recovery envelopes. The custody selection must
+already exist (`storage-recovery-custody prepare` in the installation guide).
+
+```sh
+devenv shell storage-provision setup --host <host> --volume cryptroot --apply
+```
+
+Add `--sudo-password-file <private-file>` if passwordless sudo is unavailable.
+For retained containers replace `cryptroot` with `luxnix-secrets`, then repeat
+for `luxnix-app-storage`. Omit `--apply` to preview. Setup tests a stored key or
+asks privately for the current password, verifies both encrypted recovery copies,
+then shows it once and asks for `SAVED`. Acknowledged keys are not shown again.
+Wrong passwords or mismatched identities stop setup; no keys are removed.
 
 ### Remote SSH root unlock
 

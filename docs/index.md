@@ -4,9 +4,9 @@ Choose the task below; you do not need to read every guide.
 
 | Your task | Start here |
 | --- | --- |
-| Understand client and server encryption | [Canonical encryption contract](boot-storage-operator.md#shared-encryption-contract): shared layout, login, server unlock and acceptance. |
+| Understand client and server encryption | [Canonical encryption contract](boot-storage-migration.md#shared-encryption-contract): shared layout, login, server unlock and acceptance. |
 | Use a machine while an upgrade is planned | Ask your operator for the maintenance window and when work can resume. You do not need to run migration commands. |
-| Install a machine for the first time | [Operator checklist](boot-storage-operator.md): preparation, installation, login and recovery. |
+| Install a machine for the first time | [Operator checklist](boot-storage-quickstart.md): preparation, installation, login and recovery. |
 | Continue an interrupted installation | [Resume instructions](changelog.md#continue-an-installation-or-migration): retain the existing plan and inspect its status. |
 | Update an existing machine | [Change notes](changelog.md): choose the instructions for its current storage state. |
 | Review the technical safeguards | [Migration reference](boot-storage-migration.md): evidence, commands and acceptance requirements. |
