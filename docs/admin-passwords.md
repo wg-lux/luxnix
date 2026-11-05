@@ -327,12 +327,16 @@ mutation or boot installation. From an independently authenticated recovery
 session, explicitly run `sudo luxnix-admin-password` only when rotation is intended.
 The tool prompts privately, writes the persistent boot hash and updates the live
 account. It also updates host Vault copies when their storage is encrypted.
+The tool asks twice, requires at least 12 bytes, rejects the retired password,
+and allows three attempts. Without a terminal, answer its systemd password agent
+within five minutes using `sudo systemd-tty-ask-password-agent`.
 
 `migration.accountHashes` initializes an **absent** boot copy from a private,
 validated source; an existing copy is authoritative and is never refreshed from
 Vault during activation. All selected hashes are validated before any absent
-copy is published. The shared admin/client validator also compares each valid
-file with the existing local shadow entry. Any difference (including a locked
+copy is published. A missing or retired source for an absent copy fails preparation
+without publishing any selected copy. The shared admin/client validator also
+compares each valid file with the existing local shadow entry. Any difference (including a locked
 account) stops boot staging and activation; sync, SOPS refresh, source replacement
 or a rebuild cannot implicitly change the password. New accounts may consume
 explicitly provisioned credentials. Direct user-password overrides and disabling

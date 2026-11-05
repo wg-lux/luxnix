@@ -320,6 +320,27 @@ def test_account_hash_missing_source_does_not_create_target(tmp_path):
     assert not target.exists()
 
 
+@pytest.mark.parametrize("existing", [False, True])
+def test_retired_source_never_provisions_or_replaces_account_hash(
+    tmp_path, monkeypatch, login_hashes, existing
+):
+    retired = login_hashes[0].strip()
+    monkeypatch.setattr(
+        migration, "RETIRED_ACCOUNT_HASH_DIGESTS", frozenset({hashlib.sha256(retired).hexdigest()})
+    )
+    source, target = tmp_path / "source", tmp_path / "account.hash"
+    source.write_bytes(retired + b"\n")
+    source.chmod(0o600)
+    if existing:
+        migration.write_account_hash(target, login_hashes[1])
+        migration.prepare_accounts({str(target): str(source)})
+        assert target.read_bytes() == login_hashes[1]
+    else:
+        with pytest.raises(migration.MigrationError, match="retired"):
+            migration.prepare_accounts({str(target): str(source)})
+        assert not target.exists()
+
+
 @pytest.mark.parametrize("method", ["passphrase", "tpm2"])
 def test_missing_container_never_provisions_during_startup(tmp_path, monkeypatch, method):
     container = tmp_path / "missing.luks"

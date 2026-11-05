@@ -18,9 +18,11 @@ let
   retiredAdminHashSha256 = "a396e38d2c16276942366260dfc8e88ccef88e5df8915d50e688aca7e1502bba";
   retiredAdminSalt = "yC9hyVoZEYLlzjbZ";
 
-  # Interactive replacement for a missing, malformed or retired admin hash. It
-  # asks on the current terminal or through systemd password agents and never
-  # takes the password from arguments or the environment.
+  # Manual, operator-run replacement for a missing, malformed or retired admin
+  # hash. Activation refuses invalid credentials and never invokes this tool.
+  # It asks on the current terminal or through systemd
+  # password agents and never takes the password from arguments or the
+  # environment.
   adminPasswordTool = pkgs.writeShellApplication {
     name = "luxnix-admin-password";
     runtimeInputs = [
@@ -66,6 +68,7 @@ let
         systemd-ask-password --timeout=300 --id="luxnix-admin-password:$host" "$1"
       }
 
+      # Repeat rejections in the prompt: only an explicit operator invocation prompts.
       reject() {
         notice="Rejected: $1. "
         echo "$notice" >&2

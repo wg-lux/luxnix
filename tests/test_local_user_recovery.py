@@ -334,6 +334,13 @@ def test_client_validator_accepts_existing_hash_without_changing_shell_options(
     assert path.read_text() == generated_hash + "\n"
 
 
+def test_activation_never_invokes_the_interactive_tool(recovery_policy):
+    for script in [recovery_policy["default"]["script"],
+                   recovery_policy["default"]["clientScript"]["text"]]:
+        assert not re.search(r"/nix/store/[^ /]+/bin/luxnix-admin-password", script)
+        assert "systemd-ask-password" not in script
+
+
 @pytest.mark.parametrize("action", ["switch", "test", "boot", ""])
 def test_missing_hash_never_prompts_or_mutates_during_activation(
     recovery_policy, tmp_path, monkeypatch, action
