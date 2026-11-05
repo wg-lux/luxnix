@@ -170,7 +170,6 @@ let
     lib.concatStringsSep "\n" wheelDependencyOverrides
   );
 
-  caTrustRepair = "${config.luxnix.caTrust.repairPackage}/bin/luxnix-ca-trust-repair";
   wheelDowngradeGuard = pkgs.runCommand "lx-annotate-wheel-downgrade-guard" { } ''
     mkdir -p "$out"
     cp ${./scripts/wheel-downgrade-guard.py} "$out/guard.py"
@@ -410,11 +409,7 @@ let
 
       # pip restores certifi's bundled cacert.pem on every install; relink it
       # to the regenerated system bundle and refuse to start stale runtimes.
-      if [ "$install_allowed" = "true" ]; then
-        ${caTrustRepair} ${lib.escapeShellArg runtimeWheelVenvPath}
-      else
-        ${caTrustRepair} --check ${lib.escapeShellArg runtimeWheelVenvPath}
-      fi
+
       if ! installed_package_version="$(${lib.escapeShellArg "${runtimeWheelVenvPath}/bin/python"} -c 'from importlib.metadata import version; print(version("lx-annotate"))')"; then
         echo "ERROR: Installed wheel does not expose lx-annotate package metadata." >&2
         exit 1
