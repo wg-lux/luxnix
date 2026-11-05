@@ -99,20 +99,18 @@ def test_devenv_catalog_has_actionable_risk_metadata() -> None:
         assert isinstance(command["operator_confirmation_required"], bool)
         assert command["summary"].strip()
         assert command["usage"].startswith(f"devenv shell {command_id}")
-        assert command.get(
-            "implementation"
-        ), f"{command_id}: implementation path is required"
+        assert command.get("implementation"), (
+            f"{command_id}: implementation path is required"
+        )
 
         for path_field in ("implementation", "documentation"):
             relative_path = command[path_field]
-            assert (
-                REPO_ROOT / relative_path
-            ).exists(), f"{command_id}: missing {path_field} {relative_path}"
+            assert (REPO_ROOT / relative_path).exists(), (
+                f"{command_id}: missing {path_field} {relative_path}"
+            )
 
         documentation = REPO_ROOT / command["documentation"]
-        assert f"devenv shell {command_id}" in documentation.read_text(
-            encoding="utf-8"
-        )
+        assert f"devenv shell {command_id}" in documentation.read_text(encoding="utf-8")
 
     tasks_by_id = {task["id"]: task for task in catalog["tasks"]}
     for task_id in (
@@ -638,10 +636,16 @@ def test_native_host_commands_have_separate_validated_catalog() -> None:
         assert entry["operator_confirmation_required"] is True
         assert entry["usage"].startswith("sudo luxnix-")
         assert (REPO_ROOT / entry["implementation"]).is_file()
-    install = next(entry for entry in native if entry["id"] == "install-prepared-encrypted-system")
+    install = next(
+        entry for entry in native if entry["id"] == "install-prepared-encrypted-system"
+    )
     assert install["risk"] == "destructive-local"
     assert install["operator_confirmation_required"] is True
-    assert install["usage"] == "python -m lx_administration.storage.boot_migration install --state <private-state-directory>"
+    assert (
+        install["usage"]
+        == "python -m lx_administration.storage.boot_migration install "
+        "--state <private-state-directory>"
+    )
     assert len(install["prerequisites"]) >= 2
     for entry in (entry for entry in native if entry["id"].startswith("rebuild-host-")):
         action = entry["id"].removeprefix("rebuild-host-")
@@ -658,3 +662,29 @@ def test_native_host_commands_have_separate_validated_catalog() -> None:
             f"nixos-rebuild {action}"
             in (REPO_ROOT / entry["documentation"]).read_text()
         )
+
+
+def test_direnv_reports_known_export_failure_without_evaluating_it(tmp_path):
+    fake = tmp_path / "devenv"
+    fake.write_text(
+        '#!/bin/sh\nif [ "$1" = --version ]; then echo "devenv 1.11.1"; '
+        "else exit 99; fi\n"
+    )
+    fake.chmod(0o755)
+    (tmp_path / ".env").write_text("")
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            'log_error() { echo "$1" >&2; }; source "$1"',
+            "check",
+            str(REPO_ROOT / ".envrc"),
+        ],
+        cwd=tmp_path,
+        env=os.environ | {"PATH": str(tmp_path) + ":" + os.environ["PATH"]},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1
+    assert "Upgrade the Devenv CLI" in result.stderr
+    assert "Explicit devenv shell commands remain available" in result.stderr

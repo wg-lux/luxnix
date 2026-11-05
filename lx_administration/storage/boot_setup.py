@@ -8,17 +8,23 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import stat
 import subprocess
 import sys
 from typing import Literal
+from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 import yaml
 
 from lx_administration.autoconf.config import AutoconfConfig, DEFAULT_CONFIG_PATH
 from lx_administration.storage import boot_migration as migration
-from lx_administration.utils.file_operations import atomic_write_file
+from lx_administration.utils.file_operations import (
+    atomic_create_file,
+    atomic_write_file,
+)
+from lx_administration.yaml import load_unique_yaml_file
 
 
 class Phase(StrEnum):
@@ -89,6 +95,7 @@ class NextStep(Contract):
     plan_id: str
     reason: str
     required_checks: list[str] = Field(default_factory=list)
+    stage: str | None = None
 
 
 def inspect_disk(path: str, *, children: bool = True) -> BlockDevice:
@@ -409,6 +416,7 @@ def next_step(state: Path) -> NextStep:
             return NextStep(
                 **base,
                 action=Action.ACCEPT,
+                stage="acceptance",
                 reason="Perform physical boot/application/recovery acceptance; "
                 "keep recovery copies. No automatic reboot.",
                 required_checks=sorted(migration.required_checks("acceptance", plan)),
@@ -417,6 +425,10 @@ def next_step(state: Path) -> NextStep:
             return NextStep(
                 **base,
                 action=Action.INSTALL_RECOVERY,
+                stage="install-recovery",
+                required_checks=sorted(
+                    migration.required_checks("install-recovery", plan)
+                ),
                 reason="Use migration install recovery; never repartition.",
             )
         record = load_journal(state, plan) if journal_path(state).exists() else None
@@ -437,6 +449,7 @@ def next_step(state: Path) -> NextStep:
                 return NextStep(
                     **base,
                     action=Action.ASSESS,
+                    stage=stage,
                     reason=f"Record actual {stage} evidence: {error}",
                     required_checks=sorted(migration.required_checks(stage, plan)),
                 )
@@ -459,6 +472,7 @@ def next_step(state: Path) -> NextStep:
             return NextStep(
                 **base,
                 action=Action.PREPARE_ACCESS,
+                stage="prepared",
                 reason="Stage original or explicitly enrolled credentials and "
                 "secondary keys; verify the boot password receipt. "
                 f"Access preparation preserves existing credentials. {error}",
@@ -529,6 +543,142 @@ def configured_target(config_path: Path, host: str) -> tuple[dict, Path]:
     return spec, state
 
 
+class OperatorEvidence(Contract):
+    schema_version: Literal[1] = 1
+    plan_id: str
+    stage: str
+    checks: dict[str, bool]
+    artifacts: list[str] = Field(min_length=1)
+
+
+def guidance() -> dict[str, str]:
+    return load_unique_yaml_file(Path(__file__).with_name("boot-setup-guidance.yml"))
+
+
+def show_step(
+    step: NextStep, state: Path, config: Path, *, as_json: bool = False
+) -> None:
+    if as_json:
+        print(step.model_dump_json(indent=2))
+        return
+
+    def command(action: str) -> str:
+        return shlex.join(
+            [
+                "devenv",
+                "shell",
+                "boot-storage-setup",
+                action,
+                "--host",
+                step.host,
+                "--config",
+                str(config),
+            ]
+        )
+
+    print(f"\nHost: {step.host} | Saved plan: {step.plan_id}\nRecovery state: {state}")
+    print(f"Next step: {step.stage or step.action.value}\n{step.reason}")
+    if step.action == Action.PREPARE_ACCESS:
+        print("First stage the required credentials, then prepare access:")
+        print(command("advance") + " --apply")
+        print("After access preparation, complete and review the checks below.")
+    if step.required_checks:
+        descriptions = guidance()
+        print("\nThe operator must complete these checks and record the results:")
+        for index, check in enumerate(step.required_checks, 1):
+            print(f"{index}. {descriptions[check]}\n   Evidence check: {check}")
+        report = state / f"{step.stage}-notes.txt"
+        print(f"\nWrite dated results and recovery locations in {report} (mode 0600).")
+        print("Do not include passwords, private keys or patient data in the notes.")
+        print("When all checks actually pass, record your review with:")
+        print(
+            f'{command("review")} --assessor "$USER" '
+            f"--report {shlex.quote(str(report))}"
+        )
+        print(
+            "Review asks for explicit confirmation of each check; "
+            "it never proves them automatically."
+        )
+    if step.action == Action.ASSESS:
+        print(
+            "Rerunning plan will not complete this review. "
+            "No disk erasure is scheduled."
+        )
+    elif step.action in {
+        Action.PREPARE,
+        Action.PROVISION,
+        Action.INSTALL,
+    }:
+        print("\nNext command (after completing the instructions above):")
+        print(command("advance") + " --apply")
+        if step.action == Action.PROVISION:
+            print(
+                "Run from tested installer media on this host. "
+                "Erasure requires typed confirmation."
+            )
+    elif step.action == Action.RECOVER:
+        print(
+            "Inspect and mount the intended layout from trusted installer media. Then:"
+        )
+        print(command("recover") + ' --assessor "$USER" --apply')
+    elif step.action == Action.INSTALL_RECOVERY:
+        print(
+            "After review, use the documented install --retry-interrupted procedure; "
+            "never rerun Disko."
+        )
+
+
+def review(state: Path, assessor: str, report: Path) -> None:
+    if not sys.stdin.isatty():
+        raise migration.MigrationError(
+            "Review requires an interactive terminal and actual completed checks"
+        )
+    step = next_step(state)
+    if step.stage is None or not step.required_checks:
+        raise migration.MigrationError("No human assessment is currently requested")
+    migration.private_path(report)
+    if not report.read_text().strip():
+        raise migration.MigrationError(
+            "Write the actual test results in the report first"
+        )
+    report_hash = migration.file_digest(report)
+    descriptions = guidance()
+    for check in step.required_checks:
+        print(descriptions[check])
+        if (
+            input("Type VERIFIED only if you performed/reviewed this successfully: ")
+            != "VERIFIED"
+        ):
+            raise migration.MigrationError(
+                "Review cancelled; no assessment was recorded"
+            )
+    if next_step(state) != step or migration.file_digest(report) != report_hash:
+        raise migration.MigrationError(
+            "Plan, requested checks or report changed during review"
+        )
+    evidence = state / f"{step.stage}-review-{uuid4().hex}.json"
+    payload = OperatorEvidence(
+        plan_id=step.plan_id,
+        stage=step.stage,
+        checks=dict.fromkeys(step.required_checks, True),
+        artifacts=[str(report)],
+    )
+    atomic_create_file(
+        destination=evidence,
+        content=[payload.model_dump_json().encode()],
+        file_mode=0o600,
+    )
+    print(
+        json.dumps({"event": "operator_review_created", "path": str(evidence)}),
+        file=sys.stderr,
+    )
+    migration.attest(state, step.stage, evidence, assessor)
+    print(
+        "Operator assessment recorded. This is human evidence, "
+        "not an automated recovery test."
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="action", required=True)
@@ -556,18 +706,26 @@ def main() -> None:
         "attest",
         "status",
         "setup-media",
+        "review",
     ):
         command = sub.add_parser(action)
         command.add_argument("--host", required=True)
         command.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
+        command.add_argument(
+            "--json",
+            action="store_true",
+            help="Print machine-readable next-step output",
+        )
         if action in {"advance", "recover", "setup-media"}:
             command.add_argument("--apply", action="store_true")
         if action == "setup-media":
             command.add_argument(
                 "--device", help="Select one detected external filesystem"
             )
-        if action in {"recover", "attest"}:
+        if action in {"recover", "attest", "review"}:
             command.add_argument("--assessor", required=True)
+        if action == "review":
+            command.add_argument("--report", type=Path, required=True)
         if action == "attest":
             command.add_argument("--stage", choices=migration.STAGES, required=True)
             command.add_argument("--evidence", type=Path, required=True)
@@ -603,6 +761,8 @@ def main() -> None:
             case "plan":
                 migration.plan_spec(spec, state)
                 prepare(state)
+            case "review":
+                review(state, args.assessor, args.report)
             case "attest":
                 migration.attest(state, args.stage, args.evidence, args.assessor)
             case "status":
@@ -611,11 +771,16 @@ def main() -> None:
             case "next":
                 pass
             case "advance":
-                print(advance(state, apply=args.apply).model_dump_json(indent=2))
+                show_step(
+                    advance(state, apply=args.apply),
+                    state,
+                    args.config,
+                    as_json=args.json,
+                )
                 return
             case "recover":
                 provision(state, apply=args.apply, recover_by=args.assessor)
-        print(next_step(state).model_dump_json(indent=2))
+        show_step(next_step(state), state, args.config, as_json=args.json)
     except (ValueError, KeyError, OSError, subprocess.SubprocessError) as error:
         parser.exit(
             1,

@@ -5,6 +5,11 @@ This is the canonical short guide for both client and server installations
 `legacy-containers` is retained recovery compatibility, not a second installation
 design. Repository settings describe intent, not the disks currently installed.
 
+If direnv reports a syntax error at `Checking secrets in ...`, Devenv 1.11.1
+has mixed status text into its shell export. This does not undo a completed
+setup command. Upgrade the Devenv CLI (2.1.2 was verified here), then run
+`direnv reload`; explicit `devenv shell ...` commands remain usable meanwhile.
+
 Run controller commands from the reviewed LuxNix checkout in a private terminal
 (no screen sharing, session recording or terminal logging). Keep console access
 and trusted recovery media ready. Replace `<host>` with the approved
@@ -103,12 +108,37 @@ cold boot and recovery before proceeding to the next host.
    `boot-storage-setup next --host <host>` to inspect the next step.
 
    Planning builds and pins both the system closure and Disko executable.
-   Complete the reported recovery checks and record actual evidence through
-   `boot-storage-setup attest --host <host> --stage <stage> --evidence <report>
-   --assessor <admin>` as described in the
+   A saved plan followed by **recovery review required** means planning succeeded.
+   Repeating `plan` will not satisfy the human checks. The default output explains
+   each check and prints the next command; `--json` retains structured output.
+
+   For a disposable gc-09 installation, the operator must:
+
+   - Test physical console/keyboard access and the firmware boot menu.
+   - Boot trusted NixOS installer media without installing; confirm both the NVMe
+     and recovery drive are visible. Return to the installed system to record it.
+   - Test administrator login/sudo and independent access to recovery credentials.
+   - Confirm the data owner authorizes erasing the exact selected system NVMe,
+     excluding the recovery drive.
+   - Preserve required machine identities, account credentials and application
+     keys/salts independently, or verify their explicit re-enrollment procedure.
+
+   Write dated results, who tested them, disk serials and recovery locations in
+   `/recovery/luxnix-state/gc-09/recovery-notes.txt`, owned by the operator with
+   mode `0600`. Do not put passwords, private keys or patient data in this file.
+   Only after all checks actually pass, run:
+
+   ```sh
+   devenv shell boot-storage-setup review --host gc-09 --assessor "$USER" --report /recovery/luxnix-state/gc-09/recovery-notes.txt
+   ```
+
+   Review asks for `VERIFIED` for each check, creates the evidence JSON and passes
+   it to the existing attestation gate. Cancellation or incomplete notes do not
+   approve the stage. Other hosts/stages receive their own required checklist.
+   `attest` remains available for existing reviewed JSON reports; see the
    [evidence contract](boot-storage-migration.md#guided-operator-workflow).
-   `boot-storage-setup status --host <host>` reports the plan ID and required checks.
-   The helper never attests to recovery or restore tests on your behalf.
+   Keep the plan's reviewed checkout/revision unchanged: updating that release
+   invalidates its evidence; a tool update is not permission to reset its journal.
 
 3. **Boot tested installer media on the selected host.** Keep the same clean
    checkout, built Nix paths, state and evidence available at their planned

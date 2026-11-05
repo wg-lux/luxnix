@@ -31,6 +31,9 @@ entrypoints:
   - name: recovery-media
     file: recovery_media.py
     purpose: Discover existing external filesystems, verify independent writable recovery media and prepare private setup state without formatting.
+  - name: boot-setup-guidance
+    file: boot-setup-guidance.yml
+    purpose: Explain each required human recovery and acceptance assessment without automatically approving evidence.
   - name: boot-setup
     file: boot_setup.py
     purpose: Sequential setup, pinned one-time provisioning, typed journals and verified non-formatting recovery.

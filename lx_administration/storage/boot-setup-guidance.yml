@@ -1,0 +1,29 @@
+# These are human assessments, never automatic proof or permission to erase.
+console_boot_tested: At the selected host, test the physical console, keyboard and firmware boot menu. Confirm you can select recovery media without relying on SSH.
+trusted_installer_tested: Boot trusted NixOS installer media on this machine without starting installation. Confirm it sees the system disk and recovery drive, then return to the installed system to record the result.
+independent_credentials_tested: Test administrator login and sudo. Confirm required recovery credentials are accessible independently of the system disk that will be erased; do not put passwords in the evidence notes.
+selected_disks_disposal_authorized: Confirm the data owner authorizes erasing exactly the system disk IDs/serials shown in this plan. The recovery drive is excluded. Disposable application data does not authorize losing credentials.
+machine_and_application_credentials_preserved_or_reenrolled: Preserve required machine identities, administrator credentials and application keys/salts outside the system disk, or document and test their explicit re-enrollment procedure. Existing encrypted data still needs its original keys.
+new_disks_verified: Verify the selected disks are genuinely empty new disks. Existing filesystems require a migration or explicitly disposable plan.
+headers_preserved: Preserve the original LUKS headers and verify independent recovery copies before replacing any disk layout.
+archives_authenticated: Authenticate the backup archives with the intended recovery identities; record the actual verification results.
+independent_copy_verified: Verify the backup copy is readable independently of all disks selected for replacement.
+source_retained: Confirm the original source disks or approved whole-disk images are retained and can be restored.
+whole_disk_image_verified: Verify the complete disk image and demonstrate its restoration on an isolated target.
+isolated_restore_verified: Restore the required dataset to an isolated target and verify its contents.
+database_verified: Verify the restored database is consistent and usable by the application.
+historical_media_decrypted: Decrypt and open historical protected media using the restored original keys.
+identities_preserved: Verify original machine and application identities, keys and retained salts are preserved.
+target_layout_reviewed: Review every prepared mount, filesystem and selected disk against the saved plan.
+recovery_slots_tested: Test the independent LUKS recovery credentials for the newly prepared volumes.
+identities_restored: Verify original machine and application identities and keys were restored to protected target storage.
+database_restored: Restore and verify the database on the prepared target, preserving its required identities.
+initial_credentials_staged: Stage and verify administrator and application credentials on the encrypted target; test the intended recovery or re-enrollment procedure.
+boot_artifacts_reviewed: Review the bootloader, initrd, root unlock configuration and boot-password receipt for this exact target.
+offline_cold_boot_passed: Cold-boot the installed machine without network-dependent root unlock and test local disk unlock and account selection/login.
+secondary_unlock_passed: Verify every configured secondary encrypted volume unlocks and mounts correctly after boot.
+application_verified: Verify application startup, authenticated access and decryption of required existing data.
+failure_tests_passed: Verify required missing-key, missing-storage and unavailable-secret scenarios stop affected consumers safely.
+recovery_test_passed: Demonstrate recovery using the independent media and credentials, retaining the recovery copies afterward.
+partial_install_reviewed: Inspect the actual partial installation, boot files and prepared mounts; record what completed and what failed.
+safe_to_retry_install_only: Confirm only the pinned install-only operation can safely be repeated; no repartitioning or formatting is permitted.

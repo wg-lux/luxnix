@@ -523,7 +523,9 @@ def test_plan_cli_uses_autoconf_without_spec_or_state(monkeypatch, capsys):
 
     calls = []
     spec, state = {"host": "gc-09"}, Path("/independent/gc-09")
-    monkeypatch.setattr("sys.argv", ["boot-storage-setup", "plan", "--host", "gc-09"])
+    monkeypatch.setattr(
+        "sys.argv", ["boot-storage-setup", "plan", "--host", "gc-09", "--json"]
+    )
     monkeypatch.setattr(setup, "configured_target", lambda p, h: (spec, state))
     monkeypatch.setattr(migration, "plan_spec", lambda s, p: calls.append((s, p)))
     monkeypatch.setattr(setup, "prepare", lambda p: calls.append(p))
@@ -540,3 +542,105 @@ def test_plan_cli_uses_autoconf_without_spec_or_state(monkeypatch, capsys):
     setup.main()
     assert calls == [(spec, state), state]
     assert json.loads(capsys.readouterr().out)["action"] == "assess"
+
+
+def test_guidance_covers_all_existing_assessment_contracts():
+    required = {c for checks in migration.STAGES.values() for c in checks} | {
+        "new_disks_verified",
+        "initial_credentials_staged",
+        "whole_disk_image_verified",
+        "selected_disks_disposal_authorized",
+        "machine_and_application_credentials_preserved_or_reenrolled",
+    }
+    assert set(setup.guidance()) == required
+    assert all(setup.guidance().values())
+
+
+def test_human_output_explains_recovery_and_exact_next_command(state, capsys):
+    root, plan, _ = state
+    step = setup.NextStep(
+        action=setup.Action.ASSESS,
+        host="gc-09",
+        plan_id=plan["plan_id"],
+        stage="recovery",
+        reason="Operator review required",
+        required_checks=["console_boot_tested"],
+    )
+    setup.show_step(step, root, Path("/reviewed/autoconf/config.yml"))
+    output = capsys.readouterr().out
+    assert "physical console" in output
+    assert "review --host gc-09" in output
+    assert str(root / "recovery-notes.txt") in output
+    assert "Rerunning plan will not complete" in output
+    assert "--apply" not in output
+
+
+@pytest.mark.parametrize("answer", ["VERIFIED", "yes"])
+def test_review_requires_explicit_checks_and_delegates_attestation(
+    state, monkeypatch, answer
+):
+    root, plan, _ = state
+    report = root / "notes.txt"
+    report.write_text("Operator tested console and recorded the actual result.")
+    step = setup.NextStep(
+        action=setup.Action.ASSESS,
+        host="gc-09",
+        plan_id=plan["plan_id"],
+        stage="recovery",
+        reason="Operator review required",
+        required_checks=["console_boot_tested"],
+    )
+    monkeypatch.setattr(setup, "next_step", lambda p: step)
+    monkeypatch.setattr(setup.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda prompt: answer)
+    recorded = []
+    monkeypatch.setattr(
+        migration,
+        "attest",
+        lambda s, stage, evidence, assessor: recorded.append(
+            (stage, json.loads(evidence.read_text()), assessor)
+        ),
+    )
+    if answer == "VERIFIED":
+        setup.review(root, "operator", report)
+        assert recorded[0][0] == "recovery"
+        assert recorded[0][1]["checks"] == {"console_boot_tested": True}
+        assert recorded[0][1]["artifacts"] == [str(report)]
+        assert recorded[0][2] == "operator"
+    else:
+        with pytest.raises(migration.MigrationError, match="cancelled"):
+            setup.review(root, "operator", report)
+        assert not recorded and not list(root.glob("*-review-*.json"))
+
+
+def test_review_rejects_piped_approval(state, monkeypatch):
+    root, _, _ = state
+    monkeypatch.setattr(setup.sys.stdin, "isatty", lambda: False)
+    with pytest.raises(migration.MigrationError, match="interactive"):
+        setup.review(root, "operator", root / "notes.txt")
+
+
+@pytest.mark.parametrize("changed", [False, True])
+def test_review_rejects_empty_or_changed_notes(state, monkeypatch, changed):
+    root, plan, _ = state
+    report = root / "notes.txt"
+    report.write_text("actual initial notes" if changed else "")
+    step = setup.NextStep(
+        action=setup.Action.ASSESS,
+        host="gc-09",
+        plan_id=plan["plan_id"],
+        stage="recovery",
+        reason="Review required",
+        required_checks=["console_boot_tested"],
+    )
+    monkeypatch.setattr(setup, "next_step", lambda p: step)
+    monkeypatch.setattr(setup.sys.stdin, "isatty", lambda: True)
+
+    def confirm(prompt):
+        report.write_text("changed while reviewing")
+        return "VERIFIED"
+
+    monkeypatch.setattr("builtins.input", confirm)
+    with pytest.raises(migration.MigrationError, match="changed|actual test results"):
+        setup.review(root, "operator", report)
+    assert not list(root.glob("*-review-*.json"))

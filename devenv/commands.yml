@@ -247,7 +247,7 @@ commands:
     summary: Guide root setup in order with pinned provisioning, typed erasure approval and non-destructive recovery.
     risk: destructive-local
     operator_confirmation_required: true
-    usage: devenv shell boot-storage-setup <observe|setup-media|plan|next|advance|recover|attest|status> --host <host> [--config <autoconf-yaml>] [--apply] [--assessor <admin>]
+    usage: devenv shell boot-storage-setup <observe|setup-media|plan|next|advance|recover|review|attest|status> --host <host> [--config <autoconf-yaml>] [--apply] [--assessor <admin>]
     implementation: lx_administration/storage/boot_setup.py
     documentation: docs/boot-storage-operator.md
     prerequisites:
@@ -258,6 +258,7 @@ commands:
       - Setup-media previews USB/removable filesystems; apply mounts one existing filesystem at /recovery, requires 1 GiB free, prepares private state and continues planning. Multiple candidates require --device; no formatting or automatic install.
       - Observe runs on the target and emits reviewed disk/hardware facts as YAML without writes; no substitute disk selection.
       - Plan reads boot_storage.hosts from Autoconf and builds the closure and Disko executable; private journals live under boot_storage.state_root/host.
+      - Default output explains the operator checklist and next command; --json retains structured output. Review asks for explicit confirmation of each completed check and records existing operator notes through the canonical attestation gate.
       - Next and advance without apply only report the next step; attest and status reuse the existing migration evidence workflow.
       - Advance at the provisioning step with apply requires a real terminal and exact host, plan and serial confirmation before formatting the selected disks once.
       - Durable typed intent and pre-format disk metadata are saved before execution. Failed or uncertain attempts never retry formatting automatically.
