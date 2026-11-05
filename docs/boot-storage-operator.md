@@ -116,6 +116,22 @@ Use the selected host's build, not another host's closure. Check the running,
 booted and system-profile closures and bootloader default independently: they can
 disagree after an interrupted installation. Retain a known-bootable generation.
 
+If activation reports a missing `/dev/mapper/cryptroot`, run the candidate's
+`sudo ./result/sw/bin/luxnix-setup-root-encryption` (replace `./result` with your
+actual build result). It reports the configured host/device and mounted root,
+checks all root filesystem members, and explains the required next step.
+It never formats disks, opens mappings, changes keyslots or activates a generation.
+An already encrypted but mismatched root needs configuration/recovery review;
+a plaintext root needs the installation/migration workflow above. Creating an
+unrelated mapper named `cryptroot` does not fix the mounted root.
+
+Once root matches the candidate, explicitly run
+`sudo ./result/sw/bin/luxnix-setup-root-encryption --setup-password` to verify the
+existing disk password through the canonical helper. Then run
+`sudo ./result/sw/bin/luxnix-verify-boot-storage` and retry the rebuild only after
+all checks pass. A successful root-only check does not verify secondary volumes,
+application recovery, or physical next-boot acceptance.
+
 On an installed boot-LUKS host, build the target generation first and run its
 `luxnix-setup-boot-password` helper with sudo to prepare the first activation
 (use the actual build-result path). `--change` explicitly adds a new password while keeping recovery

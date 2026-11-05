@@ -696,3 +696,135 @@ def test_gc02_authentication_retries_before_queueing_application():
     assert value["auth"]["RestartSec"] == "30s"
     assert value["auth"]["TimeoutStartSec"] == "45s"
     assert value["auth"]["ExecStartPost"].endswith("/bin/systemctl --no-block start lx-annotate.service")
+
+
+@pytest.mark.parametrize("encrypted", [False, True])
+def test_root_setup_explains_layout_mismatch_without_mutation(
+    monkeypatch, capsys, encrypted
+):
+    current = {"source": "/dev/current[/root]", "fstype": "btrfs"}
+    monkeypatch.setattr(boot, "probe", lambda *args: {"filesystems": [current]})
+
+    def mismatch(*args):
+        raise FileNotFoundError("/dev/mapper/cryptroot")
+
+    monkeypatch.setattr(boot, "verify_mount", mismatch)
+    monkeypatch.setattr(
+        boot, "filesystem_devices", lambda fs: ["/dev/member1", "/dev/member2"]
+    )
+    checked = []
+
+    def require(device):
+        checked.append(device)
+        if not encrypted and device == "/dev/member2":
+            raise ValueError("Unencrypted member")
+
+    monkeypatch.setattr(boot, "require_luks2", require)
+    with pytest.raises(ValueError, match="Root setup is blocked"):
+        boot.setup_root(
+            {
+                "mounts": {
+                    "/": {
+                        "device": "/dev/mapper/cryptroot",
+                        "fsType": "btrfs",
+                        "subvolume": "root",
+                    }
+                }
+            }
+        )
+    output = capsys.readouterr().out
+    assert checked == ["/dev/member1", "/dev/member2"]
+    assert "Mounted root: /dev/current[/root]" in output
+    assert ("already uses LUKS2" in output) is encrypted
+    assert ("boot-storage-migration plan" in output) is not encrypted
+    assert "Root matches" not in output
+
+
+def test_root_setup_requires_exact_configured_mount(monkeypatch, capsys):
+    monkeypatch.setattr(
+        boot,
+        "probe",
+        lambda *args: {
+            "filesystems": [
+                {"source": "/dev/mapper/cryptroot[/root]", "fstype": "btrfs"}
+            ]
+        },
+    )
+    checked = []
+    monkeypatch.setattr(boot, "verify_mount", lambda *args: checked.append(args))
+    boot.setup_root(
+        {
+            "mounts": {
+                "/": {
+                    "device": "/dev/mapper/cryptroot",
+                    "fsType": "btrfs",
+                    "subvolume": "root",
+                }
+            }
+        }
+    )
+    assert checked == [("/", "/dev/mapper/cryptroot", "btrfs", "root")]
+    assert "--setup-password" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("records", [[], [{}, {}]])
+def test_root_setup_refuses_unknown_or_ambiguous_root(monkeypatch, records):
+    monkeypatch.setattr(boot, "probe", lambda *args: {"filesystems": records})
+    with pytest.raises(ValueError, match="Cannot identify one mounted root"):
+        boot.setup_root({"mounts": {"/": {}}})
+
+
+def test_missing_cryptroot_gives_actionable_preswitch_error(monkeypatch):
+    monkeypatch.setattr(
+        boot,
+        "probe",
+        lambda *args: {
+            "filesystems": [
+                {"source": "/dev/plain[/root]", "fstype": "btrfs", "fsroot": "/root"}
+            ]
+        },
+    )
+
+    def missing(path):
+        raise FileNotFoundError(path)
+
+    monkeypatch.setattr(boot.os, "stat", missing)
+    with pytest.raises(ValueError, match="luxnix-setup-root-encryption") as error:
+        boot.verify_mount("/", "/dev/mapper/cryptroot", "btrfs", "root")
+    assert "mounted root uses /dev/plain" in str(error.value)
+
+
+def test_packaged_root_setup_help_and_argument_safety():
+    expression = r"""
+      let f = builtins.getFlake ("git+file://" + toString ./.);
+      in builtins.head (builtins.filter
+        (p: (p.name or "") == "luxnix-setup-root-encryption")
+        f.nixosConfigurations.gc-09.config.environment.systemPackages)
+    """
+    build = subprocess.run(
+        [
+            "nix",
+            "build",
+            "--impure",
+            "--no-link",
+            "--print-out-paths",
+            "--expr",
+            expression,
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=600,
+    )
+    assert build.returncode == 0, build.stderr
+    tool = Path(build.stdout.strip()) / "bin/luxnix-setup-root-encryption"
+    result = subprocess.run([str(tool), "--help"], capture_output=True, text=True)
+    assert result.returncode == 0
+    assert "Never formats disks" in result.stdout
+    for args in [["--change"], ["--setup-password", "extra"]]:
+        result = subprocess.run([str(tool), *args], capture_output=True, text=True)
+        assert result.returncode == 2
+    if os.geteuid() != 0:
+        result = subprocess.run([str(tool)], capture_output=True, text=True)
+        assert result.returncode == 1
+        assert "Run with sudo" in result.stderr

@@ -45,7 +45,7 @@ entrypoints:
   purpose: Opt-in TPM-bound client identity and release fetch command; not wired into unlock.
 - name: operator-unlocked-storage
   file: luxnix/operator-unlocked-storage/default.nix
-  purpose: Shared boot LUKS policy, legacy-container compatibility and guarded native mount override normalization.
+  purpose: Shared boot LUKS policy and root setup helper, legacy-container compatibility and guarded native mount override normalization.
 - name: operator-storage-helper
   file: luxnix/operator-storage-helper/default.nix
   purpose: Legacy-container recovery helper; omitted from boot-LUKS systems.

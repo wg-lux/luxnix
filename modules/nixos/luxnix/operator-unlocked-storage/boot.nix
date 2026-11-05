@@ -149,6 +149,37 @@ let
         --device ${lib.escapeShellArg config.boot.initrd.luks.devices.cryptroot.device} "$@"
     '';
   };
+  setupRoot = pkgs.writeShellApplication {
+    name = "luxnix-setup-root-encryption";
+    runtimeInputs = [
+      pkgs.python3
+      pkgs.util-linux
+      pkgs.btrfs-progs
+      pkgs.cryptsetup
+    ];
+    text = ''
+      usage() {
+        echo 'Usage: luxnix-setup-root-encryption [--setup-password]'
+        echo 'Inspect the running root against this candidate; plaintext root requires reviewed provisioning.'
+        echo '--setup-password verifies an existing LUKS password only after the root check succeeds.'
+        echo 'Never formats disks, opens mappings, changes keyslots or activates a generation.'
+      }
+      if [ "$#" -gt 1 ]; then usage >&2; exit 2; fi
+      case "''${1:-}" in
+        --help) usage; exit 0 ;;
+        ""|--setup-password) ;;
+        *) usage >&2; exit 2 ;;
+      esac
+      if [ "$EUID" -ne 0 ]; then echo 'Run with sudo to inspect LUKS mappings.' >&2; exit 1; fi
+      printf 'Candidate host: %s\nConfigured LUKS device: %s\n' \
+        ${lib.escapeShellArg config.networking.hostName} \
+        ${lib.escapeShellArg config.boot.initrd.luks.devices.cryptroot.device}
+      python3 ${checker}/boot.py ${spec} --root-setup
+      if [ "''${1:-}" = --setup-password ]; then
+        exec ${lib.getExe setupPassword}
+      fi
+    '';
+  };
   check = name: "luxnix-storage-check-${name}";
   guard =
     requiredPaths:
@@ -323,6 +354,7 @@ in
         environment.systemPackages = [
           verifier
           setupPassword
+          setupRoot
         ];
         system.preSwitchChecks.encryptedStorage = ''
           ${lib.getExe verifier}

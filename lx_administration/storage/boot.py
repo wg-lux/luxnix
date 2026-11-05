@@ -69,7 +69,18 @@ def verify_mount(path: str, expected: str, expected_type: str | None = None,
             raise ValueError(f"Unexpected bind source root at {path}")
         expected = probe("findmnt", "--json", "--target", expected,
                          "--output", "SOURCE")["filesystems"][0]["source"].split("[", 1)[0]
-    if os.stat(source).st_rdev != os.stat(expected).st_rdev:
+    try:
+        expected_info = os.stat(expected)
+    except FileNotFoundError as exc:
+        if path == "/":
+            raise ValueError(
+                f"Configured root device {expected} is missing; mounted root uses "
+                f"{source}. "
+                "Run the candidate generation's sw/bin/luxnix-setup-root-encryption "
+                "with sudo. A rebuild cannot encrypt a plaintext root"
+            ) from exc
+        raise
+    if os.stat(source).st_rdev != expected_info.st_rdev:
         raise ValueError(f"Unexpected backing device at {path}")
     if encrypted:
         encrypted_storage(Path(path))
@@ -77,6 +88,76 @@ def verify_mount(path: str, expected: str, expected_type: str | None = None,
     for device in filesystem_devices(fs):
         if encrypted:
             require_luks2(device)
+
+
+def setup_root(spec: dict) -> None:
+    """Read-only setup guidance; existing installers and password tools own changes."""
+    root = spec["mounts"]["/"]
+    records = probe(
+        "findmnt",
+        "--json",
+        "--mountpoint",
+        "/",
+        "--output",
+        "SOURCE,FSTYPE,UUID,FSROOT",
+    )["filesystems"]
+    if len(records) != 1:
+        raise ValueError(
+            "Cannot identify one mounted root; inspect from trusted recovery media"
+        )
+    current = records[0]
+    print(f"Mounted root: {current['source']} ({current['fstype']})")
+    print(f"Configured root: {root['device']}")
+    try:
+        verify_mount("/", root["device"], root["fsType"], root["subvolume"])
+    except (
+        ValueError,
+        OSError,
+        subprocess.CalledProcessError,
+        subprocess.TimeoutExpired,
+    ) as exc:
+        print(f"Root verification failed: {exc}")
+        try:
+            for device in filesystem_devices(current):
+                require_luks2(device)
+        except (
+            ValueError,
+            OSError,
+            subprocess.CalledProcessError,
+            subprocess.TimeoutExpired,
+        ) as probe_error:
+            print(f"Current root is not verified as LUKS2: {probe_error}")
+            print(
+                "If root is plaintext, use the reviewed backup/provision/restore "
+                "workflow; neither a rebuild nor a reboot encrypts it.\n1. Record "
+                "the target host, hardware UUID and exact disk IDs, serials and "
+                "sizes.\n2. Preserve recovery credentials and verify "
+                "backup/restore, or explicitly authorize a disposable installation "
+                "under the fresh-install contract.\n3. On the controller, use "
+                "devenv shell boot-storage-migration plan with a private --spec "
+                "YAML and --state directory; complete its recovery and provision "
+                "gates.\n4. Provision only the approved disks from trusted "
+                "installer media, enter the LUKS password, then prepare-access, "
+                "check and install through that saved plan."
+            )
+        else:
+            print(
+                "Current root already uses LUKS2. Resolve the configured "
+                "device/subvolume or storage-policy mismatch before rebuilding; do "
+                "not format it or open an unrelated volume just to create the "
+                "expected mapper name."
+            )
+        raise ValueError(
+            "Root setup is blocked. Follow docs/boot-storage-operator.md and "
+            "docs/boot-storage-migration.md#guided-operator-workflow; no storage "
+            "was changed"
+        ) from exc
+    print(
+        "Root matches the configured LUKS2 layout. Run this helper with "
+        "--setup-password to verify the existing disk password, then run "
+        "luxnix-verify-boot-storage before retrying the rebuild. This check alone "
+        "is not full boot readiness."
+    )
 
 
 def reject_retired_mount(path: str) -> None:
@@ -100,7 +181,7 @@ def verify_key(path: str) -> None:
 
 
 def key_device(device: str, mapping: str) -> tuple[str, int, int]:
-    """Bind the evaluated raw device to the open mapping, including its LUKS UUID."""
+    "Bind the evaluated raw device to the open mapping, including its LUKS UUID."
     if (not device.startswith("/dev/") or ".." in Path(device).parts
             or not re.fullmatch(r"[A-Za-z0-9_.+-]+", mapping)):
         raise ValueError("Invalid secondary device or mapping specification")
@@ -122,7 +203,7 @@ def key_device(device: str, mapping: str) -> tuple[str, int, int]:
 
 
 def verify_unlock(key: dict) -> None:
-    """Test the existing keyslot without opening, closing or modifying a mapping."""
+    "Test the existing keyslot without opening, closing or modifying a mapping."
     verify_key(key["path"])
     try:
         identity = key_device(key["device"], key["mapping"])
@@ -141,6 +222,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("spec", type=Path, nargs="?")
     parser.add_argument("--key", type=str)
+    parser.add_argument(
+        "--root-setup", action="store_true",
+        help="Inspect root and explain the supported encryption setup path",
+    )
     parser.add_argument("--mounted-storage", action="store_true",
                         help="Check running consumers' mounts and key permissions; not reboot readiness")
     parser.add_argument("paths", nargs="*")
@@ -152,6 +237,9 @@ def main() -> None:
         if args.spec is None:
             raise ValueError("Missing storage specification")
         spec = json.loads(args.spec.read_text())
+        if args.root_setup:
+            setup_root(spec)
+            return
         for path in spec.get("retiredMounts", []):
             reject_retired_mount(path)
         for path, expected in spec["mounts"].items():

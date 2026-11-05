@@ -257,6 +257,10 @@ disko.lib.testLib.makeDiskoTest {
       assert "Started Dispatch Password Requests to Console." not in boot_log, boot_log
       machine.fail("test -e /unauthorized-shell-command")
       machine.succeed("luxnix-verify-boot-storage")
+      receipt = machine.succeed("sha256sum /var/lib/luxnix-boot-passphrase/cryptroot.json")
+      machine.succeed("luxnix-setup-root-encryption")
+      machine.succeed("luxnix-setup-root-encryption --setup-password")
+      assert machine.succeed("sha256sum /var/lib/luxnix-boot-passphrase/cryptroot.json") == receipt
       fingerprint = machine.succeed("sha256sum ${key}")
       machine.succeed("/run/current-system/bin/switch-to-configuration test")
       assert machine.succeed("sha256sum ${key}") == fingerprint
