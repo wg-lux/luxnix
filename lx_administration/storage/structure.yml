@@ -28,9 +28,12 @@ entrypoints:
   - name: independent-recovery-custody
     file: recovery_custody.py
     purpose: Prepare dedicated age identities and verify independently decryptable recovery envelopes without replacing originals.
+  - name: boot-setup
+    file: boot_setup.py
+    purpose: Sequential setup, pinned one-time provisioning, typed journals and verified non-formatting recovery.
   - name: boot-migration
     file: boot_migration.py
-    purpose: Bind explicit LUKS2 fresh/migration plans to hardware checks, reviewed evidence and idempotent install-only actions.
+    purpose: Bind explicit LUKS2 fresh/disposable/migration plans to hardware checks, reviewed evidence and idempotent install-only actions.
   - name: storage-readiness
     file: readiness.py
     purpose: Collect observations or reject incomplete host, layout and disk-identity admission without changing storage.

@@ -48,47 +48,94 @@ LUKS alone does not establish it or filesystem integrity. See the
 
 ## New installation or root migration
 
-First prepare the reviewed hardware plan and recovery evidence using the
-[installation guide](boot-storage-migration.md#guided-operator-workflow).
-A migration requires retained disks or a verified backup and restore test.
-Use the same saved state after an interruption; do not restart disk formatting.
-Disposable data permits a separately authorized fresh provisioning plan, not
-implicit permission to erase disks. Confirm hardware identities and preserve or
-explicitly re-enroll machine/application credentials before provisioning.
+Use `boot-storage-setup` for the sequential workflow; `boot-storage-migration`
+remains the evidence and install-only interface. Neither command encrypts a
+running plaintext root in place. Work on **one host at a time**, accepting its
+cold boot and recovery before proceeding to the next host.
 
-On the controller:
+1. **Review a clean, durable release.** On the target, collect a specification
+   without changing storage. Use its reviewed checkout and actual inventory name:
+
+   ```sh
+   devenv shell boot-storage-setup observe --checkout <checkout> --host <host> --installation disposable --source-retention discard-approved
+   ```
+
+   Save the YAML privately on encrypted controller storage. Observation requires
+   permission to read the hardware UUID. It reads only the configured disk IDs;
+   it never substitutes another disk. Review serials, sizes and hardware UUID.
+   `disposable` explicitly permits reusing the selected disks after authorization;
+   it does **not** authorize erasure by itself. Use `fresh` / `new-disks` for empty
+   disks, or `migration` / `old-disks` (or `whole-disk-image`) when retaining data.
+   Preserve or explicitly re-enroll machine/application credentials even when
+   application data is disposable.
+
+2. **Plan on the controller.** Use private absolute paths on encrypted storage:
+
+   ```sh
+   devenv shell boot-storage-setup plan --spec <private-spec.yml> --state <state>
+   devenv shell boot-storage-setup next --state <state>
+   ```
+
+   Planning builds and pins both the system closure and Disko executable.
+   Complete the reported recovery checks and record actual evidence through
+   `boot-storage-migration attest` as described in the
+   [evidence contract](boot-storage-migration.md#guided-operator-workflow).
+   The helper never attests to recovery or restore tests on your behalf.
+
+3. **Boot tested installer media on the selected host.** Keep the same clean
+   checkout, built Nix paths, state and evidence available at their planned
+   absolute paths. State/evidence must be root-owned and private on independent
+   encrypted storage, outside `/mnt` and all selected disks. Run the reviewed
+   Python environment as root, with no active swap or target mappings/mounts:
+
+   ```sh
+   python -m lx_administration.storage.boot_setup advance --state <state>
+   python -m lx_administration.storage.boot_setup advance --state <state> --apply
+   ```
+
+   The first command previews. The second performs **one** eligible step. For
+   provisioning it requires typing the exact host, plan identifier and disk
+   serials at a real terminal, then runs the pinned Disko layout. Enter the disk
+   passwords at its hidden prompts and preserve them in your password manager.
+   It refuses global partition/mapping-name collisions and existing `/mnt`
+   mounts. It never formats the running system or automatically reboots.
+
+4. **Prepare credentials and install.** Restore the required original secrets,
+   keys, salts and data, or explicitly enroll initial credentials for a disposable
+   installation. Review secondary-volume key enrollment and the candidate boot
+   password receipt using the detailed guide. Run `advance --apply` to prepare
+   missing administrator/initrd SSH access through the existing guarded helper;
+   existing credentials are preserved. It does not supply application secrets or
+   change account passwords. Complete and attest the reported `prepared` checks.
+   Preview again, then `advance --apply` validates the complete target and asks
+   for the separate install confirmation. Filesystem identities must still match
+   those recorded after provisioning.
+
+5. **Accept the physical result.** Arrange a console-assisted first boot; test
+   root unlock, account selection, administrator login/sudo/SSH, application
+   startup and decryption, and independent recovery. Keep recovery copies.
+   Successful installation alone does not authorize fleet rollout.
+
+### Interrupted setup
+
+Run `next --state <state>` using the same state. A completed format is never
+repeated. A running/interrupted provision blocks all automatic retries. Preserve
+`provision.json`: it records disk metadata and execution state, **not a backup**.
+Inspect the disks; repair/mount the intended complete layout from trusted media,
+then preview and explicitly accept it without rerunning Disko:
 
 ```sh
-devenv shell check-connectivity <host>
-devenv shell boot-storage-migration status --state <state>
+python -m lx_administration.storage.boot_setup recover --state <state> --assessor <admin>
+python -m lx_administration.storage.boot_setup recover --state <state> --assessor <admin> --apply
 ```
 
-As root in the trusted installer, with the reviewed package and state available:
-
-```sh
-python -m lx_administration.storage.boot_migration check --state <state> --stage provision
-```
-
-Only after that passes, provision the approved disks with their reviewed Disko
-layout and mount the target at `/mnt`. Choose and record the prompted LUKS
-password in your password manager. Stage the administrator credential using
-[the account guide](admin-passwords.md#6-install-on-a-new-machine); it is separate
-from the disk password. Restore existing application keys, salts and data onto
-protected storage when migrating. Then run:
-
-```sh
-python -m lx_administration.storage.boot_migration prepare-access --state <state>
-```
-
-Record the `prepared` evidence from the guide, then:
-
-```sh
-python -m lx_administration.storage.boot_migration check --state <state> --stage install
-python -m lx_administration.storage.boot_migration install --state <state>
-```
-
-Confirm the displayed host and disks. Arrange the first boot with console
-recovery available; verify disk unlock, administrator login and application data.
+Recovery rechecks hardware, encrypted filesystems and evidence and requires an
+exact terminal confirmation. Incomplete or mismatched layouts remain blocked;
+restore retained disks/backups or arrange a separately reviewed reprovision.
+For an interrupted installation, follow the existing `install-recovery`
+assessment and `boot-storage-migration install --retry-interrupted` procedure.
+Never delete journals to bypass a blocked retry. Old boot generations cannot
+undo formatting or recover lost keys.
 
 ## Save and verify disk-password custody
 

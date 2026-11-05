@@ -25,6 +25,12 @@ entrypoints:
   - name: secret-rotation-check
     file: check-secret-rotation.py
     purpose: Validate public cross-repository source contracts without secret or runtime access.
+  - name: password-path-search
+    file: find-password-paths.sh
+    purpose: Read-only search for password storage paths in the repository and on disk; filesystem modes print paths only.
+  - name: password-file-deletion
+    file: delete-password-files.sh
+    purpose: Destructive local deletion of password files by path match; dry run by default, --apply requires typed confirmation.
   - name: structure-linter
     file: lint_structure.py
     purpose: Inspect structure linter ownership and interfaces.

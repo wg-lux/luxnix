@@ -11,6 +11,9 @@ boundaries:
   - Source checks do not prove deployment readiness
   - Nix evaluation and VM tests are separate from the fast Python lane
 entrypoints:
+  - name: boot-setup-safety
+    file: test_boot_setup.py
+    purpose: Verify sequential root setup, disposal gates, typed approval, journal durability and non-formatting recovery.
   - name: boot-recovery-vm
     file: nixtest/boot_recovery_vm_test.nix
     purpose: Exercise gc-02 credential validators, immutable-user PAM login, desktop chooser and delayed Vault dependency recovery in a disposable VM.

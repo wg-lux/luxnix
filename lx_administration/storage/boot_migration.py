@@ -178,6 +178,7 @@ def evaluate(checkout: Path, host: str) -> dict:
       layout = c.luxnix.storage.operatorUnlocked.layout;
       enabled = c.luxnix.storage.operatorUnlocked.enable;
       closure = builtins.toString c.system.build.toplevel;
+      provisioner = builtins.toString c.system.build.diskoScript;
       disks = builtins.mapAttrs (_: d: d.device) c.disko.devices.disk;
       mounts = builtins.mapAttrs
         (_: v: { inherit (v) device fsType options; }) c.fileSystems;
@@ -229,7 +230,7 @@ def evaluate(checkout: Path, host: str) -> dict:
 
 
 def fresh_install(spec: dict) -> bool:
-    return spec.get("installation", "migration") == "fresh"
+    return spec.get("installation", "migration") in {"fresh", "disposable"}
 
 
 def stage_order(plan: dict) -> tuple[str, ...]:
@@ -273,15 +274,21 @@ def validate_spec(spec: dict) -> None:
         raise MigrationError("Unsupported specification version or host name")
     if spec.get("root_encryption", "luks2") != "luks2":
         raise MigrationError("New installations require root_encryption: luks2")
-    if spec.get("installation", "migration") not in {"migration", "fresh"}:
-        raise MigrationError("Select installation: migration or fresh")
-    retention = (
-        {"new-disks"} if fresh_install(spec) else {"old-disks", "whole-disk-image"}
-    )
+    if spec.get("installation", "migration") not in {
+        "migration",
+        "fresh",
+        "disposable",
+    }:
+        raise MigrationError("Select installation: migration, fresh or disposable")
+    retention = {
+        "migration": {"old-disks", "whole-disk-image"},
+        "fresh": {"new-disks"},
+        "disposable": {"discard-approved"},
+    }[spec.get("installation", "migration")]
     if spec["source_retention"] not in retention:
         raise MigrationError(
-            "Fresh installation requires new-disks; migration requires old-disks "
-            "or whole-disk-image retention"
+            "Fresh installation requires new-disks; disposable requires "
+            "discard-approved; migration requires old-disks or whole-disk-image"
         )
     if not isinstance(spec["hardware_uuid"], str) or not re.fullmatch(
         r"[a-fA-F0-9-]{36}", spec["hardware_uuid"]
@@ -360,6 +367,24 @@ def create_plan(spec_path: Path, state: Path) -> dict:
             or source_identity(Path(spec["checkout"])) != source
         ):
             raise MigrationError("Release changed during build; no plan was published")
+        provisioner = run(
+            "nix",
+            "build",
+            "--no-update-lock-file",
+            "--no-link",
+            "--print-out-paths",
+            str(spec["checkout"])
+            + "#nixosConfigurations."
+            + spec["host"]
+            + ".config.system.build.diskoScript",
+            timeout=3600,
+        )
+        if (
+            provisioner != config["provisioner"]
+            or source_identity(Path(spec["checkout"])) != source
+        ):
+            raise MigrationError("Provisioner or release changed during build")
+        config["provisioner_sha256"] = file_digest(Path(provisioner))
         payload = {
             "schema_version": 1,
             "spec": spec,
@@ -428,6 +453,14 @@ def required_checks(stage: str, plan: dict) -> set[str]:
                 "independent_credentials_tested",
                 "new_disks_verified",
             }
+            if plan["spec"].get("installation") == "disposable":
+                required.remove("new_disks_verified")
+                required.update(
+                    {
+                        "selected_disks_disposal_authorized",
+                        "machine_and_application_credentials_preserved_or_reenrolled",
+                    }
+                )
         elif stage == "prepared":
             required -= {"database_restored", "identities_restored"}
             required.add("initial_credentials_staged")
@@ -761,7 +794,7 @@ def verify_installer(disks: set[int]) -> None:
         raise MigrationError("Disable installer swap before handling restored secrets")
 
 
-def verify_target(plan: dict, disks: set[int]) -> dict:
+def verify_layout(plan: dict, disks: set[int]) -> dict:
     # Reuse the same mount, Btrfs member, LUKS2 and key checks used at runtime.
     from lx_administration.storage import boot
 
@@ -802,8 +835,7 @@ def verify_target(plan: dict, disks: set[int]) -> dict:
                 "A prepared mount uses a disk outside the operator selection"
             )
         if any(
-            not device_disks(member) <= disks
-            for member in filesystem_devices(record)
+            not device_disks(member) <= disks for member in filesystem_devices(record)
         ):
             raise MigrationError(
                 "A filesystem member is outside the selected target disks"
@@ -815,6 +847,13 @@ def verify_target(plan: dict, disks: set[int]) -> dict:
         }
     if "/" not in identities or "/boot" not in identities:
         raise MigrationError("The complete root and EFI mount graph is required")
+    return identities
+
+
+def verify_target(plan: dict, disks: set[int]) -> dict:
+    from lx_administration.storage import boot
+
+    identities = verify_layout(plan, disks)
     for line in plan["config"]["crypttab"].splitlines():
         if not line.strip():
             continue
@@ -863,7 +902,9 @@ def account_hash(path: Path) -> bytes:
     try:
         return operator_migration.account_hash(path)
     except operator_migration.MigrationError as exc:
-        raise MigrationError("Restored administrator hash is missing, locked, malformed or retired") from exc
+        raise MigrationError(
+            "Restored administrator hash is missing, locked, malformed or retired"
+        ) from exc
 
 
 def verify_accounts(plan: dict, root: Path = Path("/mnt")) -> None:
@@ -901,7 +942,9 @@ def sync_directory(path: Path) -> None:
         os.close(fd)
 
 
-def prepare_access(state: Path, root: Path = Path("/mnt")) -> dict:
+def prepare_access(
+    state: Path, root: Path = Path("/mnt"), *, expected_mounts: dict | None = None
+) -> dict:
     """Restore a missing boot hash and create only the dedicated SSH host identity."""
     import tempfile
 
@@ -912,6 +955,11 @@ def prepare_access(state: Path, root: Path = Path("/mnt")) -> dict:
         verify_independent_state(state, progress, disks)
         from lx_administration.storage import boot
 
+        if (
+            expected_mounts is not None
+            and verify_layout(plan, disks) != expected_mounts
+        ):
+            raise MigrationError("Provisioned filesystem identities changed")
         root_config = plan["config"]["mounts"]["/"]
         root_device = "/dev/mapper/cryptroot"
         boot.verify_mount(str(root), root_device, root_config["fsType"])
@@ -1016,7 +1064,9 @@ def verify_unmounted_targets(plan: dict) -> None:
                 disk["path"],
             )
         )["blockdevices"]
-        if fresh_install(plan["spec"]) and any(d.get("fstype") for d in walk(tree)):
+        if plan["spec"].get("installation") == "fresh" and any(
+            d.get("fstype") for d in walk(tree)
+        ):
             raise MigrationError(
                 "Fresh installation requires empty new disks; "
                 "existing filesystems need a migration plan"
@@ -1073,7 +1123,12 @@ def confirm(plan: dict) -> None:
         raise MigrationError("Installation cancelled; no install command ran")
 
 
-def install(state: Path, *, retry_interrupted: bool = False) -> None:
+def install(
+    state: Path,
+    *,
+    retry_interrupted: bool = False,
+    expected_mounts: dict | None = None,
+) -> None:
     with installer_lock() as install_lock, locked_state(state):
         plan = load_plan(state)
         progress = load_progress(state, plan)
@@ -1101,6 +1156,8 @@ def install(state: Path, *, retry_interrupted: bool = False) -> None:
         disks = check_gates(plan, progress, "install")
         verify_independent_state(state, progress, disks)
         identities = verify_target(plan, disks)
+        if expected_mounts is not None and identities != expected_mounts:
+            raise MigrationError("Provisioned filesystem identities changed")
         previous = progress["install"].get("mounts")
         if previous is not None and previous != identities:
             raise MigrationError(

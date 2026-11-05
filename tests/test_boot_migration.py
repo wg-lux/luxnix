@@ -532,3 +532,87 @@ def test_fresh_plan_cannot_treat_existing_filesystems_as_empty(
     )
     with pytest.raises(migration.MigrationError, match="empty new disks"):
         migration.verify_unmounted_targets(plan)
+
+
+def test_disposable_reinstall_requires_explicit_retention_and_recovery(state):
+    _, plan, _ = state
+    plan["spec"]["installation"] = "disposable"
+    with pytest.raises(migration.MigrationError, match="discard-approved"):
+        migration.validate_spec(plan["spec"])
+    plan["spec"]["source_retention"] = "discard-approved"
+    migration.validate_spec(plan["spec"])
+    assert migration.stage_order(plan) == ("recovery", "prepared")
+    assert migration.required_checks("recovery", plan) == {
+        "console_boot_tested",
+        "trusted_installer_tested",
+        "independent_credentials_tested",
+        "selected_disks_disposal_authorized",
+        "machine_and_application_credentials_preserved_or_reenrolled",
+    }
+    assert "initial_credentials_staged" in migration.required_checks("prepared", plan)
+
+
+@pytest.mark.parametrize(
+    "mounted,mapping", [(True, False), (False, True), (False, False)]
+)
+def test_disposable_disks_still_require_offline_unmapped_target(
+    state, monkeypatch, mounted, mapping
+):
+    _, plan, _ = state
+    plan["spec"].update(installation="disposable", source_retention="discard-approved")
+    tree = {
+        "blockdevices": [
+            {
+                "type": "crypt" if mapping else "disk",
+                "fstype": "btrfs",
+                "mountpoints": ["/"] if mounted else [],
+            }
+        ]
+    }
+    monkeypatch.setattr(migration, "run", lambda *args: json.dumps(tree))
+    if mounted or mapping:
+        with pytest.raises(migration.MigrationError, match="open mapping or mounted"):
+            migration.verify_unmounted_targets(plan)
+    else:
+        migration.verify_unmounted_targets(plan)
+
+
+@pytest.mark.parametrize("changed", [False, True])
+def test_plan_pins_provisioner_and_rejects_build_drift(
+    state, tmp_path, monkeypatch, changed
+):
+    import yaml
+
+    _, original, _ = state
+    spec_path = tmp_path / "spec.yml"
+    spec_path.write_text(yaml.safe_dump(original["spec"]))
+    target = tmp_path / "new-state"
+    script = tmp_path / "disko"
+    script.write_text("reviewed synthetic program")
+    config = original["config"] | {
+        "disks": {"root": original["spec"]["disks"][0]["path"]},
+        "provisioner": str(script),
+    }
+    monkeypatch.setattr(migration, "source_identity", lambda p: original["source"])
+    monkeypatch.setattr(migration, "evaluate", lambda *a: config)
+    calls = []
+
+    def run(*args, **kwargs):
+        calls.append(args)
+        assert "--no-update-lock-file" in args
+        assert "--no-link" in args
+        if args[-1].endswith("diskoScript"):
+            return "/changed/program" if changed else str(script)
+        return config["closure"]
+
+    monkeypatch.setattr(migration, "run", run)
+    if changed:
+        with pytest.raises(migration.MigrationError, match="changed during build"):
+            migration.create_plan(spec_path, target)
+        assert not (target / "plan.json").exists()
+    else:
+        plan = migration.create_plan(spec_path, target)
+        assert plan["config"]["provisioner_sha256"] == migration.file_digest(script)
+        assert migration.load_plan(target) == plan
+        assert migration.create_plan(spec_path, target) == plan
+    assert len(calls) == 2

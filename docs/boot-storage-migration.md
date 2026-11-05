@@ -189,8 +189,10 @@ both on each host's physical cold boot.
 
 The 2026-11-02 convergence decision supersedes the earlier plain-root installation
 policy. New installations require `boot-luks` and `root_encryption: luks2`.
-`unencrypted-root` plans and configurations are rejected; fresh encrypted installs
-still use `installation: fresh` and `source_retention: new-disks`.
+`unencrypted-root` plans and configurations are rejected. Empty new disks use
+`installation: fresh` and `source_retention: new-disks`; explicitly approved
+disposable existing disks use `installation: disposable` and
+`source_retention: discard-approved`.
 
 Existing gc-09/gc-10 containers remain bounded recovery compatibility. Do not
 remove their decryptors, original keys or retained data until physical migration,
@@ -208,8 +210,9 @@ alias name. Enrollment preserves existing output and original keyslots.
 ## Guided operator workflow
 
 Keep using the existing system until the operator has tested recovery. The
-workflow never erases a disk, replaces a volume key or reboots a computer. It can
-install the reviewed system only after the separate preparation steps below.
+`boot-storage-migration` command never erases a disk, replaces a volume key or
+reboots a computer. It can install the reviewed system only after the separate
+preparation steps below.
 If a check says **Stop**, keep the disks and recovery copies and ask the named
 operator to resolve that check. Do not disable a guard or change an evidence
 answer just to continue. Reverting a repository change is possible; reverting
@@ -217,8 +220,11 @@ disk formatting requires retained disks or a tested whole-disk restore.
 
 The operator uses `devenv shell boot-storage-migration --help` from the reviewed
 checkout. `plan`, `status`, `attest`, `prepare-access`, `check` and `install` are separate actions;
-there is no "do everything" or automatic rollback action. Only `install` changes
-the target's boot installation, and it requires an interactive confirmation
+there is no automatic rollback action. The companion
+`devenv shell boot-storage-setup` sequences these gates and can run the pinned
+Disko provisioner after separate explicit erase confirmation. See the
+[sequential commands and interruption recovery](boot-storage-operator.md#new-installation-or-root-migration).
+Only `install` changes the target's boot installation, and it requires an interactive confirmation
 containing the selected host and plan identifier. Formatting, key enrollment,
 restoration, firmware changes and reboot remain separately authorized operations.
 
@@ -229,7 +235,12 @@ restoration, firmware changes and reboot remain separately authorized operations
    (`old-disks` or `whole-disk-image` for migration), and `disks`.
    Optional `root_encryption` must be `luks2`, matching the `boot-luks` host configuration. Optional `installation`
    defaults to `migration`; select `fresh` with `source_retention: new-disks`
-   only for empty new disks. Each disk has its exact
+   only for empty new disks. For explicitly disposable existing disks select
+   `installation: disposable` with `source_retention: discard-approved`. Its
+   recovery checks require `selected_disks_disposal_authorized` and
+   `machine_and_application_credentials_preserved_or_reenrolled`, instead of
+   `new_disks_verified`; console, installer and independent credential tests
+   still apply. Each disk has its exact
    `/dev/disk/by-id/` `path`, `serial` and integer `size_bytes`. These are real
    operator observations, never values copied from an example. The selected
    disk paths must exactly match the evaluated layout. Prepare any intended
@@ -237,15 +248,16 @@ restoration, firmware changes and reboot remain separately authorized operations
 2. **Create the plan.** Run `devenv shell boot-storage-migration plan --spec
    <private-spec.yml> --state <private-state-directory>`. The parent directory
    must already be private and encrypted. This builds the selected closure and
-   binds the plan to its source revision, lockfile, layout and disk selection.
+   Disko executable and binds the plan to its source revision, lockfile, layout, disk selection and
+   provisioner content digest.
    It does not contact or change the target. Repeating the same plan is safe;
    a different selection needs a new state directory.
 3. **Record actual recovery, backup and restore results.** Complete the runbook
    steps below, then use `devenv shell boot-storage-migration attest --state
    <private-state-directory> --stage <stage> --evidence <private-report.json>
    --assessor <reviewer>`. Stages are ordered: `recovery`, `backup`, `restore`,
-   `prepared`, then physical `acceptance` after installation. Fresh installation
-   uses only `recovery`, `prepared`, then `acceptance`; use the exact check names
+   `prepared`, then physical `acceptance` after installation. Fresh and disposable
+   installations use only `recovery`, `prepared`, then `acceptance`; use the exact check names
    from `status`. Evidence is a
    named human assessment, not an automatically proven restore. Each JSON
    report contains exactly `schema_version: 1`, `plan_id`, `stage`, `checks`

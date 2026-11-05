@@ -40,6 +40,8 @@
       -i ansible/inventory/hosts.ini "$@"
   '';
 
+  boot-storage-setup.package = pkgs.zsh;
+  boot-storage-setup.exec = ''${pkgs.uv}/bin/uv run python -m lx_administration.storage.boot_setup "$@"'';
   boot-storage-migration.package = pkgs.zsh;
   boot-storage-migration.exec = ''${pkgs.uv}/bin/uv run python -m lx_administration.storage.boot_migration "$@"'';
   storage-recovery-custody.package = pkgs.zsh;
