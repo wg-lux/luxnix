@@ -57,11 +57,13 @@ cold boot and recovery before proceeding to the next host.
    without changing storage. Use its reviewed checkout and actual inventory name:
 
    ```sh
-   devenv shell boot-storage-setup observe --checkout <luxnix-path> --host <host> --installation disposable --source-retention discard-approved
+   boot_hardware_uuid=$(sudo cat /sys/class/dmi/id/product_uuid) &&
+   devenv shell boot-storage-setup observe --checkout <luxnix-path> --host <host> --installation disposable --source-retention discard-approved --hardware-uuid "$boot_hardware_uuid"
    ```
 
-   Save the YAML privately on encrypted controller storage. Observation requires
-   permission to read the hardware UUID. It reads only the configured disk IDs;
+   Run Devenv as your normal user; only the UUID read uses sudo. The installer
+   rechecks this UUID against the actual hardware before disk operations.
+   Save the YAML privately on encrypted controller storage. Observation reads only the configured disk IDs;
    it never substitutes another disk. Review serials, sizes and hardware UUID.
    `disposable` explicitly permits reusing the selected disks after authorization;
    it does **not** authorize erasure by itself. Use `fresh` / `new-disks` for empty

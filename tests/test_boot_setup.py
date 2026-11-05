@@ -347,13 +347,29 @@ def test_observe_records_only_configured_disk_and_real_hardware(
     )
     assert spec["disks"] == plan["spec"]["disks"]
     assert spec["hardware_uuid"] == hardware.read_text()
+
+    def denied(*args, **kwargs):
+        raise PermissionError("restricted DMI")
+
+    monkeypatch.setattr(Path, "read_text", denied)
+    args = (Path(plan["spec"]["checkout"]), "gc-09", "disposable", "discard-approved")
+    with pytest.raises(migration.MigrationError, match="do not run Devenv with sudo"):
+        setup.observe(*args)
+    assert setup.observe(*args, hardware_uuid=spec["hardware_uuid"]) == spec
+    with pytest.raises(migration.MigrationError):
+        setup.observe(*args, hardware_uuid="")
+
     assert calls[0][-1] == path
     assert "--nodeps" in calls[0]
     assert setup.snapshot_disks(plan)[0].serial == "test-serial"
     assert "--nodeps" not in calls[-1]
     with pytest.raises(migration.MigrationError):
         setup.observe(
-            Path(plan["spec"]["checkout"]), "gc-09", "disposable", "new-disks"
+            Path(plan["spec"]["checkout"]),
+            "gc-09",
+            "disposable",
+            "new-disks",
+            hardware_uuid=spec["hardware_uuid"],
         )
     with pytest.raises(migration.MigrationError, match="host name"):
         setup.observe(Path("/release"), 'gc-09"; abort', "fresh", "new-disks")

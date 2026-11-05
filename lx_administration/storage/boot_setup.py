@@ -109,10 +109,26 @@ def inspect_disk(path: str, *, children: bool = True) -> BlockDevice:
     return disk
 
 
-def observe(checkout: Path, host: str, installation: str, retention: str) -> dict:
+def observe(
+    checkout: Path,
+    host: str,
+    installation: str,
+    retention: str,
+    *,
+    hardware_uuid: str | None = None,
+) -> dict:
     """Collect a specification on the target; never select substitute disks."""
     if not migration.HOST.fullmatch(host):
         raise migration.MigrationError("Invalid inventory host name")
+    if hardware_uuid is None:
+        try:
+            hardware_uuid = migration.DMI_UUID.read_text().strip()
+        except PermissionError as error:
+            raise migration.MigrationError(
+                "Read the UUID with sudo cat /sys/class/dmi/id/product_uuid, "
+                "then pass --hardware-uuid to observe as your normal user; "
+                "do not run Devenv with sudo"
+            ) from error
     source = migration.source_identity(checkout)
     config = migration.evaluate(checkout, host)
     disks = []
@@ -123,7 +139,7 @@ def observe(checkout: Path, host: str, installation: str, retention: str) -> dic
         "schema_version": 1,
         "host": host,
         "checkout": str(checkout),
-        "hardware_uuid": migration.DMI_UUID.read_text().strip(),
+        "hardware_uuid": hardware_uuid,
         "root_encryption": "luks2",
         "installation": installation,
         "source_retention": retention,
@@ -490,6 +506,9 @@ def main() -> None:
     observation.add_argument("--checkout", required=True, type=Path)
     observation.add_argument("--host", required=True)
     observation.add_argument(
+        "--hardware-uuid", help="UUID read on the target; rechecked before provisioning"
+    )
+    observation.add_argument(
         "--installation", required=True, choices=["migration", "fresh", "disposable"]
     )
     observation.add_argument(
@@ -518,6 +537,7 @@ def main() -> None:
                             args.host,
                             args.installation,
                             args.source_retention,
+                            hardware_uuid=args.hardware_uuid,
                         ),
                         sort_keys=False,
                     ),
