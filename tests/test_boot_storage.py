@@ -739,6 +739,8 @@ def test_root_setup_explains_layout_mismatch_without_mutation(
     assert ("devenv tasks run boot-storage:setup" in output) is not encrypted
     assert "boot-storage-migration plan" not in output
     assert "--spec" not in output and "--state" not in output
+    assert "boot-storage-operator.md" not in output
+    assert "Run the candidate generation" not in output
     if not encrypted:
         for phase in ("1. PREVIEW", "2. PREPARE", "3. INSTALL", "4. ACCEPT"):
             assert phase in output

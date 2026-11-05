@@ -13,7 +13,7 @@ import socket
 import stat
 import subprocess
 import sys
-from typing import Literal
+from typing import Literal, TextIO
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -241,6 +241,48 @@ def snapshot_disks(plan: dict) -> list[BlockDevice]:
     return result
 
 
+def show_target(spec: dict, *, stream: TextIO | None = None) -> None:
+    print(f"\nTARGET COMPUTER: {spec['host']}", file=stream)
+    print(
+        "Selected disks (check the serial numbers, not just their names):", file=stream
+    )
+    for disk in spec["disks"]:
+        print(
+            f"  {disk['path']} | serial={disk['serial']} | "
+            f"{disk['size_bytes'] / 1024**3:.1f} GiB ({disk['size_bytes']} bytes)",
+            file=stream,
+        )
+    mode = spec.get("installation", "migration")
+    match mode:
+        case "disposable":
+            message = (
+                "DISCARD DATA: installation erases all existing files on these disks. "
+                "This plan does NOT require a data backup or restore test. "
+                "If you need any existing files or are unsure, STOP and ask an "
+                "administrator to prepare a migration plan before continuing."
+            )
+        case "migration":
+            message = (
+                "KEEP DATA THROUGH BACKUP AND RESTORE: installation erases these "
+                "disks. Required backups, original keys and a tested restore "
+                "must be verified first; files are not preserved in place."
+            )
+        case "fresh":
+            message = (
+                "NEW DISKS ONLY: stop if any selected disk contains data you need."
+            )
+        case _:
+            raise migration.MigrationError(
+                "Unknown installation mode; stop and review the plan"
+            )
+    print(f"Data policy ({mode}): {message}", file=stream)
+    print(
+        "No files are backed up by this setup command. Recovery credentials are "
+        "required in every mode. A backup for another computer does not count.",
+        file=stream,
+    )
+
+
 def confirmation(plan: dict, *, recover: bool = False) -> None:
     verb = "ACCEPT EXISTING LAYOUT" if recover else "ERASE"
     serials = ",".join(d["serial"] for d in plan["spec"]["disks"])
@@ -262,11 +304,7 @@ def confirmation(plan: dict, *, recover: bool = False) -> None:
                 else "ERASE all contents of the selected disks below.\n"
             )
         )
-        for disk in plan["spec"]["disks"]:
-            terminal.write(
-                f"{disk['path']} serial={disk['serial']} "
-                f"size_bytes={disk['size_bytes']}\n"
-            )
+        show_target(plan["spec"], stream=terminal)
         terminal.write(
             "Old boot generations cannot undo formatting. Keep independent "
             "credentials and recovery media.\nType exactly: " + phrase + "\n> "
@@ -564,11 +602,19 @@ def show_step(
         return
 
     def command(action: str) -> str:
+        installer = step.action in {
+            Action.PROVISION,
+            Action.PREPARE_ACCESS,
+            Action.INSTALL,
+            Action.RECOVER,
+        }
         return shlex.join(
-            [
-                "devenv",
-                "shell",
-                "boot-storage-setup",
+            (
+                ["python", "-m", "lx_administration.storage.boot_setup"]
+                if installer
+                else ["devenv", "shell", "boot-storage-setup"]
+            )
+            + [
                 action,
                 "--host",
                 step.host,
@@ -579,6 +625,10 @@ def show_step(
 
     print(f"\nHost: {step.host} | Saved plan: {step.plan_id}\nRecovery state: {state}")
     print(f"Next step: {step.stage or step.action.value}\n{step.reason}")
+    print(
+        "If a check is unclear or fails, stop and ask for help. "
+        "Do not guess or mark it VERIFIED."
+    )
     if step.action == Action.PREPARE_ACCESS:
         print("First stage the required credentials, then prepare access:")
         print(command("advance") + " --apply")
@@ -712,6 +762,7 @@ def run_workflow(
 
     if apply and not sys.stdin.isatty():
         raise migration.MigrationError("Apply requires a private interactive terminal")
+    show_target(spec)
     if not apply:
         if (state / "plan.json").exists():
             show_step(next_step(state), state, config)
@@ -860,6 +911,8 @@ def main() -> None:
         if args.action != "observe":
             host = current_host(args.config) if args.current_host else args.host
             spec, state = configured_target(args.config, host)
+            if args.action not in {"run", "status"} and not args.json:
+                show_target(spec)
         match args.action:
             case "observe":
                 print(

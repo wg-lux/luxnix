@@ -295,6 +295,9 @@ def test_real_tty_requires_exact_host_plan_and_serial(state):
             timeout=15,
         )
         child.expect_exact("> ")
+        assert "TARGET COMPUTER: gc-09" in child.before
+        assert "serial=test-serial" in child.before
+        assert "Data policy (migration)" in child.before
         child.sendline(answer)
         child.expect(pexpect.EOF)
         assert ("APPROVED" in child.before) is approved
@@ -556,6 +559,15 @@ def test_guidance_covers_all_existing_assessment_contracts():
     assert all(setup.guidance().values())
 
 
+def test_status_remains_machine_readable(state, monkeypatch, capsys):
+    root, plan, _ = state
+    monkeypatch.setattr("sys.argv", ["boot-storage-setup", "status", "--host", "gc-09"])
+    monkeypatch.setattr(setup, "configured_target", lambda *a: (plan["spec"], root))
+    monkeypatch.setattr(migration, "status", lambda p: {"plan_id": plan["plan_id"]})
+    setup.main()
+    assert json.loads(capsys.readouterr().out) == {"plan_id": plan["plan_id"]}
+
+
 def test_human_output_explains_recovery_and_exact_next_command(state, capsys):
     root, plan, _ = state
     step = setup.NextStep(
@@ -674,6 +686,62 @@ def test_workflow_preview_never_prepares_or_reviews(workflow_environment, monkey
     )
     setup.run_workflow(plan["spec"], root, Path("/config"), apply=False)
     assert calls == []
+
+
+@pytest.mark.parametrize(
+    "mode, warning",
+    [
+        ("disposable", "does NOT require a data backup"),
+        ("migration", "not preserved in place"),
+        ("fresh", "NEW DISKS ONLY"),
+    ],
+)
+def test_preview_explains_data_policy_before_recovery_discovery(
+    workflow_environment, monkeypatch, capsys, mode, warning
+):
+    from lx_administration.storage import recovery_media
+
+    root, plan, calls = workflow_environment
+    spec = plan["spec"] | {"installation": mode}
+
+    def unavailable(*args, **kwargs):
+        output = capsys.readouterr().out
+        assert "TARGET COMPUTER: gc-09" in output
+        assert "serial=test-serial" in output
+        assert warning in output
+        assert "No files are backed up by this setup command" in output
+        raise migration.MigrationError("Recovery drive missing")
+
+    monkeypatch.setattr(recovery_media, "setup", unavailable)
+    with pytest.raises(migration.MigrationError, match="Recovery drive missing"):
+        setup.run_workflow(spec, root / "not-created", Path("/config"), apply=False)
+    assert calls == []
+    assert not (root / "not-created").exists()
+
+
+@pytest.mark.parametrize(
+    "action",
+    [
+        setup.Action.PROVISION,
+        setup.Action.RECOVER,
+        setup.Action.PREPARE_ACCESS,
+        setup.Action.INSTALL,
+    ],
+)
+def test_installer_guidance_uses_native_python_not_devenv(state, capsys, action):
+    root, plan, _ = state
+    step = setup.NextStep(
+        action=action,
+        host="gc-09",
+        plan_id=plan["plan_id"],
+        reason="Installer required",
+    )
+    setup.show_step(step, root, Path("/reviewed/config.yml"))
+    output = capsys.readouterr().out
+    assert "python -m lx_administration.storage.boot_setup" in output
+    assert "--host gc-09 --config /reviewed/config.yml" in output
+    assert "devenv" not in output
+    assert "Do not guess or mark it VERIFIED" in output
 
 
 def test_workflow_pauses_for_notes_then_installer(

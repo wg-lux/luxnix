@@ -1,5 +1,20 @@
 # Root encryption: operator steps
 
+This process replaces a disk layout; it does not encrypt the running system in
+place. A rebuild or reboot cannot perform the conversion. If you only need to
+understand the next step, use **Preview** and stop there.
+
+Before continuing, check the displayed **computer name, disk serials and data
+policy**. `migration` requires backup and restore verification; `disposable`
+allows erasing existing files **without a data backup check**; `fresh` is for
+empty new disks. If you need existing data, or do not know, stop and have an
+administrator prepare a migration plan. Never change the mode simply to skip a
+failed check. A backup of gc-10 is not a backup of gc-09.
+
+The workflow does not create your data backups. Someone must actually test the
+required recovery and restore steps. If you do not understand a check, stop and
+ask for help; do not type `VERIFIED`. Never put passwords in chat or notes.
+
 ## 1. Preview — installed host, normal user
 
 - Connect the recovery drive.
@@ -9,6 +24,7 @@
 ```sh
 devenv tasks run boot-storage:setup
 ```
+
 
 ## 2. Prepare recovery — same terminal
 
@@ -34,10 +50,17 @@ python -m lx_administration.storage.boot_setup run --current-host --apply
 ```
 
 - Confirm the exact target disk serials before erasure; enter and save the LUKS password.
+- This is the destructive step. The prompt requires the computer name, plan ID
+  and disk serials; `yes` or an empty answer cancels. An old boot generation cannot
+  recover erased files.
 - Supply the requested credentials and completed prepared-stage notes.
 - Rerun after each requested action; confirm installation separately.
 - If interrupted, stop and follow [recovery instructions](boot-storage-migration.md#interrupted-setup).
   Keep the journal; do not restart formatting.
+
+Do not run `sudo devenv` to get past an installer warning. The installed system
+and installer use different commands deliberately. Keep the recovery drive
+connected and never erase or repurpose it during this procedure.
 
 ## 4. Cold boot and accept
 
