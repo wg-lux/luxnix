@@ -202,3 +202,14 @@ def test_autoconf_config_rejects_invalid_home_state_version(tmp_path, value):
 
     with pytest.raises(AutoconfConfigError, match="home.state_version"):
         AutoconfConfig.load(config_file)
+
+
+@pytest.mark.parametrize(
+    "settings", ["state_root: relative", "unexpected: true", "hosts: {gc-09: {}}"]
+)
+def test_boot_storage_config_rejects_invalid_settings(tmp_path, settings):
+    from pydantic import ValidationError
+
+    config_file = write_config(tmp_path, "boot_storage:\n  " + settings + "\n")
+    with pytest.raises(ValidationError):
+        AutoconfConfig.load(config_file)

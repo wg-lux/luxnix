@@ -376,7 +376,7 @@ def test_evidence_on_target_disk_is_rejected(state, monkeypatch):
         ),
     )
     monkeypatch.setattr(migration, "device_disks", lambda *a: {1})
-    with pytest.raises(migration.MigrationError, match="independent encrypted storage"):
+    with pytest.raises(migration.MigrationError, match="independent storage"):
         migration.verify_independent_state(root, progress, {1})
 
 
@@ -616,3 +616,44 @@ def test_plan_pins_provisioner_and_rejects_build_drift(
         assert migration.load_plan(target) == plan
         assert migration.create_plan(spec_path, target) == plan
     assert len(calls) == (1 if changed == "toplevel" else 2)
+
+
+def test_plaintext_journal_keeps_permissions_guard(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    path = tmp_path / "journal.json"
+    path.write_text("{}")
+    path.chmod(0o600)
+    # Model trusted parents; pytest's /tmp parent is otherwise intentionally rejected.
+    real_stat = Path.stat
+    monkeypatch.setattr(
+        Path,
+        "stat",
+        lambda p, **kw: (
+            SimpleNamespace(st_mode=real_stat(p, **kw).st_mode & ~0o022)
+            if p in path.parents
+            else real_stat(p, **kw)
+        ),
+    )
+    monkeypatch.setattr(
+        migration,
+        "encrypted_storage",
+        lambda p: pytest.fail("metadata needs no encryption"),
+    )
+    migration.private_path(path)
+    path.chmod(0o644)
+    with pytest.raises(migration.MigrationError, match="private"):
+        migration.private_path(path)
+
+
+def test_plaintext_independent_state_is_accepted(state, monkeypatch):
+    root, _, progress = state
+    monkeypatch.setattr(
+        migration,
+        "run",
+        lambda *a: json.dumps(
+            {"filesystems": [{"source": "/dev/usb1", "fstype": "ext4"}]}
+        ),
+    )
+    monkeypatch.setattr(migration, "device_disks", lambda *a: {2})
+    migration.verify_independent_state(root, progress, {1})

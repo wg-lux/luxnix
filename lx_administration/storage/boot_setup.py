@@ -16,6 +16,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 import yaml
 
+from lx_administration.autoconf.config import AutoconfConfig, DEFAULT_CONFIG_PATH
 from lx_administration.storage import boot_migration as migration
 from lx_administration.utils.file_operations import atomic_write_file
 
@@ -497,6 +498,37 @@ def advance(state: Path, *, apply: bool = False) -> NextStep:
     return next_step(state)
 
 
+def configured_target(config_path: Path, host: str) -> tuple[dict, Path]:
+    if not migration.HOST.fullmatch(host):
+        raise migration.MigrationError("Invalid inventory host name")
+    config = AutoconfConfig.load(config_path)
+    settings = config.boot_storage
+    if host not in settings.hosts:
+        raise migration.MigrationError(
+            f"Add boot_storage.hosts.{host} to {config.source}"
+        )
+    spec = settings.hosts[host].model_dump(mode="json") | {
+        "schema_version": 1,
+        "host": host,
+        "checkout": str(config.nix_output),
+    }
+    migration.validate_spec(spec)
+    if settings.state_root is None:
+        raise migration.MigrationError(
+            "Set boot_storage.state_root in autoconf/config.yml to an existing "
+            "private independent directory; "
+            "no recovery location is configured"
+        )
+    state = settings.state_root / host
+    if (state / "plan.json").exists():
+        with migration.locked_state(state):
+            if migration.load_plan(state)["spec"] != spec:
+                raise migration.MigrationError(
+                    "Autoconf differs from the saved plan; preserve its recovery state"
+                )
+    return spec, state
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="action", required=True)
@@ -516,18 +548,22 @@ def main() -> None:
         required=True,
         choices=["old-disks", "whole-disk-image", "new-disks", "discard-approved"],
     )
-    for action in ("plan", "next", "advance", "recover"):
+    for action in ("plan", "next", "advance", "recover", "attest", "status"):
         command = sub.add_parser(action)
-        command.add_argument("--state", required=True, type=Path)
-        if action == "plan":
-            command.add_argument("--spec", required=True, type=Path)
+        command.add_argument("--host", required=True)
+        command.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
         if action in {"advance", "recover"}:
             command.add_argument("--apply", action="store_true")
-        if action == "recover":
+        if action in {"recover", "attest"}:
             command.add_argument("--assessor", required=True)
+        if action == "attest":
+            command.add_argument("--stage", choices=migration.STAGES, required=True)
+            command.add_argument("--evidence", type=Path, required=True)
     args = parser.parse_args()
     os.umask(0o077)
     try:
+        if args.action != "observe":
+            spec, state = configured_target(args.config, args.host)
         match args.action:
             case "observe":
                 print(
@@ -545,16 +581,21 @@ def main() -> None:
                 )
                 return
             case "plan":
-                migration.create_plan(args.spec, args.state)
-                prepare(args.state)
+                migration.plan_spec(spec, state)
+                prepare(state)
+            case "attest":
+                migration.attest(state, args.stage, args.evidence, args.assessor)
+            case "status":
+                print(json.dumps(migration.status(state), indent=2))
+                return
             case "next":
                 pass
             case "advance":
-                print(advance(args.state, apply=args.apply).model_dump_json(indent=2))
+                print(advance(state, apply=args.apply).model_dump_json(indent=2))
                 return
             case "recover":
-                provision(args.state, apply=args.apply, recover_by=args.assessor)
-        print(next_step(args.state).model_dump_json(indent=2))
+                provision(state, apply=args.apply, recover_by=args.assessor)
+        print(next_step(state).model_dump_json(indent=2))
     except (ValueError, KeyError, OSError, subprocess.SubprocessError) as error:
         parser.exit(
             1,

@@ -32,3 +32,19 @@ home:
     - admin
   # Compatibility baseline for generated Home Manager configurations.
   state_version: "23.11"
+
+# Operator intent only; never store journals, evidence, credentials or passwords here.
+boot_storage:
+  # Set an existing private independent directory before planning.
+  # null deliberately blocks setup; there is no target-disk or /tmp fallback.
+  state_root: null
+  hosts:
+    gc-09:
+      hardware_uuid: e0118e2d-e0c4-9844-a4eb-9fe2b5747b0d
+      root_encryption: luks2
+      installation: disposable
+      source_retention: discard-approved
+      disks:
+        - path: /dev/disk/by-id/nvme-Phison_512GB_ESO512GHLCA1-21C-2MS_511231127249015467
+          serial: '511231127249015467'
+          size_bytes: 512110190592

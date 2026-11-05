@@ -247,16 +247,17 @@ commands:
     summary: Guide root setup in order with pinned provisioning, typed erasure approval and non-destructive recovery.
     risk: destructive-local
     operator_confirmation_required: true
-    usage: devenv shell boot-storage-setup <observe|plan|next|advance|recover> [--state <private-directory>] [--spec <private-yaml>] [--apply] [--assessor <admin>]
+    usage: devenv shell boot-storage-setup <observe|plan|next|advance|recover|attest|status> --host <host> [--config <autoconf-yaml>] [--apply] [--assessor <admin>]
     implementation: lx_administration/storage/boot_setup.py
     documentation: docs/boot-storage-operator.md
     prerequisites:
-      - A clean durable release and private encrypted independent plan/evidence storage.
+      - A clean durable release and private independent plan/evidence storage (encryption optional).
       - Provisioning runs only on the verified target in a trusted installer with fresh recovery evidence and unmounted selected disks.
       - Existing disposable disks require installation disposable, source_retention discard-approved and explicit disposal/credential recovery assessments.
     effects:
       - Observe runs on the target and emits reviewed disk/hardware facts as YAML without writes; no substitute disk selection.
-      - Plan builds the closure and Disko executable; next and advance without apply only report the next step.
+      - Plan reads boot_storage.hosts from Autoconf and builds the closure and Disko executable; private journals live under boot_storage.state_root/host.
+      - Next and advance without apply only report the next step; attest and status reuse the existing migration evidence workflow.
       - Advance at the provisioning step with apply requires a real terminal and exact host, plan and serial confirmation before formatting the selected disks once.
       - Durable typed intent and pre-format disk metadata are saved before execution. Failed or uncertain attempts never retry formatting automatically.
       - Recover with apply verifies and accepts only the existing layout after named administrator confirmation; it never formats.

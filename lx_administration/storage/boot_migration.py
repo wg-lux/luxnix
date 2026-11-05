@@ -115,7 +115,6 @@ def private_path(path: Path, *, directory: bool = False) -> None:
             "Evidence and state must belong to the current operator and be "
             "private (0700 directories, 0600 files)"
         )
-    encrypted_storage(path)
 
 
 @contextmanager
@@ -320,7 +319,11 @@ def validate_spec(spec: dict) -> None:
 
 def create_plan(spec_path: Path, state: Path) -> dict:
     private_path(spec_path)
-    spec = yaml.safe_load(spec_path.read_text())
+    return plan_spec(yaml.safe_load(spec_path.read_text()), state)
+
+
+def plan_spec(spec: dict, state: Path) -> dict:
+    """Plan from validated operator input, with the same private state guards."""
     validate_spec(spec)
     with locked_state(state, create=True):
         if (state / "plan.json").exists():
@@ -682,7 +685,7 @@ def verify_independent_state(state: Path, progress: dict, disks: set[int]) -> No
         ):
             raise MigrationError(
                 "Keep the plan and every evidence file on independent "
-                "encrypted storage, outside all target disks"
+                "storage, outside all target disks"
             )
 
 

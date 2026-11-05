@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import re
 from collections.abc import Collection, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 import yaml
 
@@ -138,6 +140,37 @@ def _state_version(value: object) -> str:
     return value
 
 
+class BootStorageDisk(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    path: str
+    serial: str
+    size_bytes: int = Field(gt=0, strict=True)
+
+
+class BootStorageHost(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    hardware_uuid: str = Field(pattern=r"^[a-fA-F0-9-]{36}$")
+    root_encryption: Literal["luks2"]
+    installation: Literal["migration", "fresh", "disposable"]
+    source_retention: Literal[
+        "old-disks", "whole-disk-image", "new-disks", "discard-approved"
+    ]
+    disks: list[BootStorageDisk] = Field(min_length=1)
+
+
+class BootStorageConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    state_root: Path | None = None
+    hosts: dict[str, BootStorageHost] = Field(default_factory=dict)
+
+    @field_validator("state_root")
+    @classmethod
+    def absolute_state_root(cls, value: Path | None) -> Path | None:
+        if value is not None and (not value.is_absolute() or ".." in value.parts):
+            raise ValueError("boot_storage.state_root must be an absolute path")
+        return value
+
+
 @dataclass(frozen=True)
 class AutoconfConfig:
     """Resolved options for one autoconf pipeline run."""
@@ -152,6 +185,7 @@ class AutoconfConfig:
     inventory_system_group: str
     home_default_users: tuple[str, ...]
     home_state_version: str
+    boot_storage: BootStorageConfig = field(default_factory=BootStorageConfig)
 
     @classmethod
     def load(cls, source: Path | str | None = None) -> AutoconfConfig:
@@ -166,7 +200,7 @@ class AutoconfConfig:
             raise AutoconfConfigError(f"Invalid YAML in {source_path}: {exc}") from exc
 
         root = _mapping(raw, "root")
-        _only_keys(root, {"schema_version", *_SECTION_KEYS}, "root")
+        _only_keys(root, {"schema_version", "boot_storage", *_SECTION_KEYS}, "root")
         if root.get("schema_version") != 1:
             raise AutoconfConfigError("'schema_version' must be 1")
 
@@ -177,6 +211,7 @@ class AutoconfConfig:
         base_dir = source_path.parent
         return cls(
             source=source_path,
+            boot_storage=BootStorageConfig.model_validate(root.get("boot_storage", {})),
             ansible_root=_relative_path(
                 paths["ansible_root"], "paths.ansible_root", base_dir
             ),

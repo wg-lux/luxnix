@@ -18,7 +18,7 @@ entrypoints:
     purpose: Inspect pipeline ownership and interfaces.
   - name: options
     file: config.py
-    purpose: Inspect options ownership and interfaces.
+    purpose: Validate generator options and per-host boot setup intent with an explicitly configured recovery state root.
   - name: layouts
     file: layout.py
     purpose: Inspect layouts ownership and interfaces.

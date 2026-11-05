@@ -229,7 +229,7 @@ containing the selected host and plan identifier. Formatting, key enrollment,
 restoration, firmware changes and reboot remain separately authorized operations.
 
 1. **Select the computer and disks.** Prepare a private YAML specification on
-   encrypted controller storage. It contains `schema_version: 1`, `host`,
+   controller storage (encryption optional for plan/evidence metadata). It contains `schema_version: 1`, `host`,
    `checkout` (the absolute durable clean release checkout), `hardware_uuid`
    (the target's independently recorded DMI product UUID), `source_retention`
    (`old-disks` or `whole-disk-image` for migration), and `disks`.
@@ -247,7 +247,7 @@ restoration, firmware changes and reboot remain separately authorized operations
    inventory change through Autoconf and review it before creating the plan.
 2. **Create the plan.** Run `devenv shell boot-storage-migration plan --spec
    <private-spec.yml> --state <private-state-directory>`. The parent directory
-   must already be private and encrypted. This builds the selected closure and
+   must already be private. This builds the selected closure and
    Disko executable and binds the plan to its source revision, lockfile, layout, disk selection and
    provisioner content digest.
    It does not contact or change the target. Repeating the same plan is safe;
@@ -273,7 +273,7 @@ restoration, firmware changes and reboot remain separately authorized operations
    plan; changed artifacts invalidate it. Pre-install assessments expire after
    24 hours and must be reassessed with updated evidence, not merely re-submitted.
 4. **Check preparation from the trusted installer.** Preserve the state and
-   evidence on independent encrypted storage, with the same absolute paths and
+   evidence on independent storage (encryption optional), with the same absolute paths and
    appropriate root ownership when used as root. Preserve the clean checkout
    at its planned path and make the built closure available in the installer.
    `check --state <private-state-directory> --stage provision` checks the applicable recovery,

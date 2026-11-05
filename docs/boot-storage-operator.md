@@ -7,8 +7,8 @@ design. Repository settings describe intent, not the disks currently installed.
 
 Run controller commands from the reviewed LuxNix checkout in a private terminal
 (no screen sharing, session recording or terminal logging). Keep console access
-and trusted recovery media ready. Replace `<host>` and `<state>` with the approved
-inventory host and existing migration state directory; do not paste placeholders.
+and trusted recovery media ready. Replace `<host>` with the approved
+inventory host. Setup reads autoconf/config.yml; --config selects another reviewed Autoconf file.
 
 ## Shared encryption contract
 
@@ -63,7 +63,10 @@ cold boot and recovery before proceeding to the next host.
 
    Run Devenv as your normal user; only the UUID read uses sudo. The installer
    rechecks this UUID against the actual hardware before disk operations.
-   Save the YAML privately on encrypted controller storage. Observation reads only the configured disk IDs;
+   Record the observed hardware UUID, installation mode, retention and disks under
+   `boot_storage.hosts.<host>` in `autoconf/config.yml`; gc-09 is already recorded.
+   Host name comes from that key and checkout from `paths.nix_output`.
+   Observation reads only the configured disk IDs;
    it never substitutes another disk. Review serials, sizes and hardware UUID.
    `disposable` explicitly permits reusing the selected disks after authorization;
    it does **not** authorize erasure by itself. Use `fresh` / `new-disks` for empty
@@ -71,28 +74,36 @@ cold boot and recovery before proceeding to the next host.
    Preserve or explicitly re-enroll machine/application credentials even when
    application data is disposable.
 
-2. **Plan on the controller.** Use private absolute paths on encrypted storage:
+2. **Plan on the controller.** Set `boot_storage.state_root` once to an existing
+   private directory on independent storage; encryption is optional for journals
+   and non-secret evidence. Use storage supporting Unix ownership and permissions.
+   There is no target-disk or temporary fallback. Commit the reviewed configuration before planning. LuxNix derives
+   the journal directory as `state_root/<host>`; no separate spec file is needed.
+   Keep passwords, private keys and application backups in their separately
+   protected recovery storage, not in the journal directory:
 
    ```sh
-   devenv shell boot-storage-setup plan --spec <private-spec.yml> --state <state>
-   devenv shell boot-storage-setup next --state <state>
+   devenv shell boot-storage-setup plan --host <host>
+   devenv shell boot-storage-setup next --host <host>
    ```
 
    Planning builds and pins both the system closure and Disko executable.
    Complete the reported recovery checks and record actual evidence through
-   `boot-storage-migration attest` as described in the
+   `boot-storage-setup attest --host <host> --stage <stage> --evidence <report>
+   --assessor <admin>` as described in the
    [evidence contract](boot-storage-migration.md#guided-operator-workflow).
+   `boot-storage-setup status --host <host>` reports the plan ID and required checks.
    The helper never attests to recovery or restore tests on your behalf.
 
 3. **Boot tested installer media on the selected host.** Keep the same clean
    checkout, built Nix paths, state and evidence available at their planned
    absolute paths. State/evidence must be root-owned and private on independent
-   encrypted storage, outside `/mnt` and all selected disks. Run the reviewed
+   storage, outside `/mnt` and all selected disks. Run the reviewed
    Python environment as root, with no active swap or target mappings/mounts:
 
    ```sh
-   python -m lx_administration.storage.boot_setup advance --state <state>
-   python -m lx_administration.storage.boot_setup advance --state <state> --apply
+   python -m lx_administration.storage.boot_setup advance --host <host>
+   python -m lx_administration.storage.boot_setup advance --host <host> --apply
    ```
 
    The first command previews. The second performs **one** eligible step. For
@@ -120,15 +131,15 @@ cold boot and recovery before proceeding to the next host.
 
 ### Interrupted setup
 
-Run `next --state <state>` using the same state. A completed format is never
+Run `next --host <host>` using the same state. A completed format is never
 repeated. A running/interrupted provision blocks all automatic retries. Preserve
 `provision.json`: it records disk metadata and execution state, **not a backup**.
 Inspect the disks; repair/mount the intended complete layout from trusted media,
 then preview and explicitly accept it without rerunning Disko:
 
 ```sh
-python -m lx_administration.storage.boot_setup recover --state <state> --assessor <admin>
-python -m lx_administration.storage.boot_setup recover --state <state> --assessor <admin> --apply
+python -m lx_administration.storage.boot_setup recover --host <host> --assessor <admin>
+python -m lx_administration.storage.boot_setup recover --host <host> --assessor <admin> --apply
 ```
 
 Recovery rechecks hardware, encrypted filesystems and evidence and requires an

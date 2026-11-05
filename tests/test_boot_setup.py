@@ -469,3 +469,74 @@ def test_direct_provision_cli_is_removed(monkeypatch):
     with pytest.raises(SystemExit) as error:
         setup.main()
     assert error.value.code == 2
+
+
+def test_autoconf_target_reuses_plan_and_blocks_drift(state, tmp_path):
+    import yaml
+    from tests.autoconf_test_support import write_config
+
+    root, plan, _ = state
+    config_path = write_config(tmp_path)
+    raw = yaml.safe_load(config_path.read_text())
+    raw["paths"]["nix_output"] = plan["spec"]["checkout"]
+    raw["boot_storage"] = {
+        "state_root": str(root.parent),
+        "hosts": {
+            "gc-09": {
+                **{
+                    k: v
+                    for k, v in plan["spec"].items()
+                    if k not in {"schema_version", "host", "checkout"}
+                },
+                "root_encryption": "luks2",
+                "installation": "migration",
+            }
+        },
+    }
+    config_path.write_text(yaml.safe_dump(raw))
+    spec, selected = setup.configured_target(config_path, "gc-09")
+    assert selected == root.parent / "gc-09"
+    assert spec["disks"] == plan["spec"]["disks"]
+    assert spec["checkout"] == plan["spec"]["checkout"]
+    root.rename(selected)
+    plan["spec"] = spec
+    plan["plan_id"] = migration.digest(
+        {k: v for k, v in plan.items() if k != "plan_id"}
+    )
+    migration.atomic_json(selected / "plan.json", plan)
+    assert setup.configured_target(config_path, "gc-09") == (spec, selected)
+    raw["boot_storage"]["hosts"]["gc-09"]["disks"][0]["serial"] = "changed"
+    config_path.write_text(yaml.safe_dump(raw))
+    # An existing plan with different settings must not be adopted implicitly.
+    with pytest.raises(migration.MigrationError, match="differs from the saved plan"):
+        setup.configured_target(config_path, "gc-09")
+    with pytest.raises(migration.MigrationError, match="Add boot_storage.hosts"):
+        setup.configured_target(config_path, "gc-02")
+    raw["boot_storage"]["state_root"] = None
+    config_path.write_text(yaml.safe_dump(raw))
+    with pytest.raises(migration.MigrationError, match="no recovery location"):
+        setup.configured_target(config_path, "gc-09")
+
+
+def test_plan_cli_uses_autoconf_without_spec_or_state(monkeypatch, capsys):
+    from pathlib import Path
+
+    calls = []
+    spec, state = {"host": "gc-09"}, Path("/independent/gc-09")
+    monkeypatch.setattr("sys.argv", ["boot-storage-setup", "plan", "--host", "gc-09"])
+    monkeypatch.setattr(setup, "configured_target", lambda p, h: (spec, state))
+    monkeypatch.setattr(migration, "plan_spec", lambda s, p: calls.append((s, p)))
+    monkeypatch.setattr(setup, "prepare", lambda p: calls.append(p))
+    monkeypatch.setattr(
+        setup,
+        "next_step",
+        lambda p: setup.NextStep(
+            action=setup.Action.ASSESS,
+            host="gc-09",
+            plan_id="test",
+            reason="Recovery evidence required",
+        ),
+    )
+    setup.main()
+    assert calls == [(spec, state), state]
+    assert json.loads(capsys.readouterr().out)["action"] == "assess"

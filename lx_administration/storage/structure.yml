@@ -88,6 +88,7 @@ entrypoints:
 dependencies:
   internal:
     - modules/nixos
+    - lx_administration/autoconf
   external:
     - cryptography
     - mTLS

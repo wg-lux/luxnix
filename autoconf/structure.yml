@@ -4,7 +4,7 @@ path: autoconf
 parent: ../structure.yml
 summary: Centralized pipeline options; generated inventory and merged variables are derived local outputs.
 responsibilities:
-  - Own generator paths and inventory-wide parsing options
+  - Own generator paths, inventory-wide parsing options and reviewed boot setup intent
   - Describe generation inputs and output lifecycle
 boundaries:
   - Do not hand-edit generated inventory or merged variables
