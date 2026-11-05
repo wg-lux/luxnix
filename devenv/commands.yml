@@ -247,7 +247,7 @@ commands:
     summary: Guide root setup in order with pinned provisioning, typed erasure approval and non-destructive recovery.
     risk: destructive-local
     operator_confirmation_required: true
-    usage: devenv shell boot-storage-setup <observe|plan|next|advance|provision|recover> [--state <private-directory>] [--spec <private-yaml>] [--apply] [--assessor <admin>]
+    usage: devenv shell boot-storage-setup <observe|plan|next|advance|recover> [--state <private-directory>] [--spec <private-yaml>] [--apply] [--assessor <admin>]
     implementation: lx_administration/storage/boot_setup.py
     documentation: docs/boot-storage-operator.md
     prerequisites:
@@ -257,7 +257,7 @@ commands:
     effects:
       - Observe runs on the target and emits reviewed disk/hardware facts as YAML without writes; no substitute disk selection.
       - Plan builds the closure and Disko executable; next and advance without apply only report the next step.
-      - Provision with apply requires a real terminal and exact host, plan and serial confirmation before formatting the selected disks once.
+      - Advance at the provisioning step with apply requires a real terminal and exact host, plan and serial confirmation before formatting the selected disks once.
       - Durable typed intent and pre-format disk metadata are saved before execution. Failed or uncertain attempts never retry formatting automatically.
       - Recover with apply verifies and accepts only the existing layout after named administrator confirmation; it never formats.
       - Advance with apply delegates eligible access preparation or separately confirmed installation through existing gates. No automatic key rotation, evidence approval, reboot or backup cleanup.

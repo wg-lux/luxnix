@@ -350,41 +350,28 @@ def create_plan(spec_path: Path, state: Path) -> dict:
             raise MigrationError(
                 "Selected disks do not exactly match the evaluated host layout"
             )
-        built = run(
-            "nix",
-            "build",
-            "--no-update-lock-file",
-            "--no-link",
-            "--print-out-paths",
-            str(spec["checkout"])
-            + "#nixosConfigurations."
-            + spec["host"]
-            + ".config.system.build.toplevel",
-            timeout=3600,
-        )
-        if (
-            built != config["closure"]
-            or source_identity(Path(spec["checkout"])) != source
+        for attribute, field in (
+            ("toplevel", "closure"),
+            ("diskoScript", "provisioner"),
         ):
-            raise MigrationError("Release changed during build; no plan was published")
-        provisioner = run(
-            "nix",
-            "build",
-            "--no-update-lock-file",
-            "--no-link",
-            "--print-out-paths",
-            str(spec["checkout"])
-            + "#nixosConfigurations."
-            + spec["host"]
-            + ".config.system.build.diskoScript",
-            timeout=3600,
-        )
-        if (
-            provisioner != config["provisioner"]
-            or source_identity(Path(spec["checkout"])) != source
-        ):
-            raise MigrationError("Provisioner or release changed during build")
-        config["provisioner_sha256"] = file_digest(Path(provisioner))
+            built = run(
+                "nix",
+                "build",
+                "--no-update-lock-file",
+                "--no-link",
+                "--print-out-paths",
+                f"{spec['checkout']}#nixosConfigurations.{spec['host']}"
+                f".config.system.build.{attribute}",
+                timeout=3600,
+            )
+            if (
+                built != config[field]
+                or source_identity(Path(spec["checkout"])) != source
+            ):
+                raise MigrationError(
+                    "Release or output changed during build; no plan was published"
+                )
+        config["provisioner_sha256"] = file_digest(Path(config["provisioner"]))
         payload = {
             "schema_version": 1,
             "spec": spec,

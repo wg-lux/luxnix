@@ -577,7 +577,7 @@ def test_disposable_disks_still_require_offline_unmapped_target(
         migration.verify_unmounted_targets(plan)
 
 
-@pytest.mark.parametrize("changed", [False, True])
+@pytest.mark.parametrize("changed", [None, "toplevel", "diskoScript"])
 def test_plan_pins_provisioner_and_rejects_build_drift(
     state, tmp_path, monkeypatch, changed
 ):
@@ -601,9 +601,9 @@ def test_plan_pins_provisioner_and_rejects_build_drift(
         calls.append(args)
         assert "--no-update-lock-file" in args
         assert "--no-link" in args
-        if args[-1].endswith("diskoScript"):
-            return "/changed/program" if changed else str(script)
-        return config["closure"]
+        if changed and args[-1].endswith(changed):
+            return "/changed/program"
+        return str(script) if args[-1].endswith("diskoScript") else config["closure"]
 
     monkeypatch.setattr(migration, "run", run)
     if changed:
@@ -615,4 +615,4 @@ def test_plan_pins_provisioner_and_rejects_build_drift(
         assert plan["config"]["provisioner_sha256"] == migration.file_digest(script)
         assert migration.load_plan(target) == plan
         assert migration.create_plan(spec_path, target) == plan
-    assert len(calls) == 2
+    assert len(calls) == (1 if changed == "toplevel" else 2)

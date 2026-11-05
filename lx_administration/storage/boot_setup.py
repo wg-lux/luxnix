@@ -90,6 +90,25 @@ class NextStep(Contract):
     required_checks: list[str] = Field(default_factory=list)
 
 
+def inspect_disk(path: str, *, children: bool = True) -> BlockDevice:
+    tree = DiskTree.model_validate_json(
+        migration.run(
+            "lsblk",
+            "--json",
+            "--bytes",
+            "--paths",
+            *([] if children else ["--nodeps"]),
+            "--output",
+            "PATH,TYPE,SERIAL,SIZE,FSTYPE,UUID,MOUNTPOINTS",
+            path,
+        )
+    )
+    disk = tree.blockdevices[0]
+    if disk.type != "disk":
+        raise migration.MigrationError("Configured target is not a whole disk")
+    return disk
+
+
 def observe(checkout: Path, host: str, installation: str, retention: str) -> dict:
     """Collect a specification on the target; never select substitute disks."""
     if not migration.HOST.fullmatch(host):
@@ -98,21 +117,7 @@ def observe(checkout: Path, host: str, installation: str, retention: str) -> dic
     config = migration.evaluate(checkout, host)
     disks = []
     for path in config["disks"].values():
-        tree = DiskTree.model_validate_json(
-            migration.run(
-                "lsblk",
-                "--json",
-                "--bytes",
-                "--nodeps",
-                "--paths",
-                "--output",
-                "PATH,TYPE,SERIAL,SIZE,FSTYPE,UUID,MOUNTPOINTS",
-                path,
-            )
-        )
-        disk = tree.blockdevices[0]
-        if disk.type != "disk":
-            raise migration.MigrationError("Configured target is not a whole disk")
+        disk = inspect_disk(path, children=False)
         disks.append({"path": path, "serial": disk.serial, "size_bytes": disk.size})
     spec = {
         "schema_version": 1,
@@ -143,9 +148,9 @@ def load_journal(state: Path, plan: dict) -> Journal:
     return record
 
 
-def save_journal(state: Path, record: Journal) -> None:
+def save_journal(state: Path, record: Journal, **changes: object) -> Journal:
     # Validate every transition at the persistence boundary, including updates.
-    record = Journal.model_validate(record.model_dump())
+    record = Journal.model_validate(record.model_dump() | changes)
     atomic_write_file(
         destination=journal_path(state),
         content=[record.model_dump_json(indent=2).encode() + b"\n"],
@@ -161,6 +166,7 @@ def save_journal(state: Path, record: Journal) -> None:
         ),
         file=sys.stderr,
     )
+    return record
 
 
 def provisioner(plan: dict) -> Path:
@@ -203,23 +209,8 @@ def prepare(state: Path) -> None:
 def snapshot_disks(plan: dict) -> list[BlockDevice]:
     result = []
     for disk in plan["spec"]["disks"]:
-        tree = DiskTree.model_validate_json(
-            migration.run(
-                "lsblk",
-                "--json",
-                "--bytes",
-                "--paths",
-                "--output",
-                "PATH,TYPE,SERIAL,SIZE,FSTYPE,UUID,MOUNTPOINTS",
-                disk["path"],
-            )
-        )
-        observed = tree.blockdevices[0]
-        if (
-            observed.type != "disk"
-            or observed.serial != disk["serial"]
-            or observed.size != disk["size_bytes"]
-        ):
+        observed = inspect_disk(disk["path"])
+        if observed.serial != disk["serial"] or observed.size != disk["size_bytes"]:
             raise migration.MigrationError("Disk snapshot differs from the plan")
         result.append(observed)
     return result
@@ -347,14 +338,10 @@ def provision(
             migration.verify_independent_state(state, progress, disks)
             save_journal(
                 state,
-                Journal.model_validate(
-                    record.model_dump()
-                    | {
-                        "phase": Phase.COMPLETE,
-                        "mounts": identities,
-                        "recovered_by": recover_by,
-                    }
-                ),
+                record,
+                phase=Phase.COMPLETE,
+                mounts=identities,
+                recovered_by=recover_by,
             )
             return
         script = provisioner(plan)
@@ -379,10 +366,8 @@ def provision(
         migration.verify_unmounted_targets(plan)
         verify_provision_namespace(script, disks)
         migration.verify_independent_state(state, progress, disks)
-        record = Journal.model_validate(
-            record.model_dump() | {"phase": Phase.RUNNING, "before": before}
-        )
-        save_journal(state, record)  # Durable intent BEFORE any disk change.
+        # Publish validated durable intent before any disk change.
+        record = save_journal(state, record, phase=Phase.RUNNING, before=before)
         try:
             run_provisioner(script, lock)
             if migration.probe_disks(plan) != disks:
@@ -390,21 +375,9 @@ def provision(
                     "Disk identity changed during provisioning"
                 )
             identities = migration.verify_layout(plan, disks)
-            complete = Journal.model_validate(
-                record.model_dump()
-                | {
-                    "phase": Phase.COMPLETE,
-                    "mounts": identities,
-                }
-            )
-            save_journal(state, complete)
+            save_journal(state, record, phase=Phase.COMPLETE, mounts=identities)
         except BaseException:
-            save_journal(
-                state,
-                Journal.model_validate(
-                    record.model_dump() | {"phase": Phase.INTERRUPTED}
-                ),
-            )
+            save_journal(state, record, phase=Phase.INTERRUPTED)
             raise
         print("Layout provisioned and mounted. No installation or reboot performed.")
 
@@ -524,12 +497,12 @@ def main() -> None:
         required=True,
         choices=["old-disks", "whole-disk-image", "new-disks", "discard-approved"],
     )
-    for action in ("plan", "next", "advance", "provision", "recover"):
+    for action in ("plan", "next", "advance", "recover"):
         command = sub.add_parser(action)
         command.add_argument("--state", required=True, type=Path)
         if action == "plan":
             command.add_argument("--spec", required=True, type=Path)
-        if action in {"advance", "provision", "recover"}:
+        if action in {"advance", "recover"}:
             command.add_argument("--apply", action="store_true")
         if action == "recover":
             command.add_argument("--assessor", required=True)
@@ -557,9 +530,8 @@ def main() -> None:
             case "next":
                 pass
             case "advance":
-                advance(args.state, apply=args.apply)
-            case "provision":
-                provision(args.state, apply=args.apply)
+                print(advance(args.state, apply=args.apply).model_dump_json(indent=2))
+                return
             case "recover":
                 provision(args.state, apply=args.apply, recover_by=args.assessor)
         print(next_step(args.state).model_dump_json(indent=2))

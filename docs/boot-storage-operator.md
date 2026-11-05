@@ -57,7 +57,7 @@ cold boot and recovery before proceeding to the next host.
    without changing storage. Use its reviewed checkout and actual inventory name:
 
    ```sh
-   devenv shell boot-storage-setup observe --checkout <checkout> --host <host> --installation disposable --source-retention discard-approved
+   devenv shell boot-storage-setup observe --checkout <luxnix-path> --host <host> --installation disposable --source-retention discard-approved
    ```
 
    Save the YAML privately on encrypted controller storage. Observation requires

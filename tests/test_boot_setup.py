@@ -348,6 +348,9 @@ def test_observe_records_only_configured_disk_and_real_hardware(
     assert spec["disks"] == plan["spec"]["disks"]
     assert spec["hardware_uuid"] == hardware.read_text()
     assert calls[0][-1] == path
+    assert "--nodeps" in calls[0]
+    assert setup.snapshot_disks(plan)[0].serial == "test-serial"
+    assert "--nodeps" not in calls[-1]
     with pytest.raises(migration.MigrationError):
         setup.observe(
             Path(plan["spec"]["checkout"]), "gc-09", "disposable", "new-disks"
@@ -433,3 +436,20 @@ def test_pinned_store_symlink_is_verified_not_blindly_followed(
     else:
         with pytest.raises(migration.MigrationError):
             setup.provisioner(plan)
+
+
+def test_invalid_transition_preserves_journal(environment):
+    root, plan, _, _, _ = environment
+    before = setup.journal_path(root).read_bytes()
+    with pytest.raises(ValidationError):
+        setup.save_journal(
+            root, setup.load_journal(root, plan), phase=setup.Phase.COMPLETE
+        )
+    assert setup.journal_path(root).read_bytes() == before
+
+
+def test_direct_provision_cli_is_removed(monkeypatch):
+    monkeypatch.setattr("sys.argv", ["boot-storage-setup", "provision"])
+    with pytest.raises(SystemExit) as error:
+        setup.main()
+    assert error.value.code == 2

@@ -1,4 +1,6 @@
 inputs:
+  pre-commit-hooks:
+    follows: git-hooks
   git-hooks:
     url: github:cachix/git-hooks.nix
     inputs:

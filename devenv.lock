@@ -138,6 +138,9 @@
       "inputs": {
         "devenv": "devenv",
         "git-hooks": "git-hooks",
+        "pre-commit-hooks": [
+          "git-hooks"
+        ],
         "mk-shell-bin": "mk-shell-bin",
         "nix2container": "nix2container",
         "nixpkgs": "nixpkgs",
