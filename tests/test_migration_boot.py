@@ -40,6 +40,8 @@ def spec():
         ("authorized_keys", []),
         ("gateway", "198.51.100.1"),
         ("hardware_uuid", "wrong-machine"),
+        ("boot_trust", "skip-all-checks"),
+        ("console", "pts/0"),
     ],
 )
 def test_invalid_signed_spec_refused(spec, field, value):
@@ -80,6 +82,7 @@ def stage(tmp_path, monkeypatch, spec):
         certificate=tmp_path / "db.pem",
         esp=esp,
         apply=False,
+        allow_unverified_boot=False,
         payload=payload,
         recovery=recovery,
     )
@@ -421,3 +424,100 @@ def test_loader_orders_identity_copy_authentication_and_detach(tmp_path, failure
         assert boot.digest(tmp_path / "nix-store.squashfs") == expected
     else:
         assert "start-runtime" not in events
+
+
+@pytest.mark.parametrize(
+    "mode,allowed", [("local-console", False), ("secure-boot", True)]
+)
+def test_staging_requires_matching_explicit_boot_trust(
+    stage, monkeypatch, spec, mode, allowed
+):
+    args, variables, calls = stage
+    spec["boot_trust"] = mode
+    args.allow_unverified_boot = allowed
+    args.apply = True
+    with pytest.raises(ValueError, match="cannot be downgraded"):
+        boot.stage(args)
+    assert "LoaderEntryOneShot" not in variables
+    assert not (args.esp / "EFI").exists()
+
+
+def test_console_image_stages_without_signer_but_keeps_payload_check(stage, spec):
+    args, variables, calls = stage
+    spec["boot_trust"] = "local-console"
+    args.allow_unverified_boot = True
+    args.apply = True
+    boot.stage(args)
+    assert "LoaderEntryOneShot" in variables
+    assert not any(call[0] == "sbverify" for call in calls)
+
+
+@pytest.mark.parametrize(
+    "console,answer,accepted",
+    [
+        ("/dev/tty1", "BOOT UNVERIFIED test-host aaaaaaaaaaaa", True),
+        ("/dev/tty1", "yes", False),
+        ("/dev/pts/0", "BOOT UNVERIFIED test-host aaaaaaaaaaaa", False),
+    ],
+)
+def test_unverified_admission_requires_exact_physical_approval(
+    spec, tmp_path, monkeypatch, console, answer, accepted
+):
+    spec["boot_trust"] = "local-console"
+    path = tmp_path / "spec.json"
+    path.write_text(json.dumps(spec))
+    monkeypatch.setattr(boot, "require_machine", lambda *a: None)
+    monkeypatch.setattr(boot.sb, "run", lambda *a: "tmpfs" if a[0] == "findmnt" else "")
+    monkeypatch.setattr(
+        boot.sys, "stdin", SimpleNamespace(isatty=lambda: True, fileno=lambda: 0)
+    )
+    monkeypatch.setattr(boot.os, "ttyname", lambda _: console)
+    monkeypatch.setattr("builtins.input", lambda _: answer)
+    args = SimpleNamespace(spec=path, certificate=Path("unused"))
+    if accepted:
+        boot.admit(args)
+    else:
+        with pytest.raises(ValueError, match="console approval|physical console"):
+            boot.admit(args)
+
+
+def test_console_mode_still_checks_hardware_and_ram(spec, monkeypatch):
+    spec["boot_trust"] = "local-console"
+    monkeypatch.setattr(
+        Path,
+        "read_text",
+        lambda path: spec["hardware_uuid"]
+        if path.name == "product_uuid"
+        else "MemTotal: 1024 kB\n",
+    )
+    monkeypatch.setattr(
+        boot.sb, "firmware_check", lambda *a: pytest.fail("requires enrollment")
+    )
+    with pytest.raises(ValueError, match="Insufficient RAM"):
+        boot.require_machine(spec, spec["host"], Path("unused"))
+
+
+def test_build_defaults_to_console_mode_without_signing(monkeypatch):
+    selected = []
+    monkeypatch.setattr(boot, "build", selected.append)
+    boot.main(
+        [
+            "build",
+            "gc-09",
+            "--interface",
+            "enp4s0",
+            "--address",
+            "192.0.2.10/24",
+            "--controller-cidr",
+            "192.0.2.1/32",
+            "--recovery-uuid",
+            "1111-2222",
+            "--recovery-fstype",
+            "vfat",
+            "--output",
+            "/unused",
+        ]
+    )
+    assert selected[0].boot_trust == "local-console"
+    assert selected[0].console == "tty1"
+    assert selected[0].sign is False

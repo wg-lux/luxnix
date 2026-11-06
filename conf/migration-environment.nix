@@ -1,6 +1,8 @@
 # Standalone RAM appliance. Never import the target host's disks or services.
 { inputs, spec }:
 let
+  localConsole = (spec.boot_trust or "secure-boot") == "local-console";
+  console = spec.console or "tty1";
   runtimeSystem = inputs.nixpkgs.lib.nixosSystem {
     system = "x86_64-linux";
     modules = [
@@ -106,6 +108,26 @@ let
             openssh.authorizedKeys.keys = spec.authorized_keys;
           };
           services.getty.autologinUser = lib.mkForce null;
+          # A local shell is available only after physical approval in this image.
+          systemd.services."getty@tty1".enable = lib.mkIf localConsole false;
+          systemd.services."autovt@tty1".enable = lib.mkIf localConsole false;
+          systemd.services."serial-getty@ttyS0".enable = lib.mkIf localConsole false;
+          systemd.services.luxnix-migration-console = lib.mkIf localConsole {
+            wantedBy = [ "multi-user.target" ];
+            requires = [ "luxnix-migration-admission.service" ];
+            after = [ "luxnix-migration-admission.service" ];
+            serviceConfig = {
+              Type = "simple";
+              ExecStart = "${pkgs.bashInteractive}/bin/bash --login";
+              StandardInput = "tty";
+              StandardOutput = "tty";
+              StandardError = "tty";
+              TTYPath = "/dev/${console}";
+              TTYReset = true;
+              TTYVHangup = true;
+              Restart = "always";
+            };
+          };
           swapDevices = lib.mkForce [ ];
           zramSwap.enable = lib.mkForce false;
           boot.resumeDevice = lib.mkForce "";
@@ -162,6 +184,12 @@ let
             serviceConfig = {
               Type = "oneshot";
               RemainAfterExit = true;
+              StandardInput = lib.mkIf localConsole "tty";
+              StandardOutput = lib.mkIf localConsole "tty";
+              StandardError = lib.mkIf localConsole "tty";
+              TTYPath = lib.mkIf localConsole "/dev/${console}";
+              TTYReset = lib.mkIf localConsole true;
+              TimeoutStartSec = lib.mkIf localConsole "infinity";
             };
             script = ''
               export PYTHONPATH=${runtime}

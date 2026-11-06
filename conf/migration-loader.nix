@@ -40,6 +40,10 @@ in
 {
   boot.initrd.systemd.enable = lib.mkForce true;
   boot.initrd.systemd.emergencyAccess = false;
+  boot.initrd.systemd.services.initrd-nixos-activation.serviceConfig = {
+    StandardOutput = "journal+console";
+    StandardError = "journal+console";
+  };
   boot.initrd.systemd.additionalUpstreamUnits = [ "systemd-udev-settle.service" ];
   boot.initrd.systemd.storePaths = [
     "${./migration-load.sh}"
@@ -58,7 +62,11 @@ in
       "cryptsetup.target"
     ];
     requires = [ "systemd-udev-settle.service" ];
-    unitConfig.DefaultDependencies = false;
+    unitConfig = {
+      DefaultDependencies = false;
+      # The store mount requires this service through the switch-root isolation.
+      IgnoreOnIsolate = true;
+    };
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;

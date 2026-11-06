@@ -1,4 +1,4 @@
-"""Build signed RAM recovery images and stage an explicit one-shot boot.
+"""Build RAM recovery images and stage an explicit one-shot boot.
 
 No command in this module encrypts storage, enrolls firmware keys or reboots.
 The target-side commands use only the standard library and secure_boot.py.
@@ -17,6 +17,7 @@ import re
 import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 import uuid
 
@@ -32,7 +33,7 @@ def digest(path: Path) -> str:
 
 
 def validate_spec(spec: dict) -> None:
-    if set(spec) - {"payload"} != {
+    if set(spec) - {"payload", "boot_trust", "console"} != {
         "host",
         "hardware_uuid",
         "revision",
@@ -46,6 +47,10 @@ def validate_spec(spec: dict) -> None:
         "target_serials",
     }:
         raise ValueError("Unexpected migration image specification fields")
+    if spec.get("boot_trust", "secure-boot") not in {"secure-boot", "local-console"}:
+        raise ValueError("Unsupported boot trust mode")
+    if spec.get("console", "tty1") not in {"tty1", "ttyS0"}:
+        raise ValueError("Select a physical console")
     if not re.fullmatch(r"[a-z][a-z0-9-]{0,62}", spec["host"]):
         raise ValueError("Invalid inventory hostname")
     if not re.fullmatch(r"[0-9a-f]{40}", spec["revision"]):
@@ -226,6 +231,8 @@ def build(args) -> None:
         raise ValueError("Unsupported administrator account name")
     spec = {
         "host": args.host,
+        "boot_trust": args.boot_trust,
+        "console": args.console,
         "hardware_uuid": host["hardware_uuid"].lower(),
         "revision": revision,
         "interface": args.interface,
@@ -311,6 +318,7 @@ def build(args) -> None:
                 "image": str(destination),
                 "sha256": digest(destination),
                 "signed": args.sign,
+                "boot_trust": args.boot_trust,
                 "payload": str(args.output / "migration.squashfs"),
                 "payload_sha256": manifest["payload"]["sha256"],
                 "host": args.host,
@@ -360,7 +368,8 @@ def require_machine(spec: dict, host: str, certificate: Path) -> None:
     actual = Path("/sys/class/dmi/id/product_uuid").read_text().strip().lower()
     if actual != spec["hardware_uuid"]:
         raise ValueError("Signed image is for another physical machine")
-    sb.firmware_check(certificate)
+    if spec.get("boot_trust", "secure-boot") == "secure-boot":
+        sb.firmware_check(certificate)
     memory = (
         int(
             next(
@@ -423,8 +432,20 @@ def stage(args) -> None:
         raise ValueError("Image must be a regular file")
     if digest(args.image) != args.sha256:
         raise ValueError("Image SHA256 differs from the controller artifact")
-    sb.run("sbverify", "--cert", args.certificate, args.image)
     spec = image_spec(args.image)
+    local_console = spec.get("boot_trust", "secure-boot") == "local-console"
+    if local_console != args.allow_unverified_boot:
+        raise ValueError(
+            "Local-console images require --allow-unverified-boot; "
+            "secure images cannot be downgraded"
+        )
+    if local_console:
+        print(
+            "UNVERIFIED BOOT: no firmware authentication; "
+            "physical console approval required at every boot."
+        )
+    else:
+        sb.run("sbverify", "--cert", args.certificate, args.image)
     require_machine(spec, args.host, args.certificate)
     verify_payload(args.payload, spec)
     require_recovery(args.recovery, spec)
@@ -490,7 +511,8 @@ def stage(args) -> None:
             raise ValueError("Image changed during staging")
         image = esp / "EFI/LuxNixMigration" / (name + ".efi")
         publish(image, content)
-        sb.run("sbverify", "--cert", args.certificate, image)
+        if not local_console:
+            sb.run("sbverify", "--cert", args.certificate, image)
         publish(
             esp / "loader/entries" / entry,
             (
@@ -513,6 +535,29 @@ def admit(args) -> None:
         raise ValueError("Migration environment must run from RAM")
     if sb.run("swapon", "--show", "--noheadings", "--output", "NAME").strip():
         raise ValueError("Migration environment must not use swap")
+    if spec.get("boot_trust", "secure-boot") == "local-console":
+        console = "/dev/" + spec.get("console", "tty1")
+        if not sys.stdin.isatty() or os.ttyname(sys.stdin.fileno()) != console:
+            raise ValueError(
+                "Unverified boot requires approval on the configured physical console"
+            )
+        phrase = f"BOOT UNVERIFIED {spec['host']} {spec['revision'][:12]}"
+        print(
+            "WARNING: firmware has NOT authenticated this migration environment.",
+            flush=True,
+        )
+        print(
+            "Payload integrity was checked, but a replaced loader "
+            "could replace that check.",
+            flush=True,
+        )
+        print(
+            "Proceed only if you trust the staged image and physical machine. "
+            "No encryption starts automatically.",
+            flush=True,
+        )
+        if input(f"Type {phrase} to open migration access: ").strip() != phrase:
+            raise ValueError("Local console approval declined")
     print("RAM environment admitted; migration still requires the existing plan gates")
 
 
@@ -530,6 +575,13 @@ def main(argv=None) -> None:
     builder.add_argument("--recovery-luks-uuid")
     builder.add_argument("--output", type=Path, required=True)
     builder.add_argument("--sign", action="store_true")
+    builder.add_argument(
+        "--boot-trust",
+        choices=("secure-boot", "local-console"),
+        default="local-console",
+    )
+    builder.add_argument("--console", choices=("tty1", "ttyS0"), default="tty1")
+
     builder.add_argument("--custody", type=Path, default=sb.DEFAULT_CUSTODY)
     target = commands.add_parser("stage")
     target.add_argument("host")
@@ -540,6 +592,7 @@ def main(argv=None) -> None:
     target.add_argument("--certificate", type=Path, required=True)
     target.add_argument("--esp", type=Path, default=Path("/boot"))
     target.add_argument("--apply", action="store_true")
+    target.add_argument("--allow-unverified-boot", action="store_true")
     admission = commands.add_parser("admit")
     admission.add_argument("--spec", type=Path, required=True)
     admission.add_argument("--certificate", type=Path, required=True)
@@ -548,6 +601,7 @@ def main(argv=None) -> None:
         {"build": build, "stage": stage, "admit": admit}[args.command](args)
     except (
         ValueError,
+        EOFError,
         OSError,
         KeyError,
         sb.SecureBootError,

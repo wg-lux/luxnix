@@ -65,11 +65,15 @@ def test_signed_loader_rejects_modified_payload_manifest(tmp_path):
     assert result.returncode != 0
 
 
-@pytest.mark.parametrize("tamper", [False, True])
-def test_split_loader_boots_only_authenticated_ram_payload(tmp_path, tamper):
+@pytest.mark.parametrize("case", ["accept", "decline", "tamper"])
+def test_split_loader_boots_only_authenticated_ram_payload(tmp_path, case):
+    tamper = case == "tamper"
     bundle = Path(os.environ["LUXNIX_MIGRATION_BUNDLE"])
     spec = json.loads((bundle / "manifest.json").read_text())
     assert spec["host"] == "test-host"
+    local_console = spec.get("boot_trust") == "local-console"
+    if case == "decline" and not local_console:
+        pytest.skip("console refusal requires local-console fixture")
     assert spec["recovery"] == {
         "uuid": "1111-2222",
         "fstype": "vfat",
@@ -126,7 +130,9 @@ def test_split_loader_boots_only_authenticated_ram_payload(tmp_path, tamper):
         "-display",
         "none",
         "-serial",
-        f"file:{serial}",
+        "stdio",
+        "-monitor",
+        "none",
         "-no-reboot",
         "-uuid",
         spec["hardware_uuid"],
@@ -141,15 +147,45 @@ def test_split_loader_boots_only_authenticated_ram_payload(tmp_path, tamper):
         "-device",
         "ide-hd,drive=recovery,serial=test-recovery-disk",
     ]
-    with (tmp_path / "qemu.log").open("w") as log:
-        process = subprocess.Popen(command, stdout=log, stderr=log)
+    with (tmp_path / "qemu.log").open("w") as log, serial.open("w") as output_log:
+        process = subprocess.Popen(
+            command, stdin=subprocess.PIPE, stdout=output_log, stderr=log
+        )
         try:
             deadline = time.monotonic() + 120
             marker = (
                 "Migration payload admission failed" if tamper else "Multi-User System"
             )
+            if local_console and not tamper:
+                marker = (
+                    "Local console approval declined"
+                    if case == "decline"
+                    else "LUXNIX_CONSOLE_READY"
+                )
+            confirmed = False
+            probed = False
             while time.monotonic() < deadline:
                 output = serial.read_text(errors="replace") if serial.exists() else ""
+                if local_console and not tamper:
+                    if "to open migration access:" in output and not confirmed:
+                        assert "RAM environment admitted" not in output
+                        phrase = (
+                            f"BOOT UNVERIFIED {spec['host']} {spec['revision'][:12]}"
+                        )
+                        process.stdin.write(
+                            ((phrase if case == "accept" else "no") + "\n").encode()
+                        )
+                        process.stdin.flush()
+                        confirmed = True
+                    if ":/]#" in output and confirmed and not probed:
+                        process.stdin.write(
+                            b"test $(id -u) = 0 "
+                            b"&& test $(findmnt -n -o FSTYPE /) = tmpfs "
+                            b'&& test -z "$(swapon --show --noheadings)" '
+                            b"&& printf 'LUXNIX_%s\\n' CONSOLE_READY\n"
+                        )
+                        process.stdin.flush()
+                        probed = True
                 if marker in output:
                     break
                 if not tamper and "Migration payload admission failed" in output:
@@ -180,7 +216,10 @@ if __name__ == "__main__":
     from tests.test_migration_boot import spec as specification
 
     root = Path(__file__).resolve().parents[1]
-    serialized = json.dumps(json.dumps(specification.__wrapped__()))
+    fixture = specification.__wrapped__()
+    if os.environ.get("LUXNIX_MIGRATION_LOCAL_CONSOLE"):
+        fixture.update(boot_trust="local-console", console="ttyS0")
+    serialized = json.dumps(json.dumps(fixture))
     module = json.dumps(str(root / "conf/migration-environment.nix"))
     expression = (
         f"let f = builtins.getFlake {json.dumps('git+file://' + str(root))}; "

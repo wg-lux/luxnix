@@ -46,7 +46,7 @@
 - **Vault**
   - [Machine Setup Secrets Checklist](docs/machine-secrets-checklist.md)
   - [Root Encryption Quick Steps](docs/boot-storage-quickstart.md)
-  - [Signed RAM migration](docs/migration-environment.md)
+  - [RAM migration](docs/migration-environment.md)
   - [Boot LUKS Storage Migration](docs/boot-storage-migration.md)
   - [Credential Backup](docs/credential-backup.md)
   - [Unmigrated Hosts (Legacy Storage)](docs/legacy-storage-recovery.md)

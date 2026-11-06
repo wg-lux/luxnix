@@ -12,7 +12,7 @@ boundaries:
 entrypoints:
 - name: migration-environment
   file: migration-environment.md
-  purpose: Signed one-shot RAM migration workflow, identity verification and remaining recovery prerequisites.
+  purpose: Signed or console-confirmed one-shot RAM migration workflow, identity verification and remaining recovery prerequisites.
 - name: credential-backup
   file: credential-backup.md
   purpose: Preserve admin/client credential sources in encrypted archives and renew recovery evidence after drift.

@@ -67,6 +67,7 @@
               '--payload', migration_stage + '/migration.squashfs',
               '--recovery', migration_recovery | default('/recovery'),
               '--certificate', migration_stage + '/db.pem']
+             + (['--allow-unverified-boot'] if migration_allow_unverified_boot | default(false) | bool else [])
              + (['--apply'] if migration_apply | default(false) | bool else []) }}
         chdir: "{{ migration_stage }}"
       environment:

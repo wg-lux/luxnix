@@ -18,7 +18,7 @@ entrypoints:
   purpose: Copy a bounded recovery payload to RAM and authenticate it before mounting or executing it.
 - name: migration-environment
   file: migration-environment.nix
-  purpose: Build the standalone RAM UKI from a signed host specification; never import target filesystems.
+  purpose: Build the standalone RAM UKI with signed or console-confirmed boot admission; never import target filesystems.
 - name: migration-environment-policy
   file: migration-environment.yml
   purpose: Canonical RAM, ESP and recovery SSH limits.
