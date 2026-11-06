@@ -1,0 +1,136 @@
+---
+# Routine replacement only. The custodian prepares a fresh bundle on gs-02.
+# Breach containment/resume remains the separate site-lifecycle procedure.
+- name: Confirm one routine Vault enrollment rotation
+  hosts: gpu_client
+  gather_facts: false
+  become: false
+  any_errors_fatal: true
+  tasks:
+    - name: Require one explicit site and a real execution
+      ansible.builtin.assert:
+        that:
+          - ansible_play_hosts_all | length == 1
+          - inventory_hostname != 'gs-02'
+          - inventory_hostname is match('^[a-z0-9][a-z0-9-]*$')
+          - not ansible_check_mode
+          - enrollment_expected_ca_sha256 is defined
+          - enrollment_expected_ca_sha256 | regex_replace(':', '') is match('^[A-Fa-f0-9]{64}$')
+
+    - name: Validate the reviewed deployment source and site contract
+      ansible.builtin.command:
+        argv: [uv, run, python, scripts/vault/site_enrollment_preflight.py, '{{ inventory_hostname }}', --json]
+        chdir: '{{ playbook_dir }}/../..'
+      delegate_to: localhost
+      changed_when: false
+      register: rotation_preflight
+
+    - name: Identify locked deployment inputs
+      ansible.builtin.command:
+        argv: [sha256sum, flake.lock]
+        chdir: '{{ playbook_dir }}/../..'
+      delegate_to: localhost
+      changed_when: false
+      register: rotation_lock_digest
+
+    - name: Check hub and site connectivity before changes
+      ansible.builtin.command:
+        argv: [bash, scripts/check-connectivity.sh, '{{ item }}']
+        chdir: '{{ playbook_dir }}/../..'
+      delegate_to: localhost
+      changed_when: false
+      loop: ['gs-02', '{{ inventory_hostname }}']
+
+    - name: Confirm prepared credentials and routine rotation scope
+      ansible.builtin.pause:
+        prompt: |
+          Site: {{ inventory_hostname }} ({{ ansible_host }})
+          Hub: gs-02 ({{ hostvars['gs-02'].ansible_host }})
+          Revision: {{ (rotation_preflight.stdout | from_json).revision }}
+          Locked inputs: {{ rotation_lock_digest.stdout }}
+          This delivers /root/vault-enrollment/{{ inventory_hostname }} from gs-02,
+          restarts site authentication and managed secrets, and forces certificate issuance.
+          Confirm the bundle is newly prepared for this routine AppRole replacement,
+          the CA fingerprint was independently verified, and the node shared secret is unchanged.
+          For breach rotation or a changed node secret, abort and use the site-lifecycle guide.
+          Type rotate {{ inventory_hostname }} to proceed; anything else aborts
+      register: rotation_consent
+
+    - name: Require explicit interactive consent
+      ansible.builtin.assert:
+        that:
+          - rotation_consent.user_input | default('') == 'rotate ' ~ inventory_hostname
+        fail_msg: Rotation cancelled before credential delivery.
+
+- name: Deliver the replacement through the protected enrollment workflow
+  ansible.builtin.import_playbook: deliver_hub_enrollment.yml
+
+- name: Activate the replacement Vault identity and client certificate
+  hosts: gpu_client
+  gather_facts: false
+  become: true
+  become_user: root
+  any_errors_fatal: true
+  vars:
+    ansible_become_user: root
+    ansible_host_key_checking: true
+    ansible_ssh_host_key_checking: true
+  tasks:
+    - name: Refresh authentication and certificate consumers in order
+      block:
+        - name: Restart bootstrap authentication even if already active
+          ansible.builtin.command:
+            argv: [systemctl, restart, vault-auth-setup.service]
+          changed_when: true
+
+        - name: Require fresh authenticated enrollment
+          ansible.builtin.command:
+            argv: [luxnix-vault-enrollment-status]
+          changed_when: false
+          register: rotation_auth_status
+          failed_when: >-
+            rotation_auth_status.rc != 0 or
+            rotation_auth_status.stdout | trim != 'Vault enrollment state: ready'
+
+        - name: Restart managed secrets with the replacement authentication
+          ansible.builtin.command:
+            argv: [systemctl, restart, managed-secrets-setup.service]
+          changed_when: true
+
+        - name: Force fresh authentication and client certificate issuance
+          ansible.builtin.command:
+            argv: [luxnix-vault-reissue-hub-client-certificate]
+          changed_when: true
+
+        - name: Verify the certificate oneshot completed successfully
+          ansible.builtin.command:
+            argv: [systemctl, show, luxnix-vault-issue-hub-client-certificate.service, --property=Result, --value]
+          changed_when: false
+          register: rotation_certificate_result
+          failed_when: >-
+            rotation_certificate_result.rc != 0 or
+            rotation_certificate_result.stdout | trim != 'success'
+
+      rescue:
+        - name: Read classified authentication recovery guidance
+          ansible.builtin.command:
+            argv: [luxnix-vault-enrollment-status]
+          changed_when: false
+          failed_when: false
+          register: rotation_recovery_status
+
+        - name: Stop rotation without claiming consumer acceptance
+          ansible.builtin.fail:
+            msg: >-
+              Activation failed. {{ rotation_recovery_status.stdout | default('Enrollment state unavailable.') }}
+              Review vault-auth-setup and luxnix-vault-issue-hub-client-certificate journals on this site.
+              Correct rejected enrollment, pinned CA trust, sealed Vault or connectivity as indicated.
+              Do not revoke the retiring credentials or restore incident access based on this run.
+              See docs/vault-hub-machine-enrollment.md, Rotation or removal.
+
+    - name: Report activation and remaining acceptance
+      ansible.builtin.debug:
+        msg: >-
+          Fresh Vault authentication and certificate issuance succeeded for {{ inventory_hostname }}.
+          Verify receiver acceptance and a disposable transfer before revoking retiring Secret IDs/tokens
+          and removing protected enrollment staging. This run does not perform revocation or breach recovery.

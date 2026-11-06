@@ -1,0 +1,164 @@
+diff --git a/setup.sh b/setup.sh
+--- a/setup.sh
++++ b/setup.sh
+@@ -74,7 +74,7 @@
+ # 'WinApps Configuration File'
+ readonly CONFIG_PATH="${HOME}/.config/winapps/winapps.conf" # UNIX path to the WinApps configuration file.
+ # 'Inquirer Bash Script'
+-readonly INQUIRER_PATH="./install/inquirer.sh" # UNIX path to the 'inquirer' script, which is used to produce selection menus.
++readonly INQUIRER_PATH="@out@/src/install/inquirer.sh" # UNIX path to the 'inquirer' script, which is used to produce selection menus.
+
+ # REMOTE DESKTOP CONFIGURATION
+ readonly RDP_PORT=3389         # Port used for RDP on Windows.
+@@ -162,14 +162,6 @@
+     #    echo -e "${WARNING_TEXT}[WARNING]${CLEAR_TEXT} You might want to remove your old installation on '${SCRIPT_DIR_PATH}'."
+     #fi
+
+-    if [[ ! -d "$SOURCE_PATH" ]]; then
+-        # $SUDO git clone --recurse-submodules --remote-submodules https://github.com/winapps-org/winapps.git "$SOURCE_PATH"
+-        $SUDO git clone --recurse-submodules --remote-submodules "$GIT_SOURCE" "$SOURCE_PATH"
+-    else
+-        echo -e "${INFO_TEXT}WinApps installation already present at ${CLEAR_TEXT}${COMMAND_TEXT}${SOURCE_PATH}${CLEAR_TEXT}${INFO_TEXT}. Updating...${CLEAR_TEXT}"
+-        $SUDO git -C "$SOURCE_PATH" pull --no-rebase
+-    fi
+-
+     # Silently change the working directory.
+     if ! cd "$SOURCE_PATH" &>/dev/null; then
+         # Display the error type.
+@@ -194,21 +186,8 @@
+ # Name: 'waGetInquirer'
+ # Role: Loads the inquirer script, even if the source isn't cloned yet
+ function waGetInquirer() {
+-    local INQUIRER=$INQUIRER_PATH
+-
+-    if [ -d "$SYS_SOURCE_PATH" ]; then
+-        INQUIRER=$SYS_SOURCE_PATH/$INQUIRER_PATH
+-    elif [ -d "$USER_SOURCE_PATH" ] ; then
+-        INQUIRER=$USER_SOURCE_PATH/$INQUIRER_PATH
+-    else
+-        INQUIRER="/tmp/waInquirer.sh"
+-        rm -f "$INQUIRER"
+-        # curl -o "$INQUIRER" "https://raw.githubusercontent.com/winapps-org/winapps/main/install/inquirer.sh"
+-        curl -o "$INQUIRER" "https://gitlab.phaidra.org/imgw/winapps/-/raw/eeb08b09ed9fda0ec85c51f616476ed10bc7a6c1/install/inquirer.sh"
+-    fi
+-    # shellcheck source=/dev/null # Exclude this file from being checked by ShellCheck.
+-    echo "$INQUIRER"
+-    source "$INQUIRER"
++    # shellcheck source=/dev/null
++    source "$INQUIRER_PATH"
+ }
+
+ # Name: 'waCheckInput'
+@@ -823,7 +802,7 @@
+     # Identify groups the current user belongs to.
+     USER_GROUPS=$(groups "$(whoami)")
+
+-    if ! (echo "$USER_GROUPS" | grep -q -E "\blibvirt\b") || ! (echo "$USER_GROUPS" | grep -q -E "\bkvm\b"); then
++    if ! (echo "$USER_GROUPS" | grep -q -E "\blibvirtd\b") || ! (echo "$USER_GROUPS" | grep -q -E "\bkvm\b"); then
+         # Complete the previous line.
+         echo -e "${FAIL_TEXT}Failed!${CLEAR_TEXT}\n"
+
+@@ -1259,11 +1238,11 @@
+     # Populate variables.
+     WIN_BASH="\
+ #!/usr/bin/env bash
+-${BIN_PATH}/winapps windows"
++@out@/bin/winapps windows"
+     WIN_DESKTOP="\
+ [Desktop Entry]
+ Name=Windows
+-Exec=${BIN_PATH}/winapps windows %F
++Exec=@out@/bin/winapps windows %F
+ Terminal=false
+ Type=Application
+ Icon=${APPDATA_PATH}/icons/windows.svg
+@@ -1368,13 +1347,13 @@
+     # Determine the content of the bash script for the application.
+     APP_BASH="\
+ #!/usr/bin/env bash
+-${BIN_PATH}/winapps ${1}"
++@out@/bin/winapps ${1}"
+
+     # Determine the content of the '.desktop' file for the application.
+     APP_DESKTOP_FILE="\
+ [Desktop Entry]
+ Name=${NAME}
+-Exec=${BIN_PATH}/winapps ${1} %F
++Exec=@out@/bin/winapps ${1} %F
+ Terminal=false
+ Type=Application
+ Icon=${APP_ICON}
+@@ -1443,7 +1422,9 @@
+             fi
+
+             # Copy the protocol handler to the appropriate directory.
++            # Fix permissions for nix.
+             $SUDO cp "./apps/ms-office-protocol-handler.desktop" "$TARGET_DIR/ms-office-protocol-handler.desktop"
++            $SUDO chmod u+w "$TARGET_DIR/ms-office-protocol-handler.desktop"
+         fi
+
+         # Print feedback.
+@@ -1675,7 +1656,7 @@
+     echo -e "${BOLD_TEXT}Installing WinApps.${CLEAR_TEXT}"
+
+     # Check for existing conflicting WinApps installations.
+-    waCheckExistingInstall
++    # waCheckExistingInstall
+
+     # Load the WinApps configuration file.
+     waLoadConfig
+@@ -1743,9 +1724,8 @@
+     # Check for installed applications.
+     waFindInstalled
+
+-    # Install the WinApps bash scripts.
+-    $SUDO ln -sf "${SOURCE_PATH}/bin/winapps" "${BIN_PATH}/winapps"
+-    $SUDO ln -sf "${SOURCE_PATH}/setup.sh" "${BIN_PATH}/winapps-setup"
++    # Fix permissions for nix.
++    $SUDO chmod u+w -R "${APPDATA_PATH}"
+
+     # Configure the Windows RDP session application launcher.
+     waConfigureWindows
+@@ -1807,18 +1787,15 @@
+     local DESKTOP_FILE_NAME=""        # Stores the name of the '.desktop' file for the application.
+     local BASH_SCRIPT_NAME=""         # Stores the name of the application.
+
+-    # Remove the 'WinApps' bash scripts.
+-    $SUDO rm -f "${BIN_PATH}/winapps"
+-    # $SUDO rm -f "${BIN_PATH}/winapps-setup"
+-
+     # Remove WinApps configuration data, temporary files and logs.
++    chmod -R u+rw "$USER_APPDATA_PATH"
+     rm -rf "$USER_APPDATA_PATH"
+
+     # Remove application icons and shortcuts.
+     $SUDO rm -rf "$APPDATA_PATH"
+
+     # Store '.desktop' files containing "${BIN_PATH}/winapps" in an array, returning an empty array if no such files exist.
+-    readarray -t WINAPPS_DESKTOP_FILES < <(grep -l -d skip "${BIN_PATH}/winapps" "${APP_PATH}/"* 2>/dev/null || true)
++    readarray -t WINAPPS_DESKTOP_FILES < <(grep -l -d skip "@out@/bin/winapps" "${APP_PATH}/"* 2>/dev/null || true)
+
+     # Remove each '.desktop' file.
+     for DESKTOP_FILE_PATH in "${WINAPPS_DESKTOP_FILES[@]}"; do
+@@ -1839,7 +1816,7 @@
+     done
+
+     # Store the paths of bash scripts calling 'WinApps' to launch specific applications in an array, returning an empty array if no such files exist.
+-    readarray -t WINAPPS_APP_BASH_SCRIPTS < <(grep -l -d skip "${BIN_PATH}/winapps" "${BIN_PATH}/"* 2>/dev/null || true)
++    readarray -t WINAPPS_APP_BASH_SCRIPTS < <(grep -l -d skip "@out@/bin/winapps" "${BIN_PATH}/"* 2>/dev/null || true)
+
+     # Remove each bash script.
+     for BASH_SCRIPT_PATH in "${WINAPPS_APP_BASH_SCRIPTS[@]}"; do
+@@ -1860,10 +1837,9 @@
+     done
+
+     # Print caveats.
+-    echo -e "\n${INFO_TEXT}Please note that your WinApps configuration and the WinApps source code were not removed.${CLEAR_TEXT}"
+-    echo -e "${INFO_TEXT}You can remove these manually by running:${CLEAR_TEXT}"
++    echo -e "\n${INFO_TEXT}Please note that your WinApps configuration and the WinApps package were not removed.${CLEAR_TEXT}"
++    echo -e "${INFO_TEXT}You can remove your config manually by running:${CLEAR_TEXT}"
+     echo -e "${COMMAND_TEXT}rm -r $(dirname "$CONFIG_PATH")${CLEAR_TEXT}"
+-    echo -e "${COMMAND_TEXT}rm -r ${SOURCE_PATH}${CLEAR_TEXT}\n"
+
+     # Print feedback.
+     echo -e "${SUCCESS_TEXT}UNINSTALLATION COMPLETE.${CLEAR_TEXT}"

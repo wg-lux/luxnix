@@ -1,13 +1,14 @@
 {
-  pkgs,
   config,
   lib,
   ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.user.settings;
-in {
+in
+{
   options.user.settings = {
     mutable = mkBoolOpt false "Enable mutable user settings";
   };

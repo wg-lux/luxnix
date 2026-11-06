@@ -1,15 +1,15 @@
 {
-  pkgs,
   config,
   lib,
   ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.group.endoreg-service;
 
-  
-in {
+in
+{
   options.group.endoreg-service = with types; {
     enable = mkBoolOpt false "Enable the endoreg-service group";
     name = mkOpt str "endoreg-service" "The name of the group";
@@ -21,16 +21,13 @@ in {
   };
 
   config = mkIf cfg.enable {
-    users.groups.${cfg.name} =
-      {
-        name = cfg.name; 
-        members = cfg.members;
-        gid = cfg.gid;
-      };
+    users.groups.${cfg.name} = {
+      inherit (cfg) name members gid;
+    };
 
     users.groups."sslCert" = {
       name = "sslCert";
-      members = cfg.members;
+      inherit (cfg) members;
     };
 
     home-manager = {

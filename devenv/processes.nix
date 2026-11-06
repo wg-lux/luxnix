@@ -1,6 +1,3 @@
-{pkgs}:
-{
-  
+_: {
   ping.exec = "ping localhost";
-  
 }

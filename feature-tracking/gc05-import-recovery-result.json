@@ -1,0 +1,29 @@
+{
+  "task_status": "complete",
+  "findings": [
+    {
+      "claim": "Video 4 finalization first failed because an orphaned processed-HLS QUEUED reservation caused already_materializing while the import was still active.",
+      "source": "gc-05 lx-annotate journal from 2026-09-03 19:20 through 2026-09-04 09:58 CEST",
+      "confidence": "high"
+    },
+    {
+      "claim": "The active upload task e1424deb38764981a5e29719b7dcd661 was a Redis-redelivered task, and obsolete processed-HLS deliveries were independently queued.",
+      "source": "gc-05 Celery inspection and Redis DB 1 delivery metadata",
+      "confidence": "high"
+    },
+    {
+      "claim": "Non-terminating task revocation plus compare-and-set dispatch failure of the exact orphaned HLS reservations preserves the active import and deletes no media.",
+      "source": "endoreg_db/services/hls_media.py mark_hls_materialization_dispatch_failed and gc-05 live verification",
+      "confidence": "high"
+    },
+    {
+      "claim": "The current task must remain uninterrupted and the worker must not restart until the import is terminal because revoke state is memory-only.",
+      "source": "gc-05 ffmpeg worker ExecStart and Celery revoked registry",
+      "confidence": "high"
+    }
+  ],
+  "gaps": [
+    "The import was still processing when this work unit completed; terminal video, HLS, media, and queue acceptance gates remain orchestrator work.",
+    "Authenticated playback and annotation save/reload require a separate acceptance probe."
+  ]
+}

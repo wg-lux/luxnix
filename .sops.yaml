@@ -1,0 +1,33 @@
+keys:
+  - &recipient_01 age1fy626vylmpya4t4gyqx6kw4ggn7j79upjgt4jka2gq6lysluhd0s8ytqls
+  - &recipient_02 age1kzxen8ynw28h935jnjc9t8cx4p8mv6angk5suvkp6ntu4am9pe4smfw22z
+  - &recipient_03 age1emuknmcdwt5letup4eatvjxrrllkd06uqhslvzhwr0jkjj9f8ewquz9xur
+  - &recipient_04 age1rc26esy506fa0kv2y97sjzfk4g2pr0ctv2rzkacewx5d8urns3zqhr7r7n
+  - &recipient_05 age1wtkcl8gwwumvzf78ttqy4gh2pwzz724glugs5wah2fcudgfh5pxq3urkpg
+  - &recipient_06 age1uswlqzs3pf99r6e8qq5d3eh44sufe5tdczmfqygeam7vfr96fugqa0pps7
+  - &recipient_07 age19pl6jt7ekljfjww4g9anzafdxj0e52mnfnsyd26u5xdemfksqpwsnfwrs5
+  - &recipient_08 age1968z5kxjrf5nnzmvp7fp70pytkpnaaa0xel7cqr8nt4vtezygfnstuh4dx
+
+creation_rules:
+  - path_regex: ^modules/nixos/secrets\.yaml$
+    key_groups:
+      - age:
+          - *recipient_01
+          - *recipient_02
+          - *recipient_03
+          - *recipient_04
+          - *recipient_05
+          - *recipient_06
+          - *recipient_07
+          - *recipient_08
+  - path_regex: ^modules/nixos/services/secrets\.yaml$
+    key_groups:
+      - age:
+          - *recipient_01
+          - *recipient_02
+          - *recipient_03
+          - *recipient_04
+          - *recipient_05
+          - *recipient_06
+          - *recipient_07
+          - *recipient_08

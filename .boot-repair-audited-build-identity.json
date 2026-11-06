@@ -1,0 +1,10 @@
+{
+  "repository": "/home/admin/luxnix",
+  "base_revision": "6900db128352fb73c878a0cc85e3c4902a42bf89",
+  "staged_tree": "6b8927e425b4fe11d98955315774d8b1abcdd991",
+  "flake_lock_sha256": "65bd23da94a0e9cf17e09ac9c17e8e33e85d55b7fc429d4cca0446e29f62c2f7",
+  "target": "gc-02",
+  "candidate": "/nix/store/szhzi491lp7qwq5vslbrhqkzmj5dc6dp-nixos-system-gc-02-26.05.20261021.da6dc0e",
+  "nar_hash": "sha256-24BvOfPfn+/Nlcr3kp0uTmWHKGT8SqdISppp0JkyMRo=",
+  "installed": false
+}

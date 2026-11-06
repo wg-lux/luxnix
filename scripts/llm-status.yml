@@ -1,0 +1,26 @@
+schema_version: 1
+interval_seconds: 60
+timeout_seconds: 5
+retention_days: 7
+# Fixed operator-owned targets. The HTTP API never accepts a target URL.
+endpoints:
+  - id: gs-01-ollama
+    host: gs-01
+    url: http://172.16.255.21:11434/api/version
+    check: ollama
+  - id: gs-01-glm
+    host: gs-01
+    url: http://172.16.255.21:8088/health
+    check: glm
+  - id: gs-02-ollama
+    host: gs-02
+    url: http://172.16.255.22:11434/api/version
+    check: ollama
+  - id: gs-02-glm
+    host: gs-02
+    url: http://172.16.255.22:8088/health
+    check: glm
+  - id: gs-02-glm-public
+    host: gs-02
+    url: https://glm.endo-reg.net/health
+    check: glm

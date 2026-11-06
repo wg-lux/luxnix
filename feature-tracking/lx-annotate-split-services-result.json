@@ -1,0 +1,23 @@
+{
+  "task_status": "complete",
+  "findings": [
+    {
+      "claim": "config.nix now composes thirty-seven one-service leaf modules through one shared service context.",
+      "source": "modules/nixos/services/lx-annotate-local/config.nix:1451",
+      "confidence": "high"
+    },
+    {
+      "claim": "Each leaf documents its purpose and command while colocating only same-name timers or paths.",
+      "source": "modules/nixos/services/lx-annotate-local/subservices/lx-annotate-filewatcher.nix:1",
+      "confidence": "high"
+    },
+    {
+      "claim": "The worker aggregator declares no service and composes nine one-service Celery modules.",
+      "source": "modules/nixos/services/lx-annotate-local/subservices/workers.nix:1",
+      "confidence": "high"
+    }
+  ],
+  "gaps": [
+    "The repository tracker directory now contains a concurrently restored legacy YAML that does not match the feature schema."
+  ]
+}

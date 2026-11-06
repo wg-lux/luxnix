@@ -1,0 +1,24 @@
+---
+application: "lx-annotate"
+version: "1.2.2"
+source_repository: "/home/admin/release-worktrees/lx-annotate-gc05-20260904"
+source_commit: "c717ffd6f75cee42c5729ab42254e21e0ab28588"
+built_at: "2026-09-04T11:49:14+02:00"
+
+artifact:
+  file: "lx_annotate-1.2.2-py3-none-any.whl"
+  size_bytes: 2223860
+  sha256: "d1f7da418868954bc049677ae839e5672af2ef60d7d3d84553f864da2cbaddd4"
+
+verification:
+  - command: "git commit (repository pre-commit suite)"
+    result: "passed, including backend and frontend tests, type checking, linting, and runtime checks"
+  - command: "focused Celery routing, visibility-timeout, and environment-contract pytest selection"
+    result: "20 passed"
+  - command: >-
+      ruff check lx_annotate/celery.py lx_annotate/settings/settings_base.py
+      tests/system/test_production_celery_routing.py
+      tests/system/test_secretspec_environment_contract.py
+    result: "passed"
+  - command: "wheel metadata and source inspection"
+    result: "version 1.2.2; source matches commit c717ffd6; no build-path leakage; Celery visibility timeout and HLS route present"

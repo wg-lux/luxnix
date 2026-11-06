@@ -1,12 +1,19 @@
-{ lib
-, pkgs
-, config
-, ...
+{
+  lib,
+  pkgs,
+  config,
+  ...
 }:
-with lib; let
+with lib;
+let
   cfg = config.roles.aglnet.host;
+  network = config.luxnix.generic-settings.network;
+  dnsAddress = network.hosts.${network.serviceHosts.openvpn}.ip-vpn;
 
-  defaultBackupNameservers = [ "8.8.8.8" "1.1.1.1" ];
+  defaultBackupNameservers = [
+    "8.8.8.8"
+    "1.1.1.1"
+  ];
   defaultPort = 1194;
   defaultProtocol = "TCP";
   defaultProtocolLc = "tcp";
@@ -20,7 +27,6 @@ with lib; let
   defaultKeepalive = "10 1200";
   defaultCipher = "AES-256-GCM";
   defaultVerbosity = "3";
-
 
   defaultCaPath = "/etc/openvpn/ca.pem";
   defaultTlsAuthPath = "/etc/openvpn/tls.pem";
@@ -219,7 +225,6 @@ in
 
   };
 
-
   config = mkIf cfg.enable {
     environment = {
       systemPackages = with pkgs; [
@@ -228,11 +233,10 @@ in
     };
 
     systemd.tmpfiles.rules = [
-      "d /etc/openvpn 0750 admin users -" #TODO Harden?
+      # TODO (aglnet owner): replace the broad users group after inventory
+      # declares the operators that require OpenVPN configuration access.
+      "d /etc/openvpn 0750 admin users -"
     ];
-
-
-
 
     # Networking
     networking = {
@@ -245,7 +249,7 @@ in
           };
         };
       };
-      nameservers = [ "172.16.255.1" ]; # Override system nameserver to ensure VPN DNS is used
+      nameservers = [ dnsAddress ]; # Override system nameserver to ensure VPN DNS is used
       search = [ cfg.localDomain ]; # Add explicit DNS search domain
     };
 
@@ -263,7 +267,7 @@ in
         # Only listen on VPN interface
         interface = "${cfg.dev}0";
         bind-interfaces = true;
-        listen-address = "172.16.255.1"; # VPN server IP
+        listen-address = dnsAddress; # VPN server IP
 
         # Don't modify non-local queries
         domain-needed = true;
@@ -292,7 +296,7 @@ in
           proto ${cfg.protocolLc}
           dev ${cfg.dev}
           server ${cfg.subnet} ${cfg.subnetIntern}
-        
+
           ${if cfg.persistKey then "persist-key" else ""}
           ${if cfg.persistTun then "persist-tun" else ""}
 
@@ -313,25 +317,23 @@ in
           ${if cfg.client-to-client then "client-to-client" else ""}
 
           # DNS and routing configuration
-          push "route 172.16.255.0 255.255.255.0"  # Route all VPN subnet traffic
-          push "route 172.16.255.1 255.255.255.255"  # Ensure DNS server is reachable
-          push "route 172.16.255.12 255.255.255.255" # Nginx, keycloak
-          push "dhcp-option DNS 172.16.255.1"
+          push "route ${dnsAddress} 255.255.255.255"  # Ensure DNS server is reachable
+          push "route ${network.nginx.vpnIp} 255.255.255.255" # Nginx, keycloak
+          push "dhcp-option DNS ${dnsAddress}"
           push "dhcp-option DOMAIN ${cfg.localDomain}"
           push "dhcp-option DOMAIN-ROUTE ${cfg.localDomain}"
           push "dhcp-option DOMAIN-SEARCH ${cfg.localDomain}"  # Add search domain
-        
+
         '';
 
       in
       {
-        restartAfterSleep = cfg.restartAfterSleep;
+        inherit (cfg) restartAfterSleep;
 
         servers = {
           "${cfg.networkName}" = {
-            config = config;
-            autoStart = cfg.autoStart;
-            updateResolvConf = cfg.updateResolvConf;
+            inherit config;
+            inherit (cfg) autoStart updateResolvConf;
           };
         };
       };

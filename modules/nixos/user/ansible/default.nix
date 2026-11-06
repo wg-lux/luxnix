@@ -5,9 +5,11 @@
   ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.user.ansible;
-in {
+in
+{
   options.user.ansible = {
     enable = mkBoolOpt false "Enable Ansible Config + User";
   };
@@ -30,6 +32,6 @@ in {
     ];
 
     luxnix.python.sw.enable = true;
-    
+
   };
 }

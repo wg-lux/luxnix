@@ -1,19 +1,19 @@
 {
   lib,
-  pkgs,
   config,
   ...
 }:
-with lib; let
+with lib;
+let
   cfg = config.roles.postgres.main;
 
-  postgresqlPort = config.roles.postgres.default.postgresqlPort;
+  postgresqlPort = config.services.postgresql.settings.port;
 
   adminAuthKeys = config.users.users.${config.user.admin.name}.openssh.authorizedKeys.keys;
   allAuthKeys = adminAuthKeys ++ cfg.additionalPostgresAuthKeys;
 
-
-in {
+in
+{
   options.roles.postgres.main = {
     enable = mkEnableOption "main internal postgres configuration";
 
@@ -24,12 +24,11 @@ in {
 
     additionalPostgresAuthKeys = mkOption {
       type = types.listOf types.str;
-      default = [];
+      default = [ ];
       description = "Additional authorized keys for postgres user";
     };
 
   };
-
 
   config = mkIf cfg.enable {
     networking.firewall.allowedTCPPorts = [ postgresqlPort ];
@@ -41,6 +40,6 @@ in {
         openssh.authorizedKeys.keys = allAuthKeys;
       };
     };
-  
+
   };
 }

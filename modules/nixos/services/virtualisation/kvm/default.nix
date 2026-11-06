@@ -5,9 +5,11 @@
   ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.services.virtualisation.kvm;
-in {
+in
+{
   options.services.virtualisation.kvm = {
     enable = mkBoolOpt false "enable kvm virtualisation";
   };
@@ -37,7 +39,7 @@ in {
           swtpm.enable = true;
           ovmf = {
             enable = true;
-            packages = [pkgs.OVMFFull.fd];
+            packages = [ pkgs.OVMFFull.fd ];
           };
         };
       };

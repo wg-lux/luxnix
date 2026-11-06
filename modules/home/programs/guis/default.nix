@@ -4,9 +4,11 @@
   lib,
   ...
 }:
-with lib; let
+with lib;
+let
   cfg = config.programs.guis;
-in {
+in
+{
   options.programs.guis = {
     enable = mkEnableOption "Enable gnome adwaita GUI applications";
   };

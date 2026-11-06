@@ -12,7 +12,6 @@ ansible_roles:
   - "smtp_cred"
 
 host_luxnix:
-  generic_settings.enable: "true"
   generic_settings.hostPlatform: '"x86_64-linux"'
   generic_settings.systemStateVersion: '"23.11"'
 

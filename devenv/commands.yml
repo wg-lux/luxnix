@@ -1,0 +1,746 @@
+---
+# Human- and machine-readable catalog for Devenv shell wrappers and tasks.
+# Run these from the repository root. Inside an active shell, shell-wrapper
+# names can be used directly; tasks keep their explicit `devenv tasks run`
+# prefix so their execution mode remains unambiguous.
+schema_version: 1
+canonical_invocation: devenv shell <command> [arguments...]
+task_invocation: devenv tasks run <task> [arguments...]
+risk_levels_source: ../luxnix.yml#risk_levels
+
+# Frontends should require an explicit operator confirmation before entries
+# marked operator_confirmation_required. The field does not imply that the
+# underlying wrapper implements its own prompt.
+commands:
+  - id: migration-boot
+    summary: Discover local build settings, then build and optionally sign a host-bound RAM migration image.
+    risk: sensitive-local-state
+    operator_confirmation_required: true
+    usage: devenv shell migration-boot discover [<host>] [--controller-cidr <ipv4/prefix>] [--format command]; devenv shell migration-boot build <host> --settings <settings.yml> --output <new-directory> [--boot-trust local-console|secure-boot] [--sign]
+    implementation: lx_administration/storage/migration_boot.py
+    documentation: docs/migration-environment.md
+    prerequisites:
+      - Clean reviewed durable checkout and existing fleet signing custody for signing.
+      - Explicit management network; administrator keys enable SSH, while keyless local-console images disable it.
+    effects:
+      - Discovery prints YAML or a shell-quoted command from local facts without changing state; build flags override YAML settings.
+      - Builds a small UKI verifying a separate RAM runtime; local-console is the default, with physical approval before access.
+      - Signing decrypts controller custody only in the existing protected RAM workspace.
+  - id: stage-migration-boot
+    summary: Verify and optionally arm a one-shot RAM boot on exactly one inventory host.
+    risk: sensitive-remote-state
+    operator_confirmation_required: true
+    usage: devenv shell stage-migration-boot --limit <host> -e migration_image=<absolute-image> -e migration_sha256=<digest> -e migration_payload=<absolute-payload> [-e migration_allow_unverified_boot=true] [-e migration_apply=true]
+    implementation: scripts/run-ansible-playbook.sh
+    playbook: ansible/playbooks/migration-boot.yml
+    documentation: docs/migration-environment.md
+    prerequisites:
+      - Successful check-connectivity, pinned host identity and explicit operator approval for the selected host.
+      - Systemd-boot and sufficient ESP space; Secure Boot with fleet trust, or explicit local-console image and staging opt-in.
+      - Target Python 3.12 or newer, objcopy, sbverify, bootctl, findmnt, lsblk and blkid available on the system PATH.
+      - Independent ext4 or FAT recovery filesystem already mounted; signed filesystem UUID and target-disk exclusion must match.
+    effects:
+      - Copies public signed artifacts and admission helpers to private root-owned target staging.
+      - Default mode verifies both artifacts and recovery identity; migration_apply publishes the payload before arming the one-shot entry.
+      - Never reboots, mounts target data, encrypts storage or changes the normal boot default.
+  - id: credential-backup
+    summary: Preview, create or verify an encrypted credential archive bound to the host plan, paths and physical recovery drive.
+    risk: sensitive-local-state
+    operator_confirmation_required: true
+    usage: devenv shell credential-backup <preview|backup|verify> --state <plan-directory> --archive <new-archive.tar.age> [--identity <independent-age-identity>]
+    implementation: lx_administration/storage/credential_backup.py
+    documentation: docs/credential-backup.md
+    prerequisites:
+      - Reviewed clean checkout on the selected host and a matching immutable plan with an evaluated secret contract.
+      - Existing root-owned private backup directory on independent storage; no media formatting or mounting is performed.
+      - Native age identity on separate encrypted physical media, independent of both the archive and all erased disks.
+    effects:
+      - Runs the reviewed Python helper via sudo; never run sudo devenv.
+      - Copies both admin/client boot hashes and declared initialization sources without rotation or deletion.
+      - Verifies authenticated decryption before exclusive atomic ciphertext publication; plaintext remains in memory with protected swap.
+      - Verification fails on configuration, generation, path, credential or storage identity drift; retain old archives and renew evidence.
+      - This archive does not replace secret preflight, independent Vault access tests or full application/database backups.
+  - id: check-secret-rotation
+    summary: Validate the central rotation catalog against three source checkouts and display ordered gates.
+    risk: read-only
+    operator_confirmation_required: false
+    usage: devenv shell check-secret-rotation --endoreg-db <checkout> --lx-annotate <checkout> [--family <family>]
+    implementation: scripts/check-secret-rotation.py
+    documentation: docs/secret-rotation.md
+
+  - id: enroll-reachable-hub-sites
+    summary: Prompt once for a Vault enrollment token and reconcile enrollment on reachable configured sites.
+    risk: sensitive-remote-state
+    operator_confirmation_required: true
+    usage: devenv shell enroll-reachable-hub-sites [--site gc-09] [--ask-sudo-password]
+    implementation: scripts/enroll-reachable-hub-sites.sh
+    playbook: ansible/playbooks/enroll_reachable_hub_sites.yml
+    documentation: docs/vault-hub-machine-enrollment.md
+    prerequisites:
+      - Clean reviewed durable checkout, configured receiver identities and pinned SSH keys.
+      - Initialized unsealed Vault on gs-02; existing hub enrollment commands deployed.
+      - >-
+        SSH from this controller and root sudo access (use --ask-sudo-password for separate host passwords; legacy --ask-become-pass asks
+        once for a shared password); private controller tmpfs; encrypted or disabled swap.
+    effects:
+      - Token entry authorizes the displayed reachable fleet; token is not saved or printed.
+      - Reuses valid installed or saved credentials; creates missing initial enrollment.
+      - Preserves node secrets and hub recipient identity; refuses contained or conflicting identities.
+      - Installs credentials, recipient public keys and receiver secret copies, then verifies authentication and certificates.
+      - Refreshes receiver and sender database identities, then starts the site application and transfer worker; existing queued work may run.
+      - Reports unreachable sites, fails when no site enrolls or a reachable site fails, and retains protected hub bundles for retry.
+
+  - id: rotate-hub-enrollment
+    summary: Interactively deliver a prepared routine AppRole replacement and renew the site client certificate.
+    risk: sensitive-remote-state
+    operator_confirmation_required: true
+    usage: >-
+      devenv shell rotate-hub-enrollment --limit <host>
+      -e enrollment_expected_ca_sha256=<independently-verified-fingerprint>
+    implementation: scripts/run-secret-playbook.sh
+    playbook: ansible/playbooks/rotate_hub_enrollment.yml
+    documentation: docs/vault-hub-machine-enrollment.md
+    prerequisites:
+      - Fresh enrollment bundle prepared by the custodian on gs-02; node shared secret unchanged.
+      - Clean reviewed checkout, pinned SSH identities, and independently verified Vault CA fingerprint.
+      - Interactive terminal and explicit host confirmation after preflight and connectivity checks.
+    effects:
+      - Delivers through the existing private tmpfs enrollment workflow.
+      - Restarts authentication, requires ready, restarts managed secrets, and forces certificate reissuance.
+      - Stops on failure with classified authentication recovery guidance.
+      - Leaves receiver acceptance, retiring credential revocation and staging cleanup to the operator.
+
+  - id: rotate-admin-passwords
+    summary: Show one validated admin replacement on the terminal and require y/n before live activation.
+    risk: sensitive-remote-state
+    operator_confirmation_required: true
+    usage: >-
+      devenv shell rotate-admin-passwords --limit <host>
+      -e admin_rotation_recovery_confirmed=true [ansible-playbook arguments...]
+    implementation: scripts/run-secret-playbook.sh
+    playbook: ansible/playbooks/rotate_admin_passwords.yml
+    documentation: docs/admin-passwords.md
+    local_activation:
+      transport: ansible_connection=local
+      inventory: Use the canonical inventory plus a private managed-group overlay for the selected host.
+      privilege: --ask-become-pass requests the current sudo password.
+      recovery: Keep a separately verified root shell open until new-password authentication and hash readback pass.
+      verification: After updating admin, subsequent sudo tasks use the approved replacement only when the connection account is admin.
+      documentation: docs/admin-passwords.md#activate-on-the-same-machine
+
+  - id: deliver-hub-enrollment
+    summary: Deliver one gs-02 enrollment bundle using private controller tmpfs and pinned SSH.
+    risk: sensitive-remote-state
+    operator_confirmation_required: true
+    usage: >-
+      devenv shell deliver-hub-enrollment --limit <host>
+      -e enrollment_expected_ca_sha256=<independently-verified-fingerprint>
+    implementation: scripts/run-secret-playbook.sh
+    playbook: ansible/playbooks/deliver_hub_enrollment.yml
+    documentation: docs/vault-hub-machine-enrollment.md
+
+  - id: vault-migrate-local-key
+    summary: Create one explicitly migrated master-encrypted copy without replacing the legacy source.
+    risk: sensitive-local-state
+    operator_confirmation_required: true
+    usage: >-
+      devenv shell vault-migrate-local-key --source <old> --output <new>
+      --legacy-key <key-file> --legacy-id <label>
+      --master-key <key-file> --confirm-migration
+    implementation: scripts/vault/migrate_local_key.py
+    documentation: docs/vault-setup.md
+
+  - id: manage
+    summary: Prepare the local environment or select its development mode.
+    risk: local-state
+    operator_confirmation_required: false
+    usage: devenv shell manage [setup|dev|prod|deploy|help]
+    implementation: devenv/management.nix
+    documentation: docs/development.md
+
+  - id: bnsc
+    summary: Generate canonical Autoconf outputs.
+    risk: local-state
+    operator_confirmation_required: false
+    usage: devenv shell bnsc
+    alias_for: autoconf:generate
+    implementation: devenv/tasks.nix
+    documentation: docs/autoconf.md
+
+  - id: openbao-provision
+    summary: Reconcile selected KV v2 secrets from active Vault or verify existing OpenBao records when Vault is absent.
+    risk: sensitive-remote-state
+    operator_confirmation_required: true
+    usage: devenv shell openbao-provision --config <migration.yml> [--record <id>] [--apply]
+    implementation: lx_administration/storage/bao_migration.py
+    documentation: docs/openbao.md
+    prerequisites:
+      - Initialized active OpenBao, existing KV v2 mounts and scoped API credentials.
+      - Reviewed explicit record manifest, pinned HTTPS identities and protected credential files.
+    effects:
+      - Preview by default; --apply creates missing records and reconciles explicitly source-authoritative records with CAS.
+      - Repeated equal values create no new version; absent Vault succeeds only with complete target records.
+      - Immutable conflicts, missing required records and TLS or authentication failures remain errors.
+
+  - id: vault-bootstrap
+    summary: Create or update the encrypted LuxNix vault and host exports.
+    risk: sensitive-local-state
+    operator_confirmation_required: true
+    usage: devenv shell vault-bootstrap [bootstrap arguments...]
+    implementation: scripts/bootstrap-lx-vault.py
+    documentation: docs/admin-passwords.md
+    scoped_admin_rotation:
+      usage: >-
+        devenv shell vault-bootstrap --skip-sync --admin-host <host>
+        [--admin-passwords <private-input.yml>] [--export]
+      prerequisites:
+        - Existing canonical admin pair and registered host PSK.
+        - All local ciphertext migrated to the explicit master key.
+      effects:
+        - Validates expiry and password/hash agreement only for the selected admin pair.
+        - Preserves unrelated credentials and their expiry metadata.
+        - Exports only the pair under <vault-dir>/admin-rotations/<host>/deploy/<host>.
+        - Leaves the ordinary fleet export unchanged.
+
+  - id: validate-admin-passwords
+    summary: Validate inventory admin passwords against the encrypted vault.
+    risk: sensitive-read-only
+    operator_confirmation_required: false
+    usage: devenv shell validate-admin-passwords [validation arguments...]
+    implementation: scripts/validate-admin-passwords.py
+    documentation: docs/admin-passwords.md
+
+  - id: vault-site-preflight
+    summary: Validate non-secret prerequisites for one Vault site enrollment.
+    risk: read-only
+    operator_confirmation_required: false
+    usage: devenv shell vault-site-preflight <host> [--json]
+    implementation: scripts/vault/site_enrollment_preflight.py
+    documentation: docs/vault-hub-machine-enrollment.md
+
+  - id: secure-boot-keys
+    summary: Create the fleet Secure Boot PKI once in controller custody and publish public enrollment files.
+    risk: sensitive-local-state
+    operator_confirmation_required: true
+    usage: devenv shell secure-boot-keys [--custody <path>]
+    implementation: lx_administration/secure_boot.py
+    documentation: docs/secure-boot.md
+
+  - id: secure-boot-sign
+    summary: Sign one host's reviewed generation on the controller and import the signed boot artifacts.
+    risk: remote-state
+    operator_confirmation_required: true
+    usage: devenv shell secure-boot-sign <host> [--finish boot|switch] [--rollback-receipt <protected-target-receipt>]
+    implementation: lx_administration/secure_boot.py
+    documentation: docs/secure-boot.md
+    prerequisites:
+      - Clean durable reviewed checkout with canonical inventory, pinned SSH identity and successful connectivity check.
+      - Host profile exactly matches the controller-built closure; interactive host and generation confirmation.
+    effects:
+      - Imports verified signed artifacts; identical imports are safe to repeat and conflicts fail before replacement.
+      - Optional finish boot registers the next boot; finish switch activates services and checks the active closure. Neither reboots.
+      - Checks actual firmware signer and current unlock health; detached completion has a host-local watchdog and fresh SSH acknowledgement.
+      - Identical stateful compatibility manifests allow automatic rollback; differing or legacy footprints need an exact-closure compatibility assessment.
+
+  - id: check-connectivity
+    summary: Check SSH connectivity to a selected inventory host or group.
+    risk: remote-read-only
+    operator_confirmation_required: false
+    usage: devenv shell check-connectivity <host-or-group>
+    implementation: scripts/check-connectivity.sh
+    documentation: ansible/playbooks/readme.md
+
+  - id: storage-migration-snapshot
+    summary: Quiesce application writers and preserve existing Btrfs storage as read-only migration snapshots.
+    risk: sensitive-remote-state
+    operator_confirmation_required: true
+    usage: devenv shell storage-migration-snapshot --limit <gc-09-or-gc-10> -e migration_snapshot_id=<id> -e ansible_become_user=root --become-password-file <private-file>
+    implementation: lx_administration/storage/snapshot.py
+    playbook: ansible/playbooks/storage-migration-snapshot.yml
+    documentation: docs/boot-storage-migration.md
+    effects:
+      - Temporarily masks and stops application writers, then restores previously active services.
+      - Freezes mounted legacy filesystems only during snapshot creation and unfreezes in cleanup.
+      - Prearmed systemd cleanup survives controller disconnect or helper termination and retries journal recovery; OpenBao must be unsealed before dependent writers restart.
+      - Preserves read-only snapshots and a plan; never formats, activates, reboots or deletes sources.
+
+  - id: storage-migration-backup
+    summary: Encrypt and authenticate existing migration snapshots on a mounted backup filesystem.
+    risk: sensitive-remote-state
+    operator_confirmation_required: true
+    usage: devenv shell storage-migration-backup --host <policy-host> --snapshot-id <id> --destination <mountpoint> --identity <dedicated-age-identity> --custodian-identity <independent-age-identity> --sudo-password-file <private-file> [--recover-existing]
+    implementation: lx_administration/storage/migration_backup.py
+    documentation: docs/boot-storage-migration.md
+    effects:
+      - Reads immutable snapshots over pinned SSH and writes only age ciphertext to the backup filesystem.
+      - Uses dedicated controller and independent custodian age identities, never a login SSH key for new archives.
+      - Authenticates every complete archive with both identities before publication; incomplete artifacts are retained as partial files.
+      - Binds receipts to the full snapshot plan and recipient set; explicit orphan recovery compares both decryptions with a fresh current source stream.
+      - Does not establish application restore acceptance or independent recovery-key custody.
+
+  - id: storage-readiness
+    summary: Observe storage or explicitly require a fail-closed privileged baseline for one selected host.
+    risk: sensitive-read-only
+    operator_confirmation_required: false
+    usage: devenv shell storage-readiness --limit <host-or-group> [-e @<private-admission-request.yml>]
+    implementation: scripts/run-ansible-playbook.sh
+    playbook: ansible/playbooks/storage-readiness.yml
+    documentation: docs/boot-storage-migration.md
+    effects:
+      - Observation is the unprivileged default; admission requires one host, its existing layout and exact attached disk serials.
+      - Admission uses root to inspect storage and test existing keys without disclosing them; changes no storage or services.
+      - Successful baseline admission does not approve installation, recovery custody or backup restore.
+
+  - id: boot-storage-setup
+    summary: Guide in-place LUKS2 encryption with typed approval and non-formatting recovery.
+    risk: destructive-local
+    operator_confirmation_required: true
+    usage: devenv shell boot-storage-setup [guide|first-setup|observe|setup-media|run|plan|next|preflight|advance|recover|review|attest|status|retire-containers] [--host <host>] [--config <autoconf-yaml>] [--apply] [--assessor <admin>] [--custody <encrypted-directory>] [--vault-key-custody <file>] [--accept-absent <id>]
+    implementation: lx_administration/storage/boot_setup.py
+    documentation: docs/boot-storage-migration.md
+    prerequisites:
+      - A clean durable release and private independent plan/evidence storage (encryption optional).
+      - Provisioning runs only on the verified target in a trusted installer with fresh recovery evidence and unmounted selected disks.
+      - Only installation in-place and source_retention in-place are accepted; destructive plans are retired.
+    effects:
+      - With no action it guides this machine's configured host and resumes the next step; every check still needs a typed VERIFIED and it never starts encryption, whose installer step keeps its own typed approval.
+      - Before a plan exists, guide and first-setup show the host's salt state and write any changed choice to its inventory through ansible/playbooks/first-setup-config.yml, regenerate and pause for a commit; they refuse changes that would stop an established salt.
+      - First setup recommends the host's own random salt, created on first start, and never offers a center as a new choice or reads salt values; a host keeping a center salt still enrolls through enroll-reachable-hub-sites from the controller.
+      - Guide creates the default custody file only after typed approval, never formats an existing file, and copies only secrets missing from custody after confirmation.
+      - Setup-media previews USB/removable filesystems; apply mounts one existing filesystem at /recovery, requires 1 GiB free, prepares private state and continues planning. Multiple candidates require --device; no formatting or automatic install.
+      - Observe runs on the target and emits reviewed disk/hardware facts as YAML without writes; no substitute disk selection.
+      - Plan reads boot_storage.hosts from Autoconf and builds only the system closure; private journals live under boot_storage.state_root/host.
+      - Default output explains the operator checklist and next command; --json retains structured output. Review asks for explicit confirmation of each completed check and records existing operator notes through the canonical attestation gate.
+      - Next and advance without apply only report the next step; attest and status reuse the existing migration evidence workflow.
+      - Advance at the provisioning step with apply requires a real terminal and exact host, plan and serial confirmation before encrypting the existing root partition in place.
+      - Durable typed intent and pre-conversion disk metadata are saved before execution. Interrupted encryption resumes from the LUKS2 header; there is no formatter.
+      - Recover with apply verifies and accepts only the existing layout after named administrator confirmation; it never formats.
+      - Advance with apply delegates eligible access preparation or separately confirmed installation through existing gates. No automatic key rotation, evidence approval, reboot or backup cleanup.
+
+  - id: boot-storage-migration
+    summary: Plan, record reviewed evidence and install the selected LUKS2 encrypted-root target.
+    risk: destructive-local
+    operator_confirmation_required: true
+    usage: devenv shell boot-storage-migration <plan|status|attest|check|prepare-access|install> [arguments...]
+    implementation: lx_administration/storage/boot_migration.py
+    documentation: docs/boot-storage-migration.md
+    prerequisites:
+      - Operator-selected host, durable clean checkout, exact disk identities and independent recovery custody.
+      - Install requires ordered reviewed evidence, mode-specific target validation and an interactive exact-plan confirmation.
+    effects:
+      - Plan and attest create protected local records; status is observational and check verifies prerequisites.
+      - Prepare-access restores only a missing admin hash from its valid restored source and creates the dedicated early-boot SSH identity once; never replaces existing credentials.
+      - Install invokes only nixos-install for the pinned closure; never formats, generates volume keys, restores application data or reboots.
+      - Interrupted installation blocks retry until separately reviewed recovery evidence; no automatic destructive rollback.
+      - New installation requires root_encryption luks2 and boot-luks; plain-root installation is retired.
+      - Destructive fresh, disposable and erase/restore plans are readable historical evidence only and cannot run.
+
+  - id: storage-recovery-custody
+    summary: Prepare and cryptographically verify dedicated independently decryptable recovery custody without changing hosts or volumes.
+    risk: sensitive-local-state
+    operator_confirmation_required: true
+    usage: devenv shell storage-recovery-custody <prepare|verify|export-vault-record> [arguments...]
+    implementation: lx_administration/storage/recovery_custody.py
+    documentation: docs/boot-storage-migration.md
+    effects:
+      - Explicit prepare creates missing native age identities on operator-selected independent encrypted storage and verifies both with challenge decryption.
+      - Optional vault policy automatically exports and re-verifies independent recovery envelopes before provisioning; original records remain usable.
+      - Verify repeats physical ancestry and cryptographic checks; no key replacement, login-key export, remote operation or old-archive deletion.
+
+  - id: lx-annotate-streamable-migration
+    summary: Run the deployed LX-Annotate streamable-storage migration helper.
+    risk: remote-state
+    operator_confirmation_required: true
+    usage: devenv shell lx-annotate-streamable-migration <host> [migration arguments...]
+    implementation: scripts/lx-annotate-streamable-migration.sh
+    documentation: modules/nixos/services/lx-annotate-local/README.md
+
+  - id: run-ansible
+    summary: Apply the main Ansible playbook to configured hosts.
+    risk: remote-state
+    operator_confirmation_required: true
+    usage: >-
+      devenv shell run-ansible --limit <host-or-group>
+      [ansible-playbook arguments...]
+    implementation: scripts/run-ansible-playbook.sh
+    playbook: ansible/site.yml
+    documentation: ansible/playbooks/readme.md
+
+  - id: ssh-all
+    summary: Open inventory-selected hosts in repository shells within Tmux.
+    risk: remote-read-only
+    operator_confirmation_required: false
+    usage: devenv shell ssh-all [--group <inventory-group>] [--dry-run]
+    implementation: scripts/tmux-inventory-session.py
+    documentation: tmux/README.md
+
+  - id: init-server-ssh
+    summary: Open inventory-selected hosts with htop within Tmux.
+    risk: remote-read-only
+    operator_confirmation_required: false
+    usage: devenv shell init-server-ssh [--group <inventory-group>] [--dry-run]
+    implementation: scripts/tmux-inventory-session.py
+    documentation: tmux/README.md
+
+  - id: kill-server-ssh
+    summary: Stop the local ssh-servers tmux session.
+    risk: local-state
+    operator_confirmation_required: false
+    usage: devenv shell kill-server-ssh
+    implementation: devenv/scripts.nix
+    documentation: tmux/README.md
+
+  - id: conn-server-ssh
+    summary: Attach to the local ssh-servers tmux session.
+    risk: local-state
+    operator_confirmation_required: false
+    usage: devenv shell conn-server-ssh
+    implementation: devenv/scripts.nix
+    documentation: tmux/README.md
+
+  - id: sync-secrets
+    summary: Deploy managed secrets with the dedicated Ansible playbook.
+    risk: sensitive-remote-state
+    operator_confirmation_required: true
+    usage: >-
+      devenv shell sync-secrets --limit <host-or-group>
+      [ansible-playbook arguments...]
+    implementation: scripts/run-ansible-playbook.sh
+    playbook: ansible/playbooks/deploy_secrets.yml
+    documentation: ansible/playbooks/readme.md
+
+  - id: mount-persisting-storage
+    summary: Mount persistent storage using secrets from the configured provider.
+    risk: sensitive-local-state
+    operator_confirmation_required: true
+    usage: devenv shell mount-persisting-storage
+    implementation: scripts/storage/mount_persisting_storage.py
+    documentation: docs/hardware-setup.md
+
+  - id: storage-provision
+    summary: Set up verified disk-password custody for encrypted roots or retained containers; provisioning remains legacy-only.
+    risk: sensitive-remote-state
+    operator_confirmation_required: true
+    usage: devenv shell storage-provision <setup|escrow|provision> --host <host> --volume <volume> [--recovery-host <host> | --controller-only-custody] [--backend passphrase] [--local-target] [--apply]
+    effects:
+      - Setup verifies the existing LUKS password, prompts privately when absent from custody, requires configured independent age recovery envelopes, and displays it once until the operator acknowledges secure storage.
+      - Setup accepts cryptroot or a declared legacy container; it never creates partitions, adds keyslots, moves data or activates a host. Existing-key-file bytes are used exactly, including newlines.
+      - Controller-only custody is an explicit escrow-only option; provisioning still requires independent recovery.
+      - The explicit local-target option requires the inventory host to match the local hostname; recovery remains remote and privileged target commands still require sudo.
+      - Passphrase provisioning requires the host's passphrase unlock policy and leaves the mapping open; subsequent boots use the escrowed passphrase.
+    implementation: lx_administration/storage/provision.py
+    documentation: docs/legacy-storage-recovery.md
+
+  - id: openbao-local
+    summary: Retained OpenBao disk-recovery status and unlock credential rotation; new enrollment is retired.
+    risk: sensitive-remote-state
+    operator_confirmation_required: true
+    usage: devenv shell openbao-local <status|rotate-unlock> --limit <host-or-group> [--recovery-host <host>] [--apply]
+    implementation: lx_administration/storage/local_enrollment.py
+    documentation: docs/legacy-storage-recovery.md
+    effects:
+      - Read-only legacy enrollment/adoption/rollout previews remain inspectable; their apply actions are rejected before remote calls.
+      - rotate-unlock replaces the unlock AppRole SecretID, not the boot passphrase, seal key or LUKS passphrases.
+      - Original escrow, recovery keyslots and data remain until physical migration and named acceptance.
+
+# Tasks are listed separately because they are invoked through `devenv tasks`
+# rather than the shell-wrapper namespace above.
+tasks:
+  - id: python-quality:check
+    summary: Reject new Python diagnostics while allowing reviewed debt to decrease.
+    risk: read-only
+    operator_confirmation_required: false
+    usage: devenv tasks run python-quality:check
+    implementation: scripts/python-quality.py
+    policy: python-quality.yml
+    documentation: docs/development.md
+  - id: tests:operator-storage-migration-vm
+    summary: Verify encrypted pre-copy, final cutover and receipt reuse after reboot.
+    risk: local-state
+    operator_confirmation_required: false
+    usage: devenv tasks run tests:operator-storage-migration-vm
+    implementation: tests/nixtest/operator_storage_migration_vm_test.nix
+    documentation: docs/legacy-storage-recovery.md
+  - id: tests:bao-migration-vm
+    summary: Exercise Vault to OpenBao provisioning, retries and absent-source behavior with real TLS services.
+    risk: local-state
+    operator_confirmation_required: false
+    usage: devenv tasks run tests:bao-migration-vm
+    implementation: devenv/tasks.nix
+    documentation: docs/openbao.md
+  - id: tests:root-integrity-vm
+    summary: Exercise kernel-enforced verified-store boot and tamper rejection in a disposable image.
+    risk: local-state
+    operator_confirmation_required: false
+    usage: devenv tasks run tests:root-integrity-vm
+    implementation: tests/nixtest/root_integrity_vm_test.nix
+    documentation: docs/root-integrity-prototype.md
+    effects:
+      - Builds and boots a disposable image with an unsigned UKI carrying its verity store hash.
+      - Uses only synthetic release markers; no host mounts, production credentials or firmware changes.
+      - VM evidence does not establish firmware authentication, hardware TPM policy or fleet readiness.
+  - id: tests:openbao-local-vm
+    summary: Verify local OpenBao TPM and passphrase seals, enrollment and cold-boot unlock in disposable VMs.
+    risk: local-state
+    operator_confirmation_required: false
+    usage: devenv tasks run tests:openbao-local-vm
+    implementation: devenv/tasks.nix
+    documentation: docs/legacy-storage-recovery.md
+  - id: tests:openbao-vm
+    summary: Verify isolated OpenBao release, authorization, revocation, audit and reseal in a disposable VM.
+    risk: local-state
+    operator_confirmation_required: false
+    usage: devenv tasks run tests:openbao-vm
+    implementation: devenv/tasks.nix
+    documentation: docs/openbao.md
+    effects:
+      - Builds and boots a local NixOS test VM; formats only its disposable test disk.
+      - Generates ephemeral test credentials inside the VM; no hardware TPM or remote operations.
+
+  - id: context:check
+    summary: Validate hierarchical context manifests and all declared local references.
+    risk: read-only
+    operator_confirmation_required: false
+    usage: devenv tasks run context:check
+    implementation: scripts/lint_structure.py
+    documentation: docs/agent_context.md
+
+  - id: nix-quality:check
+    summary: Run ratcheted parse, deadnix, statix, nixfmt, and flake-checker checks without modifying files.
+    risk: read-only
+    operator_confirmation_required: false
+    usage: devenv tasks run nix-quality:check
+    implementation: scripts/nix-quality.py
+    policy: nix-quality.yml
+    documentation: docs/nix-quality.md
+
+  - id: nix-quality:generators
+    summary: Run 61 non-evaluating Autoconf render, isolated-output, and boot-renderer contracts.
+    risk: read-only
+    operator_confirmation_required: false
+    usage: devenv tasks run nix-quality:generators
+    implementation: devenv/tasks.nix
+    policy: nix-quality.yml
+    documentation: docs/nix-quality.md
+
+  - id: nix-quality:full
+    summary: Add full flake evaluation to the Nix quality checks.
+    risk: read-only
+    operator_confirmation_required: false
+    usage: devenv tasks run nix-quality:full
+    implementation: scripts/nix-quality.py
+    policy: nix-quality.yml
+    documentation: docs/nix-quality.md
+
+  - id: env:setup
+    summary: Prepare the development shell and probe optional CUDA support.
+    risk: local-state
+    operator_confirmation_required: false
+    usage: devenv tasks run env:setup
+    implementation: devenv/management.nix
+    documentation: docs/development.md
+
+  - id: env:setup-cuda
+    summary: Probe optional CUDA support without blocking shell setup.
+    risk: read-only
+    operator_confirmation_required: false
+    usage: devenv tasks run env:setup-cuda
+    implementation: devenv/management.nix
+    documentation: docs/development.md
+
+  - id: initialize-environment:endoreg-db
+    summary: Initialize and migrate the EndoReg database.
+    risk: local-state
+    operator_confirmation_required: true
+    usage: devenv tasks run initialize-environment:endoreg-db
+    implementation: devenv/management.nix
+    documentation: docs/development.md
+
+  - id: initialize-environment:finished
+    summary: Confirm that development environment initialization finished.
+    risk: read-only
+    operator_confirmation_required: false
+    usage: devenv tasks run initialize-environment:finished
+    implementation: devenv/management.nix
+    documentation: docs/development.md
+
+  - id: boot-storage:setup
+    summary: Preview or resume the current host's guarded boot-storage workflow in order.
+    risk: destructive-local
+    operator_confirmation_required: true
+    usage: devenv tasks run boot-storage:setup
+    implementation: devenv/tasks.nix
+    documentation: docs/boot-storage-quickstart.md
+    effects:
+      - Default is preview. LUXNIX_BOOT_SETUP_APPLY=1 enables sequential execution through a real controlling terminal.
+      - Selects the configured hostname or uniquely matching installer hardware UUID; never selects an arbitrary host.
+      - Prepares recovery media and plan, reviews existing operator notes, then delegates provisioning/access/install through existing gates.
+      - Pauses for missing notes, installer boot, interrupted-operation recovery and physical acceptance; no automatic reboot or formatting retry.
+
+  - id: autoconf:check
+    summary: Validate and show resolved Autoconf options without generating files.
+    risk: read-only
+    operator_confirmation_required: false
+    usage: devenv tasks run autoconf:check
+    implementation: devenv/tasks.nix
+    documentation: docs/autoconf.md
+
+  - id: autoconf:refresh-facts
+    summary: Refresh local facts while retaining last-known-good snapshots for failures.
+    risk: remote-read-only
+    operator_confirmation_required: false
+    usage: devenv tasks run autoconf:refresh-facts
+    implementation: devenv/tasks.nix
+    documentation: docs/autoconf.md
+
+  - id: autoconf:refresh-facts-strict
+    summary: Refresh local facts and fail if any inventory host remains stale.
+    risk: remote-read-only
+    operator_confirmation_required: false
+    usage: devenv tasks run autoconf:refresh-facts-strict
+    implementation: devenv/tasks.nix
+    documentation: docs/autoconf.md
+
+  - id: autoconf:generate-report
+    summary: Generate a private, redacted HTML inventory report from local facts.
+    risk: local-state
+    operator_confirmation_required: false
+    usage: devenv tasks run autoconf:generate-report
+    implementation: devenv/tasks.nix
+    documentation: docs/autoconf.md
+
+  - id: autoconf:initialize-vault
+    summary: Initialize the Autoconf vault.
+    risk: sensitive-local-state
+    operator_confirmation_required: true
+    usage: devenv tasks run autoconf:initialize-vault
+    implementation: devenv/tasks.nix
+    documentation: docs/vault-setup.md
+
+  - id: autoconf:generate
+    summary: Validate Autoconf options and generate NixOS and Home Manager configs.
+    risk: local-state
+    operator_confirmation_required: false
+    usage: devenv tasks run autoconf:generate
+    implementation: devenv/tasks.nix
+    documentation: docs/autoconf.md
+
+  - id: docs:toc-generator
+    summary: Regenerate the documentation table of contents.
+    risk: local-state
+    operator_confirmation_required: false
+    usage: devenv tasks run docs:toc-generator
+    implementation: devenv/tasks.nix
+    documentation: docs/index.md
+
+  - id: docs:check
+    summary: Validate documentation navigation and portable local links.
+    risk: read-only
+    operator_confirmation_required: false
+    usage: devenv tasks run docs:check
+    implementation: devenv/tasks.nix
+    documentation: docs/index.md
+
+  - id: tests:pytest
+    summary: Run the repository Python test suite with root-scoped discovery.
+    risk: read-only
+    operator_confirmation_required: false
+    usage: devenv tasks run tests:pytest
+    implementation: devenv/tasks.nix
+    documentation: docs/testing-nixtests.md
+
+  - id: repo:state-summary
+    summary: Run the repository checks and write a JSON state snapshot for before/after comparison.
+    risk: local-state
+    operator_confirmation_required: false
+    usage: devenv tasks run repo:state-summary
+    implementation: scripts/repo-state-summary.py
+    documentation: docs/nixos-version-bump.md
+
+  - id: endoreg-db:init
+    summary: Initialize the EndoReg database.
+    risk: local-state
+    operator_confirmation_required: true
+    usage: devenv tasks run endoreg-db:init
+    implementation: devenv/tasks.nix
+    documentation: docs/development.md
+
+  - id: endoreg-db:migrate
+    summary: Apply EndoReg database migrations.
+    risk: local-state
+    operator_confirmation_required: true
+    usage: devenv tasks run endoreg-db:migrate
+    implementation: devenv/tasks.nix
+    documentation: docs/development.md
+
+# Native host operations deliberately run outside the Devenv shell.
+native_commands:
+  - id: luxnix-normalize-storage
+    summary: Preview and explicitly retire matching legacy native mount overrides so declared encrypted storage mounts take over.
+    risk: local-state
+    operator_confirmation_required: true
+    usage: sudo luxnix-normalize-storage [--apply]
+    execution_context: Run on the selected legacy-container host in a private terminal during a stopped-writer maintenance window.
+    implementation: lx_administration/storage/operator_migration.py
+    documentation: docs/legacy-storage-recovery.md
+    effects:
+      - Requires matching generated replacements, stopped guarded writers and typed hostname confirmation before changes.
+      - Keeps private backups, reloads systemd and restores native overrides if replacement verification fails; never moves data or changes keys or mounts.
+
+  - id: install-prepared-encrypted-system
+    summary: Install a reviewed closure onto prepared storage in its explicitly selected root-encryption mode from trusted installer media.
+    risk: destructive-local
+    operator_confirmation_required: true
+    usage: python -m lx_administration.storage.boot_migration install --state <private-state-directory>
+    implementation: lx_administration/storage/boot_migration.py
+    documentation: docs/boot-storage-migration.md
+    prerequisites:
+      - An in-place LUKS2 plan, verified recovery evidence, exact disk identities and complete required target mounts; destructive modes are rejected.
+      - Existing administrator credentials, identities, application keys and data preserved on protected storage.
+      - Run the guarded installer from trusted media; direct nixos-install bypasses the evidence workflow and is not the supported migration entrypoint.
+    effects:
+      - Installs the boot configuration; does not authorize formatting or rerunning a disk phase.
+
+  - id: setup-boot-password
+    summary: Prompt privately to verify or add a root disk passphrase while retaining existing recovery slots.
+    risk: sensitive-local-state
+    operator_confirmation_required: true
+    usage: sudo luxnix-setup-boot-password [--change]
+    execution_context: Run interactively on the selected installed boot-LUKS host, using the target generation's command before detached activation.
+    implementation: lx_administration/storage/boot_password.py
+    documentation: docs/boot-storage-migration.md
+    effects:
+      - Prompts at the first boot or switch rebuild and after LUKS header changes; --change prompts explicitly.
+      - Tests an existing password or adds a confirmed new password after verifying an existing recovery credential and backing up the header.
+      - Stores only a private host/UUID/header-bound verification receipt; never stores a password or removes keyslots.
+      - A missing private terminal blocks unprepared activation before bootloader changes; builds and dry activation do not enroll credentials.
+
+  - id: rebuild-host-switch
+    summary: Persist and activate the reviewed configuration using native NixOS switching.
+    risk: remote-state
+    operator_confirmation_required: true
+    usage: sudo nixos-rebuild switch --flake '<checkout>#<host>'
+    execution_context: Run on the selected host; the checkout must contain the reviewed compatible application version.
+    verification:
+      - Require exit status zero and matching /run/current-system and /nix/var/nix/profiles/system targets.
+      - Check bootloader default and one-shot overrides; after an authorized reboot, verify /run/booted-system matches the intended closure.
+    implementation: modules/home/cli/shells/shared/default.nix
+    documentation: docs/deployment-guide.md
+    prerequisites:
+      - Explicit checkout and host; reviewed revision and locked inputs; successful build and connectivity checks.
+      - Retain SSH session and verify fresh access after activation; console recovery for access-affecting changes.
+    effects:
+      - Updates the persistent system profile and boot default and activates services.
+      - The nho alias uses LUXNIX_FLAKE and LUXNIX_HOST; no intermediate test activation.
+      - Boot-LUKS passphrase setup prompts interactively if its verified host/header receipt is absent or stale.
+
+  - id: rebuild-host-boot
+    summary: Stage the reviewed configuration for the next boot without live activation.
+    risk: remote-state
+    operator_confirmation_required: true
+    usage: sudo nixos-rebuild boot --flake '<checkout>#<host>'
+    implementation: modules/home/cli/shells/shared/default.nix
+    documentation: docs/deployment-guide.md
+    effects:
+      - Updates the system profile and boot default; running services retain their configuration.
+      - The nhb alias uses LUXNIX_FLAKE and LUXNIX_HOST; reboot is a separate authorized action.

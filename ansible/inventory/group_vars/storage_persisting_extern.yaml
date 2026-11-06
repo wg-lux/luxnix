@@ -1,0 +1,6 @@
+group_roles:
+  endoreg_client.paths.storagePersistingEnable: "true"
+  endoreg_client.paths.storagePersistingMountPoint: '"/mnt/endoreg-client-storage"'
+  endoreg_client.paths.storagePersistingIsExternalDrive: "true"
+group_services: {}
+group_luxnix: {}

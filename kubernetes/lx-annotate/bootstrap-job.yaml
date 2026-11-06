@@ -1,0 +1,83 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: lx-annotate-bootstrap-
+  namespace: lx-annotate
+  labels:
+    app.kubernetes.io/name: lx-annotate
+    app.kubernetes.io/component: bootstrap
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: lx-annotate
+        app.kubernetes.io/component: bootstrap
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: bootstrap
+          image: ghcr.io/wg-lux/lx-annotate:0.5.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -lc
+          args:
+            - |
+              set -eu
+
+              marker_dir="${LX_ANNOTATE_BOOTSTRAP_MARKER_DIR:-/var/lib/lx-annotate/data/.bootstrap}"
+              marker_file="${marker_dir}/release-${LX_ANNOTATE_RELEASE_ID}.ready"
+
+              mkdir -p "$marker_dir"
+              python -m django migrate --noinput --settings=lx_annotate.settings.settings_prod
+              python -m django load_base_db_data --settings=lx_annotate.settings.settings_prod
+              printf 'release=%s\ncompleted_at=%s\n' "$LX_ANNOTATE_RELEASE_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$marker_file"
+          envFrom:
+            - configMapRef:
+                name: lx-annotate-config
+          env:
+            - name: DJANGO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: lx-annotate-secret
+                  key: DJANGO_SECRET_KEY
+            - name: DJANGO_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: lx-annotate-secret
+                  key: DJANGO_DB_PASSWORD
+            - name: OIDC_RP_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: lx-annotate-secret
+                  key: OIDC_RP_CLIENT_ID
+            - name: OIDC_RP_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lx-annotate-secret
+                  key: OIDC_RP_CLIENT_SECRET
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/lx-annotate/data
+            - name: master-key
+              mountPath: /run/secrets/lx-annotate
+              readOnly: true
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: lx-annotate-data
+        - name: master-key
+          secret:
+            secretName: lx-annotate-secret
+            items:
+              - key: master-key
+                path: master-key

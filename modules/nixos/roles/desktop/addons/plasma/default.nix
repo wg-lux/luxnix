@@ -1,38 +1,52 @@
 {
   config,
   lib,
-  pkgs,
   ...
 }:
 with lib;
-with lib.luxnix; let
+with lib.luxnix;
+let
   cfg = config.roles.desktop.addons.plasma;
-in {
+
+in
+{
   options.roles.desktop.addons.plasma = with types; {
-    enable = mkBoolOpt true "Enable or disable the plasma DE.";
+    enable = mkBoolOpt false "Enable or disable the plasma DE.";
+    bootAutoLogin = mkBoolOpt false "Retained compatibility option; autologin is refused fleet-wide.";
   };
 
   config = mkIf cfg.enable {
-###   
-  roles.custom-packages.kdePlasma = true;
+    assertions = [
+      {
+        assertion = !cfg.bootAutoLogin && !config.services.displayManager.autoLogin.enable;
+        message = "Desktop autologin is disabled fleet-wide; use the SDDM account chooser.";
+      }
+    ];
+    ###
+    roles.custom-packages.kdePlasma = true;
 
-  services.desktopManager.plasma6.enable = true;
-  services.displayManager = {
-    defaultSession = "plasmax11";
-    sddm.enable = true;
-  };
+    services = {
+      desktopManager.plasma6.enable = true;
+      displayManager = {
+        autoLogin.enable = false;
+        defaultSession = "plasma"; # Correct session name for Plasma Wayland
+        gdm = {
+          enable = false;
+          autoSuspend = false;
+        };
+        sddm = {
+          enable = true;
+          wayland.enable = true; # Forces the SDDM greeter to use Wayland
+        };
+      };
+      xserver = {
+        enable = true;
+        # TODO (desktop-role owner): derive the keyboard layout from the locale
+        # contract after generic-settings exports a dedicated XKB layout.
+        xkb.layout = "de";
+        xkb.variant = "";
 
-  services.xserver = {
-    enable = true;
-    xkb.layout = "de"; # TODO use locale via generic settings
-    xkb.variant = "";
-    displayManager = {
-      gdm= {
-        enable = false;
-        autoSuspend = false;
       };
     };
-  };
-
   };
 }

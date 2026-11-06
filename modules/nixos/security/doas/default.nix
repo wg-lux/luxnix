@@ -3,10 +3,14 @@
   lib,
   ...
 }:
-with lib;
-with lib.luxnix; let
+let
+  inherit (lib) mkIf;
+  inherit (lib.luxnix) mkBoolOpt;
+
   cfg = config.security.luxnix.doas;
-in {
+  adminUserName = config.user.admin.name;
+in
+{
   options.security.luxnix.doas = {
     enable = mkBoolOpt false "Whether or not to replace sudo with doas.";
   };
@@ -20,7 +24,7 @@ in {
       enable = true;
       extraRules = [
         {
-          users = [config.user.admin.name];
+          users = [ adminUserName ];
           noPass = true;
           keepEnv = true;
         }
@@ -28,6 +32,8 @@ in {
     };
 
     # Add an alias to the shell for backward-compat and convenience.
-    environment.shellAliases = {sudo = "doas";};
+    environment.shellAliases = {
+      sudo = "doas";
+    };
   };
 }
