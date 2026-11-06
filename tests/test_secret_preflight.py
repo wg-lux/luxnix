@@ -285,7 +285,7 @@ def test_plan_without_a_contract_requires_a_new_plan(environment):
     migration.atomic_json(
         state / "plan.json", payload | {"plan_id": migration.digest(payload)}
     )
-    with pytest.raises(preflight.PreflightError, match="create a new plan"):
+    with pytest.raises(migration.MigrationError, match="create a new plan"):
         preflight.run(state, custody)
 
 

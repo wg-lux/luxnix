@@ -34,6 +34,9 @@ MILESTONES = (
     "System installed",
     "Physical acceptance recorded",
 )
+RETIRE_HINT = (
+    "To remove old containers: devenv shell boot-storage-setup retire-containers"
+)
 PLAN_SAVED = (
     "The plan is saved. This only records what to do; nothing on the disk has changed."
 )
@@ -565,6 +568,12 @@ def advance(state: Path, *, apply: bool = False) -> NextStep:
     return next_step(state)
 
 
+def save_plan(spec: dict, state: Path) -> None:
+    migration.plan_spec(spec, state)
+    prepare(state)
+    success(PLAN_SAVED)
+
+
 def target_spec(config_path: Path, host: str) -> tuple[dict, Path]:
     if not migration.HOST.fullmatch(host):
         raise migration.MigrationError("Invalid inventory host name")
@@ -881,14 +890,15 @@ def run_workflow(
             show_step(next_step(state), state, config)
         else:
             recovery_media.setup(spec, state, apply=False, device=device)
-        print(
-            "Preview only. Run: devenv shell boot-storage-setup"
-        )
+        print("Preview only. Run: devenv shell boot-storage-setup")
         return
     recovery_media.setup(spec, state, apply=True, device=device)
-    migration.plan_spec(spec, state)
-    prepare(state)
-    success(PLAN_SAVED)
+    save_plan(spec, state)
+    drive(state, config)
+
+
+def drive(state: Path, config: Path) -> None:
+    """Advance a saved plan until it needs the operator or the installer."""
     visited = set()
     while True:
         step = next_step(state)
@@ -924,29 +934,12 @@ def run_workflow(
                     "then rerun this task. No automatic reboot."
                 )
                 return
-            if step.action == Action.PROVISION:
-                continue
         elif step.action == Action.PREPARE:
             prepare(state)
-            continue
         if step.action in {Action.ASSESS, Action.PREPARE_ACCESS, Action.ACCEPT}:
-            if step.action == Action.ACCEPT:
-                with migration.locked_state(state):
-                    plan = migration.load_plan(state)
-                    progress = migration.load_progress(state, plan)
-                    try:
-                        migration.check_attestation(
-                            "acceptance", plan, progress, fresh=False
-                        )
-                    except (ValueError, OSError):
-                        pass  # Show the required human review below; never approve it.
-                    else:
-                        success(
-                            "Physical acceptance is recorded. Retain recovery copies. "
-                            "To remove old containers: "
-                            "devenv shell boot-storage-setup retire-containers"
-                        )
-                        return
+            if step.action == Action.ACCEPT and acceptance_recorded(state):
+                success(f"Physical acceptance is recorded. {RETIRE_HINT}")
+                return
             report = state / f"{step.stage}-notes.txt"
             if not report.is_file():
                 print(
@@ -963,10 +956,7 @@ def run_workflow(
                 )
             review(state, assessor, report)
             if step.action == Action.ACCEPT:
-                print(
-                    "To remove old containers: "
-                    "devenv shell boot-storage-setup retire-containers"
-                )
+                print(RETIRE_HINT)
                 return
 
 
@@ -1083,10 +1073,7 @@ def main() -> None:
                 from lx_administration.storage import first_setup
 
                 spec, _ = target_spec(args.config, host)
-                try:
-                    first_setup.run(Path(spec["checkout"]), host)
-                except first_setup.Stopped as stop:
-                    print(f"\nPaused, nothing has failed. {stop}")
+                first_setup.run(Path(spec["checkout"]), host)
                 return
             spec, state = configured_target(args.config, host)
             if args.action not in {"run", "status"} and not args.json:
@@ -1118,13 +1105,9 @@ def main() -> None:
                 recovery_media.setup(spec, state, apply=args.apply, device=args.device)
                 if not args.apply:
                     return
-                migration.plan_spec(spec, state)
-                prepare(state)
-                success(PLAN_SAVED)
+                save_plan(spec, state)
             case "plan":
-                migration.plan_spec(spec, state)
-                prepare(state)
-                success(PLAN_SAVED)
+                save_plan(spec, state)
             case "retire-containers":
                 retire_containers(state, apply=args.apply)
                 return
@@ -1143,7 +1126,7 @@ def main() -> None:
                             "Records imported with a salt missing from this host and "
                             "custody cannot be matched to their patients again.",
                         )
-                    except first_setup.Stopped as stop:
+                    except migration.Stopped as stop:
                         raise migration.MigrationError(str(stop)) from stop
                 secret_preflight.run(
                     state,
@@ -1174,6 +1157,9 @@ def main() -> None:
                 if args.apply:
                     success("The existing layout was accepted after the interruption.")
         show_step(next_step(state), state, args.config, as_json=args.json)
+    except migration.Stopped as stop:
+        print(f"\nPaused, nothing has failed. {stop}")
+        print("Run this again to continue: devenv shell boot-storage-setup")
     except (ValueError, KeyError, OSError, subprocess.SubprocessError) as error:
         parser.exit(
             1,

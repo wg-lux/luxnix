@@ -68,7 +68,7 @@ def test_first_setup_runs_only_before_a_plan_exists(monkeypatch, tmp_path):
     monkeypatch.setattr(guide.first_setup, "run", lambda *a: called.append(a))
     monkeypatch.setattr(setup, "next_step", lambda s: step(["console_boot_tested"]))
     monkeypatch.setattr(guide, "recovery_stage", lambda *a: None)
-    monkeypatch.setattr(setup, "run_workflow", lambda *a, **k: None)
+    monkeypatch.setattr(setup, "drive", lambda *a: None)
     guide.run("gc-09", tmp_path)
     assert not called
 

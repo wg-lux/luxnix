@@ -68,43 +68,25 @@ def test_center_problem_passes_a_configured_site():
     assert first.center_problem("gc-09", CENTER, facts()) is None
 
 
-def test_an_unchanged_choice_writes_nothing():
+def test_moving_to_a_host_salt_clears_the_center_setting_only():
     current = facts(center=True, center_key=CENTER)
-    assert first.settings_for(first.Choice(CENTER, True), {}, current) == []
-
-
-def test_center_settings_are_quoted_for_nix_and_enable_vault_auth():
-    settings = first.settings_for(
-        first.Choice(CENTER, True), {"host_roles": {}}, facts(defer=True)
-    )
-    written = {s["key"]: s["value"] for s in settings}
-    assert written[CENTER_KEY] == "true"
-    assert written["endoreg_client.defaultCenterKey"] == f'"{CENTER}"'
-    assert written["vault.client.auth.deferUntilProvisioned"] == "false"
-
-
-def test_existing_center_key_spelling_is_kept():
-    inventory = {"host_roles": {"endoreg-client.defaultCenterKey": "old"}}
-    settings = first.settings_for(first.Choice(CENTER, True), inventory, facts())
-    assert "endoreg-client.defaultCenterKey" in {s["key"] for s in settings}
-    assert "endoreg_client.defaultCenterKey" not in {s["key"] for s in settings}
-
-
-def test_machine_settings_leave_vault_auth_and_center_alone():
-    current = facts(center=True, center_key=CENTER)
-    settings = first.settings_for(first.Choice(None, True), {}, current)
-    assert settings == [
+    assert first.host_salt_settings(current) == [
         {"section": "host_services", "key": CENTER_KEY, "value": "false"}
     ]
 
 
-def test_a_new_choice_is_always_the_hosts_own_salt(monkeypatch):
-    assert first.ask_choice(None) == first.Choice(None, True)
+def test_moving_to_a_host_salt_restores_the_unit_that_creates_it():
+    settings = first.host_salt_settings(facts(center=True, legacy=False))
+    assert {"section": "host_services", "key": LEGACY_KEY, "value": "true"} in settings
 
 
-def test_a_host_on_an_active_center_salt_cannot_change(monkeypatch):
+def test_a_host_on_an_active_center_salt_cannot_move(monkeypatch, tmp_path):
+    current = facts(center=True, center_key=CENTER)
+    console(monkeypatch, current, keyring={"center_id": CENTER})
+    monkeypatch.setattr(first, "write_inventory", lambda *a: pytest.fail("no write"))
+    answers(monkeypatch, "2")
     with pytest.raises(migration.MigrationError, match="no supported way"):
-        first.ask_choice({"center_id": CENTER})
+        first.run(tmp_path, "gc-09")
 
 
 @pytest.mark.parametrize("reply", ["", "3", "maybe"])
@@ -243,12 +225,22 @@ def test_a_host_salt_needs_no_vault_or_enrollment(monkeypatch, tmp_path, capsys)
 def test_a_result_differing_from_the_choice_is_an_error(monkeypatch, tmp_path):
     inventory = tmp_path / "ansible/inventory/host_vars"
     inventory.mkdir(parents=True)
-    (inventory / "gc-09.yml").write_text("host_roles: {}\n")
-    monkeypatch.setattr(first, "evaluate", lambda *a: facts())
+    (inventory / "gc-09.yml").write_text("host_services: {}\n")
+    current = facts(center=True, center_key=CENTER)
+    monkeypatch.setattr(first, "evaluate", lambda *a: current)
     monkeypatch.setattr(first, "write_inventory", lambda *a: None)
     monkeypatch.setattr(first, "regenerate", lambda checkout: None)
     with pytest.raises(migration.MigrationError, match="differs from your choice"):
-        first.apply_choice(tmp_path, "gc-09", first.Choice(CENTER, True), facts())
+        first.move_to_host_salt(tmp_path, "gc-09", current)
+
+
+def test_a_malformed_inventory_stops_before_any_write(monkeypatch, tmp_path):
+    inventory = tmp_path / "ansible/inventory/host_vars"
+    inventory.mkdir(parents=True)
+    (inventory / "gc-09.yml").write_text("a: 1\na: 2\n")
+    monkeypatch.setattr(first, "write_inventory", lambda *a: pytest.fail("no write"))
+    with pytest.raises(yaml.YAMLError):
+        first.move_to_host_salt(tmp_path, "gc-09", facts())
 
 
 def playbook_checkout(tmp_path, inventory):
@@ -285,26 +277,16 @@ def test_real_playbook_writes_choices_and_keeps_everything_else(tmp_path):
         tmp_path,
         "gc-09",
         [
-            {"section": "host_services", "key": CENTER_KEY, "value": "true"},
-            {
-                "section": "host_roles",
-                "key": "endoreg_client.defaultCenterKey",
-                "value": f'"{CENTER}"',
-            },
-            {
-                "section": "host_luxnix",
-                "key": "vault.client.auth.deferUntilProvisioned",
-                "value": "false",
-            },
+            {"section": "host_services", "key": CENTER_KEY, "value": "false"},
+            {"section": "host_services", "key": LEGACY_KEY, "value": "true"},
         ],
     )
     text = path.read_text()
     assert "# Würzburg shares one center salt." in text
     written = yaml.safe_load(text)
-    assert written["host_services"][CENTER_KEY] == "true"
-    assert written["host_roles"]["endoreg_client.defaultCenterKey"] == f'"{CENTER}"'
+    assert written["host_services"][CENTER_KEY] == "false"
+    assert written["host_services"][LEGACY_KEY] == "true"
     assert written["host_roles"]["custom_packages.baseDevelopment"] == "true"
-    assert written["host_luxnix"]["vault.client.auth.deferUntilProvisioned"] == "false"
     assert written["host_luxnix"]["other.setting"] == "true"
     assert text.count(CENTER_KEY) == 1
 
@@ -324,20 +306,29 @@ def test_real_playbook_refuses_a_setting_it_does_not_own(tmp_path, capsys):
 
 @needs_ansible
 def test_real_playbook_refuses_an_inventory_without_the_section(tmp_path):
-    path = playbook_checkout(tmp_path, "host_services:\n  a: b\n")
+    path = playbook_checkout(tmp_path, "host_roles:\n  a: b\n")
     with pytest.raises(migration.MigrationError, match="playbook failed"):
         first.write_inventory(
             tmp_path,
             "gc-09",
-            [
-                {
-                    "section": "host_luxnix",
-                    "key": "vault.client.auth.deferUntilProvisioned",
-                    "value": "false",
-                }
-            ],
+            [{"section": "host_services", "key": CENTER_KEY, "value": "false"}],
         )
-    assert "host_luxnix" not in path.read_text()
+    assert CENTER_KEY not in path.read_text()
+
+
+@needs_ansible
+def test_real_playbook_no_longer_writes_center_or_vault_settings(tmp_path):
+    path = playbook_checkout(tmp_path, INVENTORY)
+    before = path.read_text()
+    for section, key in (
+        ("host_roles", "endoreg_client.defaultCenterKey"),
+        ("host_luxnix", "vault.client.auth.deferUntilProvisioned"),
+    ):
+        with pytest.raises(migration.MigrationError, match="playbook failed"):
+            first.write_inventory(
+                tmp_path, "gc-09", [{"section": section, "key": key, "value": "x"}]
+            )
+    assert path.read_text() == before
 
 
 def test_salt_values_are_never_read():

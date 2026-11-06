@@ -11,9 +11,6 @@
     allowed_settings:
       - host_services/luxnix.lxAnnotateLocal.django.centerIdentitySalt
       - host_services/luxnix.lxAnnotateLocal.django.enrollLegacyDefaultSalt
-      - host_roles/endoreg-client.defaultCenterKey
-      - host_roles/endoreg_client.defaultCenterKey
-      - host_luxnix/vault.client.auth.deferUntilProvisioned
   tasks:
     - name: Refuse an invalid host name
       ansible.builtin.assert:

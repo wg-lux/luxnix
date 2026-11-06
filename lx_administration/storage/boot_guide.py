@@ -24,7 +24,8 @@ from lx_administration.storage import (
     recovery_media,
     secret_preflight,
 )
-from lx_administration.storage.first_setup import Stopped
+from lx_administration.storage.boot_migration import Stopped
+from lx_administration.utils.file_operations import atomic_write_file
 
 CUSTODY_FILE = Path("/recovery/luxnix-custody.luks")
 CUSTODY_MAPPING = "luxnix-custody"
@@ -69,12 +70,16 @@ def custody_mounted() -> bool:
     return quiet("mountpoint", "-q", str(CUSTODY_MOUNT))
 
 
+def mount_custody() -> None:
+    interactive("mkdir", "-p", str(CUSTODY_MOUNT))
+    interactive("mount", f"/dev/mapper/{CUSTODY_MAPPING}", str(CUSTODY_MOUNT))
+
+
 def open_custody() -> None:
     if not Path("/dev/mapper", CUSTODY_MAPPING).exists():
         print(f"Enter the custody passphrase for {CUSTODY_FILE}.")
         interactive("cryptsetup", "open", str(CUSTODY_FILE), CUSTODY_MAPPING)
-    interactive("mkdir", "-p", str(CUSTODY_MOUNT))
-    interactive("mount", f"/dev/mapper/{CUSTODY_MAPPING}", str(CUSTODY_MOUNT))
+    mount_custody()
 
 
 def close_custody() -> None:
@@ -84,7 +89,7 @@ def close_custody() -> None:
 
 def create_custody() -> None:
     # luksFormat on an open file destroys it silently, so only a new file is formatted.
-    if quiet("test", "-e", str(CUSTODY_FILE)):
+    if secret_preflight.exists(CUSTODY_FILE):
         raise migration.MigrationError(f"{CUSTODY_FILE} exists; refusing to format it")
     print(
         f"\nSecrets need encrypted custody outside this disk. This creates a new "
@@ -100,15 +105,14 @@ def create_custody() -> None:
     )  # fmt: skip
     interactive("cryptsetup", "open", str(CUSTODY_FILE), CUSTODY_MAPPING)
     interactive("mkfs.ext4", "-q", f"/dev/mapper/{CUSTODY_MAPPING}")
-    interactive("mkdir", "-p", str(CUSTODY_MOUNT))
-    interactive("mount", f"/dev/mapper/{CUSTODY_MAPPING}", str(CUSTODY_MOUNT))
+    mount_custody()
     setup.success(f"Custody created at {CUSTODY_DIRECTORY}.")
 
 
 def ensure_custody() -> Path:
     """Reuse, reopen or create the default custody; never format an existing file."""
     if not custody_mounted():
-        if not quiet("test", "-e", str(CUSTODY_FILE)):
+        if not secret_preflight.exists(CUSTODY_FILE):
             create_custody()
         elif quiet("cryptsetup", "isLuks", str(CUSTODY_FILE)):
             open_custody()
@@ -116,7 +120,7 @@ def ensure_custody() -> Path:
             raise migration.MigrationError(
                 f"{CUSTODY_FILE} is not a LUKS file; move it aside and rerun"
             )
-    if not quiet("test", "-d", str(CUSTODY_DIRECTORY)):
+    if not secret_preflight.is_directory(CUSTODY_DIRECTORY):
         user, group = str(os.getuid()), str(os.getgid())
         interactive(
             "install", "-d", "-m", "0700", "-o", user, "-g", group,
@@ -150,7 +154,9 @@ def scan_for_patient_data() -> tuple[int, list[str]]:
     names: list[str] = []
     for pattern in PATIENT_DATA_PATTERNS:
         names += ["-o", "-iname", pattern]
-    roots = [r for r in SCAN_ROOTS if Path(r).exists()]
+    # find does not dedupe start points, so keep one root per filesystem.
+    present = (r for r in reversed(SCAN_ROOTS) if Path(r).exists())
+    roots = list({os.stat(r).st_dev: r for r in present}.values())
     result = secret_preflight.privileged(
         "find", *roots, "-xdev", "-type", "f", "(", *names[1:], ")", "-printf", "%h\n"
     )
@@ -196,12 +202,14 @@ def ask_backup(spec: dict) -> str:
         raise migration.MigrationError(
             f"{location} is on the disk being encrypted, so it is not a backup"
         )
-    print(f"Backup size: {measure_size(path)} | Space used on root: {root_used()}")
+    print("Measuring the backup...")
+    size = measure_size(path)
+    print(f"Backup size: {size} | Space used on root: {root_used()}")
     print("The backup is on a different disk. Only you can prove it restores.")
     tested = input("How did you test restoring it? (no secrets) ").strip()
     if not tested:
         raise Stopped("A backup counts only once a restore has been tested.")
-    return f"Backup at {location}, size {measure_size(path)}. Restore test: {tested}"
+    return f"Backup at {location}, size {size}. Restore test: {tested}"
 
 
 def measured_detail(check: str, spec: dict, state: Path) -> str:
@@ -298,10 +306,11 @@ def write_notes(state: Path, answers: dict) -> Path:
     for check, answer in sorted(answers.items()):
         when = time.strftime("%Y-%m-%d %H:%M", time.localtime(answer["confirmed_at"]))
         lines.append(f"{when} {check}: confirmed. {answer['detail']}".rstrip())
-    descriptor = os.open(notes, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(descriptor, "w") as output:
-        os.fchmod(output.fileno(), 0o600)
-        output.write("\n".join(lines) + "\n")
+    atomic_write_file(
+        destination=notes,
+        content=[("\n".join(lines) + "\n").encode()],
+        file_mode=0o600,
+    )
     return notes
 
 
@@ -342,12 +351,10 @@ def plan_is_stale(state: Path, spec: dict) -> bool:
 def plan_has_started(state: Path) -> bool:
     with migration.locked_state(state):
         plan = migration.load_plan(state)
-        progress = migration.load_progress(state, plan)
-        if progress["install"]["status"] != "pending":
+        if migration.load_progress(state, plan)["install"]["status"] != "pending":
             return True
-        if not setup.journal_path(state).exists():
-            return False
-        return setup.load_journal(state, plan).phase != setup.Phase.PLANNED
+    # Outside the lock: encryption_started takes the same non-reentrant lock.
+    return setup.encryption_started(state)
 
 
 def replace_stale_plan(state: Path, spec: dict) -> None:
@@ -380,24 +387,17 @@ def run(
     spec, state = setup.target_spec(config, host)
     setup.show_target(spec)
     recovery_media.setup(spec, state, apply=True, device=device)
-    try:
-        replace_stale_plan(state, spec)
-        if not (state / "plan.json").exists():
-            # Choices change the revision, so they come before a plan pins it.
-            accepted_by = first_setup.run(Path(spec["checkout"]), host)
-            migration.plan_spec(spec, state)
-            setup.prepare(state)
-            setup.success(setup.PLAN_SAVED)
-            if accepted_by:
-                migration.atomic_json(
-                    state / ENROLLMENT_ACCEPTANCE,
-                    {"accepted_by": accepted_by, "accepted_at": time.time()},
-                )
-        step = setup.next_step(state)
-        if step.action == setup.Action.ASSESS and step.stage == "recovery":
-            recovery_stage(spec, state, custody)
-    except Stopped as stop:
-        print(f"\nPaused, nothing has failed. {stop}")
-        print("Run this again to continue: devenv shell boot-storage-setup")
-        return
-    setup.run_workflow(spec, state, config, apply=True, device=device)
+    replace_stale_plan(state, spec)
+    if not (state / "plan.json").exists():
+        # Choices change the revision, so they come before a plan pins it.
+        accepted_by = first_setup.run(Path(spec["checkout"]), host)
+        setup.save_plan(spec, state)
+        if accepted_by:
+            migration.atomic_json(
+                state / ENROLLMENT_ACCEPTANCE,
+                {"accepted_by": accepted_by, "accepted_at": time.time()},
+            )
+    step = setup.next_step(state)
+    if step.action == setup.Action.ASSESS and step.stage == "recovery":
+        recovery_stage(spec, state, custody)
+    setup.drive(state, config)

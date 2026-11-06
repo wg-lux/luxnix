@@ -12,22 +12,23 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 from pathlib import Path
-import re
 import shutil
 import subprocess
 import sys
 import tempfile
+from typing import NoReturn
 
 import yaml
 
 from lx_administration.storage import boot_migration as migration
 from lx_administration.storage import secret_preflight
+from lx_administration.storage.boot_migration import Stopped
+from lx_administration.storage.boot_setup import success
 from lx_administration.yaml import load_unique_yaml_file
 
 KEYRING = Path("/etc/secrets/vault/lx_annotate_identity_keyring.yml")
 SECRETS_DIRECTORY = Path("/etc/secrets/vault")
 PLAYBOOK = Path("ansible/playbooks/first-setup-config.yml")
-CENTER_KEYS = ("endoreg-client.defaultCenterKey", "endoreg_client.defaultCenterKey")
 DJANGO = "luxnix.lxAnnotateLocal.django"
 ACTIVATION_GUIDE = "docs/center-identity-salt-activation.md"
 VAULT_HEALTH = {
@@ -43,29 +44,32 @@ let
   server = f.nixosConfigurations.gs-02.config;
   hub = server.services.luxnix.lxAnnotateLocal.hub.nodeProvisioning.nodes;
   node = builtins.filter (n: n.nodeKey == "HOST") hub;
+  # Only a center host depends on gs-02; lazy, so others never evaluate it.
+  usesHub = (c.services.luxnix.lxAnnotateLocal.enable or false)
+    && c.services.luxnix.lxAnnotateLocal.django.centerIdentitySalt;
 in {
   enabled = c.services.luxnix.lxAnnotateLocal.enable or false;
   center = c.services.luxnix.lxAnnotateLocal.django.centerIdentitySalt;
   legacy = c.services.luxnix.lxAnnotateLocal.django.enrollLegacyDefaultSalt;
   center_key = c.roles.endoreg-client.defaultCenterKey or null;
-  defer = c.luxnix.vault.client.auth.deferUntilProvisioned;
   vault_address = c.luxnix.vault.client.address;
   vault_ca = c.luxnix.vault.client.caCertFile;
-  centers = server.luxnix.vault.server.hubPki.sharedIdentityCenters;
-  node_center = if node == [ ] then null else (builtins.head node).centerKey or null;
-  listed = node != [ ];
+  centers =
+    if usesHub then server.luxnix.vault.server.hubPki.sharedIdentityCenters else [ ];
+  node_center =
+    if usesHub && node != [ ] then (builtins.head node).centerKey or null else null;
+  listed = usesHub && node != [ ];
 }
 """
-
-
-class Stopped(Exception):
-    """The operator paused or must act; this is not a failure."""
 
 
 @dataclass(frozen=True)
 class Choice:
     center: str | None  # None means this host's own machine salt.
     legacy: bool
+
+
+OWN_SALT = Choice(center=None, legacy=True)
 
 
 def evaluate(checkout: Path, host: str) -> dict:
@@ -83,7 +87,7 @@ def evaluate(checkout: Path, host: str) -> dict:
     )  # fmt: skip
     if result.returncode:
         raise migration.MigrationError(
-            f"{host} and gs-02 must evaluate before first setup; run nix eval on them"
+            f"{host} must evaluate before first setup, and gs-02 too on a center salt"
         )
     return json.loads(result.stdout)
 
@@ -153,33 +157,24 @@ def current_choice(facts: dict) -> Choice:
     )
 
 
-def settings_for(choice: Choice, inventory: dict, facts: dict) -> list[dict]:
-    """Only what differs, so an unchanged host leaves its inventory untouched."""
-    now = current_choice(facts)
-    changes = []
-
-    def add(section: str, key: str, value: str) -> None:
-        changes.append({"section": section, "key": key, "value": value})
-
-    if (choice.center is not None) != (now.center is not None):
-        add(
-            "host_services",
-            f"{DJANGO}.centerIdentitySalt",
-            "true" if choice.center else "false",
+def host_salt_settings(facts: dict) -> list[dict]:
+    """Moving to the host's salt; the legacy option also enables the salt unit."""
+    settings = [
+        {
+            "section": "host_services",
+            "key": f"{DJANGO}.centerIdentitySalt",
+            "value": "false",
+        }
+    ]
+    if not facts["legacy"]:
+        settings.append(
+            {
+                "section": "host_services",
+                "key": f"{DJANGO}.enrollLegacyDefaultSalt",
+                "value": "true",
+            }
         )
-    if choice.legacy != now.legacy:
-        add(
-            "host_services",
-            f"{DJANGO}.enrollLegacyDefaultSalt",
-            "true" if choice.legacy else "false",
-        )
-    if choice.center and choice.center != facts["center_key"]:
-        roles = inventory.get("host_roles") or {}
-        key = next((k for k in CENTER_KEYS if k in roles), CENTER_KEYS[1])
-        add("host_roles", key, json.dumps(choice.center))
-    if choice.center and facts["defer"]:
-        add("host_luxnix", "vault.client.auth.deferUntilProvisioned", "false")
-    return changes
+    return settings
 
 
 def write_inventory(checkout: Path, host: str, settings: list[dict]) -> None:
@@ -254,30 +249,19 @@ def show_status(host: str, choice: Choice, facts: dict, keyring: dict | None) ->
         )
 
 
-def ask_choice(keyring: dict | None) -> Choice:
-    """A new choice is always the host's own salt; the hub must not hold the key."""
-    # The legacy reader option also enables the unit that creates the host's salt.
-    choice = Choice(center=None, legacy=True)
-    problem = refusal(choice, keyring)
-    if problem:
-        raise migration.MigrationError(problem)
-    return choice
-
-
-def apply_choice(checkout: Path, host: str, choice: Choice, facts: dict) -> None:
+def move_to_host_salt(checkout: Path, host: str, facts: dict) -> NoReturn:
+    """Write and verify the change, then pause; the plan pins the next commit."""
     path = checkout / "ansible/inventory/host_vars" / f"{host}.yml"
-    settings = settings_for(choice, load_unique_yaml_file(path), facts)
-    if not settings:
-        return
-    write_inventory(checkout, host, settings)
+    load_unique_yaml_file(path)  # Refuse a missing or malformed inventory first.
+    write_inventory(checkout, host, host_salt_settings(facts))
     regenerate(checkout)
-    if current_choice(evaluate(checkout, host)) != choice:
+    if current_choice(evaluate(checkout, host)) != OWN_SALT:
         raise migration.MigrationError(
             "The evaluated configuration differs from your choice; review git diff"
         )
     relative = path.relative_to(checkout)
-    print(f"\nWritten to {relative} and regenerated. Now review and commit:")
     paths = f"{relative} systems/x86_64-linux/{host}"
+    print(f"\nWritten to {relative} and regenerated. Now review and commit:")
     print(f"  git diff {paths}")
     print(f"  git add -A {paths}")
     print(f'  git commit -m "First setup: identity salt for {host}"')
@@ -327,7 +311,7 @@ def require_delivery(host: str, center: str) -> str | None:
 
 def run(checkout: Path, host: str) -> str | None:
     """Settle the choice; return who accepted continuing without the center salt."""
-    if not re.fullmatch(r"[a-z][a-z0-9-]{0,62}", host):
+    if not migration.HOST.fullmatch(host):
         raise migration.MigrationError("Invalid inventory host name")
     print("Reading this host's configuration...")
     facts = evaluate(checkout, host)
@@ -346,10 +330,12 @@ def run(checkout: Path, host: str) -> str | None:
     print("3. Stop for now")
     answer = input("> ").strip()
     if answer == "2" and choice.center:
-        choice = ask_choice(keyring)
-        print(f"\nNew setting: {describe(choice)}")
-        apply_choice(checkout, host, choice, facts)
-    elif answer != "1":
+        problem = refusal(OWN_SALT, keyring)
+        if problem:
+            raise migration.MigrationError(problem)
+        print(f"\nNew setting: {describe(OWN_SALT)}")
+        move_to_host_salt(checkout, host, facts)
+    if answer != "1":
         raise Stopped("Nothing was changed.")
     if choice.center:
         problem = center_problem(host, choice.center, facts)
@@ -358,7 +344,5 @@ def run(checkout: Path, host: str) -> str | None:
         accepted_by = require_delivery(host, choice.center)
     else:
         accepted_by = None
-    from lx_administration.storage.boot_setup import success
-
     success(f"First setup is settled for {host}: {describe(choice)}")
     return accepted_by

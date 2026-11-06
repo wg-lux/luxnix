@@ -59,6 +59,22 @@ def run(*args: str, pass_fds=(), timeout: int | None = 600) -> str:
     return result.stdout.strip()
 
 
+def with_key(
+    passphrase: bytes, action: str, *arguments: str, timeout: int | None = 600
+) -> str:
+    """Run cryptsetup with the passphrase on a private descriptor, never in argv."""
+    with boot_password.key_fd(passphrase) as fd:
+        return run(
+            "cryptsetup",
+            action,
+            "--key-file",
+            f"/proc/self/fd/{fd}",
+            *arguments,
+            pass_fds=(fd,),
+            timeout=timeout,
+        )
+
+
 def check_passphrase(value: bytes) -> None:
     """Refuse a passphrase that could differ when typed at the boot prompt."""
     text = value.decode("utf-8", errors="replace")
@@ -119,19 +135,7 @@ def subvolume_path(mounts: dict, path: str) -> str:
 def opened_container(path: Path, container: dict, passphrase: bytes):
     """Open a container read-only; this workflow never writes to one."""
     name = f"luxnix-consolidate-{container['name']}"
-    with boot_password.key_fd(passphrase) as fd:
-        run(
-            "cryptsetup",
-            "open",
-            "--type",
-            "luks2",
-            "--readonly",
-            "--key-file",
-            f"/proc/self/fd/{fd}",
-            str(path),
-            name,
-            pass_fds=(fd,),
-        )
+    with_key(passphrase, "open", "--type", "luks2", "--readonly", str(path), name)
     try:
         with mounted(f"/dev/mapper/{name}", "ro") as point:
             yield point
@@ -217,43 +221,13 @@ def encrypt(device: str, passphrase: bytes, *, resume: bool) -> None:
             "--batch-mode",
         ]
     )
-    with boot_password.key_fd(passphrase) as fd:
-        if resume:
-            run(
-                "cryptsetup",
-                "repair",
-                "--batch-mode",
-                "--key-file",
-                f"/proc/self/fd/{fd}",
-                device,
-                pass_fds=(fd,),
-                timeout=None,
-            )
-        run(
-            "cryptsetup",
-            "reencrypt",
-            *arguments,
-            "--key-file",
-            f"/proc/self/fd/{fd}",
-            device,
-            pass_fds=(fd,),
-            timeout=None,
-        )
+    if resume:
+        with_key(passphrase, "repair", "--batch-mode", device, timeout=None)
+    with_key(passphrase, "reencrypt", *arguments, device, timeout=None)
 
 
 def open_root(device: str, passphrase: bytes) -> None:
-    with boot_password.key_fd(passphrase) as fd:
-        run(
-            "cryptsetup",
-            "open",
-            "--type",
-            "luks2",
-            "--key-file",
-            f"/proc/self/fd/{fd}",
-            device,
-            "cryptroot",
-            pass_fds=(fd,),
-        )
+    with_key(passphrase, "open", "--type", "luks2", device, "cryptroot")
 
 
 def erase_plaintext_swap(partitions: list[str]) -> list[str]:

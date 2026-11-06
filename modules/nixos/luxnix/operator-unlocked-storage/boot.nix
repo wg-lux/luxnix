@@ -357,12 +357,6 @@ in
           setupPassword
           setupRoot
         ];
-        system.preSwitchChecks.encryptedStorage = ''
-          ${lib.getExe verifier}
-          case "$2" in
-            boot|switch) ${lib.getExe setupPassword} ;;
-          esac
-        '';
         systemd.services = lib.mkMerge [
           (lib.listToAttrs (
             map (

@@ -194,7 +194,7 @@ def test_fleet_boot_contract():
       devices = builtins.mapAttrs (_: fs: fs.device) c.fileSystems;
       mountOptions = builtins.mapAttrs (_: fs: fs.options) c.fileSystems;
       units = builtins.attrNames c.systemd.services;
-      guard = c.system.preSwitchChecks.encryptedStorage;
+      guard = c.system.preSwitchChecks ? encryptedStorage;
       rootPrompt = c.boot.initrd.luks.devices.cryptroot.crypttabExtraOpts;
       rootKeyFile = c.boot.initrd.luks.devices.cryptroot.keyFile;
       bootKeyTools = builtins.filter (p:
@@ -227,9 +227,7 @@ def test_fleet_boot_contract():
         assert "/etc/secrets" not in cfg["mounts"]
         assert not any(u.startswith("luxnix-storage-unlock-") for u in cfg["units"])
         assert "luxnix-storage-migrate" not in cfg["units"]
-        assert "luxnix-verify-boot-storage" in cfg["guard"]
-        assert "luxnix-setup-boot-password" in cfg["guard"]
-        assert 'case "$2" in' in cfg["guard"]
+        assert cfg["guard"] is False
         assert cfg["rootKeyFile"] is None, host
         assert cfg["bootKeyTools"] == [], host
         assert not any(
@@ -459,7 +457,7 @@ def test_boot_startup_gates_do_not_depend_on_legacy_container_metadata(host):
           luxnix.storage.operatorUnlocked.bindMounts = lib.mkForce {};
         }]; };
         gates = c: {
-          activation = c.system.preSwitchChecks.encryptedStorage;
+          activation = c.system.preSwitchChecks ? encryptedStorage;
           consumers = lib.mapAttrs (_: unit: {
             inherit (unit) requires after bindsTo;
             inherit (unit.serviceConfig) ExecStart;
@@ -542,8 +540,8 @@ def test_former_legacy_hosts_use_fleet_boot_luks(host):
     assert state['root'] == '/dev/disk/by-partlabel/nixos_root'
     assert state['openbao'] is False
     assert state['legacyUnits'] == [] and state['secretsBind'] is False
-    # Blocks switch/boot onto the still-plaintext installed disks.
-    assert state['preSwitch'] is True
+    # Staging does not require the running root to match the future layout.
+    assert state['preSwitch'] is False
     assert state['failures'] == []
 
 
@@ -694,50 +692,6 @@ def test_boot_luks_rejects_reintroduced_automatic_unlock(override):
         "Root unlock must prompt" in message or "enrollment is retired" in message
         for message in json.loads(result.stdout)
     )
-
-
-def test_password_setup_runs_only_for_persistent_activation(tmp_path):
-    expression = r"""
-      let f = builtins.getFlake ("git+file://" + builtins.toString ./.);
-      in f.nixosConfigurations.gc-02.config.system.preSwitchChecks.encryptedStorage
-    """
-    result = subprocess.run(
-        ["nix", "eval", "--impure", "--raw", "--expr", expression],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
-    assert result.returncode == 0, result.stderr
-    import re
-
-    script = re.sub(
-        r"/nix/store/[^\s;]+/bin/luxnix-verify-boot-storage",
-        'test "$VERIFY" = pass',
-        result.stdout,
-    )
-    script = re.sub(
-        r"/nix/store/[^\s;]+/bin/luxnix-setup-boot-password", 'touch "$MARKER"', script
-    )
-    marker = tmp_path / "prompted"
-    for action in ["build", "dry-activate", "test", "boot", "switch"]:
-        marker.unlink(missing_ok=True)
-        result = subprocess.run(
-            ["bash", "-ec", script, "check", "/nix/store/target", action],
-            env={**os.environ, "VERIFY": "pass", "MARKER": str(marker)},
-            capture_output=True,
-            text=True,
-        )
-        assert result.returncode == 0, result.stderr
-        assert marker.exists() == (action in {"boot", "switch"})
-    marker.unlink(missing_ok=True)
-    result = subprocess.run(
-        ["bash", "-ec", script, "check", "/nix/store/target", "boot"],
-        env={**os.environ, "VERIFY": "fail", "MARKER": str(marker)},
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode != 0 and not marker.exists()
 
 
 def test_gc02_authentication_retries_before_queueing_application():

@@ -206,19 +206,12 @@ def missing_copies(state: Path, custody: Path) -> list[tuple[Path, Path]]:
     with migration.locked_state(state):
         plan = migration.load_plan(state)
         migration.verify_source(plan)
-        contract = plan["config"].get("secret_contract")
-        if contract is None:
-            raise PreflightError(
-                "This plan has no evaluated secret contract; create a new plan"
-            )
+        contract = migration.secret_contract(plan)
         require_target_host(plan)
         require_custody_directory(custody, plan)
         items = required_items(plan, contract)
         host = plan["spec"]["host"]
-    pairs = (
-        (Path(i["path"]), custody / host / "secrets" / i["path"].lstrip("/"))
-        for i in items
-    )
+    pairs = ((Path(i["path"]), custody_copy(custody, host, i["path"])) for i in items)
     return [(live, copy) for live, copy in pairs if exists(live) and not exists(copy)]
 
 
@@ -233,23 +226,22 @@ def copy_to_custody(live: Path, copy: Path) -> None:
         raise PreflightError(f"Could not copy {live} into custody")
 
 
-def is_salt(item: dict) -> bool:
-    return item["id"].startswith("identity-")
+def custody_copy(custody: Path, host: str, path: str) -> Path:
+    return custody / host / "secrets" / path.lstrip("/")
 
 
 def missing_salts(state: Path, custody: Path) -> list[str]:
     """Salts neither on this host nor in custody, so nothing can preserve them."""
     with migration.locked_state(state):
         plan = migration.load_plan(state)
-        contract = plan["config"].get("secret_contract") or {"items": []}
-        items = required_items(plan, contract)
+        items = required_items(plan, migration.secret_contract(plan))
         host = plan["spec"]["host"]
     return [
         item["path"]
         for item in items
-        if is_salt(item)
+        if migration.is_salt_id(item["id"])
         and not exists(Path(item["path"]))
-        and not exists(custody / host / "secrets" / item["path"].lstrip("/"))
+        and not exists(custody_copy(custody, host, item["path"]))
     ]
 
 
@@ -269,10 +261,11 @@ def check_item(
     )
 
     live = Path(item["path"])
-    copy = custody / host / "secrets" / item["path"].lstrip("/")
+    copy = custody_copy(custody, host, item["path"])
     on_host = exists(live)
     # A salt that still exists is always copied; only one already gone can be accepted.
-    if accept_salt_loss and is_salt(item) and not on_host and not exists(copy):
+    salt = migration.is_salt_id(item["id"])
+    if accept_salt_loss and salt and not on_host and not exists(copy):
         return "accepted-loss", None
     # A locked container looks exactly like a missing file, so absence is never
     # assumed: the operator must state it, per item, after checking.
@@ -384,11 +377,7 @@ def run(
     with migration.locked_state(state):
         plan = migration.load_plan(state)
         migration.verify_source(plan)
-        contract = plan["config"].get("secret_contract")
-        if contract is None:
-            raise PreflightError(
-                "This plan has no evaluated secret contract; create a new plan"
-            )
+        contract = migration.secret_contract(plan)
         if contract["vault_server"] or contract["openbao"]:
             raise PreflightError(
                 "This host runs a secrets server whose data and unseal material "
@@ -435,7 +424,7 @@ def run(
                 waiver = (
                     "If it was never enrolled, --accept-salt-loss states that records "
                     "imported so far may be lost."
-                    if is_salt(item)
+                    if migration.is_salt_id(item["id"])
                     else "This plan keeps data, so it cannot be waived: restore it."
                     if item["kind"] == "data" and keeps_data
                     else f"If it never existed here, pass --accept-absent {item['id']}"
@@ -448,7 +437,7 @@ def run(
         problems.extend(
             f"{r['id']}: {r['status']}"
             for r in results
-            if r["status"] not in {"verified", "accepted-absent", "accepted-loss"}
+            if r["status"] not in migration.PREFLIGHT_PASSING
         )
         print("Not required:")
         for reason in NOT_REQUIRED:
@@ -461,7 +450,7 @@ def run(
                 + "\n  ".join(problems)
             )
         admin = next(i for i in items if i["id"] == "admin-password-hash")
-        copy = custody / host / "secrets" / admin["path"].lstrip("/")
+        copy = custody_copy(custody, host, admin["path"])
         verify_admin_password(read_private(copy))
         receipt = {
             "schema_version": 1,

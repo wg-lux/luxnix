@@ -24,10 +24,10 @@ ask for help; do not type `VERIFIED`. Never put passwords in chat or notes.
 
 Connect the recovery drive, use the reviewed clean checkout, then run this. It works
 out the host from this machine's name or hardware UUID, and you can stop and rerun it
-at any point, including after a reboot:
+at any point, including after a reboot, from inside the devenv shell:
 
 ```sh
-devenv shell boot-storage-setup
+boot-storage-setup --host <host> --device <path to recovery hard drive>
 ```
 
 It does this for you:
@@ -64,7 +64,7 @@ journal independently of the disks being converted, at their planned paths.
 
 ## 3. Install — trusted installer media, root terminal
 
-- Boot the tested NixOS installer; mount the recovery filesystem at `/recovery`.
+- Boot the tested NixOS installer *preferrably ; mount the recovery filesystem at `/recovery`.
 - Make the preserved checkout, Nix artifacts and reviewed Python environment available.
 - Ensure recovery state/evidence is root-owned and private; disable active swap.
 - From the preserved checkout, run:

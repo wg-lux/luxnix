@@ -74,6 +74,14 @@ class MigrationError(ValueError):
     pass
 
 
+class Stopped(Exception):
+    """The operator paused or must act first; this is not a failure."""
+
+
+# Receipt item states that let a preflight pass; written and verified from this one set.
+PREFLIGHT_PASSING = frozenset({"verified", "accepted-absent", "accepted-loss"})
+
+
 def run(*args: str, timeout: int = 120) -> str:
     result = subprocess.run(args, text=True, capture_output=True, timeout=timeout)
     if result.returncode:
@@ -460,8 +468,7 @@ def plan_spec(spec: dict, state: Path) -> dict:
         source = source_identity(Path(spec["checkout"]))
         config = evaluate(Path(spec["checkout"]), spec["host"])
         validate_selection(spec, config)
-        if encrypts_in_place(spec):
-            validate_in_place(config)
+        validate_in_place(config)
         if config["secure_boot"]:
             raise MigrationError(
                 "Controller-signed first installation is not supported by "
@@ -632,13 +639,22 @@ def check_attestation(
         verify_readiness(record["artifacts"], plan, fresh=fresh)
 
 
-def verify_preflight_receipt(path: Path, plan: dict, *, fresh: bool = True) -> None:
-    """Accept only a current machine-written proof that this plan's secrets survive."""
+def secret_contract(plan: dict) -> dict:
     contract = plan["config"].get("secret_contract")
     if contract is None:
         raise MigrationError(
             "This plan has no evaluated secret contract; create a new plan"
         )
+    return contract
+
+
+def is_salt_id(item_id: str) -> bool:
+    return item_id.startswith("identity-")
+
+
+def verify_preflight_receipt(path: Path, plan: dict, *, fresh: bool = True) -> None:
+    """Accept only a current machine-written proof that this plan's secrets survive."""
+    contract = secret_contract(plan)
     try:
         private_path(path)
         receipt = json.loads(path.read_text())
@@ -647,10 +663,10 @@ def verify_preflight_receipt(path: Path, plan: dict, *, fresh: bool = True) -> N
             "Stop: run boot-storage-setup preflight first; the secrets this host "
             "needs have not been verified"
         ) from error
-    accepted_by = receipt.pop("salt_loss_accepted_by", None)
     exact_keys(
         receipt,
-        {
+        ({"salt_loss_accepted_by"} & receipt.keys())
+        | {
             "schema_version",
             "kind",
             "plan_id",
@@ -665,7 +681,10 @@ def verify_preflight_receipt(path: Path, plan: dict, *, fresh: bool = True) -> N
     )
     statuses = {item["id"]: item["status"] for item in receipt["items"]}
     lost = {key for key, status in statuses.items() if status == "accepted-loss"}
-    if lost and (not accepted_by or any(not k.startswith("identity-") for k in lost)):
+    if lost and (
+        not receipt.get("salt_loss_accepted_by")
+        or any(not is_salt_id(key) for key in lost)
+    ):
         raise MigrationError(
             "Only missing salts can be accepted as lost, by a named person; "
             "rerun preflight"
@@ -677,7 +696,7 @@ def verify_preflight_receipt(path: Path, plan: dict, *, fresh: bool = True) -> N
         or receipt["host"] != plan["spec"]["host"]
         or receipt["admin_password_verified"] is not True
         or not {item["id"] for item in contract["items"]} <= set(statuses)
-        or set(statuses.values()) - {"verified", "accepted-absent", "accepted-loss"}
+        or set(statuses.values()) - PREFLIGHT_PASSING
     ):
         raise MigrationError(
             "The secret preflight receipt does not prove this plan; rerun preflight"

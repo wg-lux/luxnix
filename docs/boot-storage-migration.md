@@ -16,8 +16,10 @@ determine whether a host is accepted.
   every member. Disk swap must be encrypted or disabled.
 - Missing storage blocks its consumers. Verification checks all filesystem members,
   mount/subvolume identity, LUKS2, secondary keys and active swap.
-- A rebuild cannot encrypt plaintext root. Never bypass pre-switch checks or create
-  an unrelated mapper to satisfy them. No boot unit formats disks or generates keys.
+- A rebuild cannot encrypt plaintext root. Boot staging does not check the running
+  storage layout or prompt for a disk password. A staged encrypted-root generation
+  cannot boot until conversion finishes; retain a working recovery boot path.
+  No boot unit formats disks or generates keys.
 - Application encryption, original keys/salts, backup encryption and
   [Secure Boot](secure-boot.md) remain separate requirements.
 
@@ -63,7 +65,7 @@ bootloader default separately: failed activation can leave them different.
 Generations from before the conversion cannot open the encrypted root, and a
 generation rollback does not reverse the encryption or database migrations.
 
-### Password setup during rebuild
+### Explicit password verification
 
 On an already encrypted host, build the exact reviewed candidate and use its
 helpers in a private interactive terminal (not a recorded/shared session):
@@ -83,7 +85,9 @@ Verification stores a private host/UUID/header-bound receipt under
 `/var/lib/luxnix-boot-passphrase`, never a password. Unchanged headers need no
 repeat prompt. Explicit `sudo luxnix-setup-boot-password --change` adds a password
 (at least 12 characters), requires an existing credential, backs up the header
-and preserves old slots. Missing terminal or failed verification aborts activation.
+and preserves old slots. Missing terminal or failed verification stops the helper.
+Rebuilds do not invoke these helpers automatically; service storage guards still
+reject missing or unencrypted storage.
 In-place conversion sets the initial password at its own prompt. Rebuilds do not
 rotate Linux or wallet passwords.
 
@@ -739,9 +743,10 @@ gc-09 selects `boot-luks` but still needs in-place conversion of its plaintext r
 On 2026-11-04 the owner retained gc-10's existing partitions and restored its
 explicit `legacy-containers` profile with Plymouth passphrase unlock. Its
 automatic migration is disabled; normal rebuilds preserve the existing data.
-For hosts selecting `boot-luks`, the boot-storage pre-switch check
-rejects `switch` and `boot` onto a plaintext root, so a rebuild on the old disks
-fails before the bootloader changes. Never bypass it with `NIXOS_NO_CHECK=1`.
+For hosts selecting `boot-luks`, rebuilds can stage the future encrypted-root
+configuration while root is still plaintext. Staging does not perform conversion
+or establish bootability. Boot recovery and complete conversion before selecting
+that generation; activating it early can stop protected services.
 Both remain unmigrated in repository acceptance; inspect the live
 host before making any claim about its root storage. For gc-10, no recovery
 console is available for converting its plaintext root.
