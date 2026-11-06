@@ -99,8 +99,9 @@ do not infer encryption or enrollment targets from command aliases.
 ## Guided operator workflow
 
 Use the [quickstart](boot-storage-quickstart.md) and `devenv shell boot-storage-setup` for normal
-operation. The task reads `autoconf/config.yml`; it does not require separate
-`--spec` or `--state` arguments.
+operation. With no action it guides this machine's host and resumes the next step, and it
+reads `autoconf/config.yml`, so it does not need `--spec` or `--state` arguments. Every
+action defaults to this host; `--host` selects a reviewed alternative.
 
 ### Configuration and recovery media
 
@@ -109,8 +110,8 @@ operation. The task reads `autoconf/config.yml`; it does not require separate
   retention and exact disk `path`, `serial`, `size_bytes`.
 - `boot_storage.state_root`: independent recovery directory; the media helper uses
   `/recovery/luxnix-state` and stores each plan under its host name.
-- `--current-host` selects the configured hostname or a unique hardware-UUID match.
-  `--host`, `--config` and `--device` select explicit reviewed alternatives.
+- Every action selects the configured hostname or a unique hardware-UUID match by
+  default. `--host`, `--config` and `--device` select explicit reviewed alternatives.
 
 Media preparation selects an existing USB/removable ext4, XFS or Btrfs filesystem,
 excludes system/target disks, checks at least 1 GiB free for metadata and mounts it
@@ -132,7 +133,9 @@ active swap, mounted target disks and conflicting mappings.
 
 A saved plan cannot change. Setup stops if Autoconf differs from it, and preflight and
 later steps stop if the checkout's revision or lockfile changed. Restore what changed,
-or replace a plan that has not started. First check its state, using the real host:
+or replace a plan that has not started. `devenv shell boot-storage-setup` checks this and
+offers the replacement itself after you type `REPLACE PLAN <host>`, keeping the old state.
+To do it by hand, first check its state, using the real host:
 
 ```sh
 sudo ls -la /recovery/luxnix-state/gc-09
@@ -148,7 +151,7 @@ clean, move the old state aside without deleting it, and create the new plan:
 
 ```sh
 sudo mv /recovery/luxnix-state/gc-09 /recovery/luxnix-state/gc-09.superseded-YYYY-MM-DD
-LUXNIX_BOOT_SETUP_APPLY=1 devenv tasks run boot-storage:setup
+devenv shell boot-storage-setup
 ```
 
 Old reviews and receipts do not carry over, so repeat preflight and the recovery checks.
@@ -181,13 +184,11 @@ system and in the initrd.
 
 After conversion nothing opens the containers at boot; applications run directly on
 the encrypted root. The container files stay untouched as a fallback until physical
-acceptance is recorded. Then, from the repository root in the Devenv shell on the
-installed system, replacing `gc-09` with the host (`sudo` needs the full interpreter
-path because it resets `PATH`):
+acceptance is recorded. Then, on the installed system (it asks for `sudo` itself):
 
 ```bash
-sudo "$(command -v python)" -m lx_administration.storage.boot_setup retire-containers --host gc-09
-sudo "$(command -v python)" -m lx_administration.storage.boot_setup retire-containers --host gc-09 --apply
+devenv shell boot-storage-setup retire-containers
+devenv shell boot-storage-setup retire-containers --apply
 ```
 
 This deletes only the container files, after typed approval, and refuses if a target
@@ -217,25 +218,38 @@ archive also does not satisfy preflight, which compares plain copies in custody.
 Run this on the host being converted, after creating its plan and before review:
 
 ```bash
-devenv shell boot-storage-setup preflight --host gc-09 \
+devenv shell boot-storage-setup preflight \
   --custody /run/luxnix-custody/custody [--vault-key-custody /path/to/key-copy] [--accept-absent <id>]
 ```
 
-Replace `gc-09` with the host. `--custody` takes a directory, never a device or disk.
+`--custody` takes a directory, never a device or disk. The guided command runs this for
+you; run it directly to use `--vault-key-custody` or `--accept-absent`.
 
 It works out what this host needs from the plan's evaluated configuration, tests
 it, and writes `secret-preflight.json` to the plan state. `review` refuses to start
 without a receipt less than 24 hours old for this exact plan, and `attest` and
 provisioning reject an assessment that lacks it. A failed rerun removes the old
 receipt. Preflight never copies or changes a credential; it prints the command for
-anything missing, so expect the first run to stop and list what to copy.
+anything missing, so expect the first run to stop and list what to copy. The guided
+command copies only what is missing, after you agree, and never replaces an existing copy.
 
 ##### Preparing custody
 
 Custody must be a private directory (mode 0700) owned by the operator on encrypted
 storage outside the selected disks. A LUKS USB drive works, and so does a LUKS file on
-the recovery drive, which is checked against the disk holding that file. To create the
-file on an existing recovery filesystem:
+the recovery drive, which is checked against the disk holding that file. The guided
+command opens or creates that file for you; pass `--custody <directory>` to use an
+already mounted location instead. The commands below are the manual equivalent.
+
+**Create it only once.** `luksFormat` on an existing file destroys everything in it
+without an error, even while it is mounted, and the mounted volume keeps working until
+it closes. Check first; if this prints `Already exists`, go to the reopen commands:
+
+```sh
+sudo cryptsetup isLuks /recovery/luxnix-custody.luks && echo 'Already exists: do not recreate it'
+```
+
+To create the file on an existing recovery filesystem:
 
 ```sh
 sudo truncate -s 2G /recovery/luxnix-custody.luks
@@ -248,7 +262,8 @@ sudo install -d -m 0700 -o "$USER" -g "$(id -gn)" /run/luxnix-custody/custody
 ```
 
 Keep its passphrase outside the host being converted; losing it loses everything in
-custody. `/run` is cleared at reboot, so reopen custody after each one:
+custody. `/run` is cleared at reboot, so reopen custody after each one, and use the same
+commands to prove the copies are really stored after making them:
 
 ```sh
 sudo cryptsetup open /recovery/luxnix-custody.luks luxnix-custody
@@ -256,12 +271,16 @@ sudo mkdir -p /run/luxnix-custody
 sudo mount /dev/mapper/luxnix-custody /run/luxnix-custody
 ```
 
-Unmount it before removing the drive:
+Skip this if it is already open: `findmnt /run/luxnix-custody` prints a line. Mounting
+twice stacks mounts. Unmount it before reopening or removing the drive:
 
 ```sh
 sudo umount /run/luxnix-custody
 sudo cryptsetup close luxnix-custody
 ```
+
+After copying the secrets, close custody, reopen it and rerun preflight. A pass from an
+open volume alone does not prove the file can be opened again.
 
 The custody, plan and any backup on one drive survive a system disk failure, not the
 loss of that drive. If this host holds the admin vault, `--vault-key-custody` must be on
@@ -371,15 +390,15 @@ signed first-install combinations remain blocked.
 
 ### Interrupted setup
 
-Run `next --host <host>` using the same state. A completed conversion is never
+Run `devenv shell boot-storage-setup next`. A completed conversion is never
 repeated. Interrupted in-place encryption resumes from its LUKS2 header. Preserve
 `provision.json`: it records disk metadata and execution state, **not a backup**.
 Inspect the disks; repair/mount the intended complete layout from trusted media,
 then preview and explicitly accept it:
 
 ```sh
-python -m lx_administration.storage.boot_setup recover --host <host> --assessor <admin>
-python -m lx_administration.storage.boot_setup recover --host <host> --assessor <admin> --apply
+python -m lx_administration.storage.boot_setup recover --assessor <admin>
+python -m lx_administration.storage.boot_setup recover --assessor <admin> --apply
 ```
 
 Recovery rechecks hardware, encrypted filesystems and evidence and requires an
@@ -392,7 +411,8 @@ open the encrypted root or recover lost keys.
 
 ### Save and verify disk-password custody
 
-After the installed host is reachable, use the controller's existing encrypted
+Do this only after the conversion, from the controller rather than the host itself,
+once the installed host is reachable by SSH. Use the controller's existing encrypted
 vault and configured independent recovery envelopes. The custody selection must
 already exist (`storage-recovery-custody prepare` in the installation guide).
 
@@ -776,7 +796,7 @@ remain independent; local OpenBao storage-unlock enrollment is superseded.
 The focused source/probe lane is:
 
 ```sh
-python -m pytest -q tests/test_boot_storage.py tests/test_managed_secret_storage.py tests/test_operator_storage_migration.py tests/test_in_place.py tests/test_secret_preflight.py tests/test_recovery_custody.py
+python -m pytest -q tests/test_boot_storage.py tests/test_managed_secret_storage.py tests/test_operator_storage_migration.py tests/test_in_place.py tests/test_secret_preflight.py tests/test_recovery_custody.py tests/test_boot_guide.py
 nix build .#checks.x86_64-linux.boot-storage --no-link -L
 nix build .#checks.x86_64-linux.boot-storage-in-place --no-link -L
 nix build .#checks.x86_64-linux.boot-storage-remote --no-link -L

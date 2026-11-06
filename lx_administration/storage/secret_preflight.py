@@ -104,6 +104,11 @@ def require_custody_directory(custody: Path, plan: dict) -> None:
 
     if not custody.is_absolute() or custody.resolve() != custody:
         raise PreflightError("Custody must be an absolute path without symbolic links")
+    if not custody.exists():
+        raise PreflightError(
+            f"Custody directory {custody} does not exist. Mount your encrypted custody "
+            "first, or use the path it is mounted at"
+        )
     info = custody.lstat()
     if not stat.S_ISDIR(info.st_mode) or info.st_mode & 0o077:
         raise PreflightError("Custody must be a private directory (mode 0700)")
@@ -189,6 +194,43 @@ def copy_hint(live: Path, copy: Path) -> str:
         parent = shlex.quote(str(copy.parent))
         return f"sudo mkdir -p {parent} && sudo cp -a {source} {target}"
     return f"sudo install -D -m 0600 {source} {target}"
+
+
+def required_items(plan: dict, contract: dict) -> list[dict]:
+    items = [*contract["items"], *retained_volume_keys(plan)]
+    return items + identity_generations(contract, items)
+
+
+def missing_copies(state: Path, custody: Path) -> list[tuple[Path, Path]]:
+    """Secrets on this host with no custody copy; existing copies are never touched."""
+    with migration.locked_state(state):
+        plan = migration.load_plan(state)
+        migration.verify_source(plan)
+        contract = plan["config"].get("secret_contract")
+        if contract is None:
+            raise PreflightError(
+                "This plan has no evaluated secret contract; create a new plan"
+            )
+        require_target_host(plan)
+        require_custody_directory(custody, plan)
+        items = required_items(plan, contract)
+        host = plan["spec"]["host"]
+    pairs = (
+        (Path(i["path"]), custody / host / "secrets" / i["path"].lstrip("/"))
+        for i in items
+    )
+    return [(live, copy) for live, copy in pairs if exists(live) and not exists(copy)]
+
+
+def copy_to_custody(live: Path, copy: Path) -> None:
+    if is_directory(live):
+        command = ["cp", "-a", str(live), str(copy)]
+        if privileged("mkdir", "-p", str(copy.parent)).returncode:
+            raise PreflightError(f"Could not create {copy.parent}")
+    else:
+        command = ["install", "-D", "-m", "0600", str(live), str(copy)]
+    if privileged(*command).returncode:
+        raise PreflightError(f"Could not copy {live} into custody")
 
 
 def check_item(
@@ -327,8 +369,7 @@ def run(
         receipt_path.unlink(missing_ok=True)
         require_target_host(plan)
         require_custody_directory(custody, plan)
-        items = [*contract["items"], *retained_volume_keys(plan)]
-        items += identity_generations(contract, items)
+        items = required_items(plan, contract)
         keeps_data = plan["spec"].get("installation", "migration") in {
             "migration",
             "in-place",
@@ -396,5 +437,8 @@ def run(
             "admin_password_verified": True,
         }
         atomic_json(receipt_path, receipt)
-        print(f"Preflight passed: {receipt_path} (valid for 24 hours).")
+        print(
+            f"\nSUCCESS: Preflight passed; {len(results)} secrets match their custody "
+            f"copies. Receipt: {receipt_path} (valid for 24 hours)."
+        )
         return receipt

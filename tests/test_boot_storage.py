@@ -807,7 +807,7 @@ def test_root_setup_explains_layout_mismatch_without_mutation(
     if not encrypted:
         for phase in ("1. PREVIEW", "2. PREPARE", "3. INSTALL", "4. ACCEPT"):
             assert phase in output
-        assert "LUXNIX_BOOT_SETUP_APPLY=1" in output
+        assert "devenv shell boot-storage-setup\n" in output
         assert "pauses before encrypting the existing root in place" in output
         assert "pauses before formatting" not in output
     assert "Root matches" not in output

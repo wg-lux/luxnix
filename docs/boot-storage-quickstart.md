@@ -20,47 +20,45 @@ The workflow does not create your data backups. Someone must actually test the
 required recovery and restore steps. If you do not understand a check, stop and
 ask for help; do not type `VERIFIED`. Never put passwords in chat or notes.
 
-## 1. Preview — installed host, normal user
+## 1. Run the one command — installed host, normal user
 
-- Connect the recovery drive.
-- Use the updated, reviewed, clean LuxNix checkout configured in `autoconf/config.yml`.
-- Check the configured host, hardware UUID and target disk serials.
-
-```sh
-devenv tasks run boot-storage:setup
-```
-
-
-## 2. Prepare recovery — same terminal
+Connect the recovery drive, use the reviewed clean checkout, then run this. It works
+out the host from this machine's name or hardware UUID, and you can stop and rerun it
+at any point, including after a reboot:
 
 ```sh
-LUXNIX_BOOT_SETUP_APPLY=1 devenv tasks run boot-storage:setup
+devenv shell boot-storage-setup
 ```
 
-The task display can garble or cut off this output. To read the full instructions,
-run this, replacing `gc-09` with the host:
+It does this for you:
 
-```sh
-devenv shell boot-storage-setup next --host gc-09
-```
+- Mounts the recovery drive and saves the plan. If the checkout changed and the plan
+  has not started, it offers to replace the plan and keeps the old one.
+- Opens encrypted custody, or creates it after you type `CREATE CUSTODY`. It never
+  formats an existing custody file.
+- Copies the secrets missing from custody after you agree, proves they survive closing
+  the volume, and runs preflight.
+- Searches the unencrypted root for likely patient files, checks the backup is on
+  another disk, and writes the notes and the review for you.
 
-If setup says Autoconf differs from the saved plan, see
-[replacing a saved plan](boot-storage-migration.md#replacing-a-saved-plan).
+## 2. Confirm what only you can prove
 
-[Prepare encrypted custody](boot-storage-migration.md#preparing-custody) outside the
-system disk, mount it, then prove the secrets this host needs are safely copied:
+The command asks for these one at a time and remembers your answers for 24 hours. Type
+`VERIFIED` only for what you did, or press Enter to stop for now.
 
-```sh
-devenv shell boot-storage-setup preflight --host gc-09 --custody /run/luxnix-custody/custody
-```
+- A data backup exists and you tested restoring it. The tool creates no backup.
+- Patient data was never on the unencrypted root. The search cannot prove this: if it
+  ever was, stop for a data-remanence review.
+- The custody passphrase and your credentials are kept off this computer.
+- The physical console, keyboard and firmware boot menu work.
+- The trusted installer boots here and sees both drives. Boot back and rerun the command.
 
-Copy anything it lists and rerun until it passes. Its receipt lasts 24 hours.
+Each step that works prints a `SUCCESS:` line, a progress checklist shows whether root
+is encrypted yet, and `Root setup stopped:` means that command did not finish. To look
+without changing anything, run `devenv tasks run boot-storage:setup`.
 
-- Complete the displayed recovery checks; preserve credentials and required backups.
-- Write the requested `<stage>-notes.txt` with mode `0600`, without secrets.
-- Rerun the command and confirm only checks you actually performed.
-- Before leaving: preserve the reviewed checkout, pinned Nix artifacts and recovery
-  journal independently of the disks being converted, at their planned paths.
+Before leaving: preserve the reviewed checkout, pinned Nix artifacts and recovery
+journal independently of the disks being converted, at their planned paths.
 
 ## 3. Install — trusted installer media, root terminal
 
@@ -70,7 +68,7 @@ Copy anything it lists and rerun until it passes. Its receipt lasts 24 hours.
 - From the preserved checkout, run:
 
 ```sh
-python -m lx_administration.storage.boot_setup run --current-host --apply
+python -m lx_administration.storage.boot_setup run --apply
 ```
 
 - Confirm the exact target disk serials before encryption; enter and preserve the LUKS password.
@@ -97,20 +95,20 @@ connected and never erase or repurpose it during this procedure.
 - With recovery state private and owned by the operator running the workflow, rerun:
 
 ```sh
-LUXNIX_BOOT_SETUP_APPLY=1 devenv tasks run boot-storage:setup
+devenv shell boot-storage-setup
 ```
 
 Do not use `nh os boot` to convert plaintext root. Keep the planned release unchanged.
 
 ## 5. Remove the old containers
 
-Only after acceptance is recorded, run this from the repository root in the Devenv
-shell on the installed system, replacing `gc-09` with the host. Without `--apply` it
-only previews; with it, typed approval deletes the container files permanently.
+Only after acceptance is recorded, on the installed system. It asks for `sudo` itself.
+Without `--apply` it only previews; with it, typed approval deletes the container files
+permanently.
 
 ```sh
-sudo "$(command -v python)" -m lx_administration.storage.boot_setup retire-containers --host gc-09
-sudo "$(command -v python)" -m lx_administration.storage.boot_setup retire-containers --host gc-09 --apply
+devenv shell boot-storage-setup retire-containers
+devenv shell boot-storage-setup retire-containers --apply
 ```
 
 For installer handoff requirements, see the [detailed guide](boot-storage-migration.md#configuration-and-recovery-media).

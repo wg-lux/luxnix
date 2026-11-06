@@ -264,7 +264,7 @@ commands:
     summary: Guide in-place LUKS2 encryption with typed approval and non-formatting recovery.
     risk: destructive-local
     operator_confirmation_required: true
-    usage: devenv shell boot-storage-setup <observe|setup-media|run|plan|next|preflight|advance|recover|review|attest|status|retire-containers> --host <host> [--config <autoconf-yaml>] [--apply] [--assessor <admin>] [--custody <encrypted-directory>] [--vault-key-custody <file>] [--accept-absent <id>]
+    usage: devenv shell boot-storage-setup [guide|observe|setup-media|run|plan|next|preflight|advance|recover|review|attest|status|retire-containers] [--host <host>] [--config <autoconf-yaml>] [--apply] [--assessor <admin>] [--custody <encrypted-directory>] [--vault-key-custody <file>] [--accept-absent <id>]
     implementation: lx_administration/storage/boot_setup.py
     documentation: docs/boot-storage-migration.md
     prerequisites:
@@ -272,6 +272,8 @@ commands:
       - Provisioning runs only on the verified target in a trusted installer with fresh recovery evidence and unmounted selected disks.
       - Only installation in-place and source_retention in-place are accepted; destructive plans are retired.
     effects:
+      - With no action it guides this machine's configured host and resumes the next step; every check still needs a typed VERIFIED and it never starts encryption, whose installer step keeps its own typed approval.
+      - Guide creates the default custody file only after typed approval, never formats an existing file, and copies only secrets missing from custody after confirmation.
       - Setup-media previews USB/removable filesystems; apply mounts one existing filesystem at /recovery, requires 1 GiB free, prepares private state and continues planning. Multiple candidates require --device; no formatting or automatic install.
       - Observe runs on the target and emits reviewed disk/hardware facts as YAML without writes; no substitute disk selection.
       - Plan reads boot_storage.hosts from Autoconf and builds only the system closure; private journals live under boot_storage.state_root/host.

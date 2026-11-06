@@ -483,7 +483,7 @@ def test_human_output_explains_recovery_and_exact_next_command(state, capsys):
     setup.show_step(step, root, Path("/reviewed/autoconf/config.yml"))
     output = capsys.readouterr().out
     assert "physical console" in output
-    assert "review --host gc-09" in output
+    assert "boot-storage-setup review" in output
     assert str(root / "recovery-notes.txt") in output
     assert "Rerunning plan will not complete" in output
     assert "--apply" not in output
@@ -625,7 +625,7 @@ def test_installer_guidance_uses_native_python_not_devenv(state, capsys, action)
     setup.show_step(step, root, Path("/reviewed/config.yml"))
     output = capsys.readouterr().out
     assert "python -m lx_administration.storage.boot_setup" in output
-    assert "--host gc-09 --config /reviewed/config.yml" in output
+    assert "--config /reviewed/config.yml" in output
     assert "devenv" not in output
     assert "Do not guess or mark it VERIFIED" in output
 
@@ -848,3 +848,40 @@ def test_interrupted_conversion_preserves_journal_and_resumes(
     setup.provision(root, apply=True)
     assert calls == ["confirm", "confirm", "encrypt"]
     assert setup.load_journal(root, plan).phase == setup.Phase.COMPLETE
+
+
+def test_output_says_a_plan_is_not_encryption_and_shows_progress(
+    state, capsys, monkeypatch
+):
+    root, _, _ = state
+
+    def missing(state):
+        raise migration.MigrationError("run preflight first")
+
+    monkeypatch.setattr(setup.migration, "require_preflight", missing)
+    step = setup.next_step(root)
+    assert step.action == setup.Action.ASSESS and step.stage == "recovery"
+    setup.show_step(step, root, Path("/config.yml"))
+    output = capsys.readouterr().out
+    assert "[x] Plan saved" in output
+    assert "[ ] Secret preflight passed" in output
+    assert "Root is NOT encrypted yet" in output
+    assert "Nothing has failed" in output
+    assert "Do this next: run devenv shell boot-storage-setup" in output
+
+
+def test_passed_preflight_is_shown_as_done(state, capsys, monkeypatch):
+    root, _, _ = state
+    monkeypatch.setattr(setup.migration, "require_preflight", lambda state: None)
+    setup.show_step(setup.next_step(root), root, Path("/config.yml"))
+    output = capsys.readouterr().out
+    assert "[x] Secret preflight passed" in output
+    assert "Secret preflight has passed" in output
+    assert "First prove" not in output
+
+
+def test_success_keeps_json_output_parseable(capsys):
+    setup.success("done")
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "SUCCESS: done" in captured.err

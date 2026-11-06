@@ -17,6 +17,9 @@ entrypoints:
   - name: in-place-encryption-safety
     file: test_in_place.py
     purpose: Verify refusal before disk changes, compared data consolidation and acceptance-gated container retirement.
+  - name: boot-guide
+    file: test_boot_guide.py
+    purpose: Verify the guided command never formats existing custody, never answers for the operator and keeps replaced plans.
   - name: in-place-encryption-vm
     file: nixtest/in_place_encryption_vm_test.nix
     purpose: Encrypt a real plaintext root with containers, cut power, resume, cold boot and retire containers on disposable disks.

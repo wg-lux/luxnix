@@ -239,6 +239,12 @@ def test_custody_on_an_erased_disk_is_refused(environment, monkeypatch):
         preflight.run(state, custody)
 
 
+def test_missing_custody_directory_is_explained(environment, tmp_path):
+    state, _, _, _ = environment
+    with pytest.raises(preflight.PreflightError, match="Mount your encrypted custody"):
+        preflight.run(state, tmp_path.resolve() / "not-mounted")
+
+
 def test_unencrypted_custody_is_refused(environment, monkeypatch):
     state, _, custody, live = environment
     fill_custody(custody, live)

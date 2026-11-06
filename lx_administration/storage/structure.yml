@@ -16,6 +16,9 @@ entrypoints:
   - name: credential-backup-policy
     file: credential-backup-policy.yml
     purpose: Bounded optional credential scope and non-authoritative retirement candidates; no deletion rules.
+  - name: boot-guide
+    file: boot_guide.py
+    purpose: One resumable command for the current host that measures what it can, prepares custody and asks the operator to confirm only what it cannot prove.
   - name: in-place-encryption
     file: in_place.py
     purpose: Encrypt a plaintext Btrfs root in place with LUKS2, resume interruptions, move container data onto the encrypted root and retire containers after acceptance.
