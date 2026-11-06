@@ -37,8 +37,24 @@ devenv tasks run boot-storage:setup
 LUXNIX_BOOT_SETUP_APPLY=1 devenv tasks run boot-storage:setup
 ```
 
-The task display can garble or cut off this output. To read the full instructions, run
-`devenv shell boot-storage-setup next --host <host>`, using the real host name.
+The task display can garble or cut off this output. To read the full instructions,
+run this, replacing `gc-09` with the host:
+
+```sh
+devenv shell boot-storage-setup next --host gc-09
+```
+
+If setup says Autoconf differs from the saved plan, see
+[replacing a saved plan](boot-storage-migration.md#replacing-a-saved-plan).
+
+[Prepare encrypted custody](boot-storage-migration.md#preparing-custody) outside the
+system disk, mount it, then prove the secrets this host needs are safely copied:
+
+```sh
+devenv shell boot-storage-setup preflight --host gc-09 --custody /run/luxnix-custody/custody
+```
+
+Copy anything it lists and rerun until it passes. Its receipt lasts 24 hours.
 
 - Complete the displayed recovery checks; preserve credentials and required backups.
 - Write the requested `<stage>-notes.txt` with mode `0600`, without secrets.
@@ -58,13 +74,16 @@ python -m lx_administration.storage.boot_setup run --current-host --apply
 ```
 
 - Confirm the exact target disk serials before encryption; enter and preserve the LUKS password.
-- The conversion preserves the filesystem. The prompt requires the computer name,
-  plan ID and disk serials; `yes` or an empty answer cancels. A tested backup is
-  still required because hardware failure can damage data during conversion.
+  It may use only letters a-x, digits and spaces, because the boot prompt can use a
+  different keyboard layout.
+- The conversion preserves the filesystem. Type the displayed `ENCRYPT IN PLACE` line
+  with the computer name, plan ID and disk serials; `yes` or an empty answer cancels.
+  A tested backup is still required because hardware failure can damage data during
+  conversion.
 - Supply the requested credentials and completed prepared-stage notes.
 - Rerun after each requested action; confirm installation separately.
 - If interrupted, stop and follow [recovery instructions](boot-storage-migration.md#interrupted-setup).
-  Keep the journal; do not restart formatting.
+  Keep the journal and rerun the same command; it resumes.
 
 Do not run `sudo devenv` to get past an installer warning. The installed system
 and installer use different commands deliberately. Keep the recovery drive
@@ -82,4 +101,16 @@ LUXNIX_BOOT_SETUP_APPLY=1 devenv tasks run boot-storage:setup
 ```
 
 Do not use `nh os boot` to convert plaintext root. Keep the planned release unchanged.
+
+## 5. Remove the old containers
+
+Only after acceptance is recorded, run this from the repository root in the Devenv
+shell on the installed system, replacing `gc-09` with the host. Without `--apply` it
+only previews; with it, typed approval deletes the container files permanently.
+
+```sh
+sudo "$(command -v python)" -m lx_administration.storage.boot_setup retire-containers --host gc-09
+sudo "$(command -v python)" -m lx_administration.storage.boot_setup retire-containers --host gc-09 --apply
+```
+
 For installer handoff requirements, see the [detailed guide](boot-storage-migration.md#configuration-and-recovery-media).

@@ -1,6 +1,6 @@
 # Boot LUKS storage: migration and recovery
 
-For installation commands, use the [four-step checklist](boot-storage-quickstart.md).
+For installation commands, use the [operator checklist](boot-storage-quickstart.md).
 This reference covers layout, evidence gates, retained-data migration and recovery.
 Host reports describe dated observations; live checks and `boot-encryption-acceptance.yml`
 determine whether a host is accepted.
@@ -60,8 +60,8 @@ restart; if writing the EFI variable fails, the normal menu timeout applies.
 Retain a known-compatible generation, console access and independent SSH access.
 Compare `/run/current-system`, `/run/booted-system`, the system profile and
 bootloader default separately: failed activation can leave them different.
-Pre-migration generations cannot boot a newly repartitioned layout; a generation
-rollback does not reverse formatting or database migrations.
+Generations from before the conversion cannot open the encrypted root, and a
+generation rollback does not reverse the encryption or database migrations.
 
 ### Password setup during rebuild
 
@@ -84,15 +84,13 @@ Verification stores a private host/UUID/header-bound receipt under
 repeat prompt. Explicit `sudo luxnix-setup-boot-password --change` adds a password
 (at least 12 characters), requires an existing credential, backs up the header
 and preserves old slots. Missing terminal or failed verification aborts activation.
-Fresh installation sets the initial password at Disko's prompt. Rebuilds do not
+In-place conversion sets the initial password at its own prompt. Rebuilds do not
 rotate Linux or wallet passwords.
 
 ## Single production path and retained recovery
 
-New installations require `root_encryption: luks2`. Use `fresh/new-disks` for
-empty new disks, `disposable/discard-approved` only for approved disposable disks,
-and `migration/old-disks` or `migration/whole-disk-image` when retaining data.
-Preserve machine/application credentials even for disposable installations.
+Setup requires `root_encryption: luks2`, `installation: in-place` and
+`source_retention: in-place`; see [retired paths](#retired-destructive-installation-paths).
 Retain legacy containers and decryptors until migration and recovery retention
 are accepted. TPM/container/network-release/PAM enrollment is not a new-install
 path. Existing raw-offset boot-key installations still require physical acceptance;
@@ -121,14 +119,39 @@ ambiguous media stop setup. Existing media is never formatted. This is journal
 storage, not an application backup. Encryption is optional for non-secret evidence;
 credentials and application backups keep their separate protection requirements.
 
-Planning builds and pins the system closure and Disko executable, source revision,
-lockfile, hardware and system closure. Keep that release unchanged; never reset
-a saved journal to accommodate a new checkout. Before installer boot, preserve the
+Planning builds and pins the system closure, source revision, lockfile and hardware.
+Keep that release unchanged; never reset a saved journal to accommodate a new
+checkout. [Replace the plan](#replacing-a-saved-plan) instead. Before installer boot, preserve the
 checkout, built artifacts and evidence independently at their planned paths.
 Installer state must be root-owned and private, outside `/mnt` and selected disks.
 Use the reviewed root Python environment there; do not run `sudo devenv` on the
 installed desktop. Trusted installer checks reject target-backed Nix stores,
 active swap, mounted target disks and conflicting mappings.
+
+### Replacing a saved plan
+
+A saved plan cannot change. Setup stops if Autoconf differs from it, and preflight and
+later steps stop if the checkout's revision or lockfile changed. Restore what changed,
+or replace a plan that has not started. First check its state, using the real host:
+
+```sh
+sudo ls -la /recovery/luxnix-state/gc-09
+sudo jq '.spec | {installation, source_retention, checkout}' /recovery/luxnix-state/gc-09/plan.json
+sudo jq .install.status /recovery/luxnix-state/gc-09/progress.json
+sudo jq .phase /recovery/luxnix-state/gc-09/provision.json
+```
+
+A plan has not started when the install status is `pending` and the phase is `planned`
+or `provision.json` does not exist. Any other result means work began: stop and follow
+[interrupted setup](#interrupted-setup). Otherwise commit the changes so the checkout is
+clean, move the old state aside without deleting it, and create the new plan:
+
+```sh
+sudo mv /recovery/luxnix-state/gc-09 /recovery/luxnix-state/gc-09.superseded-YYYY-MM-DD
+LUXNIX_BOOT_SETUP_APPLY=1 devenv tasks run boot-storage:setup
+```
+
+Old reviews and receipts do not carry over, so repeat preflight and the recovery checks.
 
 ### In-place root encryption
 
@@ -179,32 +202,72 @@ disk, with a power cut during encryption, cold boots and container retirement.
 
 In-place encryption requires `vault_recovery_tested` before provisioning.
 The setup command does not back up Vault. An existing assessment without this check
-is insufficient. If checks or source change, preserve the old plan and follow the
-reviewed new-plan process; never edit its recorded revision or mark an unperformed
-check complete.
+is insufficient. If checks or source change, [replace the plan](#replacing-a-saved-plan);
+never edit its recorded revision or mark an unperformed check complete.
 
 Use [credential backup](credential-backup.md) to preserve the evaluated credential
 files, including both admin/client boot hashes and their Vault sources, in an
 authenticated encrypted archive. Run its verification after reboot or credential
 changes and immediately before migration. It does not change passwords, replace
-the full data backup, or complete the following recovery checks automatically.
+the full data backup, or complete the following recovery checks automatically. Its
+archive also does not satisfy preflight, which compares plain copies in custody.
 
 #### Secret preflight
 
 Run this on the host being converted, after creating its plan and before review:
 
 ```bash
-devenv shell boot-storage-setup preflight --host <host> \
-  --custody /path/to/encrypted/directory [--vault-key-custody <file>] [--accept-absent <id>]
+devenv shell boot-storage-setup preflight --host gc-09 \
+  --custody /run/luxnix-custody/custody [--vault-key-custody /path/to/key-copy] [--accept-absent <id>]
 ```
+
+Replace `gc-09` with the host. `--custody` takes a directory, never a device or disk.
 
 It works out what this host needs from the plan's evaluated configuration, tests
 it, and writes `secret-preflight.json` to the plan state. `review` refuses to start
 without a receipt less than 24 hours old for this exact plan, and `attest` and
 provisioning reject an assessment that lacks it. A failed rerun removes the old
 receipt. Preflight never copies or changes a credential; it prints the command for
-anything missing. Custody must be a private directory on encrypted storage outside
-the selected disks.
+anything missing, so expect the first run to stop and list what to copy.
+
+##### Preparing custody
+
+Custody must be a private directory (mode 0700) owned by the operator on encrypted
+storage outside the selected disks. A LUKS USB drive works, and so does a LUKS file on
+the recovery drive, which is checked against the disk holding that file. To create the
+file on an existing recovery filesystem:
+
+```sh
+sudo truncate -s 2G /recovery/luxnix-custody.luks
+sudo cryptsetup luksFormat --type luks2 /recovery/luxnix-custody.luks
+sudo cryptsetup open /recovery/luxnix-custody.luks luxnix-custody
+sudo mkfs.ext4 -q /dev/mapper/luxnix-custody
+sudo mkdir -p /run/luxnix-custody
+sudo mount /dev/mapper/luxnix-custody /run/luxnix-custody
+sudo install -d -m 0700 -o "$USER" -g "$(id -gn)" /run/luxnix-custody/custody
+```
+
+Keep its passphrase outside the host being converted; losing it loses everything in
+custody. `/run` is cleared at reboot, so reopen custody after each one:
+
+```sh
+sudo cryptsetup open /recovery/luxnix-custody.luks luxnix-custody
+sudo mkdir -p /run/luxnix-custody
+sudo mount /dev/mapper/luxnix-custody /run/luxnix-custody
+```
+
+Unmount it before removing the drive:
+
+```sh
+sudo umount /run/luxnix-custody
+sudo cryptsetup close luxnix-custody
+```
+
+The custody, plan and any backup on one drive survive a system disk failure, not the
+loss of that drive. If this host holds the admin vault, `--vault-key-custody` must be on
+a different physical disk from custody, so a file on the same recovery drive is refused.
+
+##### What preflight requires
 
 | Required when | Items | Checked by |
 | --- | --- | --- |
@@ -234,12 +297,12 @@ that keeps data, because provisioning would issue a replacement that
 cannot read what exists: restore the original instead. Other items that truly never
 existed on this host can be stated with `--accept-absent <id>`; the receipt records
 that. Account hashes still need a valid custody copy. For a host with data use
-`installation: in-place`; preflight warns on a mode that does not keep data. Hosts running the Vault or OpenBao server stop here: preflight cannot
-verify their data and unseal material, so use
+`installation: in-place`; preflight warns on a mode that does not keep data. Hosts
+running the Vault or OpenBao server stop here: preflight cannot verify their data and unseal material, so use
 [Vault Server Rebuild](vault-server-rebuild.md).
 
 Preflight proves that the keys exist, match and decrypt, not that the data can be
-restored; the migration `backup` and `restore` stages cover that. It also does not
+restored; your tested backup covers that. It also does not
 prove the root LUKS passphrase, which is set during installation and tested at
 physical acceptance. The remaining `vault_recovery_tested` confirmation still covers
 anything outside this table.
@@ -295,8 +358,6 @@ Evidence JSON contains exactly `schema_version: 1`, `plan_id`, `stage`, `checks`
 and a nonempty `artifacts` list of private absolute paths. Use the check names from
 `status`; every result must be performed and true. Artifact hashes bind evidence
 to the plan. Pre-install assessments expire after 24 hours and require reassessment.
-Migration recovery requires exactly one fresh [readiness admission](#readiness-observations-versus-admission)
-JSON artifact; the simple notes-only review does not replace this report.
 
 From the trusted installer, `check --stage provision` verifies prerequisites
 without formatting. The setup workflow separately confirms in-place LUKS2 conversion. Restore/enroll credentials, then `prepare-access` prepares missing admin
@@ -314,7 +375,7 @@ Run `next --host <host>` using the same state. A completed conversion is never
 repeated. Interrupted in-place encryption resumes from its LUKS2 header. Preserve
 `provision.json`: it records disk metadata and execution state, **not a backup**.
 Inspect the disks; repair/mount the intended complete layout from trusted media,
-then preview and explicitly accept it without rerunning Disko:
+then preview and explicitly accept it:
 
 ```sh
 python -m lx_administration.storage.boot_setup recover --host <host> --assessor <admin>
@@ -327,7 +388,7 @@ restore retained disks/backups or arrange a separately reviewed reprovision.
 For an interrupted installation, follow the existing `install-recovery`
 assessment and `boot-storage-migration install --retry-interrupted` procedure.
 Never delete journals to bypass a blocked retry. Old boot generations cannot
-undo formatting or recover lost keys.
+open the encrypted root or recover lost keys.
 
 ### Save and verify disk-password custody
 
@@ -401,18 +462,12 @@ to erase disks. The prepared-target installer performs fresh machine checks.
 ## Before touching a production disk
 
 This procedure requires an authorized operator at a working console, maintenance
-window, trusted installer/recovery media, independent recovery custody, sufficient
-new storage and a verified backup. Nothing here authorizes formatting in an
-ordinary update. Prefer new disks so old disks remain recoverable. Do not attempt
-in-place conversion or overwrite the only working LUKS header.
+window, trusted installer/recovery media, independent recovery custody and a verified
+backup. Nothing here authorizes formatting in an ordinary update. Never overwrite the
+only working LUKS header. These steps are how to make and test that backup.
 
 1. Record the host, inventory target, reviewed Git revision, flake.lock and exact
-   serial-number disk IDs. When replacing disks, update the host disk identifiers
-   to the verified new serials before building. Disconnect old disks before
-   creating identically labeled partitions; duplicate GPT labels can select the
-   wrong device. If disks must be reused, first retain verified full old-disk
-   images including headers on independent encrypted storage. Run the documented
-   connectivity check. Privately save
+   serial-number disk IDs. Run the documented connectivity check. Privately save
    `lsblk -o NAME,PATH,TYPE,FSTYPE,UUID,PARTUUID,MOUNTPOINTS`, `findmnt --real`,
    `swapon --show`, `cryptsetup status` for each mapping, and
    `btrfs filesystem show` for each Btrfs filesystem. Include bind ancestry,
@@ -440,7 +495,7 @@ in-place conversion or overwrite the only working LUKS header.
 5. Restore the backup to an isolated encrypted test target. Validate PostgreSQL
    consistency/queries and decrypt representative old media with the restored
    keys, including data encrypted before rotations. Compare protected manifests
-   and ownership. Retain the backup and old storage until production acceptance.
+   and ownership. Retain the backup until production acceptance.
 
 ## Snapshot backups from the existing gc-09 and gc-10 installations
 
@@ -553,9 +608,9 @@ These are **filesystem snapshots, not whole-disk images**: they cover root, home
 Nix, persist and logs, plus gc-10's data filesystem. They preserve existing inner
 container files, including their headers. Unmounted unrelated subvolumes and
 external export disks are outside that scope. Preserve EFI/partition metadata
-and controller `.lxv` custody separately. Do not reuse source disks on the basis
-of these archives alone; retain old disks or obtain the full-disk images required
-above. PostgreSQL/media restore tests are still mandatory.
+and controller `.lxv` custody separately, or take a
+[full-disk image](#full-disk-image-of-the-original-nvme). PostgreSQL/media restore
+tests are still mandatory.
 
 A supplementary host copy of a dedicated age identity can be made with the
 operator-authorized `ansible/playbooks/storage-backup-identity-escrow.yml`, through
@@ -592,9 +647,9 @@ copies of those records can be prepared as described in
 Then restore their logical contents into the final encrypted layout. Archive
 authentication proves transport and decryption, not database/media usability.
 
-### Reusing the original NVMe
+### Full-disk image of the original NVMe
 
-After restore tests pass, shut down normally and boot the trusted recovery stick.
+To keep a complete copy before conversion, after restore tests pass, shut down normally and boot the trusted recovery stick.
 Identify the original NVMe by its recorded serial, not its current `/dev/nvme*`
 number. Keep every source partition unmounted and disable installer automounting
 and disk swap. Mount only the independently identified backup disk. Stream the
@@ -650,15 +705,14 @@ original application master key, retained historical keys/salts and, where used,
 SOPS age identity. A root passphrase alone cannot decrypt application backups
 whose separate application keys have been lost.
 
-Keep old disks disconnected and recoverable until signed-off acceptance. Before
-new writes, rollback can boot the old disks with their old generation and keys.
-After accepting new writes, reverting disks loses those writes unless a separate
-consistent reverse migration is performed. A Nix generation rollback cannot undo
-a disk format, restore missing keys or reconcile diverged databases.
+In-place conversion leaves no old disk to return to, so the tested backup is the
+rollback. Restoring it loses later writes unless they are preserved first. Retain it
+and the container files until signed-off acceptance. A Nix generation rollback cannot
+undo the encryption, restore missing keys or reconcile diverged databases.
 
 ## Temporary compatibility and removal
 
-gc-09 selects `boot-luks` but still needs reprovisioning from its plaintext root.
+gc-09 selects `boot-luks` but still needs in-place conversion of its plaintext root.
 On 2026-11-04 the owner retained gc-10's existing partitions and restored its
 explicit `legacy-containers` profile with Plymouth passphrase unlock. Its
 automatic migration is disabled; normal rebuilds preserve the existing data.
@@ -667,7 +721,7 @@ rejects `switch` and `boot` onto a plaintext root, so a rebuild on the old disks
 fails before the bootloader changes. Never bypass it with `NIXOS_NO_CHECK=1`.
 Both remain unmigrated in repository acceptance; inspect the live
 host before making any claim about its root storage. For gc-10, no recovery
-console is available for its plaintext-root reprovision.
+console is available for converting its plaintext root.
 Its original encrypted application and secrets containers remain mandatory;
 this exception does not authorize plaintext application startup or claim root
 protection. Disk swap stays disabled. The bounded
@@ -722,8 +776,9 @@ remain independent; local OpenBao storage-unlock enrollment is superseded.
 The focused source/probe lane is:
 
 ```sh
-python -m pytest -q tests/test_boot_storage.py tests/test_managed_secret_storage.py tests/test_operator_storage_migration.py
+python -m pytest -q tests/test_boot_storage.py tests/test_managed_secret_storage.py tests/test_operator_storage_migration.py tests/test_in_place.py tests/test_secret_preflight.py tests/test_recovery_custody.py
 nix build .#checks.x86_64-linux.boot-storage --no-link -L
+nix build .#checks.x86_64-linux.boot-storage-in-place --no-link -L
 nix build .#checks.x86_64-linux.boot-storage-remote --no-link -L
 nix build .#nixosConfigurations.gc-10.config.system.build.toplevel --no-link
 nix build .#nixosConfigurations.gs-02.config.system.build.toplevel --no-link
