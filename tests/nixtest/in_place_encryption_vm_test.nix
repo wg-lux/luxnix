@@ -229,6 +229,7 @@ disko.lib.testLib.makeDiskoTest {
         };
       };
       config = {
+
         boot.kernelParams = [
           "quiet"
           "splash"

@@ -111,7 +111,7 @@ def require_custody_directory(custody: Path, plan: dict) -> None:
     selected = {os.path.realpath(d["path"]) for d in plan["spec"]["disks"]}
     if storage_disks(custody) & selected:
         raise PreflightError(
-            "Custody is on a disk this plan erases; use independent encrypted media"
+            "Custody is on a disk this plan selects; use independent encrypted media"
         )
 
 
@@ -336,7 +336,7 @@ def run(
         if not keeps_data:
             print(
                 f"WARNING: this plan is '{plan['spec']['installation']}' and does "
-                "not keep data. Use installation: migration for a host with data."
+                "not keep data. Use installation: in-place for a host with data."
             )
         accepted = set(accept_absent)
         unknown = accepted - {item["id"] for item in items}

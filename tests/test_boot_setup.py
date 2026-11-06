@@ -408,7 +408,9 @@ def test_autoconf_target_reuses_plan_and_blocks_drift(state, tmp_path):
     raw["boot_storage"]["hosts"]["gc-09"]["disks"][0]["serial"] = "changed"
     config_path.write_text(yaml.safe_dump(raw))
     # An existing plan with different settings must not be adopted implicitly.
-    with pytest.raises(migration.MigrationError, match="differs from the saved plan"):
+    with pytest.raises(
+        migration.MigrationError, match="differs from the saved plan in: disks"
+    ):
         setup.configured_target(config_path, "gc-09")
     with pytest.raises(migration.MigrationError, match="Add boot_storage.hosts"):
         setup.configured_target(config_path, "gc-02")

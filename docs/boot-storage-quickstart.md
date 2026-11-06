@@ -37,6 +37,9 @@ devenv tasks run boot-storage:setup
 LUXNIX_BOOT_SETUP_APPLY=1 devenv tasks run boot-storage:setup
 ```
 
+The task display can garble or cut off this output. To read the full instructions, run
+`devenv shell boot-storage-setup next --host <host>`, using the real host name.
+
 - Complete the displayed recovery checks; preserve credentials and required backups.
 - Write the requested `<stage>-notes.txt` with mode `0600`, without secrets.
 - Rerun the command and confirm only checks you actually performed.

@@ -64,6 +64,15 @@ def private(path: Path, *, exists=True):
             )
 
 
+def loop_backing_file(device: str) -> Path:
+    try:
+        name = Path(device).name
+        backing = Path(f"/sys/block/{name}/loop/backing_file").read_text().strip()
+    except OSError as error:
+        raise CustodyError("Unable to identify a loop device's backing file") from error
+    return Path(backing)
+
+
 def storage_disks(path: Path) -> set[str]:
     current = path if path.exists() else path.parent
     mount = json.loads(
@@ -88,6 +97,12 @@ def storage_disks(path: Path) -> set[str]:
         for node in nodes:
             if node.get("type") == "disk":
                 disks.add(os.path.realpath(node["name"]))
+            elif node.get("type") == "loop":
+                # A file-backed volume lives on whatever disk holds that file.
+                backing = loop_backing_file(node["name"])
+                if not backing.is_file():
+                    raise CustodyError("A loop device's backing file is missing")
+                disks.update(storage_disks(backing))
             visit(node.get("children", []))
 
     for source in sources:

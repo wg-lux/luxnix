@@ -52,6 +52,58 @@ def test_custody_disk_separation_uses_all_verified_members(
         assert checked == members
 
 
+def loop_probe(monkeypatch, tmp_path, disk):
+    """A LUKS file mounted through crypt and loop, stored on a filesystem on disk."""
+    backing = tmp_path / "custody.luks"
+    backing.touch()
+
+    def probe(args):
+        if args[0] == "findmnt":
+            on_file = args[args.index("--target") + 1] == str(backing)
+            source = "/dev/held-file-partition" if on_file else "/dev/mapper/custody"
+            return json.dumps({"filesystems": [{"source": source}]}).encode()
+        assert args[0] == "lsblk"
+        if args[-1] == "/dev/mapper/custody":
+            tree = {
+                "type": "crypt",
+                "name": args[-1],
+                "children": [{"type": "loop", "name": "/dev/loop0"}],
+            }
+        else:
+            tree = {
+                "type": "part",
+                "name": args[-1],
+                "children": [{"type": "disk", "name": disk}],
+            }
+        return json.dumps({"blockdevices": [tree]}).encode()
+
+    monkeypatch.setattr(custody, "filesystem_devices", lambda fs: [fs["source"]])
+    monkeypatch.setattr(custody, "run", probe)
+    monkeypatch.setattr(custody, "loop_backing_file", lambda device: backing)
+    return backing
+
+
+def test_a_file_backed_volume_resolves_to_the_disk_holding_its_file(
+    tmp_path, monkeypatch
+):
+    loop_probe(monkeypatch, tmp_path, "/dev/usb-recovery")
+    assert custody.storage_disks(tmp_path) == {"/dev/usb-recovery"}
+
+
+def test_a_file_backed_volume_on_the_system_disk_is_seen_as_that_disk(
+    tmp_path, monkeypatch
+):
+    # Otherwise a LUKS file beside the data would pass as independent custody.
+    loop_probe(monkeypatch, tmp_path, "/dev/system")
+    assert custody.storage_disks(tmp_path) & {"/dev/system"}
+
+
+def test_a_deleted_backing_file_is_refused(tmp_path, monkeypatch):
+    loop_probe(monkeypatch, tmp_path, "/dev/usb-recovery").unlink()
+    with pytest.raises(custody.CustodyError, match="backing file is missing"):
+        custody.storage_disks(tmp_path)
+
+
 @pytest.fixture
 def media(tmp_path, monkeypatch):
     if not shutil.which("age") or not shutil.which("age-keygen"):

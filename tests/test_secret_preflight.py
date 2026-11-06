@@ -235,7 +235,7 @@ def test_custody_on_an_erased_disk_is_refused(environment, monkeypatch):
     fill_custody(custody, live)
     selected = os.path.realpath(plan["spec"]["disks"][0]["path"])
     monkeypatch.setattr(recovery_custody, "storage_disks", lambda *a: {selected})
-    with pytest.raises(preflight.PreflightError, match="disk this plan erases"):
+    with pytest.raises(preflight.PreflightError, match="disk this plan selects"):
         preflight.run(state, custody)
 
 

@@ -158,11 +158,13 @@ system and in the initrd.
 
 After conversion nothing opens the containers at boot; applications run directly on
 the encrypted root. The container files stay untouched as a fallback until physical
-acceptance is recorded. Then, as root on the installed system:
+acceptance is recorded. Then, from the repository root in the Devenv shell on the
+installed system, replacing `gc-09` with the host (`sudo` needs the full interpreter
+path because it resets `PATH`):
 
 ```bash
-python -m lx_administration.storage.boot_setup retire-containers --host <host>
-python -m lx_administration.storage.boot_setup retire-containers --host <host> --apply
+sudo "$(command -v python)" -m lx_administration.storage.boot_setup retire-containers --host gc-09
+sudo "$(command -v python)" -m lx_administration.storage.boot_setup retire-containers --host gc-09 --apply
 ```
 
 This deletes only the container files, after typed approval, and refuses if a target
@@ -189,11 +191,11 @@ the full data backup, or complete the following recovery checks automatically.
 
 #### Secret preflight
 
-Run this on the host being erased, after creating its plan and before review:
+Run this on the host being converted, after creating its plan and before review:
 
 ```bash
 devenv shell boot-storage-setup preflight --host <host> \
-  --custody <encrypted-directory> [--vault-key-custody <file>] [--accept-absent <id>]
+  --custody /path/to/encrypted/directory [--vault-key-custody <file>] [--accept-absent <id>]
 ```
 
 It works out what this host needs from the plan's evaluated configuration, tests
@@ -227,12 +229,12 @@ enrollment adds generations at runtime, so preflight also discovers them on the 
 instead of relying on configuration alone.
 
 A locked container looks like a missing file, so an absent item stops preflight.
-Unlock it first. Keys that open or identify existing data cannot be waived on an
-`installation: migration` plan, because provisioning would issue a replacement that
+Unlock it first. Keys that open or identify existing data cannot be waived on a plan
+that keeps data, because provisioning would issue a replacement that
 cannot read what exists: restore the original instead. Other items that truly never
 existed on this host can be stated with `--accept-absent <id>`; the receipt records
 that. Account hashes still need a valid custody copy. For a host with data use
-`installation: migration`; preflight warns on any other mode. Hosts running the Vault or OpenBao server stop here: preflight cannot
+`installation: in-place`; preflight warns on a mode that does not keep data. Hosts running the Vault or OpenBao server stop here: preflight cannot
 verify their data and unseal material, so use
 [Vault Server Rebuild](vault-server-rebuild.md).
 

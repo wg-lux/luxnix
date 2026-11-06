@@ -569,9 +569,18 @@ def configured_target(config_path: Path, host: str) -> tuple[dict, Path]:
     state = settings.state_root / host
     if (state / "plan.json").exists():
         with migration.locked_state(state):
-            if migration.load_plan(state)["spec"] != spec:
+            saved = migration.load_plan(state)["spec"]
+            if saved != spec:
+                changed = sorted(
+                    key
+                    for key in saved.keys() | spec.keys()
+                    if saved.get(key) != spec.get(key)
+                )
                 raise migration.MigrationError(
-                    "Autoconf differs from the saved plan; preserve its recovery state"
+                    "Autoconf differs from the saved plan in: "
+                    f"{', '.join(changed)}. Restore those values to continue this "
+                    f"plan. To start a new plan instead, first check {state} records "
+                    "no started work, then move that directory aside; never delete it"
                 )
     return spec, state
 
@@ -629,7 +638,11 @@ def show_step(
         print("After access preparation, complete and review the checks below.")
     if step.stage == "recovery":
         print("\nFirst prove the required secrets survive the encryption conversion:")
-        print(command("preflight") + " --custody <encrypted-directory>")
+        print(command("preflight") + " --custody /path/to/encrypted/directory")
+        print(
+            "Custody is a private directory (mode 0700) on an already mounted, "
+            "encrypted filesystem outside the selected disks; never a device or disk."
+        )
         print(
             "It lists what is required and how to copy anything missing. "
             "Review refuses to continue without its receipt."
