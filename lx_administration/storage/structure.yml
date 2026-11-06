@@ -12,7 +12,7 @@ boundaries:
 entrypoints:
   - name: migration-boot
     file: migration_boot.py
-    purpose: Build and admit host-bound RAM images with firmware trust or physical console approval; stage an explicit one-shot boot without rebooting or encrypting.
+    purpose: Discover reusable build settings, build and admit host-bound RAM images with firmware trust or physical console approval; stage an explicit one-shot boot without rebooting or encrypting.
   - name: credential-backup
     file: credential_backup.py
     purpose: Authenticated credential archives with stable media identity, preserved account sources and explicit drift rejection.

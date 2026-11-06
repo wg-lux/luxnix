@@ -521,3 +521,151 @@ def test_build_defaults_to_console_mode_without_signing(monkeypatch):
     assert selected[0].boot_trust == "local-console"
     assert selected[0].console == "tty1"
     assert selected[0].sign is False
+
+
+@pytest.fixture
+def discovery(monkeypatch, spec):
+    monkeypatch.setattr(boot.socket, "gethostname", lambda: spec["host"])
+    import lx_administration.yaml
+
+    monkeypatch.setattr(
+        lx_administration.yaml,
+        "load_unique_yaml_file",
+        lambda _: {"boot_storage": {"hosts": {spec["host"]: spec}}},
+    )
+    records = {
+        "route": [{"dev": "eth0", "gateway": "192.0.2.1"}],
+        "address": [
+            {"addr_info": [{"scope": "global", "local": "192.0.2.10", "prefixlen": 24}]}
+        ],
+        "findmnt": {
+            "filesystems": [
+                {
+                    "source": "/dev/sdb1",
+                    "uuid": "1111-2222",
+                    "fstype": "vfat",
+                    "fsroot": "/",
+                }
+            ]
+        },
+        "lsblk": {"blockdevices": [{"type": "part", "uuid": "1111-2222"}]},
+    }
+
+    def run(*command):
+        key = command[3] if command[0] == "ip" else command[0]
+        assert key in records, command
+        return json.dumps(records[key])
+
+    monkeypatch.setattr(boot.sb, "run", run)
+    return records
+
+
+def test_discovery_yaml_and_printed_command_roundtrip(discovery, capsys, monkeypatch):
+    import shlex
+    import yaml
+
+    boot.main(["discover", "--controller-cidr", "192.0.2.1/32"])
+    settings = yaml.safe_load(capsys.readouterr().out)
+    assert settings["host"] == "test-host"
+    assert settings["address"] == "192.0.2.10/24"
+    assert settings["recovery_uuid"] == "1111-2222"
+    selected = []
+    monkeypatch.setattr(boot, "build", selected.append)
+    boot.main(
+        [
+            "discover",
+            "--controller-cidr",
+            "192.0.2.1/32",
+            "--format",
+            "command",
+            "--output",
+            "/home/admin/a directory",
+        ]
+    )
+    command = shlex.split(capsys.readouterr().out)
+    assert command[:3] == ["devenv", "shell", "migration-boot"]
+    boot.main(command[3:])
+    for field in boot.BUILD_SETTINGS:
+        assert getattr(selected[0], field) == settings[field]
+    assert selected[0].output == Path("/home/admin/a directory")
+
+
+@pytest.mark.parametrize(
+    "failure", ["host", "routes", "addresses", "mount", "encryption"]
+)
+def test_discovery_rejects_ambiguous_or_foreign_inputs(discovery, failure):
+    args = ["discover"]
+    if failure == "host":
+        args.append("another-host")
+    elif failure == "routes":
+        discovery["route"] *= 2
+    elif failure == "addresses":
+        discovery["address"][0]["addr_info"] *= 2
+    elif failure == "mount":
+        discovery["findmnt"]["filesystems"] = []
+    else:
+        discovery["lsblk"]["blockdevices"] = [{"type": "crypt"}]
+    with pytest.raises(SystemExit) as error:
+        boot.main(args)
+    assert error.value.code == 1
+
+
+def test_discovery_recognizes_encrypted_media(discovery, capsys):
+    import yaml
+
+    discovery["lsblk"]["blockdevices"] = [
+        {
+            "type": "crypt",
+            "children": [
+                {"type": "part", "fstype": "crypto_LUKS", "uuid": "outer-uuid"}
+            ],
+        }
+    ]
+    boot.main(["discover"])
+    settings = yaml.safe_load(capsys.readouterr().out)
+    assert settings["recovery_luks_uuid"] == "outer-uuid"
+    assert settings["controller_cidr"] is None
+
+
+@pytest.mark.parametrize(
+    "failure", [None, "host", "uuid", "unknown", "missing", "type"]
+)
+def test_build_settings_bound_to_host_with_explicit_overrides(tmp_path, spec, failure):
+    import yaml
+
+    values = {
+        "host": spec["host"],
+        "hardware_uuid": spec["hardware_uuid"],
+        "interface": "eth0",
+        "address": "192.0.2.10/24",
+        "gateway": None,
+        "controller_cidr": "192.0.2.1/32",
+        "recovery_uuid": "1111-2222",
+        "recovery_fstype": "vfat",
+        "recovery_luks_uuid": None,
+    }
+    if failure == "host":
+        values["host"] = "other-host"
+    elif failure == "uuid":
+        values["hardware_uuid"] = "wrong"
+    elif failure == "unknown":
+        values["sign"] = True
+    elif failure == "missing":
+        values["controller_cidr"] = None
+    elif failure == "type":
+        values["interface"] = ["eth0"]
+    path = tmp_path / "settings.yml"
+    path.write_text(yaml.safe_dump(values))
+    args = SimpleNamespace(
+        host=spec["host"],
+        settings=path,
+        **{name: None for name in boot.BUILD_SETTINGS},
+    )
+    args.address = "192.0.2.20/24"
+    if failure:
+        with pytest.raises(ValueError):
+            boot.build_settings(args, spec)
+    else:
+        boot.build_settings(args, spec)
+        assert args.address == "192.0.2.20/24"
+        assert args.interface == "eth0"

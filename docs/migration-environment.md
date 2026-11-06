@@ -7,7 +7,7 @@ Encryption remains an explicit offline operation. Existing boot generations stay
 ## 1. Prepare
 
 - Confirm the host, reviewed revision and locked inputs in a clean, committed
-  checkout. The default `local-console` mode needs no signing custody or Secure Boot.
+  checkout.
 - Ask where the backup is and how restoration was tested. A remote backup is
   valid, but the journal, evidence, credentials and reviewed checkout still need
   independent local storage outside the target disks. Preserve the installation
@@ -19,14 +19,33 @@ Encryption remains an explicit offline operation. Existing boot generations stay
 
 ## 2. Build
 
-Run `devenv shell migration-boot build --help`, then supply:
+On the **target host**, print its detected settings (read-only):
 
-```text
-devenv shell migration-boot build <host> \
-  --interface <nic> --address <ipv4/prefix> --controller-cidr <ipv4/prefix> \
-  --recovery-uuid <filesystem-uuid> --recovery-fstype <ext4|vfat> \
-  --output <new-directory> --boot-trust local-console
+```sh
+devenv shell migration-boot discover
 ```
+
+Save them outside the checkout, review `controller_cidr` (the IPv4/CIDR allowed
+to connect over SSH), then build from the same YAML:
+
+```sh
+devenv shell migration-boot discover > ~/migration-settings.yml
+devenv shell migration-boot build gc-09 --settings ~/migration-settings.yml \
+  --output ~/migration-gc-09
+```
+
+Replace `gc-09` for another target. Discovery reads the local hostname, default
+IPv4 route, interface address, recovery UUID/filesystem and optional outer LUKS
+UUID. It refuses ambiguous routes or addresses; use `--interface` and `--address`
+to select them. `controller_cidr` is deliberately left unset unless supplied with
+`--controller-cidr`; the build refuses until you set it. Settings can be copied to
+a build controller and must match the selected inventory host and hardware UUID.
+Explicit build flags override YAML values.
+
+To print a fully populated, shell-quoted command instead, run
+`migration-boot discover --controller-cidr <controller-ip>/32 --format command`.
+Use `--output <new-directory>` to choose its destination. Discovery never builds,
+mounts, signs or changes boot entries; staging still verifies the live disks.
 
 Add `--gateway <ipv4>` if needed. Choose a reachable management network; host VPN
 settings and DNS are not inherited. Wi-Fi association is not configured.

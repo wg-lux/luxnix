@@ -15,6 +15,8 @@ import os
 from pathlib import Path
 import re
 import shutil
+import shlex
+import socket
 import stat
 import subprocess
 import sys
@@ -179,12 +181,7 @@ def require_recovery(path: Path, spec: dict) -> None:
         )
     )["blockdevices"]
 
-    def walk(nodes):
-        for node in nodes:
-            yield node
-            yield from walk(node.get("children", []))
-
-    nodes = list(walk(rows))
+    nodes = list(block_nodes(rows))
     disks = [n.get("serial") for n in nodes if n["type"] == "disk"]
     if not disks or any(
         not serial or serial in spec["target_serials"] for serial in disks
@@ -217,6 +214,168 @@ def image_spec(image: Path) -> dict:
     return spec
 
 
+BUILD_SETTINGS = (
+    "interface",
+    "address",
+    "gateway",
+    "controller_cidr",
+    "recovery_uuid",
+    "recovery_fstype",
+    "recovery_luks_uuid",
+)
+
+
+def block_nodes(nodes):
+    for node in nodes:
+        yield node
+        yield from block_nodes(node.get("children", []))
+
+
+def build_settings(args, host):
+    """Read data only; settings cannot select code, signing or output paths."""
+    from lx_administration.yaml import load_unique_yaml_file
+
+    if args.settings:
+        values = load_unique_yaml_file(args.settings)
+        if not isinstance(values, dict) or set(values) != {
+            "host",
+            "hardware_uuid",
+            *BUILD_SETTINGS,
+        }:
+            raise ValueError("Unexpected build settings fields")
+        if (values["host"], values["hardware_uuid"]) != (
+            args.host,
+            host["hardware_uuid"].lower(),
+        ):
+            raise ValueError("Build settings belong to another inventory host")
+        if any(
+            value is not None and not isinstance(value, str)
+            for value in values.values()
+        ):
+            raise ValueError("Build settings values must be strings or null")
+        for name in BUILD_SETTINGS:
+            if getattr(args, name) is None:
+                setattr(args, name, values[name])
+    missing = [
+        "--" + name.replace("_", "-")
+        for name in BUILD_SETTINGS
+        if name not in {"gateway", "recovery_luks_uuid"} and not getattr(args, name)
+    ]
+    if missing:
+        raise ValueError("Supply build settings or flags: " + ", ".join(missing))
+
+
+def discover(args):
+    """Observe this host without building, mounting or changing boot state."""
+    from lx_administration.yaml import load_unique_yaml_file
+    import yaml
+
+    host_name = socket.gethostname().split(".")[0]
+    if args.host is not None and args.host != host_name:
+        raise ValueError("Run discovery on the selected host, not its controller")
+    host = load_unique_yaml_file(args.flake / "autoconf/config.yml")["boot_storage"][
+        "hosts"
+    ][host_name]
+    routes = json.loads(sb.run("ip", "-json", "-4", "route", "show", "default"))
+    if args.interface:
+        routes = [r for r in routes if r.get("dev") == args.interface]
+    if not args.interface and len(routes) != 1:
+        raise ValueError("Default route is missing or ambiguous; select --interface")
+    interface = args.interface or routes[0]["dev"]
+    if len(routes) > 1:
+        raise ValueError("Multiple default routes on the selected interface")
+    addresses = json.loads(
+        sb.run("ip", "-json", "-4", "address", "show", "dev", interface)
+    )
+    addresses = [
+        f"{a['local']}/{a['prefixlen']}"
+        for link in addresses
+        for a in link.get("addr_info", [])
+        if a.get("scope") == "global"
+    ]
+    if not args.address and len(addresses) != 1:
+        raise ValueError("IPv4 address is missing or ambiguous; supply --address")
+    mounts = json.loads(
+        sb.run(
+            "findmnt",
+            "--json",
+            "--mountpoint",
+            args.recovery,
+            "--output",
+            "SOURCE,UUID,FSTYPE,FSROOT",
+        )
+    )["filesystems"]
+    if len(mounts) != 1 or mounts[0].get("fsroot") != "/":
+        raise ValueError("Select a mounted recovery filesystem root")
+    mount = mounts[0]
+    if mount.get("fstype") not in {"ext4", "vfat"} or not mount.get("uuid"):
+        raise ValueError("Recovery needs ext4 or FAT and a filesystem UUID")
+    nodes = list(
+        block_nodes(
+            json.loads(
+                sb.run(
+                    "lsblk",
+                    "--json",
+                    "--inverse",
+                    "--paths",
+                    "--output",
+                    "NAME,TYPE,FSTYPE,UUID",
+                    mount["source"],
+                )
+            )["blockdevices"]
+        )
+    )
+    luks = [
+        n["uuid"] for n in nodes if n.get("fstype") == "crypto_LUKS" and n.get("uuid")
+    ]
+    if len(luks) > 1 or (any(n["type"] == "crypt" for n in nodes) and not luks):
+        raise ValueError("Recovery encryption identity is ambiguous")
+    values = {
+        "host": host_name,
+        "hardware_uuid": host["hardware_uuid"].lower(),
+        "interface": interface,
+        "address": args.address or addresses[0],
+        "gateway": args.gateway or (routes[0].get("gateway") if routes else None),
+        "controller_cidr": args.controller_cidr,
+        "recovery_uuid": mount["uuid"],
+        "recovery_fstype": mount["fstype"],
+        "recovery_luks_uuid": luks[0] if luks else None,
+    }
+    if Path(f"/sys/class/net/{interface}/wireless").exists():
+        print(
+            "Wi-Fi detected: the RAM image does not configure wireless association. "
+            "Use the local console or select wired networking.",
+            file=sys.stderr,
+        )
+    if not args.controller_cidr:
+        print(
+            "Set controller_cidr to the allowed SSH controller IPv4/CIDR "
+            "before building.",
+            file=sys.stderr,
+        )
+    if args.format == "command":
+        if not args.controller_cidr:
+            raise ValueError("--format command requires --controller-cidr")
+        command = [
+            "devenv",
+            "shell",
+            "migration-boot",
+            "build",
+            host_name,
+            "--flake",
+            str(args.flake.resolve()),
+        ]
+        for name in BUILD_SETTINGS:
+            if values[name] is not None:
+                command.extend(["--" + name.replace("_", "-"), values[name]])
+        command.extend(
+            ["--output", str(args.output or Path.home() / f"migration-{host_name}")]
+        )
+        print(shlex.join(command))
+    else:
+        print(yaml.safe_dump(values, sort_keys=False), end="")
+
+
 def build(args) -> None:
     from lx_administration.yaml import load_unique_yaml_file
 
@@ -226,6 +385,7 @@ def build(args) -> None:
     revision = sb.reviewed_source(root, root / "ansible/inventory/hosts.ini")
     config = load_unique_yaml_file(root / "autoconf/config.yml")
     host = config["boot_storage"]["hosts"][args.host]
+    build_settings(args, host)
     admin = sb._nix(root, args.host, "user.admin.name")
     if not re.fullmatch(r"[a-z_][a-z0-9_-]*", admin):
         raise ValueError("Unsupported administrator account name")
@@ -564,14 +724,29 @@ def admit(args) -> None:
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
+    discovery = commands.add_parser(
+        "discover", help="Print local build settings without changes"
+    )
+    discovery.add_argument("host", nargs="?")
+    discovery.add_argument("--flake", type=Path, default=sb.ROOT)
+    discovery.add_argument("--recovery", type=Path, default=Path("/recovery"))
+    for option in ("interface", "address", "gateway", "controller-cidr"):
+        discovery.add_argument("--" + option)
+    discovery.add_argument("--format", choices=("yaml", "command"), default="yaml")
+    discovery.add_argument(
+        "--output", type=Path, help="Output directory in the printed command"
+    )
     builder = commands.add_parser("build")
     builder.add_argument("host")
     builder.add_argument("--flake", type=Path, default=sb.ROOT)
     for option in ("interface", "address", "controller-cidr"):
-        builder.add_argument("--" + option, required=True)
+        builder.add_argument("--" + option)
     builder.add_argument("--gateway")
-    builder.add_argument("--recovery-uuid", required=True)
-    builder.add_argument("--recovery-fstype", choices=("ext4", "vfat"), required=True)
+    builder.add_argument(
+        "--settings", type=Path, help="Read discovery YAML; explicit flags override it"
+    )
+    builder.add_argument("--recovery-uuid")
+    builder.add_argument("--recovery-fstype", choices=("ext4", "vfat"))
     builder.add_argument("--recovery-luks-uuid")
     builder.add_argument("--output", type=Path, required=True)
     builder.add_argument("--sign", action="store_true")
@@ -598,7 +773,9 @@ def main(argv=None) -> None:
     admission.add_argument("--certificate", type=Path, required=True)
     args = parser.parse_args(argv)
     try:
-        {"build": build, "stage": stage, "admit": admit}[args.command](args)
+        {"discover": discover, "build": build, "stage": stage, "admit": admit}[
+            args.command
+        ](args)
     except (
         ValueError,
         EOFError,
