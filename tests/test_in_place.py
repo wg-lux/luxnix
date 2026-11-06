@@ -264,6 +264,7 @@ def test_swap_is_only_erased_when_it_is_really_swap(monkeypatch):
     class Result:
         def __init__(self, kind):
             self.stdout = kind
+            self.returncode = 0
 
     kinds = {
         "/dev/swap": "swap",
@@ -274,7 +275,7 @@ def test_swap_is_only_erased_when_it_is_really_swap(monkeypatch):
         in_place.subprocess, "run", lambda args, **k: Result(kinds[args[-1]])
     )
     monkeypatch.setattr(in_place, "run", lambda *a, **k: calls.append(a) or "")
-    assert in_place.erase_plaintext_swap(list(kinds)) == ["/dev/swap"]
+    assert in_place.erase_plaintext_swap(list(kinds)) == (["/dev/swap"], [])
     assert [c[-1] for c in calls] == ["/dev/swap"]
 
 
@@ -409,3 +410,39 @@ def test_interrupted_journal_offers_resume_not_a_formatter(monkeypatch, tmp_path
     step = setup.next_step(root)
     assert step.action == setup.Action.PROVISION
     assert "resume" in step.reason
+
+
+def probes(monkeypatch, *results):
+    answers = iter(results)
+
+    class Probe:
+        def __init__(self, returncode, stdout):
+            self.returncode, self.stdout = returncode, stdout
+
+    monkeypatch.setattr(
+        in_place.subprocess, "run", lambda *a, **k: Probe(*next(answers))
+    )
+
+
+def test_swap_is_erased_and_other_partitions_are_left_alone(monkeypatch):
+    erased = []
+    monkeypatch.setattr(in_place, "run", lambda *a, **k: erased.append(a[-1]))
+    probes(monkeypatch, (0, "swap\n"), (2, ""), (0, "ext4\n"))
+    assert in_place.erase_plaintext_swap(["/a", "/b", "/c"]) == (["/a"], [])
+    assert erased == ["/a"]
+
+
+def test_a_failed_probe_is_reported_without_ending_the_conversion(monkeypatch):
+    monkeypatch.setattr(in_place, "run", lambda *a, **k: pytest.fail("never erase"))
+    probes(monkeypatch, (1, ""))
+    assert in_place.erase_plaintext_swap(["/a"]) == ([], ["/a"])
+
+
+def test_a_failed_erase_is_reported_without_ending_the_conversion(monkeypatch):
+    def fail(*a, **k):
+        raise in_place.InPlaceError("blkdiscard failed")
+
+    monkeypatch.setattr(in_place, "run", fail)
+    probes(monkeypatch, (0, "swap\n"))
+    assert in_place.erase_plaintext_swap(["/a"]) == ([], ["/a"])
+

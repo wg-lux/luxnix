@@ -26,8 +26,6 @@ from lx_administration.storage.boot_migration import Stopped
 from lx_administration.storage.boot_setup import success
 from lx_administration.yaml import load_unique_yaml_file
 
-KEYRING = Path("/etc/secrets/vault/lx_annotate_identity_keyring.yml")
-SECRETS_DIRECTORY = Path("/etc/secrets/vault")
 PLAYBOOK = Path("ansible/playbooks/first-setup-config.yml")
 DJANGO = "luxnix.lxAnnotateLocal.django"
 ACTIVATION_GUIDE = "docs/center-identity-salt-activation.md"
@@ -51,6 +49,9 @@ in {
   enabled = c.services.luxnix.lxAnnotateLocal.enable or false;
   center = c.services.luxnix.lxAnnotateLocal.django.centerIdentitySalt;
   legacy = c.services.luxnix.lxAnnotateLocal.django.enrollLegacyDefaultSalt;
+  create = c.services.luxnix.lxAnnotateLocal.django.createInitialIdentitySalt;
+  keyring = c.services.luxnix.lxAnnotateLocal.django.identitySaltKeyringFile;
+  vault_dir = c.luxnix.vault.dir;
   center_key = c.roles.endoreg-client.defaultCenterKey or null;
   vault_address = c.luxnix.vault.client.address;
   vault_ca = c.luxnix.vault.client.caCertFile;
@@ -70,6 +71,7 @@ class Choice:
 
 
 OWN_SALT = Choice(center=None, legacy=True)
+ESTABLISHED, NO_SALT, UNKNOWN = "established", "none", "unknown"
 
 
 def evaluate(checkout: Path, host: str) -> dict:
@@ -92,20 +94,32 @@ def evaluate(checkout: Path, host: str) -> dict:
     return json.loads(result.stdout)
 
 
-def established_keyring() -> dict | None:
-    """Read the manifest, which holds only paths; it is absent if storage is locked."""
-    result = secret_preflight.privileged("cat", str(KEYRING))
-    if result.returncode:
-        return None
-    return yaml.safe_load(result.stdout)
+def read_keyring(facts: dict) -> tuple[str, dict | None]:
+    """Report what is known; the manifest holds only paths, never salt values.
 
-
-def center_salt_delivered(center: str) -> bool:
-    return secret_preflight.exists(
-        SECRETS_DIRECTORY / f"lx_annotate_center_{center}_identity"
-    ) or secret_preflight.exists(
-        SECRETS_DIRECTORY / f"lx_annotate_identity_center_{center}"
+    An unreadable or empty secrets directory is not proof that no salt exists, so it
+    is UNKNOWN. That locks only the irreversible change, never keeping the setting.
+    """
+    if facts["keyring"]:
+        result = secret_preflight.privileged("cat", facts["keyring"])
+        if result.returncode == 0:
+            try:
+                return ESTABLISHED, yaml.safe_load(result.stdout)
+            except yaml.YAMLError:
+                return UNKNOWN, None
+    listing = secret_preflight.privileged(
+        "find", facts["vault_dir"], "-mindepth", "1", "-maxdepth", "1", "-print"
     )
+    if listing.returncode or not listing.stdout.strip():
+        return UNKNOWN, None
+    return NO_SALT, None
+
+
+def center_salt_delivered(center: str, vault_dir: str) -> bool:
+    directory = Path(vault_dir)
+    return secret_preflight.exists(
+        directory / f"lx_annotate_center_{center}_identity"
+    ) or secret_preflight.exists(directory / f"lx_annotate_identity_center_{center}")
 
 
 def vault_status(address: str, certificate: str | None) -> str:
@@ -157,24 +171,18 @@ def current_choice(facts: dict) -> Choice:
     )
 
 
-def host_salt_settings(facts: dict) -> list[dict]:
-    """Moving to the host's salt; the legacy option also enables the salt unit."""
-    settings = [
-        {
-            "section": "host_services",
-            "key": f"{DJANGO}.centerIdentitySalt",
-            "value": "false",
-        }
+def host_salt_settings(facts: dict, *, create: bool) -> list[dict]:
+    """Settings for the host's own salt; the legacy option enables the salt unit."""
+    wanted = {
+        "centerIdentitySalt": ("false", facts["center"]),
+        "enrollLegacyDefaultSalt": ("true", not facts["legacy"]),
+        "createInitialIdentitySalt": ("true", create and not facts["create"]),
+    }
+    return [
+        {"section": "host_services", "key": f"{DJANGO}.{name}", "value": value}
+        for name, (value, needed) in wanted.items()
+        if needed
     ]
-    if not facts["legacy"]:
-        settings.append(
-            {
-                "section": "host_services",
-                "key": f"{DJANGO}.enrollLegacyDefaultSalt",
-                "value": "true",
-            }
-        )
-    return settings
 
 
 def write_inventory(checkout: Path, host: str, settings: list[dict]) -> None:
@@ -230,10 +238,14 @@ def describe(choice: Choice) -> str:
     return f"{salt}\n  Reads old default_salt records: {reader}"
 
 
-def show_status(host: str, choice: Choice, facts: dict, keyring: dict | None) -> None:
-    active = "none found (or storage is locked); the host creates one on first start"
-    if keyring is not None:
-        active = keyring.get("center_id") or "this host's own salt"
+def show_status(
+    host: str, choice: Choice, facts: dict, status: str, keyring: dict | None
+) -> None:
+    active = {
+        NO_SALT: "none found",
+        UNKNOWN: "cannot tell; storage may be locked",
+        ESTABLISHED: (keyring or {}).get("center_id") or "this host's own salt",
+    }[status]
     print(f"\n=== LuxNix first setup: {host} ===")
     print(f"Configured: {describe(choice)}")
     print(f"Active on this host: {active}")
@@ -249,11 +261,13 @@ def show_status(host: str, choice: Choice, facts: dict, keyring: dict | None) ->
         )
 
 
-def move_to_host_salt(checkout: Path, host: str, facts: dict) -> NoReturn:
+def move_to_host_salt(
+    checkout: Path, host: str, facts: dict, *, create: bool
+) -> NoReturn:
     """Write and verify the change, then pause; the plan pins the next commit."""
     path = checkout / "ansible/inventory/host_vars" / f"{host}.yml"
     load_unique_yaml_file(path)  # Refuse a missing or malformed inventory first.
-    write_inventory(checkout, host, host_salt_settings(facts))
+    write_inventory(checkout, host, host_salt_settings(facts, create=create))
     regenerate(checkout)
     if current_choice(evaluate(checkout, host)) != OWN_SALT:
         raise migration.MigrationError(
@@ -280,9 +294,9 @@ def accept_data_loss(host: str, consequence: str) -> str:
     return name
 
 
-def require_delivery(host: str, center: str) -> str | None:
+def require_delivery(host: str, center: str, vault_dir: str) -> str | None:
     """The site fails closed without its salt, so settle this before encrypting."""
-    if center_salt_delivered(center):
+    if center_salt_delivered(center, vault_dir):
         print(f"Center salt for {center} is present on this host.")
         return None
     print(
@@ -309,7 +323,30 @@ def require_delivery(host: str, center: str) -> str | None:
     )
 
 
-def run(checkout: Path, host: str) -> str | None:
+def change_offered(
+    choice: Choice, facts: dict, status: str, keyring: dict | None
+) -> str | None:
+    """Offer only what cannot stop the host; everything else stays on Keep."""
+    if choice.center:
+        if status == UNKNOWN:
+            print(
+                "Moving to this host's own salt is unavailable until storage is "
+                "unlocked, because a salt already active here cannot be changed."
+            )
+            return None
+        if refusal(OWN_SALT, keyring):
+            return None
+        return "Use this host's own random salt (recommended)"
+    if status != ESTABLISHED and not facts["create"]:
+        print(
+            "If no salt comes back from custody, LX-Annotate waits until creating one "
+            "is allowed."
+        )
+        return "Let this host create a random salt on first start (recommended)"
+    return None
+
+
+def run(checkout: Path, host: str, *, ask_delivery: bool = True) -> str | None:
     """Settle the choice; return who accepted continuing without the center salt."""
     if not migration.HOST.fullmatch(host):
         raise migration.MigrationError("Invalid inventory host name")
@@ -318,31 +355,33 @@ def run(checkout: Path, host: str) -> str | None:
     if not facts["enabled"]:
         print(f"LX-Annotate is not enabled on {host}, so it needs no salt choice.")
         return None
-    keyring = established_keyring()
+    status, keyring = read_keyring(facts)
     choice = current_choice(facts)
-    show_status(host, choice, facts, keyring)
+    show_status(host, choice, facts, status, keyring)
     problem = refusal(choice, keyring)
     if problem:
-        raise migration.MigrationError(f"Inventory conflicts with this host: {problem}")
+        raise migration.MigrationError(
+            f"Inventory conflicts with this host: {problem}. Restore the inventory "
+            f"setting that matches the active salt and rerun; see {ACTIVATION_GUIDE}"
+        )
+    change = change_offered(choice, facts, status, keyring)
     print("\n1. Keep this and continue")
-    if choice.center:
-        print("2. Use this host's own random salt (recommended)")
+    if change:
+        print(f"2. {change}")
     print("3. Stop for now")
     answer = input("> ").strip()
-    if answer == "2" and choice.center:
-        problem = refusal(OWN_SALT, keyring)
-        if problem:
-            raise migration.MigrationError(problem)
+    if answer == "2" and change:
         print(f"\nNew setting: {describe(OWN_SALT)}")
-        move_to_host_salt(checkout, host, facts)
+        move_to_host_salt(checkout, host, facts, create=status != ESTABLISHED)
     if answer != "1":
         raise Stopped("Nothing was changed.")
-    if choice.center:
+    accepted_by = None
+    if choice.center and ask_delivery:
         problem = center_problem(host, choice.center, facts)
         if problem:
             raise migration.MigrationError(problem)
-        accepted_by = require_delivery(host, choice.center)
-    else:
-        accepted_by = None
+        accepted_by = require_delivery(host, choice.center, facts["vault_dir"])
+    elif choice.center:
+        print("Center salt delivery is checked when the plan is created.")
     success(f"First setup is settled for {host}: {describe(choice)}")
     return accepted_by

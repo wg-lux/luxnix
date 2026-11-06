@@ -245,6 +245,60 @@ def missing_salts(state: Path, custody: Path) -> list[str]:
     ]
 
 
+def orphaned_salt(state: Path, custody: Path) -> dict | None:
+    """The host's salt is gone but traces remain, so its provisioner would refuse.
+
+    A center host is left out: its active salt comes back from Vault.
+    """
+    with migration.locked_state(state):
+        plan = migration.load_plan(state)
+        contract = migration.secret_contract(plan)
+        host = plan["spec"]["host"]
+    by_id = {item["id"]: item["path"] for item in contract["items"]}
+    active = by_id.get("identity-active")
+    stores = [by_id.get("identity-salt-recovery"), contract.get("identity_replica")]
+    stores = [store for store in stores if store]
+    if not active or any(
+        exists(Path(path))
+        for path in [active, *(str(Path(s, "active.salt")) for s in stores)]
+    ):
+        return None
+    traces = [
+        path
+        for path in [
+            by_id.get("identity-salt-keyring"),
+            by_id.get("identity-legacy-default"),
+            *(str(Path(s, "enrolled")) for s in stores),
+        ]
+        if path and exists(Path(path))
+    ]
+    if not traces:
+        return None
+    keyring = by_id.get("identity-salt-keyring")
+    manifest = yaml.safe_load(read_private(Path(keyring))) if keyring in traces else {}
+    if manifest.get("center_id"):
+        return None
+    copy = custody_copy(custody, host, active)
+    return {"active": active, "traces": traces, "copy": copy if exists(copy) else None}
+
+
+def restore_salt(copy: Path, active: str) -> None:
+    if privileged("install", "-D", "-m", "0600", str(copy), active).returncode:
+        raise PreflightError(f"Could not restore {active} from custody")
+
+
+def set_aside(paths: list[str]) -> list[str]:
+    """Move traces aside, never delete them, so the provisioner may start fresh."""
+    stamp = time.strftime("%Y%m%d%H%M%S")
+    moved = []
+    for path in paths:
+        target = f"{path}.superseded-{stamp}"
+        if privileged("mv", "-n", path, target).returncode:
+            raise PreflightError(f"Could not set {path} aside; nothing was deleted")
+        moved.append(target)
+    return moved
+
+
 def check_item(
     item: dict,
     custody: Path,

@@ -223,7 +223,8 @@ def provision(
         if not values:
             if not allow_initial_enrollment:
                 raise ValueError(
-                    "Initial identity enrollment must be explicitly requested"
+                    "Initial identity enrollment must be explicitly requested; run "
+                    "devenv shell boot-storage-setup first-setup or restore custody"
                 )
             values.add(generate_identity_salt())
         value = values.pop()

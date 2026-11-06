@@ -669,3 +669,53 @@ def test_build_settings_bound_to_host_with_explicit_overrides(tmp_path, spec, fa
         boot.build_settings(args, spec)
         assert args.address == "192.0.2.20/24"
         assert args.interface == "eth0"
+
+
+@pytest.mark.parametrize(
+    "keys,accepted",
+    [
+        ([], True),
+        (["not-a-public-key"], False),
+        (None, False),
+        (["ssh-ed25519 AAAA test-fixture\nextra"], False),
+    ],
+)
+def test_local_console_accepts_no_keys_but_rejects_malformed_keys(spec, keys, accepted):
+    spec.update(boot_trust="local-console", authorized_keys=keys)
+    if accepted:
+        boot.validate_spec(spec)
+    else:
+        with pytest.raises(ValueError, match="public keys"):
+            boot.validate_spec(spec)
+
+
+@pytest.mark.parametrize("keyless", [True, False])
+def test_console_ssh_units_follow_administrator_keys(spec, keyless):
+    spec["boot_trust"] = "local-console"
+    if keyless:
+        spec["authorized_keys"] = []
+    root = Path.cwd()
+    expression = (
+        f"let f = builtins.getFlake {json.dumps('git+file://' + str(root))}; "
+        f"c = (import {root}/conf/migration-environment.nix {{inputs=f.inputs; "
+        f"spec=builtins.fromJSON {json.dumps(json.dumps(spec))};}}).config; "
+        "in { ssh = c.services.openssh.enable; "
+        "daemon = c.systemd.services ? sshd; "
+        "admission = c.systemd.services.luxnix-migration-admission.requires; "
+        "firewall = c.networking.firewall.extraCommands; "
+        "generator = c.systemd.generators.systemd-ssh-generator or null; "
+        "console = c.systemd.services ? luxnix-migration-console; }"
+    )
+    result = subprocess.run(
+        ["nix", "eval", "--impure", "--json", "--expr", expression],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=120,
+    )
+    config = json.loads(result.stdout)
+    assert config["console"]
+    assert config["ssh"] == config["daemon"] == (not keyless)
+    assert ("sshd-keygen.service" in config["admission"]) == (not keyless)
+    assert ("--dport 2222" in config["firewall"]) == (not keyless)
+    assert (config["generator"] == "/dev/null") == keyless

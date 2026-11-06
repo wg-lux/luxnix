@@ -21,7 +21,7 @@ commands:
     documentation: docs/migration-environment.md
     prerequisites:
       - Clean reviewed durable checkout and existing fleet signing custody for signing.
-      - Explicit management network and administrator keys from the evaluated host configuration.
+      - Explicit management network; administrator keys enable SSH, while keyless local-console images disable it.
     effects:
       - Discovery prints YAML or a shell-quoted command from local facts without changing state; build flags override YAML settings.
       - Builds a small UKI verifying a separate RAM runtime; local-console is the default, with physical approval before access.

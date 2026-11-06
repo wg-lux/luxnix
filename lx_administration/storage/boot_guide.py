@@ -33,7 +33,6 @@ CUSTODY_MOUNT = Path("/run/luxnix-custody")
 CUSTODY_DIRECTORY = CUSTODY_MOUNT / "custody"
 CUSTODY_SIZE = "2G"
 ANSWERS = "recovery-checks.json"
-ENROLLMENT_ACCEPTANCE = "center-salt-acceptance.json"
 GUIDED_NOTES = "recovery-notes-guided.txt"
 ANSWER_LIFETIME = 24 * 3600
 # Measured checks first, so a reboot for the physical tests comes last.
@@ -72,7 +71,10 @@ def custody_mounted() -> bool:
 
 def mount_custody() -> None:
     interactive("mkdir", "-p", str(CUSTODY_MOUNT))
-    interactive("mount", f"/dev/mapper/{CUSTODY_MAPPING}", str(CUSTODY_MOUNT))
+    interactive(
+        "mount", "-o", "nosuid,nodev,noexec", f"/dev/mapper/{CUSTODY_MAPPING}",
+        str(CUSTODY_MOUNT),
+    )  # fmt: skip
 
 
 def open_custody() -> None:
@@ -240,8 +242,8 @@ def measured_detail(check: str, spec: dict, state: Path) -> str:
                 f" {receipt['salt_loss_accepted_by']} accepted possible data loss for "
                 f"missing salts: {', '.join(lost)}."
             )
-        if (state / ENROLLMENT_ACCEPTANCE).exists():
-            acceptance = json.loads((state / ENROLLMENT_ACCEPTANCE).read_text())
+        if (state / setup.ENROLLMENT_ACCEPTANCE).exists():
+            acceptance = json.loads((state / setup.ENROLLMENT_ACCEPTANCE).read_text())
             detail += (
                 f" {acceptance['accepted_by']} accepted continuing without center "
                 "salt enrollment."
@@ -314,23 +316,67 @@ def write_notes(state: Path, answers: dict) -> Path:
     return notes
 
 
+LOSS_WARNING = (
+    "If this salt never held data, nothing is lost. Otherwise records imported with it "
+    "cannot be matched to their patients again. If a locked container is hiding it, "
+    "stop and unlock it first."
+)
+
+
+def settle_orphaned_salt(host: str, state: Path, custody: Path) -> str | None:
+    """Offer every way forward for a lost salt; return who accepted starting fresh."""
+    orphan = secret_preflight.orphaned_salt(state, custody)
+    if orphan is None:
+        return None
+    print(f"\nThis host's salt {orphan['active']} is gone, but traces of it remain:")
+    print("  " + "\n  ".join(orphan["traces"]))
+    restorable = orphan["copy"] is not None
+    if restorable:
+        print("1. Restore it from custody (recommended; nothing is lost)")
+    print("2. Set the traces aside and let this host create a new salt")
+    print("3. Stop for now")
+    answer = input("> ").strip()
+    if answer == "1" and restorable:
+        secret_preflight.restore_salt(orphan["copy"], orphan["active"])
+        setup.success("The salt was restored from custody.")
+        return None
+    if answer != "2":
+        raise Stopped("Nothing was changed.")
+    accepted_by = first_setup.accept_data_loss(host, LOSS_WARNING)
+    moved = secret_preflight.set_aside(orphan["traces"])
+    print("Kept for review:\n  " + "\n  ".join(moved))
+    return accepted_by
+
+
+def accept_missing_salts(
+    host: str, state: Path, custody: Path, accepted_by: str | None
+) -> str | None:
+    missing = secret_preflight.missing_salts(state, custody)
+    if not missing or accepted_by:
+        return accepted_by
+    return first_setup.accept_data_loss(
+        host,
+        "These salts are not on this host or in custody:\n  "
+        + "\n  ".join(missing)
+        + f"\n{LOSS_WARNING}",
+    )
+
+
+def settle_missing_salts(host: str, state: Path, custody: Path) -> str | None:
+    accepted_by = settle_orphaned_salt(host, state, custody)
+    return accept_missing_salts(host, state, custody, accepted_by)
+
+
 def recovery_stage(spec: dict, state: Path, custody: Path | None) -> None:
     reopenable = custody is None
     directory = custody or ensure_custody()
-    fill_custody(state, directory, reopenable=reopenable)
     if not setup.preflight_passed(state):
-        missing = secret_preflight.missing_salts(state, directory)
-        accepted_by = None
-        if missing:
-            accepted_by = first_setup.accept_data_loss(
-                spec["host"],
-                "These salts are not on this host or in custody:\n  "
-                + "\n  ".join(missing)
-                + "\nThe host creates a new random salt on first start. If they were "
-                "never enrolled, nothing is lost. If they existed, records imported "
-                "with them cannot be matched to their patients again. If a locked "
-                "container is hiding them, stop and unlock it first.",
-            )
+        # Settled first, so custody then copies what remains, set-aside files included.
+        accepted_by = settle_orphaned_salt(spec["host"], state, directory)
+        fill_custody(state, directory, reopenable=reopenable)
+        accepted_by = accept_missing_salts(
+            spec["host"], state, directory, accepted_by
+        )
         secret_preflight.run(state, directory, salt_loss_accepted_by=accepted_by)
     step = setup.next_step(state)
     answers = ask_checks(spec, state, step)
@@ -389,14 +435,7 @@ def run(
     recovery_media.setup(spec, state, apply=True, device=device)
     replace_stale_plan(state, spec)
     if not (state / "plan.json").exists():
-        # Choices change the revision, so they come before a plan pins it.
-        accepted_by = first_setup.run(Path(spec["checkout"]), host)
         setup.save_plan(spec, state)
-        if accepted_by:
-            migration.atomic_json(
-                state / ENROLLMENT_ACCEPTANCE,
-                {"accepted_by": accepted_by, "accepted_at": time.time()},
-            )
     step = setup.next_step(state)
     if step.action == setup.Action.ASSESS and step.stage == "recovery":
         recovery_stage(spec, state, custody)

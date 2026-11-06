@@ -21,17 +21,24 @@ let
       --user ${lib.escapeShellArg endoreg-service-user-name} \
       --group ${lib.escapeShellArg endoreg-service-group-name} \
       ${lib.optionalString cfg.django.centerIdentitySalt "--source-salt ${lib.escapeShellArg centerSaltFile} --center-id ${lib.escapeShellArg centerKey}"} \
-      ${lib.optionalString (!cfg.django.centerIdentitySalt) "--allow-create"}
+      ${lib.optionalString cfg.django.createInitialIdentitySalt "--allow-create"}
   '';
 in
 mkIf (cfg.django.enrollLegacyDefaultSalt && !cfg.django.identitySaltViaSecretSpec) {
-  assertions = lib.optional cfg.django.centerIdentitySalt {
-    assertion =
-      builtins.match "[A-Za-z0-9_-]+" centerKey != null
-      && config.luxnix.vault.client.hubPki.enable
-      && !config.luxnix.vault.client.auth.deferUntilProvisioned;
-    message = "Center identity salt requires a stable center key and enrolled Vault machine authentication.";
-  };
+  assertions =
+    lib.optional cfg.django.centerIdentitySalt {
+      assertion =
+        builtins.match "[A-Za-z0-9_-]+" centerKey != null
+        && config.luxnix.vault.client.hubPki.enable
+        && !config.luxnix.vault.client.auth.deferUntilProvisioned;
+      message = "Center identity salt requires a stable center key and enrolled Vault machine authentication.";
+    }
+    ++ [
+      {
+        assertion = !(cfg.django.centerIdentitySalt && cfg.django.createInitialIdentitySalt);
+        message = "A host cannot create its own salt while it uses a center salt from Vault.";
+      }
+    ];
   roles.managed-secrets.customSecrets.lx_annotate_center_identity_source =
     mkIf cfg.django.centerIdentitySalt
       {

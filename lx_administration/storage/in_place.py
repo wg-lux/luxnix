@@ -230,20 +230,29 @@ def open_root(device: str, passphrase: bytes) -> None:
     with_key(passphrase, "open", "--type", "luks2", device, "cryptroot")
 
 
-def erase_plaintext_swap(partitions: list[str]) -> list[str]:
-    """Swap can hold secrets in clear; erasing it loses nothing durable."""
-    erased = []
+def erase_plaintext_swap(partitions: list[str]) -> tuple[list[str], list[str]]:
+    """Swap can hold secrets in clear; erasing it loses nothing durable.
+
+    Root is already encrypted here, so a failure is reported for the operator to finish
+    rather than ending the conversion. blkid exits 2 when a partition has no signature.
+    """
+    erased, unchecked = [], []
     for partition in partitions:
-        kind = subprocess.run(
+        probe = subprocess.run(
             ["blkid", "-p", "-o", "value", "-s", "TYPE", partition],
             text=True,
             capture_output=True,
             check=False,
-        ).stdout.strip()
-        if kind == "swap":
-            run("blkdiscard", "--force", "--zeroout", partition, timeout=7200)
-            erased.append(partition)
-    return erased
+        )
+        if probe.returncode not in {0, 2}:
+            unchecked.append(partition)
+        elif probe.stdout.strip() == "swap":
+            try:
+                run("blkdiscard", "--force", "--zeroout", partition, timeout=7200)
+                erased.append(partition)
+            except (InPlaceError, subprocess.SubprocessError):
+                unchecked.append(partition)
+    return erased, unchecked
 
 
 def mount_target(mounts: dict, root: Path) -> None:
@@ -384,7 +393,7 @@ def convert(
     if original is not None and converted != original:
         raise InPlaceError("The filesystem identity changed during encryption; stop")
     run("btrfs", "check", "--readonly", "/dev/mapper/cryptroot", timeout=7200)
-    erased = erase_plaintext_swap(layout["swap_partitions"])
+    erased, unchecked = erase_plaintext_swap(layout["swap_partitions"])
     mount_target(mounts, root)
     consolidated = consolidate_containers(
         containers, layout["binds"], container_passphrases, root
@@ -394,4 +403,5 @@ def convert(
         "filesystem_uuid": converted,
         "consolidated": consolidated,
         "swap_erased": erased,
+        "swap_unchecked": unchecked,
     }

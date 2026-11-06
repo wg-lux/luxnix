@@ -13,6 +13,7 @@ CENTER = "university_hospital_wuerzburg"
 ROOT = Path(__file__).resolve().parent.parent
 CENTER_KEY = f"{first.DJANGO}.centerIdentitySalt"
 LEGACY_KEY = f"{first.DJANGO}.enrollLegacyDefaultSalt"
+CREATE_KEY = f"{first.DJANGO}.createInitialIdentitySalt"
 
 
 def facts(**changes):
@@ -20,6 +21,9 @@ def facts(**changes):
         "enabled": True,
         "center": False,
         "legacy": True,
+        "create": False,
+        "keyring": "/etc/secrets/vault/keyring.yml",
+        "vault_dir": "/etc/secrets/vault",
         "center_key": None,
         "defer": False,
         "vault_address": "https://vault.example:8200",
@@ -70,43 +74,48 @@ def test_center_problem_passes_a_configured_site():
 
 def test_moving_to_a_host_salt_clears_the_center_setting_only():
     current = facts(center=True, center_key=CENTER)
-    assert first.host_salt_settings(current) == [
+    assert first.host_salt_settings(current, create=False) == [
         {"section": "host_services", "key": CENTER_KEY, "value": "false"}
     ]
 
 
 def test_moving_to_a_host_salt_restores_the_unit_that_creates_it():
-    settings = first.host_salt_settings(facts(center=True, legacy=False))
+    settings = first.host_salt_settings(
+        facts(center=True, legacy=False), create=False
+    )
     assert {"section": "host_services", "key": LEGACY_KEY, "value": "true"} in settings
 
 
-def test_a_host_on_an_active_center_salt_cannot_move(monkeypatch, tmp_path):
+def test_a_host_on_an_active_center_salt_is_not_offered_a_move(
+    monkeypatch, tmp_path, capsys
+):
     current = facts(center=True, center_key=CENTER)
     console(monkeypatch, current, keyring={"center_id": CENTER})
     monkeypatch.setattr(first, "write_inventory", lambda *a: pytest.fail("no write"))
     answers(monkeypatch, "2")
-    with pytest.raises(migration.MigrationError, match="no supported way"):
+    with pytest.raises(first.Stopped):
         first.run(tmp_path, "gc-09")
+    assert "2. Use this host" not in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("reply", ["", "3", "maybe"])
 def test_missing_center_salt_stops_unless_a_choice_is_made(monkeypatch, reply):
-    monkeypatch.setattr(first, "center_salt_delivered", lambda center: False)
+    monkeypatch.setattr(first, "center_salt_delivered", lambda center, vault_dir: False)
     answers(monkeypatch, reply)
     with pytest.raises(first.Stopped):
-        first.require_delivery("gc-09", CENTER)
+        first.require_delivery("gc-09", CENTER, "/vault")
 
 
 def test_confirmed_enrollment_records_no_acceptance(monkeypatch):
-    monkeypatch.setattr(first, "center_salt_delivered", lambda center: False)
+    monkeypatch.setattr(first, "center_salt_delivered", lambda center, vault_dir: False)
     answers(monkeypatch, "1")
-    assert first.require_delivery("gc-09", CENTER) is None
+    assert first.require_delivery("gc-09", CENTER, "/vault") is None
 
 
 def test_continuing_without_enrollment_names_who_accepted(monkeypatch, capsys):
-    monkeypatch.setattr(first, "center_salt_delivered", lambda center: False)
+    monkeypatch.setattr(first, "center_salt_delivered", lambda center, vault_dir: False)
     answers(monkeypatch, "2", "ACCEPT DATA LOSS gc-09", "A. Operator")
-    assert first.require_delivery("gc-09", CENTER) == "A. Operator"
+    assert first.require_delivery("gc-09", CENTER, "/vault") == "A. Operator"
     assert "stays stopped" in capsys.readouterr().out
 
 
@@ -122,16 +131,17 @@ def test_data_loss_needs_the_exact_phrase_and_a_name(monkeypatch, replies):
 
 
 def test_delivered_center_salt_asks_nothing(monkeypatch):
-    monkeypatch.setattr(first, "center_salt_delivered", lambda center: True)
+    monkeypatch.setattr(first, "center_salt_delivered", lambda center, vault_dir: True)
     answers(monkeypatch)
-    first.require_delivery("gc-09", CENTER)
+    first.require_delivery("gc-09", CENTER, "/vault")
 
 
-def console(monkeypatch, current, keyring=None):
+def console(monkeypatch, current, keyring=None, status=None):
+    known = status or (first.ESTABLISHED if keyring else first.NO_SALT)
     monkeypatch.setattr(first, "evaluate", lambda *a: current)
-    monkeypatch.setattr(first, "established_keyring", lambda: keyring)
+    monkeypatch.setattr(first, "read_keyring", lambda facts: (known, keyring))
     monkeypatch.setattr(first, "vault_status", lambda *a: "ready")
-    monkeypatch.setattr(first, "center_salt_delivered", lambda center: True)
+    monkeypatch.setattr(first, "center_salt_delivered", lambda center, vault_dir: True)
 
 
 def test_keeping_settings_writes_nothing_and_succeeds(monkeypatch, tmp_path, capsys):
@@ -173,7 +183,7 @@ def test_moving_to_a_host_salt_writes_regenerates_and_asks_for_a_commit(
     (inventory / "gc-09.yml").write_text("host_services: {}\n")
     states = iter([facts(center=True, center_key=CENTER), facts()])
     monkeypatch.setattr(first, "evaluate", lambda *a: next(states))
-    monkeypatch.setattr(first, "established_keyring", lambda: None)
+    monkeypatch.setattr(first, "read_keyring", lambda f: (first.ESTABLISHED, {}))
     monkeypatch.setattr(first, "vault_status", lambda *a: "ready")
     written = []
     monkeypatch.setattr(first, "write_inventory", lambda *a: written.append(a[2]))
@@ -190,21 +200,86 @@ def test_moving_to_a_host_salt_writes_regenerates_and_asks_for_a_commit(
     assert "git commit" in output
 
 
-def test_a_host_on_its_own_salt_is_not_offered_a_change(monkeypatch, tmp_path):
-    console(monkeypatch, facts())
+def test_a_host_with_its_own_salt_is_not_offered_a_change(monkeypatch, tmp_path):
+    console(monkeypatch, facts(), keyring={"schema_version": 1})
     monkeypatch.setattr(first, "write_inventory", lambda *a: pytest.fail("no write"))
     answers(monkeypatch, "2")
     with pytest.raises(first.Stopped):
         first.run(tmp_path, "gc-09")
 
 
-def test_the_salt_unit_creates_only_in_machine_mode():
+def test_a_host_with_no_salt_is_offered_creating_one(monkeypatch, tmp_path, capsys):
+    inventory = tmp_path / "ansible/inventory/host_vars"
+    inventory.mkdir(parents=True)
+    (inventory / "gc-09.yml").write_text("host_services: {}\n")
+    console(monkeypatch, facts())
+    written = []
+    monkeypatch.setattr(first, "write_inventory", lambda *a: written.append(a[2]))
+    monkeypatch.setattr(first, "regenerate", lambda checkout: None)
+    answers(monkeypatch, "2")
+    with pytest.raises(first.Stopped, match="after this commit"):
+        first.run(tmp_path, "gc-09")
+    assert written == [
+        [{"section": "host_services", "key": CREATE_KEY, "value": "true"}]
+    ]
+    assert "create a random salt" in capsys.readouterr().out
+
+
+def test_no_salt_can_still_continue_for_a_custody_restore(
+    monkeypatch, tmp_path, capsys
+):
+    console(monkeypatch, facts())
+    monkeypatch.setattr(first, "write_inventory", lambda *a: pytest.fail("no write"))
+    answers(monkeypatch, "1")
+    assert first.run(tmp_path, "gc-09") is None
+    assert "SUCCESS" in capsys.readouterr().err
+
+
+def test_unknown_storage_locks_only_the_irreversible_move(
+    monkeypatch, tmp_path, capsys
+):
+    console(monkeypatch, facts(center=True, center_key=CENTER), status=first.UNKNOWN)
+    monkeypatch.setattr(first, "write_inventory", lambda *a: pytest.fail("no write"))
+    answers(monkeypatch, "1")
+    first.run(tmp_path, "gc-09")
+    captured = capsys.readouterr()
+    assert "until storage is unlocked" in captured.out
+    assert "2. Use this host" not in captured.out
+    assert "SUCCESS" in captured.err
+
+
+def privileged_results(monkeypatch, results):
+    class Result:
+        def __init__(self, returncode, stdout=b""):
+            self.returncode, self.stdout = returncode, stdout
+
+    monkeypatch.setattr(
+        first.secret_preflight,
+        "privileged",
+        lambda *command: Result(*results[command[0]]),
+    )
+
+
+def test_keyring_states_are_told_apart(monkeypatch):
+    privileged_results(monkeypatch, {"cat": (0, b"center_id: x\n")})
+    assert first.read_keyring(facts()) == (first.ESTABLISHED, {"center_id": "x"})
+    privileged_results(monkeypatch, {"cat": (1,), "find": (0, b"/vault/other\n")})
+    assert first.read_keyring(facts()) == (first.NO_SALT, None)
+    privileged_results(monkeypatch, {"cat": (1,), "find": (0, b"")})
+    assert first.read_keyring(facts()) == (first.UNKNOWN, None)
+    privileged_results(monkeypatch, {"cat": (1,), "find": (1,)})
+    assert first.read_keyring(facts()) == (first.UNKNOWN, None)
+    privileged_results(monkeypatch, {"cat": (0, b"a: [")})
+    assert first.read_keyring(facts()) == (first.UNKNOWN, None)
+
+
+def test_salt_creation_is_a_per_host_setting():
     unit = ROOT / (
         "modules/nixos/services/lx-annotate-local/subservices/"
         "lx-annotate-identity-salts.nix"
     )
     assert (
-        'lib.optionalString (!cfg.django.centerIdentitySalt) "--allow-create"'
+        'lib.optionalString cfg.django.createInitialIdentitySalt "--allow-create"'
         in unit.read_text()
     )
 
@@ -213,13 +288,13 @@ def test_a_host_salt_needs_no_vault_or_enrollment(monkeypatch, tmp_path, capsys)
     console(monkeypatch, facts())
     monkeypatch.setattr(first, "vault_status", lambda *a: pytest.fail("no Vault"))
     monkeypatch.setattr(
-        first, "center_salt_delivered", lambda center: pytest.fail("no center")
+        first, "center_salt_delivered", lambda *a: pytest.fail("no center")
     )
     answers(monkeypatch, "1")
     assert first.run(tmp_path, "gc-09") is None
     output = capsys.readouterr().out
     assert "the hub never holds it" in output
-    assert "creates one on first start" in output
+    assert "none found" in output
 
 
 def test_a_result_differing_from_the_choice_is_an_error(monkeypatch, tmp_path):
@@ -231,7 +306,7 @@ def test_a_result_differing_from_the_choice_is_an_error(monkeypatch, tmp_path):
     monkeypatch.setattr(first, "write_inventory", lambda *a: None)
     monkeypatch.setattr(first, "regenerate", lambda checkout: None)
     with pytest.raises(migration.MigrationError, match="differs from your choice"):
-        first.move_to_host_salt(tmp_path, "gc-09", current)
+        first.move_to_host_salt(tmp_path, "gc-09", current, create=False)
 
 
 def test_a_malformed_inventory_stops_before_any_write(monkeypatch, tmp_path):
@@ -240,7 +315,7 @@ def test_a_malformed_inventory_stops_before_any_write(monkeypatch, tmp_path):
     (inventory / "gc-09.yml").write_text("a: 1\na: 2\n")
     monkeypatch.setattr(first, "write_inventory", lambda *a: pytest.fail("no write"))
     with pytest.raises(yaml.YAMLError):
-        first.move_to_host_salt(tmp_path, "gc-09", facts())
+        first.move_to_host_salt(tmp_path, "gc-09", facts(), create=False)
 
 
 def playbook_checkout(tmp_path, inventory):
@@ -334,4 +409,4 @@ def test_real_playbook_no_longer_writes_center_or_vault_settings(tmp_path):
 def test_salt_values_are_never_read():
     source = (ROOT / "lx_administration/storage/first_setup.py").read_text()
     assert source.count('privileged("cat"') == 1
-    assert 'privileged("cat", str(KEYRING))' in source
+    assert 'privileged("cat", facts["keyring"])' in source

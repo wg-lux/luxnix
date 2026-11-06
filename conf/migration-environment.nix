@@ -3,6 +3,7 @@
 let
   localConsole = (spec.boot_trust or "secure-boot") == "local-console";
   console = spec.console or "tty1";
+  sshEnabled = spec.authorized_keys != [ ];
   runtimeSystem = inputs.nixpkgs.lib.nixosSystem {
     system = "x86_64-linux";
     modules = [
@@ -79,13 +80,14 @@ let
             };
             linkConfig.RequiredForOnline = "routable";
           };
-          networking.firewall.extraCommands = ''
+          networking.firewall.extraCommands = lib.mkIf sshEnabled ''
             ${pkgs.iptables}/bin/iptables -A nixos-fw -i ${lib.escapeShellArg spec.interface} \
               -s ${lib.escapeShellArg spec.controller_cidr} -p tcp \
               --dport ${toString spec.policy.ssh_port} -j nixos-fw-accept
           '';
+          systemd.generators.systemd-ssh-generator = lib.mkIf (!sshEnabled) "/dev/null";
           services.openssh = {
-            enable = true;
+            enable = sshEnabled;
             openFirewall = false;
             ports = [ spec.policy.ssh_port ];
             hostKeys = [
@@ -175,8 +177,8 @@ let
           systemd.services.luxnix-migration-admission = {
             wantedBy = [ "multi-user.target" ];
             before = [ "sshd.service" ];
-            after = [ "sshd-keygen.service" ];
-            requires = [ "sshd-keygen.service" ];
+            after = lib.optional sshEnabled "sshd-keygen.service";
+            requires = lib.optional sshEnabled "sshd-keygen.service";
             path = [
               pkgs.util-linux
               pkgs.openssh
@@ -195,11 +197,13 @@ let
               export PYTHONPATH=${runtime}
               ${python}/bin/python -m lx_administration.storage.migration_boot admit \
                 --spec /etc/luxnix/migration.json --certificate /etc/luxnix/migration-db.pem
-              echo 'Verify this recovery SSH fingerprint through the trusted console:' > /dev/console
-              ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub > /dev/console
+              ${lib.optionalString sshEnabled ''
+                echo 'Verify this recovery SSH fingerprint through the trusted console:' > /dev/console
+                ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub > /dev/console
+              ''}
             '';
           };
-          systemd.services.sshd = {
+          systemd.services.sshd = lib.mkIf sshEnabled {
             requires = [ "luxnix-migration-admission.service" ];
             after = [ "luxnix-migration-admission.service" ];
           };

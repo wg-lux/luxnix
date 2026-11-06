@@ -674,3 +674,78 @@ def test_receipt_with_unnamed_loss_is_rejected(environment):
     (state / migration.PREFLIGHT_RECEIPT).write_text(json.dumps(receipt))
     with pytest.raises(migration.MigrationError, match="named person"):
         migration.verify_preflight_receipt(state / migration.PREFLIGHT_RECEIPT, plan)
+
+
+def salt_layout(environment):
+    state, plan, custody, live = environment
+    recovery = live / "salts"
+    replica = live / "replica"
+    replica.mkdir()
+    paths = {
+        "identity-active": live / "active",
+        "identity-salt-keyring": live / "keyring.yml",
+        "identity-legacy-default": live / "legacy",
+    }
+    payload = {k: v for k, v in plan.items() if k != "plan_id"}
+    contract = payload["config"]["secret_contract"]
+    contract["identity_replica"] = str(replica)
+    contract["items"] = contract["items"] + [
+        {"kind": "data", "id": key, "path": str(path)} for key, path in paths.items()
+    ]
+    migration.atomic_json(
+        state / "plan.json", payload | {"plan_id": migration.digest(payload)}
+    )
+    return state, custody, live, recovery, replica, paths
+
+
+def test_a_salt_gone_with_traces_left_is_reported(environment):
+    state, custody, _, recovery, _, paths = salt_layout(environment)
+    (recovery / "enrolled").write_text("receipt")
+    paths["identity-salt-keyring"].write_text("schema_version: 1\n")
+    found = preflight.orphaned_salt(state, custody)
+    assert found["active"] == str(paths["identity-active"])
+    assert str(recovery / "enrolled") in found["traces"]
+    assert found["copy"] is None
+
+
+def test_a_custody_copy_of_the_lost_salt_is_found_and_restored(environment):
+    state, custody, _, recovery, _, paths = salt_layout(environment)
+    (recovery / "enrolled").write_text("receipt")
+    copy = copy_of(custody, paths["identity-active"])
+    copy.parent.mkdir(parents=True, exist_ok=True)
+    copy.write_text("saved")
+    found = preflight.orphaned_salt(state, custody)
+    assert found["copy"] == copy
+    preflight.restore_salt(found["copy"], found["active"])
+    assert paths["identity-active"].read_text() == "saved"
+    assert preflight.orphaned_salt(state, custody) is None
+
+
+@pytest.mark.parametrize("kept", ["active", "salts/active.salt", "replica/active.salt"])
+def test_any_surviving_copy_is_not_an_orphan(environment, kept):
+    # The provisioner recovers the salt itself from any of these.
+    state, custody, live, recovery, _, _ = salt_layout(environment)
+    (recovery / "enrolled").write_text("receipt")
+    (live / kept).write_text("salt")
+    assert preflight.orphaned_salt(state, custody) is None
+
+
+def test_no_traces_is_a_fresh_host_not_an_orphan(environment):
+    state, custody, *_ = salt_layout(environment)
+    assert preflight.orphaned_salt(state, custody) is None
+
+
+def test_a_center_host_is_left_to_vault(environment):
+    state, custody, _, _, _, paths = salt_layout(environment)
+    paths["identity-salt-keyring"].write_text("center_id: example\n")
+    assert preflight.orphaned_salt(state, custody) is None
+
+
+def test_setting_aside_moves_and_never_deletes(tmp_path, monkeypatch):
+    monkeypatch.setattr(preflight, "root_prefix", list)
+    trace = tmp_path / "enrolled"
+    trace.write_text("receipt")
+    moved = preflight.set_aside([str(trace)])
+    assert not trace.exists()
+    assert Path(moved[0]).read_text() == "receipt"
+

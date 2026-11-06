@@ -72,7 +72,7 @@ def validate_spec(spec: dict) -> None:
     keys = spec["authorized_keys"]
     if (
         not isinstance(keys, list)
-        or not keys
+        or (not keys and spec.get("boot_trust", "secure-boot") != "local-console")
         or any(
             not isinstance(key, str)
             or "\n" in key
@@ -416,6 +416,10 @@ def build(args) -> None:
         "policy": load_unique_yaml_file(root / "conf/migration-environment.yml"),
     }
     validate_spec(spec)
+    if not spec["authorized_keys"]:
+        print(
+            "No administrator SSH keys: building a local-console image with SSH disabled."
+        )
     expression = (
         f"let f = builtins.getFlake {json.dumps('git+file://' + str(root))}; "
         f"in (f.lib.migrationEnvironment (builtins.fromJSON "

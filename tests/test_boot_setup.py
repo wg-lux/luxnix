@@ -63,7 +63,7 @@ def environment(install_environment, monkeypatch):
         assert journal.phase == setup.Phase.RUNNING
         assert journal.before == [disk]
         calls.append("encrypt")
-        return {"consolidated": []}
+        return {"consolidated": [], "swap_unchecked": []}
 
     monkeypatch.setattr(in_place, "convert", run)
     setup.prepare(root)

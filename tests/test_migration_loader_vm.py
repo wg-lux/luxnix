@@ -178,8 +178,13 @@ def test_split_loader_boots_only_authenticated_ram_payload(tmp_path, case):
                         process.stdin.flush()
                         confirmed = True
                     if ":/]#" in output and confirmed and not probed:
+                        ssh_check = (
+                            b'test -z "$(systemctl show sshd.service -p FragmentPath --value)" && '
+                            if not spec["authorized_keys"]
+                            else b""
+                        )
                         process.stdin.write(
-                            b"test $(id -u) = 0 "
+                            ssh_check + b"test $(id -u) = 0 "
                             b"&& test $(findmnt -n -o FSTYPE /) = tmpfs "
                             b'&& test -z "$(swapon --show --noheadings)" '
                             b"&& printf 'LUXNIX_%s\\n' CONSOLE_READY\n"
@@ -218,7 +223,7 @@ if __name__ == "__main__":
     root = Path(__file__).resolve().parents[1]
     fixture = specification.__wrapped__()
     if os.environ.get("LUXNIX_MIGRATION_LOCAL_CONSOLE"):
-        fixture.update(boot_trust="local-console", console="ttyS0")
+        fixture.update(boot_trust="local-console", console="ttyS0", authorized_keys=[])
     serialized = json.dumps(json.dumps(fixture))
     module = json.dumps(str(root / "conf/migration-environment.nix"))
     expression = (

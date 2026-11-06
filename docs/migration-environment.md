@@ -52,6 +52,8 @@ settings and DNS are not inherited. Wi-Fi association is not configured.
 For local operation, the selected Ethernet interface may remain disconnected;
 the console works without networking. Host identity and administrator keys come
 from existing configuration; limits live in `conf/migration-environment.yml`.
+With no administrator public keys, local-console builds disable SSH entirely;
+the physical root terminal still works. Secure Boot mode requires SSH keys.
 
 For encrypted recovery media, add `--recovery-luks-uuid <outer-luks-uuid>` and
 unlock it before staging. Boot requires its password through console/BMC **before
@@ -90,7 +92,7 @@ reboot. The normal boot default must exclude migration entries and stays unchang
 After the separately authorized reboot, local-console mode waits on the physical
 screen (`tty1`) for `BOOT UNVERIFIED <host> <revision-prefix>`. Check the displayed
 host and trust warning, then type the exact phrase. This opens a root terminal and
-permits SSH; it does **not** encrypt anything. A wrong answer leaves access blocked.
+permits SSH when administrator keys are configured; it does **not** encrypt anything. A wrong answer leaves access blocked.
 Serial consoles may select `--console ttyS0` when building.
 
 For remote access, verify the recovery SSH fingerprint on

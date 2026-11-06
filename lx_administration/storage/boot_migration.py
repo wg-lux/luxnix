@@ -222,6 +222,8 @@ def evaluate(checkout: Path, host: str) -> dict:
         vault_server = c.luxnix.vault.server.enable;
         openbao = c.luxnix.openbao.enable;
         identity_directory = if l.enable then vault else null;
+        identity_replica = if l.enable
+          then "${l.runtime.encryptedDataDir}/.identity-salt-recovery" else null;
         items = builtins.filter (i: i.path != null) ([
           (item "account" "admin-password-hash"
             users.${c.user.admin.name}.hashedPasswordFile)

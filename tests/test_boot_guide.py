@@ -292,3 +292,67 @@ def test_retiring_containers_asks_for_root_itself(monkeypatch):
         setup.main()
     assert executed["program"] == "sudo"
     assert executed["arguments"][-2:] == ["retire-containers", "--apply"]
+
+
+def orphan(tmp_path, *, copy):
+    return {
+        "active": "/vault/active",
+        "traces": ["/vault/keyring.yml", "/recovery/enrolled"],
+        "copy": tmp_path / "copy" if copy else None,
+    }
+
+
+def test_no_orphaned_salt_asks_nothing(monkeypatch, tmp_path):
+    monkeypatch.setattr(guide.secret_preflight, "orphaned_salt", lambda *a: None)
+    answers(monkeypatch)
+    assert guide.settle_orphaned_salt("gc-09", tmp_path, tmp_path) is None
+
+
+def test_a_lost_salt_can_be_restored_from_custody(monkeypatch, tmp_path):
+    found = orphan(tmp_path, copy=True)
+    monkeypatch.setattr(guide.secret_preflight, "orphaned_salt", lambda *a: found)
+    restored = []
+    monkeypatch.setattr(
+        guide.secret_preflight, "restore_salt", lambda *a: restored.append(a)
+    )
+    monkeypatch.setattr(
+        guide.secret_preflight, "set_aside", lambda p: pytest.fail("no")
+    )
+    answers(monkeypatch, "1")
+    assert guide.settle_orphaned_salt("gc-09", tmp_path, tmp_path) is None
+    assert restored == [(found["copy"], "/vault/active")]
+
+
+def test_without_a_copy_restoring_is_not_offered(monkeypatch, tmp_path, capsys):
+    found = orphan(tmp_path, copy=False)
+    monkeypatch.setattr(guide.secret_preflight, "orphaned_salt", lambda *a: found)
+    monkeypatch.setattr(
+        guide.secret_preflight, "restore_salt", lambda *a: pytest.fail("no")
+    )
+    answers(monkeypatch, "1")
+    with pytest.raises(guide.Stopped):
+        guide.settle_orphaned_salt("gc-09", tmp_path, tmp_path)
+    assert "Restore it from custody" not in capsys.readouterr().out
+
+
+def test_starting_fresh_needs_acceptance_and_keeps_the_traces(monkeypatch, tmp_path):
+    found = orphan(tmp_path, copy=True)
+    monkeypatch.setattr(guide.secret_preflight, "orphaned_salt", lambda *a: found)
+    moved = []
+    monkeypatch.setattr(
+        guide.secret_preflight, "set_aside", lambda p: moved.append(p) or ["kept"]
+    )
+    answers(monkeypatch, "2", "no")
+    with pytest.raises(guide.Stopped):
+        guide.settle_orphaned_salt("gc-09", tmp_path, tmp_path)
+    assert not moved
+    answers(monkeypatch, "2", "ACCEPT DATA LOSS gc-09", "A. Operator")
+    assert guide.settle_orphaned_salt("gc-09", tmp_path, tmp_path) == "A. Operator"
+    assert moved == [found["traces"]]
+
+
+def test_custody_mounts_without_suid_devices_or_execution(monkeypatch):
+    seen, _ = commands(monkeypatch)
+    guide.mount_custody()
+    assert ("mount", "-o", "nosuid,nodev,noexec") == seen[-1][:3]
+

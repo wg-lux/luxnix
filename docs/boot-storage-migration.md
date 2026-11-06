@@ -171,7 +171,8 @@ media, `advance --apply` asks for typed approval and the passphrases, then:
    A failure here leaves the disk untouched.
 2. Shrinks Btrfs by 32 MiB for the header and runs `cryptsetup reencrypt --encrypt`.
 3. Opens the result and confirms the filesystem UUID and `btrfs check`.
-4. Erases the old plaintext swap partition, which holds no durable data.
+4. Erases the old plaintext swap partition, which holds no durable data. If it cannot
+   check or erase it, the conversion continues and prints the command to finish by hand.
 5. Opens each container read-only, copies each configured directory to its normal
    path, compares it with `diff -r`, then publishes it. Anything the old root held at
    that path moves to `<path>.pre-consolidation`.
@@ -261,7 +262,7 @@ sudo cryptsetup luksFormat --type luks2 /recovery/luxnix-custody.luks
 sudo cryptsetup open /recovery/luxnix-custody.luks luxnix-custody
 sudo mkfs.ext4 -q /dev/mapper/luxnix-custody
 sudo mkdir -p /run/luxnix-custody
-sudo mount /dev/mapper/luxnix-custody /run/luxnix-custody
+sudo mount -o nosuid,nodev,noexec /dev/mapper/luxnix-custody /run/luxnix-custody
 sudo install -d -m 0700 -o "$USER" -g "$(id -gn)" /run/luxnix-custody/custody
 ```
 
@@ -272,7 +273,7 @@ commands to prove the copies are really stored after making them:
 ```sh
 sudo cryptsetup open /recovery/luxnix-custody.luks luxnix-custody
 sudo mkdir -p /run/luxnix-custody
-sudo mount /dev/mapper/luxnix-custody /run/luxnix-custody
+sudo mount -o nosuid,nodev,noexec /dev/mapper/luxnix-custody /run/luxnix-custody
 ```
 
 Skip this if it is already open: `findmnt /run/luxnix-custody` prints a line. Mounting

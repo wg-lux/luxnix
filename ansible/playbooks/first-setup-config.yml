@@ -11,6 +11,7 @@
     allowed_settings:
       - host_services/luxnix.lxAnnotateLocal.django.centerIdentitySalt
       - host_services/luxnix.lxAnnotateLocal.django.enrollLegacyDefaultSalt
+      - host_services/luxnix.lxAnnotateLocal.django.createInitialIdentitySalt
   tasks:
     - name: Refuse an invalid host name
       ansible.builtin.assert:
