@@ -10,6 +10,18 @@ boundaries:
   - Do not mount or alter live storage during context validation
   - Preserve encrypted storage and hub authentication boundaries
 entrypoints:
+  - name: credential-backup
+    file: credential_backup.py
+    purpose: Authenticated credential archives with stable media identity, preserved account sources and explicit drift rejection.
+  - name: credential-backup-policy
+    file: credential-backup-policy.yml
+    purpose: Bounded optional credential scope and non-authoritative retirement candidates; no deletion rules.
+  - name: in-place-encryption
+    file: in_place.py
+    purpose: Encrypt a plaintext Btrfs root in place with LUKS2, resume interruptions, move container data onto the encrypted root and retire containers after acceptance.
+  - name: secret-preflight
+    file: secret_preflight.py
+    purpose: Verify from the evaluated host configuration that only the secrets it needs exist, match and decrypt on independent encrypted custody, then write the receipt recovery review requires.
   - name: disk-password-custody
     file: password_custody.py
     purpose: Privately prompt and disclose verified disk credentials once until acknowledged, with receipts bound to encrypted vault records.
@@ -36,10 +48,10 @@ entrypoints:
     purpose: Explain each required human recovery and acceptance assessment without automatically approving evidence.
   - name: boot-setup
     file: boot_setup.py
-    purpose: Sequential setup, pinned one-time provisioning, typed journals and verified non-formatting recovery.
+    purpose: In-place-only LUKS2 setup, typed journals and verified non-formatting recovery; no Disko executor.
   - name: boot-migration
     file: boot_migration.py
-    purpose: Bind explicit LUKS2 fresh/disposable/migration plans to hardware checks, reviewed evidence and idempotent install-only actions.
+    purpose: Bind in-place LUKS2 plans to hardware checks, reviewed evidence and install-only actions; old destructive plans are read-only evidence.
   - name: storage-readiness
     file: readiness.py
     purpose: Collect observations or reject incomplete host, layout and disk-identity admission without changing storage.
@@ -70,9 +82,6 @@ entrypoints:
   - name: storage-provision
     file: provision.py
     purpose: Verify and escrow existing root or container passwords with independent recovery custody; retain bounded legacy provisioning without implicit formatting.
-  - name: storage-provision-setup
-    file: provision_setup.py
-    purpose: Interactive, resumable operator guide that runs read-only prerequisite checks and delegates every change to storage-provision after typed confirmation.
   - name: tpm-release
     file: tpm_release.py
     purpose: Create and verify the non-exportable TPM client identity and fetch one volume release over mTLS.

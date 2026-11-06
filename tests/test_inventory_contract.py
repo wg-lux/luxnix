@@ -87,7 +87,9 @@ def test_h01_is_home_only_and_not_a_remote_inventory_target() -> None:
     home_vars = load_home_host_vars(REPO_ROOT / "ansible/inventory")
 
     assert "h-01" not in inventory
-    assert home_hosts["h-01"]["extra_groups"] == ["group_home_networking"]
+    assert home_hosts["h-01"]["extra_groups"] == [
+        "group_home_git_maddonix", "group_home_networking",
+    ]
     assert "h-01" in home_vars
 
 

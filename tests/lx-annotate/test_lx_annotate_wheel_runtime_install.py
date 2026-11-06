@@ -194,6 +194,7 @@ def _make_executable(path: Path, content: str) -> None:
 
 
 @pytest.mark.parametrize("command", [
+    "lx-annotate-web", "lx-annotate-worker",
     "lx-annotate-recover-data", "lx-annotate-provision-hub-nodes",
     "lx-annotate-storage-relief", "lx-annotate-acceptance", "lx-annotate-check-static",
 ])
@@ -764,3 +765,28 @@ def test_release_version_must_match_selected_wheel(version: str):
     else:
         assert result.returncode != 0
         assert "runtime.packageVersion must match runtime.wheelPath" in result.stderr
+
+
+@pytest.mark.parametrize("failure", ["none", "ensure", "static"])
+def test_preparation_requires_static_sync(tmp_path: Path, failure: str):
+    source = CONFIG_NIX.read_text()
+    body = source.split('cat > "$out/bin/lx-annotate-runtime-ensure" <<EOF\n', 1)[1]
+    body = body.split("    EOF", 1)[0]
+    out = tmp_path / "wrapper"
+    (out / "libexec").mkdir(parents=True)
+    log = tmp_path / "calls.log"
+    (out / "libexec/lx-annotate-wheel-runtime-lib").write_text(
+        'lx_annotate_wheel_ensure() { echo ensure >> "$CALLS_LOG"; '
+        'test "$FAILURE" != ensure; }\n'
+        'lx_annotate_wheel_sync_static() { echo static >> "$CALLS_LOG"; '
+        'test "$FAILURE" != static; }\n'
+    )
+    result = subprocess.run(
+        ["bash", "-c", body],
+        env=dict(os.environ, out=str(out), CALLS_LOG=str(log), FAILURE=failure),
+        capture_output=True, text=True,
+    )
+    assert (result.returncode == 0) is (failure == "none"), result.stderr
+    assert log.read_text().splitlines() == (
+        ["ensure"] if failure == "ensure" else ["ensure", "static"]
+    )

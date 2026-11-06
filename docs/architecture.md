@@ -45,6 +45,13 @@ machine. Read the source ownership rules below before choosing a file to edit.
 
 ## Sources of Truth and Generated Output
 
+Ansible inventory owns fleet policy; `lx_administration` owns its loading,
+precedence and rendering rules. Shared values belong in group variables, with
+host variables reserved for intentional differences. Do not copy an inherited
+value into a host merely to make it visible there: inspect the merged configuration.
+Nix modules own reusable runtime behavior; templates and generated entry points
+connect these sources without introducing another policy definition.
+
 For Autoconf-managed hosts, the data flow is:
 
 ```text

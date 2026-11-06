@@ -103,6 +103,7 @@ nav:
       - Machine Setup Secrets Checklist: machine-secrets-checklist.md
       - Root Encryption Quick Steps: boot-storage-quickstart.md
       - Boot LUKS Storage Migration: boot-storage-migration.md
+      - Credential Backup: credential-backup.md
       - Unmigrated Hosts (Legacy Storage): legacy-storage-recovery.md
       - Application Secrets with sops-nix: sops-application-secrets.md
       - Fleet Secure Boot: secure-boot.md

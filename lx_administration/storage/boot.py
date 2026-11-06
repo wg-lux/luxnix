@@ -78,7 +78,8 @@ def verify_mount(path: str, expected: str, expected_type: str | None = None,
                 f"{source}. "
                 "A rebuild cannot encrypt a plaintext root. From the reviewed "
                 "LuxNix checkout, run devenv tasks run boot-storage:setup to "
-                "preview the installation workflow; see docs/boot-storage-quickstart.md"
+                "preview the in-place encryption workflow; "
+                "see docs/boot-storage-quickstart.md"
             ) from exc
         raise
     if os.stat(source).st_rdev != expected_info.st_rdev:
@@ -137,12 +138,13 @@ def setup_root(spec: dict) -> None:
                 "2. PREPARE: Run the same task with the apply flag:\n"
                 "   LUXNIX_BOOT_SETUP_APPLY=1 devenv tasks run boot-storage:setup\n"
                 "   Follow its recovery checklist and preserve credentials. "
-                "It pauses before formatting the installed system.\n"
+                "It pauses before encrypting the existing root in place.\n"
                 "3. INSTALL: Boot trusted installer media. Keep the planned "
                 "checkout, Nix paths and private recovery state available; follow "
                 "the installer handoff in docs/boot-storage-migration.md. "
                 "Confirm the exact disks, enter the LUKS password and complete "
-                "credential preparation before confirming installation.\n"
+                "credential preparation before confirming the install-only "
+                "boot configuration update.\n"
                 "4. ACCEPT: Cold boot, test root unlock, desktop account "
                 "selection, admin recovery and application decryption; then "
                 "record acceptance with the same workflow.\n"
@@ -167,15 +169,6 @@ def setup_root(spec: dict) -> None:
         "luxnix-verify-boot-storage before retrying the rebuild. This check alone "
         "is not full boot readiness."
     )
-
-
-def reject_retired_mount(path: str) -> None:
-    result = subprocess.run(["findmnt", "--mountpoint", path, "--noheadings"],
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    if result.returncode == 0:
-        raise ValueError(f"Legacy container/bind still mounted at {path}; complete restore before activation")
-    if result.returncode != 1:
-        raise ValueError(f"Cannot inspect retired mount {path}")
 
 
 def verify_key(path: str) -> None:
@@ -249,8 +242,6 @@ def main() -> None:
         if args.root_setup:
             setup_root(spec)
             return
-        for path in spec.get("retiredMounts", []):
-            reject_retired_mount(path)
         for path, expected in spec["mounts"].items():
             verify_mount(path, expected["device"], expected["fsType"], expected["subvolume"])
         for key in spec["keys"]:

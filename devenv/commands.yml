@@ -12,6 +12,23 @@ risk_levels_source: ../luxnix.yml#risk_levels
 # marked operator_confirmation_required. The field does not imply that the
 # underlying wrapper implements its own prompt.
 commands:
+  - id: credential-backup
+    summary: Preview, create or verify an encrypted credential archive bound to the host plan, paths and physical recovery drive.
+    risk: sensitive-local-state
+    operator_confirmation_required: true
+    usage: devenv shell credential-backup <preview|backup|verify> --state <plan-directory> --archive <new-archive.tar.age> [--identity <independent-age-identity>]
+    implementation: lx_administration/storage/credential_backup.py
+    documentation: docs/credential-backup.md
+    prerequisites:
+      - Reviewed clean checkout on the selected host and a matching immutable plan with an evaluated secret contract.
+      - Existing root-owned private backup directory on independent storage; no media formatting or mounting is performed.
+      - Native age identity on separate encrypted physical media, independent of both the archive and all erased disks.
+    effects:
+      - Runs the reviewed Python helper via sudo; never run sudo devenv.
+      - Copies both admin/client boot hashes and declared initialization sources without rotation or deletion.
+      - Verifies authenticated decryption before exclusive atomic ciphertext publication; plaintext remains in memory with protected swap.
+      - Verification fails on configuration, generation, path, credential or storage identity drift; retain old archives and renew evidence.
+      - This archive does not replace secret preflight, independent Vault access tests or full application/database backups.
   - id: check-secret-rotation
     summary: Validate the central rotation catalog against three source checkouts and display ordered gates.
     risk: read-only
@@ -244,24 +261,24 @@ commands:
       - Successful baseline admission does not approve installation, recovery custody or backup restore.
 
   - id: boot-storage-setup
-    summary: Guide root setup in order with pinned provisioning, typed erasure approval and non-destructive recovery.
+    summary: Guide in-place LUKS2 encryption with typed approval and non-formatting recovery.
     risk: destructive-local
     operator_confirmation_required: true
-    usage: devenv shell boot-storage-setup <observe|setup-media|run|plan|next|advance|recover|review|attest|status> --host <host> [--config <autoconf-yaml>] [--apply] [--assessor <admin>]
+    usage: devenv shell boot-storage-setup <observe|setup-media|run|plan|next|preflight|advance|recover|review|attest|status|retire-containers> --host <host> [--config <autoconf-yaml>] [--apply] [--assessor <admin>] [--custody <encrypted-directory>] [--vault-key-custody <file>] [--accept-absent <id>]
     implementation: lx_administration/storage/boot_setup.py
     documentation: docs/boot-storage-migration.md
     prerequisites:
       - A clean durable release and private independent plan/evidence storage (encryption optional).
       - Provisioning runs only on the verified target in a trusted installer with fresh recovery evidence and unmounted selected disks.
-      - Existing disposable disks require installation disposable, source_retention discard-approved and explicit disposal/credential recovery assessments.
+      - Only installation in-place and source_retention in-place are accepted; destructive plans are retired.
     effects:
       - Setup-media previews USB/removable filesystems; apply mounts one existing filesystem at /recovery, requires 1 GiB free, prepares private state and continues planning. Multiple candidates require --device; no formatting or automatic install.
       - Observe runs on the target and emits reviewed disk/hardware facts as YAML without writes; no substitute disk selection.
-      - Plan reads boot_storage.hosts from Autoconf and builds the closure and Disko executable; private journals live under boot_storage.state_root/host.
+      - Plan reads boot_storage.hosts from Autoconf and builds only the system closure; private journals live under boot_storage.state_root/host.
       - Default output explains the operator checklist and next command; --json retains structured output. Review asks for explicit confirmation of each completed check and records existing operator notes through the canonical attestation gate.
       - Next and advance without apply only report the next step; attest and status reuse the existing migration evidence workflow.
-      - Advance at the provisioning step with apply requires a real terminal and exact host, plan and serial confirmation before formatting the selected disks once.
-      - Durable typed intent and pre-format disk metadata are saved before execution. Failed or uncertain attempts never retry formatting automatically.
+      - Advance at the provisioning step with apply requires a real terminal and exact host, plan and serial confirmation before encrypting the existing root partition in place.
+      - Durable typed intent and pre-conversion disk metadata are saved before execution. Interrupted encryption resumes from the LUKS2 header; there is no formatter.
       - Recover with apply verifies and accepts only the existing layout after named administrator confirmation; it never formats.
       - Advance with apply delegates eligible access preparation or separately confirmed installation through existing gates. No automatic key rotation, evidence approval, reboot or backup cleanup.
 
@@ -281,7 +298,7 @@ commands:
       - Install invokes only nixos-install for the pinned closure; never formats, generates volume keys, restores application data or reboots.
       - Interrupted installation blocks retry until separately reviewed recovery evidence; no automatic destructive rollback.
       - New installation requires root_encryption luks2 and boot-luks; plain-root installation is retired.
-      - Fresh installation on verified empty new disks requires recovery and preparation evidence without fictitious source-backup assessments.
+      - Destructive fresh, disposable and erase/restore plans are readable historical evidence only and cannot run.
 
   - id: storage-recovery-custody
     summary: Prepare and cryptographically verify dedicated independently decryptable recovery custody without changing hosts or volumes.
@@ -378,19 +395,6 @@ commands:
       - Passphrase provisioning requires the host's passphrase unlock policy and leaves the mapping open; subsequent boots use the escrowed passphrase.
     implementation: lx_administration/storage/provision.py
     documentation: docs/legacy-storage-recovery.md
-
-  - id: storage-provision-setup
-    summary: Interactive, resumable guide that checks every storage-provision prerequisite and applies only after typed confirmation.
-    risk: sensitive-remote-state
-    operator_confirmation_required: true
-    usage: devenv shell storage-provision-setup [--host <host>] [--volume <volume>] [--recovery-host <host>] [--backend passphrase] [--sudo-password-file <private-file>]
-    implementation: lx_administration/storage/provision_setup.py
-    documentation: docs/legacy-storage-recovery.md
-    effects:
-      - Limits selection to gc-09/gc-10 legacy-container migration; plain-root and boot-luks targets are refused.
-      - Read-only checks first; connectivity, target sudo, encrypted admin vault and the controller preview, which must match the choices.
-      - Applies only through storage-provision provision --apply after the operator types the host name; never formats existing data, deletes or reboots.
-      - Stores non-secret answers and completion receipts privately under the XDG state directory; repeat runs re-verify and resume.
 
   - id: openbao-local
     summary: Retained OpenBao disk-recovery status and unlock credential rotation; new enrollment is retired.
@@ -656,8 +660,8 @@ native_commands:
     implementation: lx_administration/storage/boot_migration.py
     documentation: docs/boot-storage-migration.md
     prerequisites:
-      - Mode-appropriate recovery evidence, exact disk identities and complete required target mounts; fresh installation requires verified empty new disks.
-      - Administrator credentials staged; migration additionally requires restored identities, application keys and consistent data on protected storage.
+      - An in-place LUKS2 plan, verified recovery evidence, exact disk identities and complete required target mounts; destructive modes are rejected.
+      - Existing administrator credentials, identities, application keys and data preserved on protected storage.
       - Run the guarded installer from trusted media; direct nixos-install bypasses the evidence workflow and is not the supported migration entrypoint.
     effects:
       - Installs the boot configuration; does not authorize formatting or rerunning a disk phase.

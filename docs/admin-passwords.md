@@ -358,19 +358,10 @@ follow the same initialize-once boot-copy and no-implicit-change rules; client
 password rotation must explicitly update its selected private hash and live
 account together. It does not modify LUKS keyslots or KWallet.
 
-For a fresh installation, use nixos-anywhere's documented
-[`--extra-files` staging tree](https://nix-community.github.io/nixos-anywhere/howtos/secrets.html).
-Create the tree in a private, operator-owned tmpfs directory and place the
-decrypted host-export hash at the relative path matching the evaluated
-`user.admin.passwordFile`. Decrypt directly into that protected file without
-printing its contents; verify its hash format, root ownership and mode `0600`.
-Keep the host-export decryption key outside the staging tree. Add
-`--extra-files <staging-root>` to the installation command in the Getting
-Started guide only after confirming the exact target and destructive install
-scope. The installer copies this tree before first activation. Remove the
-decrypted staging tree after acceptance, including after a failed installation.
-Verify SSH-key login and independent privilege recovery before closing the
-installer session.
+For root encryption, use the [in-place workflow](boot-storage-quickstart.md).
+Preserve the existing boot password hashes and independently verify credential
+recovery before conversion. Access preparation must not replace an existing
+identity or password. The former fresh disk-installation recommendation is retired.
 
 For a separate recovery credential, configure the existing password-file option
 to a unique, protected runtime file. Do not place a hash or plaintext password in

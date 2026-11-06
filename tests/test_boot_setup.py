@@ -1,4 +1,4 @@
-"""Root setup never turns an uncertain disk write into an automatic retry."""
+"""Root setup admits only in-place encryption and preserves interrupted journals."""
 
 import json
 from pathlib import Path
@@ -11,7 +11,21 @@ from lx_administration.storage import boot_migration as migration
 from lx_administration.storage import boot_setup as setup
 from tests import test_boot_migration as migration_tests
 
-state = migration_tests.state
+@pytest.fixture
+def state(tmp_path, monkeypatch):
+    root, plan, progress = migration_tests.state.__wrapped__(tmp_path, monkeypatch)
+    plan["spec"].update(installation="in-place", source_retention="in-place")
+    plan["config"]["in_place"] = {
+        "root_device": "/dev/test1", "swap_partitions": [], "containers": [],
+    }
+    plan["plan_id"] = migration.digest(
+        {k: v for k, v in plan.items() if k != "plan_id"}
+    )
+    progress["plan_id"] = plan["plan_id"]
+    migration.atomic_json(root / "plan.json", plan)
+    migration.atomic_json(root / "progress.json", progress)
+    return root, plan, progress
+
 install_environment = migration_tests.install_environment
 seed_assessment = migration_tests.seed_assessment
 
@@ -33,23 +47,25 @@ def environment(install_environment, monkeypatch):
         mountpoints=[],
     )
     calls = []
-    monkeypatch.setattr(setup, "verify_provision_namespace", lambda *a: None)
-    monkeypatch.setattr(setup, "provisioner", lambda p: Path("/pinned/disko"))
+    from lx_administration.storage import in_place, boot_password
+    monkeypatch.setattr(migration, "device_disks", lambda *a: {1})
+    monkeypatch.setattr(in_place, "root_state", lambda *a: in_place.PLAINTEXT)
+    monkeypatch.setattr(boot_password, "secret", lambda *a: b"test passphrase 1234")
     monkeypatch.setattr(setup, "snapshot_disks", lambda p: [disk])
     monkeypatch.setattr(migration, "verify_unmounted_targets", lambda p: None)
     monkeypatch.setattr(migration, "verify_layout", lambda *a: mounts)
     monkeypatch.setattr(migration, "probe_disks", lambda *a: {1})
     monkeypatch.setattr(setup, "confirmation", lambda *a, **k: calls.append("confirm"))
 
-    def run(path, lock):
+    def run(*args, **kwargs):
         # The intent and original metadata must be readable before execution.
         journal = setup.load_journal(root, plan)
         assert journal.phase == setup.Phase.RUNNING
         assert journal.before == [disk]
-        assert lock >= 0
-        calls.append("format")
+        calls.append("encrypt")
+        return {"consolidated": []}
 
-    monkeypatch.setattr(setup, "run_provisioner", run)
+    monkeypatch.setattr(in_place, "convert", run)
     setup.prepare(root)
     return root, plan, progress, calls, mounts
 
@@ -65,46 +81,15 @@ def test_preview_never_prompts_formats_or_changes_journal(environment):
 def test_completed_provision_is_idempotent_and_prepare_preserves_it(environment):
     root, plan, _, calls, mounts = environment
     setup.provision(root, apply=True)
-    assert calls == ["confirm", "format"]
+    assert calls == ["confirm", "encrypt"]
     record = setup.load_journal(root, plan)
     assert record.phase == setup.Phase.COMPLETE
     assert record.model_dump(mode="json")["mounts"] == mounts
     before = (root / "provision.json").read_bytes()
     setup.prepare(root)
     setup.provision(root, apply=True)
-    assert calls == ["confirm", "format"]
+    assert calls == ["confirm", "encrypt"]
     assert (root / "provision.json").read_bytes() == before
-
-
-@pytest.mark.parametrize("failure", [RuntimeError("failed"), KeyboardInterrupt()])
-def test_failed_or_interrupted_format_cannot_repeat(environment, monkeypatch, failure):
-    root, plan, _, calls, _ = environment
-
-    def fail(*args):
-        calls.append("uncertain write")
-        raise failure
-
-    monkeypatch.setattr(setup, "run_provisioner", fail)
-    with pytest.raises(type(failure)):
-        setup.provision(root, apply=True)
-    assert setup.load_journal(root, plan).phase == setup.Phase.INTERRUPTED
-    with pytest.raises(migration.MigrationError, match="Never retry"):
-        setup.provision(root, apply=True)
-    assert calls == ["confirm", "uncertain write"]
-
-
-def test_running_journal_after_process_death_is_not_retried(environment):
-    root, plan, _, calls, _ = environment
-    record = setup.Journal(
-        plan_id=plan["plan_id"],
-        phase=setup.Phase.RUNNING,
-        before=setup.snapshot_disks(plan),
-    )
-    setup.save_journal(root, record)
-    with pytest.raises(migration.MigrationError, match="Never retry"):
-        setup.provision(root, apply=True)
-    assert calls == []
-    assert setup.next_step(root).action == setup.Action.RECOVER
 
 
 def test_recovery_accepts_existing_layout_without_formatting(environment):
@@ -286,7 +271,7 @@ def test_real_tty_requires_exact_host_plan_and_serial(state):
         "from lx_administration.storage.boot_setup import confirmation; "
         f"confirmation({plan!r}); print('APPROVED')"
     )
-    phrase = f"ERASE gc-09 {plan['plan_id'][:12]} test-serial"
+    phrase = f"ENCRYPT IN PLACE gc-09 {plan['plan_id'][:12]} test-serial"
     for answer, approved in [("yes", False), (phrase, True)]:
         child = pexpect.spawn(
             str(Path(".venv/bin/python").absolute()),
@@ -297,21 +282,12 @@ def test_real_tty_requires_exact_host_plan_and_serial(state):
         child.expect_exact("> ")
         assert "TARGET COMPUTER: gc-09" in child.before
         assert "serial=test-serial" in child.before
-        assert "Data policy (migration)" in child.before
+        assert "Data policy (in-place)" in child.before
         child.sendline(answer)
         child.expect(pexpect.EOF)
         assert ("APPROVED" in child.before) is approved
         child.close()
         assert child.exitstatus == (0 if approved else 1)
-
-
-def test_provisioner_requires_pinned_store_program(state):
-    _, plan, _ = state
-    with pytest.raises(migration.MigrationError, match="pinned Disko"):
-        setup.provisioner(plan)
-    plan["config"]["provisioner"] = "/bin/true"
-    with pytest.raises(migration.MigrationError, match="pinned Disko"):
-        setup.provisioner(plan)
 
 
 def test_observe_records_only_configured_disk_and_real_hardware(
@@ -378,85 +354,6 @@ def test_observe_records_only_configured_disk_and_real_hardware(
         setup.observe(Path("/release"), 'gc-09"; abort', "fresh", "new-disks")
 
 
-@pytest.mark.parametrize("mount", ["/mnt", "/mnt/recovery"])
-def test_provision_refuses_to_unmount_other_storage(tmp_path, monkeypatch, mount):
-    monkeypatch.setattr(
-        migration, "run", lambda *a: json.dumps({"filesystems": [{"target": mount}]})
-    )
-    with pytest.raises(migration.MigrationError, match="Unmount /mnt"):
-        setup.verify_provision_namespace(tmp_path / "absent-script", {1})
-
-
-def test_provision_rejects_global_partition_and_mapper_collisions(
-    tmp_path, monkeypatch
-):
-    script = tmp_path / "disko"
-    script.write_text(
-        "cryptsetup /dev/disk/by-partlabel/nixos_root /dev/mapper/cryptswap"
-    )
-    monkeypatch.setattr(
-        migration, "run", lambda *a: json.dumps({"filesystems": [{"target": "/"}]})
-    )
-    monkeypatch.setattr(Path, "exists", lambda p: True)
-    monkeypatch.setattr(migration, "device_disks", lambda p: {2})
-    with pytest.raises(migration.MigrationError, match="unselected disk"):
-        setup.verify_provision_namespace(script, {1})
-    monkeypatch.setattr(migration, "device_disks", lambda p: {1})
-    setup.verify_provision_namespace(script, {1})
-
-
-def test_formatter_does_not_inherit_test_password_or_shell_injection(monkeypatch):
-    monkeypatch.setenv("IN_DISKO_TEST", "1")
-    monkeypatch.setenv("BASH_ENV", "/untrusted")
-    monkeypatch.setenv("password", "never-inherit")
-    calls = []
-    monkeypatch.setattr(subprocess, "run", lambda *a, **k: calls.append((a, k)))
-    setup.run_provisioner(Path("/pinned/disko"), 42)
-    args, kwargs = calls[0]
-    assert args == (["/pinned/disko"],)
-    assert kwargs["pass_fds"] == (42,)
-    assert kwargs["check"] is True
-    assert set(kwargs["env"]) == {"PATH", "HOME", "LANG", "TERM"}
-
-
-@pytest.mark.parametrize(
-    "target, digest_ok",
-    [
-        ("/nix/store/" + "b" * 32 + "-disko/bin/disko", True),
-        ("/nix/store/" + "b" * 32 + "-disko/bin/disko", False),
-        ("/outside/disko", True),
-    ],
-)
-def test_pinned_store_symlink_is_verified_not_blindly_followed(
-    state, monkeypatch, target, digest_ok
-):
-    from types import SimpleNamespace
-    import stat
-
-    _, plan, _ = state
-    path = "/nix/store/" + "a" * 32 + "-disko"
-    plan["config"].update(provisioner=path, provisioner_sha256="expected")
-    monkeypatch.setattr(Path, "resolve", lambda p, **k: Path(target))
-    monkeypatch.setattr(
-        Path,
-        "lstat",
-        lambda p: SimpleNamespace(
-            st_uid=0,
-            st_mode=(stat.S_IFLNK | 0o777)
-            if str(p) == path
-            else (stat.S_IFREG | 0o555),
-        ),
-    )
-    monkeypatch.setattr(
-        migration, "file_digest", lambda p: "expected" if digest_ok else "changed"
-    )
-    if digest_ok and target.startswith("/nix/store/"):
-        assert setup.provisioner(plan) == Path(path)
-    else:
-        with pytest.raises(migration.MigrationError):
-            setup.provisioner(plan)
-
-
 def test_invalid_transition_preserves_journal(environment):
     root, plan, _, _, _ = environment
     before = setup.journal_path(root).read_bytes()
@@ -492,7 +389,7 @@ def test_autoconf_target_reuses_plan_and_blocks_drift(state, tmp_path):
                     if k not in {"schema_version", "host", "checkout"}
                 },
                 "root_encryption": "luks2",
-                "installation": "migration",
+                "installation": "in-place",
             }
         },
     }
@@ -554,6 +451,9 @@ def test_guidance_covers_all_existing_assessment_contracts():
         "whole_disk_image_verified",
         "selected_disks_disposal_authorized",
         "machine_and_application_credentials_preserved_or_reenrolled",
+        "in_place_backup_acknowledged",
+        "plaintext_remnants_reviewed",
+        "container_data_consolidated",
     }
     assert set(setup.guidance()) == required
     assert all(setup.guidance().values())
@@ -688,35 +588,19 @@ def test_workflow_preview_never_prepares_or_reviews(workflow_environment, monkey
     assert calls == []
 
 
-@pytest.mark.parametrize(
-    "mode, warning",
-    [
-        ("disposable", "does NOT require a data backup"),
-        ("migration", "not preserved in place"),
-        ("fresh", "NEW DISKS ONLY"),
-    ],
-)
-def test_preview_explains_data_policy_before_recovery_discovery(
-    workflow_environment, monkeypatch, capsys, mode, warning
+@pytest.mark.parametrize("mode", ["disposable", "migration", "fresh", None])
+def test_retired_mode_stops_before_recovery_discovery(
+    workflow_environment, monkeypatch, mode
 ):
     from lx_administration.storage import recovery_media
-
     root, plan, calls = workflow_environment
     spec = plan["spec"] | {"installation": mode}
-
-    def unavailable(*args, **kwargs):
-        output = capsys.readouterr().out
-        assert "TARGET COMPUTER: gc-09" in output
-        assert "serial=test-serial" in output
-        assert warning in output
-        assert "No files are backed up by this setup command" in output
-        raise migration.MigrationError("Recovery drive missing")
-
-    monkeypatch.setattr(recovery_media, "setup", unavailable)
-    with pytest.raises(migration.MigrationError, match="Recovery drive missing"):
+    monkeypatch.setattr(recovery_media, "setup",
+                        lambda *a, **k: pytest.fail("must reject before discovery"))
+    with pytest.raises(migration.MigrationError, match="Only in-place"):
         setup.run_workflow(spec, root / "not-created", Path("/config"), apply=False)
-    assert calls == []
     assert not (root / "not-created").exists()
+    assert calls == []
 
 
 @pytest.mark.parametrize(
@@ -893,3 +777,72 @@ def test_workflow_apply_requires_terminal_before_media(
     with pytest.raises(migration.MigrationError, match="interactive terminal"):
         setup.run_workflow(plan["spec"], root, Path("/config"), apply=True)
     assert calls == []
+
+
+@pytest.mark.parametrize("mode", ["fresh", "disposable", "migration", None])
+@pytest.mark.parametrize("action", ["prepare", "provision", "next_step"])
+def test_saved_destructive_plan_cannot_reach_execution(
+    state, monkeypatch, mode, action
+):
+    root, plan, progress = state
+    plan["spec"].update(installation=mode, source_retention="old-disks")
+    if mode is None:
+        del plan["spec"]["installation"]
+    else:
+        plan["spec"]["source_retention"] = {
+            "fresh": "new-disks", "disposable": "discard-approved",
+            "migration": "old-disks"
+        }[mode]
+    plan["plan_id"] = migration.digest(
+        {k: v for k, v in plan.items() if k != "plan_id"}
+    )
+    progress["plan_id"] = plan["plan_id"]
+    migration.atomic_json(root / "plan.json", plan)
+    migration.atomic_json(root / "progress.json", progress)
+    from contextlib import nullcontext
+    monkeypatch.setattr(migration, "installer_lock", lambda: nullcontext(1))
+    monkeypatch.setattr(migration, "verify_source",
+                        lambda *a: pytest.fail("must reject before execution checks"))
+    with pytest.raises(migration.MigrationError, match="Only in-place"):
+        getattr(setup, action)(root)
+    assert not (root / "provision.json").exists()
+
+
+@pytest.mark.parametrize("mode", ["fresh", "disposable", "migration"])
+def test_autoconf_and_cli_reject_destructive_modes(state, monkeypatch, mode):
+    from lx_administration.autoconf.config import BootStorageHost
+    _, plan, _ = state
+    fields = {k: plan["spec"][k] for k in BootStorageHost.model_fields
+              if k in plan["spec"]}
+    fields.update(root_encryption="luks2", installation=mode)
+    with pytest.raises(ValidationError):
+        BootStorageHost.model_validate(fields)
+    monkeypatch.setattr(setup.sys, "argv", [
+        "boot-storage-setup", "observe", "--checkout", "/nonexistent",
+        "--host", "gc-09", "--installation", mode, "--source-retention", "in-place",
+    ])
+    with pytest.raises(SystemExit) as failure:
+        setup.main()
+    assert failure.value.code == 2
+
+
+@pytest.mark.parametrize("failure", [RuntimeError("interrupted"), KeyboardInterrupt()])
+def test_interrupted_conversion_preserves_journal_and_resumes(
+    environment, monkeypatch, failure
+):
+    from lx_administration.storage import in_place
+    root, plan, _, calls, _ = environment
+    original = in_place.convert
+    def fail(*a, **kw):
+        assert setup.load_journal(root, plan).phase == setup.Phase.RUNNING
+        raise failure
+    monkeypatch.setattr(in_place, "convert", fail)
+    with pytest.raises(type(failure)):
+        setup.provision(root, apply=True)
+    assert setup.load_journal(root, plan).phase == setup.Phase.INTERRUPTED
+    assert setup.next_step(root).action == setup.Action.PROVISION
+    monkeypatch.setattr(in_place, "root_state", lambda *a: in_place.ENCRYPTING)
+    monkeypatch.setattr(in_place, "convert", original)
+    setup.provision(root, apply=True)
+    assert calls == ["confirm", "confirm", "encrypt"]
+    assert setup.load_journal(root, plan).phase == setup.Phase.COMPLETE

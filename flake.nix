@@ -264,6 +264,11 @@
           inherit (inputs) disko;
           repoRoot = ./.;
         };
+        boot-storage-in-place = import ./tests/nixtest/in_place_encryption_vm_test.nix {
+          pkgs = inputs.nixpkgs.legacyPackages.${system};
+          inherit (inputs) disko;
+          repoRoot = ./.;
+        };
         boot-storage-mdraid = import ./tests/nixtest/boot_storage_vm_test.nix {
           pkgs = inputs.nixpkgs.legacyPackages.${system};
           inherit (inputs) disko;

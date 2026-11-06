@@ -110,7 +110,7 @@ def test_lx_annotate_scripts_export_protected_storage_contract():
     assert '--constraint "$application_constraints"' in config_source
     assert "--no-cache-dir" not in config_source
     assert "package = effectiveRuntimePackage;" in config_source
-    assert "make_entrypoint lx-annotate-web lx-annotate-web 1" in config_source
+    assert "make_entrypoint lx-annotate-web lx-annotate-web" in config_source
     assert (
         "find ${lib.escapeShellArg runtimeStaticRootPath} -type d -exec chmod 0750 {} +"
         in config_source
@@ -123,7 +123,7 @@ def test_lx_annotate_scripts_export_protected_storage_contract():
         "chmod -R u+rwX,go-rwx ${lib.escapeShellArg runtimeStaticRootPath}"
         not in config_source
     )
-    assert "make_entrypoint lx-annotate-migrate lx-annotate-migrate 0" in config_source
+    assert "make_entrypoint lx-annotate-migrate lx-annotate-migrate" in config_source
     assert "systemd = {" in config_source
     assert "services = {" in config_source
     assert "lx-annotate-migrate = mkLxAnnotateAppService" in config_source

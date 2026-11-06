@@ -1,4 +1,4 @@
-"""Sequential root setup: preview by default, confirmed provisioning, no auto-retry."""
+"""In-place LUKS2 root setup: preview by default; no formatting executor."""
 
 from __future__ import annotations
 
@@ -7,10 +7,8 @@ from enum import StrEnum
 import json
 import os
 from pathlib import Path
-import re
 import shlex
 import socket
-import stat
 import subprocess
 import sys
 from typing import Literal, TextIO
@@ -194,36 +192,11 @@ def save_journal(state: Path, record: Journal, **changes: object) -> Journal:
     return record
 
 
-def provisioner(plan: dict) -> Path:
-    value = plan["config"].get("provisioner", "")
-    if not re.fullmatch(r"/nix/store/[a-z0-9]{32}-disko", value):
-        raise migration.MigrationError(
-            "Create a new plan containing the pinned Disko provisioner"
-        )
-    path = Path(value)
-    link = path.lstat()
-    resolved = path.resolve(strict=True)
-    if not re.fullmatch(r"/nix/store/[a-z0-9]{32}-disko(?:/bin/disko)?", str(resolved)):
-        raise migration.MigrationError(
-            "Provisioner resolves outside its store contract"
-        )
-    info = resolved.lstat()
-    if (
-        link.st_uid != 0
-        or not stat.S_ISREG(info.st_mode)
-        or info.st_mode & 0o222
-        or info.st_uid != 0
-        or migration.file_digest(resolved) != plan["config"].get("provisioner_sha256")
-    ):
-        raise migration.MigrationError("Pinned provisioner is missing or changed")
-    return path
-
-
 def prepare(state: Path) -> None:
     with migration.locked_state(state):
         plan = migration.load_plan(state)
+        migration.require_in_place(plan["spec"])
         migration.verify_source(plan)
-        provisioner(plan)
         migration.load_progress(state, plan)
         if journal_path(state).exists():
             load_journal(state, plan)  # Preserve all existing attempt history.
@@ -252,29 +225,13 @@ def show_target(spec: dict, *, stream: TextIO | None = None) -> None:
             f"{disk['size_bytes'] / 1024**3:.1f} GiB ({disk['size_bytes']} bytes)",
             file=stream,
         )
-    mode = spec.get("installation", "migration")
-    match mode:
-        case "disposable":
-            message = (
-                "DISCARD DATA: installation erases all existing files on these disks. "
-                "This plan does NOT require a data backup or restore test. "
-                "If you need any existing files or are unsure, STOP and ask an "
-                "administrator to prepare a migration plan before continuing."
-            )
-        case "migration":
-            message = (
-                "KEEP DATA THROUGH BACKUP AND RESTORE: installation erases these "
-                "disks. Required backups, original keys and a tested restore "
-                "must be verified first; files are not preserved in place."
-            )
-        case "fresh":
-            message = (
-                "NEW DISKS ONLY: stop if any selected disk contains data you need."
-            )
-        case _:
-            raise migration.MigrationError(
-                "Unknown installation mode; stop and review the plan"
-            )
+    migration.require_in_place(spec)
+    mode = "in-place"
+    message = (
+        "ENCRYPT EXISTING DATA IN PLACE: nothing is formatted; make a TESTED "
+        "BACKUP FIRST. Hardware failure can damage data. Older boot entries stop "
+        "working once root is encrypted. No formatter is available."
+    )
     print(f"Data policy ({mode}): {message}", file=stream)
     print(
         "No files are backed up by this setup command. Recovery credentials are "
@@ -284,7 +241,11 @@ def show_target(spec: dict, *, stream: TextIO | None = None) -> None:
 
 
 def confirmation(plan: dict, *, recover: bool = False) -> None:
-    verb = "ACCEPT EXISTING LAYOUT" if recover else "ERASE"
+    migration.require_in_place(plan["spec"])
+    if recover:
+        verb = "ACCEPT EXISTING LAYOUT"
+    else:
+        verb = "ENCRYPT IN PLACE"
     serials = ",".join(d["serial"] for d in plan["spec"]["disks"])
     phrase = f"{verb} {plan['spec']['host']} {plan['plan_id'][:12]} {serials}"
     # A pipe or sudo's password channel cannot supply destructive approval.
@@ -301,60 +262,29 @@ def confirmation(plan: dict, *, recover: bool = False) -> None:
             + (
                 "Verify the existing layout; no formatter will run.\n"
                 if recover
-                else "ERASE all contents of the selected disks below.\n"
+                else "Encrypt the root partition below in place. Nothing is "
+                "formatted, but a tested backup is your only protection against "
+                "hardware failure during the conversion.\n"
             )
         )
         show_target(plan["spec"], stream=terminal)
         terminal.write(
-            "Old boot generations cannot undo formatting. Keep independent "
-            "credentials and recovery media.\nType exactly: " + phrase + "\n> "
+            "Old boot generations cannot open an encrypted root. "
+            "Keep independent credentials and recovery media.\nType exactly: "
+            + phrase
+            + "\n> "
         )
         terminal.flush()
         if response.readline().rstrip("\n") != phrase:
             raise migration.MigrationError("Cancelled; no next action ran")
 
 
-def run_provisioner(path: Path, lock: int) -> None:
-    # Inherit the private terminal for Disko's LUKS prompts, never capture keys.
-    subprocess.run(
-        [str(path)],
-        check=True,
-        pass_fds=(lock,),
-        env={
-            "PATH": os.defpath,
-            "HOME": "/root",
-            "LANG": "C.UTF-8",
-            "TERM": os.environ.get("TERM", "dumb"),
-        },
-    )
-
-
-def verify_provision_namespace(script: Path, disks: set[int]) -> None:
-    # Disko unmounts /mnt and addresses partitions/mappings by global names.
-    mounts = json.loads(
-        migration.run("findmnt", "--json", "--list", "--output", "TARGET")
-    )["filesystems"]
-    if any(m["target"] == "/mnt" or m["target"].startswith("/mnt/") for m in mounts):
-        raise migration.MigrationError("Unmount /mnt explicitly before provisioning")
-    paths = set(
-        re.findall(
-            r"/dev/(?:disk/by-partlabel|mapper)/[a-zA-Z0-9_.+-]+", script.read_text()
-        )
-    )
-    for path in paths:
-        if Path(path).exists():
-            owners = migration.device_disks(path)
-            if not owners or not owners <= disks:
-                raise migration.MigrationError(
-                    f"Provisioning name {path} belongs to an unselected disk"
-                )
-
-
 def provision(
     state: Path, *, apply: bool = False, recover_by: str | None = None
 ) -> None:
-    with migration.installer_lock() as lock, migration.locked_state(state):
+    with migration.installer_lock(), migration.locked_state(state):
         plan = migration.load_plan(state)
+        migration.require_in_place(plan["spec"])
         migration.verify_source(plan)
         progress = migration.load_progress(state, plan)
         record = load_journal(state, plan)
@@ -377,12 +307,6 @@ def provision(
                 )
             if record.phase not in {Phase.RUNNING, Phase.INTERRUPTED}:
                 raise migration.MigrationError("No uncertain provisioning to recover")
-        elif record.phase in {Phase.RUNNING, Phase.INTERRUPTED}:
-            raise migration.MigrationError(
-                "Provisioning may have changed disks. Never retry the formatter. "
-                "Inspect the retained journal and disks; use recover only after "
-                "the intended layout is complete, or restore independent recovery."
-            )
         disks = migration.check_gates(plan, progress, "provision")
         migration.verify_independent_state(state, progress, disks)
         if recovery:
@@ -407,47 +331,114 @@ def provision(
                 recovered_by=recover_by,
             )
             return
-        script = provisioner(plan)
-        migration.verify_unmounted_targets(plan)
-        verify_provision_namespace(script, disks)
-        before = snapshot_disks(plan)
-        if not apply:
-            print(
-                "Provision checks passed; no disk writes. "
-                "Use --apply for typed approval."
-            )
-            return
-        confirmation(plan)
-        if (
-            migration.check_gates(plan, progress, "provision") != disks
-            or snapshot_disks(plan) != before
-            or provisioner(plan) != script
-        ):
+        encrypt_in_place(state, plan, progress, record, disks, apply=apply)
+
+
+def encrypt_in_place(
+    state: Path, plan: dict, progress: dict, record: Journal, disks: set, *, apply: bool
+) -> None:
+    from lx_administration.storage import boot_password, in_place
+
+    layout = plan["config"]["in_place"]
+    for device in [layout["root_device"], *layout["swap_partitions"]]:
+        if not migration.device_disks(device) <= disks:
             raise migration.MigrationError(
-                "Target or provisioner changed during approval"
+                "The evaluated root or swap partition is outside the selected disks"
             )
-        migration.verify_unmounted_targets(plan)
-        verify_provision_namespace(script, disks)
-        migration.verify_independent_state(state, progress, disks)
-        # Publish validated durable intent before any disk change.
-        record = save_journal(state, record, phase=Phase.RUNNING, before=before)
-        try:
-            run_provisioner(script, lock)
-            if migration.probe_disks(plan) != disks:
-                raise migration.MigrationError(
-                    "Disk identity changed during provisioning"
-                )
-            identities = migration.verify_layout(plan, disks)
-            save_journal(state, record, phase=Phase.COMPLETE, mounts=identities)
-        except BaseException:
-            save_journal(state, record, phase=Phase.INTERRUPTED)
-            raise
-        print("Layout provisioned and mounted. No installation or reboot performed.")
+    migration.verify_unmounted_targets(plan)
+    before = snapshot_disks(plan)
+    condition = in_place.root_state(layout["root_device"])
+    if not apply:
+        print(
+            f"In-place checks passed; the root partition is {condition}. No disk "
+            "writes. Use --apply for typed approval."
+        )
+        return
+    confirmation(plan)
+    if (
+        migration.check_gates(plan, progress, "provision") != disks
+        or snapshot_disks(plan) != before
+        or in_place.root_state(layout["root_device"]) != condition
+    ):
+        raise migration.MigrationError("Target changed during approval")
+    migration.verify_independent_state(state, progress, disks)
+    if condition == in_place.PLAINTEXT:
+        print(
+            "Choose the root passphrase. Use only letters a-x, digits and spaces: "
+            "other characters can differ at the boot prompt."
+        )
+        passphrase = boot_password.secret("New root disk passphrase: ")
+        if boot_password.secret("Confirm root disk passphrase: ") != passphrase:
+            raise migration.MigrationError("Passphrases do not match; nothing changed")
+        in_place.check_passphrase(passphrase)
+    else:
+        passphrase = boot_password.secret("Existing root disk passphrase: ")
+    containers = {
+        c["name"]: boot_password.secret(f"Existing passphrase for {c['name']}: ")
+        for c in layout["containers"]
+    }
+    # Publish validated durable intent before any disk change.
+    record = save_journal(state, record, phase=Phase.RUNNING, before=before)
+    try:
+        result = in_place.convert(
+            layout,
+            plan["config"]["mounts"],
+            root_passphrase=passphrase,
+            container_passphrases=containers,
+        )
+        if migration.probe_disks(plan) != disks:
+            raise migration.MigrationError("Disk identity changed during encryption")
+        identities = migration.verify_layout(plan, disks)
+        save_journal(state, record, phase=Phase.COMPLETE, mounts=identities)
+    except BaseException:
+        save_journal(state, record, phase=Phase.INTERRUPTED)
+        raise
+    print(
+        f"Root encrypted in place and mounted; moved: {result['consolidated']}. Old "
+        "containers are untouched. Installation has not run and nothing rebooted."
+    )
+
+
+def retire_containers(state: Path, *, apply: bool = False) -> None:
+    """Delete old containers on the installed system, only after acceptance."""
+    from lx_administration.storage import in_place
+
+    with migration.locked_state(state):
+        plan = migration.load_plan(state)
+        progress = migration.load_progress(state, plan)
+    if not migration.encrypts_in_place(plan["spec"]):
+        raise migration.MigrationError("This plan did not consolidate any containers")
+    if progress["install"]["status"] != "complete":
+        raise migration.MigrationError("Installation is not complete")
+    migration.check_attestation("acceptance", plan, progress, fresh=False)
+    if socket.gethostname().split(".", 1)[0] != plan["spec"]["host"]:
+        raise migration.MigrationError(f"Run this on {plan['spec']['host']}")
+    if os.geteuid() != 0:
+        raise migration.MigrationError("Run this as root on the installed system")
+    migration.boot_verify_root()
+    layout = plan["config"]["in_place"]
+    for container in layout["containers"]:
+        print(f"Would delete: {container['container']}")
+    if not apply:
+        print("Preview only. Use --apply for typed approval.")
+        return
+    phrase = f"DELETE CONTAINERS {plan['spec']['host']} {plan['plan_id'][:12]}"
+    if not sys.stdin.isatty():
+        raise migration.MigrationError("Use a private interactive terminal")
+    print(
+        "This permanently removes the old containers. Their data now lives only on "
+        "the encrypted root and in your backups."
+    )
+    if input(f"Type exactly: {phrase}\n> ") != phrase:
+        raise migration.MigrationError("Cancelled; nothing was deleted")
+    removed = in_place.retire_containers(layout["containers"], layout["binds"])
+    print(f"Deleted: {removed}")
 
 
 def next_step(state: Path) -> NextStep:
     with migration.locked_state(state):
         plan = migration.load_plan(state)
+        migration.require_in_place(plan["spec"])
         migration.verify_source(plan)
         progress = migration.load_progress(state, plan)
         base = {"host": plan["spec"]["host"], "plan_id": plan["plan_id"]}
@@ -471,13 +462,16 @@ def next_step(state: Path) -> NextStep:
                 reason="Use migration install recovery; never repartition.",
             )
         record = load_journal(state, plan) if journal_path(state).exists() else None
-        if record and record.phase in {Phase.RUNNING, Phase.INTERRUPTED}:
+        if (
+            record
+            and record.phase in {Phase.RUNNING, Phase.INTERRUPTED}
+            and migration.encrypts_in_place(plan["spec"])
+        ):
             return NextStep(
                 **base,
-                action=Action.RECOVER,
-                reason="Uncertain provisioning. Inspect retained disk metadata. "
-                "recover --apply accepts only a verified existing layout; "
-                "it cannot rerun formatting.",
+                action=Action.PROVISION,
+                reason="Encryption was interrupted. Rerun to resume it; progress is "
+                "kept in the disk header. Do not format or restart it.",
             )
         for stage in migration.stage_order(plan):
             if stage == "prepared":
@@ -633,6 +627,13 @@ def show_step(
         print("First stage the required credentials, then prepare access:")
         print(command("advance") + " --apply")
         print("After access preparation, complete and review the checks below.")
+    if step.stage == "recovery":
+        print("\nFirst prove the required secrets survive the encryption conversion:")
+        print(command("preflight") + " --custody <encrypted-directory>")
+        print(
+            "It lists what is required and how to copy anything missing. "
+            "Review refuses to continue without its receipt."
+        )
     if step.required_checks:
         descriptions = guidance()
         print("\nThe operator must complete these checks and record the results:")
@@ -665,7 +666,7 @@ def show_step(
         if step.action == Action.PROVISION:
             print(
                 "Run from tested installer media on this host. "
-                "Erasure requires typed confirmation."
+                "In-place encryption requires typed confirmation."
             )
     elif step.action == Action.RECOVER:
         print(
@@ -687,6 +688,9 @@ def review(state: Path, assessor: str, report: Path) -> None:
     step = next_step(state)
     if step.stage is None or not step.required_checks:
         raise migration.MigrationError("No human assessment is currently requested")
+    if step.stage == "recovery":
+        # Before anyone types VERIFIED: this check is measured, not asserted.
+        migration.require_preflight(state)
     migration.private_path(report)
     if not report.read_text().strip():
         raise migration.MigrationError(
@@ -864,12 +868,14 @@ def main() -> None:
         "--hardware-uuid", help="UUID read on the target; rechecked before provisioning"
     )
     observation.add_argument(
-        "--installation", required=True, choices=["migration", "fresh", "disposable"]
+        "--installation",
+        required=True,
+        choices=["in-place"],
     )
     observation.add_argument(
         "--source-retention",
         required=True,
-        choices=["old-disks", "whole-disk-image", "new-disks", "discard-approved"],
+        choices=["in-place"],
     )
     for action in (
         "plan",
@@ -881,6 +887,8 @@ def main() -> None:
         "setup-media",
         "review",
         "run",
+        "preflight",
+        "retire-containers",
     ):
         command = sub.add_parser(action)
         host_selection = command.add_mutually_exclusive_group(required=True)
@@ -892,7 +900,7 @@ def main() -> None:
             action="store_true",
             help="Print machine-readable next-step output",
         )
-        if action in {"advance", "recover", "setup-media", "run"}:
+        if action in {"advance", "recover", "setup-media", "run", "retire-containers"}:
             command.add_argument("--apply", action="store_true")
         if action in {"setup-media", "run"}:
             command.add_argument(
@@ -902,6 +910,26 @@ def main() -> None:
             command.add_argument("--assessor", required=True)
         if action == "review":
             command.add_argument("--report", type=Path, required=True)
+        if action == "preflight":
+            command.add_argument(
+                "--custody",
+                type=Path,
+                required=True,
+                help="Private directory on independent encrypted media",
+            )
+            command.add_argument(
+                "--vault-key-custody",
+                type=Path,
+                help="Admin vault key copy on separate encrypted media; "
+                "required when this host holds the admin vault",
+            )
+            command.add_argument(
+                "--accept-absent",
+                action="append",
+                default=[],
+                metavar="ID",
+                help="State that this required item never existed on this host",
+            )
         if action == "attest":
             command.add_argument("--stage", choices=migration.STAGES, required=True)
             command.add_argument("--evidence", type=Path, required=True)
@@ -945,6 +973,18 @@ def main() -> None:
             case "plan":
                 migration.plan_spec(spec, state)
                 prepare(state)
+            case "retire-containers":
+                retire_containers(state, apply=args.apply)
+                return
+            case "preflight":
+                from lx_administration.storage import secret_preflight
+
+                secret_preflight.run(
+                    state,
+                    args.custody,
+                    key_custody=args.vault_key_custody,
+                    accept_absent=tuple(args.accept_absent),
+                )
             case "review":
                 review(state, args.assessor, args.report)
             case "attest":

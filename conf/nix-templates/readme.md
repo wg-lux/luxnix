@@ -30,6 +30,9 @@ remotely managed host's address in `hosts.ini`. Home hosts and inherited home
 groups belong in `home-hosts.yml`; system-specific and home-specific values
 belong in their respective host variable files above.
 
+The Home Manager template renders nonempty sections through one shared loop.
+Section names are preserved except for `editors`, which maps to `programs`.
+
 ## System option namespaces
 
 - `group_roles`, `role_roles`, and `host_roles` populate `roles`.

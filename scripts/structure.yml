@@ -5,6 +5,7 @@ parent: ../structure.yml
 summary: Operational frontends and repository validation tools invoked by canonical wrappers.
 responsibilities:
   - Expose guarded inventory-aware administration commands
+  - Exclude destructive wipe-and-reinstall templates from operator tooling
   - Validate repository quality and context drift
 boundaries:
   - Do not bypass documented Devenv wrappers for sensitive operations

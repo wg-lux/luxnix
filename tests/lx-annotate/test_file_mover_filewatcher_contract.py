@@ -676,7 +676,7 @@ def test_filewatcher_deployment_uses_packaged_once_entrypoint() -> None:
         encoding="utf-8"
     ) + LX_ANNOTATE_FILEWATCHER_SOURCE.read_text(encoding="utf-8")
 
-    assert "make_entrypoint lx-annotate-watch lx-annotate-watch 0" in source
+    assert "make_entrypoint lx-annotate-watch lx-annotate-watch" in source
     assert (
         'ExecStart = "${effectiveRuntimePackage}/bin/lx-annotate-watch --once";'
         in source

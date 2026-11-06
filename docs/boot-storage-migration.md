@@ -48,9 +48,9 @@ and backups. One member provides no redundancy. Future mirror addition requires
 a reviewed MD growth operation, never rerunning Disko over live data.
 The retained legacy layout cannot be converted by configuration activation.
 Preserve complete data, PostgreSQL, original keys/salts and independent unlock
-credentials before reprovisioning. The gc-10 export-disk and temporary plaintext
-backup exceptions do not authorize plaintext production application storage;
-see [cutover scope](#gc-10-cutover-scope-operator-decision-2026-11-03).
+credentials before conversion. The current in-place tool rejects this multi-disk
+layout; retain the working installation until support is implemented and tested.
+The gc-10 backup exceptions do not authorize erasing its disks.
 
 ## Splash unlock and generation recovery
 
@@ -122,13 +122,157 @@ storage, not an application backup. Encryption is optional for non-secret eviden
 credentials and application backups keep their separate protection requirements.
 
 Planning builds and pins the system closure and Disko executable, source revision,
-lockfile, hardware and provisioner digest. Keep that release unchanged; never reset
+lockfile, hardware and system closure. Keep that release unchanged; never reset
 a saved journal to accommodate a new checkout. Before installer boot, preserve the
 checkout, built artifacts and evidence independently at their planned paths.
 Installer state must be root-owned and private, outside `/mnt` and selected disks.
 Use the reviewed root Python environment there; do not run `sudo devenv` on the
 installed desktop. Trusted installer checks reject target-backed Nix stores,
 active swap, mounted target disks and conflicting mappings.
+
+### In-place root encryption
+
+`installation: in-place` with `source_retention: in-place` is the path for hosts with
+data. It supports one plaintext Btrfs root partition; planning refuses other root
+filesystems, MD arrays and additional encrypted partitions. From trusted installer
+media, `advance --apply` asks for typed approval and the passphrases, then:
+
+1. Tests every container passphrase and checks that the container data fits on root.
+   A failure here leaves the disk untouched.
+2. Shrinks Btrfs by 32 MiB for the header and runs `cryptsetup reencrypt --encrypt`.
+3. Opens the result and confirms the filesystem UUID and `btrfs check`.
+4. Erases the old plaintext swap partition, which holds no durable data.
+5. Opens each container read-only, copies each configured directory to its normal
+   path, compares it with `diff -r`, then publishes it. Anything the old root held at
+   that path moves to `<path>.pre-consolidation`.
+6. Records the boot-passphrase receipt. `prepare-access` and `install` follow as usual.
+
+If this stops, rerun the same command. It runs `cryptsetup repair` and resumes from
+the LUKS2 header; never format or restart. Consolidated directories are not copied
+again.
+
+The root passphrase may contain only letters a-x, digits and spaces, because the boot
+prompt can use a different keyboard layout than a desktop terminal. Older boot menu
+entries cannot open the encrypted root. `cryptsetup` is available on the installed
+system and in the initrd.
+
+After conversion nothing opens the containers at boot; applications run directly on
+the encrypted root. The container files stay untouched as a fallback until physical
+acceptance is recorded. Then, as root on the installed system:
+
+```bash
+python -m lx_administration.storage.boot_setup retire-containers --host <host>
+python -m lx_administration.storage.boot_setup retire-containers --host <host> --apply
+```
+
+This deletes only the container files, after typed approval, and refuses if a target
+was not consolidated or a container is still attached. Their recovery records in the
+admin vault are not changed. This path does not cover gc-10, whose containers are
+on `/data/raid01` and whose layout is `legacy-containers`.
+
+`nix build .#checks.x86_64-linux.boot-storage-in-place` runs this on a disposable VM
+disk, with a power cut during encryption, cold boots and container retirement.
+
+### Vault recovery before root encryption
+
+In-place encryption requires `vault_recovery_tested` before provisioning.
+The setup command does not back up Vault. An existing assessment without this check
+is insufficient. If checks or source change, preserve the old plan and follow the
+reviewed new-plan process; never edit its recorded revision or mark an unperformed
+check complete.
+
+Use [credential backup](credential-backup.md) to preserve the evaluated credential
+files, including both admin/client boot hashes and their Vault sources, in an
+authenticated encrypted archive. Run its verification after reboot or credential
+changes and immediately before migration. It does not change passwords, replace
+the full data backup, or complete the following recovery checks automatically.
+
+#### Secret preflight
+
+Run this on the host being erased, after creating its plan and before review:
+
+```bash
+devenv shell boot-storage-setup preflight --host <host> \
+  --custody <encrypted-directory> [--vault-key-custody <file>] [--accept-absent <id>]
+```
+
+It works out what this host needs from the plan's evaluated configuration, tests
+it, and writes `secret-preflight.json` to the plan state. `review` refuses to start
+without a receipt less than 24 hours old for this exact plan, and `attest` and
+provisioning reject an assessment that lacks it. A failed rerun removes the old
+receipt. Preflight never copies or changes a credential; it prints the command for
+anything missing. Custody must be a private directory on encrypted storage outside
+the selected disks.
+
+| Required when | Items | Checked by |
+| --- | --- | --- |
+| Always | Admin password hash | Custody copy matches, format is valid and not retired, and you type the password that matches it |
+| Client user enabled | Client password hash | Custody copy matches, format is valid and not retired |
+| LX-Annotate enabled | Master key and any master keyring, identity keyring, every salt generation on the host or named by the keyring, salt recovery copies, Django secret key | Custody copy matches |
+| Managed encrypted data enabled | Its LUKS key and UUID files | Custody copy matches |
+| Hub receiver or storage node | Current and retiring recipient private keys | Custody copy matches |
+| OpenVPN configured | Client key and certificate, TLS auth key, CA | Custody copy matches |
+| SOPS secrets declared | Host age key or SSH identity | Custody copy matches |
+| Encrypted volume outside the selected disks | Its key file | Custody copy matches |
+| Admin vault on this host | `~/.lxv`, and `~/.lxv.key` through `--vault-key-custody` | Copies match, the key copy is on a separate disk, and it decrypts every record in the vault copy |
+
+Copies go under `<custody>/<host>/secrets/<original-path>`, and the admin vault under
+`<custody>/controller/.lxv`. Material that managed-secrets regenerates, enrollment
+re-delivers or the admin vault re-exports is deliberately not required. Those
+replacements assume a reachable VPN, Vault and controller, which is why their
+prerequisites above are required.
+
+Salts are issued by the host, or by Vault for an allowlisted center, and center
+enrollment adds generations at runtime, so preflight also discovers them on the host
+instead of relying on configuration alone.
+
+A locked container looks like a missing file, so an absent item stops preflight.
+Unlock it first. Keys that open or identify existing data cannot be waived on an
+`installation: migration` plan, because provisioning would issue a replacement that
+cannot read what exists: restore the original instead. Other items that truly never
+existed on this host can be stated with `--accept-absent <id>`; the receipt records
+that. Account hashes still need a valid custody copy. For a host with data use
+`installation: migration`; preflight warns on any other mode. Hosts running the Vault or OpenBao server stop here: preflight cannot
+verify their data and unseal material, so use
+[Vault Server Rebuild](vault-server-rebuild.md).
+
+Preflight proves that the keys exist, match and decrypt, not that the data can be
+restored; the migration `backup` and `restore` stages cover that. It also does not
+prove the root LUKS passphrase, which is set during installation and tested at
+physical acceptance. The remaining `vault_recovery_tested` confirmation still covers
+anything outside this table.
+
+#### What each store contains
+
+`modules/nixos/luxnix/vault` defines several distinct credential locations:
+
+- Host files: `luxnix.vault.dir`, `adminPasswordFile`,
+  `adminPasswordHashedFile`, `key` and `psk`. Inspect evaluated paths for the
+  selected host; these declarations do not copy secrets into the Nix closure.
+- Controller Ansible Vault: normally `~/.lxv` and its independent unlocking key,
+  normally `~/.lxv.key`. Both must survive if that controller disk is erased.
+  Follow [local Vault recovery](vault-setup.md); do not initialize a replacement
+  vault or generate new credentials as a migration shortcut.
+- HashiCorp Vault: client token/AppRole files and any configured environment file
+  provide access to a separate server. Preserve or test supported re-enrollment
+  independently of the selected disk. If the selected machine hosts the server,
+  preserve and test recovery of its Raft data and independent unseal/recovery
+  material using [Vault Server Rebuild](vault-server-rebuild.md).
+
+Before confirming this check, identify which stores actually apply, preserve
+their required files in independent protected storage, and demonstrate recovery
+without reading the original disk's credential files. Verify the recovered
+administrator password/hash pair privately and retain application master keys,
+historical keys and identity salts. Write only locations and test results in the
+notes, never passwords, hashes, private keys or decrypted vault contents. The
+unencrypted recovery journal filesystem alone is not suitable for plaintext
+secrets. A backup containing a LUKS container still needs its original unlock key.
+
+The installer validates a supplied administrator hash and preserves an existing
+restored hash; it cannot infer that a different valid hash matches your previous
+password. Restore the original hash to keep the same login password, and test
+login after installation. Root LUKS uses a separate password. Re-enrollment of
+Vault access must not replace keys needed to decrypt historical application data.
 
 ### Evidence and advanced interface
 
@@ -143,8 +287,8 @@ automation: `plan --spec <private-spec.yml> --state <private-state-directory>`,
 `schema_version: 1`, `host`, `checkout`, `hardware_uuid`, `root_encryption`,
 `installation`, `source_retention` and the disk fields above.
 
-Stages are `recovery`, `backup`, `restore`, `prepared`, then physical `acceptance`.
-Fresh/disposable plans omit backup/restore stages, not credential preservation.
+In-place stages are `recovery`, `prepared`, then physical `acceptance`.
+Recovery includes an explicitly tested backup; the tool does not create it.
 Evidence JSON contains exactly `schema_version: 1`, `plan_id`, `stage`, `checks`
 and a nonempty `artifacts` list of private absolute paths. Use the check names from
 `status`; every result must be performed and true. Artifact hashes bind evidence
@@ -153,8 +297,7 @@ Migration recovery requires exactly one fresh [readiness admission](#readiness-o
 JSON artifact; the simple notes-only review does not replace this report.
 
 From the trusted installer, `check --stage provision` verifies prerequisites
-without formatting. The setup workflow separately confirms erasure and runs pinned
-Disko. Restore/enroll credentials, then `prepare-access` prepares missing admin
+without formatting. The setup workflow separately confirms in-place LUKS2 conversion. Restore/enroll credentials, then `prepare-access` prepares missing admin
 hashes and optional initrd SSH identity while preserving existing credentials.
 Record `prepared` evidence and pass `check --stage install` before the separate
 install confirmation. Installation verifies mounts, disk identities, secondary
@@ -165,8 +308,8 @@ signed first-install combinations remain blocked.
 
 ### Interrupted setup
 
-Run `next --host <host>` using the same state. A completed format is never
-repeated. A running/interrupted provision blocks all automatic retries. Preserve
+Run `next --host <host>` using the same state. A completed conversion is never
+repeated. Interrupted in-place encryption resumes from its LUKS2 header. Preserve
 `provision.json`: it records disk metadata and execution state, **not a backup**.
 Inspect the disks; repair/mount the intended complete layout from trusted media,
 then preview and explicitly accept it without rerunning Disko:
@@ -462,139 +605,23 @@ write a plaintext image or recovery private identity onto the external disk.
 
 Keep this image, the snapshot backups and their independent recovery identity
 until restored PostgreSQL, old encrypted media and cold-boot acceptance pass.
-Once the NVMe is formatted, rollback requires restoring its whole-disk image
-from trusted recovery media; selecting an older NixOS generation cannot restore
-the old partition layout or data. Preserve any new writes separately before
-rolling back, since restoring the image discards them.
+This is recovery evidence, not permission to format the NVMe. In-place conversion
+keeps its filesystem; restoration is a separately reviewed recovery action that
+can replace newer writes. Preserve those writes before any recovery decision.
 
-## Reprovision and restore (explicit destructive operator action)
+## Retired destructive installation paths
 
-### gc-10 cutover scope (operator decision, 2026-11-03)
+The Disko execution branch, fresh/disposable/erase-and-restore setup modes and
+standalone wipe-and-reinstall template have been removed. Old plans remain
+readable recovery evidence but cannot authorize setup, access preparation or
+installation. Preserve them; never edit a saved plan to bypass rejection.
 
-The requested migration includes the live backend, not only a backup. Reuse the
-two internal disks only after verified offline whole-disk images and a tested
-restore. For this migration the operator selected **plaintext backup archives**
-on the existing `Backup-24-11` filesystem, without an additional archive password.
-This is a host-specific exception to the encrypted-archive procedure above;
-do not run that procedure and describe its age ciphertext as plaintext. Raw disk
-images still contain the original encrypted containers and need the existing
-container credentials for recovery. Preserve those credentials until recovery
-retention ends. Keep backup access private and existing backup contents intact.
-
-Start by extracting the existing containers into a private plaintext file tree
-on the selected backup disk. This copy can precede the offline disk work: keep
-the original containers closed to writers, open separate read-only mappings,
-and verify file contents and metadata after copying. Preserve the originals.
-Do not interpret permission to copy data as permission to erase disks or remove
-containers. A verified file copy is a restore source; it becomes the live backend
-only after the separate path cutover and application checks below.
-
-The installed backend remains `boot-luks`: one root unlock at boot, with the
-secondary disk unlocked by its keyfile on encrypted root. Restore logical data
-from inside the old containers, preserving numeric ownership, permissions,
-ACLs, extended attributes, application keys and historical identity salts:
-
-| Legacy container directory | Live destination after restore |
-| --- | --- |
-| `luxnix-app-storage/application` | `/var/lib/lx-annotate` (data-disk Btrfs subvolume) |
-| `luxnix-app-storage/postgresql` | `/var/lib/postgresql` (data-disk Btrfs subvolume) |
-| `luxnix-app-storage/postgresql-backups` | `/var/backup/postgresql` (data-disk Btrfs subvolume) |
-| `luxnix-secrets/host-secrets` | `/etc/secrets` |
-| `luxnix-secrets/managed-secrets` | `/etc/secrets/vault` |
-| `luxnix-secrets/identity-salt-recovery` | `/var/lib/lx-annotate-identity-salts` |
-| `luxnix-secrets/identity-salt-replica` | `/var/lib/lx-annotate/data/.identity-salt-recovery` |
-| `luxnix-secrets/wheel-conf` | `/var/endoreg-service-user/lx-annotate-wheel/conf` |
-| `luxnix-secrets/hub-client-pki` | `/var/lib/lx-annotate/hub-pki` |
-
-Reconcile this table with the final evaluated bind metadata and actual source
-contents before copying. Restore nested destinations after their parent tree.
-Do not restore the `.luks` backing files or obsolete container mount directories
-into the new live filesystem. Keep their complete originals in the recovery
-images. Select `boot-luks`, disable local OpenBao enrollment tooling and leave
-legacy container migration disabled in the installation release. Shared legacy
-metadata stays available for other hosts and for detecting stale mounts.
-
-Retirement is complete only after the installed mount graph points at the new
-encrypted partitions, no legacy unlock units or container mounts remain active,
-PostgreSQL checks and historical-media decryption pass, and a cold boot starts
-the application after one storage prompt. The external backup is recovery
-storage, never the application's live backend. Do not delete recovery images or
-claim physical acceptance based on a configuration build.
-
-### Installation procedure
-
-1. Review the evaluated Disko layout for the exact host against serials and the
-   recorded installed layout. Build the system on a durable reviewed checkout;
-   a temporary verification checkout must never become the production source.
-   Ensure trusted installation media can unlock the restored system and verify
-   Secure Boot signatures where enabled. Record all mountpoints and crypttab
-   entries from evaluation before any destructive command.
-   Test the one-time USB boot menu from the local console before erasing storage.
-   Possessing a recovery stick does not prove firmware permits booting it. If an
-   unknown firmware password blocks recovery, retain the working installation;
-   do not reset firmware or disable Secure Boot as a migration workaround.
-2. On the authorized replacement disks only (or an explicitly approved reused
-   disk after its offline whole-disk image has been verified), run the reviewed destructive Disko
-   provisioning workflow to create the complete layout (EFI, LUKS2 root and all
-   data members). Disko uses prompted recovery credentials at this stage, not
-   runtime keyfiles. Verify all member mappings are open before Btrfs array
-   creation. Mount the resulting target root at `/mnt` and its data filesystems
-   at their declared paths beneath it. Test the recovery credentials before
-   installing. Keep EFI free of private key material.
-3. Generate each secondary key **once**, directly into private storage on the
-   newly mounted encrypted root: `/mnt/etc/luks-keys/<crypttab-mapping>.key`,
-   root-owned 0400, at least 32 random bytes, with parent root-owned 0700. Use
-   exclusive creation and refuse an existing pathname. For already encrypted
-   retained data disks, restore their enrolled keys instead. A missing existing
-   key is a recovery failure, not permission to regenerate.
-4. Enroll each new key with `cryptsetup luksAddKey` against its verified secondary
-   device, supplying only the key **file path** as the new key and entering the
-   existing recovery credential at the hidden prompt. Test that key with
-   `cryptsetup open --test-passphrase --key-file <key-path> <verified-device>`.
-   Retain and test independent recovery slots and encrypted external key backups.
-   Disko's format phase never generates runtime keys. **Do not rerun destructive
-   Disko or nixos-anywhere's disk phase after creating keys or restoring data.**
-5. Restore logical destinations directly at their existing application paths,
-   flattening obsolete container and bind layers. Restore nested mounts separately
-   to their intended directory. Restore account hashes before first login and the
-   existing SOPS age key at its configured path (generation remains disabled).
-   Restore PostgreSQL consistently using the matching major version. Verify
-   numeric service IDs and permissions before enabling any writers.
-6. Before first installation, ensure the mounted target has its standard
-   root-owned `/var/lib` directory, then initialize its machine identity
-   with `systemd-machine-id-setup --root=/mnt` from the trusted installer. Do not
-   replace an existing identity on a restored installation. A bare chroot may
-   report `cryptsetup status` type `n/a` without udev metadata. Expose the trusted
-   installer's `/run/udev` at `/mnt/run/udev` through a read-only bind mount for
-   staging/installation, and remove that temporary mount during installer
-   teardown. Never accept `n/a` as proof of LUKS2. With its required mounts and
-   Nix store available, use `nixos-enter --root /mnt --
-   <built-closure>/sw/bin/luxnix-setup-boot-password` in a private terminal to
-   verify the existing disk password and stage its receipt. A missing
-   `/etc/machine-id` blocks staging; do not manufacture a receipt or bypass the
-   check. Then install the already built closure onto the prepared target using the local
-   NixOS install-only workflow, after reviewing `findmnt -R /mnt` and confirming
-   the target serials again:
-
-   ```sh
-   python -m lx_administration.storage.boot_migration install --state <private-state-directory>
-   ```
-
-   This must run from the trusted installer, not the running old host. It must
-   not repartition or format. Account hashes and service secrets must already
-   have been restored. When migrating existing sops-nix configuration, remove
-   the obsolete `operatorStorageKey.volumeKeys` entries; preserve the private age
-   identity, applicationSecrets, consumers and pinned ciphertext. Data unlock keys
-   are now local root-owned keyfiles, independent of SOPS installation. Do not run the general `nixos-anywhere` command with its
-   default disk phase against this prepared installation. From the installed
-   target run `luxnix-verify-boot-storage`; it binds each secondary key to the raw
-   device and open LUKS2 mapping and tests the enrolled key without changing
-   slots or mappings. A wrong key on an already open mapping therefore blocks
-   the normal pre-switch check. Runtime consumer guards use `--mounted-storage`
-   to check current mounts and permissions without repeated key derivation;
-   that option does not prove next-boot unlock. Inspect every mapping, `findmnt` and
-   `swapon --show`. Inspect the built initrd and EFI to confirm that neither
-   secondary key contents nor private age identities were embedded.
+Use the [in-place workflow](#in-place-root-encryption) for supported existing
+Btrfs roots. Unsupported arrays, extra encrypted devices and signed-install
+combinations stop for review; there is no repartitioning fallback. Disko layout
+declarations remain descriptive inputs for the expected mount graph, not a
+command for converting an installed machine. Historical approval to erase a
+host does not select a supported mode in this workflow.
 
 ## Acceptance, recovery and rollback limits
 
@@ -659,8 +686,8 @@ the whole playbook without tag selection: every earlier step is repeated and
 idempotent, and the playbook refuses `--tags activate` alone because it would
 skip the target, closure and mapping gates. No missing container is created.
 
-Remove the exception only after console-
-assisted reprovision and verified restore; the final fleet architecture is unchanged.
+Remove the exception only after a supported in-place conversion and verified
+physical acceptance; unsupported layouts remain on their working installation.
 
 `layout = "legacy-containers"` is an explicit maintenance/recovery exception for
 an unmigrated host. Set it through the canonical host inventory, for example:
@@ -673,7 +700,7 @@ host_luxnix:
 Run `devenv tasks run autoconf:check`, render/compare in an isolated directory,
 then regenerate through `devenv tasks run autoconf:generate` under the documented
 Autoconf workflow. Remove this explicit exception only as part of the verified
-reprovision/restore procedure. The old `migration.enable` flag controls container
+in-place conversion procedure. The old `migration.enable` flag controls container
 copying only; it is not proof of physical root migration and is ignored by the
 boot-LUKS runtime. Compatibility retains the existing inventory container UUIDs, bind map,
 SOPS container-key support and recovery tools. It is not a second final fleet
@@ -709,6 +736,36 @@ or the fleet's Btrfs RAID hardware. Its Nix store is the test harness's shared
 read-only store. A VM result cannot substitute for the physical acceptance steps
 above. The fleet readiness tracker remains authoritative and must not be marked
 complete from these repository checks alone.
+
+### In-place-only workflow retirement verification (2026-11-06)
+
+The formatting executor and its Disko build input were removed from
+`boot_setup.py` and `boot_migration.py`. Autoconf and the observation CLI accept
+only in-place plans. Historical destructive plans remain readable evidence but
+cannot pass planning or execution admission. The wipe/reinstall template and
+`deploy-new-host` command entry were removed; command catalogs and operator guides
+now point to the in-place preview.
+
+```bash
+.devenv/state/venv/bin/python -m pytest -q tests/test_boot_setup.py tests/test_boot_migration.py tests/test_in_place.py tests/test_secret_preflight.py tests/test_credential_backup.py tests/test_devenv_command_catalog.py tests/test_autoconf_cli.py tests/test_documentation_contract.py tests/test_project_map_contract.py --tb=short
+.devenv/state/venv/bin/python -m pytest -q tests/test_boot_storage.py -k 'root_setup or setup_root' --tb=short
+nix eval --raw '.#nixosConfigurations.gc-02.config.system.build.toplevel.drvPath'
+python scripts/lint_structure.py
+```
+
+The main suite passed 279 tests; six root-diagnostic tests passed. gc-02 system
+evaluation and all 23 structure
+manifests passed. The Devenv documentation/Nix-quality wrappers stop at the
+Secretspec reason policy, so their underlying checks were run directly.
+Direct Nix quality passes parsing, Deadnix, Statix, formatting and flake-checker;
+source visibility remains blocked by the unrelated untracked in-place VM test.
+Python quality reports 71 existing diagnostics outside this change. No quality
+baseline was raised. Changed-file whitespace checks pass; the repository-wide
+check flags an unrelated trailing blank line in gc-09 inventory. Tracker
+validation passes; the environment lifecycle readiness check remains 2/10.
+No production disk operation, activation, full system build or VM boot was run.
+These checks establish rejection of retired commands, not physical conversion
+or boot acceptance on the fleet.
 
 ## Coordinated hub snapshots
 

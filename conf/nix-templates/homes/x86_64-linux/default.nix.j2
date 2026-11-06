@@ -10,34 +10,15 @@ _: {
 {% endif %}
 {% endfor %}
 {% endmacro %}
-{% if cli %}
-  cli = {
-{{ render_attrset(cli, 4) }}  };
+{% for name, data in [
+  ("cli", cli), ("desktops", desktops), ("networking", networking),
+  ("programs", editors), ("services", services), ("luxnix", luxnix), ("roles", roles)
+] %}
+{% if data %}
+  {{ name }} = {
+{{ render_attrset(data, 4) }}  };
 {% endif %}
-{% if desktops %}
-  desktops = {
-{{ render_attrset(desktops, 4) }}  };
-{% endif %}
-{% if networking %}
-  networking = {
-{{ render_attrset(networking, 4) }}  };
-{% endif %}
-{% if editors %}
-  programs = {
-{{ render_attrset(editors, 4) }}  };
-{% endif %}
-{% if services %}
-  services = {
-{{ render_attrset(services, 4) }}  };
-{% endif %}
-{% if luxnix %}
-  luxnix = {
-{{ render_attrset(luxnix, 4) }}  };
-{% endif %}
-{% if roles %}
-  roles = {
-{{ render_attrset(roles, 4) }}  };
-{% endif %}
+{% endfor %}
 
   home.stateVersion = {{ stateVersion | nix_string }};
 }{{ "\n" }}

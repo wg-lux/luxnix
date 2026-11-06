@@ -9,12 +9,12 @@ default_groups:
   - group_home_services
 
 hosts:
-  s-01: {}
-  s-02: {}
-  s-03: {}
-  s-04: {}
-  gs-01: {}
-  gs-02: {}
+  s-01: {extra_groups: [group_home_git_maddonix]}
+  s-02: {extra_groups: [group_home_git_maddonix]}
+  s-03: {extra_groups: [group_home_git_maddonix]}
+  s-04: {extra_groups: [group_home_git_maddonix]}
+  gs-01: {extra_groups: [group_home_git_maddonix]}
+  gs-02: {extra_groups: [group_home_git_maddonix]}
   gc-01: {}
   gc-02: {}
   gc-03: {}
@@ -22,6 +22,7 @@ hosts:
   gc-05: {}
   gc-06:
     extra_groups:
+      - group_home_git_maddonix
       - group_home_editors
   gc-07: {}
   gc-08: {}
@@ -31,4 +32,5 @@ hosts:
     use_default_groups: false
   h-01:
     extra_groups:
+      - group_home_git_maddonix
       - group_home_networking

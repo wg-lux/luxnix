@@ -11,6 +11,9 @@ boundaries:
   - Local CMDB facts are sensitive and must not be committed
   - Remote changes require explicit target authorization and connectivity checks
 entrypoints:
+  - name: home-git-identity
+    file: inventory/group_vars/group_home_git_maddonix.yml
+    purpose: Share the maddonix Git identity only with homes selected in home-hosts.yml.
   - name: storage-local-backup
     file: playbooks/storage-local-backup.yml
     purpose: Create encrypted snapshot archives on the approved gc-09 local external filesystem without sending a private key.

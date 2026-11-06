@@ -47,6 +47,13 @@
   storage-recovery-custody.package = pkgs.zsh;
   storage-recovery-custody.exec = ''${pkgs.uv}/bin/uv run python -m lx_administration.storage.recovery_custody "$@"'';
 
+  credential-backup.package = pkgs.zsh;
+  credential-backup.exec = ''
+    backup_python="$(${pkgs.uv}/bin/uv run python -c 'import sys; print(sys.executable)')"
+    exec sudo env PATH="${pkgs.age}/bin:${pkgs.git}/bin:${pkgs.nix}/bin:${pkgs.util-linux}/bin:${pkgs.getent}/bin:$PATH" \
+      "$backup_python" -m lx_administration.storage.credential_backup "$@"
+  '';
+
   lx-annotate-streamable-migration.package = pkgs.zsh;
   lx-annotate-streamable-migration.exec = ''./scripts/lx-annotate-streamable-migration.sh "$@"'';
 
@@ -111,8 +118,6 @@
   # Local storage
   storage-provision.package = pkgs.zsh;
   storage-provision.exec = ''${pkgs.uv}/bin/uv run python -m lx_administration.storage.provision "$@"'';
-  storage-provision-setup.package = pkgs.zsh;
-  storage-provision-setup.exec = ''${pkgs.uv}/bin/uv run python -m lx_administration.storage.provision_setup "$@"'';
   openbao-local.package = pkgs.zsh;
   openbao-local.exec = ''${pkgs.uv}/bin/uv run python -m lx_administration.storage.local_enrollment "$@"'';
   mount-persisting-storage.package = pkgs.zsh;

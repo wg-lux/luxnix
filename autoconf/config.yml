@@ -41,8 +41,8 @@ boot_storage:
     gc-09:
       hardware_uuid: e0118e2d-e0c4-9844-a4eb-9fe2b5747b0d
       root_encryption: luks2
-      installation: disposable
-      source_retention: discard-approved
+      installation: in-place
+      source_retention: in-place
       disks:
         - path: /dev/disk/by-id/nvme-Phison_512GB_ESO512GHLCA1-21C-2MS_511231127249015467
           serial: '511231127249015467'

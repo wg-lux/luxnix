@@ -3,10 +3,8 @@
 template_name: "main"
 
 host_roles:
-  endoreg_client.enable: "true"
   endoreg-client.lxAi: "true"
   endoreg-client.database.port: config.services.postgresql.settings.port
-  nginxHost.enable: "true"
   # The public GLM vhost lives on the s-02 ingress; public DNS never reaches
   # this host, so a local vhost could neither serve nor obtain ACME certs.
   nginxHost.glm52.enable: "false"
@@ -49,11 +47,6 @@ host_services:
     clientKeyFile = "/etc/secrets/vault/hub-storage/gs-02-client.key";
     recipientPublicKeyFile = "/etc/secrets/vault/hub-storage/gs-01-recipient-current.pub.pem";
     } ]'
-
-  # Ollama service
-  luxnix.ollama.enable: "true"
-  luxnix.ollama.acceleration: '"cuda"'
-  luxnix.ollama.enableModelBootstrap: "false"
 
   # The loopback endpoint is provisioned by this host's PostgreSQL role.
   luxnix.lxAnnotateLocal.database.ownership: '"local"'

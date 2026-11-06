@@ -6,50 +6,21 @@ from pydantic import BaseModel, Field
 from lx_administration.autoconf.imports.merge import deep_update
 from lx_administration.yaml import load_unique_yaml_file
 
+SYSTEM_SECTIONS = ("luxnix", "roles", "services", "nixos")
+HOME_SECTIONS = (
+    "cli", "desktops", "editors", "networking", "services", "luxnix", "roles",
+)
+SYSTEM_LAYERS = ("group", "role", "host")
 SYSTEM_FIELDS = frozenset(
-    {
-        "group_luxnix",
-        "group_roles",
-        "group_services",
-        "group_nixos",
-        "group_imports",
-        "role_luxnix",
-        "role_roles",
-        "role_services",
-        "role_nixos",
-        "role_imports",
-        "host_luxnix",
-        "host_roles",
-        "host_services",
-        "host_nixos",
-        "host_imports",
-        "template_name",
-    }
-)
-
+    f"{layer}_{section}"
+    for layer in SYSTEM_LAYERS
+    for section in (*SYSTEM_SECTIONS, "imports")
+) | {"template_name"}
 HOME_FIELDS = frozenset(
-    {
-        "host_home_roles",
-        "group_home_roles",
-        "host_home_services",
-        "group_home_services",
-        "host_home_luxnix",
-        "group_home_luxnix",
-        "host_home_cli",
-        "group_home_cli",
-        "host_home_desktops",
-        "group_home_desktops",
-        "host_luxnix",
-        "host_nixos",
-        "host_imports",
-        "system_users",
-        "home_configs",
-        "group_home_editors",
-        "host_home_editors",
-        "group_home_networking",
-        "host_home_networking",
-    }
-)
+    f"{layer}_home_{section}"
+    for layer in ("group", "host")
+    for section in HOME_SECTIONS
+) | {"host_luxnix", "host_nixos", "host_imports", "system_users", "home_configs"}
 
 
 def _load_yaml_fields(source: str | Path, allowed: frozenset[str]) -> dict[str, Any]:
@@ -192,14 +163,14 @@ class MergedHostVars(BaseModel):
     def load_from_file(cls, file: str | Path, logger=None) -> "MergedHostVars":
         return cls(**_load_yaml_fields(file, SYSTEM_FIELDS))
 
-    def prepare_roles(self, logger=None) -> dict[str, Any]:
-        role_configs = _merge_layers(
-            self.group_roles,
-            self.role_roles,
-            self.host_roles,
+    def _prepare_system_section(self, section: str, logger=None) -> dict[str, Any]:
+        merged = _merge_layers(
+            *(getattr(self, f"{layer}_{section}") for layer in SYSTEM_LAYERS)
         )
-        role_configs = _dictkey_replace_underscore_keys(role_configs, logger=logger)
-        return role_configs
+        return _dictkey_replace_underscore_keys(merged, logger=logger)
+
+    def prepare_roles(self, logger=None) -> dict[str, Any]:
+        return self._prepare_system_section("roles", logger)
 
     def prepare_home_config(
         self,
@@ -207,25 +178,11 @@ class MergedHostVars(BaseModel):
         state_version: str,
     ) -> dict[str, Any]:
         base_config = {
-            "cli": deep_update(self.group_home_cli or {}, self.host_home_cli or {}),
-            "desktops": deep_update(
-                self.group_home_desktops or {}, self.host_home_desktops or {}
-            ),
-            "editors": deep_update(
-                self.group_home_editors or {}, self.host_home_editors or {}
-            ),
-            "networking": deep_update(
-                self.group_home_networking or {}, self.host_home_networking or {}
-            ),
-            "services": deep_update(
-                self.group_home_services or {}, self.host_home_services or {}
-            ),
-            "luxnix": deep_update(
-                self.group_home_luxnix or {}, self.host_home_luxnix or {}
-            ),
-            "roles": deep_update(
-                self.group_home_roles or {}, self.host_home_roles or {}
-            ),
+            section: _merge_layers(
+                getattr(self, f"group_home_{section}"),
+                getattr(self, f"host_home_{section}"),
+            )
+            for section in HOME_SECTIONS
         }
 
         if username and self.home_configs and username in self.home_configs:
@@ -249,33 +206,13 @@ class MergedHostVars(BaseModel):
         return final_config
 
     def prepare_services(self, logger=None) -> dict[str, Any]:
-        service_configs = _merge_layers(
-            self.group_services,
-            self.role_services,
-            self.host_services,
-        )
-        service_configs = _dictkey_replace_underscore_keys(
-            service_configs, logger=logger
-        )
-        return service_configs
+        return self._prepare_system_section("services", logger)
 
     def prepare_luxnix(self, logger=None) -> dict[str, Any]:
-        luxnix_configs = _merge_layers(
-            self.group_luxnix,
-            self.role_luxnix,
-            self.host_luxnix,
-        )
-        luxnix_configs = _dictkey_replace_underscore_keys(luxnix_configs, logger=logger)
-        return luxnix_configs
+        return self._prepare_system_section("luxnix", logger)
 
     def prepare_nixos(self, logger=None) -> dict[str, Any]:
-        nixos_configs = _merge_layers(
-            self.group_nixos,
-            self.role_nixos,
-            self.host_nixos,
-        )
-        nixos_configs = _dictkey_replace_underscore_keys(nixos_configs, logger=logger)
-        return nixos_configs
+        return self._prepare_system_section("nixos", logger)
 
     def prepare_imports(self) -> list[str]:
         imports: list[str] = []

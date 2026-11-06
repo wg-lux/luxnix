@@ -18,6 +18,9 @@ def state(tmp_path, monkeypatch):
     # Test state contains synthetic public metadata, never production secrets.
     monkeypatch.setattr(migration, "private_path", lambda *a, **k: None)
     monkeypatch.setattr(migration, "verify_source", lambda *a: None)
+    # The receipt gate has its own coverage in test_secret_preflight.py.
+    monkeypatch.setattr(migration, "preflight_artifacts", lambda *a: [])
+    monkeypatch.setattr(migration, "verify_preflight_artifacts", lambda *a, **k: None)
     root = tmp_path / "state"
     root.mkdir()
     (root / ".lock").touch(mode=0o600)
@@ -124,6 +127,30 @@ def test_human_assessment_requires_exact_checks_and_artifacts(state, tmp_path):
         migration.attest(root, "recovery", report, "Test reviewer")
 
 
+@pytest.mark.parametrize("mode", ["migration", "disposable", "fresh"])
+def test_vault_recovery_is_required_even_when_data_is_disposable(
+    state, tmp_path, mode
+):
+    root, plan, progress = state
+    plan["spec"]["installation"] = mode
+    plan["spec"]["source_retention"] = {
+        "migration": "old-disks", "disposable": "discard-approved",
+        "fresh": "new-disks",
+    }[mode]
+    plan["plan_id"] = migration.digest(
+        {k: v for k, v in plan.items() if k != "plan_id"}
+    )
+    progress["plan_id"] = plan["plan_id"]
+    migration.atomic_json(root / "plan.json", plan)
+    migration.atomic_json(root / "progress.json", progress)
+    checks = dict.fromkeys(migration.required_checks("recovery", plan), True)
+    assert checks.pop("vault_recovery_tested") is True
+    report, _ = evidence(tmp_path, plan, "recovery", checks=checks)
+    with pytest.raises(migration.MigrationError, match="Every required"):
+        migration.attest(root, "recovery", report, "Test reviewer")
+    assert migration.load_progress(root, plan)["attestations"] == {}
+
+
 def test_identical_assessment_does_not_refresh_clock(state, tmp_path, monkeypatch):
     root, plan, _ = state
     monkeypatch.setattr(migration, "verify_readiness", lambda *a, **k: None)
@@ -152,6 +179,11 @@ def test_changed_early_assessment_invalidates_later_assessments(
 
 def test_plan_tampering_and_partial_initialization_fail(state, tmp_path, monkeypatch):
     root, plan, _ = state
+    plan["spec"].update(installation="in-place", source_retention="in-place")
+    plan["plan_id"] = migration.digest(
+        {k: v for k, v in plan.items() if k != "plan_id"}
+    )
+    migration.atomic_json(root / "plan.json", plan)
     value = json.loads((root / "plan.json").read_text())
     value["spec"]["host"] = "gc-10"
     migration.atomic_json(root / "plan.json", value)
@@ -341,6 +373,7 @@ def test_interrupted_running_marker_requires_human_review(install_environment):
 
 def test_signed_first_install_is_rejected(state, monkeypatch):
     _, plan, progress = state
+    plan["spec"].update(installation="in-place", source_retention="in-place")
     plan["config"]["secure_boot"] = True
     monkeypatch.setattr(migration, "check_attestation", lambda *a: None)
     monkeypatch.setattr(
@@ -546,6 +579,7 @@ def test_disposable_reinstall_requires_explicit_retention_and_recovery(state):
         "console_boot_tested",
         "trusted_installer_tested",
         "independent_credentials_tested",
+        "vault_recovery_tested",
         "selected_disks_disposal_authorized",
         "machine_and_application_credentials_preserved_or_reenrolled",
     }
@@ -577,21 +611,20 @@ def test_disposable_disks_still_require_offline_unmapped_target(
         migration.verify_unmounted_targets(plan)
 
 
-@pytest.mark.parametrize("changed", [None, "toplevel", "diskoScript"])
-def test_plan_pins_provisioner_and_rejects_build_drift(
+@pytest.mark.parametrize("changed", [None, "toplevel"])
+def test_plan_builds_only_system_closure_and_rejects_build_drift(
     state, tmp_path, monkeypatch, changed
 ):
     import yaml
 
     _, original, _ = state
+    original["spec"].update(installation="in-place", source_retention="in-place")
     spec_path = tmp_path / "spec.yml"
     spec_path.write_text(yaml.safe_dump(original["spec"]))
     target = tmp_path / "new-state"
-    script = tmp_path / "disko"
-    script.write_text("reviewed synthetic program")
     config = original["config"] | {
         "disks": {"root": original["spec"]["disks"][0]["path"]},
-        "provisioner": str(script),
+        "in_place": {"root_fs_type": "btrfs", "arrays": [], "other_encrypted": []},
     }
     monkeypatch.setattr(migration, "source_identity", lambda p: original["source"])
     monkeypatch.setattr(migration, "evaluate", lambda *a: config)
@@ -603,7 +636,8 @@ def test_plan_pins_provisioner_and_rejects_build_drift(
         assert "--no-link" in args
         if changed and args[-1].endswith(changed):
             return "/changed/program"
-        return str(script) if args[-1].endswith("diskoScript") else config["closure"]
+        assert args[-1].endswith("toplevel")
+        return config["closure"]
 
     monkeypatch.setattr(migration, "run", run)
     if changed:
@@ -612,10 +646,11 @@ def test_plan_pins_provisioner_and_rejects_build_drift(
         assert not (target / "plan.json").exists()
     else:
         plan = migration.create_plan(spec_path, target)
-        assert plan["config"]["provisioner_sha256"] == migration.file_digest(script)
+        assert "provisioner" not in plan["config"]
+        assert "provisioner_sha256" not in plan["config"]
         assert migration.load_plan(target) == plan
         assert migration.create_plan(spec_path, target) == plan
-    assert len(calls) == (1 if changed == "toplevel" else 2)
+    assert len(calls) == 1
 
 
 def test_plaintext_journal_keeps_permissions_guard(tmp_path, monkeypatch):
@@ -657,3 +692,22 @@ def test_plaintext_independent_state_is_accepted(state, monkeypatch):
     )
     monkeypatch.setattr(migration, "device_disks", lambda *a: {2})
     migration.verify_independent_state(root, progress, {1})
+
+
+@pytest.mark.parametrize("mode", [None, "migration", "fresh", "disposable"])
+def test_retired_plan_cannot_build_or_pass_execution_gates(state, monkeypatch, mode):
+    root, plan, progress = state
+    if mode is not None:
+        plan["spec"]["installation"] = mode
+    monkeypatch.setattr(
+        migration, "run", lambda *a, **kw: pytest.fail("No command allowed")
+    )
+    monkeypatch.setattr(
+        migration, "verify_source", lambda *a: pytest.fail("No source access")
+    )
+    for operation in [lambda: migration.plan_spec(plan["spec"], root / "new"),
+                      lambda: migration.check_gates(plan, progress, "provision"),
+                      lambda: migration.check_gates(plan, progress, "install")]:
+        with pytest.raises(migration.MigrationError, match="Only in-place"):
+            operation()
+    assert not (root / "new").exists()

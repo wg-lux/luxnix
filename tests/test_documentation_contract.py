@@ -577,7 +577,8 @@ def test_admin_password_workflow_has_one_canonical_private_input_procedure() -> 
     assert '!= "tmpfs"' in guide
     assert "--skip-sync --export" in guide
     assert "devenv shell rotate-admin-passwords --limit <host>" in guide
-    assert "--extra-files" in guide
+    assert "boot-storage-quickstart.md" in guide
+    assert "nixos-anywhere" not in guide
 
 
 def test_secret_rotation_uses_the_canonical_vault_key_path() -> None:

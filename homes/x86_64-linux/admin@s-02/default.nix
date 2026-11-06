@@ -4,8 +4,8 @@ _: {
     programs = {
       git = {
         allowedSigners = "SHA256:LNfWnvEthO0QL8DzUxtxHD4VnLxvCZWFmcDhZodk29o";
-        enable = true;
         email = "tlux14@googlemail.com";
+        enable = true;
         userName = "maddonix";
       };
     };

@@ -28,7 +28,6 @@
   - [Hardware Setup](docs/hardware-setup.md)
   - [Virtualization](docs/virtualization-guide.md)
   - [SSH Host Identity](docs/ssh-host-identity.md)
-  - [CA Trust and Certificate Repair](docs/ca-trust.md)
   - [Configuration Tests](docs/testing-nixtests.md)
   - [NixOS Version Bump](docs/nixos-version-bump.md)
 - **Services**
@@ -48,6 +47,7 @@
   - [Machine Setup Secrets Checklist](docs/machine-secrets-checklist.md)
   - [Root Encryption Quick Steps](docs/boot-storage-quickstart.md)
   - [Boot LUKS Storage Migration](docs/boot-storage-migration.md)
+  - [Credential Backup](docs/credential-backup.md)
   - [Unmigrated Hosts (Legacy Storage)](docs/legacy-storage-recovery.md)
   - [Application Secrets with sops-nix](docs/sops-application-secrets.md)
   - [Fleet Secure Boot](docs/secure-boot.md)

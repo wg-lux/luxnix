@@ -691,7 +691,10 @@ def write_account_hash(target, content):
 
 def account_hash(path):
     """Validate one supported non-retired hash without disclosing its contents."""
-    value = path.read_bytes()
+    return validate_account_hash(path.read_bytes())
+
+
+def validate_account_hash(value):
     valid = (
         rb"(\$6\$(rounds=[0-9]+\$)?[./A-Za-z0-9]{1,16}\$[./A-Za-z0-9]{86}|"
         rb"\$y\$[./A-Za-z0-9]+\$[./A-Za-z0-9]+\$[./A-Za-z0-9]{43})\n?"

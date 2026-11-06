@@ -11,11 +11,27 @@
 ## Startup contract
 
 - The preparation unit is the sole package installer for the shared virtual environment.
+- Preparation validates and synchronizes packaged static assets before it succeeds, including when the wheel is already installed. A failed copy or asset check blocks dependent startup and is retried on the next preparation attempt.
+- Web and worker entrypoints verify the prepared release without recopying the static tree. Web process restarts therefore avoid recursive asset copying and permission updates. If served assets are damaged or removed, rerun preparation through the reviewed recovery workflow; a web restart alone does not repair them.
 - Online installations wait for network-online.target; an explicit wheelhouse does not add this dependency.
 - Application and override plans must both resolve and pass downgrade admission before either install starts.
 - Resolver failure leaves installed distributions and the successful release stamp unchanged.
 - Diagnostics expose a fixed category and narrowly validated missing requirements, never raw pip output or authenticated URLs.
 - Network-online ordering does not guarantee that a package index is reachable or contains a requested release.
+
+## Storage during the root-encryption transition
+
+With `storage.operatorUnlocked.layout = "boot-luks"`, startup and activation
+validate the configured filesystem graph and the encrypted backing of each
+protected path. They do not inspect legacy container files or scan retired
+container/bind mount locations. Keeping or removing the old `volumes` and
+`bindMounts` migration metadata does not change those gates.
+
+Root device identity, LUKS2, Btrfs members, secondary disks and keys remain
+checked. An unencrypted application path still blocks startup. Existing
+explicit `legacy-containers` hosts retain their layout-specific checks until
+migration; this change neither selects a new layout nor migrates or removes data.
+Migration acceptance and container retirement remain explicit operator work.
 
 ## Catalogue reconciliation
 
@@ -190,3 +206,56 @@ devenv tasks run docs:check
 **Live admission:** Check-only reproduced distribution_unavailable for endoreg-db==1.3.15 without installing packages or writing constraints.
 
 **Not performed:** Activation, service restarts, package installation, migrations, invalid-distribution cleanup, and full NixOS system build.
+
+## Static preparation verification (2026-11-06)
+
+Commands run from the repository root:
+
+```bash
+.devenv/state/venv/bin/python -m pytest -q tests/lx-annotate/test_lx_annotate_wheel_runtime_install.py tests/lx-annotate/test_wheel_static_check.py tests/lx-annotate/test_lx_annotate_switch_lifecycle.py --tb=short
+.devenv/state/venv/bin/python -m pytest -q tests/test_documentation_contract.py
+nix build --no-link --impure --expr 'let f = builtins.getFlake "git+file:///home/admin/luxnix"; in f.nixosConfigurations.gc-10.config.services.lx-annotate.package'
+python scripts/lint_structure.py
+git diff --check
+```
+
+Results: 64 startup/static/lifecycle tests and 26 documentation tests passed;
+the gc-10 runtime package built; 23 structure manifests and whitespace checks
+passed. Pytest reported cleanup warnings for unrelated temporary directories.
+The broader run including encryption-default and file-mover contracts had
+87 passes and 10 failures: one existing installer source expectation and nine
+storage evaluations failing on missing `retainContainers`. The same attribute
+blocked `nix eval --raw '.#nixosConfigurations.gc-02.config.system.build.toplevel.drvPath'`.
+
+`devenv tasks run docs:check` and `devenv tasks run nix-quality:check` stopped
+at the Secretspec reason policy; the underlying commands were run directly.
+`.devenv/state/venv/bin/python scripts/nix-quality.py` passed parse, formatting,
+Statix and flake-checker checks, but failed source visibility and Deadnix on
+the unrelated untracked `tests/nixtest/in_place_encryption_vm_test.nix`.
+`./feature-tracking/tracker.py validate` passed all 11 definitions;
+`./feature-tracking/tracker.py check lx_annotate_environment_lifecycle_audit`
+remained nonzero at 2/10. These blockers were not changed or waived.
+No activation, full system build or production uptime measurement was performed.
+
+## Root-storage gate verification (2026-11-06)
+
+```bash
+.devenv/state/venv/bin/python -m pytest -q tests/test_boot_storage.py tests/test_operator_unlocked_storage.py tests/test_managed_secret_storage.py --tb=short
+nix eval --raw '.#nixosConfigurations.gc-02.config.system.build.toplevel.drvPath'
+.devenv/state/venv/bin/python -m pytest -q tests/test_documentation_contract.py
+python scripts/lint_structure.py
+```
+
+All 126 storage tests passed (one warning), including fleet boot-layout checks,
+legacy-layout coverage, and gc-02/gc-10/gs-02 root-mode independence from legacy
+container metadata. gc-02 system evaluation, 26 documentation tests and all
+23 structure manifests passed. No full system build, VM boot or activation was
+performed; these results do not establish deployed fleet encryption.
+
+The Devenv documentation and Nix-quality wrappers still stop at the Secretspec
+reason policy. The direct Nix-quality runner passes parsing, Deadnix, Statix,
+formatting and flake-checker, but flags the unrelated untracked in-place VM test.
+The direct Python-quality runner reports 71 existing diagnostics outside the
+changed code. Changed-file whitespace checks pass; the repository-wide check
+reports an unrelated trailing blank line in gc-09 inventory. Tracker validation
+passes; environment lifecycle readiness remains incomplete at 2/10.

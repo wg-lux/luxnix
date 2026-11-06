@@ -1,0 +1,5 @@
+# Opt-in Git identity for homes administered by maddonix.
+group_home_cli:
+  cli.programs.git.userName: "maddonix"
+  cli.programs.git.email: "tlux14@googlemail.com"
+  cli.programs.git.allowedSigners: "SHA256:LNfWnvEthO0QL8DzUxtxHD4VnLxvCZWFmcDhZodk29o"

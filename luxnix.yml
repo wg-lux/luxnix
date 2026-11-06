@@ -15,7 +15,6 @@ prerequisites:
   development:
     - devenv
   deploy:
-    - nixos-anywhere
     - ssh
 
 # Shared vocabulary for workflows here and wrappers in devenv/commands.yml.
@@ -356,25 +355,16 @@ workflows:
       - Connects to the selected host over SSH.
       - Writes connectivity logs under logs.
 
-  - id: deploy-new-host
-    summary: Install the selected configuration on a target machine.
-    risk: destructive-remote
-    confirmation_required: true
-    documentation: docs/getting-started.md
-    arguments:
-      host:
-        required: true
-        source: discover-hosts
-      target-ip:
-        required: true
-        source: operator
-      staging-root:
-        required: true
-        source: operator
-        sensitive: true
-    command: nixos-anywhere --extra-files <staging-root> --flake '.#<host>' nixos@<target-ip>
+  - id: prepare-root-encryption
+    summary: Preview the in-place LUKS2 workflow without erasing or repartitioning disks.
+    risk: local-state
+    documentation: docs/boot-storage-quickstart.md
+    command: devenv tasks run boot-storage:setup
+    prerequisites:
+      - devenv
     effects:
-      - Can repartition and install the target machine according to the host configuration.
+      - Reports the next reviewed recovery or encryption step for the configured host.
+      - Applying encryption requires a separate explicit invocation and target confirmation.
 
 support:
   secret_rotation: docs/secret-rotation.md

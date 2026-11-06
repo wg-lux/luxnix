@@ -112,9 +112,6 @@ let
           mapping = v.name;
         }) keys;
         paths = requiredPaths;
-        retiredMounts = builtins.filter (p: !(builtins.hasAttr p config.fileSystems)) (
-          builtins.attrNames cfg.bindMounts ++ map (v: v.mountPoint) (builtins.attrValues cfg.volumes)
-        );
       }
     );
   spec = storageSpec paths allMounts secondary;
@@ -160,8 +157,8 @@ let
     text = ''
       usage() {
         echo 'Usage: luxnix-setup-root-encryption [--setup-password]'
-        echo 'Inspect the running root against this candidate; plaintext root requires reviewed provisioning.'
-        echo 'Preview installation from the reviewed LuxNix checkout: devenv tasks run boot-storage:setup'
+        echo 'Inspect the running root against this candidate; plaintext root requires reviewed in-place encryption.'
+        echo 'Preview in-place encryption from the reviewed LuxNix checkout: devenv tasks run boot-storage:setup'
         echo '--setup-password verifies an existing LUKS password only after the root check succeeds.'
         echo 'Never formats disks, opens mappings, changes keyslots or activates a generation.'
       }
@@ -312,6 +309,7 @@ in
           ];
           systemd = {
             enable = true;
+            initrdBin = [ pkgs.cryptsetup ];
             storePaths = [
               "${config.boot.initrd.systemd.package}/bin/bootctl"
               (lib.getExe' config.boot.plymouth.package "plymouth")
@@ -352,7 +350,9 @@ in
             v: "${v.name} ${v.device} ${keyFile v} luks,nofail,headless,x-systemd.device-timeout=30s"
           ) secondary
           + "\n";
+        # Disk recovery always needs these, also from a damaged generation.
         environment.systemPackages = [
+          pkgs.cryptsetup
           verifier
           setupPassword
           setupRoot

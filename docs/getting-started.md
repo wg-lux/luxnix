@@ -21,7 +21,6 @@ inspection from local-state and remote deployment operations.
 - `luxnix` repository (this repository)
 - Nix with flakes enabled on the control machine
 - Devenv for cataloged tasks and shell wrappers
-- `nixos-anywhere` available on the control machine
 - SSH keypair on the control machine (default: `~/.ssh/id_ed25519`)
 
 Notes:
@@ -63,10 +62,10 @@ configuration; connectivity checks and subsequent steps concern deployment.
 New client and server installations require `boot-luks` with LUKS2 root.
 The former `unencrypted-root` installation path is retired and rejected.
 Use the [guarded operator checklist](boot-storage-quickstart.md) for prepared-target
-installation. Never run the disk-formatting command below on a restored target.
+installation after in-place conversion. No disk formatter is part of this workflow.
 
-The following steps can replace the target's operating system and partition its
-disks. Confirm backups, recovery access, the selected host and address, and the
+The following steps prepare a reviewed configuration and preview in-place root
+encryption. They do not authorize repartitioning. Confirm backups, recovery access, the selected host and address, and the
 reviewed repository revision before installation. For local development only,
 continue with [Development](development.md).
 
@@ -112,8 +111,9 @@ continue with [Development](development.md).
    - Create, import, validate and export the host's unique password/hash pair.
    - Stage the protected runtime hash for first activation as described under
      [Install on a new machine](admin-passwords.md#6-install-on-a-new-machine).
-7. Deploy after explicitly confirming the target and destructive install scope:
-   - `nixos-anywhere --extra-files <staging-root> --flake '.#<host>' nixos@<target-ip>`
+7. Preview the in-place root-encryption workflow for the selected host:
+   - `devenv tasks run boot-storage:setup`
+   - Follow [in-place root encryption](boot-storage-quickstart.md); the preview does not erase disks.
    - Use the verified staging tree from the admin password guide; the hash must
      exist before first activation.
 8. First login on target host:
@@ -157,7 +157,7 @@ and retain console recovery for changes that could break remote access.
   - `tests/eval-logs/*.log`
 
 For an installer failure, leave the target in the installer, preserve the
-`nixos-anywhere` output, and re-check disk and hardware inputs before retrying.
+in-place conversion journal, and follow the interrupted-conversion recovery procedure before retrying.
 For an activation failure on an existing installation, select the previous
 NixOS generation at boot or run `sudo nixos-rebuild switch --rollback`, then
 verify SSH, `/run/current-system`, mounts, and critical services. Restore

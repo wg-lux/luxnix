@@ -112,6 +112,34 @@ def test_c01_home_source_declares_both_managed_users() -> None:
     assert merged.system_users == ["admin", "client-user"]
 
 
+def test_shared_git_identity_changes_only_opted_in_homes(tmp_path):
+    inventory = REPO_ROOT / "ansible/inventory"
+    shutil.copy(inventory / "home-hosts.yml", tmp_path)
+    shutil.copytree(inventory / "host_vars/home", tmp_path / "host_vars/home")
+    (tmp_path / "group_vars").mkdir()
+    for source in (inventory / "group_vars").glob("group_home_*.yml"):
+        shutil.copy(source, tmp_path / "group_vars")
+
+    def home_configs():
+        return {
+            host: MergedHostVars(**values).prepare_home_config("admin", "23.11")
+            for host, values in load_home_host_vars(tmp_path).items()
+        }
+
+    before = home_configs()
+    identity = tmp_path / "group_vars/group_home_git_maddonix.yml"
+    values = yaml.safe_load(identity.read_text())
+    values["group_home_cli"]["cli.programs.git.userName"] = "changed-in-test"
+    identity.write_text(yaml.safe_dump(values))
+    after = home_configs()
+    selected = {"gc-06", "gs-01", "gs-02", "h-01", "s-01", "s-02", "s-03", "s-04"}
+    assert {host for host in before if before[host] != after[host]} == selected
+    for host in selected:
+        expected = before[host]
+        expected["cli"]["programs"]["git"]["userName"] = "changed-in-test"
+        assert after[host] == expected
+
+
 def test_merged_host_vars_defaults_are_not_shared() -> None:
     first = MergedHostVars()
     second = MergedHostVars()
@@ -183,14 +211,15 @@ def test_inventory_loader_reports_missing_file_without_assert(tmp_path):
         AnsibleInventory.from_file(missing)
 
 
-def test_merged_host_vars_uses_group_role_host_precedence() -> None:
-    merged = MergedHostVars(
-        group_services={"service": {"source": "group", "group": True}},
-        role_services={"service": {"source": "role", "role": True}},
-        host_services={"service": {"source": "host", "host": True}},
-    )
+@pytest.mark.parametrize("section", ("roles", "services", "luxnix", "nixos"))
+def test_merged_host_vars_uses_group_role_host_precedence(section) -> None:
+    merged = MergedHostVars(**{
+        f"{layer}_{section}": {"service": {"source": layer, layer: True}}
+        for layer in ("group", "role", "host")
+    })
+    original = merged.model_dump()
 
-    assert merged.prepare_services() == {
+    assert getattr(merged, f"prepare_{section}")() == {
         "service": {
             "source": "host",
             "group": True,
@@ -198,6 +227,24 @@ def test_merged_host_vars_uses_group_role_host_precedence() -> None:
             "host": True,
         }
     }
+    assert merged.model_dump() == original
+
+
+@pytest.mark.parametrize(
+    "section",
+    ("cli", "desktops", "editors", "networking", "services", "luxnix", "roles"),
+)
+def test_home_sections_preserve_nested_overrides_without_mutating_inputs(section):
+    merged = MergedHostVars(**{
+        f"group_home_{section}": {f"{section}.app": {"enable": True, "theme": "light"}},
+        f"host_home_{section}": {f"{section}.app": {"theme": "dark"}},
+        "home_configs": {"alice": {f"{section}.extra": True}},
+    })
+    original = merged.model_dump()
+    assert merged.prepare_home_config("alice", "24.05")[section] == {
+        "app": {"enable": True, "theme": "dark"}, "extra": True,
+    }
+    assert merged.model_dump() == original
 
 
 def test_merged_host_vars_exports_top_level_nixos_and_imports():

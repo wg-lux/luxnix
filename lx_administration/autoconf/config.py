@@ -151,10 +151,8 @@ class BootStorageHost(BaseModel):
     model_config = ConfigDict(extra="forbid")
     hardware_uuid: str = Field(pattern=r"^[a-fA-F0-9-]{36}$")
     root_encryption: Literal["luks2"]
-    installation: Literal["migration", "fresh", "disposable"]
-    source_retention: Literal[
-        "old-disks", "whole-disk-image", "new-disks", "discard-approved"
-    ]
+    installation: Literal["in-place"]
+    source_retention: Literal["in-place"]
     disks: list[BootStorageDisk] = Field(min_length=1)
 
 

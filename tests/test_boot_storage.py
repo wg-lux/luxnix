@@ -408,10 +408,73 @@ def test_plain_dm_crypt_is_not_luks2(monkeypatch):
         boot.require_luks2("/dev/mapper/data")
 
 
-def test_old_bind_mount_prevents_cutover(monkeypatch):
-    monkeypatch.setattr(boot.subprocess, "run", lambda *a, **kw: SimpleNamespace(returncode=0))
-    with pytest.raises(ValueError, match="Legacy container/bind"):
-        boot.reject_retired_mount("/etc/secrets")
+@pytest.mark.parametrize("plaintext", [False, True])
+def test_root_storage_gate_ignores_retired_container_mounts(
+    tmp_path, monkeypatch, plaintext
+):
+    specification = tmp_path / "storage.json"
+    specification.write_text(json.dumps({
+        "mounts": {"/": {"device": "/dev/mapper/cryptroot",
+                         "fsType": "ext4", "subvolume": None}},
+        "keys": [], "paths": ["/var/lib/lx-annotate"],
+        # Older specs may still carry this migration metadata.
+        "retiredMounts": ["/var/lib/obsolete-container", "/etc/secrets"],
+    }))
+    monkeypatch.setattr(
+        sys, "argv", ["boot.py", str(specification), "--mounted-storage"]
+    )
+    checked = []
+    monkeypatch.setattr(boot, "verify_mount", lambda *args: checked.append(args))
+    def encrypted(path, **kwargs):
+        checked.append(str(path))
+        if plaintext:
+            raise ValueError("Unencrypted application storage")
+    monkeypatch.setattr(boot, "encrypted_storage", encrypted)
+    # No findmnt subprocess may inspect a retired container or bind mount.
+    monkeypatch.setattr(
+        boot.subprocess, "run", lambda *a, **kw: pytest.fail("Legacy mount probe")
+    )
+    if plaintext:
+        with pytest.raises(SystemExit) as failure:
+            boot.main()
+        assert failure.value.code == 1
+    else:
+        boot.main()
+    assert checked == [
+        ("/", "/dev/mapper/cryptroot", "ext4", None), "/var/lib/lx-annotate"
+    ]
+
+
+@pytest.mark.parametrize("host", ["gc-02", "gc-10", "gs-02"])
+def test_boot_startup_gates_do_not_depend_on_legacy_container_metadata(host):
+    expression = r'''
+      let
+        f = builtins.getFlake ("git+file://" + builtins.toString ./.);
+        lib = f.inputs.nixpkgs.lib;
+        host = f.nixosConfigurations.HOST.extendModules { modules = [{
+          luxnix.storage.operatorUnlocked.layout = lib.mkForce "boot-luks";
+        }]; };
+        cleared = host.extendModules { modules = [{
+          luxnix.storage.operatorUnlocked.volumes = lib.mkForce {};
+          luxnix.storage.operatorUnlocked.bindMounts = lib.mkForce {};
+        }]; };
+        gates = c: {
+          activation = c.system.preSwitchChecks.encryptedStorage;
+          consumers = lib.mapAttrs (_: unit: {
+            inherit (unit) requires after bindsTo;
+            inherit (unit.serviceConfig) ExecStart;
+          }) (lib.filterAttrs (name: _: lib.hasPrefix "luxnix-storage-check-" name)
+                c.systemd.services);
+        };
+      in { independent = gates host.config == gates cleared.config;
+           consumers = builtins.attrNames (gates host.config).consumers; }
+    '''.replace("HOST", host)
+    result = subprocess.run(["nix", "eval", "--impure", "--json", "--expr", expression],
+                            cwd=ROOT, capture_output=True, text=True, timeout=300)
+    assert result.returncode == 0, result.stderr
+    state = json.loads(result.stdout)
+    assert "luxnix-storage-check-lx-annotate" in state["consumers"]
+    assert state["independent"], host
 
 
 def test_sops_identity_stays_on_root_after_initial_unlock():
@@ -745,7 +808,8 @@ def test_root_setup_explains_layout_mismatch_without_mutation(
         for phase in ("1. PREVIEW", "2. PREPARE", "3. INSTALL", "4. ACCEPT"):
             assert phase in output
         assert "LUXNIX_BOOT_SETUP_APPLY=1" in output
-        assert "pauses before formatting" in output
+        assert "pauses before encrypting the existing root in place" in output
+        assert "pauses before formatting" not in output
     assert "Root matches" not in output
 
 

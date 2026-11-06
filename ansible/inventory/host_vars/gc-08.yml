@@ -4,7 +4,6 @@ luxnix_dev_repo: "/home/admin/dev/luxnix"
 template_name: "main"
 
 host_roles:
-  aglnet.client.enable: "true"
   custom_packages.dev03: "true"
   custom_packages.office: "true"
   custom_packages.baseDevelopment: "true"
@@ -42,5 +41,3 @@ host_luxnix:
   generic_settings.linux.supportedFilesystems:
     - "nfs"
     - "btrfs"
-
-  maintenance.autoUpdates.enable: "false"

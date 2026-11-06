@@ -12,7 +12,7 @@ including the longer FFmpeg allowance; plan maintenance around active tasks.
 ## Scope
 
 - Example host names: `gc-02`, `s-02`, etc.
-- Deployment method: `nixos-anywhere`
+- Existing-host root conversion: in-place LUKS2, followed by install-only boot configuration
 - Control machine: host where this repository is cloned
 
 ## Production Source And Temporary-File Policy
@@ -177,7 +177,6 @@ generation. Older generations do not acquire this new pre-switch check.
 ## Prerequisites
 
 - Nix + flakes enabled on the control machine
-- `nixos-anywhere` available on the control machine
 - SSH keypair on control machine (`~/.ssh/id_ed25519` by default)
 - Target machine booted into NixOS installer
 - Existing host inputs are present in the Ansible inventory, or you are ready
@@ -270,27 +269,26 @@ continuing. If any check fails, stop, correct the canonical inventory or
 template input, regenerate, and repeat the preflight; do not start an
 installer deployment from a failed or stale result.
 
-## 5. Deploy with nixos-anywhere
+## 5. Convert an existing root in place
 
-Use the protected staging tree from the [admin password guide](admin-passwords.md#6-install-on-a-new-machine).
-Confirm the exact target and destructive install scope before running:
+Use the [root-encryption quickstart](boot-storage-quickstart.md). Preview first:
 
 ```bash
-nixos-anywhere --extra-files <staging-root> --flake ".#<host>" nixos@<target-ip>
+devenv tasks run boot-storage:setup
 ```
+
+The supported conversion preserves the existing Btrfs filesystem. Destructive
+fresh/disposable/erase-and-restore plans and the generic disk-installation command
+have been retired. Unsupported layouts stop for review without a formatting fallback.
+Applying the conversion requires the recovery evidence, trusted installer media
+and exact target confirmation described in that guide.
 
 ### Deployment failure and recovery
 
-If `nixos-anywhere` fails, preserve its output and do not retry blindly. Keep
-the target in the installer until the disk and boot state are understood;
-check the target console and SSH reachability, then compare the selected
-hardware and `disks.nix` inputs with the real machine. A partially installed
-target must be reinstalled from the reviewed flake or restored from the
-operator's approved host backup before it is treated as deployed. Re-run the
-evaluation, build, connectivity check, and post-install acceptance checks
-after recovery. For an already running host, use the booted previous NixOS
-generation from the boot menu or `sudo nixos-rebuild switch --rollback` and
-verify `/run/current-system` and SSH access before retrying.
+Preserve the plan, journal and independent backups. Follow the
+[interrupted setup procedure](boot-storage-migration.md#interrupted-setup) using
+the same plan. Do not delete journals or restart through a disk formatter.
+An older unencrypted boot generation cannot open a newly encrypted root.
 
 ## 6. Post-install on target host
 
@@ -337,7 +335,7 @@ acceptance. Root unlock and application-secret delivery are separate gates.
    `devenv tasks run autoconf:generate`.
 6. Review generated outputs without editing them directly. Correct their
    Inventory, template, or Autoconf inputs instead.
-7. Run the preflight checks and deploy with `nixos-anywhere` only after they
+7. Run the preflight checks and follow the in-place root encryption guide only after they
    pass.
 
 ### Study laptops that send to the central hub

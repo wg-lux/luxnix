@@ -30,6 +30,7 @@ STAGES = {
     "recovery": (
         "console_boot_tested",
         "independent_credentials_tested",
+        "vault_recovery_tested",
         "headers_preserved",
         "trusted_installer_tested",
     ),
@@ -66,6 +67,7 @@ DMI_UUID = Path("/sys/class/dmi/id/product_uuid")
 INSTALL_LOCK = Path("/run/lock/luxnix-boot-install.lock")
 HOST = re.compile(r"[a-z][a-z0-9-]{0,62}")
 CLOSURE = re.compile(r"/nix/store/[a-z0-9]{32}-nixos-system-[^/]+")
+PREFLIGHT_RECEIPT = "secret-preflight.json"
 
 
 class MigrationError(ValueError):
@@ -177,7 +179,6 @@ def evaluate(checkout: Path, host: str) -> dict:
       layout = c.luxnix.storage.operatorUnlocked.layout;
       enabled = c.luxnix.storage.operatorUnlocked.enable;
       closure = builtins.toString c.system.build.toplevel;
-      provisioner = builtins.toString c.system.build.diskoScript;
       disks = builtins.mapAttrs (_: d: d.device) c.disko.devices.disk;
       mounts = builtins.mapAttrs
         (_: v: { inherit (v) device fsType options; }) c.fileSystems;
@@ -196,6 +197,79 @@ def evaluate(checkout: Path, host: str) -> dict:
         keys = u.openssh.authorizedKeys.keys;
         wheel = builtins.elem "wheel" u.extraGroups;
         normal = u.isNormalUser;
+      };
+      secret_contract = let
+        l = c.services.luxnix.lxAnnotateLocal;
+        vault = c.luxnix.vault.dir;
+        item = kind: id: path: { inherit kind id path; };
+        key = item "key";
+        data = item "data";
+        users = c.users.users;
+        env = l.runtime.extraEnvironment;
+        encrypted = l.runtime.managedEncryptedData;
+        hub = c.services.luxnix.hubStorage.node;
+        recipients = prefix: files: map
+          (path: data "${prefix}-${baseNameOf path}" path) files;
+      in {
+        vault_server = c.luxnix.vault.server.enable;
+        openbao = c.luxnix.openbao.enable;
+        identity_directory = if l.enable then vault else null;
+        items = builtins.filter (i: i.path != null) ([
+          (item "account" "admin-password-hash"
+            users.${c.user.admin.name}.hashedPasswordFile)
+        ] ++ (if c.user.client.enable then [
+          (item "account" "client-password-hash"
+            users.${c.user.client.name}.hashedPasswordFile)
+        ] else [ ]) ++ (if l.enable then [
+          (data "lx-annotate-master-key" l.runtime.masterKeyFile)
+          (data "master-keyring" (env.LX_ANNOTATE_MASTER_KEYRING_FILE or null))
+          (data "identity-salt-keyring" l.django.identitySaltKeyringFile)
+          (data "identity-salt-file" l.django.identitySaltFile)
+          (data "identity-active" "${vault}/lx_annotate_identity_active")
+          (data "identity-legacy-default"
+            "${vault}/lx_annotate_identity_legacy_default")
+          (data "identity-salt-recovery" "/var/lib/lx-annotate-identity-salts")
+          (key "django-secret-key" "${vault}/django_secret_key")
+        ] ++ (if encrypted.enable then [
+          (data "encrypted-data-key" encrypted.keyFile)
+          (data "encrypted-data-uuid" encrypted.luksUuidFile)
+        ] else [ ]) ++ (if l.hub.transferApi.enable then
+          recipients "hub-recipient" l.hub.transferApi.recipientPrivateKeyFiles
+        else [ ]) else [ ]) ++ (if hub.enable then
+          recipients "hub-storage-recipient" hub.recipientPrivateIdentityFiles
+        else [ ]) ++ (if builtins.attrNames c.sops.secrets != [ ] then
+          [ (key "sops-age-key" c.sops.age.keyFile) ]
+          ++ map (path: key "sops-ssh-identity-${baseNameOf path}" path)
+            c.sops.age.sshKeyPaths
+        else [ ]) ++ (if builtins.attrNames c.services.openvpn.servers != [ ] then [
+          (key "openvpn-client-key" "/etc/openvpn/key.key")
+          (key "openvpn-client-certificate" "/etc/openvpn/crt.crt")
+          (key "openvpn-tls-auth" "/etc/openvpn/tls.pem")
+          (key "openvpn-ca" "/etc/openvpn/ca.pem")
+        ] else [ ]));
+      };
+      in_place = let
+        o = c.luxnix.storage.operatorUnlocked;
+        partitions = builtins.concatMap
+          (d: builtins.attrValues (d.content.partitions or { }))
+          (builtins.attrValues c.disko.devices.disk);
+        luks = builtins.filter
+          (p: (p.content or null) != null && p.content.type == "luks") partitions;
+        isSwap = p: (p.content.content or null) != null
+          && p.content.content.type == "swap";
+        names = builtins.attrNames o.volumes;
+      in {
+        root_device = c.boot.initrd.luks.devices.cryptroot.device;
+        root_fs_type = c.fileSystems."/".fsType;
+        arrays = builtins.attrNames (c.disko.devices.mdadm or { });
+        swap_partitions = map (p: p.device) (builtins.filter isSwap luks);
+        other_encrypted = map (p: p.content.name) (builtins.filter
+          (p: !isSwap p && !p.content.initrdUnlock) luks);
+        containers = map (name: {
+          inherit name;
+          inherit (o.volumes.${name}) container mountPoint fsType;
+        }) (builtins.filter (name: o.volumes.${name}.container != null) names);
+        binds = o.bindMounts;
       };
       failures = map (a: a.message) (builtins.filter (a: !a.assertion) c.assertions);
     }""".replace("CHECKOUT", json.dumps("git+file://" + str(checkout))).replace(
@@ -229,7 +303,43 @@ def evaluate(checkout: Path, host: str) -> dict:
 
 
 def fresh_install(spec: dict) -> bool:
-    return spec.get("installation", "migration") in {"fresh", "disposable"}
+    """No separate backup and restore stages: nothing is restored afterwards."""
+    return spec.get("installation", "migration") in {"fresh", "disposable", "in-place"}
+
+
+def boot_verify_root() -> None:
+    """Refuse to act unless the running root really is the encrypted mapping."""
+    from lx_administration.storage import boot
+
+    boot.verify_mount("/", "/dev/mapper/cryptroot")
+
+
+def encrypts_in_place(spec: dict) -> bool:
+    return spec.get("installation", "migration") == "in-place"
+
+
+def require_in_place(spec: dict) -> None:
+    """Old plans remain readable evidence, but can never authorize erasure."""
+    if (not isinstance(spec, dict) or spec.get("installation") != "in-place"
+            or spec.get("source_retention") != "in-place"
+            or spec.get("root_encryption", "luks2") != "luks2"):
+        raise MigrationError(
+            "Only in-place LUKS2 encryption is supported. Destructive installation "
+            "plans are retired; preserve their journals and recovery evidence."
+        )
+
+
+def validate_in_place(config: dict) -> None:
+    """Refuse a layout this conversion would leave broken instead of guessing."""
+    layout = config["in_place"]
+    if layout["root_fs_type"] != "btrfs":
+        raise MigrationError("In-place encryption supports a Btrfs root only")
+    if layout["arrays"] or layout["other_encrypted"]:
+        raise MigrationError(
+            "In-place encryption covers one root partition; this host also has "
+            f"{', '.join(layout['arrays'] + layout['other_encrypted'])}. Review them "
+            "separately before planning"
+        )
 
 
 def stage_order(plan: dict) -> tuple[str, ...]:
@@ -274,20 +384,25 @@ def validate_spec(spec: dict) -> None:
     if spec.get("root_encryption", "luks2") != "luks2":
         raise MigrationError("New installations require root_encryption: luks2")
     if spec.get("installation", "migration") not in {
+        "in-place",
         "migration",
         "fresh",
         "disposable",
     }:
-        raise MigrationError("Select installation: migration, fresh or disposable")
+        raise MigrationError(
+            "Select installation: in-place, migration, fresh or disposable"
+        )
     retention = {
+        "in-place": {"in-place"},
         "migration": {"old-disks", "whole-disk-image"},
         "fresh": {"new-disks"},
         "disposable": {"discard-approved"},
     }[spec.get("installation", "migration")]
     if spec["source_retention"] not in retention:
         raise MigrationError(
-            "Fresh installation requires new-disks; disposable requires "
-            "discard-approved; migration requires old-disks or whole-disk-image"
+            "In-place requires in-place; fresh requires new-disks; disposable "
+            "requires discard-approved; migration requires old-disks or "
+            "whole-disk-image"
         )
     if not isinstance(spec["hardware_uuid"], str) or not re.fullmatch(
         r"[a-fA-F0-9-]{36}", spec["hardware_uuid"]
@@ -324,6 +439,7 @@ def create_plan(spec_path: Path, state: Path) -> dict:
 
 def plan_spec(spec: dict, state: Path) -> dict:
     """Plan from validated operator input, with the same private state guards."""
+    require_in_place(spec)
     validate_spec(spec)
     with locked_state(state, create=True):
         if (state / "plan.json").exists():
@@ -344,6 +460,8 @@ def plan_spec(spec: dict, state: Path) -> dict:
         source = source_identity(Path(spec["checkout"]))
         config = evaluate(Path(spec["checkout"]), spec["host"])
         validate_selection(spec, config)
+        if encrypts_in_place(spec):
+            validate_in_place(config)
         if config["secure_boot"]:
             raise MigrationError(
                 "Controller-signed first installation is not supported by "
@@ -355,7 +473,6 @@ def plan_spec(spec: dict, state: Path) -> dict:
             )
         for attribute, field in (
             ("toplevel", "closure"),
-            ("diskoScript", "provisioner"),
         ):
             built = run(
                 "nix",
@@ -374,7 +491,6 @@ def plan_spec(spec: dict, state: Path) -> dict:
                 raise MigrationError(
                     "Release or output changed during build; no plan was published"
                 )
-        config["provisioner_sha256"] = file_digest(Path(config["provisioner"]))
         payload = {
             "schema_version": 1,
             "spec": spec,
@@ -435,12 +551,30 @@ def required_checks(stage: str, plan: dict) -> set[str]:
     if stage in ORDER and stage not in stage_order(plan):
         raise MigrationError("This stage does not apply to a fresh installation")
     required = set(STAGES[stage])
+    if encrypts_in_place(plan["spec"]):
+        if stage == "recovery":
+            return {
+                "console_boot_tested",
+                "trusted_installer_tested",
+                "independent_credentials_tested",
+                "vault_recovery_tested",
+                "in_place_backup_acknowledged",
+                "plaintext_remnants_reviewed",
+            }
+        if stage == "prepared":
+            return {
+                "target_layout_reviewed",
+                "recovery_slots_tested",
+                "boot_artifacts_reviewed",
+                "container_data_consolidated",
+            }
     if fresh_install(plan["spec"]):
         if stage == "recovery":
             required = {
                 "console_boot_tested",
                 "trusted_installer_tested",
                 "independent_credentials_tested",
+                "vault_recovery_tested",
                 "new_disks_verified",
             }
             if plan["spec"].get("installation") == "disposable":
@@ -492,8 +626,85 @@ def check_attestation(
                 f"The {stage} evidence changed; reassess this step and all "
                 f"following steps"
             )
+    if stage == "recovery":
+        verify_preflight_artifacts(record["artifacts"], plan, fresh=fresh)
     if stage == "recovery" and not fresh_install(plan["spec"]):
         verify_readiness(record["artifacts"], plan, fresh=fresh)
+
+
+def verify_preflight_receipt(path: Path, plan: dict, *, fresh: bool = True) -> None:
+    """Accept only a current machine-written proof that this plan's secrets survive."""
+    contract = plan["config"].get("secret_contract")
+    if contract is None:
+        raise MigrationError(
+            "This plan has no evaluated secret contract; create a new plan"
+        )
+    try:
+        private_path(path)
+        receipt = json.loads(path.read_text())
+    except (OSError, ValueError) as error:
+        raise MigrationError(
+            "Stop: run boot-storage-setup preflight first; the secrets this host "
+            "needs have not been verified"
+        ) from error
+    exact_keys(
+        receipt,
+        {
+            "schema_version",
+            "kind",
+            "plan_id",
+            "host",
+            "recorded_at",
+            "custody",
+            "items",
+            "controller",
+            "admin_password_verified",
+        },
+        "Secret preflight receipt",
+    )
+    statuses = {item["id"]: item["status"] for item in receipt["items"]}
+    if (
+        receipt["schema_version"] != 1
+        or receipt["kind"] != "secret-preflight"
+        or receipt["plan_id"] != plan["plan_id"]
+        or receipt["host"] != plan["spec"]["host"]
+        or receipt["admin_password_verified"] is not True
+        or not {item["id"] for item in contract["items"]} <= set(statuses)
+        or set(statuses.values()) - {"verified", "accepted-absent"}
+    ):
+        raise MigrationError(
+            "The secret preflight receipt does not prove this plan; rerun preflight"
+        )
+    if fresh and not 0 <= time.time() - receipt["recorded_at"] <= MAX_AGE:
+        raise MigrationError(
+            "The secret preflight is older than 24 hours or has an invalid clock; "
+            "rerun preflight"
+        )
+
+
+def verify_preflight_artifacts(
+    artifacts: list[dict], plan: dict, *, fresh: bool = True
+) -> None:
+    receipts = [
+        Path(a["path"]) for a in artifacts if Path(a["path"]).name == PREFLIGHT_RECEIPT
+    ]
+    if len(receipts) != 1:
+        raise MigrationError(
+            "The recovery assessment has no secret preflight receipt; run "
+            "boot-storage-setup preflight, then review again"
+        )
+    verify_preflight_receipt(receipts[0], plan, fresh=fresh)
+
+
+def preflight_artifacts(state: Path, plan: dict) -> list[str]:
+    path = state / PREFLIGHT_RECEIPT
+    verify_preflight_receipt(path, plan)
+    return [str(path)]
+
+
+def require_preflight(state: Path) -> None:
+    with locked_state(state):
+        preflight_artifacts(state, load_plan(state))
 
 
 def attest(state: Path, stage: str, evidence_path: Path, assessor: str) -> None:
@@ -555,7 +766,10 @@ def attest(state: Path, stage: str, evidence_path: Path, assessor: str) -> None:
         ):
             raise MigrationError("There is no interrupted installation to review")
         artifacts = []
-        for path in dict.fromkeys([str(evidence_path), *evidence["artifacts"]]):
+        receipt = preflight_artifacts(state, plan) if stage == "recovery" else []
+        for path in dict.fromkeys(
+            [str(evidence_path), *evidence["artifacts"], *receipt]
+        ):
             private_path(Path(path))
             artifacts.append({"path": path, "sha256": file_digest(Path(path))})
         if stage == "recovery" and not fresh_install(plan["spec"]):
@@ -1027,6 +1241,7 @@ def prepare_access(
 
 
 def check_gates(plan: dict, progress: dict, stage: str) -> set[int]:
+    require_in_place(plan["spec"])
     verify_source(plan)
     validate_selection(plan["spec"], plan["config"])
     order = stage_order(plan)

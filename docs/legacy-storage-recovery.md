@@ -1,11 +1,38 @@
 # Unmigrated hosts: legacy storage until boot-LUKS
 
-The fleet target is [boot LUKS](boot-storage-migration.md), installed with the
-[operator checklist](boot-storage-quickstart.md). gc-10 explicitly retains its
-existing containers at the owner's request. This page is
+The fleet target is [boot LUKS](boot-storage-migration.md), with in-place root
+encryption replacing the previous repartition-and-restore direction. This page is
 only for hosts that still run the older layout. It covers operating and
-recovering them until they are reinstalled, then it stops applying. It is not
+recovering them until their migration is verified, then it stops applying. It is not
 an installation, enrollment or provisioning path.
+
+## Supported direction and retained recovery tools
+
+| Task | Intended result | What must remain available |
+| --- | --- | --- |
+| Set up a host with an existing root filesystem | Encrypt root in place without creating application or secrets partitions/loop containers; retain application-level encryption inside root | Root conversion, boot unlock, credential escrow and recovery verification |
+| Enable server Vault and preserve migration credentials | Use the central Vault on gs-02; save and verify recovery credentials before root conversion and keep gs-02 reachable during maintenance | Vault enrollment, authenticated custody, independently usable access/unseal materials and recovery copies |
+| Consolidate gc-10 once | Copy authoritative data from the old application/secrets containers into directories on verified encrypted storage, then retire the old mounts and containers after acceptance | Existing-container unlock, stopped-writer copy, integrity verification, account/secret preservation and rollback |
+
+These are the requested outcomes, not evidence of completed deployment. The
+in-place implementation is under active development. A blank disk installation
+is outside the existing-root operation. gc-10's loop containers are filesystem
+images, not physical partitions; removing them does not authorize changing the
+partition table or deleting `/data/raid01`.
+
+Vault on gs-02 must remain running during gc-09/gc-10 conversion. Verify actual
+authenticated credential retrieval from the installer/recovery environment,
+including its network/VPN route, CA trust and login credentials; SSH reachability
+alone is insufficient. Access must not require the root being converted to be
+mounted or unlocked. If gs-02 itself is the target, arrange an independently
+reachable recovery service before proceeding. Preserve a separate usable
+recovery copy and its unlocking materials; a copy inside the target root cannot
+recover an inaccessible root. The credential archive helper remains available
+as independent recovery, not a replacement for reachable server Vault.
+
+The interactive new-container provisioning wizard has been removed. Keep the
+underlying escrow, unlock, copy and recovery helpers while these consumers remain;
+do not remove them merely because root encryption is now the target layout.
 
 | Host | Repository configuration | Old live storage to preserve |
 | --- | --- | --- |
@@ -13,9 +40,10 @@ an installation, enrollment or provisioning path.
 | gc-10 | `legacy-containers`: preserve existing partitions and unlock through Plymouth | Containers listed in [gc-10](#gc-10) |
 | gs-02 | `boot-luks`; the Vault TLS container option evaluates off | `/var/lib/luxnix-vault-tls.luks` holding Vault PKI and managed secrets |
 
-gc-09 cannot be rebuilt in place with its plaintext root under the boot-LUKS
-policy. gc-10 explicitly retains its existing container layout; migration is
-disabled and rebuilding does not repartition or move application data.
+Rebuilding does not convert plaintext root into LUKS. gc-10's current repository
+configuration retains the existing container layout with migration disabled;
+the requested one-time consolidation still needs its explicit migration and
+verification before those containers can be removed.
 
 The repository describes intent, not live state. Inspect the host before
 acting. Do not activate the boot-LUKS configuration on an old disk layout: it
@@ -184,10 +212,8 @@ the operation; existing records and keyslots are never replaced.
 `--existing-key-file` uses exact UTF-8 file bytes, including a deliberate newline,
 in setup mode. Never put a password on the command line. For an installed
 encrypted root, use the same command with its host and `--volume cryptroot`.
-New partition creation remains the explicit reviewed Disko installation step.
-
-`devenv shell storage-provision-setup` is the retained guided legacy provisioner;
-use `storage-provision setup` above for password custody on existing volumes.
+Use `storage-provision setup` above for password custody on existing volumes;
+it does not perform root conversion or gc-10 data consolidation.
 Contributor regression lanes are `devenv tasks run tests:operator-storage-migration-vm`
 and `devenv tasks run tests:openbao-local-vm`; these exercise disposable VM storage,
 not production enrollment or approval to reactivate a retired backend.

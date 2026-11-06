@@ -54,7 +54,7 @@ in
           ;;
         "deploy")
           echo "No generic deployment task is defined because deployment requires an explicit host and target." >&2
-          echo "See docs/deployment-guide.md or the deploy-new-host workflow in luxnix.yml." >&2
+          echo "See docs/boot-storage-quickstart.md for in-place root encryption; disk-wiping deployment is retired." >&2
           exit 2
           ;;
         "help")

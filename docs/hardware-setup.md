@@ -155,18 +155,17 @@ is an error, not successful setup.
 
 ## Manual recovery and provider templates
 
-Two preserved scripts are deliberately not exposed as canonical commands:
+The legacy wipe-and-reinstall template has been removed. The remaining
+recovery template is deliberately not exposed as a canonical command:
 
-- `hetzner-dedicated-wipe-and-install-nixos.sh` is a destructive, legacy-BIOS,
-  two-disk Hetzner installation template.
 - `recover-files-live-boot.sh` is a site-specific `gc-06` live-boot recovery
   template with fixed devices, subvolumes, repository path, and host target.
 
 Their machine-readable status and required review points live in the
 [manual operations catalog](https://github.com/wg-lux/luxnix/blob/main/scripts/manual-operations.yml).
-Do not stream either script directly into a privileged shell. For a supported
-new installation, use the `deploy-new-host` workflow from `luxnix.yml`; for
-recovery, adapt a reviewed copy to the actual disks and recovery objective.
+Do not stream the script into a privileged shell. Existing hosts use the
+[in-place root encryption workflow](boot-storage-quickstart.md); recovery must
+preserve the installed data and use the actual encrypted devices.
 
 ## Next steps
 

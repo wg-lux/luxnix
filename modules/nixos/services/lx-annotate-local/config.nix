@@ -467,13 +467,13 @@ let
     set -euo pipefail
     source "$out/libexec/lx-annotate-wheel-runtime-lib"
     lx_annotate_wheel_ensure
+    lx_annotate_wheel_sync_static
     EOF
     chmod +x "$out/bin/lx-annotate-runtime-ensure"
 
     make_entrypoint() {
       local name="$1"
       local target="$2"
-      local sync_static="$3"
       cat > "$out/bin/$name" <<EOF
     #!${pkgs.bash}/bin/bash
     set -euo pipefail
@@ -481,9 +481,6 @@ let
     export LX_ANNOTATE_WHEEL_INSTALL_ALLOWED=false
     lx_annotate_wheel_ensure
     lx_annotate_wheel_export_secret_env
-    if [ "$sync_static" = "1" ]; then
-      lx_annotate_wheel_sync_static
-    fi
     if [ ! -x ${lib.escapeShellArg "${runtimeWheelVenvPath}/bin"}/"$target" ]; then
       echo "ERROR: Installed lx-annotate wheel does not expose console script: $target" >&2
       exit 1
@@ -493,23 +490,23 @@ let
       chmod +x "$out/bin/$name"
     }
 
-    make_entrypoint lx-annotate-web lx-annotate-web 1
-    make_entrypoint lx-annotate-server lx-annotate-web 1
-    make_entrypoint lx-annotate-manage lx-annotate-manage 0
-    make_entrypoint lx-annotate-migrate lx-annotate-migrate 0
-    make_entrypoint lx-annotate-load-base-data lx-annotate-load-base-data 0
-    make_entrypoint lx-annotate-worker lx-annotate-worker 0
-    make_entrypoint lx-annotate-celery lx-annotate-celery 0
-    make_entrypoint lx-annotate-watch lx-annotate-watch 0
-    make_entrypoint lx-annotate-export-frames lx-annotate-export-frames 0
-    make_entrypoint lx-annotate-import-sap lx-annotate-import-sap 0
-    make_entrypoint lx-annotate-recover-data lx-annotate-recover-data 0
-    make_entrypoint lx-annotate-provision-hub-nodes lx-annotate-provision-hub-nodes 0
-    make_entrypoint lx-annotate-storage-relief lx-annotate-storage-relief 0
-    make_entrypoint lx-annotate-acceptance lx-annotate-acceptance 0
-    make_entrypoint lx-annotate-check-static lx-annotate-check-static 0
-    make_entrypoint lx-dtypes-kb-registry lx-dtypes-kb-registry 0
-    make_entrypoint lx-dtypes-prototype-kb-smoke lx-dtypes-prototype-kb-smoke 0
+    make_entrypoint lx-annotate-web lx-annotate-web
+    make_entrypoint lx-annotate-server lx-annotate-web
+    make_entrypoint lx-annotate-manage lx-annotate-manage
+    make_entrypoint lx-annotate-migrate lx-annotate-migrate
+    make_entrypoint lx-annotate-load-base-data lx-annotate-load-base-data
+    make_entrypoint lx-annotate-worker lx-annotate-worker
+    make_entrypoint lx-annotate-celery lx-annotate-celery
+    make_entrypoint lx-annotate-watch lx-annotate-watch
+    make_entrypoint lx-annotate-export-frames lx-annotate-export-frames
+    make_entrypoint lx-annotate-import-sap lx-annotate-import-sap
+    make_entrypoint lx-annotate-recover-data lx-annotate-recover-data
+    make_entrypoint lx-annotate-provision-hub-nodes lx-annotate-provision-hub-nodes
+    make_entrypoint lx-annotate-storage-relief lx-annotate-storage-relief
+    make_entrypoint lx-annotate-acceptance lx-annotate-acceptance
+    make_entrypoint lx-annotate-check-static lx-annotate-check-static
+    make_entrypoint lx-dtypes-kb-registry lx-dtypes-kb-registry
+    make_entrypoint lx-dtypes-prototype-kb-smoke lx-dtypes-prototype-kb-smoke
   '';
   effectiveRuntimePackage = if useWheelRuntime then wheelRuntimePackage else cfg.runtime.package;
   effectivePackageVersion =

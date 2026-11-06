@@ -172,7 +172,6 @@ def test_manual_operation_templates_are_explicitly_classified() -> None:
     assert catalog["risk_levels_source"] == "../luxnix.yml#risk_levels"
     assert catalog["canonical_workflows_source"] == "../luxnix.yml#workflows"
     assert {operation["path"] for operation in operations} == {
-        "scripts/hetzner-dedicated-wipe-and-install-nixos.sh",
         "scripts/recover-files-live-boot.sh",
     }
 
@@ -289,14 +288,15 @@ def test_readme_inspection_links_to_canonical_host_workflows() -> None:
     inspection = readme.split("## Inspect the repository", 1)[1].split("\n## ", 1)[0]
     assert workflows["discover-hosts"]["command"] in inspection
     assert "docs/getting-started.md" in inspection
-    assert workflows["deploy-new-host"]["command"] not in inspection
+    assert "deploy-new-host" not in workflows
+    assert "nixos-anywhere --" not in inspection
     guide = (REPO_ROOT / "docs/getting-started.md").read_text(encoding="utf-8")
     ordered_workflows = (
         "discover-hosts",
         "validate-host",
         "build-host",
         "check-connectivity",
-        "deploy-new-host",
+        "prepare-root-encryption",
     )
 
     command_positions = [
