@@ -179,7 +179,8 @@ def test_split_loader_boots_only_authenticated_ram_payload(tmp_path, case):
                         confirmed = True
                     if ":/]#" in output and confirmed and not probed:
                         ssh_check = (
-                            b'test -z "$(systemctl show sshd.service -p FragmentPath --value)" && '
+                            b'test -z "$(systemctl show sshd.service '
+                            b'-p FragmentPath --value)" && '
                             if not spec["authorized_keys"]
                             else b""
                         )

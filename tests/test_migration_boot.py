@@ -719,3 +719,36 @@ def test_console_ssh_units_follow_administrator_keys(spec, keyless):
     assert ("sshd-keygen.service" in config["admission"]) == (not keyless)
     assert ("--dport 2222" in config["firewall"]) == (not keyless)
     assert (config["generator"] == "/dev/null") == keyless
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        'from="172.16.255.22",restrict ssh-ed25519 AAAA restricted',
+        'command="echo \\"hello world\\"",no-pty ssh-ed25519 AAAA command',
+        "ssh-ed25519 AAAA user's key",
+        "sk-ssh-ed25519@openssh.com AAAA security-key",
+        "sk-ecdsa-sha2-nistp256@openssh.com AAAA security-key",
+    ],
+)
+def test_authorized_key_options_and_comments_are_preserved(spec, key):
+    spec["authorized_keys"] = [key]
+    boot.validate_spec(spec)
+    assert spec["authorized_keys"] == [key]
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        'from="unclosed ssh-ed25519 AAAA',
+        "ssh-ed25519",
+        "ssh-ed25519 !!!!",
+        'from="172.16.255.22",restrict invalid-key AAAA',
+        "ssh-ed25519 AAAA\rssh-ed25519 BBBB",
+        "ssh-ed25519 AAAA\nssh-ed25519 BBBB",
+    ],
+)
+def test_malformed_authorized_key_lines_are_rejected(spec, key):
+    spec["authorized_keys"] = [key]
+    with pytest.raises(ValueError, match="public keys"):
+        boot.validate_spec(spec)

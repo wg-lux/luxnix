@@ -34,6 +34,29 @@ def digest(path: Path) -> str:
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
+def authorized_key_line(key) -> bool:
+    """Recognize an OpenSSH key line without removing its access restrictions."""
+    if not isinstance(key, str) or "\n" in key or "\r" in key:
+        return False
+    tokens = shlex.shlex(key, posix=True)
+    tokens.whitespace_split = True
+    tokens.commenters = ""
+    key_type = re.compile(
+        r"(ssh-(rsa|ed25519)|ecdsa-sha2-nistp(256|384|521)|"
+        r"sk-(ssh-ed25519|ecdsa-sha2-nistp256)@openssh\.com)"
+    )
+    try:
+        kind = next(tokens)
+        if not key_type.fullmatch(kind):
+            kind = next(tokens)  # Optional comma-separated authorized_keys options.
+        return bool(
+            key_type.fullmatch(kind)
+            and re.fullmatch(r"[A-Za-z0-9+/]+={0,2}", next(tokens))
+        )
+    except (StopIteration, ValueError):
+        return False
+
+
 def validate_spec(spec: dict) -> None:
     if set(spec) - {"payload", "boot_trust", "console"} != {
         "host",
@@ -73,12 +96,7 @@ def validate_spec(spec: dict) -> None:
     if (
         not isinstance(keys, list)
         or (not keys and spec.get("boot_trust", "secure-boot") != "local-console")
-        or any(
-            not isinstance(key, str)
-            or "\n" in key
-            or not key.startswith(("ssh-ed25519 ", "ssh-rsa ", "ecdsa-sha2-"))
-            for key in keys
-        )
+        or any(not authorized_key_line(key) for key in keys)
     ):
         raise ValueError("Image requires explicit inventory administrator public keys")
     recovery = spec["recovery"]
@@ -417,9 +435,7 @@ def build(args) -> None:
     }
     validate_spec(spec)
     if not spec["authorized_keys"]:
-        print(
-            "No administrator SSH keys: building a local-console image with SSH disabled."
-        )
+        print("No SSH keys: local-console image will have SSH disabled.")
     expression = (
         f"let f = builtins.getFlake {json.dumps('git+file://' + str(root))}; "
         f"in (f.lib.migrationEnvironment (builtins.fromJSON "
