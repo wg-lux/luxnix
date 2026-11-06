@@ -10,6 +10,18 @@ boundaries:
 - Do not patch generated Nix output for template changes
 - Do not weaken host identity verification
 entrypoints:
+- name: migration-loader
+  file: migration-loader.nix
+  purpose: Build the small UKI around the exact digest of a separately built runtime, without a recursive hash dependency.
+- name: migration-payload-loader
+  file: migration-load.sh
+  purpose: Copy a bounded recovery payload to RAM and authenticate it before mounting or executing it.
+- name: migration-environment
+  file: migration-environment.nix
+  purpose: Build the standalone RAM UKI from a signed host specification; never import target filesystems.
+- name: migration-environment-policy
+  file: migration-environment.yml
+  purpose: Canonical RAM, ESP and recovery SSH limits.
 - name: secure-boot-public-certificate
   file: secure-boot/db.pem
   purpose: Public fleet signing certificate; adjacent auth files enroll firmware trust. Private signing keys stay outside the repository.

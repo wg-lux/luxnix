@@ -647,6 +647,7 @@ def verify_preflight_receipt(path: Path, plan: dict, *, fresh: bool = True) -> N
             "Stop: run boot-storage-setup preflight first; the secrets this host "
             "needs have not been verified"
         ) from error
+    accepted_by = receipt.pop("salt_loss_accepted_by", None)
     exact_keys(
         receipt,
         {
@@ -663,6 +664,12 @@ def verify_preflight_receipt(path: Path, plan: dict, *, fresh: bool = True) -> N
         "Secret preflight receipt",
     )
     statuses = {item["id"]: item["status"] for item in receipt["items"]}
+    lost = {key for key, status in statuses.items() if status == "accepted-loss"}
+    if lost and (not accepted_by or any(not k.startswith("identity-") for k in lost)):
+        raise MigrationError(
+            "Only missing salts can be accepted as lost, by a named person; "
+            "rerun preflight"
+        )
     if (
         receipt["schema_version"] != 1
         or receipt["kind"] != "secret-preflight"
@@ -670,7 +677,7 @@ def verify_preflight_receipt(path: Path, plan: dict, *, fresh: bool = True) -> N
         or receipt["host"] != plan["spec"]["host"]
         or receipt["admin_password_verified"] is not True
         or not {item["id"] for item in contract["items"]} <= set(statuses)
-        or set(statuses.values()) - {"verified", "accepted-absent"}
+        or set(statuses.values()) - {"verified", "accepted-absent", "accepted-loss"}
     ):
         raise MigrationError(
             "The secret preflight receipt does not prove this plan; rerun preflight"

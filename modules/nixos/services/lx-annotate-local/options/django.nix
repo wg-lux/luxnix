@@ -61,7 +61,9 @@ in
               default = true;
               description = ''
                 Recover established machine identity salts or enroll an authoritative
-                center bundle, retaining historical salts for source matching. Existing managed
+                center bundle, retaining historical salts for source matching. Without a
+                center salt, a host with no trace of a salt creates a random one on first
+                start; the hub never holds it. Existing managed
                 salts are preserved with two root-owned recovery copies. External
                 salt configurations must explicitly disable managed provisioning.
                 Requires keyring-capable writers; never replaces an established salt.

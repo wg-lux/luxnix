@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+import shutil
 import time
 import warnings
 
@@ -614,3 +615,62 @@ def test_salt_referenced_by_the_keyring_is_required_even_if_stored_elsewhere(
     copy_of(custody, elsewhere).unlink()
     with pytest.raises(preflight.PreflightError, match="identity-file-retired-salt"):
         preflight.run(state, custody)
+
+
+def remove_salts(live):
+    shutil.rmtree(live / "salts")
+
+
+def test_accepted_salt_loss_passes_and_names_who_accepted(environment):
+    state, plan, custody, live = environment
+    remove_salts(live)
+    fill_custody(custody, live)
+    receipt = preflight.run(state, custody, salt_loss_accepted_by="A. Operator")
+    found = statuses(receipt)
+    assert found["identity-salt-recovery"] == "accepted-loss"
+    assert found["lx-annotate-master-key"] == "verified"
+    assert receipt["salt_loss_accepted_by"] == "A. Operator"
+    migration.verify_preflight_receipt(state / migration.PREFLIGHT_RECEIPT, plan)
+
+
+def test_missing_salts_are_refused_without_acceptance(environment):
+    state, _, custody, live = environment
+    remove_salts(live)
+    fill_custody(custody, live)
+    with pytest.raises(preflight.PreflightError, match="identity-salt-recovery"):
+        preflight.run(state, custody)
+
+
+def test_accepting_loss_never_excuses_a_salt_still_on_this_host(environment):
+    state, _, custody, live = environment
+    with pytest.raises(preflight.PreflightError, match="identity-salt-recovery"):
+        preflight.run(state, custody, salt_loss_accepted_by="A. Operator")
+
+
+def test_accepting_loss_never_excuses_the_master_key(environment):
+    # A locked container hides salts and this key together, so this still stops.
+    state, _, custody, live = environment
+    fill_custody(custody, live)
+    remove_salts(live)
+    copy_of(custody, live / "master").unlink()
+    (live / "master").unlink()
+    with pytest.raises(preflight.PreflightError, match="lx-annotate-master-key"):
+        preflight.run(state, custody, salt_loss_accepted_by="A. Operator")
+
+
+def test_missing_salts_lists_only_salts_absent_everywhere(environment):
+    state, _, custody, live = environment
+    assert preflight.missing_salts(state, custody) == []
+    remove_salts(live)
+    assert preflight.missing_salts(state, custody) == [str(live / "salts")]
+
+
+def test_receipt_with_unnamed_loss_is_rejected(environment):
+    state, plan, custody, live = environment
+    remove_salts(live)
+    fill_custody(custody, live)
+    receipt = preflight.run(state, custody, salt_loss_accepted_by="A. Operator")
+    del receipt["salt_loss_accepted_by"]
+    (state / migration.PREFLIGHT_RECEIPT).write_text(json.dumps(receipt))
+    with pytest.raises(migration.MigrationError, match="named person"):
+        migration.verify_preflight_receipt(state / migration.PREFLIGHT_RECEIPT, plan)

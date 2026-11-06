@@ -18,7 +18,13 @@ from uuid import uuid4
 
 from lx_administration.storage import boot_migration as migration
 from lx_administration.storage import boot_setup as setup
-from lx_administration.storage import recovery_custody, recovery_media, secret_preflight
+from lx_administration.storage import (
+    first_setup,
+    recovery_custody,
+    recovery_media,
+    secret_preflight,
+)
+from lx_administration.storage.first_setup import Stopped
 
 CUSTODY_FILE = Path("/recovery/luxnix-custody.luks")
 CUSTODY_MAPPING = "luxnix-custody"
@@ -26,6 +32,7 @@ CUSTODY_MOUNT = Path("/run/luxnix-custody")
 CUSTODY_DIRECTORY = CUSTODY_MOUNT / "custody"
 CUSTODY_SIZE = "2G"
 ANSWERS = "recovery-checks.json"
+ENROLLMENT_ACCEPTANCE = "center-salt-acceptance.json"
 GUIDED_NOTES = "recovery-notes-guided.txt"
 ANSWER_LIFETIME = 24 * 3600
 # Measured checks first, so a reboot for the physical tests comes last.
@@ -42,10 +49,6 @@ PATIENT_DATA_PATTERNS = (
     "*.sql", "*.sql.gz", "*.dump", "*.pdf",
 )  # fmt: skip
 SCAN_ROOTS = ("/", "/home", "/persist", "/var/log", "/tmp", "/var/tmp")
-
-
-class Stopped(Exception):
-    """The operator paused; this is not a failure."""
 
 
 def interactive(*command: str) -> None:
@@ -223,6 +226,18 @@ def measured_detail(check: str, spec: dict, state: Path) -> str:
             f"secrets in {receipt['custody']}, outside the selected disks, and the "
             "admin password against its saved hash."
         )
+        lost = [i["path"] for i in receipt["items"] if i["status"] == "accepted-loss"]
+        if lost:
+            detail += (
+                f" {receipt['salt_loss_accepted_by']} accepted possible data loss for "
+                f"missing salts: {', '.join(lost)}."
+            )
+        if (state / ENROLLMENT_ACCEPTANCE).exists():
+            acceptance = json.loads((state / ENROLLMENT_ACCEPTANCE).read_text())
+            detail += (
+                f" {acceptance['accepted_by']} accepted continuing without center "
+                "salt enrollment."
+            )
         print(detail)
         if check == "independent_credentials_tested":
             print("Yours to confirm: the custody passphrase is off this computer.")
@@ -295,7 +310,19 @@ def recovery_stage(spec: dict, state: Path, custody: Path | None) -> None:
     directory = custody or ensure_custody()
     fill_custody(state, directory, reopenable=reopenable)
     if not setup.preflight_passed(state):
-        secret_preflight.run(state, directory)
+        missing = secret_preflight.missing_salts(state, directory)
+        accepted_by = None
+        if missing:
+            accepted_by = first_setup.accept_data_loss(
+                spec["host"],
+                "These salts are not on this host or in custody:\n  "
+                + "\n  ".join(missing)
+                + "\nThe host creates a new random salt on first start. If they were "
+                "never enrolled, nothing is lost. If they existed, records imported "
+                "with them cannot be matched to their patients again. If a locked "
+                "container is hiding them, stop and unlock it first.",
+            )
+        secret_preflight.run(state, directory, salt_loss_accepted_by=accepted_by)
     step = setup.next_step(state)
     answers = ask_checks(spec, state, step)
     assessor = os.environ.get("USER") or input("Name of the operator: ").strip()
@@ -353,12 +380,19 @@ def run(
     spec, state = setup.target_spec(config, host)
     setup.show_target(spec)
     recovery_media.setup(spec, state, apply=True, device=device)
-    replace_stale_plan(state, spec)
-    if not (state / "plan.json").exists():
-        migration.plan_spec(spec, state)
-        setup.prepare(state)
-        setup.success(setup.PLAN_SAVED)
     try:
+        replace_stale_plan(state, spec)
+        if not (state / "plan.json").exists():
+            # Choices change the revision, so they come before a plan pins it.
+            accepted_by = first_setup.run(Path(spec["checkout"]), host)
+            migration.plan_spec(spec, state)
+            setup.prepare(state)
+            setup.success(setup.PLAN_SAVED)
+            if accepted_by:
+                migration.atomic_json(
+                    state / ENROLLMENT_ACCEPTANCE,
+                    {"accepted_by": accepted_by, "accepted_at": time.time()},
+                )
         step = setup.next_step(state)
         if step.action == setup.Action.ASSESS and step.stage == "recovery":
             recovery_stage(spec, state, custody)

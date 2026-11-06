@@ -315,7 +315,10 @@ Unlock it first. Keys that open or identify existing data cannot be waived on a 
 that keeps data, because provisioning would issue a replacement that
 cannot read what exists: restore the original instead. Other items that truly never
 existed on this host can be stated with `--accept-absent <id>`; the receipt records
-that. Account hashes still need a valid custody copy. For a host with data use
+that. Salts that were never enrolled are the exception to the data-key rule:
+`--accept-salt-loss` asks for typed acceptance and a name, and the receipt records them.
+It covers only salts absent from both the host and custody, because records imported
+with a lost salt cannot be matched again. Account hashes still need a valid custody copy. For a host with data use
 `installation: in-place`; preflight warns on a mode that does not keep data. Hosts
 running the Vault or OpenBao server stop here: preflight cannot verify their data and unseal material, so use
 [Vault Server Rebuild](vault-server-rebuild.md).

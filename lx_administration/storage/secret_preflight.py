@@ -233,8 +233,34 @@ def copy_to_custody(live: Path, copy: Path) -> None:
         raise PreflightError(f"Could not copy {live} into custody")
 
 
+def is_salt(item: dict) -> bool:
+    return item["id"].startswith("identity-")
+
+
+def missing_salts(state: Path, custody: Path) -> list[str]:
+    """Salts neither on this host nor in custody, so nothing can preserve them."""
+    with migration.locked_state(state):
+        plan = migration.load_plan(state)
+        contract = plan["config"].get("secret_contract") or {"items": []}
+        items = required_items(plan, contract)
+        host = plan["spec"]["host"]
+    return [
+        item["path"]
+        for item in items
+        if is_salt(item)
+        and not exists(Path(item["path"]))
+        and not exists(custody / host / "secrets" / item["path"].lstrip("/"))
+    ]
+
+
 def check_item(
-    item: dict, custody: Path, host: str, accepted: set[str], *, keeps_data: bool
+    item: dict,
+    custody: Path,
+    host: str,
+    accepted: set[str],
+    *,
+    keeps_data: bool,
+    accept_salt_loss: bool = False,
 ) -> tuple[str, str | None]:
     """Return the item's status and, when a copy is missing, how to make it."""
     from lx_administration.storage.operator_migration import (
@@ -245,6 +271,9 @@ def check_item(
     live = Path(item["path"])
     copy = custody / host / "secrets" / item["path"].lstrip("/")
     on_host = exists(live)
+    # A salt that still exists is always copied; only one already gone can be accepted.
+    if accept_salt_loss and is_salt(item) and not on_host and not exists(copy):
+        return "accepted-loss", None
     # A locked container looks exactly like a missing file, so absence is never
     # assumed: the operator must state it, per item, after checking.
     if not on_host and item["id"] not in accepted:
@@ -350,6 +379,7 @@ def run(
     *,
     key_custody: Path | None = None,
     accept_absent: tuple[str, ...] = (),
+    salt_loss_accepted_by: str | None = None,
 ) -> dict:
     with migration.locked_state(state):
         plan = migration.load_plan(state)
@@ -390,7 +420,12 @@ def run(
         results, hints = [], []
         for item in items:
             status, hint = check_item(
-                item, custody, host, accepted, keeps_data=keeps_data
+                item,
+                custody,
+                host,
+                accepted,
+                keeps_data=keeps_data,
+                accept_salt_loss=salt_loss_accepted_by is not None,
             )
             results.append({"id": item["id"], "path": item["path"], "status": status})
             print(f"  {status:16} {item['id']}  {item['path']}")
@@ -398,7 +433,10 @@ def run(
                 hints.append(hint)
             if status == "absent-on-host":
                 waiver = (
-                    "This plan keeps data, so a data key cannot be waived: restore it."
+                    "If it was never enrolled, --accept-salt-loss states that records "
+                    "imported so far may be lost."
+                    if is_salt(item)
+                    else "This plan keeps data, so it cannot be waived: restore it."
                     if item["kind"] == "data" and keeps_data
                     else f"If it never existed here, pass --accept-absent {item['id']}"
                 )
@@ -410,7 +448,7 @@ def run(
         problems.extend(
             f"{r['id']}: {r['status']}"
             for r in results
-            if r["status"] not in {"verified", "accepted-absent"}
+            if r["status"] not in {"verified", "accepted-absent", "accepted-loss"}
         )
         print("Not required:")
         for reason in NOT_REQUIRED:
@@ -436,6 +474,8 @@ def run(
             "controller": controller,
             "admin_password_verified": True,
         }
+        if any(r["status"] == "accepted-loss" for r in results):
+            receipt["salt_loss_accepted_by"] = salt_loss_accepted_by
         atomic_json(receipt_path, receipt)
         print(
             f"\nSUCCESS: Preflight passed; {len(results)} secrets match their custody "

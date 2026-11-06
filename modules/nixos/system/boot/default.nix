@@ -301,30 +301,6 @@ in
           ];
           text = ''exec python3 ${../../../../lx_administration/activation.py} "$@"'';
         })
-        (pkgs.writeShellApplication {
-          name = "luxnix-check-unlock-health";
-          runtimeInputs = [
-            pkgs.cryptsetup
-            pkgs.systemd
-          ];
-          text =
-            let
-              storage = config.luxnix.storage.operatorUnlocked;
-            in
-            if !storage.enable then
-              "exit 0"
-            else if storage.layout == "boot-luks" then
-              config.system.preSwitchChecks.encryptedStorage
-            else if storage.unlockMethod == "local-openbao" then
-              config.system.preSwitchChecks.openbaoLocalPreflight
-            else if storage.unlockMethod == "tpm2" then
-              lib.concatMapStringsSep "\n" (
-                volume:
-                "cryptsetup open --test-passphrase --token-only --token-type systemd-tpm2 --external-tokens-path ${pkgs.systemd}/lib/cryptsetup ${lib.escapeShellArg volume.container}"
-              ) (builtins.attrValues storage.volumes)
-            else
-              "exit 0";
-        })
       ]
       ++ lib.optionals cfg.secureBoot [
         sbctl

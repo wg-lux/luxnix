@@ -379,7 +379,6 @@ def finish_generation(ssh: list[str], generation: int, toplevel: str, action: st
         raise SecureBootError("Choose boot (next start) or switch (activate now)")
     require_generation(ssh, generation, toplevel)
     subprocess.run(['ssh', '-t', *ssh, 'sudo', f'{toplevel}/sw/bin/luxnix-boot-artifacts', 'verify-firmware'], check=True)
-    subprocess.run(['ssh', '-t', *ssh, 'sudo', f'{toplevel}/sw/bin/luxnix-check-unlock-health'], check=True)
     command = [f'{toplevel}/sw/bin/luxnix-safe-activate', 'start', '--system', toplevel, '--action', action]
     if receipt:
         command += ['--receipt', receipt]

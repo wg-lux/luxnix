@@ -20,6 +20,25 @@
   vault-site-preflight.exec = ''${pkgs.uv}/bin/uv run python scripts/vault/site_enrollment_preflight.py "$@"'';
 
   # Remote operations
+  migration-boot.package = pkgs.zsh;
+  migration-boot.exec = ''
+    export PATH=${
+      pkgs.lib.makeBinPath [
+        pkgs.binutils
+        pkgs.sbsigntool
+        pkgs.age
+      ]
+    }:$PATH
+    ${pkgs.uv}/bin/uv run python -m lx_administration.storage.migration_boot "$@"
+  '';
+
+  stage-migration-boot.package = pkgs.zsh;
+  stage-migration-boot.exec = ''
+    ANSIBLE_CONFIG=conf/connectivity-ansible.cfg ANSIBLE_HOST_KEY_CHECKING=True LUXNIX_UV_BIN=${pkgs.uv}/bin/uv \
+      bash scripts/run-ansible-playbook.sh ansible/playbooks/migration-boot.yml \
+      -i ansible/inventory/hosts.ini "$@"
+  '';
+
   check-connectivity.package = pkgs.zsh;
   check-connectivity.exec = ''./scripts/check-connectivity.sh "$@"'';
 

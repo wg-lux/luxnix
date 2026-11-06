@@ -12,6 +12,36 @@ risk_levels_source: ../luxnix.yml#risk_levels
 # marked operator_confirmation_required. The field does not imply that the
 # underlying wrapper implements its own prompt.
 commands:
+  - id: migration-boot
+    summary: Build and optionally sign a host-bound RAM migration image from reviewed configuration.
+    risk: sensitive-local-state
+    operator_confirmation_required: true
+    usage: devenv shell migration-boot build <host> --interface <nic> --address <ipv4/prefix> --controller-cidr <ipv4/prefix> --recovery-uuid <uuid> --recovery-fstype <ext4|vfat> --output <new-directory> [--gateway <ipv4>] [--sign]
+    implementation: lx_administration/storage/migration_boot.py
+    documentation: docs/migration-environment.md
+    prerequisites:
+      - Clean reviewed durable checkout and existing fleet signing custody for signing.
+      - Explicit management network and administrator keys from the evaluated host configuration.
+    effects:
+      - Builds a small UKI authenticating a separate RAM runtime; no target mounts or conversions.
+      - Signing decrypts controller custody only in the existing protected RAM workspace.
+  - id: stage-migration-boot
+    summary: Verify and optionally arm a signed one-shot RAM boot on exactly one inventory host.
+    risk: sensitive-remote-state
+    operator_confirmation_required: true
+    usage: devenv shell stage-migration-boot --limit <host> -e migration_image=<absolute-image> -e migration_sha256=<digest> -e migration_payload=<absolute-payload> [-e migration_apply=true]
+    implementation: scripts/run-ansible-playbook.sh
+    playbook: ansible/playbooks/migration-boot.yml
+    documentation: docs/migration-environment.md
+    prerequisites:
+      - Successful check-connectivity, pinned host identity and explicit operator approval for the selected host.
+      - Enabled Secure Boot with the fleet certificate enrolled, systemd-boot and sufficient ESP space.
+      - Target Python 3.12 or newer, objcopy, sbverify, bootctl, findmnt, lsblk and blkid available on the system PATH.
+      - Independent ext4 or FAT recovery filesystem already mounted; signed filesystem UUID and target-disk exclusion must match.
+    effects:
+      - Copies public signed artifacts and admission helpers to private root-owned target staging.
+      - Default mode verifies both artifacts and recovery identity; migration_apply publishes the payload before arming the one-shot entry.
+      - Never reboots, mounts target data, encrypts storage or changes the normal boot default.
   - id: credential-backup
     summary: Preview, create or verify an encrypted credential archive bound to the host plan, paths and physical recovery drive.
     risk: sensitive-local-state
@@ -264,7 +294,7 @@ commands:
     summary: Guide in-place LUKS2 encryption with typed approval and non-formatting recovery.
     risk: destructive-local
     operator_confirmation_required: true
-    usage: devenv shell boot-storage-setup [guide|observe|setup-media|run|plan|next|preflight|advance|recover|review|attest|status|retire-containers] [--host <host>] [--config <autoconf-yaml>] [--apply] [--assessor <admin>] [--custody <encrypted-directory>] [--vault-key-custody <file>] [--accept-absent <id>]
+    usage: devenv shell boot-storage-setup [guide|first-setup|observe|setup-media|run|plan|next|preflight|advance|recover|review|attest|status|retire-containers] [--host <host>] [--config <autoconf-yaml>] [--apply] [--assessor <admin>] [--custody <encrypted-directory>] [--vault-key-custody <file>] [--accept-absent <id>]
     implementation: lx_administration/storage/boot_setup.py
     documentation: docs/boot-storage-migration.md
     prerequisites:
@@ -273,6 +303,8 @@ commands:
       - Only installation in-place and source_retention in-place are accepted; destructive plans are retired.
     effects:
       - With no action it guides this machine's configured host and resumes the next step; every check still needs a typed VERIFIED and it never starts encryption, whose installer step keeps its own typed approval.
+      - Before a plan exists, guide and first-setup show the host's salt state and write any changed choice to its inventory through ansible/playbooks/first-setup-config.yml, regenerate and pause for a commit; they refuse changes that would stop an established salt.
+      - First setup recommends the host's own random salt, created on first start, and never offers a center as a new choice or reads salt values; a host keeping a center salt still enrolls through enroll-reachable-hub-sites from the controller.
       - Guide creates the default custody file only after typed approval, never formats an existing file, and copies only secrets missing from custody after confirmation.
       - Setup-media previews USB/removable filesystems; apply mounts one existing filesystem at /recovery, requires 1 GiB free, prepares private state and continues planning. Multiple candidates require --device; no formatting or automatic install.
       - Observe runs on the target and emits reviewed disk/hardware facts as YAML without writes; no substitute disk selection.

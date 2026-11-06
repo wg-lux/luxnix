@@ -11,12 +11,21 @@ boundaries:
   - Source checks do not prove deployment readiness
   - Nix evaluation and VM tests are separate from the fast Python lane
 entrypoints:
+  - name: migration-loader-vm
+    file: test_migration_loader_vm.py
+    purpose: Opt-in disposable QEMU boot of the signed-loader initrd and rejection of corrupted external payloads; no production firmware or root disks.
+  - name: migration-boot
+    file: test_migration_boot.py
+    purpose: Verify artifact tamper refusal, host admission and preservation of normal boot defaults.
   - name: credential-backup
     file: test_credential_backup.py
     purpose: Verify authenticated archive round trips, tamper rejection, credential drift and non-overwriting backup behavior.
   - name: in-place-encryption-safety
     file: test_in_place.py
     purpose: Verify refusal before disk changes, compared data consolidation and acceptance-gated container retirement.
+  - name: first-setup
+    file: test_first_setup.py
+    purpose: Verify irreversible salt changes are refused and that the real playbook writes only allowlisted inventory settings.
   - name: boot-guide
     file: test_boot_guide.py
     purpose: Verify the guided command never formats existing custody, never answers for the operator and keeps replaced plans.

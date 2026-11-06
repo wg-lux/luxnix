@@ -1,0 +1,80 @@
+---
+- name: Stage a reviewed signed RAM environment without rebooting
+  hosts: all
+  gather_facts: false
+  become: true
+  vars:
+    migration_stage: /var/lib/luxnix-migration-stage
+  tasks:
+    - name: Require one explicit host and artifact digest
+      ansible.builtin.assert:
+        that:
+          - ansible_play_hosts_all | length == 1
+          - ansible_limit | default('') == inventory_hostname
+          - migration_image | default('') is match('^/')
+          - migration_payload | default('') is match('^/')
+          - migration_sha256 | default('') is match('^[0-9a-f]{64}$')
+        fail_msg: Select exactly one inventory host and a reviewed absolute image path and SHA256.
+
+    - name: Require reviewed controller code before copying privileged helpers
+      ansible.builtin.command:
+        argv:
+          - "{{ ansible_playbook_python }}"
+          - -c
+          - >-
+            from pathlib import Path;
+            from lx_administration.secure_boot import reviewed_source;
+            print(reviewed_source(Path.cwd(), Path.cwd() / 'ansible/inventory/hosts.ini'))
+        chdir: "{{ playbook_dir }}/../.."
+      delegate_to: localhost
+      become: false
+      changed_when: false
+
+    - name: Create private artifact staging directories
+      ansible.builtin.file:
+        path: "{{ migration_stage }}/{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+      loop: ['', lx_administration, lx_administration/storage]
+
+    - name: Copy controller artifacts and standard-library admission helpers
+      ansible.builtin.copy:
+        src: "{{ item.source }}"
+        dest: "{{ migration_stage }}/{{ item.destination }}"
+        owner: root
+        group: root
+        mode: '0600'
+      loop:
+        - source: "{{ migration_image }}"
+          destination: migration.efi
+        - source: "{{ migration_payload }}"
+          destination: migration.squashfs
+        - source: "{{ playbook_dir }}/../../conf/secure-boot/db.pem"
+          destination: db.pem
+        - source: "{{ playbook_dir }}/../../lx_administration/secure_boot.py"
+          destination: lx_administration/secure_boot.py
+        - source: "{{ playbook_dir }}/../../lx_administration/storage/migration_boot.py"
+          destination: lx_administration/storage/migration_boot.py
+
+    - name: Verify the image and optionally arm its one-shot entry
+      ansible.builtin.command:
+        argv: >-
+          {{ ['/run/current-system/sw/bin/python3', '-S', '-m',
+              'lx_administration.storage.migration_boot', 'stage', inventory_hostname,
+              '--image', migration_stage + '/migration.efi', '--sha256', migration_sha256,
+              '--payload', migration_stage + '/migration.squashfs',
+              '--recovery', migration_recovery | default('/recovery'),
+              '--certificate', migration_stage + '/db.pem']
+             + (['--apply'] if migration_apply | default(false) | bool else []) }}
+        chdir: "{{ migration_stage }}"
+      environment:
+        PYTHONPATH: "{{ migration_stage }}"
+        PATH: /run/current-system/sw/bin:/run/wrappers/bin
+      register: migration_result
+      changed_when: migration_apply | default(false) | bool
+
+    - name: Report boot admission result
+      ansible.builtin.debug:
+        msg: "{{ migration_result.stdout }}"

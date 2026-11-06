@@ -54,6 +54,25 @@ def test_mounted_custody_is_not_mounted_again(monkeypatch):
     assert not [c for c in seen if c[0] in {"mount", "cryptsetup"}]
 
 
+def test_first_setup_runs_only_before_a_plan_exists(monkeypatch, tmp_path):
+    state = tmp_path / "gc-09"
+    state.mkdir()
+    (state / "plan.json").write_text("{}")
+    called = []
+    spec = {"checkout": str(tmp_path), "host": "gc-09", "disks": []}
+    monkeypatch.setattr(guide.sys.stdin, "isatty", lambda: True, raising=False)
+    monkeypatch.setattr(setup, "target_spec", lambda *a: (spec, state))
+    monkeypatch.setattr(setup, "show_target", lambda *a: None)
+    monkeypatch.setattr(guide.recovery_media, "setup", lambda *a, **k: None)
+    monkeypatch.setattr(guide, "replace_stale_plan", lambda *a: None)
+    monkeypatch.setattr(guide.first_setup, "run", lambda *a: called.append(a))
+    monkeypatch.setattr(setup, "next_step", lambda s: step(["console_boot_tested"]))
+    monkeypatch.setattr(guide, "recovery_stage", lambda *a: None)
+    monkeypatch.setattr(setup, "run_workflow", lambda *a, **k: None)
+    guide.run("gc-09", tmp_path)
+    assert not called
+
+
 def test_a_new_custody_needs_typed_approval(monkeypatch):
     seen, results = commands(monkeypatch)
     results["test"] = 1  # the file does not exist

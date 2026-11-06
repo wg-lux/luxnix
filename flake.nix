@@ -315,6 +315,7 @@
 
     in
     inputs.nixpkgs.lib.recursiveUpdate base {
+      lib.migrationEnvironment = spec: import ./conf/migration-environment.nix { inherit inputs spec; };
       packages = nixtestPackages;
       checks = nixtestChecks;
       formatter = builtins.mapAttrs (

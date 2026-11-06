@@ -993,6 +993,7 @@ def main() -> None:
     )
     for action in (
         "guide",
+        "first-setup",
         "plan",
         "next",
         "advance",
@@ -1053,6 +1054,12 @@ def main() -> None:
                 metavar="ID",
                 help="State that this required item never existed on this host",
             )
+            command.add_argument(
+                "--accept-salt-loss",
+                action="store_true",
+                help="Accept, by typed confirmation, that salts missing from this host "
+                "and custody may lose imported records",
+            )
         if action == "attest":
             command.add_argument("--stage", choices=migration.STAGES, required=True)
             command.add_argument("--evidence", type=Path, required=True)
@@ -1071,6 +1078,15 @@ def main() -> None:
                 boot_guide.run(
                     host, args.config, device=args.device, custody=args.custody
                 )
+                return
+            if args.action == "first-setup":
+                from lx_administration.storage import first_setup
+
+                spec, _ = target_spec(args.config, host)
+                try:
+                    first_setup.run(Path(spec["checkout"]), host)
+                except first_setup.Stopped as stop:
+                    print(f"\nPaused, nothing has failed. {stop}")
                 return
             spec, state = configured_target(args.config, host)
             if args.action not in {"run", "status"} and not args.json:
@@ -1113,13 +1129,28 @@ def main() -> None:
                 retire_containers(state, apply=args.apply)
                 return
             case "preflight":
-                from lx_administration.storage import secret_preflight
+                from lx_administration.storage import first_setup, secret_preflight
 
+                accepted_by = None
+                if args.accept_salt_loss:
+                    if not sys.stdin.isatty():
+                        raise migration.MigrationError(
+                            "Accepting data loss needs a private interactive terminal"
+                        )
+                    try:
+                        accepted_by = first_setup.accept_data_loss(
+                            host,
+                            "Records imported with a salt missing from this host and "
+                            "custody cannot be matched to their patients again.",
+                        )
+                    except first_setup.Stopped as stop:
+                        raise migration.MigrationError(str(stop)) from stop
                 secret_preflight.run(
                     state,
                     args.custody,
                     key_custody=args.vault_key_custody,
                     accept_absent=tuple(args.accept_absent),
+                    salt_loss_accepted_by=accepted_by,
                 )
             case "review":
                 review(state, args.assessor, args.report)

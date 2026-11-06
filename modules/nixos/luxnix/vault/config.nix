@@ -246,7 +246,7 @@ mkIf cfg.enable {
     ++ lib.optionals (cfg.client.enable && cfg.client.caCertFile != null) [
       vaultCaInstallTool
     ]
-    ++ lib.optionals managedTlsCfg.encryptedStorage [ pkgs.cryptsetup ]
+    ++ [ pkgs.cryptsetup ]
     ++ lib.optionals clientHubPkiCfg.enable [ forceHubClientReissueTool ]
     ++ lib.optionals (clientHubPkiCfg.enable && cfg.client.auth.method == "approle") [
       hubSiteEnrollmentInstallTool

@@ -30,6 +30,43 @@ for h in $(nix eval --json '.#nixosConfigurations' --apply builtins.attrNames | 
 done
 ```
 
+## Choosing the salt at first setup
+
+`devenv shell boot-storage-setup` asks this before it creates an encryption plan. To
+open the same console on its own, add `first-setup`.
+
+**Use the host's own salt.** LX-Annotate creates a random one on first start if none
+exists, and only that host keeps it. The hub must not be able to reverse the pseudonyms
+it receives, and a center salt held in gs-02's Vault would let its operator do that. The
+cost is that machines of a center no longer share patient identities.
+
+The console therefore never offers a center as a new choice. A host already configured
+for one is told this and can move to its own salt, unless the center salt is already
+active: there is no supported way back, so the console refuses. Choosing writes the
+host's inventory through `ansible/playbooks/first-setup-config.yml` and regenerates.
+Commit the result, then rerun: the plan and RAM image pin that revision.
+
+A host that keeps a center salt still needs the enrollment below. If the salt is not on
+the host, the console stops until you confirm that enrollment or type
+`ACCEPT DATA LOSS <host>` and name who accepts continuing. LX-Annotate then stays stopped
+after encryption until enrollment runs.
+
+```bash
+devenv shell enroll-reachable-hub-sites --site gc-09
+```
+
+Replace `gc-09` with the host.
+
+A new random salt is created only when the host has no trace of one. If its receipts
+exist but the salt is gone, the unit refuses to replace it: restore the salt from custody.
+Preflight stops when a salt is missing from the host and custody. Accepting that with
+`ACCEPT DATA LOSS <host>` is recorded in the plan's notes, and records imported with a
+lost salt cannot be matched to their patients again. A salt still on the host is always
+copied into custody, and the media master key can never be accepted as lost. A locked
+container hides that key too, so preflight still stops; unlock it instead of accepting.
+
+The rest of this page applies only to centers that keep a shared salt.
+
 ## Opting a center in
 
 Both sides are inventory changes, followed by `devenv tasks run autoconf:generate`:

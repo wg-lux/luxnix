@@ -102,6 +102,7 @@ nav:
   - Vault:
       - Machine Setup Secrets Checklist: machine-secrets-checklist.md
       - Root Encryption Quick Steps: boot-storage-quickstart.md
+      - Signed RAM migration: migration-environment.md
       - Boot LUKS Storage Migration: boot-storage-migration.md
       - Credential Backup: credential-backup.md
       - Unmigrated Hosts (Legacy Storage): legacy-storage-recovery.md
