@@ -61,7 +61,8 @@ in
               default = true;
               description = ''
                 Recover established machine identity salts or enroll an authoritative
-                center bundle, retaining historical salts for source matching. Existing managed
+                center bundle, retaining historical salts for source matching. A host with
+                no usable salt creates a random one that the hub never holds. Existing managed
                 salts are preserved with two root-owned recovery copies. External
                 salt configurations must explicitly disable managed provisioning.
                 Requires keyring-capable writers; never replaces an established salt.
@@ -92,15 +93,6 @@ in
                 luxnix.vault.client.hubPki.oidcClientSecretKvPath through managed secrets on
                 every boot. Requires enrolled Vault machine authentication; a failed fetch
                 keeps the previous file and fails the managed-secrets unit.
-              '';
-            };
-            createInitialIdentitySalt = mkOption {
-              type = types.bool;
-              default = false;
-              description = ''
-                Let a host with no trace of a salt create a random one on first start; the
-                hub never holds it. Set per host by first setup, so a reinstalled host does
-                not create one before its custody copy is restored.
               '';
             };
             identitySaltViaSecretSpec = mkOption {

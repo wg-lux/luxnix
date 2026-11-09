@@ -80,11 +80,9 @@ In concrete terms:
 3. A service-specific gate uses those files.
 4. The application starts only after the gate succeeds.
 
-For `lx-annotate`, the service-specific gate is:
-
-- `lx-annotate-encrypted-data.service`
-
-That gate unlocks and mounts the encrypted data directory before the app starts.
+For `lx-annotate`, LuxNix supplies storage guards and mount dependencies from
+`luxnix.storage.operatorUnlocked`. The application consumes mounted paths; it
+does not unlock devices.
 
 ## What Is Already Reusable
 
@@ -251,9 +249,7 @@ Examples:
 - write a rendered config file
 - fetch a certificate bundle
 
-For `lx-annotate`, that gate is:
-
-- `lx-annotate-encrypted-data.service`
+For `lx-annotate`, storage gates belong to the shared LuxNix storage module.
 
 ### Step 5. Gate the application service on the runtime unit
 

@@ -752,3 +752,104 @@ def test_malformed_authorized_key_lines_are_rejected(spec, key):
     spec["authorized_keys"] = [key]
     with pytest.raises(ValueError, match="public keys"):
         boot.validate_spec(spec)
+
+
+@pytest.fixture
+def local_bundle(stage, monkeypatch):
+    args, variables, calls = stage
+    bundle = args.image.parent / f"migration-{args.host}"
+    bundle.mkdir()
+    (bundle / "migration.efi").write_bytes(args.image.read_bytes())
+    (bundle / "migration.squashfs").write_bytes(args.payload.read_bytes())
+    args.certificate.write_text("public test certificate")
+    monkeypatch.setattr(Path, "home", lambda: bundle.parent)
+    monkeypatch.setattr(boot.socket, "gethostname", lambda: args.host)
+    command = [
+        "stage",
+        "--certificate",
+        str(args.certificate),
+        "--recovery",
+        str(args.recovery),
+        "--esp",
+        str(args.esp),
+    ]
+    return command, bundle, args, variables, calls
+
+
+@pytest.mark.parametrize("apply", [False, True])
+def test_short_stage_discovers_bundle_and_reuses_existing_guards(local_bundle, apply):
+    command, bundle, args, variables, calls = local_bundle
+    boot.main(command + (["--apply"] if apply else []))
+    assert ("LoaderEntryOneShot" in variables) == apply
+    assert not any("set-default" in call or "reboot" in call for call in calls)
+
+
+@pytest.mark.parametrize(
+    "missing", ["migration.efi", "migration.squashfs", "certificate", "recovery", "esp"]
+)
+def test_short_stage_missing_inputs_fail_before_sudo(
+    local_bundle, monkeypatch, missing
+):
+    command, bundle, args, variables, calls = local_bundle
+    if missing in {"recovery", "esp"}:
+        command[command.index("--" + missing) + 1] += "/missing"
+    else:
+        (args.certificate if missing == "certificate" else bundle / missing).unlink()
+    monkeypatch.setattr(boot.os, "geteuid", lambda: 1000)
+    monkeypatch.setattr(
+        boot.subprocess,
+        "run",
+        lambda *a, **kw: pytest.fail("must not request sudo"),
+    )
+    with pytest.raises(SystemExit) as error:
+        boot.main(command + ["--apply"])
+    assert error.value.code == 1
+    assert not calls
+
+
+def test_short_stage_pins_user_paths_and_digest_across_sudo(local_bundle, monkeypatch):
+    command, bundle, args, variables, calls = local_bundle
+    invoked = []
+    monkeypatch.setattr(boot.os, "geteuid", lambda: 1000)
+
+    def elevate(argv, **kwargs):
+        invoked.append(argv)
+        assert argv[:3] == ["sudo", "--", "env"]
+        assert "uv" not in argv
+        assert argv[argv.index("--image") + 1] == str(bundle / "migration.efi")
+        assert argv[argv.index("--sha256") + 1] == boot.digest(bundle / "migration.efi")
+        monkeypatch.setattr(boot.os, "geteuid", lambda: 0)
+        boot.main(argv[argv.index("lx_administration.storage.migration_boot") + 1 :])
+
+    monkeypatch.setattr(boot.subprocess, "run", elevate)
+    boot.main(command + ["--apply"])
+    assert len(invoked) == 1
+    assert "LoaderEntryOneShot" in variables
+
+
+def test_short_stage_rejects_mixed_or_partial_artifact_inputs(local_bundle):
+    command, bundle, args, variables, calls = local_bundle
+    for extra in (
+        ["--image", str(args.image)],
+        [
+            "--bundle",
+            str(bundle),
+            "--image",
+            str(args.image),
+            "--payload",
+            str(args.payload),
+            "--sha256",
+            args.sha256,
+        ],
+    ):
+        with pytest.raises(SystemExit):
+            boot.main(command + extra)
+    assert not calls
+
+
+def test_short_stage_tampered_payload_cannot_arm_boot(local_bundle):
+    command, bundle, args, variables, calls = local_bundle
+    (bundle / "migration.squashfs").write_bytes(b"tampered")
+    with pytest.raises(SystemExit):
+        boot.main(command + ["--apply"])
+    assert "LoaderEntryOneShot" not in variables

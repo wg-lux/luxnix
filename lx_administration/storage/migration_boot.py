@@ -601,6 +601,53 @@ def publish(path: Path, content: bytes | Path, expected: str | None = None) -> N
         temporary.unlink(missing_ok=True)
 
 
+def local_stage(args) -> None:
+    """Resolve local artifacts once, then use the same privileged stage checks."""
+    args.host = args.host or socket.gethostname().split(".")[0]
+    if not re.fullmatch(r"[a-z][a-z0-9-]{0,62}", args.host):
+        raise ValueError("Invalid inventory hostname")
+    explicit = (args.image, args.payload, args.sha256)
+    if (args.bundle and any(explicit)) or (any(explicit) and not all(explicit)):
+        raise ValueError("Use --bundle or all of --image, --payload and --sha256")
+    if not any(explicit):
+        bundle = (args.bundle or Path.home() / f"migration-{args.host}").expanduser()
+        args.image = bundle / "migration.efi"
+        args.payload = bundle / "migration.squashfs"
+    for name in ("image", "payload", "certificate", "recovery", "esp"):
+        path = getattr(args, name).expanduser().absolute()
+        if not path.exists():
+            raise ValueError(f"Missing --{name}: {path}")
+        if name in {"image", "payload", "certificate"} and not path.is_file():
+            raise ValueError(f"--{name} must be a regular file: {path}")
+        setattr(args, name, path)
+    args.sha256 = args.sha256 or digest(args.image)
+    print(
+        f"Stage {args.host}: {args.image}; recovery {args.recovery}; ESP {args.esp}",
+        flush=True,
+    )
+    if os.geteuid() == 0:
+        stage(args)
+        return
+    command = [
+        "sudo",
+        "--",
+        "env",
+        f"PATH={os.environ['PATH']}",
+        sys.executable,
+        "-B",
+        "-m",
+        "lx_administration.storage.migration_boot",
+        "stage",
+        args.host,
+    ]
+    for name in ("image", "payload", "sha256", "certificate", "recovery", "esp"):
+        command.extend(["--" + name, str(getattr(args, name))])
+    for name in ("apply", "allow_unverified_boot"):
+        if getattr(args, name):
+            command.append("--" + name.replace("_", "-"))
+    subprocess.run(command, check=True)
+
+
 def stage(args) -> None:
     import fcntl
 
@@ -779,12 +826,15 @@ def main(argv=None) -> None:
 
     builder.add_argument("--custody", type=Path, default=sb.DEFAULT_CUSTODY)
     target = commands.add_parser("stage")
-    target.add_argument("host")
-    target.add_argument("--image", type=Path, required=True)
-    target.add_argument("--sha256", required=True)
-    target.add_argument("--payload", type=Path, required=True)
+    target.add_argument("host", nargs="?", help="Defaults to the local hostname")
+    target.add_argument("--bundle", type=Path, help="Defaults to ~/migration-<host>")
+    target.add_argument("--image", type=Path)
+    target.add_argument("--sha256")
+    target.add_argument("--payload", type=Path)
     target.add_argument("--recovery", type=Path, default=Path("/recovery"))
-    target.add_argument("--certificate", type=Path, required=True)
+    target.add_argument(
+        "--certificate", type=Path, default=sb.ROOT / "conf/secure-boot/db.pem"
+    )
     target.add_argument("--esp", type=Path, default=Path("/boot"))
     target.add_argument("--apply", action="store_true")
     target.add_argument("--allow-unverified-boot", action="store_true")
@@ -793,7 +843,7 @@ def main(argv=None) -> None:
     admission.add_argument("--certificate", type=Path, required=True)
     args = parser.parse_args(argv)
     try:
-        {"discover": discover, "build": build, "stage": stage, "admit": admit}[
+        {"discover": discover, "build": build, "stage": local_stage, "admit": admit}[
             args.command
         ](args)
     except (

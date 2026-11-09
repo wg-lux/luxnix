@@ -1,7 +1,9 @@
-"""Create once, recover missing copies, and never replace established identity salts.
+"""Keep LX-Annotate's identity salts working without anyone having to decide anything.
 
 Center enrollment adds the authoritative center salt as a new active generation and
 keeps an established machine salt as a retiring reader; no salt file is rewritten.
+Unusable files are set aside, never deleted. Salts are still never written outside
+encrypted storage, which is the one thing that stops this.
 """
 
 from __future__ import annotations
@@ -160,6 +162,117 @@ def publish_or_secure(
         os.chmod(name, 0o600, dir_fd=fd, follow_symlinks=False)
 
 
+def set_aside(fd: int, name: str) -> None:
+    """Keep what cannot be used under a new name; nothing here is ever deleted."""
+    os.rename(
+        name,
+        f"{name}.superseded-{secrets.token_hex(6)}",
+        src_dir_fd=fd,
+        dst_dir_fd=fd,
+    )
+    os.fsync(fd)
+    print(f"Identity salts: set aside unusable {name}", file=sys.stderr)
+
+
+def usable(fd: int, name: str, owners: set[int], parse=salt_line):
+    try:
+        raw = read(fd, name, owners)
+        return None if raw is None else parse(raw)
+    except (OSError, ValueError, yaml.YAMLError):
+        set_aside(fd, name)
+        return None
+
+
+def exists_in(fd: int, name: str) -> bool:
+    try:
+        os.stat(name, dir_fd=fd, follow_symlinks=False)
+    except FileNotFoundError:
+        return False
+    return True
+
+
+def agree(copies: list, receipts: list) -> bytes | None:
+    """A copy matching a receipt wins, then the first copy; others are set aside."""
+    values = [value for _, _, value in copies if value is not None]
+    if not values:
+        chosen = None
+    else:
+        receipted = {raw for _, _, raw in receipts if raw is not None}
+        chosen = next(
+            (value for value in values if fingerprint_line(value) in receipted),
+            values[0],
+        )
+    for fd, name, value in copies:
+        if value is not None and value != chosen:
+            set_aside(fd, name)
+    for fd, name, raw in receipts:
+        if raw is not None and (chosen is None or raw != fingerprint_line(chosen)):
+            set_aside(fd, name)
+    return chosen
+
+
+def settle_generation(
+    deployed: int,
+    stores: tuple[int, int],
+    names: tuple[str, str, str],
+    ids: tuple[int, int],
+    owners: set[int],
+    fallback=None,
+) -> bytes | None:
+    """Make one generation whole from any surviving copy, or from the fallback."""
+    active, backup, receipt = names
+    root = {os.geteuid()}
+    copies = [(deployed, active, usable(deployed, active, owners))] + [
+        (fd, backup, usable(fd, backup, root)) for fd in stores
+    ]
+    receipts = [(fd, receipt, usable(fd, receipt, root, bytes)) for fd in stores]
+    value = agree(copies, receipts)
+    if value is None and fallback is not None:
+        value = fallback()
+    if value is None:
+        return None
+    # Persist both recovery copies and receipts before publishing the active salt.
+    for fd in stores:
+        if not exists_in(fd, backup):
+            publish(fd, backup, value + b"\n", os.geteuid(), os.getegid(), 0o400)
+        if not exists_in(fd, receipt):
+            publish(
+                fd, receipt, fingerprint_line(value), os.geteuid(), os.getegid(), 0o400
+            )
+    place(deployed, active, value + b"\n", *ids)
+    return value
+
+
+def place(fd: int, name: str, content: bytes, uid: int, gid: int) -> None:
+    publish_or_secure(fd, name, b"" if exists_in(fd, name) else None, content, uid, gid)
+
+
+def read_source(source_salt: Path | None, owners: set[int]) -> bytes | None:
+    """Vault may be unreachable; that only means this salt is not available yet."""
+    if source_salt is None:
+        return None
+    try:
+        with directory(source_salt.parent) as source_dir:
+            raw = read(source_dir, source_salt.name, owners)
+        return None if raw is None else salt_line(raw)
+    except (OSError, ValueError):
+        print("Identity salts: center salt is unavailable for now", file=sys.stderr)
+        return None
+
+
+def parse_manifest(raw: bytes) -> dict:
+    manifest = yaml.safe_load(raw)
+    if not isinstance(manifest, dict):
+        raise ValueError("Keyring manifest is not a mapping")
+    return manifest
+
+
+def parse_legacy(raw: bytes) -> bytes:
+    if raw.rstrip(b"\r\n") != b"default_salt":
+        raise ValueError("Unexpected retiring salt")
+    return raw
+
+
 def provision(
     secret_dir: Path,
     recovery_dir: Path,
@@ -167,108 +280,22 @@ def provision(
     uid: int,
     gid: int,
     source_salt: Path | None = None,
-    allow_initial_enrollment: bool = False,
     center_id: str | None = None,
 ):
-    if source_salt is not None and center_id is None:
-        raise ValueError("Center salt source and center must be supplied together")
-    if center_id is not None:
-        if source_salt is None:
-            raise ValueError("Center salt source and center must be supplied together")
-        if not CENTER_KEY.fullmatch(center_id):
-            raise ValueError("Invalid center key for identity enrollment")
-        return provision_center_salt(
-            secret_dir, recovery_dir, replica_dir, uid, gid, source_salt, center_id
-        )
-    with ExitStack() as stack:
-        primary = stack.enter_context(directory(recovery_dir, private=True))
-        lock = os.open(
-            ".lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600, dir_fd=primary
-        )
-        stack.callback(os.close, lock)
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        replica = stack.enter_context(directory(replica_dir, private=True))
-        deployed = stack.enter_context(directory(secret_dir, group=gid))
-        if (
-            len(
-                {
-                    (os.fstat(fd).st_dev, os.fstat(fd).st_ino)
-                    for fd in (primary, replica, deployed)
-                }
-            )
-            != 3
-        ):
-            raise ValueError("Salt recovery directories must be distinct")
-        owners = {os.geteuid(), uid}
-        active = read(deployed, ACTIVE, owners)
-        legacy = read(deployed, LEGACY, owners)
-        manifest = read(deployed, MANIFEST, owners)
-        expected = machine_manifest(secret_dir)
-        if manifest is not None and yaml.safe_load(manifest) != expected:
-            raise ValueError(
-                "Established manifest differs; refusing to replace its generations"
-            )
-        if legacy is not None and legacy.rstrip(b"\r\n") != b"default_salt":
-            raise ValueError("Established retiring salt differs; refusing replacement")
-        backups = [read(fd, "active.salt", {os.geteuid()}) for fd in (primary, replica)]
-        receipts = [read(fd, "enrolled", {os.geteuid()}) for fd in (primary, replica)]
-        values = {salt_line(raw) for raw in [active, *backups] if raw is not None}
-        if len(values) > 1:
-            raise ValueError("Salt copies disagree; all copies preserved for recovery")
-        if not values and any(raw is not None for raw in [manifest, legacy, *receipts]):
-            raise ValueError(
-                "Previously enrolled salt is missing; restore backup, never regenerate"
-            )
+    """Always leave a working keyring, and never make anyone decide anything.
 
-        if not values:
-            if not allow_initial_enrollment:
-                raise ValueError(
-                    "Initial identity enrollment must be explicitly requested; run "
-                    "devenv shell boot-storage-setup first-setup or restore custody"
-                )
-            values.add(generate_identity_salt())
-        value = values.pop()
-        fingerprint = fingerprint_line(value)
-        if any(receipt is not None and receipt != fingerprint for receipt in receipts):
-            raise ValueError(
-                "Salt does not match enrollment receipt; refusing replacement"
-            )
-        # Persist both recovery copies and receipts before publishing the active salt.
-        for fd, backup, receipt in zip((primary, replica), backups, receipts):
-            if backup is None:
-                publish(
-                    fd, "active.salt", value + b"\n", os.geteuid(), os.getegid(), 0o400
-                )
-            if receipt is None:
-                publish(fd, "enrolled", fingerprint, os.geteuid(), os.getegid(), 0o400)
-        for name, existing, content in (
-            (ACTIVE, active, value + b"\n"),
-            (LEGACY, legacy, b"default_salt\n"),
-            (MANIFEST, manifest, yaml.safe_dump(expected).encode("utf-8")),
-        ):
-            publish_or_secure(deployed, name, existing, content, uid, gid)
-
-
-def provision_center_salt(
-    secret_dir: Path,
-    recovery_dir: Path,
-    replica_dir: Path,
-    uid: int,
-    gid: int,
-    source_salt: Path,
-    center_id: str,
-):
-    """Enroll the Vault center salt as active; demote, never replace, a machine salt.
-
-    The only file ever replaced is the keyring manifest, and only from the exact
-    machine-only manifest to the center manifest after every generation and both
-    recovery copies of each are durable.
+    An active center salt is kept for good: Vault cannot replace it and the inventory
+    cannot leave it. A host with no usable salt, including one that only ever had
+    default_salt, gets a new random salt; default_salt stays a retiring reader. Without
+    a center salt yet, the host uses its own until Vault can deliver one. Anything
+    unusable is set aside rather than deleted, and values are never logged.
     """
-    if not source_salt.is_absolute():
+    if (source_salt is None) != (center_id is None):
+        raise ValueError("Center salt source and center must be supplied together")
+    if center_id is not None and not CENTER_KEY.fullmatch(center_id):
+        raise ValueError("Invalid center key for identity enrollment")
+    if source_salt is not None and not source_salt.is_absolute():
         raise ValueError("Authoritative salt source must be absolute")
-    center_name = f"{CENTER_PREFIX}{center_id}"
-    center_backup = f"center-{center_id}.salt"
-    center_receipt = f"center-{center_id}.enrolled"
     with ExitStack() as stack:
         primary = stack.enter_context(directory(recovery_dir, private=True))
         lock = os.open(
@@ -289,107 +316,57 @@ def provision_center_salt(
         ):
             raise ValueError("Salt recovery directories must be distinct")
         owners = {os.geteuid(), uid}
-        root = {os.geteuid()}
         stores = (primary, replica)
+        ids = (uid, gid)
+        manifest = usable(deployed, MANIFEST, owners, parse_manifest)
+        established = (manifest or {}).get("center_id")
+        if not (isinstance(established, str) and CENTER_KEY.fullmatch(established)):
+            established = None
+        center = established or center_id
+        source = read_source(source_salt, owners) if center == center_id else None
 
-        with directory(source_salt.parent) as source_dir:
-            source = read(source_dir, source_salt.name, owners)
-        if source is None:
-            raise ValueError("Center salt is unavailable; refusing local generation")
-        center = salt_line(source)
-
-        active = read(deployed, ACTIVE, owners)
-        legacy = read(deployed, LEGACY, owners)
-        manifest = read(deployed, MANIFEST, owners)
-        if legacy is not None and legacy.rstrip(b"\r\n") != b"default_salt":
-            raise ValueError("Established retiring salt differs; refusing replacement")
-        backups = [read(fd, "active.salt", root) for fd in stores]
-        receipts = [read(fd, "enrolled", root) for fd in stores]
-        machine_values = {
-            salt_line(raw) for raw in [active, *backups] if raw is not None
-        }
-        if len(machine_values) > 1:
-            raise ValueError("Salt copies disagree; all copies preserved for recovery")
-        machine = machine_values.pop() if machine_values else None
-
-        deployed_center = read(deployed, center_name, owners)
-        center_backups = [read(fd, center_backup, root) for fd in stores]
-        center_receipts = [read(fd, center_receipt, root) for fd in stores]
-        if any(
-            salt_line(raw) != center
-            for raw in [deployed_center, *center_backups]
-            if raw is not None
-        ):
-            raise ValueError(
-                "Center salt copies differ from the Vault source; all copies preserved"
+        center_value = None
+        if center is not None:
+            center_value = settle_generation(
+                deployed,
+                stores,
+                (
+                    f"{CENTER_PREFIX}{center}",
+                    f"center-{center}.salt",
+                    f"center-{center}.enrolled",
+                ),
+                ids,
+                owners,
+                fallback=lambda: source,
             )
-        center_fingerprint = fingerprint_line(center)
-        if any(r is not None and r != center_fingerprint for r in center_receipts):
-            raise ValueError("Center salt does not match its enrollment receipt")
-
-        history = machine is not None and machine != center
-        expected = center_manifest(secret_dir, center_id, history)
-        established = yaml.safe_load(manifest) if manifest is not None else None
-        previous_machine = machine_manifest(secret_dir)
-        if machine is None and (
-            any(receipt is not None for receipt in receipts)
-            or established == previous_machine
-            or established == center_manifest(secret_dir, center_id, True)
-        ):
-            raise ValueError(
-                "Previously enrolled salt is missing; restore backup, never regenerate"
-            )
-        if established is not None and established not in (expected, previous_machine):
-            raise ValueError(
-                "Established manifest differs; refusing to replace its generations"
-            )
-
-        # Make the machine generation durable first: it stays the historical reader.
-        if machine is not None:
-            fingerprint = fingerprint_line(machine)
-            if any(r is not None and r != fingerprint for r in receipts):
-                raise ValueError(
-                    "Salt does not match enrollment receipt; refusing replacement"
-                )
-            for fd, backup, receipt in zip(stores, backups, receipts):
-                if backup is None:
-                    publish(
-                        fd,
-                        "active.salt",
-                        machine + b"\n",
-                        os.geteuid(),
-                        os.getegid(),
-                        0o400,
-                    )
-                if receipt is None:
-                    publish(
-                        fd, "enrolled", fingerprint, os.geteuid(), os.getegid(), 0o400
-                    )
-            publish_or_secure(deployed, ACTIVE, active, machine + b"\n", uid, gid)
-        for fd, backup, receipt in zip(stores, center_backups, center_receipts):
-            if backup is None:
-                publish(
-                    fd, center_backup, center + b"\n", os.geteuid(), os.getegid(), 0o400
-                )
-            if receipt is None:
-                publish(
-                    fd,
-                    center_receipt,
-                    center_fingerprint,
-                    os.geteuid(),
-                    os.getegid(),
-                    0o400,
-                )
-        publish_or_secure(
-            deployed, center_name, deployed_center, center + b"\n", uid, gid
+        # Only a host with no center salt needs a new generation of its own.
+        machine = settle_generation(
+            deployed,
+            stores,
+            (ACTIVE, "active.salt", "enrolled"),
+            ids,
+            owners,
+            fallback=None if center_value is not None else generate_identity_salt,
         )
-        publish_or_secure(deployed, LEGACY, legacy, b"default_salt\n", uid, gid)
-
-        content = yaml.safe_dump(expected).encode("utf-8")
-        if established == expected or manifest is None:
-            publish_or_secure(deployed, MANIFEST, manifest, content, uid, gid)
+        if usable(deployed, LEGACY, owners, parse_legacy) is None:
+            publish(deployed, LEGACY, b"default_salt\n", uid, gid, 0o600)
         else:
-            # Atomic switch of new writes to the center generation.
+            place(deployed, LEGACY, b"default_salt\n", *ids)
+
+        expected = (
+            center_manifest(
+                secret_dir, center, machine is not None and machine != center_value
+            )
+            if center_value is not None
+            else machine_manifest(secret_dir)
+        )
+        content = yaml.safe_dump(expected).encode("utf-8")
+        if manifest is None:
+            publish(deployed, MANIFEST, content, uid, gid, 0o600)
+        elif manifest == expected:
+            place(deployed, MANIFEST, content, *ids)
+        else:
+            # Atomic switch of new writes, only after every generation is durable.
             replace_private(deployed, MANIFEST, content, uid, gid)
 
 
@@ -437,14 +414,6 @@ def main() -> int:
         help="Private Vault-managed center salt file; requires --center-id.",
     )
     parser.add_argument("--center-id")
-    parser.add_argument(
-        "--allow-create",
-        action="store_true",
-        help=(
-            "Permit explicit first enrollment when no existing identity "
-            "material or enrollment evidence is present."
-        ),
-    )
     args = parser.parse_args()
     try:
         if args.source_bundle is None:
@@ -462,7 +431,6 @@ def main() -> int:
                 pwd.getpwnam(args.user).pw_uid,
                 grp.getgrnam(args.group).gr_gid,
                 source_salt=args.source_salt,
-                allow_initial_enrollment=args.allow_create,
                 center_id=args.center_id,
             )
             print("Identity salts verified with two durable recovery copies.")
@@ -489,7 +457,7 @@ def main() -> int:
         # Never render parser exceptions or file contents into service logs.
         print(
             "Identity salt provisioning failed; existing files preserved. "
-            "Check private file metadata, copy agreement and enrollment receipts.",
+            "Check that the salt directories are on mounted encrypted storage.",
             file=sys.stderr,
         )
         return 1

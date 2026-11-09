@@ -70,7 +70,22 @@ Boot with the fleet certificate enrolled and retains signature checks at staging
 
 ## 3. Stage, then arm
 
-Run `devenv shell check-connectivity <host>`, then:
+On the target, as your normal user inside the devenv shell:
+
+```sh
+migration-boot stage gc-09 --allow-unverified-boot
+migration-boot stage gc-09 --allow-unverified-boot --apply
+```
+
+The first command verifies; the second publishes and arms one-shot boot. It finds
+`~/migration-gc-09/migration.efi` and `migration.squashfs`, computes the EFI digest,
+uses the repository certificate, `/recovery` and `/boot`, and requests sudo itself.
+Omit the hostname to use this machine's hostname. For a different build directory,
+add `--bundle <directory>`. Missing files or mounts, identity mismatches and invalid
+payloads stop staging; nothing is mounted or rebuilt automatically. The image
+metadata supplies the expected recovery identity; no network rediscovery is needed.
+
+For controller-driven remote staging, run `devenv shell check-connectivity <host>`, then:
 
 ```text
 devenv shell stage-migration-boot --limit <host> \

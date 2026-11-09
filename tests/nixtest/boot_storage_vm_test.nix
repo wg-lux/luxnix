@@ -147,10 +147,6 @@ disko.lib.testLib.makeDiskoTest {
         type = lib.types.bool;
         default = false;
       };
-      services.luxnix.lxAnnotateLocal.runtime.managedEncryptedData.enable = lib.mkOption {
-        type = lib.types.bool;
-        default = false;
-      };
     };
     config = {
       # Boot LUKS enables Plymouth itself; match the fleet splash kernel parameters.

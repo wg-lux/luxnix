@@ -80,7 +80,7 @@ for canonical invocations and risk labels.
 
 - [LX Terminology package host](./guides/lx-terminology.md): public ZIP distribution, editor publication, runtime imports, and deployment prerequisites.
 - [Service Module Pattern](./deploying-services-lx-annotate-style.md): reusable pattern for Vault-backed service deployment.
-- [lx-annotate Encrypted Data](./lx-annotate-encrypted-data.md): optional application-volume integration; not the canonical root-unlock path.
+- [lx-annotate Encrypted Data](./lx-annotate-encrypted-data.md): OS-owned storage and stable application paths for root encryption and legacy mounts.
 - [lx-annotate Secure HLS](./lx-annotate-secure-hls.md): end-to-end encrypted video playback, deployment, hub boundary, readiness, and incident-response contract.
 - [lx-annotate Cluster Readiness](./lx-annotate-cluster-readiness.md): release flow, completed decisions, and remaining production gates.
 - [gs-02 Local Redis Broker Recovery](./operations/gs-02-local-redis-broker.md): preflight, activation, acceptance, rollback, and encrypted-persistence follow-up for the implemented but undeployed broker change.

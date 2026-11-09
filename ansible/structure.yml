@@ -17,9 +17,6 @@ entrypoints:
   - name: home-git-identity
     file: inventory/group_vars/group_home_git_maddonix.yml
     purpose: Share the maddonix Git identity only with homes selected in home-hosts.yml.
-  - name: first-setup-config
-    file: playbooks/first-setup-config.yml
-    purpose: Write allowlisted first-setup salt choices into one host's inventory; local files only.
   - name: storage-local-backup
     file: playbooks/storage-local-backup.yml
     purpose: Create encrypted snapshot archives on the approved gc-09 local external filesystem without sending a private key.

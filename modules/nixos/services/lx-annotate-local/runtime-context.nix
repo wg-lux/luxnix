@@ -102,14 +102,6 @@ let
   pythonInterpreter = "${cfg.runtime.pythonPackage}/bin/python3";
   wheelFilePath = if cfg.runtime.wheelPath == null then "" else toString cfg.runtime.wheelPath;
   packageVersion = cfg.runtime.packageVersion;
-  managedEncryptedDataServiceName = "lx-annotate-encrypted-data.service";
-  encryptionServiceUnits =
-    if cfg.runtime.managedEncryptedData.enable then
-      [ managedEncryptedDataServiceName ]
-    else
-      lib.optionals (cfg.runtime.encryptionService != null) [ cfg.runtime.encryptionService ];
-  encryptedDataMountOptions = lib.concatStringsSep "," cfg.runtime.managedEncryptedData.mountOptions;
-
   makeAbsolute = path: if lib.hasPrefix "/" path then path else "${runtimeWorkingDir}/${path}";
 
   envAssetDir = makeAbsolute cfg.django.assetDir;
@@ -247,9 +239,6 @@ let
         pythonInterpreter
         wheelFilePath
         packageVersion
-        managedEncryptedDataServiceName
-        encryptionServiceUnits
-        encryptedDataMountOptions
         ;
     };
     defaults = {

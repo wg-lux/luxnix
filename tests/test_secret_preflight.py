@@ -621,33 +621,24 @@ def remove_salts(live):
     shutil.rmtree(live / "salts")
 
 
-def test_accepted_salt_loss_passes_and_names_who_accepted(environment):
+def test_a_lost_salt_never_stops_preflight(environment):
     state, plan, custody, live = environment
     remove_salts(live)
     fill_custody(custody, live)
-    receipt = preflight.run(state, custody, salt_loss_accepted_by="A. Operator")
+    receipt = preflight.run(state, custody)
     found = statuses(receipt)
-    assert found["identity-salt-recovery"] == "accepted-loss"
+    assert found["identity-salt-recovery"] == "salt-regenerated"
     assert found["lx-annotate-master-key"] == "verified"
-    assert receipt["salt_loss_accepted_by"] == "A. Operator"
     migration.verify_preflight_receipt(state / migration.PREFLIGHT_RECEIPT, plan)
 
 
-def test_missing_salts_are_refused_without_acceptance(environment):
-    state, _, custody, live = environment
-    remove_salts(live)
-    fill_custody(custody, live)
+def test_a_salt_still_on_this_host_must_be_copied(environment):
+    state, _, custody, _ = environment
     with pytest.raises(preflight.PreflightError, match="identity-salt-recovery"):
         preflight.run(state, custody)
 
 
-def test_accepting_loss_never_excuses_a_salt_still_on_this_host(environment):
-    state, _, custody, live = environment
-    with pytest.raises(preflight.PreflightError, match="identity-salt-recovery"):
-        preflight.run(state, custody, salt_loss_accepted_by="A. Operator")
-
-
-def test_accepting_loss_never_excuses_the_master_key(environment):
+def test_the_master_key_is_never_excused(environment):
     # A locked container hides salts and this key together, so this still stops.
     state, _, custody, live = environment
     fill_custody(custody, live)
@@ -655,97 +646,35 @@ def test_accepting_loss_never_excuses_the_master_key(environment):
     copy_of(custody, live / "master").unlink()
     (live / "master").unlink()
     with pytest.raises(preflight.PreflightError, match="lx-annotate-master-key"):
-        preflight.run(state, custody, salt_loss_accepted_by="A. Operator")
+        preflight.run(state, custody)
 
 
-def test_missing_salts_lists_only_salts_absent_everywhere(environment):
-    state, _, custody, live = environment
-    assert preflight.missing_salts(state, custody) == []
-    remove_salts(live)
-    assert preflight.missing_salts(state, custody) == [str(live / "salts")]
-
-
-def test_receipt_with_unnamed_loss_is_rejected(environment):
+def test_only_a_salt_can_be_regenerated_in_a_receipt(environment):
     state, plan, custody, live = environment
     remove_salts(live)
     fill_custody(custody, live)
-    receipt = preflight.run(state, custody, salt_loss_accepted_by="A. Operator")
-    del receipt["salt_loss_accepted_by"]
+    receipt = preflight.run(state, custody)
+    for item in receipt["items"]:
+        if item["id"] == "lx-annotate-master-key":
+            item["status"] = "salt-regenerated"
     (state / migration.PREFLIGHT_RECEIPT).write_text(json.dumps(receipt))
-    with pytest.raises(migration.MigrationError, match="named person"):
+    with pytest.raises(migration.MigrationError, match="Only a salt"):
         migration.verify_preflight_receipt(state / migration.PREFLIGHT_RECEIPT, plan)
 
 
-def salt_layout(environment):
+def test_a_custody_copy_of_a_lost_salt_comes_back(environment):
     state, plan, custody, live = environment
-    recovery = live / "salts"
-    replica = live / "replica"
-    replica.mkdir()
-    paths = {
-        "identity-active": live / "active",
-        "identity-salt-keyring": live / "keyring.yml",
-        "identity-legacy-default": live / "legacy",
-    }
+    active = live / "active"
     payload = {k: v for k, v in plan.items() if k != "plan_id"}
-    contract = payload["config"]["secret_contract"]
-    contract["identity_replica"] = str(replica)
-    contract["items"] = contract["items"] + [
-        {"kind": "data", "id": key, "path": str(path)} for key, path in paths.items()
-    ]
+    payload["config"]["secret_contract"]["items"].append(
+        {"kind": "data", "id": "identity-active", "path": str(active)}
+    )
     migration.atomic_json(
         state / "plan.json", payload | {"plan_id": migration.digest(payload)}
     )
-    return state, custody, live, recovery, replica, paths
-
-
-def test_a_salt_gone_with_traces_left_is_reported(environment):
-    state, custody, _, recovery, _, paths = salt_layout(environment)
-    (recovery / "enrolled").write_text("receipt")
-    paths["identity-salt-keyring"].write_text("schema_version: 1\n")
-    found = preflight.orphaned_salt(state, custody)
-    assert found["active"] == str(paths["identity-active"])
-    assert str(recovery / "enrolled") in found["traces"]
-    assert found["copy"] is None
-
-
-def test_a_custody_copy_of_the_lost_salt_is_found_and_restored(environment):
-    state, custody, _, recovery, _, paths = salt_layout(environment)
-    (recovery / "enrolled").write_text("receipt")
-    copy = copy_of(custody, paths["identity-active"])
+    copy = copy_of(custody, active)
     copy.parent.mkdir(parents=True, exist_ok=True)
     copy.write_text("saved")
-    found = preflight.orphaned_salt(state, custody)
-    assert found["copy"] == copy
-    preflight.restore_salt(found["copy"], found["active"])
-    assert paths["identity-active"].read_text() == "saved"
-    assert preflight.orphaned_salt(state, custody) is None
-
-
-@pytest.mark.parametrize("kept", ["active", "salts/active.salt", "replica/active.salt"])
-def test_any_surviving_copy_is_not_an_orphan(environment, kept):
-    # The provisioner recovers the salt itself from any of these.
-    state, custody, live, recovery, _, _ = salt_layout(environment)
-    (recovery / "enrolled").write_text("receipt")
-    (live / kept).write_text("salt")
-    assert preflight.orphaned_salt(state, custody) is None
-
-
-def test_no_traces_is_a_fresh_host_not_an_orphan(environment):
-    state, custody, *_ = salt_layout(environment)
-    assert preflight.orphaned_salt(state, custody) is None
-
-
-def test_a_center_host_is_left_to_vault(environment):
-    state, custody, _, _, _, paths = salt_layout(environment)
-    paths["identity-salt-keyring"].write_text("center_id: example\n")
-    assert preflight.orphaned_salt(state, custody) is None
-
-
-def test_setting_aside_moves_and_never_deletes(tmp_path, monkeypatch):
-    monkeypatch.setattr(preflight, "root_prefix", list)
-    trace = tmp_path / "enrolled"
-    trace.write_text("receipt")
-    moved = preflight.set_aside([str(trace)])
-    assert not trace.exists()
-    assert Path(moved[0]).read_text() == "receipt"
-
+    assert preflight.restore_lost_salts(state, custody) == [str(active)]
+    assert active.read_text() == "saved"
+    assert preflight.restore_lost_salts(state, custody) == []

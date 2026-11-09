@@ -7,13 +7,11 @@ with ctx;
     after = [
       "lx-annotate-runtime-env.service"
       "lx-annotate-wheel-runtime.service"
-    ]
-    ++ encryptionServiceUnits;
+    ];
     requires = [
       "lx-annotate-runtime-env.service"
       "lx-annotate-wheel-runtime.service"
-    ]
-    ++ encryptionServiceUnits;
+    ];
     restartTriggers = [ effectiveRuntimePackage ];
     stopIfChanged = false;
     unitConfig = encryptedDataMountUnitConfig;

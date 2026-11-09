@@ -10,22 +10,19 @@ with ctx;
       "lx-annotate.service"
       "nginx.service"
     ]
-    ++ alwaysWorkerServiceUnits
-    ++ encryptionServiceUnits;
+    ++ alwaysWorkerServiceUnits;
     wants = [
       "lx-annotate-preflight.service"
       "lx-annotate.service"
       "nginx.service"
     ]
-    ++ alwaysWorkerServiceUnits
-    ++ encryptionServiceUnits;
+    ++ alwaysWorkerServiceUnits;
     requires = [
       "lx-annotate-preflight.service"
       "lx-annotate.service"
       "nginx.service"
     ]
-    ++ alwaysWorkerServiceUnits
-    ++ encryptionServiceUnits;
+    ++ alwaysWorkerServiceUnits;
     unitConfig = encryptedDataMountUnitConfig;
     environment = commonExtraEnv;
     serviceConfig = {

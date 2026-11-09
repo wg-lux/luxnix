@@ -61,30 +61,22 @@ the normal deployment process to update running services. The corresponding
 contract is tracked by `ocr_runtime_dependencies` in
 [`lx_annotate_environment_lifecycle_audit.yaml`](../../../../feature-tracking/lx_annotate_environment_lifecycle_audit.yaml).
 
-## Encrypted Data Flow
+## Storage ownership
 
-The module can manage the application data directory as a LUKS-backed mount:
+LuxNix owns disk encryption, unlocking and mounts through
+`luxnix.storage.operatorUnlocked`. New installations use encrypted root;
+existing legacy containers remain an OS compatibility layout.
 
-- `runtime.managedEncryptedData.enable = true`
-- systemd unit: `lx-annotate-encrypted-data.service`
-- mount target: `runtime.encryptedDataDir`
+LX-Annotate receives `runtime.encryptedDataDir` (the historical path option)
+and `runtime.masterKeyFile`. The application uses the same paths under either
+layout and has no LUKS UUID, disk key or unlock-service configuration.
+LuxNix orders consumers after their mounts and checks protected storage before
+startup. A locked or missing mount must not cause writes to an underlying directory.
 
-When `runtime.vaultManagedEncryptedData.enable = true`, the module also wires the existing `roles.managed-secrets` service to provision:
-
-- `/etc/secrets/vault/lx_annotate_luks.key`
-- `/etc/secrets/vault/lx_annotate_luks.uuid`
-- `/etc/secrets/vault/lx_annotate_master_key`
-
-from a hostname-scoped Vault path:
-
-- `secret/data/nodes/<networking.hostName>/lx-annotate`
-
-The encrypted-data unit then:
-
-1. waits for the secret provisioning service
-2. reads the key file and UUID file
-3. opens the LUKS device with `cryptsetup`
-4. mounts it at `runtime.encryptedDataDir`
+Application encryption keys are independent of disk passphrases. Preserve the
+existing key during migration; changing the storage layout never rotates it.
+The retired `managedEncryptedData`, `vaultManagedEncryptedData` and
+`encryptionService` options must be replaced with OS storage configuration.
 
 ## Automatic identity salt provisioning and recovery
 
@@ -160,10 +152,11 @@ and an `enrolled` fingerprint receipt in two root-owned, mode-0700 directories:
 All persistent directories require verified encrypted backing storage before access.
 Recovery files are mode 0400. Creation uses an exclusive lock, fsynced files and
 directories, and atomic publication without overwriting existing files. Missing
-copies are restored from any surviving matching salt. Conflicting copies,
-changed manifests, unsafe permissions, symlinks, or an enrollment receipt without
-recoverable salt fail closed. Salt values and parsing errors are never logged.
-The legacy fallback is never used to conceal a missing active salt.
+copies are restored from any surviving matching salt. Conflicting copies, changed
+manifests, unsafe permissions and symlinks are set aside under `.superseded-<id>`, and a
+host with no usable salt creates a new random one, so salt state never stops the
+application; only storage that is not encrypted does. Salt values and parsing errors are
+never logged. `default_salt` is only ever a retiring reader, never the active salt.
 
 This local validation/recovery step runs before the shared application environment
 is prepared and repeats every fifteen minutes. It performs no network operations
@@ -386,15 +379,13 @@ database, Celery, storage, and encryption environment from `scripts/env.nix`,
 and run with `ProtectSystem=full`, `PrivateTmp=true`, and
 `NoNewPrivileges=true`. Their write access is limited to the lx-annotate
 runtime, wheel, static, config, storage, and model-training staging paths. The
-root-run exceptions are the environment writer and the optional encrypted-data
-mount unit.
+environment writer runs as root; disk mounts belong to the LuxNix storage module.
 
 ### Core Boot Units
 
 | Unit                                               | Type / trigger                        | Runtime role                                                                                                                                                                                                                                                                                                                    |
 | -------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `lx-annotate-runtime-env.service`                  | root oneshot, remains active          | Creates the runtime/config/data directories, copies the database password into the runtime config directory, normalizes Keycloak secret permissions, and writes `/var/lib/lx-annotate/.env.systemd` plus the compatibility copy under the data root.                                                                            |
-| `lx-annotate-encrypted-data.service`               | optional root oneshot, remains active | Opens the configured LUKS device, mounts it at `runtime.encryptedDataDir`, fixes owner/mode on the mount point, and closes it again on stop. Enabled by `runtime.managedEncryptedData.enable`.                                                                                                                                  |
 | `lx-annotate-data-recovery.service`                | manual oneshot, exposed by default    | Normal startup uses the canonical runtime root without invoking legacy recovery. `dataRecovery.runBeforeStartup = true` explicitly restores the startup dependency for a reviewed migration with compatible recovery commands. The current backend removed `migrate_data_dir`; do not enable this legacy path for that release. |
 | `lx-annotate-preflight.service`                    | explicit diagnostic oneshot           | Runs comprehensive checks when requested directly or through live acceptance. It does not block normal web, worker, or HLS startup and does not cache a previous successful diagnostic run.                                                                                                                                     |
 | `lx-annotate-migrate.service`                      | oneshot, remains active               | Runs `lx-annotate-manage migrate --noinput` against the effective runtime package. On failure it applies the reviewed legacy-history repair and retries once; unrelated or unrepaired failures remain fatal. It is ordered before base-data loading, encrypted-storage validation, and the web service.                         |
@@ -621,8 +612,7 @@ For cluster-oriented validation, set:
 - `runtime.autoGenerateMasterKey = false`
 
 Clustered mode fails evaluation if Redis or Postgres point at localhost, if
-shared storage is not acknowledged, or if per-host managed encrypted-data /
-hostname-scoped Vault state is enabled. Clustered deployments must use shared
+shared storage is not acknowledged, or the shared application key is missing. Clustered deployments must use shared
 storage plus a shared workload master key for the data they share across web and
 worker replicas.
 
@@ -875,17 +865,9 @@ The main review caveats have now been addressed in code:
 1. Vault auth is no longer ambient.
    Use `luxnix.vault.client` to provide either a token file, AppRole files, or an explicit environment file. `vault-auth-setup.service` then prepares the runtime Vault environment for `managed-secrets-setup.service`.
 
-2. Vault-backed lx-annotate secrets now refresh on boot.
-   The lx-annotate LUKS key, UUID, and application master key are configured with `refreshOnBoot = true`.
-
-3. Hostname pathing is enforced.
-   `runtime.vaultManagedEncryptedData.enable` now asserts that `networking.hostName` is set, and the secret path stays hostname-scoped.
-
-4. Secret file permissions remain strict by design.
-   The LUKS key and UUID are written as `root:root` with `0400`. The application master key uses the configured EndoReg service user/group and `0600`.
-
-5. The trust boundary is split in the right place.
-   Vault material unlocks the mounted data directory and provides the application master key file, but the application still consumes files from the mounted path rather than raw Vault state.
+2. Storage and application credentials have separate owners.
+   LuxNix unlocks storage. LX-Annotate consumes the mounted data path and its
+   existing application master-key file; it does not fetch disk keys from Vault.
 
 ## Boot Order
 
@@ -895,7 +877,6 @@ options or roles are disabled:
 ```text
 vault-auth-setup.service
   -> managed-secrets-setup.service
-    -> lx-annotate-encrypted-data.service
       -> lx-annotate-runtime-env.service
         -> lx-annotate-migrate.service
           -> lx-annotate-load-base-data.service
@@ -906,7 +887,7 @@ vault-auth-setup.service
 `lx-annotate-boot.service` is an alias for `lx-annotate.service`. Path units,
 worker units, and timer units are activated independently by systemd, but their
 services still require the same runtime environment, base-data, master-key, and
-encrypted-data gates before doing application work.
+LuxNix storage gates before doing application work.
 
 That is the intended fail-closed behavior. If Vault lookup, secret delivery,
 LUKS unlock, feature-registry attestation, or encrypted-storage validation
@@ -936,18 +917,6 @@ services.luxnix.lxAnnotateLocal = {
     wheelPath = /path/to/dist/lx_annotate-0.0.2-py3-none-any.whl;
     wheelhousePath = /path/to/wheelhouse;
     encryptedDataDir = "/var/lib/lx-annotate/secure_data";
-
-    managedEncryptedData = {
-      enable = true;
-      mapperName = "lx-annotate-data";
-      fsType = "ext4";
-    };
-
-    vaultManagedEncryptedData = {
-      enable = true;
-      vaultPathTemplate = "secret/data/nodes/{hostname}/lx-annotate";
-      setupService = "managed-secrets-setup.service";
-    };
 
     masterKeyFile = /etc/secrets/vault/lx_annotate_master_key;
   };
@@ -1045,7 +1014,7 @@ The expected startup order is:
 
 1. `vault-auth-setup.service`
 2. `managed-secrets-setup.service`
-3. `lx-annotate-encrypted-data.service`
+3. LuxNix storage guard for the configured layout
 4. `lx-annotate-migrate.service`
 5. `lx-annotate-load-base-data.service`
 6. `lx-annotate-boot.service`
@@ -1057,7 +1026,7 @@ Useful verification commands:
 ```bash
 systemctl status vault-auth-setup.service
 systemctl status managed-secrets-setup.service
-systemctl status lx-annotate-encrypted-data.service
+systemctl list-units 'luxnix-storage-*'
 systemctl status lx-annotate-migrate.service
 systemctl status lx-annotate-load-base-data.service
 systemctl status lx-annotate-boot.service

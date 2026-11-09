@@ -68,8 +68,6 @@ let
     pythonInterpreter
     wheelFilePath
     packageVersion
-    managedEncryptedDataServiceName
-    encryptionServiceUnits
     ;
   inherit (runtime.defaults)
     processedReportDirName
@@ -845,8 +843,7 @@ let
   ++ localRedisServiceUnits
   ++ localPostgresServiceUnits
   ++ localPostgresSetupUnits
-  ++ managedSecretsSetupUnits
-  ++ encryptionServiceUnits;
+  ++ managedSecretsSetupUnits;
   appServiceBaseWants = [
     "lx-annotate-runtime-env.service"
   ]
@@ -854,14 +851,12 @@ let
   ++ localRedisServiceUnits
   ++ localPostgresServiceUnits
   ++ localPostgresSetupUnits
-  ++ managedSecretsSetupUnits
-  ++ encryptionServiceUnits;
+  ++ managedSecretsSetupUnits;
   appServiceBaseRequires = [
     "lx-annotate-runtime-env.service"
   ]
   ++ wheelRuntimePrepareServiceUnits
-  ++ managedSecretsSetupUnits
-  ++ encryptionServiceUnits;
+  ++ managedSecretsSetupUnits;
   lxAnnotateJournalNamespace = "lx-annotate";
   mkLxAnnotateAppService =
     {
@@ -1523,11 +1518,6 @@ let
     hubBackupWriterServices
     hubBackupWriterTimers
     ;
-  encryptedDataScripts = import ./scripts/encrypted-data.nix args;
-  inherit (encryptedDataScripts)
-    lxAnnotateEncryptedDataMountScript
-    lxAnnotateEncryptedDataUmountScript
-    ;
   # Explicit interface shared by the individual service modules.
   subserviceContext = args // {
     inherit
@@ -1543,7 +1533,6 @@ let
       effectiveRuntimePackage
       emergencyStorageReliefScript
       encryptedDataMountUnitConfig
-      encryptionServiceUnits
       endoreg-service-group-name
       endoreg-service-user-home
       endoreg-service-user-name
@@ -1560,8 +1549,6 @@ let
       localPostgresServiceUnits
       localPostgresSetupUnits
       localRedisServiceUnits
-      lxAnnotateEncryptedDataMountScript
-      lxAnnotateEncryptedDataUmountScript
       lxAnnotateJournalNamespace
       lxAnnotateMigrateVideoStreamableStorageScript
       managedSecretsSetupUnits
@@ -1609,7 +1596,6 @@ let
       ./subservices/lx-annotate-center-admin-bootstrap.nix
       ./subservices/lx-annotate-hub-node-provisioning.nix
       ./subservices/lx-annotate-hub-envelope-key-preflight.nix
-      ./subservices/lx-annotate-encrypted-data.nix
       ./subservices/lx-annotate-filewatcher.nix
       ./subservices/lx-annotate-hub-export-recovery.nix
       ./subservices/lx-annotate-hub-export-health.nix
@@ -1864,14 +1850,6 @@ in
               message = "services.luxnix.lxAnnotateLocal.runtime.clustered.enable requires runtime.autoGenerateMasterKey = false.";
             }
             {
-              assertion = !cfg.runtime.clustered.enable || !cfg.runtime.managedEncryptedData.enable;
-              message = "services.luxnix.lxAnnotateLocal.runtime.clustered.enable does not support per-host managedEncryptedData.";
-            }
-            {
-              assertion = !cfg.runtime.clustered.enable || !cfg.runtime.vaultManagedEncryptedData.enable;
-              message = "services.luxnix.lxAnnotateLocal.runtime.clustered.enable requires a shared workload master key, not hostname-scoped vaultManagedEncryptedData.";
-            }
-            {
               assertion =
                 !lib.hasPrefix "${repoDir}/" cfg.runtime.encryptedDataDir
                 && cfg.runtime.encryptedDataDir != repoDir
@@ -1881,62 +1859,17 @@ in
             }
             {
               assertion =
-                !cfg.runtime.managedEncryptedData.enable
-                || cfg.runtime.managedEncryptedData.luksUuid != null
-                || cfg.runtime.managedEncryptedData.luksUuidFile != null;
-              message = "services.luxnix.lxAnnotateLocal.runtime.managedEncryptedData.luksUuid or luksUuidFile must be set when managedEncryptedData.enable = true.";
-            }
-            {
-              assertion =
-                !cfg.runtime.managedEncryptedData.enable || cfg.runtime.managedEncryptedData.keyFile != null;
-              message = "services.luxnix.lxAnnotateLocal.runtime.managedEncryptedData.keyFile must be set when managedEncryptedData.enable = true.";
-            }
-            {
-              assertion =
-                !cfg.runtime.managedEncryptedData.enable
-                || cfg.runtime.encryptionService == null
-                || cfg.runtime.encryptionService == managedEncryptedDataServiceName;
-              message = "services.luxnix.lxAnnotateLocal.runtime.encryptionService must stay unset or equal to lx-annotate-encrypted-data.service when managedEncryptedData.enable = true.";
-            }
-            {
-              assertion = !cfg.runtime.vaultManagedEncryptedData.enable || config.networking.hostName != "";
-              message = "services.luxnix.lxAnnotateLocal.runtime.vaultManagedEncryptedData requires networking.hostName to be set.";
-            }
-            {
-              assertion =
-                !cfg.runtime.vaultManagedEncryptedData.enable
-                || (
-                  config.luxnix.vault.enable
-                  && (
-                    config.luxnix.vault.client.auth.method != "none"
-                    || config.luxnix.vault.client.environmentFile != null
-                  )
-                );
-              message = "services.luxnix.lxAnnotateLocal.runtime.vaultManagedEncryptedData requires luxnix.vault client configuration, either via auth bootstrap or a declared environmentFile.";
-            }
-            {
-              assertion =
                 !cfg.runtime.sopsMasterKey.enable
                 || (
                   config.security.sops.operatorStorageKey.enable
                   && !cfg.runtime.clustered.enable
-                  && !(
-                    cfg.runtime.vaultManagedEncryptedData.enable
-                    && cfg.runtime.vaultManagedEncryptedData.manageMasterKey
-                  )
                   && cfg.runtime.masterKeyFile == sopsMasterKeyPath
                 );
-              message = "services.luxnix.lxAnnotateLocal.runtime.sopsMasterKey requires security.sops.operatorStorageKey, excludes clustered and Vault master-key delivery, and owns runtime.masterKeyFile (${sopsMasterKeyPath}).";
+              message = "runtime.sopsMasterKey requires security.sops.operatorStorageKey, excludes clustered delivery, and owns runtime.masterKeyFile.";
             }
             {
-              assertion =
-                cfg.runtime.masterKeyFile != null
-                || cfg.runtime.autoGenerateMasterKey
-                || (
-                  cfg.runtime.vaultManagedEncryptedData.enable
-                  && cfg.runtime.vaultManagedEncryptedData.manageMasterKey
-                );
-              message = "services.luxnix.lxAnnotateLocal requires an application master key for encrypted storage. Set runtime.masterKeyFile, keep runtime.autoGenerateMasterKey = true, or enable vaultManagedEncryptedData.manageMasterKey.";
+              assertion = cfg.runtime.masterKeyFile != null || cfg.runtime.autoGenerateMasterKey;
+              message = "LX-Annotate requires an application master key: set runtime.masterKeyFile or runtime.autoGenerateMasterKey.";
             }
             {
               assertion = (cfg.django.sslCertificatePath == null) == (cfg.django.sslKeyPath == null);
@@ -2165,7 +2098,6 @@ in
                     (
                       cfg.runtime.autoGenerateMasterKey
                       && !cfg.runtime.sopsMasterKey.enable
-                      && !cfg.runtime.vaultManagedEncryptedData.enable
                       && (
                         cfg.runtime.masterKeyFile == null
                         || cfg.runtime.masterKeyFile == cfg.runtime.autoGeneratedMasterKeyFilePath
@@ -2177,96 +2109,9 @@ in
                       group = endoreg-service-group-name;
                       permissions = "600";
                       description = "Per-machine application master key for lx-annotate encrypted storage";
-                      generator =
-                        if
-                          config.luxnix.storage.operatorUnlocked.enable
-                          && config.luxnix.storage.operatorUnlocked.layout == "boot-luks"
-                        then
-                          "echo 'Missing application master key: restore the existing key before startup' >&2; exit 1"
-                        else
-                          "${pkgs.openssl}/bin/openssl rand -base64 32 | tr -d '\n'";
+                      generator = "${pkgs.openssl}/bin/openssl rand -base64 32 | tr -d '\n'";
                     };
 
-                lx_annotate_luks_key = mkIf cfg.runtime.vaultManagedEncryptedData.enable {
-                  path = toString cfg.runtime.vaultManagedEncryptedData.keyFilePath;
-                  owner = "root";
-                  group = "root";
-                  permissions = "400";
-                  description = "Vault-backed LUKS key for lx-annotate encrypted data";
-                  customScript = true;
-                  refreshOnBoot = true;
-                  generator = ''
-                    HOSTNAME=${lib.escapeShellArg config.networking.hostName}
-                    VAULT_PATH=${
-                      lib.escapeShellArg (
-                        lib.replaceStrings [ "{hostname}" ] [ config.networking.hostName ]
-                          cfg.runtime.vaultManagedEncryptedData.vaultPathTemplate
-                      )
-                    }
-                    ${pkgs.vault}/bin/vault kv get -format=json "$VAULT_PATH" \
-                      | ${pkgs.jq}/bin/jq -er '.data.data.${cfg.runtime.vaultManagedEncryptedData.vaultKeyField}' \
-                      > "$TARGET_FILE"
-                  '';
-                };
-
-                lx_annotate_luks_uuid = mkIf cfg.runtime.vaultManagedEncryptedData.enable {
-                  path = toString cfg.runtime.vaultManagedEncryptedData.luksUuidFilePath;
-                  owner = "root";
-                  group = "root";
-                  permissions = "400";
-                  description = "Vault-backed LUKS UUID for lx-annotate encrypted data";
-                  customScript = true;
-                  refreshOnBoot = true;
-                  generator = ''
-                    HOSTNAME=${lib.escapeShellArg config.networking.hostName}
-                    VAULT_PATH=${
-                      lib.escapeShellArg (
-                        lib.replaceStrings [ "{hostname}" ] [ config.networking.hostName ]
-                          cfg.runtime.vaultManagedEncryptedData.vaultPathTemplate
-                      )
-                    }
-                    ${pkgs.vault}/bin/vault kv get -format=json "$VAULT_PATH" \
-                      | ${pkgs.jq}/bin/jq -er '.data.data.${cfg.runtime.vaultManagedEncryptedData.vaultUuidField}' \
-                      | tr -d '\n' > "$TARGET_FILE"
-                  '';
-                };
-
-                lx_annotate_master_key =
-                  mkIf
-                    (
-                      cfg.runtime.vaultManagedEncryptedData.enable
-                      && cfg.runtime.vaultManagedEncryptedData.manageMasterKey
-                    )
-                    {
-                      path = toString cfg.runtime.vaultManagedEncryptedData.masterKeyFilePath;
-                      owner = endoreg-service-user-name;
-                      group = endoreg-service-group-name;
-                      permissions = "600";
-                      description = "Vault-backed application master key for lx-annotate encrypted storage";
-                      customScript = true;
-                      refreshOnBoot = true;
-                      generator = ''
-                        HOSTNAME=${lib.escapeShellArg config.networking.hostName}
-                        VAULT_PATH=${
-                          lib.escapeShellArg (
-                            lib.replaceStrings [ "{hostname}" ] [ config.networking.hostName ]
-                              cfg.runtime.vaultManagedEncryptedData.vaultPathTemplate
-                          )
-                        }
-                        ${pkgs.vault}/bin/vault kv get -format=json "$VAULT_PATH" \
-                          | ${pkgs.jq}/bin/jq -er '.data.data.${cfg.runtime.vaultManagedEncryptedData.vaultMasterKeyField}' \
-                          | tr -d '\n' > "$TARGET_FILE"
-                        if [ ! -s "$TARGET_FILE" ]; then
-                          echo "ERROR: Vault returned an empty lx-annotate application master key from $VAULT_PATH."
-                          exit 1
-                        fi
-                        if [ -f "$SECRET_FILE" ] && ! ${pkgs.diffutils}/bin/cmp -s "$SECRET_FILE" "$TARGET_FILE"; then
-                          echo "ERROR: Vault lx-annotate application master key differs from the existing local key at $SECRET_FILE."
-                          echo "Refusing to replace it during managed-secrets refresh because that would break decryption of existing app-layer encrypted data."
-                          exit 1
-                        fi
-                      '';
-                    };
               };
             };
           };
@@ -2300,31 +2145,11 @@ in
                     cfg.runtime.clustered.enable
                     || (externalRedisConfigured && !isLocalRedisUrl cfg.runtime.externalServices.redisUrl)
                   );
-                  managedEncryptedData = {
-                    enable = mkIf cfg.runtime.vaultManagedEncryptedData.enable (mkDefault true);
-                    keyFile = mkIf cfg.runtime.vaultManagedEncryptedData.enable (
-                      mkDefault cfg.runtime.vaultManagedEncryptedData.keyFilePath
-                    );
-                    luksUuidFile = mkIf cfg.runtime.vaultManagedEncryptedData.enable (
-                      mkDefault cfg.runtime.vaultManagedEncryptedData.luksUuidFilePath
-                    );
-                    after = mkIf cfg.runtime.vaultManagedEncryptedData.enable (mkBefore [
-                      cfg.runtime.vaultManagedEncryptedData.setupService
-                    ]);
-                    requires = mkIf cfg.runtime.vaultManagedEncryptedData.enable (mkBefore [
-                      cfg.runtime.vaultManagedEncryptedData.setupService
-                    ]);
-                  };
                   masterKeyFile = mkDefault (
                     if cfg.runtime.sopsMasterKey.enable then
                       sopsMasterKeyPath
                     else if cfg.runtime.clustered.enable && cfg.runtime.clustered.sharedMasterKeyFile != null then
                       cfg.runtime.clustered.sharedMasterKeyFile
-                    else if
-                      cfg.runtime.vaultManagedEncryptedData.enable
-                      && cfg.runtime.vaultManagedEncryptedData.manageMasterKey
-                    then
-                      cfg.runtime.vaultManagedEncryptedData.masterKeyFilePath
                     else if cfg.runtime.autoGenerateMasterKey then
                       cfg.runtime.autoGeneratedMasterKeyFilePath
                     else

@@ -7,10 +7,7 @@ with ctx;
     description = "Move duplicate anonymized lx-annotate payload into external archive storage";
     after = [
       "systemd-tmpfiles-setup.service"
-    ]
-    ++ encryptionServiceUnits;
-    wants = encryptionServiceUnits;
-    requires = encryptionServiceUnits;
+    ];
     unitConfig = encryptedDataMountUnitConfig;
     serviceConfig = {
       Type = "oneshot";

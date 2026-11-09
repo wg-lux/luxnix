@@ -14,20 +14,17 @@ with ctx;
     ]
     ++ localPostgresServiceUnits
     ++ localPostgresSetupUnits
-    ++ managedSecretsSetupUnits
-    ++ encryptionServiceUnits;
+    ++ managedSecretsSetupUnits;
     wants = [
       "lx-annotate-load-base-data.service"
     ]
     ++ localPostgresServiceUnits
-    ++ managedSecretsSetupUnits
-    ++ encryptionServiceUnits;
+    ++ managedSecretsSetupUnits;
     requires = [
       "lx-annotate-runtime-env.service"
       "lx-annotate-load-base-data.service"
     ]
-    ++ managedSecretsSetupUnits
-    ++ encryptionServiceUnits;
+    ++ managedSecretsSetupUnits;
     restartTriggers = [ effectiveRuntimePackage ];
     stopIfChanged = false;
     unitConfig = encryptedDataMountUnitConfig;

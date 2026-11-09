@@ -196,11 +196,9 @@ the service's mount namespace before attempting any salt recovery or replacement
   plaintext admin-password companion belong to the documented local vault and
   credential-management workflows. They are not Vault AppRole credentials;
   the operating-system account consumes the password hash.
-- **Vault-managed application LUKS storage:** `lx_annotate_luks.key` and
-  `lx_annotate_luks.uuid` under the vault directory apply only when that runtime
-  mode is enabled. Follow [Encrypted Data](lx-annotate-encrypted-data.md).
-  Root-disk and USB boot-unlock material have a separate lifecycle in
-  [Hardware Setup](hardware-setup.md).
+- **Disk encryption:** LuxNix owns disk-unlock credentials. LX-Annotate receives
+  the mounted data path and a separate application key file; see
+  [storage ownership](lx-annotate-encrypted-data.md).
 - **Center identity mode:** the managed source is
   `/etc/secrets/vault/lx_annotate_center_<centerKey>_identity`; the custodian must
   provision the center source in Vault and authorize the machine to read it.

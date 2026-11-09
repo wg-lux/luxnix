@@ -12,17 +12,17 @@ with ctx;
     ++ localPostgresServiceUnits
     ++ localPostgresSetupUnits
 
-    ++ encryptionServiceUnits;
+    ;
     wants = [
       "lx-annotate-runtime-env.service"
     ]
 
-    ++ encryptionServiceUnits;
+    ;
     requires = [
       "lx-annotate-runtime-env.service"
     ]
 
-    ++ encryptionServiceUnits;
+    ;
     unitConfig = {
       RequiresMountsFor = [
         envDataDir

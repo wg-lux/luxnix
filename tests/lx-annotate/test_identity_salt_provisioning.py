@@ -190,7 +190,7 @@ def test_interrupted_demotion_keeps_machine_manifest_until_complete(
     source = center_source(tmp_path)
     with monkeypatch.context() as patch:
         patch.setitem(
-            MODULE["provision_center_salt"].__globals__, "publish", interrupted
+            MODULE["provision"].__globals__, "publish", interrupted
         )
         with pytest.raises(OSError):
             provision_center(stores, source)
@@ -200,58 +200,60 @@ def test_interrupted_demotion_keeps_machine_manifest_until_complete(
     assert manifest["active"] == str(stores[0] / CENTER_FILE)
 
 
-@pytest.mark.parametrize("change", ["source", "deployed", "backup", "receipt"])
-def test_center_salt_is_never_replaced_after_enrollment(stores, tmp_path, change):
+@pytest.mark.parametrize("change", ["source", "backup"])
+def test_an_active_center_salt_wins_and_differing_copies_are_kept(
+    stores, tmp_path, change
+):
     provision(stores)
     source = center_source(tmp_path)
     provision_center(stores, source)
+    original = (stores[0] / CENTER_FILE).read_bytes()
     if change == "source":
         center_source(tmp_path, b"d" * 64)
     else:
-        target = {
-            "deployed": stores[0] / CENTER_FILE,
-            "backup": stores[1] / f"center-{CENTER}.salt",
-            "receipt": stores[2] / f"center-{CENTER}.enrolled",
-        }[change]
+        target = stores[1] / f"center-{CENTER}.salt"
         target.chmod(0o600)
         target.write_bytes(b"e" * 64 + b"\n")
-    before = snapshot(stores)
-    with pytest.raises(ValueError):
-        provision_center(stores, source)
-    assert snapshot(stores) == before
+    provision_center(stores, source)
+    assert (stores[0] / CENTER_FILE).read_bytes() == original
+    if change == "backup":
+        assert (stores[1] / f"center-{CENTER}.salt").read_bytes() == original
+        kept = list(stores[1].glob(f"center-{CENTER}.salt.superseded-*"))
+        assert kept[0].read_bytes() == b"e" * 64 + b"\n"
 
 
-def test_center_manifest_for_another_center_fails_closed(stores, tmp_path):
+def test_an_active_center_is_kept_when_another_is_configured(stores, tmp_path):
     provision(stores)
     provision_center(stores, center_source(tmp_path))
     before = snapshot(stores)
-    with pytest.raises(ValueError, match="manifest differs"):
-        provision_center(stores, center_source(tmp_path), center="rbk_stuttgart")
+    provision_center(stores, center_source(tmp_path), center="rbk_stuttgart")
     assert snapshot(stores) == before
 
 
-def test_machine_mode_refuses_to_switch_back_from_center_manifest(stores, tmp_path):
+def test_an_active_center_is_kept_when_the_inventory_leaves_it(stores, tmp_path):
     provision(stores)
     provision_center(stores, center_source(tmp_path))
     before = snapshot(stores)
-    with pytest.raises(ValueError, match="manifest differs"):
-        provision(stores)
+    provision(stores)
     assert snapshot(stores) == before
 
 
-def test_lost_machine_generation_is_never_silently_dropped(stores, tmp_path):
+def test_a_lost_machine_salt_does_not_stop_a_center_host(stores, tmp_path):
     provision(stores)
     provision_center(stores, center_source(tmp_path))
     for directory in stores:
         for name in (ACTIVE, "active.salt"):
             if (directory / name).exists():
                 (directory / name).unlink()
-    with pytest.raises(ValueError, match="Previously enrolled"):
-        provision_center(stores, center_source(tmp_path))
+    provision_center(stores, center_source(tmp_path))
+    manifest = yaml.safe_load((stores[0] / MANIFEST).read_text())
+    assert str(stores[0] / ACTIVE) not in manifest["retiring"]
+    assert (stores[0] / CENTER_FILE).exists()
+    assert list(stores[1].glob("enrolled.superseded-*"))
 
 
 @pytest.mark.parametrize("kind", ["missing", "public", "symlink", "default"])
-def test_center_source_failure_never_replaces_established_machine_salt(
+def test_center_source_failure_keeps_the_machine_salt_and_continues(
     stores, tmp_path, kind
 ):
     provision(stores)
@@ -264,8 +266,7 @@ def test_center_source_failure_never_replaces_established_machine_salt(
             b"default_salt\n" if kind == "default" else b"c" * 64 + b"\n"
         )
         source.chmod(0o644 if kind == "public" else 0o600)
-    with pytest.raises((ValueError, OSError)):
-        provision_center(stores, source)
+    provision_center(stores, source)
     assert snapshot(stores) == before
 
 
@@ -275,11 +276,15 @@ def test_unsafe_center_keys_are_rejected(stores, tmp_path, center):
         provision_center(stores, center_source(tmp_path), center=center)
 
 
-def test_missing_center_source_never_generates_a_machine_identity(stores, tmp_path):
-    with pytest.raises(ValueError, match="unavailable"):
-        provision_center(stores, tmp_path / "missing")
+def test_a_center_salt_delivered_later_enrolls_over_the_host_salt(stores, tmp_path):
+    missing = tmp_path / "center-identity"
+    provision_center(stores, missing)
     assert (stores[0] / ACTIVE).read_bytes() == b"a" * 64 + b"\n"
     assert not (stores[0] / CENTER_FILE).exists()
+    provision_center(stores, center_source(tmp_path))
+    manifest = yaml.safe_load((stores[0] / MANIFEST).read_text())
+    assert manifest["active"] == str(stores[0] / CENTER_FILE)
+    assert str(stores[0] / ACTIVE) in manifest["retiring"]
 
 
 def test_cli_requires_center_for_source_salt(stores, tmp_path):
@@ -307,33 +312,48 @@ def test_cli_requires_center_for_source_salt(stores, tmp_path):
 
 
 @pytest.mark.parametrize("evidence", ["manifest", "receipt", "legacy"])
-def test_never_regenerates_if_only_enrollment_evidence_survives(stores, evidence):
+def test_a_host_left_with_only_traces_gets_a_new_salt(stores, evidence):
     provision(stores)
     keep = {"manifest": MANIFEST, "receipt": "enrolled", "legacy": LEGACY}[evidence]
     for directory in stores:
         for path in directory.iterdir():
             if path.name not in {keep, ".lock"}:
                 path.unlink()
-    with pytest.raises(ValueError, match="Previously enrolled"):
-        provision(stores)
-    assert not (stores[0] / ACTIVE).exists()
+    provision(stores)
+    created = (stores[0] / ACTIVE).read_bytes().strip()
+    assert len(created) == 64 and created != b"a" * 64
+    assert (stores[0] / LEGACY).read_bytes() == b"default_salt\n"
+    if evidence == "receipt":
+        assert list(stores[1].glob("enrolled.superseded-*"))
+    provision(stores)
+    assert (stores[0] / ACTIVE).read_bytes().strip() == created
+
+
+def test_a_host_that_used_default_salt_gets_a_real_one_and_can_still_read_it(stores):
+    (stores[0] / ACTIVE).write_bytes(b"default_salt\n")
+    provision(stores)
+    created = (stores[0] / ACTIVE).read_bytes().strip()
+    assert len(created) == 64
+    manifest = yaml.safe_load((stores[0] / MANIFEST).read_text())
+    assert manifest["allow_legacy_default_salt"] is True
+    assert str(stores[0] / LEGACY) in manifest["retiring"]
+    assert list(stores[0].glob(f"{ACTIVE}.superseded-*"))
 
 
 @pytest.mark.parametrize("index", [0, 1, 2])
-def test_conflicting_copies_are_preserved(stores, index):
+def test_conflicting_copies_resolve_to_the_receipted_salt_and_are_kept(stores, index):
     provision(stores)
-    target = stores[index] / (ACTIVE if index == 0 else "active.salt")
+    original = (stores[0] / ACTIVE).read_bytes()
+    name = ACTIVE if index == 0 else "active.salt"
+    target = stores[index] / name
     target.chmod(0o600)
     target.write_bytes(b"different-test-salt\n")
-    before = {
-        path: path.read_bytes()
-        for directory in stores
-        for path in directory.iterdir()
-        if path.name != ".lock"
-    }
-    with pytest.raises(ValueError, match="disagree"):
-        provision(stores)
-    assert all(path.read_bytes() == value for path, value in before.items())
+    provision(stores)
+    assert (stores[0] / ACTIVE).read_bytes() == original
+    assert (stores[1] / "active.salt").read_bytes() == original
+    assert (stores[2] / "active.salt").read_bytes() == original
+    kept = list(stores[index].glob(f"{name}.superseded-*"))
+    assert kept[0].read_bytes() == b"different-test-salt\n"
 
 
 @pytest.mark.parametrize("failure_after", range(1, 7))
@@ -358,8 +378,9 @@ def test_interrupted_publication_resumes_same_salt(stores, monkeypatch, failure_
 
 
 @pytest.mark.parametrize("kind", ["symlink", "empty", "public", "receipt", "manifest"])
-def test_unsafe_or_corrupt_inputs_fail_closed(stores, kind):
+def test_unusable_files_are_set_aside_and_the_salt_survives(stores, kind):
     provision(stores)
+    original = (stores[1] / "active.salt").read_bytes()
     active = stores[0] / ACTIVE
     if kind == "symlink":
         active.unlink()
@@ -374,8 +395,12 @@ def test_unsafe_or_corrupt_inputs_fail_closed(stores, kind):
         receipt.write_bytes(b"incorrect\n")
     else:
         (stores[0] / MANIFEST).write_text("active: /different/generation\n")
-    with pytest.raises((ValueError, OSError)):
-        provision(stores)
+    provision(stores)
+    assert (stores[0] / ACTIVE).read_bytes() == original
+    assert not (stores[0] / ACTIVE).is_symlink()
+    assert (stores[0] / ACTIVE).stat().st_mode & 0o077 == 0
+    manifest = yaml.safe_load((stores[0] / MANIFEST).read_text())
+    assert manifest["active"] == str(stores[0] / ACTIVE)
 
 
 def test_cli_requires_authoritative_source_and_encrypted_storage(stores):
@@ -383,7 +408,10 @@ def test_cli_requires_authoritative_source_and_encrypted_storage(stores):
     assert result.returncode == 2
 
 
-def test_missing_authoritative_salt_never_generates_locally(tmp_path):
+def test_a_new_host_creates_its_own_random_salt(tmp_path):
     stores = tuple(tmp_path / name for name in ("deployed", "recovery", "replica"))
-    with pytest.raises(ValueError, match="explicitly requested"):
-        provision(stores)
+    provision(stores)
+    first = (stores[0] / ACTIVE).read_bytes().strip()
+    assert len(first) == 64
+    provision(stores)
+    assert (stores[0] / ACTIVE).read_bytes().strip() == first

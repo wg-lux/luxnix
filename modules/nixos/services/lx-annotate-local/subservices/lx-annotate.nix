@@ -15,16 +15,14 @@ with ctx;
     ++ localRedisServiceUnits
     ++ localPostgresServiceUnits
     ++ localPostgresSetupUnits
-    ++ managedSecretsSetupUnits
-    ++ encryptionServiceUnits;
+    ++ managedSecretsSetupUnits;
     requires = [
       "lx-annotate-runtime-env.service"
       "lx-annotate-load-base-data.service"
       "lx-annotate-master-key-check.service"
     ]
     ++ dataRecoveryServiceUnits
-    ++ managedSecretsSetupUnits
-    ++ encryptionServiceUnits;
+    ++ managedSecretsSetupUnits;
     after = [
       "lx-annotate-runtime-env.service"
       "lx-annotate-load-base-data.service"
@@ -36,8 +34,7 @@ with ctx;
     ++ localRedisServiceUnits
     ++ localPostgresServiceUnits
     ++ localPostgresSetupUnits
-    ++ managedSecretsSetupUnits
-    ++ encryptionServiceUnits;
+    ++ managedSecretsSetupUnits;
     unitConfig = encryptedDataMountUnitConfig // {
       # Keep retrying transient process failures without a permanent rate-limit latch.
       StartLimitIntervalSec = 0;

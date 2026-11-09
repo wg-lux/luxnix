@@ -181,124 +181,6 @@ let
       };
     };
   };
-  managedEncryptedDataType = types.submodule {
-    options = {
-      enable = mkOption {
-        type = types.bool;
-        default = false;
-        description = "Manage the lx-annotate encrypted data directory with a local LUKS-backed systemd unit.";
-      };
-      luksUuid = mkOption {
-        type = types.nullOr types.str;
-        default = null;
-        description = "LUKS UUID opened by lx-annotate-encrypted-data.service.";
-      };
-      keyFile = mkOption {
-        type = types.nullOr types.path;
-        default = null;
-        description = "Key file used to unlock the encrypted data volume.";
-      };
-      luksUuidFile = mkOption {
-        type = types.nullOr types.path;
-        default = null;
-        description = "Optional file containing the LUKS UUID for the encrypted data volume.";
-      };
-      mapperName = mkOption {
-        type = types.str;
-        default = "lx-annotate-data";
-        description = "Device-mapper name used for the unlocked encrypted data volume.";
-      };
-      fsType = mkOption {
-        type = types.str;
-        default = "ext4";
-        description = "Filesystem type mounted for the encrypted lx-annotate data volume.";
-      };
-      mountOptions = mkOption {
-        type = types.listOf types.str;
-        default = [ "defaults" ];
-        description = "Mount options passed to the encrypted data volume mount.";
-      };
-      owner = mkOption {
-        type = types.str;
-        default = "endoreg-service-user";
-        description = "Owner applied to the mounted encrypted data directory.";
-      };
-      group = mkOption {
-        type = types.str;
-        default = "endoreg-service";
-        description = "Group applied to the mounted encrypted data directory.";
-      };
-      dirMode = mkOption {
-        type = types.str;
-        default = "0750";
-        description = "Permissions applied to the mounted encrypted data directory.";
-      };
-      after = mkOption {
-        type = types.listOf types.str;
-        default = [ "managed-secrets-setup.service" ];
-        description = "Additional units ordered before the encrypted data service starts.";
-      };
-      requires = mkOption {
-        type = types.listOf types.str;
-        default = [ "managed-secrets-setup.service" ];
-        description = "Additional units required by the encrypted data service.";
-      };
-    };
-  };
-  vaultManagedEncryptedDataType = types.submodule {
-    options = {
-      enable = mkOption {
-        type = types.bool;
-        default = false;
-        description = "Fetch lx-annotate encrypted-data unlock material from Vault via managed-secrets.";
-      };
-      keyFilePath = mkOption {
-        type = types.path;
-        default = "/etc/secrets/vault/lx_annotate_luks.key";
-        description = "Local path where the Vault-backed LUKS key is written.";
-      };
-      luksUuidFilePath = mkOption {
-        type = types.path;
-        default = "/etc/secrets/vault/lx_annotate_luks.uuid";
-        description = "Local path where the Vault-backed LUKS UUID is written.";
-      };
-      masterKeyFilePath = mkOption {
-        type = types.path;
-        default = "/etc/secrets/vault/lx_annotate_master_key";
-        description = "Local path where the Vault-backed application master key is written.";
-      };
-      vaultPathTemplate = mkOption {
-        type = types.str;
-        default = "secret/data/nodes/{hostname}/lx-annotate";
-        description = "Vault KV path template. {hostname} is replaced with networking.hostName.";
-      };
-      vaultKeyField = mkOption {
-        type = types.str;
-        default = "luks_key";
-        description = "Field name in the Vault payload that contains the raw LUKS key material.";
-      };
-      vaultUuidField = mkOption {
-        type = types.str;
-        default = "luks_uuid";
-        description = "Field name in the Vault payload that contains the LUKS UUID.";
-      };
-      vaultMasterKeyField = mkOption {
-        type = types.str;
-        default = "app_master_key";
-        description = "Field name in the Vault payload that contains the application-layer master key.";
-      };
-      manageMasterKey = mkOption {
-        type = types.bool;
-        default = true;
-        description = "Whether to provision the application master key from the same hostname-scoped Vault payload.";
-      };
-      setupService = mkOption {
-        type = types.str;
-        default = "managed-secrets-setup.service";
-        description = "Systemd unit responsible for delivering the Vault-backed lx-annotate secret files.";
-      };
-    };
-  };
   ffmpegStreamThrottleProfileType = types.submodule {
     options = {
       cpuQuota = mkOption {
@@ -437,12 +319,6 @@ let
         description = "Canonical lx-annotate intake directories.";
       };
 
-      encryptionService = mkOption {
-        type = types.nullOr types.str;
-        default = null;
-        description = "Optional systemd unit that unlocks or mounts the encrypted lx-annotate data directory.";
-      };
-
       masterKeyFile = mkOption {
         type = types.nullOr types.path;
         default = null;
@@ -461,17 +337,6 @@ let
         description = "Local path where the auto-generated per-machine application master key is written.";
       };
 
-      managedEncryptedData = mkOption {
-        type = managedEncryptedDataType;
-        default = { };
-        description = "Managed encrypted data mount configuration for lx-annotate.";
-      };
-
-      vaultManagedEncryptedData = mkOption {
-        type = vaultManagedEncryptedDataType;
-        default = { };
-        description = "Hostname-aware Vault-backed provisioning for lx-annotate encrypted data secrets.";
-      };
     };
 
     resources = {
@@ -670,16 +535,11 @@ let
         );
         encryptedDataDir = lib.mkDefault runtimeCfg.encryptedDataDir;
         intakeDirs = lib.mkDefault runtimeCfg.intakeDirs;
-        encryptionService = lib.mkIf (runtimeCfg.encryptionService != null) (
-          lib.mkDefault runtimeCfg.encryptionService
-        );
         masterKeyFile = lib.mkIf (runtimeCfg.masterKeyFile != null) (
           lib.mkDefault runtimeCfg.masterKeyFile
         );
         autoGenerateMasterKey = lib.mkDefault runtimeCfg.autoGenerateMasterKey;
         autoGeneratedMasterKeyFilePath = lib.mkDefault runtimeCfg.autoGeneratedMasterKeyFilePath;
-        managedEncryptedData = lib.mkDefault runtimeCfg.managedEncryptedData;
-        vaultManagedEncryptedData = lib.mkDefault runtimeCfg.vaultManagedEncryptedData;
         tessdataPrefix = lib.mkIf (runtimeCfg.tessdataPrefix != null) (
           lib.mkDefault runtimeCfg.tessdataPrefix
         );

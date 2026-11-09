@@ -11,7 +11,6 @@ import shlex
 import socket
 import subprocess
 import sys
-import time
 from typing import Literal, TextIO
 from uuid import uuid4
 
@@ -35,7 +34,6 @@ MILESTONES = (
     "System installed",
     "Physical acceptance recorded",
 )
-ENROLLMENT_ACCEPTANCE = "center-salt-acceptance.json"
 RETIRE_HINT = (
     "To remove old containers: devenv shell boot-storage-setup retire-containers"
 )
@@ -577,26 +575,7 @@ def advance(state: Path, *, apply: bool = False) -> NextStep:
 
 
 def save_plan(spec: dict, state: Path) -> None:
-    """Every plan settles first setup first, since it changes the pinned revision."""
-    accepted_by = None
-    if not (state / "plan.json").exists():
-        if sys.stdin.isatty():
-            from lx_administration.storage import first_setup
-
-            accepted_by = first_setup.run(Path(spec["checkout"]), spec["host"])
-        else:
-            print(
-                "No terminal, so first setup was not offered. Review the salt with: "
-                "devenv shell boot-storage-setup first-setup",
-                file=sys.stderr,
-            )
     migration.plan_spec(spec, state)
-    if accepted_by:
-        # Before prepare, so a failure there cannot lose a typed acceptance.
-        migration.atomic_json(
-            state / ENROLLMENT_ACCEPTANCE,
-            {"accepted_by": accepted_by, "accepted_at": time.time()},
-        )
     prepare(state)
     success(PLAN_SAVED)
 
@@ -1010,7 +989,6 @@ def main() -> None:
     )
     for action in (
         "guide",
-        "first-setup",
         "plan",
         "next",
         "advance",
@@ -1071,12 +1049,6 @@ def main() -> None:
                 metavar="ID",
                 help="State that this required item never existed on this host",
             )
-            command.add_argument(
-                "--accept-salt-loss",
-                action="store_true",
-                help="Accept, by typed confirmation, that salts missing from this host "
-                "and custody may lose imported records",
-            )
         if action == "attest":
             command.add_argument("--stage", choices=migration.STAGES, required=True)
             command.add_argument("--evidence", type=Path, required=True)
@@ -1095,12 +1067,6 @@ def main() -> None:
                 boot_guide.run(
                     host, args.config, device=args.device, custody=args.custody
                 )
-                return
-            if args.action == "first-setup":
-                from lx_administration.storage import first_setup
-
-                spec, _ = target_spec(args.config, host)
-                first_setup.run(Path(spec["checkout"]), host, ask_delivery=False)
                 return
             spec, state = configured_target(args.config, host)
             if args.action not in {"run", "status"} and not args.json:
@@ -1139,25 +1105,13 @@ def main() -> None:
                 retire_containers(state, apply=args.apply)
                 return
             case "preflight":
-                from lx_administration.storage import first_setup, secret_preflight
+                from lx_administration.storage import secret_preflight
 
-                accepted_by = None
-                if args.accept_salt_loss:
-                    if not sys.stdin.isatty():
-                        raise migration.MigrationError(
-                            "Accepting data loss needs a private interactive terminal"
-                        )
-                    from lx_administration.storage import boot_guide
-
-                    accepted_by = boot_guide.settle_missing_salts(
-                        host, state, args.custody
-                    )
                 secret_preflight.run(
                     state,
                     args.custody,
                     key_custody=args.vault_key_custody,
                     accept_absent=tuple(args.accept_absent),
-                    salt_loss_accepted_by=accepted_by,
                 )
             case "review":
                 review(state, args.assessor, args.report)

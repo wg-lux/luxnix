@@ -586,8 +586,6 @@ def _gc_02_extended_contracts() -> dict[str, Any]:
                   externalServices = {
                     redisUrl = "rediss://redis.lx-annotate.svc.cluster.local:6379/1";
                   };
-                  managedEncryptedData.enable = false;
-                  vaultManagedEncryptedData.enable = false;
                 };
               })
             ];

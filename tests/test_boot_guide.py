@@ -54,25 +54,6 @@ def test_mounted_custody_is_not_mounted_again(monkeypatch):
     assert not [c for c in seen if c[0] in {"mount", "cryptsetup"}]
 
 
-def test_first_setup_runs_only_before_a_plan_exists(monkeypatch, tmp_path):
-    state = tmp_path / "gc-09"
-    state.mkdir()
-    (state / "plan.json").write_text("{}")
-    called = []
-    spec = {"checkout": str(tmp_path), "host": "gc-09", "disks": []}
-    monkeypatch.setattr(guide.sys.stdin, "isatty", lambda: True, raising=False)
-    monkeypatch.setattr(setup, "target_spec", lambda *a: (spec, state))
-    monkeypatch.setattr(setup, "show_target", lambda *a: None)
-    monkeypatch.setattr(guide.recovery_media, "setup", lambda *a, **k: None)
-    monkeypatch.setattr(guide, "replace_stale_plan", lambda *a: None)
-    monkeypatch.setattr(guide.first_setup, "run", lambda *a: called.append(a))
-    monkeypatch.setattr(setup, "next_step", lambda s: step(["console_boot_tested"]))
-    monkeypatch.setattr(guide, "recovery_stage", lambda *a: None)
-    monkeypatch.setattr(setup, "drive", lambda *a: None)
-    guide.run("gc-09", tmp_path)
-    assert not called
-
-
 def test_a_new_custody_needs_typed_approval(monkeypatch):
     seen, results = commands(monkeypatch)
     results["test"] = 1  # the file does not exist
@@ -82,19 +63,6 @@ def test_a_new_custody_needs_typed_approval(monkeypatch):
     assert not [c for c in seen if "luksFormat" in c]
 
 
-def test_declining_to_copy_copies_nothing(monkeypatch, tmp_path):
-    pair = (tmp_path / "live", tmp_path / "copy")
-    monkeypatch.setattr(guide.secret_preflight, "missing_copies", lambda *a: [pair])
-    copied = []
-    monkeypatch.setattr(
-        guide.secret_preflight, "copy_to_custody", lambda *a: copied.append(a)
-    )
-    answers(monkeypatch, "n")
-    with pytest.raises(guide.Stopped):
-        guide.fill_custody(tmp_path, tmp_path, reopenable=True)
-    assert not copied
-
-
 def test_copies_are_proven_by_closing_and_reopening(monkeypatch, tmp_path):
     pair = (tmp_path / "live", tmp_path / "copy")
     monkeypatch.setattr(guide.secret_preflight, "missing_copies", lambda *a: [pair])
@@ -102,7 +70,7 @@ def test_copies_are_proven_by_closing_and_reopening(monkeypatch, tmp_path):
     order = []
     monkeypatch.setattr(guide, "close_custody", lambda: order.append("close"))
     monkeypatch.setattr(guide, "open_custody", lambda: order.append("open"))
-    answers(monkeypatch, "y")
+    answers(monkeypatch)
     guide.fill_custody(tmp_path, tmp_path, reopenable=True)
     assert order == ["close", "open"]
 
@@ -232,14 +200,12 @@ def test_a_started_plan_is_never_replaced(monkeypatch, tmp_path):
     assert not seen
 
 
-def test_replacing_a_plan_needs_typed_approval_and_keeps_it(monkeypatch, tmp_path):
+def test_a_stale_unstarted_plan_is_replaced_without_asking_and_kept(
+    monkeypatch, tmp_path
+):
     seen, _ = commands(monkeypatch)
     state = plan_state(monkeypatch, tmp_path, stale=True, started=False)
-    answers(monkeypatch, "yes")
-    with pytest.raises(guide.Stopped):
-        guide.replace_stale_plan(state, {"host": "gc-09"})
-    assert not seen
-    answers(monkeypatch, "REPLACE PLAN gc-09")
+    answers(monkeypatch)
     guide.replace_stale_plan(state, {"host": "gc-09"})
     assert seen[0][:3] == ("mv", "-n", str(state))
     assert "gc-09.superseded-" in seen[0][3]
@@ -294,65 +260,7 @@ def test_retiring_containers_asks_for_root_itself(monkeypatch):
     assert executed["arguments"][-2:] == ["retire-containers", "--apply"]
 
 
-def orphan(tmp_path, *, copy):
-    return {
-        "active": "/vault/active",
-        "traces": ["/vault/keyring.yml", "/recovery/enrolled"],
-        "copy": tmp_path / "copy" if copy else None,
-    }
-
-
-def test_no_orphaned_salt_asks_nothing(monkeypatch, tmp_path):
-    monkeypatch.setattr(guide.secret_preflight, "orphaned_salt", lambda *a: None)
-    answers(monkeypatch)
-    assert guide.settle_orphaned_salt("gc-09", tmp_path, tmp_path) is None
-
-
-def test_a_lost_salt_can_be_restored_from_custody(monkeypatch, tmp_path):
-    found = orphan(tmp_path, copy=True)
-    monkeypatch.setattr(guide.secret_preflight, "orphaned_salt", lambda *a: found)
-    restored = []
-    monkeypatch.setattr(
-        guide.secret_preflight, "restore_salt", lambda *a: restored.append(a)
-    )
-    monkeypatch.setattr(
-        guide.secret_preflight, "set_aside", lambda p: pytest.fail("no")
-    )
-    answers(monkeypatch, "1")
-    assert guide.settle_orphaned_salt("gc-09", tmp_path, tmp_path) is None
-    assert restored == [(found["copy"], "/vault/active")]
-
-
-def test_without_a_copy_restoring_is_not_offered(monkeypatch, tmp_path, capsys):
-    found = orphan(tmp_path, copy=False)
-    monkeypatch.setattr(guide.secret_preflight, "orphaned_salt", lambda *a: found)
-    monkeypatch.setattr(
-        guide.secret_preflight, "restore_salt", lambda *a: pytest.fail("no")
-    )
-    answers(monkeypatch, "1")
-    with pytest.raises(guide.Stopped):
-        guide.settle_orphaned_salt("gc-09", tmp_path, tmp_path)
-    assert "Restore it from custody" not in capsys.readouterr().out
-
-
-def test_starting_fresh_needs_acceptance_and_keeps_the_traces(monkeypatch, tmp_path):
-    found = orphan(tmp_path, copy=True)
-    monkeypatch.setattr(guide.secret_preflight, "orphaned_salt", lambda *a: found)
-    moved = []
-    monkeypatch.setattr(
-        guide.secret_preflight, "set_aside", lambda p: moved.append(p) or ["kept"]
-    )
-    answers(monkeypatch, "2", "no")
-    with pytest.raises(guide.Stopped):
-        guide.settle_orphaned_salt("gc-09", tmp_path, tmp_path)
-    assert not moved
-    answers(monkeypatch, "2", "ACCEPT DATA LOSS gc-09", "A. Operator")
-    assert guide.settle_orphaned_salt("gc-09", tmp_path, tmp_path) == "A. Operator"
-    assert moved == [found["traces"]]
-
-
 def test_custody_mounts_without_suid_devices_or_execution(monkeypatch):
     seen, _ = commands(monkeypatch)
     guide.mount_custody()
     assert ("mount", "-o", "nosuid,nodev,noexec") == seen[-1][:3]
-

@@ -19,7 +19,6 @@ from uuid import uuid4
 from lx_administration.storage import boot_migration as migration
 from lx_administration.storage import boot_setup as setup
 from lx_administration.storage import (
-    first_setup,
     recovery_custody,
     recovery_media,
     secret_preflight,
@@ -139,9 +138,7 @@ def fill_custody(state: Path, custody: Path, *, reopenable: bool) -> None:
     print(f"\nThese {len(missing)} secrets are not in custody yet:")
     for live, _ in missing:
         print(f"  {live}")
-    print(f"They are copied to {custody}; the originals are not changed.")
-    if input("Copy them now? [y/N] ").strip().lower() not in {"y", "yes"}:
-        raise Stopped("Nothing was copied.")
+    print(f"Copying them to {custody}; the originals are not changed.")
     for live, copy in missing:
         secret_preflight.copy_to_custody(live, copy)
     setup.success(f"Copied {len(missing)} secrets into custody.")
@@ -236,18 +233,10 @@ def measured_detail(check: str, spec: dict, state: Path) -> str:
             f"secrets in {receipt['custody']}, outside the selected disks, and the "
             "admin password against its saved hash."
         )
-        lost = [i["path"] for i in receipt["items"] if i["status"] == "accepted-loss"]
-        if lost:
-            detail += (
-                f" {receipt['salt_loss_accepted_by']} accepted possible data loss for "
-                f"missing salts: {', '.join(lost)}."
-            )
-        if (state / setup.ENROLLMENT_ACCEPTANCE).exists():
-            acceptance = json.loads((state / setup.ENROLLMENT_ACCEPTANCE).read_text())
-            detail += (
-                f" {acceptance['accepted_by']} accepted continuing without center "
-                "salt enrollment."
-            )
+        items = receipt["items"]
+        fresh = [i["path"] for i in items if i["status"] == "salt-regenerated"]
+        if fresh:
+            detail += f" New salts will be created for: {', '.join(fresh)}."
         print(detail)
         if check == "independent_credentials_tested":
             print("Yours to confirm: the custody passphrase is off this computer.")
@@ -316,68 +305,14 @@ def write_notes(state: Path, answers: dict) -> Path:
     return notes
 
 
-LOSS_WARNING = (
-    "If this salt never held data, nothing is lost. Otherwise records imported with it "
-    "cannot be matched to their patients again. If a locked container is hiding it, "
-    "stop and unlock it first."
-)
-
-
-def settle_orphaned_salt(host: str, state: Path, custody: Path) -> str | None:
-    """Offer every way forward for a lost salt; return who accepted starting fresh."""
-    orphan = secret_preflight.orphaned_salt(state, custody)
-    if orphan is None:
-        return None
-    print(f"\nThis host's salt {orphan['active']} is gone, but traces of it remain:")
-    print("  " + "\n  ".join(orphan["traces"]))
-    restorable = orphan["copy"] is not None
-    if restorable:
-        print("1. Restore it from custody (recommended; nothing is lost)")
-    print("2. Set the traces aside and let this host create a new salt")
-    print("3. Stop for now")
-    answer = input("> ").strip()
-    if answer == "1" and restorable:
-        secret_preflight.restore_salt(orphan["copy"], orphan["active"])
-        setup.success("The salt was restored from custody.")
-        return None
-    if answer != "2":
-        raise Stopped("Nothing was changed.")
-    accepted_by = first_setup.accept_data_loss(host, LOSS_WARNING)
-    moved = secret_preflight.set_aside(orphan["traces"])
-    print("Kept for review:\n  " + "\n  ".join(moved))
-    return accepted_by
-
-
-def accept_missing_salts(
-    host: str, state: Path, custody: Path, accepted_by: str | None
-) -> str | None:
-    missing = secret_preflight.missing_salts(state, custody)
-    if not missing or accepted_by:
-        return accepted_by
-    return first_setup.accept_data_loss(
-        host,
-        "These salts are not on this host or in custody:\n  "
-        + "\n  ".join(missing)
-        + f"\n{LOSS_WARNING}",
-    )
-
-
-def settle_missing_salts(host: str, state: Path, custody: Path) -> str | None:
-    accepted_by = settle_orphaned_salt(host, state, custody)
-    return accept_missing_salts(host, state, custody, accepted_by)
-
-
 def recovery_stage(spec: dict, state: Path, custody: Path | None) -> None:
     reopenable = custody is None
     directory = custody or ensure_custody()
     if not setup.preflight_passed(state):
-        # Settled first, so custody then copies what remains, set-aside files included.
-        accepted_by = settle_orphaned_salt(spec["host"], state, directory)
+        for path in secret_preflight.restore_lost_salts(state, directory):
+            print(f"Restored {path} from custody.")
         fill_custody(state, directory, reopenable=reopenable)
-        accepted_by = accept_missing_salts(
-            spec["host"], state, directory, accepted_by
-        )
-        secret_preflight.run(state, directory, salt_loss_accepted_by=accepted_by)
+        secret_preflight.run(state, directory)
     step = setup.next_step(state)
     answers = ask_checks(spec, state, step)
     assessor = os.environ.get("USER") or input("Name of the operator: ").strip()
@@ -411,14 +346,7 @@ def replace_stale_plan(state: Path, spec: dict) -> None:
             "The checkout or Autoconf changed, but this plan has started. Restore the "
             "planned revision to continue it; the plan cannot be replaced now"
         )
-    print(
-        "\nThe checkout or Autoconf changed since this plan was saved, and the plan "
-        "has not started. Replacing it keeps the old one and repeats preflight and "
-        "the checks."
-    )
-    phrase = f"REPLACE PLAN {spec['host']}"
-    if input(f"Type {phrase} to continue: ") != phrase:
-        raise Stopped("The plan was not replaced.")
+    print("\nThe checkout changed before this plan started, so it is being replaced.")
     kept = state.with_name(f"{state.name}.superseded-{uuid4().hex[:8]}")
     if not quiet("mv", "-n", str(state), str(kept)):
         raise migration.MigrationError(f"Could not move {state} aside; nothing changed")

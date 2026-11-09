@@ -492,8 +492,8 @@ sudo find /var/lib/lx-annotate/data/import/mover-staging -maxdepth 2 -printf '%T
 ## Storage and encrypted data
 
 ```bash
-sudo systemctl status lx-annotate-encrypted-data.service
-sudo journalctl -u lx-annotate-encrypted-data.service -n 200 --no-pager
+sudo systemctl list-units 'luxnix-storage-*'
+sudo journalctl -u 'luxnix-storage-*' -n 200 --no-pager
 findmnt /var/lib/lx-annotate/data
 findmnt -T /var/lib/lx-annotate/data
 df -h /var/lib/lx-annotate /var/lib/lx-annotate/data

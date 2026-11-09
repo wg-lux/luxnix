@@ -30,47 +30,32 @@ for h in $(nix eval --json '.#nixosConfigurations' --apply builtins.attrNames | 
 done
 ```
 
-## Choosing the salt at first setup
+## How a host gets its salt
 
-`devenv shell boot-storage-setup` asks this before it creates an encryption plan. To
-open the same console on its own, add `first-setup`.
+No operator decides this, and nobody setting up a machine is asked about it. LX-Annotate's
+salt unit always leaves a working keyring:
 
-**Use the host's own salt.** With `django.createInitialIdentitySalt` set, LX-Annotate
-creates a random one on first start if the host has no trace of one, and only that host
-keeps it. The console offers to set this when it finds no salt. It stays per host so a
-reinstalled host waits for its custody copy instead of creating a new salt first. The hub must not be able to reverse the pseudonyms
-it receives, and a center salt held in gs-02's Vault would let its operator do that. The
-cost is that machines of a center no longer share patient identities.
+| Situation | What the host does |
+| --- | --- |
+| No usable salt, or only `default_salt` | Creates a random salt that only this host holds; `default_salt` stays a reader |
+| A copy is missing | Restores it from any surviving copy |
+| Copies disagree | Keeps the copy matching a receipt, otherwise the deployed one |
+| An active center salt | Keeps it for good, whatever the inventory or Vault says |
+| Configured for a center, not delivered yet | Uses its own salt until Vault can deliver the center salt |
 
-The console therefore never offers a center as a new choice. A host already configured
-for one is told this and can move to its own salt, unless the center salt is already
-active: there is no supported way back, so the console does not offer it. If storage is
-locked it cannot tell, so it offers only keeping the setting; unlock and rerun to move.
-Choosing writes the
-host's inventory through `ansible/playbooks/first-setup-config.yml` and regenerates.
-Commit the result, then rerun: the plan and RAM image pin that revision.
+Anything unusable is kept under a `.superseded-<id>` name rather than deleted, and the
+journal names the file, never a value. During migration, the guided command restores any
+salt file that custody still holds before the host could replace it.
 
-A host that keeps a center salt still needs the enrollment below. If the salt is not on
-the host, the console stops until you confirm that enrollment or type
-`ACCEPT DATA LOSS <host>` and name who accepts continuing. LX-Annotate then stays stopped
-after encryption until enrollment runs.
+A new salt cannot read records hashed with a salt that is truly gone, so those no longer
+match their patients; the superseded files are what recovery would start from. The one
+thing that still stops the unit is storage that is not encrypted, because a salt is never
+written to plaintext.
 
-```bash
-devenv shell enroll-reachable-hub-sites --site gc-09
-```
-
-Replace `gc-09` with the host.
-
-A new random salt is created only when the host has no trace of one. If traces exist but
-the salt is gone, the guided command offers a way forward: restore the salt from custody
-if a copy exists, or set the traces aside with a `.superseded-<time>` suffix and start
-with a new salt. They are never deleted. A salt missing from the host and custody needs
-`ACCEPT DATA LOSS <host>`, recorded in the plan's notes, because records imported with a
-lost salt cannot be matched to their patients again. A salt still on the host is always
-copied into custody, and the media master key can never be accepted as lost. A locked
-container hides that key too, so preflight still stops; unlock it instead of accepting.
-
-The rest of this page applies only to centers that keep a shared salt.
+The hub must not be able to reverse the pseudonyms it receives, and a center salt held in
+gs-02's Vault would let its operator do that. Prefer the host's own salt. Whether a host
+uses a center is an administrator's inventory setting (`centerIdentitySalt`), and machines
+of a center then share patient identities. The rest of this page applies only to those.
 
 ## Opting a center in
 
@@ -122,10 +107,8 @@ The provisioner (`scripts/provision-identity-salts.py`) never rewrites a salt fi
 New identities and new hub pseudonyms use the center salt. The machine salt and
 `default_salt` stay as read-only retiring readers for existing hashes.
 
-The unit fails closed (no LX-Annotate start) when the Vault source is missing,
-any center copy or receipt disagrees with Vault, the manifest names another
-center, or an enrolled machine salt has disappeared. It never generates a local
-replacement.
+The established copies win over Vault, and a missing Vault source never stops the
+host; see [How a host gets its salt](#how-a-host-gets-its-salt).
 
 ## 1. Before deployment
 
@@ -243,9 +226,9 @@ If salt files are damaged or lost:
 | Situation | Recovery |
 | --- | --- |
 | One of the three copies of a generation is missing | `sudo systemctl start lx-annotate-identity-salts.service` restores it from the others. |
-| Deployed center salt and both recovery copies lost | Restore from backup. The receipts guarantee that only the identical Vault value is accepted. |
-| Machine salt lost in all three places | The unit fails with "Previously enrolled salt is missing". Restore `lx_annotate_identity_active` (or `active.salt`) from backup. Vault cannot supply it and no replacement is generated. |
-| Copies disagree | The unit fails and keeps every copy. Compare the receipts and restore the copy whose SHA-256 matches its receipt. |
+| Deployed center salt and both recovery copies lost | The host re-enrolls the salt from Vault, or uses its own until Vault can deliver it. |
+| Machine salt lost in all three places | The host creates a new salt and sets its stale receipts aside. To read records hashed with the old one, restore it from backup. Vault cannot supply it. |
+| Copies disagree | The host keeps the copy matching its receipt and sets the others aside under `.superseded-<id>`. |
 
 Do not delete `lx_annotate_identity_active` or any `*.salt` recovery copy after
 activation. They are required to read hashes created before activation.
@@ -274,13 +257,10 @@ Until that alias migration exists, choose one per site:
 
 ## Do not
 
-- Disable `centerIdentitySalt` after activation. Machine mode refuses the center
-  manifest ("Established manifest differs") and LX-Annotate stays stopped. There
-  is no supported switch back; fix forward.
-- Change `defaultCenterKey` on an activated host. A manifest for another center
-  fails closed.
+- Disable `centerIdentitySalt` or change `defaultCenterKey` after activation, expecting
+  a change. The host keeps its active center salt; there is no supported switch.
 - Remove the center from `sharedIdentityCenters` while sites depend on it:
   reconciliation would drop their read grant, and the next boot's
   managed-secrets refresh would fail.
-- Write, delete or re-create the Vault center secret. Sites refuse any value
-  that differs from their receipts.
+- Write, delete or re-create the Vault center secret. Enrolled sites keep their own
+  copy, so a new value would split the center.

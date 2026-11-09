@@ -161,23 +161,6 @@ in
         '';
       }
       {
-        name = "lx-annotate-vault-secret-generators-remain-hostname-scoped";
-        type = "script";
-        script = ''
-          ${ntlib.helpers.path [ pkgs.gnugrep ]}
-          ${ntlib.helpers.scriptHelpers}
-          assert_file_contains ${repoRoot}/modules/nixos/services/lx-annotate-local/options/runtime.nix 'vaultPathTemplate = mkOption' "vault path template option must exist"
-          assert_file_contains ${lxAnnotateConfig} 'replaceStrings' "lx-annotate Vault secret generators must transform the configured path template"
-          assert_file_contains ${lxAnnotateConfig} '"{hostname}"' "lx-annotate Vault secret generators must keep the hostname placeholder contract"
-          assert_file_contains ${lxAnnotateConfig} 'config.networking.hostName' "lx-annotate Vault secret generators must derive the node name from networking.hostName"
-          assert_file_contains ${lxAnnotateConfig} 'cfg.runtime.vaultManagedEncryptedData.vaultPathTemplate' "lx-annotate Vault secret generators must use the configured Vault path template"
-          assert_file_contains ${lxAnnotateConfig} 'vaultKeyField' "vault key field option must exist"
-          assert_file_contains ${lxAnnotateConfig} 'vaultUuidField' "vault uuid field option must exist"
-          assert_file_contains ${lxAnnotateConfig} 'vaultMasterKeyField' "vault master key field option must exist"
-          assert_file_contains ${lxAnnotateConfig} 'manageMasterKey' "application master key provisioning must remain configurable"
-        '';
-      }
-      {
         name = "lx-annotate-runtime-propagates-encryption-env-and-mount-gating";
         type = "script";
         script = ''
@@ -194,8 +177,6 @@ in
           assert_file_contains ${lxAnnotateScripts} 'verify_encrypted_storage' "lx-annotate rebuild guard must validate encrypted storage with the application master key"
           assert_file_contains ${lxAnnotateConfig} 'ExecStart =.*runLocalMasterKeyCheckScript' "the master key systemd gate must execute the guarded wrapper"
           assert_file_contains ${lxAnnotateConfig} 'unitConfig = encryptedDataMountUnitConfig' "lx-annotate services must apply the shared encrypted-data mount contract"
-          assert_file_contains ${lxAnnotateConfig} 'encryptionServiceUnits' "lx-annotate config must derive shared encryption service dependencies"
-          assert_file_contains ${lxAnnotateConfig} '\+\+ encryptionServiceUnits' "lx-annotate app units must append encryption service dependencies"
           assert_file_contains ${lxAnnotateConfig} 'cmp -s "\$SECRET_FILE" "\$TARGET_FILE"' "Vault master key refresh must refuse accidental app-key rotation"
         '';
       }

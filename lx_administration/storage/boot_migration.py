@@ -79,7 +79,7 @@ class Stopped(Exception):
 
 
 # Receipt item states that let a preflight pass; written and verified from this one set.
-PREFLIGHT_PASSING = frozenset({"verified", "accepted-absent", "accepted-loss"})
+PREFLIGHT_PASSING = frozenset({"verified", "accepted-absent", "salt-regenerated"})
 
 
 def run(*args: str, timeout: int = 120) -> str:
@@ -667,8 +667,7 @@ def verify_preflight_receipt(path: Path, plan: dict, *, fresh: bool = True) -> N
         ) from error
     exact_keys(
         receipt,
-        ({"salt_loss_accepted_by"} & receipt.keys())
-        | {
+        {
             "schema_version",
             "kind",
             "plan_id",
@@ -682,15 +681,11 @@ def verify_preflight_receipt(path: Path, plan: dict, *, fresh: bool = True) -> N
         "Secret preflight receipt",
     )
     statuses = {item["id"]: item["status"] for item in receipt["items"]}
-    lost = {key for key, status in statuses.items() if status == "accepted-loss"}
-    if lost and (
-        not receipt.get("salt_loss_accepted_by")
-        or any(not is_salt_id(key) for key in lost)
+    if any(
+        status == "salt-regenerated" and not is_salt_id(key)
+        for key, status in statuses.items()
     ):
-        raise MigrationError(
-            "Only missing salts can be accepted as lost, by a named person; "
-            "rerun preflight"
-        )
+        raise MigrationError("Only a salt can be regenerated; rerun preflight")
     if (
         receipt["schema_version"] != 1
         or receipt["kind"] != "secret-preflight"

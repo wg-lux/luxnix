@@ -32,8 +32,6 @@ boot-storage-setup --host <host> --device <path to recovery hard drive>
 
 It does this for you:
 
-- Before there is a plan, shows how this host gets its identity salt and recommends its
-  own random salt, which the hub never holds. See [choosing the salt](center-identity-salt-activation.md#choosing-the-salt-at-first-setup).
 - Mounts the recovery drive and saves the plan. If the checkout changed and the plan
   has not started, it offers to replace the plan and keeps the old one.
 - Opens encrypted custody, or creates it after you type `CREATE CUSTODY`. It never

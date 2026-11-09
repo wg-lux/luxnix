@@ -12,16 +12,13 @@ boundaries:
 entrypoints:
   - name: migration-boot
     file: migration_boot.py
-    purpose: Discover reusable build settings, build and admit host-bound RAM images with firmware trust or physical console approval; stage an explicit one-shot boot without rebooting or encrypting.
+    purpose: Discover reusable build settings and local bundles, build and admit host-bound RAM images with firmware trust or physical console approval; stage an explicit one-shot boot without rebooting or encrypting.
   - name: credential-backup
     file: credential_backup.py
     purpose: Authenticated credential archives with stable media identity, preserved account sources and explicit drift rejection.
   - name: credential-backup-policy
     file: credential-backup-policy.yml
     purpose: Bounded optional credential scope and non-authoritative retirement candidates; no deletion rules.
-  - name: first-setup
-    file: first_setup.py
-    purpose: Steer hosts to their own random identity salt before a plan pins the revision, writing inventory through Ansible and refusing irreversible salt changes.
   - name: boot-guide
     file: boot_guide.py
     purpose: One resumable command for the current host that measures what it can, prepares custody and asks the operator to confirm only what it cannot prove.

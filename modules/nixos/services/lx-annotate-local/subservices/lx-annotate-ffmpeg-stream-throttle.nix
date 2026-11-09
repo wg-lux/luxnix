@@ -12,20 +12,17 @@ with ctx;
     ]
     ++ localPostgresServiceUnits
     ++ localPostgresSetupUnits
-    ++ managedSecretsSetupUnits
-    ++ encryptionServiceUnits;
+    ++ managedSecretsSetupUnits;
     wants = [
       "lx-annotate-runtime-env.service"
     ]
     ++ localPostgresServiceUnits
     ++ localPostgresSetupUnits
-    ++ managedSecretsSetupUnits
-    ++ encryptionServiceUnits;
+    ++ managedSecretsSetupUnits;
     requires = [
       "lx-annotate-runtime-env.service"
     ]
-    ++ managedSecretsSetupUnits
-    ++ encryptionServiceUnits;
+    ++ managedSecretsSetupUnits;
     unitConfig = encryptedDataMountUnitConfig;
     environment = commonExtraEnv;
     serviceConfig = {

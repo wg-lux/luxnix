@@ -14,24 +14,21 @@ with ctx;
     ++ dataRecoveryServiceUnits
     ++ localPostgresServiceUnits
     ++ localPostgresSetupUnits
-    ++ managedSecretsSetupUnits
-    ++ encryptionServiceUnits;
+    ++ managedSecretsSetupUnits;
     wants = [
       "lx-annotate-load-base-data.service"
       "lx-annotate-master-key-check.service"
     ]
     ++ dataRecoveryServiceUnits
     ++ localPostgresServiceUnits
-    ++ managedSecretsSetupUnits
-    ++ encryptionServiceUnits;
+    ++ managedSecretsSetupUnits;
     requires = [
       "lx-annotate-runtime-env.service"
       "lx-annotate-load-base-data.service"
       "lx-annotate-master-key-check.service"
     ]
     ++ dataRecoveryServiceUnits
-    ++ managedSecretsSetupUnits
-    ++ encryptionServiceUnits;
+    ++ managedSecretsSetupUnits;
     restartTriggers = [ effectiveRuntimePackage ];
     unitConfig = encryptedDataMountUnitConfig;
     environment = commonExtraEnv;

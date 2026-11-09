@@ -23,9 +23,6 @@ entrypoints:
   - name: in-place-encryption-safety
     file: test_in_place.py
     purpose: Verify refusal before disk changes, compared data consolidation and acceptance-gated container retirement.
-  - name: first-setup
-    file: test_first_setup.py
-    purpose: Verify irreversible salt changes are refused and that the real playbook writes only allowlisted inventory settings.
   - name: boot-guide
     file: test_boot_guide.py
     purpose: Verify the guided command never formats existing custody, never answers for the operator and keeps replaced plans.

@@ -7,8 +7,9 @@ responsibilities:
 - Reject retired file-free identity delivery and preserve established local identity storage.
 - Own service options, runtime environment contracts and systemd composition
 - Supply the immutable report-embedding model path to the shared application environment.
-- Coordinate workers, storage, secret handles and hub interfaces
+- Coordinate workers, OS-provided storage paths, secret handles and hub interfaces
 boundaries:
+- Disk unlock and mount policy belongs to luxnix.storage.operatorUnlocked, not the application
 - Application business logic belongs in the upstream wheel
 - Runtime dependency versions belong to the selected application artifact, not independent source inputs
 - Preserve database ownership, encrypted storage and least-privilege secret contracts

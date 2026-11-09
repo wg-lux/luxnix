@@ -230,73 +230,26 @@ def custody_copy(custody: Path, host: str, path: str) -> Path:
     return custody / host / "secrets" / path.lstrip("/")
 
 
-def missing_salts(state: Path, custody: Path) -> list[str]:
-    """Salts neither on this host nor in custody, so nothing can preserve them."""
+def restore_lost_salts(state: Path, custody: Path) -> list[str]:
+    """Bring back salt files custody still holds, before the host replaces them."""
     with migration.locked_state(state):
         plan = migration.load_plan(state)
         items = required_items(plan, migration.secret_contract(plan))
         host = plan["spec"]["host"]
-    return [
-        item["path"]
-        for item in items
-        if migration.is_salt_id(item["id"])
-        and not exists(Path(item["path"]))
-        and not exists(custody_copy(custody, host, item["path"]))
-    ]
-
-
-def orphaned_salt(state: Path, custody: Path) -> dict | None:
-    """The host's salt is gone but traces remain, so its provisioner would refuse.
-
-    A center host is left out: its active salt comes back from Vault.
-    """
-    with migration.locked_state(state):
-        plan = migration.load_plan(state)
-        contract = migration.secret_contract(plan)
-        host = plan["spec"]["host"]
-    by_id = {item["id"]: item["path"] for item in contract["items"]}
-    active = by_id.get("identity-active")
-    stores = [by_id.get("identity-salt-recovery"), contract.get("identity_replica")]
-    stores = [store for store in stores if store]
-    if not active or any(
-        exists(Path(path))
-        for path in [active, *(str(Path(s, "active.salt")) for s in stores)]
-    ):
-        return None
-    traces = [
-        path
-        for path in [
-            by_id.get("identity-salt-keyring"),
-            by_id.get("identity-legacy-default"),
-            *(str(Path(s, "enrolled")) for s in stores),
-        ]
-        if path and exists(Path(path))
-    ]
-    if not traces:
-        return None
-    keyring = by_id.get("identity-salt-keyring")
-    manifest = yaml.safe_load(read_private(Path(keyring))) if keyring in traces else {}
-    if manifest.get("center_id"):
-        return None
-    copy = custody_copy(custody, host, active)
-    return {"active": active, "traces": traces, "copy": copy if exists(copy) else None}
-
-
-def restore_salt(copy: Path, active: str) -> None:
-    if privileged("install", "-D", "-m", "0600", str(copy), active).returncode:
-        raise PreflightError(f"Could not restore {active} from custody")
-
-
-def set_aside(paths: list[str]) -> list[str]:
-    """Move traces aside, never delete them, so the provisioner may start fresh."""
-    stamp = time.strftime("%Y%m%d%H%M%S")
-    moved = []
-    for path in paths:
-        target = f"{path}.superseded-{stamp}"
-        if privileged("mv", "-n", path, target).returncode:
-            raise PreflightError(f"Could not set {path} aside; nothing was deleted")
-        moved.append(target)
-    return moved
+    restored = []
+    for item in items:
+        live, copy = Path(item["path"]), custody_copy(custody, host, item["path"])
+        if (
+            migration.is_salt_id(item["id"])
+            and not exists(live)
+            and exists(copy)
+            and not is_directory(copy)
+        ):
+            restore = ("install", "-D", "-m", "0600", str(copy), str(live))
+            if privileged(*restore).returncode:
+                raise PreflightError(f"Could not restore {live} from custody")
+            restored.append(str(live))
+    return restored
 
 
 def check_item(
@@ -306,7 +259,6 @@ def check_item(
     accepted: set[str],
     *,
     keeps_data: bool,
-    accept_salt_loss: bool = False,
 ) -> tuple[str, str | None]:
     """Return the item's status and, when a copy is missing, how to make it."""
     from lx_administration.storage.operator_migration import (
@@ -317,10 +269,10 @@ def check_item(
     live = Path(item["path"])
     copy = custody_copy(custody, host, item["path"])
     on_host = exists(live)
-    # A salt that still exists is always copied; only one already gone can be accepted.
-    salt = migration.is_salt_id(item["id"])
-    if accept_salt_loss and salt and not on_host and not exists(copy):
-        return "accepted-loss", None
+    # A salt that exists is always copied. One already gone is not a blocker: the host
+    # creates a new salt, and default_salt stays readable.
+    if migration.is_salt_id(item["id"]) and not on_host and not exists(copy):
+        return "salt-regenerated", None
     # A locked container looks exactly like a missing file, so absence is never
     # assumed: the operator must state it, per item, after checking.
     if not on_host and item["id"] not in accepted:
@@ -426,7 +378,6 @@ def run(
     *,
     key_custody: Path | None = None,
     accept_absent: tuple[str, ...] = (),
-    salt_loss_accepted_by: str | None = None,
 ) -> dict:
     with migration.locked_state(state):
         plan = migration.load_plan(state)
@@ -468,7 +419,6 @@ def run(
                 host,
                 accepted,
                 keeps_data=keeps_data,
-                accept_salt_loss=salt_loss_accepted_by is not None,
             )
             results.append({"id": item["id"], "path": item["path"], "status": status})
             print(f"  {status:16} {item['id']}  {item['path']}")
@@ -476,10 +426,7 @@ def run(
                 hints.append(hint)
             if status == "absent-on-host":
                 waiver = (
-                    "If it was never enrolled, --accept-salt-loss states that records "
-                    "imported so far may be lost."
-                    if migration.is_salt_id(item["id"])
-                    else "This plan keeps data, so it cannot be waived: restore it."
+                    "This plan keeps data, so it cannot be waived: restore it."
                     if item["kind"] == "data" and keeps_data
                     else f"If it never existed here, pass --accept-absent {item['id']}"
                 )
@@ -517,8 +464,6 @@ def run(
             "controller": controller,
             "admin_password_verified": True,
         }
-        if any(r["status"] == "accepted-loss" for r in results):
-            receipt["salt_loss_accepted_by"] = salt_loss_accepted_by
         atomic_json(receipt_path, receipt)
         print(
             f"\nSUCCESS: Preflight passed; {len(results)} secrets match their custody "

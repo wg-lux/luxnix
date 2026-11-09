@@ -6,6 +6,15 @@ LX-Annotate commands. Keep host provisioning and systemd integration in LuxNix.
 This handoff identifies implementation sources, existing application equivalents,
 remaining gaps, and the tests required before deleting an OS implementation.
 
+## Storage boundary
+
+LuxNix owns disk encryption, unlock credentials, mount identity and startup
+ordering through `luxnix.storage.operatorUnlocked`. LX-Annotate consumes the
+provided runtime directory and application key file under either boot LUKS or
+an existing legacy-container layout. It neither opens devices nor selects a
+storage layout. Application-level file encryption and key validation remain
+application responsibilities; migration must preserve the existing key.
+
 ## Source and artifact reference points
 
 Release dependency selection was refreshed on 2026-11-03:
