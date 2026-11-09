@@ -84,7 +84,12 @@ def select(media: list[Medium], device: str | None) -> Medium:
             "Candidates: "
             + ", ".join(f"{m.device} ({m.serial}, {m.filesystem})" for m in media)
             + ". Blank, read-only, duplicate-UUID and unsupported filesystems "
-            "are not formatted."
+            "are not formatted.",
+            fix=(
+                "connect one formatted USB drive and rerun"
+                if not media
+                else "rerun with --device <one of the candidates above>"
+            ),
         )
     return chosen[0]
 
@@ -140,7 +145,8 @@ def verify_mount(medium: Medium, excluded: set[int]) -> int:
     available = usage.f_bavail * usage.f_frsize
     if available < MIN_FREE:
         raise migration.MigrationError(
-            "Recovery filesystem needs at least 1 GiB free for setup metadata"
+            "Recovery filesystem needs at least 1 GiB free for setup metadata",
+            fix="free space on the recovery drive, or use another drive with --device",
         )
     return available
 
@@ -163,7 +169,10 @@ def setup(spec: dict, state: Path, *, apply: bool, device: str | None = None) ->
         privileged("cat", str(migration.DMI_UUID)).lower()
         != spec["hardware_uuid"].lower()
     ):
-        raise migration.MigrationError("This is not the selected host's hardware")
+        raise migration.MigrationError(
+            "This is not the selected host's hardware",
+            fix="run it on that machine itself, or rerun with the right --host",
+        )
     excluded = set().union(*(migration.device_disks(d["path"]) for d in spec["disks"]))
     root = next(r for r in mounts() if r["target"] == "/")
     if root["source"].startswith("/dev/"):

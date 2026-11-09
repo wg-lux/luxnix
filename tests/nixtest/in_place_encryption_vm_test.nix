@@ -226,27 +226,29 @@ disko.lib.testLib.makeDiskoTest {
       };
       config = {
 
-        boot.kernelParams = [
-          "quiet"
-          "splash"
-        ];
-        # Disko's harness embeds a synthetic root key; this test needs the real prompt.
-        boot.initrd.secrets = lib.mkForce { };
+        boot = {
+          kernelParams = [
+            "quiet"
+            "splash"
+          ];
+          # Disko's harness embeds a synthetic root key; this test needs the real prompt.
+          initrd.secrets = lib.mkForce { };
+          resumeDevice = "/dev/disk/by-label/nixos";
+          # The driver reads the console by line and the prompt has no line ending,
+          # so without this it only sees the prompt if later output happens to follow.
+          # Do not pass wait_for_console_text a timeout: it then reads one line per second.
+          initrd.systemd.services.console-line-flush = {
+            wantedBy = [ "initrd.target" ];
+            before = [ "initrd-switch-root.target" ];
+            conflicts = [ "initrd-switch-root.target" ];
+            unitConfig.DefaultDependencies = false;
+            script = "while :; do echo > /dev/console; /bin/sleep 1; done";
+          };
+        };
         # Mirror gc-09: no discovered swap, and resume= names the label that moves
         # from the plaintext partition onto the mapper during the conversion.
         swapDevices = lib.mkForce [ ];
         systemd.generators.systemd-gpt-auto-generator = "/dev/null";
-        boot.resumeDevice = "/dev/disk/by-label/nixos";
-        # The driver reads the console by line and the prompt has no line ending,
-        # so without this it only sees the prompt if later output happens to follow.
-        # Do not pass wait_for_console_text a timeout: it then reads one line per second.
-        boot.initrd.systemd.services.console-line-flush = {
-          wantedBy = [ "initrd.target" ];
-          before = [ "initrd-switch-root.target" ];
-          conflicts = [ "initrd-switch-root.target" ];
-          unitConfig.DefaultDependencies = false;
-          script = "while :; do echo > /dev/console; /bin/sleep 1; done";
-        };
         luxnix.storage.operatorUnlocked = {
           enable = true;
           guardedServices.application = [

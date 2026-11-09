@@ -61,12 +61,14 @@ configuration; connectivity checks and subsequent steps concern deployment.
 
 New client and server installations require `boot-luks` with LUKS2 root.
 The former `unencrypted-root` installation path is retired and rejected.
-Use the [guarded operator checklist](boot-storage-quickstart.md) for prepared-target
-installation after in-place conversion. No disk formatter is part of this workflow.
+Use the [fresh encrypted installer](boot-storage-quickstart.md) for new or
+explicitly disposable machines. Existing contents that must survive use the
+separate `luxnix migrate` workflow.
 
-The following steps prepare a reviewed configuration and preview in-place root
-encryption. They do not authorize repartitioning. Confirm backups, recovery access, the selected host and address, and the
-reviewed repository revision before installation. For local development only,
+The steps below prepare a reviewed configuration and installer bundle. Preparation
+does not authorize erasure: the live installer verifies the selected hardware
+and requires separate typed consent. Retain independent recovery access and any
+application keys or data still needed elsewhere. For local development only,
 continue with [Development](development.md).
 
 1. Prepare the target machine in the NixOS installer:
@@ -111,11 +113,13 @@ continue with [Development](development.md).
    - Create, import, validate and export the host's unique password/hash pair.
    - Stage the protected runtime hash for first activation as described under
      [Install on a new machine](admin-passwords.md#6-install-on-a-new-machine).
-7. Preview the in-place root-encryption workflow for the selected host:
-   - `devenv tasks run boot-storage:setup`
-   - Follow [in-place root encryption](boot-storage-quickstart.md); the preview does not erase disks.
-   - Use the verified staging tree from the admin password guide; the hash must
-     exist before first activation.
+7. Prepare the fresh encrypted installer:
+   - `devenv shell luxnix` shows setup guidance without changing state.
+   - `devenv shell luxnix install --profile /absolute/host.yml` builds the pinned
+     bundle from the administrator-prepared hardware profile.
+   - Follow the [installation checklist](boot-storage-quickstart.md), using the
+     verified account/application credential staging tree. Existing data is
+     preserved only through the explicit migration workflow, never by fresh installation.
 8. First login on target host:
    - `sudo nixos-rebuild switch --flake '.#<host>'` (alias: `nho`)
    - `nh home switch` (alias: `nhh`)

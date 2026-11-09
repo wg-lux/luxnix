@@ -196,6 +196,7 @@ disko.lib.testLib.makeDiskoTest {
       );
       luxnix.storage.operatorUnlocked = {
         enable = true;
+        plaintextRootBridge = plaintextRootTest;
         autoStartProtectedServices = !deferStartupTest;
         guardedServices.writer = if plaintextRootTest then [ "/home" ] else [ "/srv/data" ];
         remoteUnlock = lib.mkIf remoteUnlockTest {

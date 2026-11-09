@@ -1,14 +1,19 @@
 """Root setup admits only in-place encryption and preserves interrupted journals."""
 
 import json
+import os
 from pathlib import Path
 import subprocess
+import sys
+import time
+from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
 
 from lx_administration.storage import boot_migration as migration
 from lx_administration.storage import boot_setup as setup
+from lx_administration.storage import secret_preflight
 from tests import test_boot_migration as migration_tests
 
 @pytest.fixture
@@ -214,7 +219,6 @@ def test_sequenced_access_and_install_preserve_recorded_mount_binding(
     root, plan, progress, calls, mounts = environment
     for stage in migration.stage_order(plan)[:-1]:
         seed_assessment((root, plan, progress), stage, tmp_path)
-    monkeypatch.setattr(migration, "verify_readiness", lambda *a, **k: None)
     assert setup.next_step(root).action == setup.Action.PROVISION
     setup.advance(root, apply=True)
     assert setup.next_step(root).action == setup.Action.PREPARE_ACCESS
@@ -371,7 +375,7 @@ def test_direct_provision_cli_is_removed(monkeypatch):
     assert error.value.code == 2
 
 
-def test_autoconf_target_reuses_plan_and_blocks_drift(state, tmp_path):
+def test_autoconf_target_reuses_plan_and_blocks_drift(state, tmp_path, monkeypatch):
     import yaml
     from tests.autoconf_test_support import write_config
 
@@ -404,20 +408,172 @@ def test_autoconf_target_reuses_plan_and_blocks_drift(state, tmp_path):
         {k: v for k, v in plan.items() if k != "plan_id"}
     )
     migration.atomic_json(selected / "plan.json", plan)
+    progress = json.loads((selected / "progress.json").read_text())
+    progress["plan_id"] = plan["plan_id"]
+    migration.atomic_json(selected / "progress.json", progress)
+    monkeypatch.setattr(migration, "source_identity", lambda p: plan["source"])
     assert setup.configured_target(config_path, "gc-09") == (spec, selected)
+
     raw["boot_storage"]["hosts"]["gc-09"]["disks"][0]["serial"] = "changed"
     config_path.write_text(yaml.safe_dump(raw))
-    # An existing plan with different settings must not be adopted implicitly.
-    with pytest.raises(
-        migration.MigrationError, match="differs from the saved plan in: disks"
-    ):
+    # A started plan is never replaced; the stop names what to restore.
+    progress["install"]["status"] = "running"
+    migration.atomic_json(selected / "progress.json", progress)
+    with pytest.raises(migration.MigrationError, match="changed disks after") as stop:
         setup.configured_target(config_path, "gc-09")
-    with pytest.raises(migration.MigrationError, match="Add boot_storage.hosts"):
+    assert str(selected / "plan.json") in stop.value.fix
+
+    # An unstarted outdated plan is set aside, never deleted, and saved anew.
+    progress["install"]["status"] = "pending"
+    migration.atomic_json(selected / "progress.json", progress)
+    moved, saved = [], []
+    monkeypatch.setattr(
+        secret_preflight,
+        "privileged",
+        lambda *command: moved.append(command) or SimpleNamespace(returncode=0),
+    )
+    monkeypatch.setattr(setup, "save_plan", lambda spec, state: saved.append(spec))
+    changed, _ = setup.configured_target(config_path, "gc-09")
+    assert moved[0][:3] == ("mv", "-n", str(selected))
+    assert ".superseded-" in moved[0][3]
+    assert saved == [changed] and changed["disks"][0]["serial"] == "changed"
+    with pytest.raises(migration.MigrationError, match="gc-02 has no boot storage"):
         setup.configured_target(config_path, "gc-02")
     raw["boot_storage"]["state_root"] = None
     config_path.write_text(yaml.safe_dump(raw))
-    with pytest.raises(migration.MigrationError, match="no recovery location"):
+    with pytest.raises(migration.MigrationError, match="No recovery location"):
         setup.configured_target(config_path, "gc-09")
+
+
+def test_a_started_plan_survives_a_moved_checkout(monkeypatch, tmp_path):
+    monkeypatch.setattr(migration, "private_path", lambda *a, **k: None)
+    spec = {"host": "gc-09", "checkout": "/release"}
+    monkeypatch.setattr(
+        setup, "saved_plan", lambda state: {"spec": spec, "source": {"revision": "a"}}
+    )
+    monkeypatch.setattr(setup, "plan_has_started", lambda state: True)
+    monkeypatch.setattr(
+        migration, "source_identity", lambda p: pytest.fail("a started plan is kept")
+    )
+    setup.refresh_plan(tmp_path / "gc-09", dict(spec))
+
+
+def test_surviving_conversion_blocks_writer_and_plan_replacement(
+    install_environment, tmp_path
+):
+    root, plan, _ = install_environment
+    ready = tmp_path / "child.pid"
+    child_code = (
+        "import os,sys,time; from pathlib import Path; "
+        "Path(sys.argv[1]).write_text(str(os.getpid())); time.sleep(30)"
+    )
+    controller_code = """
+import os, sys
+from pathlib import Path
+from lx_administration.storage import boot_migration as m, in_place
+m.private_path = lambda *a, **k: None
+m.os.geteuid = lambda: 0
+original_fstat = os.fstat
+def root_fstat(fd):
+    values = list(original_fstat(fd)); values[4] = 0
+    return os.stat_result(values)
+m.os.fstat = root_fstat
+m.INSTALL_LOCK = Path(sys.argv[1])
+with m.installer_lock() as global_fd, m.locked_state(Path(sys.argv[2])) as state_fd:
+    with in_place.operation_locks(global_fd, state_fd):
+        in_place.run(sys.executable, '-c', sys.argv[4], sys.argv[3])
+"""
+    before = {p.name: p.read_bytes() for p in root.iterdir()}
+    controller = subprocess.Popen(
+        [sys.executable, "-c", controller_code, str(migration.INSTALL_LOCK),
+         str(root), str(ready), child_code]
+    )
+    child = None
+    try:
+        deadline = time.monotonic() + 10
+        while not ready.exists() and time.monotonic() < deadline:
+            assert controller.poll() is None
+            time.sleep(0.01)
+        assert ready.exists(), "conversion child did not start"
+        child = int(ready.read_text())
+        controller.kill()
+        controller.wait(timeout=5)
+        os.kill(child, 0)
+        with pytest.raises(migration.MigrationError, match="Another installer"):
+            with migration.installer_lock():
+                pytest.fail("surviving child must retain machine serialization")
+        with pytest.raises(migration.MigrationError, match="recovery location"):
+            with migration.locked_state(root):
+                pytest.fail("surviving child must block another state writer")
+        with pytest.raises(migration.MigrationError, match="recovery location"):
+            setup.refresh_plan(root, plan["spec"] | {"checkout": "/changed"})
+        assert {p.name: p.read_bytes() for p in root.iterdir()} == before
+        assert not list(root.parent.glob("state.superseded-*"))
+    finally:
+        if controller.poll() is None:
+            controller.kill()
+            controller.wait(timeout=5)
+        if child is not None:
+            os.kill(child, 15)
+
+
+def test_replacement_keeps_stable_lock_across_rename(state, monkeypatch):
+    root, plan, _ = state
+    monkeypatch.setattr(migration, "source_identity", lambda p: {"revision": "new"})
+
+    def move(*command):
+        root.rename(command[-1])
+        return SimpleNamespace(returncode=0)
+
+    def save(spec, path):
+        with migration.locked_state(path, create=True) as fd:
+            # The new directory has a different inode; the parent boundary stays.
+            assert os.fstat(fd).st_ino == root.parent.stat().st_ino
+            check = subprocess.run(
+                [sys.executable, "-c",
+                 "import fcntl,os,sys; "
+                 "fcntl.flock(os.open(sys.argv[1],os.O_RDONLY),"
+                 "fcntl.LOCK_EX|fcntl.LOCK_NB)",
+                 str(root.parent)], capture_output=True,
+            )
+            assert check.returncode != 0
+
+    monkeypatch.setattr(secret_preflight, "privileged", move)
+    monkeypatch.setattr(setup, "save_plan", save)
+    setup.refresh_plan(root, plan["spec"])
+    assert root.is_dir()
+    assert len(list(root.parent.glob("state.superseded-*"))) == 1
+
+
+@pytest.mark.parametrize("argv", [
+    ["status"], ["next"], ["verify"], ["run"], ["advance"],
+    ["recover", "--assessor", "reviewer"], ["setup-media"],
+])
+def test_inspection_preserves_plan_and_journals(state, monkeypatch, argv):
+    root, plan, _ = state
+    setup.prepare(root)
+    # Make the saved source stale: inspection must not replace it as a repair.
+    monkeypatch.setattr(migration, "source_identity", lambda p: {"revision": "new"})
+    monkeypatch.setattr(setup, "current_host", lambda c: plan["spec"]["host"])
+    monkeypatch.setattr(setup, "target_spec", lambda *a: (plan["spec"], root))
+    monkeypatch.setattr(
+        setup, "configured_target", lambda *a: pytest.fail("inspection replaced plan")
+    )
+    monkeypatch.setattr(
+        migration, "verify_root_guard", lambda *a, **k: {"root": "encrypted"}
+    )
+    monkeypatch.setattr(
+        "lx_administration.storage.recovery_media.setup", lambda *a, **k: None
+    )
+    before = {str(p.relative_to(root.parent)): p.read_bytes()
+              for p in root.parent.rglob("*") if p.is_file()}
+    try:
+        setup.main(argv)
+    except SystemExit as stop:
+        assert stop.code == 1  # Stale evidence may stop an observation, never fix it.
+    after = {str(p.relative_to(root.parent)): p.read_bytes()
+             for p in root.parent.rglob("*") if p.is_file()}
+    assert after == before
 
 
 def test_plan_cli_uses_autoconf_without_spec_or_state(monkeypatch, capsys):
@@ -447,23 +603,16 @@ def test_plan_cli_uses_autoconf_without_spec_or_state(monkeypatch, capsys):
 
 
 def test_guidance_covers_all_existing_assessment_contracts():
-    required = {c for checks in migration.STAGES.values() for c in checks} | {
-        "new_disks_verified",
-        "initial_credentials_staged",
-        "whole_disk_image_verified",
-        "selected_disks_disposal_authorized",
-        "machine_and_application_credentials_preserved_or_reenrolled",
-        "in_place_backup_acknowledged",
-        "plaintext_remnants_reviewed",
-        "container_data_consolidated",
-    }
+    required = {c for checks in migration.STAGES.values() for c in checks}
     assert set(setup.guidance()) == required
     assert all(setup.guidance().values())
 
 
 def test_status_remains_machine_readable(state, monkeypatch, capsys):
     root, plan, _ = state
-    monkeypatch.setattr("sys.argv", ["boot-storage-setup", "status", "--host", "gc-09"])
+    monkeypatch.setattr(
+        "sys.argv", ["boot-storage-setup", "status", "--host", "gc-09", "--json"]
+    )
     monkeypatch.setattr(setup, "configured_target", lambda *a: (plan["spec"], root))
     monkeypatch.setattr(migration, "status", lambda p: {"plan_id": plan["plan_id"]})
     setup.main()
@@ -483,7 +632,7 @@ def test_human_output_explains_recovery_and_exact_next_command(state, capsys):
     setup.show_step(step, root, Path("/reviewed/autoconf/config.yml"))
     output = capsys.readouterr().out
     assert "physical console" in output
-    assert "boot-storage-setup review" in output
+    assert "devenv shell luxnix storage review" in output
     assert str(root / "recovery-notes.txt") in output
     assert "Rerunning plan will not complete" in output
     assert "--apply" not in output
@@ -863,11 +1012,10 @@ def test_output_says_a_plan_is_not_encryption_and_shows_progress(
     assert step.action == setup.Action.ASSESS and step.stage == "recovery"
     setup.show_step(step, root, Path("/config.yml"))
     output = capsys.readouterr().out
-    assert "[x] Plan saved" in output
-    assert "[ ] Secret preflight passed" in output
-    assert "Root is NOT encrypted yet" in output
-    assert "Nothing has failed" in output
-    assert "Do this next: run devenv shell boot-storage-setup" in output
+    assert "Saved plan:" in output
+    assert "A saved plan is not proof of encryption" in output
+    assert "First prove the required secrets survive" in output
+    assert "Do this next: run devenv shell luxnix migrate" in output
 
 
 def test_passed_preflight_is_shown_as_done(state, capsys, monkeypatch):
@@ -875,7 +1023,6 @@ def test_passed_preflight_is_shown_as_done(state, capsys, monkeypatch):
     monkeypatch.setattr(setup.migration, "require_preflight", lambda state: None)
     setup.show_step(setup.next_step(root), root, Path("/config.yml"))
     output = capsys.readouterr().out
-    assert "[x] Secret preflight passed" in output
     assert "Secret preflight has passed" in output
     assert "First prove" not in output
 

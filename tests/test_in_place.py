@@ -4,8 +4,13 @@ The conversion runs on a real disk in nixtest/in_place_encryption_vm_test.
 """
 
 import json
+import fcntl
+import os
 from pathlib import Path
 import stat
+import subprocess
+import sys
+import time
 
 import pytest
 
@@ -13,6 +18,64 @@ from lx_administration.storage import boot_migration as migration
 from lx_administration.storage import boot_password
 from lx_administration.storage import boot_setup as setup
 from lx_administration.storage import in_place
+
+
+def test_conversion_child_keeps_operation_lock_after_controller_is_killed(tmp_path):
+    lock = tmp_path / "operation.lock"
+    ready = tmp_path / "child.pid"
+    child_code = (
+        "import os,sys,time; from pathlib import Path; "
+        "Path(sys.argv[1]).write_text(str(os.getpid())); time.sleep(30)"
+    )
+    controller_code = """
+import fcntl, sys
+from pathlib import Path
+from lx_administration.storage import in_place
+with Path(sys.argv[1]).open('a+') as lock:
+    fcntl.flock(lock, fcntl.LOCK_EX)
+    with in_place.operation_locks(lock.fileno()):
+        in_place.run(sys.executable, '-c', sys.argv[3], sys.argv[2])
+"""
+    controller = subprocess.Popen(
+        [sys.executable, "-c", controller_code, str(lock), str(ready), child_code]
+    )
+    child = None
+    try:
+        deadline = time.monotonic() + 10
+        while not ready.exists() and time.monotonic() < deadline:
+            assert controller.poll() is None
+            time.sleep(0.01)
+        assert ready.exists(), "conversion child did not start"
+        child = int(ready.read_text())
+        controller.kill()
+        controller.wait(timeout=5)
+        os.kill(child, 0)
+        with lock.open("r+") as writer:
+            with pytest.raises(BlockingIOError):
+                fcntl.flock(writer, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    finally:
+        if controller.poll() is None:
+            controller.kill()
+            controller.wait(timeout=5)
+        if child is not None:
+            os.kill(child, 15)
+
+
+def test_failed_command_reports_partial_modification(tmp_path):
+    target = tmp_path / "target"
+    with pytest.raises(
+        in_place.InPlaceError, match="may be partially modified"
+    ) as stop:
+        in_place.run(
+            sys.executable,
+            "-c",
+            "import sys; from pathlib import Path; "
+            "Path(sys.argv[1]).write_text('partial'); sys.exit(1)",
+            str(target),
+        )
+    assert target.read_text() == "partial"
+    assert "left as it is" not in str(stop.value)
+    assert "Preserve the journal" in str(stop.value)
 
 
 @pytest.mark.parametrize(

@@ -19,6 +19,7 @@ import yaml
 
 from lx_administration.autoconf.config import AutoconfConfig, DEFAULT_CONFIG_PATH
 from lx_administration.storage import boot_migration as migration
+from lx_administration.storage import migration_lifecycle as lifecycle
 from lx_administration.utils.file_operations import (
     atomic_create_file,
     atomic_write_file,
@@ -26,17 +27,7 @@ from lx_administration.utils.file_operations import (
 from lx_administration.yaml import load_unique_yaml_file
 
 
-MILESTONES = (
-    "Plan saved",
-    "Secret preflight passed",
-    "Recovery review recorded",
-    "Root encrypted (from installer media)",
-    "System installed",
-    "Physical acceptance recorded",
-)
-RETIRE_HINT = (
-    "To remove old containers: devenv shell boot-storage-setup retire-containers"
-)
+RETIRE_HINT = "To remove old containers: devenv shell luxnix retire-containers"
 PLAN_SAVED = (
     "The plan is saved. This only records what to do; nothing on the disk has changed."
 )
@@ -266,13 +257,17 @@ def confirmation(plan: dict, *, recover: bool = False) -> None:
     phrase = f"{verb} {plan['spec']['host']} {plan['plan_id'][:12]} {serials}"
     # A pipe or sudo's password channel cannot supply destructive approval.
     if not sys.stdin.isatty():
-        raise migration.MigrationError("Use a private interactive installer terminal")
+        raise migration.MigrationError(
+            "Use a private interactive installer terminal", fix=migration.TERMINAL_FIX
+        )
     with (
         open("/dev/tty", "w", encoding="utf-8") as terminal,
         open("/dev/tty", "r", encoding="utf-8") as response,
     ):
         if not terminal.isatty():
-            raise migration.MigrationError("A real controlling terminal is required")
+            raise migration.MigrationError(
+                "A real controlling terminal is required", fix=migration.TERMINAL_FIX
+            )
         terminal.write(
             "\n"
             + (
@@ -298,7 +293,13 @@ def confirmation(plan: dict, *, recover: bool = False) -> None:
 def provision(
     state: Path, *, apply: bool = False, recover_by: str | None = None
 ) -> None:
-    with migration.installer_lock(), migration.locked_state(state):
+    from lx_administration.storage import in_place
+
+    with (
+        migration.installer_lock() as install_fd,
+        migration.locked_state(state) as state_fd,
+        in_place.operation_locks(install_fd, state_fd),
+    ):
         plan = migration.load_plan(state)
         migration.require_in_place(plan["spec"])
         migration.verify_source(plan)
@@ -345,6 +346,13 @@ def provision(
                 phase=Phase.COMPLETE,
                 mounts=identities,
                 recovered_by=recover_by,
+            )
+            lifecycle.advance(
+                state,
+                plan["plan_id"],
+                lifecycle.Stage.VERIFYING,
+                detail=f"interrupted layout accepted by {recover_by}",
+                initial=migration.lifecycle_position(state, plan, progress),
             )
             return
         encrypt_in_place(state, plan, progress, record, disks, apply=apply)
@@ -394,6 +402,13 @@ def encrypt_in_place(
         for c in layout["containers"]
     }
     # Publish validated durable intent before any disk change.
+    lifecycle.advance(
+        state,
+        plan["plan_id"],
+        lifecycle.Stage.MIGRATING,
+        detail="encryption started",
+        initial=migration.lifecycle_position(state, plan, progress),
+    )
     record = save_journal(state, record, phase=Phase.RUNNING, before=before)
     try:
         result = in_place.convert(
@@ -406,8 +421,12 @@ def encrypt_in_place(
             raise migration.MigrationError("Disk identity changed during encryption")
         identities = migration.verify_layout(plan, disks)
         save_journal(state, record, phase=Phase.COMPLETE, mounts=identities)
-    except BaseException:
+        lifecycle.advance(
+            state, plan["plan_id"], lifecycle.Stage.VERIFYING, detail="encryption finished"
+        )
+    except BaseException as error:
         save_journal(state, record, phase=Phase.INTERRUPTED)
+        lifecycle.fail(state, plan["plan_id"], type(error).__name__)
         raise
     print(
         f"Root encrypted in place and mounted; moved: {result['consolidated']}. Old "
@@ -419,6 +438,17 @@ def encrypt_in_place(
             f"swap. After confirming it is that partition, run: blkdiscard --force "
             f"--zeroout {partition}"
         )
+
+
+def verify_hardware(state: Path) -> dict:
+    """Read the real disk against the planned encrypted root without state writes."""
+    with migration.locked_state(state):
+        plan = migration.load_plan(state)
+        migration.load_progress(state, plan)
+        root = Path("/mnt") if os.path.ismount("/mnt") else Path("/")
+        result = migration.verify_root_guard(plan, root, action="dry-activate")
+    print(f"The disk matches the planned encrypted root: {json.dumps(result)}")
+    return result
 
 
 def retire_containers(state: Path, *, apply: bool = False) -> None:
@@ -446,7 +476,9 @@ def retire_containers(state: Path, *, apply: bool = False) -> None:
         return
     phrase = f"DELETE CONTAINERS {plan['spec']['host']} {plan['plan_id'][:12]}"
     if not sys.stdin.isatty():
-        raise migration.MigrationError("Use a private interactive terminal")
+        raise migration.MigrationError(
+            "Use a private interactive terminal", fix=migration.TERMINAL_FIX
+        )
     print(
         "This permanently removes the old containers. Their data now lives only on "
         "the encrypted root and in your backups."
@@ -570,7 +602,7 @@ def advance(state: Path, *, apply: bool = False) -> NextStep:
                     "acceptance. Nothing reboots automatically."
                 )
         case Action.ASSESS | Action.RECOVER | Action.INSTALL_RECOVERY | Action.ACCEPT:
-            raise migration.MigrationError(step.reason)
+            raise migration.MigrationError(step.reason, fix=next_command(step, state))
     return next_step(state)
 
 
@@ -587,7 +619,9 @@ def target_spec(config_path: Path, host: str) -> tuple[dict, Path]:
     settings = config.boot_storage
     if host not in settings.hosts:
         raise migration.MigrationError(
-            f"Add boot_storage.hosts.{host} to {config.source}"
+            f"{host} has no boot storage entry",
+            fix=f"an administrator adds boot_storage.hosts.{host} to {config.source} "
+            "(docs/boot-storage-migration.md)",
         )
     spec = settings.hosts[host].model_dump(mode="json") | {
         "schema_version": 1,
@@ -597,30 +631,75 @@ def target_spec(config_path: Path, host: str) -> tuple[dict, Path]:
     migration.validate_spec(spec)
     if settings.state_root is None:
         raise migration.MigrationError(
-            "Set boot_storage.state_root in autoconf/config.yml to an existing "
-            "private independent directory; "
-            "no recovery location is configured"
+            "No recovery location is configured",
+            fix=f"an administrator sets boot_storage.state_root in {config.source} "
+            "to /recovery/luxnix-state",
         )
     return spec, settings.state_root / host
 
 
+def saved_plan(state: Path) -> dict | None:
+    if not (state / "plan.json").exists():
+        return None
+    with migration.locked_state(state):
+        return migration.load_plan(state)
+
+
+def plan_has_started(state: Path) -> bool:
+    with migration.locked_state(state):
+        plan = migration.load_plan(state)
+        return migration.load_progress(state, plan)["install"][
+            "status"
+        ] != "pending" or (
+            journal_path(state).exists()
+            and load_journal(state, plan).phase != Phase.PLANNED
+        )
+
+
+def refresh_plan(state: Path, spec: dict) -> None:
+    """Replace an outdated, unstarted plan; a started plan is never replaced."""
+    with migration.state_lock(state):
+        _refresh_plan(state, spec)
+
+
+def _refresh_plan(state: Path, spec: dict) -> None:
+    from lx_administration.storage import secret_preflight
+
+    plan = saved_plan(state)
+    if plan is None:
+        return
+    changed = sorted(
+        key
+        for key in plan["spec"].keys() | spec.keys()
+        if plan["spec"].get(key) != spec.get(key)
+    )
+    if plan_has_started(state):
+        if changed:
+            raise migration.MigrationError(
+                f"Autoconf changed {', '.join(changed)} after this plan started; "
+                "a started plan is never replaced",
+                fix=f"restore boot_storage.hosts.{spec['host']} in Autoconf to the "
+                f"values saved in {state / 'plan.json'}, then rerun",
+            )
+        # Only the checkout moved; steps that need the planned revision say so.
+        return
+    if not changed and (
+        migration.source_identity(Path(spec["checkout"])) == plan["source"]
+    ):
+        return
+    kept = state.with_name(f"{state.name}.superseded-{uuid4().hex[:8]}")
+    if secret_preflight.privileged("mv", "-n", str(state), str(kept)).returncode:
+        raise migration.MigrationError(f"Could not move {state} aside; nothing changed")
+    print(
+        "\nThe checkout or Autoconf changed before this plan started, so it is "
+        f"replaced. Old plan kept at {kept}"
+    )
+    save_plan(spec, state)
+
+
 def configured_target(config_path: Path, host: str) -> tuple[dict, Path]:
     spec, state = target_spec(config_path, host)
-    if (state / "plan.json").exists():
-        with migration.locked_state(state):
-            saved = migration.load_plan(state)["spec"]
-            if saved != spec:
-                changed = sorted(
-                    key
-                    for key in saved.keys() | spec.keys()
-                    if saved.get(key) != spec.get(key)
-                )
-                raise migration.MigrationError(
-                    "Autoconf differs from the saved plan in: "
-                    f"{', '.join(changed)}. Restore those values to continue this "
-                    f"plan. To start a new plan instead, first check {state} records "
-                    "no started work, then move that directory aside; never delete it"
-                )
+    refresh_plan(state, spec)
     return spec, state
 
 
@@ -661,39 +740,6 @@ def acceptance_recorded(state: Path) -> bool:
     return True
 
 
-def encryption_started(state: Path) -> bool:
-    with migration.locked_state(state):
-        plan = migration.load_plan(state)
-        if not journal_path(state).exists():
-            return False
-        return load_journal(state, plan).phase != Phase.PLANNED
-
-
-def milestones_done(step: NextStep, state: Path) -> int:
-    match step.action:
-        case Action.ASSESS:
-            return 2 if preflight_passed(state) else 1
-        case Action.PREPARE | Action.PROVISION | Action.RECOVER:
-            return 3
-        case Action.PREPARE_ACCESS | Action.INSTALL | Action.INSTALL_RECOVERY:
-            return 4
-        case Action.ACCEPT:
-            return 6 if acceptance_recorded(state) else 5
-
-
-def show_progress(step: NextStep, state: Path) -> None:
-    done = milestones_done(step, state)
-    print("\nProgress:")
-    for index, milestone in enumerate(MILESTONES):
-        print(f"  [{'x' if index < done else ' '}] {milestone}")
-    if done >= 4:
-        print("Root is encrypted.")
-    elif encryption_started(state):
-        print("Encryption started and is not finished. Do not format or restart it.")
-    else:
-        print("Root is NOT encrypted yet, and nothing on the disk has changed.")
-
-
 def show_step(
     step: NextStep, state: Path, config: Path, *, as_json: bool = False
 ) -> None:
@@ -712,89 +758,56 @@ def show_step(
             (
                 ["python", "-m", "lx_administration.storage.boot_setup"]
                 if installer
-                else ["devenv", "shell", "boot-storage-setup"]
+                else ["devenv", "shell", "luxnix", "storage"]
             )
             + [action]
             + ([] if config == DEFAULT_CONFIG_PATH else ["--config", str(config)])
         )
 
     print(f"\nHost: {step.host} | Saved plan: {step.plan_id}\nRecovery state: {state}")
-    show_progress(step, state)
-    if step.action == Action.ASSESS:
-        print("\nNothing has failed. Setup is waiting for you to do the steps below.")
-    print(f"\nNext step: {step.stage or step.action.value}\n{step.reason}")
+    print(f"Next step: {step.stage or step.action.value}\n{step.reason}")
     print(
-        "If a check is unclear or fails, stop and ask for help. "
-        "Do not guess or mark it VERIFIED."
+        "A saved plan is not proof of encryption. "
+        "Use luxnix inspect HOST to verify storage."
     )
-    if step.action == Action.PREPARE_ACCESS:
-        print("First stage the required credentials, then prepare access:")
-        print(command("advance") + " --apply")
-        print("After access preparation, complete and review the checks below.")
-    passed = step.stage == "recovery" and preflight_passed(state)
-    if passed:
-        print("\nSecret preflight has passed. Its receipt lasts 24 hours.")
-    elif step.stage == "recovery":
-        print("\nFirst prove the required secrets survive the encryption conversion:")
-        print(command("preflight") + " --custody /run/luxnix-custody/custody")
-        print(
-            "Custody is a private directory (mode 0700) on an already mounted, "
-            "encrypted filesystem outside the selected disks; never a device or disk. "
-            "Change the path if yours is elsewhere. To create or reopen it, see "
-            "'Preparing custody' in docs/boot-storage-migration.md."
-        )
-        print(
-            "It lists what is required and how to copy anything missing. "
-            "Review refuses to continue without its receipt."
-        )
+    print("Do not guess or mark it VERIFIED if a check is unclear or fails.")
+    if step.stage == "recovery":
+        if preflight_passed(state):
+            print("Secret preflight has passed. Its receipt lasts 24 hours.")
+        else:
+            print("First prove the required secrets survive the conversion:")
+            print(command("preflight") + " --custody /run/luxnix-custody/custody")
+        print(f"Do this next: run {MIGRATE}")
     if step.required_checks:
         descriptions = guidance()
-        print("\nThe operator must complete these checks and record the results:")
         for index, check in enumerate(step.required_checks, 1):
             print(f"{index}. {descriptions[check]}\n   Evidence check: {check}")
         report = state / f"{step.stage}-notes.txt"
-        print(f"\nWrite dated results and recovery locations in {report} (mode 0600).")
-        print("Do not include passwords, private keys or patient data in the notes.")
-        print("When all checks actually pass, record your review with:")
+        print(f"Record dated results in {report} (0600); no secrets or patient data.")
         print(
             f'{command("review")} --assessor "$USER" '
             f"--report {shlex.quote(str(report))}"
         )
-        print(
-            "Review asks for explicit confirmation of each check; "
-            "it never proves them automatically."
-        )
-    if step.stage == "recovery":
-        print(
-            "\nDo this next: run devenv shell boot-storage-setup\n"
-            "It handles custody, preflight, the notes and the review, and asks you "
-            "only about what it cannot prove."
-        )
+        print("Confirm only checks actually performed; review is not automatic proof.")
     if step.action == Action.ASSESS:
-        print(
-            "Rerunning plan will not complete this review. "
-            "No disk erasure is scheduled."
-        )
-    elif step.action in {
+        print("Rerunning plan will not complete the review.")
+    if step.action in {
         Action.PREPARE,
         Action.PROVISION,
+        Action.PREPARE_ACCESS,
         Action.INSTALL,
     }:
-        print("\nNext command (after completing the instructions above):")
         print(command("advance") + " --apply")
-        if step.action == Action.PROVISION:
+        if step.action != Action.PREPARE:
             print(
-                "Run from tested installer media on this host. "
-                "In-place encryption requires typed confirmation."
+                "Run from trusted installer media; "
+                "existing data and credentials are preserved."
             )
     elif step.action == Action.RECOVER:
-        print(
-            "Inspect and mount the intended layout from trusted installer media. Then:"
-        )
         print(command("recover") + ' --assessor "$USER" --apply')
     elif step.action == Action.INSTALL_RECOVERY:
         print(
-            "After review, use the documented install --retry-interrupted procedure; "
+            "Review partial installation before install --retry-interrupted; "
             "never rerun Disko."
         )
 
@@ -833,14 +846,17 @@ def review(state: Path, assessor: str, report: Path) -> None:
     record_review(state, step, assessor, report)
 
 
-def record_review(state: Path, step: NextStep, assessor: str, report: Path) -> None:
+def record_review(
+    state: Path, step: NextStep, assessor: str, report: Path,
+    *, artifacts: tuple[Path, ...] = (),
+) -> None:
     """Record checks the operator has already confirmed in this terminal."""
     evidence = state / f"{step.stage}-review-{uuid4().hex}.json"
     payload = OperatorEvidence(
         plan_id=step.plan_id,
         stage=step.stage,
         checks=dict.fromkeys(step.required_checks, True),
-        artifacts=[str(report)],
+        artifacts=[str(report), *(str(path) for path in artifacts)],
     )
     atomic_create_file(
         destination=evidence,
@@ -868,8 +884,9 @@ def current_host(config_path: Path) -> str:
         hardware = migration.DMI_UUID.read_text().strip().lower()
     except PermissionError as error:
         raise migration.MigrationError(
-            f"No boot setup entry for {hostname}; hardware identification requires "
-            "read access to the DMI UUID. Select --host explicitly if needed."
+            f"This machine ({hostname}) is not recognised by name, and its hardware "
+            "UUID needs root to read",
+            fix="rerun with --host <host>, the host name in autoconf/config.yml",
         ) from error
     matches = [
         host
@@ -878,9 +895,53 @@ def current_host(config_path: Path) -> str:
     ]
     if len(matches) != 1:
         raise migration.MigrationError(
-            "Current hardware must match exactly one Autoconf boot_storage host"
+            f"This machine ({hostname}) matches {len(matches)} configured hosts "
+            "by hardware UUID, not exactly one",
+            fix="rerun with --host <host>, or have an administrator correct "
+            "boot_storage.hosts.<host>.hardware_uuid",
         )
     return matches[0]
+
+
+MIGRATE = "devenv shell luxnix migrate"
+INSTALLER_STEP = (
+    "Boot the installer USB stick and mount the recovery drive at /recovery, then run "
+    "as root from the preserved checkout: "
+    "python -m lx_administration.storage.boot_setup run --apply  "
+    "(docs/boot-storage-quickstart.md, step 3)"
+)
+
+
+def containers_left(state: Path) -> list[str]:
+    plan = saved_plan(state)
+    layout = (plan or {}).get("config", {}).get("in_place", {})
+    return [
+        c["container"]
+        for c in layout.get("containers", [])
+        if Path(c["container"]).exists()
+    ]
+
+
+def next_command(step: NextStep, state: Path) -> str | None:
+    """The one thing to do next for a saved plan; None once nothing is left."""
+    match step.action:
+        case Action.PREPARE | Action.ASSESS:
+            return MIGRATE
+        case Action.PROVISION | Action.PREPARE_ACCESS | Action.INSTALL:
+            return INSTALLER_STEP
+        case Action.RECOVER | Action.INSTALL_RECOVERY:
+            return (
+                f"An administrator reviews the interrupted step: {step.reason} "
+                "(docs/boot-storage-migration.md#interrupted-setup)"
+            )
+        case Action.ACCEPT if not acceptance_recorded(state):
+            return (
+                "Cold-boot the machine, unlock it, check that login and the "
+                f"application work, then run: {MIGRATE}"
+            )
+    if containers_left(state):
+        return "devenv shell luxnix retire-containers"
+    return None
 
 
 def run_workflow(
@@ -889,14 +950,16 @@ def run_workflow(
     from lx_administration.storage import recovery_media
 
     if apply and not sys.stdin.isatty():
-        raise migration.MigrationError("Apply requires a private interactive terminal")
+        raise migration.MigrationError(
+            "Apply requires a private interactive terminal", fix=migration.TERMINAL_FIX
+        )
     show_target(spec)
     if not apply:
         if (state / "plan.json").exists():
             show_step(next_step(state), state, config)
         else:
             recovery_media.setup(spec, state, apply=False, device=device)
-        print("Preview only. Run: devenv shell boot-storage-setup")
+        print(f"Preview only. Run: {MIGRATE}")
         return
     recovery_media.setup(spec, state, apply=True, device=device)
     save_plan(spec, state)
@@ -966,7 +1029,8 @@ def drive(state: Path, config: Path) -> None:
                 return
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    argv = sys.argv[1:] if argv is None else argv
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="action", required=True)
     observation = sub.add_parser(
@@ -1000,6 +1064,7 @@ def main() -> None:
         "run",
         "preflight",
         "retire-containers",
+        "verify",
     ):
         command = sub.add_parser(action)
         # Without either option the host comes from this machine's identity.
@@ -1052,11 +1117,13 @@ def main() -> None:
         if action == "attest":
             command.add_argument("--stage", choices=migration.STAGES, required=True)
             command.add_argument("--evidence", type=Path, required=True)
-    # The bare command is the normal way in: it picks the host and the next step.
-    args = parser.parse_args(sys.argv[1:] or ["guide"])
+    if not argv:
+        parser.print_help()
+        return
+    args = parser.parse_args(argv)
     if args.action == "retire-containers" and os.geteuid() != 0:
         module = "lx_administration.storage.boot_setup"
-        os.execvp("sudo", ["sudo", sys.executable, "-m", module, *sys.argv[1:]])
+        os.execvp("sudo", ["sudo", sys.executable, "-m", module, *argv])
     os.umask(0o077)
     try:
         if args.action != "observe":
@@ -1068,7 +1135,10 @@ def main() -> None:
                     host, args.config, device=args.device, custody=args.custody
                 )
                 return
-            spec, state = configured_target(args.config, host)
+            # Only explicit planning can replace a saved plan. Inspection and
+            # applying an existing plan must never silently select another one.
+            target = configured_target if args.action == "plan" else target_spec
+            spec, state = target(args.config, host)
             if args.action not in {"run", "status"} and not args.json:
                 show_target(spec)
         match args.action:
@@ -1120,6 +1190,9 @@ def main() -> None:
             case "status":
                 print(json.dumps(migration.status(state), indent=2))
                 return
+            case "verify":
+                verify_hardware(state)
+                return
             case "next":
                 pass
             case "advance":
@@ -1137,13 +1210,9 @@ def main() -> None:
         show_step(next_step(state), state, args.config, as_json=args.json)
     except migration.Stopped as stop:
         print(f"\nPaused, nothing has failed. {stop}")
-        print("Run this again to continue: devenv shell boot-storage-setup")
+        print(f"Next: {MIGRATE}  (continues where you left off)")
     except (ValueError, KeyError, OSError, subprocess.SubprocessError) as error:
-        parser.exit(
-            1,
-            f"Root setup stopped: {error}\n"
-            "Keep the plan, journal and recovery copies.\n",
-        )
+        parser.exit(1, migration.explain_stop(error))
 
 
 if __name__ == "__main__":

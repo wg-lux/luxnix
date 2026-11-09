@@ -11,6 +11,12 @@ boundaries:
   - Source checks do not prove deployment readiness
   - Nix evaluation and VM tests are separate from the fast Python lane
 entrypoints:
+  - name: fresh-install
+    file: test_fresh_install.py
+    purpose: Refuse unsafe erasure, resume verified fresh installation without formatting or credential replacement and inspect root-only encrypted systems.
+  - name: fresh-install-vm
+    file: nixtest/fresh_install_vm_test.nix
+    purpose: Exercise the packaged installer, interruption recovery without repeated Disko, encrypted boot and administrator PAM authentication.
   - name: migration-loader-vm
     file: test_migration_loader_vm.py
     purpose: Opt-in disposable QEMU boot of the signed-loader initrd and rejection of corrupted external payloads; no production firmware or root disks.
@@ -22,10 +28,13 @@ entrypoints:
     purpose: Verify authenticated archive round trips, tamper rejection, credential drift and non-overwriting backup behavior.
   - name: in-place-encryption-safety
     file: test_in_place.py
-    purpose: Verify refusal before disk changes, compared data consolidation and acceptance-gated container retirement.
+    purpose: Verify child-held operation locks, truthful partial-failure diagnostics, compared data consolidation and acceptance-gated container retirement.
   - name: boot-guide
     file: test_boot_guide.py
-    purpose: Verify the guided command never formats existing custody, never answers for the operator and keeps replaced plans.
+    purpose: Preserve existing custody and distinguish accepted backup risk from operator-reported restore evidence without answering for the operator.
+  - name: luxnix-command
+    file: test_luxnix_cli.py
+    purpose: Verify fresh installation is the nonmutating default, preservation requires an explicit command, and status never creates or refreshes plans.
   - name: in-place-encryption-vm
     file: nixtest/in_place_encryption_vm_test.nix
     purpose: Encrypt a real plaintext root with containers, cut power, resume, cold boot and retire containers on disposable disks.
@@ -37,7 +46,7 @@ entrypoints:
     purpose: Verify external selection, mount identity, capacity checks and non-destructive recovery setup.
   - name: boot-setup-safety
     file: test_boot_setup.py
-    purpose: Verify sequential root setup, disposal gates, typed approval, journal durability and non-formatting recovery.
+    purpose: Verify sequential root setup, disposal gates, typed approval, journal durability, non-formatting recovery and replacement of outdated unstarted plans.
   - name: boot-recovery-vm
     file: nixtest/boot_recovery_vm_test.nix
     purpose: Exercise gc-02 credential validators, immutable-user PAM login, desktop chooser and delayed Vault dependency recovery in a disposable VM.
@@ -107,6 +116,18 @@ entrypoints:
   - name: boot-storage
     file: test_boot_storage.py
     purpose: Verify fleet boot LUKS declarations and read-only recovery failure checks.
+  - name: root-guard
+    file: test_root_guard.py
+    purpose: Decide root-storage activation across disk states, identity, retention, EFI capacity and audited overrides.
+  - name: root-recovery
+    file: test_root_recovery.py
+    purpose: Classify complete observed storage and refuse generation selection on failed probes, incomplete members or interrupted conversion.
+  - name: migration-lifecycle
+    file: test_migration_lifecycle.py
+    purpose: Reject invalid or tampered migration stages and keep repeated transitions idempotent.
+  - name: root-guard-vm
+    file: nixtest/root_guard_vm_test.nix
+    purpose: Run the real preflight against plaintext, LUKS2 and interrupted disposable disks.
   - name: boot-storage-vm
     file: nixtest/boot_storage_vm_test.nix
     purpose: Disposable plaintext-root compatibility and console/SSH LUKS unlock, partition/MD-array unlock, deferred startup and protected-write rejection.
@@ -186,6 +207,9 @@ entrypoints:
   - name: storage-boot-ordering
     file: test_storage_boot_ordering.py
     purpose: Evaluate gc-09's legacy storage graph against boot ordering cycles and mandatory nested-bind identity gates.
+  - name: operator-storage-helper-build
+    file: test_operator_storage_helper.py
+    purpose: Build the recovery helper with ShellCheck enabled and verify empty-service refusal before unlock or startup.
   - name: operator-unlocked-storage
     file: test_operator_unlocked_storage.py
     purpose: Evaluate reusable storage validation, dependency gates, disabled isolation and generated site layouts.

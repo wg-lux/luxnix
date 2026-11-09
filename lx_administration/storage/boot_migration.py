@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
-from datetime import datetime
+from contextvars import ContextVar
 import fcntl
 import hashlib
 import json
@@ -24,33 +24,25 @@ import time
 import yaml
 
 from lx_administration.secret_storage import encrypted_storage, filesystem_devices
+from lx_administration.storage import migration_lifecycle as lifecycle
 from lx_administration.storage.cutover import atomic_json
 
+# Preservation has two preparation stages. Fresh installation owns its own
+# admission contract and never records migration assessments.
 STAGES = {
     "recovery": (
         "console_boot_tested",
+        "trusted_installer_tested",
         "independent_credentials_tested",
         "vault_recovery_tested",
-        "headers_preserved",
-        "trusted_installer_tested",
-    ),
-    "backup": (
-        "archives_authenticated",
-        "independent_copy_verified",
-        "source_retained",
-    ),
-    "restore": (
-        "isolated_restore_verified",
-        "database_verified",
-        "historical_media_decrypted",
-        "identities_preserved",
+        "in_place_backup_acknowledged",
+        "plaintext_remnants_reviewed",
     ),
     "prepared": (
         "target_layout_reviewed",
         "recovery_slots_tested",
-        "identities_restored",
-        "database_restored",
         "boot_artifacts_reviewed",
+        "container_data_consolidated",
     ),
     "acceptance": (
         "offline_cold_boot_passed",
@@ -61,21 +53,50 @@ STAGES = {
     ),
     "install-recovery": ("partial_install_reviewed", "safe_to_retry_install_only"),
 }
-ORDER = ("recovery", "backup", "restore", "prepared")
+ORDER = ("recovery", "prepared")
+
 MAX_AGE = 24 * 60 * 60
 DMI_UUID = Path("/sys/class/dmi/id/product_uuid")
 INSTALL_LOCK = Path("/run/lock/luxnix-boot-install.lock")
+_state_locks: ContextVar[tuple[tuple[tuple[int, int], int], ...]] = ContextVar(
+    "state_locks", default=()
+)
 HOST = re.compile(r"[a-z][a-z0-9-]{0,62}")
 CLOSURE = re.compile(r"/nix/store/[a-z0-9]{32}-nixos-system-[^/]+")
 PREFLIGHT_RECEIPT = "secret-preflight.json"
+RECOVERY_CHECKS = "recovery-checks.json"
+
+
+STATUS_COMMAND = "devenv shell luxnix status"
+PREFLIGHT_FIX = "devenv shell luxnix migrate  (reruns the secret preflight)"
+TERMINAL_FIX = (
+    "open a terminal window on this machine and run the command there directly, "
+    "not through a pipe, script or task runner"
+)
 
 
 class MigrationError(ValueError):
-    pass
+    """A stop; `fix` names the one thing that resolves it, when that is known."""
+
+    def __init__(self, message: str, *, fix: str | None = None) -> None:
+        super().__init__(message)
+        self.fix = fix
 
 
 class Stopped(Exception):
     """The operator paused or must act first; this is not a failure."""
+
+
+def explain_stop(error: BaseException) -> str:
+    """Every stop says what happened, what is kept, and the next thing to run."""
+    fix = getattr(error, "fix", None) or (
+        f"{STATUS_COMMAND}  (reads the saved state and names the next step)"
+    )
+    return (
+        f"\nSTOPPED: {error}\n"
+        "Kept: the plan, journal and recovery copies. Do not delete them.\n"
+        f"Next: {fix}\n"
+    )
 
 
 # Receipt item states that let a preflight pass; written and verified from this one set.
@@ -128,7 +149,52 @@ def private_path(path: Path, *, directory: bool = False) -> None:
 
 
 @contextmanager
+def state_lock(state: Path):
+    """Serialize state replacement with execution on an inode never renamed.
+
+    The private parent directory is deliberately shared by sibling host states.
+    Opening it creates no lockfile, including for read-only inspection.
+    """
+    private_path(state.parent, directory=True)
+    fd = os.open(state.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    token = None
+    try:
+        info = os.fstat(fd)
+        if (
+            not stat.S_ISDIR(info.st_mode)
+            or info.st_uid != os.geteuid()
+            or info.st_mode & 0o022
+        ):
+            raise MigrationError("Unsafe state parent lock")
+        identity = (info.st_dev, info.st_ino)
+        held = dict(_state_locks.get()).get(identity)
+        if held is not None:
+            yield held
+            return
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise MigrationError(
+                "Another operation is using this recovery location; "
+                "wait for it to finish"
+            ) from error
+        token = _state_locks.set((*_state_locks.get(), (identity, fd)))
+        yield fd
+    finally:
+        if token is not None:
+            _state_locks.reset(token)
+        os.close(fd)
+
+
+@contextmanager
 def locked_state(state: Path, *, create: bool = False):
+    with state_lock(state) as stable_lock:
+        with _locked_state(state, create=create):
+            yield stable_lock
+
+
+@contextmanager
+def _locked_state(state: Path, *, create: bool = False):
     if create and not state.exists():
         private_path(state.parent, directory=True)
         state.mkdir(mode=0o700)
@@ -172,7 +238,8 @@ def source_identity(checkout: Path) -> dict:
     ):
         raise MigrationError(
             "The release checkout has uncommitted changes; review and retain "
-            "a clean release first"
+            "a clean release first",
+            fix=f"git -C {checkout} status  (commit or stash the changes, then rerun)",
         )
     return {
         "revision": run("git", "-C", str(checkout), "rev-parse", "HEAD"),
@@ -180,9 +247,18 @@ def source_identity(checkout: Path) -> dict:
     }
 
 
+def migration_target(checkout: Path, host: str) -> str:
+    """Name the encrypted target; the host may still deploy its plaintext layout."""
+    return (
+        f"let f = builtins.getFlake {json.dumps('git+file://' + str(checkout))}; "
+        f"in f.nixosConfigurations.{host}.extendModules {{ modules = [ {{ "
+        "luxnix.storage.operatorUnlocked.layout = "
+        'f.inputs.nixpkgs.lib.mkForce "boot-luks"; } ]; }'
+    )
+
+
 def evaluate(checkout: Path, host: str) -> dict:
-    expression = """let f = builtins.getFlake CHECKOUT;
-      c = f.nixosConfigurations.HOST.config;
+    expression = """let c = (TARGET).config;
     in { host = c.networking.hostName;
       layout = c.luxnix.storage.operatorUnlocked.layout;
       enabled = c.luxnix.storage.operatorUnlocked.enable;
@@ -214,7 +290,6 @@ def evaluate(checkout: Path, host: str) -> dict:
         data = item "data";
         users = c.users.users;
         env = l.runtime.extraEnvironment;
-        encrypted = l.runtime.managedEncryptedData;
         hub = c.services.luxnix.hubStorage.node;
         recipients = prefix: files: map
           (path: data "${prefix}-${baseNameOf path}" path) files;
@@ -240,10 +315,7 @@ def evaluate(checkout: Path, host: str) -> dict:
             "${vault}/lx_annotate_identity_legacy_default")
           (data "identity-salt-recovery" "/var/lib/lx-annotate-identity-salts")
           (key "django-secret-key" "${vault}/django_secret_key")
-        ] ++ (if encrypted.enable then [
-          (data "encrypted-data-key" encrypted.keyFile)
-          (data "encrypted-data-uuid" encrypted.luksUuidFile)
-        ] else [ ]) ++ (if l.hub.transferApi.enable then
+        ] ++ (if l.hub.transferApi.enable then
           recipients "hub-recipient" l.hub.transferApi.recipientPrivateKeyFiles
         else [ ]) else [ ]) ++ (if hub.enable then
           recipients "hub-storage-recipient" hub.recipientPrivateIdentityFiles
@@ -282,9 +354,7 @@ def evaluate(checkout: Path, host: str) -> dict:
         binds = o.bindMounts;
       };
       failures = map (a: a.message) (builtins.filter (a: !a.assertion) c.assertions);
-    }""".replace("CHECKOUT", json.dumps("git+file://" + str(checkout))).replace(
-        "HOST", host
-    )
+    }""".replace("TARGET", migration_target(checkout, host))
     result = json.loads(
         run(
             "nix",
@@ -312,11 +382,6 @@ def evaluate(checkout: Path, host: str) -> dict:
     return result
 
 
-def fresh_install(spec: dict) -> bool:
-    """No separate backup and restore stages: nothing is restored afterwards."""
-    return spec.get("installation", "migration") in {"fresh", "disposable", "in-place"}
-
-
 def boot_verify_root() -> None:
     """Refuse to act unless the running root really is the encrypted mapping."""
     from lx_administration.storage import boot
@@ -330,9 +395,12 @@ def encrypts_in_place(spec: dict) -> bool:
 
 def require_in_place(spec: dict) -> None:
     """Old plans remain readable evidence, but can never authorize erasure."""
-    if (not isinstance(spec, dict) or spec.get("installation") != "in-place"
-            or spec.get("source_retention") != "in-place"
-            or spec.get("root_encryption", "luks2") != "luks2"):
+    if (
+        not isinstance(spec, dict)
+        or spec.get("installation") != "in-place"
+        or spec.get("source_retention") != "in-place"
+        or spec.get("root_encryption", "luks2") != "luks2"
+    ):
         raise MigrationError(
             "Only in-place LUKS2 encryption is supported. Destructive installation "
             "plans are retired; preserve their journals and recovery evidence."
@@ -353,7 +421,8 @@ def validate_in_place(config: dict) -> None:
 
 
 def stage_order(plan: dict) -> tuple[str, ...]:
-    return ("recovery", "prepared") if fresh_install(plan["spec"]) else ORDER
+    require_in_place(plan["spec"])
+    return ORDER
 
 
 def validate_selection(spec: dict, config: dict) -> None:
@@ -480,26 +549,25 @@ def plan_spec(spec: dict, state: Path) -> dict:
             raise MigrationError(
                 "Selected disks do not exactly match the evaluated host layout"
             )
-        for attribute, field in (
-            ("toplevel", "closure"),
+        target = migration_target(Path(spec["checkout"]), spec["host"])
+        built = run(
+            "nix",
+            "build",
+            "--no-update-lock-file",
+            "--no-link",
+            "--print-out-paths",
+            "--impure",
+            "--expr",
+            f"({target}).config.system.build.toplevel",
+            timeout=3600,
+        )
+        if (
+            built != config["closure"]
+            or source_identity(Path(spec["checkout"])) != source
         ):
-            built = run(
-                "nix",
-                "build",
-                "--no-update-lock-file",
-                "--no-link",
-                "--print-out-paths",
-                f"{spec['checkout']}#nixosConfigurations.{spec['host']}"
-                f".config.system.build.{attribute}",
-                timeout=3600,
+            raise MigrationError(
+                "Release or output changed during build; no plan was published"
             )
-            if (
-                built != config[field]
-                or source_identity(Path(spec["checkout"])) != source
-            ):
-                raise MigrationError(
-                    "Release or output changed during build; no plan was published"
-                )
         payload = {
             "schema_version": 1,
             "spec": spec,
@@ -552,59 +620,23 @@ def load_progress(state: Path, plan: dict) -> dict:
 def verify_source(plan: dict) -> None:
     if source_identity(Path(plan["spec"]["checkout"])) != plan["source"]:
         raise MigrationError(
-            "The reviewed release or lockfile changed; create a new plan"
+            "The checkout or flake.lock changed after this plan started",
+            fix=f"git -C {plan['spec']['checkout']} checkout "
+            f"{plan['source']['revision']}  (the plan's revision), then rerun",
         )
 
 
 def required_checks(stage: str, plan: dict) -> set[str]:
-    if stage in ORDER and stage not in stage_order(plan):
-        raise MigrationError("This stage does not apply to a fresh installation")
-    required = set(STAGES[stage])
-    if encrypts_in_place(plan["spec"]):
-        if stage == "recovery":
-            return {
-                "console_boot_tested",
-                "trusted_installer_tested",
-                "independent_credentials_tested",
-                "vault_recovery_tested",
-                "in_place_backup_acknowledged",
-                "plaintext_remnants_reviewed",
-            }
-        if stage == "prepared":
-            return {
-                "target_layout_reviewed",
-                "recovery_slots_tested",
-                "boot_artifacts_reviewed",
-                "container_data_consolidated",
-            }
-    if fresh_install(plan["spec"]):
-        if stage == "recovery":
-            required = {
-                "console_boot_tested",
-                "trusted_installer_tested",
-                "independent_credentials_tested",
-                "vault_recovery_tested",
-                "new_disks_verified",
-            }
-            if plan["spec"].get("installation") == "disposable":
-                required.remove("new_disks_verified")
-                required.update(
-                    {
-                        "selected_disks_disposal_authorized",
-                        "machine_and_application_credentials_preserved_or_reenrolled",
-                    }
-                )
-        elif stage == "prepared":
-            required -= {"database_restored", "identities_restored"}
-            required.add("initial_credentials_staged")
-    if stage == "backup" and plan["spec"]["source_retention"] == "whole-disk-image":
-        required.add("whole_disk_image_verified")
-    return required
+    require_in_place(plan["spec"])
+    if stage not in STAGES:
+        raise MigrationError("This stage does not apply to in-place preservation")
+    return set(STAGES[stage])
 
 
 def check_attestation(
     stage: str, plan: dict, progress: dict, *, fresh: bool = True
 ) -> None:
+    require_in_place(plan["spec"])
     record = progress["attestations"].get(stage)
     if not record or record["plan_id"] != plan["plan_id"]:
         raise MigrationError(
@@ -637,8 +669,6 @@ def check_attestation(
             )
     if stage == "recovery":
         verify_preflight_artifacts(record["artifacts"], plan, fresh=fresh)
-    if stage == "recovery" and not fresh_install(plan["spec"]):
-        verify_readiness(record["artifacts"], plan, fresh=fresh)
 
 
 def secret_contract(plan: dict) -> dict:
@@ -662,8 +692,8 @@ def verify_preflight_receipt(path: Path, plan: dict, *, fresh: bool = True) -> N
         receipt = json.loads(path.read_text())
     except (OSError, ValueError) as error:
         raise MigrationError(
-            "Stop: run boot-storage-setup preflight first; the secrets this host "
-            "needs have not been verified"
+            "The secret preflight has not verified this host's secrets yet",
+            fix=PREFLIGHT_FIX,
         ) from error
     exact_keys(
         receipt,
@@ -685,7 +715,9 @@ def verify_preflight_receipt(path: Path, plan: dict, *, fresh: bool = True) -> N
         status == "salt-regenerated" and not is_salt_id(key)
         for key, status in statuses.items()
     ):
-        raise MigrationError("Only a salt can be regenerated; rerun preflight")
+        raise MigrationError(
+            "Only a salt can be regenerated; rerun preflight", fix=PREFLIGHT_FIX
+        )
     if (
         receipt["schema_version"] != 1
         or receipt["kind"] != "secret-preflight"
@@ -696,12 +728,14 @@ def verify_preflight_receipt(path: Path, plan: dict, *, fresh: bool = True) -> N
         or set(statuses.values()) - PREFLIGHT_PASSING
     ):
         raise MigrationError(
-            "The secret preflight receipt does not prove this plan; rerun preflight"
+            "The secret preflight receipt does not prove this plan; rerun preflight",
+            fix=PREFLIGHT_FIX,
         )
     if fresh and not 0 <= time.time() - receipt["recorded_at"] <= MAX_AGE:
         raise MigrationError(
             "The secret preflight is older than 24 hours or has an invalid clock; "
-            "rerun preflight"
+            "rerun preflight",
+            fix=PREFLIGHT_FIX,
         )
 
 
@@ -713,8 +747,8 @@ def verify_preflight_artifacts(
     ]
     if len(receipts) != 1:
         raise MigrationError(
-            "The recovery assessment has no secret preflight receipt; run "
-            "boot-storage-setup preflight, then review again"
+            "The recovery assessment has no secret preflight receipt",
+            fix=PREFLIGHT_FIX,
         )
     verify_preflight_receipt(receipts[0], plan, fresh=fresh)
 
@@ -741,6 +775,7 @@ def attest(state: Path, stage: str, evidence_path: Path, assessor: str) -> None:
         )
     with locked_state(state):
         plan = load_plan(state)
+        require_in_place(plan["spec"])
         progress = load_progress(state, plan)
         verify_source(plan)
         private_path(evidence_path)
@@ -788,6 +823,8 @@ def attest(state: Path, stage: str, evidence_path: Path, assessor: str) -> None:
             and progress["install"]["status"] != "interrupted"
         ):
             raise MigrationError("There is no interrupted installation to review")
+        if stage == "acceptance":
+            verify_booted(plan)
         artifacts = []
         receipt = preflight_artifacts(state, plan) if stage == "recovery" else []
         for path in dict.fromkeys(
@@ -795,8 +832,6 @@ def attest(state: Path, stage: str, evidence_path: Path, assessor: str) -> None:
         ):
             private_path(Path(path))
             artifacts.append({"path": path, "sha256": file_digest(Path(path))})
-        if stage == "recovery" and not fresh_install(plan["spec"]):
-            verify_readiness(artifacts, plan)
         previous = progress["attestations"].get(stage)
         if (
             previous
@@ -823,53 +858,14 @@ def attest(state: Path, stage: str, evidence_path: Path, assessor: str) -> None:
             "checks": sorted(checks),
         }
         atomic_json(state / "progress.json", progress)
-
-
-def verify_readiness(artifacts: list[dict], plan: dict, *, fresh: bool = True) -> None:
-    from lx_administration.storage.readiness import evaluate as admit
-
-    reports = []
-    for artifact in artifacts:
-        path = Path(artifact["path"])
-        # Reports are small JSON documents, never decrypt or parse backup payloads.
-        if path.suffix != ".json" or path.stat().st_size > 2 * 1024 * 1024:
-            continue
-        value = json.loads(path.read_text())
-        if isinstance(value, dict) and "report_sha256" in value:
-            reports.append(value)
-    if len(reports) != 1:
-        raise MigrationError(
-            "Recovery evidence must include exactly one private readiness "
-            "admission JSON report captured through pinned SSH"
-        )
-    report = reports[0]
-    payload = {
-        k: v for k, v in report.items() if k not in {"report_sha256", "admission"}
-    }
-    admission = report.get("admission", {})
-    if report["report_sha256"] != digest(payload):
-        raise MigrationError(
-            "Readiness report content does not match its recorded digest"
-        )
-    decision = admit(
-        report,
-        plan["spec"]["host"],
-        admission.get("expected_layout"),
-        admission.get("expected_serials"),
-    )
-    if not decision["admitted"]:
-        raise MigrationError(
-            "The readiness baseline fails admission; collect a corrected "
-            "report before proceeding"
-        )
-    observed = datetime.fromisoformat(report["observed_at"])
-    if observed.tzinfo is None or (
-        fresh and not 0 <= time.time() - observed.timestamp() <= MAX_AGE
-    ):
-        raise MigrationError(
-            "Readiness observation must be from the last 24 hours with an "
-            "explicit timezone"
-        )
+        if stage == "acceptance":
+            lifecycle.advance(
+                state,
+                plan["plan_id"],
+                lifecycle.Stage.COMPLETED,
+                detail=f"accepted by {assessor}",
+                initial=lifecycle_position(state, plan, progress),
+            )
 
 
 @contextmanager
@@ -1357,7 +1353,7 @@ def install(
     retry_interrupted: bool = False,
     expected_mounts: dict | None = None,
 ) -> None:
-    with installer_lock() as install_lock, locked_state(state):
+    with installer_lock() as install_lock, locked_state(state) as state_fd:
         plan = load_plan(state)
         progress = load_progress(state, plan)
         status = progress["install"]["status"]
@@ -1396,6 +1392,7 @@ def install(
             raise MigrationError(
                 "The reviewed built closure is not available in the installer store"
             )
+        verify_root_guard(plan, Path("/mnt"))
         confirm(plan)
         # Recheck after the operator prompt, immediately before the one mutation.
         if (
@@ -1404,6 +1401,15 @@ def install(
         ):
             raise MigrationError("Target changed while awaiting confirmation")
         verify_independent_state(state, progress, disks)
+        initial = lifecycle_position(state, plan, progress)
+        verify_root_guard(plan, Path("/mnt"))
+        lifecycle.advance(
+            state,
+            plan["plan_id"],
+            lifecycle.Stage.ACTIVATING,
+            detail="hardware preflight passed",
+            initial=initial,
+        )
         progress["attestations"].pop("install-recovery", None)
         progress["install"] = {
             "status": "running",
@@ -1422,7 +1428,7 @@ def install(
                     "--no-root-passwd",
                 ],
                 check=True,
-                pass_fds=(install_lock,),
+                pass_fds=(install_lock, state_fd),
             )
             link = Path("/mnt/nix/var/nix/profiles/system")
             # Absolute store symlinks resolve in the live installer as the same closure.
@@ -1432,9 +1438,10 @@ def install(
                 )
             if verify_target(plan, disks) != identities:
                 raise MigrationError("Target identity changed during installation")
-        except BaseException:
+        except BaseException as error:
             progress["install"]["status"] = "interrupted"
             atomic_json(state / "progress.json", progress)
+            lifecycle.fail(state, plan["plan_id"], type(error).__name__)
             raise
         progress["install"]["status"] = "complete"
         progress["install"]["finished_at"] = time.time()
@@ -1445,10 +1452,123 @@ def install(
         )
 
 
+def lifecycle_position(state: Path, plan: dict, progress: dict) -> dict:
+    """Where an operation begun before lifecycle records existed already stands."""
+    journal = state / "provision.json"
+    phase = json.loads(journal.read_text())["phase"] if journal.exists() else None
+    return lifecycle.derive(
+        phase,
+        progress["install"]["status"],
+        "acceptance" in progress["attestations"],
+    )
+
+
+def verify_booted(plan: dict) -> None:
+    """Acceptance is a real boot of the planned closure on the encrypted disk."""
+    closure = plan["config"]["closure"]
+    if {os.path.realpath(p) for p in ("/run/booted-system", "/run/current-system")} != {closure}:
+        raise MigrationError(
+            "Acceptance must run on the migrated host after it booted the planned system"
+        )
+    verify_root_guard(plan, Path("/"), action="dry-activate")
+
+
+def verify_root_guard(plan: dict, root: Path, *, action: str = "boot") -> dict:
+    """Probe the actual disk against the planned closure; a saved stage proves nothing."""
+    from lx_administration.storage import root_guard
+
+    contract = Path(plan["config"]["closure"]) / "etc/luxnix/root-storage.json"
+    if not contract.is_file():
+        raise MigrationError(
+            "The planned closure has no root-storage contract; create a new plan "
+            "from the current release"
+        )
+    spec = json.loads(contract.read_text())
+    seen = root_guard.observe(spec, root=root, system=plan["config"]["closure"])
+    findings = root_guard.assess(
+        spec,
+        seen,
+        action=action,
+        system=plan["config"]["closure"],
+        first_install=True,
+        # In-place conversion writes this receipt after testing the passphrase.
+        require_receipt=True,
+    )
+    if findings:
+        raise MigrationError(
+            "The disk does not match the planned encrypted root: "
+            + "; ".join(f"{item.code}: {item.message}" for item in findings)
+        )
+    return {"luks_uuid": seen["luks"]["uuid"], "partition": seen["partition"]}
+
+
+def data_recovery(state: Path, plan: dict, progress: dict) -> dict:
+    """Report reviewed human evidence separately from credential custody."""
+    unknown = {
+        "status": "unknown",
+        "verification": "unavailable",
+        "note": "No reviewed, plan-bound data-backup outcome is available.",
+    }
+    path = state / RECOVERY_CHECKS
+    try:
+        check_attestation(
+            "recovery", plan, progress,
+            fresh=progress["install"]["status"] != "complete",
+        )
+        artifacts = progress["attestations"]["recovery"]["artifacts"]
+        if not any(item["path"] == str(path) for item in artifacts):
+            return unknown
+        saved = json.loads(path.read_text())
+        if saved["plan_id"] != plan["plan_id"]:
+            return unknown
+        backup = saved["checks"]["in_place_backup_acknowledged"]["backup"]
+        exact_keys(
+            backup,
+            {"status", "accepted_by", "location", "restore_test", "verification"},
+            "Backup outcome",
+        )
+        if backup["status"] == "risk-accepted":
+            valid = (
+                isinstance(backup["accepted_by"], str)
+                and bool(backup["accepted_by"].strip())
+                and backup["location"] is None
+                and backup["restore_test"] is None
+                and backup["verification"] == "not-performed"
+            )
+        elif backup["status"] == "restore-tested":
+            valid = (
+                backup["accepted_by"] is None
+                and isinstance(backup["location"], str)
+                and Path(backup["location"]).is_absolute()
+                and isinstance(backup["restore_test"], str)
+                and bool(backup["restore_test"].strip())
+                and backup["verification"] == "operator-reported"
+            )
+        else:
+            valid = False
+        if valid:
+            return backup | {"current_backup_availability": "not-inspected"}
+    except (ValueError, KeyError, TypeError, OSError):
+        pass
+    return unknown
+
+
 def status(state: Path) -> dict:
     with locked_state(state):
         plan = load_plan(state)
         progress = load_progress(state, plan)
+        if not encrypts_in_place(plan["spec"]):
+            return {
+                "host": plan["spec"]["host"],
+                "plan_id": plan["plan_id"],
+                "installation": plan["spec"].get("installation", "migration"),
+                "install": progress["install"]["status"],
+                "read_only": True,
+                "assessments": list(progress["attestations"]),
+                "required_checks": {},
+                "note": "Retired plan: historical evidence only. Preserve its journals "
+                "and recovery copies; it cannot authorize a new operation.",
+            }
         assessments = {}
         for stage in (*stage_order(plan), "acceptance"):
             try:
@@ -1466,8 +1586,13 @@ def status(state: Path) -> dict:
             "plan_id": plan["plan_id"],
             "install": progress["install"]["status"],
             "assessments": assessments,
+            "data_recovery": data_recovery(state, plan, progress),
             "root_encryption": plan["spec"].get("root_encryption", "luks2"),
             "installation": plan["spec"].get("installation", "migration"),
+            "stage": lifecycle.load(
+                state, plan["plan_id"], lifecycle_position(state, plan, progress)
+            )["stage"],
+            "stage_note": "The stage is history only; run `luxnix verify` to check the disk.",
             "required_checks": {
                 s: sorted(required_checks(s, plan))
                 for s in (*stage_order(plan), "acceptance", "install-recovery")
@@ -1539,11 +1664,7 @@ def main() -> None:
         subprocess.SubprocessError,
         yaml.YAMLError,
     ) as error:
-        parser.exit(
-            1,
-            f"Stop: {error}. Keep the current disks and recovery copies; "
-            f"review the migration runbook.\n",
-        )
+        parser.exit(1, explain_stop(error))
 
 
 if __name__ == "__main__":

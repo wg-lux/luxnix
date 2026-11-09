@@ -150,7 +150,11 @@ def test_going_without_a_backup_must_name_who_accepts_it(monkeypatch):
     with pytest.raises(guide.Stopped):
         guide.ask_backup({"disks": []})
     answers(monkeypatch, "", "A. Operator")
-    assert "Risk accepted by: A. Operator" in guide.ask_backup({"disks": []})
+    backup = guide.ask_backup({"disks": []})
+    assert backup == {
+        "status": "risk-accepted", "accepted_by": "A. Operator",
+        "location": None, "restore_test": None, "verification": "not-performed",
+    }
 
 
 def test_untested_backup_does_not_count(monkeypatch, tmp_path):
@@ -162,6 +166,116 @@ def test_untested_backup_does_not_count(monkeypatch, tmp_path):
     answers(monkeypatch, str(tmp_path), "")
     with pytest.raises(guide.Stopped):
         guide.ask_backup({"disks": []})
+
+
+def test_tested_backup_records_human_evidence_not_automated_proof(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(guide.secret_preflight, "exists", lambda path: True)
+    monkeypatch.setattr(
+        guide.recovery_custody, "storage_disks", lambda path: {"/dev/usb"}
+    )
+    monkeypatch.setattr(guide, "measure_size", lambda path: "1G")
+    answers(
+        monkeypatch, str(tmp_path), "Stopped writers; restored data and keys offline"
+    )
+    backup = guide.ask_backup({"disks": []})
+    assert backup["status"] == "restore-tested"
+    assert backup["verification"] == "operator-reported"
+    assert backup["location"] == str(tmp_path)
+    assert "not automated verification" in guide.backup_detail(backup)
+
+
+@pytest.mark.parametrize(
+    "status,confirmation,label",
+    [
+        ("risk-accepted", "ACKNOWLEDGED", "risk accepted; backup not verified"),
+        ("restore-tested", "VERIFIED", "restore test reported by operator"),
+    ],
+)
+def test_saved_backup_outcomes_remain_distinct(
+    monkeypatch, checks, status, confirmation, label
+):
+    backup = {
+        "status": status,
+        "accepted_by": "Operator" if status == "risk-accepted" else None,
+        "location": "/backup" if status == "restore-tested" else None,
+        "restore_test": (
+            "Offline data and key restore" if status == "restore-tested" else None
+        ),
+        "verification": (
+            "operator-reported" if status == "restore-tested" else "not-performed"
+        ),
+    }
+    monkeypatch.setattr(guide, "measured_detail", lambda *a: backup)
+    answers(monkeypatch, confirmation)
+    saved = guide.ask_checks({}, checks, step([guide.BACKUP_CHECK]))
+    record = json.loads((checks / guide.ANSWERS).read_text())
+    assert record["checks"][guide.BACKUP_CHECK]["backup"] == backup
+    assert guide.load_answers(checks, "plan-a") == saved
+    assert label in guide.write_notes(checks, saved).read_text()
+
+
+def test_waiver_cannot_be_recorded_as_a_verified_backup(monkeypatch, checks):
+    monkeypatch.setattr(
+        guide,
+        "measured_detail",
+        lambda *a: {
+            "status": "risk-accepted",
+            "accepted_by": "Operator",
+            "location": None,
+            "restore_test": None,
+            "verification": "not-performed",
+        },
+    )
+    answers(monkeypatch, "VERIFIED")
+    with pytest.raises(guide.Stopped):
+        guide.ask_checks({}, checks, step([guide.BACKUP_CHECK]))
+    assert not (checks / guide.ANSWERS).exists()
+
+
+def test_old_free_text_backup_answer_has_unknown_verification(tmp_path):
+    notes = guide.write_notes(
+        tmp_path,
+        {
+            guide.BACKUP_CHECK: {
+                "confirmed_at": guide.time.time(),
+                "detail": "Old backup acknowledgement",
+            }
+        },
+    )
+    assert "backup verification unknown" in notes.read_text()
+    assert "confirmed" not in notes.read_text()
+
+
+def test_custody_receipt_does_not_claim_application_data_recovery(tmp_path):
+    (tmp_path / migration.PREFLIGHT_RECEIPT).write_text(
+        json.dumps(
+            {
+                "custody": "/custody",
+                "items": [{"status": "verified"}],
+            }
+        )
+    )
+    detail = guide.measured_detail("vault_recovery_tested", {}, tmp_path)
+    assert "verifies credential custody only" in detail
+    assert "no application-data backup or restore is established" in detail
+
+
+def test_interactive_failure_does_not_claim_a_partially_changed_target_is_unchanged(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        guide.subprocess,
+        "run",
+        lambda *a, **kw: type("Result", (), {"returncode": 1})(),
+    )
+    with pytest.raises(
+        migration.MigrationError, match="may have partially completed"
+    ) as caught:
+        guide.interactive("cryptsetup", "luksFormat", str(guide.CUSTODY_FILE))
+    assert str(guide.CUSTODY_FILE) in str(caught.value)
+    assert "nothing was deleted" not in str(caught.value)
 
 
 def test_patient_data_search_reports_counts_never_file_names(monkeypatch):
@@ -183,48 +297,13 @@ def test_patient_data_search_reports_counts_never_file_names(monkeypatch):
     assert "-xdev" in calls[0]
 
 
-def plan_state(monkeypatch, tmp_path, *, stale, started):
-    state = tmp_path / "gc-09"
-    state.mkdir()
-    (state / "plan.json").write_text("{}")
-    monkeypatch.setattr(guide, "plan_is_stale", lambda *a: stale)
-    monkeypatch.setattr(guide, "plan_has_started", lambda *a: started)
-    return state
-
-
-def test_a_started_plan_is_never_replaced(monkeypatch, tmp_path):
-    seen, _ = commands(monkeypatch)
-    state = plan_state(monkeypatch, tmp_path, stale=True, started=True)
-    with pytest.raises(migration.MigrationError, match="has started"):
-        guide.replace_stale_plan(state, {"host": "gc-09"})
-    assert not seen
-
-
-def test_a_stale_unstarted_plan_is_replaced_without_asking_and_kept(
-    monkeypatch, tmp_path
-):
-    seen, _ = commands(monkeypatch)
-    state = plan_state(monkeypatch, tmp_path, stale=True, started=False)
-    answers(monkeypatch)
-    guide.replace_stale_plan(state, {"host": "gc-09"})
-    assert seen[0][:3] == ("mv", "-n", str(state))
-    assert "gc-09.superseded-" in seen[0][3]
-
-
-def test_a_current_plan_is_left_alone(monkeypatch, tmp_path):
-    seen, _ = commands(monkeypatch)
-    state = plan_state(monkeypatch, tmp_path, stale=False, started=False)
-    guide.replace_stale_plan(state, {"host": "gc-09"})
-    assert not seen
-
-
-def test_bare_command_guides_the_host_this_machine_is(monkeypatch):
+def test_explicit_guide_uses_this_machine(monkeypatch):
     called = {}
     monkeypatch.setattr(setup, "current_host", lambda config: "gc-09")
     monkeypatch.setattr(
         guide, "run", lambda host, config, **k: called.update(host=host)
     )
-    monkeypatch.setattr(sys, "argv", ["boot-storage-setup"])
+    monkeypatch.setattr(sys, "argv", ["boot-storage-setup", "guide"])
     setup.main()
     assert called["host"] == "gc-09"
 
@@ -237,7 +316,7 @@ def test_commands_no_longer_need_a_host(monkeypatch, capsys):
         seen["host"] = host
         raise ValueError("stop here")
 
-    monkeypatch.setattr(setup, "configured_target", target)
+    monkeypatch.setattr(setup, "target_spec", target)
     monkeypatch.setattr(sys, "argv", ["boot-storage-setup", "next"])
     with pytest.raises(SystemExit):
         setup.main()
@@ -264,3 +343,9 @@ def test_custody_mounts_without_suid_devices_or_execution(monkeypatch):
     seen, _ = commands(monkeypatch)
     guide.mount_custody()
     assert ("mount", "-o", "nosuid,nodev,noexec") == seen[-1][:3]
+
+
+def test_bare_preservation_helper_does_not_begin_migration(monkeypatch, capsys):
+    monkeypatch.setattr(guide, "run", lambda *a, **k: pytest.fail("explicit guide required"))
+    setup.main([])
+    assert "usage:" in capsys.readouterr().out

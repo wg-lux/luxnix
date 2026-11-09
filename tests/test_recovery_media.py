@@ -183,6 +183,8 @@ def test_cli_plans_only_after_successful_media_setup(
         + (["--apply"] if apply else []),
     )
     monkeypatch.setattr(boot_setup, "configured_target", lambda *a: (SPEC, state))
+    monkeypatch.setattr(boot_setup, "show_target", lambda *a, **k: None)
+    monkeypatch.setattr(boot_setup, "show_step", lambda *a, **k: None)
 
     def prepare_media(*args, **kwargs):
         calls.append("media")

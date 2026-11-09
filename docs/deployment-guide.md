@@ -142,6 +142,22 @@ failed systemd query or uncertain stop remains a blocker; inspect the retained
 record rather than starting concurrent recovery. Accepted and rolled-back
 records are terminal no-ops.
 
+Before scheduling detached activation, the helper runs each generation's
+`luxnix-root-preflight verify` against the live storage: both the candidate and
+its proposed rollback must pass. It repeats the candidate check before changing
+the system profile and the rollback check before restoring that profile. A
+storage rejection records `rejected` without changing the profile; rerunning the
+watchdog does nothing for that record. If storage changes after activation,
+recovery stops with its record retained rather than selecting an incompatible
+generation.
+
+When either generation has a root-storage contract, both must have one. Older
+generations without the checker cannot serve as automatic rollback targets;
+use the administrator recovery procedure to select and verify a compatible
+system. A previous plaintext-root generation is not a recovery option after
+root encryption. These checks do not replace the application compatibility
+receipt, tested independent recovery media, or post-boot hardware acceptance.
+
 ### SSH access during updates
 
 Run `devenv shell check-connectivity gc-10` from the controller before changing
@@ -269,19 +285,19 @@ continuing. If any check fails, stop, correct the canonical inventory or
 template input, regenerate, and repeat the preflight; do not start an
 installer deployment from a failed or stale result.
 
-## 5. Convert an existing root in place
+## 5. Install encrypted storage
 
-Use the [root-encryption quickstart](boot-storage-quickstart.md). Preview first:
+Fresh LUKS2 installation is the default for new or explicitly disposable machines.
+Run `devenv shell luxnix` for non-destructive setup guidance, then prepare the
+reviewed bundle with `devenv shell luxnix install --profile /absolute/host.yml`.
+Follow the [installation checklist](boot-storage-quickstart.md) for credentials,
+trusted installer media and the separate typed erasure approval.
 
-```bash
-devenv tasks run boot-storage:setup
-```
-
-The supported conversion preserves the existing Btrfs filesystem. Destructive
-fresh/disposable/erase-and-restore plans and the generic disk-installation command
-have been retired. Unsupported layouts stop for review without a formatting fallback.
-Applying the conversion requires the recovery evidence, trusted installer media
-and exact target confirmation described in that guide.
+Already encrypted machines use `devenv shell luxnix inspect <host>` before applying
+matching configuration. Existing plaintext contents that must survive use
+`devenv shell luxnix migrate`; its backup/recovery gates remain mandatory.
+Unsupported preservation layouts stop without a formatting fallback. Never reuse
+an old erase/restore plan or infer disposal approval from an earlier operation.
 
 ### Deployment failure and recovery
 
@@ -335,8 +351,8 @@ acceptance. Root unlock and application-secret delivery are separate gates.
    `devenv tasks run autoconf:generate`.
 6. Review generated outputs without editing them directly. Correct their
    Inventory, template, or Autoconf inputs instead.
-7. Run the preflight checks and follow the in-place root encryption guide only after they
-   pass.
+7. Run preflight checks, then follow the fresh encrypted installation checklist.
+   Select explicit preservation migration when existing contents must survive.
 
 ### Study laptops that send to the central hub
 

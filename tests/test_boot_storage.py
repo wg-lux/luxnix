@@ -521,10 +521,12 @@ def test_wrong_btrfs_subvolume_is_not_accepted(monkeypatch):
 
 @pytest.mark.parametrize("host", ["gc-09"])
 def test_former_legacy_hosts_use_fleet_boot_luks(host):
-    """gc-09 targets boot LUKS; gc-10 retains its installed container layout."""
+    """The planned gc-09 migration target is boot LUKS; gc-10 keeps its containers."""
     expression = r'''
     let f = builtins.getFlake ("git+file://" + builtins.toString ./.);
-        c = f.nixosConfigurations.HOST.config;
+        c = (f.nixosConfigurations.HOST.extendModules { modules = [{
+          luxnix.storage.operatorUnlocked.layout = f.inputs.nixpkgs.lib.mkForce "boot-luks";
+        }]; }).config;
     in { layout = c.luxnix.storage.operatorUnlocked.layout;
          root = c.boot.initrd.luks.devices.cryptroot.device;
          openbao = c.luxnix.openbao.local.enable;
@@ -756,15 +758,15 @@ def test_root_setup_explains_layout_mismatch_without_mutation(
     assert checked == ["/dev/member1", "/dev/member2"]
     assert "Mounted root: /dev/current[/root]" in output
     assert ("already uses LUKS2" in output) is encrypted
-    assert ("devenv tasks run boot-storage:setup" in output) is not encrypted
+    assert ("devenv shell luxnix migrate" in output) is not encrypted
     assert "boot-storage-migration plan" not in output
     assert "--spec" not in output and "--state" not in output
     assert "boot-storage-operator.md" not in output
     assert "Run the candidate generation" not in output
     if not encrypted:
-        for phase in ("1. PREVIEW", "2. PREPARE", "3. INSTALL", "4. ACCEPT"):
-            assert phase in output
-        assert "devenv shell boot-storage-setup\n" in output
+        assert "docs/boot-storage-migration.md" in output
+        assert "cold-boot acceptance" in output
+        assert "fresh" not in output and "--profile" not in output
         assert "pauses before encrypting the existing root in place" in output
         assert "pauses before formatting" not in output
     assert "Root matches" not in output
@@ -819,7 +821,7 @@ def test_missing_cryptroot_gives_actionable_preswitch_error(monkeypatch):
         raise FileNotFoundError(path)
 
     monkeypatch.setattr(boot.os, "stat", missing)
-    with pytest.raises(ValueError, match="devenv tasks run boot-storage:setup") as error:
+    with pytest.raises(ValueError, match="devenv shell luxnix migrate") as error:
         boot.verify_mount("/", "/dev/mapper/cryptroot", "btrfs", "root")
     assert "mounted root uses /dev/plain" in str(error.value)
     assert "luxnix-setup-root-encryption" not in str(error.value)
@@ -830,7 +832,7 @@ def test_packaged_root_setup_help_and_argument_safety():
       let f = builtins.getFlake ("git+file://" + toString ./.);
       in builtins.head (builtins.filter
         (p: (p.name or "") == "luxnix-setup-root-encryption")
-        f.nixosConfigurations.gc-09.config.environment.systemPackages)
+        f.nixosConfigurations.gc-08.config.environment.systemPackages)
     """
     build = subprocess.run(
         [
@@ -852,7 +854,7 @@ def test_packaged_root_setup_help_and_argument_safety():
     result = subprocess.run([str(tool), "--help"], capture_output=True, text=True)
     assert result.returncode == 0
     assert "Never formats disks" in result.stdout
-    assert "devenv tasks run boot-storage:setup" in result.stdout
+    assert "devenv shell luxnix migrate" in result.stdout
     for args in [["--change"], ["--setup-password", "extra"]]:
         result = subprocess.run([str(tool), *args], capture_output=True, text=True)
         assert result.returncode == 2

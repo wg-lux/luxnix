@@ -59,6 +59,8 @@
       -i ansible/inventory/hosts.ini "$@"
   '';
 
+  luxnix.package = pkgs.zsh;
+  luxnix.exec = ''${pkgs.uv}/bin/uv run python -m lx_administration.cli "$@"'';
   boot-storage-setup.package = pkgs.zsh;
   boot-storage-migration.package = pkgs.zsh;
   boot-storage-setup.exec = ''${pkgs.uv}/bin/uv run python -m lx_administration.storage.boot_setup "$@"'';

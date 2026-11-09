@@ -125,6 +125,24 @@ def retained_helper():
     return script
 
 
+def storage_preflight(target, action, *, required=False):
+    """Check the candidate's storage before publishing a profile or rolling back."""
+    candidate = Path(target)
+    manifest = candidate / 'etc/luxnix/root-storage.json'
+    helper = candidate / 'sw/bin/luxnix-root-preflight'
+    if not manifest.is_file():
+        if required:
+            raise ValueError(
+                'Generation has no storage admission contract; '
+                'use independent recovery media'
+            )
+        return False
+    if not helper.is_file():
+        raise ValueError('Candidate storage admission helper is missing')
+    run(str(helper), 'verify', '--system', target, '--action', action)
+    return True
+
+
 def start(target, action, receipt=None):
     if not CLOSURE.fullmatch(target) or action not in {'boot', 'switch'}:
         raise ValueError('Select a built system closure and boot or switch')
@@ -146,6 +164,12 @@ def start(target, action, receipt=None):
         for other in BASE.glob('*.json'):
             if json.loads(other.read_text()).get('status') in {'pending', 'running', 'awaiting-ack'}:
                 raise ValueError('Another activation is pending acknowledgement')
+        storage_guarded = any(
+            (Path(system) / 'etc/luxnix/root-storage.json').is_file()
+            for system in (previous, target)
+        )
+        storage_preflight(target, action, required=storage_guarded)
+        storage_preflight(previous, action, required=storage_guarded)
         mode = compatibility(previous, target, receipt)
         record = {'id': identifier, 'previous': previous, 'target': target, 'action': action,
                   'status': 'preparing', 'compatibility': mode, 'created': time.time()}
@@ -172,6 +196,15 @@ def worker(identifier):
         path, value = load(identifier)
         if value['status'] != 'pending':
             return
+        try:
+            storage_preflight(value['target'], value['action'], required=any(
+                (Path(system) / 'etc/luxnix/root-storage.json').is_file()
+                for system in (value['previous'], value['target'])
+            ))
+        except (ValueError, OSError, subprocess.SubprocessError):
+            value['status'] = 'rejected'
+            save(path, value)
+            raise
         value['status'] = 'running'
         save(path, value)
     try:
@@ -224,7 +257,7 @@ def stop_activation_worker(identifier):
 def recover(identifier, stop_worker=True):
     with locked(wait=True):
         path, value = load(identifier)
-        if value['status'] in {'accepted', 'rolled-back'}:
+        if value['status'] in {'accepted', 'rolled-back', 'rejected'}:
             return
         # Serialize state inspection, worker termination and rollback against
         # start/ack/worker publication. Terminal records need no transient unit.
@@ -232,6 +265,8 @@ def recover(identifier, stop_worker=True):
             stop_activation_worker(identifier)
         value['status'] = 'recovering'
         save(path, value)
+        storage_preflight(value['previous'], value['action'], required=(
+            Path(value['target']) / 'etc/luxnix/root-storage.json').is_file())
         run('nix-env', '--profile', str(PROFILE), '--set', value['previous'])
         run(value['previous'] + '/bin/switch-to-configuration', value['action'], timeout=1800)
         if str(PROFILE.resolve()) != value['previous'] or (value['action'] == 'switch' and str(CURRENT.resolve()) != value['previous']):

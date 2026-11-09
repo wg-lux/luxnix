@@ -264,9 +264,18 @@
           inherit (inputs) disko;
           repoRoot = ./.;
         };
+        boot-storage-fresh = import ./tests/nixtest/fresh_install_vm_test.nix {
+          pkgs = inputs.nixpkgs.legacyPackages.${system};
+          inherit (inputs) disko;
+          repoRoot = ./.;
+        };
         boot-storage-in-place = import ./tests/nixtest/in_place_encryption_vm_test.nix {
           pkgs = inputs.nixpkgs.legacyPackages.${system};
           inherit (inputs) disko;
+          repoRoot = ./.;
+        };
+        root-guard = import ./tests/nixtest/root_guard_vm_test.nix {
+          pkgs = inputs.nixpkgs.legacyPackages.${system};
           repoRoot = ./.;
         };
         boot-storage-plaintext = import ./tests/nixtest/boot_storage_vm_test.nix {
@@ -322,7 +331,21 @@
     in
     inputs.nixpkgs.lib.recursiveUpdate base {
       lib.migrationEnvironment = spec: import ./conf/migration-environment.nix { inherit inputs spec; };
-      packages = nixtestPackages;
+      packages = builtins.mapAttrs (
+        system: packages:
+        let
+          recovery = import ./lx_administration/storage/recovery-image.nix {
+            inherit system;
+            inherit (inputs) nixpkgs;
+            repoRoot = ./.;
+          };
+        in
+        packages
+        // {
+          luxnix-boot-recover = recovery.recoverTool;
+          luxnix-recovery-iso = recovery.iso;
+        }
+      ) nixtestPackages;
       checks = nixtestChecks;
       formatter = builtins.mapAttrs (
         system: _: inputs.nixpkgs.legacyPackages.${system}.nixfmt-tree

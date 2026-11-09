@@ -62,30 +62,91 @@ let
             (modulesPath + "/installer/netboot/netboot.nix")
             (modulesPath + "/profiles/minimal.nix")
           ];
-          system.stateVersion = "26.05";
+          system = {
+            stateVersion = "26.05";
+            disableInstallerTools = true;
+            tools.nixos-install.enable = true;
+            tools.nixos-enter.enable = true;
+          };
           # The appliance installs a preserved closure; it never rebuilds itself.
           nixpkgs.flake.setNixPath = false;
           nixpkgs.flake.setFlakeRegistry = false;
-          system.disableInstallerTools = true;
-          system.tools.nixos-install.enable = true;
-          system.tools.nixos-enter.enable = true;
-          networking.hostName = "${spec.host}-migration";
-          networking.useDHCP = false;
-          networking.useNetworkd = true;
-          systemd.network.networks."10-management" = {
-            matchConfig.Name = spec.interface;
-            address = [ spec.address ];
-            routes = lib.optional (spec.gateway != null) {
-              Gateway = spec.gateway;
-            };
-            linkConfig.RequiredForOnline = "routable";
+          networking = {
+            hostName = "${spec.host}-migration";
+            useDHCP = false;
+            useNetworkd = true;
+            firewall.extraCommands = lib.mkIf sshEnabled ''
+              ${pkgs.iptables}/bin/iptables -A nixos-fw -i ${lib.escapeShellArg spec.interface} \
+                -s ${lib.escapeShellArg spec.controller_cidr} -p tcp \
+                --dport ${toString spec.policy.ssh_port} -j nixos-fw-accept
+            '';
           };
-          networking.firewall.extraCommands = lib.mkIf sshEnabled ''
-            ${pkgs.iptables}/bin/iptables -A nixos-fw -i ${lib.escapeShellArg spec.interface} \
-              -s ${lib.escapeShellArg spec.controller_cidr} -p tcp \
-              --dport ${toString spec.policy.ssh_port} -j nixos-fw-accept
-          '';
-          systemd.generators.systemd-ssh-generator = lib.mkIf (!sshEnabled) "/dev/null";
+          systemd = {
+            network.networks."10-management" = {
+              matchConfig.Name = spec.interface;
+              address = [ spec.address ];
+              routes = lib.optional (spec.gateway != null) {
+                Gateway = spec.gateway;
+              };
+              linkConfig.RequiredForOnline = "routable";
+            };
+            generators.systemd-ssh-generator = lib.mkIf (!sshEnabled) "/dev/null";
+            services = {
+              # A local shell is available only after physical approval in this image.
+              "getty@tty1".enable = lib.mkIf localConsole false;
+              "autovt@tty1".enable = lib.mkIf localConsole false;
+              "serial-getty@ttyS0".enable = lib.mkIf localConsole false;
+              luxnix-migration-console = lib.mkIf localConsole {
+                wantedBy = [ "multi-user.target" ];
+                requires = [ "luxnix-migration-admission.service" ];
+                after = [ "luxnix-migration-admission.service" ];
+                serviceConfig = {
+                  Type = "simple";
+                  ExecStart = "${pkgs.bashInteractive}/bin/bash --login";
+                  StandardInput = "tty";
+                  StandardOutput = "tty";
+                  StandardError = "tty";
+                  TTYPath = "/dev/${console}";
+                  TTYReset = true;
+                  TTYVHangup = true;
+                  Restart = "always";
+                };
+              };
+              luxnix-migration-admission = {
+                wantedBy = [ "multi-user.target" ];
+                before = [ "sshd.service" ];
+                after = lib.optional sshEnabled "sshd-keygen.service";
+                requires = lib.optional sshEnabled "sshd-keygen.service";
+                path = [
+                  pkgs.util-linux
+                  pkgs.openssh
+                ];
+                serviceConfig = {
+                  Type = "oneshot";
+                  RemainAfterExit = true;
+                  StandardInput = lib.mkIf localConsole "tty";
+                  StandardOutput = lib.mkIf localConsole "tty";
+                  StandardError = lib.mkIf localConsole "tty";
+                  TTYPath = lib.mkIf localConsole "/dev/${console}";
+                  TTYReset = lib.mkIf localConsole true;
+                  TimeoutStartSec = lib.mkIf localConsole "infinity";
+                };
+                script = ''
+                  export PYTHONPATH=${runtime}
+                  ${python}/bin/python -m lx_administration.storage.migration_boot admit \
+                    --spec /etc/luxnix/migration.json --certificate /etc/luxnix/migration-db.pem
+                  ${lib.optionalString sshEnabled ''
+                    echo 'Verify this recovery SSH fingerprint through the trusted console:' > /dev/console
+                    ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub > /dev/console
+                  ''}
+                '';
+              };
+              sshd = lib.mkIf sshEnabled {
+                requires = [ "luxnix-migration-admission.service" ];
+                after = [ "luxnix-migration-admission.service" ];
+              };
+            };
+          };
           services.openssh = {
             enable = sshEnabled;
             openFirewall = false;
@@ -110,102 +171,53 @@ let
             openssh.authorizedKeys.keys = spec.authorized_keys;
           };
           services.getty.autologinUser = lib.mkForce null;
-          # A local shell is available only after physical approval in this image.
-          systemd.services."getty@tty1".enable = lib.mkIf localConsole false;
-          systemd.services."autovt@tty1".enable = lib.mkIf localConsole false;
-          systemd.services."serial-getty@ttyS0".enable = lib.mkIf localConsole false;
-          systemd.services.luxnix-migration-console = lib.mkIf localConsole {
-            wantedBy = [ "multi-user.target" ];
-            requires = [ "luxnix-migration-admission.service" ];
-            after = [ "luxnix-migration-admission.service" ];
-            serviceConfig = {
-              Type = "simple";
-              ExecStart = "${pkgs.bashInteractive}/bin/bash --login";
-              StandardInput = "tty";
-              StandardOutput = "tty";
-              StandardError = "tty";
-              TTYPath = "/dev/${console}";
-              TTYReset = true;
-              TTYVHangup = true;
-              Restart = "always";
-            };
-          };
           swapDevices = lib.mkForce [ ];
           zramSwap.enable = lib.mkForce false;
-          boot.resumeDevice = lib.mkForce "";
-          boot.postBootCommands = lib.mkForce "";
-          boot.loader.systemd-boot.enable = false;
-          boot.loader.efi.canTouchEfiVariables = false;
-          boot.initrd.availableKernelModules = [
-            "nvme"
-            "ahci"
-            "sd_mod"
-            "usb_storage"
-            "xhci_pci"
-            "usbhid"
-          ];
-          boot.supportedFilesystems = [
-            "btrfs"
-            "ext4"
-            "vfat"
-          ];
-          boot.kernelParams = [
-            "console=tty0"
-            "console=ttyS0,115200"
-            "noresume"
-            "rd.systemd.gpt_auto=0"
-            "systemd.gpt_auto=0"
-          ];
-          netboot.squashfsCompression = "xz -Xdict-size 100%";
-          boot.uki = {
-            name = "luxnix-migration-${spec.host}";
-            version = spec.revision;
-          };
-          environment.systemPackages = [
-            migration
-            python
-            pkgs.openssh
-            pkgs.cryptsetup
-            pkgs.btrfs-progs
-            pkgs.util-linux
-            pkgs.rsync
-            pkgs.age
-            pkgs.gitMinimal
-          ];
-          environment.etc."luxnix/migration.json".text = builtins.toJSON spec;
-          environment.etc."luxnix/migration-db.pem".source = certificate;
-          systemd.services.luxnix-migration-admission = {
-            wantedBy = [ "multi-user.target" ];
-            before = [ "sshd.service" ];
-            after = lib.optional sshEnabled "sshd-keygen.service";
-            requires = lib.optional sshEnabled "sshd-keygen.service";
-            path = [
-              pkgs.util-linux
-              pkgs.openssh
+          boot = {
+            resumeDevice = lib.mkForce "";
+            postBootCommands = lib.mkForce "";
+            loader.systemd-boot.enable = false;
+            loader.efi.canTouchEfiVariables = false;
+            initrd.availableKernelModules = [
+              "nvme"
+              "ahci"
+              "sd_mod"
+              "usb_storage"
+              "xhci_pci"
+              "usbhid"
             ];
-            serviceConfig = {
-              Type = "oneshot";
-              RemainAfterExit = true;
-              StandardInput = lib.mkIf localConsole "tty";
-              StandardOutput = lib.mkIf localConsole "tty";
-              StandardError = lib.mkIf localConsole "tty";
-              TTYPath = lib.mkIf localConsole "/dev/${console}";
-              TTYReset = lib.mkIf localConsole true;
-              TimeoutStartSec = lib.mkIf localConsole "infinity";
+            supportedFilesystems = [
+              "btrfs"
+              "ext4"
+              "vfat"
+            ];
+            kernelParams = [
+              "console=tty0"
+              "console=ttyS0,115200"
+              "noresume"
+              "rd.systemd.gpt_auto=0"
+              "systemd.gpt_auto=0"
+            ];
+            uki = {
+              name = "luxnix-migration-${spec.host}";
+              version = spec.revision;
             };
-            script = ''
-              export PYTHONPATH=${runtime}
-              ${python}/bin/python -m lx_administration.storage.migration_boot admit \
-                --spec /etc/luxnix/migration.json --certificate /etc/luxnix/migration-db.pem
-              ${lib.optionalString sshEnabled ''
-                echo 'Verify this recovery SSH fingerprint through the trusted console:' > /dev/console
-                ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub > /dev/console
-              ''}
-            '';
           };
-          systemd.services.sshd = lib.mkIf sshEnabled {
-            requires = [ "luxnix-migration-admission.service" ];
-            after = [ "luxnix-migration-admission.service" ];
+          netboot.squashfsCompression = "xz -Xdict-size 100%";
+          environment = {
+            systemPackages = [
+              migration
+              python
+              pkgs.openssh
+              pkgs.cryptsetup
+              pkgs.btrfs-progs
+              pkgs.util-linux
+              pkgs.rsync
+              pkgs.age
+              pkgs.gitMinimal
+            ];
+            etc."luxnix/migration.json".text = builtins.toJSON spec;
+            etc."luxnix/migration-db.pem".source = certificate;
           };
           # Target mounts, conversion, state import and reboot remain operator actions.
         }

@@ -506,6 +506,7 @@
           }
         )
       );
+      layout = "legacy-containers";
 
       migration = {
         accountHashes =
@@ -520,6 +521,7 @@
         enable = true;
       };
 
+      rootIdentity.requirePersistentDisk = true;
       startupServices = lib.filter (
         name: builtins.elem "multi-user.target" config.systemd.services.${name}.wantedBy
       ) (builtins.attrNames config.luxnix.storage.operatorUnlocked.guardedServices);

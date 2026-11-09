@@ -2,6 +2,7 @@
 from contextlib import contextmanager
 import hashlib
 import json
+import re
 from pathlib import Path
 import pytest
 import yaml
@@ -271,3 +272,121 @@ def test_legacy_recovery_activation_tag_cannot_skip_gates_or_fresh_login():
         'Verify fresh SSH access',
         'Acknowledge the exact activation only after a fresh SSH login',
     ]
+
+
+def test_storage_preflight_runs_candidate_helper_before_profile_publication(
+    tmp_path, monkeypatch
+):
+    target = tmp_path / 'target'
+    (target / 'etc/luxnix').mkdir(parents=True)
+    (target / 'etc/luxnix/root-storage.json').write_text('{}')
+    helper = target / 'sw/bin/luxnix-root-preflight'
+    helper.parent.mkdir(parents=True)
+    helper.write_text('#!/bin/sh\nexit 0\n')
+    calls = []
+    monkeypatch.setattr(a, 'run', lambda *args: calls.append(args))
+    assert a.storage_preflight(str(target), 'boot') is True
+    assert calls == [
+        (str(helper), 'verify', '--system', str(target), '--action', 'boot')
+    ]
+    helper.unlink()
+    with pytest.raises(ValueError, match='helper is missing'):
+        a.storage_preflight(str(target), 'boot')
+
+
+def test_unguarded_old_generation_cannot_be_used_for_encrypted_rollback(tmp_path):
+    with pytest.raises(ValueError, match='independent recovery media'):
+        a.storage_preflight(str(tmp_path), 'boot', required=True)
+
+
+def test_worker_storage_rejection_never_changes_profile_or_arms_rollback(
+    state, monkeypatch
+):
+    value, current, profile = state
+    def reject(*args, **kwargs):
+        raise ValueError('plaintext root cannot activate encrypted candidate')
+    monkeypatch.setattr(a, 'storage_preflight', reject)
+    monkeypatch.setattr(
+        a, 'run',
+        lambda *args, **kwargs: pytest.fail('rejected storage changed host state'),
+    )
+    with pytest.raises(ValueError, match='plaintext root'):
+        a.worker(value['id'])
+    assert a.load(value['id'])[1]['status'] == 'rejected'
+    assert str(profile.resolve()) == '/nix/store/new'
+    assert str(current.resolve()) == '/nix/store/old'
+    a.recover(value['id'])
+
+
+def test_recovery_storage_rejection_preserves_profile(state, monkeypatch):
+    value, current, profile = state
+    calls = []
+    monkeypatch.setattr(a, 'run', lambda *args, **kwargs: calls.append(args))
+    def reject(*args, **kwargs):
+        raise ValueError('previous root no longer matches physical storage')
+    monkeypatch.setattr(a, 'storage_preflight', reject)
+    with pytest.raises(ValueError, match='physical storage'):
+        a.recover(value['id'])
+    assert a.load(value['id'])[1]['status'] == 'recovering'
+    assert not any(args[0] == 'nix-env' for args in calls)
+    assert str(profile.resolve()) == '/nix/store/new'
+
+
+@pytest.mark.parametrize('missing', ['previous', 'target'])
+def test_guarded_pair_requires_contract_on_both_sides_before_scheduling(
+    state, monkeypatch, tmp_path, missing
+):
+    value, current, profile = state
+    previous, target = [tmp_path / name for name in ('previous', 'target')]
+    for candidate in (previous, target):
+        candidate.mkdir()
+        if candidate.name != missing:
+            contract = candidate / 'etc/luxnix/root-storage.json'
+            contract.parent.mkdir(parents=True)
+            contract.write_text('{}')
+            helper = candidate / 'sw/bin/luxnix-root-preflight'
+            helper.parent.mkdir(parents=True)
+            helper.write_text('#!/bin/sh\nexit 0\n')
+    current.unlink()
+    current.symlink_to(previous)
+    for path in a.BASE.glob('*.json'):
+        path.unlink()
+    monkeypatch.setattr(a, 'CLOSURE', re.compile('.*'))
+    monkeypatch.setattr(a, 'retained_helper', lambda: Path('/retained/helper'))
+    calls = []
+    monkeypatch.setattr(a, 'run', lambda *args, **kwargs: calls.append(args))
+    with pytest.raises(ValueError, match='no storage admission contract'):
+        a.start(str(target), 'boot')
+    assert not list(a.BASE.glob('*.json'))
+    assert not any(args[0] in {'nix-env', 'systemd-run', 'nix-store'} for args in calls)
+    assert str(profile.resolve()) == '/nix/store/new'
+
+
+@pytest.mark.parametrize('refused', [False, True])
+def test_guard_verify_cli_never_mutates_profile_or_consumes_override(
+    tmp_path, monkeypatch, refused
+):
+    from lx_administration.storage import root_guard
+
+    spec = tmp_path / 'spec.json'
+    spec.write_text(json.dumps({'host': 'synthetic'}))
+    monkeypatch.setattr(root_guard, 'observe', lambda *args, **kwargs: {})
+    decisions = []
+
+    def assess(*args, **kwargs):
+        decisions.append(kwargs)
+        return [root_guard.Finding('test', 'synthetic refusal')] if refused else []
+
+    monkeypatch.setattr(root_guard, 'assess', assess)
+    for name in ('withdraw', 'consume_override'):
+        monkeypatch.setattr(
+            root_guard, name,
+            lambda *args, **kwargs: pytest.fail('verify must not mutate state'),
+        )
+    with pytest.raises(SystemExit) as result:
+        root_guard.main([
+            'verify', '--spec', str(spec), '--system', '/nix/store/synthetic',
+            '--action', 'boot',
+        ])
+    assert result.value.code == int(refused)
+    assert decisions and decisions[0]['action'] == 'boot'

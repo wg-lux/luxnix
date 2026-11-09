@@ -9,10 +9,6 @@ let
   inherit (builtins) elemAt;
   inherit (lib) literalExpression mkOption types;
   runtime = lxAnnotateRuntime;
-  inherit (runtime.identities)
-    endoreg-service-user-name
-    endoreg-service-group-name
-    ;
   inherit (runtime.paths)
     runtimeDataRootPath
     ;

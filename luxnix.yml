@@ -30,6 +30,7 @@ risk_levels:
   destructive-remote: May overwrite, delete, or repartition data on remote hosts.
 
 paths:
+  boot_storage_contract: boot-storage.yml
   secret_rotation_catalog: secrets-management.yml
   secret_rotation_check: scripts/check-secret-rotation.py
   flake: flake.nix
@@ -356,14 +357,14 @@ workflows:
       - Writes connectivity logs under logs.
 
   - id: prepare-root-encryption
-    summary: Preview the in-place LUKS2 workflow without erasing or repartitioning disks.
-    risk: local-state
+    summary: Show fresh encrypted installation guidance, without changing anything.
+    risk: read-only
     documentation: docs/boot-storage-quickstart.md
-    command: devenv tasks run boot-storage:setup
+    command: devenv shell luxnix
     prerequisites:
       - devenv
     effects:
-      - Reports the next reviewed recovery or encryption step for the configured host.
+      - Fresh installation is the default; preserving an existing host requires explicit migrate.
       - Applying encryption requires a separate explicit invocation and target confirmation.
 
 support:

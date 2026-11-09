@@ -25,18 +25,10 @@
   };
 
   "boot-storage:setup" = {
-    description = "Preview or resume current-host recovery, review and installation in order";
+    description = "Show the default encrypted installation workflow";
     showOutput = true;
     exec = ''
-      case "''${LUXNIX_BOOT_SETUP_APPLY:-0}" in
-        0) exec ${pkgs.uv}/bin/uv run python -m lx_administration.storage.boot_setup run --current-host ;;
-        1)
-          # Task output is normally captured. Keep operator/password prompts on
-          # the real controlling terminal; absence of one must fail, never pipe approval.
-          exec ${pkgs.uv}/bin/uv run python -m lx_administration.storage.boot_setup run --current-host --apply </dev/tty >/dev/tty 2>/dev/tty
-          ;;
-        *) echo "LUXNIX_BOOT_SETUP_APPLY must be 0 (preview) or 1 (apply)" >&2; exit 2 ;;
-      esac
+      exec ${pkgs.uv}/bin/uv run python -m lx_administration.cli
     '';
   };
 

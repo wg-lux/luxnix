@@ -1,6 +1,5 @@
 """Migration admission rejects missing evidence and never repeats uncertain writes."""
 
-from datetime import datetime, timezone
 import json
 from pathlib import Path
 import os
@@ -29,7 +28,8 @@ def state(tmp_path, monkeypatch):
         "host": "gc-09",
         "checkout": "/home/admin/release",
         "hardware_uuid": "12345678-1234-1234-1234-123456789abc",
-        "source_retention": "old-disks",
+        "installation": "in-place",
+        "source_retention": "in-place",
         "disks": [
             {
                 "path": "/dev/disk/by-id/test-disk",
@@ -99,16 +99,94 @@ def seed_assessment(state, stage, tmp_path):
     return report, artifact
 
 
+@pytest.mark.parametrize("kind", ["risk-accepted", "restore-tested"])
+def test_status_distinguishes_reviewed_backup_outcomes(state, tmp_path, kind):
+    root, plan, progress = state
+    seed_assessment(state, "recovery", tmp_path)
+    backup = {
+        "status": kind,
+        "accepted_by": "Test operator" if kind == "risk-accepted" else None,
+        "location": "/independent-backup" if kind == "restore-tested" else None,
+        "restore_test": (
+            "Isolated data/key restore" if kind == "restore-tested" else None
+        ),
+        "verification": (
+            "operator-reported" if kind == "restore-tested" else "not-performed"
+        ),
+    }
+    path = root / migration.RECOVERY_CHECKS
+    path.write_text(
+        json.dumps(
+            {
+                "plan_id": plan["plan_id"],
+                "checks": {"in_place_backup_acknowledged": {"backup": backup}},
+            }
+        )
+    )
+    # A provisional answer alone is never a reviewed recovery assessment.
+    assert migration.data_recovery(root, plan, progress)["status"] == "unknown"
+    progress["attestations"]["recovery"]["artifacts"].append(
+        {
+            "path": str(path),
+            "sha256": migration.file_digest(path),
+        }
+    )
+    migration.atomic_json(root / "progress.json", progress)
+    outcome = migration.status(root)["data_recovery"]
+    assert outcome == backup | {"current_backup_availability": "not-inspected"}
+    # Changing an answer after its review invalidates the outcome.
+    path.write_text(path.read_text() + " ")
+    assert migration.data_recovery(root, plan, progress)["status"] == "unknown"
+
+
+@pytest.mark.parametrize(
+    "failure", ["legacy", "wrong-plan", "invalid-claim", "expired"]
+)
+def test_missing_or_invalid_backup_evidence_remains_unknown(state, tmp_path, failure):
+    root, plan, progress = state
+    seed_assessment(state, "recovery", tmp_path)
+    answer = {"detail": "Historical free-text acknowledgement"}
+    if failure != "legacy":
+        answer["backup"] = {
+            "status": "risk-accepted",
+            "accepted_by": "Test operator",
+            "location": None,
+            "restore_test": None,
+            "verification": (
+                "verified" if failure == "invalid-claim" else "not-performed"
+            ),
+        }
+    path = root / migration.RECOVERY_CHECKS
+    path.write_text(
+        json.dumps(
+            {
+                "plan_id": (
+                    "another-plan" if failure == "wrong-plan" else plan["plan_id"]
+                ),
+                "checks": {"in_place_backup_acknowledged": answer},
+            }
+        )
+    )
+    progress["attestations"]["recovery"]["artifacts"].append(
+        {
+            "path": str(path),
+            "sha256": migration.file_digest(path),
+        }
+    )
+    if failure == "expired":
+        progress["attestations"]["recovery"]["recorded_at"] -= migration.MAX_AGE + 1
+    assert migration.data_recovery(root, plan, progress)["status"] == "unknown"
+
+
 def test_reject_missing_and_changed_prior_evidence(state, tmp_path, monkeypatch):
     root, plan, progress = state
-    report, _ = evidence(tmp_path, plan, "backup")
+    report, _ = evidence(tmp_path, plan, "prepared")
     with pytest.raises(migration.MigrationError, match="recovery"):
-        migration.attest(root, "backup", report, "Test reviewer")
-    monkeypatch.setattr(migration, "verify_readiness", lambda *a, **k: None)
+        migration.attest(root, "prepared", report, "Test reviewer")
     _, artifact = seed_assessment(state, "recovery", tmp_path)
     artifact.write_text("Changed report")
     with pytest.raises(migration.MigrationError, match="evidence changed"):
-        migration.attest(root, "backup", report, "Test reviewer")
+        migration.attest(root, "prepared", report, "Test reviewer")
     assert migration.load_progress(root, plan)["attestations"].keys() == {"recovery"}
 
 
@@ -127,22 +205,8 @@ def test_human_assessment_requires_exact_checks_and_artifacts(state, tmp_path):
         migration.attest(root, "recovery", report, "Test reviewer")
 
 
-@pytest.mark.parametrize("mode", ["migration", "disposable", "fresh"])
-def test_vault_recovery_is_required_even_when_data_is_disposable(
-    state, tmp_path, mode
-):
-    root, plan, progress = state
-    plan["spec"]["installation"] = mode
-    plan["spec"]["source_retention"] = {
-        "migration": "old-disks", "disposable": "discard-approved",
-        "fresh": "new-disks",
-    }[mode]
-    plan["plan_id"] = migration.digest(
-        {k: v for k, v in plan.items() if k != "plan_id"}
-    )
-    progress["plan_id"] = plan["plan_id"]
-    migration.atomic_json(root / "plan.json", plan)
-    migration.atomic_json(root / "progress.json", progress)
+def test_preservation_keeps_vault_recovery_requirement(state, tmp_path):
+    root, plan, _ = state
     checks = dict.fromkeys(migration.required_checks("recovery", plan), True)
     assert checks.pop("vault_recovery_tested") is True
     report, _ = evidence(tmp_path, plan, "recovery", checks=checks)
@@ -153,7 +217,6 @@ def test_vault_recovery_is_required_even_when_data_is_disposable(
 
 def test_identical_assessment_does_not_refresh_clock(state, tmp_path, monkeypatch):
     root, plan, _ = state
-    monkeypatch.setattr(migration, "verify_readiness", lambda *a, **k: None)
     report, _ = evidence(tmp_path, plan, "recovery")
     migration.attest(root, "recovery", report, "Test reviewer")
     before = (root / "progress.json").read_bytes()
@@ -170,9 +233,8 @@ def test_changed_early_assessment_invalidates_later_assessments(
     state, tmp_path, monkeypatch
 ):
     root, plan, progress = state
-    monkeypatch.setattr(migration, "verify_readiness", lambda *a, **k: None)
     report, _ = seed_assessment(state, "recovery", tmp_path)
-    seed_assessment(state, "backup", tmp_path)
+    seed_assessment(state, "prepared", tmp_path)
     migration.attest(root, "recovery", report, "Another reviewer")
     assert set(migration.load_progress(root, plan)["attestations"]) == {"recovery"}
 
@@ -199,10 +261,11 @@ def test_plan_tampering_and_partial_initialization_fail(state, tmp_path, monkeyp
         migration.create_plan(spec_file, root)
 
 
-def test_whole_disk_retention_adds_required_proof(state):
+@pytest.mark.parametrize("stage", ["backup", "restore", "unknown"])
+def test_retired_stages_cannot_enter_preservation(state, stage):
     _, plan, _ = state
-    plan["spec"]["source_retention"] = "whole-disk-image"
-    assert "whole_disk_image_verified" in migration.required_checks("backup", plan)
+    with pytest.raises(migration.MigrationError, match="does not apply"):
+        migration.required_checks(stage, plan)
 
 
 def test_source_cleanliness_and_durable_path_are_required(monkeypatch):
@@ -211,57 +274,6 @@ def test_source_cleanliness_and_durable_path_are_required(monkeypatch):
     monkeypatch.setattr(migration, "run", lambda *a, **k: " M file")
     with pytest.raises(migration.MigrationError, match="uncommitted"):
         migration.source_identity(Path("/home/admin/release"))
-
-
-def test_readiness_report_required_and_digest_revalidated(state, tmp_path, monkeypatch):
-    _, plan, _ = state
-    with pytest.raises(migration.MigrationError, match="exactly one"):
-        migration.verify_readiness([], plan)
-    report = {"host": "gc-09", "observed_at": datetime.now(timezone.utc).isoformat()}
-    report["report_sha256"] = migration.digest(report)
-    report["admission"] = {
-        "expected_layout": "legacy-containers",
-        "expected_serials": ["source-disk"],
-    }
-    path = tmp_path / "readiness.json"
-    path.write_text(json.dumps(report))
-    from lx_administration.storage import readiness
-
-    calls = []
-
-    def admit(value, host, layout, serials):
-        calls.append((host, layout, serials))
-        return {"admitted": True}
-
-    monkeypatch.setattr(readiness, "evaluate", admit)
-    migration.verify_readiness([{"path": str(path)}], plan)
-    assert calls == [("gc-09", "legacy-containers", ["source-disk"])]
-    report["host"] = "gc-10"
-    path.write_text(json.dumps(report))
-    with pytest.raises(migration.MigrationError, match="digest"):
-        migration.verify_readiness([{"path": str(path)}], plan)
-    assert len(calls) == 1
-
-
-def test_readiness_false_admission_and_stale_report_fail(state, tmp_path, monkeypatch):
-    _, plan, _ = state
-    from lx_administration.storage import readiness
-
-    report = {"host": "gc-09", "observed_at": "2000-01-01T00:00:00+00:00"}
-    report["report_sha256"] = migration.digest(report)
-    report["admission"] = {
-        "admitted": True,
-        "expected_layout": "legacy-containers",
-        "expected_serials": ["source"],
-    }
-    path = tmp_path / "report.json"
-    path.write_text(json.dumps(report))
-    monkeypatch.setattr(readiness, "evaluate", lambda *a: {"admitted": False})
-    with pytest.raises(migration.MigrationError, match="fails admission"):
-        migration.verify_readiness([{"path": str(path)}], plan)
-    monkeypatch.setattr(readiness, "evaluate", lambda *a: {"admitted": True})
-    with pytest.raises(migration.MigrationError, match="last 24 hours"):
-        migration.verify_readiness([{"path": str(path)}], plan)
 
 
 @pytest.fixture
@@ -278,6 +290,19 @@ def install_environment(state, tmp_path, monkeypatch):
     monkeypatch.setattr(migration, "INSTALL_LOCK", tmp_path / "installer.lock")
     monkeypatch.setattr(migration, "check_gates", lambda *a: {1})
     monkeypatch.setattr(migration, "verify_independent_state", lambda *a: None)
+    monkeypatch.setattr(migration, "verify_root_guard", lambda *a, **k: {})
+    monkeypatch.setattr(migration, "verify_booted", lambda *a: None)
+    # Install-only fixtures have no provision journal; real journals still decide.
+    position = migration.lifecycle_position
+    monkeypatch.setattr(
+        migration,
+        "lifecycle_position",
+        lambda state, plan, progress: (
+            position(state, plan, progress)
+            if (state / "provision.json").exists()
+            else {"stage": "verifying", "failed_from": None}
+        ),
+    )
     monkeypatch.setattr(
         migration, "verify_target", lambda *a: {"/": {"uuid": "test-root"}}
     )
@@ -462,6 +487,20 @@ def test_child_keeps_global_lock_when_parent_closes_it(install_environment):
         pass
 
 
+def test_sibling_states_share_stable_boundary_without_reusing_state_files(state):
+    root, _, _ = state
+    original = (root / "plan.json").read_bytes()
+    sibling = root.with_name("other-host")
+    with migration.locked_state(root) as outer:
+        with migration.locked_state(sibling, create=True) as nested:
+            assert outer == nested
+            assert (sibling / ".lock").is_file()
+            assert not (sibling / "plan.json").exists()
+    assert (root / "plan.json").read_bytes() == original
+    with migration.locked_state(root):
+        pass
+
+
 def test_post_confirmation_evidence_change_stops_before_install(
     install_environment, monkeypatch
 ):
@@ -497,47 +536,49 @@ def test_root_mode_requires_luks2(state):
         migration.validate_selection({}, {"layout": "unencrypted-root"})
 
 
-def test_fresh_encrypted_install_keeps_recovery_without_source_restore(state):
+@pytest.mark.parametrize(
+    "mode,retention", [("fresh", "new-disks"), ("disposable", "discard-approved")]
+)
+def test_fresh_spec_does_not_enable_migration_stages(state, mode, retention):
     _, plan, _ = state
-    plan["spec"].update(
-        root_encryption="luks2", installation="fresh", source_retention="new-disks"
-    )
+    plan["spec"].update(installation=mode, source_retention=retention)
     migration.validate_spec(plan["spec"])
-    assert migration.stage_order(plan) == ("recovery", "prepared")
-    prepared = migration.required_checks("prepared", plan)
-    assert {"initial_credentials_staged", "recovery_slots_tested"} <= prepared
-    assert "database_restored" not in prepared
-    assert "new_disks_verified" in migration.required_checks("recovery", plan)
-    assert "secondary_unlock_passed" in migration.required_checks("acceptance", plan)
-    with pytest.raises(migration.MigrationError, match="does not apply"):
-        migration.required_checks("backup", plan)
+    with pytest.raises(migration.MigrationError, match="Only in-place"):
+        migration.stage_order(plan)
+    with pytest.raises(migration.MigrationError, match="Only in-place"):
+        migration.required_checks("recovery", plan)
 
 
-def test_fresh_admission_does_not_require_a_nonexistent_source_host(
-    state, tmp_path, monkeypatch
-):
+@pytest.mark.parametrize(
+    "mode,retention",
+    [
+        (None, "old-disks"),
+        ("migration", "whole-disk-image"),
+        ("fresh", "new-disks"),
+        ("disposable", "discard-approved"),
+    ],
+)
+def test_retired_plans_are_read_only_evidence(state, monkeypatch, mode, retention):
     root, plan, progress = state
-    plan["spec"].update(
-        root_encryption="luks2", installation="fresh", source_retention="new-disks"
-    )
-    plan["config"]["layout"] = "boot-luks"
+    plan["spec"].update(installation=mode, source_retention=retention)
+    if mode is None:
+        plan["spec"].pop("installation")
     plan["plan_id"] = migration.digest(
         {k: v for k, v in plan.items() if k != "plan_id"}
     )
     progress["plan_id"] = plan["plan_id"]
+    progress["attestations"] = {"backup": {"historical": "unchanged"}}
     migration.atomic_json(root / "plan.json", plan)
     migration.atomic_json(root / "progress.json", progress)
-    monkeypatch.setattr(
-        migration, "verify_readiness", lambda *a, **k: pytest.fail("no existing host")
-    )
-    report, _ = evidence(tmp_path, plan, "recovery")
-    migration.attest(root, "recovery", report, "Test reviewer")
-    report, _ = evidence(tmp_path, plan, "prepared")
-    migration.attest(root, "prepared", report, "Test reviewer")
-    assert set(migration.load_progress(root, plan)["attestations"]) == {
-        "recovery",
-        "prepared",
-    }
+    before = (root / "progress.json").read_bytes()
+    monkeypatch.setattr(migration, "verify_source", lambda *a: pytest.fail("read only"))
+    result = migration.status(root)
+    assert result["read_only"] is True
+    assert result["required_checks"] == {}
+    assert result["assessments"] == ["backup"]
+    with pytest.raises(migration.MigrationError, match="Only in-place"):
+        migration.attest(root, "recovery", root / "missing-evidence", "Test reviewer")
+    assert (root / "progress.json").read_bytes() == before
 
 
 @pytest.mark.parametrize("fstype", ["ext4", "crypto_LUKS"])
@@ -567,23 +608,13 @@ def test_fresh_plan_cannot_treat_existing_filesystems_as_empty(
         migration.verify_unmounted_targets(plan)
 
 
-def test_disposable_reinstall_requires_explicit_retention_and_recovery(state):
+def test_disposable_spec_still_requires_explicit_discard(state):
     _, plan, _ = state
     plan["spec"]["installation"] = "disposable"
     with pytest.raises(migration.MigrationError, match="discard-approved"):
         migration.validate_spec(plan["spec"])
     plan["spec"]["source_retention"] = "discard-approved"
     migration.validate_spec(plan["spec"])
-    assert migration.stage_order(plan) == ("recovery", "prepared")
-    assert migration.required_checks("recovery", plan) == {
-        "console_boot_tested",
-        "trusted_installer_tested",
-        "independent_credentials_tested",
-        "vault_recovery_tested",
-        "selected_disks_disposal_authorized",
-        "machine_and_application_credentials_preserved_or_reenrolled",
-    }
-    assert "initial_credentials_staged" in migration.required_checks("prepared", plan)
 
 
 @pytest.mark.parametrize(
@@ -699,15 +730,37 @@ def test_retired_plan_cannot_build_or_pass_execution_gates(state, monkeypatch, m
     root, plan, progress = state
     if mode is not None:
         plan["spec"]["installation"] = mode
+    else:
+        plan["spec"].pop("installation", None)
     monkeypatch.setattr(
         migration, "run", lambda *a, **kw: pytest.fail("No command allowed")
     )
     monkeypatch.setattr(
         migration, "verify_source", lambda *a: pytest.fail("No source access")
     )
-    for operation in [lambda: migration.plan_spec(plan["spec"], root / "new"),
-                      lambda: migration.check_gates(plan, progress, "provision"),
-                      lambda: migration.check_gates(plan, progress, "install")]:
+    for operation in [
+        lambda: migration.plan_spec(plan["spec"], root / "new"),
+        lambda: migration.check_gates(plan, progress, "provision"),
+        lambda: migration.check_gates(plan, progress, "install"),
+    ]:
         with pytest.raises(migration.MigrationError, match="Only in-place"):
             operation()
     assert not (root / "new").exists()
+
+
+def test_acceptance_requires_the_planned_system_to_be_booted(monkeypatch):
+    closure = "/nix/store/" + "a" * 32 + "-nixos-system-host"
+    monkeypatch.setattr(migration.os.path, "realpath", lambda path: "/nix/store/other")
+    with pytest.raises(migration.MigrationError, match="booted the planned system"):
+        migration.verify_booted({"config": {"closure": closure}})
+
+
+def test_acceptance_also_checks_the_live_disk(monkeypatch):
+    closure = "/nix/store/" + "a" * 32 + "-nixos-system-host"
+    calls = []
+    monkeypatch.setattr(migration.os.path, "realpath", lambda path: closure)
+    monkeypatch.setattr(
+        migration, "verify_root_guard", lambda plan, root, **k: calls.append((root, k))
+    )
+    migration.verify_booted({"config": {"closure": closure}})
+    assert calls == [(Path("/"), {"action": "dry-activate"})]

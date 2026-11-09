@@ -198,6 +198,42 @@ def test_insufficient_esp_space_never_publishes(stage, monkeypatch):
     assert "LoaderEntryOneShot" not in variables
 
 
+def test_esp_capacity_is_rechecked_under_publication_lock(stage, monkeypatch):
+    args, variables, calls = stage
+    args.apply = True
+    available = iter([2**30, 0])
+    monkeypatch.setattr(
+        boot.shutil,
+        "disk_usage",
+        lambda path: SimpleNamespace(
+            free=next(available) if path == args.esp else 2**30
+        ),
+    )
+    with pytest.raises(ValueError, match="ESP lacks space"):
+        boot.stage(args)
+    assert not (args.esp / "EFI").exists()
+    assert "LoaderEntryOneShot" not in variables
+    assert (
+        args.esp / "loader/loader.conf"
+    ).read_text() == "default nixos-generation-*\n"
+
+
+def test_repeated_stage_needs_reserve_without_second_image_copy(stage, monkeypatch):
+    args, variables, calls = stage
+    args.apply = True
+    boot.stage(args)
+    retained = {p: p.read_bytes() for p in args.esp.rglob("*") if p.is_file()}
+    reserve = (
+        load_unique_yaml_file(Path("conf/migration-environment.yml"))["esp_reserve_mib"]
+        * boot.MIB
+    )
+    monkeypatch.setattr(
+        boot.shutil, "disk_usage", lambda _: SimpleNamespace(free=reserve)
+    )
+    boot.stage(args)
+    assert retained == {p: p.read_bytes() for p in args.esp.rglob("*") if p.is_file()}
+
+
 def test_disabled_firmware_trust_and_low_ram_refused(spec, monkeypatch):
     monkeypatch.setattr(
         Path,

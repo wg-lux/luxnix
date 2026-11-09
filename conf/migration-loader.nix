@@ -38,58 +38,64 @@ let
       '';
 in
 {
-  boot.initrd.systemd.enable = lib.mkForce true;
-  boot.initrd.systemd.emergencyAccess = false;
-  boot.initrd.systemd.services.initrd-nixos-activation.serviceConfig = {
-    StandardOutput = "journal+console";
-    StandardError = "journal+console";
-  };
-  boot.initrd.systemd.additionalUpstreamUnits = [ "systemd-udev-settle.service" ];
-  boot.initrd.systemd.storePaths = [
-    "${./migration-load.sh}"
-    "${parameters}"
-  ];
-  boot.initrd.supportedFilesystems = [ spec.recovery.fstype ];
-  boot.initrd.luks.devices = lib.optionalAttrs (spec.recovery.luks_uuid != null) {
-    migration-recovery.device = "/dev/disk/by-uuid/${spec.recovery.luks_uuid}";
-  };
-  boot.initrd.systemd.services.luxnix-migration-payload = {
-    description = "Authenticate migration runtime in RAM";
-    requiredBy = [ "sysroot-nix-.ro\\x2dstore.mount" ];
-    before = [ "sysroot-nix-.ro\\x2dstore.mount" ];
-    after = [
-      "systemd-udev-settle.service"
-      "cryptsetup.target"
-    ];
-    requires = [ "systemd-udev-settle.service" ];
-    unitConfig = {
-      DefaultDependencies = false;
-      # The store mount requires this service through the switch-root isolation.
-      IgnoreOnIsolate = true;
+  boot = {
+    initrd = {
+      systemd = {
+        enable = lib.mkForce true;
+        emergencyAccess = false;
+        services.initrd-nixos-activation.serviceConfig = {
+          StandardOutput = "journal+console";
+          StandardError = "journal+console";
+        };
+        additionalUpstreamUnits = [ "systemd-udev-settle.service" ];
+        storePaths = [
+          "${./migration-load.sh}"
+          "${parameters}"
+        ];
+        services.luxnix-migration-payload = {
+          description = "Authenticate migration runtime in RAM";
+          requiredBy = [ "sysroot-nix-.ro\\x2dstore.mount" ];
+          before = [ "sysroot-nix-.ro\\x2dstore.mount" ];
+          after = [
+            "systemd-udev-settle.service"
+            "cryptsetup.target"
+          ];
+          requires = [ "systemd-udev-settle.service" ];
+          unitConfig = {
+            DefaultDependencies = false;
+            # The store mount requires this service through the switch-root isolation.
+            IgnoreOnIsolate = true;
+          };
+          serviceConfig = {
+            Type = "oneshot";
+            RemainAfterExit = true;
+            StandardOutput = "journal+console";
+            StandardError = "journal+console";
+          };
+          path = [
+            pkgs.util-linux
+            pkgs.coreutils
+            pkgs.gawk
+          ];
+          script = ''
+            . ${./migration-load.sh}
+            if ! . ${parameters}; then
+              echo 'Migration payload admission failed. Root conversion is unavailable.' > /dev/console
+              exit 1
+            fi
+          '';
+        };
+      };
+      supportedFilesystems = [ spec.recovery.fstype ];
+      luks.devices = lib.optionalAttrs (spec.recovery.luks_uuid != null) {
+        migration-recovery.device = "/dev/disk/by-uuid/${spec.recovery.luks_uuid}";
+      };
     };
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      StandardOutput = "journal+console";
-      StandardError = "journal+console";
+    uki.settings.UKI = {
+      Initrd = lib.mkForce "${config.system.build.initialRamdisk}/initrd";
+      Cmdline = lib.mkForce "init=${runtimeSystem.config.system.build.toplevel}/init ${toString config.boot.kernelParams}";
+      OSRelease = lib.mkForce "@${config.system.build.migrationMetadata}";
     };
-    path = [
-      pkgs.util-linux
-      pkgs.coreutils
-      pkgs.gawk
-    ];
-    script = ''
-      . ${./migration-load.sh}
-      if ! . ${parameters}; then
-        echo 'Migration payload admission failed. Root conversion is unavailable.' > /dev/console
-        exit 1
-      fi
-    '';
-  };
-  boot.uki.settings.UKI = {
-    Initrd = lib.mkForce "${config.system.build.initialRamdisk}/initrd";
-    Cmdline = lib.mkForce "init=${runtimeSystem.config.system.build.toplevel}/init ${toString config.boot.kernelParams}";
-    OSRelease = lib.mkForce "@${config.system.build.migrationMetadata}";
   };
   system.build.migrationMetadata = lib.mkForce (
     pkgs.runCommand "migration-os-release" { nativeBuildInputs = [ pkgs.python3 ]; } ''

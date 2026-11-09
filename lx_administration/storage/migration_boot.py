@@ -699,14 +699,24 @@ def stage(args) -> None:
         raise ValueError("Selected ESP is not a mounted FAT filesystem")
     name = f"luxnix-migration-{args.host}-{args.sha256[:16]}"
     entry = name + ".conf"
+    image = esp / "EFI/LuxNixMigration" / (name + ".efi")
+
+    def require_capacity():
+        # Repeating a verified publication needs no second copy of the image.
+        if image.exists() and digest(image) != args.sha256:
+            raise ValueError("Existing boot artifact differs; refusing replacement")
+        needed = 0 if image.exists() else size
+        reserve = spec["policy"]["esp_reserve_mib"] * MIB
+        if shutil.disk_usage(esp).free < needed + reserve:
+            raise ValueError(
+                "ESP lacks space; do not repartition or delete recovery entries"
+            )
+
     require_default(esp, entry)
     oneshot = loader_variable("LoaderEntryOneShot")
     if oneshot and oneshot != entry:
         raise ValueError("Another one-shot boot is already armed")
-    if shutil.disk_usage(esp).free < size + spec["policy"]["esp_reserve_mib"] * MIB:
-        raise ValueError(
-            "ESP lacks space; do not repartition or delete recovery entries"
-        )
+    require_capacity()
     if not args.apply:
         print(f"Verified {args.host}: stage {entry}; no boot state changed")
         return
@@ -718,6 +728,7 @@ def stage(args) -> None:
         require_default(esp, entry)
         if loader_variable("LoaderEntryOneShot") not in (None, "", entry):
             raise ValueError("Another one-shot boot was armed during staging")
+        require_capacity()
         for directory in (esp / "EFI/LuxNixMigration", esp / "loader/entries"):
             if directory.resolve() != directory:
                 raise ValueError("Refuse symlinked boot directories")
@@ -736,7 +747,6 @@ def stage(args) -> None:
         content = args.image.read_bytes()
         if hashlib.sha256(content).hexdigest() != args.sha256:
             raise ValueError("Image changed during staging")
-        image = esp / "EFI/LuxNixMigration" / (name + ".efi")
         publish(image, content)
         if not local_console:
             sb.run("sbverify", "--cert", args.certificate, image)

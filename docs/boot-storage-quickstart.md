@@ -1,114 +1,135 @@
-# Root encryption: operator steps
+# Encrypted storage setup
 
-Hosts with data use `installation: in-place`: the root partition is encrypted where
-it is, from installer media, and nothing is formatted. A rebuild or reboot cannot
-perform the conversion. If you only need to understand the next step, use **Preview**
-and stop there.
+Fresh LUKS2 installation is the default for new machines. Run
+`devenv shell luxnix` for setup guidance; it changes nothing.
+`devenv shell luxnix --profile /absolute/host.yml` is shorthand for fresh
+installer preparation. The
+[current contract](https://github.com/wg-lux/luxnix/blob/main/boot-storage.yml)
+is the single requirements source. Existing machines are never automatically
+reclassified as disposable.
 
-**Make and test a backup first.** A power cut can be resumed, but bad RAM or a failing
-disk during the conversion can damage data. Old unencrypted copies can also stay
-physically readable on SSD flash, so a host that ever stored patient data on its
-plaintext root needs a separate data-remanence review; this tool does not securely erase old data.
+| Machine | Command | Purpose |
+| --- | --- | --- |
+| New or explicitly disposable | `devenv shell luxnix install --profile /absolute/host.yml` | Build the fresh installer. |
+| Already encrypted | `devenv shell luxnix inspect gc-02` | Verify actual storage and administrator credentials. |
+| Existing contents must survive | `devenv shell luxnix migrate` | Preserve and encrypt the existing installation. |
 
-Before continuing, check the displayed **computer name and disk serials**.
-Only `installation: in-place` and `source_retention: in-place` are supported.
-The former erase/restore, fresh and disposable modes are retired. Old plans
-cannot execute; preserve their journals and backups for recovery review.
-Unsupported layouts stop without offering a formatting fallback.
+Replace example hosts and paths with the administrator's prepared values.
+Configuration updates to an encrypted host use the [deployment workflow](deployment-guide.md).
 
-The workflow does not create your data backups. Someone must actually test the
-required recovery and restore steps. If you do not understand a check, stop and
-ask for help; do not type `VERIFIED`. Never put passwords in chat or notes.
+## Fresh installation
 
-## 1. Run the one command — installed host, normal user
+An administrator prepares a clean, durable release and a YAML profile containing
+`schema_version: 1`, `host`, absolute `checkout`, `hardware_uuid` and `disks`.
+Each disk has a stable by-id `path`, exact `serial` and `size_bytes`. Use
+`installation: fresh` with `source_retention: new-disks` for empty media, or
+`installation: disposable` with `source_retention: discard-approved` for erasure
+explicitly authorized for this operation.
 
-Connect the recovery drive, use the reviewed clean checkout, then run this. It works
-out the host from this machine's name or hardware UUID, and you can stop and rerun it
-at any point, including after a reboot, from inside the devenv shell:
+The supported profile is one GPT disk, an EFI partition and LUKS2/Btrfs root
+with console passphrase unlock. The host configuration supplies subvolumes.
+Arrays, secondary encrypted partitions, remote initrd SSH and signed first
+installation require separate integration; do not disable security controls to
+fit this profile.
 
-```sh
-boot-storage-setup --host <host> --device <path to recovery hard drive>
-```
+Preparation prints `/nix/store/.../bin/luxnix-install`. The bundle contains the
+matching system closure, Disko script and Python runtime. The administrator
+retains and copies its **complete Nix store closure** to trusted installer media;
+copying just the executable is insufficient. Running it needs no checkout or
+separate Python environment.
 
-It does this for you:
+Prepare the evaluated account and application credentials on independent
+encrypted media, in a private directory mirroring their absolute target paths.
+Files must be root-owned mode 0400 or 0600; directories must be private. Provision
+required application identities through their existing administrative workflow.
+The installer never replaces keys needed by retained data.
 
-- Mounts the recovery drive and saves the plan. If the checkout changed and the plan
-  has not started, it offers to replace the plan and keeps the old one.
-- Opens encrypted custody, or creates it after you type `CREATE CUSTODY`. It never
-  formats an existing custody file.
-- Copies the secrets missing from custody after you agree, proves they survive closing
-  the volume, and runs preflight.
-- Searches the unencrypted root for likely patient files, checks the backup is on
-  another disk, and writes the notes and the review for you.
-
-## 2. Confirm what only you can prove
-
-The command asks for these one at a time and remembers your answers for 24 hours. Type
-`VERIFIED` only for what you did, or press Enter to stop for now.
-
-- A data backup exists and you tested restoring it. The tool creates no backup.
-- Patient data was never on the unencrypted root. The search cannot prove this: if it
-  ever was, stop for a data-remanence review.
-- The custody passphrase and your credentials are kept off this computer.
-- The physical console, keyboard and firmware boot menu work.
-- The trusted installer boots here and sees both drives. Boot back and rerun the command.
-
-Each step that works prints a `SUCCESS:` line, a progress checklist shows whether root
-is encrypted yet, and `Root setup stopped:` means that command did not finish. To look
-without changing anything, run `devenv tasks run boot-storage:setup`.
-
-Before leaving: preserve the reviewed checkout, pinned Nix artifacts and recovery
-journal independently of the disks being converted, at their planned paths.
-
-## 3. Install — trusted installer media, root terminal
-
-- Boot the tested NixOS installer *preferrably ; mount the recovery filesystem at `/recovery`.
-- Make the preserved checkout, Nix artifacts and reviewed Python environment available.
-- Ensure recovery state/evidence is root-owned and private; disable active swap.
-- From the preserved checkout, run:
+From a root terminal in the live installer, with the credential media unlocked:
 
 ```sh
-python -m lx_administration.storage.boot_setup run --apply
+/bundle/bin/luxnix-install --state /recovery/install-state --credentials /custody/credentials
+/bundle/bin/luxnix-install --state /recovery/install-state --credentials /custody/credentials --apply
 ```
 
-- Confirm the exact target disk serials before encryption; enter and preserve the LUKS password.
-  It may use only letters a-x, digits and spaces, because the boot prompt can use a
-  different keyboard layout.
-- The conversion preserves the filesystem. Type the displayed `ENCRYPT IN PLACE` line
-  with the computer name, plan ID and disk serials; `yes` or an empty answer cancels.
-  A tested backup is still required because hardware failure can damage data during
-  conversion.
-- Supply the requested credentials and completed prepared-stage notes.
-- Rerun after each requested action; confirm installation separately.
-- If interrupted, stop and follow [recovery instructions](boot-storage-migration.md#interrupted-setup).
-  Keep the journal and rerun the same command; it resumes.
+Replace `/bundle` with the prepared store path. The first command checks the
+target only. The second verifies hardware and credentials, tests the administrator
+password, displays the host and disk serial, and requests one typed erasure
+approval. Disko asks for and confirms the disk passphrase. Keep it off-machine
+for recovery; it is separate from account passwords and data backups.
 
-Do not run `sudo devenv` to get past an installer warning. The installed system
-and installer use different commands deliberately. Keep the recovery drive
-connected and never erase or repurpose it during this procedure.
+The installer creates encrypted storage, copies credentials without overwriting,
+installs the matching system and verifies actual mounts. Reboot, unlock and log
+in; then test application initialization and recovery access. Pre-reboot success
+is explicitly **awaiting cold-boot acceptance**. Repeating the command refuses
+another erase.
 
-## 4. Cold boot and accept
+### Continue an interrupted fresh installation
 
-- After successful installation, boot the installed system.
-- Test root unlock, desktop user selection, admin login/sudo/SSH and application decryption.
-- Write the requested acceptance notes; retain the recovery drive and credentials.
-- With recovery state private and owned by the operator running the workflow, rerun:
+Keep the original bundle, journal and provisioning media. From the same trusted
+installer, preview recovery and then continue explicitly:
 
 ```sh
-devenv shell boot-storage-setup
+/bundle/bin/luxnix-install --state /recovery/install-state --credentials /custody/credentials --resume
+/bundle/bin/luxnix-install --state /recovery/install-state --credentials /custody/credentials --resume --apply
 ```
 
-Do not use `nh os boot` to convert plaintext root. Keep the planned release unchanged.
+Recovery requires the original hardware and disk identities, the exact bundle,
+and the filesystem identities recorded after storage creation. It never runs
+Disko. It checks all already-copied credentials against the provisioning media,
+keeps matching files, copies only missing files, then retries installation of the
+same closure. Conflicting credentials stop recovery before any missing file is
+written. A completed journal is verified without repeating installation; physical
+cold-boot acceptance remains separate.
 
-## 5. Remove the old containers
+After a reboot, unlock custody and the **existing** root LUKS mapping, then remount
+the root subvolumes and EFI partition at `/mnt` using the devices, filesystem
+types and subvolume options in the administrator's prepared host profile. Do not
+run Disko to mount them. The recovery command verifies the complete mounted layout
+against the journal; a missing or changed mount stops it. A process interruption
+normally leaves these mounts in place.
 
-Only after acceptance is recorded, on the installed system. It asks for `sudo` itself.
-Without `--apply` it only previews; with it, typed approval deletes the container files
-permanently.
+If no verified storage checkpoint exists, formatting may have stopped part-way.
+`--resume` refuses to infer success from partition labels or an open mapping.
+Preserve the journal and have an administrator inspect that exact selected disk
+from trusted media. This state cannot authorize another erase or an automatic
+repair; any new destructive installation needs a separate reviewed operation.
 
-```sh
-devenv shell boot-storage-setup retire-containers
-devenv shell boot-storage-setup retire-containers --apply
-```
+Fresh installation does not require restoring intentionally discarded contents.
+It does require preserving any data, application keys or identities still needed
+elsewhere. An old migration plan or historical approval is never erase consent.
 
-For installer handoff requirements, see the [detailed guide](boot-storage-migration.md#configuration-and-recovery-media).
+## Preserve an existing installation
+
+Use the [migration reference](boot-storage-migration.md) when contents must
+survive. Only one plaintext Btrfs root is supported by the in-place converter;
+unsupported layouts stop without a formatting fallback.
+
+1. Make and test a backup. Preserve original credentials, historical keys and
+   independent recovery access. Conversion is not secure erasure of old plaintext
+   SSD data; prior patient data requires a separate data-remanence review.
+2. Connect recovery media and run `devenv shell luxnix migrate` from the reviewed
+   clean checkout as the normal user. Confirm the displayed host and serials.
+   The guide prepares custody, checks copies and asks only for human evidence.
+   Type `VERIFIED` only for completed checks; Enter pauses without losing state.
+3. Boot trusted installer media and mount recovery at `/recovery`. Keep the
+   pinned checkout, Nix artifacts and Python environment independently available.
+   State must be root-owned and private; disable swap. From the preserved checkout:
+
+   ```sh
+   python -m lx_administration.storage.boot_setup run --apply
+   ```
+
+   Confirm `ENCRYPT IN PLACE`, provide the passphrases and follow the requested
+   prepared-stage review and separate install confirmation. Do not run `sudo devenv`.
+4. Cold boot, unlock, test login/sudo/SSH and decrypt old application data. Rerun
+   `devenv shell luxnix migrate` to record acceptance. Keep backups and custody.
+5. Only after acceptance, preview `devenv shell luxnix retire-containers`.
+   Adding `--apply` requests typed approval to delete the retired container files.
+
+For interruptions, follow [recovery](boot-storage-migration.md#interrupted-setup)
+with the same journal. A rebuild cannot encrypt plaintext root, and an older
+plaintext boot generation cannot open the converted root.
+
+Administrators retain `devenv shell boot-storage-setup` and
+`devenv tasks run boot-storage:setup` as compatibility entry points. Their actions
+remain explicit; setup guidance itself does not authorize disk changes.

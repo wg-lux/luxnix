@@ -293,6 +293,21 @@ commands:
       - Admission uses root to inspect storage and test existing keys without disclosing them; changes no storage or services.
       - Successful baseline admission does not approve installation, recovery custody or backup restore.
 
+  - id: luxnix
+    summary: Fresh encrypted installation by default; preservation requires an explicit command.
+    risk: destructive-local
+    operator_confirmation_required: true
+    usage: devenv shell luxnix [--profile <file.yml>] | [install|inspect|prepare|migrate|status|verify|recover|retire-containers|storage] [options]
+    implementation: lx_administration/cli.py
+    documentation: docs/boot-storage-quickstart.md
+    effects:
+      - No arguments show fresh-install guidance; --profile builds a pinned installer without changing disks.
+      - status reads an explicit preservation journal without replacing or creating a plan.
+      - inspect <host> verifies actual encrypted mounts and credentials without creating workflow state.
+      - migrate, recover, retire-containers and storage run the matching boot-storage-setup action with all its gates; nothing is skipped.
+      - prepare saves the plan; verify compares the real disk with it without writing plans, journals or evidence.
+      - recover without --assessor only prints the procedure for the disk state read from the partition.
+
   - id: boot-storage-setup
     summary: Guide in-place LUKS2 encryption with typed approval and non-formatting recovery.
     risk: destructive-local
@@ -305,14 +320,15 @@ commands:
       - Provisioning runs only on the verified target in a trusted installer with fresh recovery evidence and unmounted selected disks.
       - Only installation in-place and source_retention in-place are accepted; destructive plans are retired.
     effects:
-      - With no action it guides this machine's configured host and resumes the next step; every check still needs a typed VERIFIED and it never starts encryption, whose installer step keeps its own typed approval.
+      - Guide resumes the configured host workflow; checks require the operator's actual results, with ACKNOWLEDGED for a backup risk waiver and VERIFIED for completed checks. Encryption retains its installer-only identity checks and typed approval.
       - Identity salts need no operator decision; the host creates, recovers and keeps them automatically on encrypted storage.
-      - Guide creates the default custody file only after typed approval, never formats an existing file, and copies only secrets missing from custody after confirmation.
+      - Guide creates the default custody file only after typed approval, never formats an existing file, and copies secrets missing from custody without asking.
+      - Explicit planning or the migration guide can replace an outdated unstarted plan under the execution serialization boundary, retaining <state>.superseded-<id>. Inspection never replaces plans, and started plans cannot be replaced.
       - Setup-media previews USB/removable filesystems; apply mounts one existing filesystem at /recovery, requires 1 GiB free, prepares private state and continues planning. Multiple candidates require --device; no formatting or automatic install.
       - Observe runs on the target and emits reviewed disk/hardware facts as YAML without writes; no substitute disk selection.
       - Plan reads boot_storage.hosts from Autoconf and builds only the system closure; private journals live under boot_storage.state_root/host.
       - Default output explains the operator checklist and next command; --json retains structured output. Review asks for explicit confirmation of each completed check and records existing operator notes through the canonical attestation gate.
-      - Next and advance without apply only report the next step; attest and status reuse the existing migration evidence workflow.
+      - Status, next, verify and advance or run without apply inspect existing state without creating or replacing plans, moving journals or recording evidence.
       - Advance at the provisioning step with apply requires a real terminal and exact host, plan and serial confirmation before encrypting the existing root partition in place.
       - Durable typed intent and pre-conversion disk metadata are saved before execution. Interrupted encryption resumes from the LUKS2 header; there is no formatter.
       - Recover with apply verifies and accepts only the existing layout after named administrator confirmation; it never formats.
@@ -566,17 +582,14 @@ tasks:
     documentation: docs/development.md
 
   - id: boot-storage:setup
-    summary: Preview or resume the current host's guarded boot-storage workflow in order.
-    risk: destructive-local
-    operator_confirmation_required: true
+    summary: Show the default fresh encrypted installation workflow without changing disks.
+    risk: read-only
+    operator_confirmation_required: false
     usage: devenv tasks run boot-storage:setup
     implementation: devenv/tasks.nix
     documentation: docs/boot-storage-quickstart.md
     effects:
-      - Default is preview. LUXNIX_BOOT_SETUP_APPLY=1 enables sequential execution through a real controlling terminal.
-      - Selects the configured hostname or uniquely matching installer hardware UUID; never selects an arbitrary host.
-      - Prepares recovery media and plan, reviews existing operator notes, then delegates provisioning/access/install through existing gates.
-      - Pauses for missing notes, installer boot, interrupted-operation recovery and physical acceptance; no automatic reboot or formatting retry.
+      - Runs the bare luxnix command; migration and installation require explicit commands.
 
   - id: autoconf:check
     summary: Validate and show resolved Autoconf options without generating files.
@@ -676,6 +689,18 @@ tasks:
 
 # Native host operations deliberately run outside the Devenv shell.
 native_commands:
+  - id: apply-fresh-encrypted-install
+    summary: Erase one explicitly selected disk and install the prepared encrypted system.
+    risk: destructive-local
+    operator_confirmation_required: true
+    usage: <bundle>/bin/luxnix-install --state <independent-state> --credentials <encrypted-credentials> --apply
+    implementation: lx_administration/storage/fresh_install.py
+    documentation: docs/boot-storage-quickstart.md
+    effects:
+      - Verifies live installer, hardware, independent credentials and administrator access before typed erasure approval.
+      - Formats only the selected disk, provisions supplied credentials and installs the pinned system.
+      - Interrupted attempts cannot repeat formatting; cold-boot acceptance is separate.
+      - Add --resume to preview recovery from a verified storage checkpoint, then --resume --apply to continue without Disko or replacement credentials. Uncertain formatting remains blocked for recovery review.
   - id: luxnix-normalize-storage
     summary: Preview and explicitly retire matching legacy native mount overrides so declared encrypted storage mounts take over.
     risk: local-state
@@ -711,10 +736,10 @@ native_commands:
     implementation: lx_administration/storage/boot_password.py
     documentation: docs/boot-storage-migration.md
     effects:
-      - Prompts at the first boot or switch rebuild and after LUKS header changes; --change prompts explicitly.
+      - Run it once before the first boot or switch rebuild and after LUKS header changes; a rebuild never prompts and is refused until a matching receipt exists. --change prompts explicitly.
       - Tests an existing password or adds a confirmed new password after verifying an existing recovery credential and backing up the header.
       - Stores only a private host/UUID/header-bound verification receipt; never stores a password or removes keyslots.
-      - A missing private terminal blocks unprepared activation before bootloader changes; builds and dry activation do not enroll credentials.
+      - Builds, dry activation and the root-storage preflight never enroll credentials.
 
   - id: rebuild-host-switch
     summary: Persist and activate the reviewed configuration using native NixOS switching.
@@ -733,7 +758,7 @@ native_commands:
     effects:
       - Updates the persistent system profile and boot default and activates services.
       - The nho alias uses LUXNIX_FLAKE and LUXNIX_HOST; no intermediate test activation.
-      - Boot-LUKS passphrase setup prompts interactively if its verified host/header receipt is absent or stale.
+      - The root-storage preflight refuses a generation that does not match the physical disk, or lacks a verified passphrase receipt.
 
   - id: rebuild-host-boot
     summary: Stage the reviewed configuration for the next boot without live activation.

@@ -10,6 +10,12 @@ boundaries:
   - Do not mount or alter live storage during context validation
   - Preserve encrypted storage and hub authentication boundaries
 entrypoints:
+  - name: fresh-install
+    file: fresh_install.py
+    purpose: Build an immutable fresh installer, admit explicit disk erasure, resume verified installation without formatting and inspect existing encrypted storage without migration state.
+  - name: fresh-installer-bundle
+    file: fresh-installer.nix
+    purpose: Package pinned closure, Disko script, public hardware plan and Python runtime without credentials.
   - name: migration-boot
     file: migration_boot.py
     purpose: Discover reusable build settings and local bundles, build and admit host-bound RAM images with firmware trust or physical console approval; stage an explicit one-shot boot without rebooting or encrypting.
@@ -54,7 +60,7 @@ entrypoints:
     purpose: Explain each required human recovery and acceptance assessment without automatically approving evidence.
   - name: boot-setup
     file: boot_setup.py
-    purpose: In-place-only LUKS2 setup, typed journals and verified non-formatting recovery; no Disko executor.
+    purpose: In-place-only LUKS2 setup, typed journals and verified non-formatting recovery; no Disko executor. Provides read-only journal inspection and replaces outdated unstarted plans only during explicit migration setup.
   - name: boot-migration
     file: boot_migration.py
     purpose: Bind in-place LUKS2 plans to hardware checks, reviewed evidence and install-only actions; old destructive plans are read-only evidence.
@@ -70,6 +76,18 @@ entrypoints:
   - name: migration-backup
     file: migration_backup.py
     purpose: Stream inventory-scoped snapshots into authenticated age archives without deleting or restoring storage.
+  - name: root-guard
+    file: root_guard.py
+    purpose: Target-host preflight comparing one generation's root-storage contract with the physical disk; ships in the host closure.
+  - name: root-recovery
+    file: root_recovery.py
+    purpose: Classify a root partition from its own metadata and select a matching generation from recovery media without touching disk data.
+  - name: recovery-image
+    file: recovery-image.nix
+    purpose: Self-contained recovery ISO and tool with no host closure or application dependency.
+  - name: migration-lifecycle
+    file: migration_lifecycle.py
+    purpose: Durable, ordered migration stages; history only and never proof of disk state.
   - name: boot-storage
     file: boot.py
     purpose: Read-only root setup guidance, actual mount identity, Btrfs member and protected key checks before activation or consumers.
@@ -108,9 +126,11 @@ entrypoints:
     purpose: Inspect envelopes ownership and interfaces.
 dependencies:
   internal:
+    - systems
     - modules/nixos
     - lx_administration/autoconf
   external:
+    - Nix and Disko
     - cryptography
     - mTLS
     - filesystem mounts

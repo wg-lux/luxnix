@@ -13,6 +13,7 @@ An interrupted conversion is resumed from the LUKS2 header, never restarted.
 from __future__ import annotations
 
 from contextlib import contextmanager
+from contextvars import ContextVar
 import json
 import os
 from pathlib import Path
@@ -33,10 +34,23 @@ SPACE_MARGIN = 1024**3
 CONSOLIDATION_STATE = Path("/var/lib/luxnix-in-place")
 LAYOUT_SAFE = re.compile(r"[a-xA-X0-9 ]+")
 PLAINTEXT, ENCRYPTING, ENCRYPTED = "plaintext", "encrypting", "encrypted"
+_operation_locks: ContextVar[tuple[int, ...]] = ContextVar(
+    "operation_locks", default=()
+)
 
 
 class InPlaceError(ValueError):
     pass
+
+
+@contextmanager
+def operation_locks(*fds: int):
+    """Keep orchestration locks alive in children after controller termination."""
+    token = _operation_locks.set(tuple(dict.fromkeys((*_operation_locks.get(), *fds))))
+    try:
+        yield
+    finally:
+        _operation_locks.reset(token)
 
 
 def run(*args: str, pass_fds=(), timeout: int | None = 600) -> str:
@@ -47,14 +61,16 @@ def run(*args: str, pass_fds=(), timeout: int | None = 600) -> str:
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
-        pass_fds=pass_fds,
+        pass_fds=tuple(dict.fromkeys((*pass_fds, *_operation_locks.get()))),
         timeout=timeout,
         check=False,
     )
     if result.returncode:
         raise InPlaceError(
             f"{Path(args[0]).name} {args[1] if len(args) > 1 else ''} failed "
-            f"(exit {result.returncode}); data was left as it is"
+            f"(exit {result.returncode}); the target may be partially modified. "
+            "Preserve the journal and inspect/resume from trusted installer media; "
+            "never format to retry"
         )
     return result.stdout.strip()
 

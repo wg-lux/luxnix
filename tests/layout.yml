@@ -24,6 +24,14 @@ python_suites:
     scope: Optional CUDA environment probes, outside the default pytest suite.
     command: devenv tasks run env:setup-cuda
 nix_suites:
+  - id: fresh-install
+    path: tests/nixtest/fresh_install_vm_test.nix
+    scope: Packaged fresh installation through LUKS2 boot and administrator login.
+    command: nix build .#checks.x86_64-linux.boot-storage-fresh --no-link -L
+  - id: root-guard
+    path: tests/nixtest/root_guard_vm_test.nix
+    scope: Real preflight and recovery classification against plaintext, LUKS2 and interrupted disposable disks.
+    command: nix build .#checks.x86_64-linux.root-guard --no-link -L
   - id: boot-storage
     path: tests/nixtest/boot_storage_vm_test.nix
     scope: Cold boot root unlock, stage-2 data unlock, key retention and failure behavior on disposable disks.

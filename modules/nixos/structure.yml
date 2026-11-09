@@ -24,7 +24,10 @@ entrypoints:
   purpose: Restrict opt-in scheduled upgrades to reviewed immutable revisions staged for a separate operator reboot.
 - name: boot-storage
   file: luxnix/operator-unlocked-storage/boot.nix
-  purpose: Header-detected LUKS2 or plaintext-root boot, explicit password setup, secondary crypttab and strict encrypted storage checks.
+  purpose: LUKS2 root unlock with no plaintext fallback by default, explicit password setup, secondary crypttab and strict encrypted storage checks.
+- name: root-storage-guard
+  file: luxnix/operator-unlocked-storage/root-guard.nix
+  purpose: Publish each generation's root-storage contract and enforce the target-host preflight before activation.
 - name: storage-login-access
   file: luxnix/storage-access/default.nix
   purpose: Authenticate per-account OpenBao wraps at login and serialize remote storage lock/unlock without logout shutdown.

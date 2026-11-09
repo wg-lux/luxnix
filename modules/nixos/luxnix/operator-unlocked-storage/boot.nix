@@ -23,8 +23,27 @@ let
   '';
   enabled = cfg.enable && cfg.layout == "boot-luks";
   recoveryHint = "Problems? Press Ctrl+Alt+Del and choose recovery media or a compatible system.";
-  # Keep one mount graph across conversion. A linear mapping is NOT encryption:
-  # the existing kernel-backed storage guards reject it for protected consumers.
+  refusePlaintext = ''
+    echo 'Root has no LUKS2 header; this generation requires encrypted root.' >&2
+    echo 'Choose a generation matching this disk or boot recovery media.' >&2
+    exit 1
+  '';
+  # Disabled by default: without a LUKS2 header there is nothing to authenticate.
+  # A missing header alone is not evidence of a plaintext filesystem, and low-level
+  # probing rejects ambiguous signatures and unreadable devices.
+  plaintextBridge = ''
+    if ! filesystem=$(blkid --probe --output value --match-tag TYPE "$device"); then
+      echo 'Cannot identify root filesystem; refusing plaintext fallback' >&2
+      exit 1
+    fi
+    if [ "$filesystem" != ${lib.escapeShellArg config.fileSystems."/".fsType} ]; then
+      echo "Root is neither LUKS2 nor the configured plaintext filesystem; refusing to mount it" >&2
+      exit 1
+    fi
+    echo 'Booting plaintext root for migration; protected storage remains unavailable.' >&2
+    exec dmsetup create cryptroot --uuid LUXNIX-PLAINTEXT-ROOT \
+      --table "0 $(blockdev --getsz "$device") linear $(readlink -f "$device") 0"
+  '';
   rootDevice = pkgs.writeShellApplication {
     name = "luxnix-root-device";
     runtimeInputs = [
@@ -48,39 +67,21 @@ let
           # Failed unlock must never fall through to plaintext handling.
           exec systemd-cryptsetup attach "$name" "$device" "$key" "$opts"
         fi
-        # A missing LUKS header alone is not evidence of a plaintext filesystem.
-        # Low-level probing rejects ambiguous signatures and unreadable devices.
-        if ! filesystem=$(blkid --probe --output value --match-tag TYPE "$device"); then
-          echo 'Cannot identify root filesystem; refusing plaintext fallback' >&2
-          exit 1
-        fi
-        if [ "$filesystem" != ${lib.escapeShellArg config.fileSystems."/".fsType} ]; then
-          echo "Root is neither LUKS2 nor the configured plaintext filesystem; refusing to mount it" >&2
-          exit 1
-        fi
-        echo 'Booting plaintext root for migration; protected storage remains unavailable.' >&2
-        exec dmsetup create cryptroot --uuid LUXNIX-PLAINTEXT-ROOT \
-          --table "0 $(blockdev --getsz "$device") linear $(readlink -f "$device") 0"
+        ${if cfg.plaintextRootBridge then plaintextBridge else refusePlaintext}
       done < /etc/crypttab
       echo 'Missing cryptroot entry in initrd crypttab' >&2
       exit 1
     '';
   };
   mountUnit = path: "${utils.escapeSystemdPath path}.mount";
+  luksContents =
+    values:
+    map (v: v.content) (builtins.filter (v: v.content != null && v.content.type == "luks") values);
   luks =
-    lib.concatLists (
-      lib.mapAttrsToList (
-        _: disk:
-        lib.mapAttrsToList (_: p: p.content) (
-          lib.filterAttrs (_: p: p.content != null && p.content.type == "luks") disk.content.partitions
-        )
-      ) (lib.attrByPath [ "disko" "devices" "disk" ] { } config)
+    lib.concatMap (disk: luksContents (builtins.attrValues disk.content.partitions)) (
+      builtins.attrValues (lib.attrByPath [ "disko" "devices" "disk" ] { } config)
     )
-    ++ lib.mapAttrsToList (_: array: array.content) (
-      lib.filterAttrs (_: array: array.content != null && array.content.type == "luks") (
-        lib.attrByPath [ "disko" "devices" "mdadm" ] { } config
-      )
-    );
+    ++ luksContents (builtins.attrValues (lib.attrByPath [ "disko" "devices" "mdadm" ] { } config));
   secondary = builtins.filter (
     v:
     !v.initrdUnlock
@@ -165,62 +166,46 @@ let
     cp ${../../../../lx_administration/storage/cutover.py} "$out/cutover.py"
     cp ${../../../../lx_administration/secret_storage.py} "$out/secret_storage.py"
   '';
-  verifier = pkgs.writeShellApplication {
-    name = "luxnix-verify-boot-storage";
-    runtimeInputs = [
-      pkgs.python3
-      pkgs.util-linux
-      pkgs.btrfs-progs
-      pkgs.cryptsetup
-    ];
-    text = ''
-      exec python3 ${checker}/boot.py ${spec} "$@"
-    '';
-  };
-  setupPassword = pkgs.writeShellApplication {
-    name = "luxnix-setup-boot-password";
-    runtimeInputs = [
-      pkgs.python3
-      pkgs.util-linux
-      pkgs.cryptsetup
-    ];
-    text = ''
-      exec python3 ${checker}/boot_password.py \
-        --device ${lib.escapeShellArg config.boot.initrd.luks.devices.cryptroot.device} "$@"
-    '';
-  };
-  setupRoot = pkgs.writeShellApplication {
-    name = "luxnix-setup-root-encryption";
-    runtimeInputs = [
-      pkgs.python3
-      pkgs.util-linux
-      pkgs.btrfs-progs
-      pkgs.cryptsetup
-    ];
-    text = ''
-      usage() {
-        echo 'Usage: luxnix-setup-root-encryption [--setup-password]'
-        echo 'Inspect the running root against this candidate; plaintext root requires reviewed in-place encryption.'
-        echo 'Preview in-place encryption from the reviewed LuxNix checkout: devenv tasks run boot-storage:setup'
-        echo '--setup-password verifies an existing LUKS password only after the root check succeeds.'
-        echo 'Never formats disks, opens mappings, changes keyslots or activates a generation.'
-      }
-      if [ "$#" -gt 1 ]; then usage >&2; exit 2; fi
-      case "''${1:-}" in
-        --help) usage; exit 0 ;;
-        ""|--setup-password) ;;
-        *) usage >&2; exit 2 ;;
-      esac
-      if [ "$EUID" -ne 0 ]; then echo 'Run with sudo to inspect LUKS mappings.' >&2; exit 1; fi
-      printf 'Candidate host: %s\nConfigured LUKS device: %s\n' \
-        ${lib.escapeShellArg config.networking.hostName} \
-        ${lib.escapeShellArg config.boot.initrd.luks.devices.cryptroot.device}
-      python3 ${checker}/boot.py ${spec} --root-setup
-      if [ "''${1:-}" = --setup-password ]; then
-        exec ${lib.getExe setupPassword}
-      fi
-    '';
-  };
+  storageCommand =
+    name: inputs: text:
+    pkgs.writeShellApplication {
+      inherit name text;
+      runtimeInputs = [
+        pkgs.python3
+        pkgs.util-linux
+      ]
+      ++ inputs;
+    };
+  verifier = storageCommand "luxnix-verify-boot-storage" [ pkgs.btrfs-progs pkgs.cryptsetup ] ''
+    exec python3 ${checker}/boot.py ${spec} "$@"
+  '';
+  setupPassword = storageCommand "luxnix-setup-boot-password" [ pkgs.cryptsetup ] ''
+    exec python3 ${checker}/boot_password.py \
+      --device ${lib.escapeShellArg config.boot.initrd.luks.devices.cryptroot.device} "$@"
+  '';
+  setupRoot = storageCommand "luxnix-setup-root-encryption" [ pkgs.btrfs-progs pkgs.cryptsetup ] ''
+    usage() {
+      echo 'Usage: luxnix-setup-root-encryption [--setup-password]'
+      echo 'Inspect the running root against this candidate; plaintext root requires reviewed in-place encryption.'
+      echo 'Preserve this installation with in-place encryption: devenv shell luxnix migrate'
+      echo '--setup-password verifies an existing LUKS password only after the root check succeeds.'
+      echo 'Never formats disks, opens mappings, changes keyslots or activates a generation.'
+    }
+    if [ "$#" -gt 1 ]; then usage >&2; exit 2; fi
+    case "''${1:-}" in
+      --help) usage; exit 0 ;;
+      ""|--setup-password) ;;
+      *) usage >&2; exit 2 ;;
+    esac
+    if [ "$EUID" -ne 0 ]; then echo 'Run with sudo to inspect LUKS mappings.' >&2; exit 1; fi
+    printf 'Candidate host: %s\nConfigured LUKS device: %s\n' \
+      ${lib.escapeShellArg config.networking.hostName} \
+      ${lib.escapeShellArg config.boot.initrd.luks.devices.cryptroot.device}
+    python3 ${checker}/boot.py ${spec} --root-setup
+    if [ "''${1:-}" = --setup-password ]; then
+      exec ${lib.getExe setupPassword}
+    fi
+  '';
   check = name: "luxnix-storage-check-${name}";
   guard =
     requiredPaths:
@@ -377,10 +362,10 @@ in
             initrdBin = [ pkgs.cryptsetup ];
             storePaths = [
               (lib.getExe rootDevice)
-              pkgs.runtimeShell
               (lib.getExe' pkgs.util-linux "blkid")
               (lib.getExe' pkgs.util-linux "blockdev")
               (lib.getExe' pkgs.lvm2 "dmsetup")
+              pkgs.runtimeShell
               "${config.boot.initrd.systemd.package}/bin/bootctl"
               (lib.getExe' config.boot.plymouth.package "plymouth")
             ];
@@ -510,11 +495,6 @@ in
           // {
             "/".options = [ "x-systemd.device-timeout=0" ];
           };
-        systemd.sleep.settings.Sleep = {
-          AllowHibernation = false;
-          AllowHybridSleep = false;
-          AllowSuspendThenHibernate = false;
-        };
       }
       (lib.mkIf remote.enable {
         assertions = [

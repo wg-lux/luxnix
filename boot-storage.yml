@@ -1,0 +1,49 @@
+# Current storage contract. Historical acceptance material is not an installer gate.
+schema_version: 1
+architecture: manual-boot-luks2
+default_workflow: fresh
+runbook: docs/boot-storage-quickstart.md
+historical_catalog: boot-encryption-acceptance.yml
+baseline:
+  - One operator passphrase unlock for root; no TPM or central service required at boot.
+  - Secondary keys remain on encrypted root, outside the initrd.
+  - Protected services verify actual encrypted backing devices before writing.
+  - Disk installation never rotates application keys or identities.
+workflows:
+  fresh:
+    command: devenv shell luxnix --profile <administrator-profile.yml>
+    implementation: lx_administration/storage/fresh_install.py
+    scope: One GPT disk with EFI and LUKS2 Btrfs root; manual console unlock.
+    profile: Explicit fresh/new-disks or disposable/discard-approved selection for this operation.
+    prerequisites:
+      - Clean durable release with locked inputs and administrator-prepared hardware profile.
+      - Prepared account and application credentials on independent encrypted media.
+      - Administrator password verified before disk changes; disk passphrase retained off-machine.
+      - Actual target UUID, disk serial and size verified in the live installer.
+      - Explicit typed approval of the displayed erasure.
+    excludes:
+      - Migration backup and old-data restore attestations for intentionally discarded contents.
+      - Implicit disposal of any data, keys or identities still required elsewhere.
+      - Automatic retry of formatting, unattended unlock and signed first installation.
+    recovery:
+      command: <prepared-bundle>/bin/luxnix-install --state <original-state> --credentials <original-credentials> --resume
+      apply: Add --apply to continue after the read-only recovery preview.
+      behavior: Verify the original plan, hardware, mounted filesystem identities and existing credentials; copy only missing credentials and retry the same system installation without Disko.
+      limit: Missing verified storage checkpoints or conflicting credentials stop recovery; incomplete formatting never authorizes another erase.
+    acceptance:
+      - Installation completes against the matching closure and verified encrypted mounts.
+      - Cold boot, unlock, administrator login and application initialization are verified separately.
+      - Recovery access and required application credentials remain available off-machine.
+  existing:
+    command: devenv shell luxnix inspect <host>
+    behavior: Read-only verification of configured live mounts, secondary keys and administrator hash.
+    configuration: Apply matching configuration through the existing deployment workflow after inspection.
+  preservation:
+    command: devenv shell luxnix migrate
+    implementation: lx_administration/storage/boot_setup.py
+    behavior: Preserve existing data with the established in-place conversion and recovery journal.
+    prerequisites: Existing recovery, backup, identity preservation and acceptance requirements remain applicable.
+verification:
+  python: uv run pytest -q tests/test_fresh_install.py tests/test_luxnix_cli.py
+  vm: nix build .#checks.x86_64-linux.boot-storage-fresh --no-link -L
+  qualification: Repository tests do not establish physical host acceptance.

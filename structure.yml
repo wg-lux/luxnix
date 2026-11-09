@@ -13,9 +13,12 @@ entrypoints:
   - name: python-quality-policy
     file: python-quality.yml
     purpose: Pin Python lint scope, Ruff version and reviewed diagnostic fingerprints.
+  - name: current-boot-storage
+    file: boot-storage.yml
+    purpose: Current manual LUKS2 contract with separate fresh, existing and preservation workflows.
   - name: boot-encryption-acceptance
     file: boot-encryption-acceptance.yml
-    purpose: Boot LUKS acceptance requirements and explicitly superseded container/OpenBao evidence.
+    purpose: Compatibility pointer to archived acceptance evidence and the current boot-storage.yml contract.
   - name: secret-rotation-catalog
     file: secrets-management.yml
     purpose: Canonical cross-repository secret ownership and ordered rotation gates.

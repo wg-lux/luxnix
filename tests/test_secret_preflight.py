@@ -400,8 +400,22 @@ def test_volume_on_a_selected_disk_needs_no_old_key(environment, monkeypatch):
 
 
 @pytest.fixture
-def receipt(environment):
-    state, plan, custody, live = environment
+def preservation(environment):
+    state, plan, _, _ = environment
+    progress = migration.load_progress(state, plan)
+    plan["spec"].update(installation="in-place", source_retention="in-place")
+    plan["plan_id"] = migration.digest(
+        {k: v for k, v in plan.items() if k != "plan_id"}
+    )
+    progress["plan_id"] = plan["plan_id"]
+    migration.atomic_json(state / "plan.json", plan)
+    migration.atomic_json(state / "progress.json", progress)
+    return environment
+
+
+@pytest.fixture
+def receipt(preservation):
+    state, plan, custody, live = preservation
     fill_custody(custody, live)
     preflight.run(state, custody)
     return state, plan, state / migration.PREFLIGHT_RECEIPT
@@ -433,7 +447,7 @@ def test_receipt_gate_rejects_anything_short_of_proof(receipt, change):
 
 def test_missing_receipt_names_the_command(environment):
     state, _, _, _ = environment
-    with pytest.raises(migration.MigrationError, match="boot-storage-setup preflight"):
+    with pytest.raises(migration.MigrationError, match="has not verified"):
         migration.require_preflight(state)
 
 
@@ -449,7 +463,6 @@ def test_review_stops_before_any_prompt_without_a_receipt(
     progress = json.loads((state / "progress.json").read_text())
     progress["plan_id"] = plan["plan_id"]
     migration.atomic_json(state / "progress.json", progress)
-    monkeypatch.setattr(migration, "verify_readiness", lambda *a, **k: None)
     prompts = []
     monkeypatch.setattr("builtins.input", lambda *a: prompts.append(a) or "VERIFIED")
     report = tmp_path / "notes.txt"
@@ -479,8 +492,8 @@ def recovery_evidence(tmp_path, plan):
     return report
 
 
-def test_attest_cannot_bypass_the_missing_receipt(environment, tmp_path):
-    state, plan, _, _ = environment
+def test_attest_cannot_bypass_the_missing_receipt(preservation, tmp_path):
+    state, plan, _, _ = preservation
     with pytest.raises(migration.MigrationError, match="preflight"):
         migration.attest(
             state, "recovery", recovery_evidence(tmp_path, plan), "Test reviewer"

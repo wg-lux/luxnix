@@ -77,8 +77,8 @@ def verify_mount(path: str, expected: str, expected_type: str | None = None,
                 f"Configured root device {expected} is missing; mounted root uses "
                 f"{source}. "
                 "A rebuild cannot encrypt a plaintext root. From the reviewed "
-                "LuxNix checkout, run devenv tasks run boot-storage:setup to "
-                "preview the in-place encryption workflow; "
+                "LuxNix checkout, run devenv shell luxnix migrate for "
+                "the explicit preservation workflow; "
                 "see docs/boot-storage-quickstart.md"
             ) from exc
         raise
@@ -130,26 +130,14 @@ def setup_root(spec: dict) -> None:
         ) as probe_error:
             print(f"Current root is not verified as LUKS2: {probe_error}")
             print(
-                "This helper only diagnoses root storage. For plaintext root, "
-                "complete these four phases; do not retry nh os boot yet.\n"
-                "1. PREVIEW: As your normal user in the reviewed clean LuxNix "
-                "checkout, connect the recovery drive and run:\n"
-                "   devenv tasks run boot-storage:setup\n"
-                "2. PREPARE: Run the guided command; it picks this host:\n"
-                "   devenv shell boot-storage-setup\n"
-                "   Follow its recovery checklist and preserve credentials. "
-                "It pauses before encrypting the existing root in place.\n"
-                "3. INSTALL: Boot trusted installer media. Keep the planned "
-                "checkout, Nix paths and private recovery state available; follow "
-                "the installer handoff in docs/boot-storage-migration.md. "
-                "Confirm the exact disks, enter the LUKS password and complete "
-                "credential preparation before confirming the install-only "
-                "boot configuration update.\n"
-                "4. ACCEPT: Cold boot, test root unlock, desktop account "
-                "selection, admin recovery and application decryption; then "
-                "record acceptance with the same workflow.\n"
-                "Neither a rebuild nor a reboot encrypts plaintext root. "
-                "Keep the saved plan; never delete it to bypass a failed step."
+                "This helper only diagnoses root storage. Preserve this machine's "
+                "contents with the explicit migration workflow:\n"
+                "  devenv shell luxnix migrate\n"
+                "Use a reviewed clean checkout and independent recovery media. "
+                "The guide pauses before encrypting the existing root in place. "
+                "Follow docs/boot-storage-migration.md for backup, installer "
+                "handoff and cold-boot acceptance. Neither a rebuild nor a reboot "
+                "encrypts plaintext root. Keep the saved plan and recovery copies."
             )
         else:
             print(

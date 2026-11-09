@@ -148,7 +148,10 @@ let
   });
 in
 {
-  imports = [ ./boot.nix ];
+  imports = [
+    ./boot.nix
+    ./root-guard.nix
+  ];
 
   options.luxnix.storage.operatorUnlocked = {
     layout = lib.mkOption {
@@ -316,6 +319,11 @@ in
       ];
     }
     (lib.mkIf cfg.enable {
+      systemd.sleep.settings.Sleep = {
+        AllowHibernation = false;
+        AllowHybridSleep = false;
+        AllowSuspendThenHibernate = false;
+      };
       system.activationScripts = lib.mkIf (cfg.migration.accountHashes != { }) {
         luxnixPrepareBootAccountHashes = {
           deps = [ "specialfs" ];
@@ -632,11 +640,6 @@ in
             }
           ) containerVolumes;
 
-        sleep.settings.Sleep = {
-          AllowHibernation = false;
-          AllowHybridSleep = false;
-          AllowSuspendThenHibernate = false;
-        };
       };
     })
   ];

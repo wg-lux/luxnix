@@ -1,8 +1,7 @@
 """One resumable command for root encryption on the current host.
 
-It does whatever can be measured and asks only about what cannot, such as a physical
-boot test. It never answers for the operator: every check still needs a typed VERIFIED,
-and nothing here starts the encryption.
+It measures what it can and records human evidence separately from risk decisions.
+Storage changes retain the installer's explicit target checks and confirmation.
 """
 
 from __future__ import annotations
@@ -14,7 +13,6 @@ import sys
 import time
 from collections import Counter
 from pathlib import Path
-from uuid import uuid4
 
 from lx_administration.storage import boot_migration as migration
 from lx_administration.storage import boot_setup as setup
@@ -31,12 +29,13 @@ CUSTODY_MAPPING = "luxnix-custody"
 CUSTODY_MOUNT = Path("/run/luxnix-custody")
 CUSTODY_DIRECTORY = CUSTODY_MOUNT / "custody"
 CUSTODY_SIZE = "2G"
-ANSWERS = "recovery-checks.json"
+ANSWERS = migration.RECOVERY_CHECKS
 GUIDED_NOTES = "recovery-notes-guided.txt"
 ANSWER_LIFETIME = 24 * 3600
+BACKUP_CHECK = "in_place_backup_acknowledged"
 # Measured checks first, so a reboot for the physical tests comes last.
 CHECK_ORDER = (
-    "in_place_backup_acknowledged",
+    BACKUP_CHECK,
     "plaintext_remnants_reviewed",
     "independent_credentials_tested",
     "vault_recovery_tested",
@@ -56,7 +55,9 @@ def interactive(*command: str) -> None:
     if result.returncode:
         raise migration.MigrationError(
             f"{Path(command[0]).name} failed (exit {result.returncode}); "
-            "nothing was deleted"
+            "it may have partially completed. Inspect custody at "
+            f"{CUSTODY_FILE} and {CUSTODY_MOUNT} before retrying; "
+            "preserve the custody file and journal."
         )
 
 
@@ -182,7 +183,7 @@ def root_used() -> str:
     return result.stdout.split()[-1] if result.stdout.split() else "not measured"
 
 
-def ask_backup(spec: dict) -> str:
+def ask_backup(spec: dict) -> dict:
     location = input(
         "Absolute path of the mounted backup, or Enter if you are going without one: "
     ).strip()
@@ -192,7 +193,13 @@ def ask_backup(spec: dict) -> str:
             raise Stopped(
                 "A tested backup or a named person accepting the risk is needed."
             )
-        return f"No backup. Risk accepted by: {name}"
+        return {
+            "status": "risk-accepted",
+            "accepted_by": name,
+            "location": None,
+            "restore_test": None,
+            "verification": "not-performed",
+        }
     path = Path(location)
     if not path.is_absolute() or not secret_preflight.exists(path):
         raise migration.MigrationError(f"{location} is not an existing absolute path")
@@ -208,12 +215,30 @@ def ask_backup(spec: dict) -> str:
     tested = input("How did you test restoring it? (no secrets) ").strip()
     if not tested:
         raise Stopped("A backup counts only once a restore has been tested.")
-    return f"Backup at {location}, size {size}. Restore test: {tested}"
+    return {
+        "status": "restore-tested",
+        "accepted_by": None,
+        "location": location,
+        "restore_test": tested,
+        "verification": "operator-reported",
+    }
 
 
-def measured_detail(check: str, spec: dict, state: Path) -> str:
+def backup_detail(backup: dict) -> str:
+    if backup["status"] == "risk-accepted":
+        return (
+            f"No data backup. Risk accepted by: {backup['accepted_by']}. "
+            "No data restoration has been verified."
+        )
+    return (
+        f"Data backup at {backup['location']}. Restore test reported by the operator: "
+        f"{backup['restore_test']}. This is human evidence, not automated verification."
+    )
+
+
+def measured_detail(check: str, spec: dict, state: Path) -> str | dict:
     """Print and return what the machine can establish for one check."""
-    if check == "in_place_backup_acknowledged":
+    if check == BACKUP_CHECK:
         return ask_backup(spec)
     if check == "plaintext_remnants_reviewed":
         print("Searching the unencrypted root for likely patient files...")
@@ -231,7 +256,8 @@ def measured_detail(check: str, spec: dict, state: Path) -> str:
         detail = (
             f"Preflight verified {verified} of {len(receipt['items'])} required "
             f"secrets in {receipt['custody']}, outside the selected disks, and the "
-            "admin password against its saved hash."
+            "admin password against its saved hash. This verifies credential custody "
+            "only; no application-data backup or restore is established."
         )
         items = receipt["items"]
         fresh = [i["path"] for i in items if i["status"] == "salt-regenerated"]
@@ -279,12 +305,24 @@ def ask_checks(spec: dict, state: Path, step: setup.NextStep) -> dict:
         print(f"\n--- Check {number} of {len(remaining)}: {check} ---")
         print(descriptions[check])
         detail = measured_detail(check, spec, state)
+        backup = detail if check == BACKUP_CHECK and isinstance(detail, dict) else None
+        if backup is not None:
+            detail = backup_detail(backup)
+            print(detail)
         if check in PHYSICAL_INSTRUCTIONS:
             print(PHYSICAL_INSTRUCTIONS[check])
-        answer = input("Type VERIFIED only if you did this, or press Enter to stop: ")
-        if answer != "VERIFIED":
+        risk = backup is not None and backup["status"] == "risk-accepted"
+        expected = "ACKNOWLEDGED" if risk else "VERIFIED"
+        prompt = (
+            "Type ACKNOWLEDGED to record this risk decision, or press Enter to stop: "
+            if risk
+            else "Type VERIFIED only if you did this, or press Enter to stop: "
+        )
+        if input(prompt) != expected:
             raise Stopped("Your earlier answers are saved.")
         answers[check] = {"confirmed_at": time.time(), "detail": detail}
+        if backup is not None:
+            answers[check]["backup"] = backup
         migration.atomic_json(
             state / ANSWERS, {"plan_id": step.plan_id, "checks": answers}
         )
@@ -296,7 +334,13 @@ def write_notes(state: Path, answers: dict) -> Path:
     lines = []
     for check, answer in sorted(answers.items()):
         when = time.strftime("%Y-%m-%d %H:%M", time.localtime(answer["confirmed_at"]))
-        lines.append(f"{when} {check}: confirmed. {answer['detail']}".rstrip())
+        label = "confirmed"
+        if check == BACKUP_CHECK:
+            label = {
+                "risk-accepted": "risk accepted; backup not verified",
+                "restore-tested": "restore test reported by operator",
+            }.get(answer.get("backup", {}).get("status"), "backup verification unknown")
+        lines.append(f"{when} {check}: {label}. {answer['detail']}".rstrip())
     atomic_write_file(
         destination=notes,
         content=[("\n".join(lines) + "\n").encode()],
@@ -316,52 +360,23 @@ def recovery_stage(spec: dict, state: Path, custody: Path | None) -> None:
     step = setup.next_step(state)
     answers = ask_checks(spec, state, step)
     assessor = os.environ.get("USER") or input("Name of the operator: ").strip()
-    setup.record_review(state, step, assessor, write_notes(state, answers))
-
-
-def plan_is_stale(state: Path, spec: dict) -> bool:
-    if not (state / "plan.json").exists():
-        return False
-    with migration.locked_state(state):
-        plan = migration.load_plan(state)
-        return plan["spec"] != spec or (
-            migration.source_identity(Path(spec["checkout"])) != plan["source"]
-        )
-
-
-def plan_has_started(state: Path) -> bool:
-    with migration.locked_state(state):
-        plan = migration.load_plan(state)
-        if migration.load_progress(state, plan)["install"]["status"] != "pending":
-            return True
-    # Outside the lock: encryption_started takes the same non-reentrant lock.
-    return setup.encryption_started(state)
-
-
-def replace_stale_plan(state: Path, spec: dict) -> None:
-    if not plan_is_stale(state, spec):
-        return
-    if plan_has_started(state):
-        raise migration.MigrationError(
-            "The checkout or Autoconf changed, but this plan has started. Restore the "
-            "planned revision to continue it; the plan cannot be replaced now"
-        )
-    print("\nThe checkout changed before this plan started, so it is being replaced.")
-    kept = state.with_name(f"{state.name}.superseded-{uuid4().hex[:8]}")
-    if not quiet("mv", "-n", str(state), str(kept)):
-        raise migration.MigrationError(f"Could not move {state} aside; nothing changed")
-    print(f"Old plan kept at {kept}")
+    setup.record_review(
+        state, step, assessor, write_notes(state, answers),
+        artifacts=(state / ANSWERS,),
+    )
 
 
 def run(
     host: str, config: Path, *, device: str | None = None, custody: Path | None = None
 ) -> None:
     if not sys.stdin.isatty():
-        raise migration.MigrationError("Use a private interactive terminal")
+        raise migration.MigrationError(
+            "Use a private interactive terminal", fix=migration.TERMINAL_FIX
+        )
     spec, state = setup.target_spec(config, host)
     setup.show_target(spec)
     recovery_media.setup(spec, state, apply=True, device=device)
-    replace_stale_plan(state, spec)
+    setup.refresh_plan(state, spec)
     if not (state / "plan.json").exists():
         setup.save_plan(spec, state)
     step = setup.next_step(state)

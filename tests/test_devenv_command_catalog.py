@@ -7,6 +7,8 @@ import subprocess
 from pathlib import Path
 from typing import Any, cast
 
+import pytest
+
 from lx_administration.yaml import load_unique_yaml_file
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -624,13 +626,14 @@ def test_native_host_commands_have_separate_validated_catalog() -> None:
     catalog = _catalog()
     native = catalog["native_commands"]
     assert {entry["id"] for entry in native} == {
+        "apply-fresh-encrypted-install",
         "rebuild-host-switch",
         "rebuild-host-boot",
         "install-prepared-encrypted-system",
         "setup-boot-password",
         "luxnix-normalize-storage",
     }
-    assert len(native) == 5
+    assert len(native) == 6
     for name in ("setup-boot-password", "luxnix-normalize-storage"):
         entry = next(item for item in native if item["id"] == name)
         assert entry["operator_confirmation_required"] is True
@@ -683,9 +686,8 @@ def test_direnv_uses_devenv_supplied_loader(tmp_path):
     assert result.stdout.strip() == "loaded"
 
 
-def test_boot_setup_task_flag_preserves_real_terminal(tmp_path):
-    import pexpect
-
+@pytest.mark.parametrize("old_apply", ["0", "1", "yes"])
+def test_setup_task_only_shows_fresh_guidance(tmp_path, old_apply):
     tasks = (REPO_ROOT / "devenv/tasks.nix").read_text()
     body = re.search(
         r'"boot-storage:setup" = \{.*?exec = \'\'(.*?)\n    \'\';', tasks, re.S
@@ -693,32 +695,11 @@ def test_boot_setup_task_flag_preserves_real_terminal(tmp_path):
     tooling = tmp_path / "tooling"
     (tooling / "bin").mkdir(parents=True)
     fake = tooling / "bin/uv"
-    fake.write_text(
-        '#!/bin/sh\nprintf "%s\\n" "$@" > "$CAPTURE_FILE"\n'
-        'if [ "$LUXNIX_BOOT_SETUP_APPLY" = 1 ]; then '
-        "test -t 0 && test -t 1 && test -t 2; fi\n"
-    )
+    fake.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$CAPTURE_FILE"\n')
     fake.chmod(0o755)
-    body = body.replace("${pkgs.uv}", str(tooling)).replace("''${", "${")
+    body = body.replace("${pkgs.uv}", str(tooling))
     capture = tmp_path / "arguments"
-    env = os.environ | {"CAPTURE_FILE": str(capture), "LUXNIX_BOOT_SETUP_APPLY": "0"}
-    result = subprocess.run(
-        ["bash", "-c", body], env=env, capture_output=True, text=True
-    )
+    env = os.environ | {"CAPTURE_FILE": str(capture), "LUXNIX_BOOT_SETUP_APPLY": old_apply}
+    result = subprocess.run(["bash", "-c", body], env=env, capture_output=True, text=True)
     assert result.returncode == 0
-    assert (
-        "--current-host" in capture.read_text() and "--apply" not in capture.read_text()
-    )
-    capture.unlink()
-    env["LUXNIX_BOOT_SETUP_APPLY"] = "yes"
-    assert (
-        subprocess.run(["bash", "-c", body], env=env, capture_output=True).returncode
-        == 2
-    )
-    assert not capture.exists()
-    env["LUXNIX_BOOT_SETUP_APPLY"] = "1"
-    child = pexpect.spawn("bash", ["-c", body], env=env, encoding="utf-8", timeout=15)
-    child.expect(pexpect.EOF)
-    child.close()
-    assert child.exitstatus == 0
-    assert "--apply" in capture.read_text()
+    assert capture.read_text().splitlines() == ["run", "python", "-m", "lx_administration.cli"]

@@ -33,7 +33,8 @@ home:
   # Compatibility baseline for generated Home Manager configurations.
   state_version: "23.11"
 
-# Operator intent only; never store journals, evidence, credentials or passwords here.
+# Explicit preservation profiles only; new machines use the default fresh installer.
+# Never store journals, evidence, credentials or passwords here.
 boot_storage:
   # setup-media mounts an existing external filesystem and prepares this directory.
   state_root: /recovery/luxnix-state
