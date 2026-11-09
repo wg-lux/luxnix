@@ -6,6 +6,7 @@
   remoteUnlockTest ? false,
   mdraidTest ? false,
   deferStartupTest ? false,
+  plaintextRootTest ? false,
 }:
 let
   key = "/etc/luks-keys/lx-data.key";
@@ -51,11 +52,22 @@ let
                   "--type"
                   "luks2"
                 ];
-                content = {
-                  type = "filesystem";
-                  format = "ext4";
-                  mountpoint = "/";
-                };
+                content =
+                  if plaintextRootTest then
+                    {
+                      type = "btrfs";
+                      subvolumes = {
+                        root.mountpoint = "/";
+                        home.mountpoint = "/home";
+                        nix.mountpoint = "/nix";
+                      };
+                    }
+                  else
+                    {
+                      type = "filesystem";
+                      format = "ext4";
+                      mountpoint = "/";
+                    };
               };
             };
           };
@@ -93,7 +105,9 @@ in
 disko.lib.testLib.makeDiskoTest {
   inherit pkgs;
   name =
-    if mdraidTest then
+    if plaintextRootTest then
+      "boot-storage-plaintext"
+    else if mdraidTest then
       "boot-storage-mdraid"
     else if deferStartupTest then
       "boot-storage-deferred"
@@ -102,8 +116,11 @@ disko.lib.testLib.makeDiskoTest {
     else
       "boot-storage";
   disko-config = raw;
-  enableOCR = true;
   extraInstallerConfig = { pkgs, ... }: {
+    environment.systemPackages = pkgs.lib.optionals plaintextRootTest [
+      pkgs.cryptsetup
+      pkgs.btrfs-progs
+    ];
     environment.etc."test-initrd-host-key" = pkgs.lib.mkIf remoteUnlockTest {
       source = sshFixtures + "/ssh_host_ed25519_key";
       mode = "0600";
@@ -114,28 +131,44 @@ disko.lib.testLib.makeDiskoTest {
       chmod 0400 ${key}
     '';
   };
-  postDisko = ''
-    # Fresh targets have no machine-id yet. Stage a real verified receipt before
-    # the install hook, replacing only the private prompt with a synthetic value.
-    machine.succeed("install -d -m 0755 /mnt/var/lib")
-    machine.succeed("${pkgs.systemd}/bin/systemd-machine-id-setup --root=/mnt")
-    machine.succeed("mkdir -p /mnt/nix/store; mount --bind /nix/store /mnt/nix/store; touch /mnt/etc/NIXOS")
-    # cryptsetup resolves mapping type through udev state; a bare chroot reports
-    # n/a even for LUKS2. Expose the installer metadata without granting writes.
-    machine.succeed("mkdir -p /mnt/run/udev; mount --bind /run/udev /mnt/run/udev; mount -o remount,bind,ro /mnt/run/udev")
-    stage_password = "import sys; sys.path.insert(0, '${repoRoot}'); from lx_administration.storage import boot_password as b; b.secret = lambda _: b'secretsecret'; b.prepare('/dev/disk/by-partlabel/disk-system-root')"
-    machine.succeed("nixos-enter --root /mnt -- ${pkgs.coreutils}/bin/env PATH=${
-      pkgs.lib.makeBinPath [
-        pkgs.util-linux
-        pkgs.cryptsetup
-      ]
-    } ${pkgs.python3}/bin/python3 -c " + shlex.quote(stage_password))
-    machine.succeed("umount /mnt/nix/store")
-    machine.succeed("install -d -m 0700 /mnt/etc/luks-keys; cp -p ${key} /mnt${key}")
-  ''
-  + pkgs.lib.optionalString remoteUnlockTest ''
-    machine.succeed("install -d -m 0700 /mnt/etc/luxnix/initrd-ssh; install -m 0600 /etc/test-initrd-host-key /mnt/etc/luxnix/initrd-ssh/ssh_host_ed25519_key")
-  '';
+  postDisko =
+    (
+      if plaintextRootTest then
+        ''
+          # Install the encrypted-root generation onto an existing plaintext layout.
+          # Only disposable test disks are reformatted here, never by the boot helper.
+          machine.succeed("umount -R /mnt; cryptsetup close cryptroot")
+          machine.succeed("wipefs -a /dev/disk/by-partlabel/disk-system-root; mkfs.btrfs -f /dev/disk/by-partlabel/disk-system-root")
+          machine.succeed("mount /dev/disk/by-partlabel/disk-system-root /mnt; btrfs subvolume create /mnt/root /mnt/home /mnt/nix; umount /mnt")
+          machine.succeed("mount -o subvol=root /dev/disk/by-partlabel/disk-system-root /mnt; mkdir -p /mnt/home /mnt/nix /mnt/boot /mnt/srv/data")
+          machine.succeed("mount -o subvol=home /dev/disk/by-partlabel/disk-system-root /mnt/home; mount -o subvol=nix /dev/disk/by-partlabel/disk-system-root /mnt/nix")
+          machine.succeed("mount /dev/disk/by-partlabel/disk-system-ESP /mnt/boot; mount /dev/mapper/lx-data /mnt/srv/data")
+          machine.succeed("mkdir -p /mnt/home/admin; echo preserved > /mnt/home/admin/root-mode-marker")
+        ''
+      else
+        ''
+          # Fresh targets have no machine-id yet. Stage a real verified receipt before
+          # the install hook, replacing only the private prompt with a synthetic value.
+          machine.succeed("install -d -m 0755 /mnt/var/lib")
+          machine.succeed("${pkgs.systemd}/bin/systemd-machine-id-setup --root=/mnt")
+          machine.succeed("mkdir -p /mnt/nix/store; mount --bind /nix/store /mnt/nix/store; touch /mnt/etc/NIXOS")
+          # cryptsetup resolves mapping type through udev state; a bare chroot reports
+          # n/a even for LUKS2. Expose the installer metadata without granting writes.
+          machine.succeed("mkdir -p /mnt/run/udev; mount --bind /run/udev /mnt/run/udev; mount -o remount,bind,ro /mnt/run/udev")
+          stage_password = "import sys; sys.path.insert(0, '${repoRoot}'); from lx_administration.storage import boot_password as b; b.secret = lambda _: b'secretsecret'; b.prepare('/dev/disk/by-partlabel/disk-system-root')"
+          machine.succeed("nixos-enter --root /mnt -- ${pkgs.coreutils}/bin/env PATH=${
+            pkgs.lib.makeBinPath [
+              pkgs.util-linux
+              pkgs.cryptsetup
+            ]
+          } ${pkgs.python3}/bin/python3 -c " + shlex.quote(stage_password))
+          machine.succeed("umount /mnt/nix/store")
+          machine.succeed("install -d -m 0700 /mnt/etc/luks-keys; cp -p ${key} /mnt${key}")
+        ''
+    )
+    + pkgs.lib.optionalString remoteUnlockTest ''
+      machine.succeed("install -d -m 0700 /mnt/etc/luxnix/initrd-ssh; install -m 0600 /etc/test-initrd-host-key /mnt/etc/luxnix/initrd-ssh/ssh_host_ed25519_key")
+    '';
   extraSystemConfig = { lib, pkgs, ... }: {
     imports = [ "${repoRoot}/modules/nixos/luxnix/operator-unlocked-storage" ];
     options = {
@@ -164,7 +197,7 @@ disko.lib.testLib.makeDiskoTest {
       luxnix.storage.operatorUnlocked = {
         enable = true;
         autoStartProtectedServices = !deferStartupTest;
-        guardedServices.writer = [ "/srv/data" ];
+        guardedServices.writer = if plaintextRootTest then [ "/home" ] else [ "/srv/data" ];
         remoteUnlock = lib.mkIf remoteUnlockTest {
           enable = true;
           interface = "eth0";
@@ -191,7 +224,9 @@ disko.lib.testLib.makeDiskoTest {
     };
   };
   bootCommands =
-    if remoteUnlockTest then
+    if plaintextRootTest then
+      ""
+    else if remoteUnlockTest then
       ''
         import os, select, shutil, subprocess, tempfile, time
         machine.wait_for_console_text("Please enter passphrase")
@@ -233,71 +268,89 @@ disko.lib.testLib.makeDiskoTest {
         machine.send_chars("secretsecret\n")
       '';
   extraTestScript =
-    pkgs.lib.optionalString mdraidTest ''
-      machine.wait_for_unit("srv-data.mount")
-      machine.succeed("test $(cat /sys/class/block/$(basename $(readlink -f /dev/md/application))/md/raid_disks) = 1")
-      machine.succeed("cryptsetup isLuks --type luks2 /dev/md/application")
-      machine.fail("cryptsetup isLuks /dev/disk/by-partlabel/disk-data-data")
-    ''
-    + ''
-      def wait_for_writer():
-          if ${if deferStartupTest then "True" else "False"}:
-              machine.fail("systemctl is-active writer.service")
-              machine.succeed("systemctl start writer.service")
-          machine.wait_for_unit("writer.service")
+    if plaintextRootTest then
+      ''
+        for attempt in range(2):
+            machine.wait_for_unit("multi-user.target")
+            machine.succeed("findmnt -no SOURCE / | grep /dev/mapper/cryptroot")
+            machine.succeed("dmsetup table cryptroot | grep ' linear '")
+            machine.succeed("grep -x preserved /home/admin/root-mode-marker")
+            machine.fail("cryptsetup isLuks /dev/disk/by-partlabel/disk-system-root")
+            machine.fail("luxnix-verify-boot-storage")
+            machine.fail("systemctl start writer.service")
+            machine.fail("systemctl is-active writer.service")
+            assert "Booting plaintext root for migration" in machine.succeed("journalctl -b --no-pager")
+            assert "Please enter passphrase" not in machine.get_console_log()
+            if attempt == 0:
+                machine.shutdown()
+                machine.start()
+      ''
+    else
+      pkgs.lib.optionalString mdraidTest ''
+        machine.wait_for_unit("srv-data.mount")
+        machine.succeed("test $(cat /sys/class/block/$(basename $(readlink -f /dev/md/application))/md/raid_disks) = 1")
+        machine.succeed("cryptsetup isLuks --type luks2 /dev/md/application")
+        machine.fail("cryptsetup isLuks /dev/disk/by-partlabel/disk-data-data")
+      ''
+      + ''
+        def wait_for_writer():
+            if ${if deferStartupTest then "True" else "False"}:
+                machine.fail("systemctl is-active writer.service")
+                machine.succeed("systemctl start writer.service")
+            machine.wait_for_unit("writer.service")
 
-      wait_for_writer()
-      # The root passphrase must be answered on the Plymouth splash, not the bare console agent.
-      boot_log = machine.succeed("journalctl -b _PID=1 -o cat --no-pager")
-      assert "Started Forward Password Requests to Plymouth." in boot_log, boot_log
-      assert "Started Dispatch Password Requests to Console." not in boot_log, boot_log
-      machine.fail("test -e /unauthorized-shell-command")
-      machine.succeed("luxnix-verify-boot-storage")
-      receipt = machine.succeed("sha256sum /var/lib/luxnix-boot-passphrase/cryptroot.json")
-      machine.succeed("luxnix-setup-root-encryption")
-      machine.succeed("luxnix-setup-root-encryption --setup-password")
-      assert machine.succeed("sha256sum /var/lib/luxnix-boot-passphrase/cryptroot.json") == receipt
-      fingerprint = machine.succeed("sha256sum ${key}")
-      machine.succeed("/run/current-system/bin/switch-to-configuration test")
-      assert machine.succeed("sha256sum ${key}") == fingerprint
-      machine.succeed("systemctl stop srv-data.mount")
-      machine.fail("systemctl is-active writer.service")
-      machine.succeed("systemctl stop systemd-cryptsetup@$(systemd-escape lx-data).service")
-      machine.succeed("mv ${key} ${key}.saved")
-      machine.fail("systemctl start writer.service")
-      machine.fail("test -e /srv/data/writes")
-      machine.succeed("mv ${key}.saved ${key}; systemctl reset-failed; systemctl start writer.service")
-      machine.succeed("luxnix-verify-boot-storage")
-      # A writable overlay on encrypted root lets the guest update its profile
-      # without mutating the harness's shared read-only host store.
-      machine.succeed("mkdir -p /run/store-lower /var/lib/test-store/upper /var/lib/test-store/work; mount --bind /nix/store /run/store-lower; mount -t overlay overlay -o lowerdir=/run/store-lower,upperdir=/var/lib/test-store/upper,workdir=/var/lib/test-store/work /nix/store")
-      # The harness does not populate the guest store database. Publish the
-      # already built closure as a generation; exercise the real boot switch below.
-      machine.succeed("ln -s $(readlink -f /run/current-system/specialisation/updated) /nix/var/nix/profiles/system-2-link; ln -sfn system-2-link /nix/var/nix/profiles/system")
-      machine.succeed("/nix/var/nix/profiles/system/bin/switch-to-configuration boot")
-      machine.shutdown()
-      machine.start()
-      machine.wait_for_console_text("Please enter passphrase")
-      machine.send_chars("secretsecret\n")
-      wait_for_writer()
-      assert machine.succeed("sha256sum ${key}") == fingerprint
-      machine.succeed("test -f /etc/storage-update-test; luxnix-verify-boot-storage")
-      machine.succeed("mv ${key} ${key}.saved")
-      machine.shutdown()
-      machine.start()
-      machine.wait_for_console_text("Please enter passphrase")
-      machine.send_chars("secretsecret\n")
-      machine.wait_for_unit("multi-user.target")
-      machine.fail("systemctl start writer.service")
-      machine.fail("systemctl is-active writer.service")
-      machine.fail("test -e /srv/data/writes")
-      machine.succeed("mv ${key}.saved ${key}; systemctl reset-failed; systemctl start writer.service")
-      machine.succeed("printf secretsecret > /run/test-root-key; printf recovery-test > /run/test-recovery-key; cryptsetup luksAddKey /dev/disk/by-partlabel/disk-system-root /run/test-recovery-key --key-file /run/test-root-key")
-      machine.shutdown()
-      machine.start()
-      machine.wait_for_console_text("Please enter passphrase")
-      machine.send_chars("recovery-test\n")
-      wait_for_writer()
-      machine.succeed("luxnix-verify-boot-storage")
-    '';
+        wait_for_writer()
+        # The root passphrase must be answered on the Plymouth splash, not the bare console agent.
+        boot_log = machine.succeed("journalctl -b _PID=1 -o cat --no-pager")
+        assert "Started Forward Password Requests to Plymouth." in boot_log, boot_log
+        assert "Started Dispatch Password Requests to Console." not in boot_log, boot_log
+        machine.fail("test -e /unauthorized-shell-command")
+        machine.succeed("luxnix-verify-boot-storage")
+        receipt = machine.succeed("sha256sum /var/lib/luxnix-boot-passphrase/cryptroot.json")
+        machine.succeed("luxnix-setup-root-encryption")
+        machine.succeed("luxnix-setup-root-encryption --setup-password")
+        assert machine.succeed("sha256sum /var/lib/luxnix-boot-passphrase/cryptroot.json") == receipt
+        fingerprint = machine.succeed("sha256sum ${key}")
+        machine.succeed("/run/current-system/bin/switch-to-configuration test")
+        assert machine.succeed("sha256sum ${key}") == fingerprint
+        machine.succeed("systemctl stop srv-data.mount")
+        machine.fail("systemctl is-active writer.service")
+        machine.succeed("systemctl stop systemd-cryptsetup@$(systemd-escape lx-data).service")
+        machine.succeed("mv ${key} ${key}.saved")
+        machine.fail("systemctl start writer.service")
+        machine.fail("test -e /srv/data/writes")
+        machine.succeed("mv ${key}.saved ${key}; systemctl reset-failed; systemctl start writer.service")
+        machine.succeed("luxnix-verify-boot-storage")
+        # A writable overlay on encrypted root lets the guest update its profile
+        # without mutating the harness's shared read-only host store.
+        machine.succeed("mkdir -p /run/store-lower /var/lib/test-store/upper /var/lib/test-store/work; mount --bind /nix/store /run/store-lower; mount -t overlay overlay -o lowerdir=/run/store-lower,upperdir=/var/lib/test-store/upper,workdir=/var/lib/test-store/work /nix/store")
+        # The harness does not populate the guest store database. Publish the
+        # already built closure as a generation; exercise the real boot switch below.
+        machine.succeed("ln -s $(readlink -f /run/current-system/specialisation/updated) /nix/var/nix/profiles/system-2-link; ln -sfn system-2-link /nix/var/nix/profiles/system")
+        machine.succeed("/nix/var/nix/profiles/system/bin/switch-to-configuration boot")
+        machine.shutdown()
+        machine.start()
+        machine.wait_for_console_text("Please enter passphrase")
+        machine.send_chars("secretsecret\n")
+        wait_for_writer()
+        assert machine.succeed("sha256sum ${key}") == fingerprint
+        machine.succeed("test -f /etc/storage-update-test; luxnix-verify-boot-storage")
+        machine.succeed("mv ${key} ${key}.saved")
+        machine.shutdown()
+        machine.start()
+        machine.wait_for_console_text("Please enter passphrase")
+        machine.send_chars("secretsecret\n")
+        machine.wait_for_unit("multi-user.target")
+        machine.fail("systemctl start writer.service")
+        machine.fail("systemctl is-active writer.service")
+        machine.fail("test -e /srv/data/writes")
+        machine.succeed("mv ${key}.saved ${key}; systemctl reset-failed; systemctl start writer.service")
+        machine.succeed("printf secretsecret > /run/test-root-key; printf recovery-test > /run/test-recovery-key; cryptsetup luksAddKey /dev/disk/by-partlabel/disk-system-root /run/test-recovery-key --key-file /run/test-root-key")
+        machine.shutdown()
+        machine.start()
+        machine.wait_for_console_text("Please enter passphrase")
+        machine.send_chars("recovery-test\n")
+        wait_for_writer()
+        machine.succeed("luxnix-verify-boot-storage")
+      '';
 }

@@ -24,7 +24,7 @@ entrypoints:
   purpose: Restrict opt-in scheduled upgrades to reviewed immutable revisions staged for a separate operator reboot.
 - name: boot-storage
   file: luxnix/operator-unlocked-storage/boot.nix
-  purpose: Passphrase-only root unlock, explicit interactive password setup, secondary crypttab and encrypted storage checks.
+  purpose: Header-detected LUKS2 or plaintext-root boot, explicit password setup, secondary crypttab and strict encrypted storage checks.
 - name: storage-login-access
   file: luxnix/storage-access/default.nix
   purpose: Authenticate per-account OpenBao wraps at login and serialize remote storage lock/unlock without logout shutdown.

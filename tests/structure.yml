@@ -109,7 +109,7 @@ entrypoints:
     purpose: Verify fleet boot LUKS declarations and read-only recovery failure checks.
   - name: boot-storage-vm
     file: nixtest/boot_storage_vm_test.nix
-    purpose: Disposable root console/SSH unlock, partition/MD-array unlock, deferred consumer startup and missing-key write rejection.
+    purpose: Disposable plaintext-root compatibility and console/SSH LUKS unlock, partition/MD-array unlock, deferred startup and protected-write rejection.
   - name: gc-10-backup-exports
     file: lx-annotate/test_gc10_backup_exports.py
     purpose: Evaluate host-only export mount dependencies and reject missing or wrong Backup identity before filesystem writes.

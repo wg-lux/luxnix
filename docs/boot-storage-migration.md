@@ -56,6 +56,22 @@ The gc-10 backup exceptions do not authorize erasing its disks.
 
 ## Splash unlock and generation recovery
 
+The initrd inspects the configured root partition on every boot. An on-device
+LUKS2 header selects the normal password unlock. Otherwise, a successful low-level
+probe must identify exactly the configured Btrfs, ext4 or XFS filesystem before
+booting plaintext root. Both paths expose `/dev/mapper/cryptroot` so root and its
+subvolumes use the same mount graph before and after conversion. The plaintext
+mapping is a device-mapper **linear** mapping, not encryption; its name is not
+proof of protection. Missing, unreadable, ambiguous or unsupported signatures
+stop boot, and failed LUKS unlock never falls back to plaintext.
+
+This compatibility path permits administrative boot during migration. It does
+not encrypt anything, enable plaintext swap, restore legacy container mounts or
+relax application/secret storage checks. Protected services remain blocked on
+plaintext root. The guarded installer still requires completed LUKS2 conversion.
+The plaintext filesystem signature is not an authenticated identity: this mode
+must not be treated as proof against deliberate disk replacement or tampering.
+
 Plymouth uses the plain-text `details` theme. Root unlock waits without a time or
 attempt limit. Ctrl+Alt+Del requests a persistent boot-menu choice for the next
 restart; if writing the EFI variable fails, the normal menu timeout applies.
@@ -744,9 +760,10 @@ On 2026-11-04 the owner retained gc-10's existing partitions and restored its
 explicit `legacy-containers` profile with Plymouth passphrase unlock. Its
 automatic migration is disabled; normal rebuilds preserve the existing data.
 For hosts selecting `boot-luks`, rebuilds can stage the future encrypted-root
-configuration while root is still plaintext. Staging does not perform conversion
-or establish bootability. Boot recovery and complete conversion before selecting
-that generation; activating it early can stop protected services.
+configuration while root is still plaintext. Generations with the root-header
+detector can boot that existing filesystem without a disk password, then use
+LUKS2 unlock after conversion. Staging does not perform conversion or establish
+physical boot acceptance; activating it early can stop protected services.
 Both remain unmigrated in repository acceptance; inspect the live
 host before making any claim about its root storage. For gc-10, no recovery
 console is available for converting its plaintext root.
@@ -807,6 +824,7 @@ The focused source/probe lane is:
 python -m pytest -q tests/test_boot_storage.py tests/test_managed_secret_storage.py tests/test_operator_storage_migration.py tests/test_in_place.py tests/test_secret_preflight.py tests/test_recovery_custody.py tests/test_boot_guide.py
 nix build .#checks.x86_64-linux.boot-storage --no-link -L
 nix build .#checks.x86_64-linux.boot-storage-in-place --no-link -L
+nix build .#checks.x86_64-linux.boot-storage-plaintext --no-link -L
 nix build .#checks.x86_64-linux.boot-storage-remote --no-link -L
 nix build .#nixosConfigurations.gc-10.config.system.build.toplevel --no-link
 nix build .#nixosConfigurations.gs-02.config.system.build.toplevel --no-link

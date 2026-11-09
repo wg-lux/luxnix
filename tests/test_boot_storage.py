@@ -195,6 +195,7 @@ def test_fleet_boot_contract():
       mountOptions = builtins.mapAttrs (_: fs: fs.options) c.fileSystems;
       units = builtins.attrNames c.systemd.services;
       guard = c.system.preSwitchChecks ? encryptedStorage;
+      rootDetector = c.boot.initrd.systemd.services."systemd-cryptsetup@cryptroot".serviceConfig.ExecStart;
       rootPrompt = c.boot.initrd.luks.devices.cryptroot.crypttabExtraOpts;
       rootKeyFile = c.boot.initrd.luks.devices.cryptroot.keyFile;
       bootKeyTools = builtins.filter (p:
@@ -228,13 +229,15 @@ def test_fleet_boot_contract():
         assert not any(u.startswith("luxnix-storage-unlock-") for u in cfg["units"])
         assert "luxnix-storage-migrate" not in cfg["units"]
         assert cfg["guard"] is False
+        assert cfg["rootDetector"][0] == ""
+        assert cfg["rootDetector"][1].endswith("/bin/luxnix-root-device attach")
         assert cfg["rootKeyFile"] is None, host
         assert cfg["bootKeyTools"] == [], host
         assert not any(
             option.startswith(("fido2-", "tpm2-", "pkcs11-", "keyfile-"))
             for option in cfg["rootPrompt"]
         ), host
-        # Splash prompt without time or attempt limit; restart reaches older generations.
+        # Splash prompt without a time limit; recovery needs a compatible generation.
         assert {"timeout=0", "tries=0"} <= set(cfg["rootPrompt"]), host
         assert "x-systemd.device-timeout=0" in cfg["mountOptions"]["/"], host
         assert cfg["splash"], host

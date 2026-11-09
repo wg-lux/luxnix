@@ -22,7 +22,50 @@ let
     done
   '';
   enabled = cfg.enable && cfg.layout == "boot-luks";
-  recoveryHint = "Problems? Press Ctrl+Alt+Del and choose an older system in the menu.";
+  recoveryHint = "Problems? Press Ctrl+Alt+Del and choose recovery media or a compatible system.";
+  # Keep one mount graph across conversion. A linear mapping is NOT encryption:
+  # the existing kernel-backed storage guards reject it for protected consumers.
+  rootDevice = pkgs.writeShellApplication {
+    name = "luxnix-root-device";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.cryptsetup
+      pkgs.lvm2
+      pkgs.util-linux
+      config.boot.initrd.systemd.package
+    ];
+    text = ''
+      if [ "$1" = detach ]; then
+        if [ "$(dmsetup info -c --noheadings -o uuid cryptroot 2>/dev/null)" = LUXNIX-PLAINTEXT-ROOT ]; then
+          exec dmsetup remove cryptroot
+        fi
+        exec systemd-cryptsetup detach cryptroot
+      fi
+      # Consume NixOS's crypttab, preserving its complete unlock options.
+      while read -r name device key opts; do
+        [ "$name" = cryptroot ] || continue
+        if cryptsetup isLuks --type luks2 "$device"; then
+          # Failed unlock must never fall through to plaintext handling.
+          exec systemd-cryptsetup attach "$name" "$device" "$key" "$opts"
+        fi
+        # A missing LUKS header alone is not evidence of a plaintext filesystem.
+        # Low-level probing rejects ambiguous signatures and unreadable devices.
+        if ! filesystem=$(blkid --probe --output value --match-tag TYPE "$device"); then
+          echo 'Cannot identify root filesystem; refusing plaintext fallback' >&2
+          exit 1
+        fi
+        if [ "$filesystem" != ${lib.escapeShellArg config.fileSystems."/".fsType} ]; then
+          echo "Root is neither LUKS2 nor the configured plaintext filesystem; refusing to mount it" >&2
+          exit 1
+        fi
+        echo 'Booting plaintext root for migration; protected storage remains unavailable.' >&2
+        exec dmsetup create cryptroot --uuid LUXNIX-PLAINTEXT-ROOT \
+          --table "0 $(blockdev --getsz "$device") linear $(readlink -f "$device") 0"
+      done < /etc/crypttab
+      echo 'Missing cryptroot entry in initrd crypttab' >&2
+      exit 1
+    '';
+  };
   mountUnit = path: "${utils.escapeSystemdPath path}.mount";
   luks =
     lib.concatLists (
@@ -257,6 +300,16 @@ in
         assertions = [
           {
             assertion =
+              config.boot.initrd.luks.devices.cryptroot.header == null
+              && builtins.elem config.fileSystems."/".fsType [
+                "btrfs"
+                "ext4"
+                "xfs"
+              ];
+            message = "Root detection requires an on-device LUKS2 header and a Btrfs, ext4 or XFS filesystem.";
+          }
+          {
+            assertion =
               cfg.unlockMethod == "passphrase"
               && !(lib.attrByPath [ "luxnix" "tpmReleaseClient" "enable" ] false config);
             message = "Boot LUKS uses independent root unlock; alternative disk-unlock backends are retired for new enrollment.";
@@ -323,35 +376,57 @@ in
             enable = true;
             initrdBin = [ pkgs.cryptsetup ];
             storePaths = [
+              (lib.getExe rootDevice)
+              pkgs.runtimeShell
+              (lib.getExe' pkgs.util-linux "blkid")
+              (lib.getExe' pkgs.util-linux "blockdev")
+              (lib.getExe' pkgs.lvm2 "dmsetup")
               "${config.boot.initrd.systemd.package}/bin/bootctl"
               (lib.getExe' config.boot.plymouth.package "plymouth")
             ];
-            # ctrl-alt-del.target aliases reboot.target in the initrd.
-            services.luxnix-reboot-to-boot-menu = {
-              description = "Keep the boot menu open after a restart from the disk password screen";
-              wantedBy = [ "reboot.target" ];
-              before = [ "systemd-reboot.service" ];
-              unitConfig.DefaultDependencies = false;
-              serviceConfig = {
-                Type = "oneshot";
-                ExecStart = "${config.boot.initrd.systemd.package}/bin/bootctl set-timeout-oneshot menu-force";
+            # Retain the crypttab generator's device dependencies, lifetime and
+            # shutdown ordering; replace only its attach/detach implementation.
+            services = {
+              "systemd-cryptsetup@cryptroot" = {
+                overrideStrategy = "asDropin";
+                serviceConfig = {
+                  ExecStart = [
+                    ""
+                    "${lib.getExe rootDevice} attach"
+                  ];
+                  ExecStop = [
+                    ""
+                    "${lib.getExe rootDevice} detach"
+                  ];
+                };
               };
-            };
-            services.luxnix-unlock-recovery-hint = {
-              description = "Show the restart hint on the disk password screen";
-              wantedBy = [ "initrd.target" ];
-              after = [ "plymouth-start.service" ];
-              conflicts = [ "initrd-switch-root.target" ];
-              before = [ "initrd-switch-root.target" ];
-              unitConfig = {
-                DefaultDependencies = false;
-                ConditionPathExists = "/run/plymouth/pid";
+              # ctrl-alt-del.target aliases reboot.target in the initrd.
+              luxnix-reboot-to-boot-menu = {
+                description = "Keep the boot menu open after a restart from the disk password screen";
+                wantedBy = [ "reboot.target" ];
+                before = [ "systemd-reboot.service" ];
+                unitConfig.DefaultDependencies = false;
+                serviceConfig = {
+                  Type = "oneshot";
+                  ExecStart = "${config.boot.initrd.systemd.package}/bin/bootctl set-timeout-oneshot menu-force";
+                };
               };
-              serviceConfig = {
-                Type = "oneshot";
-                RemainAfterExit = true;
-                ExecStart = "${lib.getExe' config.boot.plymouth.package "plymouth"} display-message --text=${lib.escapeShellArg recoveryHint}";
-                ExecStop = "${lib.getExe' config.boot.plymouth.package "plymouth"} hide-message --text=${lib.escapeShellArg recoveryHint}";
+              luxnix-unlock-recovery-hint = {
+                description = "Show the restart hint on the disk password screen";
+                wantedBy = [ "initrd.target" ];
+                after = [ "plymouth-start.service" ];
+                conflicts = [ "initrd-switch-root.target" ];
+                before = [ "initrd-switch-root.target" ];
+                unitConfig = {
+                  DefaultDependencies = false;
+                  ConditionPathExists = "/run/plymouth/pid";
+                };
+                serviceConfig = {
+                  Type = "oneshot";
+                  RemainAfterExit = true;
+                  ExecStart = "${lib.getExe' config.boot.plymouth.package "plymouth"} display-message --text=${lib.escapeShellArg recoveryHint}";
+                  ExecStop = "${lib.getExe' config.boot.plymouth.package "plymouth"} hide-message --text=${lib.escapeShellArg recoveryHint}";
+                };
               };
             };
           };

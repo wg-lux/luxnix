@@ -983,7 +983,14 @@ repository_review:
   recommendation_source: Eigentümerentscheidungen vom 2026-10-26 und Review in git show da58d1be:docs/openbao-architecture.md. OpenBao-Storage wurde gegen den gepinnten Quellcode
     v2.6.4 geprüft (docs/openbao.md); der Static Seal ist nur anhand von Zeichenketten im Binary vermutet.
 architecture_decisions:
-  authoritative_date: "2026-11-04"
+  authoritative_date: "2026-11-09"
+  header_detected_root_boot_2026_11_09:
+    requested_by: repository_owner_in_chat
+    decision: Boot the configured root as LUKS2 when its header is present, or as the positively identified configured plaintext filesystem during migration.
+    scope: Shared boot-luks initrd compatibility; no conversion, formatting, keyslot change or automatic migration at boot.
+    enforcement: Failed LUKS unlock never falls back; unknown or ambiguous signatures fail. A plaintext linear mapping is not accepted by encrypted-storage guards.
+    acceptance: Plaintext administrative boot is not encrypted-root acceptance. Installation and protected application/secret storage still require LUKS2.
+    authorization: Repository implementation and disposable tests only; no deployment or live disk changes.
   gc10_legacy_containers_retained_2026_11_04:
     requested_by: repository_owner_in_chat
     decision: gc-10 retains its installed partitions and selects legacy-containers with passphrase unlock on the Plymouth splash; automatic migration stays disabled. gc-09 keeps boot-luks.

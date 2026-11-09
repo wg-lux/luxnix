@@ -269,6 +269,12 @@
           inherit (inputs) disko;
           repoRoot = ./.;
         };
+        boot-storage-plaintext = import ./tests/nixtest/boot_storage_vm_test.nix {
+          pkgs = inputs.nixpkgs.legacyPackages.${system};
+          inherit (inputs) disko;
+          repoRoot = ./.;
+          plaintextRootTest = true;
+        };
         boot-storage-mdraid = import ./tests/nixtest/boot_storage_vm_test.nix {
           pkgs = inputs.nixpkgs.legacyPackages.${system};
           inherit (inputs) disko;
