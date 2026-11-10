@@ -52,6 +52,7 @@ luxnix/
 ├── luxnix.yml                # machine-readable project map and workflows
 ├── secrets-management.yml    # central cross-repository rotation catalog
 ├── nix-quality.yml           # Nix quality policy, baselines, and progress
+├── boot-storage.yml          # boot-storage workflow contract
 ├── TABLE_OF_CONTENTS.md      # generated documentation map
 ├── autoconf/                 # centralized pipeline options and intermediates
 ├── ansible/                  # inventory, variables, roles, and local facts

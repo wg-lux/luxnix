@@ -430,13 +430,15 @@ def test_fleet_inventory_defaults_and_all_host_assertions():
             "EndoReg clients require encrypted operator storage for secrets and application data."
         ] if settings["clientRole"] else [])
         assert sorted(settings["baselineFailures"]) == sorted(expected), (host, settings)
-        # gc-10 retains its installed containers by owner decision 2026-11-04.
-        assert settings["layout"] == ("legacy-containers" if host == "gc-10" else "boot-luks"), host
-        assert settings["prepare"] is None, host
-        if host == "gc-10":
-            assert not settings["migration"]
-            assert len(settings["mountOptions"]) == 2
-            assert all({"noauto", "nofail"} <= set(options) for options in settings["mountOptions"])
+        # gc-10 retains its installed containers by owner decision 2026-11-04; gc-09
+        # retains them, with container migration, until its plaintext root is converted.
+        legacy = host in {"gc-09", "gc-10"}
+        assert settings["layout"] == ("legacy-containers" if legacy else "boot-luks"), host
+        assert (settings["prepare"] is not None) == (host == "gc-09"), host
+        if legacy:
+            assert settings["migration"] == (host == "gc-09"), host
+            assert len(settings["mountOptions"]) == 2, host
+            assert all({"noauto", "nofail"} <= set(options) for options in settings["mountOptions"]), host
         else:
             assert settings["mountOptions"] == [], host
 
