@@ -1,64 +1,54 @@
 # Boot storage recovery
 
-Use this page when a host stops in emergency mode after a storage change, when a
-rebuild is refused by the root-storage preflight, or when a migration was
-interrupted. Classification and preview commands are read-only. Selecting a
-generation with `restore --apply` changes the system profile and boot entries.
-Resuming interrupted encryption uses the migration workflow and writes storage;
-none of these recovery paths authorizes formatting or replacement keys.
+Use this page when a host stops in emergency mode after a storage change, a
+rebuild is refused by the root-storage preflight, or a migration was interrupted.
+Classifying and previewing only read. `restore --apply` changes the system profile
+and boot entries; resuming encryption continues the migration. Recovery keeps the
+existing data and keys.
 
 ## Build recovery media first
 
-Build this before starting a migration, and keep it with the recovery drive:
+Build this before migrating and keep it with the recovery drive:
 
 ```bash
 nix build .#luxnix-recovery-iso
 ```
 
-The image holds only storage tools and `luxnix-boot-recover`. It contains no host
-closure or application package, so a broken application build cannot block
-recovery. Boot it on the affected machine.
+The image holds only storage tools and `luxnix-boot-recover`, so it works whatever
+the state of application builds. Boot it on the affected machine.
 
 ## Identify the disk state
 
-Read the state from the partition itself. A saved migration stage never proves
-what is on the disk.
+The partition itself is the proof of its state:
 
 ```bash
 luxnix-boot-recover classify --partition /dev/disk/by-partlabel/nixos_root
 ```
 
-Use the exact root partition from the prepared host profile or migration plan;
-the partition label above is only an example, not proof of disk identity.
-
-This changes nothing and is safe to repeat. On a running host,
+Use the root partition named in the host profile or migration plan; the label above
+is an example. This only reads and is safe to repeat. On a running host,
 `devenv shell luxnix recover --partition <path>` prints the same procedure.
 
-| State | Compatible root layouts | What to do |
+| State | Bootable generations | Next step |
 | --- | --- | --- |
-| `plaintext` | Only those that mount the partition directly | [Select a generation](#select-a-matching-generation) |
-| `encrypting` | None | [Resume encryption](#resume-interrupted-encryption) |
-| `encrypted` | Only those that mount `/dev/mapper/cryptroot` | Unlock, then [select a generation](#select-a-matching-generation) |
-| `unknown` | None | Stop. See [Unrecognized partition](#unrecognized-partition) |
+| `plaintext` | Those that mount the partition directly | [Select a generation](#select-a-matching-generation) |
+| `encrypting` | None until encryption finishes | [Resume encryption](#resume-interrupted-encryption) |
+| `encrypted` | Those that mount `/dev/mapper/cryptroot` | Unlock, then [select a generation](#select-a-matching-generation) |
+| `unknown` | None | [Unrecognized partition](#unrecognized-partition) |
 
-A compatible layout does not prove a generation will boot. Missing probes,
-incomplete filesystem membership and interrupted encryption cannot establish
-generation compatibility; recovery selection stops on that uncertainty.
-
-A plaintext-root generation does not boot after encryption, and an encrypted-root
-generation does not boot before it. Retained boot entries of the other kind are
-not a fallback.
+Selection proceeds only when every probe succeeds and the layout matches; a cold
+boot then confirms the choice.
 
 ## Select a matching generation
 
-For an encrypted disk, unlock it first:
+On an encrypted disk, unlock first:
 
 ```bash
 cryptsetup open --type luks2 /dev/disk/by-partlabel/nixos_root cryptroot
 ```
 
-Mount the root subvolumes and the EFI partition. Use the mapper device on an
-encrypted disk and the partition on a plaintext disk:
+Mount the root subvolumes and the EFI partition, from the mapper device when
+encrypted or the partition when plaintext:
 
 ```bash
 device=/dev/mapper/cryptroot    # or /dev/disk/by-partlabel/nixos_root
@@ -70,45 +60,54 @@ mount -o subvol=log "$device" /mnt/var/log
 mount /dev/disk/by-partlabel/boot /mnt/boot
 ```
 
-List the generations, then preview your choice:
+List the generations, preview a choice, then add `--apply` to select it:
 
 ```bash
 luxnix-boot-recover generations --root /mnt
 luxnix-boot-recover restore --root /mnt --generation <N>
 ```
 
-`restore` refuses a generation that does not match the disk. Add `--apply` to
-select it. That changes the system profile and boot entries only. Reboot when it
-finishes.
+`restore` accepts only generations that match the disk and changes only the system
+profile and boot entries. Reboot when it finishes.
 
 ## Resume interrupted encryption
 
-Do not format the partition and do not run a filesystem repair on it. Boot the
-tested installer, mount the recovery drive at `/recovery`, and rerun:
+The LUKS2 header keeps the progress; leave the partition as it is. Boot the staged
+LuxNix migration entry (the boot default already points there) and run in its root
+terminal:
 
 ```bash
-devenv shell luxnix migrate
+luxnix-migration run --apply
 ```
 
-The conversion resumes from the LUKS2 header. To accept a layout that an
-administrator has already reviewed instead, use
-`devenv shell luxnix recover --assessor <name> --apply`.
+To accept a layout an administrator has already reviewed, use
+`luxnix-migration recover --assessor <name> --apply`.
+
+## When the RAM environment has a black screen
+
+The RAM environment is the minimal NixOS profile with a compressed read-only
+store; it loads no desktop, applications or host closure, and the loader checks
+memory before copying. It boots with basic graphics (`nomodeset`), visible kernel
+messages, and the selected console last, so on `tty1` errors and the approval
+prompt appear on the attached screen (a `ttyS0` build uses the serial console).
+
+A blank screen alone does not mean RAM ran out. Note whether it goes blank before
+any kernel text or after a specific message, keep the existing system and recovery
+entries, and report it for diagnosis. The UEFI VM test covers boot and keyboard
+approval with 5 GiB RAM; each physical display is confirmed on the host.
 
 ## Unrecognized partition
 
-Compare the partition with the disk identity saved in the migration plan. Restore
-a LUKS2 header backup only if the plan names this exact partition. Until then,
-leave the disk unchanged, and take a full-disk image before any repair attempt.
+Compare the partition with the disk identity in the migration plan, keep the disk
+unchanged, and take a full-disk image before any repair. Restore a LUKS2 header
+backup only to the exact partition the plan names.
 
 ## When a rebuild is refused
 
-The preflight runs on the target host for `nixos-rebuild switch`, `boot`, `test`
-and `dry-activate`, the `nho` and `nhb` aliases, Ansible, `luxnix-safe-activate`
-and `nixos-install`. A refusal names each cause and changes no disk or boot entry.
-A refused generation is removed from the system profile so it cannot occupy a boot
-menu slot.
-
-Read the current comparison at any time; it is safe to repeat:
+The preflight runs on the host for `nixos-rebuild switch`, `boot`, `test` and
+`dry-activate`, `nho`, `nhb`, Ansible, `luxnix-safe-activate` and `nixos-install`.
+A refusal names each cause, leaves disks and boot entries as they were, and removes
+the refused generation from the boot menu. Compare at any time (read-only):
 
 ```bash
 luxnix-root-preflight status
@@ -116,41 +115,38 @@ luxnix-root-preflight status
 
 | Code | Meaning | Fix |
 | --- | --- | --- |
-| `root-not-luks` | The configuration needs encrypted root; the disk is plaintext | Keep `legacy-containers` until `devenv shell luxnix migrate` finishes |
-| `root-is-luks` | The configuration mounts plaintext root; the disk is encrypted | Select `boot-luks` for this host |
-| `root-reencrypting` | Encryption has not finished | [Resume encryption](#resume-interrupted-encryption) |
-| `mapping-missing`, `mapping-identity` | `cryptroot` is closed or backed by another device | Boot the correct generation and check the disk |
-| `partition-identity`, `disk-missing`, `partition-missing` | The partition is not on the declared disk | Check the host's disk facts; do not edit them to match an unknown disk |
-| `luks-uuid` | The header differs from the pinned UUID | Treat as a replaced disk or header until proven otherwise |
-| `mount-*`, `subvolume` | Mounts differ from the configuration | Correct the layout or the configuration |
-| `recovery-credential` | No tested passphrase matches this header | Run `sudo luxnix-setup-boot-password` (safe to repeat) |
-| `esp-capacity`, `esp` | The EFI partition cannot hold this generation | Remove old generations |
-| `no-fallback-generation` | No other usable boot entry matches this disk | Reboot into a matching generation first, or keep recovery media ready and use an override |
+| `root-not-luks` | Configuration expects encryption; the disk is plaintext | Keep `legacy-containers` until `devenv shell luxnix migrate` finishes |
+| `root-is-luks` | Configuration expects plaintext; the disk is encrypted | Select `boot-luks` for this host |
+| `root-reencrypting` | Encryption is still in progress | [Resume encryption](#resume-interrupted-encryption) |
+| `mapping-missing`, `mapping-identity` | `cryptroot` is closed or backed by another device | Boot the matching generation and check the disk |
+| `partition-identity`, `disk-missing`, `partition-missing` | The partition is not on the declared disk | Check the host's disk facts against the real hardware |
+| `luks-uuid` | The header differs from the pinned UUID | Treat it as a replaced disk or header until confirmed |
+| `mount-*`, `subvolume` | Mounts differ from the configuration | Align the layout and the configuration |
+| `recovery-credential` | No tested passphrase matches this header | Run `sudo luxnix-setup-boot-password` (repeatable) |
+| `esp-capacity`, `esp` | The EFI partition lacks space for this generation | Remove old generations |
+| `no-fallback-generation` | No other boot entry matches this disk | Boot a matching generation first, or keep recovery media ready and use an override |
 
 ### Audited override
 
-Findings marked `physical mismatch` cannot be overridden. For the others, an
-administrator at a root terminal can allow one activation of one exact closure:
+Physical mismatches always stop. For other findings, an administrator at a root
+terminal can allow one activation of one exact system:
 
 ```bash
 sudo luxnix-root-preflight override --system <closure> --operator <name> --reason <text>
 ```
 
-The override expires after 15 minutes and is consumed by its first use. It is
-recorded in `/var/lib/luxnix/root-guard-audit.jsonl` and the system journal.
+The override lasts 15 minutes, is used once, and is recorded in
+`/var/lib/luxnix/root-guard-audit.jsonl` and the system journal.
 
-`NIXOS_NO_CHECK=1` does not skip this check: `sudo` no longer forwards it, and
-`switch-to-configuration` runs the preflight itself when it is set and records the
-use in the audit log. It still skips unrelated upstream checks. A root user can
-always write to the EFI partition directly, so root access remains the trust
-boundary.
+The preflight also runs when `NIXOS_NO_CHECK=1` is set: `sudo` drops the variable,
+and `switch-to-configuration` checks and logs its use itself. Root can still write
+the EFI partition directly, so root access remains the trust boundary.
 
 ## After encryption
 
-Once `devenv shell luxnix verify` passes and the host has cold-booted, change the
-host to `boot-luks` in its inventory and regenerate. Pin the UUID that `verify`
-reports in the same change, as host facts in
-`ansible/inventory/host_vars/<host>.yml`:
+Once `devenv shell luxnix verify` passes and the host has cold-booted, set
+`boot-luks` and pin the UUID that `verify` reports, in
+`ansible/inventory/host_vars/<host>.yml`, then regenerate:
 
 ```yaml
 host_luxnix:
@@ -158,14 +154,12 @@ host_luxnix:
   storage.operatorUnlocked.rootIdentity.luksUUID: '"<uuid>"'
 ```
 
-After conversion, the retained plaintext generations stay in the boot menu but
-cannot boot. Generations built before this guard have no `root-storage.json`, so
-automatic detached rollback refuses them; manual recovery from this page still
-works.
+Plaintext generations stay in the boot menu without booting the encrypted disk.
+Generations built before the guard carry no `root-storage.json`; recover them
+manually with this page.
 
-## Limits of the fallback check
+## What the fallback check proves
 
-For systemd-boot, the check confirms that an entry's kernel and initrd exist and
-that the entry boots that generation's closure. For Secure Boot images it can only
-confirm the file name, because the contents are signed into one file. Neither
-proves the entry will boot: only a cold boot on the real machine does.
+For systemd-boot it confirms an entry's kernel and initrd exist and that the entry
+boots its generation. For Secure Boot images it confirms the file name, because
+the image is signed as one file. A cold boot on the machine is the final proof.

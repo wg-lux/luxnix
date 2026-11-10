@@ -203,7 +203,7 @@ def prepare(state: Path) -> None:
     with migration.locked_state(state):
         plan = migration.load_plan(state)
         migration.require_in_place(plan["spec"])
-        migration.verify_source(plan)
+        migration.verify_source(plan, state)
         migration.load_progress(state, plan)
         if journal_path(state).exists():
             load_journal(state, plan)  # Preserve all existing attempt history.
@@ -302,7 +302,7 @@ def provision(
     ):
         plan = migration.load_plan(state)
         migration.require_in_place(plan["spec"])
-        migration.verify_source(plan)
+        migration.verify_source(plan, state)
         progress = migration.load_progress(state, plan)
         record = load_journal(state, plan)
         if progress["install"]["status"] != "pending":
@@ -324,7 +324,7 @@ def provision(
                 )
             if record.phase not in {Phase.RUNNING, Phase.INTERRUPTED}:
                 raise migration.MigrationError("No uncertain provisioning to recover")
-        disks = migration.check_gates(plan, progress, "provision")
+        disks = migration.check_gates(plan, progress, "provision", state)
         migration.verify_independent_state(state, progress, disks)
         if recovery:
             identities = migration.verify_layout(plan, disks)
@@ -333,7 +333,7 @@ def provision(
                 return
             confirmation(plan, recover=True)
             if (
-                migration.check_gates(plan, progress, "provision") != disks
+                migration.check_gates(plan, progress, "provision", state) != disks
                 or migration.verify_layout(plan, disks) != identities
             ):
                 raise migration.MigrationError(
@@ -378,9 +378,10 @@ def encrypt_in_place(
             "writes. Use --apply for typed approval."
         )
         return
+    require_mains_power()
     confirmation(plan)
     if (
-        migration.check_gates(plan, progress, "provision") != disks
+        migration.check_gates(plan, progress, "provision", state) != disks
         or snapshot_disks(plan) != before
         or in_place.root_state(layout["root_device"]) != condition
     ):
@@ -401,13 +402,15 @@ def encrypt_in_place(
         c["name"]: boot_password.secret(f"Existing passphrase for {c['name']}: ")
         for c in layout["containers"]
     }
+    initial = migration.lifecycle_position(state, plan, progress)
+    hold = hold_boot(state, plan, initial)
     # Publish validated durable intent before any disk change.
     lifecycle.advance(
         state,
         plan["plan_id"],
         lifecycle.Stage.MIGRATING,
         detail="encryption started",
-        initial=migration.lifecycle_position(state, plan, progress),
+        initial=initial,
     )
     record = save_journal(state, record, phase=Phase.RUNNING, before=before)
     try:
@@ -427,16 +430,113 @@ def encrypt_in_place(
     except BaseException as error:
         save_journal(state, record, phase=Phase.INTERRUPTED)
         lifecycle.fail(state, plan["plan_id"], type(error).__name__)
+        keep_or_release_hold(hold, layout["root_device"])
         raise
     print(
         f"Root encrypted in place and mounted; moved: {result['consolidated']}. Old "
         "containers are untouched. Installation has not run and nothing rebooted."
     )
+    if hold["held"]:
+        print(
+            "Until the encrypted system is installed, every reboot returns to this "
+            "migration environment. Continue here; do not boot the old system."
+        )
+    keep_header_backup(state, plan, layout["root_device"])
     for partition in result["swap_unchecked"]:
         print(
             f"WARNING: could not check or erase {partition}, which may hold plaintext "
             f"swap. After confirming it is that partition, run: blkdiscard --force "
             f"--zeroout {partition}"
+        )
+
+
+POWER_SUPPLIES = Path("/sys/class/power_supply")
+
+
+def require_mains_power() -> None:
+    """A battery alone can run out mid-conversion; resuming then needs a recovery."""
+    batteries, external = [], []
+    for supply in sorted(POWER_SUPPLIES.glob("*")):
+        try:
+            kind = (supply / "type").read_text().strip()
+            if kind == "Battery":
+                batteries.append(supply.name)
+            elif kind in {"Mains", "USB"}:
+                external.append((supply / "online").read_text().strip() == "1")
+        except OSError:
+            continue
+    if batteries and not any(external):
+        raise migration.MigrationError(
+            "This machine runs on battery; nothing on the disk changed",
+            fix="connect the power supply, then rerun",
+        )
+
+
+def keep_header_backup(state: Path, plan: dict, device: str) -> None:
+    """Save the converted header beside the state; it does not replace a backup."""
+    from lx_administration.storage import boot_password
+
+    try:
+        backup = boot_password.backup_header(device, state, "header-after-conversion-")
+    except (ValueError, OSError) as error:
+        print(
+            f"WARNING: no LUKS header backup was saved ({error}). Make one before "
+            f"reboot: cryptsetup luksHeaderBackup {device} --header-backup-file "
+            "<private file on independent encrypted media>"
+        )
+        return
+    lifecycle.record_evidence(
+        state,
+        plan["plan_id"],
+        "luks_header_backup",
+        {"path": str(backup), "sha256": migration.file_digest(backup)},
+    )
+    print(
+        f"LUKS header backup saved: {backup}. Copy it into encrypted custody. "
+        "Together with a passphrase valid now it opens this disk, even after that "
+        "passphrase is removed, so keep it as protected as the passphrase."
+    )
+
+
+def hold_boot(state: Path, plan: dict, initial: dict) -> dict:
+    """Before the root changes, point the boot default back at this environment.
+
+    No installed generation boots a partly or fully encrypted root before the
+    planned system is installed, so a reboot must land where conversion resumes.
+    """
+    from lx_administration.storage import migration_boot
+
+    hold = migration_boot.hold_for_migration(plan["spec"]["host"])
+    lifecycle.record_evidence(
+        state, plan["plan_id"], "boot_default_hold", hold, initial=initial
+    )
+    if not hold["held"]:
+        print(
+            "WARNING: this environment was not started from the staged LuxNix "
+            "migration boot entry, so a reboot before installation finishes will "
+            "start the old system, which cannot boot the encrypted root. Do not "
+            "reboot until the install step reports the new boot default."
+        )
+    return hold
+
+
+def keep_or_release_hold(hold: dict, device: str) -> None:
+    """Return the old default only when the root is still plain and bootable."""
+    from lx_administration.storage import in_place, migration_boot
+
+    try:
+        if in_place.root_state(device) == in_place.PLAINTEXT:
+            migration_boot.release_hold(hold)
+            if hold["held"]:
+                print("The root is unchanged; the previous boot default is restored.")
+            return
+    except (ValueError, OSError, subprocess.SubprocessError) as error:
+        print(f"WARNING: could not restore the previous boot default: {error}")
+        return
+    if hold["held"]:
+        print(
+            "The root is partly or fully encrypted; reboots return to this migration "
+            "environment. Rerun this step to resume."
         )
 
 
@@ -494,7 +594,7 @@ def next_step(state: Path) -> NextStep:
     with migration.locked_state(state):
         plan = migration.load_plan(state)
         migration.require_in_place(plan["spec"])
-        migration.verify_source(plan)
+        migration.verify_source(plan, state)
         progress = migration.load_progress(state, plan)
         base = {"host": plan["spec"]["host"], "plan_id": plan["plan_id"]}
         if progress["install"]["status"] == "complete":
@@ -528,11 +628,15 @@ def next_step(state: Path) -> NextStep:
                 reason="Encryption was interrupted. Rerun to resume it; progress is "
                 "kept in the disk header. Do not format or restart it.",
             )
+        # Approvals that authorized starting the conversion never expire it.
+        started = migration.conversion_started(state)
         for stage in migration.stage_order(plan):
             if stage == "prepared":
                 break
             try:
-                migration.check_attestation(stage, plan, progress)
+                migration.check_attestation(
+                    stage, plan, progress, fresh=not (started and stage == "recovery")
+                )
             except (ValueError, OSError) as error:
                 return NextStep(
                     **base,
@@ -607,8 +711,10 @@ def advance(state: Path, *, apply: bool = False) -> NextStep:
 
 
 def save_plan(spec: dict, state: Path) -> None:
-    migration.plan_spec(spec, state)
+    plan = migration.plan_spec(spec, state)
     prepare(state)
+    if not migration.installer_environment():
+        migration.publish_source(state, plan)
     success(PLAN_SAVED)
 
 
@@ -905,9 +1011,8 @@ def current_host(config_path: Path) -> str:
 
 MIGRATE = "devenv shell luxnix migrate"
 INSTALLER_STEP = (
-    "Boot the installer USB stick and mount the recovery drive at /recovery, then run "
-    "as root from the preserved checkout: "
-    "python -m lx_administration.storage.boot_setup run --apply  "
+    "Boot the staged LuxNix migration entry, mount the recovery drive at /recovery, "
+    "then run at its console: luxnix-migration run --apply  "
     "(docs/boot-storage-quickstart.md, step 3)"
 )
 
@@ -944,6 +1049,26 @@ def next_command(step: NextStep, state: Path) -> str | None:
     return None
 
 
+def write_notes(report: Path) -> bool:
+    """Take the check results in this terminal, so no editor or reboot is needed."""
+    if not sys.stdin.isatty():
+        return False
+    print(
+        "Describe, with the date, the checks you actually performed and their "
+        "results. No passwords or patient data. End with an empty line; an empty "
+        "description pauses without recording anything."
+    )
+    lines = []
+    while line := input("> ").rstrip():
+        lines.append(line)
+    if not lines:
+        return False
+    atomic_create_file(
+        destination=report, content=["\n".join(lines).encode() + b"\n"], file_mode=0o600
+    )
+    return True
+
+
 def run_workflow(
     spec: dict, state: Path, config: Path, *, apply: bool, device: str | None = None
 ) -> None:
@@ -962,7 +1087,14 @@ def run_workflow(
         print(f"Preview only. Run: {MIGRATE}")
         return
     recovery_media.setup(spec, state, apply=True, device=device)
-    save_plan(spec, state)
+    if migration.installer_environment():
+        # The installer continues the plan saved on the host; it never replans.
+        if not (state / "plan.json").exists():
+            raise migration.MigrationError(
+                "No saved plan on the recovery drive", fix=f"run {MIGRATE} first"
+            )
+    else:
+        save_plan(spec, state)
     drive(state, config)
 
 
@@ -985,16 +1117,9 @@ def drive(state: Path, config: Path) -> None:
             )
             return
         if step.action in {Action.PROVISION, Action.INSTALL, Action.PREPARE_ACCESS}:
-            if os.geteuid() != 0 or migration.mount_record("/")["fstype"] not in {
-                "tmpfs",
-                "overlay",
-                "squashfs",
-            }:
-                print(
-                    "Paused: boot installer media and mount recovery at /recovery. "
-                    "Run the reviewed workflow as root there. "
-                    "Do not run sudo devenv on the installed system."
-                )
+            if not migration.installer_environment():
+                print(f"Paused: {INSTALLER_STEP}")
+                print("Do not run sudo devenv on the installed system.")
                 return
             advance(state, apply=True)
             if step.action == Action.INSTALL:
@@ -1010,11 +1135,13 @@ def drive(state: Path, config: Path) -> None:
                 success(f"Physical acceptance is recorded. {RETIRE_HINT}")
                 return
             report = state / f"{step.stage}-notes.txt"
-            if not report.is_file():
+            if not report.is_file() and not write_notes(report):
                 print(
                     f"Paused: write the completed check results to {report}, "
                     "then rerun the same task. No assessment has been approved."
                 )
+                if migration.installer_environment():
+                    print("Stay in this environment; do not reboot.")
                 return
             assessor = input(
                 "Name of the operator who performed/reviewed these checks: "

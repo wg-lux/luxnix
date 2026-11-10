@@ -133,6 +133,28 @@ def exact_keys(value: dict, keys: set[str], name: str) -> None:
         raise MigrationError(f"{name} has missing or unknown fields")
 
 
+INSTALLER_ROOT_FILESYSTEMS = {"tmpfs", "overlay", "squashfs"}
+SOURCES = "sources"
+
+
+def installer_environment() -> bool:
+    """Root in a RAM installer, where the installed system's users do not run.
+
+    The host stage creates state as the operator; the installer stage runs as
+    root. No process can act as that operator inside the RAM environment.
+    """
+    if os.geteuid() != 0:
+        return False
+    try:
+        return mount_record("/")["fstype"] in INSTALLER_ROOT_FILESYSTEMS
+    except (MigrationError, OSError, ValueError, subprocess.SubprocessError):
+        return False
+
+
+def trusted_owner(uid: int) -> bool:
+    return uid == os.geteuid() or installer_environment()
+
+
 def private_path(path: Path, *, directory: bool = False) -> None:
     """Require an operator-owned private path; tighten read-only exposure in place.
 
@@ -156,7 +178,7 @@ def private_path(path: Path, *, directory: bool = False) -> None:
         raise MigrationError(
             f"{path} must be a {'directory' if directory else 'regular file'}"
         )
-    if info.st_uid != os.geteuid():
+    if not trusted_owner(info.st_uid):
         raise MigrationError(
             f"{path} is owned by uid {info.st_uid}, not the current operator "
             f"(uid {os.geteuid()}). It was probably created as another user, for "
@@ -204,7 +226,7 @@ def state_lock(state: Path):
         info = os.fstat(fd)
         if (
             not stat.S_ISDIR(info.st_mode)
-            or info.st_uid != os.geteuid()
+            or not trusted_owner(info.st_uid)
             or info.st_mode & 0o022
         ):
             raise MigrationError("Unsafe state parent lock")
@@ -250,7 +272,7 @@ def _locked_state(state: Path, *, create: bool = False):
         info = os.fstat(fd)
         if (
             not stat.S_ISREG(info.st_mode)
-            or info.st_uid != os.geteuid()
+            or not trusted_owner(info.st_uid)
             or info.st_mode & 0o077
         ):
             raise MigrationError("Unsafe operation lock")
@@ -275,18 +297,81 @@ def source_identity(checkout: Path) -> dict:
         raise MigrationError(
             "Use a durable reviewed checkout outside /tmp without symbolic links"
         )
-    if run(
-        "git", "-C", str(checkout), "status", "--porcelain", "--untracked-files=normal"
-    ):
+    git = ["git", "-C", str(checkout)]
+    if installer_environment():
+        # Root in the RAM installer reads the operator's copy; its identity is
+        # compared with the plan below, and that copy is the code that runs.
+        git = ["git", "-c", f"safe.directory={checkout}", "-C", str(checkout)]
+    if run(*git, "status", "--porcelain", "--untracked-files=normal"):
         raise MigrationError(
             "The release checkout has uncommitted changes; review and retain "
             "a clean release first",
             fix=f"git -C {checkout} status  (commit or stash the changes, then rerun)",
         )
     return {
-        "revision": run("git", "-C", str(checkout), "rev-parse", "HEAD"),
+        "revision": run(*git, "rev-parse", "HEAD"),
         "lock_sha256": file_digest(checkout / "flake.lock"),
     }
+
+
+def source_copy(state: Path, plan: dict) -> Path:
+    """Where the plan's exact source waits for the RAM migration environment."""
+    return state.parent / SOURCES / plan["source"]["revision"]
+
+
+def plan_checkout(state: Path, plan: dict) -> Path:
+    """The checkout this stage verifies: the copy, when the original is not here."""
+    checkout = Path(plan["spec"]["checkout"])
+    if installer_environment() and not checkout.exists():
+        return source_copy(state, plan)
+    return checkout
+
+
+def publish_source(state: Path, plan: dict) -> Path:
+    """Keep the plan's exact source beside its state on the recovery drive.
+
+    The RAM migration environment cannot see the installed checkout before the
+    root is converted, so it verifies and runs this copy. Safe to repeat.
+    """
+    target = source_copy(state, plan)
+    if target.exists():
+        private_path(target, directory=True)
+        if source_identity(target) != plan["source"]:
+            raise MigrationError(
+                f"{target} does not match this plan's source; move it aside for "
+                "review, then rerun"
+            )
+        return target
+    root = target.parent
+    if not root.exists():
+        root.mkdir(mode=0o700)
+    private_path(root, directory=True)
+    partial = root / f".{target.name}.partial-{os.getpid()}"
+    run(
+        "git",
+        "clone",
+        "--quiet",
+        "--depth",
+        "1",
+        f"file://{plan['spec']['checkout']}",
+        str(partial),
+        timeout=1800,
+    )
+    try:
+        partial.chmod(0o700)
+        if source_identity(partial) != plan["source"]:
+            raise MigrationError(
+                "The copied source does not match the plan; the checkout moved "
+                "while it was copied",
+                fix=f"git -C {plan['spec']['checkout']} checkout "
+                f"{plan['source']['revision']}, then rerun",
+            )
+        partial.rename(target)
+    except BaseException:
+        subprocess.run(["rm", "-rf", "--one-file-system", str(partial)], check=False)
+        raise
+    print(f"Saved this plan's source for the migration environment: {target}")
+    return target
 
 
 def migration_target(checkout: Path, host: str) -> str:
@@ -659,8 +744,11 @@ def load_progress(state: Path, plan: dict) -> dict:
     return progress
 
 
-def verify_source(plan: dict) -> None:
-    if source_identity(Path(plan["spec"]["checkout"])) != plan["source"]:
+def verify_source(plan: dict, state: Path | None = None) -> None:
+    checkout = (
+        plan_checkout(state, plan) if state else Path(plan["spec"]["checkout"])
+    )
+    if source_identity(checkout) != plan["source"]:
         raise MigrationError(
             "The checkout or flake.lock changed after this plan started",
             fix=f"git -C {plan['spec']['checkout']} checkout "
@@ -819,7 +907,7 @@ def attest(state: Path, stage: str, evidence_path: Path, assessor: str) -> None:
         plan = load_plan(state)
         require_in_place(plan["spec"])
         progress = load_progress(state, plan)
-        verify_source(plan)
+        verify_source(plan, state)
         private_path(evidence_path)
         evidence = json.loads(evidence_path.read_text())
         exact_keys(
@@ -1216,7 +1304,7 @@ def prepare_access(
     with installer_lock(), locked_state(state):
         plan = load_plan(state)
         progress = load_progress(state, plan)
-        disks = check_gates(plan, progress, "provision")
+        disks = check_gates(plan, progress, "provision", state)
         verify_independent_state(state, progress, disks)
         from lx_administration.storage import boot
 
@@ -1301,13 +1389,30 @@ def prepare_access(
         }
 
 
-def check_gates(plan: dict, progress: dict, stage: str) -> set[int]:
+def conversion_started(state: Path) -> bool:
+    """Whether disk changes began, so pre-conversion approvals were consumed."""
+    journal = state / "provision.json"
+    if not journal.exists():
+        return False
+    private_path(journal)
+    return json.loads(journal.read_text()).get("phase") != "planned"
+
+
+def check_gates(
+    plan: dict, progress: dict, stage: str, state: Path | None = None
+) -> set[int]:
     require_in_place(plan["spec"])
-    verify_source(plan)
+    verify_source(plan, state)
     validate_selection(plan["spec"], plan["config"])
+    # The recovery review authorizes starting the conversion. Once the disk is
+    # changing, its 24-hour age must not block finishing the matching install:
+    # that would leave an encrypted disk with no generation that can unlock it.
+    started = state is not None and conversion_started(state)
     order = stage_order(plan)
     for prior in order[:-1] if stage == "provision" else order:
-        check_attestation(prior, plan, progress)
+        check_attestation(
+            prior, plan, progress, fresh=not (started and prior == "recovery")
+        )
     if plan["config"]["secure_boot"]:
         raise MigrationError(
             "Signed first installation needs a supported controller-signing "
@@ -1350,7 +1455,7 @@ def check(state: Path, stage: str) -> dict:
     with locked_state(state):
         plan = load_plan(state)
         progress = load_progress(state, plan)
-        disks = check_gates(plan, progress, stage)
+        disks = check_gates(plan, progress, stage, state)
         verify_independent_state(state, progress, disks)
         if stage == "install":
             verify_target(plan, disks)
@@ -1419,7 +1524,7 @@ def install(
             check_attestation("install-recovery", plan, progress)
         elif retry_interrupted:
             raise MigrationError("There is no interrupted installation to retry")
-        disks = check_gates(plan, progress, "install")
+        disks = check_gates(plan, progress, "install", state)
         verify_independent_state(state, progress, disks)
         identities = verify_target(plan, disks)
         if expected_mounts is not None and identities != expected_mounts:
@@ -1430,15 +1535,12 @@ def install(
                 "Prepared filesystem identities changed after the first "
                 "install attempt; do not reuse this plan"
             )
-        if not Path(plan["config"]["closure"]).is_dir():
-            raise MigrationError(
-                "The reviewed built closure is not available in the installer store"
-            )
+        require_closure(plan, Path("/mnt"))
         verify_root_guard(plan, Path("/mnt"))
         confirm(plan)
         # Recheck after the operator prompt, immediately before the one mutation.
         if (
-            check_gates(plan, progress, "install") != disks
+            check_gates(plan, progress, "install", state) != disks
             or verify_target(plan, disks) != identities
         ):
             raise MigrationError("Target changed while awaiting confirmation")
@@ -1480,6 +1582,7 @@ def install(
                 )
             if verify_target(plan, disks) != identities:
                 raise MigrationError("Target identity changed during installation")
+            entry = hand_over_boot(plan, Path("/mnt"))
         except BaseException as error:
             progress["install"]["status"] = "interrupted"
             atomic_json(state / "progress.json", progress)
@@ -1489,9 +1592,47 @@ def install(
         progress["install"]["finished_at"] = time.time()
         atomic_json(state / "progress.json", progress)
         print(
-            "Installation completed. Do not remove recovery copies; perform "
+            f"Installation completed and the firmware now boots {entry}, the "
+            "planned encrypted system. Do not remove recovery copies; perform "
             "the separate cold-boot acceptance checks."
         )
+
+
+def require_closure(plan: dict, root: Path) -> None:
+    """The planned closure must be valid here or in the target's own store."""
+    from lx_administration.storage import root_guard
+
+    closure = plan["config"]["closure"]
+    if Path(closure).is_dir():
+        return
+    if not root_guard.closure_path(closure, root).is_dir():
+        raise MigrationError(
+            "The reviewed built closure is in neither the installer store nor "
+            f"the target store below {root}",
+            fix=f"copy {closure} to the host before booting the migration "
+            "environment (nix copy --to ssh://<host>)",
+        )
+    # Registration, not just a directory: nixos-install reuses this store path.
+    run("nix-store", "--store", str(root), "--check-validity", closure)
+
+
+def hand_over_boot(plan: dict, root: Path) -> str:
+    """After install, the firmware default must boot the planned encrypted system."""
+    from lx_administration.storage import migration_boot, root_guard
+
+    contract = (
+        root_guard.closure_path(plan["config"]["closure"], root)
+        / "etc/luxnix/root-storage.json"
+    )
+    esp = root_guard.under(root, json.loads(contract.read_text())["bootloader"]["esp"])
+    try:
+        return migration_boot.hand_over_boot(root, esp, plan["config"]["closure"])
+    except (ValueError, OSError) as error:
+        raise MigrationError(
+            f"The encrypted system is installed, but its boot default is not "
+            f"proven: {error}. Do not boot the installed system yet; review "
+            "and retry the install from the migration environment",
+        ) from error
 
 
 def lifecycle_position(state: Path, plan: dict, progress: dict) -> dict:
@@ -1519,7 +1660,10 @@ def verify_root_guard(plan: dict, root: Path, *, action: str = "boot") -> dict:
     """Probe the actual disk against the planned closure; a saved stage proves nothing."""
     from lx_administration.storage import root_guard
 
-    contract = Path(plan["config"]["closure"]) / "etc/luxnix/root-storage.json"
+    contract = (
+        root_guard.closure_path(plan["config"]["closure"], root)
+        / "etc/luxnix/root-storage.json"
+    )
     if not contract.is_file():
         raise MigrationError(
             "The planned closure has no root-storage contract; create a new plan "

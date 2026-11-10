@@ -193,6 +193,7 @@ def test_cli_plans_only_after_successful_media_setup(
 
     monkeypatch.setattr(media, "setup", prepare_media)
     monkeypatch.setattr(media.migration, "plan_spec", lambda *a: calls.append("plan"))
+    monkeypatch.setattr(media.migration, "publish_source", lambda *a: None)
     monkeypatch.setattr(boot_setup, "prepare", lambda *a: calls.append("journal"))
     monkeypatch.setattr(
         boot_setup,

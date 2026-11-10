@@ -119,14 +119,17 @@ def secret(prompt: str) -> bytes:
     return value
 
 
-def add_password(device: str, password: bytes, previous: bytes, state: Path) -> None:
-    # A durable private header backup precedes the only header mutation. Never
-    # remove existing slots, including the credential authorizing this addition.
-    backup = Path(tempfile.mkdtemp(prefix="header-before-", dir=state)) / "luks.header"
+def backup_header(device: str, state: Path, prefix: str) -> Path:
+    """Write a private, durable LUKS header backup into its own new directory.
+
+    It holds the keyslots valid now: anyone with it and a passphrase valid now can
+    open the data, even after that passphrase is removed from the live header.
+    """
+    backup = Path(tempfile.mkdtemp(prefix=prefix, dir=state)) / "luks.header"
     if cryptsetup(
         "luksHeaderBackup", device, "--header-backup-file", str(backup)
     ).returncode:
-        raise ValueError("LUKS header backup failed; password was not changed")
+        raise ValueError("LUKS header backup failed")
     os.chmod(backup, 0o600)
     with backup.open("rb") as stream:
         os.fsync(stream.fileno())
@@ -136,6 +139,16 @@ def add_password(device: str, password: bytes, previous: bytes, state: Path) -> 
             os.fsync(fd)
         finally:
             os.close(fd)
+    return backup
+
+
+def add_password(device: str, password: bytes, previous: bytes, state: Path) -> None:
+    # A durable private header backup precedes the only header mutation. Never
+    # remove existing slots, including the credential authorizing this addition.
+    try:
+        backup_header(device, state, "header-before-")
+    except ValueError as error:
+        raise ValueError(f"{error}; password was not changed") from error
     with key_fd(previous) as old_fd, key_fd(password) as new_fd:
         result = cryptsetup(
             "luksAddKey",

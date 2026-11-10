@@ -39,6 +39,37 @@ let
 in
 {
   boot = {
+    # A recovery appliance must show early failures on its selected terminal.
+    # The last console is /dev/console; serial must not hide the physical screen.
+    kernelParams = lib.mkForce (
+      builtins.filter (
+        parameter:
+        !(lib.hasPrefix "console=" parameter)
+        && !(lib.hasPrefix "loglevel=" parameter)
+        && !(builtins.elem parameter [
+          "quiet"
+          "splash"
+        ])
+      ) runtimeSystem.config.boot.kernelParams
+      ++ [
+        "nomodeset"
+        "loglevel=7"
+        "rd.systemd.show_status=1"
+        "systemd.show_status=1"
+      ]
+      ++ (
+        if (spec.console or "tty1") == "ttyS0" then
+          [
+            "console=tty0"
+            "console=ttyS0,115200"
+          ]
+        else
+          [
+            "console=ttyS0,115200"
+            "console=tty1"
+          ]
+      )
+    );
     initrd = {
       systemd = {
         enable = lib.mkForce true;

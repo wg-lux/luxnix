@@ -889,3 +889,127 @@ def test_short_stage_tampered_payload_cannot_arm_boot(local_bundle):
     with pytest.raises(SystemExit):
         boot.main(command + ["--apply"])
     assert "LoaderEntryOneShot" not in variables
+
+
+@pytest.fixture
+def firmware(monkeypatch):
+    """A fake systemd-boot variable store; bootctl writes go only here."""
+    variables = {}
+    calls = []
+    verbs = {"set-default": "LoaderEntryDefault", "set-oneshot": "LoaderEntryOneShot"}
+
+    def run(*args, **kwargs):
+        calls.append(args)
+        assert args[0] == "bootctl" and args[1] in verbs
+        if args[2]:
+            variables[verbs[args[1]]] = args[2]
+        else:
+            variables.pop(verbs[args[1]], None)
+        return ""
+
+    monkeypatch.setattr(boot, "loader_variable", variables.get)
+    monkeypatch.setattr(boot.sb, "run", run)
+    return variables, calls
+
+
+MIGRATION_ENTRY = "luxnix-migration-gc-09-67372ff722c24ad6.conf"
+
+
+def test_hold_points_every_reboot_at_the_booted_migration_entry(firmware):
+    variables, calls = firmware
+    variables.update(
+        LoaderEntrySelected=MIGRATION_ENTRY,
+        LoaderEntryDefault="nixos-generation-25.conf",
+    )
+    hold = boot.hold_for_migration("gc-09")
+    assert hold == {
+        "held": True,
+        "previous": "nixos-generation-25.conf",
+        "entry": MIGRATION_ENTRY,
+    }
+    assert variables["LoaderEntryDefault"] == MIGRATION_ENTRY
+    boot.release_hold(hold)
+    assert variables["LoaderEntryDefault"] == "nixos-generation-25.conf"
+    boot.release_hold(dict(hold, previous=None))
+    assert "LoaderEntryDefault" not in variables
+
+
+@pytest.mark.parametrize(
+    "selected",
+    [None, "nixos-generation-25.conf", "luxnix-migration-gc-10-67372ff722c24ad6.conf"],
+)
+def test_hold_never_redirects_boot_outside_this_hosts_migration_entry(
+    firmware, selected
+):
+    variables, calls = firmware
+    if selected:
+        variables["LoaderEntrySelected"] = selected
+    hold = boot.hold_for_migration("gc-09")
+    assert hold["held"] is False
+    boot.release_hold(hold)
+    assert calls == []
+
+
+def test_unreadable_hold_is_an_error(firmware, monkeypatch):
+    variables, _ = firmware
+    variables["LoaderEntrySelected"] = MIGRATION_ENTRY
+    monkeypatch.setattr(boot.sb, "run", lambda *a, **k: "")
+    with pytest.raises(ValueError, match="did not read back"):
+        boot.hold_for_migration("gc-09")
+
+
+CLOSURE = "/nix/store/" + "c" * 32 + "-nixos-system-gc-09"
+
+
+@pytest.fixture
+def installed(tmp_path):
+    root, esp = tmp_path / "mnt", tmp_path / "mnt/boot"
+    profiles = root / "nix/var/nix/profiles"
+    profiles.mkdir(parents=True)
+    (profiles / "system").symlink_to("system-38-link")
+    (esp / "loader/entries").mkdir(parents=True)
+    (esp / "EFI/nixos").mkdir(parents=True)
+    for name in ("kernel.efi", "initrd.efi"):
+        (esp / "EFI/nixos" / name).write_text("test")
+    entry = esp / "loader/entries/nixos-generation-38.conf"
+    entry.write_text(
+        "linux /EFI/nixos/kernel.efi\ninitrd /EFI/nixos/initrd.efi\n"
+        f"options init={CLOSURE}/init root=/dev/mapper/cryptroot\n"
+    )
+    (esp / "loader/loader.conf").write_text(
+        "timeout 5\ndefault nixos-generation-38.conf\n"
+    )
+    return root, esp, entry
+
+
+def test_handover_clears_overrides_so_loader_conf_boots_the_new_system(
+    firmware, installed
+):
+    variables, _ = firmware
+    root, esp, _ = installed
+    variables.update(
+        LoaderEntryDefault=MIGRATION_ENTRY,
+        LoaderEntryOneShot="nixos-generation-25.conf",
+    )
+    assert boot.hand_over_boot(root, esp, CLOSURE) == "nixos-generation-38.conf"
+    # A pinned EFI default would also freeze out every later rebuild.
+    assert "LoaderEntryDefault" not in variables
+    assert "LoaderEntryOneShot" not in variables
+
+
+def test_handover_refuses_an_entry_for_another_closure(firmware, installed):
+    variables, calls = firmware
+    root, esp, entry = installed
+    variables["LoaderEntryDefault"] = MIGRATION_ENTRY
+    entry.write_text(entry.read_text().replace("c" * 32, "d" * 32))
+    with pytest.raises(ValueError, match="does not boot the planned closure"):
+        boot.hand_over_boot(root, esp, CLOSURE)
+    assert variables["LoaderEntryDefault"] == MIGRATION_ENTRY and calls == []
+
+
+def test_handover_refuses_a_loader_conf_default_elsewhere(firmware, installed):
+    variables, _ = firmware
+    root, esp, _ = installed
+    (esp / "loader/loader.conf").write_text("default nixos-generation-25.conf\n")
+    with pytest.raises(ValueError, match="not the installed nixos-generation-38"):
+        boot.hand_over_boot(root, esp, CLOSURE)

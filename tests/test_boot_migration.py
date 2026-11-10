@@ -292,6 +292,10 @@ def install_environment(state, tmp_path, monkeypatch):
     monkeypatch.setattr(migration, "verify_independent_state", lambda *a: None)
     monkeypatch.setattr(migration, "verify_root_guard", lambda *a, **k: {})
     monkeypatch.setattr(migration, "verify_booted", lambda *a: None)
+    # Boot hand-over has its own coverage in test_migration_boot.py.
+    monkeypatch.setattr(
+        migration, "hand_over_boot", lambda plan, root: "nixos-generation-2.conf"
+    )
     # Install-only fixtures have no provision journal; real journals still decide.
     position = migration.lifecycle_position
     monkeypatch.setattr(
@@ -400,7 +404,7 @@ def test_signed_first_install_is_rejected(state, monkeypatch):
     _, plan, progress = state
     plan["spec"].update(installation="in-place", source_retention="in-place")
     plan["config"]["secure_boot"] = True
-    monkeypatch.setattr(migration, "check_attestation", lambda *a: None)
+    monkeypatch.setattr(migration, "check_attestation", lambda *a, **k: None)
     monkeypatch.setattr(
         migration,
         "probe_disks",
@@ -830,3 +834,157 @@ def test_acceptance_also_checks_the_live_disk(monkeypatch):
     )
     migration.verify_booted({"config": {"closure": closure}})
     assert calls == [(Path("/"), {"action": "dry-activate"})]
+
+
+@pytest.mark.parametrize(
+    ("phase", "recovery_fresh"),
+    [(None, True), ("planned", True), ("running", False), ("complete", False)],
+)
+def test_recovery_approval_is_consumed_once_conversion_starts(
+    state, monkeypatch, phase, recovery_fresh
+):
+    root, plan, progress = state
+    if phase:
+        migration.atomic_json(root / "provision.json", {"phase": phase})
+    seen = {}
+    monkeypatch.setattr(
+        migration,
+        "check_attestation",
+        lambda stage, plan, progress, *, fresh=True: seen.__setitem__(stage, fresh),
+    )
+    for name in ("require_in_place", "validate_selection", "verify_installer"):
+        monkeypatch.setattr(migration, name, lambda *a: None)
+    monkeypatch.setattr(migration, "probe_disks", lambda *a: {1})
+    migration.check_gates(plan, progress, "install", root)
+    # The recovery review authorized starting; it must not strand a changed disk.
+    assert seen == {"recovery": recovery_fresh, "prepared": True}
+
+
+@pytest.mark.parametrize(
+    ("euid", "fstype", "expected"),
+    [
+        (0, "tmpfs", True),
+        (0, "squashfs", True),
+        (0, "btrfs", False),
+        (1000, "tmpfs", False),
+    ],
+)
+def test_installer_environment_is_root_on_a_ram_filesystem(
+    monkeypatch, euid, fstype, expected
+):
+    monkeypatch.setattr(migration.os, "geteuid", lambda: euid)
+    monkeypatch.setattr(migration, "mount_record", lambda path: {"fstype": fstype})
+    assert migration.installer_environment() is expected
+
+
+def test_installer_trusts_operator_owned_state(tmp_path, monkeypatch):
+    path = tmp_path / "plan.json"
+    path.write_text("{}")
+    path.chmod(0o600)
+    _trusted_parents(monkeypatch, path)
+    monkeypatch.setattr(migration.os, "geteuid", lambda: os.getuid() + 1)
+    monkeypatch.setattr(migration, "installer_environment", lambda: False)
+    with pytest.raises(migration.MigrationError, match="is owned by uid"):
+        migration.private_path(path)
+    monkeypatch.setattr(migration, "installer_environment", lambda: True)
+    migration.private_path(path)
+
+
+@pytest.mark.parametrize(
+    ("installer", "exists", "copy"),
+    [(False, False, False), (True, True, False), (True, False, True)],
+)
+def test_installer_verifies_the_recovery_copy_only_when_needed(
+    tmp_path, monkeypatch, installer, exists, copy
+):
+    checkout = tmp_path / "checkout"
+    if exists:
+        checkout.mkdir()
+    plan = {"spec": {"checkout": str(checkout)}, "source": {"revision": "f" * 40}}
+    state = tmp_path / "luxnix-state" / "gc-09"
+    monkeypatch.setattr(migration, "installer_environment", lambda: installer)
+    expected = state.parent / "sources" / ("f" * 40) if copy else checkout
+    assert migration.plan_checkout(state, plan) == expected
+
+
+@pytest.fixture
+def source_plan(tmp_path, monkeypatch):
+    state = tmp_path / "luxnix-state" / "gc-09"
+    state.mkdir(parents=True)
+    plan = {
+        "spec": {"checkout": "/home/admin/luxnix"},
+        "source": {"revision": "c" * 40, "lock_sha256": "d" * 64},
+    }
+    monkeypatch.setattr(migration, "private_path", lambda *a, **k: None)
+    clones = []
+
+    def run(*args, **kwargs):
+        clones.append(args)
+        Path(args[-1]).mkdir()
+        return ""
+
+    monkeypatch.setattr(migration, "run", run)
+    return state, plan, clones
+
+
+def test_plan_source_is_copied_once_beside_the_state(source_plan, monkeypatch):
+    state, plan, clones = source_plan
+    monkeypatch.setattr(migration, "source_identity", lambda path: plan["source"])
+    target = migration.publish_source(state, plan)
+    assert target == state.parent / "sources" / ("c" * 40)
+    assert target.is_dir() and not list(target.parent.glob(".*partial*"))
+    assert clones[0][:5] == ("git", "clone", "--quiet", "--depth", "1")
+    assert clones[0][5] == "file:///home/admin/luxnix"
+    assert migration.publish_source(state, plan) == target
+    assert len(clones) == 1
+
+
+def test_mismatched_plan_source_is_never_published(source_plan, monkeypatch):
+    state, plan, _ = source_plan
+    monkeypatch.setattr(
+        migration, "source_identity", lambda path: {"revision": "other"}
+    )
+    with pytest.raises(migration.MigrationError, match="checkout moved"):
+        migration.publish_source(state, plan)
+    assert not (state.parent / "sources" / ("c" * 40)).exists()
+    assert not list((state.parent / "sources").iterdir())
+
+
+def test_existing_foreign_plan_source_is_refused(source_plan, monkeypatch):
+    state, plan, clones = source_plan
+    (state.parent / "sources" / ("c" * 40)).mkdir(parents=True)
+    monkeypatch.setattr(
+        migration, "source_identity", lambda path: {"revision": "other"}
+    )
+    with pytest.raises(migration.MigrationError, match="does not match this plan"):
+        migration.publish_source(state, plan)
+    assert clones == []
+
+
+def test_closure_in_target_store_must_be_registered(tmp_path, monkeypatch):
+    closure = "/nix/store/" + "b" * 32 + "-nixos-system-gc-09"
+    plan = {"config": {"closure": closure}}
+    with pytest.raises(migration.MigrationError, match="neither the installer store"):
+        migration.require_closure(plan, tmp_path)
+    (tmp_path / closure.lstrip("/")).mkdir(parents=True)
+    calls = []
+    monkeypatch.setattr(migration, "run", lambda *a, **k: calls.append(a) or "")
+    migration.require_closure(plan, tmp_path)
+    assert calls == [
+        ("nix-store", "--store", str(tmp_path), "--check-validity", closure)
+    ]
+
+
+def test_unproven_boot_handover_leaves_install_interrupted(
+    install_environment, monkeypatch
+):
+    root, plan, _ = install_environment
+    monkeypatch.setattr(migration.subprocess, "run", lambda argv, **kw: None)
+
+    def unproven(plan, root):
+        raise migration.MigrationError("loader.conf selects another entry")
+
+    monkeypatch.setattr(migration, "hand_over_boot", unproven)
+    with pytest.raises(migration.MigrationError, match="another entry"):
+        migration.install(root)
+    assert migration.load_progress(root, plan)["install"]["status"] == "interrupted"

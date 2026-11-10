@@ -49,10 +49,15 @@ let
               pkgs.openssl
               pkgs.coreutils
               pkgs.findutils
+              # bootctl holds the boot default here while the root is converted.
+              pkgs.systemd
+              # Keeps a conversion running when an SSH connection drops.
+              pkgs.tmux
             ];
+            # Verifies the plan's own source on the recovery drive, then runs it.
             text = ''
               export PYTHONPATH=${runtime}
-              exec ${python}/bin/python -m lx_administration.storage.boot_setup "$@"
+              exec ${python}/bin/python -m lx_administration.storage.installer_handoff "$@"
             '';
           };
           certificate = ./secure-boot/db.pem;
@@ -82,6 +87,14 @@ let
             '';
           };
           systemd = {
+            # Suspend would pause a running conversion; nothing may sleep here.
+            targets = {
+              sleep.enable = false;
+              suspend.enable = false;
+              hibernate.enable = false;
+              hybrid-sleep.enable = false;
+              suspend-then-hibernate.enable = false;
+            };
             network.networks."10-management" = {
               matchConfig.Name = spec.interface;
               address = [ spec.address ];
@@ -147,30 +160,41 @@ let
               };
             };
           };
-          services.openssh = {
-            enable = sshEnabled;
-            openFirewall = false;
-            ports = [ spec.policy.ssh_port ];
-            hostKeys = [
-              {
-                path = "/etc/ssh/ssh_host_ed25519_key";
-                type = "ed25519";
-              }
-            ];
-            settings = {
-              PasswordAuthentication = false;
-              KbdInteractiveAuthentication = false;
-              PermitRootLogin = "prohibit-password";
-              AllowUsers = [ "root" ];
-              AllowTcpForwarding = false;
-              X11Forwarding = false;
+          services = {
+            # Closing the lid or an idle timeout must not try to sleep either.
+            logind.settings.Login = {
+              HandleLidSwitch = "ignore";
+              HandleLidSwitchExternalPower = "ignore";
+              HandleLidSwitchDocked = "ignore";
+              HandleSuspendKey = "ignore";
+              HandleHibernateKey = "ignore";
+              IdleAction = "ignore";
+            };
+            getty.autologinUser = lib.mkForce null;
+            openssh = {
+              enable = sshEnabled;
+              openFirewall = false;
+              ports = [ spec.policy.ssh_port ];
+              hostKeys = [
+                {
+                  path = "/etc/ssh/ssh_host_ed25519_key";
+                  type = "ed25519";
+                }
+              ];
+              settings = {
+                PasswordAuthentication = false;
+                KbdInteractiveAuthentication = false;
+                PermitRootLogin = "prohibit-password";
+                AllowUsers = [ "root" ];
+                AllowTcpForwarding = false;
+                X11Forwarding = false;
+              };
             };
           };
           users.users.root = {
             hashedPassword = "!";
             openssh.authorizedKeys.keys = spec.authorized_keys;
           };
-          services.getty.autologinUser = lib.mkForce null;
           swapDevices = lib.mkForce [ ];
           zramSwap.enable = lib.mkForce false;
           boot = {

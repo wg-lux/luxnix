@@ -35,8 +35,9 @@ PROCEDURES = {
     ENCRYPTING: [
         "Encryption stopped part-way: no installed generation can boot this disk yet.",
         "Do not format the partition and do not run a filesystem repair on it.",
-        "Boot the tested installer and rerun: devenv shell luxnix migrate. It resumes "
-        "from the LUKS2 header.",
+        "Boot the staged LuxNix migration entry; the boot default already points "
+        "there. Mount the recovery drive at /recovery and run: luxnix-migration run "
+        "--apply. It resumes from the LUKS2 header.",
     ],
     ENCRYPTED: [
         "Root is encrypted: plaintext-root generations cannot boot, so choose only "

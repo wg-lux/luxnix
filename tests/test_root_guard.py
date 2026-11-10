@@ -559,3 +559,23 @@ def test_verify_never_withdraws_or_consumes(monkeypatch, capsys):
     monkeypatch.setattr(guard, "consume_override", lambda *a: pytest.fail("consumed"))
     assert guard.verify(spec("boot-luks"), system=SYSTEM, action="boot") == 1
     assert "root-not-luks" in capsys.readouterr().err
+
+
+def test_target_store_closure_and_kernel_links_resolve_inside_root(tmp_path):
+    """A RAM installer measures the in-place host's closure in the host's store."""
+    root = tmp_path / "mnt"
+    closure = "/nix/store/" + "c" * 32 + "-nixos-system-gc-09"
+    linux = root / ("nix/store/" + "k" * 32 + "-linux")
+    linux.mkdir(parents=True)
+    (linux / "bzImage").write_bytes(b"k" * 100)
+    (linux / "initrd").write_bytes(b"i" * 50)
+    system = root / closure.lstrip("/")
+    system.mkdir(parents=True)
+    (system / "kernel").symlink_to("/nix/store/" + "k" * 32 + "-linux/bzImage")
+    (system / "initrd").symlink_to("/nix/store/" + "k" * 32 + "-linux/initrd")
+    (root / "boot").mkdir()
+    assert guard.closure_path(closure, root) == system
+    assert guard.closure_path(closure, Path("/")) == Path(closure)
+    assert guard.resolve_under(root, system / "kernel") == linux / "bzImage"
+    esp = guard.probe_esp(root, "/boot", closure)
+    assert esp is not None and esp["needed"] == 150

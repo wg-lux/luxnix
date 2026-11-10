@@ -541,6 +541,72 @@ def require_default(esp: Path, entry: str) -> None:
         raise ValueError("Normal boot default must exclude migration entries")
 
 
+MIGRATION_PREFIX = "luxnix-migration-"
+
+
+def set_loader_variable(name: str, entry: str) -> None:
+    """Write one systemd-boot selection variable and read it back.
+
+    An empty entry removes the variable, so loader.conf decides again.
+    """
+    verb = {"LoaderEntryDefault": "set-default", "LoaderEntryOneShot": "set-oneshot"}
+    try:
+        sb.run("bootctl", verb[name], entry)
+    except sb.SecureBootError as error:
+        raise ValueError(f"Could not set {name}: {error}") from error
+    if (loader_variable(name) or "") != entry:
+        raise ValueError(f"{name} did not read back as {entry or 'unset'}")
+
+
+def hold_for_migration(host: str) -> dict:
+    """Before the root changes, make every reboot return to this environment.
+
+    Returns what to restore if nothing on the disk changes after all.
+    """
+    selected = loader_variable("LoaderEntrySelected")
+    previous = loader_variable("LoaderEntryDefault")
+    if not selected or not selected.startswith(f"{MIGRATION_PREFIX}{host}-"):
+        return {"held": False, "previous": previous, "selected": selected}
+    set_loader_variable("LoaderEntryDefault", selected)
+    return {"held": True, "previous": previous, "entry": selected}
+
+
+def release_hold(hold: dict) -> None:
+    """Restore the default saved by hold_for_migration; the disk is unchanged."""
+    if hold.get("held"):
+        set_loader_variable("LoaderEntryDefault", hold.get("previous") or "")
+
+
+def hand_over_boot(root: Path, esp: Path, closure: str) -> str:
+    """Make the installed encrypted generation the firmware's real default.
+
+    Clears every override so loader.conf, which NixOS keeps current on each
+    rebuild, decides; then proves that default boots the planned closure.
+    """
+    from lx_administration.storage import root_guard
+
+    link = os.readlink(root / "nix/var/nix/profiles/system")
+    match = re.fullmatch(r"system-(\d+)-link", link)
+    if match is None:
+        raise ValueError(f"Unexpected installed system profile link: {link}")
+    entry = f"nixos-generation-{match[1]}.conf"
+    if root_guard.esp_generations(esp).get(int(match[1])) != closure:
+        raise ValueError(f"Boot entry {entry} does not boot the planned closure")
+    for name in ("LoaderEntryOneShot", "LoaderEntryDefault"):
+        if loader_variable(name):
+            set_loader_variable(name, "")
+    defaults = [
+        line.split(None, 1)[1].strip()
+        for line in (esp / "loader/loader.conf").read_text().splitlines()
+        if line.strip().startswith("default ")
+    ]
+    if defaults != [entry]:
+        raise ValueError(
+            f"loader.conf selects {defaults or 'no entry'}, not the installed {entry}"
+        )
+    return entry
+
+
 def require_machine(spec: dict, host: str, certificate: Path) -> None:
     validate_spec(spec)
     if spec["host"] != host:

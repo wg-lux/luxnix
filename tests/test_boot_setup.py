@@ -71,8 +71,79 @@ def environment(install_environment, monkeypatch):
         return {"consolidated": [], "swap_unchecked": []}
 
     monkeypatch.setattr(in_place, "convert", run)
+    # Never touch this machine's real EFI variables; see boot_hold below.
+    from lx_administration.storage import migration_boot
+
+    monkeypatch.setattr(
+        migration_boot, "hold_for_migration", lambda host: {"held": False}
+    )
+    monkeypatch.setattr(migration_boot, "release_hold", lambda hold: None)
+    # Power and header backup have their own tests; never read this machine's.
+    monkeypatch.setattr(setup, "require_mains_power", lambda: None)
+    monkeypatch.setattr(setup, "keep_header_backup", lambda *a: None)
     setup.prepare(root)
     return root, plan, progress, calls, mounts
+
+
+HOLD = {
+    "held": True,
+    "previous": "nixos-generation-25.conf",
+    "entry": "luxnix-migration-gc-09-67372ff722c24ad6.conf",
+}
+
+
+@pytest.fixture
+def boot_hold(environment, monkeypatch):
+    """Record boot-default changes in the same order as confirmation and writes."""
+    from lx_administration.storage import migration_boot
+
+    calls = environment[3]
+    monkeypatch.setattr(
+        migration_boot,
+        "hold_for_migration",
+        lambda host: calls.append(("hold", host)) or dict(HOLD),
+    )
+    monkeypatch.setattr(
+        migration_boot, "release_hold", lambda hold: calls.append(("release", hold))
+    )
+    return environment
+
+
+def test_boot_default_is_held_before_any_disk_change(boot_hold):
+    from lx_administration.storage import migration_lifecycle as lifecycle
+
+    root, plan, _, calls, _ = boot_hold
+    setup.provision(root, apply=True)
+    assert calls == ["confirm", ("hold", "gc-09"), "encrypt"]
+    record = lifecycle.load(root, plan["plan_id"])
+    assert record["evidence"]["boot_default_hold"]["entry"] == HOLD["entry"]
+
+
+@pytest.mark.parametrize(
+    ("after", "released"), [("plaintext", True), ("encrypting", False)]
+)
+def test_failed_conversion_restores_default_only_while_root_is_plain(
+    boot_hold, monkeypatch, after, released
+):
+    from lx_administration.storage import in_place
+
+    root, _, _, calls, _ = boot_hold
+
+    def fail(*a, **kw):
+        monkeypatch.setattr(in_place, "root_state", lambda *a: after)
+        raise in_place.InPlaceError("stopped")
+
+    monkeypatch.setattr(in_place, "convert", fail)
+    with pytest.raises(in_place.InPlaceError):
+        setup.provision(root, apply=True)
+    assert (("release", HOLD) in calls) is released
+
+
+def test_unheld_conversion_warns_not_to_reboot(environment, capsys):
+    root, _, _, calls, _ = environment
+    setup.provision(root, apply=True)
+    assert calls == ["confirm", "encrypt"]
+    assert "Do not reboot until the install step" in capsys.readouterr().out
 
 
 def test_preview_never_prompts_formats_or_changes_journal(environment):
@@ -586,6 +657,7 @@ def test_plan_cli_uses_autoconf_without_spec_or_state(monkeypatch, capsys):
     )
     monkeypatch.setattr(setup, "configured_target", lambda p, h: (spec, state))
     monkeypatch.setattr(migration, "plan_spec", lambda s, p: calls.append((s, p)))
+    monkeypatch.setattr(migration, "publish_source", lambda *a: None)
     monkeypatch.setattr(setup, "prepare", lambda p: calls.append(p))
     monkeypatch.setattr(
         setup,
@@ -718,6 +790,8 @@ def workflow_environment(state, monkeypatch):
     monkeypatch.setattr(setup.sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr(recovery_media, "setup", lambda *a, **k: calls.append("media"))
     monkeypatch.setattr(migration, "plan_spec", lambda *a: calls.append("plan"))
+    # Publishing the plan's source has its own coverage in test_boot_migration.py.
+    monkeypatch.setattr(migration, "publish_source", lambda *a: None)
     monkeypatch.setattr(setup, "prepare", lambda *a: calls.append("journal"))
     monkeypatch.setattr(setup, "show_step", lambda *a, **k: None)
     return root, plan, calls
@@ -791,9 +865,12 @@ def test_workflow_pauses_for_notes_then_installer(
         stage="recovery",
     )
     monkeypatch.setattr(setup, "next_step", lambda p: step)
+    # An empty description pauses without recording anything.
+    monkeypatch.setattr("builtins.input", lambda prompt: "")
     setup.run_workflow(plan["spec"], root, Path("/config"), apply=True)
     assert calls == ["media", "plan", "journal"]
     assert "write the completed check results" in capsys.readouterr().out
+    assert not (root / "recovery-notes.txt").exists()
     (root / "recovery-notes.txt").write_text("Actual results")
     monkeypatch.setattr("builtins.input", lambda prompt: "operator")
 
@@ -806,7 +883,31 @@ def test_workflow_pauses_for_notes_then_installer(
     monkeypatch.setattr(setup.os, "geteuid", lambda: 1000)
     setup.run_workflow(plan["spec"], root, Path("/config"), apply=True)
     assert calls[-1] == "review"
-    assert "boot installer media" in capsys.readouterr().out
+    assert "Boot the staged LuxNix migration entry" in capsys.readouterr().out
+
+
+def test_workflow_takes_notes_in_the_terminal(workflow_environment, monkeypatch):
+    root, plan, calls = workflow_environment
+    step = setup.NextStep(
+        action=setup.Action.ASSESS,
+        host="gc-09",
+        plan_id=plan["plan_id"],
+        reason="review",
+        stage="recovery",
+    )
+    monkeypatch.setattr(setup, "next_step", lambda p: step)
+    answers = iter(["2026-11-10 console and RAM boot tested", "", "operator"])
+    monkeypatch.setattr("builtins.input", lambda prompt: next(answers))
+
+    def reviewed(state, assessor, report):
+        calls.append(("review", assessor, report.read_text()))
+        step.action = setup.Action.PROVISION
+        step.stage = None
+
+    monkeypatch.setattr(setup, "review", reviewed)
+    setup.run_workflow(plan["spec"], root, Path("/config"), apply=True)
+    assert ("review", "operator", "2026-11-10 console and RAM boot tested\n") in calls
+    assert (root / "recovery-notes.txt").stat().st_mode & 0o777 == 0o600
 
 
 @pytest.mark.parametrize(
@@ -909,10 +1010,9 @@ def test_workflow_orders_provision_access_review_install(
     monkeypatch.setattr(setup, "advance", advance)
     monkeypatch.setattr(setup, "review", review)
     setup.run_workflow(plan["spec"], root, Path("/config"), apply=True)
+    # The installer continues the plan the host saved; it never replans.
     assert calls == [
         "media",
-        "plan",
-        "journal",
         "provision",
         "prepare-access",
         "review",
@@ -1032,3 +1132,98 @@ def test_success_keeps_json_output_parseable(capsys):
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "SUCCESS: done" in captured.err
+
+
+def test_installer_continues_the_saved_plan_without_replanning(
+    workflow_environment, monkeypatch
+):
+    root, plan, calls = workflow_environment
+    monkeypatch.setattr(migration, "installer_environment", lambda: True)
+    monkeypatch.setattr(setup, "drive", lambda state, config: calls.append("drive"))
+    setup.run_workflow(plan["spec"], root, Path("/config"), apply=True)
+    assert calls == ["media", "drive"]
+    (root / "plan.json").unlink()
+    with pytest.raises(migration.MigrationError, match="No saved plan"):
+        setup.run_workflow(plan["spec"], root, Path("/config"), apply=True)
+
+
+def power_supplies(tmp_path, monkeypatch, **supplies):
+    for name, (kind, online) in supplies.items():
+        supply = tmp_path / "power_supply" / name
+        supply.mkdir(parents=True)
+        (supply / "type").write_text(kind + "\n")
+        if online is not None:
+            (supply / "online").write_text(f"{online}\n")
+    monkeypatch.setattr(setup, "POWER_SUPPLIES", tmp_path / "power_supply")
+
+
+@pytest.mark.parametrize(
+    ("supplies", "refused"),
+    [
+        ({}, False),
+        ({"BAT0": ("Battery", None), "AC": ("Mains", 1)}, False),
+        ({"BAT0": ("Battery", None), "ucsi": ("USB", 1)}, False),
+        ({"BAT0": ("Battery", None), "AC": ("Mains", 0)}, True),
+        ({"BAT0": ("Battery", None)}, True),
+        ({"AC": ("Mains", 0)}, False),
+    ],
+)
+def test_conversion_needs_mains_power_on_battery_machines(
+    tmp_path, monkeypatch, supplies, refused
+):
+    power_supplies(tmp_path, monkeypatch, **supplies)
+    if refused:
+        with pytest.raises(migration.MigrationError, match="runs on battery"):
+            setup.require_mains_power()
+    else:
+        setup.require_mains_power()
+
+
+def test_battery_refusal_comes_before_confirmation(environment, monkeypatch):
+    root, plan, _, calls, _ = environment
+
+    def battery():
+        raise migration.MigrationError("This machine runs on battery")
+
+    monkeypatch.setattr(setup, "require_mains_power", battery)
+    with pytest.raises(migration.MigrationError, match="battery"):
+        setup.provision(root, apply=True)
+    assert calls == []
+    assert setup.load_journal(root, plan).phase == setup.Phase.PLANNED
+
+
+def test_converted_header_is_backed_up_and_recorded(state, monkeypatch, capsys):
+    from lx_administration.storage import boot_password
+    from lx_administration.storage import migration_lifecycle as lifecycle
+
+    root, plan, _ = state
+    backups = []
+
+    def backup(device, state, prefix):
+        path = state / (prefix + "x") / "luks.header"
+        path.parent.mkdir()
+        path.write_bytes(b"header")
+        backups.append((device, prefix))
+        return path
+
+    monkeypatch.setattr(boot_password, "backup_header", backup)
+    setup.keep_header_backup(root, plan, "/dev/test1")
+    assert backups == [("/dev/test1", "header-after-conversion-")]
+    record = lifecycle.load(root, plan["plan_id"])["evidence"]["luks_header_backup"]
+    assert record["path"].endswith("luks.header") and len(record["sha256"]) == 64
+    assert "Copy it into encrypted custody" in capsys.readouterr().out
+
+
+def test_failed_header_backup_warns_but_never_undoes_the_conversion(
+    state, monkeypatch, capsys
+):
+    from lx_administration.storage import boot_password
+
+    root, plan, _ = state
+
+    def fail(*a):
+        raise ValueError("LUKS header backup failed")
+
+    monkeypatch.setattr(boot_password, "backup_header", fail)
+    setup.keep_header_backup(root, plan, "/dev/test1")
+    assert "WARNING: no LUKS header backup was saved" in capsys.readouterr().out

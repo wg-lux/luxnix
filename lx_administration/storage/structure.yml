@@ -18,7 +18,7 @@ entrypoints:
     purpose: Package pinned closure, Disko script, public hardware plan and Python runtime without credentials.
   - name: migration-boot
     file: migration_boot.py
-    purpose: Discover reusable build settings and local bundles, build and admit host-bound RAM images with firmware trust or physical console approval; stage an explicit one-shot boot without rebooting or encrypting.
+    purpose: Discover reusable build settings and local bundles, build and admit host-bound RAM images with firmware trust or physical console approval; stage an explicit one-shot boot without rebooting or encrypting; hold the boot default on the migration entry during conversion and hand it to the installed encrypted generation.
   - name: credential-backup
     file: credential_backup.py
     purpose: Authenticated credential archives with stable media identity, preserved account sources and explicit drift rejection.
@@ -88,6 +88,9 @@ entrypoints:
   - name: migration-lifecycle
     file: migration_lifecycle.py
     purpose: Durable, ordered migration stages; history only and never proof of disk state.
+  - name: installer-handoff
+    file: installer_handoff.py
+    purpose: RAM-image launcher that verifies the plan's own source copy on the recovery drive, runs it, and returns root-created state to the plan's operator.
   - name: boot-storage
     file: boot.py
     purpose: Read-only root setup guidance, actual mount identity, Btrfs member and protected key checks before activation or consumers.

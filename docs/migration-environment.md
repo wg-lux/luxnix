@@ -1,91 +1,73 @@
 # RAM migration environment
 
-Build a small EFI loader and a separate runtime on `/recovery`. At boot,
-the loader copies the runtime into RAM, verifies its digest and unmounts its source.
-Encryption remains an explicit offline operation. Existing boot generations stay.
+A small EFI loader starts a separate runtime from the recovery drive, copies it
+into RAM, verifies its digest and releases the drive. From there the root disk is
+converted while nothing uses it. Booting it changes nothing on its own, and the
+existing boot generations stay.
 
 ## 1. Prepare
 
-- Confirm the host, reviewed revision and locked inputs in a clean, committed
-  checkout.
-- Ask where the backup is and how restoration was tested. A remote backup is
-  valid, but the journal, evidence, credentials and reviewed checkout still need
-  independent local storage outside the target disks. Preserve the installation
-  closure separately; it is not included in the runtime.
-- Mount an independent **ext4 or FAT** recovery filesystem at `/recovery`, at its
-  filesystem root. Btrfs recovery media and early-boot downloads are unsupported.
-- Require systemd-boot, sufficient `/boot` space, and physical console/BMC access.
-  The target needs Python 3.12+, `objcopy`, `sbverify`, `bootctl`, `findmnt`, `lsblk` and `blkid`.
+- Use a clean, committed checkout with the reviewed revision and locked inputs.
+- Know where the data backup is and how its restore was tested. A remote backup
+  works; the journal, evidence, credentials and checkout still need local storage
+  outside the target disks.
+- Mount an independent **ext4 or FAT** filesystem at `/recovery`, at its root.
+- Have systemd-boot, enough `/boot` space, and physical console or BMC access.
+  The target needs Python 3.12+, `objcopy`, `sbverify`, `bootctl`, `findmnt`,
+  `lsblk` and `blkid`.
 
 ## 2. Build
 
-On the **target host**, print its detected settings (read-only):
-
-```sh
-devenv shell migration-boot discover
-```
-
-Save them outside the checkout, review `controller_cidr` (the IPv4/CIDR allowed
-to connect over SSH), then build from the same YAML:
+On the **target host**, collect its settings (read-only) into a file outside the
+checkout:
 
 ```sh
 devenv shell migration-boot discover > ~/migration-settings.yml
+```
+
+Set `controller_cidr`, the IPv4/CIDR allowed to connect over SSH, then build:
+
+```sh
 devenv shell migration-boot build gc-09 --settings ~/migration-settings.yml \
   --output ~/migration-gc-09
 ```
 
-Replace `gc-09` for another target. Discovery reads the local hostname, default
-IPv4 route, interface address, recovery UUID/filesystem and optional outer LUKS
-UUID. It refuses ambiguous routes or addresses; use `--interface` and `--address`
-to select them. `controller_cidr` is deliberately left unset unless supplied with
-`--controller-cidr`; the build refuses until you set it. Settings can be copied to
-a build controller and must match the selected inventory host and hardware UUID.
-Explicit build flags override YAML values.
+Discovery reads the hostname, default IPv4 route, interface address and recovery
+filesystem. Select with `--interface`, `--address`, `--gateway` and
+`--controller-cidr` where needed; explicit flags override the YAML.
+`migration-boot discover --controller-cidr <ip>/32 --format command` prints a
+ready, quoted build command instead. Settings may be copied to a build controller;
+they must match the inventory host and its hardware UUID.
 
-To print a fully populated, shell-quoted command instead, run
-`migration-boot discover --controller-cidr <controller-ip>/32 --format command`.
-Use `--output <new-directory>` to choose its destination. Discovery never builds,
-mounts, signs or changes boot entries; staging still verifies the live disks.
+Use a reachable management network; the image has no VPN, DNS or Wi-Fi of the
+host. Without administrator SSH keys, a local-console image disables SSH and the
+physical root terminal still works. Limits live in `conf/migration-environment.yml`.
 
-Add `--gateway <ipv4>` if needed. Choose a reachable management network; host VPN
-settings and DNS are not inherited. Wi-Fi association is not configured.
-For local operation, the selected Ethernet interface may remain disconnected;
-the console works without networking. Host identity and administrator keys come
-from existing configuration; limits live in `conf/migration-environment.yml`.
-With no administrator public keys, local-console builds disable SSH entirely;
-the physical root terminal still works. Secure Boot mode requires SSH keys.
+For encrypted recovery media, add `--recovery-luks-uuid <uuid>`; its password is
+entered at the console during boot. The image holds no private key or password.
 
-For encrypted recovery media, add `--recovery-luks-uuid <outer-luks-uuid>` and
-unlock it before staging. Boot requires its password through console/BMC **before
-SSH becomes available**. No private key or recovery password is put in the image.
-
-Retain `migration.efi`, `migration.squashfs`, `manifest.json` and the reported EFI
-SHA256. The JSON file is informational. In local-console mode the digest detects
-payload corruption, but neither the loader nor its digest is authenticated by firmware.
-A replaced loader could replace the verification logic.
-
-For firmware authentication instead, build with `--boot-trust secure-boot --sign`
-using [fleet signing custody](secure-boot.md). That mode requires enabled Secure
-Boot with the fleet certificate enrolled and retains signature checks at staging.
+Keep `migration.efi`, `migration.squashfs`, `manifest.json` and the reported EFI
+SHA256. In local-console mode the digest detects payload corruption; the loader
+itself is not authenticated by firmware, so the physical approval prompt is the
+trust step. For firmware authentication, build with `--boot-trust secure-boot
+--sign` using [fleet signing custody](secure-boot.md); that needs Secure Boot with
+the fleet certificate enrolled, and administrator SSH keys.
 
 ## 3. Stage, then arm
 
-On the target, as your normal user inside the devenv shell:
+On the target, as your normal user in the devenv shell:
 
 ```sh
 migration-boot stage gc-09 --allow-unverified-boot
 migration-boot stage gc-09 --allow-unverified-boot --apply
 ```
 
-The first command verifies; the second publishes and arms one-shot boot. It finds
-`~/migration-gc-09/migration.efi` and `migration.squashfs`, computes the EFI digest,
-uses the repository certificate, `/recovery` and `/boot`, and requests sudo itself.
-Omit the hostname to use this machine's hostname. For a different build directory,
-add `--bundle <directory>`. Missing files or mounts, identity mismatches and invalid
-payloads stop staging; nothing is mounted or rebuilt automatically. The image
-metadata supplies the expected recovery identity; no network rediscovery is needed.
+The first command verifies; the second publishes the image and arms it for the
+next boot only, asking for sudo itself. It finds the bundle in `~/migration-<host>`
+(`--bundle <directory>` for another), checks identities and payloads, and leaves
+the normal boot default unchanged.
 
-For controller-driven remote staging, run `devenv shell check-connectivity <host>`, then:
+From the controller, after `devenv shell check-connectivity <host>`:
 
 ```text
 devenv shell stage-migration-boot --limit <host> \
@@ -94,45 +76,60 @@ devenv shell stage-migration-boot --limit <host> \
   -e migration_allow_unverified_boot=true
 ```
 
-The explicit `migration_allow_unverified_boot=true` is required for local-console
-images; omit it for Secure Boot images. Direct staging uses `--allow-unverified-boot`.
-This copies artifacts to the target and verifies them without changing boot state.
-For another existing recovery mount, add `-e migration_recovery=<mountpoint>`.
-After reviewing the result, repeat with **`-e migration_apply=true`** to publish
-both artifacts and arm one-shot boot. These commands neither mount storage nor
-reboot. The normal boot default must exclude migration entries and stays unchanged.
+This copies and verifies the artifacts. Review the result, then repeat with
+`-e migration_apply=true` to publish and arm. Secure Boot images omit
+`migration_allow_unverified_boot`; another recovery mount uses
+`-e migration_recovery=<mountpoint>`.
 
 ## 4. Boot and migrate
 
-After the separately authorized reboot, local-console mode waits on the physical
-screen (`tty1`) for `BOOT UNVERIFIED <host> <revision-prefix>`. Check the displayed
-host and trust warning, then type the exact phrase. This opens a root terminal and
-permits SSH when administrator keys are configured; it does **not** encrypt anything. A wrong answer leaves access blocked.
-Serial consoles may select `--console ttyS0` when building.
+After the reboot, the physical screen (`tty1`, or `ttyS0` when built with
+`--console ttyS0`) asks for `BOOT UNVERIFIED <host> <revision-prefix>`. Check the
+host and trust notice, then type the phrase to open a root terminal and, with
+keys configured, SSH on port **2222**. Verify the SSH fingerprint on the console
+and pin it before connecting with strict host-key checking; it changes each boot.
 
-For remote access, verify the recovery SSH fingerprint on
-the trusted console/BMC and pin it before connecting as root on port **2222** with
-strict host-key checking. The fingerprint changes each boot; do not trust an
-unverified `ssh-keyscan` result.
+Mount the recovery drive at `/recovery` and run:
 
-Use `luxnix-migration --help`, supplying `--host <inventory-host>` and
-`--config <independent-checkout>/autoconf/config.yml` for each operation. Follow
-[boot storage migration](boot-storage-migration.md) with the saved plan. Preview
-before confirmation; target filesystems must be unmounted and swap disabled.
-Booting recovery never starts encryption automatically.
+```sh
+luxnix-migration run --apply
+```
 
-Keep recovery material until cold boot, Plymouth unlock, administrator login and
-LX-Annotate data access pass. One-shot boot is **not disk rollback**: after root
-conversion, the old generation may not boot. Re-select the retained recovery entry
-through the boot console to resume an interrupted migration.
+`luxnix-migration` finds this host's saved plan, checks the plan's source copy in
+`/recovery/luxnix-state/sources/<revision>` against its revision and `flake.lock`,
+and runs that source. A plan from a newer commit therefore needs no new image.
+Afterwards, files created as root are handed back to the plan's operator, so the
+installed host continues as that user. The steps follow the
+[migration reference](boot-storage-migration.md).
+
+The environment keeps the conversion running safely:
+
+- Conversion starts on mains power; on battery alone it asks to connect power.
+- Sleep and hibernation are disabled, and the lid, suspend key and idle are ignored.
+- Over SSH it runs in the tmux session `luxnix-migration`. After a dropped
+  connection, run the same command to return to it.
+- One workflow runs at a time.
+
+Just before the first disk write, the boot default moves to the migration entry
+this environment started from, so every reboot returns here (still behind console
+approval). Installation then clears that override, `loader.conf` selects the new
+encrypted generation, and the install verifies it boots the planned system. If
+nothing on the disk changed, the previous default returns. Started from another
+entry, the environment warns instead; then stay in the session until installation
+reports the new default.
+
+Keep recovery material until cold boot, unlock, administrator login and
+LX-Annotate data access all pass. After conversion, the old generation stays in the
+menu but only the encrypted generation boots.
 
 ## Developer checks
 
 Build a disposable console fixture with
-`LUXNIX_MIGRATION_LOCAL_CONSOLE=1 uv run python -m tests.test_migration_loader_vm`.
-Set `LUXNIX_MIGRATION_BUNDLE` to its output and `LUXNIX_QEMU` to the QEMU executable;
-run `uv run pytest -q tests/test_migration_loader_vm.py`. Requires KVM, mtools,
+`LUXNIX_MIGRATION_LOCAL_CONSOLE=1 uv run python -m tests.test_migration_loader_vm`,
+set `LUXNIX_MIGRATION_BUNDLE` to its output and `LUXNIX_QEMU` to QEMU, then run
+`uv run pytest -q tests/test_migration_loader_vm.py`. This needs KVM, mtools,
 dosfstools, binutils, OpenSSL and sbsigntool.
 
-VM tests cover RAM startup, console approval/refusal and tamper rejection. Real firmware trust, networking,
-encrypted recovery-media unlock and installation acceptance still need host testing.
+VM tests cover RAM startup, console approval, tamper rejection and, in
+`boot-default-hold`, the boot default across power cuts. Firmware trust, networking,
+encrypted recovery media and installation acceptance are confirmed on the host.

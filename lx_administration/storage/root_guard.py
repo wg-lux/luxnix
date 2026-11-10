@@ -71,6 +71,31 @@ def under(root: Path, path: str) -> Path:
     return root / path.lstrip("/")
 
 
+def resolve_under(root: Path, path: Path) -> Path:
+    """Follow a chain of links as if root were /; a target store stays inside root."""
+    current = path
+    for _ in range(40):
+        try:
+            target = os.readlink(current)
+        except OSError:
+            return current
+        current = (
+            under(root, target) if target.startswith("/") else current.parent / target
+        )
+    raise OSError(f"Too many symbolic links below {path}")
+
+
+def closure_path(system: str, root: Path) -> Path:
+    """A closure as reachable here: in this store, else in the target store below root.
+
+    A RAM installer finds an in-place host's closure only in the host's own store.
+    """
+    own = Path(system)
+    if own.exists() or root == Path("/"):
+        return own
+    return under(root, system)
+
+
 def probe_luks(partition: str) -> dict | None:
     raw = run("cryptsetup", "luksDump", "--dump-json-metadata", partition)
     if raw is None:
@@ -335,16 +360,16 @@ def probe_esp(root: Path, esp: str, system: str | None) -> dict | None:
     path = under(root, esp)
     try:
         stats = os.statvfs(path)
-        kernel, initrd = (Path(system or "") / "kernel", Path(system or "") / "initrd")
-        needed = kernel.stat().st_size + initrd.stat().st_size
+        base = closure_path(system, root) if system else Path("")
+        files = [resolve_under(root, base / name) for name in ("kernel", "initrd")]
+        needed = sum(item.stat().st_size for item in files)
     except OSError:
         return None
     # systemd-boot deduplicates files already copied to the ESP by store hash.
-    for link in (kernel, initrd):
-        name = Path(os.path.realpath(link))
-        copied = path / "EFI/nixos" / f"{name.parent.name}-{name.name}.efi"
+    for item in files:
+        copied = path / "EFI/nixos" / f"{item.parent.name}-{item.name}.efi"
         if copied.exists():
-            needed -= link.stat().st_size
+            needed -= item.stat().st_size
     return {"free": stats.f_bavail * stats.f_frsize, "needed": max(needed, 0)}
 
 

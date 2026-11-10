@@ -32,6 +32,10 @@ nix_suites:
     path: tests/nixtest/root_guard_vm_test.nix
     scope: Real preflight and recovery classification against plaintext, LUKS2 and interrupted disposable disks.
     command: nix build .#checks.x86_64-linux.root-guard --no-link -L
+  - id: boot-default-hold
+    path: tests/nixtest/boot_default_hold_vm_test.nix
+    scope: Real UEFI firmware and systemd-boot keep returning to the migration entry across power cuts until the install hand-over boots the installed generation.
+    command: nix build .#checks.x86_64-linux.boot-default-hold --no-link -L
   - id: boot-storage
     path: tests/nixtest/boot_storage_vm_test.nix
     scope: Cold boot root unlock, stage-2 data unlock, key retention and failure behavior on disposable disks.

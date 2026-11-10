@@ -278,6 +278,10 @@
           pkgs = inputs.nixpkgs.legacyPackages.${system};
           repoRoot = ./.;
         };
+        boot-default-hold = import ./tests/nixtest/boot_default_hold_vm_test.nix {
+          pkgs = inputs.nixpkgs.legacyPackages.${system};
+          repoRoot = ./.;
+        };
         boot-storage-plaintext = import ./tests/nixtest/boot_storage_vm_test.nix {
           pkgs = inputs.nixpkgs.legacyPackages.${system};
           inherit (inputs) disko;
