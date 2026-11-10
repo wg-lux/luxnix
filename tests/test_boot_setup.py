@@ -1227,3 +1227,32 @@ def test_failed_header_backup_warns_but_never_undoes_the_conversion(
     monkeypatch.setattr(boot_password, "backup_header", fail)
     setup.keep_header_backup(root, plan, "/dev/test1")
     assert "WARNING: no LUKS header backup was saved" in capsys.readouterr().out
+
+
+def test_disk_inspection_keeps_partitions_nested_under_the_disk(monkeypatch):
+    """util-linux 2.42 prints a flat list unless the tree column is named."""
+    seen = []
+    tree = {
+        "blockdevices": [
+            {
+                "path": "/dev/nvme0n1", "type": "disk", "serial": "s", "size": 10,
+                "fstype": None, "uuid": None, "mountpoints": [None],
+                "children": [
+                    {
+                        "path": "/dev/nvme0n1p2", "type": "part", "serial": None,
+                        "size": 9, "fstype": "btrfs", "uuid": "u",
+                        "mountpoints": ["/"],
+                    }
+                ],
+            }
+        ]
+    }
+
+    def run(*args, **kwargs):
+        seen.append(args)
+        return json.dumps(tree)
+
+    monkeypatch.setattr(migration, "run", run)
+    disk = setup.inspect_disk("/dev/disk/by-id/test")
+    assert "--tree=PATH" in seen[0]
+    assert [child.path for child in disk.children] == ["/dev/nvme0n1p2"]

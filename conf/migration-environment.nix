@@ -303,6 +303,8 @@ let
             systemPackages = [
               migration
               python
+              # Operators start their own session for long steps over SSH.
+              pkgs.tmux
               pkgs.openssh
               pkgs.cryptsetup
               pkgs.btrfs-progs

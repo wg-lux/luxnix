@@ -111,6 +111,8 @@ def inspect_disk(path: str, *, children: bool = True) -> BlockDevice:
             "--json",
             "--bytes",
             "--paths",
+            # Without a NAME column, util-linux 2.42 prints a flat list; keep the tree.
+            "--tree=PATH",
             *([] if children else ["--nodeps"]),
             "--output",
             "PATH,TYPE,SERIAL,SIZE,FSTYPE,UUID,MOUNTPOINTS",

@@ -19,6 +19,8 @@ import time
 
 from lx_administration.storage import boot_migration as migration
 from lx_administration.storage import migration_boot, recovery_media, secret_preflight
+from lx_administration.storage.migration_policy import snapshot_sources
+from lx_administration.storage.snapshot import mount_identity
 from lx_administration.utils.file_operations import atomic_create_file
 
 GIB = 1024**3
@@ -97,10 +99,18 @@ def ensure_key(custody: Path, host: str) -> Path:
     return key
 
 
-def needed_bytes() -> int:
-    """Room for everything on the root filesystem, with a quarter to spare."""
-    info = os.statvfs("/")
-    used = (info.f_blocks - info.f_bfree) * info.f_frsize
+def needed_bytes(host: str) -> int:
+    """Include every captured filesystem, counting shared subvolumes only once."""
+    devices = set()
+    used = 0
+    for path in snapshot_sources(host).values():
+        # Btrfs subvolume st_dev/statfs IDs differ; use the observed filesystem UUID.
+        uuid = mount_identity(path)["uuid"]
+        if uuid in devices:
+            continue
+        devices.add(uuid)
+        info = os.statvfs(path)
+        used += (info.f_blocks - info.f_bfree) * info.f_frsize
     return int(used * 1.25) + 4 * GIB
 
 
@@ -245,7 +255,7 @@ def run(spec: dict, state: Path, custody: Path) -> dict:
         "the last backup are copied."
     )
     key = ensure_key(custody, host)
-    mount = open_container(host, key, needed_bytes())
+    mount = open_container(host, key, needed_bytes(host))
     try:
         report = capture(host)
         copy(report, mount)

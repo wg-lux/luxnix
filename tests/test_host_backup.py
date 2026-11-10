@@ -104,7 +104,7 @@ def machine(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(backup.recovery_media, "MOUNT", recovery)
     monkeypatch.setattr(backup, "MOUNT_ROOT", tmp_path / "run")
-    monkeypatch.setattr(backup, "needed_bytes", lambda: 100 * GIB)
+    monkeypatch.setattr(backup, "needed_bytes", lambda host: 100 * GIB)
     monkeypatch.setattr(backup, "free_bytes", lambda path: 500 * GIB)
     monkeypatch.setattr(backup.Path, "exists", _exists(world))
     monkeypatch.setattr(migration, "private_path", lambda *a, **k: None)
@@ -127,6 +127,27 @@ def names(calls):
         "snapshot" if command[0] == sys.executable else Path(command[0]).name
         for command in calls
     ]
+
+
+def test_size_estimate_counts_shared_root_once_and_includes_separate_data(monkeypatch):
+    from types import SimpleNamespace
+
+    def filesystem(path):
+        data = path == "/data/raid01"
+        return SimpleNamespace(
+            f_blocks=1000,
+            f_bfree=100,
+            f_frsize=GIB if data else GIB // 2,
+        )
+
+    monkeypatch.setattr(backup.os, "statvfs", filesystem)
+    monkeypatch.setattr(
+        backup,
+        "mount_identity",
+        lambda path: {"uuid": "data" if path == "/data/raid01" else "root"},
+    )
+    # Five root subvolumes share 450 GiB; the separate data filesystem uses 900.
+    assert backup.needed_bytes("gc-10") == int(1350 * GIB * 1.25) + 4 * GIB
 
 
 def test_first_backup_creates_an_encrypted_container_then_copies_and_verifies(
