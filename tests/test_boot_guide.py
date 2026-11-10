@@ -349,3 +349,82 @@ def test_bare_preservation_helper_does_not_begin_migration(monkeypatch, capsys):
     monkeypatch.setattr(guide, "run", lambda *a, **k: pytest.fail("explicit guide required"))
     setup.main([])
     assert "usage:" in capsys.readouterr().out
+
+
+AUTOMATIC = {
+    "status": "copy-verified",
+    "accepted_by": None,
+    "location": "/recovery/luxnix-backup-gc-09.luks",
+    "restore_test": None,
+    "verification": "checksum-compared",
+}
+
+
+def test_the_verified_backup_is_offered_first(monkeypatch, capsys):
+    answers(monkeypatch, "")
+    assert guide.ask_backup({"disks": []}, AUTOMATIC) == AUTOMATIC
+    out = capsys.readouterr().out
+    assert "verified file by file" in out and "No restore was tested" in out
+
+
+def test_another_backup_can_still_be_named(monkeypatch, tmp_path):
+    monkeypatch.setattr(guide.secret_preflight, "exists", lambda p: True)
+    monkeypatch.setattr(guide.recovery_custody, "storage_disks", lambda p: set())
+    monkeypatch.setattr(guide, "measure_size", lambda p: "1G")
+    monkeypatch.setattr(guide, "root_used", lambda: "1G")
+    answers(monkeypatch, str(tmp_path), "Restored into a spare machine")
+    backup = guide.ask_backup({"disks": []}, AUTOMATIC)
+    assert backup["status"] == "restore-tested" and backup["location"] == str(tmp_path)
+
+
+def test_a_failed_automatic_backup_falls_back_to_the_questions(monkeypatch, capsys):
+    def fail(*a):
+        raise migration.MigrationError("The recovery drive needs 40 GiB more")
+
+    monkeypatch.setattr(guide.host_backup, "run", fail)
+    assert guide.automatic_backup({"host": "gc-09"}, None, None) is None
+    assert "needs 40 GiB more" in capsys.readouterr().out
+
+
+def test_copy_verified_outcome_is_saved_with_its_own_label(monkeypatch, checks):
+    monkeypatch.setattr(guide, "measured_detail", lambda *a: AUTOMATIC)
+    answers(monkeypatch, "VERIFIED")
+    saved = guide.ask_checks({}, checks, step([guide.BACKUP_CHECK]))
+    assert saved[guide.BACKUP_CHECK]["backup"] == AUTOMATIC
+    assert "verified by checksum; restore not tested" in guide.write_notes(
+        checks, saved
+    ).read_text()
+
+
+@pytest.mark.parametrize("answered", [False, True])
+def test_backup_runs_before_the_questions_only_while_they_are_open(
+    monkeypatch, tmp_path, answered
+):
+    events = []
+    monkeypatch.setattr(guide.setup, "preflight_passed", lambda state: True)
+    monkeypatch.setattr(
+        guide.setup, "next_step", lambda state: step([guide.BACKUP_CHECK])
+    )
+    monkeypatch.setattr(
+        guide,
+        "load_answers",
+        lambda state, plan: {guide.BACKUP_CHECK: {}} if answered else {},
+    )
+    monkeypatch.setattr(
+        guide,
+        "automatic_backup",
+        lambda spec, state, custody: events.append(("backup", custody)) or AUTOMATIC,
+    )
+    monkeypatch.setattr(
+        guide,
+        "ask_checks",
+        lambda spec, state, s, automatic: events.append(("ask", automatic)) or {},
+    )
+    monkeypatch.setattr(guide, "write_notes", lambda state, a: tmp_path / "notes")
+    monkeypatch.setattr(guide.setup, "record_review", lambda *a, **k: None)
+    monkeypatch.setenv("USER", "operator")
+    guide.recovery_stage({"host": "gc-09"}, tmp_path, tmp_path / "custody")
+    if answered:
+        assert events == [("ask", None)]
+    else:
+        assert events == [("backup", tmp_path / "custody"), ("ask", AUTOMATIC)]

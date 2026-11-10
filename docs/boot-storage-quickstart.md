@@ -86,12 +86,15 @@ profile alone.
 The in-place converter handles one plaintext Btrfs root; the
 [migration reference](boot-storage-migration.md) has the details.
 
-1. **Back up.** Make and test a data backup, and keep the original credentials,
-   historical keys and independent recovery access. Conversion encrypts from now
-   on; older plaintext SSD data needs a separate data-remanence review.
-2. **Plan.** Connect the recovery drive and run `devenv shell luxnix migrate` from
-   the reviewed clean checkout as your normal user. Confirm the host and serials.
-   The guide prepares custody, checks copies and asks for the checks only you can
+1. **Keep credentials safe.** Keep the original credentials, historical keys and
+   independent recovery access. Conversion encrypts from now on; older plaintext
+   SSD data needs a separate data-remanence review.
+2. **Plan and back up.** Connect the recovery drive and run
+   `devenv shell luxnix migrate` from the reviewed clean checkout as your normal
+   user. Confirm the host and serials. The guide prepares custody, then updates an
+   encrypted backup of this machine on the recovery drive: a consistent snapshot
+   (application services pause briefly), only the changes since the last backup,
+   each file verified by checksum. It then asks for the checks only you can
    confirm. Type `VERIFIED` for completed checks; Enter pauses and keeps progress.
    Saving the plan copies its exact source to
    `/recovery/luxnix-state/sources/<revision>`.

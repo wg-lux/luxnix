@@ -988,3 +988,32 @@ def test_unproven_boot_handover_leaves_install_interrupted(
     with pytest.raises(migration.MigrationError, match="another entry"):
         migration.install(root)
     assert migration.load_progress(root, plan)["install"]["status"] == "interrupted"
+
+
+def test_a_checksum_verified_copy_is_a_distinct_backup_outcome(state, monkeypatch):
+    root, plan, progress = state
+    record = {
+        "plan_id": plan["plan_id"],
+        "checks": {
+            "in_place_backup_acknowledged": {
+                "backup": {
+                    "status": "copy-verified",
+                    "accepted_by": None,
+                    "location": "/recovery/luxnix-backup-gc-09.luks",
+                    "restore_test": None,
+                    "verification": "checksum-compared",
+                }
+            }
+        },
+    }
+    migration.atomic_json(root / migration.RECOVERY_CHECKS, record)
+    progress["attestations"]["recovery"] = {
+        "artifacts": [{"path": str(root / migration.RECOVERY_CHECKS)}]
+    }
+    monkeypatch.setattr(migration, "check_attestation", lambda *a, **k: None)
+    outcome = migration.data_recovery(root, plan, progress)
+    assert outcome["status"] == "copy-verified"
+    assert outcome["verification"] == "checksum-compared"
+    record["checks"]["in_place_backup_acknowledged"]["backup"]["restore_test"] = "x"
+    migration.atomic_json(root / migration.RECOVERY_CHECKS, record)
+    assert migration.data_recovery(root, plan, progress)["status"] == "unknown"

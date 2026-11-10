@@ -17,6 +17,7 @@ from pathlib import Path
 from lx_administration.storage import boot_migration as migration
 from lx_administration.storage import boot_setup as setup
 from lx_administration.storage import (
+    host_backup,
     recovery_custody,
     recovery_media,
     secret_preflight,
@@ -183,10 +184,32 @@ def root_used() -> str:
     return result.stdout.split()[-1] if result.stdout.split() else "not measured"
 
 
-def ask_backup(spec: dict) -> dict:
-    location = input(
-        "Absolute path of the mounted backup, or Enter if you are going without one: "
-    ).strip()
+def automatic_backup(spec: dict, state: Path, custody: Path) -> dict | None:
+    """Update the encrypted backup on the recovery drive before asking about it."""
+    try:
+        backup = host_backup.run(spec, state, custody)
+    except (ValueError, OSError, subprocess.SubprocessError) as error:
+        print(f"\nThe automatic backup did not complete: {error}")
+        print("You can name another backup, or rerun later to retry it.")
+        return None
+    setup.success("The encrypted backup on the recovery drive is up to date.")
+    return backup
+
+
+def ask_backup(spec: dict, automatic: dict | None = None) -> dict:
+    if automatic is not None:
+        print(backup_detail(automatic))
+        choice = input(
+            "Press Enter to use it, or type the absolute path of another backup: "
+        ).strip()
+        if not choice:
+            return automatic
+        location = choice
+    else:
+        location = input(
+            "Absolute path of the mounted backup, or Enter if you are going without "
+            "one: "
+        ).strip()
     if not location:
         name = input("Going without a backup. Who accepts this risk? (name) ").strip()
         if not name:
@@ -225,6 +248,11 @@ def ask_backup(spec: dict) -> dict:
 
 
 def backup_detail(backup: dict) -> str:
+    if backup["status"] == "copy-verified":
+        return (
+            f"Encrypted backup at {backup['location']}, updated from a consistent "
+            "snapshot and verified file by file against it. No restore was tested."
+        )
     if backup["status"] == "risk-accepted":
         return (
             f"No data backup. Risk accepted by: {backup['accepted_by']}. "
@@ -236,10 +264,12 @@ def backup_detail(backup: dict) -> str:
     )
 
 
-def measured_detail(check: str, spec: dict, state: Path) -> str | dict:
+def measured_detail(
+    check: str, spec: dict, state: Path, backup: dict | None = None
+) -> str | dict:
     """Print and return what the machine can establish for one check."""
     if check == BACKUP_CHECK:
-        return ask_backup(spec)
+        return ask_backup(spec, backup)
     if check == "plaintext_remnants_reviewed":
         print("Searching the unencrypted root for likely patient files...")
         total, folders = scan_for_patient_data()
@@ -294,7 +324,9 @@ def load_answers(state: Path, plan_id: str) -> dict:
     }
 
 
-def ask_checks(spec: dict, state: Path, step: setup.NextStep) -> dict:
+def ask_checks(
+    spec: dict, state: Path, step: setup.NextStep, automatic: dict | None = None
+) -> dict:
     answers = load_answers(state, step.plan_id)
     descriptions = setup.guidance()
     remaining = sorted(
@@ -304,7 +336,7 @@ def ask_checks(spec: dict, state: Path, step: setup.NextStep) -> dict:
     for number, check in enumerate(remaining, 1):
         print(f"\n--- Check {number} of {len(remaining)}: {check} ---")
         print(descriptions[check])
-        detail = measured_detail(check, spec, state)
+        detail = measured_detail(check, spec, state, automatic)
         backup = detail if check == BACKUP_CHECK and isinstance(detail, dict) else None
         if backup is not None:
             detail = backup_detail(backup)
@@ -337,6 +369,9 @@ def write_notes(state: Path, answers: dict) -> Path:
         label = "confirmed"
         if check == BACKUP_CHECK:
             label = {
+                "copy-verified": (
+                    "encrypted copy verified by checksum; restore not tested"
+                ),
                 "risk-accepted": "risk accepted; backup not verified",
                 "restore-tested": "restore test reported by operator",
             }.get(answer.get("backup", {}).get("status"), "backup verification unknown")
@@ -358,7 +393,12 @@ def recovery_stage(spec: dict, state: Path, custody: Path | None) -> None:
         fill_custody(state, directory, reopenable=reopenable)
         secret_preflight.run(state, directory)
     step = setup.next_step(state)
-    answers = ask_checks(spec, state, step)
+    automatic = None
+    if BACKUP_CHECK in step.required_checks and BACKUP_CHECK not in load_answers(
+        state, step.plan_id
+    ):
+        automatic = automatic_backup(spec, state, directory)
+    answers = ask_checks(spec, state, step, automatic)
     assessor = os.environ.get("USER") or input("Name of the operator: ").strip()
     setup.record_review(
         state, step, assessor, write_notes(state, answers),

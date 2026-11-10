@@ -1,5 +1,6 @@
 """Boot artifact safety tests; never touch real firmware or storage."""
 
+import contextlib
 import copy
 import json
 import os
@@ -1013,3 +1014,211 @@ def test_handover_refuses_a_loader_conf_default_elsewhere(firmware, installed):
     (esp / "loader/loader.conf").write_text("default nixos-generation-25.conf\n")
     with pytest.raises(ValueError, match="not the installed nixos-generation-38"):
         boot.hand_over_boot(root, esp, CLOSURE)
+
+
+def parse_newc(archive: bytes) -> dict:
+    """Independent reader for the archive the kernel unpacks."""
+    entries, offset = {}, 0
+    while True:
+        assert archive[offset : offset + 6] == b"070701"
+        header = archive[offset + 6 : offset + 110]
+        fields = [int(header[8 * i : 8 * i + 8], 16) for i in range(13)]
+        size, name_size, mode = fields[6], fields[11], fields[1]
+        name_start = offset + 110
+        name = archive[name_start : name_start + name_size - 1].decode()
+        data_start = name_start + name_size + (-(110 + name_size) % 4)
+        data = archive[data_start : data_start + size]
+        offset = data_start + size + (-size % 4)
+        if name == "TRAILER!!!":
+            assert offset == len(archive)
+            return entries
+        entries[name] = (mode, data)
+
+
+def test_kexec_archive_is_a_valid_newc_archive():
+    archive = boot.newc(
+        [
+            ("luxnix-kexec", 0o040700, None),
+            ("luxnix-kexec/key", 0o100600, b"private"),
+            ("luxnix-kexec/odd", 0o100644, b"abcde"),
+        ]
+    )
+    assert len(archive) % 4 == 0
+    assert parse_newc(archive) == {
+        "luxnix-kexec": (0o040700, b""),
+        "luxnix-kexec/key": (0o100600, b"private"),
+        "luxnix-kexec/odd": (0o100644, b"abcde"),
+    }
+
+
+@pytest.fixture
+def kexec_identity(tmp_path, monkeypatch, spec):
+    run = tmp_path / "run"
+    run.mkdir()
+    key = run / "ssh_host_ed25519_key"
+    key.write_text("private")
+    key.chmod(0o600)
+    public = "ssh-ed25519 AAAAkey target-migration"
+    (run / "ssh_host_ed25519_key.pub").write_text(public + "\n")
+    (run / "identity.json").write_text(
+        json.dumps(
+            {
+                "host": spec["host"],
+                "revision": spec["revision"],
+                "public_key": "ssh-ed25519 AAAAkey target-migration",
+            }
+        )
+    )
+    monkeypatch.setattr(boot, "KEXEC_RUN", run)
+    real = Path.lstat
+    monkeypatch.setattr(
+        Path,
+        "lstat",
+        lambda p: os.stat_result([*list(real(p))[:4], 0, *list(real(p))[5:]])
+        if p == key
+        else real(p),
+    )
+    return run
+
+
+def test_kexec_admission_accepts_only_the_pinned_host_key(kexec_identity, spec):
+    spec = spec | {"boot_trust": "host-kexec"}
+    boot.require_kexec_identity(spec)
+    (kexec_identity / "ssh_host_ed25519_key.pub").write_text("ssh-ed25519 AAAAother\n")
+    with pytest.raises(ValueError, match="differs from the pinned one"):
+        boot.require_kexec_identity(spec)
+
+
+def test_kexec_admission_refuses_without_a_handed_over_key(kexec_identity, spec):
+    (kexec_identity / "identity.json").unlink()
+    with pytest.raises(ValueError, match="SSH stays closed"):
+        boot.require_kexec_identity(spec | {"boot_trust": "host-kexec"})
+
+
+def test_host_kexec_specs_require_administrator_keys(spec):
+    boot.validate_spec(spec | {"boot_trust": "host-kexec"})
+    with pytest.raises(ValueError, match="administrator public keys"):
+        boot.validate_spec(spec | {"boot_trust": "host-kexec", "authorized_keys": []})
+
+
+@pytest.fixture
+def kexec_host(tmp_path, monkeypatch, spec):
+    """A target with a prebuilt bundle; records every privileged command."""
+    spec = spec | {"boot_trust": "host-kexec"}
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    (bundle / "kernel").write_bytes(b"k" * 100)
+    (bundle / "initrd").write_bytes(b"i" * 103)
+    (bundle / "cmdline").write_text("init=/nix/store/x/init console=tty0")
+    (bundle / "manifest.json").write_text(json.dumps(spec))
+    net = tmp_path / "net" / spec["interface"]
+    net.mkdir(parents=True)
+    (net / "addr_assign_type").write_text("0\n")
+    (net / "address").write_text("52:54:00:12:01:02\n")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir(mode=0o700)
+    meminfo = tmp_path / "meminfo"
+    meminfo.write_text("MemTotal: 16000000 kB\nMemAvailable: 8000000 kB\n")
+
+    @contextlib.contextmanager
+    def private_workspace():
+        yield workspace
+
+    def run(*args, **kwargs):
+        if args[:2] == ("ssh-keygen", "-q"):
+            key = Path(args[-1])
+            key.write_text("private")
+            key.with_suffix(".pub").write_text("ssh-ed25519 AAAAkey target-migration\n")
+            return ""
+        if args[:2] == ("ssh-keygen", "-lf"):
+            return "256 SHA256:pinned target-migration (ED25519)\n"
+        raise AssertionError(args)
+
+    calls = []
+    monkeypatch.setattr(boot.socket, "gethostname", lambda: spec["host"])
+    monkeypatch.setattr(boot, "require_machine", lambda *a: None)
+    monkeypatch.setattr(boot, "NETWORK", tmp_path / "net")
+    monkeypatch.setattr(boot, "LOCKDOWN", tmp_path / "lockdown")
+    monkeypatch.setattr(boot.sb, "private_workspace", private_workspace)
+    monkeypatch.setattr(boot.sb, "run", run)
+    monkeypatch.setattr(boot.sb, "_require_tty", lambda: None)
+    monkeypatch.setattr(boot, "as_root", lambda *c: calls.append(c))
+    real_read = Path.read_text
+    monkeypatch.setattr(
+        Path,
+        "read_text",
+        lambda p, *a, **k: real_read(
+            meminfo if str(p) == "/proc/meminfo" else p, *a, **k
+        ),
+    )
+    args = SimpleNamespace(
+        host=None, bundle=bundle, output=tmp_path / "out", apply=False, flake=None
+    )
+    return args, calls, workspace, spec
+
+
+def test_kexec_preview_pins_the_key_and_loads_nothing(kexec_host, capsys):
+    args, calls, workspace, spec = kexec_host
+    boot.kexec(args)
+    out = capsys.readouterr().out
+    assert "Host key: 256 SHA256:pinned" in out and "Preview only" in out
+    assert calls == []
+    known = (args.output / "known_hosts").read_text()
+    assert known == "[192.0.2.10]:2222 ssh-ed25519 AAAAkey\n"
+    # The appended archive carries the key, its identity and the interface rule.
+    initrd = (workspace / "initrd").read_bytes()
+    assert initrd.startswith(b"i" * 103)
+    entries = parse_newc(initrd[104:])
+    assert entries["luxnix-kexec/ssh_host_ed25519_key"] == (0o100600, b"private")
+    identity = json.loads(entries["luxnix-kexec/identity.json"][1])
+    assert identity == {
+        "host": spec["host"],
+        "revision": spec["revision"],
+        "public_key": "ssh-ed25519 AAAAkey target-migration",
+    }
+    link = entries["luxnix-kexec/10-luxnix-management.link"][1].decode()
+    assert "PermanentMACAddress=52:54:00:12:01:02" in link and "Name=eth0" in link
+
+
+def test_kexec_apply_loads_then_switches_after_the_typed_phrase(
+    kexec_host, monkeypatch
+):
+    args, calls, workspace, spec = kexec_host
+    args.apply = True
+    monkeypatch.setattr("builtins.input", lambda prompt: f"START RAM {spec['host']}")
+    boot.kexec(args)
+    assert calls[0][:3] == ("kexec", "--load", str(args.bundle / "kernel"))
+    assert calls[0][3:5] == ("--initrd", str(workspace / "initrd"))
+    assert calls[0][-1] == "init=/nix/store/x/init console=tty0"
+    assert calls[1] == ("systemctl", "kexec")
+
+
+def test_kexec_apply_without_the_phrase_loads_nothing(kexec_host, monkeypatch):
+    args, calls, _, _ = kexec_host
+    args.apply = True
+    monkeypatch.setattr("builtins.input", lambda prompt: "yes")
+    with pytest.raises(ValueError, match="nothing was loaded"):
+        boot.kexec(args)
+    assert calls == []
+
+
+def test_kexec_refuses_under_kernel_lockdown(kexec_host, tmp_path):
+    args, calls, _, _ = kexec_host
+    (tmp_path / "lockdown").write_text("none [integrity] confidentiality\n")
+    with pytest.raises(ValueError, match="lockdown"):
+        boot.kexec(args)
+    assert calls == []
+
+
+def test_kexec_refuses_a_changed_hardware_address(kexec_host, tmp_path, spec):
+    args, calls, _, _ = kexec_host
+    (tmp_path / "net" / spec["interface"] / "addr_assign_type").write_text("3\n")
+    with pytest.raises(ValueError, match="changed hardware address"):
+        boot.kexec(args)
+
+
+def test_kexec_runs_only_on_its_own_host(kexec_host):
+    args, calls, _, _ = kexec_host
+    args.host = "another-host"
+    with pytest.raises(ValueError, match="target host itself"):
+        boot.kexec(args)

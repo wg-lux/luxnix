@@ -125,9 +125,15 @@ entrypoints:
   - name: migration-lifecycle
     file: test_migration_lifecycle.py
     purpose: Reject invalid or tampered migration stages and keep repeated transitions idempotent.
+  - name: host-backup
+    file: test_host_backup.py
+    purpose: Encrypt before writing, upsert and grow the backup container, verify by checksum, close on failure and prune old capture snapshots.
   - name: installer-handoff
     file: test_installer_handoff.py
     purpose: Run only the plan's verified source in the RAM environment and hand root-created state back to its operator.
+  - name: migration-kexec-vm
+    file: nixtest/migration_kexec_vm_test.nix
+    purpose: A running host switches into the RAM environment with kexec; the controller reaches it only with the SSH host key pinned beforehand.
   - name: boot-default-hold-vm
     file: nixtest/boot_default_hold_vm_test.nix
     purpose: Under real UEFI firmware and systemd-boot, a held boot default survives power cuts and the hand-over boots the installed generation.

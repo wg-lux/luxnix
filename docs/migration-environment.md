@@ -16,28 +16,52 @@ existing boot generations stay.
   The target needs Python 3.12+, `objcopy`, `sbverify`, `bootctl`, `findmnt`,
   `lsblk` and `blkid`.
 
-## 2. Build
+## 2. Settings file
 
-On the **target host**, collect its settings (read-only) into a file outside the
+The settings file describes how the RAM environment reaches the network and finds
+the recovery drive. It is written only when you run `migration-boot discover`;
+`build` and `kexec` only read it. Create it on the **target host**, outside the
 checkout:
 
-```sh
-devenv shell migration-boot discover > ~/migration-settings.yml
-```
+1. Mount the recovery drive at `/recovery` and connect the wired network the
+   RAM environment will use.
+2. Run discovery with your controller's address, as the target sees it:
 
-Set `controller_cidr`, the IPv4/CIDR allowed to connect over SSH, then build:
+   ```sh
+   devenv shell migration-boot discover --controller-cidr <controller-ip>/32 \
+     > ~/migration-settings.yml
+   ```
+
+3. Review each value against the table below, then pass the file to `build` or
+   `kexec` with `--settings ~/migration-settings.yml`.
+
+| Key | Where discovery gets it | What to check |
+| --- | --- | --- |
+| `host` | This machine's hostname | It names the host in `autoconf/config.yml` |
+| `hardware_uuid` | `boot_storage.hosts.<host>.hardware_uuid` in `autoconf/config.yml` | It equals `sudo cat /sys/class/dmi/id/product_uuid` |
+| `interface` | The interface of the default route (`--interface` to choose) | A wired interface; the RAM environment has no Wi-Fi |
+| `address` | That interface's IPv4 address and prefix (`--address`) | A stable address: the RAM environment uses it statically |
+| `gateway` | The default route's gateway (`--gateway`), or `null` | Needed only when the controller is on another subnet |
+| `controller_cidr` | Only `--controller-cidr` | The address SSH may come from, usually one `/32` |
+| `recovery_uuid`, `recovery_fstype` | The filesystem mounted at `/recovery` (`--recovery` for another mount) | ext4 or FAT, at the drive's root |
+| `recovery_luks_uuid` | The LUKS layer below that filesystem, or `null` | Present when the recovery drive is encrypted |
+
+When reading the file, `build` and `kexec` require exactly these keys, with
+`host` and `hardware_uuid` matching the inventory and every value a string or
+`null`. A flag such as `--address` overrides one value for that run. A missing
+value stops the command and names the flag to supply. Run discovery again whenever
+the network, the controller or the recovery drive changes; the file may be copied
+to a build controller unchanged.
+
+`migration-boot discover --controller-cidr <ip>/32 --format command` prints the
+complete, quoted `build` command instead of YAML.
+
+## 3. Build
 
 ```sh
 devenv shell migration-boot build gc-09 --settings ~/migration-settings.yml \
   --output ~/migration-gc-09
 ```
-
-Discovery reads the hostname, default IPv4 route, interface address and recovery
-filesystem. Select with `--interface`, `--address`, `--gateway` and
-`--controller-cidr` where needed; explicit flags override the YAML.
-`migration-boot discover --controller-cidr <ip>/32 --format command` prints a
-ready, quoted build command instead. Settings may be copied to a build controller;
-they must match the inventory host and its hardware UUID.
 
 Use a reachable management network; the image has no VPN, DNS or Wi-Fi of the
 host. Without administrator SSH keys, a local-console image disables SSH and the
@@ -53,7 +77,7 @@ trust step. For firmware authentication, build with `--boot-trust secure-boot
 --sign` using [fleet signing custody](secure-boot.md); that needs Secure Boot with
 the fleet certificate enrolled, and administrator SSH keys.
 
-## 3. Stage, then arm
+## 4. Stage, then arm
 
 On the target, as your normal user in the devenv shell:
 
@@ -81,7 +105,7 @@ This copies and verifies the artifacts. Review the result, then repeat with
 `migration_allow_unverified_boot`; another recovery mount uses
 `-e migration_recovery=<mountpoint>`.
 
-## 4. Boot and migrate
+## 5. Boot and migrate
 
 After the reboot, the physical screen (`tty1`, or `ttyS0` when built with
 `--console ttyS0`) asks for `BOOT UNVERIFIED <host> <revision-prefix>`. Check the
@@ -122,6 +146,49 @@ Keep recovery material until cold boot, unlock, administrator login and
 LX-Annotate data access all pass. After conversion, the old generation stays in the
 menu but only the encrypted generation boots.
 
+## Start without a reboot (remote)
+
+For remote work, build and start the RAM environment directly from the running
+host, with no reboot, boot entry or console. Over your existing SSH session, from
+the devenv shell on the **target host**:
+
+```sh
+devenv shell migration-boot kexec --settings ~/migration-settings.yml
+devenv shell migration-boot kexec --settings ~/migration-settings.yml --apply
+```
+
+The first command builds the RAM environment from the reviewed checkout and
+creates the SSH host key it will use. It prints that key's fingerprint and writes
+a ready `known_hosts` file to `~/migration-<host>-kexec/`; nothing is loaded. Copy
+that file to your controller.
+
+The second command asks you to type `START RAM <host>`, loads the RAM
+environment, and switches to it through `systemctl kexec`: the host shuts down
+cleanly, and the disks stay as they are. Your connection ends; reconnect with the
+printed command:
+
+```sh
+ssh -o UserKnownHostsFile=<known_hosts> -o StrictHostKeyChecking=yes -p 2222 root@<address>
+```
+
+The running host is the trust step: you start the environment as root from a
+verified session, so no console phrase is needed. Remote access stays narrow:
+
+- SSH listens on port 2222 only, for `controller_cidr` only, with the
+  administrator keys from the inventory.
+- The host key is created on the host before the switch and handed over in the
+  initrd; the environment opens SSH only with that exact key, so the fingerprint
+  you pinned is the one you reach.
+- The management interface keeps its name, matched by its permanent hardware
+  address.
+
+It needs the reviewed settings with `controller_cidr`, a wired interface with its
+permanent address, and free memory for the image. Kernel lockdown, usually from
+Secure Boot, blocks unsigned images; such hosts use the staged boot entry instead.
+`--bundle <path>` starts a prebuilt bundle. A later reboot returns to the boot
+default, which [during conversion](boot-storage-map.md#the-boot-default-during-conversion)
+is the staged migration entry.
+
 ## Developer checks
 
 Build a disposable console fixture with
@@ -130,6 +197,7 @@ set `LUXNIX_MIGRATION_BUNDLE` to its output and `LUXNIX_QEMU` to QEMU, then run
 `uv run pytest -q tests/test_migration_loader_vm.py`. This needs KVM, mtools,
 dosfstools, binutils, OpenSSL and sbsigntool.
 
-VM tests cover RAM startup, console approval, tamper rejection and, in
-`boot-default-hold`, the boot default across power cuts. Firmware trust, networking,
+VM tests cover RAM startup, console approval, tamper rejection, the boot default
+across power cuts (`boot-default-hold`) and the remote start without reboot with a
+pinned host key (`migration-kexec`). Firmware trust, networking,
 encrypted recovery media and installation acceptance are confirmed on the host.

@@ -1721,6 +1721,14 @@ def data_recovery(state: Path, plan: dict, progress: dict) -> dict:
                 and backup["restore_test"] is None
                 and backup["verification"] == "not-performed"
             )
+        elif backup["status"] == "copy-verified":
+            valid = (
+                backup["accepted_by"] is None
+                and isinstance(backup["location"], str)
+                and Path(backup["location"]).is_absolute()
+                and backup["restore_test"] is None
+                and backup["verification"] == "checksum-compared"
+            )
         elif backup["status"] == "restore-tested":
             valid = (
                 backup["accepted_by"] is None

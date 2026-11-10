@@ -282,6 +282,11 @@
           pkgs = inputs.nixpkgs.legacyPackages.${system};
           repoRoot = ./.;
         };
+        migration-kexec = import ./tests/nixtest/migration_kexec_vm_test.nix {
+          pkgs = inputs.nixpkgs.legacyPackages.${system};
+          repoRoot = ./.;
+          inherit (inputs.self.lib) migrationEnvironment;
+        };
         boot-storage-plaintext = import ./tests/nixtest/boot_storage_vm_test.nix {
           pkgs = inputs.nixpkgs.legacyPackages.${system};
           inherit (inputs) disko;

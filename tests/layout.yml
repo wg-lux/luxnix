@@ -32,6 +32,10 @@ nix_suites:
     path: tests/nixtest/root_guard_vm_test.nix
     scope: Real preflight and recovery classification against plaintext, LUKS2 and interrupted disposable disks.
     command: nix build .#checks.x86_64-linux.root-guard --no-link -L
+  - id: migration-kexec
+    path: tests/nixtest/migration_kexec_vm_test.nix
+    scope: A running host starts the RAM environment through kexec without a reboot; SSH accepts only the pinned host key from the controller address.
+    command: nix build .#checks.x86_64-linux.migration-kexec --no-link -L
   - id: boot-default-hold
     path: tests/nixtest/boot_default_hold_vm_test.nix
     scope: Real UEFI firmware and systemd-boot keep returning to the migration entry across power cuts until the install hand-over boots the installed generation.

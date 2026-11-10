@@ -72,7 +72,11 @@ def validate_spec(spec: dict) -> None:
         "target_serials",
     }:
         raise ValueError("Unexpected migration image specification fields")
-    if spec.get("boot_trust", "secure-boot") not in {"secure-boot", "local-console"}:
+    if spec.get("boot_trust", "secure-boot") not in {
+        "secure-boot",
+        "local-console",
+        "host-kexec",
+    }:
         raise ValueError("Unsupported boot trust mode")
     if spec.get("console", "tty1") not in {"tty1", "ttyS0"}:
         raise ValueError("Select a physical console")
@@ -394,10 +398,10 @@ def discover(args):
         print(yaml.safe_dump(values, sort_keys=False), end="")
 
 
-def build(args) -> None:
+def reviewed_spec(args, root: Path, boot_trust: str, console: str) -> dict:
+    """The image specification from the reviewed checkout and the build settings."""
     from lx_administration.yaml import load_unique_yaml_file
 
-    root = args.flake.resolve()
     if not re.fullmatch(r"[a-z][a-z0-9-]{0,62}", args.host):
         raise ValueError("Invalid inventory hostname")
     revision = sb.reviewed_source(root, root / "ansible/inventory/hosts.ini")
@@ -409,8 +413,8 @@ def build(args) -> None:
         raise ValueError("Unsupported administrator account name")
     spec = {
         "host": args.host,
-        "boot_trust": args.boot_trust,
-        "console": args.console,
+        "boot_trust": boot_trust,
+        "console": console,
         "hardware_uuid": host["hardware_uuid"].lower(),
         "revision": revision,
         "interface": args.interface,
@@ -434,14 +438,16 @@ def build(args) -> None:
         "policy": load_unique_yaml_file(root / "conf/migration-environment.yml"),
     }
     validate_spec(spec)
-    if not spec["authorized_keys"]:
-        print("No SSH keys: local-console image will have SSH disabled.")
+    return spec
+
+
+def build_attribute(root: Path, spec: dict, attribute: str) -> Path:
     expression = (
         f"let f = builtins.getFlake {json.dumps('git+file://' + str(root))}; "
         f"in (f.lib.migrationEnvironment (builtins.fromJSON "
-        f"{json.dumps(json.dumps(spec))})).config.system.build.migrationBundle"
+        f"{json.dumps(json.dumps(spec))})).config.system.build.{attribute}"
     )
-    output = Path(
+    return Path(
         sb.run(
             "nix",
             "build",
@@ -453,6 +459,15 @@ def build(args) -> None:
             expression,
         ).strip()
     )
+
+
+def build(args) -> None:
+    root = args.flake.resolve()
+    spec = reviewed_spec(args, root, args.boot_trust, args.console)
+    revision = spec["revision"]
+    if not spec["authorized_keys"]:
+        print("No SSH keys: local-console image will have SSH disabled.")
+    output = build_attribute(root, spec, "migrationBundle")
     images = list(output.glob("*.efi"))
     manifest = json.loads((output / "manifest.json").read_text())
     if (
@@ -726,6 +741,10 @@ def stage(args) -> None:
     if digest(args.image) != args.sha256:
         raise ValueError("Image SHA256 differs from the controller artifact")
     spec = image_spec(args.image)
+    if spec.get("boot_trust") == "host-kexec":
+        raise ValueError(
+            "host-kexec images start with migration-boot kexec, not a boot entry"
+        )
     local_console = spec.get("boot_trust", "secure-boot") == "local-console"
     if local_console != args.allow_unverified_boot:
         raise ValueError(
@@ -838,6 +857,8 @@ def admit(args) -> None:
         raise ValueError("Migration environment must run from RAM")
     if sb.run("swapon", "--show", "--noheadings", "--output", "NAME").strip():
         raise ValueError("Migration environment must not use swap")
+    if spec.get("boot_trust") == "host-kexec":
+        require_kexec_identity(spec)
     if spec.get("boot_trust", "secure-boot") == "local-console":
         console = "/dev/" + spec.get("console", "tty1")
         if not sys.stdin.isatty() or os.ttyname(sys.stdin.fileno()) != console:
@@ -862,6 +883,205 @@ def admit(args) -> None:
         if input(f"Type {phrase} to open migration access: ").strip() != phrase:
             raise ValueError("Local console approval declined")
     print("RAM environment admitted; migration still requires the existing plan gates")
+
+
+KEXEC_RUN = Path("/run/luxnix-kexec")
+KEXEC_ARCHIVE = "luxnix-kexec"
+LOCKDOWN = Path("/sys/kernel/security/lockdown")
+NETWORK = Path("/sys/class/net")
+
+
+def require_kexec_identity(spec: dict) -> None:
+    """SSH opens only with the host key that migration-boot kexec pinned."""
+    try:
+        identity = json.loads((KEXEC_RUN / "identity.json").read_text())
+        public = (KEXEC_RUN / "ssh_host_ed25519_key.pub").read_text().split()[:2]
+        key = (KEXEC_RUN / "ssh_host_ed25519_key").lstat()
+    except (OSError, ValueError) as error:
+        raise ValueError(
+            "This RAM environment has no SSH host key from migration-boot kexec; "
+            "SSH stays closed"
+        ) from error
+    if (
+        identity.get("host") != spec["host"]
+        or identity.get("revision") != spec["revision"]
+        or str(identity.get("public_key", "")).split()[:2] != public
+        or key.st_uid != 0
+        or stat.S_IMODE(key.st_mode) != 0o600
+    ):
+        raise ValueError(
+            "The SSH host key differs from the pinned one; SSH stays closed"
+        )
+
+
+def newc(entries: list[tuple[str, int, bytes | None]]) -> bytes:
+    """A newc cpio archive; the kernel unpacks it on top of the initrd."""
+    archive = bytearray()
+
+    def pad() -> None:
+        archive.extend(b"\0" * (-len(archive) % 4))
+
+    trailer = ("TRAILER!!!", 0, b"")
+    for number, (name, mode, data) in enumerate([*entries, trailer], 1):
+        body = b"" if data is None else data
+        encoded = name.encode() + b"\0"
+        last = name == "TRAILER!!!"
+        links = 1 if last or data is not None else 2
+        fields = (0 if last else number, mode, 0, 0, links, 0, len(body))
+        fields += (0, 0, 0, 0, len(encoded), 0)
+        archive += b"070701" + b"".join(f"{value:08x}".encode() for value in fields)
+        archive += encoded
+        pad()
+        archive += body
+        pad()
+    return bytes(archive)
+
+
+def store_tool(name: str) -> str:
+    found = shutil.which(name)
+    real = os.path.realpath(found) if found else ""
+    if not real.startswith(("/nix/store/", "/run/current-system/")):
+        raise ValueError(f"{name} from the Nix store is required; use the devenv shell")
+    return real
+
+
+def as_root(*command: str) -> None:
+    prefix = [] if os.geteuid() == 0 else ["sudo", "--"]
+    subprocess.run([*prefix, store_tool(command[0]), *command[1:]], check=True)
+
+
+def kexec_bundle(args, host: str) -> tuple[Path, dict]:
+    if args.bundle is not None:
+        bundle = args.bundle.resolve()
+        spec = json.loads((bundle / "manifest.json").read_text())
+    else:
+        root = args.flake.resolve()
+        args.host = host
+        spec = reviewed_spec(args, root, "host-kexec", "tty1")
+        print("Building the RAM environment; this can take a while.", flush=True)
+        bundle = build_attribute(root, spec, "kexecBundle")
+        if json.loads((bundle / "manifest.json").read_text()) != spec:
+            raise ValueError("Built RAM environment differs from the reviewed inputs")
+        if sb.reviewed_source(root, root / "ansible/inventory/hosts.ini") != spec[
+            "revision"
+        ]:
+            raise ValueError("Source changed during the build")
+    validate_spec(spec)
+    if spec.get("boot_trust") != "host-kexec" or spec["host"] != host:
+        raise ValueError(f"The bundle is not a host-kexec image for {host}")
+    for name in ("kernel", "initrd", "cmdline"):
+        if not (bundle / name).is_file():
+            raise ValueError(f"The bundle lacks its {name}")
+    return bundle, spec
+
+
+def management_link(spec: dict) -> bytes:
+    """Keep the management interface's name, matched by its hardware address."""
+    device = NETWORK / spec["interface"]
+    if not device.exists():
+        raise ValueError(f"Management interface {spec['interface']} does not exist")
+    if (device / "addr_assign_type").read_text().strip() != "0":
+        raise ValueError(
+            f"{spec['interface']} uses a changed hardware address; select a wired "
+            "interface with its permanent address"
+        )
+    address = (device / "address").read_text().strip()
+    return (
+        f"[Match]\nPermanentMACAddress={address}\n\n"
+        f"[Link]\nName={spec['interface']}\n"
+    ).encode()
+
+
+def kexec(args) -> None:
+    """Build, then start the RAM environment in place of the running system."""
+    host = socket.gethostname().split(".")[0]
+    if args.host not in (None, host):
+        raise ValueError("Run this on the target host itself")
+    bundle, spec = kexec_bundle(args, host)
+    require_machine(spec, host, Path("/dev/null"))
+    if LOCKDOWN.exists() and "[none]" not in LOCKDOWN.read_text():
+        raise ValueError(
+            "Kernel lockdown (usually Secure Boot) blocks starting an unsigned "
+            "RAM image; use the staged boot entry instead"
+        )
+    if not spec["authorized_keys"]:
+        raise ValueError("Remote access needs administrator SSH keys in the inventory")
+    link = management_link(spec)
+    available = int(
+        next(
+            line.split()[1]
+            for line in Path("/proc/meminfo").read_text().splitlines()
+            if line.startswith("MemAvailable:")
+        )
+    )
+    needed = sum((bundle / name).stat().st_size for name in ("kernel", "initrd"))
+    if available * 1024 < 2 * needed + 512 * MIB:
+        raise ValueError("Not enough free memory to load the RAM environment")
+    address = str(ipaddress.IPv4Interface(spec["address"]).ip)
+    port = spec["policy"]["ssh_port"]
+    output = args.output or Path.home() / f"migration-{host}-kexec"
+    output.mkdir(mode=0o700, parents=True, exist_ok=True)
+    known_hosts = output / "known_hosts"
+    with sb.private_workspace() as workspace:
+        key = workspace / "ssh_host_ed25519_key"
+        sb.run(
+            "ssh-keygen", "-q", "-t", "ed25519", "-N", "",
+            "-C", f"{host}-migration", "-f", key,
+        )  # fmt: skip
+        public = key.with_suffix(".pub").read_text().strip()
+        fingerprint = sb.run("ssh-keygen", "-lf", key.with_suffix(".pub")).strip()
+        identity = {"host": host, "revision": spec["revision"], "public_key": public}
+        directory, public_line = KEXEC_ARCHIVE, f"{public}\n".encode()
+        archive = newc(
+            [
+                (directory, 0o040700, None),
+                (f"{directory}/ssh_host_ed25519_key", 0o100600, key.read_bytes()),
+                (f"{directory}/ssh_host_ed25519_key.pub", 0o100644, public_line),
+                (f"{directory}/identity.json", 0o100644, json.dumps(identity).encode()),
+                (f"{directory}/10-luxnix-management.link", 0o100644, link),
+            ]
+        )
+        initrd = workspace / "initrd"
+        with initrd.open("wb") as stream, (bundle / "initrd").open("rb") as base:
+            shutil.copyfileobj(base, stream)
+            stream.write(b"\0" * (-stream.tell() % 4))
+            stream.write(archive)
+        known_hosts.write_text(f"[{address}]:{port} {' '.join(public.split()[:2])}\n")
+        connect = (
+            f"ssh -o UserKnownHostsFile={known_hosts} -o StrictHostKeyChecking=yes "
+            f"-p {port} root@{address}"
+        )
+        print(
+            f"RAM environment for {host}, revision {spec['revision'][:12]}\n"
+            f"SSH: {address}:{port}, from {spec['controller_cidr']} only, "
+            "administrator keys only\n"
+            f"Host key: {fingerprint}\n"
+            f"Pinned in: {known_hosts}\n"
+            f"Connect with: {connect}",
+            flush=True,
+        )
+        if not args.apply:
+            print("Preview only; nothing was loaded. Add --apply to start it.")
+            return
+        sb._require_tty()
+        phrase = f"START RAM {host}"
+        print(
+            f"\n{host} shuts down cleanly and the RAM environment starts in its place. "
+            "Services stop and this connection ends; disks stay as they are. Copy "
+            f"{known_hosts} to your controller first.",
+            flush=True,
+        )
+        if input(f"Type {phrase} to continue: ").strip() != phrase:
+            raise ValueError("Cancelled; nothing was loaded")
+        as_root(
+            "kexec", "--load", str(bundle / "kernel"), "--initrd", str(initrd),
+            "--command-line", (bundle / "cmdline").read_text().strip(),
+        )  # fmt: skip
+    # The loaded kernel holds its own copy; the host key is gone from this disk.
+    print(
+        f"Loaded. Starting the RAM environment; reconnect with: {connect}", flush=True
+    )
+    as_root("systemctl", "kexec")
 
 
 def main(argv=None) -> None:
@@ -914,14 +1134,29 @@ def main(argv=None) -> None:
     target.add_argument("--esp", type=Path, default=Path("/boot"))
     target.add_argument("--apply", action="store_true")
     target.add_argument("--allow-unverified-boot", action="store_true")
+    starter = commands.add_parser(
+        "kexec", help="Build, then start the RAM environment without a reboot"
+    )
+    starter.add_argument("host", nargs="?", help="Defaults to the local hostname")
+    starter.add_argument("--flake", type=Path, default=sb.ROOT)
+    for option in BUILD_SETTINGS:
+        starter.add_argument("--" + option.replace("_", "-"), dest=option)
+    starter.add_argument("--settings", type=Path)
+    starter.add_argument("--bundle", type=Path, help="A prebuilt kexec bundle")
+    starter.add_argument("--output", type=Path)
+    starter.add_argument("--apply", action="store_true")
     admission = commands.add_parser("admit")
     admission.add_argument("--spec", type=Path, required=True)
     admission.add_argument("--certificate", type=Path, required=True)
     args = parser.parse_args(argv)
     try:
-        {"discover": discover, "build": build, "stage": local_stage, "admit": admit}[
-            args.command
-        ](args)
+        {
+            "discover": discover,
+            "build": build,
+            "stage": local_stage,
+            "admit": admit,
+            "kexec": kexec,
+        }[args.command](args)
     except (
         ValueError,
         EOFError,

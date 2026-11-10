@@ -62,7 +62,7 @@ stages always run in order. A failed stage resumes where it stopped.
 
 | Stage | What happens | Where | Disk changes |
 | --- | --- | --- | --- |
-| preparing | Plan pinned to revision, closure and disk identity; source copied to the recovery drive; backup and custody checked | Installed host | None |
+| preparing | Plan pinned to revision, closure and disk identity; source copied to the recovery drive; encrypted host backup updated and verified; custody checked | Installed host | None |
 | migrating | Boot default held on the migration entry; root encrypted in place; container data copied in | RAM migration environment | Yes, after typed `ENCRYPT IN PLACE` |
 | verifying | Disk read against the plan: header, UUID, mapping, subvolumes, tested credential | Same session | None |
 | activating | Matching `boot-luks` system installed; boot default handed to it and verified | Same session | Boot entries only |
@@ -104,6 +104,7 @@ Run these as your normal user from a reviewed checkout, unless noted.
 | `devenv shell luxnix recover --partition <path>` | Prints the procedure for that disk state | Yes |
 | `devenv shell luxnix recover --assessor <name> --apply` | Accepts a reviewed layout after confirmation | Yes, rechecks first |
 | `devenv shell luxnix retire-containers --apply` | Deletes retired containers after typed approval | Once |
+| `devenv shell migration-boot kexec --apply` (target host) | Builds and starts the RAM environment without a reboot; pins its SSH key | Yes; asks to confirm |
 | `luxnix-migration run --apply` (RAM environment, root) | Runs the plan's own source; asks before every disk change | Yes, resumes |
 | `luxnix-root-preflight status` (host) | Compares the running configuration with the disk | Yes |
 | `luxnix-boot-recover classify` (recovery ISO) | Reports the disk state | Yes |
@@ -165,6 +166,7 @@ holds only storage tools, so it works whatever the state of application builds.
 | Recovery ISO | `lx_administration/storage/recovery-image.nix` |
 | Migration state and journals | `/recovery/luxnix-state/<host>/` |
 | Plan source for the RAM environment | `/recovery/luxnix-state/sources/<revision>/` |
+| Encrypted host backup | `/recovery/luxnix-backup-<host>.luks`, key in custody (`<custody>/<host>/host-backup.key`) |
 | LUKS header backup | `/recovery/luxnix-state/<host>/header-after-conversion-*/luks.header` |
 | Storage contract per generation | `/etc/luxnix/root-storage.json` |
 | Override and audit records | `/run/luxnix/root-guard-override.json`, `/var/lib/luxnix/root-guard-audit.jsonl` |

@@ -2,6 +2,10 @@
 { inputs, spec }:
 let
   localConsole = (spec.boot_trust or "secure-boot") == "local-console";
+  # Started by the trusted running host with kexec; no firmware, loader or console.
+  hostKexec = (spec.boot_trust or "secure-boot") == "host-kexec";
+  # Created on the host before kexec, so its fingerprint can be pinned beforehand.
+  kexecHostKey = "/run/luxnix-kexec/ssh_host_ed25519_key";
   console = spec.console or "tty1";
   sshEnabled = spec.authorized_keys != [ ];
   runtimeSystem = inputs.nixpkgs.lib.nixosSystem {
@@ -148,7 +152,7 @@ let
                   export PYTHONPATH=${runtime}
                   ${python}/bin/python -m lx_administration.storage.migration_boot admit \
                     --spec /etc/luxnix/migration.json --certificate /etc/luxnix/migration-db.pem
-                  ${lib.optionalString sshEnabled ''
+                  ${lib.optionalString (sshEnabled && !hostKexec) ''
                     echo 'Verify this recovery SSH fingerprint through the trusted console:' > /dev/console
                     ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub > /dev/console
                   ''}
@@ -177,7 +181,7 @@ let
               ports = [ spec.policy.ssh_port ];
               hostKeys = [
                 {
-                  path = "/etc/ssh/ssh_host_ed25519_key";
+                  path = if hostKexec then kexecHostKey else "/etc/ssh/ssh_host_ed25519_key";
                   type = "ed25519";
                 }
               ];
@@ -202,6 +206,24 @@ let
             postBootCommands = lib.mkForce "";
             loader.systemd-boot.enable = false;
             loader.efi.canTouchEfiVariables = false;
+            # The kexec command appends /luxnix-kexec to the initrd: the SSH host key it
+            # pinned and a rule keeping the management interface's name. systemd moves
+            # /run into the running system, where sshd and udev use them.
+            initrd.systemd.services.luxnix-kexec-identity = lib.mkIf hostKexec {
+              wantedBy = [ "initrd.target" ];
+              before = [ "initrd-switch-root.target" ];
+              unitConfig.DefaultDependencies = false;
+              serviceConfig.Type = "oneshot";
+              script = ''
+                if [ -d /luxnix-kexec ]; then
+                  mkdir -p -m 0700 /run/luxnix-kexec /run/systemd/network
+                  cp -p /luxnix-kexec/ssh_host_ed25519_key /luxnix-kexec/ssh_host_ed25519_key.pub \
+                    /luxnix-kexec/identity.json /run/luxnix-kexec/
+                  chmod 0600 /run/luxnix-kexec/ssh_host_ed25519_key
+                  cp /luxnix-kexec/10-luxnix-management.link /run/systemd/network/
+                fi
+              '';
+            };
             initrd.availableKernelModules = [
               "nvme"
               "ahci"
@@ -250,5 +272,24 @@ let
   };
 in
 runtimeSystem.extendModules {
-  modules = [ (import ./migration-loader.nix { inherit spec runtimeSystem; }) ];
+  modules = [
+    (import ./migration-loader.nix { inherit spec runtimeSystem; })
+    (
+      { pkgs, ... }:
+      {
+        # The runtime itself, without the EFI loader: started by migration-boot kexec.
+        system.build.kexecBundle =
+          let
+            runtime = runtimeSystem.config;
+          in
+          pkgs.runCommand "luxnix-migration-kexec-${spec.host}" { } ''
+            mkdir $out
+            ln -s ${runtime.system.build.kernel}/${runtime.system.boot.loader.kernelFile} $out/kernel
+            ln -s ${runtime.system.build.netbootRamdisk}/initrd $out/initrd
+            echo -n ${pkgs.lib.escapeShellArg "init=${runtime.system.build.toplevel}/init ${toString runtime.boot.kernelParams}"} > $out/cmdline
+            cp ${pkgs.writeText "manifest.json" (builtins.toJSON spec)} $out/manifest.json
+          '';
+      }
+    )
+  ];
 }

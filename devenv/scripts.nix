@@ -27,6 +27,9 @@
         pkgs.binutils
         pkgs.sbsigntool
         pkgs.age
+        # migration-boot kexec: load the RAM runtime and pin its SSH host key.
+        pkgs.kexec-tools
+        pkgs.openssh
       ]
     }:$PATH
     ${pkgs.uv}/bin/uv run python -m lx_administration.storage.migration_boot "$@"

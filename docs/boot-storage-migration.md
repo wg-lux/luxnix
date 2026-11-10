@@ -136,6 +136,21 @@ afterwards `devenv shell luxnix retire-containers` previews their removal, and
 
 ### Recovery and secret preflight
 
+Before asking about the backup, the guide updates one encrypted backup of the host
+on the recovery drive, `luxnix-backup-<host>.luks`:
+
+1. A LUKS2 container opened with a random key kept in encrypted custody
+   (`<custody>/<host>/host-backup.key`); it grows when the host's data grows.
+2. A consistent capture through `snapshot.py`: declared writers stop briefly,
+   inner filesystems freeze, read-only snapshots are taken, services restart.
+3. `rsync` copies only what changed and removes what was deleted, then a
+   `--checksum` comparison verifies every file against the snapshot.
+4. Only the newest capture snapshots stay on the host.
+
+The guide offers this backup first, recorded as `copy-verified`; another tested
+backup can be named instead. A verified copy is a strong start, and a tested
+restore remains the proof.
+
 Before conversion, make and test a consistent data backup. Keep LUKS headers,
 original application master keys, historical keys and salts, and account
 credentials on independent encrypted media. Inventory nested mounts and database
@@ -143,8 +158,9 @@ paths, stop writers before dumps or filesystem capture, and prove recovery by
 restoring to an isolated encrypted target, querying PostgreSQL and decrypting old
 media.
 
-The guide records each backup outcome as `restore-tested` (operator-reported) or,
-by a named decision confirmed with `ACKNOWLEDGED`, as `risk-accepted`. Custody and
+The guide records each backup outcome as `copy-verified` (the automatic backup),
+`restore-tested` (operator-reported) or, by a named decision confirmed with
+`ACKNOWLEDGED`, as `risk-accepted`. Custody and
 a passing preflight cover credentials; the data backup is its own evidence.
 
 The guide prepares or opens custody, copies only missing credentials and verifies
